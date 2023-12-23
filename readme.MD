@@ -12,7 +12,7 @@ This system dovetails into the CI/CD actions set out in my code repos, allowing 
 
 1. Noone cares how fancy or complex your infrastructure is, they only care that it works, and that it works reliably. Simplicity is paramount
 2. If you're having to do regular maintenance to make sure it continues to work, you're doing it wrong
-3. Managed scaling and managed environments are King, it is unlikely that you can outdo the entire teams managing those environments for you
+3. You can't be awake at all hours, managed services and their accompanying autoscaling systems and automatic health checks will give you the most consistent uptimes and performance
 4. Always use containers where possible, nothing is worse than debugging different environments
 5. If someone else with limited knowledge can't easily take charge of your infrastructure from you, you're doing it wrong
 
