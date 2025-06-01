@@ -1,6 +1,6 @@
 ---
 # Minimum severity level to fail the commit (possible values: LOW, MEDIUM, HIGH, CRITICAL)
-minimum_severity: MEDIUM
+minimum_severity: CRITICAL
 
 # Exclude specific directories from scanning
 exclude:
