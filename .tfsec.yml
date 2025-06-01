@@ -1,0 +1,35 @@
+---
+# Minimum severity level to fail the commit (possible values: LOW, MEDIUM, HIGH, CRITICAL)
+minimum_severity: MEDIUM
+
+# Exclude specific directories from scanning
+exclude:
+  - "**/.terraform/**/*"  # Exclude terraform state directories
+  - "**/examples/**/*"    # Exclude example directories
+
+# Configure specific rules for GCP
+soft_fail:
+  - google-compute-disk-encryption-customer-key  # Warning for custom encryption keys
+  - google-compute-no-public-ip  # Warning for public IPs
+  - google-storage-enable-ubla  # Warning for uniform bucket-level access
+
+# Custom checks severity overrides for GCP
+severity_overrides:
+  google-compute-enable-os-login: HIGH
+  google-compute-no-project-wide-ssh-keys: CRITICAL
+  google-compute-enable-shielded-vm: HIGH
+  google-storage-enable-versioning: MEDIUM
+  google-sql-backup-configuration: CRITICAL
+  google-storage-bucket-encryption: HIGH
+
+# Exclude specific checks by code
+exclude_checks:
+  - AWS*  # Exclude all AWS checks
+  - AZU*  # Exclude all Azure checks
+  
+# Focus on GCP checks
+check_type:
+  - google
+
+# Timeout settings (in seconds)
+timeout: 300 
