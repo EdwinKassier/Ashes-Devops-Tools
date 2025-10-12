@@ -1,0 +1,101 @@
+name: Terraform Apply
+
+on:
+  push:
+    tags:
+      - 'env/dev/v*'
+      - 'env/uat/v*'
+      - 'env/prod/v*'
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  TERRAFORM_VERSION: '1.0.0'
+
+jobs:
+  determine-environment:
+    name: Determine Environment
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.parse.outputs.environment }}
+      version: ${{ steps.parse.outputs.version }}
+    steps:
+      - name: Parse tag
+        id: parse
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          ENV=$(echo $TAG | cut -d'/' -f2)
+          VERSION=$(echo $TAG | cut -d'/' -f3)
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Deploying version $VERSION to $ENV environment"
+
+  apply:
+    name: Apply to ${{ needs.determine-environment.outputs.environment }}
+    runs-on: ubuntu-latest
+    needs: determine-environment
+    environment:
+      name: ${{ needs.determine-environment.outputs.environment }}
+      url: https://console.cloud.google.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Configure GCP credentials
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Terraform Init
+        working-directory: envs/${{ needs.determine-environment.outputs.environment }}
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: envs/${{ needs.determine-environment.outputs.environment }}
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: envs/${{ needs.determine-environment.outputs.environment }}
+        run: terraform apply -auto-approve tfplan
+
+      - name: Create deployment summary
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ needs.determine-environment.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ needs.determine-environment.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag**: ${GITHUB_REF#refs/tags/}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Triggered by**: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ✅ Success" >> $GITHUB_STEP_SUMMARY
+
+  notify-success:
+    name: Notify Success
+    runs-on: ubuntu-latest
+    needs: [determine-environment, apply]
+    if: success()
+    steps:
+      - name: Success notification
+        run: |
+          echo "✅ Successfully deployed to ${{ needs.determine-environment.outputs.environment }}"
+
+  notify-failure:
+    name: Notify Failure
+    runs-on: ubuntu-latest
+    needs: [determine-environment, apply]
+    if: failure()
+    steps:
+      - name: Failure notification
+        run: |
+          echo "❌ Deployment to ${{ needs.determine-environment.outputs.environment }} failed"
+          exit 1
+

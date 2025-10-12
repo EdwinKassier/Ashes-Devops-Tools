@@ -1,0 +1,63 @@
+# Code Owners for Ashes DevOps Tools
+#
+# These owners will be the default owners for everything in the repo.
+# Unless a later match takes precedence, these users will be requested
+# for review when someone opens a pull request.
+#
+# Format: path/to/file @github-username @github-team
+
+# Global owners (fallback for everything)
+* @edwinkassier
+
+# Root configuration files
+/.github/ @edwinkassier
+/Makefile @edwinkassier
+/.pre-commit-config.yaml @edwinkassier
+/.tflint.hcl @edwinkassier
+/.tfsec.yml @edwinkassier
+/.terraform-docs.yml @edwinkassier
+
+# Documentation
+/README.md @edwinkassier
+/CONTRIBUTING.md @edwinkassier
+/SECURITY.md @edwinkassier
+/LICENSE @edwinkassier
+/CHANGELOG.md @edwinkassier
+
+# Scripts
+/scripts/ @edwinkassier
+
+# Environment configurations
+/envs/organisation/ @edwinkassier
+/envs/dev/ @edwinkassier
+/envs/uat/ @edwinkassier
+/envs/prod/ @edwinkassier
+
+# Modules - IAM & Security
+/modules/iam/ @edwinkassier
+/modules/governance/ @edwinkassier
+
+# Modules - Networking
+/modules/network/ @edwinkassier
+
+# Modules - Compute & Applications
+/modules/cloud_run/ @edwinkassier
+/modules/cloud_functions/ @edwinkassier
+/modules/firebase/ @edwinkassier
+
+# Modules - Storage & Data
+/modules/cloud_storage/ @edwinkassier
+/modules/artifact_registery/ @edwinkassier
+
+# Modules - Infrastructure
+/modules/host/ @edwinkassier
+
+# Require review from security team for security-related changes
+/.tfsec.yml @edwinkassier
+/SECURITY.md @edwinkassier
+/modules/governance/ @edwinkassier
+/modules/iam/ @edwinkassier
+
+# Require review for production environment changes
+/envs/prod/ @edwinkassier
+

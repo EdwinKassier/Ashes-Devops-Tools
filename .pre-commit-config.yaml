@@ -1,0 +1,134 @@
+repos:
+  # Terraform hooks
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.83.5
+    hooks:
+      - id: terraform_fmt
+        name: Terraform format
+        description: Format Terraform files
+
+      - id: terraform_validate
+        name: Terraform validate
+        description: Validate Terraform configuration
+        args:
+          - --hook-config=--retry-once-with-cleanup=true
+
+      - id: terraform_docs
+        name: Terraform docs
+        description: Generate Terraform module documentation
+        args:
+          - --hook-config=--path-to-file=README.md
+          - --hook-config=--add-to-existing-file=true
+          - --hook-config=--create-file-if-not-exists=true
+
+      - id: terraform_tflint
+        name: TFLint
+        description: Lint Terraform files
+        args:
+          - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl
+          - --args=--module
+
+      - id: terraform_tfsec
+        name: TFSec security scan
+        description: Security scan for Terraform
+        args:
+          - --args=--config-file=__GIT_WORKING_DIR__/.tfsec.yml
+
+      - id: terraform_checkov
+        name: Checkov security scan
+        description: Additional security scanning with Checkov
+        args:
+          - --args=--quiet
+          - --args=--compact
+          - --args=--framework terraform
+
+      - id: terraform_trivy
+        name: Trivy security scan
+        description: Security scanner for Terraform
+        args:
+          - --args=--skip-dirs="**/.terraform"
+
+  # General hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        name: Trim trailing whitespace
+        description: Remove trailing whitespace
+
+      - id: end-of-file-fixer
+        name: Fix end of files
+        description: Ensure files end with newline
+
+      - id: check-yaml
+        name: Check YAML
+        description: Validate YAML files
+        args: ['--safe']
+
+      - id: check-json
+        name: Check JSON
+        description: Validate JSON files
+
+      - id: check-added-large-files
+        name: Check for large files
+        description: Prevent large files from being committed
+        args: ['--maxkb=1000']
+
+      - id: check-merge-conflict
+        name: Check for merge conflicts
+        description: Check for merge conflict strings
+
+      - id: detect-private-key
+        name: Detect private keys
+        description: Prevent committing private keys
+
+      - id: mixed-line-ending
+        name: Check line endings
+        description: Ensure consistent line endings
+        args: ['--fix=lf']
+
+      - id: check-case-conflict
+        name: Check filename case
+        description: Check for files with names that would conflict on case-insensitive filesystems
+
+  # Git commit message hooks
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.12.0
+    hooks:
+      - id: commitizen
+        name: Commitizen check
+        description: Check commit message format
+        stages: [commit-msg]
+
+  # Markdown linting
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.37.0
+    hooks:
+      - id: markdownlint
+        name: Markdown lint
+        description: Lint markdown files
+        args: ['--fix']
+
+  # YAML linting
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.33.0
+    hooks:
+      - id: yamllint
+        name: YAML lint
+        description: Lint YAML files
+        args: ['-d', '{extends: default, rules: {line-length: {max: 120}, document-start: disable}}']
+
+# Global configuration
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
+default_stages: [commit, push]
+
+# Exclude patterns
+exclude: |
+  (?x)^(
+    \.terraform/.*|
+    .*\.tfstate.*|
+    .*\.tfplan|
+    n8n\.json|
+    ENHANCED_VALIDATION_SUMMARY\.md
+  )$
+

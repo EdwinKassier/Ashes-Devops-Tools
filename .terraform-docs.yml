@@ -1,0 +1,112 @@
+formatter: "markdown table"
+
+version: ">=0.16"
+
+header-from: main.tf
+footer-from: ""
+
+recursive:
+  enabled: true
+  path: modules
+
+sections:
+  hide: []
+  show:
+    - header
+    - requirements
+    - providers
+    - modules
+    - resources
+    - inputs
+    - outputs
+
+content: |-
+  {{ .Header }}
+
+  ## Usage
+
+  Basic usage of this module is as follows:
+
+  ```hcl
+  module "example" {
+  	source = "<module-path>"
+
+  	# Required variables
+  	{{ range .Module.Inputs }}{{ if .Required -}}
+  	{{ .Name }} = 
+  	{{ end }}{{ end }}
+  }
+  ```
+
+  {{ .Requirements }}
+
+  {{ .Providers }}
+
+  {{ if .Modules -}}
+  ## Modules
+
+  {{ range .Modules }}
+  - {{ .Name }} - {{ .Source }}{{ if .Version }} ({{ .Version }}){{ end }}
+  {{- end }}
+  {{ end }}
+
+  {{ if .Resources -}}
+  ## Resources
+
+  The following resources are created:
+
+  {{ range .Module.Resources }}
+  - {{ .GetMode }}.{{ .Spec }} ({{ .Position.Filename }}#L{{ .Position.Line }})
+  {{- end }}
+  {{ end }}
+
+  {{ .Inputs }}
+
+  {{ .Outputs }}
+
+  ## Security Considerations
+
+  - Ensure all sensitive variables are marked as `sensitive = true`
+  - Use GCP Secret Manager for storing secrets
+  - Follow the principle of least privilege for IAM roles
+  - Enable audit logging for compliance
+
+  ## Contributing
+
+  Contributions are welcome! Please read the [CONTRIBUTING.md](../../CONTRIBUTING.md) for guidelines.
+
+  ## License
+
+  This module is licensed under the MIT License. See [LICENSE](../../LICENSE) for details.
+
+output:
+  file: "README.md"
+  mode: inject
+  template: |-
+    <!-- BEGIN_TF_DOCS -->
+    {{ .Content }}
+    <!-- END_TF_DOCS -->
+
+output-values:
+  enabled: false
+  from: ""
+
+sort:
+  enabled: true
+  by: required
+
+settings:
+  anchor: true
+  color: true
+  default: true
+  description: true
+  escape: true
+  hide-empty: false
+  html: true
+  indent: 2
+  lockfile: true
+  read-comments: true
+  required: true
+  sensitive: true
+  type: true
+

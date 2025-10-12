@@ -1,0 +1,51 @@
+name: Generate Documentation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'modules/**/*.tf'
+      - '.terraform-docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  docs:
+    name: Generate Module Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup terraform-docs
+        uses: terraform-docs/gh-actions@v1.0.0
+        with:
+          working-dir: .
+          config-file: .terraform-docs.yml
+          recursive: true
+          recursive-path: modules
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if [[ -n $(git status -s) ]]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit documentation
+        if: steps.changes.outputs.has_changes == 'true'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add modules/**/README.md
+          git commit -m "docs: auto-generate module documentation [skip ci]"
+          git push
+

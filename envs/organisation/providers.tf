@@ -2,15 +2,15 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = ">= 4.0.0"
+      version = "~> 4.80"
     }
     google-beta = {
       source  = "hashicorp/google-beta"
-      version = ">= 4.0.0"
+      version = "~> 4.80"
     }
     random = {
       source  = "hashicorp/random"
-      version = ">= 3.0.0"
+      version = "~> 3.5"
     }
   }
   required_version = ">= 1.0.0"
@@ -18,6 +18,11 @@ terraform {
 
 provider "google" {
   # Configuration options
+  region = var.default_region
+}
+
+provider "google-beta" {
+  # Configuration options for beta resources
   region = var.default_region
 }
 
