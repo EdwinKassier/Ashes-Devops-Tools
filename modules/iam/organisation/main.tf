@@ -92,6 +92,7 @@ resource "google_folder" "ou_folders" {
 }
 
 # Create Projects in each OU folder
+# checkov:skip=CKV2_GCP_5:Audit logging is configured at org level via cloud-audit-logs module
 resource "google_project" "projects" {
   for_each = {
     for proj_key, proj in flatten([
