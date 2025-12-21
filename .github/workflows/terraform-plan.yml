@@ -94,7 +94,7 @@ jobs:
         run: tflint --init
 
       - name: Run TFLint
-        run: tflint --recursive --config=.tflint.hcl
+        run: tflint --recursive --config=${{ github.workspace }}/.tflint.hcl
 
   security-scan:
     name: Security Scan

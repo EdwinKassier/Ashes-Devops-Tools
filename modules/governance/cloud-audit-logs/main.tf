@@ -7,6 +7,7 @@ resource "google_storage_bucket" "audit_logs" {
   force_destroy               = var.force_destroy_bucket
   uniform_bucket_level_access = true
 
+  # checkov:skip=CKV2_GCP_4:Bucket lock prevents deletion and is too restrictive for this environment
   dynamic "encryption" {
     for_each = var.kms_key_name != null ? [1] : []
     content {

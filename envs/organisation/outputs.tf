@@ -37,16 +37,6 @@ output "projects" {
 }
 
 # IAM and Policies
-output "iam_policy_etag" {
-  description = "The etag of the organization's IAM policy"
-  value       = module.organization.iam_policy_etag
-}
-
-output "resource_locations_policy" {
-  description = "Details of the resource locations organization policy"
-  value       = module.organization.resource_locations_policy
-  sensitive   = true
-}
 
 output "domain_restricted_sharing_policy" {
   description = "Details of the domain restricted sharing policy"
