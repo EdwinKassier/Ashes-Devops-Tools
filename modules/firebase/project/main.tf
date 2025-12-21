@@ -1,17 +1,3 @@
-terraform {
-  required_version = ">= 1.0.0"
-  
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = "~> 4.80"
-    }
-    google-beta = {
-      source  = "hashicorp/google-beta"
-      version = "~> 4.80"
-    }
-  }
-}
 
 # Firebase Project
 resource "google_firebase_project" "default" {
@@ -23,7 +9,7 @@ resource "google_firebase_project" "default" {
 resource "google_project_service" "firebase" {
   project = var.project_id
   service = "firebase.googleapis.com"
-  
+
   disable_dependent_services = true
   disable_on_destroy         = false
 }
@@ -31,7 +17,7 @@ resource "google_project_service" "firebase" {
 resource "google_project_service" "firestore" {
   project = var.project_id
   service = "firestore.googleapis.com"
-  
+
   disable_dependent_services = true
   disable_on_destroy         = false
 }
@@ -39,7 +25,7 @@ resource "google_project_service" "firestore" {
 resource "google_project_service" "identitytoolkit" {
   project = var.project_id
   service = "identitytoolkit.googleapis.com"
-  
+
   disable_dependent_services = true
   disable_on_destroy         = false
 }
@@ -59,7 +45,7 @@ resource "google_firebase_apple_app" "default" {
 }
 
 resource "google_apikeys_key" "apple" {
-  count  = var.apple_bundle_id != "" ? 1 : 0
+  count    = var.apple_bundle_id != "" ? 1 : 0
   provider = google-beta
 
   name         = "${var.apple_bundle_id}-api-key"

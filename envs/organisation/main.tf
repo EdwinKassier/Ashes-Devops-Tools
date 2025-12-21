@@ -21,10 +21,11 @@ resource "random_id" "suffix" {
 module "organization" {
   source = "../../modules/iam/organisation"
 
-  domain        = var.domain
-  project_id    = google_project.admin_project.project_id
-  customer_id   = var.customer_id
-  billing_account = var.billing_account
+  domain                 = var.domain
+  project_id             = google_project.admin_project.project_id
+  customer_id            = var.customer_id
+  admin_email            = var.admin_email
+  developers_group_email = var.developers_group_email
 
   # Default organization admins
   org_admin_members = [

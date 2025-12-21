@@ -1,5 +1,5 @@
 config {
-  module              = true
+  call_module_type = "all"
   force               = false
   disabled_by_default = false
 
@@ -10,7 +10,7 @@ config {
 # GCP Plugin
 plugin "google" {
   enabled = true
-  version = "0.26.0"
+  version = "0.37.1"
   source  = "github.com/terraform-linters/tflint-ruleset-google"
 }
 
@@ -60,15 +60,15 @@ rule "terraform_naming_convention" {
 
   custom = "default"
 
-  locals {
+  local {
     format = "snake_case"
   }
 
-  outputs {
+  output {
     format = "snake_case"
   }
 
-  variables {
+  variable {
     format = "snake_case"
   }
 }
@@ -89,26 +89,6 @@ rule "terraform_workspace_remote" {
   enabled = true
 }
 
-# GCP-specific rules
-rule "google_compute_disk_invalid_size" {
-  enabled = true
-}
-
-rule "google_compute_instance_invalid_machine_type" {
-  enabled = true
-}
-
-rule "google_container_cluster_invalid_machine_type" {
-  enabled = true
-}
-
-rule "google_project_service_invalid_project" {
-  enabled = true
-}
-
-rule "google_storage_bucket_invalid_location" {
-  enabled = true
-}
 
 # Disable rules that may be too strict
 rule "terraform_module_version" {

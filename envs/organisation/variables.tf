@@ -30,3 +30,13 @@ variable "default_region" {
   type        = string
   default     = "europe-west1"
 }
+
+variable "admin_email" {
+  description = "Email address for the organization administrator"
+  type        = string
+}
+
+variable "developers_group_email" {
+  description = "Email address for the developers group"
+  type        = string
+}

@@ -58,8 +58,8 @@ variable "alert_threshold_percent" {
 }
 
 variable "label_filters" {
-  description = "Map of label keys to list of values for filtering budget scope"
-  type        = map(list(string))
+  description = "Map of label keys to values for filtering budget scope (single value per key)"
+  type        = map(string)
   default     = {}
 }
 

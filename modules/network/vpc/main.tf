@@ -9,9 +9,9 @@
 resource "google_compute_network" "vpc" {
   name                    = var.vpc_name
   auto_create_subnetworks = var.auto_create_subnetworks
-  routing_mode           = var.routing_mode
-  project                = var.project_id
-  description            = var.description
+  routing_mode            = var.routing_mode
+  project                 = var.project_id
+  description             = var.description
 
   delete_default_routes_on_create = var.delete_default_routes_on_create
 }
@@ -30,8 +30,8 @@ resource "google_compute_subnetwork" "public" {
   # Enable flow logs for security
   log_config {
     aggregation_interval = "INTERVAL_5_SEC"
-    flow_sampling       = 0.5
-    metadata           = "INCLUDE_ALL_METADATA"
+    flow_sampling        = 0.5
+    metadata             = "INCLUDE_ALL_METADATA"
   }
 }
 
@@ -49,8 +49,8 @@ resource "google_compute_subnetwork" "private" {
   # Enable flow logs for security
   log_config {
     aggregation_interval = "INTERVAL_5_SEC"
-    flow_sampling       = 0.5
-    metadata           = "INCLUDE_ALL_METADATA"
+    flow_sampling        = 0.5
+    metadata             = "INCLUDE_ALL_METADATA"
   }
 }
 
@@ -68,8 +68,8 @@ resource "google_compute_subnetwork" "database" {
   # Enable flow logs for security
   log_config {
     aggregation_interval = "INTERVAL_5_SEC"
-    flow_sampling       = 0.5
-    metadata           = "INCLUDE_ALL_METADATA"
+    flow_sampling        = 0.5
+    metadata             = "INCLUDE_ALL_METADATA"
   }
 }
 
@@ -84,37 +84,37 @@ resource "google_compute_router" "router" {
 # NAT gateway for private subnets
 resource "google_compute_router_nat" "nat" {
   name                               = "${var.vpc_name}-nat"
-  router                            = google_compute_router.router.name
-  region                            = var.region
-  project                           = var.project_id
-  nat_ip_allocate_option           = "AUTO_ONLY"
+  router                             = google_compute_router.router.name
+  region                             = var.region
+  project                            = var.project_id
+  nat_ip_allocate_option             = "AUTO_ONLY"
   source_subnetwork_ip_ranges_to_nat = "LIST_OF_SUBNETWORKS"
-  
+
   subnetwork {
     name                    = google_compute_subnetwork.private[0].self_link
     source_ip_ranges_to_nat = ["ALL_IP_RANGES"]
   }
-  
+
   subnetwork {
     name                    = google_compute_subnetwork.private[1].self_link
     source_ip_ranges_to_nat = ["ALL_IP_RANGES"]
   }
-  
+
   subnetwork {
     name                    = google_compute_subnetwork.private[2].self_link
     source_ip_ranges_to_nat = ["ALL_IP_RANGES"]
   }
-  
+
   subnetwork {
     name                    = google_compute_subnetwork.database[0].self_link
     source_ip_ranges_to_nat = ["ALL_IP_RANGES"]
   }
-  
+
   subnetwork {
     name                    = google_compute_subnetwork.database[1].self_link
     source_ip_ranges_to_nat = ["ALL_IP_RANGES"]
   }
-  
+
   subnetwork {
     name                    = google_compute_subnetwork.database[2].self_link
     source_ip_ranges_to_nat = ["ALL_IP_RANGES"]

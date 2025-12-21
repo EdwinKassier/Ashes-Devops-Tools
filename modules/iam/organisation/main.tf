@@ -1,17 +1,3 @@
-terraform {
-  required_version = ">= 1.0.0"
-  
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 4.0.0"
-    }
-    google-beta = {
-      source  = "hashicorp/google-beta"
-      version = ">= 4.0.0"
-    }
-  }
-}
 
 # Data source for the organization
 data "google_organization" "org" {
@@ -30,7 +16,7 @@ resource "google_project_service" "required_apis" {
   project                    = var.project_id
   service                    = each.key
   disable_dependent_services = false
-  disable_on_destroy        = false
+  disable_on_destroy         = false
 }
 
 # Organization IAM policy
@@ -41,12 +27,12 @@ resource "google_organization_iam_policy" "organization_policy" {
 
 data "google_iam_policy" "admin" {
   binding {
-    role = "roles/resourcemanager.organizationAdmin"
+    role    = "roles/resourcemanager.organizationAdmin"
     members = var.org_admin_members
   }
 
   binding {
-    role = "roles/billing.admin"
+    role    = "roles/billing.admin"
     members = var.billing_admin_members
   }
 }
@@ -83,8 +69,8 @@ resource "google_cloud_identity_group" "org_units" {
   for_each = var.organizational_units
 
   display_name = each.value.display_name
-  description = lookup(each.value, "description", "")
-  parent      = "customers/${var.customer_id}"
+  description  = lookup(each.value, "description", "")
+  parent       = "customers/${var.customer_id}"
 
   group_key {
     id = "${each.key}@${var.domain}"
@@ -124,9 +110,9 @@ resource "google_project" "projects" {
   project_id      = "${each.value.proj.name}-${each.value.ou_key}"
   folder_id       = google_folder.ou_folders[each.value.ou_key].name
   billing_account = each.value.proj.billing_account
-  labels          = merge(
-    var.project_labels, 
-    lookup(each.value.proj, "labels", {}), 
+  labels = merge(
+    var.project_labels,
+    lookup(each.value.proj, "labels", {}),
     {
       environment = each.value.ou_key
       folder_name = each.value.folder_name
@@ -149,7 +135,7 @@ resource "google_project_service" "project_services" {
   service = "cloudresourcemanager.googleapis.com"
 
   disable_dependent_services = false
-  disable_on_destroy        = false
+  disable_on_destroy         = false
 }
 
 # Create identity groups for each organizational unit
@@ -246,37 +232,37 @@ module "ou_group_memberships" {
   members = [
     # Development Admins
     {
-      group_id = module.ou_identity_groups.identity_groups["dev-admins"].name
+      group_id  = module.ou_identity_groups.identity_groups["dev-admins"].name
       member_id = var.admin_email
       roles     = ["MEMBER", "MANAGER"]
     },
     # Development Developers
     {
-      group_id = module.ou_identity_groups.identity_groups["dev-developers"].name
+      group_id  = module.ou_identity_groups.identity_groups["dev-developers"].name
       member_id = var.developers_group_email
       roles     = ["MEMBER"]
     },
     # UAT Admins
     {
-      group_id = module.ou_identity_groups.identity_groups["uat-admins"].name
+      group_id  = module.ou_identity_groups.identity_groups["uat-admins"].name
       member_id = var.admin_email
       roles     = ["MEMBER", "MANAGER"]
     },
     # UAT Developers
     {
-      group_id = module.ou_identity_groups.identity_groups["uat-developers"].name
+      group_id  = module.ou_identity_groups.identity_groups["uat-developers"].name
       member_id = var.developers_group_email
       roles     = ["MEMBER"]
     },
     # Production Admins
     {
-      group_id = module.ou_identity_groups.identity_groups["prod-admins"].name
+      group_id  = module.ou_identity_groups.identity_groups["prod-admins"].name
       member_id = var.admin_email
       roles     = ["MEMBER", "MANAGER"]
     },
     # Production Developers
     {
-      group_id = module.ou_identity_groups.identity_groups["prod-developers"].name
+      group_id  = module.ou_identity_groups.identity_groups["prod-developers"].name
       member_id = var.developers_group_email
       roles     = ["MEMBER"]
     }

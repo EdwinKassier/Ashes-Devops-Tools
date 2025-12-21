@@ -4,34 +4,24 @@
  * API Gateway Module - Main Configuration
  */
 
-terraform {
-  required_version = ">= 1.0"
-  
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 4.0"
-    }
-  }
-}
 
 # API Gateway API resource
 resource "google_api_gateway_api" "api" {
-  provider = google
-  project  = var.project_id
-  api_id   = var.api_id
+  provider     = google-beta
+  project      = var.project_id
+  api_id       = var.api_id
   display_name = var.display_name
-  labels   = var.labels
+  labels       = var.labels
 }
 
 # API Config resource
 resource "google_api_gateway_api_config" "api_config" {
-  provider      = google
+  provider      = google-beta
   project       = var.project_id
   api           = google_api_gateway_api.api.api_id
   api_config_id = "${var.api_id}-config-${formatdate("YYYYMMDDhhmmss", timestamp())}"
   display_name  = "${var.display_name} Config"
-  
+
   openapi_documents {
     document {
       path     = "spec.yaml"
@@ -52,12 +42,12 @@ resource "google_api_gateway_api_config" "api_config" {
 
 # API Gateway resource
 resource "google_api_gateway_gateway" "gateway" {
-  provider     = google
+  provider     = google-beta
   project      = var.project_id
   region       = var.region
   api_config   = google_api_gateway_api_config.api_config.id
   gateway_id   = var.gateway_id
   display_name = var.gateway_display_name
-  
-  labels       = var.labels
+
+  labels = var.labels
 } 

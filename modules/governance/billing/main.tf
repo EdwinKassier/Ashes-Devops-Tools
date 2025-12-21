@@ -9,22 +9,8 @@ resource "google_billing_budget" "monthly_budget" {
   budget_filter {
     projects               = var.projects
     credit_types_treatment = "INCLUDE_ALL_CREDITS"
-
-    # Optional: Filter by labels
-    dynamic "labels" {
-      for_each = var.label_filters
-      content {
-        values = labels.value
-      }
-    }
-
-    # Optional: Filter by services
-    dynamic "services" {
-      for_each = var.service_filters
-      content {
-        ids = services.value
-      }
-    }
+    labels                 = var.label_filters
+    services               = var.service_filters
   }
 
   amount {

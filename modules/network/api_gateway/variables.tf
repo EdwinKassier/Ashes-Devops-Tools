@@ -42,7 +42,7 @@ variable "gateway_display_name" {
 variable "labels" {
   description = "Labels to apply to the gateway"
   type        = map(string)
-  default     = {
+  default = {
     environment = "production"
     managed_by  = "terraform"
   }

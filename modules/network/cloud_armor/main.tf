@@ -39,9 +39,9 @@ resource "google_compute_security_policy" "policy" {
             count        = rate_limit_options.value.threshold_count
             interval_sec = rate_limit_options.value.interval_sec
           }
-          conform_action   = try(rate_limit_options.value.conform_action, "allow")
-          exceed_action    = try(rate_limit_options.value.exceed_action, "deny(429)")
-          enforce_on_key  = try(rate_limit_options.value.enforce_on_key, null)
+          conform_action = try(rate_limit_options.value.conform_action, "allow")
+          exceed_action  = try(rate_limit_options.value.exceed_action, "deny(429)")
+          enforce_on_key = try(rate_limit_options.value.enforce_on_key, null)
           enforce_on_key_configs {
             enforce_on_key_type = try(rate_limit_options.value.enforce_on_key_type, "ALL")
           }

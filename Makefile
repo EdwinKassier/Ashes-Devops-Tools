@@ -62,7 +62,7 @@ validate-all: ## Validate all modules
 lint: ## Run tflint on all modules
 	@echo "$(BLUE)Running TFLint...$(NC)"
 	@$(TFLINT) --init
-	@$(TFLINT) --recursive --config=.tflint.hcl
+	@$(TFLINT) --recursive --config=$(PWD)/.tflint.hcl
 	@echo "$(GREEN)✓ Linting complete!$(NC)"
 
 ##@ Security

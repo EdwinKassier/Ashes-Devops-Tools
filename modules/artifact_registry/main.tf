@@ -13,8 +13,8 @@ resource "google_artifact_registry_repository" "repo" {
 
   labels = merge(
     {
-      "managed-by"  = "terraform"
-      "repository"  = each.key
+      "managed-by" = "terraform"
+      "repository" = each.key
     },
     var.labels
   )

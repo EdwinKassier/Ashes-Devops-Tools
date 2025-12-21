@@ -88,8 +88,8 @@ resource "google_storage_bucket_iam_binding" "private" {
     google_storage_bucket.twitter_dataflow_meta.name,
     google_storage_bucket.looker_data_backup.name
   ])
-  
-  bucket = each.key
-  role   = "roles/storage.legacyBucketReader"
+
+  bucket  = each.key
+  role    = "roles/storage.legacyBucketReader"
   members = var.allowed_members
 }

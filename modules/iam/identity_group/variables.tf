@@ -6,12 +6,12 @@ variable "customer_id" {
 variable "identity_groups" {
   description = "List of identity groups to create"
   type = list(object({
-    id                  = string
-    display_name        = string
-    email               = string
-    description         = optional(string)
+    id                   = string
+    display_name         = string
+    email                = string
+    description          = optional(string)
     initial_group_config = optional(string, "WITH_INITIAL_OWNER")
-    labels              = optional(map(string), {})
+    labels               = optional(map(string), {})
   }))
   default = []
 }

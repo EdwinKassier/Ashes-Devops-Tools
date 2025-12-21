@@ -1,13 +1,3 @@
-terraform {
-  required_version = ">= 1.0.0"
-  
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 4.0.0"
-    }
-  }
-}
 
 # Google Cloud Identity Group Membership resource
 resource "google_cloud_identity_group_membership" "membership" {
@@ -28,14 +18,3 @@ resource "google_cloud_identity_group_membership" "membership" {
 }
 
 # Output the membership details
-output "memberships" {
-  description = "Map of created group memberships"
-  value = {
-    for k, v in google_cloud_identity_group_membership.membership : k => {
-      name   = v.name
-      id     = v.id
-      member = v.preferred_member_key[0].id
-      roles  = v.roles[*].name
-    }
-  }
-}

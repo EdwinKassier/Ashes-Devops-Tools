@@ -14,10 +14,10 @@ output "admin_project" {
 output "organization" {
   description = "Organization details"
   value = {
-    id           = module.organization.organization_id
-    name         = module.organization.organization_name
-    domain       = module.organization.organization_domain
-    customer_id  = module.organization.organization_directory_customer_id
+    id          = module.organization.organization_id
+    name        = module.organization.organization_name
+    domain      = module.organization.organization_domain
+    customer_id = module.organization.organization_directory_customer_id
   }
   sensitive = true
 }

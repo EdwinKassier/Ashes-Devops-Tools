@@ -8,9 +8,9 @@ variable "business_units" {
   type        = map(map(string))
   default = {
     "infrastructure" = {}
-    "platform"      = {}
-    "security"      = {}
-    "workloads"     = {}
+    "platform"       = {}
+    "security"       = {}
+    "workloads"      = {}
   }
 }
 

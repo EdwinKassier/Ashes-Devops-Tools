@@ -10,7 +10,7 @@ output "repository_names" {
 
 output "repository_urls" {
   description = "Map of repository names to their Docker registry URLs"
-  value = { 
-    for k, v in google_artifact_registry_repository.repo : k => "${var.region}-docker.pkg.dev/${var.project_id}/${k}" 
+  value = {
+    for k, v in google_artifact_registry_repository.repo : k => "${var.region}-docker.pkg.dev/${var.project_id}/${k}"
   }
 }

@@ -37,8 +37,8 @@ output "folder_iam_bindings" {
   description = "Map of folder IAM bindings"
   value = {
     for k, v in google_folder_iam_binding.folder_iam_bindings : k => {
-      folder = v.folder
-      role   = v.role
+      folder  = v.folder
+      role    = v.role
       members = v.members
     }
   }

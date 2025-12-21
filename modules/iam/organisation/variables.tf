@@ -23,7 +23,7 @@ variable "billing_admin_members" {
 variable "allowed_regions" {
   description = "List of allowed GCP regions for resource creation"
   type        = list(string)
-  default     = ["europe-west1", "europe-west2", "us-central1"]  # Example defaults
+  default     = ["europe-west1", "europe-west2", "us-central1"] # Example defaults
 }
 
 

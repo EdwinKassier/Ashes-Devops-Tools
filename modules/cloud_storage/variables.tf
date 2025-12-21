@@ -12,7 +12,7 @@ variable "region" {
 variable "kms_key_name" {
   description = "The name of the KMS key to use for encryption"
   type        = string
-  default     = ""  # If empty, Google-managed key will be used
+  default     = "" # If empty, Google-managed key will be used
 }
 
 variable "allowed_members" {
