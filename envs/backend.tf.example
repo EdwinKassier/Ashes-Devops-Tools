@@ -1,0 +1,20 @@
+# Remote Backend Configuration Template
+# 
+# This file should be uncommented and configured for each environment.
+# The GCS bucket must be created beforehand with:
+#   - Object versioning enabled
+#   - Uniform bucket-level access enabled
+#   - Appropriate IAM permissions for Terraform service account
+#
+# terraform {
+#   backend "gcs" {
+#     bucket  = "your-org-terraform-state"
+#     prefix  = "terraform/state/${environment}"
+#     # Encryption is handled by GCS default encryption or CMEK
+#   }
+# }
+#
+# Example bucket creation (run once):
+# gsutil mb -l us-central1 gs://your-org-terraform-state
+# gsutil versioning set on gs://your-org-terraform-state
+# gsutil uniformbucketlevelaccess set on gs://your-org-terraform-state

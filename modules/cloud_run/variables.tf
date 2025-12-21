@@ -141,15 +141,3 @@ variable "additional_invokers" {
   type        = map(string)
   default     = {}
 }
-
-variable "service_ports" {
-  description = "A map of service names to their container ports (deprecated - ports now defined in locals)"
-  type        = map(number)
-  default = {
-    "ashes-flask"   = 8080
-    "ashes-django"  = 8000
-    "ashes-fastapi" = 8000
-    "ashes-express" = 8080
-    "ashes-hermes"  = 8080
-  }
-}

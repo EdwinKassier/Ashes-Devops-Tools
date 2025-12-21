@@ -16,6 +16,13 @@ resource "google_storage_bucket" "audit_logs" {
   force_destroy               = var.force_destroy_bucket
   uniform_bucket_level_access = true
 
+  dynamic "encryption" {
+    for_each = var.kms_key_name != null ? [1] : []
+    content {
+      default_kms_key_name = var.kms_key_name
+    }
+  }
+
   lifecycle_rule {
     condition {
       age = var.log_retention_days

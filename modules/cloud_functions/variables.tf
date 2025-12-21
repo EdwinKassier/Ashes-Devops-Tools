@@ -132,6 +132,11 @@ variable "allow_unauthenticated" {
   description = "Allow unauthenticated invocations (NOT RECOMMENDED for production)"
   type        = bool
   default     = false
+
+  validation {
+    condition     = var.allow_unauthenticated == false
+    error_message = "Public access (allow_unauthenticated=true) is restricted. Check your security policy."
+  }
 }
 
 variable "logs_bucket_name" {

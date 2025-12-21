@@ -20,3 +20,9 @@ variable "force_destroy_bucket" {
   type        = bool
   default     = false
 }
+
+variable "kms_key_name" {
+  description = "The KMS key name to encrypt the audit logs bucket (optional)"
+  type        = string
+  default     = null
+}

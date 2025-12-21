@@ -4,11 +4,11 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = "~> 4.0"
+      version = "~> 4.80"
     }
     google-beta = {
       source  = "hashicorp/google-beta"
-      version = "~> 4.0"
+      version = "~> 4.80"
     }
   }
 }
@@ -110,7 +110,23 @@ resource "google_storage_bucket" "firebase_web_config" {
   provider = google-beta
   name     = "${var.project_id}-firebase-web-config"
   location = var.region
+  project  = var.project_id
+
+  # Security best practices
+  uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
+
+  versioning {
+    enabled = true
+  }
+
+  labels = {
+    managed-by  = "terraform"
+    purpose     = "firebase-web-config"
+    environment = "shared"
+  }
 }
+
 
 resource "google_storage_bucket_object" "firebase_config" {
   count    = var.web_display_name != "" ? 1 : 0

@@ -4,16 +4,6 @@
  * VPC Module - Main Configuration
  */
 
-terraform {
-  required_version = ">= 1.0"
-  
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 4.0"
-    }
-  }
-}
 
 # VPC resource
 resource "google_compute_network" "vpc" {

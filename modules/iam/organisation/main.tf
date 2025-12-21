@@ -247,37 +247,37 @@ module "ou_group_memberships" {
     # Development Admins
     {
       group_id = module.ou_identity_groups.identity_groups["dev-admins"].name
-      member_id = "admin@${var.domain}"  # Replace with actual admin email
+      member_id = var.admin_email
       roles     = ["MEMBER", "MANAGER"]
     },
     # Development Developers
     {
       group_id = module.ou_identity_groups.identity_groups["dev-developers"].name
-      member_id = "developers@${var.domain}"  # Replace with actual developers group
+      member_id = var.developers_group_email
       roles     = ["MEMBER"]
     },
     # UAT Admins
     {
       group_id = module.ou_identity_groups.identity_groups["uat-admins"].name
-      member_id = "admin@${var.domain}"  # Replace with actual admin email
+      member_id = var.admin_email
       roles     = ["MEMBER", "MANAGER"]
     },
     # UAT Developers
     {
       group_id = module.ou_identity_groups.identity_groups["uat-developers"].name
-      member_id = "developers@${var.domain}"  # Replace with actual developers group
+      member_id = var.developers_group_email
       roles     = ["MEMBER"]
     },
     # Production Admins
     {
       group_id = module.ou_identity_groups.identity_groups["prod-admins"].name
-      member_id = "admin@${var.domain}"  # Replace with actual admin email
+      member_id = var.admin_email
       roles     = ["MEMBER", "MANAGER"]
     },
     # Production Developers
     {
       group_id = module.ou_identity_groups.identity_groups["prod-developers"].name
-      member_id = "developers@${var.domain}"  # Replace with actual developers group
+      member_id = var.developers_group_email
       roles     = ["MEMBER"]
     }
   ]

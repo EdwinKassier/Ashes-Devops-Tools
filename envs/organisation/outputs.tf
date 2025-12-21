@@ -53,3 +53,36 @@ output "domain_restricted_sharing_policy" {
   value       = module.organization.domain_restricted_sharing_policy
   sensitive   = true
 }
+
+# Environment Variables
+output "domain" {
+  description = "The organization domain"
+  value       = var.domain
+}
+
+output "project_prefix" {
+  description = "Project prefix used for naming"
+  value       = var.project_prefix
+}
+
+output "organization_name" {
+  description = "Name of the organization"
+  value       = var.organization_name
+}
+
+output "customer_id" {
+  description = "Google Cloud customer ID"
+  sensitive   = true
+  value       = var.customer_id
+}
+
+output "billing_account" {
+  description = "Billing account ID"
+  sensitive   = true
+  value       = var.billing_account
+}
+
+output "default_region" {
+  description = "Default region for resources"
+  value       = var.default_region
+}

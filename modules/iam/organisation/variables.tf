@@ -67,3 +67,13 @@ variable "project_labels" {
   type        = map(string)
   default     = {}
 }
+
+variable "admin_email" {
+  description = "Email address for the organization administrator"
+  type        = string
+}
+
+variable "developers_group_email" {
+  description = "Email address for the developers group"
+  type        = string
+}

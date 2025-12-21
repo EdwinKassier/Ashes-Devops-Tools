@@ -30,30 +30,3 @@ variable "default_region" {
   type        = string
   default     = "europe-west1"
 }
-
-# Output all variables for reference
-output "domain" {
-  value = var.domain
-}
-
-output "project_prefix" {
-  value = var.project_prefix
-}
-
-output "organization_name" {
-  value = var.organization_name
-}
-
-output "customer_id" {
-  sensitive = true
-  value     = var.customer_id
-}
-
-output "billing_account" {
-  sensitive = true
-  value     = var.billing_account
-}
-
-output "default_region" {
-  value = var.default_region
-}
