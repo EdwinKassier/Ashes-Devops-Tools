@@ -61,3 +61,26 @@ resource "google_project_iam_audit_config" "project_audit_logs" {
     log_type = "DATA_WRITE"
   }
 }
+
+# Organization-level log sink (captures audit logs from all projects)
+# This is a best practice to ensure centralized audit logging across the org
+resource "google_logging_organization_sink" "org_audit_sink" {
+  count = var.org_id != null ? 1 : 0
+
+  name             = "org-audit-sink"
+  org_id           = var.org_id
+  destination      = "storage.googleapis.com/${google_storage_bucket.audit_logs.name}"
+  include_children = true
+
+  # Filter for all audit logs
+  filter = "logName:cloudaudit.googleapis.com"
+}
+
+# Grant the org sink writer access to the bucket
+resource "google_storage_bucket_iam_member" "org_log_writer" {
+  count = var.org_id != null ? 1 : 0
+
+  bucket = google_storage_bucket.audit_logs.name
+  role   = "roles/storage.objectCreator"
+  member = google_logging_organization_sink.org_audit_sink[0].writer_identity
+}

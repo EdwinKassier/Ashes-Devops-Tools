@@ -29,7 +29,7 @@ Organization
 
 ```hcl
 domain          = "your-domain.com"
-customer_id     = "C01234567"  # Your Google Workspace customer ID
+# customer_id is now automatically fetched via the domain
 billing_account = "billing-accounts/XXXXXX-XXXXXX-XXXXXX"
 project_prefix  = "my-org"
 organization_name = "My Company"
@@ -58,7 +58,6 @@ terraform apply
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | domain | The domain name of the organization | string | - | yes |
-| customer_id | Google Workspace customer ID | string | - | yes |
 | billing_account | Billing account ID | string | - | yes |
 | project_prefix | Prefix for project names | string | "my-org" | no |
 | organization_name | Name of the organization | string | "My Organization" | no |

@@ -1,0 +1,30 @@
+# Organization Configuration
+domain            = "example.com"
+organization_name = "My Company"
+billing_account   = "000000-000000-000000" # OR use billing_account_display_name
+
+# Project Naming
+project_prefix = "verify-org"
+
+# Admin & Group Configuration
+admin_email            = "admin@example.com"
+developers_group_email = "developers@example.com"
+
+# Optional: Add specific admin groups
+# organization_admin_groups = ["gcp-org-admins@example.com"]
+# billing_admin_groups      = ["gcp-billing-admins@example.com"]
+
+# Regions
+default_region  = "europe-west1"
+allowed_regions = ["europe-west1", "europe-west2", "us-central1"]
+
+# GitHub OIDC (for CI/CD)
+# github_org  = "MyOrg"
+# github_repo = "devops-infra"
+
+# Notifications (Optional)
+# security_contact_email = "security@example.com"
+# billing_contact_email  = "billing@example.com"
+
+# Budget
+# monthly_budget_amount = 1000

@@ -13,6 +13,16 @@ variable "network" {
   type        = string
 }
 
+variable "direction" {
+  description = "Direction of the firewall rule (INGRESS or EGRESS)"
+  type        = string
+  default     = "INGRESS"
+  validation {
+    condition     = contains(["INGRESS", "EGRESS"], var.direction)
+    error_message = "Direction must be either 'INGRESS' or 'EGRESS'."
+  }
+}
+
 variable "description" {
   description = "Description of the firewall rule"
   type        = string

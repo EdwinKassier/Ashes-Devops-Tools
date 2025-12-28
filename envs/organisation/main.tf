@@ -1,121 +1,81 @@
-# This file contains the main configuration for the organization structure
-# Provider configurations are in providers.tf
+# Modular Monolith Root Configuration
+# Composes the stage modules to enforce order and data passing.
 
-# Create admin project at the organization level
-resource "google_project" "admin_project" {
-  name            = "${var.project_prefix}-admin"
-  project_id      = "${var.project_prefix}-admin-${random_id.suffix.hex}"
-  billing_account = var.billing_account
-  labels = {
-    environment = "admin"
-    purpose     = "administration"
-    managed-by  = "terraform"
-  }
+# 1. Bootstrap: Automation Foundation
+module "bootstrap" {
+  source = "../../modules/stages/bootstrap"
+
+  project_prefix = var.project_prefix
+  org_id         = data.google_organization.org.org_id
+  billing_account = data.google_billing_account.billing.id
+  admin_email    = var.admin_email
+  github_org     = var.github_org
+  github_repo    = var.github_repo
 }
 
-# Random suffix to ensure unique project IDs
-resource "random_id" "suffix" {
-  byte_length = 4
-}
-
+# 2. Organization: Hierarchy & Governance
 module "organization" {
-  source = "../../modules/iam/organisation"
+  source = "../../modules/stages/organization"
 
-  domain                 = var.domain
-  project_id             = google_project.admin_project.project_id
-  customer_id            = var.customer_id
-  admin_email            = var.admin_email
+  domain             = var.domain
+  org_id             = data.google_organization.org.org_id
+  customer_id        = data.google_organization.org.directory_customer_id
+  admin_project_id   = module.bootstrap.admin_project_id
+  admin_project_number = module.bootstrap.admin_project_number
+  billing_account    = data.google_billing_account.billing.id
+  project_prefix     = var.project_prefix
+  environments       = var.environments
+  
+  admin_email        = var.admin_email
+  terraform_admin_email = module.bootstrap.terraform_admin_email
   developers_group_email = var.developers_group_email
+  organization_admin_groups = var.organization_admin_groups
+  billing_admin_groups = var.billing_admin_groups
+  
+  default_region         = var.default_region
+  allowed_regions        = var.allowed_regions
+  security_contact_email = var.security_contact_email
+  billing_contact_email  = var.billing_contact_email
+  monthly_budget_amount  = var.monthly_budget_amount
+  budget_currency        = var.budget_currency
 
-  # Default organization admins
-  org_admin_members = [
-    "user:admin@${var.domain}",
-    "group:gcp-organization-admins@${var.domain}"
-  ]
+  depends_on = [module.bootstrap]
+}
 
-  # Default billing admins
-  billing_admin_members = [
-    "user:billing@${var.domain}",
-    "group:gcp-billing-admins@${var.domain}"
-  ]
+# 3. Projects: Workload & Spoke Projects
+module "projects" {
+  source = "../../modules/stages/projects"
 
-  # Allowed regions for resource creation
-  allowed_regions = ["europe-west1", "europe-west2", "us-central1"]
+  project_prefix      = var.project_prefix
+  organization_name   = var.organization_name
+  default_billing_account = data.google_billing_account.billing.id
+  admin_project_id    = module.bootstrap.admin_project_id
+  folders             = module.organization.folders
+  environments        = var.environments
+  project_services    = var.project_services
+  
+  # Pass the suffix from bootstrap to ensure ID consistency
+  suffix              = module.bootstrap.suffix
+  
+  depends_on = [module.organization]
+}
 
-  # Organizational Units and Projects
-  organizational_units = {
-    development = {
-      display_name = "Development"
-      description  = "Development environment"
-      projects = {
-        "shared" = {
-          name            = "${var.project_prefix}-dev-shared"
-          billing_account = var.billing_account
-          labels = {
-            environment = "development"
-            purpose     = "shared-services"
-          }
-        }
-        "applications" = {
-          name            = "${var.project_prefix}-dev-apps"
-          billing_account = var.billing_account
-          labels = {
-            environment = "development"
-            purpose     = "applications"
-          }
-        }
-      }
-    }
-    uat = {
-      display_name = "UAT"
-      description  = "User Acceptance Testing"
-      projects = {
-        "shared" = {
-          name            = "${var.project_prefix}-uat-shared"
-          billing_account = var.billing_account
-          labels = {
-            environment = "uat"
-            purpose     = "shared-services"
-          }
-        }
-        "applications" = {
-          name            = "${var.project_prefix}-uat-apps"
-          billing_account = var.billing_account
-          labels = {
-            environment = "uat"
-            purpose     = "applications"
-          }
-        }
-      }
-    }
-    production = {
-      display_name = "Production"
-      description  = "Production environment"
-      projects = {
-        "shared" = {
-          name            = "${var.project_prefix}-prod-shared"
-          billing_account = var.billing_account
-          labels = {
-            environment = "production"
-            purpose     = "shared-services"
-          }
-        }
-        "applications" = {
-          name            = "${var.project_prefix}-prod-apps"
-          billing_account = var.billing_account
-          labels = {
-            environment = "production"
-            purpose     = "applications"
-          }
-        }
-      }
-    }
+# 4. Network Hub: Connectivity Layer
+module "network_hub" {
+  source = "../../modules/stages/network-hub"
+
+  project_prefix    = var.project_prefix
+  default_region    = var.default_region
+  
+  hub_project_id    = module.projects.project_ids["shared-hub"]
+  dns_project_id    = module.projects.project_ids["shared-dns"]
+  spoke_project_ids = {
+    "dev"  = module.projects.project_ids["dev-host"]
+    "prod" = module.projects.project_ids["prod-host"]
   }
 
-  # Common labels for all projects
-  project_labels = {
-    managed-by   = "terraform"
-    owner        = "platform-team"
-    organization = var.organization_name
-  }
+  org_id  = data.google_organization.org.org_id
+  folders = module.organization.folders
+
+  depends_on = [module.projects]
 }

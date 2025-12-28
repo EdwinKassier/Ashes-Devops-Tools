@@ -81,10 +81,17 @@ Ashes-Devops-Tools/
 - `artifact_registery/` - Container images
 
 #### **Networking**
-- `vpc/` - Virtual Private Cloud
-- `network-firewall/` - Firewall rules
-- `cloud_armor/` - DDoS protection
+- `vpc/` - Virtual Private Cloud (Dynamic CIDR, PSA, PSC integrated)
+- `subnet/` - Standardized subnet factory
+- `network-firewall/` - Hierarchical firewall rules
+- `cloud_armor/` - DDoS protection & WAF
 - `api_gateway/` - API management
+- `cdn/` - Content Delivery Network (Edge Entrypoint)
+- `dns/` - Cloud DNS (Public/Private)
+- `vpc-peering/` - Bi-directional VPC peering
+- `private-service-connect/` - Secure Google API access
+- `private-service-access/` - Cloud SQL/Redis access
+- `vpn/` - Cloud VPN (HA/BGP)
 
 #### **IAM & Security**
 - `iam/organisation/` - Organization IAM
@@ -137,13 +144,13 @@ Each environment contains:
 ```
 Environment (dev/uat/prod)
 ├── Shared Services Project
-│   ├── Networking (VPC, subnets, firewall)
+│   ├── Networking (VPC, VPN, DNS, Interconnect)
 │   ├── Security (KMS, Secret Manager)
 │   ├── Monitoring (Cloud Logging, Monitoring)
 │   └── Governance (Audit logs, budgets)
 └── Applications Project
     ├── Compute (Cloud Run, Cloud Functions)
-    ├── Storage (Cloud Storage, Firestore)
+    ├── Storage (Cloud Storage, Firestore, SQL)
     ├── Networking (Load Balancers, CDN)
     └── IAM (Service accounts, roles)
 ```
@@ -156,34 +163,44 @@ Environment (dev/uat/prod)
 
 ```
 VPC Network
-├── Public Subnets (3 zones)
-│   └── Internet-facing services
-├── Private Subnets (3 zones)
-│   └── Internal services
-├── Database Subnets (3 zones)
-│   └── Data storage
+├── Public Subnets (Auto-discovered zones)
+│   └── External LBs / NAT Gateways
+├── Private Subnets (Auto-discovered zones)
+│   └── Compute workloads
+├── Database Subnets (Auto-discovered zones)
+│   └── Data persistence
 ├── Cloud Router
-│   └── NAT Gateway
-└── Firewall Rules
-    ├── Ingress rules
-    └── Egress rules
+│   └── NAT Gateway (Logging enabled)
+├── Connectivity
+│   ├── VPN Gateway (HA/BGP)
+│   ├── VPC Peering (Hub-and-Spoke)
+│   ├── Private Service Access (Cloud SQL/Redis)
+│   └── Private Service Connect (Google APIs)
+└── Security
+    ├── Firewall Rules (Tiered: Public -> Compute -> DB)
+    └── Egress Deny Rules
 ```
 
 ### Network Security Layers
 
-1. **Perimeter Security**
+1. **Edge Security (CDN)**
+   - Global Load Balancer with Cloud CDN
+   - SSL/TLS termination
+   - Edge caching
+
+2. **Perimeter Security**
    - Cloud Armor (DDoS protection)
-   - WAF rules
+   - WAF rules (OWASP Top 10)
    - Rate limiting
 
-2. **Network Security**
-   - VPC firewall rules
-   - Private Google Access
-   - VPC Service Controls
+3. **Network Security**
+   - VPC firewall rules (Tiered architecture)
+   - Private Google Access (PSC/PSA)
+   - Database Egress Denial (Defense in Depth)
 
-3. **Application Security**
-   - IAM authentication
-   - Service-to-service auth
+4. **Application Security**
+   - API Gateway with authentication
+   - IAM service-to-service auth
    - Private endpoints
 
 ---
@@ -194,9 +211,11 @@ VPC Network
 
 ```
 ┌─────────────────────────────────────────┐
+│    Cloud CDN / Global Load Balancer     │ ← Edge caching, SSL termination
+├─────────────────────────────────────────┤
 │           Cloud Armor (L7)              │ ← DDoS, WAF
 ├─────────────────────────────────────────┤
-│       Load Balancer (L4/L7)             │ ← SSL/TLS termination
+│            API Gateway                  │ ← API management, auth
 ├─────────────────────────────────────────┤
 │          VPC Firewall Rules             │ ← Network filtering
 ├─────────────────────────────────────────┤

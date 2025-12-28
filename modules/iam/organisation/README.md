@@ -59,10 +59,11 @@ module "organization" {
 |------|-------------|------|---------|:--------:|
 | domain | The domain name of the organization (e.g., 'example.com') | string | - | yes |
 | project_id | The project ID to enable services in | string | - | yes |
+| customer_id | The customer ID of the Google Cloud organization | string | - | yes |
 | org_admin_members | List of members to have organization admin role | list(string) | [] | no |
 | billing_admin_members | List of members to have billing admin role | list(string) | [] | no |
-| allowed_regions | List of allowed GCP regions for resource creation | list(string) | ["europe-west1", "europe-west2", "us-central1"] | no |
-| tags | Tags to be applied to all resources | map(string) | {} | no |
+| organizational_units | Map of organizational units to create | map(object) | ... | no |
+| group_defaults | Map of group keys to list of default members | map(list(string)) | {} | no |
 
 ## Outputs
 

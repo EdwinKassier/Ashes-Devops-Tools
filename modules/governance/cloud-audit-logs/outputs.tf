@@ -27,3 +27,13 @@ output "log_sink_writer_identity" {
   description = "The service account that writes audit logs to the storage bucket"
   value       = google_logging_project_sink.audit_logs_sink.writer_identity
 }
+
+output "org_log_sink_name" {
+  description = "The name of the organization-level log sink (if created)"
+  value       = var.org_id != null ? google_logging_organization_sink.org_audit_sink[0].name : null
+}
+
+output "org_log_sink_writer_identity" {
+  description = "The service account that writes org-level audit logs to the storage bucket"
+  value       = var.org_id != null ? google_logging_organization_sink.org_audit_sink[0].writer_identity : null
+}

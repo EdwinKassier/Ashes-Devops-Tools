@@ -59,4 +59,79 @@ resource "google_compute_security_policy" "policy" {
       }
     }
   }
+}
+
+# OWASP Core Rule Set Rules (when enabled)
+locals {
+  owasp_rules = var.enable_owasp_rules ? {
+    "sqli" = {
+      rule_id     = "sqli-v33-stable"
+      priority    = 1000
+      description = "SQL Injection protection"
+    }
+    "xss" = {
+      rule_id     = "xss-v33-stable"
+      priority    = 1001
+      description = "Cross-site scripting protection"
+    }
+    "lfi" = {
+      rule_id     = "lfi-v33-stable"
+      priority    = 1002
+      description = "Local file inclusion protection"
+    }
+    "rfi" = {
+      rule_id     = "rfi-v33-stable"
+      priority    = 1003
+      description = "Remote file inclusion protection"
+    }
+    "rce" = {
+      rule_id     = "rce-v33-stable"
+      priority    = 1004
+      description = "Remote code execution protection"
+    }
+    "scanner" = {
+      rule_id     = "scannerdetection-v33-stable"
+      priority    = 1005
+      description = "Scanner detection"
+    }
+    "protocol" = {
+      rule_id     = "protocolattack-v33-stable"
+      priority    = 1006
+      description = "Protocol attack protection"
+    }
+  } : {}
+}
+
+# OWASP Preconfigured WAF Rules
+resource "google_compute_security_policy_rule" "owasp_rules" {
+  for_each = local.owasp_rules
+
+  project         = var.project_id
+  security_policy = google_compute_security_policy.policy.name
+  action          = "deny(403)"
+  priority        = each.value.priority
+  description     = each.value.description
+
+  match {
+    expr {
+      expression = "evaluatePreconfiguredWaf('${each.value.rule_id}', {'sensitivity': ${var.owasp_sensitivity}})"
+    }
+  }
+}
+
+# Additional Preconfigured WAF Rules
+resource "google_compute_security_policy_rule" "preconfigured_waf_rules" {
+  for_each = { for r in var.preconfigured_waf_rules : r.rule_id => r }
+
+  project         = var.project_id
+  security_policy = google_compute_security_policy.policy.name
+  action          = each.value.action
+  priority        = each.value.priority
+  description     = each.value.description
+
+  match {
+    expr {
+      expression = "evaluatePreconfiguredWaf('${each.value.rule_id}', {'sensitivity': ${each.value.sensitivity}})"
+    }
+  }
 } 

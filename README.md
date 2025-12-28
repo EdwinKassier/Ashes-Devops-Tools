@@ -21,7 +21,7 @@
 
 ## Overview
 
-The **Ashes DevOps Tools** repository provides a complete Infrastructure as Code (IaC) solution for managing Google Cloud Platform infrastructure using Terraform. This production-ready repository includes 17 reusable modules, automated CI/CD pipelines, comprehensive security scanning, and complete documentation.
+The **Ashes DevOps Tools** repository provides a complete Infrastructure as Code (IaC) solution for managing Google Cloud Platform infrastructure using Terraform. This production-ready repository includes 35+ reusable modules, automated CI/CD pipelines, comprehensive security scanning, and complete documentation.
 
 ---
 
@@ -29,7 +29,7 @@ The **Ashes DevOps Tools** repository provides a complete Infrastructure as Code
 
 Get started in 3 simple steps:
 
-\`\`\`bash
+```bash
 # 1. Install dependencies
 make install && make pre-commit-install
 
@@ -38,7 +38,7 @@ gcloud auth application-default login
 
 # 3. Initialize and validate
 cd envs/dev && terraform init && make validate-all
-\`\`\`
+```
 
 See the **[Quick Start Guide](docs/guides/QUICK_START.md)** for detailed setup instructions.
 
@@ -76,65 +76,82 @@ See the **[Quick Start Guide](docs/guides/QUICK_START.md)** for detailed setup i
 
 ### **Environments**
 
-\`\`\`
+```
 envs/
 ├── organisation/    # Organization-level resources
 ├── dev/            # Development environment
 ├── uat/            # User Acceptance Testing
 └── prod/           # Production environment
-\`\`\`
+```
 
 ### **Modules**
 
-17 reusable Terraform modules organized by category:
+35+ reusable Terraform modules organized by category:
 
 #### **Compute & Applications**
-- \`modules/cloud_run/\` - Containerized applications
-- \`modules/cloud_functions/\` - Serverless functions
-- \`modules/firebase/\` - Firebase services
+- `modules/firebase/` - Firebase services
+- `modules/monitoring/` - Compute Dashboard
 
 #### **Storage & Data**
-- \`modules/cloud_storage/\` - Object storage
-- \`modules/artifact_registery/\` - Container registry
+- `modules/cloud_storage/` - Object storage
+- `modules/artifact_registry/` - Container registry
 
 #### **Networking**
-- \`modules/network/vpc/\` - Virtual private cloud
-- \`modules/network/network-firewall/\` - Network security
-- \`modules/network/cloud_armor/\` - DDoS protection
-- \`modules/network/api_gateway/\` - API management
+- `modules/network/vpc/` - Virtual private cloud
+- `modules/network/subnet/` - Standardized subnet creation
+- `modules/network/network-firewall/` - Network security
+- `modules/network/hierarchical-firewall/` - Policy-based firewall
+- `modules/network/cloud_armor/` - DDoS protection
+- `modules/network/api_gateway/` - API management
+- `modules/network/cdn/` - Content delivery network
+- `modules/network/dns/` - Cloud DNS private/public zones
+- `modules/network/vpc-peering/` - VPC peering connections
+- `modules/network/private-service-connect/` - Private Service Connect
+- `modules/network/private-service-access/` - Private Service Access (SQL/Redis)
+- `modules/network/vpn/` - Cloud VPN (HA/BGP)
+- `modules/network/interconnect/` - Cloud Interconnect
+- `modules/network/internal-lb/` - Internal Load Balancer
+- `modules/network/nat/` - Cloud NAT
+- `modules/network/packet-mirroring/` - Packet Mirroring
+- `modules/network/shared-vpc-service/` - Shared VPC Service Attachment
+- `modules/network/vpc-flow-logs/` - VPC Flow Logs
+- `modules/network/vpc-sc/` - VPC Service Controls
 
 #### **IAM & Security**
-- \`modules/iam/organisation/\` - Organization IAM
-- \`modules/iam/role/\` - Custom IAM roles
-- \`modules/iam/identity_group/\` - Group management
-- \`modules/iam/identity_group_memberships/\` - Group memberships
-- \`modules/iam/organisation_units/\` - Organizational units
+- `modules/iam/organisation/` - Organization IAM
+- `modules/iam/role/` - Custom IAM roles
+- `modules/iam/identity_group/` - Group management
+- `modules/iam/identity_group_memberships/` - Group memberships
+- `modules/iam/organisation_units/` - Organizational units
+- `modules/iam/service_account/` - Service Account management
+- `modules/iam/workload_identity/` - Workload Identity Federation
 
 #### **Governance**
-- \`modules/governance/billing/\` - Budget monitoring
-- \`modules/governance/cloud-audit-logs/\` - Audit logging
+- `modules/governance/billing/` - Budget monitoring
+- `modules/governance/cloud-audit-logs/` - Audit logging
+- `modules/governance/org-policy/` - Organization Policies
 
 #### **Orchestration**
-- \`modules/host/\` - Unified project provisioning
+- `modules/host/` - Unified project provisioning
 
 ---
 
 ## Available Commands
 
-Run \`make help\` to see all commands. Most commonly used:
+Run `make help` to see all commands. Most commonly used:
 
 ### **Development**
-\`\`\`bash
+```bash
 make install           # Install all required tools
 make fmt               # Format all Terraform files
 make validate-all      # Validate all modules
 make lint              # Run TFLint
 make security          # Run security scans
 make ci                # Run complete CI pipeline
-\`\`\`
+```
 
 ### **Environment Operations**
-\`\`\`bash
+```bash
 make init-dev          # Initialize dev environment
 make plan-dev          # Plan dev changes
 make apply-dev         # Apply dev changes
@@ -144,15 +161,15 @@ make apply-uat         # Apply UAT changes
 make init-prod         # Initialize prod environment
 make plan-prod         # Plan prod changes
 make apply-prod        # Apply prod changes (requires confirmation)
-\`\`\`
+```
 
 ### **Documentation & Quality**
-\`\`\`bash
+```bash
 make docs              # Generate module documentation
 make docs-check        # Verify documentation is current
 make pre-commit-run    # Run all pre-commit hooks
 make clean             # Clean temporary files
-\`\`\`
+```
 
 See the **[Makefile](Makefile)** for the complete list of 40+ commands.
 
@@ -173,10 +190,10 @@ See the **[Makefile](Makefile)** for the complete list of 40+ commands.
 - **pre-commit** - 14 automated quality checks
 
 Run security scans:
-\`\`\`bash
+```bash
 make security              # Run all security scans
 make security-report       # Generate detailed reports
-\`\`\`
+```
 
 ---
 
@@ -195,7 +212,7 @@ make security-report       # Generate detailed reports
 
 Deploy using git tags:
 
-\`\`\`bash
+```bash
 # Development
 git tag -a env/dev/v1.0.0 -m "Deploy dev v1.0.0"
 git push origin env/dev/v1.0.0
@@ -207,13 +224,13 @@ git push origin env/uat/v1.0.0
 # Production (requires approval)
 git tag -a env/prod/v1.0.0 -m "Deploy prod v1.0.0"
 git push origin env/prod/v1.0.0
-\`\`\`
+```
 
 ---
 
 ## Module Documentation
 
-Each module includes auto-generated documentation using \`terraform-docs\`:
+Each module includes auto-generated documentation using `terraform-docs`:
 
 - Input variables with descriptions and validation
 - Output values
@@ -221,10 +238,10 @@ Each module includes auto-generated documentation using \`terraform-docs\`:
 - Usage examples
 
 Generate documentation:
-\`\`\`bash
+```bash
 make docs              # Generate docs for all modules
 make docs-check        # Verify docs are up to date
-\`\`\`
+```
 
 ---
 
@@ -235,7 +252,7 @@ Having issues? Check these resources:
 1. **[Troubleshooting Guide](docs/guides/TROUBLESHOOTING.md)** - Common issues and solutions
 2. **[Quick Start Guide](docs/guides/QUICK_START.md)** - Setup instructions
 3. **[Documentation Index](docs/INDEX.md)** - All documentation
-4. **Run diagnostics**: \`make validate-all && make lint && make security\`
+4. **Run diagnostics**: `make validate-all && make lint && make security`
 
 ---
 
@@ -243,7 +260,7 @@ Having issues? Check these resources:
 
 | Category | Status |
 |:---|:---:|
-| **Infrastructure Modules** | ✅ 17 modules |
+| **Infrastructure Modules** | ✅ 35+ modules |
 | **CI/CD Automation** | ✅ 4 workflows |
 | **Security Scanning** | ✅ 4 tools |
 | **Pre-commit Hooks** | ✅ 14 hooks |
@@ -279,10 +296,10 @@ Having issues? Check these resources:
 → [Troubleshooting Guide](docs/guides/TROUBLESHOOTING.md)
 
 **Run commands**
-→ \`make help\` or see [Makefile](Makefile)
+→ `make help` or see [Makefile](Makefile)
 
 **Deploy changes**
-→ \`make plan-dev && make apply-dev\`
+→ `make plan-dev && make apply-dev`
 
 **Run quality checks**
-→ \`make ci\`
+→ `make ci`

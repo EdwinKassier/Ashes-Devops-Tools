@@ -77,4 +77,10 @@ EOF
 variable "service_account_email" {
   description = "The service account email to use for the API Gateway backend"
   type        = string
-} 
+}
+
+variable "managed_service_ids" {
+  description = "A map of Service IDs to inject into the OpenAPI spec, replacing the need for external script discovery."
+  type        = map(string)
+  default     = {}
+}

@@ -1,0 +1,71 @@
+openapi: '3.0.0'
+info:
+  title: '${display_name}'
+  version: '1.0.0'
+paths:
+%{ for service_name, service_url in services ~}
+  /${service_name}/**:
+    get:
+      summary: Proxy for ${service_name}
+      operationId: ${service_name}_get
+      x-google-backend:
+        address: ${service_url}
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Proxy for ${service_name}
+      operationId: ${service_name}_post
+      x-google-backend:
+        address: ${service_url}
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        '200':
+          description: OK
+    put:
+      summary: Proxy for ${service_name}
+      operationId: ${service_name}_put
+      x-google-backend:
+        address: ${service_url}
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        '200':
+          description: OK
+    delete:
+      summary: Proxy for ${service_name}
+      operationId: ${service_name}_delete
+      x-google-backend:
+        address: ${service_url}
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        '200':
+          description: OK
+    patch:
+      summary: Proxy for ${service_name}
+      operationId: ${service_name}_patch
+      x-google-backend:
+        address: ${service_url}
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        '200':
+          description: OK
+    options:
+      summary: Proxy for ${service_name}
+      operationId: ${service_name}_options
+      x-google-backend:
+        address: ${service_url}
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        '200':
+          description: OK
+    head:
+      summary: Proxy for ${service_name}
+      operationId: ${service_name}_head
+      x-google-backend:
+        address: ${service_url}
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        '200':
+          description: OK
+%{ endfor ~}

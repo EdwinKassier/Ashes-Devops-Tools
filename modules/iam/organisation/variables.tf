@@ -9,41 +9,57 @@ variable "project_id" {
 }
 
 variable "org_admin_members" {
-  description = "List of members to have organization admin role"
+  description = "List of members to have organization admin role (format: user:email, group:email, serviceAccount:email, or domain:domain)"
   type        = list(string)
   default     = []
+
+  validation {
+    condition = alltrue([
+      for m in var.org_admin_members :
+      can(regex("^(user:|group:|serviceAccount:|domain:)", m))
+    ])
+    error_message = "Each member must be prefixed with 'user:', 'group:', 'serviceAccount:', or 'domain:'."
+  }
 }
 
 variable "billing_admin_members" {
-  description = "List of members to have billing admin role"
+  description = "List of members to have billing admin role (format: user:email, group:email, serviceAccount:email, or domain:domain)"
   type        = list(string)
   default     = []
+
+  validation {
+    condition = alltrue([
+      for m in var.billing_admin_members :
+      can(regex("^(user:|group:|serviceAccount:|domain:)", m))
+    ])
+    error_message = "Each member must be prefixed with 'user:', 'group:', 'serviceAccount:', or 'domain:'."
+  }
 }
 
-variable "allowed_regions" {
-  description = "List of allowed GCP regions for resource creation"
-  type        = list(string)
-  default     = ["europe-west1", "europe-west2", "us-central1"] # Example defaults
-}
+
 
 
 variable "customer_id" {
-  description = "The customer ID of the Google Cloud organization (e.g., 'A01b123xz')"
+  description = "The customer ID of the Google Cloud organization (e.g., 'C0abc123')"
   type        = string
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9]+$", var.customer_id))
+    error_message = "Customer ID must be alphanumeric (e.g., 'C0abc123')."
+  }
 }
 
 
+# Organizational Units Configuration
 # Organizational Units Configuration
 variable "organizational_units" {
   description = "Map of organizational units to create"
   type = map(object({
     display_name = string
     description  = optional(string, "")
-    projects = optional(map(object({
-      name            = string
-      billing_account = string
-      folder_id       = optional(string)
-      labels          = optional(map(string), {})
+    groups = optional(map(object({
+      role        = string
+      description = optional(string)
     })), {})
   }))
   default = {
@@ -62,18 +78,8 @@ variable "organizational_units" {
   }
 }
 
-variable "project_labels" {
-  description = "Common labels to apply to all projects"
-  type        = map(string)
+variable "group_defaults" {
+  description = "Map of group keys to list of default members (e.g. { admins = ['user:admin@example.com'] })"
+  type        = map(list(string))
   default     = {}
-}
-
-variable "admin_email" {
-  description = "Email address for the organization administrator"
-  type        = string
-}
-
-variable "developers_group_email" {
-  description = "Email address for the developers group"
-  type        = string
 }

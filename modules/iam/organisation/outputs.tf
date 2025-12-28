@@ -19,11 +19,7 @@ output "organization_directory_customer_id" {
   value       = data.google_organization.org.directory_customer_id
 }
 
-output "domain_restricted_sharing_policy" {
-  description = "Details of the domain restricted sharing policy"
-  value       = google_org_policy_policy.domain_restricted_sharing
-  sensitive   = true
-}
+
 
 # Identity Groups
 output "identity_groups" {
@@ -32,18 +28,19 @@ output "identity_groups" {
   sensitive   = true
 }
 
-# Folder IAM Bindings
-output "folder_iam_bindings" {
-  description = "Map of folder IAM bindings"
+# Folder IAM Members
+output "folder_iam_members" {
+  description = "Map of folder IAM members"
   value = {
-    for k, v in google_folder_iam_binding.folder_iam_bindings : k => {
-      folder  = v.folder
-      role    = v.role
-      members = v.members
+    for k, v in google_folder_iam_member.folder_iam_members : k => {
+      folder = v.folder
+      role   = v.role
+      member = v.member
     }
   }
   sensitive = true
 }
+
 
 # Group Memberships
 output "group_memberships" {
@@ -78,18 +75,4 @@ output "folders" {
       id   = v.name
     }
   }
-}
-
-output "projects" {
-  description = "Map of created projects"
-  value = {
-    for k, v in google_project.projects : k => {
-      project_id = v.project_id
-      name       = v.name
-      number     = v.number
-      folder_id  = v.folder_id
-      labels     = v.labels
-    }
-  }
-  sensitive = true
 }

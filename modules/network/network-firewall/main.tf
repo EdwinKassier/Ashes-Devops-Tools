@@ -4,6 +4,8 @@ resource "google_compute_firewall" "firewall_rule" {
   name     = var.firewall_rule_name
   network  = var.network
 
+  direction = var.direction
+
   description = var.description
 
   priority = var.priority

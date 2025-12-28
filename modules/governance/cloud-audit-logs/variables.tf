@@ -26,3 +26,9 @@ variable "kms_key_name" {
   type        = string
   default     = null
 }
+
+variable "org_id" {
+  description = "Organization ID for org-level log sink (optional). When provided, creates an org-level sink that captures audit logs from all projects."
+  type        = string
+  default     = null
+}
