@@ -6,7 +6,7 @@ labels: security
 assignees: ''
 ---
 
-## ⚠️ IMPORTANT SECURITY NOTICE
+## IMPORTANT SECURITY NOTICE
 
 **If this is a critical security vulnerability, DO NOT create a public issue.**
 

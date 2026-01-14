@@ -1,34 +1,34 @@
-# 📚 Ashes DevOps Tools Documentation Index
+# Ashes DevOps Tools Documentation Index
 
 ## Quick Navigation
 
-### 🚀 Getting Started
+### Getting Started
 - **[Quick Start Guide](guides/QUICK_START.md)** - Get set up in 5 minutes
 - **[Main README](../README.md)** - Project overview and architecture
 
-### 📖 Guides
+### Guides
 - **[Quick Start](guides/QUICK_START.md)** - 5-minute setup
 - **[Troubleshooting](guides/TROUBLESHOOTING.md)** - Common issues and solutions
 
-### 🏗️ Architecture
+### Architecture
 - **[System Architecture](architecture/ARCHITECTURE.md)** - Complete system design
 
-### 🔒 Security
+### Security
 Security documentation includes comprehensive security scanning with TFSec, Checkov, Trivy, and GitLeaks. See the [Makefile](../Makefile) for security commands.
 
-### 🤝 Contributing
-Contributions are welcome! Please ensure all changes pass quality checks by running `make ci` before submitting.
+### Contributing
+Contributions are welcome! See the **[Contributing Guide](../CONTRIBUTING.md)** for details. Please ensure all changes pass quality checks by running `make ci` before submitting.
 
-### 📋 Development Tools
+### Development Tools
 - **[Makefile](../Makefile)** - 40+ commands for development
 - **[Pre-commit Configuration](../.pre-commit-config.yaml)** - Automated quality checks
 - **[TFLint Configuration](../.tflint.hcl)** - Linting rules
 
 ---
 
-## 📁 Documentation Structure
+## Documentation Structure
 
-```
+```text
 docs/
 ├── INDEX.md                     # This file - documentation navigation
 ├── architecture/
@@ -39,7 +39,7 @@ docs/
 ```
 
 ### **Root Configuration Files**
-```
+```text
 .
 ├── README.md                    # Main project documentation
 ├── Makefile                     # 40+ development commands
@@ -57,7 +57,7 @@ docs/
 
 ---
 
-## 🎯 Common Tasks
+## Common Tasks
 
 ### I want to...
 
@@ -97,7 +97,7 @@ make help
 
 ---
 
-## 🔗 External Resources
+## External Resources
 
 - [Terraform Documentation](https://www.terraform.io/docs)
 - [GCP Best Practices](https://cloud.google.com/docs/enterprise/best-practices-for-enterprise-organizations)

@@ -20,9 +20,10 @@ locals {
     database    = "database"
   }
 
-  # Dynamic CIDR calculation based on region (moved from VPC module)
-  region_hash    = abs(tonumber(format("%d", parseint(substr(md5(var.region), 0, 4), 16)))) % 256
-  vpc_cidr_block = "10.${local.region_hash}.0.0/16"
+  # Dynamic CIDR calculation: Use provided CIDR or fallback to consistent hash of VPC Name
+  # Using VPC Name is safer for standalone usage than Region, as multiple VPCs can exist in one region.
+  name_hash      = abs(tonumber(format("%d", parseint(substr(md5(var.vpc_name), 0, 4), 16)))) % 256
+  vpc_cidr_block = var.vpc_cidr_block != null ? var.vpc_cidr_block : "10.${local.name_hash}.0.0/16"
 
   # Calculate subnets dynamically
   public_cidrs   = length(var.subnet_cidrs.public) > 0 ? var.subnet_cidrs.public : [for i, z in local.zones : cidrsubnet(local.vpc_cidr_block, 8, i)]
@@ -85,6 +86,12 @@ module "private_subnets" {
   enable_flow_logs                = true
   log_config_aggregation_interval = var.log_config_aggregation_interval
   log_config_flow_sampling        = var.log_config_flow_sampling
+
+  # Architecture: Enable Private Google Access for internal VMs
+  private_ip_google_access = true
+
+  # GKE Readiness: Pass secondary ranges if defined for this zone
+  secondary_ip_ranges = try(var.secondary_ranges[each.key], [])
 }
 
 # Database subnets
@@ -101,6 +108,9 @@ module "database_subnets" {
   enable_flow_logs                = true
   log_config_aggregation_interval = var.log_config_aggregation_interval
   log_config_flow_sampling        = var.log_config_flow_sampling
+
+  # Architecture: Enable Private Google Access for secure data operations
+  private_ip_google_access = true
 }
 
 # -----------------------------------------------------------------------------
@@ -292,6 +302,28 @@ module "firewall_database_deny_egress" {
   enable_logging = var.enable_firewall_logging
 }
 
+# Deny all other ingress traffic (Logging / Catch-all)
+module "firewall_deny_all" {
+  source = "../network/network-firewall"
+  count  = var.enable_networking ? 1 : 0
+
+  project_id         = var.project_id
+  firewall_rule_name = "${var.vpc_name}-deny-all-ingress"
+  network            = module.vpc[0].name
+  description        = "Deny all ingress traffic (lowest priority) and log it"
+  priority           = 65535
+  direction          = "INGRESS"
+
+  deny_rules = [
+    {
+      protocol = "all"
+    }
+  ]
+
+  source_ranges  = ["0.0.0.0/0"]
+  enable_logging = var.enable_firewall_logging
+}
+
 # =============================================================================
 # EDGE SECURITY (Cloud Armor WAF)
 # =============================================================================
@@ -335,14 +367,15 @@ module "dns" {
   source   = "../network/dns"
   for_each = var.dns_zones
 
-  project_id     = var.project_id
-  zone_name      = each.key
-  dns_name       = each.value.dns_name
-  description    = try(each.value.description, "Managed DNS zone for ${each.key}")
-  visibility     = each.value.visibility
-  dnssec_enabled = try(each.value.dnssec_enabled, false)
-  enable_logging = true
-  labels         = var.labels
+  project_id      = var.project_id
+  zone_name       = each.key
+  dns_name        = each.value.dns_name
+  description     = try(each.value.description, "Managed DNS zone for ${each.key}")
+  visibility      = each.value.visibility
+  dnssec_enabled  = try(each.value.dnssec_enabled, false)
+  peering_network = try(each.value.peering_network, "")
+  enable_logging  = true
+  labels          = var.labels
 
   private_visibility_networks = each.value.visibility == "private" ? [
     var.enable_networking ? module.vpc[0].self_link : var.existing_network_self_link
@@ -541,6 +574,7 @@ module "vpc_service_controls" {
   access_levels        = try(each.value.access_levels, [])
   ingress_policies     = try(each.value.ingress_policies, [])
   egress_policies      = try(each.value.egress_policies, [])
+  enable_dry_run       = try(each.value.enable_dry_run, false)
 }
 
 # =============================================================================

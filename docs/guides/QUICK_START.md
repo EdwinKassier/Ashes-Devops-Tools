@@ -11,7 +11,7 @@ Get up and running with Ashes DevOps Tools in 5 minutes!
 
 ---
 
-## 🚀 **5-Minute Setup**
+## **5-Minute Setup**
 
 ### Step 1: Clone Repository (30 seconds)
 
@@ -70,7 +70,7 @@ make security
 
 ---
 
-## ✅ **Verification Checklist**
+## **Verification Checklist**
 
 After setup, verify everything works:
 
@@ -82,13 +82,12 @@ After setup, verify everything works:
 
 ---
 
-## 📖 **Next Steps**
+## **Next Steps**
 
 ### Learn the Workflow
 
-1. **Read [Development Guide](DEVELOPMENT.md)** for detailed development workflow
-2. **Review [Contributing Guidelines](../../CONTRIBUTING.md)** for code standards
-3. **Check [Testing Guide](TESTING.md)** for running tests
+1. **Read [Contributing Guide](../../CONTRIBUTING.md)** for detailed development workflow, testing, and module standards.
+2. **Review [System Architecture](../architecture/ARCHITECTURE.md)** to understand the environment structure.
 
 ### Make Your First Change
 
@@ -117,7 +116,7 @@ After setup, verify everything works:
 
 ---
 
-## 🎯 **Common Commands**
+## **Common Commands**
 
 | Command | Description |
 |:---|:---|
@@ -133,7 +132,7 @@ After setup, verify everything works:
 
 ---
 
-## 🆘 **Troubleshooting**
+## **Troubleshooting**
 
 ### Installation Issues
 
@@ -177,16 +176,14 @@ chmod +x Makefile
 
 ---
 
-## 📚 **Additional Resources**
+## **Additional Resources**
 
-- [Development Guide](DEVELOPMENT.md) - Detailed development workflow
-- [Deployment Guide](DEPLOYMENT.md) - Deploying to environments
-- [Troubleshooting Guide](TROUBLESHOOTING.md) - Common issues
-- [Module Development](MODULE_DEVELOPMENT.md) - Creating modules
+- [Contributing Guide](../../CONTRIBUTING.md) - Development, Testing, and Deployment workflows
+- [System Architecture](../architecture/ARCHITECTURE.md) - Design reference
 
 ---
 
-## 💡 **Tips**
+## **Tips**
 
 1. **Always run `make ci` before committing** to catch issues early
 2. **Use `make help`** to discover available commands

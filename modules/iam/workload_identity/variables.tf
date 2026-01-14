@@ -52,6 +52,18 @@ variable "github_sa_bindings" {
   default = []
 }
 
+variable "github_allowed_refs" {
+  description = "List of allowed git refs for GitHub Actions (e.g., ['refs/heads/main', 'refs/heads/release/*']). When set, only workflows triggered from these refs can authenticate."
+  type        = list(string)
+  default     = []
+}
+
+variable "github_attribute_condition_override" {
+  description = "Full custom attribute condition for GitHub provider. When set, overrides the default condition based on organization and allowed_refs."
+  type        = string
+  default     = null
+}
+
 # GitLab Provider Configuration
 variable "enable_gitlab_provider" {
   description = "Enable GitLab CI OIDC provider"
@@ -91,4 +103,27 @@ variable "aws_account_id" {
   description = "AWS account ID to restrict access to"
   type        = string
   default     = null
+}
+
+# Terraform Cloud Provider Configuration
+variable "enable_tfc_provider" {
+  description = "Enable Terraform Cloud OIDC provider for Dynamic Credentials"
+  type        = bool
+  default     = false
+}
+
+variable "tfc_organization" {
+  description = "Terraform Cloud organization name"
+  type        = string
+  default     = null
+}
+
+variable "tfc_sa_bindings" {
+  description = "List of TFC workspace to service account bindings"
+  type = list(object({
+    workspace_name        = string
+    project_name          = optional(string, "*")
+    service_account_email = string
+  }))
+  default = []
 }

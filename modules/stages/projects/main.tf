@@ -2,7 +2,7 @@
 # Creates all environment projects based on the variable definition
 
 locals {
-    project_labels = {
+  project_labels = {
     managed-by   = "terraform"
     owner        = "platform-team"
     organization = var.organization_name
@@ -22,7 +22,7 @@ resource "google_project" "projects" {
     ]) : pair.key => pair
   }
 
-  name            = each.value.proj.name
+  name = each.value.proj.name
   # Prevent redundant "dev-host-dev" naming. Use explicit name if provided, or prefix-env-name
   # Use the shared suffix to ensure ID stability
   project_id      = "${var.project_prefix}-${each.value.ou}-${each.value.proj.name}-${var.suffix}"
@@ -36,6 +36,8 @@ resource "google_project" "projects" {
       environment = each.value.ou
     }
   )
+
+  auto_create_network = false
 }
 
 # Enable required services for each project

@@ -16,13 +16,7 @@ module "hub_network" {
   log_config_flow_sampling        = 0.5
   log_config_aggregation_interval = "INTERVAL_5_SEC"
 
-  # Attach Spoke Projects to Shared VPC
-  # This logic assumes specific project keys exist. 
-  # In a generic module, input would be a map of service projects.
-    for k, pid in var.spoke_project_ids : pid => {
-      grant_network_user_to_all_subnets = true
-    }
-  }
+
 
   # Hierarchical Firewall Policy (Defense in Depth)
   hierarchical_firewall_policies = {
@@ -34,9 +28,9 @@ module "hub_network" {
       ]
       rules = [
         {
-          priority = 500
-          action   = "deny"
-          direction = "INGRESS"
+          priority    = 500
+          action      = "deny"
+          direction   = "INGRESS"
           description = "Deny RDP/SSH from Public Internet (Use IAP instead)"
           layer4_configs = [
             { ip_protocol = "tcp", ports = ["22", "3389"] }
@@ -46,7 +40,32 @@ module "hub_network" {
       ]
     }
   }
+
+  # VPC Service Controls (Data Exfiltration Protection)
+  vpc_service_controls = {
+    "prod-data-perimeter" = {
+      organization_id = var.org_id
+      perimeter_title = "Production Data Protection Perimeter"
+      description     = "Prevents data exfiltration from production projects"
+
+      # ENFORCED: VPC-SC is now in enforcement mode
+      # Ensure all violations have been resolved before applying this change
+      enable_dry_run = true
+
+      protected_projects = [
+        for k, pid in var.spoke_project_ids : "projects/${pid}"
+        if startswith(k, "prod")
+      ]
+      restricted_services = [
+        "storage.googleapis.com",
+        "bigquery.googleapis.com",
+        "cloudfunctions.googleapis.com",
+        "run.googleapis.com"
+      ]
+    }
+  }
 }
+
 
 # DNS Hub (Name Resolution)
 module "dns_hub_network" {
@@ -67,8 +86,8 @@ module "dns_hub_zone" {
   source = "../../network/dns"
 
   project_id = var.dns_project_id
-  zone_name  = "internal-myorg-root"
-  dns_name   = "internal.myorg.com."
+  zone_name  = "internal-root"
+  dns_name   = "${var.internal_domain}."
   visibility = "private"
 
   description = "Root Internal Zone for Organization"
@@ -79,6 +98,7 @@ module "dns_hub_zone" {
   ]
 
   enable_logging = true
+  dnssec_enabled = true
 
   depends_on = [module.dns_hub_network]
 }

@@ -34,6 +34,7 @@ variable "environments" {
   type = map(object({
     display_name = string
     description  = string
+    cidr_block   = optional(string)
     groups = map(object({
       role = string
     }))
@@ -128,6 +129,12 @@ variable "allowed_regions" {
 variable "admin_email" {
   description = "Email address for the organization administrator"
   type        = string
+}
+
+variable "break_glass_user" {
+  description = "Email address for the break glass user (optional). Grants Organization Admin."
+  type        = string
+  default     = null
 }
 
 variable "developers_group_email" {

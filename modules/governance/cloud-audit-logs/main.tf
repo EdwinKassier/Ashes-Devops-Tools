@@ -84,3 +84,58 @@ resource "google_storage_bucket_iam_member" "org_log_writer" {
   role   = "roles/storage.objectCreator"
   member = google_logging_organization_sink.org_audit_sink[0].writer_identity
 }
+
+# =============================================================================
+# BIGQUERY LOG ANALYTICS (Optional)
+# =============================================================================
+
+# BigQuery dataset for audit log analytics
+resource "google_bigquery_dataset" "audit_logs_analytics" {
+  count = var.org_id != null && var.enable_bigquery_analytics ? 1 : 0
+
+  dataset_id    = "org_audit_logs_analytics"
+  friendly_name = "Organization Audit Logs Analytics"
+  description   = "Dataset for querying and analyzing organization-wide audit logs"
+  location      = var.bigquery_location
+  project       = var.project_id
+
+  # Partition expiration for cost management
+  default_partition_expiration_ms = var.bigquery_retention_days * 24 * 60 * 60 * 1000
+
+  labels = {
+    purpose    = "audit-logs"
+    managed-by = "terraform"
+  }
+}
+
+# Organization-level log sink to BigQuery for analytics
+resource "google_logging_organization_sink" "org_audit_bq_sink" {
+  count = var.org_id != null && var.enable_bigquery_analytics ? 1 : 0
+
+  name             = "org-audit-logs-bq-analytics"
+  org_id           = var.org_id
+  destination      = "bigquery.googleapis.com/projects/${var.project_id}/datasets/${google_bigquery_dataset.audit_logs_analytics[0].dataset_id}"
+  include_children = true
+
+  # Filter for Admin Activity and Policy logs (most useful for analytics)
+  # Data Access logs can be very high volume; add them if needed
+  filter = <<-EOF
+    logName:("cloudaudit.googleapis.com/activity" OR 
+             "cloudaudit.googleapis.com/policy")
+  EOF
+
+  # Use partitioned tables for better query performance and cost optimization
+  bigquery_options {
+    use_partitioned_tables = true
+  }
+}
+
+# Grant the BigQuery sink write access to the dataset
+resource "google_bigquery_dataset_iam_member" "bq_sink_writer" {
+  count = var.org_id != null && var.enable_bigquery_analytics ? 1 : 0
+
+  project    = var.project_id
+  dataset_id = google_bigquery_dataset.audit_logs_analytics[0].dataset_id
+  role       = "roles/bigquery.dataEditor"
+  member     = google_logging_organization_sink.org_audit_bq_sink[0].writer_identity
+}

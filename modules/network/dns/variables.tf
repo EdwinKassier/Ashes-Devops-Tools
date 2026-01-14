@@ -47,6 +47,12 @@ variable "private_visibility_networks" {
   default     = []
 }
 
+variable "peering_network" {
+  description = "The target VPC network for a peering zone (required when type is 'peering')"
+  type        = string
+  default     = ""
+}
+
 variable "records" {
   description = "DNS records to create in the zone"
   type = list(object({
@@ -59,7 +65,7 @@ variable "records" {
 }
 
 variable "dnssec_enabled" {
-  description = "Enable DNSSEC for the zone (public zones only)"
+  description = "Enable DNSSEC for the zone (supports both public and private zones)"
   type        = bool
   default     = false
 }

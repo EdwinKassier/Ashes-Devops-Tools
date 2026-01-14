@@ -10,10 +10,12 @@
 [![GCP](https://img.shields.io/badge/Google_Cloud-4285F4?style=for-the-badge&logo=google-cloud&logoColor=white)](https://cloud.google.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
-[![TFLint](https://img.shields.io/badge/TFLint-Passing-success?style=flat-square)](https://github.com/terraform-linters/tflint)
-[![TFSec](https://img.shields.io/badge/TFSec-Passing-success?style=flat-square)](https://github.com/aquasecurity/tfsec)
-[![Checkov](https://img.shields.io/badge/Checkov-Passing-success?style=flat-square)](https://www.checkov.io/)
-[![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?style=flat-square&logo=pre-commit)](https://github.com/pre-commit/pre-commit)
+<div align="center">
+  <a href="https://github.com/terraform-linters/tflint"><img src="https://img.shields.io/badge/TFLint-Passing-success?style=flat-square" alt="TFLint"/></a>
+  <a href="https://github.com/aquasecurity/tfsec"><img src="https://img.shields.io/badge/TFSec-Passing-success?style=flat-square" alt="TFSec"/></a>
+  <a href="https://www.checkov.io/"><img src="https://img.shields.io/badge/Checkov-Passing-success?style=flat-square" alt="Checkov"/></a>
+  <a href="https://github.com/pre-commit/pre-commit"><img src="https://img.shields.io/badge/pre--commit-enabled-brightgreen?style=flat-square&logo=pre-commit" alt="Pre-commit"/></a>
+</div>
 
 </div>
 
@@ -76,7 +78,7 @@ See the **[Quick Start Guide](docs/guides/QUICK_START.md)** for detailed setup i
 
 ### **Environments**
 
-```
+```text
 envs/
 ├── organisation/    # Organization-level resources
 ├── dev/            # Development environment
@@ -122,7 +124,7 @@ envs/
 - `modules/iam/role/` - Custom IAM roles
 - `modules/iam/identity_group/` - Group management
 - `modules/iam/identity_group_memberships/` - Group memberships
-- `modules/iam/organisation_units/` - Organizational units
+
 - `modules/iam/service_account/` - Service Account management
 - `modules/iam/workload_identity/` - Workload Identity Federation
 
@@ -130,9 +132,13 @@ envs/
 - `modules/governance/billing/` - Budget monitoring
 - `modules/governance/cloud-audit-logs/` - Audit logging
 - `modules/governance/org-policy/` - Organization Policies
+- `modules/governance/scc/` - Security Command Center
+- `modules/governance/kms/` - Key Management Service
+- `modules/governance/tags/` - Resource Tags
 
 #### **Orchestration**
 - `modules/host/` - Unified project provisioning
+- `modules/stages/` - Landing Zone stages (Bootstrap, Org, Projects, Network Hub, Workload)
 
 ---
 
@@ -260,13 +266,13 @@ Having issues? Check these resources:
 
 | Category | Status |
 |:---|:---:|
-| **Infrastructure Modules** | ✅ 35+ modules |
-| **CI/CD Automation** | ✅ 4 workflows |
-| **Security Scanning** | ✅ 4 tools |
-| **Pre-commit Hooks** | ✅ 14 hooks |
-| **Make Commands** | ✅ 40+ commands |
-| **Documentation** | ✅ Complete |
-| **Production Ready** | ✅ Yes |
+| **Infrastructure Modules** | 35+ |
+| **CI/CD Automation** | 4 Workflows |
+| **Security Scanning** | 4 Tools |
+| **Quality Checks** | 14 Hooks |
+| **Make Commands** | 40+ |
+| **Documentation** | Complete |
+| **Production Ready** | **Yes** |
 
 ---
 

@@ -13,6 +13,12 @@ variable "project_id" {
   type        = string
 }
 
+variable "vpc_cidr_block" {
+  description = "The CIDR block for the VPC. If not provided, it will be auto-calculated based on the VPC name hash."
+  type        = string
+  default     = null
+}
+
 variable "project_prefix" {
   description = "Prefix for naming resources (e.g., 'ashes-dev')"
   type        = string
@@ -113,7 +119,7 @@ variable "enable_firewall_logging" {
 }
 
 variable "compute_tier_ports" {
-  description = "Ports allowed from public to compute tier"
+  description = "Ports allowed from public to compute tier. WARNING: Exposing ports directly to 0.0.0.0/0 is discouraged. Prefer using Global Load Balancers with Cloud Armor."
   type        = list(string)
   default     = ["8080", "8443", "3000"]
 }
@@ -148,6 +154,15 @@ variable "subnet_cidrs" {
     private  = []
     database = []
   }
+}
+
+variable "secondary_ranges" {
+  description = "Secondary IP ranges for private subnets (required for GKE Pods/Services). Key is the zone name."
+  type = map(list(object({
+    range_name    = string
+    ip_cidr_range = string
+  })))
+  default = {}
 }
 
 # =============================================================================
@@ -255,10 +270,11 @@ variable "cdn_policy" {
 variable "dns_zones" {
   description = "Map of DNS zones to create"
   type = map(object({
-    dns_name       = string
-    visibility     = string
-    description    = optional(string)
-    dnssec_enabled = optional(bool, false)
+    dns_name        = string
+    visibility      = string
+    description     = optional(string)
+    dnssec_enabled  = optional(bool, false)
+    peering_network = optional(string)
     records = optional(list(object({
       name    = string
       type    = string
@@ -598,6 +614,7 @@ variable "vpc_service_controls" {
         service_name = string
       })))
     })), [])
+    enable_dry_run = optional(bool, false)
   }))
   default = {}
 }

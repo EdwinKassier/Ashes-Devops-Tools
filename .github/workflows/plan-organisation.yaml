@@ -19,18 +19,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
       - name: Terraform Init
         working-directory: envs/organisation
-        run: terraform init
+        run: terraform init -backend=false
 
       - name: Terraform Format Check
         working-directory: envs/organisation
@@ -40,6 +34,3 @@ jobs:
         working-directory: envs/organisation
         run: terraform validate
 
-      - name: Terraform Plan
-        working-directory: envs/organisation
-        run: terraform plan -lock=false

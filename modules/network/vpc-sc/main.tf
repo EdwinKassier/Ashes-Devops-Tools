@@ -84,53 +84,90 @@ resource "google_access_context_manager_service_perimeter" "perimeter" {
   description    = var.description
   perimeter_type = "PERIMETER_TYPE_REGULAR"
 
-  status {
-    resources           = [for p in var.protected_projects : "projects/${p}"]
-    restricted_services = var.restricted_services
-    access_levels = [
-      for level in var.access_levels :
-      "accessPolicies/${local.access_policy_name}/accessLevels/${level.name}"
-    ]
+  # Use explicit dry run spec when dry run is enabled
+  use_explicit_dry_run_spec = var.enable_dry_run
 
-    # VPC accessible services
-    dynamic "vpc_accessible_services" {
-      for_each = var.vpc_accessible_services != null ? [var.vpc_accessible_services] : []
-      content {
-        enable_restriction = vpc_accessible_services.value.enable_restriction
-        allowed_services   = vpc_accessible_services.value.allowed_services
+  # ENFORCED configuration (always defined for active perimeters)
+  dynamic "status" {
+    for_each = var.enable_dry_run ? [] : [1]
+    content {
+      resources           = [for p in var.protected_projects : "projects/${p}"]
+      restricted_services = var.restricted_services
+      access_levels = [
+        for level in var.access_levels :
+        "accessPolicies/${local.access_policy_name}/accessLevels/${level.name}"
+      ]
+
+      # VPC accessible services
+      dynamic "vpc_accessible_services" {
+        for_each = var.vpc_accessible_services != null ? [var.vpc_accessible_services] : []
+        content {
+          enable_restriction = vpc_accessible_services.value.enable_restriction
+          allowed_services   = vpc_accessible_services.value.allowed_services
+        }
       }
-    }
 
-    # Ingress policies
-    dynamic "ingress_policies" {
-      for_each = var.ingress_policies
-      content {
-        ingress_from {
-          identity_type = try(ingress_policies.value.identity_type, null)
-          identities    = try(ingress_policies.value.identities, null)
+      # Ingress policies
+      dynamic "ingress_policies" {
+        for_each = var.ingress_policies
+        content {
+          ingress_from {
+            identity_type = try(ingress_policies.value.identity_type, null)
+            identities    = try(ingress_policies.value.identities, null)
 
-          dynamic "sources" {
-            for_each = try(ingress_policies.value.sources, [])
-            content {
-              access_level = try(sources.value.access_level, null)
-              resource     = try(sources.value.resource, null)
+            dynamic "sources" {
+              for_each = try(ingress_policies.value.sources, [])
+              content {
+                access_level = try(sources.value.access_level, null)
+                resource     = try(sources.value.resource, null)
+              }
+            }
+          }
+
+          ingress_to {
+            resources = try(ingress_policies.value.resources, ["*"])
+
+            dynamic "operations" {
+              for_each = try(ingress_policies.value.operations, [])
+              content {
+                service_name = operations.value.service_name
+
+                dynamic "method_selectors" {
+                  for_each = try(operations.value.method_selectors, [])
+                  content {
+                    method     = try(method_selectors.value.method, null)
+                    permission = try(method_selectors.value.permission, null)
+                  }
+                }
+              }
             }
           }
         }
+      }
 
-        ingress_to {
-          resources = try(ingress_policies.value.resources, ["*"])
+      # Egress policies
+      dynamic "egress_policies" {
+        for_each = var.egress_policies
+        content {
+          egress_from {
+            identity_type = try(egress_policies.value.identity_type, null)
+            identities    = try(egress_policies.value.identities, null)
+          }
 
-          dynamic "operations" {
-            for_each = try(ingress_policies.value.operations, [])
-            content {
-              service_name = operations.value.service_name
+          egress_to {
+            resources = try(egress_policies.value.resources, null)
 
-              dynamic "method_selectors" {
-                for_each = try(operations.value.method_selectors, [])
-                content {
-                  method     = try(method_selectors.value.method, null)
-                  permission = try(method_selectors.value.permission, null)
+            dynamic "operations" {
+              for_each = try(egress_policies.value.operations, [])
+              content {
+                service_name = operations.value.service_name
+
+                dynamic "method_selectors" {
+                  for_each = try(operations.value.method_selectors, [])
+                  content {
+                    method     = try(method_selectors.value.method, null)
+                    permission = try(method_selectors.value.permission, null)
+                  }
                 }
               }
             }
@@ -138,29 +175,89 @@ resource "google_access_context_manager_service_perimeter" "perimeter" {
         }
       }
     }
+  }
 
-    # Egress policies
-    dynamic "egress_policies" {
-      for_each = var.egress_policies
-      content {
-        egress_from {
-          identity_type = try(egress_policies.value.identity_type, null)
-          identities    = try(egress_policies.value.identities, null)
+  # DRY RUN configuration (spec block - used when dry run is enabled)
+  dynamic "spec" {
+    for_each = var.enable_dry_run ? [1] : []
+    content {
+      resources           = [for p in var.protected_projects : "projects/${p}"]
+      restricted_services = var.restricted_services
+      access_levels = [
+        for level in var.access_levels :
+        "accessPolicies/${local.access_policy_name}/accessLevels/${level.name}"
+      ]
+
+      # VPC accessible services
+      dynamic "vpc_accessible_services" {
+        for_each = var.vpc_accessible_services != null ? [var.vpc_accessible_services] : []
+        content {
+          enable_restriction = vpc_accessible_services.value.enable_restriction
+          allowed_services   = vpc_accessible_services.value.allowed_services
         }
+      }
 
-        egress_to {
-          resources = try(egress_policies.value.resources, null)
+      # Ingress policies
+      dynamic "ingress_policies" {
+        for_each = var.ingress_policies
+        content {
+          ingress_from {
+            identity_type = try(ingress_policies.value.identity_type, null)
+            identities    = try(ingress_policies.value.identities, null)
 
-          dynamic "operations" {
-            for_each = try(egress_policies.value.operations, [])
-            content {
-              service_name = operations.value.service_name
+            dynamic "sources" {
+              for_each = try(ingress_policies.value.sources, [])
+              content {
+                access_level = try(sources.value.access_level, null)
+                resource     = try(sources.value.resource, null)
+              }
+            }
+          }
 
-              dynamic "method_selectors" {
-                for_each = try(operations.value.method_selectors, [])
-                content {
-                  method     = try(method_selectors.value.method, null)
-                  permission = try(method_selectors.value.permission, null)
+          ingress_to {
+            resources = try(ingress_policies.value.resources, ["*"])
+
+            dynamic "operations" {
+              for_each = try(ingress_policies.value.operations, [])
+              content {
+                service_name = operations.value.service_name
+
+                dynamic "method_selectors" {
+                  for_each = try(operations.value.method_selectors, [])
+                  content {
+                    method     = try(method_selectors.value.method, null)
+                    permission = try(method_selectors.value.permission, null)
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      # Egress policies
+      dynamic "egress_policies" {
+        for_each = var.egress_policies
+        content {
+          egress_from {
+            identity_type = try(egress_policies.value.identity_type, null)
+            identities    = try(egress_policies.value.identities, null)
+          }
+
+          egress_to {
+            resources = try(egress_policies.value.resources, null)
+
+            dynamic "operations" {
+              for_each = try(egress_policies.value.operations, [])
+              content {
+                service_name = operations.value.service_name
+
+                dynamic "method_selectors" {
+                  for_each = try(operations.value.method_selectors, [])
+                  content {
+                    method     = try(method_selectors.value.method, null)
+                    permission = try(method_selectors.value.permission, null)
+                  }
                 }
               }
             }

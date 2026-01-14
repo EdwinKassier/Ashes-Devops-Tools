@@ -32,3 +32,25 @@ variable "org_id" {
   type        = string
   default     = null
 }
+
+# =============================================================================
+# BIGQUERY LOG ANALYTICS (Optional)
+# =============================================================================
+
+variable "enable_bigquery_analytics" {
+  description = "Enable BigQuery sink for log analytics. Creates a BigQuery dataset and org-level sink for querying audit logs."
+  type        = bool
+  default     = false
+}
+
+variable "bigquery_location" {
+  description = "Location for the BigQuery dataset. Should match or be compatible with bucket_location."
+  type        = string
+  default     = "US"
+}
+
+variable "bigquery_retention_days" {
+  description = "Number of days to retain audit logs in BigQuery (via partition expiration)."
+  type        = number
+  default     = 365
+}

@@ -72,8 +72,6 @@ Ashes-Devops-Tools/
 ### Module Categories
 
 #### **Compute & Applications**
-- `cloud_run/` - Managed containerized applications
-- `cloud_functions/` - Event-driven serverless functions
 - `firebase/` - Application platform
 
 #### **Storage & Data**
@@ -102,9 +100,13 @@ Ashes-Devops-Tools/
 #### **Governance**
 - `governance/billing/` - Budget alerts
 - `governance/cloud-audit-logs/` - Compliance logging
+- `governance/scc/` - Security Command Center
+- `governance/kms/` - Key Management Service
+- `governance/tags/` - Resource Tags
 
 #### **Orchestration**
 - `host/` - Unified project provisioning
+- `stages/` - Landing Zone stages
 
 ### Module Design Pattern
 
@@ -321,7 +323,7 @@ graph LR
 2. **Partial Failure** (service down)
    ```bash
    # Recreate specific resource
-   terraform taint module.cloud_run.service["app"]
+   terraform taint module.host.google_compute_address.default
    terraform apply
    ```
 
@@ -475,6 +477,6 @@ graph LR
 
 ---
 
-**Last Updated**: October 2024
+**Last Updated**: January 2026
 **Version**: 1.0.0
 

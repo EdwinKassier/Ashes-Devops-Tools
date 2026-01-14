@@ -50,12 +50,12 @@ resource "google_org_policy_policy" "list_policies" {
 resource "google_org_policy_custom_constraint" "custom_constraints" {
   for_each = { for c in var.custom_constraints : c.name => c }
 
-  name         = "${var.parent}/customConstraints/${each.value.name}"
-  parent       = var.parent
-  display_name = each.value.display_name
-  description  = each.value.description
-  action_type  = each.value.action_type
-  condition    = each.value.condition
-  method_types = each.value.method_types
+  name           = "${var.parent}/customConstraints/${each.value.name}"
+  parent         = var.parent
+  display_name   = each.value.display_name
+  description    = each.value.description
+  action_type    = each.value.action_type
+  condition      = each.value.condition
+  method_types   = each.value.method_types
   resource_types = each.value.resource_types
 }

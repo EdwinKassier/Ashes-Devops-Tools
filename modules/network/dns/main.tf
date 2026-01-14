@@ -27,9 +27,19 @@ resource "google_dns_managed_zone" "zone" {
     }
   }
 
+  # Peering zone configuration
+  dynamic "peering_config" {
+    for_each = var.peering_network != "" ? [1] : []
+    content {
+      target_network {
+        network_url = var.peering_network
+      }
+    }
+  }
+
   # DNSSEC configuration (public zones only)
   dynamic "dnssec_config" {
-    for_each = var.visibility == "public" && var.dnssec_enabled ? [1] : []
+    for_each = var.dnssec_enabled ? [1] : []
     content {
       state = "on"
     }

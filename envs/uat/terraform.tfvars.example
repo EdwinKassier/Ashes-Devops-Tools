@@ -1,0 +1,23 @@
+# UAT Environment Configuration
+# Copy this file to terraform.tfvars and fill in your values
+
+# =============================================================================
+# REQUIRED: Terraform Cloud Configuration
+# =============================================================================
+
+# Your Terraform Cloud organization name
+tfc_organization = "your-tfc-org-name"
+
+# Workspace name containing the organization state
+# This should match the workspace where envs/organisation was applied
+tfc_workspace_name = "organisation"
+
+# =============================================================================
+# OPTIONAL: Overrides
+# =============================================================================
+
+# Project naming prefix (defaults to "my-org")
+# project_prefix = "my-org"
+
+# Environment name (defaults to "uat")
+# environment = "uat"

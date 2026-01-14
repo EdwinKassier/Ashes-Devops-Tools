@@ -8,25 +8,25 @@
 
 <!-- Mark the relevant option with an "x" -->
 
-- [ ] 🐛 Bug fix (non-breaking change which fixes an issue)
-- [ ] ✨ New feature (non-breaking change which adds functionality)
-- [ ] 💥 Breaking change (fix or feature that would cause existing functionality to not work as expected)
-- [ ] 📝 Documentation update
-- [ ] 🎨 Code style update (formatting, renaming)
-- [ ] ♻️ Code refactoring (no functional changes)
-- [ ] ⚡ Performance improvement
-- [ ] ✅ Test update
-- [ ] 🔧 Configuration change
-- [ ] 🏗️ Infrastructure change
+- [ ] Bug fix (non-breaking change which fixes an issue)
+- [ ] New feature (non-breaking change which adds functionality)
+- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
+- [ ] Documentation update
+- [ ] Code style update (formatting, renaming)
+- [ ] Code refactoring (no functional changes)
+- [ ] Performance improvement
+- [ ] Test update
+- [ ] Configuration change
+- [ ] Infrastructure change
 
 ## Environment
 
 <!-- Mark the environments affected by this change -->
 
-- [ ] 🏢 Organization
-- [ ] 🔧 Development
-- [ ] 🧪 UAT
-- [ ] 🚀 Production
+- [ ] Organization
+- [ ] Development
+- [ ] UAT
+- [ ] Production
 
 ## Changes Made
 
@@ -58,12 +58,12 @@ make security
 
 ### Test Results
 
-- [ ] ✅ Terraform format check passed
-- [ ] ✅ Terraform validation passed
-- [ ] ✅ TFLint passed
-- [ ] ✅ TFSec security scan passed
-- [ ] ✅ Checkov security scan passed
-- [ ] ✅ Manual testing completed
+- [ ] Terraform format check passed
+- [ ] Terraform validation passed
+- [ ] TFLint passed
+- [ ] TFSec security scan passed
+- [ ] Checkov security scan passed
+- [ ] Manual testing completed
 
 ### Test Environment
 
@@ -75,38 +75,38 @@ make security
 
 <!-- Check all that apply -->
 
-- [ ] 📖 Module README updated (or auto-generated with terraform-docs)
-- [ ] 📄 Main README updated (if applicable)
-- [ ] 📋 CHANGELOG updated
-- [ ] 💬 Code comments added for complex logic
-- [ ] 🔒 Security considerations documented
+- [ ] Module README updated (or auto-generated with terraform-docs)
+- [ ] Main README updated (if applicable)
+- [ ] CHANGELOG updated
+- [ ] Code comments added for complex logic
+- [ ] Security considerations documented
 
 ## Security Checklist
 
 <!-- Verify all security requirements -->
 
-- [ ] 🔐 No secrets or credentials committed
-- [ ] 🔒 Sensitive variables marked as `sensitive = true`
-- [ ] 👤 IAM follows least privilege principle
-- [ ] 🔑 Encryption enabled where applicable
-- [ ] 📊 Audit logging configured
-- [ ] 🛡️ Security scans passed
-- [ ] 🚫 No public access to resources (unless intentional and documented)
+- [ ] No secrets or credentials committed
+- [ ] Sensitive variables marked as `sensitive = true`
+- [ ] IAM follows least privilege principle
+- [ ] Encryption enabled where applicable
+- [ ] Audit logging configured
+- [ ] Security scans passed
+- [ ] No public access to resources (unless intentional and documented)
 
 ## Pre-merge Checklist
 
 <!-- Verify before merging -->
 
-- [ ] ✅ Self-review completed
-- [ ] 📝 Code follows project style guidelines
-- [ ] 🧪 All tests pass
-- [ ] 📚 Documentation updated
-- [ ] 🔍 No new linting warnings
-- [ ] 🔒 Security scans pass
-- [ ] 💬 Code has appropriate comments
-- [ ] ⚙️ CI/CD pipeline passes
-- [ ] 👀 Reviewed by at least one team member
-- [ ] 🔗 Related PRs/dependencies merged
+- [ ] Self-review completed
+- [ ] Code follows project style guidelines
+- [ ] All tests pass
+- [ ] Documentation updated
+- [ ] No new linting warnings
+- [ ] Security scans pass
+- [ ] Code has appropriate comments
+- [ ] CI/CD pipeline passes
+- [ ] Reviewed by at least one team member
+- [ ] Related PRs/dependencies merged
 
 ## Screenshots/Outputs
 

@@ -152,3 +152,19 @@ variable "egress_policies" {
   }))
   default = []
 }
+
+# =============================================================================
+# DRY RUN MODE (Recommended for initial rollout)
+# =============================================================================
+
+variable "enable_dry_run" {
+  description = <<-EOF
+    Enable dry run mode for the service perimeter.
+    When enabled, VPC-SC violations are logged but not enforced.
+    This is recommended for initial rollout to identify potential issues before enforcement.
+    
+    Set to false once you've verified no unexpected violations occur.
+  EOF
+  type        = bool
+  default     = false
+}

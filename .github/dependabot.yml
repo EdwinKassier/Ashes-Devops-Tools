@@ -128,3 +128,71 @@ updates:
     commit-message:
       prefix: "ci"
 
+  # Governance modules
+  - package-ecosystem: "terraform"
+    directory: "/modules/governance/scc"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "module:governance"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/governance/kms"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "module:governance"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/governance/org-policy"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "module:governance"
+
+  # Stages modules
+  - package-ecosystem: "terraform"
+    directory: "/modules/stages/bootstrap"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "module:stages"
+      - "critical"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/stages/organization"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "module:stages"
+      - "critical"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/stages/network-hub"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "module:stages"
+
+  # Host module
+  - package-ecosystem: "terraform"
+    directory: "/modules/host"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "module:host"
+

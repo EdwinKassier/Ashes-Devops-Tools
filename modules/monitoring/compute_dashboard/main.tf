@@ -401,7 +401,7 @@ locals {
     widget = {
       title = ""
       text = {
-        content = "## 📊 Unified Compute Dashboard\n\nMonitoring Cloud Run and Cloud Functions across all services.\n\n**Tip:** Look for 5xx spikes in request charts and high p99 latencies."
+        content = "## Unified Compute Dashboard\n\nMonitoring Cloud Run and Cloud Functions across all services.\n\n**Tip:** Look for 5xx spikes in request charts and high p99 latencies."
         format  = "MARKDOWN"
       }
     }

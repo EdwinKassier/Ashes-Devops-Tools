@@ -9,6 +9,7 @@ module "organization" {
   # Default organization admins
   org_admin_members = distinct(concat(
     ["user:${var.admin_email}"],
+    var.break_glass_user != null ? ["user:${var.break_glass_user}"] : [],
     [for group in var.organization_admin_groups : "group:${group}"]
   ))
 
@@ -44,7 +45,7 @@ resource "google_folder_iam_member" "terraform_admin_folder_roles" {
           "roles/resourcemanager.projectCreator",
           "roles/billing.projectManager",
           "roles/compute.networkAdmin"
-        ] : {
+          ] : {
           key    = "${folder_key}-${role}"
           folder = folder.id
           role   = role
@@ -67,6 +68,10 @@ module "audit_logs" {
   bucket_location    = var.default_region
   log_retention_days = 365
   org_id             = var.org_id
+
+  # Enable BigQuery Analytics for improved security investigation
+  enable_bigquery_analytics = true
+  bigquery_location         = var.default_region
 }
 
 # Security Command Center Notifications
@@ -113,6 +118,14 @@ module "org_policies" {
       denied_values  = null
       allow_all      = null
       deny_all       = null
+    },
+    # Network Security: Restrict VPC peering to within the organization only
+    {
+      constraint     = "compute.restrictVpcPeering"
+      allowed_values = ["under:organizations/${module.organization.organization_id}"]
+      denied_values  = null
+      allow_all      = null
+      deny_all       = null
     }
   ]
 
@@ -140,6 +153,31 @@ module "org_policies" {
     {
       constraint = "storage.uniformBucketLevelAccess"
       enforce    = true
+    },
+    # CIS 1.4: Disable automatic IAM grants for default service accounts
+    {
+      constraint = "iam.automaticIamGrantsForDefaultServiceAccounts"
+      enforce    = true
+    },
+    # CIS 4.9: Restrict VM external IP access (deny by default)
+    {
+      constraint = "compute.vmExternalIpAccess"
+      enforce    = true
+    },
+    # Security: Disable service account key upload
+    {
+      constraint = "iam.disableServiceAccountKeyUpload"
+      enforce    = true
+    },
+    # Security: Require VPC Connector for Cloud Functions
+    {
+      constraint = "cloudfunctions.requireVPCConnector"
+      enforce    = true
+    },
+    # Security: Require Private Google Access for secure API access
+    {
+      constraint = "compute.requirePrivateGoogleAccess"
+      enforce    = true
     }
   ]
 }
@@ -165,6 +203,11 @@ module "prod_folder_policies" {
     {
       constraint = "compute.requireOsLogin"
       enforce    = true
+    },
+    {
+      # Network Security: Force traffic through Cloud NAT / Load Balancers
+      constraint = "compute.disableInternetGatewayUse"
+      enforce    = true
     }
   ]
 }
@@ -176,7 +219,7 @@ resource "google_essential_contacts_contact" "security" {
   parent                              = "organizations/${var.org_id}"
   email                               = var.security_contact_email
   language_tag                        = "en-US"
-  notification_category_subscriptions = ["SECURITY", "TECHNICAL", "ALL"]
+  notification_category_subscriptions = ["SECURITY", "TECHNICAL", "LEGAL", "PRIVACY", "ALL"]
 }
 
 resource "google_essential_contacts_contact" "billing" {
@@ -199,11 +242,8 @@ module "org_budget" {
   monthly_budget_limit = var.monthly_budget_amount
   currency_code        = var.budget_currency
 
-  # Note: Ideally we pass the list of project IDs to monitor, but for now we monitor the admin project. 
-  # Expanding this to all projects in the org requires listing all projects which is dynamic.
-  # For budget alerting at org level, we might want to attach to the billing account directly, 
-  # but this module creates a budget on the billing account via a project API call.
-  projects = ["projects/${var.admin_project_number}"] 
+  # Monitor the entire Billing Account by defaulting 'projects' to empty (null)
+  # projects = ["projects/${var.admin_project_number}"]
 }
 
 # FinOps: Billing Data Export

@@ -4,6 +4,10 @@ variable "admin_project_id" { type = string }
 variable "admin_project_number" { type = string }
 variable "customer_id" { type = string }
 variable "admin_email" { type = string }
+variable "break_glass_user" {
+  type    = string
+  default = null
+}
 variable "terraform_admin_email" { type = string }
 variable "billing_account" { type = string }
 variable "project_prefix" { type = string }

@@ -9,11 +9,11 @@ This Terraform module sets up Workload Identity Federation for keyless authentic
 
 ### Benefits
 
-- ✅ No service account keys to manage or rotate
-- ✅ Short-lived tokens (1 hour by default)
-- ✅ Audit trail of external identity usage
-- ✅ Fine-grained access control based on attributes
-- ✅ Support for multiple identity providers
+- No service account keys to manage or rotate
+- Short-lived tokens (1 hour by default)
+- Audit trail of external identity usage
+- Fine-grained access control based on attributes
+- Support for multiple identity providers
 
 ## Usage
 

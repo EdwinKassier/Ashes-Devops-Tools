@@ -31,9 +31,9 @@ output "network_name" {
 output "subnets" {
   description = "All subnet outputs organized by tier"
   value = var.enable_networking ? {
-    public   = module.vpc[0].public_subnets
-    private  = module.vpc[0].private_subnets
-    database = module.vpc[0].database_subnets
+    public   = module.public_subnets
+    private  = module.private_subnets
+    database = module.database_subnets
   } : null
 }
 

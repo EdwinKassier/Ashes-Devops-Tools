@@ -37,3 +37,27 @@ output "org_log_sink_writer_identity" {
   description = "The service account that writes org-level audit logs to the storage bucket"
   value       = var.org_id != null ? google_logging_organization_sink.org_audit_sink[0].writer_identity : null
 }
+
+# =============================================================================
+# BIGQUERY LOG ANALYTICS OUTPUTS
+# =============================================================================
+
+output "bigquery_dataset_id" {
+  description = "The ID of the BigQuery dataset for audit log analytics (if created)"
+  value       = var.org_id != null && var.enable_bigquery_analytics ? google_bigquery_dataset.audit_logs_analytics[0].dataset_id : null
+}
+
+output "bigquery_dataset_self_link" {
+  description = "The self link of the BigQuery dataset for audit log analytics (if created)"
+  value       = var.org_id != null && var.enable_bigquery_analytics ? google_bigquery_dataset.audit_logs_analytics[0].self_link : null
+}
+
+output "bigquery_sink_name" {
+  description = "The name of the BigQuery log sink (if created)"
+  value       = var.org_id != null && var.enable_bigquery_analytics ? google_logging_organization_sink.org_audit_bq_sink[0].name : null
+}
+
+output "bigquery_sink_writer_identity" {
+  description = "The service account that writes audit logs to BigQuery (if created)"
+  value       = var.org_id != null && var.enable_bigquery_analytics ? google_logging_organization_sink.org_audit_bq_sink[0].writer_identity : null
+}

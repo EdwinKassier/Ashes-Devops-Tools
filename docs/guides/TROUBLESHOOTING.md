@@ -4,7 +4,7 @@ Common issues and their solutions for the Ashes DevOps Tools repository.
 
 ---
 
-## 🔍 **General Troubleshooting**
+## **General Troubleshooting**
 
 ### Enable Debug Mode
 
@@ -24,12 +24,12 @@ pre-commit run --all-files --verbose
 
 ---
 
-## 🛠️ **Installation Issues**
+## **Installation Issues**
 
 ### Issue: `make install` fails
 
 **Symptoms**:
-```
+```text
 Error: Command not found: brew
 ```
 
@@ -66,7 +66,7 @@ brew install tfsec # or use binary release
 ### Issue: Tool version conflicts
 
 **Symptoms**:
-```
+```text
 Error: Required version constraint not met
 ```
 
@@ -83,12 +83,12 @@ make upgrade-providers
 
 ---
 
-## 🔄 **Pre-commit Hook Issues**
+## **Pre-commit Hook Issues**
 
 ### Issue: Pre-commit hooks fail on first run
 
 **Symptoms**:
-```
+```text
 [ERROR] Cowardly refusing to install hooks with `core.hooksPath` set
 ```
 
@@ -104,7 +104,7 @@ make pre-commit-install
 ### Issue: terraform_docs fails
 
 **Symptoms**:
-```
+```text
 terraform-docs failed with exit code 1
 ```
 
@@ -123,7 +123,7 @@ sudo mv terraform-docs /usr/local/bin/
 ### Issue: terraform_validate fails
 
 **Symptoms**:
-```
+```text
 Error: Required providers are not installed
 ```
 
@@ -154,12 +154,12 @@ pre-commit autoupdate
 
 ---
 
-## 🧪 **Terraform Issues**
+## **Terraform Issues**
 
 ### Issue: Terraform init fails
 
 **Symptoms**:
-```
+```text
 Error: Failed to query available provider packages
 ```
 
@@ -181,7 +181,7 @@ Error: Failed to query available provider packages
 ### Issue: Terraform plan fails with provider errors
 
 **Symptoms**:
-```
+```text
 Error: Provider configuration not present
 ```
 
@@ -200,7 +200,7 @@ terraform providers
 ### Issue: State lock errors
 
 **Symptoms**:
-```
+```text
 Error: Error acquiring the state lock
 ```
 
@@ -216,7 +216,7 @@ terraform force-unlock <LOCK_ID>
 ### Issue: Module not found
 
 **Symptoms**:
-```
+```text
 Error: Module not installed
 ```
 
@@ -226,19 +226,19 @@ Error: Module not installed
 terraform init
 
 # If using local modules, check path
-ls -la modules/cloud_run/  # Verify module exists
+ls -la modules/host/  # Verify module exists
 
 # Check module source in main.tf
 ```
 
 ---
 
-## 🔒 **Security Scan Issues**
+## **Security Scan Issues**
 
 ### Issue: TFSec false positives
 
 **Symptoms**:
-```
+```text
 WARNING: Unencrypted storage bucket detected
 ```
 
@@ -261,7 +261,7 @@ WARNING: Unencrypted storage bucket detected
 ### Issue: Checkov fails with timeout
 
 **Symptoms**:
-```
+```text
 Error: Checkov scan timeout
 ```
 
@@ -278,7 +278,7 @@ skip_check:
 ### Issue: Secret detected in code
 
 **Symptoms**:
-```
+```text
 Error: Detected private key in file
 ```
 
@@ -296,7 +296,7 @@ export TF_VAR_secret="value"
 
 ---
 
-## 📝 **Documentation Issues**
+## **Documentation Issues**
 
 ### Issue: terraform-docs doesn't update README
 
@@ -309,19 +309,19 @@ README.md not updated after running `make docs`
 cat .terraform-docs.yml
 
 # Run manually with verbose
-terraform-docs markdown table --config .terraform-docs.yml modules/cloud_run/
+terraform-docs markdown table --config .terraform-docs.yml modules/host/
 
 # Ensure README.md exists
-touch modules/cloud_run/README.md
+touch modules/host/README.md
 
 # Check file permissions
-chmod 644 modules/cloud_run/README.md
+chmod 644 modules/host/README.md
 ```
 
 ### Issue: Markdown linting fails
 
 **Symptoms**:
-```
+```text
 MD041: First line should be top level heading
 ```
 
@@ -336,7 +336,7 @@ SKIP=markdownlint git commit -m "message"
 
 ---
 
-## 🚀 **CI/CD Issues**
+## **CI/CD Issues**
 
 ### Issue: GitHub Actions workflow fails
 
@@ -385,7 +385,7 @@ cat .github/workflows/terraform-apply.yml
 ### Issue: Authentication errors in GitHub Actions
 
 **Symptoms**:
-```
+```text
 Error: Failed to configure GCP credentials
 ```
 
@@ -396,7 +396,7 @@ Error: Failed to configure GCP credentials
 
 ---
 
-## 🌐 **Environment Issues**
+## **Environment Issues**
 
 ### Issue: Wrong environment selected
 
@@ -419,7 +419,7 @@ terraform workspace show
 ### Issue: Environment variables not loaded
 
 **Symptoms**:
-```
+```text
 Error: Required variable not set
 ```
 
@@ -441,12 +441,12 @@ terraform plan -var="project_id=my-project"
 
 ---
 
-## 🔧 **Module Development Issues**
+## **Module Development Issues**
 
 ### Issue: Module validation fails
 
 **Symptoms**:
-```
+```text
 Error: Unsupported argument
 ```
 
@@ -468,17 +468,17 @@ cat versions.tf
 ### Issue: Module outputs not available
 
 **Symptoms**:
-```
+```text
 Error: Output value does not exist
 ```
 
 **Solution**:
 ```bash
 # Check outputs.tf exists
-ls -la modules/cloud_run/outputs.tf
+ls -la modules/host/outputs.tf
 
 # Verify output is defined
-cat modules/cloud_run/outputs.tf
+cat modules/host/outputs.tf
 
 # Apply changes first
 terraform apply
@@ -489,12 +489,12 @@ terraform output
 
 ---
 
-## 💾 **State Management Issues**
+## **State Management Issues**
 
 ### Issue: State file conflicts
 
 **Symptoms**:
-```
+```text
 Error: Resource already exists
 ```
 
@@ -513,7 +513,7 @@ terraform refresh
 ### Issue: State file is locked
 
 **Symptoms**:
-```
+```text
 Error: state lock already acquired
 ```
 
@@ -529,7 +529,7 @@ gsutil ls gs://my-terraform-state-bucket/.terraform.lock.info
 
 ---
 
-## 📊 **Performance Issues**
+## **Performance Issues**
 
 ### Issue: `make ci` is too slow
 
@@ -560,7 +560,7 @@ Takes 5+ minutes
 **Solutions**:
 ```bash
 # Use -target for specific resources
-terraform plan -target=module.cloud_run
+terraform plan -target=module.host
 
 # Refresh only when needed
 terraform plan -refresh=false
@@ -571,7 +571,7 @@ terraform plan -parallelism=20
 
 ---
 
-## 🆘 **Getting Help**
+## **Getting Help**
 
 If you can't resolve your issue:
 
@@ -587,7 +587,7 @@ If you can't resolve your issue:
 
 ---
 
-## 📚 **Additional Resources**
+## **Additional Resources**
 
 - [Terraform Debugging](https://www.terraform.io/docs/internals/debugging.html)
 - [TFLint Rules](https://github.com/terraform-linters/tflint/tree/master/docs/rules)
@@ -596,5 +596,5 @@ If you can't resolve your issue:
 
 ---
 
-**Last Updated**: October 2024
+**Last Updated**: January 2026
 

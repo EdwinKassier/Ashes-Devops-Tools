@@ -7,5 +7,9 @@ output "hub_vpc_name" {
 }
 
 output "dns_zone_name" {
-  value = module.dns_hub_zone.name
+  value = module.dns_hub_zone.zone_name
+}
+
+output "hub_dns_domain" {
+  value = module.dns_hub_zone.dns_name
 }

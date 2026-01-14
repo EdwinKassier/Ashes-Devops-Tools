@@ -27,3 +27,22 @@ variable "github_repo" {
   description = "GitHub Repository"
   type        = string
 }
+
+# Terraform Cloud Configuration
+variable "enable_tfc_oidc" {
+  description = "Enable Terraform Cloud OIDC for Dynamic Credentials"
+  type        = bool
+  default     = true
+}
+
+variable "tfc_organization" {
+  description = "Terraform Cloud organization name"
+  type        = string
+  default     = null
+}
+
+variable "tfc_workspaces" {
+  description = "List of TFC workspaces to grant access to Terraform Admin SA"
+  type        = list(string)
+  default     = ["organization-prod"]
+}
