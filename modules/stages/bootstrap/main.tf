@@ -104,6 +104,7 @@ module "tfc_oidc" {
 # Grant Org-Level Roles to the Terraform Admin SA
 # Note: Folder roles are granted in the organization module where folders exist
 #checkov:skip=CKV_GCP_41:Terraform Admin SA requires high privileges
+#checkov:skip=CKV_GCP_45:Terraform Admin SA requires high privileges
 #checkov:skip=CKV_GCP_49:Terraform Admin SA requires high privileges
 #checkov:skip=CKV_GCP_112:Terraform Admin SA requires high privileges
 resource "google_organization_iam_member" "terraform_admin_org_roles" {

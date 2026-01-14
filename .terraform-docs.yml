@@ -42,10 +42,10 @@ content: |-
 
   {{ .Providers }}
 
-  {{ if .Module.Modules -}}
+  {{ if .Module.ModuleCalls -}}
   ## Modules
 
-  {{ range .Module.Modules }}
+  {{ range .Module.ModuleCalls }}
   - {{ .Name }} - {{ .Source }}{{ if .Version }} ({{ .Version }}){{ end }}
   {{- end }}
   {{ end }}
