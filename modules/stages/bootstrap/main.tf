@@ -103,7 +103,9 @@ module "tfc_oidc" {
 
 # Grant Org-Level Roles to the Terraform Admin SA
 # Note: Folder roles are granted in the organization module where folders exist
-#tfsec:ignore:google-iam-no-privileged-service-accounts
+#checkov:skip=CKV_GCP_41:Terraform Admin SA requires high privileges
+#checkov:skip=CKV_GCP_49:Terraform Admin SA requires high privileges
+#checkov:skip=CKV_GCP_112:Terraform Admin SA requires high privileges
 resource "google_organization_iam_member" "terraform_admin_org_roles" {
   for_each = toset([
     "roles/orgpolicy.policyAdmin",
@@ -117,6 +119,6 @@ resource "google_organization_iam_member" "terraform_admin_org_roles" {
   ])
 
   org_id = var.org_id
-  role   = each.key
+  role   = each.key #tfsec:ignore:google-iam-no-privileged-service-accounts
   member = "serviceAccount:${module.terraform_admin_sa.email}"
 }
