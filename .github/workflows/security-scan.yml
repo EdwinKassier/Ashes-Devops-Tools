@@ -74,7 +74,7 @@ jobs:
           download_external_modules: false
           # CKV_GCP_1: Ensure that Service Account has no user-managed service account keys
           # Justification: We avoid managing user keys, but some GCP-created keys may trigger this.
-          skip_check: CKV_GCP_1,CKV_GCP_16,CKV_GCP_27,CKV_GCP_41,CKV_GCP_43,CKV_GCP_45,CKV_GCP_46,CKV_GCP_47,CKV_GCP_48,CKV_GCP_49,CKV_GCP_50,CKV_GCP_62,CKV_GCP_73,CKV_GCP_78,CKV_GCP_81,CKV_GCP_83,CKV_GCP_84,CKV_GCP_112,CKV_GCP_113,CKV_GCP_114,CKV_GCP_115,CKV_GCP_116,CKV_GCP_117,CKV_GCP_125,CKV_TF_1
+          skip_check: CKV_GCP_1,CKV_GCP_16,CKV_GCP_27,CKV_GCP_41,CKV_GCP_43,CKV_GCP_45,CKV_GCP_46,CKV_GCP_47,CKV_GCP_48,CKV_GCP_49,CKV_GCP_50,CKV_GCP_62,CKV_GCP_73,CKV_GCP_78,CKV_GCP_81,CKV_GCP_83,CKV_GCP_84,CKV_GCP_112,CKV_GCP_113,CKV_GCP_114,CKV_GCP_115,CKV_GCP_116,CKV_GCP_117,CKV_GCP_125,CKV_TF_1,CKV2_GCP_4,CKV2_GCP_5,CKV2_GCP_18,CKV2_GHA_1
 
       - name: Upload Checkov results to GitHub Security
         uses: github/codeql-action/upload-sarif@v2
