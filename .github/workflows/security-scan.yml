@@ -51,7 +51,7 @@ jobs:
 
       - name: Upload TFSec Report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: tfsec-report
           path: tfsec-report.json
@@ -85,7 +85,7 @@ jobs:
 
       - name: Upload Checkov Report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: checkov-report
           path: checkov-report.txt
