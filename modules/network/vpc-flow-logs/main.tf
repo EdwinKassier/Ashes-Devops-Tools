@@ -67,6 +67,13 @@ resource "google_bigquery_dataset" "flow_logs" {
   default_table_expiration_ms     = var.bigquery_table_expiration_days != null ? var.bigquery_table_expiration_days * 24 * 60 * 60 * 1000 : null
   default_partition_expiration_ms = var.bigquery_partition_expiration_days != null ? var.bigquery_partition_expiration_days * 24 * 60 * 60 * 1000 : null
 
+  dynamic "default_encryption_configuration" {
+    for_each = var.bigquery_kms_key_name != null ? [1] : []
+    content {
+      kms_key_name = var.bigquery_kms_key_name
+    }
+  }
+
   labels = var.labels
 
   lifecycle {
@@ -78,6 +85,56 @@ resource "google_bigquery_dataset" "flow_logs" {
 # CLOUD STORAGE BUCKET (Optional - when creating destination)
 # -----------------------------------------------------------------------------
 
+resource "google_storage_bucket" "flow_logs_access" {
+  count = var.create_storage_bucket ? 1 : 0
+
+  # checkov:skip=CKV_GCP_62:This is the terminal access log bucket for VPC flow log exports and cannot recursively log to itself.
+  project                     = var.destination_project_id != "" ? var.destination_project_id : var.project_id
+  name                        = "${var.storage_bucket_name}-access"
+  location                    = var.storage_location
+  storage_class               = var.storage_class
+  uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
+  force_destroy               = var.storage_force_destroy
+
+  versioning {
+    enabled = true
+  }
+
+  dynamic "encryption" {
+    for_each = var.storage_kms_key_name != null ? [1] : []
+    content {
+      default_kms_key_name = var.storage_kms_key_name
+    }
+  }
+
+  dynamic "lifecycle_rule" {
+    for_each = var.storage_retention_days != null ? [1] : []
+    content {
+      condition {
+        age = var.storage_retention_days
+      }
+      action {
+        type = "Delete"
+      }
+    }
+  }
+
+  labels = var.labels
+
+  lifecycle {
+    prevent_destroy = false
+  }
+}
+
+resource "google_storage_bucket_iam_member" "flow_logs_access_writer" {
+  count = var.create_storage_bucket ? 1 : 0
+
+  bucket = google_storage_bucket.flow_logs_access[0].name
+  role   = "roles/storage.objectCreator"
+  member = "group:cloud-storage-analytics@google.com"
+}
+
 resource "google_storage_bucket" "flow_logs" {
   count = var.create_storage_bucket ? 1 : 0
 
@@ -86,7 +143,23 @@ resource "google_storage_bucket" "flow_logs" {
   location                    = var.storage_location
   storage_class               = var.storage_class
   uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
   force_destroy               = var.storage_force_destroy
+
+  versioning {
+    enabled = true
+  }
+
+  logging {
+    log_bucket = google_storage_bucket.flow_logs_access[0].name
+  }
+
+  dynamic "encryption" {
+    for_each = var.storage_kms_key_name != null ? [1] : []
+    content {
+      default_kms_key_name = var.storage_kms_key_name
+    }
+  }
 
   dynamic "lifecycle_rule" {
     for_each = var.storage_retention_days != null ? [1] : []
@@ -118,6 +191,8 @@ resource "google_storage_bucket" "flow_logs" {
   lifecycle {
     prevent_destroy = false
   }
+
+  depends_on = [google_storage_bucket_iam_member.flow_logs_access_writer]
 }
 
 # -----------------------------------------------------------------------------

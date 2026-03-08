@@ -15,17 +15,17 @@ output "vpc" {
 
 output "network_id" {
   description = "The VPC network ID"
-  value       = var.enable_networking ? module.vpc[0].network_id : var.existing_network_id
+  value       = var.enable_networking ? module.vpc[0].id : var.existing_network_id
 }
 
 output "network_self_link" {
   description = "The VPC network self link"
-  value       = var.enable_networking ? module.vpc[0].network_self_link : var.existing_network_self_link
+  value       = var.enable_networking ? module.vpc[0].self_link : var.existing_network_self_link
 }
 
 output "network_name" {
   description = "The VPC network name"
-  value       = var.enable_networking ? module.vpc[0].network_name : null
+  value       = var.enable_networking ? module.vpc[0].name : var.existing_network_name
 }
 
 output "subnets" {
@@ -39,12 +39,12 @@ output "subnets" {
 
 output "network_tags" {
   description = "Network tags for tiered security"
-  value       = var.enable_networking ? module.vpc[0].network_tags : null
+  value       = local.network_tags
 }
 
 output "nat_ip" {
   description = "The NAT gateway IP addresses"
-  value       = var.enable_networking ? module.vpc[0].nat_ip : null
+  value       = var.enable_networking ? try(module.integrated_nat[0].nat_ips, null) : null
 }
 
 # =============================================================================
@@ -316,4 +316,3 @@ output "internal_load_balancer_backend_services" {
     for k, v in module.internal_load_balancers : k => v.backend_service_self_link
   }
 }
-

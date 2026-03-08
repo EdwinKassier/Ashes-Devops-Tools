@@ -65,3 +65,9 @@ variable "web_display_name" {
   type        = string
   default     = ""
 }
+
+variable "kms_key_name" {
+  description = "Optional customer-managed KMS key used for the Firebase web config bucket"
+  type        = string
+  default     = null
+}

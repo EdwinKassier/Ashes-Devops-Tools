@@ -34,11 +34,15 @@ Please email security concerns to: **security@ashesproject.com**
 **Module/Resource:**
 <!-- Which module or resource is affected? -->
 
-**Environment:**
-- [ ] Development
-- [ ] UAT
-- [ ] Production
-- [ ] All environments
+**Affected Root / Surface:**
+- [ ] `envs/organization`
+- [ ] `envs/apps`
+- [ ] `examples/workloads`
+- [ ] CI/CD or repo tooling
+- [ ] Multiple surfaces
+
+**Affected Workspace (if applicable):**
+<!-- Example: apps-dev, apps-prod, apps-preprod -->
 
 ## Current Configuration
 
@@ -100,4 +104,3 @@ Please email security concerns to: **security@ashesproject.com**
 ---
 
 **For critical vulnerabilities, email security@ashesproject.com instead of creating a public issue.**
-

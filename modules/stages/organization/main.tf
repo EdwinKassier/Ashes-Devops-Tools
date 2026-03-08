@@ -1,6 +1,6 @@
 # Organization Structure
 module "organization" {
-  source = "../../iam/organisation"
+  source = "../../iam/organization"
 
   domain      = var.domain
   project_id  = var.admin_project_id
@@ -20,19 +20,7 @@ module "organization" {
   ))
 
   # Organizational Units (excluding projects, they are created later)
-  organizational_units = {
-    for k, v in var.environments : k => {
-      display_name = v.display_name
-      description  = v.description
-      groups       = v.groups
-    }
-  }
-
-  # Group Defaults
-  group_defaults = {
-    admins     = [var.admin_email]
-    developers = [var.developers_group_email]
-  }
+  organizational_units = var.environments
 }
 
 # Grant Terraform Admin SA rights on the created folders
@@ -61,6 +49,42 @@ resource "google_folder_iam_member" "terraform_admin_folder_roles" {
 
 
 # Centralized Audit Logs
+module "cmek" {
+  source = "../../governance/kms"
+
+  project_id   = var.admin_project_id
+  keyring_name = "${var.project_prefix}-org-cmek"
+  location     = var.default_region
+
+  keys = {
+    "audit-logs" = {
+      encrypter_decrypters = [
+        "serviceAccount:service-${var.admin_project_number}@gs-project-accounts.iam.gserviceaccount.com",
+      ]
+    }
+    "audit-analytics" = {
+      encrypter_decrypters = [
+        "serviceAccount:bq-${var.admin_project_number}@bigquery-encryption.iam.gserviceaccount.com",
+      ]
+    }
+    "billing-alerts" = {
+      encrypter_decrypters = [
+        "serviceAccount:service-${var.admin_project_number}@gcp-sa-pubsub.iam.gserviceaccount.com",
+      ]
+    }
+    "scc-notifications" = {
+      encrypter_decrypters = [
+        "serviceAccount:service-${var.admin_project_number}@gcp-sa-pubsub.iam.gserviceaccount.com",
+      ]
+    }
+    "billing-export" = {
+      encrypter_decrypters = [
+        "serviceAccount:bq-${var.admin_project_number}@bigquery-encryption.iam.gserviceaccount.com",
+      ]
+    }
+  }
+}
+
 module "audit_logs" {
   source = "../../governance/cloud-audit-logs"
 
@@ -68,10 +92,12 @@ module "audit_logs" {
   bucket_location    = var.default_region
   log_retention_days = 365
   org_id             = var.org_id
+  kms_key_name       = module.cmek.key_names["audit-logs"]
 
   # Enable BigQuery Analytics for improved security investigation
   enable_bigquery_analytics = true
   bigquery_location         = var.default_region
+  bigquery_kms_key_name     = module.cmek.key_names["audit-analytics"]
 }
 
 # Security Command Center Notifications
@@ -83,6 +109,7 @@ module "scc_notifications" {
   pubsub_topic_name = "scc-findings"
   config_id         = "scc-notify-all-active"
   filter            = "state=\"ACTIVE\""
+  kms_key_name      = module.cmek.key_names["scc-notifications"]
 }
 
 # Resource Manager Tags (Metadata & Governance)
@@ -92,7 +119,7 @@ module "tags" {
   org_id = var.org_id
 
   tags = {
-    "environment"         = ["dev", "uat", "prod", "shared"]
+    "environment"         = sort(keys(var.environments))
     "business-unit"       = ["engineering", "product", "sales"]
     "data-classification" = ["public", "internal", "confidential", "restricted"]
   }
@@ -185,9 +212,13 @@ module "org_policies" {
 # Folder-level Organization Policies for Production
 module "prod_folder_policies" {
   source = "../../governance/org-policy"
-  count  = contains(keys(var.environments), "prod") ? 1 : 0
+  for_each = {
+    for env_key in var.strict_folder_policy_environment_keys :
+    env_key => module.organization.folders[env_key]
+    if contains(keys(module.organization.folders), env_key)
+  }
 
-  parent = module.organization.folders["prod"].name
+  parent = each.value.name
 
   list_policies = []
 
@@ -241,6 +272,7 @@ module "org_budget" {
   project_name         = "${var.project_prefix}-org"
   monthly_budget_limit = var.monthly_budget_amount
   currency_code        = var.budget_currency
+  kms_key_name         = module.cmek.key_names["billing-alerts"]
 
   # Monitor the entire Billing Account by defaulting 'projects' to empty (null)
   # projects = ["projects/${var.admin_project_number}"]
@@ -255,4 +287,8 @@ resource "google_bigquery_dataset" "billing_export" {
   location                    = var.default_region
   project                     = var.admin_project_id
   default_table_expiration_ms = null # Billing data should be persisted
+
+  default_encryption_configuration {
+    kms_key_name = module.cmek.key_names["billing-export"]
+  }
 }

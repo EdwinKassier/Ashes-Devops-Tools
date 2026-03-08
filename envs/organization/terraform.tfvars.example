@@ -1,0 +1,86 @@
+# Organization Configuration
+domain            = "example.com"
+organization_name = "My Company"
+billing_account   = "000000-000000-000000" # OR use billing_account_display_name
+tfc_organization  = "your-tfc-org-name"
+
+# Project Naming
+project_prefix = "verify-org"
+
+# Admin & Group Configuration
+admin_email = "admin@example.com"
+
+# Optional: Grant shared services folder access to existing groups
+# shared_iam_group_role_bindings = {
+#   "gcp-shared-netops@example.com" = [
+#     "roles/compute.networkAdmin",
+#     "roles/dns.admin"
+#   ]
+# }
+
+environments = {
+  dev = {
+    display_name         = "Development"
+    region               = "europe-west1"
+    cidr_block           = "10.10.0.0/16"
+    budget_monthly_limit = 500
+    iam_group_role_bindings = {
+      "gcp-dev-platform@example.com" = [
+        "roles/compute.networkUser",
+        "roles/logging.viewer"
+      ]
+    }
+    labels = {
+      criticality = "low"
+    }
+  }
+  uat = {
+    display_name         = "UAT"
+    region               = "europe-west1"
+    cidr_block           = "10.20.0.0/16"
+    budget_monthly_limit = 1000
+    iam_group_role_bindings = {
+      "gcp-uat-platform@example.com" = [
+        "roles/compute.networkUser",
+        "roles/logging.viewer"
+      ]
+    }
+    labels = {
+      criticality = "medium"
+    }
+  }
+  prod = {
+    display_name         = "Production"
+    region               = "europe-west1"
+    cidr_block           = "10.30.0.0/16"
+    budget_monthly_limit = 5000
+    iam_group_role_bindings = {
+      "gcp-prod-platform@example.com" = [
+        "roles/compute.networkUser",
+        "roles/logging.viewer"
+      ]
+    }
+    labels = {
+      criticality = "high"
+    }
+  }
+}
+
+# Optional: Add specific admin groups
+# organization_admin_groups = ["gcp-org-admins@example.com"]
+# billing_admin_groups      = ["gcp-billing-admins@example.com"]
+
+# Regions
+default_region  = "europe-west1"
+allowed_regions = ["europe-west1", "europe-west2", "us-central1"]
+
+# GitHub OIDC (for CI/CD)
+# github_org  = "MyOrg"
+# github_repo = "devops-infra"
+
+# Notifications (Optional)
+# security_contact_email = "security@example.com"
+# billing_contact_email  = "billing@example.com"
+
+# Budget
+# monthly_budget_amount = 1000

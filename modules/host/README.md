@@ -1,10 +1,10 @@
 # Host Module
 
-Unified infrastructure orchestration module that serves as the central entrypoint for project provisioning.
+Compatibility wrapper for the application environment root.
 
 ## Overview
 
-This module instantiates and coordinates all network, security, and governance modules to provide a complete infrastructure foundation. It eliminates the need to manually wire together individual modules and ensures consistent configuration across all components.
+This module composes the lower-level networking, security, and governance modules used by [envs/apps](../../envs/apps/). It is retained for compatibility and internal orchestration; new consumers should prefer the staged roots and stage modules over calling `modules/host` directly.
 
 ## Features
 
@@ -18,7 +18,7 @@ This module instantiates and coordinates all network, security, and governance m
 
 ## Usage
 
-### Minimal Example
+### Internal Wrapper Example
 
 ```hcl
 module "infrastructure" {
@@ -32,7 +32,7 @@ module "infrastructure" {
 }
 ```
 
-### Production Example
+### Feature-Rich Example
 
 ```hcl
 module "infrastructure" {
@@ -79,36 +79,7 @@ module "infrastructure" {
 }
 ```
 
-## Inputs
-
-See [variables.tf](variables.tf) for the complete list of input variables.
-
-### Key Variables
-
-| Name | Description | Type | Default |
-|------|-------------|------|---------|
-| `project_id` | The GCP project ID | `string` | **required** |
-| `project_prefix` | Prefix for resource naming | `string` | **required** |
-| `region` | Primary GCP region | `string` | `"us-central1"` |
-| `enable_networking` | Enable VPC provisioning | `bool` | `true` |
-| `enable_cloud_armor` | Enable Cloud Armor WAF | `bool` | `true` |
-| `enable_cdn` | Enable CDN/Global LB | `bool` | `false` |
-| `enable_vpn` | Enable Cloud VPN | `bool` | `false` |
-
-## Outputs
-
-See [outputs.tf](outputs.tf) for the complete list of outputs.
-
-### Key Outputs
-
-| Name | Description |
-|------|-------------|
-| `network_id` | The VPC network ID |
-| `network_self_link` | The VPC network self link |
-| `subnets` | All subnet outputs by tier |
-| `security_policy_self_link` | Cloud Armor policy self link |
-| `cdn_ip` | Global load balancer IP |
-| `dns_name_servers` | Name servers for public zones |
+The generated module reference below is the source of truth for inputs, outputs, and required providers.
 
 ## Architecture
 
@@ -137,25 +108,13 @@ See [outputs.tf](outputs.tf) for the complete list of outputs.
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## Requirements
-
-| Name | Version |
-|------|---------|
-| terraform | >= 1.0.0 |
-| google | >= 4.80.0 |
-| google-beta | >= 4.80.0 |
-
-## License
-
-Copyright 2023 Ashes
-
 <!-- BEGIN_TF_DOCS -->
 Copyright 2023 Ashes
 
 Host Module - Unified Infrastructure Orchestration
 
-This module serves as the central entrypoint for project provisioning,
-instantiating all network, security, and governance modules.
+Compatibility wrapper used by envs/apps to compose network,
+security, and governance modules into one environment stack.
 
 ## Usage
 
@@ -176,9 +135,9 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.0.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.80.0 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 4.80.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0, < 2.0.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 6.0 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | ~> 6.0 |
 
 ## Providers
 
@@ -202,6 +161,7 @@ module "example" {
 - firewall_health_checks - ../network/network-firewall
 - firewall_iap_ssh_rdp - ../network/network-firewall
 - firewall_public_to_compute - ../network/network-firewall
+- flow_logs_kms - ../governance/kms
 - hierarchical_firewall_policies - ../network/hierarchical-firewall
 - integrated_nat - ../network/nat
 - interconnects - ../network/interconnect
@@ -226,6 +186,7 @@ The following resources are created:
 
 
 - data source.google_compute_zones.available (modules/host/main.tf#L38)
+- data source.google_project.current (modules/host/main.tf#L498)
 
 
 ## Inputs
@@ -292,7 +253,7 @@ The following resources are created:
 | <a name="input_vpc_flow_logs_storage_location"></a> [vpc\_flow\_logs\_storage\_location](#input\_vpc\_flow\_logs\_storage\_location) | Location for the Cloud Storage bucket | `string` | `"US"` | no |
 | <a name="input_vpc_name"></a> [vpc\_name](#input\_vpc\_name) | Name of the VPC network | `string` | `"main-vpc"` | no |
 | <a name="input_vpc_peerings"></a> [vpc\_peerings](#input\_vpc\_peerings) | Map of VPC peering configurations | <pre>map(object({<br/>    peer_network           = string<br/>    create_reverse_peering = optional(bool, true)<br/>    export_custom_routes   = optional(bool, false)<br/>    import_custom_routes   = optional(bool, false)<br/>  }))</pre> | `{}` | no |
-| <a name="input_vpc_service_controls"></a> [vpc\_service\_controls](#input\_vpc\_service\_controls) | Map of VPC Service Controls perimeters to create | <pre>map(object({<br/>    organization_id      = string<br/>    access_policy_name   = optional(string)<br/>    create_access_policy = optional(bool, false)<br/>    perimeter_title      = string<br/>    description          = optional(string, "Managed by Terraform")<br/>    perimeter_type       = optional(string, "PERIMETER_TYPE_REGULAR")<br/>    protected_projects   = optional(list(string), [])<br/>    restricted_services  = optional(list(string), [])<br/>    access_levels = optional(list(object({<br/>      name               = string<br/>      title              = string<br/>      description        = optional(string)<br/>      combining_function = optional(string, "AND")<br/>      conditions = list(object({<br/>        ip_subnetworks = optional(list(string))<br/>        members        = optional(list(string))<br/>        negate         = optional(bool, false)<br/>        regions        = optional(list(string))<br/>      }))<br/>    })), [])<br/>    ingress_policies = optional(list(object({<br/>      identity_type = optional(string)<br/>      identities    = optional(list(string))<br/>      resources     = optional(list(string))<br/>      operations = optional(list(object({<br/>        service_name = string<br/>      })))<br/>    })), [])<br/>    egress_policies = optional(list(object({<br/>      identity_type = optional(string)<br/>      identities    = optional(list(string))<br/>      resources     = optional(list(string))<br/>      operations = optional(list(object({<br/>        service_name = string<br/>      })))<br/>    })), [])<br/>    enable_dry_run = optional(bool, false)<br/>  }))</pre> | `{}` | no |
+| <a name="input_vpc_service_controls"></a> [vpc\_service\_controls](#input\_vpc\_service\_controls) | Map of VPC Service Controls perimeters to create | <pre>map(object({<br/>    organization_id      = string<br/>    access_policy_name   = optional(string)<br/>    create_access_policy = optional(bool, false)<br/>    perimeter_title      = string<br/>    description          = optional(string, "Managed by Terraform")<br/>    perimeter_type       = optional(string, "PERIMETER_TYPE_REGULAR")<br/>    protected_projects   = optional(list(string), [])<br/>    restricted_services  = optional(list(string), [])<br/>    access_levels = optional(list(object({<br/>      name               = string<br/>      title              = string<br/>      description        = optional(string)<br/>      combining_function = optional(string, "AND")<br/>      conditions = list(object({<br/>        ip_subnetworks = optional(list(string))<br/>        members        = optional(list(string))<br/>        negate         = optional(bool, false)<br/>        regions        = optional(list(string))<br/>      }))<br/>    })), [])<br/>    ingress_policies = optional(list(object({<br/>      identity_type = optional(string)<br/>      identities    = optional(list(string))<br/>      sources = optional(list(object({<br/>        access_level = optional(string)<br/>        resource     = optional(string)<br/>      })))<br/>      resources = optional(list(string))<br/>      operations = optional(list(object({<br/>        service_name = string<br/>        method_selectors = optional(list(object({<br/>          method     = optional(string)<br/>          permission = optional(string)<br/>        })))<br/>      })))<br/>    })), [])<br/>    egress_policies = optional(list(object({<br/>      identity_type = optional(string)<br/>      identities    = optional(list(string))<br/>      resources     = optional(list(string))<br/>      operations = optional(list(object({<br/>        service_name = string<br/>        method_selectors = optional(list(object({<br/>          method     = optional(string)<br/>          permission = optional(string)<br/>        })))<br/>      })))<br/>    })), [])<br/>    enable_dry_run = optional(bool, false)<br/>  }))</pre> | `{}` | no |
 | <a name="input_vpn_advertised_ip_ranges"></a> [vpn\_advertised\_ip\_ranges](#input\_vpn\_advertised\_ip\_ranges) | IP ranges to advertise via BGP | <pre>list(object({<br/>    range       = string<br/>    description = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_vpn_local_ips"></a> [vpn\_local\_ips](#input\_vpn\_local\_ips) | Local IP addresses for VPN interfaces | `list(string)` | <pre>[<br/>  "169.254.0.1",<br/>  "169.254.0.3"<br/>]</pre> | no |
 | <a name="input_vpn_peer_asn"></a> [vpn\_peer\_asn](#input\_vpn\_peer\_asn) | Peer router BGP ASN | `number` | `64513` | no |
@@ -350,19 +311,4 @@ The following resources are created:
 | <a name="output_vpn"></a> [vpn](#output\_vpn) | The VPN module outputs (if enabled) |
 | <a name="output_vpn_gateway_ips"></a> [vpn\_gateway\_ips](#output\_vpn\_gateway\_ips) | The VPN gateway external IP addresses |
 | <a name="output_vpn_tunnel_statuses"></a> [vpn\_tunnel\_statuses](#output\_vpn\_tunnel\_statuses) | The status of each VPN tunnel |
-
-## Security Considerations
-
-- Ensure all sensitive variables are marked as `sensitive = true`
-- Use GCP Secret Manager for storing secrets
-- Follow the principle of least privilege for IAM roles
-- Enable audit logging for compliance
-
-## Contributing
-
-Contributions are welcome! Please read the [CONTRIBUTING.md](../../CONTRIBUTING.md) for guidelines.
-
-## License
-
-This module is licensed under the MIT License. See [LICENSE](../../LICENSE) for details.
 <!-- END_TF_DOCS -->

@@ -17,6 +17,18 @@ resource "google_compute_security_policy" "policy" {
     description = "Default rule, higher priority overrides it"
   }
 
+  rule {
+    action      = "deny(403)"
+    priority    = "900"
+    description = "Block Log4Shell canary payloads"
+
+    match {
+      expr {
+        expression = "evaluatePreconfiguredExpr('cve-canary')"
+      }
+    }
+  }
+
   # Dynamic block for custom rules
   dynamic "rule" {
     for_each = var.custom_rules
@@ -134,4 +146,4 @@ resource "google_compute_security_policy_rule" "preconfigured_waf_rules" {
       expression = "evaluatePreconfiguredWaf('${each.value.rule_id}', {'sensitivity': ${each.value.sensitivity}})"
     }
   }
-} 
+}

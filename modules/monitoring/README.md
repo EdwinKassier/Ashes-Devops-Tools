@@ -1,56 +1,14 @@
-<!-- BEGIN_TF_DOCS -->
+# Monitoring Modules
 
+This directory groups monitoring and dashboard modules. It is a category index, not a deployable Terraform module.
 
-## Usage
+## Modules
 
-Basic usage of this module is as follows:
+| Module | Purpose |
+|---|---|
+| [`compute_dashboard`](./compute_dashboard/) | GCP dashboard resources for compute-oriented observability |
 
-```hcl
-module "example" {
-	source = "<module-path>"
+## Usage Guidance
 
-	# Required variables
-	
-}
-```
-
-## Requirements
-
-No requirements.
-
-## Providers
-
-No providers.
-
-
-
-## Resources
-
-The following resources are created:
-
-
-
-
-## Inputs
-
-No inputs.
-
-## Outputs
-
-No outputs.
-
-## Security Considerations
-
-- Ensure all sensitive variables are marked as `sensitive = true`
-- Use GCP Secret Manager for storing secrets
-- Follow the principle of least privilege for IAM roles
-- Enable audit logging for compliance
-
-## Contributing
-
-Contributions are welcome! Please read the [CONTRIBUTING.md](../../CONTRIBUTING.md) for guidelines.
-
-## License
-
-This module is licensed under the MIT License. See [LICENSE](../../LICENSE) for details.
-<!-- END_TF_DOCS -->
+- Use these modules from a real root or stage composition rather than applying this directory directly.
+- Refer to the concrete module README for required providers and arguments.

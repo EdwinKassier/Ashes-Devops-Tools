@@ -13,6 +13,7 @@
 # =============================================================================
 
 module "project" {
+  # checkov:skip=CKV_TF_1:Uses the upstream Terraform Google Project Factory module pinned by release version.
   source  = "terraform-google-modules/project-factory/google"
   version = "~> 14.0"
 
@@ -61,7 +62,7 @@ resource "google_project_iam_binding" "project_admins" {
 # Network User binding on specific subnets in the Host Project
 # This allows the service project to use the subnets without owning them
 resource "google_compute_subnetwork_iam_binding" "network_users" {
-  for_each = var.enable_shared_vpc_attachment ? var.shared_vpc_subnets : []
+  for_each = var.enable_shared_vpc_attachment ? var.shared_vpc_subnets : {}
 
   project    = var.shared_vpc_host_project_id
   region     = each.value.region

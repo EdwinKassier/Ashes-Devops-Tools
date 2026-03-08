@@ -30,7 +30,11 @@ variable "org_id" {
 
 variable "folders" {
   description = "Map of folder objects to attach policies to"
-  type        = map(any)
+  type = map(object({
+    id           = string
+    name         = string
+    display_name = string
+  }))
 }
 
 variable "internal_domain" {

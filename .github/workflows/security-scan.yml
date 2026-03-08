@@ -8,6 +8,7 @@ on:
     paths:
       - '**.tf'
       - '**.tfvars'
+      - '.tfsec.yml'
       - '.github/workflows/security-scan.yml'
   schedule:
     - cron: '0 0 * * 0'  # Weekly on Sunday at midnight
@@ -18,9 +19,6 @@ permissions:
   security-events: write
   actions: read
 
-env:
-  TERRAFORM_VERSION: '1.0.0'
-
 jobs:
   tfsec:
     name: TFSec Security Scan
@@ -29,13 +27,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run TFSec
+      - name: Run TFSec on modules
         uses: aquasecurity/tfsec-action@v1.0.3
         with:
+          working_directory: modules
           soft_fail: false
           config_file: .tfsec.yml
           format: sarif
           additional_args: --out tfsec-results.sarif
+
+      - name: Run TFSec on envs
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: envs
+          soft_fail: false
+          config_file: .tfsec.yml
+          format: sarif
+          additional_args: --out tfsec-env-results.sarif
 
       - name: Upload TFSec results to GitHub Security
         uses: github/codeql-action/upload-sarif@v2
@@ -47,7 +55,7 @@ jobs:
       - name: Generate TFSec Report
         if: always()
         run: |
-          docker run --rm -v "$(pwd):/src" aquasec/tfsec:latest /src --config-file /src/.tfsec.yml --format json > tfsec-report.json
+          docker run --rm -v "$(pwd):/src" aquasec/tfsec:latest /src/modules --config-file /src/.tfsec.yml --format json > tfsec-report.json
 
       - name: Upload TFSec Report
         if: always()
@@ -63,10 +71,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run Checkov
+      - name: Run Checkov on modules
         uses: bridgecrewio/checkov-action@v12
         with:
-          directory: .
+          directory: modules
           framework: terraform
           soft_fail: false
           output_format: sarif,cli
@@ -74,6 +82,17 @@ jobs:
           download_external_modules: false
           # CKV_GCP_1: Ensure that Service Account has no user-managed service account keys
           # Justification: We avoid managing user keys, but some GCP-created keys may trigger this.
+          skip_check: CKV_GCP_1,CKV_GCP_16,CKV_GCP_27,CKV_GCP_41,CKV_GCP_43,CKV_GCP_45,CKV_GCP_46,CKV_GCP_47,CKV_GCP_48,CKV_GCP_49,CKV_GCP_50,CKV_GCP_62,CKV_GCP_73,CKV_GCP_78,CKV_GCP_81,CKV_GCP_83,CKV_GCP_84,CKV_GCP_112,CKV_GCP_113,CKV_GCP_114,CKV_GCP_115,CKV_GCP_116,CKV_GCP_117,CKV_GCP_125,CKV_TF_1,CKV2_GCP_4,CKV2_GCP_5,CKV2_GCP_18,CKV2_GHA_1
+
+      - name: Run Checkov on envs
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: envs
+          framework: terraform
+          soft_fail: false
+          output_format: cli
+          output_file_path: checkov-env-report.txt
+          download_external_modules: false
           skip_check: CKV_GCP_1,CKV_GCP_16,CKV_GCP_27,CKV_GCP_41,CKV_GCP_43,CKV_GCP_45,CKV_GCP_46,CKV_GCP_47,CKV_GCP_48,CKV_GCP_49,CKV_GCP_50,CKV_GCP_62,CKV_GCP_73,CKV_GCP_78,CKV_GCP_81,CKV_GCP_83,CKV_GCP_84,CKV_GCP_112,CKV_GCP_113,CKV_GCP_114,CKV_GCP_115,CKV_GCP_116,CKV_GCP_117,CKV_GCP_125,CKV_TF_1,CKV2_GCP_4,CKV2_GCP_5,CKV2_GCP_18,CKV2_GHA_1
 
       - name: Upload Checkov results to GitHub Security
@@ -88,7 +107,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: checkov-report
-          path: checkov-report.txt
+          path: |
+            checkov-report.txt
+            checkov-env-report.txt
 
   trivy:
     name: Trivy Security Scan
@@ -152,4 +173,3 @@ jobs:
         run: |
           echo "❌ One or more security scans failed"
           exit 1
-

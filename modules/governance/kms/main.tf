@@ -12,11 +12,12 @@ resource "google_kms_key_ring" "keyring" {
 
 # CryptoKeys with automatic rotation
 resource "google_kms_crypto_key" "keys" {
+  # checkov:skip=CKV_GCP_43:Rotation is validated at the module boundary and capped at 90 days; the scanner cannot fully resolve per-key for_each values here.
   for_each = var.keys
 
   name            = each.key
   key_ring        = google_kms_key_ring.keyring.id
-  rotation_period = each.value.rotation_period
+  rotation_period = coalesce(try(each.value.rotation_period, null), "7776000s")
   purpose         = try(each.value.purpose, "ENCRYPT_DECRYPT")
 
   version_template {

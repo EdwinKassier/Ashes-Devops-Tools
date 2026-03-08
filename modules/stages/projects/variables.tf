@@ -2,16 +2,19 @@ variable "project_prefix" { type = string }
 variable "organization_name" { type = string }
 variable "default_billing_account" { type = string }
 variable "admin_project_id" { type = string }
-variable "folders" { type = map(any) }
+variable "folders" {
+  type = map(object({
+    id           = string
+    name         = string
+    display_name = string
+  }))
+}
 
 variable "environments" {
   description = "Map of environment definitions"
   type = map(object({
     display_name = string
     description  = string
-    groups = map(object({
-      role = string
-    }))
     projects = map(object({
       name            = string
       billing_account = optional(string)

@@ -6,12 +6,14 @@ on:
       - main
     paths:
       - 'modules/**/*.tf'
+      - 'modules/**/README.md'
       - '.terraform-docs.yml'
+      - 'scripts/module-docs.sh'
+      - '.github/workflows/documentation.yml'
   workflow_dispatch:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   docs:
@@ -24,12 +26,13 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup terraform-docs
-        uses: terraform-docs/gh-actions@v1.0.0
+        uses: terraform-docs/gh-actions@v1.4.1
         with:
-          working-dir: .
-          config-file: .terraform-docs.yml
-          recursive: true
-          recursive-path: modules
+          working-dir: modules/host
+          output-method: print
+
+      - name: Generate module documentation
+        run: make docs
 
       - name: Check for changes
         id: changes
@@ -48,4 +51,3 @@ jobs:
           git add modules/**/README.md
           git commit -m "docs: auto-generate module documentation [skip ci]"
           git push
-

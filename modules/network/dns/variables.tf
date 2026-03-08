@@ -65,9 +65,9 @@ variable "records" {
 }
 
 variable "dnssec_enabled" {
-  description = "Enable DNSSEC for the zone (supports both public and private zones)"
+  description = "Enable DNSSEC for public zones. Private zones ignore this setting."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "enable_logging" {

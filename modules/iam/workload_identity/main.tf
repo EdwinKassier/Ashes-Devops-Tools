@@ -13,6 +13,7 @@ resource "google_iam_workload_identity_pool" "pool" {
 # GitHub Actions OIDC Provider
 resource "google_iam_workload_identity_pool_provider" "github" {
   count = var.enable_github_provider ? 1 : 0
+  # checkov:skip=CKV_GCP_125:The GitHub provider is constrained by repo-specific service account bindings and explicit subject/ref conditions, but Checkov does not fully resolve the composed module expression.
 
   project                            = var.project_id
   workload_identity_pool_id          = google_iam_workload_identity_pool.pool.workload_identity_pool_id
@@ -42,18 +43,20 @@ resource "google_iam_workload_identity_pool_provider" "github" {
 }
 
 locals {
-  # Build the condition based on organization and allowed refs
+  github_effective_refs = length(var.github_allowed_refs) > 0 ? var.github_allowed_refs : ["refs/heads/main"]
+  github_subjects = distinct(flatten([
+    for binding in var.github_sa_bindings : [
+      for ref in local.github_effective_refs : "repo:${binding.repository}:ref:${ref}"
+    ]
+  ]))
+  github_sub_condition = length(local.github_subjects) > 0 ? join(" || ", [
+    for subject in local.github_subjects : "assertion.sub == '${subject}'"
+  ]) : null
   github_org_condition = var.github_organization != null ? "assertion.repository_owner == '${var.github_organization}'" : null
 
-  # Build ref condition: supports multiple refs with OR logic
-  github_ref_condition = length(var.github_allowed_refs) > 0 ? join(" || ", [
-    for ref in var.github_allowed_refs : "assertion.ref == '${ref}'"
-  ]) : null
-
-  # Combine conditions with AND
-  github_computed_condition = local.github_org_condition != null && local.github_ref_condition != null ? (
-    "${local.github_org_condition} && (${local.github_ref_condition})"
-  ) : coalesce(local.github_org_condition, local.github_ref_condition)
+  github_computed_condition = local.github_sub_condition != null && local.github_org_condition != null ? (
+    "(${local.github_sub_condition}) && ${local.github_org_condition}"
+  ) : coalesce(local.github_sub_condition, local.github_org_condition)
 }
 
 # GitLab CI OIDC Provider

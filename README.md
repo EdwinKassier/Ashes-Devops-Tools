@@ -6,7 +6,7 @@
 
 **Infrastructure as Code for scalable, secure, and maintainable cloud architecture**
 
-[![Terraform](https://img.shields.io/badge/Terraform-1.0+-7B42BC?style=for-the-badge&logo=terraform&logoColor=white)](https://terraform.io)
+[![Terraform](https://img.shields.io/badge/Terraform-1.6%2B-7B42BC?style=for-the-badge&logo=terraform&logoColor=white)](https://terraform.io)
 [![GCP](https://img.shields.io/badge/Google_Cloud-4285F4?style=for-the-badge&logo=google-cloud&logoColor=white)](https://cloud.google.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
@@ -23,26 +23,37 @@
 
 ## Overview
 
-The **Ashes DevOps Tools** repository provides a complete Infrastructure as Code (IaC) solution for managing Google Cloud Platform infrastructure using Terraform. This production-ready repository includes 35+ reusable modules, automated CI/CD pipelines, comprehensive security scanning, and complete documentation.
+The **Ashes DevOps Tools** repository provides a Terraform-based Google Cloud platform with two supported deployable roots:
+
+- `envs/organization` for control-plane resources such as folders, shared projects, org policies, and hub networking.
+- `envs/apps` for per-environment application infrastructure using Terraform Cloud workspaces named `apps-<env>`.
+
+Terraform Cloud is the only live plan/apply control plane. GitHub Actions validates code and publishes release metadata; it does not apply infrastructure directly.
 
 ---
 
 ## Quick Start
 
-Get started in 3 simple steps:
+Get started from the repository root:
 
 ```bash
-# 1. Install dependencies
+# 1. Install local tooling used by this repo
 make install && make pre-commit-install
 
-# 2. Authenticate with GCP
+# 2. Install Terraform separately, then authenticate with GCP
 gcloud auth application-default login
 
-# 3. Initialize and validate
-cd envs/dev && terraform init && make validate-all
+# 3. Initialize the supported roots
+terraform -chdir=envs/organization init
+TF_WORKSPACE=apps-dev terraform -chdir=envs/apps init
+
+# 4. Run the fast local checks
+make fmt-check
+make docs-check
+make security
 ```
 
-See the **[Quick Start Guide](docs/guides/QUICK_START.md)** for detailed setup instructions.
+See [docs/guides/QUICK_START.md](docs/guides/QUICK_START.md) for the full setup flow and the optional deeper checks (`make validate-all`, `make lint`) that require additional local prerequisites.
 
 ---
 
@@ -53,20 +64,20 @@ See the **[Quick Start Guide](docs/guides/QUICK_START.md)** for detailed setup i
 | Document | Description |
 |:---|:---|
 | **[Documentation Index](docs/INDEX.md)** | Complete navigation for all documentation |
-| **[Quick Start Guide](docs/guides/QUICK_START.md)** | Get set up in 5 minutes |
-| **[System Architecture](docs/architecture/ARCHITECTURE.md)** | Complete system design and architecture |
+| **[Quick Start Guide](docs/guides/QUICK_START.md)** | Local setup, initialization, and common commands |
+| **[System Architecture](docs/architecture/ARCHITECTURE.md)** | Current roots, modules, and execution model |
 | **[Troubleshooting Guide](docs/guides/TROUBLESHOOTING.md)** | Common issues and solutions |
 
 ### **Configuration & Workflows**
 
 | Type | Location | Description |
 |:---|:---|:---|
-| **Development Commands** | [Makefile](Makefile) | 40+ commands for development tasks |
-| **Pre-commit Hooks** | [.pre-commit-config.yaml](.pre-commit-config.yaml) | 14 automated quality checks |
+| **Development Commands** | [Makefile](Makefile) | Supported local entrypoints for validation, docs, and plans |
+| **Pre-commit Hooks** | [.pre-commit-config.yaml](.pre-commit-config.yaml) | Automated formatting and repository checks |
 | **Linting Configuration** | [.tflint.hcl](.tflint.hcl) | Terraform linting rules |
 | **Documentation Config** | [.terraform-docs.yml](.terraform-docs.yml) | Auto-generation configuration |
 | **Editor Settings** | [.editorconfig](.editorconfig) | Consistent coding styles |
-| **CI/CD Workflows** | [.github/workflows/](.github/workflows/) | 4 GitHub Actions workflows |
+| **CI/CD Workflows** | [.github/workflows/](.github/workflows/) | Validation, documentation, release metadata, and security workflows |
 | **Issue Templates** | [.github/ISSUE_TEMPLATE/](.github/ISSUE_TEMPLATE/) | Bug reports, features, security |
 | **Pull Requests** | [.github/pull_request_template.md](.github/pull_request_template.md) | PR template |
 | **Code Ownership** | [.github/CODEOWNERS](.github/CODEOWNERS) | Code ownership rules |
@@ -80,15 +91,13 @@ See the **[Quick Start Guide](docs/guides/QUICK_START.md)** for detailed setup i
 
 ```text
 envs/
-├── organisation/    # Organization-level resources
-├── dev/            # Development environment
-├── uat/            # User Acceptance Testing
-└── prod/           # Production environment
+├── organization/   # Control-plane root (folders, projects, policies)
+└── apps/           # Single app-environment root (TF_WORKSPACE=apps-<env>)
 ```
 
 ### **Modules**
 
-35+ reusable Terraform modules organized by category:
+Terraform modules are organized by category:
 
 #### **Compute & Applications**
 - `modules/firebase/` - Firebase services
@@ -120,7 +129,7 @@ envs/
 - `modules/network/vpc-sc/` - VPC Service Controls
 
 #### **IAM & Security**
-- `modules/iam/organisation/` - Organization IAM
+- `modules/iam/organization/` - Organization IAM
 - `modules/iam/role/` - Custom IAM roles
 - `modules/iam/identity_group/` - Group management
 - `modules/iam/identity_group_memberships/` - Group memberships
@@ -137,7 +146,7 @@ envs/
 - `modules/governance/tags/` - Resource Tags
 
 #### **Orchestration**
-- `modules/host/` - Unified project provisioning
+- `modules/host/` - Compatibility wrapper used by the app root
 - `modules/stages/` - Landing Zone stages (Bootstrap, Org, Projects, Network Hub, Workload)
 
 ---
@@ -150,23 +159,19 @@ Run `make help` to see all commands. Most commonly used:
 ```bash
 make install           # Install all required tools
 make fmt               # Format all Terraform files
-make validate-all      # Validate all modules
-make lint              # Run TFLint
+make validate-all      # Validate all supported roots (requires provider access)
+make lint              # Run TFLint (requires a working local TFLint plugin install)
 make security          # Run security scans
 make ci                # Run complete CI pipeline
 ```
 
 ### **Environment Operations**
 ```bash
-make init-dev          # Initialize dev environment
-make plan-dev          # Plan dev changes
-make apply-dev         # Apply dev changes
-make init-uat          # Initialize UAT environment
-make plan-uat          # Plan UAT changes
-make apply-uat         # Apply UAT changes
-make init-prod         # Initialize prod environment
-make plan-prod         # Plan prod changes
-make apply-prod        # Apply prod changes (requires confirmation)
+make init-organization               # Initialize the organization root
+make plan-organization               # Plan organization changes
+make init-apps APP_ENV=dev           # Initialize the apps root for a workspace
+make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars
+make apply-apps APP_ENV=prod APP_VARS=examples/prod.tfvars
 ```
 
 ### **Documentation & Quality**
@@ -177,23 +182,21 @@ make pre-commit-run    # Run all pre-commit hooks
 make clean             # Clean temporary files
 ```
 
-See the **[Makefile](Makefile)** for the complete list of 40+ commands.
+See the **[Makefile](Makefile)** for the complete list of supported commands.
 
 ---
 
 ## Security & Quality
 
 ### **Automated Security Scanning**
-- **TFSec** - Terraform security scanner
-- **Checkov** - Infrastructure policy checker  
-- **Trivy** - Vulnerability scanner
-- **GitLeaks** - Secret detection
+- **Local `make security`**: TFSec and Checkov
+- **GitHub `security-scan.yml`**: TFSec, Checkov, Trivy, and Gitleaks
 
 ### **Quality Tools**
 - **TFLint** - Terraform linting
 - **terraform validate** - Syntax validation
 - **terraform fmt** - Code formatting
-- **pre-commit** - 14 automated quality checks
+- **pre-commit** - Automated formatting and repository checks
 
 Run security scans:
 ```bash
@@ -209,27 +212,23 @@ make security-report       # Generate detailed reports
 
 | Workflow | Trigger | Purpose |
 |:---|:---|:---|
-| **[terraform-plan.yml](.github/workflows/terraform-plan.yml)** | Pull Request | Format, validate, lint, security scan, plan |
-| **[terraform-apply.yml](.github/workflows/terraform-apply.yml)** | Tags (env/*/v*) | Deploy to environments |
+| **[terraform-plan.yml](.github/workflows/terraform-plan.yml)** | Pull Request | Format, docs, validation, lint, security |
+| **[terraform-apply.yml](.github/workflows/terraform-apply.yml)** | Tags (`organization/v*`, `apps/*/v*`) | Verify Terraform Cloud run and publish release metadata |
 | **[security-scan.yml](.github/workflows/security-scan.yml)** | Push, Weekly | Comprehensive security scanning |
 | **[documentation.yml](.github/workflows/documentation.yml)** | Module changes | Auto-generate documentation |
 
 ### **Deployment**
 
-Deploy using git tags:
+Publish release metadata using git tags after the corresponding Terraform Cloud run has completed successfully:
 
 ```bash
-# Development
-git tag -a env/dev/v1.0.0 -m "Deploy dev v1.0.0"
-git push origin env/dev/v1.0.0
+# Organization control plane
+git tag -a organization/v1.0.0 -m "Release organization v1.0.0"
+git push origin organization/v1.0.0
 
-# UAT
-git tag -a env/uat/v1.0.0 -m "Deploy UAT v1.0.0"
-git push origin env/uat/v1.0.0
-
-# Production (requires approval)
-git tag -a env/prod/v1.0.0 -m "Deploy prod v1.0.0"
-git push origin env/prod/v1.0.0
+# Application environment
+git tag -a apps/prod/v1.0.0 -m "Release apps prod v1.0.0"
+git push origin apps/prod/v1.0.0
 ```
 
 ---
@@ -258,7 +257,7 @@ Having issues? Check these resources:
 1. **[Troubleshooting Guide](docs/guides/TROUBLESHOOTING.md)** - Common issues and solutions
 2. **[Quick Start Guide](docs/guides/QUICK_START.md)** - Setup instructions
 3. **[Documentation Index](docs/INDEX.md)** - All documentation
-4. **Run diagnostics**: `make validate-all && make lint && make security`
+4. **Run diagnostics**: `make fmt-check && make docs-check && make security`
 
 ---
 
@@ -266,13 +265,12 @@ Having issues? Check these resources:
 
 | Category | Status |
 |:---|:---:|
-| **Infrastructure Modules** | 35+ |
+| **Deployable Roots** | 2 |
 | **CI/CD Automation** | 4 Workflows |
 | **Security Scanning** | 4 Tools |
-| **Quality Checks** | 14 Hooks |
-| **Make Commands** | 40+ |
-| **Documentation** | Complete |
-| **Production Ready** | **Yes** |
+| **Execution Model** | Terraform Cloud |
+| **Documentation** | Current |
+| **Production Ready** | **Target State** |
 
 ---
 
@@ -304,65 +302,11 @@ Having issues? Check these resources:
 **Run commands**
 → `make help` or see [Makefile](Makefile)
 
-**Deploy changes**
-→ `make plan-dev && make apply-dev`
+**Plan organization changes**
+→ `make plan-organization`
+
+**Plan app changes**
+→ `make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars`
 
 **Run quality checks**
 → `make ci`
-
-<!-- BEGIN_TF_DOCS -->
-
-
-## Usage
-
-Basic usage of this module is as follows:
-
-```hcl
-module "example" {
-	source = "<module-path>"
-
-	# Required variables
-	
-}
-```
-
-## Requirements
-
-No requirements.
-
-## Providers
-
-No providers.
-
-
-
-## Resources
-
-The following resources are created:
-
-
-
-
-## Inputs
-
-No inputs.
-
-## Outputs
-
-No outputs.
-
-## Security Considerations
-
-- Ensure all sensitive variables are marked as `sensitive = true`
-- Use GCP Secret Manager for storing secrets
-- Follow the principle of least privilege for IAM roles
-- Enable audit logging for compliance
-
-## Contributing
-
-Contributions are welcome! Please read the [CONTRIBUTING.md](../../CONTRIBUTING.md) for guidelines.
-
-## License
-
-This module is licensed under the MIT License. See [LICENSE](../../LICENSE) for details.
-<!-- END_TF_DOCS -->

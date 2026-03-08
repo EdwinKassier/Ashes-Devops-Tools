@@ -44,5 +44,4 @@ variable "tfc_organization" {
 variable "tfc_workspaces" {
   description = "List of TFC workspaces to grant access to Terraform Admin SA"
   type        = list(string)
-  default     = ["organization-prod"]
 }

@@ -1,16 +1,12 @@
+resource "google_tags_tag_binding" "environment" {
+  for_each = {
+    for env_key, folder in module.organization.folders : env_key => {
+      parent    = folder.name
+      tag_value = module.tags.tag_values["environment-${env_key}"]
+    }
+    if contains(keys(module.tags.tag_values), "environment-${env_key}")
+  }
 
-# Tag Bindings
-resource "google_tags_tag_binding" "env_dev" {
-  parent    = module.organization.folders["dev"].name
-  tag_value = module.tags.tag_values["environment-dev"]
-}
-
-resource "google_tags_tag_binding" "env_uat" {
-  parent    = module.organization.folders["uat"].name
-  tag_value = module.tags.tag_values["environment-uat"]
-}
-
-resource "google_tags_tag_binding" "env_prod" {
-  parent    = module.organization.folders["prod"].name
-  tag_value = module.tags.tag_values["environment-prod"]
+  parent    = each.value.parent
+  tag_value = each.value.tag_value
 }

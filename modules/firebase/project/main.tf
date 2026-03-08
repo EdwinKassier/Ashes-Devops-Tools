@@ -91,6 +91,44 @@ data "google_firebase_web_app_config" "default" {
   web_app_id = var.web_display_name != "" ? google_firebase_web_app.default[0].app_id : ""
 }
 
+resource "google_storage_bucket" "firebase_web_config_access_logs" {
+  count    = var.web_display_name != "" ? 1 : 0
+  provider = google-beta
+
+  # checkov:skip=CKV_GCP_62:This is the terminal access log bucket for the Firebase config bucket and cannot recursively log to itself.
+  name                        = "${var.project_id}-firebase-web-config-access-logs"
+  location                    = var.region
+  project                     = var.project_id
+  uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
+
+  versioning {
+    enabled = true
+  }
+
+  dynamic "encryption" {
+    for_each = var.kms_key_name != null ? [1] : []
+    content {
+      default_kms_key_name = var.kms_key_name
+    }
+  }
+
+  labels = {
+    managed-by  = "terraform"
+    purpose     = "firebase-web-config-access-logs"
+    environment = "shared"
+  }
+}
+
+resource "google_storage_bucket_iam_member" "firebase_web_config_access_log_writer" {
+  count    = var.web_display_name != "" ? 1 : 0
+  provider = google-beta
+
+  bucket = google_storage_bucket.firebase_web_config_access_logs[0].name
+  role   = "roles/storage.objectCreator"
+  member = "group:cloud-storage-analytics@google.com"
+}
+
 resource "google_storage_bucket" "firebase_web_config" {
   count    = var.web_display_name != "" ? 1 : 0
   provider = google-beta
@@ -106,11 +144,24 @@ resource "google_storage_bucket" "firebase_web_config" {
     enabled = true
   }
 
+  logging {
+    log_bucket = google_storage_bucket.firebase_web_config_access_logs[0].name
+  }
+
+  dynamic "encryption" {
+    for_each = var.kms_key_name != null ? [1] : []
+    content {
+      default_kms_key_name = var.kms_key_name
+    }
+  }
+
   labels = {
     managed-by  = "terraform"
     purpose     = "firebase-web-config"
     environment = "shared"
   }
+
+  depends_on = [google_storage_bucket_iam_member.firebase_web_config_access_log_writer]
 }
 
 

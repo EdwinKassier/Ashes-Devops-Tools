@@ -1,9 +1,10 @@
 # Admin Project - Foundation of the Automation
 resource "google_project" "admin_project" {
-  name            = "${var.project_prefix}-admin"
-  project_id      = "${var.project_prefix}-admin-${random_id.suffix.hex}"
-  org_id          = var.org_id
-  billing_account = var.billing_account
+  name                = "${var.project_prefix}-admin"
+  project_id          = "${var.project_prefix}-admin-${random_id.suffix.hex}"
+  org_id              = var.org_id
+  billing_account     = var.billing_account
+  auto_create_network = false
   labels = {
     environment = "admin"
     purpose     = "administration"
@@ -71,7 +72,8 @@ module "gh_oidc" {
   github_organization    = var.github_org
 
   # Security: Restrict to main branch only for production deployments
-  github_allowed_refs = ["refs/heads/main"]
+  github_allowed_refs                 = ["refs/heads/main"]
+  github_attribute_condition_override = "assertion.sub == 'repo:${var.github_org}/${var.github_repo}:ref:refs/heads/main'"
 
   github_sa_bindings = [
     {
@@ -103,20 +105,26 @@ module "tfc_oidc" {
 
 # Grant Org-Level Roles to the Terraform Admin SA
 # Note: Folder roles are granted in the organization module where folders exist
-#checkov:skip=CKV_GCP_41:Terraform Admin SA requires high privileges
-#checkov:skip=CKV_GCP_45:Terraform Admin SA requires high privileges
-#checkov:skip=CKV_GCP_49:Terraform Admin SA requires high privileges
-#checkov:skip=CKV_GCP_112:Terraform Admin SA requires high privileges
-resource "google_organization_iam_member" "terraform_admin_org_roles" {
+resource "google_organization_iam_member" "terraform_admin_standard_org_roles" {
   for_each = toset([
     "roles/orgpolicy.policyAdmin",
     "roles/accesscontextmanager.policyAdmin",
     "roles/logging.admin",
     "roles/resourcemanager.organizationViewer",
     "roles/compute.xpnAdmin",
-    "roles/securitycenter.admin",     # SCC findings and notifications management
-    "roles/iam.securityAdmin",        # IAM policy administration
     "roles/resourcemanager.tagAdmin", # Tag management for governance
+  ])
+
+  org_id = var.org_id
+  role   = each.key #tfsec:ignore:google-iam-no-privileged-service-accounts
+  member = "serviceAccount:${module.terraform_admin_sa.email}"
+}
+
+resource "google_organization_iam_member" "terraform_admin_exception_org_roles" {
+  # checkov:skip=CKV_GCP_45:These org-level roles are intentionally isolated because the bootstrap service account must manage IAM and SCC centrally.
+  for_each = toset([
+    "roles/securitycenter.admin", # SCC findings and notifications management
+    "roles/iam.securityAdmin",    # IAM policy administration
   ])
 
   org_id = var.org_id

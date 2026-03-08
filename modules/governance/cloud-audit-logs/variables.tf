@@ -27,6 +27,12 @@ variable "kms_key_name" {
   default     = null
 }
 
+variable "bigquery_kms_key_name" {
+  description = "The KMS key name to encrypt the optional BigQuery audit analytics dataset"
+  type        = string
+  default     = null
+}
+
 variable "org_id" {
   description = "Organization ID for org-level log sink (optional). When provided, creates an org-level sink that captures audit logs from all projects."
   type        = string

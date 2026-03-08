@@ -1,253 +1,129 @@
-.PHONY: help install fmt fmt-check validate validate-all lint security security-report test docs docs-check clean pre-commit-install pre-commit-run compliance-check cost-estimate graph upgrade-providers plan-dev plan-uat plan-prod apply-dev apply-uat apply-prod init-dev init-uat init-prod
+.PHONY: help install fmt fmt-check validate validate-all lint security security-report docs docs-check test ci clean init-organization init-apps plan-organization plan-apps apply-organization apply-apps validate-requirements pre-commit-install pre-commit-run pre-commit-update
 
-# Variables
 TERRAFORM := terraform
 TFLINT := tflint
 TFSEC := tfsec
 CHECKOV := checkov
 TERRAFORM_DOCS := terraform-docs
 PRE_COMMIT := pre-commit
+ROOT_DISCOVERY := ./scripts/terraform-roots.sh
 
-# Colors for output
+APP_ENV ?= dev
+APP_WORKSPACE ?= apps-$(APP_ENV)
+APP_VARS ?= examples/dev.tfvars
+
 BLUE := \033[0;34m
 GREEN := \033[0;32m
 YELLOW := \033[0;33m
-RED := \033[0;31m
-NC := \033[0m # No Color
+NC := \033[0m
 
-##@ General
+TERRAFORM_ROOTS := $(shell $(ROOT_DISCOVERY) all)
 
-help: ## Show this help message
-	@echo '$(BLUE)Ashes DevOps Tools - Available Commands$(NC)'
-	@echo ''
-	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make $(YELLOW)<target>$(NC)\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  $(BLUE)%-25s$(NC) %s\n", $$1, $$2 } /^##@/ { printf "\n$(GREEN)%s$(NC)\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+help: ## Show available commands
+	@echo '$(BLUE)Ashes DevOps Tools$(NC)'
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n"} /^[a-zA-Z0-9_.-]+:.*?##/ { printf "  $(BLUE)%-22s$(NC) %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
-##@ Installation
+install: ## Install required local tooling
+	@bash scripts/setup.sh
 
-install: ## Install all required tools (terraform, tflint, tfsec, checkov, terraform-docs)
-	@echo "$(BLUE)Installing required tools...$(NC)"
-	@command -v $(TERRAFORM) >/dev/null 2>&1 || (echo "$(RED)Terraform not found. Installing...$(NC)" && bash scripts/install-terraform.sh)
-	@command -v $(TFLINT) >/dev/null 2>&1 || (echo "$(YELLOW)TFLint not found. Installing...$(NC)" && brew install tflint)
-	@command -v $(TFSEC) >/dev/null 2>&1 || (echo "$(YELLOW)TFSec not found. Installing...$(NC)" && brew install tfsec)
-	@command -v $(CHECKOV) >/dev/null 2>&1 || (echo "$(YELLOW)Checkov not found. Installing...$(NC)" && pip3 install checkov)
-	@command -v $(TERRAFORM_DOCS) >/dev/null 2>&1 || (echo "$(YELLOW)terraform-docs not found. Installing...$(NC)" && brew install terraform-docs)
-	@command -v $(PRE_COMMIT) >/dev/null 2>&1 || (echo "$(YELLOW)pre-commit not found. Installing...$(NC)" && pip3 install pre-commit)
-	@echo "$(GREEN)✓ All tools installed successfully!$(NC)"
-
-##@ Code Quality
-
-fmt: ## Format all Terraform files
-	@echo "$(BLUE)Formatting Terraform files...$(NC)"
+fmt: ## Format Terraform files
 	@$(TERRAFORM) fmt -recursive .
-	@echo "$(GREEN)✓ Formatting complete!$(NC)"
 
-fmt-check: ## Check if Terraform files are formatted correctly
-	@echo "$(BLUE)Checking Terraform file formatting...$(NC)"
+fmt-check: ## Check Terraform formatting
 	@$(TERRAFORM) fmt -recursive -check .
 
-validate: ## Validate Terraform syntax in current directory
-	@echo "$(BLUE)Validating Terraform syntax...$(NC)"
+validate: ## Validate Terraform in the current working directory
 	@$(TERRAFORM) validate
 
-validate-all: ## Validate all modules
-	@echo "$(BLUE)Validating all modules...$(NC)"
-	@for dir in modules/*/* envs/*/; do \
-		if [ -f "$$dir/main.tf" ] || [ -f "$$dir/versions.tf" ]; then \
-			echo "$(YELLOW)Validating $$dir...$(NC)"; \
-			(cd "$$dir" && $(TERRAFORM) init -backend=false > /dev/null && $(TERRAFORM) validate) || exit 1; \
-		fi \
+validate-all: ## Initialize without backends and validate every supported root
+	@set -e; \
+	for dir in $(TERRAFORM_ROOTS); do \
+		echo "$(YELLOW)Validating $$dir$(NC)"; \
+		$(TERRAFORM) -chdir=$$dir init -backend=false -input=false >/dev/null; \
+		$(TERRAFORM) -chdir=$$dir validate; \
 	done
-	@echo "$(GREEN)✓ All modules validated successfully!$(NC)"
 
-lint: ## Run tflint on all modules
-	@echo "$(BLUE)Running TFLint...$(NC)"
+lint: ## Run TFLint across the repository
 	@$(TFLINT) --init
-	@$(TFLINT) --recursive --config=$(PWD)/.tflint.hcl
-	@echo "$(GREEN)✓ Linting complete!$(NC)"
+	@set -e; \
+	for dir in $(TERRAFORM_ROOTS); do \
+		echo "$(YELLOW)Linting $$dir$(NC)"; \
+		$(TFLINT) --chdir=$$dir --config=$(PWD)/.tflint.hcl; \
+	done
 
-##@ Security
+security: ## Run tfsec and checkov and fail on real findings
+	@$(TFSEC) . --config-file .tfsec.yml --exclude-path examples
+	@$(CHECKOV) -d modules --quiet --compact --framework terraform
+	@$(CHECKOV) -d envs --quiet --compact --framework terraform
 
-security: ## Run security scans (tfsec and checkov)
-	@echo "$(BLUE)Running security scans...$(NC)"
-	@echo "$(YELLOW)Running TFSec...$(NC)"
-	@$(TFSEC) . --config-file .tfsec.yml || true
-	@echo "$(YELLOW)Running Checkov...$(NC)"
-	@$(CHECKOV) -d . --quiet --compact --framework terraform || true
-	@echo "$(GREEN)✓ Security scans complete!$(NC)"
-
-security-report: ## Generate detailed security report
-	@echo "$(BLUE)Generating security report...$(NC)"
+security-report: ## Generate detailed security reports
 	@mkdir -p reports
-	@$(TFSEC) . --config-file .tfsec.yml --format json > reports/tfsec-report.json
-	@$(TFSEC) . --config-file .tfsec.yml --format html > reports/tfsec-report.html
-	@$(CHECKOV) -d . --framework terraform --output json > reports/checkov-report.json
-	@$(CHECKOV) -d . --framework terraform --output cli > reports/checkov-report.txt
-	@echo "$(GREEN)✓ Security reports generated in reports/$(NC)"
+	@$(TFSEC) . --config-file .tfsec.yml --exclude-path examples --format json > reports/tfsec-report.json
+	@$(CHECKOV) -d modules --framework terraform --output json > reports/checkov-modules-report.json
+	@$(CHECKOV) -d envs --framework terraform --output json > reports/checkov-envs-report.json
 
-##@ Documentation
+docs: ## Generate Terraform docs from repo root
+	@bash scripts/module-docs.sh generate
 
-docs: ## Generate documentation for all modules
-	@echo "$(BLUE)Generating module documentation...$(NC)"
-	@for dir in modules/*/*/; do \
-		if [ -f "$$dir/main.tf" ]; then \
-			echo "$(YELLOW)Generating docs for $$dir...$(NC)"; \
-			$(TERRAFORM_DOCS) markdown table --config .terraform-docs.yml --output-file README.md "$$dir"; \
-		fi \
+docs-check: ## Verify Terraform docs are up to date
+	@bash scripts/module-docs.sh check
+
+test: ## Run terraform test suites when present
+	@set -e; \
+	test_dirs="$$(find envs modules -type f \( -name '*.tftest.hcl' -o -name '*.tftest.json' \) -exec dirname {} \; | sort -u)"; \
+	if [ -z "$$test_dirs" ]; then \
+		echo "$(YELLOW)No terraform test suites found$(NC)"; \
+		exit 0; \
+	fi; \
+	for dir in $$test_dirs; do \
+		echo "$(YELLOW)Testing $$dir$(NC)"; \
+		$(TERRAFORM) -chdir=$$dir init -backend=false -input=false >/dev/null; \
+		$(TERRAFORM) -chdir=$$dir test; \
 	done
-	@echo "$(GREEN)✓ Documentation generated!$(NC)"
 
-docs-check: ## Verify documentation is up to date
-	@echo "$(BLUE)Checking documentation...$(NC)"
-	@for dir in modules/*/*/; do \
-		if [ -f "$$dir/main.tf" ]; then \
-			$(TERRAFORM_DOCS) markdown table --config .terraform-docs.yml --output-check "$$dir" || exit 1; \
-		fi \
-	done
-	@echo "$(GREEN)✓ Documentation is up to date!$(NC)"
-
-##@ Development Environment Setup
-
-init-dev: ## Initialize Terraform for dev environment
-	@echo "$(BLUE)Initializing dev environment...$(NC)"
-	@cd envs/dev && $(TERRAFORM) init
-	@echo "$(GREEN)✓ Dev environment initialized!$(NC)"
-
-init-uat: ## Initialize Terraform for UAT environment
-	@echo "$(BLUE)Initializing UAT environment...$(NC)"
-	@cd envs/uat && $(TERRAFORM) init
-	@echo "$(GREEN)✓ UAT environment initialized!$(NC)"
-
-init-prod: ## Initialize Terraform for prod environment
-	@echo "$(BLUE)Initializing prod environment...$(NC)"
-	@cd envs/prod && $(TERRAFORM) init
-	@echo "$(GREEN)✓ Prod environment initialized!$(NC)"
-
-##@ Environment Operations
-
-plan-dev: ## Plan dev environment changes
-	@echo "$(BLUE)Planning dev environment...$(NC)"
-	@cd envs/dev && $(TERRAFORM) plan -out=tfplan
-
-plan-uat: ## Plan UAT environment changes
-	@echo "$(BLUE)Planning UAT environment...$(NC)"
-	@cd envs/uat && $(TERRAFORM) plan -out=tfplan
-
-plan-prod: ## Plan prod environment changes
-	@echo "$(BLUE)Planning prod environment...$(NC)"
-	@cd envs/prod && $(TERRAFORM) plan -out=tfplan
-
-apply-dev: ## Apply dev environment changes
-	@echo "$(YELLOW)⚠ Applying changes to dev environment...$(NC)"
-	@cd envs/dev && $(TERRAFORM) apply tfplan
-	@echo "$(GREEN)✓ Dev environment updated!$(NC)"
-
-apply-uat: ## Apply UAT environment changes
-	@echo "$(YELLOW)⚠ Applying changes to UAT environment...$(NC)"
-	@read -p "Are you sure you want to apply UAT changes? [y/N] " -n 1 -r; \
-	echo; \
-	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
-		cd envs/uat && $(TERRAFORM) apply tfplan; \
-		echo "$(GREEN)✓ UAT environment updated!$(NC)"; \
-	else \
-		echo "$(RED)✗ Apply cancelled$(NC)"; \
-	fi
-
-apply-prod: ## Apply prod environment changes (requires confirmation)
-	@echo "$(RED)⚠ WARNING: Applying changes to PRODUCTION environment!$(NC)"
-	@read -p "Type 'yes' to confirm production deployment: " confirm; \
-	if [ "$$confirm" = "yes" ]; then \
-		cd envs/prod && $(TERRAFORM) apply tfplan; \
-		echo "$(GREEN)✓ Production environment updated!$(NC)"; \
-	else \
-		echo "$(RED)✗ Production apply cancelled$(NC)"; \
-	fi
-
-##@ Pre-commit Hooks
-
-pre-commit-install: ## Install pre-commit hooks
-	@echo "$(BLUE)Installing pre-commit hooks...$(NC)"
+pre-commit-install: ## Install git pre-commit hooks
 	@$(PRE_COMMIT) install
-	@$(PRE_COMMIT) install --hook-type commit-msg
-	@echo "$(GREEN)✓ Pre-commit hooks installed!$(NC)"
 
-pre-commit-run: ## Run pre-commit on all files
-	@echo "$(BLUE)Running pre-commit checks...$(NC)"
+pre-commit-run: ## Run pre-commit across the repository
 	@$(PRE_COMMIT) run --all-files
 
-pre-commit-update: ## Update pre-commit hooks
-	@echo "$(BLUE)Updating pre-commit hooks...$(NC)"
+pre-commit-update: ## Update pinned pre-commit hooks
 	@$(PRE_COMMIT) autoupdate
 
-##@ CI/CD
-
-ci: ## Run CI pipeline locally
-	@echo "$(BLUE)Running CI pipeline...$(NC)"
+ci: ## Run the local CI pipeline
 	@$(MAKE) fmt-check
-	@$(MAKE) validate-all
-	@$(MAKE) lint
-	@$(MAKE) security
-	@echo "$(GREEN)✓ CI pipeline complete!$(NC)"
-
-pre-deploy: ## Run pre-deployment checks
-	@echo "$(BLUE)Running pre-deployment checks...$(NC)"
-	@$(MAKE) fmt-check
-	@$(MAKE) validate-all
-	@$(MAKE) lint
-	@$(MAKE) security
 	@$(MAKE) docs-check
-	@echo "$(GREEN)✓ Pre-deployment checks passed!$(NC)"
+	@$(MAKE) validate-all
+	@$(MAKE) lint
+	@$(MAKE) security
+	@$(MAKE) test
 
-##@ Utilities
+init-organization: ## Initialize the organization root
+	@$(TERRAFORM) -chdir=envs/organization init
 
-clean: ## Clean temporary files and caches
-	@echo "$(BLUE)Cleaning temporary files...$(NC)"
-	@find . -type d -name ".terraform" -exec rm -rf {} + 2>/dev/null || true
-	@find . -type f -name "*.tfplan" -delete 2>/dev/null || true
-	@find . -type f -name "*.tfstate" -delete 2>/dev/null || true
-	@find . -type f -name "*.tfstate.backup" -delete 2>/dev/null || true
-	@find . -type f -name ".terraform.lock.hcl" -delete 2>/dev/null || true
-	@rm -rf reports/ 2>/dev/null || true
-	@echo "$(GREEN)✓ Cleanup complete!$(NC)"
+init-apps: ## Initialize the apps root
+	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/apps init
 
-graph: ## Generate dependency graph
-	@echo "$(BLUE)Generating dependency graph...$(NC)"
-	@cd envs/organisation && $(TERRAFORM) init -backend=false > /dev/null
-	@cd envs/organisation && $(TERRAFORM) graph | dot -Tpng > ../../docs/dependency-graph.png
-	@echo "$(GREEN)✓ Graph generated at docs/dependency-graph.png$(NC)"
+plan-organization: ## Plan the organization root
+	@$(TERRAFORM) -chdir=envs/organization plan
 
-upgrade-providers: ## Upgrade provider versions
-	@echo "$(BLUE)Upgrading provider versions...$(NC)"
-	@for dir in modules/*/* envs/*/; do \
-		if [ -f "$$dir/versions.tf" ]; then \
-			echo "$(YELLOW)Upgrading $$dir...$(NC)"; \
-			(cd "$$dir" && $(TERRAFORM) init -upgrade); \
-		fi \
-	done
-	@echo "$(GREEN)✓ Providers upgraded!$(NC)"
+plan-apps: ## Plan the apps root for APP_ENV using APP_VARS
+	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/apps plan -var-file=$(APP_VARS)
 
-cost-estimate: ## Estimate infrastructure costs (requires infracost)
-	@echo "$(BLUE)Estimating costs...$(NC)"
-	@command -v infracost >/dev/null 2>&1 || (echo "$(RED)Infracost not found. Install from https://www.infracost.io/$(NC)" && exit 1)
-	@cd envs/dev && infracost breakdown --path .
-	@echo "$(GREEN)✓ Cost estimation complete!$(NC)"
+apply-organization: ## Apply the organization root
+	@$(TERRAFORM) -chdir=envs/organization apply
 
-compliance-check: ## Run compliance checks
-	@echo "$(BLUE)Running compliance checks...$(NC)"
-	@command -v terraform-compliance >/dev/null 2>&1 || (echo "$(YELLOW)terraform-compliance not found. Install with: pip install terraform-compliance$(NC)")
-	@echo "$(GREEN)✓ Compliance checks complete!$(NC)"
+apply-apps: ## Apply the apps root for APP_ENV using APP_VARS
+	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/apps apply -var-file=$(APP_VARS)
 
-validate-requirements: ## Validate requirements.txt for dependencies
-	@echo "$(BLUE)Validating tool versions...$(NC)"
+validate-requirements: ## Print local tool versions
 	@$(TERRAFORM) version
-	@$(TFLINT) --version || echo "$(YELLOW)TFLint not installed$(NC)"
-	@$(TFSEC) --version || echo "$(YELLOW)TFSec not installed$(NC)"
-	@$(CHECKOV) --version || echo "$(YELLOW)Checkov not installed$(NC)"
-	@$(TERRAFORM_DOCS) --version || echo "$(YELLOW)terraform-docs not installed$(NC)"
-	@echo "$(GREEN)✓ Version check complete!$(NC)"
+	@$(TFLINT) --version
+	@$(TFSEC) --version
+	@$(CHECKOV) --version
+	@$(TERRAFORM_DOCS) --version
 
-##@ Release Management
-
-create-prod-tag: ## Create production release tag
-	@echo "$(BLUE)Creating production release tag...$(NC)"
-	@./scripts/create-prod-release.sh
-
+clean: ## Remove local Terraform caches and generated reports
+	@find . -type d -name ".terraform" -prune -exec rm -rf {} +
+	@find . -type f -name "*.tfplan" -delete
+	@rm -rf reports

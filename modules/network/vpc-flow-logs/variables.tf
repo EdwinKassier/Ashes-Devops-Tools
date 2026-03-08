@@ -120,6 +120,12 @@ variable "bigquery_partition_expiration_days" {
   default     = 90
 }
 
+variable "bigquery_kms_key_name" {
+  description = "Customer-managed KMS key used to encrypt the BigQuery dataset when it is created"
+  type        = string
+  default     = null
+}
+
 # -----------------------------------------------------------------------------
 # CLOUD STORAGE CONFIGURATION
 # -----------------------------------------------------------------------------
@@ -164,6 +170,12 @@ variable "storage_archive_days" {
   description = "Days before archiving log files (null for no archival)"
   type        = number
   default     = 90
+}
+
+variable "storage_kms_key_name" {
+  description = "Customer-managed KMS key used to encrypt the Cloud Storage bucket when it is created"
+  type        = string
+  default     = null
 }
 
 # -----------------------------------------------------------------------------

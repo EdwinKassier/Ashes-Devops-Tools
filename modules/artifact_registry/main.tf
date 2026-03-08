@@ -12,6 +12,7 @@ resource "google_artifact_registry_repository" "repo" {
   repository_id = each.key
   description   = each.value.description
   format        = each.value.format
+  kms_key_name  = var.kms_key_name
 
   # Docker-specific configuration (only for DOCKER format)
   dynamic "docker_config" {

@@ -122,3 +122,71 @@ To find the permissions you need:
 
 - `service_account` - Create service accounts to grant custom roles to
 - `identity_group` - Manage groups to grant custom roles to
+
+<!-- BEGIN_TF_DOCS -->
+
+
+## Usage
+
+Basic usage of this module is as follows:
+
+```hcl
+module "example" {
+	source = "<module-path>"
+
+	# Required variables
+	permissions = 
+	role_id = 
+	title = 
+	
+}
+```
+
+## Requirements
+
+| Name | Version |
+|------|---------|
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0, < 2.0.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 6.0 |
+
+## Providers
+
+| Name | Version |
+|------|---------|
+| <a name="provider_google"></a> [google](#provider\_google) | 6.50.0 |
+
+
+
+## Resources
+
+The following resources are created:
+
+
+- resource.google_organization_iam_custom_role.org_role (modules/iam/role/main.tf#L17)
+- resource.google_project_iam_custom_role.project_role (modules/iam/role/main.tf#L5)
+
+
+## Inputs
+
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| <a name="input_permissions"></a> [permissions](#input\_permissions) | The list of permissions that the custom role will grant | `list(string)` | n/a | yes |
+| <a name="input_role_id"></a> [role\_id](#input\_role\_id) | The camelCaseRoleId for the custom role (e.g., 'myCustomRole') | `string` | n/a | yes |
+| <a name="input_title"></a> [title](#input\_title) | A human-readable title for the custom role | `string` | n/a | yes |
+| <a name="input_description"></a> [description](#input\_description) | A description of the custom role | `string` | `""` | no |
+| <a name="input_level"></a> [level](#input\_level) | Level at which to create the custom role: 'project' or 'organization' | `string` | `"project"` | no |
+| <a name="input_org_id"></a> [org\_id](#input\_org\_id) | The organization ID where the custom role will be created (required when level is 'organization') | `string` | `null` | no |
+| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The ID of the project where the custom role will be created (required when level is 'project') | `string` | `null` | no |
+| <a name="input_stage"></a> [stage](#input\_stage) | The current launch stage of the role (ALPHA, BETA, GA, DEPRECATED, DISABLED, EAP) | `string` | `"GA"` | no |
+
+## Outputs
+
+| Name | Description |
+|------|-------------|
+| <a name="output_level"></a> [level](#output\_level) | The level at which the role was created (project or organization) |
+| <a name="output_name"></a> [name](#output\_name) | The resource name of the created custom role |
+| <a name="output_permissions"></a> [permissions](#output\_permissions) | The list of permissions granted by this role |
+| <a name="output_role_id"></a> [role\_id](#output\_role\_id) | The ID of the created custom role |
+| <a name="output_stage"></a> [stage](#output\_stage) | The current launch stage of the role |
+| <a name="output_title"></a> [title](#output\_title) | The human-readable title of the custom role |
+<!-- END_TF_DOCS -->

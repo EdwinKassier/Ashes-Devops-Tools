@@ -1,110 +1,64 @@
 # Ashes DevOps Tools Documentation Index
 
-## Quick Navigation
+## Start Here
 
-### Getting Started
-- **[Quick Start Guide](guides/QUICK_START.md)** - Get set up in 5 minutes
-- **[Main README](../README.md)** - Project overview and architecture
+- [README](../README.md): repo overview, supported roots, and release model
+- [Quick Start](guides/QUICK_START.md): local setup and first validation run
+- [Architecture](architecture/ARCHITECTURE.md): control plane, app root, and CI/CD flow
+- [Troubleshooting](guides/TROUBLESHOOTING.md): common local and workflow failures
 
-### Guides
-- **[Quick Start](guides/QUICK_START.md)** - 5-minute setup
-- **[Troubleshooting](guides/TROUBLESHOOTING.md)** - Common issues and solutions
+## Core Concepts
 
-### Architecture
-- **[System Architecture](architecture/ARCHITECTURE.md)** - Complete system design
-
-### Security
-Security documentation includes comprehensive security scanning with TFSec, Checkov, Trivy, and GitLeaks. See the [Makefile](../Makefile) for security commands.
-
-### Contributing
-Contributions are welcome! See the **[Contributing Guide](../CONTRIBUTING.md)** for details. Please ensure all changes pass quality checks by running `make ci` before submitting.
-
-### Development Tools
-- **[Makefile](../Makefile)** - 40+ commands for development
-- **[Pre-commit Configuration](../.pre-commit-config.yaml)** - Automated quality checks
-- **[TFLint Configuration](../.tflint.hcl)** - Linting rules
-
----
-
-## Documentation Structure
-
-```text
-docs/
-├── INDEX.md                     # This file - documentation navigation
-├── architecture/
-│   └── ARCHITECTURE.md          # Complete system architecture and design
-└── guides/
-    ├── QUICK_START.md          # 5-minute setup guide
-    └── TROUBLESHOOTING.md      # Common issues and solutions
-```
-
-### **Root Configuration Files**
-```text
-.
-├── README.md                    # Main project documentation
-├── Makefile                     # 40+ development commands
-├── .pre-commit-config.yaml     # Automated quality checks (14 hooks)
-├── .tflint.hcl                 # Terraform linting configuration
-├── .terraform-docs.yml         # Documentation generation config
-├── .editorconfig               # Editor configuration
-└── .github/
-    └── workflows/              # CI/CD automation
-        ├── terraform-plan.yml
-        ├── terraform-apply.yml
-        ├── security-scan.yml
-        └── documentation.yml
-```
-
----
+- `envs/organization` is the control-plane root.
+- `envs/apps` is the only deployable application-environment root.
+- Terraform Cloud owns live state and apply runs.
+- GitHub Actions validates code and publishes release metadata.
 
 ## Common Tasks
 
-### I want to...
+### Initialize the roots
 
-**Get Started**
 ```bash
-# See Quick Start Guide
-make install && make pre-commit-install
-```
-→ [Quick Start Guide](guides/QUICK_START.md)
-
-**Understand the System**
-→ [System Architecture](architecture/ARCHITECTURE.md)
-
-**Format and Validate Code**
-```bash
-make fmt && make validate-all
+terraform -chdir=envs/organization init
+TF_WORKSPACE=apps-dev terraform -chdir=envs/apps init
 ```
 
-**Run Security Scans**
+### Run fast local checks
+
 ```bash
+make fmt-check
+make docs-check
 make security
 ```
 
-**Fix an Issue**
-→ [Troubleshooting Guide](guides/TROUBLESHOOTING.md)
+### Run deeper local checks
 
-**Deploy Changes**
 ```bash
-make plan-dev    # Review changes
-make apply-dev   # Apply to dev
+make validate-all
+make lint
 ```
 
-**View All Commands**
+`make validate-all` requires provider-registry access. `make lint` also requires a working local TFLint Google ruleset plugin.
+
+### Plan changes
+
 ```bash
-make help
+make plan-organization
+make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars
 ```
 
----
+## Reference Files
+
+- [Makefile](../Makefile): local operator commands
+- [.terraform-docs.yml](../.terraform-docs.yml): docs generation config
+- [.tflint.hcl](../.tflint.hcl): TFLint config
+- [.tfsec.yml](../.tfsec.yml): TFSec config
+- [terraform-plan.yml](../.github/workflows/terraform-plan.yml): PR validation workflow
+- [terraform-apply.yml](../.github/workflows/terraform-apply.yml): release-metadata workflow
 
 ## External Resources
 
-- [Terraform Documentation](https://www.terraform.io/docs)
-- [GCP Best Practices](https://cloud.google.com/docs/enterprise/best-practices-for-enterprise-organizations)
+- [Terraform Documentation](https://developer.hashicorp.com/terraform/docs)
+- [Google Cloud Best Practices](https://cloud.google.com/docs/enterprise/best-practices-for-enterprise-organizations)
 - [TFLint Rules](https://github.com/terraform-linters/tflint/tree/master/docs/rules)
 - [TFSec Checks](https://aquasecurity.github.io/tfsec/)
-
----
-
-**Infrastructure as Code for the Ashes Project**
-

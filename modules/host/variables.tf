@@ -601,9 +601,17 @@ variable "vpc_service_controls" {
     ingress_policies = optional(list(object({
       identity_type = optional(string)
       identities    = optional(list(string))
-      resources     = optional(list(string))
+      sources = optional(list(object({
+        access_level = optional(string)
+        resource     = optional(string)
+      })))
+      resources = optional(list(string))
       operations = optional(list(object({
         service_name = string
+        method_selectors = optional(list(object({
+          method     = optional(string)
+          permission = optional(string)
+        })))
       })))
     })), [])
     egress_policies = optional(list(object({
@@ -612,6 +620,10 @@ variable "vpc_service_controls" {
       resources     = optional(list(string))
       operations = optional(list(object({
         service_name = string
+        method_selectors = optional(list(object({
+          method     = optional(string)
+          permission = optional(string)
+        })))
       })))
     })), [])
     enable_dry_run = optional(bool, false)
@@ -722,4 +734,3 @@ variable "internal_load_balancers" {
   }))
   default = {}
 }
-

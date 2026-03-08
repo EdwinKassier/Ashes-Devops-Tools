@@ -2,481 +2,177 @@
 
 ## Overview
 
-The Ashes DevOps Tools repository implements a multi-environment, modular infrastructure as code solution for Google Cloud Platform using Terraform.
+This repository implements a GCP landing zone with two supported Terraform roots:
 
----
+- `envs/organization` for the control plane
+- `envs/apps` for environment-specific application infrastructure
 
-## Architecture Principles
+The design target is a low-touch platform that is easy to extend without copying roots or editing workflow matrices.
 
-### 1. **Modularity**
-- Reusable, composable infrastructure modules
-- Single responsibility per module
-- Clean separation of concerns
-- DRY (Don't Repeat Yourself) principle
+## Supported Roots
 
-### 2. **Multi-Environment Support**
-- Separate configurations for dev, UAT, and production
-- Environment-specific variables and settings
-- Consistent structure across environments
-- Isolated state management
-
-### 3. **Security First**
-- Private by default
-- Least privilege IAM
-- Encryption at rest and in transit
-- Automated security scanning
-- Audit logging enabled
-
-### 4. **Automation**
-- CI/CD pipelines for validation and deployment
-- Automated documentation generation
-- Pre-commit hooks for code quality
-- Scheduled security scans
-
-### 5. **Compliance**
-- ISO 27001 alignment
-- ISO 22301 alignment
-- GCP best practices
-- Infrastructure as Code standards
-
----
-
-## Repository Structure
-
-```
-Ashes-Devops-Tools/
-├── envs/                        # Environment configurations
-│   ├── organisation/            # Organization-level resources
-│   ├── dev/                     # Development environment
-│   ├── uat/                     # User Acceptance Testing
-│   └── prod/                    # Production environment
-├── modules/                     # Reusable Terraform modules
-│   ├── artifact_registery/      # Container registry
-│   ├── cloud_functions/         # Serverless functions
-│   ├── cloud_run/               # Containerized applications
-│   ├── cloud_storage/           # Object storage
-│   ├── firebase/                # Firebase services
-│   ├── governance/              # Billing, audit logs
-│   ├── host/                    # Unified project orchestration
-│   ├── iam/                     # Identity and access management
-│   └── network/                 # Networking components
-├── docs/                        # Documentation
-├── scripts/                     # Utility scripts
-└── .github/                     # CI/CD workflows
+```text
+envs/
+├── organization/
+└── apps/
 ```
 
----
+### `envs/organization`
 
-## Module Architecture
+Creates and manages:
 
-### Module Categories
+- admin project
+- Terraform admin service account
+- workload identity providers
+- folders and folder IAM
+- shared projects
+- per-environment host projects
+- org policy
+- tags
+- centralized audit logging
+- SCC notifications
+- billing export and budgets
+- hub networking
 
-#### **Compute & Applications**
-- `firebase/` - Application platform
+This root composes four stage modules:
 
-#### **Storage & Data**
-- `cloud_storage/` - Object storage buckets
-- `artifact_registery/` - Container images
+- `modules/stages/bootstrap`
+- `modules/stages/organization`
+- `modules/stages/projects`
+- `modules/stages/network-hub`
 
-#### **Networking**
-- `vpc/` - Virtual Private Cloud (Dynamic CIDR, PSA, PSC integrated)
-- `subnet/` - Standardized subnet factory
-- `network-firewall/` - Hierarchical firewall rules
-- `cloud_armor/` - DDoS protection & WAF
-- `api_gateway/` - API management
-- `cdn/` - Content Delivery Network (Edge Entrypoint)
-- `dns/` - Cloud DNS (Public/Private)
-- `vpc-peering/` - Bi-directional VPC peering
-- `private-service-connect/` - Secure Google API access
-- `private-service-access/` - Cloud SQL/Redis access
-- `vpn/` - Cloud VPN (HA/BGP)
+### `envs/apps`
 
-#### **IAM & Security**
-- `iam/organisation/` - Organization IAM
-- `iam/role/` - Custom IAM roles
-- `identity_group/` - Group management
-- `governance/cloud-audit-logs/` - Audit logging
+Consumes remote state from the `organization` workspace and deploys one environment at a time into the selected host project.
 
-#### **Governance**
-- `governance/billing/` - Budget alerts
-- `governance/cloud-audit-logs/` - Compliance logging
-- `governance/scc/` - Security Command Center
-- `governance/kms/` - Key Management Service
-- `governance/tags/` - Resource Tags
+The workspace naming contract is:
 
-#### **Orchestration**
-- `host/` - Unified project provisioning
-- `stages/` - Landing Zone stages
+- `organization`
+- `apps-dev`
+- `apps-uat`
+- `apps-prod`
+- `apps-<env>` for any new environment
 
-### Module Design Pattern
+## Environment Model
 
-Each module follows a consistent structure:
+The canonical environment contract lives in `envs/organization/variables.tf`:
 
-```
-module-name/
-├── main.tf          # Resource definitions
-├── variables.tf     # Input variables
-├── outputs.tf       # Output values
-├── versions.tf      # Provider versions
-├── README.md        # Documentation (auto-generated)
-└── examples/        # Usage examples (optional)
+```hcl
+map(object({
+  display_name            = string
+  region                  = string
+  cidr_block              = string
+  budget_monthly_limit    = number
+  iam_group_role_bindings = map(set(string))
+  labels                  = optional(map(string), {})
+}))
 ```
 
----
+That keeps CIDRs explicit and stable. The old pattern of deriving CIDRs from key ordering is no longer part of the platform.
 
-## Environment Architecture
+## Module Layering
 
-### Organization Level
+### Stage Modules
 
-```
-Organization
-├── Organizational Units
-│   ├── Development
-│   ├── UAT
-│   └── Production
-├── IAM Policies
-├── Organization Policies
-└── Audit Logs
-```
+- `modules/stages/bootstrap`
+  - admin project
+  - Terraform admin service account
+  - GitHub and Terraform Cloud workload identity
 
-### Project Structure
+- `modules/stages/organization`
+  - folders
+  - tags
+  - org policy
+  - audit logging
+  - SCC notifications
+  - billing export
 
-Each environment contains:
+- `modules/stages/projects`
+  - shared platform projects
+  - one host project per declared environment
 
-```
-Environment (dev/uat/prod)
-├── Shared Services Project
-│   ├── Networking (VPC, VPN, DNS, Interconnect)
-│   ├── Security (KMS, Secret Manager)
-│   ├── Monitoring (Cloud Logging, Monitoring)
-│   └── Governance (Audit logs, budgets)
-└── Applications Project
-    ├── Compute (Cloud Run, Cloud Functions)
-    ├── Storage (Cloud Storage, Firestore, SQL)
-    ├── Networking (Load Balancers, CDN)
-    └── IAM (Service accounts, roles)
-```
+- `modules/stages/network-hub`
+  - shared hub VPC
+  - shared DNS
+  - hierarchical firewall
+  - organization-spanning connectivity
 
----
+- `modules/stages/workload`
+  - separate service projects that attach to a Shared VPC host
 
-## Network Architecture
+### Shared Infrastructure Modules
 
-### VPC Design
+- `modules/network/*` contains the reusable network primitives
+- `modules/governance/*` contains budgets, logging, KMS, org policy, SCC, and tags
+- `modules/iam/*` contains reusable IAM primitives
+- `modules/host` remains the compatibility wrapper used by `envs/apps`
 
-```
-VPC Network
-├── Public Subnets (Auto-discovered zones)
-│   └── External LBs / NAT Gateways
-├── Private Subnets (Auto-discovered zones)
-│   └── Compute workloads
-├── Database Subnets (Auto-discovered zones)
-│   └── Data persistence
-├── Cloud Router
-│   └── NAT Gateway (Logging enabled)
-├── Connectivity
-│   ├── VPN Gateway (HA/BGP)
-│   ├── VPC Peering (Hub-and-Spoke)
-│   ├── Private Service Access (Cloud SQL/Redis)
-│   └── Private Service Connect (Google APIs)
-└── Security
-    ├── Firewall Rules (Tiered: Public -> Compute -> DB)
-    └── Egress Deny Rules
-```
+## State and Execution Model
 
-### Network Security Layers
-
-1. **Edge Security (CDN)**
-   - Global Load Balancer with Cloud CDN
-   - SSL/TLS termination
-   - Edge caching
-
-2. **Perimeter Security**
-   - Cloud Armor (DDoS protection)
-   - WAF rules (OWASP Top 10)
-   - Rate limiting
-
-3. **Network Security**
-   - VPC firewall rules (Tiered architecture)
-   - Private Google Access (PSC/PSA)
-   - Database Egress Denial (Defense in Depth)
-
-4. **Application Security**
-   - API Gateway with authentication
-   - IAM service-to-service auth
-   - Private endpoints
-
----
-
-## Security Architecture
-
-### Defense in Depth
-
-```
-┌─────────────────────────────────────────┐
-│    Cloud CDN / Global Load Balancer     │ ← Edge caching, SSL termination
-├─────────────────────────────────────────┤
-│           Cloud Armor (L7)              │ ← DDoS, WAF
-├─────────────────────────────────────────┤
-│            API Gateway                  │ ← API management, auth
-├─────────────────────────────────────────┤
-│          VPC Firewall Rules             │ ← Network filtering
-├─────────────────────────────────────────┤
-│         IAM & Service Accounts          │ ← Identity & authorization
-├─────────────────────────────────────────┤
-│      Application-level Security         │ ← App authentication
-├─────────────────────────────────────────┤
-│      Data Encryption (at rest)          │ ← KMS encryption
-└─────────────────────────────────────────┘
-```
-
-### Security Controls
-
-| Layer | Control | Implementation |
-|:---|:---|:---|
-| **Network** | Firewall | VPC firewall rules |
-| **Network** | Private Access | Private Google Access |
-| **Network** | DDoS Protection | Cloud Armor |
-| **Identity** | IAM | Service accounts, roles |
-| **Identity** | MFA | Enforced for admin access |
-| **Data** | Encryption at Rest | KMS, CMEK |
-| **Data** | Encryption in Transit | TLS 1.2+ |
-| **Monitoring** | Audit Logs | All API calls logged |
-| **Monitoring** | Security Scanning | TFSec, Checkov, Trivy |
-
----
-
-## CI/CD Architecture
-
-### Pipeline Flow
+### Control Flow
 
 ```mermaid
-graph LR
-    A[Developer] -->|Push| B[Git Repository]
-    B -->|Trigger| C[GitHub Actions]
-    C -->|Validate| D[Terraform Plan]
-    D -->|Security Scan| E[TFSec/Checkov]
-    E -->|Pass| F[Code Review]
-    F -->|Approve| G[Tag Release]
-    G -->|Deploy| H[Terraform Apply]
-    H -->|Verify| I[Health Checks]
+graph TD
+    A["envs/organization"] -->|workspace: organization| B["Terraform Cloud state"]
+    B --> C["envs/apps"]
+    C -->|workspace: apps-<env>| D["Host project infrastructure"]
+    E["Dedicated workload root"] --> F["modules/stages/workload"]
+    F --> D
 ```
 
-### Workflow Stages
+### Responsibilities
 
-1. **Code Quality** (PR)
-   - Format check
-   - Validation
-   - Linting
-   - Security scanning
+- Terraform Cloud owns remote state and live plan/apply execution.
+- GitHub Actions validates code on pull requests.
+- Release tags only publish GitHub release metadata after confirming a successful Terraform Cloud run.
 
-2. **Review** (PR)
-   - Manual code review
-   - Automated checks pass
-   - Documentation updated
+GitHub tags do **not** apply infrastructure directly.
 
-3. **Deployment** (Tag)
-   - Tag-based deployment
-   - Environment-specific
-   - Approval required (prod)
-   - Health verification
+## CI/CD
 
----
+### Pull Requests
 
-## Disaster Recovery
+The validation workflow runs:
 
-### Recovery Objectives
+- `terraform fmt -check`
+- terraform-docs drift check
+- `terraform init -backend=false`
+- `terraform validate`
+- `tflint`
+- `tfsec`
+- `checkov`
 
-| Metric | Target | Notes |
-|:---|:---:|:---|
-| **RTO** (Recovery Time Objective) | < 4 hours | Time to restore services |
-| **RPO** (Recovery Point Objective) | < 1 hour | Maximum data loss |
-| **MTTR** (Mean Time To Recover) | < 2 hours | Average recovery time |
+### Tags
 
-### Backup Strategy
+The release-metadata workflow listens for:
 
-1. **Infrastructure as Code**
-   - Complete infrastructure defined in Git
-   - Version controlled
-   - Can rebuild from scratch
+- `organization/vX.Y.Z`
+- `apps/<env>/vX.Y.Z`
 
-2. **State Management**
-   - Remote state in GCS
-   - State versioning enabled
-   - State backups automated
+It verifies the latest Terraform Cloud run for the matching workspace and then publishes a GitHub release.
 
-3. **Data Backups**
-   - Cloud Storage versioning
-   - Firestore backups
-   - Database snapshots
+## Operator Model
 
-### Recovery Procedures
+### Control Plane
 
-1. **Complete Disaster** (region loss)
-   ```bash
-   # Deploy to alternate region
-   cd envs/prod
-   terraform init
-   terraform plan -var="region=us-central1"
-   terraform apply
-   ```
+```bash
+terraform -chdir=envs/organization init
+terraform -chdir=envs/organization plan
+```
 
-2. **Partial Failure** (service down)
-   ```bash
-   # Recreate specific resource
-   terraform taint module.host.google_compute_address.default
-   terraform apply
-   ```
+### App Environment
 
-3. **Configuration Error**
-   ```bash
-   # Rollback to previous version
-   git revert <commit-hash>
-   terraform apply
-   ```
+```bash
+TF_WORKSPACE=apps-dev terraform -chdir=envs/apps init
+TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=examples/dev.tfvars
+```
 
----
+### Workload Projects
 
-## Scalability
+Service projects should be created from a dedicated workload root that calls `modules/stages/workload`. They should not be created inside the host project itself.
 
-### Horizontal Scaling
+## Current Boundaries
 
-- **Cloud Run**: Auto-scales based on requests
-- **Cloud Functions**: Auto-scales based on events
-- **Load Balancers**: Auto-scales capacity
-
-### Vertical Scaling
-
-- **Resource Limits**: Configurable via variables
-- **Machine Types**: Defined per service
-- **Disk Size**: Expandable without downtime
-
-### Performance Optimization
-
-1. **CDN**: Cloud CDN for static content
-2. **Caching**: Memorystore for caching
-3. **Connection Pooling**: For database connections
-4. **Async Processing**: Cloud Functions for background tasks
-
----
-
-## Monitoring & Observability
-
-### Metrics Collection
-
-- **Cloud Monitoring**: System metrics
-- **Custom Metrics**: Application metrics
-- **Audit Logs**: Security events
-- **Performance**: Latency, throughput
-
-### Alerting
-
-- **Budget Alerts**: Cost overruns
-- **Error Rate Alerts**: Application errors
-- **Latency Alerts**: Performance degradation
-- **Security Alerts**: Unauthorized access
-
-### Logging
-
-- **Application Logs**: Structured JSON logs
-- **Audit Logs**: Compliance tracking
-- **System Logs**: Infrastructure events
-- **Access Logs**: Authentication attempts
-
----
-
-## Cost Optimization
-
-### Strategies
-
-1. **Right-Sizing**
-   - Monitor resource utilization
-   - Adjust limits based on actual usage
-   - Use preemptible instances where appropriate
-
-2. **Auto-Scaling**
-   - Scale down during low traffic
-   - Scale to zero for unused services
-   - Scheduled scaling
-
-3. **Committed Use Discounts**
-   - 1-year or 3-year commitments
-   - Sustained use discounts
-   - Custom machine types
-
-4. **Budget Controls**
-   - Budget alerts configured
-   - Cost allocation labels
-   - Regular cost reviews
-
----
-
-## Compliance & Governance
-
-### ISO 27001 Controls
-
-- Risk assessment procedures
-- Access control policies
-- Incident management
-- Business continuity planning
-- Supplier management
-- Asset management
-
-### ISO 22301 Controls
-
-- Business impact analysis
-- Recovery strategies
-- Testing procedures
-- Continuous improvement
-
-### GCP Best Practices
-
-- Organization policies
-- Resource hierarchy
-- IAM least privilege
-- Audit logging
-- Encryption standards
-
----
-
-## Technology Stack
-
-| Component | Technology | Version |
-|:---|:---|:---:|
-| **IaC** | Terraform | >= 1.0.0 |
-| **Provider** | Google Cloud | ~> 4.80 |
-| **CI/CD** | GitHub Actions | Latest |
-| **Security** | TFSec, Checkov, Trivy | Latest |
-| **Documentation** | terraform-docs | Latest |
-| **Linting** | TFLint | Latest |
-
----
-
-## Future Enhancements
-
-### Planned Improvements
-
-1. **Testing**
-   - Terratest integration tests
-   - Policy-as-code tests
-   - Performance testing
-
-2. **Monitoring**
-   - SLO/SLI definitions
-   - Custom dashboards
-   - Advanced alerting
-
-3. **Cost**
-   - Infracost integration
-   - Cost attribution
-   - Optimization recommendations
-
-4. **Security**
-   - Runtime security scanning
-   - Automated remediation
-   - Threat detection
-
----
-
-**Last Updated**: January 2026
-**Version**: 1.0.0
-
+- The repository does not yet include a first-class workload root beyond the examples.
+- Local `make validate-all` requires access to `registry.terraform.io`.
+- Local `make lint` depends on a healthy TFLint Google ruleset plugin installation.

@@ -1,196 +1,100 @@
 # Quick Start Guide
 
-Get up and running with Ashes DevOps Tools in 5 minutes!
+This guide gets the repository into a usable local state with the current `organization` and `apps` roots.
 
 ## Prerequisites
 
-- macOS, Linux, or WSL2 on Windows
-- Git installed
-- Internet connection
-- (Optional) Docker for containerized development
+- macOS, Linux, or WSL2
+- Git
+- Terraform `>= 1.6.0`
+- internet access for provider downloads
+- GCP credentials for local plans
 
----
-
-## **5-Minute Setup**
-
-### Step 1: Clone Repository (30 seconds)
+## 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-org/Ashes-Devops-Tools.git
+git clone https://github.com/EdwinKassier/Ashes-Devops-Tools.git
 cd Ashes-Devops-Tools
 ```
 
-### Step 2: Install Dependencies (2 minutes)
+## 2. Install Repo Tooling
 
 ```bash
-# Install all required tools
 make install
-```
-
-This installs:
-- Terraform
-- TFLint
-- TFSec
-- Checkov
-- terraform-docs
-- pre-commit
-
-### Step 3: Install Pre-commit Hooks (30 seconds)
-
-```bash
-# Set up git hooks for code quality
 make pre-commit-install
 ```
 
-### Step 4: Verify Installation (1 minute)
+`make install` installs repo-managed tools such as TFLint, TFSec, Checkov, terraform-docs, and pre-commit. Terraform itself must already be installed separately.
+
+## 3. Authenticate to Google Cloud
 
 ```bash
-# Check all tools are installed
-make validate-requirements
-
-# Run a quick validation
-make ci
+gcloud auth application-default login
 ```
 
-### Step 5: Start Developing! (1 minute)
+## 4. Initialize the Supported Roots
 
 ```bash
-# Initialize your environment
-make init-dev
+terraform -chdir=envs/organization init
+TF_WORKSPACE=apps-dev terraform -chdir=envs/apps init
+```
 
-# Make changes to Terraform files
-# ...
+## 5. Run Fast Local Checks
 
-# Validate your changes
-make fmt
-make validate-all
-make lint
+```bash
+make fmt-check
+make docs-check
 make security
 ```
 
----
+## 6. Run Deeper Checks When Available
 
-## **Verification Checklist**
+```bash
+make validate-all
+make lint
+```
 
-After setup, verify everything works:
+Notes:
 
-- [ ] `terraform version` shows >= 1.0.0
-- [ ] `make help` shows all available commands
-- [ ] `make ci` runs without errors
-- [ ] Pre-commit hooks are installed (check `.git/hooks/`)
-- [ ] `make fmt` formats code correctly
+- `make validate-all` requires access to `registry.terraform.io`.
+- `make lint` requires a working local TFLint Google ruleset plugin.
 
----
+## 7. Plan Changes
 
-## **Next Steps**
+### Control Plane
 
-### Learn the Workflow
+```bash
+make plan-organization
+```
 
-1. **Read [Contributing Guide](../../CONTRIBUTING.md)** for detailed development workflow, testing, and module standards.
-2. **Review [System Architecture](../architecture/ARCHITECTURE.md)** to understand the environment structure.
+### App Environment
 
-### Make Your First Change
+```bash
+make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars
+```
 
-1. Create a new branch:
-   ```bash
-   git checkout -b feature/my-first-change
-   ```
+## Verification Checklist
 
-2. Make changes to Terraform files
+- `terraform version` reports `>= 1.6.0`
+- `make help` prints the supported commands
+- `make fmt-check`, `make docs-check`, and `make security` succeed
+- `terraform -chdir=envs/organization init` succeeds
+- `TF_WORKSPACE=apps-dev terraform -chdir=envs/apps init` succeeds
 
-3. Run quality checks:
-   ```bash
-   make ci
-   ```
-
-4. Commit (pre-commit hooks will run automatically):
-   ```bash
-   git add .
-   git commit -m "feat: add new feature"
-   ```
-
-5. Push and create PR:
-   ```bash
-   git push origin feature/my-first-change
-   ```
-
----
-
-## **Common Commands**
+## Common Commands
 
 | Command | Description |
 |:---|:---|
-| `make help` | Show all available commands |
-| `make fmt` | Format all Terraform files |
-| `make validate-all` | Validate all modules |
-| `make lint` | Run TFLint |
-| `make security` | Run security scans |
-| `make docs` | Generate module documentation |
-| `make ci` | Run complete CI pipeline locally |
-| `make plan-dev` | Plan dev environment changes |
-| `make apply-dev` | Apply dev environment changes |
+| `make fmt-check` | Check Terraform formatting |
+| `make docs-check` | Check terraform-docs drift |
+| `make security` | Run local security scanners |
+| `make validate-all` | Validate supported roots |
+| `make lint` | Run TFLint across supported roots |
+| `make plan-organization` | Plan control-plane changes |
+| `make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars` | Plan an app environment |
 
----
+## Next Steps
 
-## **Troubleshooting**
-
-### Installation Issues
-
-**Problem**: `make install` fails
-
-**Solution**:
-```bash
-# Install Homebrew first (macOS)
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-# Or use package manager on Linux
-sudo apt-get update  # Ubuntu/Debian
-sudo yum update      # RHEL/CentOS
-```
-
-### Pre-commit Hook Issues
-
-**Problem**: Pre-commit hooks fail
-
-**Solution**:
-```bash
-# Update hooks
-make pre-commit-update
-
-# Run manually to see errors
-make pre-commit-run
-```
-
-### Permission Issues
-
-**Problem**: Permission denied errors
-
-**Solution**:
-```bash
-# Make scripts executable
-chmod +x scripts/*.sh
-
-# Fix Makefile permissions
-chmod +x Makefile
-```
-
----
-
-## **Additional Resources**
-
-- [Contributing Guide](../../CONTRIBUTING.md) - Development, Testing, and Deployment workflows
-- [System Architecture](../architecture/ARCHITECTURE.md) - Design reference
-
----
-
-## **Tips**
-
-1. **Always run `make ci` before committing** to catch issues early
-2. **Use `make help`** to discover available commands
-3. **Read pre-commit output** if hooks fail
-4. **Check [CONTRIBUTING.md](../../CONTRIBUTING.md)** for code standards
-
----
-
-**Ready to contribute?** Check out [open issues](https://github.com/your-org/Ashes-Devops-Tools/issues) or create a new one!
-
+- Read the [Architecture Guide](../architecture/ARCHITECTURE.md)
+- Read the [Contributing Guide](../../CONTRIBUTING.md)
+- Use `examples/workloads/` as the starting point for a dedicated workload root

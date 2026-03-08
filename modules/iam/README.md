@@ -1,56 +1,19 @@
-<!-- BEGIN_TF_DOCS -->
+# IAM Modules
 
+This directory groups the IAM building blocks used across the platform. It is a category index, not a Terraform module.
 
-## Usage
+## Modules
 
-Basic usage of this module is as follows:
+| Module | Purpose |
+|---|---|
+| [`identity_group`](./identity_group/) | Google Group creation |
+| [`identity_group_memberships`](./identity_group_memberships/) | Group membership management |
+| [`organization`](./organization/) | Organization and folder IAM bindings |
+| [`role`](./role/) | Custom IAM roles |
+| [`service_account`](./service_account/) | Service account creation and bindings |
+| [`workload_identity`](./workload_identity/) | Workload Identity Federation |
 
-```hcl
-module "example" {
-	source = "<module-path>"
+## Usage Guidance
 
-	# Required variables
-	
-}
-```
-
-## Requirements
-
-No requirements.
-
-## Providers
-
-No providers.
-
-
-
-## Resources
-
-The following resources are created:
-
-
-
-
-## Inputs
-
-No inputs.
-
-## Outputs
-
-No outputs.
-
-## Security Considerations
-
-- Ensure all sensitive variables are marked as `sensitive = true`
-- Use GCP Secret Manager for storing secrets
-- Follow the principle of least privilege for IAM roles
-- Enable audit logging for compliance
-
-## Contributing
-
-Contributions are welcome! Please read the [CONTRIBUTING.md](../../CONTRIBUTING.md) for guidelines.
-
-## License
-
-This module is licensed under the MIT License. See [LICENSE](../../LICENSE) for details.
-<!-- END_TF_DOCS -->
+- These modules are typically consumed by [`modules/stages`](../stages/) and the deployable roots in [`envs`](../../envs/).
+- Review the generated README in each concrete module directory before direct use.

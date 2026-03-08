@@ -1,13 +1,17 @@
 
-# Cloud Storage bucket for audit logs
-resource "google_storage_bucket" "audit_logs" {
-  name                        = "${var.project_id}-audit-logs"
+resource "google_storage_bucket" "audit_logs_access" {
+  # checkov:skip=CKV_GCP_62:This is the terminal access log bucket for the audit log bucket and cannot recursively log to itself.
+  name                        = "${var.project_id}-audit-logs-access"
   project                     = var.project_id
   location                    = var.bucket_location
   force_destroy               = var.force_destroy_bucket
   uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
 
-  # checkov:skip=CKV2_GCP_4:Bucket lock prevents deletion and is too restrictive for this environment
+  versioning {
+    enabled = true
+  }
+
   dynamic "encryption" {
     for_each = var.kms_key_name != null ? [1] : []
     content {
@@ -25,6 +29,49 @@ resource "google_storage_bucket" "audit_logs" {
   }
 }
 
+resource "google_storage_bucket_iam_member" "audit_logs_access_writer" {
+  bucket = google_storage_bucket.audit_logs_access.name
+  role   = "roles/storage.objectCreator"
+  member = "group:cloud-storage-analytics@google.com"
+}
+
+# Cloud Storage bucket for audit logs
+resource "google_storage_bucket" "audit_logs" {
+  name                        = "${var.project_id}-audit-logs"
+  project                     = var.project_id
+  location                    = var.bucket_location
+  force_destroy               = var.force_destroy_bucket
+  uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
+
+  versioning {
+    enabled = true
+  }
+
+  # checkov:skip=CKV2_GCP_4:Bucket lock prevents deletion and is too restrictive for this environment
+  dynamic "encryption" {
+    for_each = var.kms_key_name != null ? [1] : []
+    content {
+      default_kms_key_name = var.kms_key_name
+    }
+  }
+
+  lifecycle_rule {
+    condition {
+      age = var.log_retention_days
+    }
+    action {
+      type = "Delete"
+    }
+  }
+
+  logging {
+    log_bucket = google_storage_bucket.audit_logs_access.name
+  }
+
+  depends_on = [google_storage_bucket_iam_member.audit_logs_access_writer]
+}
+
 # Log sink to export audit logs to Cloud Storage
 resource "google_logging_project_sink" "audit_logs_sink" {
   name        = "audit-logs-sink"
@@ -36,12 +83,10 @@ resource "google_logging_project_sink" "audit_logs_sink" {
 }
 
 # IAM binding for the log sink service account to write to the bucket
-resource "google_storage_bucket_iam_binding" "log_writer" {
+resource "google_storage_bucket_iam_member" "log_writer" {
   bucket = google_storage_bucket.audit_logs.name
   role   = "roles/storage.objectCreator"
-  members = [
-    google_logging_project_sink.audit_logs_sink.writer_identity,
-  ]
+  member = google_logging_project_sink.audit_logs_sink.writer_identity
 }
 
 # Cloud Audit Logs configuration
@@ -101,6 +146,13 @@ resource "google_bigquery_dataset" "audit_logs_analytics" {
 
   # Partition expiration for cost management
   default_partition_expiration_ms = var.bigquery_retention_days * 24 * 60 * 60 * 1000
+
+  dynamic "default_encryption_configuration" {
+    for_each = var.bigquery_kms_key_name != null ? [1] : []
+    content {
+      kms_key_name = var.bigquery_kms_key_name
+    }
+  }
 
   labels = {
     purpose    = "audit-logs"

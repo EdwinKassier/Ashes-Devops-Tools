@@ -1,4 +1,4 @@
-name: Terraform Plan
+name: Terraform Validation
 
 on:
   pull_request:
@@ -6,24 +6,40 @@ on:
       - main
       - develop
     paths:
-      - '**.tf'
-      - '**.tfvars'
-      - '**.hcl'
-      - '.github/workflows/terraform-plan.yml'
+      - "**.tf"
+      - "**.tfvars"
+      - "**.hcl"
+      - ".tfsec.yml"
+      - ".terraform-docs.yml"
+      - ".tflint.hcl"
+      - ".github/workflows/terraform-plan.yml"
+      - ".github/workflows/documentation.yml"
+      - "scripts/terraform-roots.sh"
+      - "scripts/module-docs.sh"
+      - "Makefile"
 
 permissions:
   contents: read
-  pull-requests: write
-  id-token: write
 
 env:
-  TERRAFORM_VERSION: '1.0.0'
-  TFLINT_VERSION: 'latest'
-  TFSEC_VERSION: 'latest'
+  TERRAFORM_VERSION: "1.6.6"
 
 jobs:
-  format-check:
-    name: Format Check
+  discover:
+    name: Discover Terraform Roots
+    runs-on: ubuntu-latest
+    outputs:
+      roots: ${{ steps.roots.outputs.roots }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Discover roots
+        id: roots
+        run: echo "roots=$(./scripts/terraform-roots.sh all-json)" >> "$GITHUB_OUTPUT"
+
+  fmt:
+    name: Terraform Format
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -34,59 +50,33 @@ jobs:
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Terraform Format Check
-        run: terraform fmt -check -recursive
-        continue-on-error: false
+      - name: Check formatting
+        run: terraform fmt -recursive -check .
+
+  docs:
+    name: Terraform Docs Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup terraform-docs
+        uses: terraform-docs/gh-actions@v1.4.1
+        with:
+          working-dir: modules/host
+          output-method: print
+
+      - name: Assert docs are committed
+        run: make docs-check
 
   validate:
-    name: Validate Modules
+    name: Validate ${{ matrix.root }}
     runs-on: ubuntu-latest
+    needs: discover
     strategy:
+      fail-fast: false
       matrix:
-        module:
-          # Compute modules
-          - modules/artifact_registery
-          - modules/cloud_functions
-          - modules/cloud_run
-          - modules/cloud_storage
-          - modules/firebase/project
-          # Governance modules
-          - modules/governance/billing
-          - modules/governance/cloud-audit-logs
-          - modules/governance/kms
-          - modules/governance/org-policy
-          - modules/governance/scc
-          - modules/governance/tags
-          # Host module
-          - modules/host
-          # IAM modules
-          - modules/iam/identity_group
-          - modules/iam/identity_group_memberships
-          - modules/iam/organisation
-          - modules/iam/organisation_units
-          - modules/iam/role
-          - modules/iam/service_account
-          - modules/iam/workload_identity
-          # Network modules
-          - modules/network/api_gateway
-          - modules/network/cdn
-          - modules/network/cloud_armor
-          - modules/network/dns
-          - modules/network/hierarchical-firewall
-          - modules/network/interconnect
-          - modules/network/internal-lb
-          - modules/network/nat
-          - modules/network/network-firewall
-          - modules/network/packet-mirroring
-          - modules/network/private-service-access
-          - modules/network/private-service-connect
-          - modules/network/shared-vpc-service
-          - modules/network/subnet
-          - modules/network/vpc
-          - modules/network/vpc-flow-logs
-          - modules/network/vpc-peering
-          - modules/network/vpc-sc
-          - modules/network/vpn
+        root: ${{ fromJson(needs.discover.outputs.roots) }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -96,12 +86,12 @@ jobs:
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Terraform Init
-        working-directory: ${{ matrix.module }}
-        run: terraform init -backend=false
+      - name: Terraform init
+        working-directory: ${{ matrix.root }}
+        run: terraform init -backend=false -input=false
 
-      - name: Terraform Validate
-        working-directory: ${{ matrix.module }}
+      - name: Terraform validate
+        working-directory: ${{ matrix.root }}
         run: terraform validate
 
   lint:
@@ -113,67 +103,64 @@ jobs:
 
       - name: Setup TFLint
         uses: terraform-linters/setup-tflint@v4
-        with:
-          tflint_version: ${{ env.TFLINT_VERSION }}
 
       - name: Initialize TFLint
         run: tflint --init
 
       - name: Run TFLint
-        run: tflint --recursive --config=${{ github.workspace }}/.tflint.hcl
+        run: make lint
 
-  security-scan:
-    name: Security Scan
+  security:
+    name: Security
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run TFSec
+      - name: Run tfsec against modules
         uses: aquasecurity/tfsec-action@v1.0.3
         with:
+          working_directory: modules
           soft_fail: false
           config_file: .tfsec.yml
-          additional_args: --format sarif --out tfsec-results.sarif
 
-      - name: Upload TFSec results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v2
-        if: always()
+      - name: Run tfsec against envs
+        uses: aquasecurity/tfsec-action@v1.0.3
         with:
-          sarif_file: tfsec-results.sarif
+          working_directory: envs
+          soft_fail: false
+          config_file: .tfsec.yml
 
-      - name: Run Checkov
+      - name: Run Checkov against modules
         uses: bridgecrewio/checkov-action@v12
         with:
-          directory: .
+          directory: modules
           framework: terraform
           quiet: true
           soft_fail: false
-          output_format: sarif
-          output_file_path: checkov-results.sarif
 
-      - name: Upload Checkov results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v2
-        if: always()
+      - name: Run Checkov against envs
+        uses: bridgecrewio/checkov-action@v12
         with:
-          sarif_file: checkov-results.sarif
-
-
+          directory: envs
+          framework: terraform
+          quiet: true
+          soft_fail: false
 
   summary:
-    name: Plan Summary
+    name: Validation Summary
     runs-on: ubuntu-latest
-    needs: [format-check, validate, lint, security-scan]
+    needs: [fmt, docs, validate, lint, security]
     if: always()
     steps:
-      - name: Summary
+      - name: Publish summary
         run: |
-          echo "## Terraform Plan Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Format Check | ${{ needs.format-check.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Validation | ${{ needs.validate.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Linting | ${{ needs.lint.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Security Scan | ${{ needs.security-scan.result }} |" >> $GITHUB_STEP_SUMMARY
-
+          echo "## Terraform Validation Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Check | Status |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Format | ${{ needs.fmt.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Docs | ${{ needs.docs.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Validate | ${{ needs.validate.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| TFLint | ${{ needs.lint.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Security | ${{ needs.security.result }} |" >> "$GITHUB_STEP_SUMMARY"

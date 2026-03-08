@@ -3,11 +3,6 @@ formatter: "markdown table"
 version: ">=0.16"
 
 header-from: main.tf
-footer-from: ""
-
-recursive:
-  enabled: true
-  path: modules
 
 sections:
   hide: []
@@ -64,21 +59,6 @@ content: |-
 
   {{ .Outputs }}
 
-  ## Security Considerations
-
-  - Ensure all sensitive variables are marked as `sensitive = true`
-  - Use GCP Secret Manager for storing secrets
-  - Follow the principle of least privilege for IAM roles
-  - Enable audit logging for compliance
-
-  ## Contributing
-
-  Contributions are welcome! Please read the [CONTRIBUTING.md](../../CONTRIBUTING.md) for guidelines.
-
-  ## License
-
-  This module is licensed under the MIT License. See [LICENSE](../../LICENSE) for details.
-
 output:
   file: "README.md"
   mode: inject
@@ -109,4 +89,3 @@ settings:
   required: true
   sensitive: true
   type: true
-

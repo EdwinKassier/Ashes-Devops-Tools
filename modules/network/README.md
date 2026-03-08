@@ -6,7 +6,7 @@ This directory contains a suite of Terraform modules for building enterprise-gra
 
 ### Core Networking
 | Module | Description | Key Features |
-|os|---|---|
+|---|---|---|
 | [`vpc`](./vpc) | Creates a VPC network | Global/Regional routing, Shared VPC Host support |
 | [`subnet`](./subnet) | Creates subnets | Flow logs, Private Google Access, Secondary Ranges |
 | [`nat`](./nat) | Cloud NAT Gateway | Manual/Auto IP allocation, Logging |
@@ -46,7 +46,7 @@ This directory contains a suite of Terraform modules for building enterprise-gra
 ## Usage Guidelines
 
 ### 1. Orchestration
-The `modules/host` module is the recommended entry point for new environments. It orchestrates a 3-tier architecture (Public, Compute, Database) secure-by-default network:
+New environment provisioning should start from [envs/organization](../../envs/organization/) and [envs/apps](../../envs/apps/). The `modules/host` wrapper is used by the app root and remains available for compatibility. The default network shape is a 3-tier architecture:
 - **Public**: Exposed to internet via LB/Gateway.
 - **Compute**: Application logic, private IPs only, access to Internet via NAT.
 - **Database**: Strictly internal, no direct egress.
@@ -67,60 +67,3 @@ For enterprise setups, use the `vpc` module with `enable_shared_vpc_host = true`
 
 ---
 *Copyright 2023 Ashes*
-
-<!-- BEGIN_TF_DOCS -->
-
-
-## Usage
-
-Basic usage of this module is as follows:
-
-```hcl
-module "example" {
-	source = "<module-path>"
-
-	# Required variables
-	
-}
-```
-
-## Requirements
-
-No requirements.
-
-## Providers
-
-No providers.
-
-
-
-## Resources
-
-The following resources are created:
-
-
-
-
-## Inputs
-
-No inputs.
-
-## Outputs
-
-No outputs.
-
-## Security Considerations
-
-- Ensure all sensitive variables are marked as `sensitive = true`
-- Use GCP Secret Manager for storing secrets
-- Follow the principle of least privilege for IAM roles
-- Enable audit logging for compliance
-
-## Contributing
-
-Contributions are welcome! Please read the [CONTRIBUTING.md](../../CONTRIBUTING.md) for guidelines.
-
-## License
-
-This module is licensed under the MIT License. See [LICENSE](../../LICENSE) for details.
-<!-- END_TF_DOCS -->

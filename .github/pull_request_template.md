@@ -21,12 +21,15 @@
 
 ## Environment
 
-<!-- Mark the environments affected by this change -->
+<!-- Mark the roots or surfaces affected by this change -->
 
-- [ ] Organization
-- [ ] Development
-- [ ] UAT
-- [ ] Production
+- [ ] `envs/organization`
+- [ ] `envs/apps`
+- [ ] `examples/workloads`
+- [ ] CI/CD or repo tooling
+
+**Apps Workspace (if applicable):**
+<!-- Example: apps-dev, apps-prod, apps-preprod -->
 
 ## Changes Made
 
@@ -51,23 +54,26 @@ Related to #
 
 ```bash
 make fmt-check
+make docs-check
+make security
+# Optional when local prerequisites are available:
 make validate-all
 make lint
-make security
 ```
 
 ### Test Results
 
 - [ ] Terraform format check passed
-- [ ] Terraform validation passed
-- [ ] TFLint passed
-- [ ] TFSec security scan passed
-- [ ] Checkov security scan passed
+- [ ] terraform-docs check passed
+- [ ] Security scan passed
+- [ ] Terraform validation passed (if applicable)
+- [ ] TFLint passed (if applicable)
 - [ ] Manual testing completed
 
 ### Test Environment
 
-- **Environment**: Dev/UAT/Prod
+- **Root/Surface**:
+- **Workspace**:
 - **Terraform Version**: 
 - **Provider Version**: 
 
@@ -77,7 +83,6 @@ make security
 
 - [ ] Module README updated (or auto-generated with terraform-docs)
 - [ ] Main README updated (if applicable)
-- [ ] CHANGELOG updated
 - [ ] Code comments added for complex logic
 - [ ] Security considerations documented
 
@@ -162,4 +167,3 @@ make security
 ---
 
 **Note**: Delete any sections that are not applicable to your PR.
-

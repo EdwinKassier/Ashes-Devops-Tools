@@ -118,4 +118,56 @@ module "nested_membership" {
 ## Related Modules
 
 - `identity_group` - Create the groups before adding memberships
-- `organisation` - Uses this module for environment-specific group memberships
+- `organization` - Historical root that previously managed environment-specific group memberships
+
+<!-- BEGIN_TF_DOCS -->
+
+
+## Usage
+
+Basic usage of this module is as follows:
+
+```hcl
+module "example" {
+	source = "<module-path>"
+
+	# Required variables
+	
+}
+```
+
+## Requirements
+
+| Name | Version |
+|------|---------|
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0, < 2.0.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 6.0 |
+
+## Providers
+
+| Name | Version |
+|------|---------|
+| <a name="provider_google"></a> [google](#provider\_google) | 6.50.0 |
+
+
+
+## Resources
+
+The following resources are created:
+
+
+- resource.google_cloud_identity_group_membership.membership (modules/iam/identity_group_memberships/main.tf#L3)
+
+
+## Inputs
+
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| <a name="input_members"></a> [members](#input\_members) | List of members to add to identity groups | <pre>list(object({<br/>    group_id  = string       # The ID of the group to add the member to<br/>    member_id = string       # The ID of the member (e.g., user@domain.com)<br/>    roles     = list(string) # List of roles to assign (e.g., ["MEMBER", "MANAGER"])<br/>  }))</pre> | `[]` | no |
+
+## Outputs
+
+| Name | Description |
+|------|-------------|
+| <a name="output_memberships"></a> [memberships](#output\_memberships) | Map of created group memberships with their details |
+<!-- END_TF_DOCS -->

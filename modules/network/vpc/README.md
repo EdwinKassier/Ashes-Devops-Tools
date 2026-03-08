@@ -54,3 +54,75 @@ module "vpc" {
 | `private_subnets` | Map of private subnet resources |
 | `database_subnets` | Map of database subnet resources |
 | `vpc_cidr_block` | The dynamically allocated CIDR block |
+
+<!-- BEGIN_TF_DOCS -->
+Copyright 2023 Ashes
+
+VPC Module - Main Configuration
+
+This module creates a Google Cloud VPC network and optionally configures it as
+a Shared VPC Host project. It is a foundational module that should be composed
+with other modules (subnets, firewalls, etc.) to build a complete network.
+
+## Usage
+
+Basic usage of this module is as follows:
+
+```hcl
+module "example" {
+	source = "<module-path>"
+
+	# Required variables
+	project_id = 
+	
+}
+```
+
+## Requirements
+
+| Name | Version |
+|------|---------|
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0, < 2.0.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 6.0 |
+
+## Providers
+
+| Name | Version |
+|------|---------|
+| <a name="provider_google"></a> [google](#provider\_google) | 6.50.0 |
+
+
+
+## Resources
+
+The following resources are created:
+
+
+- resource.google_compute_network.vpc (modules/network/vpc/main.tf#L12)
+- resource.google_compute_shared_vpc_host_project.host (modules/network/vpc/main.tf#L28)
+
+
+## Inputs
+
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The ID of the project where this VPC will be created | `string` | n/a | yes |
+| <a name="input_auto_create_subnetworks"></a> [auto\_create\_subnetworks](#input\_auto\_create\_subnetworks) | When set to true, the network is created in 'auto subnet mode' and it will create a subnet for each region automatically | `bool` | `false` | no |
+| <a name="input_delete_default_routes_on_create"></a> [delete\_default\_routes\_on\_create](#input\_delete\_default\_routes\_on\_create) | If set to true, default routes (0.0.0.0/0) will be deleted immediately after network creation | `bool` | `true` | no |
+| <a name="input_description"></a> [description](#input\_description) | An optional description of this resource | `string` | `"Managed by Terraform"` | no |
+| <a name="input_enable_shared_vpc_host"></a> [enable\_shared\_vpc\_host](#input\_enable\_shared\_vpc\_host) | Enable this project as a Shared VPC Host Project | `bool` | `false` | no |
+| <a name="input_routing_mode"></a> [routing\_mode](#input\_routing\_mode) | The network routing mode (default 'GLOBAL') | `string` | `"GLOBAL"` | no |
+| <a name="input_vpc_name"></a> [vpc\_name](#input\_vpc\_name) | The name of the VPC network | `string` | `"main-vpc"` | no |
+
+## Outputs
+
+| Name | Description |
+|------|-------------|
+| <a name="output_id"></a> [id](#output\_id) | The ID of the VPC |
+| <a name="output_name"></a> [name](#output\_name) | The name of the VPC |
+| <a name="output_network"></a> [network](#output\_network) | The created VPC resource |
+| <a name="output_network_id"></a> [network\_id](#output\_network\_id) | Deprecated alias for the VPC ID |
+| <a name="output_network_name"></a> [network\_name](#output\_network\_name) | Deprecated alias for the VPC name |
+| <a name="output_network_self_link"></a> [network\_self\_link](#output\_network\_self\_link) | Deprecated alias for the VPC self link |
+| <a name="output_self_link"></a> [self\_link](#output\_self\_link) | The URI of the VPC |
+<!-- END_TF_DOCS -->

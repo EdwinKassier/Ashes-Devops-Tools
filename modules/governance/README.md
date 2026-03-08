@@ -1,56 +1,19 @@
-<!-- BEGIN_TF_DOCS -->
+# Governance Modules
 
+This directory groups the governance and platform-control modules used by [`envs/organization`](../../envs/organization/). It is a category index, not a Terraform module.
 
-## Usage
+## Modules
 
-Basic usage of this module is as follows:
+| Module | Purpose |
+|---|---|
+| [`billing`](./billing/) | Budgets and billing alerts |
+| [`cloud-audit-logs`](./cloud-audit-logs/) | Centralized audit log storage and export |
+| [`kms`](./kms/) | Customer-managed encryption keys |
+| [`org-policy`](./org-policy/) | Organization policy constraints |
+| [`scc`](./scc/) | Security Command Center configuration |
+| [`tags`](./tags/) | Resource Manager tags and values |
 
-```hcl
-module "example" {
-	source = "<module-path>"
+## Usage Guidance
 
-	# Required variables
-	
-}
-```
-
-## Requirements
-
-No requirements.
-
-## Providers
-
-No providers.
-
-
-
-## Resources
-
-The following resources are created:
-
-
-
-
-## Inputs
-
-No inputs.
-
-## Outputs
-
-No outputs.
-
-## Security Considerations
-
-- Ensure all sensitive variables are marked as `sensitive = true`
-- Use GCP Secret Manager for storing secrets
-- Follow the principle of least privilege for IAM roles
-- Enable audit logging for compliance
-
-## Contributing
-
-Contributions are welcome! Please read the [CONTRIBUTING.md](../../CONTRIBUTING.md) for guidelines.
-
-## License
-
-This module is licensed under the MIT License. See [LICENSE](../../LICENSE) for details.
-<!-- END_TF_DOCS -->
+- Prefer the stage modules and deployable roots over calling these modules directly unless you are composing a custom platform root.
+- Use each module's generated README for exact provider, input, and output contracts.

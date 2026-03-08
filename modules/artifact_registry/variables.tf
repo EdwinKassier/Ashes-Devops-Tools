@@ -19,6 +19,11 @@ variable "region" {
   }
 }
 
+variable "kms_key_name" {
+  description = "Customer-managed KMS key name used to encrypt repository contents"
+  type        = string
+}
+
 variable "repositories" {
   description = "Map of repository configurations to create"
   type = map(object({

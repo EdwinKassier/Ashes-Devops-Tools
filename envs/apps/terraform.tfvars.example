@@ -1,0 +1,14 @@
+tfc_organization         = "your-tfc-org-name"
+terraform_admin_email    = "terraform-admin@example.iam.gserviceaccount.com"
+project_prefix           = "verify-org"
+environment              = "dev"
+provider_region          = "europe-west1"
+monthly_budget_limit     = 500
+budget_currency          = "USD"
+enable_cloud_armor       = false
+enable_owasp_rules       = false
+enable_adaptive_protection = false
+owasp_sensitivity        = 4
+log_config_flow_sampling = 0.1
+vpc_sc_enable_dry_run    = true
+vpc_flow_logs_retention_days = 30

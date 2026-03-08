@@ -57,8 +57,9 @@ resource "google_billing_budget" "monthly_budget" {
 
 # Pub/Sub topic for budget alerts
 resource "google_pubsub_topic" "budget_alerts" {
-  name    = "${var.project_name}-budget-alerts"
-  project = var.project_id
+  name         = "${var.project_name}-budget-alerts"
+  project      = var.project_id
+  kms_key_name = var.kms_key_name
 
   labels = merge(
     {

@@ -25,6 +25,12 @@ variable "region" {
   default     = "us-central1"
 }
 
+variable "kms_key_name" {
+  description = "Optional customer-managed KMS key used to encrypt the budget alert Pub/Sub topic"
+  type        = string
+  default     = null
+}
+
 variable "monthly_budget_limit" {
   description = "The monthly budget limit in the specified currency"
   type        = number

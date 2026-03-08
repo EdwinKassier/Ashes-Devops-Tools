@@ -12,11 +12,15 @@ assignees: ''
 
 ## Environment
 
-**Affected Environment:**
-- [ ] Development
-- [ ] UAT
-- [ ] Production
-- [ ] All environments
+**Affected Root / Surface:**
+- [ ] `envs/organization`
+- [ ] `envs/apps`
+- [ ] `examples/workloads`
+- [ ] CI/CD or repo tooling
+- [ ] Multiple surfaces
+
+**Affected Workspace (if applicable):**
+<!-- Example: apps-dev, apps-prod, apps-preprod -->
 
 **Module/Component:**
 <!-- Which module or component is affected? -->
@@ -71,7 +75,7 @@ Paste terraform output here
 ## Impact
 
 **Severity:**
-- [ ] Critical (Production down)
+- [ ] Critical (platform unavailable)
 - [ ] High (Major functionality broken)
 - [ ] Medium (Workaround available)
 - [ ] Low (Minor issue)
@@ -98,4 +102,3 @@ Paste terraform output here
 <!-- Link to related issues -->
 
 Relates to #
-

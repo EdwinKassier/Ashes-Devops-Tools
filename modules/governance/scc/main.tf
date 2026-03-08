@@ -3,9 +3,10 @@
 # =============================================================================
 
 resource "google_pubsub_topic" "scc_notifications" {
-  count   = length(var.notification_configs) == 0 ? 1 : 0
-  name    = var.pubsub_topic_name
-  project = var.project_id
+  count        = length(var.notification_configs) == 0 ? 1 : 0
+  name         = var.pubsub_topic_name
+  project      = var.project_id
+  kms_key_name = var.kms_key_name
 }
 
 resource "google_scc_notification_config" "notification_config" {
@@ -36,8 +37,9 @@ resource "google_pubsub_topic_iam_member" "scc_publisher" {
 resource "google_pubsub_topic" "scc_notifications_multi" {
   for_each = var.notification_configs
 
-  name    = each.value.pubsub_topic_name
-  project = var.project_id
+  name         = each.value.pubsub_topic_name
+  project      = var.project_id
+  kms_key_name = var.kms_key_name
 
   labels = {
     scc-config = each.key

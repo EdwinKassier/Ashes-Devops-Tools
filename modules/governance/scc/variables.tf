@@ -8,6 +8,12 @@ variable "project_id" {
   type        = string
 }
 
+variable "kms_key_name" {
+  description = "Optional customer-managed KMS key used to encrypt SCC notification topics"
+  type        = string
+  default     = null
+}
+
 # =============================================================================
 # LEGACY SINGLE CONFIG (Backward Compatibility)
 # =============================================================================

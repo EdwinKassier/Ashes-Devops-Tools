@@ -54,11 +54,11 @@ variable "shared_vpc_host_project_id" {
 
 variable "shared_vpc_subnets" {
   description = "List of subnets in the Host Project to grant access to"
-  type = set(object({
+  type = map(object({
     region      = string
     subnet_name = string
   }))
-  default = []
+  default = {}
 }
 
 # -----------------------------------------------------------------------------
@@ -73,11 +73,13 @@ variable "project_admin_group_email" {
 variable "project_admin_roles" {
   description = "List of roles to grant to the admin group"
   type        = list(string)
-  default = [
-    "roles/viewer",
-    "roles/storage.admin",
-    "roles/bigquery.admin",
-    "roles/cloudsql.admin",
-    "roles/redis.admin"
-  ]
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for role in var.project_admin_roles :
+      !contains(["roles/owner", "roles/editor", "roles/viewer"], role)
+    ])
+    error_message = "project_admin_roles must not include basic roles. Grant only least-privilege predefined or custom roles."
+  }
 }

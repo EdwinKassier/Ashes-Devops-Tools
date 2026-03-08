@@ -123,4 +123,58 @@ You can find your Cloud Identity customer ID:
 ## Related Modules
 
 - `identity_group_memberships` - Add members to groups created by this module
-- `organisation` - Uses this module to create environment-specific groups
+- `organization` - Uses this module to reference environment-specific groups
+
+<!-- BEGIN_TF_DOCS -->
+
+
+## Usage
+
+Basic usage of this module is as follows:
+
+```hcl
+module "example" {
+	source = "<module-path>"
+
+	# Required variables
+	customer_id = 
+	
+}
+```
+
+## Requirements
+
+| Name | Version |
+|------|---------|
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0, < 2.0.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 6.0 |
+
+## Providers
+
+| Name | Version |
+|------|---------|
+| <a name="provider_google"></a> [google](#provider\_google) | 6.50.0 |
+
+
+
+## Resources
+
+The following resources are created:
+
+
+- resource.google_cloud_identity_group.cloud_identity_group (modules/iam/identity_group/main.tf#L3)
+
+
+## Inputs
+
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| <a name="input_customer_id"></a> [customer\_id](#input\_customer\_id) | The customer ID of the Google Cloud organization (e.g., 'C0abc123') | `string` | n/a | yes |
+| <a name="input_identity_groups"></a> [identity\_groups](#input\_identity\_groups) | List of identity groups to create | <pre>list(object({<br/>    id                   = string<br/>    display_name         = string<br/>    email                = string<br/>    description          = optional(string)<br/>    initial_group_config = optional(string, "WITH_INITIAL_OWNER")<br/>    labels               = optional(map(string), {})<br/>  }))</pre> | `[]` | no |
+
+## Outputs
+
+| Name | Description |
+|------|-------------|
+| <a name="output_identity_groups"></a> [identity\_groups](#output\_identity\_groups) | Map of created identity groups with their details |
+<!-- END_TF_DOCS -->

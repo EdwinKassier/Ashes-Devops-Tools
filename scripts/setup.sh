@@ -1,60 +1,48 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-# Function to install tflint
-install_tflint() {
-    echo "Installing tflint..."
-    if command -v brew &> /dev/null; then
-        brew install tflint
-    elif command -v apt &> /dev/null; then
-        sudo apt-get install -y tflint
-    elif command -v dnf &> /dev/null; then
-        sudo dnf install -y tflint
-    elif command -v pacman &> /dev/null; then
-        sudo pacman -S --noconfirm tflint
-    else
-        echo "Package manager not found. Please install tflint manually."
-        exit 1
-    fi
+install_with_brew() {
+  brew install "$1"
 }
 
-# Function to install tfsec
-install_tfsec() {
-    echo "Installing tfsec..."
-    if command -v brew &> /dev/null; then
-        brew install tfsec
-    elif command -v apt &> /dev/null; then
-        sudo apt-get install -y tfsec
-    elif command -v dnf &> /dev/null; then
-        sudo dnf install -y tfsec
-    elif command -v pacman &> /dev/null; then
-        sudo pacman -S --noconfirm tfsec
-    else
-        echo "Package manager not found. Please install tfsec manually."
-        exit 1
-    fi
+install_with_apt() {
+  sudo apt-get update
+  sudo apt-get install -y "$1"
 }
 
-# Detect OS and install tools
-case "$(uname -s)" in
-    Darwin)
-        echo "Detected macOS"
-        install_tflint
-        install_tfsec
-        ;;
-    Linux)
-        echo "Detected Linux"
-        install_tflint
-        install_tfsec
-        ;;
-    MINGW*|CYGWIN*|MSYS*)
-        echo "Detected Windows (via WSL)"
-        # You can add a command to install using WSL or another method if needed.
-        echo "Please run this script in WSL or use a Linux environment to install tflint and tfsec."
-        ;;
-    *)
-        echo "Unsupported OS. Please install tflint and tfsec manually."
-        exit 1
-        ;;
-esac
+install_with_dnf() {
+  sudo dnf install -y "$1"
+}
 
-echo "Installation complete!"
+install_with_pacman() {
+  sudo pacman -S --noconfirm "$1"
+}
+
+install_package() {
+  local package="$1"
+  if command -v brew >/dev/null 2>&1; then
+    install_with_brew "$package"
+  elif command -v apt-get >/dev/null 2>&1; then
+    install_with_apt "$package"
+  elif command -v dnf >/dev/null 2>&1; then
+    install_with_dnf "$package"
+  elif command -v pacman >/dev/null 2>&1; then
+    install_with_pacman "$package"
+  else
+    echo "No supported package manager found for $package" >&2
+    exit 1
+  fi
+}
+
+install_pip_package() {
+  python3 -m pip install --user "$1"
+}
+
+command -v terraform >/dev/null 2>&1 || echo "Terraform must be installed separately from https://developer.hashicorp.com/terraform/downloads"
+command -v tflint >/dev/null 2>&1 || install_package tflint
+command -v tfsec >/dev/null 2>&1 || install_package tfsec
+command -v terraform-docs >/dev/null 2>&1 || install_package terraform-docs
+command -v pre-commit >/dev/null 2>&1 || install_pip_package pre-commit
+command -v checkov >/dev/null 2>&1 || install_pip_package checkov
+
+echo "Tool installation complete."

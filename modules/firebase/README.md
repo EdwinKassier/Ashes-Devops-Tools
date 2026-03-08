@@ -1,56 +1,14 @@
-<!-- BEGIN_TF_DOCS -->
+# Firebase Modules
 
+This directory groups Firebase-specific Terraform modules. It is a category index, not a deployable Terraform module.
 
-## Usage
+## Modules
 
-Basic usage of this module is as follows:
+| Module | Purpose |
+|---|---|
+| [`project`](./project/) | Enables Firebase services on an existing GCP project and optionally provisions Apple, Android, and web app resources. |
 
-```hcl
-module "example" {
-	source = "<module-path>"
+## Usage Guidance
 
-	# Required variables
-	
-}
-```
-
-## Requirements
-
-No requirements.
-
-## Providers
-
-No providers.
-
-
-
-## Resources
-
-The following resources are created:
-
-
-
-
-## Inputs
-
-No inputs.
-
-## Outputs
-
-No outputs.
-
-## Security Considerations
-
-- Ensure all sensitive variables are marked as `sensitive = true`
-- Use GCP Secret Manager for storing secrets
-- Follow the principle of least privilege for IAM roles
-- Enable audit logging for compliance
-
-## Contributing
-
-Contributions are welcome! Please read the [CONTRIBUTING.md](../../CONTRIBUTING.md) for guidelines.
-
-## License
-
-This module is licensed under the MIT License. See [LICENSE](../../LICENSE) for details.
-<!-- END_TF_DOCS -->
+- Consume these modules from a real root such as [`envs/apps`](../../envs/apps/) or from a dedicated workload composition.
+- Review the generated README inside the concrete module directory for provider requirements and inputs.

@@ -6,32 +6,32 @@
 
 output "zone" {
   description = "The created DNS managed zone resource"
-  value       = google_dns_managed_zone.zone
+  value       = local.managed_zone
 }
 
 output "id" {
   description = "The ID of the DNS managed zone"
-  value       = google_dns_managed_zone.zone.id
+  value       = local.managed_zone.id
 }
 
 output "self_link" {
   description = "The ID of the DNS managed zone (DNS zones use id rather than self_link)"
-  value       = google_dns_managed_zone.zone.id
+  value       = local.managed_zone.id
 }
 
 output "zone_name" {
   description = "The name of the DNS zone"
-  value       = google_dns_managed_zone.zone.name
+  value       = local.managed_zone.name
 }
 
 output "dns_name" {
   description = "The DNS name of the zone"
-  value       = google_dns_managed_zone.zone.dns_name
+  value       = local.managed_zone.dns_name
 }
 
 output "name_servers" {
   description = "The name servers for this zone (for public zones)"
-  value       = google_dns_managed_zone.zone.name_servers
+  value       = try(local.managed_zone.name_servers, [])
 }
 
 output "records" {

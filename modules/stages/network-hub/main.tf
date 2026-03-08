@@ -21,10 +21,10 @@ module "hub_network" {
   # Hierarchical Firewall Policy (Defense in Depth)
   hierarchical_firewall_policies = {
     "policy-hub-shared" = {
-      parent      = "folders/${var.folders["shared"].id}"
+      parent      = var.folders["shared"].name
       description = "Hub-level Defense in Depth Policy"
       associations = [
-        "folders/${var.folders["shared"].id}"
+        var.folders["shared"].name
       ]
       rules = [
         {
@@ -43,19 +43,16 @@ module "hub_network" {
 
   # VPC Service Controls (Data Exfiltration Protection)
   vpc_service_controls = {
-    "prod-data-perimeter" = {
+    "apps-data-perimeter" = {
       organization_id = var.org_id
-      perimeter_title = "Production Data Protection Perimeter"
-      description     = "Prevents data exfiltration from production projects"
+      perimeter_title = "Application Data Protection Perimeter"
+      description     = "Prevents data exfiltration from managed application projects"
 
       # ENFORCED: VPC-SC is now in enforcement mode
       # Ensure all violations have been resolved before applying this change
       enable_dry_run = true
 
-      protected_projects = [
-        for k, pid in var.spoke_project_ids : "projects/${pid}"
-        if startswith(k, "prod")
-      ]
+      protected_projects = values(var.spoke_project_ids)
       restricted_services = [
         "storage.googleapis.com",
         "bigquery.googleapis.com",

@@ -33,12 +33,16 @@ assignees: ''
 - [ ] Documentation
 - [ ] Other: 
 
-## Target Environment
+## Target Root / Surface
 
-- [ ] Development
-- [ ] UAT
-- [ ] Production
-- [ ] All environments
+- [ ] `envs/organization`
+- [ ] `envs/apps`
+- [ ] `examples/workloads`
+- [ ] CI/CD or repo tooling
+- [ ] Multiple surfaces
+
+**Target Workspace (if applicable):**
+<!-- Example: apps-dev, apps-prod, apps-preprod -->
 
 ## Benefits
 
@@ -150,4 +154,3 @@ module "example" {
 ---
 
 **Note**: Remove any sections that are not applicable.
-

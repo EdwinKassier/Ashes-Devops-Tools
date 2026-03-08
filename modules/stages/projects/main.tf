@@ -23,7 +23,7 @@ resource "google_project" "projects" {
   }
 
   name = each.value.proj.name
-  # Prevent redundant "dev-host-dev" naming. Use explicit name if provided, or prefix-env-name
+  # Prevent redundant "<env>-host-<env>" naming. Use explicit names when needed.
   # Use the shared suffix to ensure ID stability
   project_id      = "${var.project_prefix}-${each.value.ou}-${each.value.proj.name}-${var.suffix}"
   billing_account = coalesce(each.value.proj.billing_account, var.default_billing_account)

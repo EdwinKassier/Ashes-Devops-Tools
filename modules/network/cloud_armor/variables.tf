@@ -61,6 +61,12 @@ variable "enable_owasp_rules" {
   default     = false
 }
 
+variable "enable_log4j_protection" {
+  description = "Enable the Cloud Armor canary rule that blocks Log4Shell-style payloads"
+  type        = bool
+  default     = true
+}
+
 variable "owasp_sensitivity" {
   description = "OWASP rule sensitivity level (1-4, lower is more sensitive)"
   type        = number
@@ -93,4 +99,4 @@ variable "preconfigured_waf_rules" {
   # - protocolattack-v33-stable
   # - php-v33-stable
   # - sessionfixation-v33-stable
-} 
+}
