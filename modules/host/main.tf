@@ -44,6 +44,24 @@ data "google_compute_zones" "available" {
   }
 }
 
+# Deletion protection guard for the VPC and subnet stack.
+#
+# Terraform's prevent_destroy meta-argument must be a static literal — it
+# cannot be set via a variable. This guard resource exists ONLY when
+# enable_deletion_protection = true and carries a static prevent_destroy = true.
+# Any plan that would remove it (e.g. setting enable_deletion_protection = false)
+# is blocked by Terraform. To intentionally deprovision a protected stack, first
+# run: terraform state rm module.<name>.terraform_data.deletion_protection_guard
+resource "terraform_data" "deletion_protection_guard" {
+  count = var.enable_networking && var.enable_deletion_protection ? 1 : 0
+
+  input = "${var.project_id}/${var.vpc_name}"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
 module "vpc" {
   source = "../network/vpc"
   count  = var.enable_networking ? 1 : 0

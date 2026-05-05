@@ -14,9 +14,12 @@ variable "project_id" {
 }
 
 variable "vpc_cidr_block" {
-  description = "The CIDR block for the VPC. If not provided, it will be auto-calculated based on the VPC name hash."
+  description = "The CIDR block for the VPC (e.g. \"10.0.0.0/16\"). Required — must be set explicitly to prevent accidental CIDR collisions when multiple VPCs exist. Use your IPAM or a per-environment tfvars file as the source of truth."
   type        = string
-  default     = null
+  validation {
+    condition     = can(cidrnetmask(var.vpc_cidr_block))
+    error_message = "vpc_cidr_block must be a valid CIDR notation (e.g. \"10.0.0.0/16\")."
+  }
 }
 
 variable "project_prefix" {
@@ -28,6 +31,17 @@ variable "region" {
   description = "The primary GCP region for resources"
   type        = string
   default     = "us-central1"
+}
+
+variable "explicit_zones" {
+  description = <<-EOT
+    Explicit list of zones to use for subnet layout (e.g. ["us-central1-a", "us-central1-b", "us-central1-c"]).
+    Recommended for production: GCP occasionally changes how many zones are returned by the zones data source,
+    which would change subnet CIDRs and trigger destructive subnet replacement.
+    When empty, zones are auto-discovered via data.google_compute_zones.
+  EOT
+  type        = list(string)
+  default     = []
 }
 
 variable "labels" {
@@ -95,9 +109,13 @@ variable "enable_private_service_connect" {
 }
 
 variable "psa_prefix_length" {
-  description = "Prefix length for Private Service Access (e.g. 16 for /16)"
+  description = "Prefix length for Private Service Access (e.g. 16 for /16). Valid range: 16–29."
   type        = number
   default     = 16
+  validation {
+    condition     = var.psa_prefix_length >= 16 && var.psa_prefix_length <= 29
+    error_message = "psa_prefix_length must be between 16 and 29 inclusive."
+  }
 }
 
 variable "psc_target" {
@@ -125,7 +143,17 @@ variable "compute_tier_ports" {
 }
 
 variable "enable_deletion_protection" {
-  description = "Enable lifecycle prevent_destroy for critical resources"
+  description = <<-EOT
+    When true, creates a terraform_data guard resource with prevent_destroy = true
+    that blocks any plan that would destroy the VPC/subnet stack.
+
+    NOTE: Terraform's prevent_destroy cannot be set from a variable (it must be a
+    static literal). The guard resource works around this by existing only when
+    protection is enabled — removing it from the plan (e.g. by setting this to
+    false) triggers the prevent_destroy error. To intentionally deprovision a
+    protected stack, first run:
+      terraform state rm '<module_address>.terraform_data.deletion_protection_guard[0]'
+  EOT
   type        = bool
   default     = false
 }
@@ -137,9 +165,13 @@ variable "log_config_aggregation_interval" {
 }
 
 variable "log_config_flow_sampling" {
-  description = "Flow logs sampling rate (0.0 to 1.0)"
+  description = "Flow logs sampling rate (0.0 to 1.0). 0.0 disables sampling; 1.0 captures all flows."
   type        = number
   default     = 0.5
+  validation {
+    condition     = var.log_config_flow_sampling >= 0.0 && var.log_config_flow_sampling <= 1.0
+    error_message = "log_config_flow_sampling must be between 0.0 and 1.0 inclusive."
+  }
 }
 
 variable "subnet_cidrs" {
@@ -188,9 +220,13 @@ variable "enable_adaptive_protection" {
 }
 
 variable "owasp_sensitivity" {
-  description = "OWASP rule sensitivity (1-4, lower is more strict)"
+  description = "OWASP rule sensitivity level (1–4). Lower values apply stricter rules with more false positives; higher values are more permissive."
   type        = number
   default     = 2
+  validation {
+    condition     = contains([1, 2, 3, 4], var.owasp_sensitivity)
+    error_message = "owasp_sensitivity must be 1, 2, 3, or 4."
+  }
 }
 
 variable "cloud_armor_custom_rules" {
@@ -296,9 +332,13 @@ variable "enable_vpn" {
 }
 
 variable "vpn_tunnel_count" {
-  description = "Number of VPN tunnels (1 or 2 for HA)"
+  description = "Number of VPN tunnels per gateway. Use 2 for HA VPN (recommended for production); 1 for testing only."
   type        = number
   default     = 2
+  validation {
+    condition     = contains([1, 2], var.vpn_tunnel_count)
+    error_message = "vpn_tunnel_count must be 1 or 2."
+  }
 }
 
 variable "vpn_router_asn" {
@@ -425,6 +465,30 @@ variable "additional_firewall_rules" {
     source_tags   = optional(list(string))
   }))
   default = {}
+}
+
+# =============================================================================
+# INTEGRATED NAT CONFIGURATION
+# =============================================================================
+
+variable "integrated_nat_ip_allocate_option" {
+  description = "IP allocation mode for the integrated NAT gateway. AUTO_ONLY uses Google-managed IPs; MANUAL_ONLY uses reserved static IPs (also configure nat_ips in standalone_nat_gateways)."
+  type        = string
+  default     = "AUTO_ONLY"
+  validation {
+    condition     = contains(["AUTO_ONLY", "MANUAL_ONLY"], var.integrated_nat_ip_allocate_option)
+    error_message = "integrated_nat_ip_allocate_option must be AUTO_ONLY or MANUAL_ONLY."
+  }
+}
+
+variable "integrated_nat_log_filter" {
+  description = "Log filter for the integrated NAT gateway. ERRORS_ONLY, TRANSLATIONS_ONLY, or ALL."
+  type        = string
+  default     = "ERRORS_ONLY"
+  validation {
+    condition     = contains(["ERRORS_ONLY", "TRANSLATIONS_ONLY", "ALL"], var.integrated_nat_log_filter)
+    error_message = "integrated_nat_log_filter must be ERRORS_ONLY, TRANSLATIONS_ONLY, or ALL."
+  }
 }
 
 # =============================================================================
