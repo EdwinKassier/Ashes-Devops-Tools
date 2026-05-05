@@ -1,7 +1,7 @@
 repos:
   # Terraform hooks
   - repo: https://github.com/antonbabenko/pre-commit-terraform
-    rev: v1.104.0
+    rev: cba87736ffe2c479523d9d69919c1215084c7acc  # v1.104.0
     hooks:
       - id: terraform_fmt
         name: Terraform format
@@ -50,7 +50,7 @@ repos:
 
   # General hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # v6.0.0
     hooks:
       - id: trailing-whitespace
         name: Trim trailing whitespace
@@ -93,7 +93,7 @@ repos:
 
   # Git commit message hooks
   - repo: https://github.com/commitizen-tools/commitizen
-    rev: v4.10.1
+    rev: e615e667f58ecf3fb9b1d49612f07473f759b838  # v4.10.1
     hooks:
       - id: commitizen
         name: Commitizen check
@@ -102,7 +102,7 @@ repos:
 
   # Markdown linting
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.46.0
+    rev: c8fd5003603dd6f12447314ecd935ba87c09aff5  # v0.46.0
     hooks:
       - id: markdownlint
         name: Markdown lint
@@ -111,7 +111,7 @@ repos:
 
   # YAML linting
   - repo: https://github.com/adrienverge/yamllint
-    rev: v1.37.1
+    rev: 79a6b2b1392eaf49cdd32ac4f14be1a809bbd8f7  # v1.37.1
     hooks:
       - id: yamllint
         name: YAML lint
