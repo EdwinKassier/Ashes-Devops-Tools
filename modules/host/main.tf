@@ -20,24 +20,28 @@ locals {
     database    = "database"
   }
 
-  # Dynamic CIDR calculation: Use provided CIDR or fallback to consistent hash of VPC Name
-  # Using VPC Name is safer for standalone usage than Region, as multiple VPCs can exist in one region.
-  name_hash      = abs(tonumber(format("%d", parseint(substr(md5(var.vpc_name), 0, 4), 16)))) % 256
-  vpc_cidr_block = var.vpc_cidr_block != null ? var.vpc_cidr_block : "10.${local.name_hash}.0.0/16"
-
   # Calculate subnets dynamically
-  public_cidrs   = length(var.subnet_cidrs.public) > 0 ? var.subnet_cidrs.public : [for i, z in local.zones : cidrsubnet(local.vpc_cidr_block, 8, i)]
-  private_cidrs  = length(var.subnet_cidrs.private) > 0 ? var.subnet_cidrs.private : [for i, z in local.zones : cidrsubnet(local.vpc_cidr_block, 8, 16 + i)]
-  database_cidrs = length(var.subnet_cidrs.database) > 0 ? var.subnet_cidrs.database : [for i, z in local.zones : cidrsubnet(local.vpc_cidr_block, 8, 32 + i)]
+  public_cidrs   = length(var.subnet_cidrs.public) > 0 ? var.subnet_cidrs.public : [for i, z in local.zones : cidrsubnet(var.vpc_cidr_block, 8, i)]
+  private_cidrs  = length(var.subnet_cidrs.private) > 0 ? var.subnet_cidrs.private : [for i, z in local.zones : cidrsubnet(var.vpc_cidr_block, 8, 16 + i)]
+  database_cidrs = length(var.subnet_cidrs.database) > 0 ? var.subnet_cidrs.database : [for i, z in local.zones : cidrsubnet(var.vpc_cidr_block, 8, 32 + i)]
 
-  # Auto-derive zones
-  zones = data.google_compute_zones.available.names
+  # Use explicit zones when provided; fall back to GCP-discovered zones.
+  # Production deployments should set var.explicit_zones to prevent subnet
+  # recreation if the API returns a different zone count between plans.
+  zones = length(var.explicit_zones) > 0 ? var.explicit_zones : data.google_compute_zones.available.names
 }
 
-# Auto-discover available zones
+# Auto-discover available zones (used only when var.explicit_zones is empty)
 data "google_compute_zones" "available" {
   project = var.project_id
   region  = var.region
+
+  lifecycle {
+    postcondition {
+      condition     = length(self.names) > 0
+      error_message = "No compute zones returned for region '${var.region}' in project '${var.project_id}'. Verify the region is valid and the Compute Engine API is enabled."
+    }
+  }
 }
 
 module "vpc" {
@@ -117,8 +121,11 @@ module "database_subnets" {
 # CORE SERVICES (NAT, PSA, PSC)
 # -----------------------------------------------------------------------------
 
-# Integrated NAT Gateway (for private/db subnets)
-# Note: We use the standalone_nat module structure but integrated here for the 3-tier default
+# Integrated NAT Gateway (for private/db subnets).
+# The for expressions in `subnetworks` reference module.private_subnets and
+# module.database_subnets outputs — Terraform resolves these as implicit
+# dependencies and will not plan this NAT before subnet self-links are known.
+# No explicit depends_on is needed here.
 module "integrated_nat" {
   source = "../network/nat"
   count  = var.enable_networking ? 1 : 0
@@ -131,7 +138,7 @@ module "integrated_nat" {
   create_router = true
   router_name   = "${var.vpc_name}-router"
 
-  nat_ip_allocate_option             = "AUTO_ONLY"
+  nat_ip_allocate_option             = var.integrated_nat_ip_allocate_option
   source_subnetwork_ip_ranges_to_nat = "LIST_OF_SUBNETWORKS"
 
   subnetworks = concat(
@@ -140,7 +147,7 @@ module "integrated_nat" {
   )
 
   enable_logging = true
-  log_filter     = "ERRORS_ONLY"
+  log_filter     = var.integrated_nat_log_filter
 }
 
 # Private Service Access (for Cloud SQL, Redis, etc.)
