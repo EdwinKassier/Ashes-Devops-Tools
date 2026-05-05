@@ -27,19 +27,6 @@ output "folder_iam_members" {
       member = v.member
     }
   }
-  sensitive = true
-}
-
-output "identity_groups" {
-  description = "Deprecated. Group creation is no longer managed by this module."
-  value       = {}
-  sensitive   = true
-}
-
-output "group_memberships" {
-  description = "Deprecated. Group membership is no longer managed by this module."
-  value       = {}
-  sensitive   = true
 }
 
 # Enabled APIs

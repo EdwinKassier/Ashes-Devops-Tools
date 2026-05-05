@@ -26,5 +26,4 @@ output "project_roles" {
 output "impersonation_members" {
   description = "List of members allowed to impersonate this service account"
   value       = var.impersonation_members
-  sensitive   = true
 }

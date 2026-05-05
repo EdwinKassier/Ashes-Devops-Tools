@@ -2,7 +2,6 @@
 output "billing_account" {
   description = "Billing account ID for downstream usage"
   value       = data.google_billing_account.billing.id
-  sensitive   = true
 }
 
 # Admin Project
@@ -12,7 +11,6 @@ output "admin_project" {
     project_id = module.bootstrap.admin_project_id
     number     = module.bootstrap.admin_project_number
   }
-  sensitive = true
 }
 
 # Admin Project Number (for VPC-SC ingress policies referencing Workload Identity)
@@ -27,7 +25,6 @@ output "organization" {
   value = {
     id = module.organization.organization_id
   }
-  sensitive = true
 }
 
 # Organization ID (for VPC-SC and other resources requiring org_id)
@@ -40,14 +37,12 @@ output "org_id" {
 output "folders" {
   description = "Map of created folders"
   value       = module.organization.folders
-  sensitive   = true
 }
 
 # Projects
 output "projects" {
   description = "Map of created projects"
   value       = module.projects.projects
-  sensitive   = true
 }
 
 # Environment Variables
@@ -75,7 +70,6 @@ output "terraform_service_account_email" {
 # Unified environment configuration for downstream consumption
 output "environment_config" {
   description = "Stable configuration contract for downstream application environments"
-  sensitive   = true
   value = {
     for env_key, env in var.environments : env_key => {
       folder_id           = module.organization.folders[env_key].id
