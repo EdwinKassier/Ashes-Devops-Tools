@@ -1,0 +1,86 @@
+[
+  {
+    "xPos": 12, "yPos": 0, "width": 12, "height": 8,
+    "widget": {
+      "title": "Cloud Functions Active Instances",
+      "scorecard": {
+        "timeSeriesQuery": {
+          "timeSeriesFilter": {
+            "filter": "resource.type=\"cloud_function\" AND metric.type=\"cloudfunctions.googleapis.com/function/active_instances\"",
+            "aggregation": {
+              "alignmentPeriod": "60s",
+              "perSeriesAligner": "ALIGN_MEAN",
+              "crossSeriesReducer": "REDUCE_SUM"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "xPos": 24, "yPos": 8, "width": 24, "height": 12,
+    "widget": {
+      "title": "Cloud Functions - Execution Count by Status",
+      "xyChart": {
+        "dataSets": [
+          {
+            "timeSeriesQuery": {
+              "timeSeriesFilter": {
+                "filter": "resource.type=\"cloud_function\" AND metric.type=\"cloudfunctions.googleapis.com/function/execution_count\"",
+                "aggregation": {
+                  "alignmentPeriod": "60s",
+                  "perSeriesAligner": "ALIGN_RATE",
+                  "crossSeriesReducer": "REDUCE_SUM",
+                  "groupByFields": ["metric.label.status"]
+                }
+              }
+            },
+            "plotType": "STACKED_AREA",
+            "legendTemplate": "${metric.labels.status}"
+          }
+        ],
+        "yAxis": { "label": "Executions/sec", "scale": "LINEAR" },
+        "chartOptions": { "mode": "COLOR" }
+      }
+    }
+  },
+  {
+    "xPos": 24, "yPos": 56, "width": 24, "height": 12,
+    "widget": {
+      "title": "Cloud Functions - Execution Time",
+      "xyChart": {
+        "dataSets": [
+          {
+            "timeSeriesQuery": {
+              "timeSeriesFilter": {
+                "filter": "resource.type=\"cloud_function\" AND metric.type=\"cloudfunctions.googleapis.com/function/execution_times\"",
+                "aggregation": { "alignmentPeriod": "60s", "perSeriesAligner": "ALIGN_PERCENTILE_50" }
+              }
+            },
+            "plotType": "LINE", "legendTemplate": "p50"
+          },
+          {
+            "timeSeriesQuery": {
+              "timeSeriesFilter": {
+                "filter": "resource.type=\"cloud_function\" AND metric.type=\"cloudfunctions.googleapis.com/function/execution_times\"",
+                "aggregation": { "alignmentPeriod": "60s", "perSeriesAligner": "ALIGN_PERCENTILE_95" }
+              }
+            },
+            "plotType": "LINE", "legendTemplate": "p95"
+          },
+          {
+            "timeSeriesQuery": {
+              "timeSeriesFilter": {
+                "filter": "resource.type=\"cloud_function\" AND metric.type=\"cloudfunctions.googleapis.com/function/execution_times\"",
+                "aggregation": { "alignmentPeriod": "60s", "perSeriesAligner": "ALIGN_PERCENTILE_99" }
+              }
+            },
+            "plotType": "LINE", "legendTemplate": "p99"
+          }
+        ],
+        "yAxis": { "label": "Execution Time (ns)", "scale": "LINEAR" },
+        "chartOptions": { "mode": "COLOR" }
+      }
+    }
+  }
+]
