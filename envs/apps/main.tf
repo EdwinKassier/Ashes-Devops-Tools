@@ -1,3 +1,10 @@
+# This root depends on the organization root (envs/organization) via remote state.
+# Trade-offs of this coupling:
+#   Pro: avoids re-declaring org-level outputs (billing account, folder IDs, hub network).
+#   Con: envs/apps cannot be planned or applied in isolation — the organization workspace
+#        must exist and its outputs must be populated first.
+# If you are onboarding a new environment, run envs/organization first.
+# If you need to work offline, override outputs with a stub backend using a local tfvars file.
 data "terraform_remote_state" "organization" {
   backend = "cloud"
   config = {
