@@ -1,14 +1,52 @@
-tfc_organization         = "your-tfc-org-name"
-terraform_admin_email    = "terraform-admin@example.iam.gserviceaccount.com"
-project_prefix           = "verify-org"
-environment              = "dev"
-provider_region          = "europe-west1"
-monthly_budget_limit     = 500
-budget_currency          = "USD"
-enable_cloud_armor       = false
-enable_owasp_rules       = false
-enable_adaptive_protection = false
-owasp_sensitivity        = 4
-log_config_flow_sampling = 0.1
-vpc_sc_enable_dry_run    = true
-vpc_flow_logs_retention_days = 30
+tfc_organization             = "your-tfc-org-name"
+organization_workspace_name  = "organization"
+terraform_admin_email        = "terraform-admin@your-project.iam.gserviceaccount.com"
+project_prefix               = "myorg"
+environment                  = "dev"
+provider_region              = "europe-west1"
+
+# Budget
+monthly_budget_limit         = 500
+budget_currency              = "USD"
+
+# Feature flags
+enable_deletion_protection   = false
+enable_cloud_armor           = false
+enable_owasp_rules           = false
+enable_adaptive_protection   = false
+owasp_sensitivity            = 4
+
+# Flow logs
+log_config_flow_sampling        = 0.1
+log_config_aggregation_interval = "INTERVAL_5_SEC"
+vpc_flow_logs_retention_days    = 30
+
+# Labels applied to all resources in this environment
+extra_labels = {
+  team        = "platform"
+  cost-center = "engineering"
+}
+
+# VPC Service Controls
+# vpc_sc_perimeter_title is optional; defaults to "<project_prefix>-<environment>-perimeter"
+# vpc_sc_perimeter_title = "my-custom-perimeter-title"
+vpc_sc_enable_dry_run = true
+
+vpc_sc_restricted_services = [
+  "bigquery.googleapis.com",
+  "storage.googleapis.com",
+  "secretmanager.googleapis.com",
+  "cloudkms.googleapis.com",
+  "pubsub.googleapis.com",
+  "sqladmin.googleapis.com",
+  "container.googleapis.com",
+  "artifactregistry.googleapis.com",
+]
+
+# Ingress policies allow specific identities/sources into the perimeter.
+# Leave empty to deny all inbound cross-perimeter traffic.
+vpc_sc_ingress_policies = []
+
+# Egress policies allow specific identities to reach resources outside the perimeter.
+# Leave empty to deny all outbound cross-perimeter traffic.
+vpc_sc_egress_policies = []
