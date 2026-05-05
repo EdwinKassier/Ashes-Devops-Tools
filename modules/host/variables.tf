@@ -20,6 +20,10 @@ variable "vpc_cidr_block" {
     condition     = can(cidrnetmask(var.vpc_cidr_block))
     error_message = "vpc_cidr_block must be a valid CIDR notation (e.g. \"10.0.0.0/16\")."
   }
+  validation {
+    condition     = !can(cidrnetmask(var.vpc_cidr_block)) || cidrhost(var.vpc_cidr_block, 0) == split("/", var.vpc_cidr_block)[0]
+    error_message = "vpc_cidr_block must not have host bits set (e.g. use \"10.0.0.0/16\", not \"10.0.1.0/16\")."
+  }
 }
 
 variable "project_prefix" {
