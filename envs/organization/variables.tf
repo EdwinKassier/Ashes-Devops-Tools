@@ -18,9 +18,14 @@ variable "organization_name" {
 # customer_id is now fetched dynamically via data.google_organization
 
 variable "billing_account" {
-  description = "Billing account ID (optional if display name provided)"
+  description = "Billing account ID (optional if billing_account_display_name is provided)"
   type        = string
   default     = null
+
+  validation {
+    condition     = var.billing_account != null || var.billing_account_display_name != null
+    error_message = "At least one of billing_account or billing_account_display_name must be set."
+  }
 }
 
 variable "billing_account_display_name" {
@@ -57,6 +62,24 @@ variable "default_region" {
   description = "Default region for resources"
   type        = string
   default     = "europe-west1"
+}
+
+variable "hub_vpc_cidr_block" {
+  description = "CIDR block for the hub network VPC. Must not overlap with DNS hub or spoke CIDRs."
+  type        = string
+  validation {
+    condition     = can(cidrnetmask(var.hub_vpc_cidr_block))
+    error_message = "hub_vpc_cidr_block must be a valid CIDR notation (e.g. \"10.0.0.0/16\")."
+  }
+}
+
+variable "dns_hub_vpc_cidr_block" {
+  description = "CIDR block for the DNS hub VPC. Must not overlap with hub_vpc_cidr_block or spoke CIDRs."
+  type        = string
+  validation {
+    condition     = can(cidrnetmask(var.dns_hub_vpc_cidr_block))
+    error_message = "dns_hub_vpc_cidr_block must be a valid CIDR notation (e.g. \"10.1.0.0/16\")."
+  }
 }
 
 variable "allowed_regions" {
@@ -108,15 +131,13 @@ variable "project_services" {
 }
 
 variable "github_org" {
-  description = "GitHub Organization for OIDC Federation"
+  description = "GitHub organization name for WIF OIDC trust condition. Must be set explicitly — no default to prevent accidentally trusting the wrong org when forking."
   type        = string
-  default     = "EdwinKassier"
 }
 
 variable "github_repo" {
-  description = "GitHub Repository for OIDC Federation"
+  description = "GitHub repository name (without org prefix) for WIF OIDC trust condition. Must be set explicitly — no default to prevent accidentally trusting the wrong repo when forking."
   type        = string
-  default     = "Ashes-Devops-Tools"
 }
 
 variable "security_contact_email" {
