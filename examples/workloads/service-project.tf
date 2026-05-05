@@ -1,23 +1,42 @@
-# Copy this snippet into a dedicated workload root.
-# Replace the variable and remote-state references with the equivalents from your own composition.
+# Example: attach a service project to Shared VPC using the workload module.
+# In a real deployment replace the locals below with data sources or remote state.
+
+locals {
+  org_id          = "organizations/123456789"
+  folder_id       = "folders/111111111"
+  billing_account = "000000-000000-000000"
+  host_project_id = "my-host-project"
+  region          = "europe-west1"
+  private_subnet  = "private-subnet-europe-west1"
+}
+
+variable "project_prefix" {
+  type    = string
+  default = "example"
+}
+
+variable "environment" {
+  type    = string
+  default = "dev"
+}
 
 module "workload_api_service" {
   source = "../../modules/stages/workload"
 
   project_name = "${var.project_prefix}-${var.environment}-api"
 
-  org_id          = data.terraform_remote_state.organization.outputs.org_id
-  folder_id       = data.terraform_remote_state.organization.outputs.environment_config[var.environment].folder_id
-  billing_account = data.terraform_remote_state.organization.outputs.billing_account
+  org_id          = local.org_id
+  folder_id       = local.folder_id
+  billing_account = local.billing_account
 
   project_admin_group_email = "gcp-${var.environment}-platform@example.com"
 
   enable_shared_vpc_attachment = true
-  shared_vpc_host_project_id   = data.terraform_remote_state.organization.outputs.environment_config[var.environment].host_project_id
+  shared_vpc_host_project_id   = local.host_project_id
   shared_vpc_subnets = {
     private = {
-      region      = data.terraform_remote_state.organization.outputs.environment_config[var.environment].region
-      subnet_name = "replace-with-private-subnet-name"
+      region      = local.region
+      subnet_name = local.private_subnet
     }
   }
 
