@@ -25,8 +25,9 @@ output "gateway_ip_addresses" {
 }
 
 output "tunnels" {
-  description = "The VPN tunnel resources"
+  description = "The VPN tunnel resources (marked sensitive because tunnels contain shared_secret)"
   value       = google_compute_vpn_tunnel.tunnels
+  sensitive   = true
 }
 
 output "tunnel_statuses" {
