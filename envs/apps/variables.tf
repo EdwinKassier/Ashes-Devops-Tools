@@ -5,8 +5,17 @@ variable "project_prefix" {
 }
 
 variable "environment" {
-  description = "Application environment to deploy"
+  description = <<-EOT
+    Application environment to deploy. Must match a key in the organization root's
+    `environments` map (e.g., "dev", "staging", "prod"). A mismatch causes a
+    plan-time failure when looking up environment_config[var.environment].
+  EOT
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{0,29}$", var.environment))
+    error_message = "environment must be lowercase alphanumeric with optional hyphens (e.g., 'dev', 'staging', 'prod')."
+  }
 }
 
 variable "provider_region" {

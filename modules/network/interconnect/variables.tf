@@ -210,6 +210,11 @@ variable "bfd_session_initialization_mode" {
   description = "BFD session initialization mode: ACTIVE, PASSIVE, or DISABLED"
   type        = string
   default     = "ACTIVE"
+
+  validation {
+    condition     = contains(["ACTIVE", "PASSIVE", "DISABLED"], var.bfd_session_initialization_mode)
+    error_message = "bfd_session_initialization_mode must be ACTIVE, PASSIVE, or DISABLED."
+  }
 }
 
 variable "bfd_min_transmit_interval" {

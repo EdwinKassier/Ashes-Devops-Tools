@@ -87,6 +87,14 @@ variable "project_admin_roles" {
   validation {
     condition = alltrue([
       for role in var.project_admin_roles :
+      can(regex("^(roles|projects/[^/]+/roles|organizations/[0-9]+/roles)/[a-zA-Z0-9._]+$", role))
+    ])
+    error_message = "All roles must be valid GCP role strings: 'roles/<name>', 'projects/<id>/roles/<name>', or 'organizations/<num>/roles/<name>'."
+  }
+
+  validation {
+    condition = alltrue([
+      for role in var.project_admin_roles :
       !contains(["roles/owner", "roles/editor", "roles/viewer"], role)
     ])
     error_message = "project_admin_roles must not include basic roles. Grant only least-privilege predefined or custom roles."

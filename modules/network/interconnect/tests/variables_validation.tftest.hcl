@@ -230,3 +230,39 @@ run "rejects_invalid_encryption" {
     encryption = "TLS"
   }
 }
+
+# ── bfd_session_initialization_mode ───────────────────────────────────────────
+
+run "accepts_bfd_mode_active" {
+  command = plan
+
+  variables {
+    bfd_session_initialization_mode = "ACTIVE"
+  }
+}
+
+run "accepts_bfd_mode_passive" {
+  command = plan
+
+  variables {
+    bfd_session_initialization_mode = "PASSIVE"
+  }
+}
+
+run "accepts_bfd_mode_disabled" {
+  command = plan
+
+  variables {
+    bfd_session_initialization_mode = "DISABLED"
+  }
+}
+
+run "rejects_invalid_bfd_mode" {
+  command = plan
+
+  expect_failures = [var.bfd_session_initialization_mode]
+
+  variables {
+    bfd_session_initialization_mode = "active"
+  }
+}
