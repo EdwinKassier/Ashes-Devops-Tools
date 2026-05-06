@@ -164,22 +164,31 @@ TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=examples/dev.tfv
 
 ### `envs/organization` — Required Variables
 
+> **Note:** `org_id` and `billing_account_id` are **not input variables** — they are resolved automatically from data sources (`data.google_organization` and `data.google_billing_account`). Set `domain` and either `billing_account` or `billing_account_display_name` instead.
+
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `org_id` | GCP Organization ID (numbers only) | `"123456789"` |
-| `billing_account` | Billing account ID | `"012345-6789AB-CDEF01"` |
-| `github_org` | GitHub organization or user name | `"my-github-org"` |
-| `github_repo` | GitHub repository name | `"Ashes-Devops-Tools"` |
-| `project_prefix` | Short prefix for all project names (3-8 chars) | `"ashes"` |
-| `terraform_admin_email` | Service account email Terraform impersonates after bootstrap | `"terraform@admin-proj.iam.gserviceaccount.com"` |
+| `domain` | GCP organization domain name — used to look up the org ID | `"example.com"` |
+| `admin_email` | Email of the organization administrator; the bootstrap SA is created under this identity | `"admin@example.com"` |
+| `github_org` | GitHub organization name for WIF OIDC trust | `"my-github-org"` |
+| `github_repo` | GitHub repository name (without org prefix) for WIF OIDC trust | `"my-infra-repo"` |
+| `hub_vpc_cidr_block` | CIDR for the hub VPC — must not overlap with DNS hub or any spoke | `"10.0.0.0/16"` |
+| `dns_hub_vpc_cidr_block` | CIDR for the DNS hub VPC — must not overlap with hub or any spoke | `"10.1.0.0/16"` |
+| `environments` | Map of environment configs (region, CIDR, budget, IAM bindings) — see `terraform.tfvars.example` | _(see example)_ |
 
 ### `envs/organization` — Key Optional Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `billing_account` | `null` | Billing account ID — required unless `billing_account_display_name` is set |
 | `billing_account_display_name` | `null` | Alternative to `billing_account` — looks up by display name |
-| `organization_region` | `"europe-west1"` | Primary region for KMS, logging, network hub |
-| `enable_scc_notifications` | `true` | Security Command Center Pub/Sub notifications |
+| `project_prefix` | `"my-org"` | Short prefix for all project names |
+| `default_region` | `"europe-west1"` | Primary region for KMS, logging, network hub |
+| `tfc_organization` | `null` | Terraform Cloud org name for dynamic provider credentials |
+| `break_glass_user` | `null` | Email granted Organization Admin in emergencies |
+| `organization_admin_groups` | `[]` | Google Groups granted Organization Admin role |
+| `monthly_budget_amount` | `1000` | Org-level budget alert threshold (in `budget_currency`) |
+| `security_contact_email` | `null` | Email for security notifications via Essential Contacts |
 
 ### `envs/apps` — Required Variables
 

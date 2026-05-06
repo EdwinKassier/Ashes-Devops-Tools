@@ -15,7 +15,7 @@
 module "project" {
   # checkov:skip=CKV_TF_1:Uses the upstream Terraform Google Project Factory module pinned by release version.
   source  = "terraform-google-modules/project-factory/google"
-  version = "~> 14.0"
+  version = "~> 17.0"
 
   name              = var.project_name
   random_project_id = true
