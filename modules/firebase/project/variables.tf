@@ -29,9 +29,14 @@ variable "apple_app_store_id" {
 }
 
 variable "apple_team_id" {
-  description = "Apple Team ID for the Apple app"
+  description = "Apple Team ID for the Apple app (10-character uppercase alphanumeric)"
   type        = string
   default     = ""
+
+  validation {
+    condition     = var.apple_team_id == "" || can(regex("^[A-Z0-9]{10}$", var.apple_team_id))
+    error_message = "apple_team_id must be empty or a 10-character uppercase alphanumeric Apple Team ID."
+  }
 }
 
 # Android App Variables
@@ -48,15 +53,31 @@ variable "android_package_name" {
 }
 
 variable "android_sha1_hashes" {
-  description = "List of SHA-1 hashes for the Android app"
+  description = "List of SHA-1 certificate fingerprints for the Android app (40 hex characters, colon-separated pairs accepted)"
   type        = list(string)
   default     = []
+
+  validation {
+    condition = alltrue([
+      for h in var.android_sha1_hashes :
+      can(regex("^[0-9A-Fa-f]{40}$", h)) || can(regex("^([0-9A-Fa-f]{2}:){19}[0-9A-Fa-f]{2}$", h))
+    ])
+    error_message = "Each android_sha1_hashes entry must be a 40-character hex string or colon-separated hex pairs (e.g., 'AA:BB:CC:...')."
+  }
 }
 
 variable "android_sha256_hashes" {
-  description = "List of SHA-256 hashes for the Android app"
+  description = "List of SHA-256 certificate fingerprints for the Android app (64 hex characters, colon-separated pairs accepted)"
   type        = list(string)
   default     = []
+
+  validation {
+    condition = alltrue([
+      for h in var.android_sha256_hashes :
+      can(regex("^[0-9A-Fa-f]{64}$", h)) || can(regex("^([0-9A-Fa-f]{2}:){31}[0-9A-Fa-f]{2}$", h))
+    ])
+    error_message = "Each android_sha256_hashes entry must be a 64-character hex string or colon-separated hex pairs."
+  }
 }
 
 # Web App Variables
@@ -70,4 +91,9 @@ variable "kms_key_name" {
   description = "Optional customer-managed KMS key used for the Firebase web config bucket"
   type        = string
   default     = null
+
+  validation {
+    condition     = var.kms_key_name == null || can(regex("^projects/[^/]+/locations/[^/]+/keyRings/[^/]+/cryptoKeys/[^/]+$", var.kms_key_name))
+    error_message = "kms_key_name must be a valid KMS key resource name: projects/<project>/locations/<location>/keyRings/<ring>/cryptoKeys/<key>."
+  }
 }

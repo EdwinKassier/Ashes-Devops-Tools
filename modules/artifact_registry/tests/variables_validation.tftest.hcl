@@ -100,3 +100,25 @@ run "accepts_empty_repositories_map" {
     repositories = {}
   }
 }
+
+# ── kms_key_name ───────────────────────────────────────────────────────────────
+
+run "rejects_invalid_kms_key_name" {
+  command = plan
+
+  expect_failures = [var.kms_key_name]
+
+  variables {
+    kms_key_name = "my-ring/my-key"
+  }
+}
+
+run "rejects_kms_key_missing_location" {
+  command = plan
+
+  expect_failures = [var.kms_key_name]
+
+  variables {
+    kms_key_name = "projects/mock-project/keyRings/test-ring/cryptoKeys/test-key"
+  }
+}
