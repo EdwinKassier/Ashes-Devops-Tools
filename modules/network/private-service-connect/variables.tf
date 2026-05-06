@@ -26,9 +26,14 @@ variable "subnetwork" {
 }
 
 variable "target" {
-  description = "The target service to connect to (e.g., 'all-apis', 'vpc-sc', or a service attachment URI)"
+  description = "The target service to connect to. Must be 'all-apis' or 'vpc-sc'."
   type        = string
   default     = "all-apis"
+
+  validation {
+    condition     = contains(["all-apis", "vpc-sc"], var.target)
+    error_message = "target must be 'all-apis' or 'vpc-sc'. This module implements global PSC for Google APIs only."
+  }
 }
 
 variable "address_name" {

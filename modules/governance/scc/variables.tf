@@ -12,6 +12,11 @@ variable "kms_key_name" {
   description = "Optional customer-managed KMS key used to encrypt SCC notification topics"
   type        = string
   default     = null
+
+  validation {
+    condition     = var.kms_key_name == null || can(regex("^projects/[^/]+/locations/[^/]+/keyRings/[^/]+/cryptoKeys/[^/]+$", var.kms_key_name))
+    error_message = "kms_key_name must be a valid KMS key resource name: projects/<project>/locations/<location>/keyRings/<ring>/cryptoKeys/<key>."
+  }
 }
 
 # =============================================================================

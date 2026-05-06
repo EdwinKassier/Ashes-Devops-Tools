@@ -1,3 +1,16 @@
+# Guard: fail fast when TFC OIDC is enabled but no workspaces are bound.
+# Variable-level validation cannot cross-reference other variables, so a
+# precondition on a terraform_data resource is used instead.
+resource "terraform_data" "tfc_workspaces_guard" {
+  count = var.enable_tfc_oidc && var.tfc_organization != null ? 1 : 0
+  lifecycle {
+    precondition {
+      condition     = length(var.tfc_workspaces) > 0
+      error_message = "tfc_workspaces must not be empty when enable_tfc_oidc = true. Provide at least one workspace name."
+    }
+  }
+}
+
 # Admin Project - Foundation of the Automation
 resource "google_project" "admin_project" {
   name                = "${var.project_prefix}-admin"
