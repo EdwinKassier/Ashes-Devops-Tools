@@ -166,15 +166,25 @@ variable "backend_timeout_sec" {
 }
 
 variable "session_affinity" {
-  description = "Session affinity: NONE, CLIENT_IP, or GENERATED_COOKIE"
+  description = "Session affinity for the backend service. Valid values: NONE, CLIENT_IP, GENERATED_COOKIE."
   type        = string
   default     = "NONE"
+
+  validation {
+    condition     = contains(["NONE", "CLIENT_IP", "GENERATED_COOKIE"], var.session_affinity)
+    error_message = "session_affinity must be one of: NONE, CLIENT_IP, GENERATED_COOKIE."
+  }
 }
 
 variable "locality_lb_policy" {
-  description = "Locality load balancing policy"
+  description = "Locality load balancing policy for the backend service. Valid values: ROUND_ROBIN, LEAST_REQUEST, RING_HASH, RANDOM, ORIGINAL_DESTINATION, MAGLEV."
   type        = string
   default     = "ROUND_ROBIN"
+
+  validation {
+    condition     = contains(["ROUND_ROBIN", "LEAST_REQUEST", "RING_HASH", "RANDOM", "ORIGINAL_DESTINATION", "MAGLEV"], var.locality_lb_policy)
+    error_message = "locality_lb_policy must be one of: ROUND_ROBIN, LEAST_REQUEST, RING_HASH, RANDOM, ORIGINAL_DESTINATION, MAGLEV."
+  }
 }
 
 variable "connection_draining_timeout_sec" {

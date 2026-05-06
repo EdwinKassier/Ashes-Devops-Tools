@@ -1,6 +1,11 @@
 variable "billing_account" {
-  description = "The ID of the billing account to create budget for"
+  description = "The GCP billing account ID in format XXXXXX-XXXXXX-XXXXXX"
   type        = string
+
+  validation {
+    condition     = can(regex("^[A-Z0-9]{6}-[A-Z0-9]{6}-[A-Z0-9]{6}$", var.billing_account))
+    error_message = "billing_account must be a valid GCP billing account ID in format XXXXXX-XXXXXX-XXXXXX."
+  }
 }
 
 variable "project_id" {
@@ -88,9 +93,14 @@ variable "webhook_endpoint" {
 }
 
 variable "webhook_service_account" {
-  description = "Service account for authenticating webhook requests"
+  description = "Service account email for authenticating webhook requests (format: name@project.iam.gserviceaccount.com)"
   type        = string
   default     = ""
+
+  validation {
+    condition     = var.webhook_service_account == "" || can(regex("^[^@]+@[^@]+\\.[^@]+$", var.webhook_service_account))
+    error_message = "webhook_service_account must be empty or a valid service account email address."
+  }
 }
 
 variable "enable_email_notifications" {
@@ -122,6 +132,14 @@ variable "email_recipients" {
   description = "List of email addresses to receive budget alerts"
   type        = list(string)
   default     = []
+
+  validation {
+    condition = alltrue([
+      for email in var.email_recipients :
+      can(regex("^[^@]+@[^@]+\\.[^@]+$", email))
+    ])
+    error_message = "All email_recipients must be valid email addresses."
+  }
 }
 
 variable "pubsub_service_account" {

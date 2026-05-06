@@ -115,3 +115,55 @@ run "rejects_threshold_above_one" {
     alert_threshold_percent = 1.1
   }
 }
+
+# ── billing_account ────────────────────────────────────────────────────────────
+
+run "rejects_lowercase_billing_account" {
+  command         = plan
+  expect_failures = [var.billing_account]
+  variables {
+    billing_account = "abcdef-123456-789012"
+  }
+}
+
+run "rejects_billing_account_wrong_segment_count" {
+  command         = plan
+  expect_failures = [var.billing_account]
+  variables {
+    billing_account = "ABCDEF-123456"
+  }
+}
+
+# ── email_recipients ───────────────────────────────────────────────────────────
+
+run "accepts_valid_email_recipients" {
+  command = plan
+  variables {
+    email_recipients = ["alerts@example.com", "ops@company.org"]
+  }
+}
+
+run "rejects_invalid_email_recipient" {
+  command         = plan
+  expect_failures = [var.email_recipients]
+  variables {
+    email_recipients = ["not-an-email"]
+  }
+}
+
+# ── webhook_service_account ────────────────────────────────────────────────────
+
+run "accepts_empty_webhook_service_account" {
+  command = plan
+  variables {
+    webhook_service_account = ""
+  }
+}
+
+run "rejects_invalid_webhook_service_account" {
+  command         = plan
+  expect_failures = [var.webhook_service_account]
+  variables {
+    webhook_service_account = "not-an-email"
+  }
+}

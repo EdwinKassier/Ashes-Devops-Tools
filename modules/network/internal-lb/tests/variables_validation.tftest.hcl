@@ -89,3 +89,51 @@ run "rejects_invalid_health_check_type" {
     health_check_type = "UDP"
   }
 }
+
+# ── session_affinity ───────────────────────────────────────────────────────────
+
+run "accepts_none_session_affinity" {
+  command = plan
+  variables {
+    session_affinity = "NONE"
+  }
+}
+
+run "accepts_client_ip_session_affinity" {
+  command = plan
+  variables {
+    session_affinity = "CLIENT_IP"
+  }
+}
+
+run "rejects_invalid_session_affinity" {
+  command         = plan
+  expect_failures = [var.session_affinity]
+  variables {
+    session_affinity = "COOKIE"
+  }
+}
+
+# ── locality_lb_policy ─────────────────────────────────────────────────────────
+
+run "accepts_round_robin_lb_policy" {
+  command = plan
+  variables {
+    locality_lb_policy = "ROUND_ROBIN"
+  }
+}
+
+run "accepts_least_request_lb_policy" {
+  command = plan
+  variables {
+    locality_lb_policy = "LEAST_REQUEST"
+  }
+}
+
+run "rejects_invalid_lb_policy" {
+  command         = plan
+  expect_failures = [var.locality_lb_policy]
+  variables {
+    locality_lb_policy = "WEIGHTED_ROUND_ROBIN"
+  }
+}
