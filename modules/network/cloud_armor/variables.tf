@@ -51,9 +51,10 @@ variable "custom_rules" {
   validation {
     condition = alltrue([
       for k, r in var.custom_rules :
-      contains(["allow", "deny", "throttle", "rate_based_ban", "redirect"], r.action)
+      contains(["allow", "throttle", "rate_based_ban", "redirect"], r.action) ||
+      can(regex("^deny(\\([0-9]+\\))?$", r.action))
     ])
-    error_message = "custom_rules[*].action must be one of: allow, deny, throttle, rate_based_ban, redirect."
+    error_message = "custom_rules[*].action must be one of: allow, deny, deny(NNN), throttle, rate_based_ban, redirect."
   }
 }
 

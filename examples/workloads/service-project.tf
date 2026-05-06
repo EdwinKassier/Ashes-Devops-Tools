@@ -2,9 +2,9 @@
 # In a real deployment replace the locals below with data sources or remote state.
 
 locals {
-  org_id          = "organizations/123456789"
-  folder_id       = "folders/111111111"
-  billing_account = "000000-000000-000000"
+  org_id          = "123456789"
+  folder_id       = "111111111"
+  billing_account = "ABCDEF-123456-789012"
   host_project_id = "my-host-project"
   region          = "europe-west1"
   private_subnet  = "private-subnet-europe-west1"

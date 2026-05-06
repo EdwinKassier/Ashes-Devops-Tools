@@ -7,10 +7,10 @@
 locals {
   terraform_sa    = "terraform@my-seed-project.iam.gserviceaccount.com"
   org_id          = "123456789012"
-  billing_account = "012345-678901-234567"
+  billing_account = "ABCDEF-123456-789012"
 
   # Folder for the service team environment (created by envs/organization)
-  folder_id = "folders/987654321098"
+  folder_id = "987654321098"
 
   # Hub network project and subnet details (from envs/organization outputs or remote state)
   hub_project_id = "my-hub-project"
