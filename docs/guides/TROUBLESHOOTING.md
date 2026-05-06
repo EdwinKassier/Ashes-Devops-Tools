@@ -118,3 +118,77 @@ make pre-commit-install
 export TF_LOG=DEBUG
 TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=examples/dev.tfvars
 ```
+
+## WIF / ADC authentication failures in CI
+
+Workload Identity Federation is configured in `modules/stages/bootstrap`. If a GitHub Actions job fails with `google: could not find default credentials` or `Permission denied on resource project`:
+
+1. Confirm the WIF pool and provider were created:
+   ```bash
+   gcloud iam workload-identity-pools list --location=global --project=<bootstrap-project>
+   ```
+
+2. Confirm the service account impersonation binding exists:
+   ```bash
+   gcloud iam service-accounts get-iam-policy <sa>@<project>.iam.gserviceaccount.com \
+     --flatten="bindings[].members" --filter="bindings.role:roles/iam.workloadIdentityUser"
+   ```
+
+3. Check the subject attribute in the workflow against the binding condition — it must match `attribute.repository/<org>/<repo>`. The attribute values come from GitHub's OIDC token claims.
+
+4. If using `google-github-actions/auth`, confirm `workload_identity_provider` is the full provider resource name (`projects/<number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>`), not the pool name. The `github_oidc_provider_name` output from `envs/organization` exposes this value.
+
+For local ADC issues (`gcloud auth application-default login` expired), refresh credentials:
+```bash
+gcloud auth application-default login --scopes=https://www.googleapis.com/auth/cloud-platform
+```
+
+## `terraform test` fails or produces no output
+
+`terraform test` requires Terraform ≥ 1.7 for `mock_provider` support. Verify:
+```bash
+terraform version
+```
+
+If tests are silently skipped:
+- Check that test files end in `.tftest.hcl` (not `.tf` or `.tftest`)
+- Confirm `terraform init -backend=false` succeeds in the module directory first
+- Run with `-verbose` to see individual assertion values:
+  ```bash
+  terraform test -verbose
+  ```
+
+If a test fails with `Provider requires explicit configuration`:
+- Add `mock_provider "<provider-name>" {}` to the test file for every provider in `versions.tf`
+- Re-check `versions.tf` for transitive providers (e.g., `google-beta` pulled in by child modules)
+
+If an acceptance test fails due to data source postconditions in deeply nested modules:
+- Use `override_module` blocks (Terraform ≥ 1.9) to bypass child module evaluation:
+  ```hcl
+  override_module {
+    target  = module.child
+    outputs = { self_link = "projects/mock/global/networks/mock-vpc" }
+  }
+  ```
+
+## tfsec or Checkov reports a false positive
+
+Inline skips are the correct fix. Do not add findings to the global skip list in `security-scan.yml` — that silences the check for all future resources.
+
+**tfsec inline skip:**
+```hcl
+resource "google_storage_bucket" "example" {
+  #tfsec:ignore:google-storage-bucket-encryption-customer-key
+  name = "example"
+}
+```
+
+**Checkov inline skip:**
+```hcl
+resource "google_storage_bucket" "example" {
+  # checkov:skip=CKV_GCP_62:Bucket is intentionally public for static website hosting
+  name = "example"
+}
+```
+
+Always include a justification after the colon. The CI Checkov run uses `.checkov.yaml` for repo-level exceptions; add an entry there only if the skip applies to every instance of that check across the entire codebase.
