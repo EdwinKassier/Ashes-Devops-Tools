@@ -10,18 +10,33 @@ variable "project_name" {
 }
 
 variable "org_id" {
-  description = "The Organization ID"
+  description = "The numeric GCP Organization ID (digits only, without 'organizations/' prefix)"
   type        = string
+
+  validation {
+    condition     = can(regex("^[0-9]+$", var.org_id))
+    error_message = "org_id must be a numeric organization ID (digits only, without 'organizations/' prefix)."
+  }
 }
 
 variable "folder_id" {
-  description = "The Folder ID to create the project in"
+  description = "The numeric Folder ID to create the project in (digits only, without 'folders/' prefix)"
   type        = string
+
+  validation {
+    condition     = can(regex("^[0-9]+$", var.folder_id))
+    error_message = "folder_id must be a numeric folder ID (digits only, without 'folders/' prefix)."
+  }
 }
 
 variable "billing_account" {
-  description = "The Billing Account ID"
+  description = "The GCP Billing Account ID in format XXXXXX-XXXXXX-XXXXXX"
   type        = string
+
+  validation {
+    condition     = can(regex("^[A-Z0-9]{6}-[A-Z0-9]{6}-[A-Z0-9]{6}$", var.billing_account))
+    error_message = "billing_account must be a valid GCP billing account ID in format XXXXXX-XXXXXX-XXXXXX."
+  }
 }
 
 variable "activate_apis" {
@@ -68,6 +83,11 @@ variable "shared_vpc_subnets" {
 variable "project_admin_group_email" {
   description = "Email of the Google Group to grant admin access"
   type        = string
+
+  validation {
+    condition     = can(regex("^[^@]+@[^@]+\\.[^@]+$", var.project_admin_group_email))
+    error_message = "project_admin_group_email must be a valid email address."
+  }
 }
 
 variable "project_admin_roles" {

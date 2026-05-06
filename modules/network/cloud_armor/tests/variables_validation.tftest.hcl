@@ -73,3 +73,41 @@ run "rejects_owasp_sensitivity_five" {
     owasp_sensitivity = 5
   }
 }
+
+# ── custom_rules action ────────────────────────────────────────────────────────
+
+run "accepts_valid_custom_rule_action" {
+  command = plan
+
+  variables {
+    custom_rules = {
+      block-bad-ips = {
+        action   = "deny"
+        priority = 1000
+        match_conditions = {
+          versioned_expr = "SRC_IPS_V1"
+          config         = { src_ip_ranges = ["192.0.2.0/24"] }
+        }
+      }
+    }
+  }
+}
+
+run "rejects_invalid_custom_rule_action" {
+  command = plan
+
+  expect_failures = [var.custom_rules]
+
+  variables {
+    custom_rules = {
+      bad-rule = {
+        action   = "block"
+        priority = 1000
+        match_conditions = {
+          versioned_expr = "SRC_IPS_V1"
+          config         = { src_ip_ranges = ["192.0.2.0/24"] }
+        }
+      }
+    }
+  }
+}

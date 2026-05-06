@@ -47,6 +47,14 @@ variable "custom_rules" {
     }))
   }))
   default = {}
+
+  validation {
+    condition = alltrue([
+      for k, r in var.custom_rules :
+      contains(["allow", "deny", "throttle", "rate_based_ban", "redirect"], r.action)
+    ])
+    error_message = "custom_rules[*].action must be one of: allow, deny, throttle, rate_based_ban, redirect."
+  }
 }
 
 variable "enable_adaptive_protection" {
