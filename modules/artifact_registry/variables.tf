@@ -20,11 +20,12 @@ variable "region" {
 }
 
 variable "kms_key_name" {
-  description = "Customer-managed KMS key name used to encrypt repository contents"
+  description = "Customer-managed KMS key name used to encrypt repository contents. Omit for Google-managed encryption."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^projects/[^/]+/locations/[^/]+/keyRings/[^/]+/cryptoKeys/[^/]+$", var.kms_key_name))
+    condition     = var.kms_key_name == null || can(regex("^projects/[^/]+/locations/[^/]+/keyRings/[^/]+/cryptoKeys/[^/]+$", var.kms_key_name))
     error_message = "kms_key_name must be a valid KMS key resource name: projects/<project>/locations/<location>/keyRings/<ring>/cryptoKeys/<key>."
   }
 }

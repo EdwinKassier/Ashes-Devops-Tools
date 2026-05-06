@@ -1,0 +1,29 @@
+# Example: create a monthly budget with email alerts for a GCP project.
+# Replace locals with real values or remote state.
+
+locals {
+  billing_account = "ABCDEF-123456-789012"
+  project_id      = "my-workload-project"
+}
+
+module "budget" {
+  source = "../../"
+
+  billing_account      = local.billing_account
+  project_id           = local.project_id
+  project_name         = "my-workload"
+  monthly_budget_limit = 500
+
+  currency_code           = "USD"
+  alert_threshold_percent = 0.8
+
+  email_recipients = [
+    "finance@example.com",
+    "platform-team@example.com",
+  ]
+}
+
+output "budget_id" {
+  description = "The resource ID of the created budget"
+  value       = module.budget.budget_id
+}
