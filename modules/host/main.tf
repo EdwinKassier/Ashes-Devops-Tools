@@ -426,7 +426,7 @@ module "vpn" {
   router_asn               = var.vpn_router_asn
   peer_asn                 = var.vpn_peer_asn
   peer_external_gateway_ip = var.vpn_peer_gateway_ip
-  shared_secret            = var.vpn_shared_secret
+  shared_secret            = coalesce(var.vpn_shared_secret, "")
   local_ip_addresses       = var.vpn_local_ips
   peer_ip_addresses        = var.vpn_peer_ips
   advertised_ip_ranges     = var.vpn_advertised_ip_ranges

@@ -20,8 +20,8 @@ permissions:
   actions: read
 
 concurrency:
-  group: security-scan-${{ github.ref }}
-  cancel-in-progress: false
+  group: security-scan-${{ github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
   static-analysis:

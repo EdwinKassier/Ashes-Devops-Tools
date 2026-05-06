@@ -224,3 +224,108 @@ run "rejects_invalid_nat_log_filter" {
     integrated_nat_log_filter = "ALL_TRAFFIC_TYPO"
   }
 }
+
+# ── project_id format ─────────────────────────────────────────────────────────
+
+run "rejects_project_id_too_short" {
+  command = plan
+
+  expect_failures = [var.project_id]
+
+  variables {
+    project_id = "ab"
+  }
+}
+
+run "rejects_project_id_with_uppercase" {
+  command = plan
+
+  expect_failures = [var.project_id]
+
+  variables {
+    project_id = "My-Project-ID"
+  }
+}
+
+run "rejects_project_id_starting_with_digit" {
+  command = plan
+
+  expect_failures = [var.project_id]
+
+  variables {
+    project_id = "1invalid-project"
+  }
+}
+
+run "accepts_valid_project_id" {
+  command = plan
+
+  variables {
+    project_id = "my-valid-project-id"
+  }
+}
+
+# ── region format ─────────────────────────────────────────────────────────────
+
+run "rejects_invalid_region_format" {
+  command = plan
+
+  expect_failures = [var.region]
+
+  variables {
+    region = "us_central_1"
+  }
+}
+
+run "accepts_valid_region" {
+  command = plan
+
+  variables {
+    region = "europe-west1"
+  }
+}
+
+# ── enable_networking = false requires existing_network_id ────────────────────
+# When enable_networking = false, module.vpc[0] is not created.
+# The existing_network_id must be provided or resources referencing the VPC will fail.
+# This is a documentation/contract test — not a variable validation block failure.
+
+run "accepts_enable_networking_false_with_existing_network" {
+  command = plan
+
+  variables {
+    enable_networking       = false
+    existing_network_id     = "projects/my-project/global/networks/existing-vpc"
+    existing_network_self_link = "https://www.googleapis.com/compute/v1/projects/my-project/global/networks/existing-vpc"
+  }
+}
+
+# ── project_prefix format ────────────────────────────────────────────────────
+
+run "rejects_project_prefix_starting_with_digit" {
+  command = plan
+
+  expect_failures = [var.project_prefix]
+
+  variables {
+    project_prefix = "1invalid"
+  }
+}
+
+run "rejects_project_prefix_with_uppercase" {
+  command = plan
+
+  expect_failures = [var.project_prefix]
+
+  variables {
+    project_prefix = "Invalid-Prefix"
+  }
+}
+
+run "accepts_valid_project_prefix" {
+  command = plan
+
+  variables {
+    project_prefix = "ashes-dev"
+  }
+}

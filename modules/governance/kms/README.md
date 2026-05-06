@@ -96,8 +96,8 @@ The following resources are created:
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_keyring_name"></a> [keyring\_name](#input\_keyring\_name) | Name of the KMS Keyring | `string` | n/a | yes |
-| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project ID where the Keyring will be created | `string` | n/a | yes |
+| <a name="input_keyring_name"></a> [keyring\_name](#input\_keyring\_name) | Name of the KMS Keyring (1-63 alphanumeric characters, hyphens, and underscores) | `string` | n/a | yes |
+| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project ID where the Keyring will be created (6-30 characters, lowercase alphanumeric and hyphens) | `string` | n/a | yes |
 | <a name="input_keys"></a> [keys](#input\_keys) | Map of CryptoKeys to create | <pre>map(object({<br/>    rotation_period      = optional(string, "7776000s") # 90 days<br/>    purpose              = optional(string, "ENCRYPT_DECRYPT")<br/>    algorithm            = optional(string, "GOOGLE_SYMMETRIC_ENCRYPTION")<br/>    protection_level     = optional(string, "SOFTWARE")<br/>    labels               = optional(map(string), {})<br/>    encrypter_decrypters = optional(list(string), [])<br/>  }))</pre> | `{}` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels for all keys | `map(string)` | `{}` | no |
 | <a name="input_location"></a> [location](#input\_location) | Location for the Keyring (region or 'global') | `string` | `"global"` | no |

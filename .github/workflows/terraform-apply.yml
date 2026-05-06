@@ -6,8 +6,7 @@ on:
       - "organization/v*"
       - "apps/*/v*"
 
-permissions:
-  contents: write
+permissions: {}
 
 concurrency:
   group: terraform-apply-${{ github.ref_name }}
@@ -18,6 +17,8 @@ jobs:
     name: Verify Terraform Cloud Run
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
     outputs:
       workspace: ${{ steps.parse.outputs.workspace }}
       release_name: ${{ steps.parse.outputs.release_name }}
@@ -86,6 +87,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: verify-run
+    permissions:
+      contents: write
     steps:
       - name: Create release summary
         run: |

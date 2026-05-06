@@ -105,9 +105,9 @@ The following resources are created:
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_admin_email"></a> [admin\_email](#input\_admin\_email) | Email address for the organization administrator | `string` | n/a | yes |
-| <a name="input_billing_account"></a> [billing\_account](#input\_billing\_account) | Billing Account ID | `string` | n/a | yes |
-| <a name="input_github_org"></a> [github\_org](#input\_github\_org) | GitHub Organization | `string` | n/a | yes |
-| <a name="input_github_repo"></a> [github\_repo](#input\_github\_repo) | GitHub Repository | `string` | n/a | yes |
+| <a name="input_billing_account"></a> [billing\_account](#input\_billing\_account) | Billing Account ID in format XXXXXX-XXXXXX-XXXXXX | `string` | n/a | yes |
+| <a name="input_github_org"></a> [github\_org](#input\_github\_org) | GitHub organization name. No defaults — must be set explicitly to avoid accidentally trusting the wrong org when forking. | `string` | n/a | yes |
+| <a name="input_github_repo"></a> [github\_repo](#input\_github\_repo) | GitHub repository name (without owner prefix). No defaults — must be set explicitly to avoid accidentally trusting the wrong repo when forking. | `string` | n/a | yes |
 | <a name="input_org_id"></a> [org\_id](#input\_org\_id) | Organization ID | `string` | n/a | yes |
 | <a name="input_project_prefix"></a> [project\_prefix](#input\_project\_prefix) | Prefix to use for project names | `string` | n/a | yes |
 | <a name="input_enable_tfc_oidc"></a> [enable\_tfc\_oidc](#input\_enable\_tfc\_oidc) | Enable Terraform Cloud OIDC for Dynamic Credentials | `bool` | `true` | no |

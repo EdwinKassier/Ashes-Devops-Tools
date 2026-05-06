@@ -35,9 +35,14 @@ variable "data_buckets" {
 }
 
 variable "allowed_members" {
-  description = "List of members with objectViewer read access to all data_buckets (e.g., ['user:user@example.com', 'group:admins@example.com'])"
+  description = "List of members with objectViewer read access to all data_buckets (e.g., ['user:user@example.com', 'group:admins@example.com', 'serviceAccount:sa@project.iam.gserviceaccount.com'])"
   type        = list(string)
   default     = []
+
+  validation {
+    condition     = alltrue([for m in var.allowed_members : can(regex("^(user|group|serviceAccount|domain|principal|principalSet):.+$", m))])
+    error_message = "Each member must be prefixed with a valid IAM member type: user:, group:, serviceAccount:, domain:, principal:, or principalSet:."
+  }
 }
 
 variable "log_retention_days" {

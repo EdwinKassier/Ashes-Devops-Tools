@@ -1,11 +1,21 @@
 variable "project_id" {
-  description = "Project ID where the Keyring will be created"
+  description = "Project ID where the Keyring will be created (6-30 characters, lowercase alphanumeric and hyphens)"
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{4,28}[a-z0-9]$", var.project_id))
+    error_message = "project_id must be 6-30 characters, start with a lowercase letter, and contain only lowercase letters, digits, and hyphens."
+  }
 }
 
 variable "keyring_name" {
-  description = "Name of the KMS Keyring"
+  description = "Name of the KMS Keyring (1-63 alphanumeric characters, hyphens, and underscores)"
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9_-]{1,63}$", var.keyring_name))
+    error_message = "keyring_name must be 1-63 characters containing only alphanumeric characters, hyphens, and underscores."
+  }
 }
 
 variable "location" {

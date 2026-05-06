@@ -23,7 +23,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: terraform-plan-${{ github.ref }}
+  group: terraform-plan-${{ github.ref_name }}
   cancel-in-progress: true
 
 env:
@@ -83,7 +83,7 @@ jobs:
     timeout-minutes: 20
     needs: discover
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         root: ${{ fromJson(needs.discover.outputs.roots) }}
     steps:

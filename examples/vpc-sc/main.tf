@@ -21,7 +21,9 @@ module "vpc_sc" {
   perimeter_title = "Production Data Perimeter"
   description     = "Protects BigQuery and Cloud Storage in the production project"
 
-  protected_projects = ["projects/111222333444"]
+  # Bare numeric project numbers (NOT IDs, NOT "projects/NNN" format).
+  # Get the number with: gcloud projects describe <id> --format='value(projectNumber)'
+  protected_projects = ["111222333444"]
 
   restricted_services = [
     "bigquery.googleapis.com",

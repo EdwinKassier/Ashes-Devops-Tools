@@ -95,10 +95,10 @@ The following resources are created:
 
 
 - resource.google_billing_budget.monthly_budget (modules/governance/billing/main.tf#L5)
-- resource.google_cloudfunctions_function.budget_notifier (modules/governance/billing/main.tf#L108)
-- resource.google_cloudfunctions_function_iam_member.invoker (modules/governance/billing/main.tf#L143)
-- resource.google_pubsub_subscription.budget_alerts_sub (modules/governance/billing/main.tf#L74)
-- resource.google_pubsub_topic.budget_alerts (modules/governance/billing/main.tf#L59)
+- resource.google_cloudfunctions_function.budget_notifier (modules/governance/billing/main.tf#L109)
+- resource.google_cloudfunctions_function_iam_member.invoker (modules/governance/billing/main.tf#L144)
+- resource.google_pubsub_subscription.budget_alerts_sub (modules/governance/billing/main.tf#L75)
+- resource.google_pubsub_topic.budget_alerts (modules/governance/billing/main.tf#L60)
 
 
 ## Inputs
@@ -124,7 +124,7 @@ The following resources are created:
 | <a name="input_sendgrid_api_key_secret_id"></a> [sendgrid\_api\_key\_secret\_id](#input\_sendgrid\_api\_key\_secret\_id) | Secret Manager secret ID for SendGrid API key (recommended to use Secret Manager) | `string` | `""` | no |
 | <a name="input_service_filters"></a> [service\_filters](#input\_service\_filters) | List of GCP service IDs to include in budget (empty = all services) | `list(string)` | `[]` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags to apply to all resources | `map(string)` | `{}` | no |
-| <a name="input_webhook_endpoint"></a> [webhook\_endpoint](#input\_webhook\_endpoint) | Optional webhook endpoint to receive budget alerts | `string` | `""` | no |
+| <a name="input_webhook_endpoint"></a> [webhook\_endpoint](#input\_webhook\_endpoint) | Optional webhook endpoint URL to receive budget alerts (must start with https://) | `string` | `""` | no |
 | <a name="input_webhook_service_account"></a> [webhook\_service\_account](#input\_webhook\_service\_account) | Service account email for authenticating webhook requests (format: name@project.iam.gserviceaccount.com) | `string` | `""` | no |
 
 ## Outputs

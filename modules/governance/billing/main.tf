@@ -32,13 +32,14 @@ resource "google_billing_budget" "monthly_budget" {
     spend_basis       = "CURRENT_SPEND"
   }
 
-  # Alert at 100% of budget (forecasted)
+  # Alert at 100% forecasted: fires before actual spend reaches budget (predictive warning)
   threshold_rules {
     threshold_percent = 1.0
     spend_basis       = "FORECASTED_SPEND"
   }
 
-  # Alert at 100% of budget (actual)
+  # Alert at 100% actual: fires when real spend hits the budget limit (confirmatory alert)
+  # Both 100% rules are intentional — forecasted fires earlier, actual confirms breach.
   threshold_rules {
     threshold_percent = 1.0
     spend_basis       = "CURRENT_SPEND"

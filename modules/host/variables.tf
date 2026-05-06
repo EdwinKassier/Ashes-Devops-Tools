@@ -9,8 +9,13 @@
 # =============================================================================
 
 variable "project_id" {
-  description = "The GCP project ID"
+  description = "The GCP project ID (6-30 characters, lowercase alphanumeric and hyphens, must start with a letter)"
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{4,28}[a-z0-9]$", var.project_id))
+    error_message = "project_id must be 6-30 characters, start with a lowercase letter, and contain only lowercase letters, digits, and hyphens."
+  }
 }
 
 variable "vpc_cidr_block" {
@@ -27,14 +32,24 @@ variable "vpc_cidr_block" {
 }
 
 variable "project_prefix" {
-  description = "Prefix for naming resources (e.g., 'ashes-dev')"
+  description = "Prefix for naming resources (e.g., 'ashes-dev'). Must start with a letter and contain only lowercase letters, digits, and hyphens."
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]*$", var.project_prefix))
+    error_message = "project_prefix must start with a lowercase letter and contain only lowercase letters, digits, and hyphens."
+  }
 }
 
 variable "region" {
-  description = "The primary GCP region for resources"
+  description = "The primary GCP region for resources (e.g., 'us-central1', 'europe-west1')"
   type        = string
   default     = "us-central1"
+
+  validation {
+    condition     = can(regex("^[a-z]+-[a-z]+[0-9]$", var.region))
+    error_message = "region must be a valid GCP region name (e.g., 'us-central1', 'europe-west1')."
+  }
 }
 
 variable "explicit_zones" {
@@ -364,9 +379,9 @@ variable "vpn_peer_gateway_ip" {
 }
 
 variable "vpn_shared_secret" {
-  description = "VPN shared secret (consider using Secret Manager)"
+  description = "VPN shared secret (consider using Secret Manager). Must be set when enable_vpn = true."
   type        = string
-  default     = ""
+  default     = null
   sensitive   = true
 }
 

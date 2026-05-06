@@ -132,6 +132,10 @@ module "host" {
       perimeter_title = coalesce(var.vpc_sc_perimeter_title, "${upper(var.environment)} Perimeter")
       perimeter_type  = "PERIMETER_TYPE_REGULAR"
       enable_dry_run  = var.vpc_sc_enable_dry_run
+      # TODO: Replace with the numeric project NUMBER (not ID).
+      # Use: data "google_project" "host" { project_id = local.env_config.host_project_id }
+      # Then: data.google_project.host.number
+      # Currently passing project ID as a placeholder — VPC-SC requires numeric project numbers.
       protected_projects = [
         local.env_config.host_project_id
       ]

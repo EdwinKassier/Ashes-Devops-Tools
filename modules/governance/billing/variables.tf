@@ -87,9 +87,14 @@ variable "notification_channels" {
 }
 
 variable "webhook_endpoint" {
-  description = "Optional webhook endpoint to receive budget alerts"
+  description = "Optional webhook endpoint URL to receive budget alerts (must start with https://)"
   type        = string
   default     = ""
+
+  validation {
+    condition     = var.webhook_endpoint == "" || can(regex("^https://", var.webhook_endpoint))
+    error_message = "webhook_endpoint must be empty or a valid HTTPS URL starting with 'https://'."
+  }
 }
 
 variable "webhook_service_account" {

@@ -1,6 +1,12 @@
 # State Migration Mappings
 # These blocks ensure Terraform treats the refactor as a renaming operation
 # rather than a destroy/create operation.
+#
+# CLEANUP INSTRUCTION: These are one-time migration helpers for deployments that
+# were created before resources were encapsulated into stage modules. If you are
+# starting from a fresh fork with no existing Terraform state, these blocks are
+# no-ops and can be safely deleted. After running `terraform apply` once against
+# an existing deployment to complete the migration, delete this file.
 
 # Bootstrap Module Mappings
 moved {

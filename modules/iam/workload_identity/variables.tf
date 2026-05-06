@@ -38,18 +38,28 @@ variable "enable_github_provider" {
 }
 
 variable "github_organization" {
-  description = "GitHub organization to restrict access to (optional)"
+  description = "GitHub organization to restrict access to (optional). Must contain only alphanumeric characters and hyphens — value is interpolated into a CEL expression."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.github_organization == null || can(regex("^[a-zA-Z0-9][a-zA-Z0-9-]*$", var.github_organization))
+    error_message = "github_organization must contain only alphanumeric characters and hyphens (no single quotes or special characters — this value is embedded in a CEL condition)."
+  }
 }
 
 variable "github_sa_bindings" {
-  description = "List of GitHub repository to service account bindings"
+  description = "List of GitHub repository to service account bindings. repository must be 'owner/repo' format — value is interpolated into a CEL expression."
   type = list(object({
     repository            = string # Format: owner/repo
     service_account_email = string
   }))
   default = []
+
+  validation {
+    condition     = alltrue([for b in var.github_sa_bindings : can(regex("^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$", b.repository))])
+    error_message = "Each repository must be in 'owner/repo' format using only alphanumeric characters, hyphens, underscores, and dots (no single quotes — this value is embedded in a CEL condition)."
+  }
 }
 
 variable "github_allowed_refs" {
@@ -78,9 +88,14 @@ variable "gitlab_url" {
 }
 
 variable "gitlab_namespace" {
-  description = "GitLab namespace to restrict access to (optional)"
+  description = "GitLab namespace to restrict access to (optional). Value is interpolated into a CEL startsWith() expression — must not contain single quotes."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.gitlab_namespace == null || can(regex("^[a-zA-Z0-9._/-]+$", var.gitlab_namespace))
+    error_message = "gitlab_namespace must contain only alphanumeric characters, hyphens, underscores, dots, and forward slashes (no single quotes — this value is embedded in a CEL condition)."
+  }
 }
 
 variable "gitlab_sa_bindings" {
@@ -118,9 +133,14 @@ variable "enable_tfc_provider" {
 }
 
 variable "tfc_organization" {
-  description = "Terraform Cloud organization name"
+  description = "Terraform Cloud organization name. Value is interpolated into a CEL expression — must not contain single quotes."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.tfc_organization == null || can(regex("^[a-zA-Z0-9][a-zA-Z0-9-]*$", var.tfc_organization))
+    error_message = "tfc_organization must contain only alphanumeric characters and hyphens (no single quotes — this value is embedded in a CEL condition)."
+  }
 }
 
 variable "tfc_sa_bindings" {

@@ -24,6 +24,11 @@ variable "access_policy_name" {
   description = "Existing access policy name (required if create_access_policy is false)"
   type        = string
   default     = null
+
+  validation {
+    condition     = var.create_access_policy || var.access_policy_name != null
+    error_message = "access_policy_name must be set when create_access_policy is false — an existing policy name is required."
+  }
 }
 
 variable "access_policy_title" {
@@ -65,9 +70,19 @@ variable "perimeter_type" {
 }
 
 variable "protected_projects" {
-  description = "List of project numbers to protect within the perimeter"
+  description = <<-EOT
+    List of project numbers to protect within the perimeter.
+    Use bare numeric project numbers (e.g., "123456789012") — the module prepends "projects/" automatically.
+    Do NOT pass "projects/NNN" (double-wrap) or project IDs (e.g., "my-project-name").
+    Get the number with: gcloud projects describe <id> --format='value(projectNumber)'
+  EOT
   type        = list(string)
   default     = []
+
+  validation {
+    condition     = alltrue([for p in var.protected_projects : !can(regex("^projects/", p))])
+    error_message = "protected_projects values must NOT include a 'projects/' prefix — the module adds it automatically. Pass bare numeric project numbers (e.g., '123456789012')."
+  }
 }
 
 variable "restricted_services" {

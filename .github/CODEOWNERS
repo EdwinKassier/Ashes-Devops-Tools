@@ -1,16 +1,26 @@
+# Default: all files require infra team review.
+# Replace @edwinkassier with your team handles (e.g., @org/infra-team, @org/security-team).
+# For multi-maintainer teams, add additional GitHub team handles on each line.
 * @edwinkassier
 
+# CI/CD, security tooling, and scripts — require infrastructure lead review
 /.github/ @edwinkassier
 /scripts/ @edwinkassier
 /Makefile @edwinkassier
 /.terraform-docs.yml @edwinkassier
 /.tfsec.yml @edwinkassier
 /.tflint.hcl @edwinkassier
+/.pre-commit-config.yaml @edwinkassier
+/.checkov.yaml @edwinkassier
 
+# Deployed root configurations — require explicit infrastructure approval
 /envs/organization/ @edwinkassier
 /envs/apps/ @edwinkassier
+
+# Examples — require module owner review
 /examples/ @edwinkassier
 
+# Module directories — can be scoped to sub-teams once the org grows
 /modules/governance/ @edwinkassier
 /modules/host/ @edwinkassier
 /modules/iam/ @edwinkassier
@@ -20,3 +30,8 @@
 /modules/cloud_storage/ @edwinkassier
 /modules/firebase/ @edwinkassier
 /modules/monitoring/ @edwinkassier
+
+# Documentation — lower barrier, but still tracked
+/docs/ @edwinkassier
+SECURITY.md @edwinkassier
+CHANGELOG.md @edwinkassier
