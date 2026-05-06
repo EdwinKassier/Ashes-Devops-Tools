@@ -34,3 +34,31 @@ run "rejects_invalid_routing_mode" {
     routing_mode = "LOCAL"
   }
 }
+
+# ── enable_deletion_protection ─────────────────────────────────────────────────
+
+run "deletion_protection_guard_created_when_enabled" {
+  command = plan
+
+  variables {
+    enable_deletion_protection = true
+  }
+
+  assert {
+    condition     = length(terraform_data.deletion_protection_guard) == 1
+    error_message = "Guard resource must be created when enable_deletion_protection = true."
+  }
+}
+
+run "deletion_protection_guard_absent_when_disabled" {
+  command = plan
+
+  variables {
+    enable_deletion_protection = false
+  }
+
+  assert {
+    condition     = length(terraform_data.deletion_protection_guard) == 0
+    error_message = "Guard resource must not be created when enable_deletion_protection = false."
+  }
+}

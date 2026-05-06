@@ -126,7 +126,7 @@ jobs:
     name: Security
     uses: ./.github/workflows/reusable-security.yml
     with:
-      sarif_output: false
+      sarif_output: true
 
   test:
     name: Terraform Tests

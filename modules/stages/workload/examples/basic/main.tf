@@ -1,0 +1,77 @@
+# Example: onboard a new service team project into the landing zone.
+#
+# This example creates a GCP project for a service team, enables common APIs,
+# attaches it to the Shared VPC host project, and grants the team's admin group
+# least-privilege IAM roles. Replace all locals with real values or remote state.
+
+locals {
+  terraform_sa    = "terraform@my-seed-project.iam.gserviceaccount.com"
+  org_id          = "123456789012"
+  billing_account = "012345-678901-234567"
+
+  # Folder for the service team environment (created by envs/organization)
+  folder_id = "folders/987654321098"
+
+  # Hub network project and subnet details (from envs/organization outputs or remote state)
+  hub_project_id = "my-hub-project"
+  subnets = {
+    private = {
+      region      = "us-central1"
+      subnet_name = "private-us-central1"
+    }
+  }
+
+  # IAM admin group for this service team
+  team_admin_group = "group:team-backend-admins@example.com"
+}
+
+module "backend_service_project" {
+  source = "../../"
+
+  project_name    = "backend-service"
+  org_id          = local.org_id
+  folder_id       = local.folder_id
+  billing_account = local.billing_account
+
+  activate_apis = [
+    "run.googleapis.com",
+    "artifactregistry.googleapis.com",
+    "cloudbuild.googleapis.com",
+  ]
+
+  labels = {
+    team        = "backend"
+    environment = "dev"
+    managed_by  = "terraform"
+  }
+
+  # Shared VPC attachment
+  enable_shared_vpc_attachment = true
+  shared_vpc_host_project_id   = local.hub_project_id
+  shared_vpc_subnets           = local.subnets
+
+  # Grant least-privilege roles to the team admin group.
+  # WARNING: google_project_iam_binding is AUTHORITATIVE per role — on every apply it
+  # removes any member not listed here. Use this only for roles Terraform owns.
+  project_admin_group_email = local.team_admin_group
+  project_admin_roles = [
+    "roles/run.developer",
+    "roles/artifactregistry.writer",
+    "roles/logging.viewer",
+  ]
+}
+
+output "project_id" {
+  description = "The GCP project ID of the created service project"
+  value       = module.backend_service_project.project_id
+}
+
+output "project_number" {
+  description = "The numeric project number (used for service agent identities)"
+  value       = module.backend_service_project.project_number
+}
+
+output "subnet_iam_bindings" {
+  description = "IAM binding resource IDs for the networkUser grants on each subnet"
+  value       = module.backend_service_project.subnet_iam_bindings
+}

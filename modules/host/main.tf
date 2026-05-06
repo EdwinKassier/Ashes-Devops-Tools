@@ -72,6 +72,7 @@ module "vpc" {
   # Enterprise features
   enable_shared_vpc_host          = var.enable_shared_vpc_host
   delete_default_routes_on_create = true
+  enable_deletion_protection      = var.enable_deletion_protection
 }
 
 # -----------------------------------------------------------------------------

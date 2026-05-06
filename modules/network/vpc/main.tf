@@ -8,6 +8,20 @@
  * with other modules (subnets, firewalls, etc.) to build a complete network.
  */
 
+# Deletion protection guard — present only when enable_deletion_protection = true.
+# Terraform's prevent_destroy must be a static literal; it cannot reference a variable.
+# This guard resource carries prevent_destroy = true and is created conditionally so
+# that removing it (by toggling the flag) is also blocked, forcing an explicit state rm.
+resource "terraform_data" "deletion_protection_guard" {
+  count = var.enable_deletion_protection ? 1 : 0
+
+  input = var.vpc_name
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
 # VPC resource
 resource "google_compute_network" "vpc" {
   name                    = var.vpc_name

@@ -52,3 +52,20 @@ variable "enable_shared_vpc_host" {
   type        = bool
   default     = false
 }
+
+# -----------------------------------------------------------------------------
+# DELETION PROTECTION
+# -----------------------------------------------------------------------------
+
+variable "enable_deletion_protection" {
+  description = <<-EOT
+    Prevent accidental destruction of the VPC network.
+
+    When true, a terraform_data guard resource is created with prevent_destroy = true.
+    Terraform refuses to destroy this module while the guard exists. To intentionally
+    remove a protected VPC, first run:
+      terraform state rm 'module.<name>.terraform_data.deletion_protection_guard'
+  EOT
+  type        = bool
+  default     = false
+}
