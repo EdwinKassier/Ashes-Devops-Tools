@@ -38,8 +38,8 @@ variable "list_policies" {
   description = "List of list-type organization policies with allowed/denied values"
   type = list(object({
     constraint     = string       # e.g., "gcp.resourceLocations"
-    allow_all      = bool         # Allow all values (overrides allowed_values)
-    deny_all       = bool         # Deny all values (overrides denied_values)
+    allow_all      = optional(bool, false) # Allow all values (overrides allowed_values)
+    deny_all       = optional(bool, false) # Deny all values (overrides denied_values)
     allowed_values = list(string) # Specific values to allow
     denied_values  = list(string) # Specific values to deny
   }))
