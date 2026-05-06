@@ -67,6 +67,27 @@ output "terraform_service_account_email" {
   value       = module.bootstrap.terraform_admin_email
 }
 
+# Workload Identity Federation — needed by GitHub Actions and Terraform Cloud after bootstrap
+output "github_oidc_pool_id" {
+  description = "Workload Identity Pool ID for GitHub Actions OIDC"
+  value       = module.bootstrap.github_oidc_pool_id
+}
+
+output "github_oidc_provider_name" {
+  description = "Fully-qualified WIF provider name for use in GitHub Actions (google-github-actions/auth)"
+  value       = module.bootstrap.github_oidc_provider_name
+}
+
+output "tfc_oidc_pool_id" {
+  description = "Workload Identity Pool ID for Terraform Cloud OIDC (null if TFC OIDC not configured)"
+  value       = module.bootstrap.tfc_oidc_pool_id
+}
+
+output "tfc_oidc_provider_name" {
+  description = "Fully-qualified WIF provider name for Terraform Cloud OIDC (null if TFC OIDC not configured)"
+  value       = module.bootstrap.tfc_oidc_provider_name
+}
+
 # Unified environment configuration for downstream consumption
 output "environment_config" {
   description = "Stable configuration contract for downstream application environments"

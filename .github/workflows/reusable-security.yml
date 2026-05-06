@@ -1,0 +1,121 @@
+name: Reusable Security Scan
+
+on:
+  workflow_call:
+    inputs:
+      sarif_output:
+        description: "Whether to generate and upload SARIF results to GitHub Security"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  tfsec:
+    name: TFSec
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Run TFSec on modules
+        uses: aquasecurity/tfsec-action@b466648d6e39e7c75324f25d83891162a721f2d6  # v1.0.3
+        with:
+          working_directory: modules
+          soft_fail: false
+          config_file: .tfsec.yml
+          format: ${{ inputs.sarif_output && 'sarif' || 'default' }}
+          additional_args: ${{ inputs.sarif_output && '--out tfsec-results.sarif' || '' }}
+
+      - name: Run TFSec on envs
+        uses: aquasecurity/tfsec-action@b466648d6e39e7c75324f25d83891162a721f2d6  # v1.0.3
+        with:
+          working_directory: envs
+          soft_fail: false
+          config_file: .tfsec.yml
+          format: ${{ inputs.sarif_output && 'sarif' || 'default' }}
+          additional_args: ${{ inputs.sarif_output && '--out tfsec-env-results.sarif' || '' }}
+
+      - name: Upload TFSec modules SARIF
+        if: inputs.sarif_output && always()
+        uses: github/codeql-action/upload-sarif@45775bd8235c68ba998cffa5171334d58593da47  # v3.28.15
+        with:
+          sarif_file: tfsec-results.sarif
+          category: tfsec
+
+      - name: Upload TFSec envs SARIF
+        if: inputs.sarif_output && always()
+        uses: github/codeql-action/upload-sarif@45775bd8235c68ba998cffa5171334d58593da47  # v3.28.15
+        with:
+          sarif_file: tfsec-env-results.sarif
+          category: tfsec-envs
+
+      - name: Generate TFSec JSON report
+        if: inputs.sarif_output && always()
+        run: |
+          docker run --rm -v "$(pwd):/src" aquasec/tfsec:latest /src/modules --config-file /src/.tfsec.yml --format json > tfsec-report.json
+
+      - name: Upload TFSec report artifact
+        if: inputs.sarif_output && always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: tfsec-report
+          path: tfsec-report.json
+
+  checkov:
+    name: Checkov
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Run Checkov on modules
+        uses: bridgecrewio/checkov-action@9201a8e6eaa919e3444d7c4ca691896efde4f033  # v12
+        with:
+          directory: modules
+          framework: terraform
+          quiet: true
+          soft_fail: false
+          download_external_modules: false
+          config_file: .checkov.yaml
+          output_format: ${{ inputs.sarif_output && 'sarif,cli' || 'cli' }}
+          output_file_path: ${{ inputs.sarif_output && 'checkov-results.sarif,checkov-report.txt' || 'console' }}
+
+      - name: Run Checkov on envs
+        uses: bridgecrewio/checkov-action@9201a8e6eaa919e3444d7c4ca691896efde4f033  # v12
+        with:
+          directory: envs
+          framework: terraform
+          quiet: true
+          soft_fail: false
+          download_external_modules: false
+          config_file: .checkov.yaml
+          output_format: ${{ inputs.sarif_output && 'sarif,cli' || 'cli' }}
+          output_file_path: ${{ inputs.sarif_output && 'checkov-env-results.sarif,checkov-env-report.txt' || 'console' }}
+
+      - name: Upload Checkov modules SARIF
+        if: inputs.sarif_output && always()
+        uses: github/codeql-action/upload-sarif@45775bd8235c68ba998cffa5171334d58593da47  # v3.28.15
+        with:
+          sarif_file: checkov-results.sarif
+          category: checkov
+
+      - name: Upload Checkov envs SARIF
+        if: inputs.sarif_output && always()
+        uses: github/codeql-action/upload-sarif@45775bd8235c68ba998cffa5171334d58593da47  # v3.28.15
+        with:
+          sarif_file: checkov-env-results.sarif
+          category: checkov-envs
+
+      - name: Upload Checkov report artifact
+        if: inputs.sarif_output && always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: checkov-report
+          path: |
+            checkov-report.txt
+            checkov-env-report.txt

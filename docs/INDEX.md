@@ -47,6 +47,20 @@ make plan-organization
 make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars
 ```
 
+## Runbooks
+
+- [Quick Start](guides/QUICK_START.md): bootstrap sequence, backend config, first apply
+- [Add Environment](runbooks/add-environment.md): provision a new dev/staging/prod environment
+- [Service Team Onboarding](runbooks/service-team-onboarding.md): create a service project with Shared VPC attachment
+- [KMS Rotation](runbooks/kms-rotation.md): rotate CMEK keys automatically or manually
+- [CIDR Expansion](runbooks/cidr-expansion.md): expand subnet ranges without downtime
+- [Break Glass](runbooks/break-glass.md): emergency access when Workload Identity Federation fails
+
+## Architecture
+
+- [Network Topology](architecture/network-topology.md): hub-spoke VPC layout, VPC-SC perimeter, WIF OIDC flow
+- [Architecture Overview](architecture/ARCHITECTURE.md): control plane, app root, and CI/CD flow
+
 ## Reference Files
 
 - [Makefile](../Makefile): local operator commands

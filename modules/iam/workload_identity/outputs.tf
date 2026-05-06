@@ -23,6 +23,11 @@ output "aws_provider_name" {
   value       = var.enable_aws_provider ? google_iam_workload_identity_pool_provider.aws[0].name : null
 }
 
+output "tfc_provider_name" {
+  description = "The fully-qualified name of the Terraform Cloud OIDC provider"
+  value       = var.enable_tfc_provider ? google_iam_workload_identity_pool_provider.tfc[0].name : null
+}
+
 # Helper output for GitHub Actions workflow configuration
 output "github_workload_identity_provider" {
   description = "Provider string for use in GitHub Actions workflow (google-github-actions/auth)"
