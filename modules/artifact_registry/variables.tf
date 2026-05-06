@@ -25,12 +25,21 @@ variable "kms_key_name" {
 }
 
 variable "repositories" {
-  description = "Map of repository configurations to create"
+  description = "Map of repository configurations to create. Valid format values: DOCKER, MAVEN, NPM, PYTHON, APT, YUM, GOOGET, KFP, GENERIC."
   type = map(object({
     description    = string
     format         = optional(string, "DOCKER")
     immutable_tags = optional(bool, true)
   }))
+
+  validation {
+    condition = alltrue([
+      for k, v in var.repositories :
+      contains(["DOCKER", "MAVEN", "NPM", "PYTHON", "APT", "YUM", "GOOGET", "KFP", "GENERIC"], v.format)
+    ])
+    error_message = "Each repository format must be one of: DOCKER, MAVEN, NPM, PYTHON, APT, YUM, GOOGET, KFP, GENERIC."
+  }
+
   default = {
     "ashes-flask-repo" = {
       description = "Artifact registry for flask images"
