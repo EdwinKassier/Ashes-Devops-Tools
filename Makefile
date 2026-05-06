@@ -68,9 +68,12 @@ docs: ## Generate Terraform docs from repo root
 docs-check: ## Verify Terraform docs are up to date
 	@bash scripts/module-docs.sh check
 
-test: ## Run terraform test suites when present
+test: ## Run terraform test suites (searches module roots and their tests/ subdirs)
 	@set -e; \
-	test_dirs="$$(find envs modules -type f \( -name '*.tftest.hcl' -o -name '*.tftest.json' \) -exec dirname {} \; | sort -u)"; \
+	test_dirs="$$(find envs modules -type f \( -name '*.tftest.hcl' -o -name '*.tftest.json' \) \
+	  | xargs -I{} dirname {} \
+	  | sed 's|/tests$$||' \
+	  | sort -u)"; \
 	if [ -z "$$test_dirs" ]; then \
 		echo "$(YELLOW)No terraform test suites found$(NC)"; \
 		exit 0; \

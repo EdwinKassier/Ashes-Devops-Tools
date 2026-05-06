@@ -75,10 +75,6 @@ resource "google_bigquery_dataset" "flow_logs" {
   }
 
   labels = var.labels
-
-  lifecycle {
-    prevent_destroy = false
-  }
 }
 
 # -----------------------------------------------------------------------------
@@ -121,10 +117,6 @@ resource "google_storage_bucket" "flow_logs_access" {
   }
 
   labels = var.labels
-
-  lifecycle {
-    prevent_destroy = false
-  }
 }
 
 resource "google_storage_bucket_iam_member" "flow_logs_access_writer" {
@@ -187,10 +179,6 @@ resource "google_storage_bucket" "flow_logs" {
   }
 
   labels = var.labels
-
-  lifecycle {
-    prevent_destroy = false
-  }
 
   depends_on = [google_storage_bucket_iam_member.flow_logs_access_writer]
 }

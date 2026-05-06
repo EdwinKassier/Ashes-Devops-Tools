@@ -64,9 +64,11 @@ resource "google_storage_bucket_iam_member" "log_writer" {
   member = "group:cloud-storage-analytics@google.com"
 }
 
-# Main data buckets
-resource "google_storage_bucket" "twitter_data_lake" {
-  name                        = "${var.project_id}-twitter-data-lake"
+# Generic data buckets — driven by var.data_buckets
+resource "google_storage_bucket" "data" {
+  for_each = var.data_buckets
+
+  name                        = "${var.project_id}-${each.value.name_suffix}"
   project                     = var.project_id
   location                    = var.region
   force_destroy               = false
@@ -84,56 +86,14 @@ resource "google_storage_bucket" "twitter_data_lake" {
   depends_on = [google_storage_bucket_iam_member.log_writer]
 }
 
-resource "google_storage_bucket" "twitter_dataflow_meta" {
-  name                        = "${var.project_id}-twitter-dataflow-meta"
-  project                     = var.project_id
-  location                    = var.region
-  force_destroy               = false
-  uniform_bucket_level_access = true
-  public_access_prevention    = "enforced"
-  versioning {
-    enabled = true
-  }
-  logging {
-    log_bucket = google_storage_bucket.logs.name
-  }
-  encryption {
-    default_kms_key_name = var.kms_key_name
-  }
-  depends_on = [google_storage_bucket_iam_member.log_writer]
-}
-
-resource "google_storage_bucket" "looker_data_backup" {
-  name                        = "${var.project_id}-looker-backup"
-  project                     = var.project_id
-  location                    = var.region
-  force_destroy               = false
-  uniform_bucket_level_access = true
-  public_access_prevention    = "enforced"
-  versioning {
-    enabled = true
-  }
-  logging {
-    log_bucket = google_storage_bucket.logs.name
-  }
-  encryption {
-    default_kms_key_name = var.kms_key_name
-  }
-  depends_on = [google_storage_bucket_iam_member.log_writer]
-}
-
-# IAM members for private read access
+# IAM members for private read access to all data buckets
 resource "google_storage_bucket_iam_member" "private" {
   for_each = {
     for binding in flatten([
-      for bucket_name in [
-        google_storage_bucket.twitter_data_lake.name,
-        google_storage_bucket.twitter_dataflow_meta.name,
-        google_storage_bucket.looker_data_backup.name
-        ] : [
+      for key, bucket in google_storage_bucket.data : [
         for member in var.allowed_members : {
-          key    = "${bucket_name}-${substr(md5(member), 0, 12)}"
-          bucket = bucket_name
+          key    = "${key}-${substr(md5(member), 0, 12)}"
+          bucket = bucket.name
           member = member
         }
       ]

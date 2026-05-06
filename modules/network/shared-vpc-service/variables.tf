@@ -23,13 +23,13 @@ variable "service_project_id" {
 # -----------------------------------------------------------------------------
 
 variable "deletion_policy" {
-  description = "The deletion policy for the shared VPC link. ABANDON to leave resources, DELETE to destroy them."
+  description = "The deletion policy for the shared VPC link. ABANDON detaches the service project and leaves it intact."
   type        = string
   default     = "ABANDON"
 
   validation {
-    condition     = contains(["ABANDON", "DELETE"], var.deletion_policy)
-    error_message = "deletion_policy must be either 'ABANDON' or 'DELETE'."
+    condition     = contains(["ABANDON", ""], var.deletion_policy)
+    error_message = "deletion_policy must be 'ABANDON' or '' (empty string)."
   }
 }
 

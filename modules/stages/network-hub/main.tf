@@ -11,6 +11,7 @@ module "hub_network" {
   enable_networking      = true
   enable_shared_vpc_host = true
   vpc_name               = "hub-vpc-core"
+  vpc_cidr_block         = var.hub_vpc_cidr_block
 
   # Observability: Enable Flow Logs for Audit
   log_config_flow_sampling        = 0.5
@@ -77,6 +78,7 @@ module "dns_hub_network" {
   enable_networking      = true
   enable_shared_vpc_host = false
   vpc_name               = "dns-vpc-core"
+  vpc_cidr_block         = var.dns_hub_vpc_cidr_block
 }
 
 module "dns_hub_zone" {

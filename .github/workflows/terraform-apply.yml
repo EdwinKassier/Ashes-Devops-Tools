@@ -9,10 +9,15 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: terraform-apply-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   verify-run:
     name: Verify Terraform Cloud Run
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       workspace: ${{ steps.parse.outputs.workspace }}
       release_name: ${{ steps.parse.outputs.release_name }}
@@ -38,6 +43,11 @@ jobs:
           fi
 
       - name: Assert Terraform Cloud credentials are configured
+        # TFC_TOKEN must be a Terraform Cloud team token scoped to READ access
+        # on workspace runs only. It is used solely to verify run status before
+        # publishing a GitHub release — it does not trigger or modify any run.
+        # Create a dedicated team in TFC with "Read runs" permission and store
+        # its token as the TFC_TOKEN secret (not an org-level or user token).
         env:
           TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
@@ -60,6 +70,10 @@ jobs:
           echo "status=${status}" >> "$GITHUB_OUTPUT"
           case "$status" in
             applied|planned_and_finished)
+              # Run completed successfully
+              ;;
+            apply_queued)
+              # Run is pending manual apply approval in TFC — release tag is valid
               ;;
             *)
               echo "Latest Terraform Cloud run for ${WORKSPACE} is ${status}" >&2
@@ -70,6 +84,7 @@ jobs:
   release:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: verify-run
     steps:
       - name: Create release summary
@@ -81,7 +96,7 @@ jobs:
           echo "- Terraform Cloud status: ${{ needs.verify-run.outputs.status }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8  # v2.3.2
         with:
           name: ${{ needs.verify-run.outputs.release_name }}
           tag_name: ${{ github.ref_name }}

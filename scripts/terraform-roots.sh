@@ -15,6 +15,18 @@ collect_envs() {
     ! -name '.terraform' | sort
 }
 
+# Examples are only included when they have a versions.tf (self-contained).
+# Searches both the top-level examples/ directory and examples/ subdirectories
+# inside any module (HashiCorp module convention: modules/<name>/examples/<example>/).
+collect_examples() {
+  {
+    find examples -mindepth 1 -maxdepth 2 -type f -name versions.tf \
+      ! -path '*/.terraform/*' | sed 's#/versions.tf##'
+    find modules -mindepth 3 -maxdepth 5 -type f -name versions.tf \
+      -path '*/examples/*' ! -path '*/.terraform/*' | sed 's#/versions.tf##'
+  } | sort -u
+}
+
 emit_json() {
   local roots=("$@")
   printf '['
@@ -37,10 +49,14 @@ case "$mode" in
   envs)
     collect_envs
     ;;
+  examples)
+    collect_examples
+    ;;
   all)
     {
       collect_modules
       collect_envs
+      collect_examples
     } | sort -u
     ;;
   all-json)
@@ -48,12 +64,13 @@ case "$mode" in
       {
         collect_modules
         collect_envs
+        collect_examples
       } | sort -u
     )
     emit_json "${roots[@]}"
     ;;
   *)
-    echo "Usage: $0 [modules|envs|all|all-json]" >&2
+    echo "Usage: $0 [modules|envs|examples|all|all-json]" >&2
     exit 1
     ;;
 esac

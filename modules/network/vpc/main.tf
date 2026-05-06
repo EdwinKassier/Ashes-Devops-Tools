@@ -18,10 +18,6 @@ resource "google_compute_network" "vpc" {
 
   delete_default_routes_on_create = var.delete_default_routes_on_create
 
-  # Prevent accidental deletion of the network
-  lifecycle {
-    prevent_destroy = false # Set to true for production usage
-  }
 }
 
 # Shared VPC Host Project

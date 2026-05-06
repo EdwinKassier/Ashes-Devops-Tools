@@ -1,10 +1,12 @@
 version: 2
 updates:
+  # ─── Deployable roots ──────────────────────────────────────────────────────
+
   - package-ecosystem: "terraform"
     directory: "/envs/organization"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 10
     labels:
       - "dependencies"
       - "env:organization"
@@ -13,25 +15,36 @@ updates:
     directory: "/envs/apps"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 10
     labels:
       - "dependencies"
       - "env:apps"
+
+  # ─── Stage modules ──────────────────────────────────────────────────────────
 
   - package-ecosystem: "terraform"
     directory: "/modules/host"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 10
     labels:
       - "dependencies"
       - "module:host"
 
   - package-ecosystem: "terraform"
+    directory: "/modules/stages/bootstrap"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:stages"
+
+  - package-ecosystem: "terraform"
     directory: "/modules/stages/organization"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 10
     labels:
       - "dependencies"
       - "module:stages"
@@ -40,7 +53,7 @@ updates:
     directory: "/modules/stages/projects"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 10
     labels:
       - "dependencies"
       - "module:stages"
@@ -49,17 +62,351 @@ updates:
     directory: "/modules/stages/network-hub"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 10
     labels:
       - "dependencies"
       - "module:stages"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/stages/workload"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:stages"
+
+  # ─── Governance modules ──────────────────────────────────────────────────────
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/governance/billing"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:governance"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/governance/cloud-audit-logs"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:governance"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/governance/kms"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:governance"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/governance/org-policy"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:governance"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/governance/scc"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:governance"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/governance/tags"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:governance"
+
+  # ─── IAM modules ─────────────────────────────────────────────────────────────
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/iam/identity_group"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:iam"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/iam/identity_group_memberships"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:iam"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/iam/organization"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:iam"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/iam/role"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:iam"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/iam/service_account"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:iam"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/iam/workload_identity"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:iam"
+
+  # ─── Network modules ─────────────────────────────────────────────────────────
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/api_gateway"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:network"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/cdn"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:network"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/cloud_armor"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:network"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/dns"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:network"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/hierarchical-firewall"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:network"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/interconnect"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:network"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/internal-lb"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:network"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/nat"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:network"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/network-firewall"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:network"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/packet-mirroring"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:network"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/private-service-access"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:network"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/private-service-connect"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:network"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/shared-vpc-service"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:network"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/subnet"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:network"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/vpc"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:network"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/vpc-flow-logs"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:network"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/vpc-peering"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:network"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/vpc-sc"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:network"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/vpn"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:network"
+
+  # ─── Application modules ──────────────────────────────────────────────────────
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/artifact_registry"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:app"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/cloud_storage"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:app"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/firebase/project"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:app"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/monitoring/compute_dashboard"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:monitoring"
+
+  # ─── GitHub Actions ──────────────────────────────────────────────────────────
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 10
     reviewers:
       - "edwinkassier"
     labels:

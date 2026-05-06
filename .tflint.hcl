@@ -10,7 +10,7 @@ config {
 # GCP Plugin
 plugin "google" {
   enabled = true
-  version = "0.37.1"
+  version = "0.39.0"
   source  = "github.com/terraform-linters/tflint-ruleset-google"
 }
 
@@ -72,8 +72,7 @@ rule "terraform_workspace_remote" {
 }
 
 
-# Disable rules that may be too strict
 rule "terraform_module_version" {
-  enabled = false
+  enabled = true
 }
 

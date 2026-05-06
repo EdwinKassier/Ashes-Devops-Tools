@@ -3,6 +3,24 @@ variable "project_prefix" {
   type        = string
 }
 
+variable "hub_vpc_cidr_block" {
+  description = "CIDR block for the hub VPC (e.g. \"10.0.0.0/16\"). Required — set via IPAM or per-environment tfvars."
+  type        = string
+  validation {
+    condition     = can(cidrnetmask(var.hub_vpc_cidr_block))
+    error_message = "hub_vpc_cidr_block must be a valid CIDR notation."
+  }
+}
+
+variable "dns_hub_vpc_cidr_block" {
+  description = "CIDR block for the DNS hub VPC (e.g. \"10.1.0.0/16\"). Required — must not overlap with hub_vpc_cidr_block."
+  type        = string
+  validation {
+    condition     = can(cidrnetmask(var.dns_hub_vpc_cidr_block))
+    error_message = "dns_hub_vpc_cidr_block must be a valid CIDR notation."
+  }
+}
+
 variable "default_region" {
   description = "Default GCP region for resources"
   type        = string

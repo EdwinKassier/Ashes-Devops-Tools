@@ -74,9 +74,13 @@ environments = {
 default_region  = "europe-west1"
 allowed_regions = ["europe-west1", "europe-west2", "us-central1"]
 
-# GitHub OIDC (for CI/CD)
-# github_org  = "MyOrg"
-# github_repo = "devops-infra"
+# Hub network CIDRs — must be set explicitly; no defaults to prevent CIDR collisions
+hub_vpc_cidr_block     = "10.0.0.0/16"
+dns_hub_vpc_cidr_block = "10.1.0.0/16"
+
+# GitHub OIDC (for CI/CD) — required, no defaults
+github_org  = "MyOrg"
+github_repo = "devops-infra"
 
 # Notifications (Optional)
 # security_contact_email = "security@example.com"

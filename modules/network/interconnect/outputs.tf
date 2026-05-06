@@ -70,9 +70,5 @@ output "state" {
 
 output "operational_status" {
   description = "Operational status of the interconnect attachment"
-  value = var.interconnect_type == "PARTNER" && local.attachment != null ? (
-    local.attachment.partner_metadata != null ? "Partner metadata available" : "Awaiting partner activation"
-    ) : (
-    local.attachment != null ? local.attachment.state : null
-  )
+  value       = local.attachment != null ? local.attachment.state : null
 }

@@ -17,9 +17,6 @@ resource "google_compute_ha_vpn_gateway" "gateway" {
   network = var.network
   region  = var.region
 
-  lifecycle {
-    prevent_destroy = false # Set to true for production usage
-  }
 }
 
 # External VPN Gateway (peer)

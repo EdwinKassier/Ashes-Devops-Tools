@@ -47,3 +47,13 @@ output "vpc_peerings" {
   description = "VPC peering connection outputs"
   value       = module.host.vpc_peerings
 }
+
+output "security_policy_id" {
+  description = "Cloud Armor security policy ID (null when Cloud Armor is disabled)"
+  value       = module.host.security_policy_id
+}
+
+output "vpc_sc_perimeter_names" {
+  description = "Map of VPC-SC perimeter key to perimeter name (empty when VPC-SC is disabled)"
+  value       = module.host.vpc_service_controls != null ? { for k, v in module.host.vpc_service_controls : k => v.name } : {}
+}

@@ -71,7 +71,16 @@ variable "project_admin_group_email" {
 }
 
 variable "project_admin_roles" {
-  description = "List of roles to grant to the admin group"
+  description = <<-EOT
+    List of roles to grant to the admin group via google_project_iam_binding.
+
+    WARNING: google_project_iam_binding is AUTHORITATIVE per role. On every apply it
+    removes any other member that holds the role, including manually-granted access.
+    Any member not in this list will lose the role on the next terraform apply.
+
+    Consider using google_project_iam_member (additive) instead if you need to
+    coexist with bindings managed outside of Terraform.
+  EOT
   type        = list(string)
   default     = []
 

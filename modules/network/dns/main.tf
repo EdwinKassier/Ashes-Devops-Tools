@@ -59,9 +59,6 @@ resource "google_dns_managed_zone" "private_zone" {
     }
   }
 
-  lifecycle {
-    prevent_destroy = false
-  }
 }
 
 resource "google_dns_managed_zone" "public_zone" {
@@ -85,9 +82,6 @@ resource "google_dns_managed_zone" "public_zone" {
     }
   }
 
-  lifecycle {
-    prevent_destroy = false
-  }
 }
 
 # DNS Records

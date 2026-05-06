@@ -7,6 +7,7 @@ on:
       - develop
     paths:
       - "**.tf"
+      - "**.tftest.hcl"
       - "**.tfvars"
       - "**.hcl"
       - ".tfsec.yml"
@@ -21,18 +22,23 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: terraform-plan-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
-  TERRAFORM_VERSION: "1.6.6"
+  TERRAFORM_VERSION: "1.9.8"
 
 jobs:
   discover:
     name: Discover Terraform Roots
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       roots: ${{ steps.roots.outputs.roots }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 
       - name: Discover roots
         id: roots
@@ -41,12 +47,13 @@ jobs:
   fmt:
     name: Terraform Format
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd  # v3.1.2
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
@@ -56,12 +63,13 @@ jobs:
   docs:
     name: Terraform Docs Check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 
       - name: Setup terraform-docs
-        uses: terraform-docs/gh-actions@v1.4.1
+        uses: terraform-docs/gh-actions@6de6da0cefcc6b4b7a5cbea4d79d97060733093c  # v1.4.1
         with:
           working-dir: modules/host
           output-method: print
@@ -72,6 +80,7 @@ jobs:
   validate:
     name: Validate ${{ matrix.root }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: discover
     strategy:
       fail-fast: false
@@ -79,10 +88,10 @@ jobs:
         root: ${{ fromJson(needs.discover.outputs.roots) }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd  # v3.1.2
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
@@ -97,12 +106,15 @@ jobs:
   lint:
     name: TFLint
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 
       - name: Setup TFLint
-        uses: terraform-linters/setup-tflint@v4
+        uses: terraform-linters/setup-tflint@90f302c255ef959cbfb4bd10581afecdb7ece3e6  # v4.1.1
+        with:
+          tflint_version: "v0.62.0"
 
       - name: Initialize TFLint
         run: tflint --init
@@ -112,45 +124,31 @@ jobs:
 
   security:
     name: Security
+    uses: ./.github/workflows/reusable-security.yml
+    with:
+      sarif_output: false
+
+  test:
+    name: Terraform Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 
-      - name: Run tfsec against modules
-        uses: aquasecurity/tfsec-action@v1.0.3
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd  # v3.1.2
         with:
-          working_directory: modules
-          soft_fail: false
-          config_file: .tfsec.yml
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Run tfsec against envs
-        uses: aquasecurity/tfsec-action@v1.0.3
-        with:
-          working_directory: envs
-          soft_fail: false
-          config_file: .tfsec.yml
-
-      - name: Run Checkov against modules
-        uses: bridgecrewio/checkov-action@v12
-        with:
-          directory: modules
-          framework: terraform
-          quiet: true
-          soft_fail: false
-
-      - name: Run Checkov against envs
-        uses: bridgecrewio/checkov-action@v12
-        with:
-          directory: envs
-          framework: terraform
-          quiet: true
-          soft_fail: false
+      - name: Run terraform test suites
+        run: make test
 
   summary:
     name: Validation Summary
     runs-on: ubuntu-latest
-    needs: [fmt, docs, validate, lint, security]
+    timeout-minutes: 5
+    needs: [fmt, docs, validate, lint, security, test]
     if: always()
     steps:
       - name: Publish summary
@@ -164,3 +162,4 @@ jobs:
           echo "| Validate | ${{ needs.validate.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| TFLint | ${{ needs.lint.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Security | ${{ needs.security.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Tests | ${{ needs.test.result }} |" >> "$GITHUB_STEP_SUMMARY"

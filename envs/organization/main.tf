@@ -149,5 +149,8 @@ module "network_hub" {
   org_id  = data.google_organization.org.org_id
   folders = module.organization.folders
 
+  hub_vpc_cidr_block     = var.hub_vpc_cidr_block
+  dns_hub_vpc_cidr_block = var.dns_hub_vpc_cidr_block
+
   depends_on = [module.projects]
 }
