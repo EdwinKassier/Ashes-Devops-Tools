@@ -19,6 +19,11 @@ variable "api_id" {
   description = "Identifier to use for the API"
   type        = string
   default     = "ashes-api"
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{3,62}$", var.api_id))
+    error_message = "api_id must be 4-63 characters, start with a lowercase letter, and contain only lowercase letters, digits, and hyphens."
+  }
 }
 
 variable "display_name" {
@@ -31,6 +36,11 @@ variable "gateway_id" {
   description = "Identifier to use for this gateway instance"
   type        = string
   default     = "ashes-gateway"
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{3,62}$", var.gateway_id))
+    error_message = "gateway_id must be 4-63 characters, start with a lowercase letter, and contain only lowercase letters, digits, and hyphens."
+  }
 }
 
 variable "gateway_display_name" {

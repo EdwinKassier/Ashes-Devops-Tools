@@ -48,6 +48,11 @@ variable "cdn_policy" {
     signed_url_cache_max_age_sec = optional(number, 0)
   })
   default = {}
+
+  validation {
+    condition     = contains(["USE_ORIGIN_HEADERS", "FORCE_CACHE_ALL", "CACHE_ALL_STATIC"], var.cdn_policy.cache_mode)
+    error_message = "cdn_policy.cache_mode must be USE_ORIGIN_HEADERS, FORCE_CACHE_ALL, or CACHE_ALL_STATIC."
+  }
 }
 
 variable "security_policy" {
