@@ -19,4 +19,9 @@ variable "identity_groups" {
     labels               = optional(map(string), {})
   }))
   default = []
+
+  validation {
+    condition     = alltrue([for g in var.identity_groups : can(regex("^[^@]+@[^@]+\\.[^@]+$", g.email))])
+    error_message = "Each identity group email must be a valid email address (e.g., 'group@example.com')."
+  }
 }

@@ -159,14 +159,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0, < 2.0.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 6.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.0, < 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 7.14.1 |
+| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
 
 
 
@@ -176,13 +176,13 @@ The following resources are created:
 
 
 - resource.google_iam_workload_identity_pool.pool (modules/iam/workload_identity/main.tf#L5)
-- resource.google_iam_workload_identity_pool_provider.aws (modules/iam/workload_identity/main.tf#L88)
+- resource.google_iam_workload_identity_pool_provider.aws (modules/iam/workload_identity/main.tf#L85)
 - resource.google_iam_workload_identity_pool_provider.github (modules/iam/workload_identity/main.tf#L14)
-- resource.google_iam_workload_identity_pool_provider.gitlab (modules/iam/workload_identity/main.tf#L63)
-- resource.google_iam_workload_identity_pool_provider.tfc (modules/iam/workload_identity/main.tf#L129)
-- resource.google_service_account_iam_member.github_workload_identity (modules/iam/workload_identity/main.tf#L111)
-- resource.google_service_account_iam_member.gitlab_workload_identity (modules/iam/workload_identity/main.tf#L120)
-- resource.google_service_account_iam_member.tfc_workload_identity (modules/iam/workload_identity/main.tf#L160)
+- resource.google_iam_workload_identity_pool_provider.gitlab (modules/iam/workload_identity/main.tf#L60)
+- resource.google_iam_workload_identity_pool_provider.tfc (modules/iam/workload_identity/main.tf#L126)
+- resource.google_service_account_iam_member.github_workload_identity (modules/iam/workload_identity/main.tf#L108)
+- resource.google_service_account_iam_member.gitlab_workload_identity (modules/iam/workload_identity/main.tf#L117)
+- resource.google_service_account_iam_member.tfc_workload_identity (modules/iam/workload_identity/main.tf#L157)
 
 
 ## Inputs
@@ -192,7 +192,7 @@ The following resources are created:
 | <a name="input_display_name"></a> [display\_name](#input\_display\_name) | Display name for the Workload Identity Pool | `string` | n/a | yes |
 | <a name="input_pool_id"></a> [pool\_id](#input\_pool\_id) | The ID for the Workload Identity Pool | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The GCP project ID where the Workload Identity Pool will be created | `string` | n/a | yes |
-| <a name="input_aws_account_id"></a> [aws\_account\_id](#input\_aws\_account\_id) | AWS account ID to restrict access to | `string` | `null` | no |
+| <a name="input_aws_account_id"></a> [aws\_account\_id](#input\_aws\_account\_id) | AWS account ID to restrict access to (12-digit numeric AWS account ID) | `string` | `null` | no |
 | <a name="input_description"></a> [description](#input\_description) | Description of the Workload Identity Pool | `string` | `"Workload Identity Pool for external authentication"` | no |
 | <a name="input_disabled"></a> [disabled](#input\_disabled) | Whether the pool is disabled | `bool` | `false` | no |
 | <a name="input_enable_aws_provider"></a> [enable\_aws\_provider](#input\_enable\_aws\_provider) | Enable AWS OIDC provider for cross-cloud authentication | `bool` | `false` | no |
@@ -220,4 +220,5 @@ The following resources are created:
 | <a name="output_gitlab_provider_name"></a> [gitlab\_provider\_name](#output\_gitlab\_provider\_name) | The fully-qualified name of the GitLab OIDC provider |
 | <a name="output_pool_id"></a> [pool\_id](#output\_pool\_id) | The Workload Identity Pool ID |
 | <a name="output_pool_name"></a> [pool\_name](#output\_pool\_name) | The fully-qualified name of the Workload Identity Pool |
+| <a name="output_tfc_provider_name"></a> [tfc\_provider\_name](#output\_tfc\_provider\_name) | The fully-qualified name of the Terraform Cloud OIDC provider |
 <!-- END_TF_DOCS -->

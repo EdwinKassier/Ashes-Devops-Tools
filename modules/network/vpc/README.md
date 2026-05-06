@@ -82,14 +82,15 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0, < 2.0.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 6.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.0, < 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 6.50.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
+| <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 
 
@@ -98,8 +99,9 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_compute_network.vpc (modules/network/vpc/main.tf#L12)
-- resource.google_compute_shared_vpc_host_project.host (modules/network/vpc/main.tf#L28)
+- resource.google_compute_network.vpc (modules/network/vpc/main.tf#L26)
+- resource.google_compute_shared_vpc_host_project.host (modules/network/vpc/main.tf#L38)
+- resource.terraform_data.deletion_protection_guard (modules/network/vpc/main.tf#L15)
 
 
 ## Inputs
@@ -110,6 +112,7 @@ The following resources are created:
 | <a name="input_auto_create_subnetworks"></a> [auto\_create\_subnetworks](#input\_auto\_create\_subnetworks) | When set to true, the network is created in 'auto subnet mode' and it will create a subnet for each region automatically | `bool` | `false` | no |
 | <a name="input_delete_default_routes_on_create"></a> [delete\_default\_routes\_on\_create](#input\_delete\_default\_routes\_on\_create) | If set to true, default routes (0.0.0.0/0) will be deleted immediately after network creation | `bool` | `true` | no |
 | <a name="input_description"></a> [description](#input\_description) | An optional description of this resource | `string` | `"Managed by Terraform"` | no |
+| <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | Prevent accidental destruction of the VPC network.<br/><br/>When true, a terraform\_data guard resource is created with prevent\_destroy = true.<br/>Terraform refuses to destroy this module while the guard exists. To intentionally<br/>remove a protected VPC, first run:<br/>  terraform state rm 'module.<name>.terraform\_data.deletion\_protection\_guard' | `bool` | `false` | no |
 | <a name="input_enable_shared_vpc_host"></a> [enable\_shared\_vpc\_host](#input\_enable\_shared\_vpc\_host) | Enable this project as a Shared VPC Host Project | `bool` | `false` | no |
 | <a name="input_routing_mode"></a> [routing\_mode](#input\_routing\_mode) | The network routing mode (default 'GLOBAL') | `string` | `"GLOBAL"` | no |
 | <a name="input_vpc_name"></a> [vpc\_name](#input\_vpc\_name) | The name of the VPC network | `string` | `"main-vpc"` | no |

@@ -66,4 +66,8 @@ variable "project_services" {
 variable "suffix" {
   description = "Random suffix from bootstrap module appended to project IDs for uniqueness"
   type        = string
+  validation {
+    condition     = can(regex("^[a-f0-9]+$", var.suffix))
+    error_message = "suffix must be a lowercase hexadecimal string (e.g., 'abc123')."
+  }
 }

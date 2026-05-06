@@ -78,14 +78,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0, < 2.0.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 6.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.0, < 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | ~> 6.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
 
 
 
@@ -105,7 +105,7 @@ The following resources are created:
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_billing_account"></a> [billing\_account](#input\_billing\_account) | The ID of the billing account to create budget for | `string` | n/a | yes |
+| <a name="input_billing_account"></a> [billing\_account](#input\_billing\_account) | The GCP billing account ID in format XXXXXX-XXXXXX-XXXXXX | `string` | n/a | yes |
 | <a name="input_monthly_budget_limit"></a> [monthly\_budget\_limit](#input\_monthly\_budget\_limit) | The monthly budget limit in the specified currency | `number` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The GCP project ID where resources will be created | `string` | n/a | yes |
 | <a name="input_project_name"></a> [project\_name](#input\_project\_name) | The name prefix for resources | `string` | n/a | yes |
@@ -125,7 +125,7 @@ The following resources are created:
 | <a name="input_service_filters"></a> [service\_filters](#input\_service\_filters) | List of GCP service IDs to include in budget (empty = all services) | `list(string)` | `[]` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags to apply to all resources | `map(string)` | `{}` | no |
 | <a name="input_webhook_endpoint"></a> [webhook\_endpoint](#input\_webhook\_endpoint) | Optional webhook endpoint to receive budget alerts | `string` | `""` | no |
-| <a name="input_webhook_service_account"></a> [webhook\_service\_account](#input\_webhook\_service\_account) | Service account for authenticating webhook requests | `string` | `""` | no |
+| <a name="input_webhook_service_account"></a> [webhook\_service\_account](#input\_webhook\_service\_account) | Service account email for authenticating webhook requests (format: name@project.iam.gserviceaccount.com) | `string` | `""` | no |
 
 ## Outputs
 

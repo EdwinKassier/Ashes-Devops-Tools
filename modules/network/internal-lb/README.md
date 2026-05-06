@@ -143,14 +143,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0, < 2.0.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 6.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.0, < 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 7.14.1 |
+| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
 
 
 
@@ -203,12 +203,12 @@ The following resources are created:
 | <a name="input_ip_address"></a> [ip\_address](#input\_ip\_address) | Static IP address (if create\_static\_ip is false) | `string` | `null` | no |
 | <a name="input_is_l7"></a> [is\_l7](#input\_is\_l7) | Whether to create an L7 (HTTP/S) load balancer (true) or L4 TCP (false) | `bool` | `true` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to the forwarding rule | `map(string)` | `{}` | no |
-| <a name="input_locality_lb_policy"></a> [locality\_lb\_policy](#input\_locality\_lb\_policy) | Locality load balancing policy | `string` | `"ROUND_ROBIN"` | no |
+| <a name="input_locality_lb_policy"></a> [locality\_lb\_policy](#input\_locality\_lb\_policy) | Locality load balancing policy for the backend service. Valid values: ROUND\_ROBIN, LEAST\_REQUEST, RING\_HASH, RANDOM, ORIGINAL\_DESTINATION, MAGLEV. | `string` | `"ROUND_ROBIN"` | no |
 | <a name="input_log_sample_rate"></a> [log\_sample\_rate](#input\_log\_sample\_rate) | Sample rate for access logs (0.0 to 1.0) | `number` | `1` | no |
 | <a name="input_path_matchers"></a> [path\_matchers](#input\_path\_matchers) | Path matchers for URL mapping | <pre>list(object({<br/>    name            = string<br/>    default_service = string<br/>    path_rules = optional(list(object({<br/>      paths   = list(string)<br/>      service = string<br/>    })))<br/>  }))</pre> | `[]` | no |
 | <a name="input_port_range"></a> [port\_range](#input\_port\_range) | Port range for the forwarding rule (e.g., '80' or '8080-8090') | `string` | `"80"` | no |
 | <a name="input_proxy_only_subnet_ranges"></a> [proxy\_only\_subnet\_ranges](#input\_proxy\_only\_subnet\_ranges) | CIDR ranges for proxy-only subnets | `list(string)` | `[]` | no |
-| <a name="input_session_affinity"></a> [session\_affinity](#input\_session\_affinity) | Session affinity: NONE, CLIENT\_IP, or GENERATED\_COOKIE | `string` | `"NONE"` | no |
+| <a name="input_session_affinity"></a> [session\_affinity](#input\_session\_affinity) | Session affinity for the backend service. Valid values: NONE, CLIENT\_IP, GENERATED\_COOKIE. | `string` | `"NONE"` | no |
 | <a name="input_ssl_certificates"></a> [ssl\_certificates](#input\_ssl\_certificates) | List of SSL certificate self\_links (for HTTPS) | `list(string)` | `[]` | no |
 
 ## Outputs

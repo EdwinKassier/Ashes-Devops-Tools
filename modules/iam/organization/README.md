@@ -112,14 +112,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0, < 2.0.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 6.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.0, < 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 6.50.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
 
 
 
@@ -155,8 +155,6 @@ The following resources are created:
 | <a name="output_enabled_apis"></a> [enabled\_apis](#output\_enabled\_apis) | List of APIs enabled in the organization |
 | <a name="output_folder_iam_members"></a> [folder\_iam\_members](#output\_folder\_iam\_members) | Map of folder IAM members |
 | <a name="output_folders"></a> [folders](#output\_folders) | Map of created folders |
-| <a name="output_group_memberships"></a> [group\_memberships](#output\_group\_memberships) | Deprecated. Group membership is no longer managed by this module. |
-| <a name="output_identity_groups"></a> [identity\_groups](#output\_identity\_groups) | Deprecated. Group creation is no longer managed by this module. |
 | <a name="output_organization_directory_customer_id"></a> [organization\_directory\_customer\_id](#output\_organization\_directory\_customer\_id) | The directory customer ID of the organization |
 | <a name="output_organization_domain"></a> [organization\_domain](#output\_organization\_domain) | The domain of the organization |
 | <a name="output_organization_id"></a> [organization\_id](#output\_organization\_id) | The numeric ID of the organization |

@@ -16,6 +16,10 @@ variable "project_id" {
 variable "name" {
   description = "Name of the Cloud NAT gateway"
   type        = string
+  validation {
+    condition     = can(regex("^[a-z][-a-z0-9]{0,62}$", var.name))
+    error_message = "name must start with a lowercase letter and contain only lowercase letters, digits, and hyphens (max 63 characters)."
+  }
 }
 
 variable "region" {

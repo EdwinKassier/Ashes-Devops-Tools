@@ -127,6 +127,7 @@ module "example" {
 	# Required variables
 	project_id = 
 	project_prefix = 
+	vpc_cidr_block = 
 	
 }
 ```
@@ -135,15 +136,16 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0, < 2.0.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 6.0 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | ~> 6.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.0, < 8.0 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.0, < 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 7.14.1 |
+| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
+| <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
 
@@ -185,8 +187,9 @@ module "example" {
 The following resources are created:
 
 
-- data source.google_compute_zones.available (modules/host/main.tf#L38)
-- data source.google_project.current (modules/host/main.tf#L498)
+- resource.terraform_data.deletion_protection_guard (modules/host/main.tf#L55)
+- data source.google_compute_zones.available (modules/host/main.tf#L35)
+- data source.google_project.current (modules/host/main.tf#L524)
 
 
 ## Inputs
@@ -195,6 +198,7 @@ The following resources are created:
 |------|-------------|------|---------|:--------:|
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The GCP project ID | `string` | n/a | yes |
 | <a name="input_project_prefix"></a> [project\_prefix](#input\_project\_prefix) | Prefix for naming resources (e.g., 'ashes-dev') | `string` | n/a | yes |
+| <a name="input_vpc_cidr_block"></a> [vpc\_cidr\_block](#input\_vpc\_cidr\_block) | The CIDR block for the VPC (e.g. "10.0.0.0/16"). Required — must be set explicitly to prevent accidental CIDR collisions when multiple VPCs exist. Use your IPAM or a per-environment tfvars file as the source of truth. | `string` | n/a | yes |
 | <a name="input_additional_firewall_rules"></a> [additional\_firewall\_rules](#input\_additional\_firewall\_rules) | Map of additional firewall rules to create outside of the VPC module | <pre>map(object({<br/>    direction   = optional(string, "INGRESS")<br/>    description = optional(string)<br/>    priority    = optional(number, 1000)<br/>    allow_rules = optional(list(object({<br/>      protocol = string<br/>      ports    = optional(list(string))<br/>    })), [])<br/>    deny_rules = optional(list(object({<br/>      protocol = string<br/>      ports    = optional(list(string))<br/>    })), [])<br/>    source_ranges = optional(list(string))<br/>    target_tags   = optional(list(string))<br/>    source_tags   = optional(list(string))<br/>  }))</pre> | `{}` | no |
 | <a name="input_api_gateway_display_name"></a> [api\_gateway\_display\_name](#input\_api\_gateway\_display\_name) | Display name for the API Gateway | `string` | `"API Gateway"` | no |
 | <a name="input_api_gateway_managed_services"></a> [api\_gateway\_managed\_services](#input\_api\_gateway\_managed\_services) | Map of managed service IDs for auto-generated OpenAPI spec | `map(string)` | `{}` | no |
@@ -212,7 +216,7 @@ The following resources are created:
 | <a name="input_enable_api_gateway"></a> [enable\_api\_gateway](#input\_enable\_api\_gateway) | Enable API Gateway | `bool` | `false` | no |
 | <a name="input_enable_cdn"></a> [enable\_cdn](#input\_enable\_cdn) | Enable Cloud CDN with Global Load Balancer | `bool` | `false` | no |
 | <a name="input_enable_cloud_armor"></a> [enable\_cloud\_armor](#input\_enable\_cloud\_armor) | Enable Cloud Armor WAF security policy | `bool` | `true` | no |
-| <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | Enable lifecycle prevent\_destroy for critical resources | `bool` | `false` | no |
+| <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | When true, creates a terraform\_data guard resource with prevent\_destroy = true<br/>that blocks any plan that would destroy the VPC/subnet stack.<br/><br/>NOTE: Terraform's prevent\_destroy cannot be set from a variable (it must be a<br/>static literal). The guard resource works around this by existing only when<br/>protection is enabled — removing it from the plan (e.g. by setting this to<br/>false) triggers the prevent\_destroy error. To intentionally deprovision a<br/>protected stack, first run:<br/>  terraform state rm '<module\_address>.terraform\_data.deletion\_protection\_guard[0]' | `bool` | `false` | no |
 | <a name="input_enable_firewall_logging"></a> [enable\_firewall\_logging](#input\_enable\_firewall\_logging) | Enable logging for all firewall rules | `bool` | `true` | no |
 | <a name="input_enable_iap_access"></a> [enable\_iap\_access](#input\_enable\_iap\_access) | Enable IAP SSH/RDP access | `bool` | `true` | no |
 | <a name="input_enable_networking"></a> [enable\_networking](#input\_enable\_networking) | Enable VPC and network infrastructure provisioning | `bool` | `true` | no |
@@ -225,23 +229,25 @@ The following resources are created:
 | <a name="input_existing_network_id"></a> [existing\_network\_id](#input\_existing\_network\_id) | ID of existing network (when enable\_networking is false) | `string` | `""` | no |
 | <a name="input_existing_network_name"></a> [existing\_network\_name](#input\_existing\_network\_name) | Name of existing network (when enable\_networking is false) | `string` | `""` | no |
 | <a name="input_existing_network_self_link"></a> [existing\_network\_self\_link](#input\_existing\_network\_self\_link) | Self link of existing network (when enable\_networking is false) | `string` | `""` | no |
+| <a name="input_explicit_zones"></a> [explicit\_zones](#input\_explicit\_zones) | Explicit list of zones to use for subnet layout (e.g. ["us-central1-a", "us-central1-b", "us-central1-c"]).<br/>Recommended for production: GCP occasionally changes how many zones are returned by the zones data source,<br/>which would change subnet CIDRs and trigger destructive subnet replacement.<br/>When empty, zones are auto-discovered via data.google\_compute\_zones. | `list(string)` | `[]` | no |
 | <a name="input_hierarchical_firewall_policies"></a> [hierarchical\_firewall\_policies](#input\_hierarchical\_firewall\_policies) | Map of hierarchical firewall policies to create at org/folder level | <pre>map(object({<br/>    parent      = string<br/>    description = optional(string, "Managed by Terraform")<br/>    rules = optional(list(object({<br/>      priority       = number<br/>      action         = string<br/>      direction      = string<br/>      description    = optional(string)<br/>      disabled       = optional(bool, false)<br/>      enable_logging = optional(bool, false)<br/>      layer4_configs = list(object({<br/>        ip_protocol = string<br/>        ports       = optional(list(string))<br/>      }))<br/>      src_ip_ranges           = optional(list(string))<br/>      src_region_codes        = optional(list(string))<br/>      dest_ip_ranges          = optional(list(string))<br/>      dest_region_codes       = optional(list(string))<br/>      target_networks         = optional(list(string))<br/>      target_service_accounts = optional(list(string))<br/>    })), [])<br/>    associations   = optional(list(string), [])<br/>    enable_logging = optional(bool, true)<br/>  }))</pre> | `{}` | no |
+| <a name="input_integrated_nat_ip_allocate_option"></a> [integrated\_nat\_ip\_allocate\_option](#input\_integrated\_nat\_ip\_allocate\_option) | IP allocation mode for the integrated NAT gateway. AUTO\_ONLY uses Google-managed IPs; MANUAL\_ONLY uses reserved static IPs (also configure nat\_ips in standalone\_nat\_gateways). | `string` | `"AUTO_ONLY"` | no |
+| <a name="input_integrated_nat_log_filter"></a> [integrated\_nat\_log\_filter](#input\_integrated\_nat\_log\_filter) | Log filter for the integrated NAT gateway. ERRORS\_ONLY, TRANSLATIONS\_ONLY, or ALL. | `string` | `"ERRORS_ONLY"` | no |
 | <a name="input_interconnects"></a> [interconnects](#input\_interconnects) | Map of Cloud Interconnect attachments to create | <pre>map(object({<br/>    region            = string<br/>    interconnect_type = optional(string, "PARTNER")<br/>    router_name       = string<br/>    router_asn        = optional(number, 64512)<br/>    create_router     = optional(bool, true)<br/><br/>    # Dedicated interconnect settings<br/>    interconnect_self_link = optional(string)<br/>    vlan_tag               = optional(number)<br/>    bandwidth              = optional(string, "BPS_10G")<br/><br/>    # Partner interconnect settings<br/>    edge_availability_domain = optional(string, "AVAILABILITY_DOMAIN_1")<br/><br/>    # Common settings<br/>    mtu           = optional(number, 1440)<br/>    admin_enabled = optional(bool, true)<br/>    encryption    = optional(string, "NONE")<br/><br/>    # BGP settings<br/>    create_bgp_peer    = optional(bool, true)<br/>    interface_ip_range = optional(string)<br/>    peer_ip_address    = optional(string)<br/>    peer_asn           = optional(number, 65000)<br/>    enable_bfd         = optional(bool, false)<br/><br/>    advertised_ip_ranges = optional(list(object({<br/>      range       = string<br/>      description = optional(string)<br/>    })), [])<br/>  }))</pre> | `{}` | no |
 | <a name="input_internal_load_balancers"></a> [internal\_load\_balancers](#input\_internal\_load\_balancers) | Map of internal HTTP(S) load balancers to create | <pre>map(object({<br/>    region     = string<br/>    subnet     = string<br/>    is_l7      = optional(bool, true)<br/>    port_range = optional(string, "80")<br/><br/>    backends = list(object({<br/>      group           = string<br/>      balancing_mode  = optional(string, "UTILIZATION")<br/>      capacity_scaler = optional(number, 1.0)<br/>      max_utilization = optional(number, 0.8)<br/>    }))<br/><br/>    # Health check<br/>    health_check_type         = optional(string, "HTTP")<br/>    health_check_port         = optional(number, 80)<br/>    health_check_request_path = optional(string, "/health")<br/><br/>    # Optional settings<br/>    allow_global_access = optional(bool, false)<br/>    enable_ssl          = optional(bool, false)<br/>    ssl_certificates    = optional(list(string), [])<br/>    session_affinity    = optional(string, "NONE")<br/>    enable_logging      = optional(bool, true)<br/><br/>    # Firewall<br/>    create_firewall_rule     = optional(bool, true)<br/>    proxy_only_subnet_ranges = optional(list(string), [])<br/>    backend_target_tags      = optional(list(string), [])<br/>    backend_port             = optional(number, 80)<br/><br/>    labels = optional(map(string), {})<br/>  }))</pre> | `{}` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to all resources | `map(string)` | `{}` | no |
 | <a name="input_log_config_aggregation_interval"></a> [log\_config\_aggregation\_interval](#input\_log\_config\_aggregation\_interval) | Flow logs aggregation interval | `string` | `"INTERVAL_5_SEC"` | no |
-| <a name="input_log_config_flow_sampling"></a> [log\_config\_flow\_sampling](#input\_log\_config\_flow\_sampling) | Flow logs sampling rate (0.0 to 1.0) | `number` | `0.5` | no |
-| <a name="input_owasp_sensitivity"></a> [owasp\_sensitivity](#input\_owasp\_sensitivity) | OWASP rule sensitivity (1-4, lower is more strict) | `number` | `2` | no |
+| <a name="input_log_config_flow_sampling"></a> [log\_config\_flow\_sampling](#input\_log\_config\_flow\_sampling) | Flow logs sampling rate (0.0 to 1.0). 0.0 disables sampling; 1.0 captures all flows. | `number` | `0.5` | no |
+| <a name="input_owasp_sensitivity"></a> [owasp\_sensitivity](#input\_owasp\_sensitivity) | OWASP rule sensitivity level (1–4). Lower values apply stricter rules with more false positives; higher values are more permissive. | `number` | `2` | no |
 | <a name="input_packet_mirroring_policies"></a> [packet\_mirroring\_policies](#input\_packet\_mirroring\_policies) | Map of packet mirroring policies to create | <pre>map(object({<br/>    region               = string<br/>    collector_ilb_url    = string<br/>    mirrored_instances   = optional(list(string), [])<br/>    mirrored_subnetworks = optional(list(string), [])<br/>    mirrored_tags        = optional(list(string), [])<br/>    filter_ip_protocols  = optional(list(string), [])<br/>    filter_cidr_ranges   = optional(list(string), [])<br/>    filter_direction     = optional(string, "BOTH")<br/>    priority             = optional(number, 1000)<br/>    enable               = optional(bool, true)<br/>  }))</pre> | `{}` | no |
 | <a name="input_psa_name"></a> [psa\_name](#input\_psa\_name) | Name of the Private Service Access allocation | `string` | `"google-managed-services"` | no |
-| <a name="input_psa_prefix_length"></a> [psa\_prefix\_length](#input\_psa\_prefix\_length) | Prefix length for Private Service Access (e.g. 16 for /16) | `number` | `16` | no |
+| <a name="input_psa_prefix_length"></a> [psa\_prefix\_length](#input\_psa\_prefix\_length) | Prefix length for Private Service Access (e.g. 16 for /16). Valid range: 16–29. | `number` | `16` | no |
 | <a name="input_psc_target"></a> [psc\_target](#input\_psc\_target) | Target for Private Service Connect (e.g. 'all-apis' or 'vpc-sc') | `string` | `"all-apis"` | no |
 | <a name="input_region"></a> [region](#input\_region) | The primary GCP region for resources | `string` | `"us-central1"` | no |
 | <a name="input_secondary_ranges"></a> [secondary\_ranges](#input\_secondary\_ranges) | Secondary IP ranges for private subnets (required for GKE Pods/Services). Key is the zone name. | <pre>map(list(object({<br/>    range_name    = string<br/>    ip_cidr_range = string<br/>  })))</pre> | `{}` | no |
 | <a name="input_shared_vpc_service_projects"></a> [shared\_vpc\_service\_projects](#input\_shared\_vpc\_service\_projects) | Map of service projects to attach to this host project (requires enable\_shared\_vpc\_host = true) | <pre>map(object({<br/>    deletion_policy = optional(string, "ABANDON")<br/>    subnet_iam_bindings = optional(list(object({<br/>      subnet = string<br/>      region = string<br/>      member = string<br/>    })), [])<br/>    grant_network_user_to_all_subnets = optional(bool, false)<br/>    network_user_members              = optional(list(string), [])<br/>    network_viewer_members            = optional(list(string), [])<br/>    enable_gke_permissions            = optional(bool, false)<br/>  }))</pre> | `{}` | no |
 | <a name="input_standalone_nat_gateways"></a> [standalone\_nat\_gateways](#input\_standalone\_nat\_gateways) | Map of standalone NAT gateways to create (for multi-region or custom NAT configurations) | <pre>map(object({<br/>    region                             = string<br/>    create_router                      = optional(bool, true)<br/>    router_name                        = optional(string)<br/>    nat_ip_allocate_option             = optional(string, "AUTO_ONLY")<br/>    nat_ips                            = optional(list(string), [])<br/>    source_subnetwork_ip_ranges_to_nat = optional(string, "ALL_SUBNETWORKS_ALL_IP_RANGES")<br/>    subnetworks = optional(list(object({<br/>      name                     = string<br/>      source_ip_ranges_to_nat  = list(string)<br/>      secondary_ip_range_names = optional(list(string))<br/>    })), [])<br/>    min_ports_per_vm               = optional(number, 64)<br/>    enable_dynamic_port_allocation = optional(bool, false)<br/>    enable_logging                 = optional(bool, true)<br/>    log_filter                     = optional(string, "ERRORS_ONLY")<br/>  }))</pre> | `{}` | no |
 | <a name="input_subnet_cidrs"></a> [subnet\_cidrs](#input\_subnet\_cidrs) | Subnet CIDRs for public, private, and database tiers | <pre>object({<br/>    public   = list(string)<br/>    private  = list(string)<br/>    database = list(string)<br/>  })</pre> | <pre>{<br/>  "database": [],<br/>  "private": [],<br/>  "public": []<br/>}</pre> | no |
-| <a name="input_vpc_cidr_block"></a> [vpc\_cidr\_block](#input\_vpc\_cidr\_block) | The CIDR block for the VPC. If not provided, it will be auto-calculated based on the VPC name hash. | `string` | `null` | no |
 | <a name="input_vpc_flow_logs_bigquery_dataset_id"></a> [vpc\_flow\_logs\_bigquery\_dataset\_id](#input\_vpc\_flow\_logs\_bigquery\_dataset\_id) | BigQuery dataset ID for flow logs | `string` | `"vpc_flow_logs"` | no |
 | <a name="input_vpc_flow_logs_bigquery_location"></a> [vpc\_flow\_logs\_bigquery\_location](#input\_vpc\_flow\_logs\_bigquery\_location) | Location for the BigQuery dataset | `string` | `"US"` | no |
 | <a name="input_vpc_flow_logs_create_bigquery_dataset"></a> [vpc\_flow\_logs\_create\_bigquery\_dataset](#input\_vpc\_flow\_logs\_create\_bigquery\_dataset) | Whether to create a BigQuery dataset for flow logs | `bool` | `false` | no |
@@ -261,7 +267,7 @@ The following resources are created:
 | <a name="input_vpn_peer_ips"></a> [vpn\_peer\_ips](#input\_vpn\_peer\_ips) | Peer IP addresses for BGP sessions | `list(string)` | <pre>[<br/>  "169.254.0.2",<br/>  "169.254.0.4"<br/>]</pre> | no |
 | <a name="input_vpn_router_asn"></a> [vpn\_router\_asn](#input\_vpn\_router\_asn) | Cloud Router BGP ASN | `number` | `64512` | no |
 | <a name="input_vpn_shared_secret"></a> [vpn\_shared\_secret](#input\_vpn\_shared\_secret) | VPN shared secret (consider using Secret Manager) | `string` | `""` | no |
-| <a name="input_vpn_tunnel_count"></a> [vpn\_tunnel\_count](#input\_vpn\_tunnel\_count) | Number of VPN tunnels (1 or 2 for HA) | `number` | `2` | no |
+| <a name="input_vpn_tunnel_count"></a> [vpn\_tunnel\_count](#input\_vpn\_tunnel\_count) | Number of VPN tunnels per gateway. Use 2 for HA VPN (recommended for production); 1 for testing only. | `number` | `2` | no |
 
 ## Outputs
 

@@ -178,14 +178,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0, < 2.0.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 6.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.0, < 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 7.14.1 |
+| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
 
 
 
@@ -195,13 +195,13 @@ The following resources are created:
 
 
 - resource.google_bigquery_dataset.flow_logs (modules/network/vpc-flow-logs/main.tf#L57)
-- resource.google_bigquery_dataset_iam_member.sink_writer (modules/network/vpc-flow-logs/main.tf#L203)
+- resource.google_bigquery_dataset_iam_member.sink_writer (modules/network/vpc-flow-logs/main.tf#L191)
 - resource.google_logging_project_sink.flow_logs_sink (modules/network/vpc-flow-logs/main.tf#L26)
-- resource.google_pubsub_topic_iam_member.sink_writer (modules/network/vpc-flow-logs/main.tf#L222)
-- resource.google_storage_bucket.flow_logs (modules/network/vpc-flow-logs/main.tf#L138)
-- resource.google_storage_bucket.flow_logs_access (modules/network/vpc-flow-logs/main.tf#L88)
-- resource.google_storage_bucket_iam_member.flow_logs_access_writer (modules/network/vpc-flow-logs/main.tf#L130)
-- resource.google_storage_bucket_iam_member.sink_writer (modules/network/vpc-flow-logs/main.tf#L213)
+- resource.google_pubsub_topic_iam_member.sink_writer (modules/network/vpc-flow-logs/main.tf#L210)
+- resource.google_storage_bucket.flow_logs (modules/network/vpc-flow-logs/main.tf#L130)
+- resource.google_storage_bucket.flow_logs_access (modules/network/vpc-flow-logs/main.tf#L84)
+- resource.google_storage_bucket_iam_member.flow_logs_access_writer (modules/network/vpc-flow-logs/main.tf#L122)
+- resource.google_storage_bucket_iam_member.sink_writer (modules/network/vpc-flow-logs/main.tf#L201)
 
 
 ## Inputs

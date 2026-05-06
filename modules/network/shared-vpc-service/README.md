@@ -152,14 +152,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0, < 2.0.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 6.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.0, < 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | ~> 6.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
 
 
 
@@ -182,7 +182,7 @@ The following resources are created:
 |------|-------------|------|---------|:--------:|
 | <a name="input_host_project_id"></a> [host\_project\_id](#input\_host\_project\_id) | The ID of the Shared VPC Host Project | `string` | n/a | yes |
 | <a name="input_service_project_id"></a> [service\_project\_id](#input\_service\_project\_id) | The ID of the Service Project to attach | `string` | n/a | yes |
-| <a name="input_deletion_policy"></a> [deletion\_policy](#input\_deletion\_policy) | The deletion policy for the shared VPC link. ABANDON to leave resources, DELETE to destroy them. | `string` | `"ABANDON"` | no |
+| <a name="input_deletion_policy"></a> [deletion\_policy](#input\_deletion\_policy) | The deletion policy for the shared VPC link. ABANDON detaches the service project and leaves it intact. | `string` | `"ABANDON"` | no |
 | <a name="input_enable_gke_permissions"></a> [enable\_gke\_permissions](#input\_enable\_gke\_permissions) | Whether to grant GKE service account permissions on host project | `bool` | `false` | no |
 | <a name="input_grant_network_user_to_all_subnets"></a> [grant\_network\_user\_to\_all\_subnets](#input\_grant\_network\_user\_to\_all\_subnets) | Whether to grant compute.networkUser at project level (access to all subnets) | `bool` | `false` | no |
 | <a name="input_network_user_members"></a> [network\_user\_members](#input\_network\_user\_members) | List of members to grant compute.networkUser role (when grant\_network\_user\_to\_all\_subnets is true) | `list(string)` | `[]` | no |

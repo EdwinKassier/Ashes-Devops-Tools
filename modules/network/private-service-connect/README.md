@@ -68,14 +68,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0, < 2.0.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 6.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.0, < 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 7.14.1 |
+| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
 
 
 
@@ -106,7 +106,7 @@ The following resources are created:
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to the PSC resources | `map(string)` | `{}` | no |
 | <a name="input_region"></a> [region](#input\_region) | Region for the PSC endpoint (required for regional endpoints) | `string` | `null` | no |
 | <a name="input_subnetwork"></a> [subnetwork](#input\_subnetwork) | The self-link of the subnetwork for the PSC endpoint (optional) | `string` | `null` | no |
-| <a name="input_target"></a> [target](#input\_target) | The target service to connect to (e.g., 'all-apis', 'vpc-sc', or a service attachment URI) | `string` | `"all-apis"` | no |
+| <a name="input_target"></a> [target](#input\_target) | The target service to connect to. Must be 'all-apis' or 'vpc-sc'. | `string` | `"all-apis"` | no |
 
 ## Outputs
 

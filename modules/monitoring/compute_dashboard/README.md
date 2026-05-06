@@ -70,14 +70,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0, < 2.0.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 6.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.0, < 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 7.14.1 |
+| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
 
 
 
@@ -86,7 +86,7 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_monitoring_dashboard.compute_dashboard (modules/monitoring/compute_dashboard/main.tf#L435)
+- resource.google_monitoring_dashboard.compute_dashboard (modules/monitoring/compute_dashboard/main.tf#L11)
 
 
 ## Inputs

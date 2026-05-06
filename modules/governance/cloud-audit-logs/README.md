@@ -77,14 +77,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0, < 2.0.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 6.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.0, < 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 7.14.1 |
+| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
 
 
 
@@ -111,14 +111,14 @@ The following resources are created:
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The ID of the project where the Cloud Audit Logs will be configured | `string` | n/a | yes |
-| <a name="input_bigquery_kms_key_name"></a> [bigquery\_kms\_key\_name](#input\_bigquery\_kms\_key\_name) | The KMS key name to encrypt the optional BigQuery audit analytics dataset | `string` | `null` | no |
+| <a name="input_bigquery_kms_key_name"></a> [bigquery\_kms\_key\_name](#input\_bigquery\_kms\_key\_name) | The KMS key name to encrypt the optional BigQuery audit analytics dataset. Format: projects/{project}/locations/{location}/keyRings/{keyring}/cryptoKeys/{key} | `string` | `null` | no |
 | <a name="input_bigquery_location"></a> [bigquery\_location](#input\_bigquery\_location) | Location for the BigQuery dataset. Should match or be compatible with bucket\_location. | `string` | `"US"` | no |
-| <a name="input_bigquery_retention_days"></a> [bigquery\_retention\_days](#input\_bigquery\_retention\_days) | Number of days to retain audit logs in BigQuery (via partition expiration). | `number` | `365` | no |
+| <a name="input_bigquery_retention_days"></a> [bigquery\_retention\_days](#input\_bigquery\_retention\_days) | Number of days to retain audit logs in BigQuery (via partition expiration). Minimum 1. | `number` | `365` | no |
 | <a name="input_bucket_location"></a> [bucket\_location](#input\_bucket\_location) | The location of the bucket that will store audit logs | `string` | `"US"` | no |
 | <a name="input_enable_bigquery_analytics"></a> [enable\_bigquery\_analytics](#input\_enable\_bigquery\_analytics) | Enable BigQuery sink for log analytics. Creates a BigQuery dataset and org-level sink for querying audit logs. | `bool` | `false` | no |
 | <a name="input_force_destroy_bucket"></a> [force\_destroy\_bucket](#input\_force\_destroy\_bucket) | When deleting the bucket, automatically delete all objects | `bool` | `false` | no |
-| <a name="input_kms_key_name"></a> [kms\_key\_name](#input\_kms\_key\_name) | The KMS key name to encrypt the audit logs bucket (optional) | `string` | `null` | no |
-| <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | The number of days to retain audit logs in the storage bucket | `number` | `365` | no |
+| <a name="input_kms_key_name"></a> [kms\_key\_name](#input\_kms\_key\_name) | The KMS key name to encrypt the audit logs bucket (optional). Format: projects/{project}/locations/{location}/keyRings/{keyring}/cryptoKeys/{key} | `string` | `null` | no |
+| <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | The number of days to retain audit logs in the storage bucket (minimum 1) | `number` | `365` | no |
 | <a name="input_org_id"></a> [org\_id](#input\_org\_id) | Organization ID for org-level log sink (optional). When provided, creates an org-level sink that captures audit logs from all projects. | `string` | `null` | no |
 
 ## Outputs

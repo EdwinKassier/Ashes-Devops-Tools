@@ -80,14 +80,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0, < 2.0.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 6.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.0, < 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | ~> 6.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
 
 
 
@@ -108,7 +108,7 @@ The following resources are created:
 | <a name="input_parent"></a> [parent](#input\_parent) | The parent resource where policies will be applied. Format: organizations/123, folders/456, or projects/789 | `string` | n/a | yes |
 | <a name="input_boolean_policies"></a> [boolean\_policies](#input\_boolean\_policies) | List of boolean organization policies to enforce or disable | <pre>list(object({<br/>    constraint = string # e.g., "sql.restrictPublicIp", "compute.requireShieldedVm"<br/>    enforce    = bool   # true = enforce the constraint, false = disable it<br/>  }))</pre> | `[]` | no |
 | <a name="input_custom_constraints"></a> [custom\_constraints](#input\_custom\_constraints) | List of custom organization policy constraints to create | <pre>list(object({<br/>    name           = string       # Unique name, e.g., "custom.disableGkeAutoUpgrade"<br/>    display_name   = string       # Human readable name<br/>    description    = string       # Description of the constraint<br/>    action_type    = string       # ALLOW or DENY<br/>    condition      = string       # CEL condition, e.g., "resource.management.autoUpgrade == true"<br/>    method_types   = list(string) # Operations to restrict: CREATE, UPDATE, DELETE<br/>    resource_types = list(string) # Resources to restrict: e.g. ["container.googleapis.com/NodePool"]<br/>  }))</pre> | `[]` | no |
-| <a name="input_list_policies"></a> [list\_policies](#input\_list\_policies) | List of list-type organization policies with allowed/denied values | <pre>list(object({<br/>    constraint     = string       # e.g., "gcp.resourceLocations"<br/>    allow_all      = bool         # Allow all values (overrides allowed_values)<br/>    deny_all       = bool         # Deny all values (overrides denied_values)<br/>    allowed_values = list(string) # Specific values to allow<br/>    denied_values  = list(string) # Specific values to deny<br/>  }))</pre> | `[]` | no |
+| <a name="input_list_policies"></a> [list\_policies](#input\_list\_policies) | List of list-type organization policies with allowed/denied values | <pre>list(object({<br/>    constraint     = string       # e.g., "gcp.resourceLocations"<br/>    allow_all      = optional(bool, false) # Allow all values (overrides allowed_values)<br/>    deny_all       = optional(bool, false) # Deny all values (overrides denied_values)<br/>    allowed_values = list(string) # Specific values to allow<br/>    denied_values  = list(string) # Specific values to deny<br/>  }))</pre> | `[]` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags to apply for tracking and organization | `map(string)` | `{}` | no |
 
 ## Outputs

@@ -146,14 +146,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0, < 2.0.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 6.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.0, < 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 6.50.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
 
 
 
@@ -175,7 +175,7 @@ The following resources are created:
 | <a name="input_title"></a> [title](#input\_title) | A human-readable title for the custom role | `string` | n/a | yes |
 | <a name="input_description"></a> [description](#input\_description) | A description of the custom role | `string` | `""` | no |
 | <a name="input_level"></a> [level](#input\_level) | Level at which to create the custom role: 'project' or 'organization' | `string` | `"project"` | no |
-| <a name="input_org_id"></a> [org\_id](#input\_org\_id) | The organization ID where the custom role will be created (required when level is 'organization') | `string` | `null` | no |
+| <a name="input_org_id"></a> [org\_id](#input\_org\_id) | The numeric organization ID where the custom role will be created (required when level is 'organization', digits only without 'organizations/' prefix) | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The ID of the project where the custom role will be created (required when level is 'project') | `string` | `null` | no |
 | <a name="input_stage"></a> [stage](#input\_stage) | The current launch stage of the role (ALPHA, BETA, GA, DEPRECATED, DISABLED, EAP) | `string` | `"GA"` | no |
 

@@ -137,19 +137,21 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0, < 2.0.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 6.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.0, < 8.0 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.0, < 8.0 |
+| <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.6 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | ~> 6.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | 6.50.0 |
 
 ## Modules
 
 
-- project - terraform-google-modules/project-factory/google (~> 14.0)
+- project - terraform-google-modules/project-factory/google (~> 17.0)
 
 
 ## Resources
@@ -166,15 +168,15 @@ The following resources are created:
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_billing_account"></a> [billing\_account](#input\_billing\_account) | The Billing Account ID | `string` | n/a | yes |
-| <a name="input_folder_id"></a> [folder\_id](#input\_folder\_id) | The Folder ID to create the project in | `string` | n/a | yes |
-| <a name="input_org_id"></a> [org\_id](#input\_org\_id) | The Organization ID | `string` | n/a | yes |
+| <a name="input_billing_account"></a> [billing\_account](#input\_billing\_account) | The GCP Billing Account ID in format XXXXXX-XXXXXX-XXXXXX | `string` | n/a | yes |
+| <a name="input_folder_id"></a> [folder\_id](#input\_folder\_id) | The numeric Folder ID to create the project in (digits only, without 'folders/' prefix) | `string` | n/a | yes |
+| <a name="input_org_id"></a> [org\_id](#input\_org\_id) | The numeric GCP Organization ID (digits only, without 'organizations/' prefix) | `string` | n/a | yes |
 | <a name="input_project_admin_group_email"></a> [project\_admin\_group\_email](#input\_project\_admin\_group\_email) | Email of the Google Group to grant admin access | `string` | n/a | yes |
 | <a name="input_project_name"></a> [project\_name](#input\_project\_name) | The name of the project to create | `string` | n/a | yes |
 | <a name="input_activate_apis"></a> [activate\_apis](#input\_activate\_apis) | List of APIs to enable in the project | `list(string)` | `[]` | no |
 | <a name="input_enable_shared_vpc_attachment"></a> [enable\_shared\_vpc\_attachment](#input\_enable\_shared\_vpc\_attachment) | Whether to attach this project to a Shared VPC Host | `bool` | `true` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to the project | `map(string)` | `{}` | no |
-| <a name="input_project_admin_roles"></a> [project\_admin\_roles](#input\_project\_admin\_roles) | List of roles to grant to the admin group | `list(string)` | `[]` | no |
+| <a name="input_project_admin_roles"></a> [project\_admin\_roles](#input\_project\_admin\_roles) | List of roles to grant to the admin group via google\_project\_iam\_binding.<br/><br/>WARNING: google\_project\_iam\_binding is AUTHORITATIVE per role. On every apply it<br/>removes any other member that holds the role, including manually-granted access.<br/>Any member not in this list will lose the role on the next terraform apply.<br/><br/>Consider using google\_project\_iam\_member (additive) instead if you need to<br/>coexist with bindings managed outside of Terraform. | `list(string)` | `[]` | no |
 | <a name="input_shared_vpc_host_project_id"></a> [shared\_vpc\_host\_project\_id](#input\_shared\_vpc\_host\_project\_id) | The Host Project ID for Shared VPC | `string` | `""` | no |
 | <a name="input_shared_vpc_subnets"></a> [shared\_vpc\_subnets](#input\_shared\_vpc\_subnets) | List of subnets in the Host Project to grant access to | <pre>map(object({<br/>    region      = string<br/>    subnet_name = string<br/>  }))</pre> | `{}` | no |
 
@@ -185,4 +187,5 @@ The following resources are created:
 | <a name="output_project_id"></a> [project\_id](#output\_project\_id) | The ID of the created project |
 | <a name="output_project_number"></a> [project\_number](#output\_project\_number) | The numeric identifier of the created project |
 | <a name="output_service_account_email"></a> [service\_account\_email](#output\_service\_account\_email) | The email of the default service account |
+| <a name="output_subnet_iam_bindings"></a> [subnet\_iam\_bindings](#output\_subnet\_iam\_bindings) | Map of subnet key to IAM binding resource ID for the networkUser bindings granted to this service project |
 <!-- END_TF_DOCS -->

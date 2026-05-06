@@ -62,9 +62,11 @@ module "example" {
 
 	# Required variables
 	default_region = 
+	dns_hub_vpc_cidr_block = 
 	dns_project_id = 
 	folders = 
 	hub_project_id = 
+	hub_vpc_cidr_block = 
 	org_id = 
 	project_prefix = 
 	spoke_project_ids = 
@@ -76,8 +78,9 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0, < 2.0.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 6.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.0, < 8.0 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.0, < 8.0 |
 
 ## Providers
 
@@ -103,10 +106,12 @@ The following resources are created:
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_default_region"></a> [default\_region](#input\_default\_region) | Default GCP region for resources | `string` | n/a | yes |
+| <a name="input_dns_hub_vpc_cidr_block"></a> [dns\_hub\_vpc\_cidr\_block](#input\_dns\_hub\_vpc\_cidr\_block) | CIDR block for the DNS hub VPC (e.g. "10.1.0.0/16"). Required — must not overlap with hub\_vpc\_cidr\_block. | `string` | n/a | yes |
 | <a name="input_dns_project_id"></a> [dns\_project\_id](#input\_dns\_project\_id) | Project ID for the DNS hub | `string` | n/a | yes |
 | <a name="input_folders"></a> [folders](#input\_folders) | Map of folder objects to attach policies to | <pre>map(object({<br/>    id           = string<br/>    name         = string<br/>    display_name = string<br/>  }))</pre> | n/a | yes |
 | <a name="input_hub_project_id"></a> [hub\_project\_id](#input\_hub\_project\_id) | Project ID for the network hub | `string` | n/a | yes |
-| <a name="input_org_id"></a> [org\_id](#input\_org\_id) | Organization ID (format: organizations/123456789) | `string` | n/a | yes |
+| <a name="input_hub_vpc_cidr_block"></a> [hub\_vpc\_cidr\_block](#input\_hub\_vpc\_cidr\_block) | CIDR block for the hub VPC (e.g. "10.0.0.0/16"). Required — set via IPAM or per-environment tfvars. | `string` | n/a | yes |
+| <a name="input_org_id"></a> [org\_id](#input\_org\_id) | Organization ID in format 'organizations/123456789' — passed directly to vpc-sc module which requires this prefix | `string` | n/a | yes |
 | <a name="input_project_prefix"></a> [project\_prefix](#input\_project\_prefix) | Prefix used for project naming | `string` | n/a | yes |
 | <a name="input_spoke_project_ids"></a> [spoke\_project\_ids](#input\_spoke\_project\_ids) | Map of spoke project IDs to attach to Shared VPC | `map(string)` | n/a | yes |
 | <a name="input_internal_domain"></a> [internal\_domain](#input\_internal\_domain) | Internal domain for private DNS zone (e.g., 'mycompany.com') | `string` | `"internal.local"` | no |

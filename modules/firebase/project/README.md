@@ -19,16 +19,16 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0, < 2.0.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 6.0 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | ~> 6.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.0, < 8.0 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.0, < 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 6.50.0 |
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | 7.14.1 |
+| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | 7.31.0 |
 
 
 
@@ -59,12 +59,12 @@ The following resources are created:
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The GCP project ID | `string` | n/a | yes |
 | <a name="input_android_display_name"></a> [android\_display\_name](#input\_android\_display\_name) | Display name for the Android app | `string` | `""` | no |
 | <a name="input_android_package_name"></a> [android\_package\_name](#input\_android\_package\_name) | Package name for the Android app | `string` | `""` | no |
-| <a name="input_android_sha1_hashes"></a> [android\_sha1\_hashes](#input\_android\_sha1\_hashes) | List of SHA-1 hashes for the Android app | `list(string)` | `[]` | no |
-| <a name="input_android_sha256_hashes"></a> [android\_sha256\_hashes](#input\_android\_sha256\_hashes) | List of SHA-256 hashes for the Android app | `list(string)` | `[]` | no |
+| <a name="input_android_sha1_hashes"></a> [android\_sha1\_hashes](#input\_android\_sha1\_hashes) | List of SHA-1 certificate fingerprints for the Android app (40 hex characters, colon-separated pairs accepted) | `list(string)` | `[]` | no |
+| <a name="input_android_sha256_hashes"></a> [android\_sha256\_hashes](#input\_android\_sha256\_hashes) | List of SHA-256 certificate fingerprints for the Android app (64 hex characters, colon-separated pairs accepted) | `list(string)` | `[]` | no |
 | <a name="input_apple_app_store_id"></a> [apple\_app\_store\_id](#input\_apple\_app\_store\_id) | App Store ID for the Apple app | `string` | `""` | no |
 | <a name="input_apple_bundle_id"></a> [apple\_bundle\_id](#input\_apple\_bundle\_id) | Bundle ID for the Apple app | `string` | `""` | no |
 | <a name="input_apple_display_name"></a> [apple\_display\_name](#input\_apple\_display\_name) | Display name for the Apple app | `string` | `""` | no |
-| <a name="input_apple_team_id"></a> [apple\_team\_id](#input\_apple\_team\_id) | Apple Team ID for the Apple app | `string` | `""` | no |
+| <a name="input_apple_team_id"></a> [apple\_team\_id](#input\_apple\_team\_id) | Apple Team ID for the Apple app (10-character uppercase alphanumeric) | `string` | `""` | no |
 | <a name="input_kms_key_name"></a> [kms\_key\_name](#input\_kms\_key\_name) | Optional customer-managed KMS key used for the Firebase web config bucket | `string` | `null` | no |
 | <a name="input_region"></a> [region](#input\_region) | The GCP region | `string` | `"us-central1"` | no |
 | <a name="input_web_display_name"></a> [web\_display\_name](#input\_web\_display\_name) | Display name for the web app | `string` | `""` | no |

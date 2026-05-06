@@ -100,14 +100,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0, < 2.0.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 6.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.0, < 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | ~> 6.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
 
 
 
@@ -125,14 +125,14 @@ The following resources are created:
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_admin_project_id"></a> [admin\_project\_id](#input\_admin\_project\_id) | n/a | `string` | n/a | yes |
-| <a name="input_default_billing_account"></a> [default\_billing\_account](#input\_default\_billing\_account) | n/a | `string` | n/a | yes |
-| <a name="input_environments"></a> [environments](#input\_environments) | Map of environment definitions | <pre>map(object({<br/>    display_name = string<br/>    description  = string<br/>    projects = map(object({<br/>      name            = string<br/>      billing_account = optional(string)<br/>      labels          = map(string)<br/>    }))<br/>  }))</pre> | n/a | yes |
-| <a name="input_folders"></a> [folders](#input\_folders) | n/a | <pre>map(object({<br/>    id           = string<br/>    name         = string<br/>    display_name = string<br/>  }))</pre> | n/a | yes |
-| <a name="input_organization_name"></a> [organization\_name](#input\_organization\_name) | n/a | `string` | n/a | yes |
-| <a name="input_project_prefix"></a> [project\_prefix](#input\_project\_prefix) | n/a | `string` | n/a | yes |
-| <a name="input_suffix"></a> [suffix](#input\_suffix) | Random suffix from bootstrap module | `string` | n/a | yes |
-| <a name="input_project_services"></a> [project\_services](#input\_project\_services) | n/a | `list(string)` | <pre>[<br/>  "cloudresourcemanager.googleapis.com",<br/>  "compute.googleapis.com",<br/>  "serviceusage.googleapis.com",<br/>  "iam.googleapis.com",<br/>  "cloudbilling.googleapis.com",<br/>  "monitoring.googleapis.com"<br/>]</pre> | no |
+| <a name="input_admin_project_id"></a> [admin\_project\_id](#input\_admin\_project\_id) | Project ID of the bootstrap admin project used as the metrics scope for monitoring | `string` | n/a | yes |
+| <a name="input_default_billing_account"></a> [default\_billing\_account](#input\_default\_billing\_account) | Default GCP billing account ID in format XXXXXX-XXXXXX-XXXXXX, used when a project does not specify its own billing account | `string` | n/a | yes |
+| <a name="input_environments"></a> [environments](#input\_environments) | Map of environment definitions keyed by environment name. Each environment must have at least one project. | <pre>map(object({<br/>    display_name = string<br/>    description  = string<br/>    projects = map(object({<br/>      name            = string<br/>      billing_account = optional(string)<br/>      labels          = map(string)<br/>    }))<br/>  }))</pre> | n/a | yes |
+| <a name="input_folders"></a> [folders](#input\_folders) | Map of folder objects keyed by environment name, as output by the organization stage | <pre>map(object({<br/>    id           = string<br/>    name         = string<br/>    display_name = string<br/>  }))</pre> | n/a | yes |
+| <a name="input_organization_name"></a> [organization\_name](#input\_organization\_name) | Organization name applied as a label on all created projects | `string` | n/a | yes |
+| <a name="input_project_prefix"></a> [project\_prefix](#input\_project\_prefix) | Short prefix applied to all project IDs for global uniqueness (e.g., 'my-org') | `string` | n/a | yes |
+| <a name="input_suffix"></a> [suffix](#input\_suffix) | Random suffix from bootstrap module appended to project IDs for uniqueness | `string` | n/a | yes |
+| <a name="input_project_services"></a> [project\_services](#input\_project\_services) | List of GCP APIs to enable on every created project | `list(string)` | <pre>[<br/>  "cloudresourcemanager.googleapis.com",<br/>  "compute.googleapis.com",<br/>  "serviceusage.googleapis.com",<br/>  "iam.googleapis.com",<br/>  "cloudbilling.googleapis.com",<br/>  "monitoring.googleapis.com"<br/>]</pre> | no |
 
 ## Outputs
 

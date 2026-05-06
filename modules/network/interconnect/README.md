@@ -121,14 +121,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0, < 2.0.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 6.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.0, < 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | ~> 6.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
 
 
 
@@ -157,7 +157,7 @@ The following resources are created:
 | <a name="input_advertised_groups"></a> [advertised\_groups](#input\_advertised\_groups) | Advertised groups for the router (e.g., ALL\_SUBNETS) | `list(string)` | <pre>[<br/>  "ALL_SUBNETS"<br/>]</pre> | no |
 | <a name="input_advertised_ip_ranges"></a> [advertised\_ip\_ranges](#input\_advertised\_ip\_ranges) | Custom IP ranges to advertise via BGP | <pre>list(object({<br/>    range       = string<br/>    description = optional(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_advertised_route_priority"></a> [advertised\_route\_priority](#input\_advertised\_route\_priority) | Priority for advertised routes (lower = higher priority) | `number` | `100` | no |
-| <a name="input_bandwidth"></a> [bandwidth](#input\_bandwidth) | Provisioned bandwidth for dedicated interconnect (e.g., BPS\_1G, BPS\_10G) | `string` | `"BPS_10G"` | no |
+| <a name="input_bandwidth"></a> [bandwidth](#input\_bandwidth) | Provisioned bandwidth for dedicated interconnect. Valid values: BPS\_50M, BPS\_100M, BPS\_200M, BPS\_300M, BPS\_400M, BPS\_500M, BPS\_1G, BPS\_2G, BPS\_5G, BPS\_10G, BPS\_20G, BPS\_50G. | `string` | `"BPS_10G"` | no |
 | <a name="input_bfd_min_receive_interval"></a> [bfd\_min\_receive\_interval](#input\_bfd\_min\_receive\_interval) | Minimum BFD receive interval in milliseconds | `number` | `1000` | no |
 | <a name="input_bfd_min_transmit_interval"></a> [bfd\_min\_transmit\_interval](#input\_bfd\_min\_transmit\_interval) | Minimum BFD transmit interval in milliseconds | `number` | `1000` | no |
 | <a name="input_bfd_multiplier"></a> [bfd\_multiplier](#input\_bfd\_multiplier) | BFD detection multiplier | `number` | `5` | no |

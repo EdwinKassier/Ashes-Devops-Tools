@@ -88,14 +88,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0, < 2.0.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 6.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.0, < 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 7.14.1 |
+| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
 
 
 
@@ -104,12 +104,12 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_compute_external_vpn_gateway.peer (modules/network/vpn/main.tf#L26)
+- resource.google_compute_external_vpn_gateway.peer (modules/network/vpn/main.tf#L23)
 - resource.google_compute_ha_vpn_gateway.gateway (modules/network/vpn/main.tf#L14)
-- resource.google_compute_router.router (modules/network/vpn/main.tf#L41)
-- resource.google_compute_router_interface.interfaces (modules/network/vpn/main.tf#L80)
-- resource.google_compute_router_peer.peers (modules/network/vpn/main.tf#L92)
-- resource.google_compute_vpn_tunnel.tunnels (modules/network/vpn/main.tf#L62)
+- resource.google_compute_router.router (modules/network/vpn/main.tf#L38)
+- resource.google_compute_router_interface.interfaces (modules/network/vpn/main.tf#L77)
+- resource.google_compute_router_peer.peers (modules/network/vpn/main.tf#L89)
+- resource.google_compute_vpn_tunnel.tunnels (modules/network/vpn/main.tf#L59)
 
 
 ## Inputs
@@ -142,5 +142,5 @@ The following resources are created:
 | <a name="output_router"></a> [router](#output\_router) | The Cloud Router resource |
 | <a name="output_self_link"></a> [self\_link](#output\_self\_link) | The URI of the VPN gateway |
 | <a name="output_tunnel_statuses"></a> [tunnel\_statuses](#output\_tunnel\_statuses) | The status of each VPN tunnel |
-| <a name="output_tunnels"></a> [tunnels](#output\_tunnels) | The VPN tunnel resources |
+| <a name="output_tunnels"></a> [tunnels](#output\_tunnels) | The VPN tunnel resources (marked sensitive because tunnels contain shared\_secret) |
 <!-- END_TF_DOCS -->

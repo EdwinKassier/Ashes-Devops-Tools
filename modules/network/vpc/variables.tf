@@ -13,6 +13,10 @@ variable "vpc_name" {
   description = "The name of the VPC network"
   type        = string
   default     = "main-vpc"
+  validation {
+    condition     = can(regex("^[a-z][-a-z0-9]{0,62}$", var.vpc_name))
+    error_message = "vpc_name must start with a lowercase letter and contain only lowercase letters, digits, and hyphens (max 63 characters)."
+  }
 }
 
 variable "routing_mode" {

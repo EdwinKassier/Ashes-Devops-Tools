@@ -12,6 +12,10 @@ variable "project_id" {
 variable "zone_name" {
   description = "Name of the DNS zone (used as resource identifier)"
   type        = string
+  validation {
+    condition     = can(regex("^[a-z][-a-z0-9]{0,62}$", var.zone_name))
+    error_message = "zone_name must start with a lowercase letter and contain only lowercase letters, digits, and hyphens (max 63 characters)."
+  }
 }
 
 variable "dns_name" {
