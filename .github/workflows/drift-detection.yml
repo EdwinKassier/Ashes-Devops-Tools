@@ -90,6 +90,7 @@ jobs:
         id: poll
         env:
           TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+          TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
           DRIFT_RUN_ID: ${{ steps.trigger_plan.outputs.drift_run_id }}
         run: |
           for i in $(seq 1 20); do
