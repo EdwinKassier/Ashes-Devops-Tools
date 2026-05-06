@@ -74,4 +74,12 @@ variable "workload_identity_members" {
   description = "List of members allowed to use this service account via Workload Identity (format: principalSet://... or serviceAccount:...)"
   type        = list(string)
   default     = []
+
+  validation {
+    condition = alltrue([
+      for m in var.workload_identity_members :
+      can(regex("^(principalSet://|serviceAccount:)", m))
+    ])
+    error_message = "Each workload_identity_members entry must be prefixed with 'principalSet://' (federated identity) or 'serviceAccount:' (SA impersonation)."
+  }
 }

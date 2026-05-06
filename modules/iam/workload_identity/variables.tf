@@ -100,9 +100,14 @@ variable "enable_aws_provider" {
 }
 
 variable "aws_account_id" {
-  description = "AWS account ID to restrict access to"
+  description = "AWS account ID to restrict access to (12-digit numeric AWS account ID)"
   type        = string
   default     = null
+
+  validation {
+    condition     = var.aws_account_id == null || can(regex("^[0-9]{12}$", var.aws_account_id))
+    error_message = "aws_account_id must be a 12-digit numeric AWS account ID."
+  }
 }
 
 # Terraform Cloud Provider Configuration

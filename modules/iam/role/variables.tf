@@ -16,9 +16,14 @@ variable "project_id" {
 }
 
 variable "org_id" {
-  description = "The organization ID where the custom role will be created (required when level is 'organization')"
+  description = "The numeric organization ID where the custom role will be created (required when level is 'organization', digits only without 'organizations/' prefix)"
   type        = string
   default     = null
+
+  validation {
+    condition     = var.org_id == null || can(regex("^[0-9]+$", var.org_id))
+    error_message = "org_id must be a numeric organization ID (digits only, without 'organizations/' prefix)."
+  }
 }
 
 variable "role_id" {

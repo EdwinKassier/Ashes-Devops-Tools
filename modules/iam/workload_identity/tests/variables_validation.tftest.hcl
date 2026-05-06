@@ -66,3 +66,41 @@ run "rejects_pool_id_ending_with_hyphen" {
     pool_id = "github-pool-"
   }
 }
+
+# ── aws_account_id ─────────────────────────────────────────────────────────────
+
+run "accepts_null_aws_account_id" {
+  command = plan
+
+  variables {
+    aws_account_id = null
+  }
+}
+
+run "accepts_valid_aws_account_id" {
+  command = plan
+
+  variables {
+    aws_account_id = "123456789012"
+  }
+}
+
+run "rejects_aws_account_id_too_short" {
+  command = plan
+
+  expect_failures = [var.aws_account_id]
+
+  variables {
+    aws_account_id = "12345678901"
+  }
+}
+
+run "rejects_aws_account_id_with_letters" {
+  command = plan
+
+  expect_failures = [var.aws_account_id]
+
+  variables {
+    aws_account_id = "12345678901a"
+  }
+}
