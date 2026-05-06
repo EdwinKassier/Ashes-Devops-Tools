@@ -32,10 +32,7 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   # Build attribute condition based on configuration:
   # 1. Use custom override if provided
   # 2. Otherwise, combine organization filter with ref restrictions
-  attribute_condition = coalesce(
-    var.github_attribute_condition_override,
-    local.github_computed_condition
-  )
+  attribute_condition = var.github_attribute_condition_override != null ? var.github_attribute_condition_override : local.github_computed_condition
 
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
@@ -56,7 +53,7 @@ locals {
 
   github_computed_condition = local.github_sub_condition != null && local.github_org_condition != null ? (
     "(${local.github_sub_condition}) && ${local.github_org_condition}"
-  ) : coalesce(local.github_sub_condition, local.github_org_condition)
+  ) : local.github_sub_condition != null ? local.github_sub_condition : local.github_org_condition
 }
 
 # GitLab CI OIDC Provider
