@@ -42,8 +42,13 @@ variable "spoke_project_ids" {
 }
 
 variable "org_id" {
-  description = "Organization ID (format: organizations/123456789)"
+  description = "Organization ID in format 'organizations/123456789' — passed directly to vpc-sc module which requires this prefix"
   type        = string
+
+  validation {
+    condition     = can(regex("^organizations/[0-9]+$", var.org_id))
+    error_message = "org_id must be in format 'organizations/<numeric_id>' (e.g., 'organizations/123456789')."
+  }
 }
 
 variable "folders" {

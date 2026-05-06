@@ -97,12 +97,22 @@ variable "strict_folder_policy_environment_keys" {
 variable "admin_email" {
   description = "Email address for the organization administrator"
   type        = string
+
+  validation {
+    condition     = can(regex("^[^@]+@[^@]+\\.[^@]+$", var.admin_email))
+    error_message = "admin_email must be a valid email address."
+  }
 }
 
 variable "break_glass_user" {
   description = "Email address for the break glass user (optional). Grants Organization Admin."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.break_glass_user == null || can(regex("^[^@]+@[^@]+\\.[^@]+$", var.break_glass_user))
+    error_message = "break_glass_user must be a valid email address when provided."
+  }
 }
 
 variable "organization_admin_groups" {
@@ -159,7 +169,12 @@ variable "monthly_budget_amount" {
 }
 
 variable "budget_currency" {
-  description = "Currency code for budget alerts (e.g., USD, EUR, GBP)"
+  description = "ISO 4217 currency code for budget alerts (e.g., USD, EUR, GBP)"
   type        = string
   default     = "USD"
+
+  validation {
+    condition     = can(regex("^[A-Z]{3}$", var.budget_currency))
+    error_message = "budget_currency must be a 3-letter ISO 4217 currency code (e.g., USD, EUR)."
+  }
 }

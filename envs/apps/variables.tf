@@ -25,9 +25,14 @@ variable "provider_region" {
 }
 
 variable "terraform_admin_email" {
-  description = "Optional service account to impersonate for local runs"
+  description = "Optional service account email to impersonate for local runs (format: name@project.iam.gserviceaccount.com)"
   type        = string
   default     = null
+
+  validation {
+    condition     = var.terraform_admin_email == null || can(regex("^[^@]+@[^@]+\\.[^@]+$", var.terraform_admin_email))
+    error_message = "terraform_admin_email must be a valid email address when provided."
+  }
 }
 
 variable "tfc_organization" {
@@ -48,9 +53,14 @@ variable "monthly_budget_limit" {
 }
 
 variable "budget_currency" {
-  description = "Budget currency code"
+  description = "ISO 4217 currency code for budget alerts (e.g., USD, EUR, GBP)"
   type        = string
   default     = "USD"
+
+  validation {
+    condition     = can(regex("^[A-Z]{3}$", var.budget_currency))
+    error_message = "budget_currency must be a 3-letter ISO 4217 currency code (e.g., USD, EUR)."
+  }
 }
 
 variable "enable_deletion_protection" {

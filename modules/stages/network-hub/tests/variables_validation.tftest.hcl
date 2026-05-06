@@ -161,3 +161,72 @@ run "rejects_invalid_dns_hub_vpc_cidr_block" {
     dns_hub_vpc_cidr_block = "256.0.0.0/8"
   }
 }
+
+# ── org_id ─────────────────────────────────────────────────────────────────────
+
+run "accepts_valid_org_id" {
+  command = plan
+
+  override_module {
+    target  = module.hub_network
+    outputs = { network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core" }
+  }
+  override_module {
+    target  = module.dns_hub_network
+    outputs = { network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core" }
+  }
+  override_module {
+    target  = module.dns_hub_zone
+    outputs = {}
+  }
+
+  variables {
+    org_id = "organizations/987654321"
+  }
+}
+
+run "rejects_org_id_without_prefix" {
+  command = plan
+
+  override_module {
+    target  = module.hub_network
+    outputs = { network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core" }
+  }
+  override_module {
+    target  = module.dns_hub_network
+    outputs = { network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core" }
+  }
+  override_module {
+    target  = module.dns_hub_zone
+    outputs = {}
+  }
+
+  expect_failures = [var.org_id]
+
+  variables {
+    org_id = "123456789"
+  }
+}
+
+run "rejects_org_id_with_non_numeric_suffix" {
+  command = plan
+
+  override_module {
+    target  = module.hub_network
+    outputs = { network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core" }
+  }
+  override_module {
+    target  = module.dns_hub_network
+    outputs = { network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core" }
+  }
+  override_module {
+    target  = module.dns_hub_zone
+    outputs = {}
+  }
+
+  expect_failures = [var.org_id]
+
+  variables {
+    org_id = "organizations/my-org"
+  }
+}
