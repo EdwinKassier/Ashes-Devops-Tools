@@ -266,3 +266,23 @@ run "rejects_invalid_bfd_mode" {
     bfd_session_initialization_mode = "active"
   }
 }
+
+# ── bandwidth ──────────────────────────────────────────────────────────────────
+
+run "accepts_valid_bandwidth" {
+  command = plan
+
+  variables {
+    bandwidth = "BPS_1G"
+  }
+}
+
+run "rejects_invalid_bandwidth" {
+  command = plan
+
+  expect_failures = [var.bandwidth]
+
+  variables {
+    bandwidth = "1G"
+  }
+}

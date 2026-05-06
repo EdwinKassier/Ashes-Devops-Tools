@@ -104,9 +104,17 @@ variable "vlan_tag" {
 }
 
 variable "bandwidth" {
-  description = "Provisioned bandwidth for dedicated interconnect (e.g., BPS_1G, BPS_10G)"
+  description = "Provisioned bandwidth for dedicated interconnect. Valid values: BPS_50M, BPS_100M, BPS_200M, BPS_300M, BPS_400M, BPS_500M, BPS_1G, BPS_2G, BPS_5G, BPS_10G, BPS_20G, BPS_50G."
   type        = string
   default     = "BPS_10G"
+
+  validation {
+    condition = contains([
+      "BPS_50M", "BPS_100M", "BPS_200M", "BPS_300M", "BPS_400M", "BPS_500M",
+      "BPS_1G", "BPS_2G", "BPS_5G", "BPS_10G", "BPS_20G", "BPS_50G"
+    ], var.bandwidth)
+    error_message = "bandwidth must be a valid GCP interconnect bandwidth value: BPS_50M, BPS_100M, BPS_200M, BPS_300M, BPS_400M, BPS_500M, BPS_1G, BPS_2G, BPS_5G, BPS_10G, BPS_20G, or BPS_50G."
+  }
 }
 
 variable "candidate_subnets" {
