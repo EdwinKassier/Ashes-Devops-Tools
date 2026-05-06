@@ -36,12 +36,22 @@ variable "prefix_length" {
   description = "The prefix length of the IP range (e.g., 16 for /16)"
   type        = number
   default     = 16
+
+  validation {
+    condition     = var.prefix_length >= 8 && var.prefix_length <= 29
+    error_message = "prefix_length must be between 8 and 29."
+  }
 }
 
 variable "ip_version" {
   description = "The IP version (IPV4 or IPV6)"
   type        = string
   default     = "IPV4"
+
+  validation {
+    condition     = contains(["IPV4", "IPV6"], var.ip_version)
+    error_message = "ip_version must be IPV4 or IPV6."
+  }
 }
 
 variable "labels" {
