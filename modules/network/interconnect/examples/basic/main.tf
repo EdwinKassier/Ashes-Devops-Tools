@@ -14,10 +14,10 @@ locals {
 module "partner_interconnect" {
   source = "../../"
 
-  project_id       = local.project_id
-  region           = local.region
-  network          = local.network
-  attachment_name  = "partner-vlan-central1"
+  project_id        = local.project_id
+  region            = local.region
+  network           = local.network
+  attachment_name   = "partner-vlan-central1"
   interconnect_type = "PARTNER"
 
   description = "Partner Interconnect VLAN to on-premises via Equinix"

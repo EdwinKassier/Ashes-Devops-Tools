@@ -3,8 +3,8 @@
 # for long-term retention and analysis.
 
 locals {
-  project_id          = "my-workload-project"
-  log_archive_bucket  = "gs://my-org-flow-logs-archive"
+  project_id         = "my-workload-project"
+  log_archive_bucket = "gs://my-org-flow-logs-archive"
 }
 
 module "flow_log_export" {

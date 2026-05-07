@@ -14,6 +14,19 @@ variables {
       group = "projects/mock-project/zones/europe-west1-b/instanceGroups/mock-ig"
     }
   ]
+  # is_l7 = true (default), so host_rules and path_matchers are required.
+  host_rules = [
+    {
+      hosts        = ["example.com"]
+      path_matcher = "main"
+    }
+  ]
+  path_matchers = [
+    {
+      name            = "main"
+      default_service = "projects/mock-project/regions/europe-west1/backendServices/mock-bs"
+    }
+  ]
 }
 
 # ── name ───────────────────────────────────────────────────────────────────────
@@ -51,6 +64,50 @@ run "rejects_name_with_uppercase" {
 
   variables {
     name = "MyLB"
+  }
+}
+
+# ── host_rules (L7 guard) ──────────────────────────────────────────────────────
+
+run "accepts_l7_with_host_rules" {
+  command = plan
+
+  variables {
+    is_l7 = true
+    host_rules = [
+      {
+        hosts        = ["api.example.com"]
+        path_matcher = "api"
+      }
+    ]
+    path_matchers = [
+      {
+        name            = "api"
+        default_service = "projects/mock-project/regions/europe-west1/backendServices/mock-bs"
+      }
+    ]
+  }
+}
+
+run "accepts_l4_without_host_rules" {
+  command = plan
+
+  variables {
+    is_l7         = false
+    host_rules    = []
+    path_matchers = []
+  }
+}
+
+run "rejects_l7_without_host_rules" {
+  command = plan
+
+  expect_failures = [var.host_rules]
+
+  variables {
+    is_l7         = true
+    host_rules    = []
+    path_matchers = []
   }
 }
 

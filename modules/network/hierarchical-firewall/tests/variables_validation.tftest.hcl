@@ -83,9 +83,9 @@ run "accepts_allow_rule_action" {
 
   variables {
     rules = [{
-      priority  = 1000
-      action    = "allow"
-      direction = "INGRESS"
+      priority       = 1000
+      action         = "allow"
+      direction      = "INGRESS"
       layer4_configs = [{ ip_protocol = "tcp" }]
     }]
   }
@@ -96,9 +96,9 @@ run "accepts_deny_rule_action" {
 
   variables {
     rules = [{
-      priority  = 2000
-      action    = "deny"
-      direction = "EGRESS"
+      priority       = 2000
+      action         = "deny"
+      direction      = "EGRESS"
       layer4_configs = [{ ip_protocol = "udp" }]
     }]
   }
@@ -109,9 +109,9 @@ run "accepts_goto_next_rule_action" {
 
   variables {
     rules = [{
-      priority  = 3000
-      action    = "goto_next"
-      direction = "INGRESS"
+      priority       = 3000
+      action         = "goto_next"
+      direction      = "INGRESS"
       layer4_configs = [{ ip_protocol = "all" }]
     }]
   }
@@ -124,9 +124,9 @@ run "rejects_invalid_rule_action" {
 
   variables {
     rules = [{
-      priority  = 1000
-      action    = "DROP"
-      direction = "INGRESS"
+      priority       = 1000
+      action         = "DROP"
+      direction      = "INGRESS"
       layer4_configs = [{ ip_protocol = "tcp" }]
     }]
   }
@@ -139,9 +139,9 @@ run "accepts_ingress_direction" {
 
   variables {
     rules = [{
-      priority  = 1000
-      action    = "allow"
-      direction = "INGRESS"
+      priority       = 1000
+      action         = "allow"
+      direction      = "INGRESS"
       layer4_configs = [{ ip_protocol = "tcp" }]
     }]
   }
@@ -152,9 +152,9 @@ run "accepts_egress_direction" {
 
   variables {
     rules = [{
-      priority  = 1000
-      action    = "allow"
-      direction = "EGRESS"
+      priority       = 1000
+      action         = "allow"
+      direction      = "EGRESS"
       layer4_configs = [{ ip_protocol = "tcp" }]
     }]
   }
@@ -167,9 +167,9 @@ run "rejects_invalid_direction" {
 
   variables {
     rules = [{
-      priority  = 1000
-      action    = "allow"
-      direction = "BOTH"
+      priority       = 1000
+      action         = "allow"
+      direction      = "BOTH"
       layer4_configs = [{ ip_protocol = "tcp" }]
     }]
   }

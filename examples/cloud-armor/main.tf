@@ -5,9 +5,9 @@
 module "cloud_armor" {
   source = "../../modules/network/cloud_armor"
 
-  project_id   = "my-project-id"
-  policy_name  = "api-gateway-policy"
-  description  = "WAF policy for public API gateway"
+  project_id  = "my-project-id"
+  policy_name = "api-gateway-policy"
+  description = "WAF policy for public API gateway"
 
   default_rule_action = "allow"
 

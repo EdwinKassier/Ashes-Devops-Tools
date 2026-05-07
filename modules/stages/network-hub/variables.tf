@@ -42,12 +42,16 @@ variable "spoke_project_ids" {
 }
 
 variable "org_id" {
-  description = "Organization ID in format 'organizations/123456789' — passed directly to vpc-sc module which requires this prefix"
+  description = <<-EOT
+    The GCP organization ID. Accepts either a bare numeric ID (e.g. '123456789012') as returned
+    by data.google_organization.org.org_id, or the 'organizations/<id>' prefixed form.
+    The module normalizes to the prefixed form internally before passing to VPC-SC.
+  EOT
   type        = string
 
   validation {
-    condition     = can(regex("^organizations/[0-9]+$", var.org_id))
-    error_message = "org_id must be in format 'organizations/<numeric_id>' (e.g., 'organizations/123456789')."
+    condition     = can(regex("^[0-9]+$", var.org_id)) || can(regex("^organizations/[0-9]+$", var.org_id))
+    error_message = "org_id must be either a bare numeric ID (e.g., '123456789012') or 'organizations/<numeric_id>'."
   }
 }
 

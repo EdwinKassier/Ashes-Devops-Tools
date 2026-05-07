@@ -11,6 +11,13 @@ variables {
   folder_id                 = "987654321"
   billing_account           = "ABCDEF-123456-789012"
   project_admin_group_email = "team@example.com"
+  # enable_shared_vpc_attachment defaults to true; provide a stub subnet so validation passes.
+  shared_vpc_subnets = {
+    primary = {
+      region      = "us-central1"
+      subnet_name = "mock-private-subnet"
+    }
+  }
 }
 
 # ── project_admin_roles ────────────────────────────────────────────────────────
@@ -122,5 +129,37 @@ run "rejects_invalid_admin_group_email" {
   expect_failures = [var.project_admin_group_email]
   variables {
     project_admin_group_email = "not-an-email"
+  }
+}
+
+# ── shared_vpc_subnets (guard: must be non-empty when enable_shared_vpc_attachment = true) ──
+
+run "accepts_shared_vpc_with_subnets" {
+  command = plan
+  variables {
+    enable_shared_vpc_attachment = true
+    shared_vpc_subnets = {
+      primary = {
+        region      = "us-central1"
+        subnet_name = "private-subnet"
+      }
+    }
+  }
+}
+
+run "accepts_no_shared_vpc_without_subnets" {
+  command = plan
+  variables {
+    enable_shared_vpc_attachment = false
+    shared_vpc_subnets           = {}
+  }
+}
+
+run "rejects_shared_vpc_with_no_subnets" {
+  command         = plan
+  expect_failures = [var.shared_vpc_subnets]
+  variables {
+    enable_shared_vpc_attachment = true
+    shared_vpc_subnets           = {}
   }
 }

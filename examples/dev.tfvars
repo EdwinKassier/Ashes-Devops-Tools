@@ -11,8 +11,8 @@
 
 # ── Project & identity ─────────────────────────────────────────────────────────
 
-project_prefix = "ashes"
-environment    = "dev"
+project_prefix  = "ashes"
+environment     = "dev"
 provider_region = "europe-west1"
 
 # Service account that Terraform impersonates (created by bootstrap).
@@ -20,7 +20,7 @@ provider_region = "europe-west1"
 terraform_admin_email = "terraform@ashes-admin-xxxx.iam.gserviceaccount.com"
 
 # Terraform Cloud configuration
-tfc_organization           = "your-tfc-org-name"
+tfc_organization            = "your-tfc-org-name"
 organization_workspace_name = "organization"
 
 # ── Networking ─────────────────────────────────────────────────────────────────
@@ -37,8 +37,8 @@ vpc_flow_logs_retention_days    = 30
 
 # ── Security features (off by default in dev, on in prod) ─────────────────────
 
-enable_deletion_protection = false   # set true in production
-enable_cloud_armor         = false   # set true when attaching an external LB
+enable_deletion_protection = false # set true in production
+enable_cloud_armor         = false # set true when attaching an external LB
 enable_owasp_rules         = false
 enable_adaptive_protection = false
 owasp_sensitivity          = 2

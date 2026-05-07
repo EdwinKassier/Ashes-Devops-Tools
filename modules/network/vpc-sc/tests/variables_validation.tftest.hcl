@@ -4,10 +4,11 @@
 mock_provider "google" {}
 
 variables {
-  organization_id    = "organizations/123456789"
-  perimeter_name     = "test_perimeter"
-  perimeter_title    = "Test Perimeter"
-  access_policy_name = "accessPolicies/1234567890"
+  organization_id = "organizations/123456789"
+  perimeter_name  = "test_perimeter"
+  perimeter_title = "Test Perimeter"
+  # access_policy_name must be a bare numeric ID — no "accessPolicies/" prefix.
+  access_policy_name = "1234567890"
 }
 
 # ── organization_id ────────────────────────────────────────────────────────────
@@ -37,6 +38,26 @@ run "rejects_organization_id_with_letters" {
 
   variables {
     organization_id = "organizations/my-org"
+  }
+}
+
+# ── access_policy_name ────────────────────────────────────────────────────────
+
+run "accepts_bare_numeric_access_policy_name" {
+  command = plan
+
+  variables {
+    access_policy_name = "9876543210"
+  }
+}
+
+run "rejects_prefixed_access_policy_name" {
+  command = plan
+
+  expect_failures = [var.access_policy_name]
+
+  variables {
+    access_policy_name = "accessPolicies/1234567890"
   }
 }
 

@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write   # Required: create-pull-request pushes a commit to a branch
   pull-requests: write
 
 concurrency:

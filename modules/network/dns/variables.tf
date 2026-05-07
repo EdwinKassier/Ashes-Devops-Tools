@@ -46,9 +46,14 @@ variable "visibility" {
 }
 
 variable "private_visibility_networks" {
-  description = "List of VPC network self-links that can see this private zone"
+  description = "List of VPC network self-links that can resolve this private DNS zone. Must contain at least one network when visibility is 'private' — a private zone with no associated networks is unreachable and serves no purpose."
   type        = list(string)
   default     = []
+
+  validation {
+    condition     = var.visibility != "private" || length(var.private_visibility_networks) > 0
+    error_message = "private_visibility_networks must contain at least one VPC network self-link when visibility is 'private'."
+  }
 }
 
 variable "peering_network" {

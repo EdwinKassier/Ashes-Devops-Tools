@@ -18,11 +18,11 @@ run "accepts_all_app_platforms_configured" {
   command = plan
 
   variables {
-    apple_display_name  = "My iOS App"
-    apple_bundle_id     = "com.example.myapp"
+    apple_display_name   = "My iOS App"
+    apple_bundle_id      = "com.example.myapp"
     android_display_name = "My Android App"
     android_package_name = "com.example.myapp"
-    web_display_name    = "My Web App"
+    web_display_name     = "My Web App"
   }
 }
 

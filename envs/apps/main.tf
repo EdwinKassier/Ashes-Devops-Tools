@@ -122,9 +122,10 @@ module "host" {
 
   enable_vpc_flow_logs_export           = true
   vpc_flow_logs_create_bigquery_dataset = true
-  vpc_flow_logs_bigquery_dataset_id     = "vpc_flow_logs_${var.environment}"
-  vpc_flow_logs_bigquery_location       = local.env_config.region
-  vpc_flow_logs_retention_days          = var.vpc_flow_logs_retention_days
+  # BigQuery dataset IDs only allow alphanumerics and underscores — replace hyphens from environment name.
+  vpc_flow_logs_bigquery_dataset_id = "vpc_flow_logs_${replace(var.environment, "-", "_")}"
+  vpc_flow_logs_bigquery_location   = local.env_config.region
+  vpc_flow_logs_retention_days      = var.vpc_flow_logs_retention_days
 
   vpc_service_controls = {
     "${var.environment}_perimeter" = {

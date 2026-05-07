@@ -43,9 +43,14 @@ variable "create_router" {
 }
 
 variable "router_name" {
-  description = "Name of the Cloud Router. Required if create_router is false, otherwise auto-generated."
+  description = "Name of the Cloud Router. Required if create_router is false (to reference an existing router). Auto-generated from the NAT name when create_router is true."
   type        = string
   default     = ""
+
+  validation {
+    condition     = var.create_router || var.router_name != ""
+    error_message = "router_name must be provided when create_router is false."
+  }
 }
 
 variable "router_asn" {
@@ -111,9 +116,18 @@ variable "min_ports_per_vm" {
 }
 
 variable "max_ports_per_vm" {
-  description = "Maximum number of ports allocated to a VM (requires enable_dynamic_port_allocation)"
+  description = "Maximum number of ports per VM for dynamic port allocation (64–32768). Must be >= min_ports_per_vm. Only meaningful when enable_dynamic_port_allocation is true."
   type        = number
   default     = null
+
+  validation {
+    condition = var.max_ports_per_vm == null || (
+      var.max_ports_per_vm >= 64 &&
+      var.max_ports_per_vm <= 32768 &&
+      var.max_ports_per_vm >= var.min_ports_per_vm
+    )
+    error_message = "max_ports_per_vm must be between 64 and 32768 and must be >= min_ports_per_vm."
+  }
 }
 
 variable "enable_dynamic_port_allocation" {

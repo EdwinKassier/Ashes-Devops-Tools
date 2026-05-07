@@ -27,11 +27,11 @@ run "accepts_tfc_oidc_disabled_with_empty_workspaces" {
   override_module {
     target = module.terraform_admin_sa
     outputs = {
-      email               = "terraform-admin@mock-org-admin-abcd1234.iam.gserviceaccount.com"
-      name                = "projects/mock-org-admin-abcd1234/serviceAccounts/terraform-admin@mock-org-admin-abcd1234.iam.gserviceaccount.com"
-      unique_id           = "123456789012345678901"
-      member              = "serviceAccount:terraform-admin@mock-org-admin-abcd1234.iam.gserviceaccount.com"
-      project_roles       = []
+      email                 = "terraform-admin@mock-org-admin-abcd1234.iam.gserviceaccount.com"
+      name                  = "projects/mock-org-admin-abcd1234/serviceAccounts/terraform-admin@mock-org-admin-abcd1234.iam.gserviceaccount.com"
+      unique_id             = "123456789012345678901"
+      member                = "serviceAccount:terraform-admin@mock-org-admin-abcd1234.iam.gserviceaccount.com"
+      project_roles         = []
       impersonation_members = []
     }
   }
@@ -49,11 +49,11 @@ run "accepts_tfc_oidc_enabled_with_workspaces" {
   override_module {
     target = module.terraform_admin_sa
     outputs = {
-      email               = "terraform-admin@mock-org-admin-abcd1234.iam.gserviceaccount.com"
-      name                = "projects/mock-org-admin-abcd1234/serviceAccounts/terraform-admin@mock-org-admin-abcd1234.iam.gserviceaccount.com"
-      unique_id           = "123456789012345678901"
-      member              = "serviceAccount:terraform-admin@mock-org-admin-abcd1234.iam.gserviceaccount.com"
-      project_roles       = []
+      email                 = "terraform-admin@mock-org-admin-abcd1234.iam.gserviceaccount.com"
+      name                  = "projects/mock-org-admin-abcd1234/serviceAccounts/terraform-admin@mock-org-admin-abcd1234.iam.gserviceaccount.com"
+      unique_id             = "123456789012345678901"
+      member                = "serviceAccount:terraform-admin@mock-org-admin-abcd1234.iam.gserviceaccount.com"
+      project_roles         = []
       impersonation_members = []
     }
   }
@@ -70,11 +70,11 @@ run "accepts_default_tfc_workspaces_when_tfc_disabled" {
   override_module {
     target = module.terraform_admin_sa
     outputs = {
-      email               = "terraform-admin@mock-org-admin-abcd1234.iam.gserviceaccount.com"
-      name                = "projects/mock-org-admin-abcd1234/serviceAccounts/terraform-admin@mock-org-admin-abcd1234.iam.gserviceaccount.com"
-      unique_id           = "123456789012345678901"
-      member              = "serviceAccount:terraform-admin@mock-org-admin-abcd1234.iam.gserviceaccount.com"
-      project_roles       = []
+      email                 = "terraform-admin@mock-org-admin-abcd1234.iam.gserviceaccount.com"
+      name                  = "projects/mock-org-admin-abcd1234/serviceAccounts/terraform-admin@mock-org-admin-abcd1234.iam.gserviceaccount.com"
+      unique_id             = "123456789012345678901"
+      member                = "serviceAccount:terraform-admin@mock-org-admin-abcd1234.iam.gserviceaccount.com"
+      project_roles         = []
       impersonation_members = []
     }
   }

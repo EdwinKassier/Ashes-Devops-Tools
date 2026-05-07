@@ -4,12 +4,12 @@
 mock_provider "google" {}
 
 variables {
-  project_id             = "mock-project"
-  name                   = "test-vpn"
-  network                = "projects/mock-project/global/networks/mock-vpc"
-  region                 = "europe-west1"
+  project_id               = "mock-project"
+  name                     = "test-vpn"
+  network                  = "projects/mock-project/global/networks/mock-vpc"
+  region                   = "europe-west1"
   peer_external_gateway_ip = "203.0.113.1"
-  shared_secret          = "mock-secret"
+  shared_secret            = "mock-secret"
 }
 
 # ── tunnel_count ───────────────────────────────────────────────────────────────

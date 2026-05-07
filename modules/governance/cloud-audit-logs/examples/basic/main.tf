@@ -12,7 +12,7 @@ module "audit_logs" {
   project_id         = local.project_id
   org_id             = local.org_id
   bucket_location    = "US"
-  log_retention_days = 730  # 2 years
+  log_retention_days = 730 # 2 years
 }
 
 output "audit_log_bucket" {

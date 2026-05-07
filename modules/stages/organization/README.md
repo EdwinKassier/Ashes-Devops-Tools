@@ -61,7 +61,6 @@ module "example" {
 	allowed_regions = 
 	billing_account = 
 	billing_admin_groups = 
-	billing_contact_email = 
 	budget_currency = 
 	customer_id = 
 	default_region = 
@@ -71,7 +70,6 @@ module "example" {
 	org_id = 
 	organization_admin_groups = 
 	project_prefix = 
-	security_contact_email = 
 	strict_folder_policy_environment_keys = 
 	terraform_admin_email = 
 	
@@ -126,7 +124,6 @@ The following resources are created:
 | <a name="input_allowed_regions"></a> [allowed\_regions](#input\_allowed\_regions) | List of GCP regions permitted by resource location org policy | `list(string)` | n/a | yes |
 | <a name="input_billing_account"></a> [billing\_account](#input\_billing\_account) | The GCP billing account ID in format XXXXXX-XXXXXX-XXXXXX | `string` | n/a | yes |
 | <a name="input_billing_admin_groups"></a> [billing\_admin\_groups](#input\_billing\_admin\_groups) | List of Google Group email addresses to grant billing admin roles | `list(string)` | n/a | yes |
-| <a name="input_billing_contact_email"></a> [billing\_contact\_email](#input\_billing\_contact\_email) | Email address for billing notifications and budget alerts | `string` | n/a | yes |
 | <a name="input_budget_currency"></a> [budget\_currency](#input\_budget\_currency) | ISO 4217 currency code for the budget (e.g., USD, EUR, GBP) | `string` | n/a | yes |
 | <a name="input_customer_id"></a> [customer\_id](#input\_customer\_id) | The Google Workspace customer ID (format: 'C' followed by alphanumerics, e.g., 'C0abc1234') | `string` | n/a | yes |
 | <a name="input_default_region"></a> [default\_region](#input\_default\_region) | Default GCP region for regional resources (e.g., 'us-central1', 'europe-west1') | `string` | n/a | yes |
@@ -136,10 +133,11 @@ The following resources are created:
 | <a name="input_org_id"></a> [org\_id](#input\_org\_id) | The numeric GCP organization ID (digits only, no 'organizations/' prefix) | `string` | n/a | yes |
 | <a name="input_organization_admin_groups"></a> [organization\_admin\_groups](#input\_organization\_admin\_groups) | List of Google Group email addresses to grant organization admin roles | `list(string)` | n/a | yes |
 | <a name="input_project_prefix"></a> [project\_prefix](#input\_project\_prefix) | Short prefix applied to all project IDs to ensure global uniqueness (lowercase letters, digits, hyphens; starts with letter) | `string` | n/a | yes |
-| <a name="input_security_contact_email"></a> [security\_contact\_email](#input\_security\_contact\_email) | Email address for security notifications (SCC, alerts) | `string` | n/a | yes |
 | <a name="input_strict_folder_policy_environment_keys"></a> [strict\_folder\_policy\_environment\_keys](#input\_strict\_folder\_policy\_environment\_keys) | Subset of environment keys that enforce strict resource location policies | `list(string)` | n/a | yes |
 | <a name="input_terraform_admin_email"></a> [terraform\_admin\_email](#input\_terraform\_admin\_email) | Email address of the Terraform admin service account | `string` | n/a | yes |
+| <a name="input_billing_contact_email"></a> [billing\_contact\_email](#input\_billing\_contact\_email) | Email address for billing notifications and budget alerts via Essential Contacts. Optional — if null, no Essential Contact is registered for the BILLING category. | `string` | `null` | no |
 | <a name="input_break_glass_user"></a> [break\_glass\_user](#input\_break\_glass\_user) | Optional email address of a break-glass emergency user granted org admin access | `string` | `null` | no |
+| <a name="input_security_contact_email"></a> [security\_contact\_email](#input\_security\_contact\_email) | Email address for security notifications via Essential Contacts (SCC alerts, compliance notifications). Optional — if null, no Essential Contact is registered for the SECURITY category. | `string` | `null` | no |
 
 ## Outputs
 

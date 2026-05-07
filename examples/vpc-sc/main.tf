@@ -13,9 +13,10 @@ module "vpc_sc" {
   organization_id = "organizations/123456789"
 
   # Use an existing access policy (recommended for shared orgs).
+  # access_policy_name must be the bare numeric ID — do NOT include the "accessPolicies/" prefix.
   # To create a new one, set create_access_policy = true instead.
   create_access_policy = false
-  access_policy_name   = "accessPolicies/1234567890"
+  access_policy_name   = "1234567890"
 
   perimeter_name  = "prod_perimeter"
   perimeter_title = "Production Data Perimeter"
@@ -42,10 +43,10 @@ module "vpc_sc" {
           resource     = "//iam.googleapis.com/projects/555666777888/locations/global/workloadIdentityPools/github-pool"
         }
       ]
-      resources  = null
+      resources = null
       operations = [
         { service_name = "bigquery.googleapis.com", method_selectors = null },
-        { service_name = "storage.googleapis.com",  method_selectors = null },
+        { service_name = "storage.googleapis.com", method_selectors = null },
       ]
     }
   ]

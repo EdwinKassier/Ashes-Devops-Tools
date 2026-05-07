@@ -38,12 +38,19 @@ jobs:
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
           WORKSPACE: ${{ matrix.workspace }}
         run: |
-          response=$(curl --silent --show-error \
+          response=$(curl --silent --show-error --fail-with-body \
             --header "Authorization: Bearer ${TFC_TOKEN}" \
             --header "Content-Type: application/vnd.api+json" \
-            "https://app.terraform.io/api/v2/organizations/${TFC_ORGANIZATION}/workspaces/${WORKSPACE}/runs?page%5Bsize%5D=1")
-          status=$(echo "$response" | jq -r '.data[0].attributes.status')
-          run_id=$(echo "$response" | jq -r '.data[0].id')
+            "https://app.terraform.io/api/v2/organizations/${TFC_ORGANIZATION}/workspaces/${WORKSPACE}/runs?page%5Bsize%5D=1") \
+            || { echo "::error::TFC API request failed for workspace '${WORKSPACE}'. Check TFC_TOKEN and TFC_ORGANIZATION. Response: ${response}" >&2; exit 1; }
+
+          if ! echo "$response" | jq -e '.data | type == "array"' >/dev/null 2>&1; then
+            echo "::error::Unexpected TFC API response format for workspace '${WORKSPACE}': ${response}" >&2
+            exit 1
+          fi
+
+          status=$(echo "$response" | jq -r '.data[0].attributes.status // "none"')
+          run_id=$(echo "$response" | jq -r '.data[0].id // "none"')
           echo "status=${status}" >> "$GITHUB_OUTPUT"
           echo "run_id=${run_id}" >> "$GITHUB_OUTPUT"
 
@@ -54,12 +61,17 @@ jobs:
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
           WORKSPACE: ${{ matrix.workspace }}
         run: |
-          # Look up workspace ID
-          ws_response=$(curl --silent --show-error \
+          # Look up workspace ID and validate it exists
+          ws_response=$(curl --silent --show-error --fail-with-body \
             --header "Authorization: Bearer ${TFC_TOKEN}" \
             --header "Content-Type: application/vnd.api+json" \
-            "https://app.terraform.io/api/v2/organizations/${TFC_ORGANIZATION}/workspaces/${WORKSPACE}")
+            "https://app.terraform.io/api/v2/organizations/${TFC_ORGANIZATION}/workspaces/${WORKSPACE}") \
+            || { echo "::error::Workspace '${WORKSPACE}' not found in TFC org '${TFC_ORGANIZATION}'. Verify the workspace exists. Response: ${ws_response}" >&2; exit 1; }
           ws_id=$(echo "$ws_response" | jq -r '.data.id')
+          if [ -z "$ws_id" ] || [ "$ws_id" = "null" ]; then
+            echo "::error::Could not parse workspace ID from TFC response for '${WORKSPACE}'" >&2
+            exit 1
+          fi
           echo "workspace_id=${ws_id}" >> "$GITHUB_OUTPUT"
 
           # Trigger a speculative plan (drift check) using the latest configuration version

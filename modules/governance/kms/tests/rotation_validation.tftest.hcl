@@ -35,7 +35,7 @@ run "accepts_30_day_rotation" {
 
   variables {
     keys = {
-      data-key   = { rotation_period = "2592000s" }
+      data-key    = { rotation_period = "2592000s" }
       signing-key = { rotation_period = "2592000s", purpose = "ASYMMETRIC_SIGN", algorithm = "RSA_SIGN_PKCS1_4096_SHA512" }
     }
   }

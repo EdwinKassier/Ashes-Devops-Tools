@@ -185,7 +185,8 @@ run "accepts_valid_org_id" {
   }
 }
 
-run "rejects_org_id_without_prefix" {
+run "accepts_bare_numeric_org_id" {
+  # Bare numeric IDs are valid — data.google_organization.org.org_id returns this format.
   command = plan
 
   override_module {
@@ -200,8 +201,6 @@ run "rejects_org_id_without_prefix" {
     target  = module.dns_hub_zone
     outputs = {}
   }
-
-  expect_failures = [var.org_id]
 
   variables {
     org_id = "123456789"

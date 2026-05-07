@@ -4,7 +4,7 @@
 
 **Do not open a public GitHub issue for security vulnerabilities.**
 
-Email **security@ashesproject.com** with the details below. We will acknowledge within 48 hours and keep you informed of progress.
+Email **edwinkassier@gmail.com** with the details below. We will acknowledge within 48 hours and keep you informed of progress.
 
 ### What to Include
 
@@ -85,5 +85,5 @@ SARIF results are uploaded to GitHub Security tab for all scans.
 
 ## Contact
 
-- Security issues: security@ashesproject.com
+- Security issues: edwinkassier@gmail.com
 - General inquiries: edwinkassier@gmail.com

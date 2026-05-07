@@ -10,9 +10,9 @@ output "hub_vpc_name" {
 
 output "hub_subnet_self_links" {
   description = "Map of private subnet name to self_link for the hub VPC — useful for Shared VPC service project attachments and peering configuration"
-  value = {
+  value = module.hub_network.subnets != null ? {
     for k, v in module.hub_network.subnets.private : k => v.self_link
-  }
+  } : {}
 }
 
 output "hub_nat_ips" {

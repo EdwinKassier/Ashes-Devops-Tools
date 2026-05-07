@@ -97,7 +97,7 @@ The following resources are created:
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_org_id"></a> [org\_id](#input\_org\_id) | The numeric Organization ID where tags will be defined (digits only, without 'organizations/' prefix) | `string` | n/a | yes |
-| <a name="input_tags"></a> [tags](#input\_tags) | Map of Tag Keys to a list of allowed Tag Values. Keys and values follow GCP tag short\_name constraints: 1-63 chars, must start with a letter, may contain lowercase letters, digits, hyphens, and underscores. | `map(list(string))` | n/a | yes |
+| <a name="input_tags"></a> [tags](#input\_tags) | Map of Tag Keys to a list of allowed Tag Values. Keys and values follow GCP tag short\_name constraints: 1-63 chars, must start with a lowercase letter, may contain lowercase letters, digits, hyphens, and underscores. No spaces or uppercase. | `map(list(string))` | n/a | yes |
 
 ## Outputs
 

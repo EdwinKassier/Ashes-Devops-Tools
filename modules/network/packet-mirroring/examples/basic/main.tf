@@ -3,9 +3,9 @@
 # The collector ILB must already exist (use modules/network/internal-lb).
 
 locals {
-  project_id    = "my-security-project"
-  region        = "us-central1"
-  network       = "projects/my-security-project/global/networks/my-vpc"
+  project_id = "my-security-project"
+  region     = "us-central1"
+  network    = "projects/my-security-project/global/networks/my-vpc"
   # Self-link of the internal LB configured as the traffic collector.
   collector_ilb = "projects/my-security-project/regions/us-central1/forwardingRules/ids-collector-ilb"
   # Subnet to mirror traffic from.
@@ -15,12 +15,12 @@ locals {
 module "packet_mirroring" {
   source = "../../"
 
-  project_id         = local.project_id
-  name               = "subnet-mirroring"
-  region             = local.region
-  network            = local.network
-  collector_ilb_url  = local.collector_ilb
-  description        = "Mirror all TCP/UDP traffic from the private subnet to the IDS collector"
+  project_id        = local.project_id
+  name              = "subnet-mirroring"
+  region            = local.region
+  network           = local.network
+  collector_ilb_url = local.collector_ilb
+  description       = "Mirror all TCP/UDP traffic from the private subnet to the IDS collector"
 
   mirrored_subnetworks = [local.mirrored_subnet]
 

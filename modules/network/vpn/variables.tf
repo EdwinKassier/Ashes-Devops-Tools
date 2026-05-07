@@ -80,15 +80,25 @@ variable "tunnel_count" {
 }
 
 variable "peer_ip_addresses" {
-  description = "List of BGP peer IP addresses for each tunnel"
+  description = "List of BGP peer IP addresses for each tunnel. Must contain exactly tunnel_count entries (one per tunnel)."
   type        = list(string)
   default     = ["169.254.0.2", "169.254.1.2"]
+
+  validation {
+    condition     = length(var.peer_ip_addresses) >= var.tunnel_count
+    error_message = "peer_ip_addresses must contain at least tunnel_count entries. Provide one BGP peer IP per tunnel."
+  }
 }
 
 variable "local_ip_addresses" {
-  description = "List of local BGP IP addresses for each tunnel"
+  description = "List of local BGP IP addresses for each tunnel. Must contain exactly tunnel_count entries (one per tunnel)."
   type        = list(string)
   default     = ["169.254.0.1", "169.254.1.1"]
+
+  validation {
+    condition     = length(var.local_ip_addresses) >= var.tunnel_count
+    error_message = "local_ip_addresses must contain at least tunnel_count entries. Provide one local BGP IP per tunnel."
+  }
 }
 
 variable "advertised_ip_ranges" {

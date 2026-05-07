@@ -1,7 +1,11 @@
 variable "project_prefix" {
-  description = "Prefix used by the organization root"
+  description = "Short name prefix used by the organization root. Must match the organization root's project_prefix exactly — used for resource naming consistency."
   type        = string
-  default     = "my-org"
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]*$", var.project_prefix))
+    error_message = "project_prefix must start with a lowercase letter and contain only lowercase letters, digits, and hyphens."
+  }
 }
 
 variable "environment" {
@@ -64,9 +68,9 @@ variable "budget_currency" {
 }
 
 variable "enable_deletion_protection" {
-  description = "Enable lifecycle protection for critical resources"
+  description = "Enable lifecycle protection to prevent accidental destruction of critical network resources (VPC, subnets, DNS zones). Set to false only during teardown — requires state manipulation before destroy. See docs/runbooks/cidr-expansion.md for the removal procedure."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "enable_cloud_armor" {
@@ -88,15 +92,25 @@ variable "enable_adaptive_protection" {
 }
 
 variable "owasp_sensitivity" {
-  description = "Cloud Armor OWASP sensitivity (1 is strictest, 4 is least strict)"
+  description = "Cloud Armor OWASP managed rule sensitivity level: 1 = strictest (most blocks, lowest false-negative rate), 4 = most permissive (fewest blocks, highest false-negative rate). Default 2 is recommended for production."
   type        = number
-  default     = 4
+  default     = 2
+
+  validation {
+    condition     = var.owasp_sensitivity >= 1 && var.owasp_sensitivity <= 4
+    error_message = "owasp_sensitivity must be between 1 (strictest) and 4 (most permissive)."
+  }
 }
 
 variable "log_config_flow_sampling" {
-  description = "VPC Flow Logs sampling rate"
+  description = "VPC Flow Logs packet-sampling rate (0.0–1.0). 0.1 = 10% of packets sampled. Recommended: 0.5 for dev/staging, 0.1 for prod (reduce Logging cost). Set to 0.0 to disable flow log collection while keeping the log bucket."
   type        = number
   default     = 0.1
+
+  validation {
+    condition     = var.log_config_flow_sampling >= 0.0 && var.log_config_flow_sampling <= 1.0
+    error_message = "log_config_flow_sampling must be between 0.0 and 1.0."
+  }
 }
 
 variable "log_config_aggregation_interval" {
@@ -118,9 +132,16 @@ variable "extra_labels" {
 }
 
 variable "vpc_sc_enable_dry_run" {
-  description = "Whether the VPC-SC perimeter should run in dry-run mode"
+  description = <<-EOT
+    When true, VPC Service Controls logs violations but does NOT block any traffic (dry-run/simulation mode).
+    When false (the default), the perimeter is in ENFORCED mode and will block unauthorised cross-perimeter traffic.
+
+    WARNING: dry-run mode provides NO data-exfiltration protection. Only use true temporarily to
+    validate that no legitimate traffic will be blocked before switching to enforcement.
+    See docs/architecture/network-topology.md for the enforcement transition procedure.
+  EOT
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "vpc_sc_perimeter_title" {

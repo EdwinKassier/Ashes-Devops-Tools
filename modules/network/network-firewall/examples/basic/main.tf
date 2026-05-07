@@ -11,11 +11,11 @@ locals {
 module "allow_health_checks" {
   source = "../../"
 
-  project_id        = local.project_id
+  project_id         = local.project_id
   firewall_rule_name = "allow-google-hc"
-  network           = local.network
-  direction         = "INGRESS"
-  priority          = 900
+  network            = local.network
+  direction          = "INGRESS"
+  priority           = 900
 
   allow_rules = [
     { protocol = "tcp", ports = ["80", "443", "8080"] }
@@ -31,19 +31,19 @@ module "allow_health_checks" {
 module "deny_internet_ingress" {
   source = "../../"
 
-  project_id        = local.project_id
+  project_id         = local.project_id
   firewall_rule_name = "deny-internet-to-internal"
-  network           = local.network
-  direction         = "INGRESS"
-  priority          = 1100
+  network            = local.network
+  direction          = "INGRESS"
+  priority           = 1100
 
   deny_rules = [
     { protocol = "tcp", ports = [] },
     { protocol = "udp", ports = [] },
   ]
 
-  source_ranges = ["0.0.0.0/0"]
-  target_tags   = ["internal-only"]
+  source_ranges  = ["0.0.0.0/0"]
+  target_tags    = ["internal-only"]
   enable_logging = true
 }
 

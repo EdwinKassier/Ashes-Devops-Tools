@@ -32,7 +32,7 @@ module "on_prem_vpn" {
   peer_asn   = 65000
 
   # Two tunnels for high-availability.
-  tunnel_count    = 2
+  tunnel_count       = 2
   peer_ip_addresses  = local.peer_ips
   local_ip_addresses = ["169.254.0.1", "169.254.1.1"]
 }

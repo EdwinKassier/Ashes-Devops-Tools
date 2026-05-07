@@ -4,11 +4,11 @@
 mock_provider "google" {}
 
 variables {
-  project_id   = "mock-project"
-  name         = "test-nat"
-  region       = "europe-west1"
-  network      = "projects/mock-project/global/networks/mock-vpc"
-  router_name  = "test-router"
+  project_id  = "mock-project"
+  name        = "test-nat"
+  region      = "europe-west1"
+  network     = "projects/mock-project/global/networks/mock-vpc"
+  router_name = "test-router"
 }
 
 # ── nat_ip_allocate_option ─────────────────────────────────────────────────────

@@ -160,12 +160,12 @@ The following resources are created:
 
 
 - resource.google_compute_address.internal_ip (modules/network/internal-lb/main.tf#L14)
-- resource.google_compute_firewall.allow_proxy (modules/network/internal-lb/main.tf#L210)
-- resource.google_compute_forwarding_rule.forwarding_rule (modules/network/internal-lb/main.tf#L184)
+- resource.google_compute_firewall.allow_proxy (modules/network/internal-lb/main.tf#L211)
+- resource.google_compute_forwarding_rule.forwarding_rule (modules/network/internal-lb/main.tf#L185)
 - resource.google_compute_health_check.health_check (modules/network/internal-lb/main.tf#L34)
 - resource.google_compute_region_backend_service.backend (modules/network/internal-lb/main.tf#L85)
-- resource.google_compute_region_target_http_proxy.http_proxy (modules/network/internal-lb/main.tf#L161)
-- resource.google_compute_region_target_https_proxy.https_proxy (modules/network/internal-lb/main.tf#L170)
+- resource.google_compute_region_target_http_proxy.http_proxy (modules/network/internal-lb/main.tf#L162)
+- resource.google_compute_region_target_https_proxy.https_proxy (modules/network/internal-lb/main.tf#L171)
 - resource.google_compute_region_url_map.url_map (modules/network/internal-lb/main.tf#L124)
 
 
@@ -199,13 +199,13 @@ The following resources are created:
 | <a name="input_health_check_timeout_sec"></a> [health\_check\_timeout\_sec](#input\_health\_check\_timeout\_sec) | Health check timeout in seconds | `number` | `5` | no |
 | <a name="input_health_check_type"></a> [health\_check\_type](#input\_health\_check\_type) | Type of health check: HTTP, HTTPS, TCP, or GRPC | `string` | `"HTTP"` | no |
 | <a name="input_health_check_unhealthy_threshold"></a> [health\_check\_unhealthy\_threshold](#input\_health\_check\_unhealthy\_threshold) | Number of failed checks before marking unhealthy | `number` | `2` | no |
-| <a name="input_host_rules"></a> [host\_rules](#input\_host\_rules) | Host rules for URL mapping | <pre>list(object({<br/>    hosts        = list(string)<br/>    path_matcher = string<br/>  }))</pre> | `[]` | no |
+| <a name="input_host_rules"></a> [host\_rules](#input\_host\_rules) | Host rules for URL mapping (L7 load balancers only).<br/>At least one entry is required when is\_l7 = true to route traffic correctly.<br/>Each entry maps a list of hostnames to a named path\_matcher. | <pre>list(object({<br/>    hosts        = list(string)<br/>    path_matcher = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_ip_address"></a> [ip\_address](#input\_ip\_address) | Static IP address (if create\_static\_ip is false) | `string` | `null` | no |
 | <a name="input_is_l7"></a> [is\_l7](#input\_is\_l7) | Whether to create an L7 (HTTP/S) load balancer (true) or L4 TCP (false) | `bool` | `true` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to the forwarding rule | `map(string)` | `{}` | no |
 | <a name="input_locality_lb_policy"></a> [locality\_lb\_policy](#input\_locality\_lb\_policy) | Locality load balancing policy for the backend service. Valid values: ROUND\_ROBIN, LEAST\_REQUEST, RING\_HASH, RANDOM, ORIGINAL\_DESTINATION, MAGLEV. | `string` | `"ROUND_ROBIN"` | no |
 | <a name="input_log_sample_rate"></a> [log\_sample\_rate](#input\_log\_sample\_rate) | Sample rate for access logs (0.0 to 1.0) | `number` | `1` | no |
-| <a name="input_path_matchers"></a> [path\_matchers](#input\_path\_matchers) | Path matchers for URL mapping | <pre>list(object({<br/>    name            = string<br/>    default_service = string<br/>    path_rules = optional(list(object({<br/>      paths   = list(string)<br/>      service = string<br/>    })))<br/>  }))</pre> | `[]` | no |
+| <a name="input_path_matchers"></a> [path\_matchers](#input\_path\_matchers) | Path matchers for URL mapping (L7 load balancers only).<br/>Every path\_matcher name referenced in host\_rules must have a corresponding entry here. | <pre>list(object({<br/>    name            = string<br/>    default_service = string<br/>    path_rules = optional(list(object({<br/>      paths   = list(string)<br/>      service = string<br/>    })))<br/>  }))</pre> | `[]` | no |
 | <a name="input_port_range"></a> [port\_range](#input\_port\_range) | Port range for the forwarding rule (e.g., '80' or '8080-8090') | `string` | `"80"` | no |
 | <a name="input_proxy_only_subnet_ranges"></a> [proxy\_only\_subnet\_ranges](#input\_proxy\_only\_subnet\_ranges) | CIDR ranges for proxy-only subnets | `list(string)` | `[]` | no |
 | <a name="input_session_affinity"></a> [session\_affinity](#input\_session\_affinity) | Session affinity for the backend service. Valid values: NONE, CLIENT\_IP, GENERATED\_COOKIE. | `string` | `"NONE"` | no |

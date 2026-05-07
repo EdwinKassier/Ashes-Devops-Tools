@@ -294,8 +294,8 @@ run "accepts_enable_networking_false_with_existing_network" {
   command = plan
 
   variables {
-    enable_networking       = false
-    existing_network_id     = "projects/my-project/global/networks/existing-vpc"
+    enable_networking          = false
+    existing_network_id        = "projects/my-project/global/networks/existing-vpc"
     existing_network_self_link = "https://www.googleapis.com/compute/v1/projects/my-project/global/networks/existing-vpc"
   }
 }

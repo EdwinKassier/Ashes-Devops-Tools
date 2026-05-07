@@ -178,7 +178,7 @@ The following resources are created:
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to the project | `map(string)` | `{}` | no |
 | <a name="input_project_admin_roles"></a> [project\_admin\_roles](#input\_project\_admin\_roles) | List of roles to grant to the admin group via google\_project\_iam\_binding.<br/><br/>WARNING: google\_project\_iam\_binding is AUTHORITATIVE per role. On every apply it<br/>removes any other member that holds the role, including manually-granted access.<br/>Any member not in this list will lose the role on the next terraform apply.<br/><br/>Consider using google\_project\_iam\_member (additive) instead if you need to<br/>coexist with bindings managed outside of Terraform. | `list(string)` | `[]` | no |
 | <a name="input_shared_vpc_host_project_id"></a> [shared\_vpc\_host\_project\_id](#input\_shared\_vpc\_host\_project\_id) | The Host Project ID for Shared VPC | `string` | `""` | no |
-| <a name="input_shared_vpc_subnets"></a> [shared\_vpc\_subnets](#input\_shared\_vpc\_subnets) | List of subnets in the Host Project to grant access to | <pre>map(object({<br/>    region      = string<br/>    subnet_name = string<br/>  }))</pre> | `{}` | no |
+| <a name="input_shared_vpc_subnets"></a> [shared\_vpc\_subnets](#input\_shared\_vpc\_subnets) | Map of subnet key to subnet configuration in the Shared VPC Host Project. Must not be empty when enable\_shared\_vpc\_attachment is true — at least one subnet must be granted to allow workloads to use the shared network. | <pre>map(object({<br/>    region      = string<br/>    subnet_name = string<br/>  }))</pre> | `{}` | no |
 
 ## Outputs
 

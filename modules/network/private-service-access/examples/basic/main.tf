@@ -9,10 +9,10 @@ locals {
 module "psa" {
   source = "../../"
 
-  project_id   = local.project_id
-  vpc_network  = local.vpc_network
-  name         = "psa-range"
-  address      = "10.200.0.0"
+  project_id    = local.project_id
+  vpc_network   = local.vpc_network
+  name          = "psa-range"
+  address       = "10.200.0.0"
   prefix_length = 16
 }
 

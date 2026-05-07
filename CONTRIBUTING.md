@@ -84,11 +84,65 @@ Every resource created by the module must have at least its ID or self_link expo
 
 ### Tests are required
 
-Every module with a `validation` block must have a corresponding test that exercises both the valid and invalid cases. Use `mock_provider` so tests run without GCP credentials:
+Every module with a `validation` block must have a corresponding test that exercises **both the accept and reject cases**. Use `mock_provider` so tests run without GCP credentials (requires Terraform ≥ 1.7):
 
 ```bash
-cd modules/your-module && terraform test
+make test  # runs all .tftest.hcl suites in the repo
 ```
+
+#### Test structure
+
+Each test file lives under `tests/` inside the module and follows this pattern:
+
+```hcl
+# modules/your-module/tests/variables_validation.tftest.hcl
+
+mock_provider "google" {}
+mock_provider "google-beta" {}
+
+# ── Accept case ─────────────────────────────────────────────────────────────
+# Purpose: confirm valid inputs reach the mock provider without error.
+run "valid_input_accepted" {
+  command = plan
+
+  variables {
+    region = "us-central1"   # valid value
+    # ... other required variables
+  }
+
+  assert {
+    condition     = var.region == "us-central1"
+    error_message = "Expected valid region to be accepted."
+  }
+}
+
+# ── Reject case ──────────────────────────────────────────────────────────────
+# Purpose: confirm that an invalid value triggers the validation error message.
+run "invalid_region_rejected" {
+  command = plan
+
+  variables {
+    region = "US_CENTRAL_1"  # wrong format — should be rejected
+  }
+
+  expect_failures = [var.region]
+}
+```
+
+#### Requirements for every validation block
+
+| Requirement | Details |
+|-------------|---------|
+| **Accept case** | At least one `run` block that passes a valid value and does NOT expect failure |
+| **Reject case** | At least one `run` block per distinct invalid pattern with `expect_failures = [var.<name>]` |
+| **Boundary values** | For numeric ranges (e.g. `0.0–1.0`), test exactly at the boundary (`0.0`, `1.0`) and one step outside (`-0.1`, `1.1`) |
+| **Cross-variable guards** | For `!var.enable_x || condition_on_y` patterns, test: (a) disabled + empty `y` (accept), (b) enabled + valid `y` (accept), (c) enabled + empty `y` (reject) |
+| **Null guards** | For optional variables with `!= null || can(regex(...))`, test both `null` (accept) and a malformed value (reject) |
+
+#### Naming conventions
+
+- One test file per validation scope: `tests/variables_validation.tftest.hcl` for simple modules, or split by concern (e.g., `tests/iam_validation.tftest.hcl`, `tests/cidr_validation.tftest.hcl`) for modules with many validations.
+- `run` block names use `snake_case` and describe the specific behaviour: `valid_region_accepted`, `invalid_region_uppercase_rejected`.
 
 Keep generated README sections current with:
 

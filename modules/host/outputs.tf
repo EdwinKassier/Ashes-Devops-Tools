@@ -316,3 +316,27 @@ output "internal_load_balancer_backend_services" {
     for k, v in module.internal_load_balancers : k => v.backend_service_self_link
   }
 }
+
+# =============================================================================
+# VPC FLOW LOGS OUTPUTS
+# =============================================================================
+
+output "vpc_flow_logs_kms_keyring_name" {
+  description = "The KMS keyring name created for VPC Flow Logs encryption. Null when enable_vpc_flow_logs_export is false."
+  value       = var.enable_vpc_flow_logs_export ? module.flow_logs_kms[0].keyring_name : null
+}
+
+output "vpc_flow_logs_kms_key_name" {
+  description = "The fully-qualified KMS crypto key name used to encrypt VPC Flow Logs data (BigQuery and GCS). Null when enable_vpc_flow_logs_export is false."
+  value       = var.enable_vpc_flow_logs_export ? module.flow_logs_kms[0].key_names["vpc-flow-logs"] : null
+}
+
+output "vpc_flow_logs_sink_name" {
+  description = "The name of the Cloud Logging sink that exports VPC Flow Logs. Null when enable_vpc_flow_logs_export is false."
+  value       = var.enable_vpc_flow_logs_export ? module.vpc_flow_logs[0].name : null
+}
+
+output "vpc_flow_logs_sink_writer_identity" {
+  description = "The service account identity of the Cloud Logging sink writer. Grant this identity write access to the destination. Null when disabled."
+  value       = var.enable_vpc_flow_logs_export ? module.vpc_flow_logs[0].writer_identity : null
+}

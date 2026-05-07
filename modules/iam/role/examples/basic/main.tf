@@ -8,10 +8,10 @@ locals {
 module "cloud_run_deployer" {
   source = "../../"
 
-  level      = "project"
-  project_id = local.project_id
-  role_id    = "cloudRunDeployer"
-  title      = "Cloud Run Deployer"
+  level       = "project"
+  project_id  = local.project_id
+  role_id     = "cloudRunDeployer"
+  title       = "Cloud Run Deployer"
   description = "Allows deploying new Cloud Run service revisions without accessing secrets or IAM bindings"
 
   permissions = [

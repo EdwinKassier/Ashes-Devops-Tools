@@ -113,10 +113,16 @@ plan-organization: ## Plan the organization root
 plan-apps: ## Plan the apps root for APP_ENV using APP_VARS
 	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/apps plan -var-file=$(APP_VARS)
 
-apply-organization: ## Apply the organization root
+apply-organization: ## Apply the organization root (interactive confirmation required)
+	@echo "$(YELLOW)WARNING: You are about to apply changes to the ORGANIZATION root (folders, projects, org policies, hub network).$(NC)"
+	@echo "$(YELLOW)This affects all environments. Review the plan first with: make plan-organization$(NC)"
+	@printf "Type 'yes' to continue: " && read CONFIRM && [ "$$CONFIRM" = "yes" ] || (echo "Cancelled." && exit 1)
 	@$(TERRAFORM) -chdir=envs/organization apply
 
-apply-apps: ## Apply the apps root for APP_ENV using APP_VARS
+apply-apps: ## Apply the apps root for APP_ENV using APP_VARS (interactive confirmation required)
+	@echo "$(YELLOW)WARNING: You are about to apply changes to the APPS root for environment: $(APP_ENV)$(NC)"
+	@echo "$(YELLOW)Review the plan first with: make plan-apps APP_ENV=$(APP_ENV) APP_VARS=$(APP_VARS)$(NC)"
+	@printf "Type 'yes' to continue: " && read CONFIRM && [ "$$CONFIRM" = "yes" ] || (echo "Cancelled." && exit 1)
 	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/apps apply -var-file=$(APP_VARS)
 
 validate-requirements: ## Print local tool versions
@@ -132,12 +138,17 @@ state-list-organization: ## List resources in the organization workspace state
 state-list-apps: ## List resources in the apps workspace state (APP_ENV=dev)
 	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/apps state list
 
-state-rm-organization: ## Remove a resource from the organization state: make state-rm-organization ADDR='module.foo.resource.bar'
+state-rm-organization: ## Remove a resource from the organization state (DANGEROUS — orphans the GCP resource): make state-rm-organization ADDR='module.foo.resource.bar'
 	@[ -n "$(ADDR)" ] || (echo "Error: ADDR is required. Usage: make state-rm-organization ADDR='module.foo.resource.bar'" && exit 1)
+	@echo "$(YELLOW)WARNING: Removing '$(ADDR)' from state will ORPHAN this resource in GCP.$(NC)"
+	@echo "$(YELLOW)The resource will continue to exist but Terraform will no longer manage it.$(NC)"
+	@printf "Type 'yes' to confirm: " && read CONFIRM && [ "$$CONFIRM" = "yes" ] || (echo "Cancelled." && exit 1)
 	@$(TERRAFORM) -chdir=envs/organization state rm '$(ADDR)'
 
-state-rm-apps: ## Remove a resource from the apps state: make state-rm-apps ADDR='module.host.resource.bar' APP_ENV=dev
+state-rm-apps: ## Remove a resource from the apps state (DANGEROUS — orphans the GCP resource): make state-rm-apps ADDR='...' APP_ENV=dev
 	@[ -n "$(ADDR)" ] || (echo "Error: ADDR is required. Usage: make state-rm-apps ADDR='module.host.resource.bar'" && exit 1)
+	@echo "$(YELLOW)WARNING: Removing '$(ADDR)' from apps state (workspace: $(APP_WORKSPACE)) will ORPHAN this resource in GCP.$(NC)"
+	@printf "Type 'yes' to confirm: " && read CONFIRM && [ "$$CONFIRM" = "yes" ] || (echo "Cancelled." && exit 1)
 	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/apps state rm '$(ADDR)'
 
 unlock-organization: ## Force-unlock a stuck Terraform lock on the organization workspace: make unlock-organization LOCK_ID=<id>
@@ -148,7 +159,8 @@ unlock-apps: ## Force-unlock a stuck Terraform lock on an apps workspace: make u
 	@[ -n "$(LOCK_ID)" ] || (echo "Error: LOCK_ID is required. Usage: make unlock-apps LOCK_ID=<lock-id>" && exit 1)
 	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/apps force-unlock -force '$(LOCK_ID)'
 
-clean: ## Remove local Terraform caches and generated reports
-	@find . -type d -name ".terraform" -prune -exec rm -rf {} +
-	@find . -type f -name "*.tfplan" -delete
+clean: ## Remove local Terraform caches, generated reports, and lock file caches
+	@find . -type d -name ".terraform" -exec rm -rf {} + 2>/dev/null || true
+	@find . -type f -name "*.tfplan" -delete 2>/dev/null || true
+	@find . -type f -name ".terraform.lock.hcl" -not -path "*/envs/*" -delete 2>/dev/null || true
 	@rm -rf reports

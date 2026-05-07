@@ -203,7 +203,7 @@ The following resources are created:
 | <a name="input_api_gateway_display_name"></a> [api\_gateway\_display\_name](#input\_api\_gateway\_display\_name) | Display name for the API Gateway | `string` | `"API Gateway"` | no |
 | <a name="input_api_gateway_managed_services"></a> [api\_gateway\_managed\_services](#input\_api\_gateway\_managed\_services) | Map of managed service IDs for auto-generated OpenAPI spec | `map(string)` | `{}` | no |
 | <a name="input_api_gateway_openapi_spec"></a> [api\_gateway\_openapi\_spec](#input\_api\_gateway\_openapi\_spec) | Custom OpenAPI specification (if not using managed\_service\_ids) | `string` | `""` | no |
-| <a name="input_api_gateway_service_account"></a> [api\_gateway\_service\_account](#input\_api\_gateway\_service\_account) | Service account email for API Gateway backend | `string` | `""` | no |
+| <a name="input_api_gateway_service_account"></a> [api\_gateway\_service\_account](#input\_api\_gateway\_service\_account) | Service account email for the API Gateway backend service (format: name@project.iam.gserviceaccount.com). Required when enable\_api\_gateway is true. | `string` | `""` | no |
 | <a name="input_cdn_backend_groups"></a> [cdn\_backend\_groups](#input\_cdn\_backend\_groups) | Backend groups for the CDN load balancer | <pre>list(object({<br/>    group           = string<br/>    balancing_mode  = optional(string)<br/>    capacity_scaler = optional(number)<br/>    description     = optional(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_cdn_domains"></a> [cdn\_domains](#input\_cdn\_domains) | Domains for managed SSL certificate | `list(string)` | `[]` | no |
 | <a name="input_cdn_enable_http_redirect"></a> [cdn\_enable\_http\_redirect](#input\_cdn\_enable\_http\_redirect) | Enable HTTP to HTTPS redirect | `bool` | `true` | no |
@@ -252,7 +252,7 @@ The following resources are created:
 | <a name="input_vpc_flow_logs_bigquery_location"></a> [vpc\_flow\_logs\_bigquery\_location](#input\_vpc\_flow\_logs\_bigquery\_location) | Location for the BigQuery dataset | `string` | `"US"` | no |
 | <a name="input_vpc_flow_logs_create_bigquery_dataset"></a> [vpc\_flow\_logs\_create\_bigquery\_dataset](#input\_vpc\_flow\_logs\_create\_bigquery\_dataset) | Whether to create a BigQuery dataset for flow logs | `bool` | `false` | no |
 | <a name="input_vpc_flow_logs_create_storage_bucket"></a> [vpc\_flow\_logs\_create\_storage\_bucket](#input\_vpc\_flow\_logs\_create\_storage\_bucket) | Whether to create a Cloud Storage bucket for flow logs | `bool` | `false` | no |
-| <a name="input_vpc_flow_logs_destination"></a> [vpc\_flow\_logs\_destination](#input\_vpc\_flow\_logs\_destination) | Destination for VPC Flow Logs (e.g., bigquery.googleapis.com/projects/PROJECT/datasets/DATASET) | `string` | `""` | no |
+| <a name="input_vpc_flow_logs_destination"></a> [vpc\_flow\_logs\_destination](#input\_vpc\_flow\_logs\_destination) | Logging sink destination URI for VPC Flow Logs export (e.g., bigquery.googleapis.com/projects/PROJECT/datasets/DATASET). Required when enable\_vpc\_flow\_logs\_export is true and vpc\_flow\_logs\_create\_bigquery\_dataset is false. | `string` | `""` | no |
 | <a name="input_vpc_flow_logs_retention_days"></a> [vpc\_flow\_logs\_retention\_days](#input\_vpc\_flow\_logs\_retention\_days) | Days to retain flow logs data | `number` | `90` | no |
 | <a name="input_vpc_flow_logs_sink_name"></a> [vpc\_flow\_logs\_sink\_name](#input\_vpc\_flow\_logs\_sink\_name) | Name of the VPC Flow Logs sink | `string` | `"vpc-flow-logs-sink"` | no |
 | <a name="input_vpc_flow_logs_storage_bucket_name"></a> [vpc\_flow\_logs\_storage\_bucket\_name](#input\_vpc\_flow\_logs\_storage\_bucket\_name) | Cloud Storage bucket name for flow logs | `string` | `""` | no |
@@ -266,7 +266,7 @@ The following resources are created:
 | <a name="input_vpn_peer_gateway_ip"></a> [vpn\_peer\_gateway\_ip](#input\_vpn\_peer\_gateway\_ip) | External IP of the peer VPN gateway | `string` | `""` | no |
 | <a name="input_vpn_peer_ips"></a> [vpn\_peer\_ips](#input\_vpn\_peer\_ips) | Peer IP addresses for BGP sessions | `list(string)` | <pre>[<br/>  "169.254.0.2",<br/>  "169.254.0.4"<br/>]</pre> | no |
 | <a name="input_vpn_router_asn"></a> [vpn\_router\_asn](#input\_vpn\_router\_asn) | Cloud Router BGP ASN | `number` | `64512` | no |
-| <a name="input_vpn_shared_secret"></a> [vpn\_shared\_secret](#input\_vpn\_shared\_secret) | VPN shared secret (consider using Secret Manager). Must be set when enable\_vpn = true. | `string` | `null` | no |
+| <a name="input_vpn_shared_secret"></a> [vpn\_shared\_secret](#input\_vpn\_shared\_secret) | VPN shared secret. Must be set when enable\_vpn = true. Consider injecting via Secret Manager rather than a plaintext tfvars value. | `string` | `null` | no |
 | <a name="input_vpn_tunnel_count"></a> [vpn\_tunnel\_count](#input\_vpn\_tunnel\_count) | Number of VPN tunnels per gateway. Use 2 for HA VPN (recommended for production); 1 for testing only. | `number` | `2` | no |
 
 ## Outputs
@@ -309,7 +309,11 @@ The following resources are created:
 | <a name="output_subnets"></a> [subnets](#output\_subnets) | All subnet outputs organized by tier |
 | <a name="output_vpc"></a> [vpc](#output\_vpc) | The VPC module outputs (if enabled) |
 | <a name="output_vpc_flow_logs"></a> [vpc\_flow\_logs](#output\_vpc\_flow\_logs) | The VPC Flow Logs export module outputs (if enabled) |
+| <a name="output_vpc_flow_logs_kms_key_name"></a> [vpc\_flow\_logs\_kms\_key\_name](#output\_vpc\_flow\_logs\_kms\_key\_name) | The fully-qualified KMS crypto key name used to encrypt VPC Flow Logs data (BigQuery and GCS). Null when enable\_vpc\_flow\_logs\_export is false. |
+| <a name="output_vpc_flow_logs_kms_keyring_name"></a> [vpc\_flow\_logs\_kms\_keyring\_name](#output\_vpc\_flow\_logs\_kms\_keyring\_name) | The KMS keyring name created for VPC Flow Logs encryption. Null when enable\_vpc\_flow\_logs\_export is false. |
 | <a name="output_vpc_flow_logs_sink_id"></a> [vpc\_flow\_logs\_sink\_id](#output\_vpc\_flow\_logs\_sink\_id) | The ID of the VPC Flow Logs sink |
+| <a name="output_vpc_flow_logs_sink_name"></a> [vpc\_flow\_logs\_sink\_name](#output\_vpc\_flow\_logs\_sink\_name) | The name of the Cloud Logging sink that exports VPC Flow Logs. Null when enable\_vpc\_flow\_logs\_export is false. |
+| <a name="output_vpc_flow_logs_sink_writer_identity"></a> [vpc\_flow\_logs\_sink\_writer\_identity](#output\_vpc\_flow\_logs\_sink\_writer\_identity) | The service account identity of the Cloud Logging sink writer. Grant this identity write access to the destination. Null when disabled. |
 | <a name="output_vpc_flow_logs_writer_identity"></a> [vpc\_flow\_logs\_writer\_identity](#output\_vpc\_flow\_logs\_writer\_identity) | The service account identity for the flow logs sink writer |
 | <a name="output_vpc_peerings"></a> [vpc\_peerings](#output\_vpc\_peerings) | All VPC peering outputs |
 | <a name="output_vpc_service_control_perimeter_names"></a> [vpc\_service\_control\_perimeter\_names](#output\_vpc\_service\_control\_perimeter\_names) | The names of all VPC Service Controls perimeters |

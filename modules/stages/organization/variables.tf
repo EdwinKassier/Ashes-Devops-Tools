@@ -159,22 +159,24 @@ variable "strict_folder_policy_environment_keys" {
 }
 
 variable "security_contact_email" {
-  description = "Email address for security notifications (SCC, alerts)"
+  description = "Email address for security notifications via Essential Contacts (SCC alerts, compliance notifications). Optional — if null, no Essential Contact is registered for the SECURITY category."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^[^@]+@[^@]+\\.[^@]+$", var.security_contact_email))
-    error_message = "security_contact_email must be a valid email address."
+    condition     = var.security_contact_email == null || can(regex("^[^@]+@[^@]+\\.[^@]+$", var.security_contact_email))
+    error_message = "security_contact_email must be a valid email address when provided."
   }
 }
 
 variable "billing_contact_email" {
-  description = "Email address for billing notifications and budget alerts"
+  description = "Email address for billing notifications and budget alerts via Essential Contacts. Optional — if null, no Essential Contact is registered for the BILLING category."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^[^@]+@[^@]+\\.[^@]+$", var.billing_contact_email))
-    error_message = "billing_contact_email must be a valid email address."
+    condition     = var.billing_contact_email == null || can(regex("^[^@]+@[^@]+\\.[^@]+$", var.billing_contact_email))
+    error_message = "billing_contact_email must be a valid email address when provided."
   }
 }
 

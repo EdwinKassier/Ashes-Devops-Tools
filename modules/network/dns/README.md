@@ -120,7 +120,7 @@ The following resources are created:
 | <a name="input_forwarding_targets"></a> [forwarding\_targets](#input\_forwarding\_targets) | List of forwarding target IP addresses (for forwarding zones) | `list(string)` | `[]` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to the DNS zone | `map(string)` | `{}` | no |
 | <a name="input_peering_network"></a> [peering\_network](#input\_peering\_network) | The target VPC network for a peering zone (required when type is 'peering') | `string` | `""` | no |
-| <a name="input_private_visibility_networks"></a> [private\_visibility\_networks](#input\_private\_visibility\_networks) | List of VPC network self-links that can see this private zone | `list(string)` | `[]` | no |
+| <a name="input_private_visibility_networks"></a> [private\_visibility\_networks](#input\_private\_visibility\_networks) | List of VPC network self-links that can resolve this private DNS zone. Must contain at least one network when visibility is 'private' — a private zone with no associated networks is unreachable and serves no purpose. | `list(string)` | `[]` | no |
 | <a name="input_records"></a> [records](#input\_records) | DNS records to create in the zone | <pre>list(object({<br/>    name    = string<br/>    type    = string<br/>    ttl     = optional(number, 300)<br/>    rrdatas = list(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_visibility"></a> [visibility](#input\_visibility) | Zone visibility: 'public' or 'private' | `string` | `"private"` | no |
 

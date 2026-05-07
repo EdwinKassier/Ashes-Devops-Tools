@@ -9,7 +9,7 @@ variable "org_id" {
 }
 
 variable "tags" {
-  description = "Map of Tag Keys to a list of allowed Tag Values. Keys and values follow GCP tag short_name constraints: 1-63 chars, must start with a letter, may contain lowercase letters, digits, hyphens, and underscores."
+  description = "Map of Tag Keys to a list of allowed Tag Values. Keys and values follow GCP tag short_name constraints: 1-63 chars, must start with a lowercase letter, may contain lowercase letters, digits, hyphens, and underscores. No spaces or uppercase."
   type        = map(list(string))
   # Example:
   # {
@@ -20,5 +20,22 @@ variable "tags" {
   validation {
     condition     = length(var.tags) > 0
     error_message = "tags must contain at least one tag key."
+  }
+
+  validation {
+    condition = alltrue([
+      for key in keys(var.tags) :
+      can(regex("^[a-z][a-z0-9_-]{0,62}$", key))
+    ])
+    error_message = "Tag keys must start with a lowercase letter and contain only lowercase letters, digits, hyphens, and underscores (max 63 characters)."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for key, values in var.tags : [
+        for v in values : can(regex("^[a-z][a-z0-9_-]{0,62}$", v))
+      ]
+    ]))
+    error_message = "Tag values must start with a lowercase letter and contain only lowercase letters, digits, hyphens, and underscores (max 63 characters)."
   }
 }

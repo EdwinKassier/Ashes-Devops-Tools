@@ -11,14 +11,14 @@ locals {
 module "network_hub" {
   source = "../../"
 
-  project_prefix      = "myorg"
-  hub_project_id      = local.hub_project_id
-  dns_project_id      = local.dns_project_id
-  hub_vpc_cidr_block  = "10.0.0.0/16"
+  project_prefix         = "myorg"
+  hub_project_id         = local.hub_project_id
+  dns_project_id         = local.dns_project_id
+  hub_vpc_cidr_block     = "10.0.0.0/16"
   dns_hub_vpc_cidr_block = "10.1.0.0/16"
-  default_region      = "us-central1"
-  org_id              = local.org_id
-  internal_domain     = "internal.example.com."
+  default_region         = "us-central1"
+  org_id                 = local.org_id
+  internal_domain        = "internal.example.com."
 
   # Map of spoke project names to project IDs that will peer to the hub VPC.
   spoke_project_ids = {}

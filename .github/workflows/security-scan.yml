@@ -92,5 +92,9 @@ jobs:
       - name: Check for failures
         if: needs.static-analysis.result == 'failure' || needs.trivy.result == 'failure' || needs.secret-scan.result == 'failure'
         run: |
-          echo "One or more security scans failed"
+          failed=""
+          [ "${{ needs.static-analysis.result }}" = "failure" ] && failed="${failed} TFSec+Checkov"
+          [ "${{ needs.trivy.result }}" = "failure" ]           && failed="${failed} Trivy"
+          [ "${{ needs.secret-scan.result }}" = "failure" ]     && failed="${failed} GitLeaks"
+          echo "::error::Security scan(s) failed:${failed}. Check the Security tab for details."
           exit 1

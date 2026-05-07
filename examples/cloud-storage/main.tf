@@ -13,11 +13,11 @@ module "storage" {
 
   data_buckets = {
     "raw-ingest" = {
-      name_suffix  = "raw-ingest"
+      name_suffix   = "raw-ingest"
       force_destroy = false
     }
     "processed" = {
-      name_suffix  = "processed"
+      name_suffix   = "processed"
       force_destroy = false
     }
   }

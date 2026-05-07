@@ -18,7 +18,7 @@ module "api_cdn" {
     { group = local.cloud_run_neg }
   ]
 
-  enable_cdn        = true
+  enable_cdn           = true
   enable_http_redirect = true
 }
 

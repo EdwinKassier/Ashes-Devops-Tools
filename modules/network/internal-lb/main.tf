@@ -144,7 +144,8 @@ resource "google_compute_region_url_map" "url_map" {
       default_service = path_matcher.value.default_service
 
       dynamic "path_rule" {
-        for_each = try(path_matcher.value.path_rules, [])
+        # path_rules is optional — coalesce null to [] so for_each never receives null.
+        for_each = coalesce(path_matcher.value.path_rules, [])
         content {
           paths   = path_rule.value.paths
           service = path_rule.value.service

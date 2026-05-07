@@ -379,10 +379,15 @@ variable "vpn_peer_gateway_ip" {
 }
 
 variable "vpn_shared_secret" {
-  description = "VPN shared secret (consider using Secret Manager). Must be set when enable_vpn = true."
+  description = "VPN shared secret. Must be set when enable_vpn = true. Consider injecting via Secret Manager rather than a plaintext tfvars value."
   type        = string
   default     = null
   sensitive   = true
+
+  validation {
+    condition     = !var.enable_vpn || (var.vpn_shared_secret != null && var.vpn_shared_secret != "")
+    error_message = "vpn_shared_secret must be set (non-null, non-empty) when enable_vpn is true."
+  }
 }
 
 variable "vpn_local_ips" {
@@ -438,9 +443,17 @@ variable "api_gateway_display_name" {
 }
 
 variable "api_gateway_service_account" {
-  description = "Service account email for API Gateway backend"
+  description = "Service account email for the API Gateway backend service (format: name@project.iam.gserviceaccount.com). Required when enable_api_gateway is true."
   type        = string
   default     = ""
+
+  validation {
+    condition = !var.enable_api_gateway || (
+      var.api_gateway_service_account != "" &&
+      can(regex("^[a-z][a-z0-9-]*@[a-z0-9-]+\\.iam\\.gserviceaccount\\.com$", var.api_gateway_service_account))
+    )
+    error_message = "api_gateway_service_account must be a valid service account email (name@project.iam.gserviceaccount.com) when enable_api_gateway is true."
+  }
 }
 
 variable "api_gateway_managed_services" {
@@ -553,9 +566,18 @@ variable "vpc_flow_logs_sink_name" {
 }
 
 variable "vpc_flow_logs_destination" {
-  description = "Destination for VPC Flow Logs (e.g., bigquery.googleapis.com/projects/PROJECT/datasets/DATASET)"
+  description = "Logging sink destination URI for VPC Flow Logs export (e.g., bigquery.googleapis.com/projects/PROJECT/datasets/DATASET). Required when enable_vpc_flow_logs_export is true and vpc_flow_logs_create_bigquery_dataset is false."
   type        = string
   default     = ""
+
+  validation {
+    condition = (
+      !var.enable_vpc_flow_logs_export ||
+      var.vpc_flow_logs_create_bigquery_dataset ||
+      var.vpc_flow_logs_destination != ""
+    )
+    error_message = "vpc_flow_logs_destination must be set when enable_vpc_flow_logs_export is true and vpc_flow_logs_create_bigquery_dataset is false."
+  }
 }
 
 variable "vpc_flow_logs_create_bigquery_dataset" {

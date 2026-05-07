@@ -21,13 +21,18 @@ variable "create_access_policy" {
 }
 
 variable "access_policy_name" {
-  description = "Existing access policy name (required if create_access_policy is false)"
+  description = "Numeric ID of an existing Access Context Manager access policy (required when create_access_policy is false). Must be the bare numeric policy ID, not the full resource path — e.g. '1234567890', not 'accessPolicies/1234567890'."
   type        = string
   default     = null
 
   validation {
     condition     = var.create_access_policy || var.access_policy_name != null
     error_message = "access_policy_name must be set when create_access_policy is false — an existing policy name is required."
+  }
+
+  validation {
+    condition     = var.access_policy_name == null || can(regex("^[0-9]+$", var.access_policy_name))
+    error_message = "access_policy_name must be a bare numeric policy ID (e.g. '1234567890'), not a full resource path like 'accessPolicies/...'."
   }
 }
 

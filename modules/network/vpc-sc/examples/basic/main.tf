@@ -17,8 +17,8 @@ locals {
   # Project numbers (NOT IDs) to protect. Get them with:
   #   gcloud projects describe <project-id> --format='value(projectNumber)'
   protected_project_numbers = [
-    "111111111111",  # data-platform project
-    "222222222222",  # ml-pipeline project
+    "111111111111", # data-platform project
+    "222222222222", # ml-pipeline project
   ]
 
   # Corporate egress IP range to allow access from (CIDR notation)
@@ -28,9 +28,9 @@ locals {
 module "data_perimeter" {
   source = "../../"
 
-  organization_id    = local.organization_id
+  organization_id      = local.organization_id
   create_access_policy = false
-  access_policy_name = local.access_policy_name
+  access_policy_name   = local.access_policy_name
 
   perimeter_name  = "data_protection_perimeter"
   perimeter_title = "Data Protection Perimeter"
@@ -51,8 +51,8 @@ module "data_perimeter" {
   # Allow access from corporate IP range without additional conditions
   access_levels = [
     {
-      name  = "corp_network_access"
-      title = "Corporate Network Access"
+      name        = "corp_network_access"
+      title       = "Corporate Network Access"
       description = "Allow access from corporate egress IPs"
       conditions = [
         {

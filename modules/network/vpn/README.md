@@ -124,9 +124,9 @@ The following resources are created:
 | <a name="input_shared_secret"></a> [shared\_secret](#input\_shared\_secret) | Shared secret for IKE authentication | `string` | n/a | yes |
 | <a name="input_advertised_ip_ranges"></a> [advertised\_ip\_ranges](#input\_advertised\_ip\_ranges) | Custom IP ranges to advertise via BGP | <pre>list(object({<br/>    range       = string<br/>    description = optional(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to VPN resources | `map(string)` | `{}` | no |
-| <a name="input_local_ip_addresses"></a> [local\_ip\_addresses](#input\_local\_ip\_addresses) | List of local BGP IP addresses for each tunnel | `list(string)` | <pre>[<br/>  "169.254.0.1",<br/>  "169.254.1.1"<br/>]</pre> | no |
+| <a name="input_local_ip_addresses"></a> [local\_ip\_addresses](#input\_local\_ip\_addresses) | List of local BGP IP addresses for each tunnel. Must contain exactly tunnel\_count entries (one per tunnel). | `list(string)` | <pre>[<br/>  "169.254.0.1",<br/>  "169.254.1.1"<br/>]</pre> | no |
 | <a name="input_peer_asn"></a> [peer\_asn](#input\_peer\_asn) | The ASN of the peer network (for BGP) | `number` | `65001` | no |
-| <a name="input_peer_ip_addresses"></a> [peer\_ip\_addresses](#input\_peer\_ip\_addresses) | List of BGP peer IP addresses for each tunnel | `list(string)` | <pre>[<br/>  "169.254.0.2",<br/>  "169.254.1.2"<br/>]</pre> | no |
+| <a name="input_peer_ip_addresses"></a> [peer\_ip\_addresses](#input\_peer\_ip\_addresses) | List of BGP peer IP addresses for each tunnel. Must contain exactly tunnel\_count entries (one per tunnel). | `list(string)` | <pre>[<br/>  "169.254.0.2",<br/>  "169.254.1.2"<br/>]</pre> | no |
 | <a name="input_router_asn"></a> [router\_asn](#input\_router\_asn) | The ASN for the Cloud Router (BGP) | `number` | `64514` | no |
 | <a name="input_router_name"></a> [router\_name](#input\_router\_name) | Name of the Cloud Router (created if not exists) | `string` | `null` | no |
 | <a name="input_tunnel_count"></a> [tunnel\_count](#input\_tunnel\_count) | Number of VPN tunnels to create (1 or 2 for HA) | `number` | `2` | no |

@@ -144,6 +144,76 @@ Document the findings in the incident ticket and update this runbook if the brea
 
 ---
 
+## Step 8 — If Unauthorized Access Is Discovered
+
+If the post-incident review reveals actions that were **not authorized** by the named approver (e.g., unexpected resource deletions, IAM mutations, data exports), treat it as a security incident immediately:
+
+### 8a — Contain (within the first hour)
+
+```bash
+# 1. Revoke ALL SA keys immediately (not just the break-glass key)
+for KEY_ID in $(gcloud iam service-accounts keys list \
+  --iam-account=terraform@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
+  --project=ADMIN_PROJECT_ID \
+  --format="value(name)" \
+  --filter="keyType=USER_MANAGED"); do
+  gcloud iam service-accounts keys delete "$KEY_ID" \
+    --iam-account=terraform@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
+    --project=ADMIN_PROJECT_ID --quiet
+done
+
+# 2. Disable the Terraform SA entirely until the scope of damage is known
+gcloud iam service-accounts disable \
+  terraform@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
+  --project=ADMIN_PROJECT_ID
+```
+
+> **Note:** Disabling the SA will break all Terraform runs until it is re-enabled. This is intentional — stopping further potential damage takes priority.
+
+### 8b — Assess
+
+Pull a full audit trail for the window the break-glass key was active, saving to a file for forensic review:
+
+```bash
+# Replace START and END with the key creation and deletion timestamps (from Step 7 output)
+gcloud logging read \
+  'protoPayload.authenticationInfo.serviceAccountKeyName!="" OR
+   protoPayload.authenticationInfo.principalEmail="terraform@ADMIN_PROJECT_ID.iam.gserviceaccount.com"' \
+  --project=ADMIN_PROJECT_ID \
+  --freshness=72h \
+  --format=json \
+  > /tmp/incident-audit-$(date +%Y%m%d).json
+```
+
+Check specifically for:
+- `SetIamPolicy` calls (IAM mutations)
+- `DeleteBucket`, `DeleteDataset`, `DeleteObject` (data destruction)
+- Any project outside the expected scope of the change
+
+### 8c — Notify
+
+1. **Immediately notify** the approver named in Step 2 and your security team.
+2. If GCP resources were mutated beyond the authorized scope, open a [GCP Security incident](https://cloud.google.com/support/docs/issue-trackers).
+3. File an internal postmortem within 48 hours covering: timeline, root cause, impact, and remediation steps taken.
+
+### 8d — Remediate
+
+After the investigation is complete:
+
+```bash
+# Re-enable the Terraform SA only after confirming scope and reverting unauthorized changes
+gcloud iam service-accounts enable \
+  terraform@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
+  --project=ADMIN_PROJECT_ID
+```
+
+Review and tighten the break-glass procedure based on findings — in particular:
+- Was the approver verification step followed?
+- Was the time box enforced?
+- Should break-glass access require a separate short-lived SA with narrower permissions?
+
+---
+
 ## Troubleshoot WIF
 
 If the WIF pool and SA exist but authentication fails, the issue is usually the attribute condition.

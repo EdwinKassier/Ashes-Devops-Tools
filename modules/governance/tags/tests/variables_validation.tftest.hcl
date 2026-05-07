@@ -15,7 +15,7 @@ run "accepts_valid_inputs" {
 }
 
 run "rejects_org_id_with_prefix" {
-  command = plan
+  command         = plan
   expect_failures = [var.org_id]
   variables {
     org_id = "organizations/123456789"
@@ -23,7 +23,7 @@ run "rejects_org_id_with_prefix" {
 }
 
 run "rejects_non_numeric_org_id" {
-  command = plan
+  command         = plan
   expect_failures = [var.org_id]
   variables {
     org_id = "abc123"
@@ -31,7 +31,7 @@ run "rejects_non_numeric_org_id" {
 }
 
 run "rejects_empty_tags" {
-  command = plan
+  command         = plan
   expect_failures = [var.tags]
   variables {
     tags = {}

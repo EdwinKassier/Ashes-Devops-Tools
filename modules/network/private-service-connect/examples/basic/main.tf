@@ -16,7 +16,7 @@ module "psc_google_apis" {
   name       = "google-apis-psc"
   network    = local.network
   subnetwork = local.subnetwork
-  target     = "all-apis"  # Forwards to all Google APIs via PSC
+  target     = "all-apis" # Forwards to all Google APIs via PSC
   region     = local.region
 }
 

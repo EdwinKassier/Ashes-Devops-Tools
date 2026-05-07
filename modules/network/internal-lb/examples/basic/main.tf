@@ -21,8 +21,8 @@ module "internal_lb" {
     { group = local.backend_ig }
   ]
 
-  is_l7                    = true
-  health_check_type        = "HTTP"
+  is_l7                     = true
+  health_check_type         = "HTTP"
   health_check_request_path = "/healthz"
 }
 

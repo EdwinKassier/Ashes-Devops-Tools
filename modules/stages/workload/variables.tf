@@ -68,12 +68,17 @@ variable "shared_vpc_host_project_id" {
 }
 
 variable "shared_vpc_subnets" {
-  description = "List of subnets in the Host Project to grant access to"
+  description = "Map of subnet key to subnet configuration in the Shared VPC Host Project. Must not be empty when enable_shared_vpc_attachment is true — at least one subnet must be granted to allow workloads to use the shared network."
   type = map(object({
     region      = string
     subnet_name = string
   }))
   default = {}
+
+  validation {
+    condition     = !var.enable_shared_vpc_attachment || length(var.shared_vpc_subnets) > 0
+    error_message = "shared_vpc_subnets must contain at least one subnet when enable_shared_vpc_attachment is true."
+  }
 }
 
 # -----------------------------------------------------------------------------

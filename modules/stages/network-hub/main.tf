@@ -1,3 +1,10 @@
+locals {
+  # data.google_organization.org.org_id returns a bare numeric string (e.g. "123456789012").
+  # The VPC-SC module requires the "organizations/<id>" prefix form.
+  # Accept both inputs and normalize here so callers don't need to manually prefix.
+  org_id_normalized = can(regex("^organizations/", var.org_id)) ? var.org_id : "organizations/${var.org_id}"
+}
+
 # Hub Network Actuation (The "Pipes")
 module "hub_network" {
   source = "../../host"
@@ -45,7 +52,7 @@ module "hub_network" {
   # VPC Service Controls (Data Exfiltration Protection)
   vpc_service_controls = {
     "apps-data-perimeter" = {
-      organization_id = var.org_id
+      organization_id = local.org_id_normalized
       perimeter_title = "Application Data Protection Perimeter"
       description     = "Prevents data exfiltration from managed application projects"
 

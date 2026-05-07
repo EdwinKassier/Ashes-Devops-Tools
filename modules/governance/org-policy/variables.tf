@@ -37,13 +37,20 @@ variable "boolean_policies" {
 variable "list_policies" {
   description = "List of list-type organization policies with allowed/denied values"
   type = list(object({
-    constraint     = string       # e.g., "gcp.resourceLocations"
-    allow_all      = optional(bool, false) # Allow all values (overrides allowed_values)
-    deny_all       = optional(bool, false) # Deny all values (overrides denied_values)
-    allowed_values = list(string) # Specific values to allow
-    denied_values  = list(string) # Specific values to deny
+    constraint     = string                # e.g., "gcp.resourceLocations"
+    allow_all      = optional(bool, false) # Allow all values (mutually exclusive with deny_all)
+    deny_all       = optional(bool, false) # Deny all values (mutually exclusive with allow_all)
+    allowed_values = list(string)          # Specific values to allow (ignored when allow_all = true)
+    denied_values  = list(string)          # Specific values to deny (ignored when deny_all = true)
   }))
   default = []
+
+  validation {
+    condition = alltrue([
+      for p in var.list_policies : !(p.allow_all && p.deny_all)
+    ])
+    error_message = "A list policy cannot have both allow_all and deny_all set to true simultaneously — these options are mutually exclusive."
+  }
 
   # Common list constraints:
   # - gcp.resourceLocations           : Restrict regions (e.g., ["in:us-locations"])

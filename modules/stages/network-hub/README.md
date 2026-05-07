@@ -104,7 +104,7 @@ module "example" {
 | <a name="input_folders"></a> [folders](#input\_folders) | Map of folder objects to attach policies to | <pre>map(object({<br/>    id           = string<br/>    name         = string<br/>    display_name = string<br/>  }))</pre> | n/a | yes |
 | <a name="input_hub_project_id"></a> [hub\_project\_id](#input\_hub\_project\_id) | Project ID for the network hub | `string` | n/a | yes |
 | <a name="input_hub_vpc_cidr_block"></a> [hub\_vpc\_cidr\_block](#input\_hub\_vpc\_cidr\_block) | CIDR block for the hub VPC (e.g. "10.0.0.0/16"). Required — set via IPAM or per-environment tfvars. | `string` | n/a | yes |
-| <a name="input_org_id"></a> [org\_id](#input\_org\_id) | Organization ID in format 'organizations/123456789' — passed directly to vpc-sc module which requires this prefix | `string` | n/a | yes |
+| <a name="input_org_id"></a> [org\_id](#input\_org\_id) | The GCP organization ID. Accepts either a bare numeric ID (e.g. '123456789012') as returned<br/>by data.google\_organization.org.org\_id, or the 'organizations/<id>' prefixed form.<br/>The module normalizes to the prefixed form internally before passing to VPC-SC. | `string` | n/a | yes |
 | <a name="input_project_prefix"></a> [project\_prefix](#input\_project\_prefix) | Prefix used for project naming | `string` | n/a | yes |
 | <a name="input_spoke_project_ids"></a> [spoke\_project\_ids](#input\_spoke\_project\_ids) | Map of spoke project IDs to attach to Shared VPC | `map(string)` | n/a | yes |
 | <a name="input_internal_domain"></a> [internal\_domain](#input\_internal\_domain) | Internal domain for private DNS zone (e.g., 'mycompany.com') | `string` | `"internal.local"` | no |

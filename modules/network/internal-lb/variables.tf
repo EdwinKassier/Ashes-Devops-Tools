@@ -215,16 +215,28 @@ variable "backend_target_tags" {
 # -----------------------------------------------------------------------------
 
 variable "host_rules" {
-  description = "Host rules for URL mapping"
+  description = <<-EOT
+    Host rules for URL mapping (L7 load balancers only).
+    At least one entry is required when is_l7 = true to route traffic correctly.
+    Each entry maps a list of hostnames to a named path_matcher.
+  EOT
   type = list(object({
     hosts        = list(string)
     path_matcher = string
   }))
   default = []
+
+  validation {
+    condition     = !var.is_l7 || length(var.host_rules) > 0
+    error_message = "host_rules must contain at least one entry when is_l7 = true. An L7 URL map with no host rules cannot route any traffic."
+  }
 }
 
 variable "path_matchers" {
-  description = "Path matchers for URL mapping"
+  description = <<-EOT
+    Path matchers for URL mapping (L7 load balancers only).
+    Every path_matcher name referenced in host_rules must have a corresponding entry here.
+  EOT
   type = list(object({
     name            = string
     default_service = string
@@ -234,6 +246,13 @@ variable "path_matchers" {
     })))
   }))
   default = []
+
+  validation {
+    condition = alltrue([
+      for hr in var.host_rules : contains([for pm in var.path_matchers : pm.name], hr.path_matcher)
+    ])
+    error_message = "Every host_rule.path_matcher value must have a corresponding entry in path_matchers."
+  }
 }
 
 # -----------------------------------------------------------------------------
