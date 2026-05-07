@@ -161,7 +161,7 @@ The following resources are created:
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_account_id"></a> [account\_id](#input\_account\_id) | The service account ID (the part before @project.iam.gserviceaccount.com) | `string` | n/a | yes |
+| <a name="input_account_id"></a> [account\_id](#input\_account\_id) | The service account ID (the part before @project.iam.gserviceaccount.com). 6-30 characters, starts with letter, ends with letter or digit, lowercase letters/digits/hyphens only, no consecutive hyphens. | `string` | n/a | yes |
 | <a name="input_display_name"></a> [display\_name](#input\_display\_name) | The display name for the service account | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The ID of the project where the service account will be created | `string` | n/a | yes |
 | <a name="input_description"></a> [description](#input\_description) | A description of the service account | `string` | `""` | no |

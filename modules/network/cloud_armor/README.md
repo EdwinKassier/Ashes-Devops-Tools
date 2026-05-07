@@ -99,7 +99,7 @@ The following resources are created:
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_policy_name"></a> [policy\_name](#input\_policy\_name) | Name of the Cloud Armor security policy | `string` | n/a | yes |
+| <a name="input_policy_name"></a> [policy\_name](#input\_policy\_name) | Name of the Cloud Armor security policy (lowercase letters, digits, hyphens; starts with letter) | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID where the security policy will be created | `string` | n/a | yes |
 | <a name="input_custom_rules"></a> [custom\_rules](#input\_custom\_rules) | Map of custom rules to apply to the security policy | <pre>map(object({<br/>    action      = string<br/>    priority    = number<br/>    description = optional(string)<br/>    match_conditions = object({<br/>      versioned_expr = string<br/>      config = object({<br/>        src_ip_ranges = list(string)<br/>      })<br/>    })<br/>    rate_limit_options = optional(object({<br/>      threshold_count     = number<br/>      interval_sec        = number<br/>      conform_action      = optional(string)<br/>      exceed_action       = optional(string)<br/>      enforce_on_key      = optional(string)<br/>      enforce_on_key_type = optional(string)<br/>    }))<br/>  }))</pre> | `{}` | no |
 | <a name="input_default_rule_action"></a> [default\_rule\_action](#input\_default\_rule\_action) | Default rule action (allow/deny) | `string` | `"allow"` | no |

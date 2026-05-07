@@ -4,12 +4,17 @@ variable "project_id" {
 }
 
 variable "account_id" {
-  description = "The service account ID (the part before @project.iam.gserviceaccount.com)"
+  description = "The service account ID (the part before @project.iam.gserviceaccount.com). 6-30 characters, starts with letter, ends with letter or digit, lowercase letters/digits/hyphens only, no consecutive hyphens."
   type        = string
 
   validation {
     condition     = can(regex("^[a-z][a-z0-9-]{4,28}[a-z0-9]$", var.account_id))
-    error_message = "Account ID must be 6-30 characters, start with a letter, and contain only lowercase letters, numbers, and hyphens."
+    error_message = "account_id must be 6-30 characters, start with a lowercase letter, end with a letter or digit, and contain only lowercase letters, digits, and hyphens."
+  }
+
+  validation {
+    condition     = !can(regex("--", var.account_id))
+    error_message = "account_id must not contain consecutive hyphens ('--') — GCP rejects service account IDs with adjacent hyphens."
   }
 }
 

@@ -46,6 +46,14 @@ variable "repositories" {
     error_message = "Each repository format must be one of: DOCKER, MAVEN, NPM, PYTHON, APT, YUM, GOOGET, KFP, GENERIC."
   }
 
+  validation {
+    condition = alltrue([
+      for k, v in var.repositories :
+      can(regex("^[a-z][a-z0-9-]{0,61}[a-z0-9]$|^[a-z0-9]$", k))
+    ])
+    error_message = "Repository map keys must be valid Artifact Registry repository IDs: lowercase letters, digits, and hyphens; starts with a letter or digit; 1-63 characters."
+  }
+
   default = {
     "ashes-flask-repo" = {
       description = "Artifact registry for flask images"

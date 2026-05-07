@@ -10,8 +10,13 @@ variable "project_id" {
 }
 
 variable "subnet_name" {
-  description = "Name of the subnet"
+  description = "Name of the subnet (lowercase letters, digits, hyphens; starts with letter; max 63 characters)"
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{0,62}$", var.subnet_name))
+    error_message = "subnet_name must start with a lowercase letter and contain only lowercase letters, digits, and hyphens (max 63 characters)."
+  }
 }
 
 variable "ip_cidr_range" {

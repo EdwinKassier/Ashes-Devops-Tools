@@ -56,6 +56,12 @@ make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars
 - [CIDR Expansion](runbooks/cidr-expansion.md): expand subnet ranges without downtime
 - [Break Glass](runbooks/break-glass.md): emergency access when Workload Identity Federation fails
 
+## Security & Governance
+
+- [Security Policy](../SECURITY.md): vulnerability reporting, disclosure timeline, and security architecture
+- [Changelog](../CHANGELOG.md): release notes, breaking changes, and migration guides
+- [Branch Protection](guides/BRANCH_PROTECTION.md): recommended GitHub branch protection and tag ruleset settings
+
 ## Architecture
 
 - [Network Topology](architecture/network-topology.md): hub-spoke VPC layout, VPC-SC perimeter, WIF OIDC flow

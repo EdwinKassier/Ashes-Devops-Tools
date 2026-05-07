@@ -82,9 +82,7 @@ module "example" {
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.0, < 8.0 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.0, < 8.0 |
 
-## Providers
 
-No providers.
 
 ## Modules
 
@@ -92,11 +90,6 @@ No providers.
 - dns_hub_network - ../../host
 - dns_hub_zone - ../../network/dns
 - hub_network - ../../host
-
-
-## Resources
-
-The following resources are created:
 
 
 
@@ -122,6 +115,8 @@ The following resources are created:
 |------|-------------|
 | <a name="output_dns_zone_name"></a> [dns\_zone\_name](#output\_dns\_zone\_name) | Name of the managed private DNS zone |
 | <a name="output_hub_dns_domain"></a> [hub\_dns\_domain](#output\_hub\_dns\_domain) | DNS suffix served by the hub DNS project |
+| <a name="output_hub_nat_ips"></a> [hub\_nat\_ips](#output\_hub\_nat\_ips) | External NAT IP addresses allocated to the hub Cloud NAT gateway (null if integrated NAT is disabled) |
+| <a name="output_hub_subnet_self_links"></a> [hub\_subnet\_self\_links](#output\_hub\_subnet\_self\_links) | Map of private subnet name to self\_link for the hub VPC — useful for Shared VPC service project attachments and peering configuration |
 | <a name="output_hub_vpc_name"></a> [hub\_vpc\_name](#output\_hub\_vpc\_name) | Name of the hub VPC |
 | <a name="output_hub_vpc_self_link"></a> [hub\_vpc\_self\_link](#output\_hub\_vpc\_self\_link) | Self link of the hub VPC |
 <!-- END_TF_DOCS -->

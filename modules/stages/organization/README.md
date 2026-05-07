@@ -122,20 +122,20 @@ The following resources are created:
 |------|-------------|------|---------|:--------:|
 | <a name="input_admin_email"></a> [admin\_email](#input\_admin\_email) | Email address of the primary administrator | `string` | n/a | yes |
 | <a name="input_admin_project_id"></a> [admin\_project\_id](#input\_admin\_project\_id) | The project ID of the bootstrap admin project | `string` | n/a | yes |
-| <a name="input_admin_project_number"></a> [admin\_project\_number](#input\_admin\_project\_number) | The project number of the bootstrap admin project | `string` | n/a | yes |
+| <a name="input_admin_project_number"></a> [admin\_project\_number](#input\_admin\_project\_number) | The numeric project number of the bootstrap admin project (digits only) | `string` | n/a | yes |
 | <a name="input_allowed_regions"></a> [allowed\_regions](#input\_allowed\_regions) | List of GCP regions permitted by resource location org policy | `list(string)` | n/a | yes |
-| <a name="input_billing_account"></a> [billing\_account](#input\_billing\_account) | The GCP billing account ID | `string` | n/a | yes |
-| <a name="input_billing_admin_groups"></a> [billing\_admin\_groups](#input\_billing\_admin\_groups) | List of Google Groups to grant billing admin roles | `list(string)` | n/a | yes |
+| <a name="input_billing_account"></a> [billing\_account](#input\_billing\_account) | The GCP billing account ID in format XXXXXX-XXXXXX-XXXXXX | `string` | n/a | yes |
+| <a name="input_billing_admin_groups"></a> [billing\_admin\_groups](#input\_billing\_admin\_groups) | List of Google Group email addresses to grant billing admin roles | `list(string)` | n/a | yes |
 | <a name="input_billing_contact_email"></a> [billing\_contact\_email](#input\_billing\_contact\_email) | Email address for billing notifications and budget alerts | `string` | n/a | yes |
 | <a name="input_budget_currency"></a> [budget\_currency](#input\_budget\_currency) | ISO 4217 currency code for the budget (e.g., USD, EUR, GBP) | `string` | n/a | yes |
-| <a name="input_customer_id"></a> [customer\_id](#input\_customer\_id) | The Google Workspace customer ID (format: C followed by alphanumerics) | `string` | n/a | yes |
-| <a name="input_default_region"></a> [default\_region](#input\_default\_region) | Default GCP region for regional resources | `string` | n/a | yes |
-| <a name="input_domain"></a> [domain](#input\_domain) | The primary domain of the GCP organization (e.g., example.com) | `string` | n/a | yes |
+| <a name="input_customer_id"></a> [customer\_id](#input\_customer\_id) | The Google Workspace customer ID (format: 'C' followed by alphanumerics, e.g., 'C0abc1234') | `string` | n/a | yes |
+| <a name="input_default_region"></a> [default\_region](#input\_default\_region) | Default GCP region for regional resources (e.g., 'us-central1', 'europe-west1') | `string` | n/a | yes |
+| <a name="input_domain"></a> [domain](#input\_domain) | The primary domain of the GCP organization (e.g., 'example.com') | `string` | n/a | yes |
 | <a name="input_environments"></a> [environments](#input\_environments) | Map of environment definitions keyed by environment name (e.g., dev, staging, prod) | <pre>map(object({<br/>    display_name            = string<br/>    description             = string<br/>    iam_group_role_bindings = map(set(string))<br/>  }))</pre> | n/a | yes |
 | <a name="input_monthly_budget_amount"></a> [monthly\_budget\_amount](#input\_monthly\_budget\_amount) | Monthly budget cap in the configured currency. Must be greater than zero. | `number` | n/a | yes |
-| <a name="input_org_id"></a> [org\_id](#input\_org\_id) | The numeric GCP organization ID | `string` | n/a | yes |
-| <a name="input_organization_admin_groups"></a> [organization\_admin\_groups](#input\_organization\_admin\_groups) | List of Google Groups to grant organization admin roles | `list(string)` | n/a | yes |
-| <a name="input_project_prefix"></a> [project\_prefix](#input\_project\_prefix) | Short prefix applied to all project IDs to ensure global uniqueness | `string` | n/a | yes |
+| <a name="input_org_id"></a> [org\_id](#input\_org\_id) | The numeric GCP organization ID (digits only, no 'organizations/' prefix) | `string` | n/a | yes |
+| <a name="input_organization_admin_groups"></a> [organization\_admin\_groups](#input\_organization\_admin\_groups) | List of Google Group email addresses to grant organization admin roles | `list(string)` | n/a | yes |
+| <a name="input_project_prefix"></a> [project\_prefix](#input\_project\_prefix) | Short prefix applied to all project IDs to ensure global uniqueness (lowercase letters, digits, hyphens; starts with letter) | `string` | n/a | yes |
 | <a name="input_security_contact_email"></a> [security\_contact\_email](#input\_security\_contact\_email) | Email address for security notifications (SCC, alerts) | `string` | n/a | yes |
 | <a name="input_strict_folder_policy_environment_keys"></a> [strict\_folder\_policy\_environment\_keys](#input\_strict\_folder\_policy\_environment\_keys) | Subset of environment keys that enforce strict resource location policies | `list(string)` | n/a | yes |
 | <a name="input_terraform_admin_email"></a> [terraform\_admin\_email](#input\_terraform\_admin\_email) | Email address of the Terraform admin service account | `string` | n/a | yes |

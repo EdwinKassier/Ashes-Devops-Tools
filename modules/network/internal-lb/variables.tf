@@ -20,8 +20,13 @@ variable "name" {
 }
 
 variable "region" {
-  description = "The region for the load balancer"
+  description = "The region for the load balancer (e.g., 'us-central1', 'europe-west1')"
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z]+-[a-z]+[0-9]$", var.region))
+    error_message = "region must be a valid GCP region name (e.g., 'us-central1', 'europe-west1')."
+  }
 }
 
 variable "network" {

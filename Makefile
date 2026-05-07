@@ -1,4 +1,4 @@
-.PHONY: help install fmt fmt-check validate validate-all lint security security-report docs docs-check test ci clean init-organization init-apps plan-organization plan-apps apply-organization apply-apps validate-requirements pre-commit-install pre-commit-run pre-commit-update
+.PHONY: help install fmt fmt-check validate validate-all lint security security-report docs docs-check test ci clean init-organization init-apps plan-organization plan-apps apply-organization apply-apps validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-organization state-list-apps state-rm-organization state-rm-apps unlock-organization unlock-apps
 
 TERRAFORM := terraform
 TFLINT := tflint
@@ -93,13 +93,13 @@ pre-commit-run: ## Run pre-commit across the repository
 pre-commit-update: ## Update pinned pre-commit hooks
 	@$(PRE_COMMIT) autoupdate
 
-ci: ## Run the local CI pipeline
+ci: ## Run the local CI pipeline (fmt → docs → validate → lint → test → security)
 	@$(MAKE) fmt-check
 	@$(MAKE) docs-check
 	@$(MAKE) validate-all
 	@$(MAKE) lint
-	@$(MAKE) security
 	@$(MAKE) test
+	@$(MAKE) security
 
 init-organization: ## Initialize the organization root
 	@$(TERRAFORM) -chdir=envs/organization init
@@ -125,6 +125,28 @@ validate-requirements: ## Print local tool versions
 	@$(TFSEC) --version
 	@$(CHECKOV) --version
 	@$(TERRAFORM_DOCS) --version
+
+state-list-organization: ## List resources in the organization workspace state
+	@$(TERRAFORM) -chdir=envs/organization state list
+
+state-list-apps: ## List resources in the apps workspace state (APP_ENV=dev)
+	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/apps state list
+
+state-rm-organization: ## Remove a resource from the organization state: make state-rm-organization ADDR='module.foo.resource.bar'
+	@[ -n "$(ADDR)" ] || (echo "Error: ADDR is required. Usage: make state-rm-organization ADDR='module.foo.resource.bar'" && exit 1)
+	@$(TERRAFORM) -chdir=envs/organization state rm '$(ADDR)'
+
+state-rm-apps: ## Remove a resource from the apps state: make state-rm-apps ADDR='module.host.resource.bar' APP_ENV=dev
+	@[ -n "$(ADDR)" ] || (echo "Error: ADDR is required. Usage: make state-rm-apps ADDR='module.host.resource.bar'" && exit 1)
+	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/apps state rm '$(ADDR)'
+
+unlock-organization: ## Force-unlock a stuck Terraform lock on the organization workspace: make unlock-organization LOCK_ID=<id>
+	@[ -n "$(LOCK_ID)" ] || (echo "Error: LOCK_ID is required. Usage: make unlock-organization LOCK_ID=<lock-id>" && exit 1)
+	@$(TERRAFORM) -chdir=envs/organization force-unlock -force '$(LOCK_ID)'
+
+unlock-apps: ## Force-unlock a stuck Terraform lock on an apps workspace: make unlock-apps LOCK_ID=<id> APP_ENV=dev
+	@[ -n "$(LOCK_ID)" ] || (echo "Error: LOCK_ID is required. Usage: make unlock-apps LOCK_ID=<lock-id>" && exit 1)
+	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/apps force-unlock -force '$(LOCK_ID)'
 
 clean: ## Remove local Terraform caches and generated reports
 	@find . -type d -name ".terraform" -prune -exec rm -rf {} +

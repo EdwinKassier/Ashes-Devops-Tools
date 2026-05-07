@@ -12,6 +12,11 @@ variable "project_id" {
 variable "name" {
   description = "Base name for VPN resources"
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{0,62}$", var.name))
+    error_message = "name must start with a lowercase letter and contain only lowercase letters, digits, and hyphens (max 63 characters)."
+  }
 }
 
 variable "network" {
@@ -20,8 +25,13 @@ variable "network" {
 }
 
 variable "region" {
-  description = "The region for the VPN gateway"
+  description = "The region for the VPN gateway (e.g., 'us-central1', 'europe-west1')"
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z]+-[a-z]+[0-9]$", var.region))
+    error_message = "region must be a valid GCP region name (e.g., 'us-central1', 'europe-west1')."
+  }
 }
 
 variable "router_name" {
@@ -37,8 +47,13 @@ variable "router_asn" {
 }
 
 variable "peer_external_gateway_ip" {
-  description = "External IP address of the peer VPN gateway"
+  description = "External IPv4 address of the peer VPN gateway"
   type        = string
+
+  validation {
+    condition     = can(regex("^(\\d{1,3}\\.){3}\\d{1,3}$", var.peer_external_gateway_ip))
+    error_message = "peer_external_gateway_ip must be a valid IPv4 address (e.g., '203.0.113.1')."
+  }
 }
 
 variable "peer_asn" {

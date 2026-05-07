@@ -104,7 +104,7 @@ The following resources are created:
 | <a name="input_network"></a> [network](#input\_network) | The VPC network ID to attach this subnet to | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The ID of the project where the subnet will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The GCP region where the subnet will be created (e.g. europe-west1) | `string` | n/a | yes |
-| <a name="input_subnet_name"></a> [subnet\_name](#input\_subnet\_name) | Name of the subnet | `string` | n/a | yes |
+| <a name="input_subnet_name"></a> [subnet\_name](#input\_subnet\_name) | Name of the subnet (lowercase letters, digits, hyphens; starts with letter; max 63 characters) | `string` | n/a | yes |
 | <a name="input_enable_flow_logs"></a> [enable\_flow\_logs](#input\_enable\_flow\_logs) | Whether to enable VPC flow logs for this subnet | `bool` | `true` | no |
 | <a name="input_log_config_aggregation_interval"></a> [log\_config\_aggregation\_interval](#input\_log\_config\_aggregation\_interval) | Aggregation interval for collecting flow logs | `string` | `"INTERVAL_5_SEC"` | no |
 | <a name="input_log_config_flow_sampling"></a> [log\_config\_flow\_sampling](#input\_log\_config\_flow\_sampling) | Sampling rate for VPC flow logs (0.0 to 1.0) | `number` | `0.5` | no |

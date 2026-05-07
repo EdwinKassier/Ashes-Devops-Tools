@@ -188,21 +188,26 @@ See the **[Makefile](Makefile)** for the complete list of supported commands.
 
 ## Security & Quality
 
+> **Security Policy:** To report a vulnerability, see [SECURITY.md](SECURITY.md). Do not open a public GitHub issue.
+
 ### **Automated Security Scanning**
 - **Local `make security`**: TFSec and Checkov
-- **GitHub `security-scan.yml`**: TFSec, Checkov, Trivy, and Gitleaks
+- **GitHub `security-scan.yml`**: TFSec, Checkov, Trivy, and Gitleaks — SARIF results uploaded to GitHub Security tab
 
 ### **Quality Tools**
-- **TFLint** - Terraform linting
-- **terraform validate** - Syntax validation
+- **TFLint** - Terraform linting with GCP-specific ruleset
+- **terraform validate** - Syntax and schema validation
 - **terraform fmt** - Code formatting
-- **pre-commit** - Automated formatting and repository checks
+- **pre-commit** - Automated formatting, docs, and security checks on every commit
 
 Run security scans:
 ```bash
 make security              # Run all security scans
 make security-report       # Generate detailed reports
 ```
+
+### **Branch Protection**
+See [docs/guides/BRANCH_PROTECTION.md](docs/guides/BRANCH_PROTECTION.md) for recommended GitHub branch protection rules, required status checks, and tag protection settings.
 
 ---
 

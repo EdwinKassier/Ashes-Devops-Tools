@@ -184,6 +184,7 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
+| <a name="output_host_project_id"></a> [host\_project\_id](#output\_host\_project\_id) | The Shared VPC host project ID this service project is attached to (null if Shared VPC attachment is disabled) |
 | <a name="output_project_id"></a> [project\_id](#output\_project\_id) | The ID of the created project |
 | <a name="output_project_number"></a> [project\_number](#output\_project\_number) | The numeric identifier of the created project |
 | <a name="output_service_account_email"></a> [service\_account\_email](#output\_service\_account\_email) | The email of the default service account |

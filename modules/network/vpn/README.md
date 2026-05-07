@@ -118,9 +118,9 @@ The following resources are created:
 |------|-------------|------|---------|:--------:|
 | <a name="input_name"></a> [name](#input\_name) | Base name for VPN resources | `string` | n/a | yes |
 | <a name="input_network"></a> [network](#input\_network) | The self-link of the VPC network | `string` | n/a | yes |
-| <a name="input_peer_external_gateway_ip"></a> [peer\_external\_gateway\_ip](#input\_peer\_external\_gateway\_ip) | External IP address of the peer VPN gateway | `string` | n/a | yes |
+| <a name="input_peer_external_gateway_ip"></a> [peer\_external\_gateway\_ip](#input\_peer\_external\_gateway\_ip) | External IPv4 address of the peer VPN gateway | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID where the VPN will be created | `string` | n/a | yes |
-| <a name="input_region"></a> [region](#input\_region) | The region for the VPN gateway | `string` | n/a | yes |
+| <a name="input_region"></a> [region](#input\_region) | The region for the VPN gateway (e.g., 'us-central1', 'europe-west1') | `string` | n/a | yes |
 | <a name="input_shared_secret"></a> [shared\_secret](#input\_shared\_secret) | Shared secret for IKE authentication | `string` | n/a | yes |
 | <a name="input_advertised_ip_ranges"></a> [advertised\_ip\_ranges](#input\_advertised\_ip\_ranges) | Custom IP ranges to advertise via BGP | <pre>list(object({<br/>    range       = string<br/>    description = optional(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to VPN resources | `map(string)` | `{}` | no |

@@ -177,7 +177,7 @@ The following resources are created:
 | <a name="input_name"></a> [name](#input\_name) | Base name for load balancer resources | `string` | n/a | yes |
 | <a name="input_network"></a> [network](#input\_network) | The VPC network self\_link or ID | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The GCP project ID | `string` | n/a | yes |
-| <a name="input_region"></a> [region](#input\_region) | The region for the load balancer | `string` | n/a | yes |
+| <a name="input_region"></a> [region](#input\_region) | The region for the load balancer (e.g., 'us-central1', 'europe-west1') | `string` | n/a | yes |
 | <a name="input_subnet"></a> [subnet](#input\_subnet) | The subnet self\_link for the load balancer | `string` | n/a | yes |
 | <a name="input_allow_global_access"></a> [allow\_global\_access](#input\_allow\_global\_access) | Allow clients from any region to access the load balancer | `bool` | `false` | no |
 | <a name="input_backend_port"></a> [backend\_port](#input\_backend\_port) | Backend service port (for firewall rules) | `number` | `80` | no |

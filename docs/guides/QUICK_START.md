@@ -12,6 +12,7 @@ Before running any Terraform, verify the following:
 
 - [ ] You have a GCP Organization (not just a project). Find your org ID: `gcloud organizations list`
 - [ ] You have a Billing Account linked to the organization. Find it: `gcloud billing accounts list`
+- [ ] You have decided on `github_org` and `github_repo` values — **these variables have no defaults** and must be set explicitly to avoid accidentally trusting the wrong GitHub org/repo when forking
 - [ ] Your user account has the following roles **at the organization level**:
   - `roles/resourcemanager.organizationAdmin`
   - `roles/billing.admin` (or `roles/billing.user` + project creator rights)
@@ -276,5 +277,6 @@ make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars
 - Read the [Architecture Overview](../architecture/ARCHITECTURE.md)
 - Read the [Network Topology](../architecture/network-topology.md)
 - Read the [Contributing Guide](../../CONTRIBUTING.md)
+- **Configure [Branch Protection](BRANCH_PROTECTION.md)** — apply GitHub branch protection rules before granting team access
 - Browse the [Runbooks](../runbooks/) for Day 2 operations
 - Use `examples/` as reference configurations for each module

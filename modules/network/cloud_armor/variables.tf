@@ -4,8 +4,13 @@ variable "project_id" {
 }
 
 variable "policy_name" {
-  description = "Name of the Cloud Armor security policy"
+  description = "Name of the Cloud Armor security policy (lowercase letters, digits, hyphens; starts with letter)"
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{0,62}$", var.policy_name))
+    error_message = "policy_name must start with a lowercase letter and contain only lowercase letters, digits, and hyphens (max 63 characters)."
+  }
 }
 
 variable "description" {

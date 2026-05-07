@@ -36,20 +36,25 @@ gcloud compute networks subnets describe SUBNET_NAME \
 
 ### Step 2 — Update the secondary range in Terraform
 
-In `envs/apps/main.tf` (or the relevant module call), update `secondary_ip_ranges`:
+In `envs/apps/main.tf`, update the `secondary_ranges` argument on `module "host"`. The key is the subnet name (matching the host module's internal subnet names); the value is the list of secondary ranges:
 
 ```hcl
-secondary_ip_ranges = [
-  {
-    range_name    = "gke-pods"
-    ip_cidr_range = "10.200.0.0/14"   # expanded from /16
-  },
-  {
-    range_name    = "gke-services"
-    ip_cidr_range = "10.204.0.0/20"
-  }
-]
+# In envs/apps/main.tf — module "host" block
+secondary_ranges = {
+  "private" = [
+    {
+      range_name    = "gke-pods"
+      ip_cidr_range = "10.200.0.0/14"   # expanded from /16
+    },
+    {
+      range_name    = "gke-services"
+      ip_cidr_range = "10.204.0.0/20"
+    }
+  ]
+}
 ```
+
+> **Variable name:** The host module uses `secondary_ranges` (a `map(list(object))` keyed by subnet name), not `secondary_ip_ranges`. Passing an unrecognised argument causes a validation error.
 
 ### Step 3 — Plan and verify no primary CIDR change
 
@@ -102,14 +107,31 @@ After the CIDR change is applied, re-enable deletion protection by setting `enab
 
 ### Step 4 — Update the CIDR in Terraform
 
-Choose a new CIDR from your IPAM that does not overlap any existing VPC:
+The `envs/apps` root reads its VPC CIDR from `envs/organization` remote state — it is **not** set in `examples/dev.tfvars`. To change it:
+
+1. Update the `environments` map in `envs/organization` (your `local.auto.tfvars` or equivalent):
 
 ```hcl
-# In examples/dev.tfvars
-vpc_cidr_block = "10.130.0.0/16"   # new, larger block
+environments = {
+  dev = {
+    cidr_block = "10.130.0.0/16"   # new, larger block — must not overlap hub or other spokes
+    region     = "europe-west1"
+    # ... other keys unchanged
+  }
+}
 ```
 
-> **Note:** `vpc_cidr_block` is required and has no default. There is no CIDR hash fallback — the value you set is exactly what gets deployed. Coordinate with your network team to allocate a non-overlapping block.
+2. Apply the organization root first so the new CIDR is committed to remote state:
+
+```bash
+make plan-organization
+# Confirm only the environment map output changes — no network resources in the org root
+terraform -chdir=envs/organization apply
+```
+
+3. The apps root will pick up the new CIDR on its next plan via `terraform_remote_state`.
+
+> **IPAM:** Coordinate with your network team to allocate a non-overlapping block before applying. There is no CIDR hash fallback — the value you set is exactly what gets deployed.
 
 ### Step 5 — Plan with destroy preview
 

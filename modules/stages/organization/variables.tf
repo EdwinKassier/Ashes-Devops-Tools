@@ -1,52 +1,102 @@
 variable "domain" {
-  description = "The primary domain of the GCP organization (e.g., example.com)"
+  description = "The primary domain of the GCP organization (e.g., 'example.com')"
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9][a-zA-Z0-9.-]*\\.[a-zA-Z]{2,}$", var.domain))
+    error_message = "domain must be a valid domain name (e.g., 'example.com')."
+  }
 }
 
 variable "org_id" {
-  description = "The numeric GCP organization ID"
+  description = "The numeric GCP organization ID (digits only, no 'organizations/' prefix)"
   type        = string
+
+  validation {
+    condition     = can(regex("^[0-9]+$", var.org_id))
+    error_message = "org_id must contain only digits (e.g., '123456789012'). Do not include the 'organizations/' prefix."
+  }
 }
 
 variable "admin_project_id" {
   description = "The project ID of the bootstrap admin project"
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{4,28}[a-z0-9]$", var.admin_project_id))
+    error_message = "admin_project_id must be 6-30 characters, start with a lowercase letter, and contain only lowercase letters, digits, and hyphens."
+  }
 }
 
 variable "admin_project_number" {
-  description = "The project number of the bootstrap admin project"
+  description = "The numeric project number of the bootstrap admin project (digits only)"
   type        = string
+
+  validation {
+    condition     = can(regex("^[0-9]+$", var.admin_project_number))
+    error_message = "admin_project_number must contain only digits."
+  }
 }
 
 variable "customer_id" {
-  description = "The Google Workspace customer ID (format: C followed by alphanumerics)"
+  description = "The Google Workspace customer ID (format: 'C' followed by alphanumerics, e.g., 'C0abc1234')"
   type        = string
+
+  validation {
+    condition     = can(regex("^C[0-9a-z]+$", var.customer_id))
+    error_message = "customer_id must start with 'C' followed by alphanumeric characters (e.g., 'C0abc1234')."
+  }
 }
 
 variable "admin_email" {
   description = "Email address of the primary administrator"
   type        = string
+
+  validation {
+    condition     = can(regex("^[^@]+@[^@]+\\.[^@]+$", var.admin_email))
+    error_message = "admin_email must be a valid email address."
+  }
 }
 
 variable "break_glass_user" {
   description = "Optional email address of a break-glass emergency user granted org admin access"
   type        = string
   default     = null
+
+  validation {
+    condition     = var.break_glass_user == null || can(regex("^[^@]+@[^@]+\\.[^@]+$", var.break_glass_user))
+    error_message = "break_glass_user must be null or a valid email address."
+  }
 }
 
 variable "terraform_admin_email" {
   description = "Email address of the Terraform admin service account"
   type        = string
+
+  validation {
+    condition     = can(regex("^[^@]+@[^@]+\\.[^@]+$", var.terraform_admin_email))
+    error_message = "terraform_admin_email must be a valid email address."
+  }
 }
 
 variable "billing_account" {
-  description = "The GCP billing account ID"
+  description = "The GCP billing account ID in format XXXXXX-XXXXXX-XXXXXX"
   type        = string
+
+  validation {
+    condition     = can(regex("^[A-Z0-9]{6}-[A-Z0-9]{6}-[A-Z0-9]{6}$", var.billing_account))
+    error_message = "billing_account must be a valid GCP billing account ID in format XXXXXX-XXXXXX-XXXXXX."
+  }
 }
 
 variable "project_prefix" {
-  description = "Short prefix applied to all project IDs to ensure global uniqueness"
+  description = "Short prefix applied to all project IDs to ensure global uniqueness (lowercase letters, digits, hyphens; starts with letter)"
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]*$", var.project_prefix))
+    error_message = "project_prefix must start with a lowercase letter and contain only lowercase letters, digits, and hyphens."
+  }
 }
 
 variable "environments" {
@@ -64,18 +114,33 @@ variable "environments" {
 }
 
 variable "organization_admin_groups" {
-  description = "List of Google Groups to grant organization admin roles"
+  description = "List of Google Group email addresses to grant organization admin roles"
   type        = list(string)
+
+  validation {
+    condition     = alltrue([for g in var.organization_admin_groups : can(regex("^[^@]+@[^@]+\\.[^@]+$", g))])
+    error_message = "Each organization_admin_groups entry must be a valid email address."
+  }
 }
 
 variable "billing_admin_groups" {
-  description = "List of Google Groups to grant billing admin roles"
+  description = "List of Google Group email addresses to grant billing admin roles"
   type        = list(string)
+
+  validation {
+    condition     = alltrue([for g in var.billing_admin_groups : can(regex("^[^@]+@[^@]+\\.[^@]+$", g))])
+    error_message = "Each billing_admin_groups entry must be a valid email address."
+  }
 }
 
 variable "default_region" {
-  description = "Default GCP region for regional resources"
+  description = "Default GCP region for regional resources (e.g., 'us-central1', 'europe-west1')"
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z]+-[a-z]+[0-9]$", var.default_region))
+    error_message = "default_region must be a valid GCP region name (e.g., 'us-central1', 'europe-west1')."
+  }
 }
 
 variable "allowed_regions" {
