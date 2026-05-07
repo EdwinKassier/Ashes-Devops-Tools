@@ -63,10 +63,24 @@ jobs:
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
           WORKSPACE: ${{ steps.parse.outputs.workspace }}
         run: |
-          response=$(curl --silent --show-error \
+          response=$(curl --silent --show-error --fail-with-body \
             --header "Authorization: Bearer ${TFC_TOKEN}" \
             --header "Content-Type: application/vnd.api+json" \
-            "https://app.terraform.io/api/v2/organizations/${TFC_ORGANIZATION}/workspaces/${WORKSPACE}/runs?page%5Bsize%5D=1")
+            "https://app.terraform.io/api/v2/organizations/${TFC_ORGANIZATION}/workspaces/${WORKSPACE}/runs?page%5Bsize%5D=1") \
+            || { echo "TFC API request failed — check TFC_TOKEN and TFC_ORGANIZATION secrets" >&2; exit 1; }
+
+          # Validate that the response is valid JSON with a data array
+          if ! echo "$response" | jq -e '.data | type == "array"' >/dev/null 2>&1; then
+            echo "Unexpected TFC API response format: $response" >&2
+            exit 1
+          fi
+
+          run_count=$(echo "$response" | jq '.data | length')
+          if [ "$run_count" -eq 0 ]; then
+            echo "No runs found for workspace ${WORKSPACE} — tag a release only after a run exists" >&2
+            exit 1
+          fi
+
           status=$(echo "$response" | jq -r '.data[0].attributes.status')
           echo "status=${status}" >> "$GITHUB_OUTPUT"
           case "$status" in
@@ -77,7 +91,7 @@ jobs:
               # Run is pending manual apply approval in TFC — release tag is valid
               ;;
             *)
-              echo "Latest Terraform Cloud run for ${WORKSPACE} is ${status}" >&2
+              echo "Latest Terraform Cloud run for ${WORKSPACE} is '${status}' — expected applied, planned_and_finished, or apply_queued" >&2
               exit 1
               ;;
           esac
