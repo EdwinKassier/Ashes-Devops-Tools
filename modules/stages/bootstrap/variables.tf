@@ -56,13 +56,18 @@ variable "enable_tfc_oidc" {
 }
 
 variable "tfc_organization" {
-  description = "Terraform Cloud organization name"
+  description = "Terraform Cloud organization name. Required (non-null) when enable_tfc_oidc = true — leaving it null while enable_tfc_oidc = true silently skips pool creation with no error."
   type        = string
   default     = null
 
   validation {
     condition     = var.tfc_organization == null || can(regex("^[a-zA-Z0-9][a-zA-Z0-9-]*$", var.tfc_organization))
     error_message = "tfc_organization must contain only alphanumeric characters and hyphens."
+  }
+
+  validation {
+    condition     = !var.enable_tfc_oidc || var.tfc_organization != null
+    error_message = "tfc_organization must be set (non-null) when enable_tfc_oidc = true. The TFC OIDC pool is silently skipped when tfc_organization is null."
   }
 }
 

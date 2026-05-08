@@ -48,12 +48,15 @@ variable "keys" {
 
   validation {
     # Second guard: numeric range check (safe to do after format is guaranteed above).
+    # Upper bound is 31536000s (365 days / 1 year) to allow annual rotation for HSM-backed
+    # keys under FIPS 140-2 and PCI-DSS Level 1. Software keys should rotate at 90 days
+    # (7776000s) or less per NIST SP 800-57; document your choice in the key description.
     condition = alltrue([
       for key in values(var.keys) :
       tonumber(trimsuffix(coalesce(try(key.rotation_period, null), "7776000s"), "s")) >= 86400 &&
-      tonumber(trimsuffix(coalesce(try(key.rotation_period, null), "7776000s"), "s")) <= 7776000
+      tonumber(trimsuffix(coalesce(try(key.rotation_period, null), "7776000s"), "s")) <= 31536000
     ])
-    error_message = "Every KMS key rotation_period must be between 86400s (1 day) and 7776000s (90 days)."
+    error_message = "Every KMS key rotation_period must be between 86400s (1 day) and 31536000s (365 days / 1 year)."
   }
 }
 

@@ -55,12 +55,25 @@ variable "region" {
 variable "explicit_zones" {
   description = <<-EOT
     Explicit list of zones to use for subnet layout (e.g. ["us-central1-a", "us-central1-b", "us-central1-c"]).
-    Recommended for production: GCP occasionally changes how many zones are returned by the zones data source,
-    which would change subnet CIDRs and trigger destructive subnet replacement.
-    When empty, zones are auto-discovered via data.google_compute_zones.
+
+    ⚠️  PRODUCTION REQUIREMENT: always set this variable for any environment with live workloads.
+    GCP occasionally changes how many zones the data source returns (e.g. 3 → 4 when a new
+    zone is added to a region). Because subnet CIDRs are derived from zone count, a change will
+    cause Terraform to plan subnet destruction and recreation — which evicts all running VMs.
+
+    When empty, zones are auto-discovered via data.google_compute_zones (acceptable for dev/test
+    environments where occasional disruption is tolerable).
   EOT
   type        = list(string)
   default     = []
+
+  validation {
+    condition = alltrue([
+      for z in var.explicit_zones :
+      can(regex("^[a-z]+-[a-z]+[0-9]-[a-z]$", z))
+    ])
+    error_message = "Each entry in explicit_zones must be a valid GCP zone name (e.g. 'us-central1-a')."
+  }
 }
 
 variable "labels" {

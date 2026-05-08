@@ -168,3 +168,46 @@ run "rejects_invalid_webhook_service_account" {
     webhook_service_account = "not-an-email"
   }
 }
+
+# ── functions_bucket + function_source_object (required when enable_email_notifications = true) ──
+
+run "accepts_enable_email_notifications_with_all_required_fields" {
+  command = plan
+  variables {
+    enable_email_notifications = true
+    functions_bucket           = "my-functions-bucket"
+    function_source_object     = "budget_notifier.zip"
+    pubsub_service_account     = "service-12345@gcp-sa-pubsub.iam.gserviceaccount.com"
+  }
+}
+
+run "rejects_email_notifications_without_functions_bucket" {
+  command         = plan
+  expect_failures = [var.functions_bucket]
+  variables {
+    enable_email_notifications = true
+    functions_bucket           = ""
+    function_source_object     = "budget_notifier.zip"
+    pubsub_service_account     = "service-12345@gcp-sa-pubsub.iam.gserviceaccount.com"
+  }
+}
+
+run "rejects_email_notifications_without_function_source_object" {
+  command         = plan
+  expect_failures = [var.function_source_object]
+  variables {
+    enable_email_notifications = true
+    functions_bucket           = "my-functions-bucket"
+    function_source_object     = ""
+    pubsub_service_account     = "service-12345@gcp-sa-pubsub.iam.gserviceaccount.com"
+  }
+}
+
+run "accepts_email_notifications_false_with_empty_bucket" {
+  command = plan
+  variables {
+    enable_email_notifications = false
+    functions_bucket           = ""
+    function_source_object     = ""
+  }
+}

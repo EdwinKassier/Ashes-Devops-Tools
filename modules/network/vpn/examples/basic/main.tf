@@ -13,9 +13,6 @@ locals {
 
   # On-premises public IPs (one per tunnel for HA VPN).
   peer_ips = ["203.0.113.1", "203.0.113.2"]
-
-  # Treat the shared secret like a password — pass via TF_VAR_vpn_secret or a secrets manager.
-  vpn_shared_secret = "replace-with-strong-pre-shared-key"
 }
 
 module "on_prem_vpn" {
@@ -27,7 +24,9 @@ module "on_prem_vpn" {
   region     = local.region
   # Pass both peer gateway IPs — TWO_IPS_REDUNDANCY requires two distinct public IPs.
   peer_external_gateway_ips = local.peer_ips
-  shared_secret             = local.vpn_shared_secret
+  # shared_secret is a sensitive variable — pass via TF_VAR_vpn_shared_secret.
+  # Never hardcode it here. See variables.tf for instructions.
+  shared_secret = var.vpn_shared_secret
 
   router_asn = 64514
   peer_asn   = 65000

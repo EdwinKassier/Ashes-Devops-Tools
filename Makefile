@@ -1,4 +1,4 @@
-.PHONY: help install fmt fmt-check validate validate-all lint security security-report docs docs-check test ci clean init-organization init-apps plan-organization plan-apps apply-organization apply-apps validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-organization state-list-apps state-rm-organization state-rm-apps unlock-organization unlock-apps
+.PHONY: help install fmt fmt-check validate validate-all lint security security-report docs docs-check test ci clean clean-locks init-organization init-apps plan-organization plan-apps apply-organization apply-apps validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-organization state-list-apps state-rm-organization state-rm-apps unlock-organization unlock-apps
 
 TERRAFORM := terraform
 TFLINT := tflint
@@ -53,14 +53,14 @@ lint: ## Run TFLint across the repository
 
 security: ## Run tfsec and checkov and fail on real findings
 	@$(TFSEC) . --config-file .tfsec.yml --exclude-path examples
-	@$(CHECKOV) -d modules --quiet --compact --framework terraform
-	@$(CHECKOV) -d envs --quiet --compact --framework terraform
+	@$(CHECKOV) -d modules --quiet --compact --framework terraform --config-file .checkov.yaml
+	@$(CHECKOV) -d envs --quiet --compact --framework terraform --config-file .checkov.yaml
 
 security-report: ## Generate detailed security reports
 	@mkdir -p reports
 	@$(TFSEC) . --config-file .tfsec.yml --exclude-path examples --format json > reports/tfsec-report.json
-	@$(CHECKOV) -d modules --framework terraform --output json > reports/checkov-modules-report.json
-	@$(CHECKOV) -d envs --framework terraform --output json > reports/checkov-envs-report.json
+	@$(CHECKOV) -d modules --framework terraform --output json --config-file .checkov.yaml > reports/checkov-modules-report.json
+	@$(CHECKOV) -d envs --framework terraform --output json --config-file .checkov.yaml > reports/checkov-envs-report.json
 
 docs: ## Generate Terraform docs from repo root
 	@bash scripts/module-docs.sh generate
@@ -159,8 +159,14 @@ unlock-apps: ## Force-unlock a stuck Terraform lock on an apps workspace: make u
 	@[ -n "$(LOCK_ID)" ] || (echo "Error: LOCK_ID is required. Usage: make unlock-apps LOCK_ID=<lock-id>" && exit 1)
 	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/apps force-unlock -force '$(LOCK_ID)'
 
-clean: ## Remove local Terraform caches, generated reports, and lock file caches
+clean: ## Remove local Terraform caches (.terraform dirs, plan files, reports). Does NOT touch committed .terraform.lock.hcl files.
 	@find . -type d -name ".terraform" -exec rm -rf {} + 2>/dev/null || true
 	@find . -type f -name "*.tfplan" -delete 2>/dev/null || true
-	@find . -type f -name ".terraform.lock.hcl" -not -path "*/envs/*" -delete 2>/dev/null || true
 	@rm -rf reports
+	@echo "Cleaned .terraform dirs, plan files, and reports. Lock files (.terraform.lock.hcl) are version-controlled and were NOT deleted."
+
+clean-locks: ## DANGER: Delete all .terraform.lock.hcl files so they can be regenerated. Only run this when intentionally refreshing provider lock files.
+	@echo "$(YELLOW)WARNING: This deletes all committed .terraform.lock.hcl files from working tree.$(NC)"
+	@echo "$(YELLOW)Re-generate with: terraform providers lock -platform=linux_amd64 -platform=darwin_arm64$(NC)"
+	@printf "Type 'yes' to continue: " && read CONFIRM && [ "$$CONFIRM" = "yes" ] || (echo "Cancelled." && exit 1)
+	@find . -type f -name ".terraform.lock.hcl" -delete 2>/dev/null || true

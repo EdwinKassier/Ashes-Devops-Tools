@@ -64,6 +64,7 @@ jobs:
           WORKSPACE: ${{ steps.parse.outputs.workspace }}
         run: |
           response=$(curl --silent --show-error --fail-with-body \
+            --max-time 30 --connect-timeout 10 \
             --header "Authorization: Bearer ${TFC_TOKEN}" \
             --header "Content-Type: application/vnd.api+json" \
             "https://app.terraform.io/api/v2/organizations/${TFC_ORGANIZATION}/workspaces/${WORKSPACE}/runs?page%5Bsize%5D=1") \

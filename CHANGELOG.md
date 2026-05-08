@@ -12,6 +12,13 @@ Releases are tagged as `organization/vX.Y.Z` and `apps/<env>/vX.Y.Z`.
 ### Added
 - `modules/network/vpc-sc/variables.tf` — `enable_deletion_protection` variable (default `true`); protects service perimeters from accidental destruction via sentinel pattern
 - `modules/network/vpc-sc/main.tf` — `terraform_data.deletion_protection` sentinel resource with `prevent_destroy = true`; guards both regular and bridge perimeters when enabled
+- `modules/stages/bootstrap/variables.tf` — cross-variable validation: `tfc_organization` must be non-null when `enable_tfc_oidc = true` (previously silent no-op)
+- `modules/stages/bootstrap/tests/variables_validation.tftest.hcl` — new test: `rejects_tfc_oidc_enabled_without_tfc_organization`
+- `modules/governance/billing/variables.tf` — `functions_bucket` and `function_source_object` validation: both must be non-empty when `enable_email_notifications = true`
+- `modules/governance/billing/tests/variables_validation.tftest.hcl` — 4 new tests covering all `enable_email_notifications` cross-variable guards
+- `modules/host/variables.tf` — `explicit_zones` now validated with GCP zone name format regex; description updated with ⚠️ production requirement warning
+- `Makefile` — `clean-locks` target added (separate from `clean`) with interactive confirmation before deleting committed lock files; `clean` now explicitly preserves `.terraform.lock.hcl`
+- `modules/network/vpn/examples/basic/variables.tf` — `vpn_shared_secret` variable (sensitive = true) with instructions for `TF_VAR_` injection; replaces hardcoded plaintext literal
 - `modules/governance/cloud-audit-logs/variables.tf` — `sink_name` variable; allows calling module twice in same project without name collision
 - `modules/governance/cloud-audit-logs/main.tf` — `google_organization_iam_audit_config` resource: enforces DATA_READ/DATA_WRITE/ADMIN_READ logging org-wide (not just on the admin project)
 - `modules/stages/organization/outputs.tf` — new outputs: `audit_logs_bucket_name`, `billing_export_dataset_id`, `scc_pubsub_topic_id`, `cmek_key_names`; removed duplicate `tags` alias
@@ -54,6 +61,16 @@ Releases are tagged as `organization/vX.Y.Z` and `apps/<env>/vX.Y.Z`.
 - `envs/organization/moved.tf` — added cleanup instructions (safe to delete after first migration apply)
 
 ### Fixed
+- `.github/workflows/reusable-security.yml` — tfsec `config_file` changed from `.tfsec.yml` (resolved relative to `working_directory`, silently missing) to `${{ github.workspace }}/.tfsec.yml` (absolute path, always resolves correctly); all exclusion rules were previously silently ignored for both modules and envs scans
+- `.github/workflows/security-scan.yml` — concurrency group now uses `'scheduled'` key for `schedule` events; `cancel-in-progress` is `false` for scheduled runs so a push never cancels a running nightly SARIF scan
+- `.github/workflows/documentation.yml` — checkout and create-pull-request now use `DOCS_BOT_PAT` (falls back to `GITHUB_TOKEN`); PRs from `GITHUB_TOKEN` do not trigger downstream CI; added `reviewers` field so auto-generated PRs require approval before merge
+- `.github/dependabot.yml` — added `modules/monitoring/alert_policy` and `modules/monitoring/alert_policy/examples/basic` (previously missing; provider updates went untracked)
+- `Makefile` — `make security` and `make security-report` now pass `--config-file .checkov.yaml` to both Checkov invocations, matching CI behaviour; previously local runs produced different results than CI
+- `Makefile` — `make clean` no longer deletes committed `.terraform.lock.hcl` files (was deleting all lock files outside `envs/`); separated into a guarded `make clean-locks` target
+- `.tflint.hcl` — Google plugin bumped from `0.39.0` to `0.40.0`
+- `envs/apps/variables.tf` — `monthly_budget_limit` description updated to explicitly state that `0` disables budget alerts; added `>= 0` validation with clear error message
+- `modules/governance/kms/variables.tf` — rotation period upper bound relaxed from `7776000s` (90 days) to `31536000s` (365 days) to allow annual rotation for HSM-backed keys; comment documents NIST SP 800-57 recommendation for software keys
+- `.github/workflows/terraform-apply.yml` — added `--max-time 30 --connect-timeout 10` to TFC API curl; previously a slow or unresponsive TFC API would hang the step until the 15-minute job timeout
 - `scripts/setup.sh` — `check_or_install()` now returns 1 on version mismatch (was silently returning 0, which prevented version-aware reinstall callers from firing); terraform and tflint blocks updated to differentiate "not installed" from "wrong version"
 - `scripts/setup.sh` — `tfsec` installation replaced from unversioned `install_package tfsec` (package manager resolves to whatever is current) with `install_tfsec_versioned()` that downloads the exact `REQUIRED_TFSEC_VERSION` binary from GitHub releases
 - `modules/stages/bootstrap/main.tf` — `roles/iam.securityAdmin` exception updated with detailed per-role justification explaining why it is the minimum required scope and why broader alternatives (`roles/resourcemanager.organizationAdmin`) were rejected; comment documents the circular dependency that prevents a custom role approach

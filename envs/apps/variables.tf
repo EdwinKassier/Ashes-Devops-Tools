@@ -51,9 +51,19 @@ variable "organization_workspace_name" {
 }
 
 variable "monthly_budget_limit" {
-  description = "Monthly budget for this application environment"
+  description = <<-EOT
+    Monthly budget limit for this application environment in var.budget_currency.
+    A value of 0 (the default) disables budget alerting entirely — the budget
+    Pub/Sub topic and Cloud Function notifier are not created.
+    Set a positive value to enable cost alerting (e.g., 1000 for USD 1,000/month).
+  EOT
   type        = number
   default     = 0
+
+  validation {
+    condition     = var.monthly_budget_limit >= 0
+    error_message = "monthly_budget_limit must be >= 0. Use 0 to disable budget alerts, or a positive number to set a limit."
+  }
 }
 
 variable "budget_currency" {

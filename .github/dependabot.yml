@@ -391,6 +391,24 @@ updates:
       - "module:app"
 
   - package-ecosystem: "terraform"
+    directory: "/modules/monitoring/alert_policy"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:monitoring"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/monitoring/alert_policy/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
     directory: "/modules/monitoring/compute_dashboard"
     schedule:
       interval: "weekly"

@@ -114,15 +114,25 @@ variable "enable_email_notifications" {
 }
 
 variable "functions_bucket" {
-  description = "Cloud Storage bucket containing the Cloud Function source code"
+  description = "Cloud Storage bucket containing the Cloud Function source code. Required when enable_email_notifications = true."
   type        = string
   default     = ""
+
+  validation {
+    condition     = !var.enable_email_notifications || var.functions_bucket != ""
+    error_message = "functions_bucket must be set (non-empty) when enable_email_notifications = true."
+  }
 }
 
 variable "function_source_object" {
-  description = "Cloud Storage object name for the Cloud Function source"
+  description = "Cloud Storage object name for the Cloud Function source. Required when enable_email_notifications = true."
   type        = string
   default     = ""
+
+  validation {
+    condition     = !var.enable_email_notifications || var.function_source_object != ""
+    error_message = "function_source_object must be set (non-empty) when enable_email_notifications = true."
+  }
 }
 
 variable "sendgrid_api_key_secret_id" {

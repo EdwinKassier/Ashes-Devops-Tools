@@ -26,7 +26,11 @@ jobs:
         with:
           working_directory: modules
           soft_fail: false
-          config_file: .tfsec.yml
+          # Use absolute path: tfsec resolves config_file relative to working_directory,
+          # so a bare ".tfsec.yml" would look for modules/.tfsec.yml (which doesn't exist)
+          # and silently skip all exclusion rules. GITHUB_WORKSPACE always points to the
+          # repo root regardless of working_directory.
+          config_file: ${{ github.workspace }}/.tfsec.yml
           format: ${{ inputs.sarif_output && 'sarif' || 'default' }}
           additional_args: ${{ inputs.sarif_output && '--out tfsec-results.sarif' || '' }}
 
@@ -35,7 +39,7 @@ jobs:
         with:
           working_directory: envs
           soft_fail: false
-          config_file: .tfsec.yml
+          config_file: ${{ github.workspace }}/.tfsec.yml
           format: ${{ inputs.sarif_output && 'sarif' || 'default' }}
           additional_args: ${{ inputs.sarif_output && '--out tfsec-env-results.sarif' || '' }}
 

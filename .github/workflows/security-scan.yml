@@ -20,8 +20,11 @@ permissions:
   actions: read
 
 concurrency:
-  group: security-scan-${{ github.ref_name }}
-  cancel-in-progress: true
+  # Scheduled scans get their own concurrency group so a push to main never
+  # cancels a running nightly scan (which would leave SARIF results unpublished).
+  # Push/PR runs within the same ref still cancel each other to save runners.
+  group: security-scan-${{ github.event_name == 'schedule' && 'scheduled' || github.ref_name }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 jobs:
   static-analysis:

@@ -84,3 +84,28 @@ run "accepts_default_tfc_workspaces_when_tfc_disabled" {
     tfc_organization = null
   }
 }
+
+# ── tfc_organization null guard (enable_tfc_oidc=true requires non-null org) ───
+
+run "rejects_tfc_oidc_enabled_without_tfc_organization" {
+  command         = plan
+  expect_failures = [var.tfc_organization]
+
+  override_module {
+    target = module.terraform_admin_sa
+    outputs = {
+      email                 = "terraform-admin@mock-org-admin-abcd1234.iam.gserviceaccount.com"
+      name                  = "projects/mock-org-admin-abcd1234/serviceAccounts/terraform-admin@mock-org-admin-abcd1234.iam.gserviceaccount.com"
+      unique_id             = "123456789012345678901"
+      member                = "serviceAccount:terraform-admin@mock-org-admin-abcd1234.iam.gserviceaccount.com"
+      project_roles         = []
+      impersonation_members = []
+    }
+  }
+
+  variables {
+    enable_tfc_oidc  = true
+    tfc_organization = null
+    tfc_workspaces   = ["organization"]
+  }
+}
