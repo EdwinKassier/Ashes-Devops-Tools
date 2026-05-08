@@ -47,7 +47,7 @@ This landing zone implements defense-in-depth across every layer:
 - **VPC Flow Logs** — full network telemetry retained in Cloud Storage
 
 ### Audit & Compliance
-- **Cloud Audit Logs** — Data Access logs enabled for all services, 730-day retention
+- **Cloud Audit Logs** — Data Access logs enabled for all services; retention configurable via `audit_log_retention_days` (default 365 days; increase for PCI-DSS/HIPAA/FedRAMP)
 - **Security Command Center** — notifications for HIGH and CRITICAL findings
 - **Org Policies** — domain-restricted sharing, uniform bucket access, disable SA key creation
 

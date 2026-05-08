@@ -1,6 +1,7 @@
 # These tests use mock_provider so no GCP credentials are required.
 # They validate that the project_admin_roles variable correctly rejects
-# primitive IAM roles (owner/editor/viewer) at plan time.
+# primitive IAM roles (owner/editor/viewer) and cross-boundary privileged roles
+# (organizationAdmin, folderAdmin, securityAdmin, etc.) at plan time.
 
 mock_provider "google" {}
 mock_provider "google-beta" {}
@@ -87,5 +88,59 @@ run "rejects_mixed_list_containing_owner" {
 
   variables {
     project_admin_roles = ["roles/storage.admin", "roles/owner"]
+  }
+}
+
+# ── Reject cross-boundary privileged roles ────────────────────────────────────
+# These roles span beyond the project boundary and must never be granted at
+# project level via an authoritative google_project_iam_binding.
+
+run "rejects_organization_admin" {
+  command = plan
+
+  expect_failures = [var.project_admin_roles]
+
+  variables {
+    project_admin_roles = ["roles/resourcemanager.organizationAdmin"]
+  }
+}
+
+run "rejects_folder_admin" {
+  command = plan
+
+  expect_failures = [var.project_admin_roles]
+
+  variables {
+    project_admin_roles = ["roles/resourcemanager.folderAdmin"]
+  }
+}
+
+run "rejects_iam_security_admin" {
+  command = plan
+
+  expect_failures = [var.project_admin_roles]
+
+  variables {
+    project_admin_roles = ["roles/iam.securityAdmin"]
+  }
+}
+
+run "rejects_organization_role_admin" {
+  command = plan
+
+  expect_failures = [var.project_admin_roles]
+
+  variables {
+    project_admin_roles = ["roles/iam.organizationRoleAdmin"]
+  }
+}
+
+run "rejects_billing_admin" {
+  command = plan
+
+  expect_failures = [var.project_admin_roles]
+
+  variables {
+    project_admin_roles = ["roles/billing.admin"]
   }
 }

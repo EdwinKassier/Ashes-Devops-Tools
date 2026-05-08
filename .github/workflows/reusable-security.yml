@@ -55,8 +55,11 @@ jobs:
 
       - name: Generate TFSec JSON report
         if: inputs.sarif_output && always()
+        # Pin the Docker image to the same version as .tool-versions (v1.28.6) to
+        # prevent supply-chain drift. The tfsec-action above is SHA-pinned; this
+        # Docker invocation must match.
         run: |
-          docker run --rm -v "$(pwd):/src" aquasec/tfsec:latest /src/modules --config-file /src/.tfsec.yml --format json > tfsec-report.json
+          docker run --rm -v "$(pwd):/src" aquasec/tfsec:v1.28.6 /src/modules --config-file /src/.tfsec.yml --format json > tfsec-report.json
 
       - name: Upload TFSec report artifact
         if: inputs.sarif_output && always()

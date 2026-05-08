@@ -10,6 +10,11 @@ Releases are tagged as `organization/vX.Y.Z` and `apps/<env>/vX.Y.Z`.
 ## [Unreleased]
 
 ### Added
+- `modules/monitoring/alert_policy` — new module: Cloud Monitoring alert policies and notification channels (CPU, memory, Cloud Run 5xx error rate, P99 latency, uptime, log-based); email + webhook (Slack/PagerDuty) notification channels; 22 mock_provider validation tests
+- `modules/host/variables.tf` — `enable_log4j_protection` variable (previously declared in cloud_armor but silently ignored by the host module call)
+- `envs/organization/variables.tf` — `terraform_admin_email` variable for SA impersonation; `audit_log_retention_days` variable (configurable retention with compliance guidance for PCI-DSS/HIPAA/FedRAMP)
+- `modules/stages/organization/variables.tf` — `audit_log_retention_days` variable with validation
+- `modules/stages/workload/tests/iam_validation.tftest.hcl` — 5 new tests rejecting org/folder-level privileged roles (organizationAdmin, folderAdmin, securityAdmin, organizationRoleAdmin, billing.admin)
 - `SECURITY.md` — vulnerability disclosure policy and security architecture overview
 - `CHANGELOG.md` — this file
 - `docs/guides/BRANCH_PROTECTION.md` — recommended branch protection settings
@@ -39,6 +44,13 @@ Releases are tagged as `organization/vX.Y.Z` and `apps/<env>/vX.Y.Z`.
 - `envs/organization/moved.tf` — added cleanup instructions (safe to delete after first migration apply)
 
 ### Fixed
+- `modules/host/main.tf` — `enable_log4j_protection` now passed through to the cloud_armor child module call (was silently ignored before)
+- `modules/stages/workload/variables.tf` — `project_admin_roles` validation extended to block org/folder-level privileged roles in addition to primitive roles
+- `modules/stages/organization/main.tf` — added `google_bigquery_dataset_iam_member` for Cloud Billing service agent (`billing-export@system.gserviceaccount.com`); without this the billing export silently fails with missing permissions
+- `modules/stages/organization/main.tf` — audit log retention now uses `var.audit_log_retention_days` instead of hardcoded 365
+- `envs/organization/providers.tf` — `impersonate_service_account` now wired to `var.terraform_admin_email` in both `google` and `google-beta` provider blocks (previously ran with personal credentials)
+- `.github/workflows/reusable-security.yml` — tfsec Docker image pinned to `aquasec/tfsec:v1.28.6` (was floating `:latest`)
+- `SECURITY.md` — corrected "730-day" claim to reflect configurable default (365 days) with compliance guidance
 - `modules/cloud_storage/outputs.tf` — was empty; now exports `bucket_names`, `access_logs_bucket_name`, `logs_bucket_name`, `bucket_self_links`
 - `envs/apps/providers.tf` — added explicit `provider "google-beta"` block (required for Firebase, API Gateway)
 - `modules/stages/projects/variables.tf` — `suffix` variable now validated as lowercase hex

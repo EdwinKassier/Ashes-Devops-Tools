@@ -89,7 +89,7 @@ module "audit_logs" {
 
   project_id         = var.admin_project_id
   bucket_location    = var.default_region
-  log_retention_days = 365
+  log_retention_days = var.audit_log_retention_days
   org_id             = var.org_id
   kms_key_name       = module.cmek.key_names["audit-logs"]
 
@@ -290,4 +290,16 @@ resource "google_bigquery_dataset" "billing_export" {
   default_encryption_configuration {
     kms_key_name = module.cmek.key_names["billing-export"]
   }
+}
+
+# Grant the Cloud Billing service agent permission to write billing data into
+# the dataset. Without this IAM binding the billing export silently fails to
+# populate the table even though the dataset exists.
+# Service agent email format: serviceAccount:billing-export@system.gserviceaccount.com
+# Reference: https://cloud.google.com/billing/docs/how-to/export-data-bigquery-setup
+resource "google_bigquery_dataset_iam_member" "billing_export_writer" {
+  project    = var.admin_project_id
+  dataset_id = google_bigquery_dataset.billing_export.dataset_id
+  role       = "roles/bigquery.dataEditor"
+  member     = "serviceAccount:billing-export@system.gserviceaccount.com"
 }

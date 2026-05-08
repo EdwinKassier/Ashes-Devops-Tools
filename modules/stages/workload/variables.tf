@@ -124,4 +124,22 @@ variable "project_admin_roles" {
     ])
     error_message = "project_admin_roles must not include basic roles. Grant only least-privilege predefined or custom roles."
   }
+
+  validation {
+    # Block cross-boundary privileged roles that must never be granted at project level.
+    # These roles grant control over the entire org/folder hierarchy above the project
+    # and would allow privilege escalation far beyond the intended project scope.
+    condition = alltrue([
+      for role in var.project_admin_roles :
+      !contains([
+        "roles/resourcemanager.organizationAdmin",
+        "roles/resourcemanager.folderAdmin",
+        "roles/iam.securityAdmin",
+        "roles/iam.organizationRoleAdmin",
+        "roles/billing.admin",
+        "roles/billing.creator",
+      ], role)
+    ])
+    error_message = "project_admin_roles must not include org/folder-level privileged roles (organizationAdmin, folderAdmin, securityAdmin, organizationRoleAdmin, billing.admin, billing.creator). These roles span beyond the project boundary."
+  }
 }

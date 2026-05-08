@@ -17,13 +17,13 @@ terraform {
 }
 
 provider "google" {
-  # Configuration options
-  region = var.default_region
+  region                      = var.default_region
+  impersonate_service_account = var.terraform_admin_email
 }
 
 provider "google-beta" {
-  # Configuration options for beta resources
-  region = var.default_region
+  region                      = var.default_region
+  impersonate_service_account = var.terraform_admin_email
 }
 
 provider "random" {}

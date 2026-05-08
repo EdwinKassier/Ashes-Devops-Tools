@@ -238,6 +238,12 @@ variable "enable_adaptive_protection" {
   default     = true
 }
 
+variable "enable_log4j_protection" {
+  description = "Enable the Cloud Armor managed rule that blocks Log4Shell (CVE-2021-44228) exploit payloads. Requires enable_cloud_armor = true."
+  type        = bool
+  default     = true
+}
+
 variable "owasp_sensitivity" {
   description = "OWASP rule sensitivity level (1–4). Lower values apply stricter rules with more false positives; higher values are more permissive."
   type        = number

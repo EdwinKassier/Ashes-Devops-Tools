@@ -199,3 +199,22 @@ variable "budget_currency" {
     error_message = "budget_currency must be a 3-letter ISO 4217 currency code (e.g., USD, EUR)."
   }
 }
+
+variable "audit_log_retention_days" {
+  description = <<-EOT
+    Number of days to retain audit logs in Cloud Storage. Adjust to meet your
+    compliance requirements:
+      - Default (365 days) — sufficient for most cloud security baselines.
+      - PCI-DSS requires 12 months online + 12 months archival.
+      - HIPAA requires 6 years.
+      - FedRAMP requires 3 years.
+    Must be >= 1.
+  EOT
+  type        = number
+  default     = 365
+
+  validation {
+    condition     = var.audit_log_retention_days >= 1
+    error_message = "audit_log_retention_days must be at least 1."
+  }
+}

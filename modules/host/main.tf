@@ -363,6 +363,7 @@ module "cloud_armor" {
   description                = "WAF security policy for ${var.project_prefix}"
   enable_owasp_rules         = var.enable_owasp_rules
   enable_adaptive_protection = var.enable_adaptive_protection
+  enable_log4j_protection    = var.enable_log4j_protection
   owasp_sensitivity          = var.owasp_sensitivity
   custom_rules               = var.cloud_armor_custom_rules
 }

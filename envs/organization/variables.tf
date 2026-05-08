@@ -227,3 +227,21 @@ variable "enable_tfc_oidc" {
   type        = bool
   default     = true
 }
+
+variable "terraform_admin_email" {
+  description = <<-EOT
+    Service account email for the Terraform admin SA created by the bootstrap stage.
+    The organization providers impersonate this SA for all API calls, ensuring that
+    even local runs operate with the SA's permissions rather than the caller's personal
+    credentials.
+    Format: terraform@<admin-project-id>.iam.gserviceaccount.com
+    Set to null only during the very first bootstrap apply when the SA does not exist yet.
+  EOT
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.terraform_admin_email == null || can(regex("^[^@]+@[^@]+\\.iam\\.gserviceaccount\\.com$", var.terraform_admin_email))
+    error_message = "terraform_admin_email must be a GCP service account email (ends in .iam.gserviceaccount.com) or null."
+  }
+}
