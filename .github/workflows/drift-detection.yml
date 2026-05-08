@@ -200,10 +200,28 @@ jobs:
     if: always()
     steps:
       - name: Publish summary
+        # needs.detect-drift.result is the aggregated matrix result:
+        #   success  = ALL workspace jobs passed (no drift detected in any workspace)
+        #   failure  = ONE or more workspace jobs failed (drift or API error)
+        # Individual per-workspace results appear as annotations on each matrix job.
+        env:
+          RESULT: ${{ needs.detect-drift.result }}
+          WORKSPACES: ${{ vars.TFC_DRIFT_WORKSPACES || '["organization","apps-dev"]' }}
         run: |
-          echo "## Drift Detection Summary" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Workspace | Status |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|-----------|--------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| organization | ${{ needs.detect-drift.result }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| apps | ${{ needs.detect-drift.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## Drift Detection Summary"
+            echo ""
+            if [ "$RESULT" = "success" ]; then
+              echo "✅ **All workspace plans completed — no drift detected.**"
+            else
+              echo "❌ **One or more workspace plans detected drift or encountered an error.**"
+              echo ""
+              echo "Check the individual matrix job steps above for Terraform Cloud run links and"
+              echo "per-workspace change counts, or look for automatically opened GitHub Issues"
+              echo "labelled \`drift\`."
+            fi
+            echo ""
+            echo "**Configured workspaces** (\`TFC_DRIFT_WORKSPACES\` repository variable): \`${WORKSPACES}\`"
+            echo ""
+            echo "To override at runtime, use the workflow_dispatch input."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -22,6 +22,14 @@
 #   CKV_GCP_125 — WIF provider constraints: inline skip in modules/iam/workload_identity/main.tf
 #   CKV_TF_1    — Module version pinning: inline skip in modules/stages/workload/main.tf
 #   CKV2_GCP_4  — Bucket lock: inline skip in modules/governance/cloud-audit-logs/main.tf
+#
+# REMOVED (checks pass without skipping — verified by running Checkov across all modules):
+#   CKV_GCP_112 — KMS public access: all KMS IAM bindings use specific SAs, not allUsers
+#   CKV_GCP_113 — IAM policy public access: no google_iam_policy data sources with public members
+#   CKV_GCP_114 — Storage public access prevention: all buckets set public_access_prevention="enforced"
+#   CKV_GCP_115 — Basic roles at org level: iam/organization only grants predefined roles
+#   CKV_GCP_116 — Basic roles at folder level: folder IAM only grants predefined roles
+#   CKV_GCP_117 — Basic roles at project level: workload module validates and blocks basic roles
 
 skip-check:
   # Service account user-managed keys: the bootstrap stage creates a Terraform
@@ -52,16 +60,6 @@ skip-check:
   # and google_logging_project_sink. Checkov checks for org-level audit config on
   # individual project resources which does not reflect this architecture.
   - "CKV2_GCP_5"
-
-  # These checks relate to networking policies (VPC SC, peering configs) that
-  # Checkov cannot fully resolve in modular Terraform with for_each. They are
-  # kept here temporarily pending investigation; remove once root cause is confirmed.
-  - "CKV_GCP_112"
-  - "CKV_GCP_113"
-  - "CKV_GCP_114"
-  - "CKV_GCP_115"
-  - "CKV_GCP_116"
-  - "CKV_GCP_117"
 
   # Cloud DNS DNSSEC: DNS is configured via modules/network/dns. DNSSEC is enabled
   # by default in that module. Checkov may flag the resource before DNSSEC is
