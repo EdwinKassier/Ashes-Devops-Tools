@@ -36,8 +36,16 @@ variable "dns_project_id" {
   type        = string
 }
 
-variable "spoke_project_ids" {
-  description = "Map of spoke project IDs to attach to Shared VPC"
+variable "spoke_project_numbers" {
+  description = <<-EOT
+    Map of spoke project NUMBERS (not IDs) to include in the VPC-SC perimeter.
+    The GCP Access Context Manager API requires numeric project numbers prefixed with
+    "projects/". Project IDs (e.g. "myorg-dev-host-abc1") are rejected with a
+    permission error that is misleading — always pass project numbers here.
+
+    Obtain with: gcloud projects describe <id> --format='value(projectNumber)'
+    Or use module.projects.project_numbers from the stages/projects module output.
+  EOT
   type        = map(string)
 }
 

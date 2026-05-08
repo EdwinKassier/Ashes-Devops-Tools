@@ -75,9 +75,23 @@ jobs:
       - name: Install terraform-docs
         run: |
           TDOCS_VERSION=0.19.0
-          curl -sSL "https://github.com/terraform-docs/terraform-docs/releases/download/v${TDOCS_VERSION}/terraform-docs-v${TDOCS_VERSION}-linux-amd64.tar.gz" \
-            | tar -xz -C /usr/local/bin terraform-docs
+          BASE_URL="https://github.com/terraform-docs/terraform-docs/releases/download/v${TDOCS_VERSION}"
+          TARBALL="terraform-docs-v${TDOCS_VERSION}-linux-amd64.tar.gz"
+          CHECKSUM_FILE="terraform-docs-v${TDOCS_VERSION}.sha256sum"
+
+          # Download tarball and checksum file side-by-side
+          curl -sSLO "${BASE_URL}/${TARBALL}"
+          curl -sSLO "${BASE_URL}/${CHECKSUM_FILE}"
+
+          # Verify integrity before extracting
+          sha256sum --check --ignore-missing "${CHECKSUM_FILE}"
+
+          # Extract only the terraform-docs binary
+          tar -xz -C /usr/local/bin terraform-docs < "${TARBALL}"
           terraform-docs --version
+
+          # Cleanup
+          rm -f "${TARBALL}" "${CHECKSUM_FILE}"
 
       - name: Assert docs are committed
         run: make docs-check

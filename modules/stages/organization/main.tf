@@ -302,6 +302,14 @@ resource "google_bigquery_dataset" "billing_export" {
     purpose    = "billing-export"
     managed-by = "terraform"
   }
+
+  # Prevent accidental destruction of billing export data.
+  # BigQuery datasets with tables ARE destroyed by 'terraform destroy' even without
+  # force_destroy = true (unlike GCS buckets which block non-empty deletion).
+  # To tear down: manually delete tables, then remove this block and apply first.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # Grant the Cloud Billing service agent permission to write billing data into

@@ -60,6 +60,36 @@ run "invalid_parent_wrong_type" {
   expect_failures = [var.parent]
 }
 
+# Duplicate boolean constraint is rejected.
+run "rejects_duplicate_boolean_constraint" {
+  variables {
+    parent = "organizations/123456789"
+    boolean_policies = [
+      { constraint = "sql.restrictPublicIp", enforce = true },
+      { constraint = "sql.restrictPublicIp", enforce = false }
+    ]
+  }
+
+  command = plan
+
+  expect_failures = [var.boolean_policies]
+}
+
+# Duplicate list constraint is rejected.
+run "rejects_duplicate_list_constraint" {
+  variables {
+    parent = "organizations/123456789"
+    list_policies = [
+      { constraint = "gcp.resourceLocations", deny_all = true },
+      { constraint = "gcp.resourceLocations", allow_all = true }
+    ]
+  }
+
+  command = plan
+
+  expect_failures = [var.list_policies]
+}
+
 # List policy with deny_all creates exactly one policy resource.
 run "list_policy_deny_all" {
   variables {

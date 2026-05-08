@@ -133,6 +133,20 @@ resource "google_organization_iam_member" "terraform_admin_standard_org_roles" {
   member = "serviceAccount:${module.terraform_admin_sa.email}"
 }
 
+# Grant the Terraform admin SA the minimum billing-account-level role required to
+# create and manage billing budgets via google_billing_budget. Without this, budget
+# creation fails with a permissions error even though the SA has roles/billing.projectManager
+# on the folder (which does NOT grant billing.budgets.create at the account level).
+# roles/billing.costsManager is the narrowest predefined role that includes this permission.
+resource "google_billing_account_iam_member" "terraform_admin_billing_costs_manager" {
+  # checkov:skip=CKV_GCP_89:billing.costsManager at the billing account is the minimum required to
+  # create google_billing_budget resources. A more granular permission is not available as a
+  # predefined role; a custom role would require roles/iam.roleAdmin (equally privileged).
+  billing_account_id = var.billing_account
+  role               = "roles/billing.costsManager"
+  member             = "serviceAccount:${module.terraform_admin_sa.email}"
+}
+
 resource "google_organization_iam_member" "terraform_admin_exception_org_roles" {
   # checkov:skip=CKV_GCP_45:Justified — roles are intentionally isolated in a dedicated resource block
   # with per-role commentary. See rationale below; these are the minimum org-level privileges the

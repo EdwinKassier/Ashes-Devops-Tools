@@ -24,6 +24,13 @@ variable "boolean_policies" {
   }))
   default = []
 
+  validation {
+    # Duplicate constraints in for_each = { for p in list : p.constraint => p } cause
+    # the last entry to silently win — e.g. a deny entry overwritten by an allow entry.
+    condition     = length(var.boolean_policies) == length(distinct([for p in var.boolean_policies : p.constraint]))
+    error_message = "Each constraint must appear at most once in boolean_policies. Remove duplicates."
+  }
+
   # Common boolean constraints:
   # - sql.restrictPublicIp              : Block public IP on Cloud SQL instances
   # - storage.uniformBucketLevelAccess  : Require uniform IAM access on buckets
@@ -50,6 +57,11 @@ variable "list_policies" {
       for p in var.list_policies : !(p.allow_all && p.deny_all)
     ])
     error_message = "A list policy cannot have both allow_all and deny_all set to true simultaneously — these options are mutually exclusive."
+  }
+
+  validation {
+    condition     = length(var.list_policies) == length(distinct([for p in var.list_policies : p.constraint]))
+    error_message = "Each constraint must appear at most once in list_policies. Remove duplicates."
   }
 
   # Common list constraints:

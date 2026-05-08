@@ -164,5 +164,12 @@ module "budget" {
     environment = var.environment
   }
 
+  # kms_key_name: Intentionally omitted at the app-env level. The org-level
+  # budget topic is CMEK-encrypted via the CMEK key created in stages/organization.
+  # App-environment budget topics use Google-managed encryption. To change this,
+  # pass the CMEK key from remote state:
+  #   kms_key_name = data.terraform_remote_state.organization.outputs.cmek_key_names["budget-alerts"]
+  # Ensure the Pub/Sub service agent has roles/cloudkms.cryptoKeyEncrypterDecrypter first.
+
   labels = local.labels
 }

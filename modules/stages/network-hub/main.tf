@@ -57,9 +57,16 @@ module "hub_network" {
   }
 
   # VPC Service Controls (Data Exfiltration Protection)
+  # Only created when vpc_sc_access_policy_name is non-null. An empty map skips all
+  # vpc-sc module calls, avoiding the validation error that fires when access_policy_name
+  # is null but create_access_policy is false (the default).
+  #
   # Set vpc_sc_enable_dry_run = true temporarily during the enforcement transition window
   # to validate that no legitimate traffic will be blocked, then switch to false (enforced).
-  vpc_service_controls = {
+  #
+  # protected_projects: pass project NUMBERS (not IDs). The ACM API requires numeric
+  # project numbers; project ID strings are silently rejected or cause misleading errors.
+  vpc_service_controls = var.vpc_sc_access_policy_name != null ? {
     "hub-data-perimeter" = {
       organization_id    = local.org_id_normalized
       access_policy_name = var.vpc_sc_access_policy_name
@@ -67,7 +74,8 @@ module "hub_network" {
       description        = "Prevents data exfiltration from hub-managed projects"
       enable_dry_run     = var.vpc_sc_enable_dry_run
 
-      protected_projects = values(var.spoke_project_ids)
+      # values() returns project numbers from the spoke_project_numbers map.
+      protected_projects = values(var.spoke_project_numbers)
       restricted_services = [
         "storage.googleapis.com",
         "bigquery.googleapis.com",
@@ -75,7 +83,7 @@ module "hub_network" {
         "run.googleapis.com"
       ]
     }
-  }
+  } : {}
 }
 
 

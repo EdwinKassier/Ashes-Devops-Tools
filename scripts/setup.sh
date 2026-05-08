@@ -88,16 +88,32 @@ install_tfsec_versioned() {
   local os arch install_dir="/usr/local/bin"
   os=$(uname -s | tr '[:upper:]' '[:lower:]')
   arch=$(uname -m)
-  [[ "$arch" == "x86_64" ]]              && arch="amd64"
-  [[ "$arch" == "aarch64" ]]             && arch="arm64"
-  local url="https://github.com/aquasecurity/tfsec/releases/download/v${version}/tfsec-${os}-${arch}"
+  [[ "$arch" == "x86_64" ]]  && arch="amd64"
+  [[ "$arch" == "aarch64" ]] && arch="arm64"
+  local base_url="https://github.com/aquasecurity/tfsec/releases/download/v${version}"
+  local binary="tfsec-${os}-${arch}"
+  local checksum_file="tfsec_checksums.txt"
+
   echo "Downloading tfsec v${version} from GitHub releases ..."
-  curl -sSL "$url" -o /tmp/tfsec && chmod +x /tmp/tfsec
+  curl -sSL "${base_url}/${binary}"          -o /tmp/tfsec
+  curl -sSL "${base_url}/${checksum_file}"   -o /tmp/tfsec_checksums.txt
+
+  # Verify SHA-256 integrity before installing — guards against compromised releases.
+  # The checksum file contains lines like: "abc123...  tfsec-linux-amd64"
+  if ! (cd /tmp && grep "${binary}" tfsec_checksums.txt | sha256sum --check --status); then
+    echo "ERROR: tfsec checksum verification FAILED. Aborting installation." >&2
+    rm -f /tmp/tfsec /tmp/tfsec_checksums.txt
+    exit 1
+  fi
+  echo "tfsec v${version} checksum verified."
+
+  chmod +x /tmp/tfsec
   if [[ -w "$install_dir" ]]; then
     mv /tmp/tfsec "${install_dir}/tfsec"
   else
     sudo mv /tmp/tfsec "${install_dir}/tfsec"
   fi
+  rm -f /tmp/tfsec_checksums.txt
   echo "tfsec ${version} installed to ${install_dir}/tfsec"
 }
 

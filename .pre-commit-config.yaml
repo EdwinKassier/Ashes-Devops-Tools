@@ -41,6 +41,12 @@ repos:
           - --args=--quiet
           - --args=--compact
           - --args=--framework terraform
+          # Pass the repo-root config file so local pre-commit runs apply the same
+          # skip list as CI (make security / reusable-security.yml). Without this,
+          # local runs raise false positives that CI would suppress, causing broken
+          # commit loops. __GIT_WORKING_DIR__ is resolved by pre-commit-terraform to
+          # the repository root regardless of the current working directory.
+          - --args=--config-file=__GIT_WORKING_DIR__/.checkov.yaml
 
       - id: terraform_trivy
         name: Trivy security scan

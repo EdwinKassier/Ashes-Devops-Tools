@@ -10,6 +10,9 @@ Releases are tagged as `organization/vX.Y.Z` and `apps/<env>/vX.Y.Z`.
 ## [Unreleased]
 
 ### Added
+- `modules/stages/bootstrap/main.tf` — `google_billing_account_iam_member` grants `roles/billing.costsManager` to the Terraform admin SA; without this, `google_billing_budget` creation fails at apply time with a permissions error even when folder-level roles are present
+- `modules/governance/org-policy/variables.tf` — duplicate constraint validation on both `boolean_policies` and `list_policies`; prevents silent last-wins overwrite when the same constraint appears twice
+- `modules/governance/org-policy/tests/validation.tftest.hcl` — 2 new tests rejecting duplicate boolean and list policy constraints
 - `modules/network/vpc-sc/variables.tf` — `enable_deletion_protection` variable (default `true`); protects service perimeters from accidental destruction via sentinel pattern
 - `modules/network/vpc-sc/main.tf` — `terraform_data.deletion_protection` sentinel resource with `prevent_destroy = true`; guards both regular and bridge perimeters when enabled
 - `modules/stages/bootstrap/variables.tf` — cross-variable validation: `tfc_organization` must be non-null when `enable_tfc_oidc = true` (previously silent no-op)
@@ -61,6 +64,16 @@ Releases are tagged as `organization/vX.Y.Z` and `apps/<env>/vX.Y.Z`.
 - `envs/organization/moved.tf` — added cleanup instructions (safe to delete after first migration apply)
 
 ### Fixed
+- **CRITICAL** `modules/stages/network-hub/main.tf:70` — VPC-SC `protected_projects` passed project ID strings instead of required project NUMBERS; the ACM API silently rejects or misinterprets IDs causing misleading permission errors. Renamed `spoke_project_ids` → `spoke_project_numbers` and updated callers to use `module.projects.project_numbers`
+- **CRITICAL** `modules/stages/network-hub/main.tf` — `vpc_service_controls` map was always populated unconditionally; when `vpc_sc_access_policy_name = null` the vpc-sc module's validation fires immediately (`access_policy_name must be set when create_access_policy = false`), making VPC-SC opt-out impossible without triggering a plan error. Wrapped in `var.vpc_sc_access_policy_name != null ? { ... } : {}`
+- `modules/host/variables.tf` + `main.tf` — `vpc_service_controls` object type was missing `enable_deletion_protection` field; users could not disable the perimeter sentinel through the host module interface, requiring `terraform state rm` workaround. Added `enable_deletion_protection = optional(bool, true)` and wired it through
+- `modules/stages/organization/main.tf` — `google_bigquery_dataset.billing_export` had no `lifecycle { prevent_destroy = true }`; BigQuery datasets with tables are destroyed by `terraform destroy` without error, unlike GCS buckets
+- `envs/apps/main.tf` — `module "budget"` call omitted `kms_key_name` (app-env Pub/Sub topics unencrypted vs CMEK-encrypted org topics); added comment documenting intentional omission with upgrade path
+- `.github/workflows/terraform-plan.yml` — `terraform-docs` install now downloads and verifies SHA-256 checksum before extracting binary; previously any compromised release would execute silently in CI
+- `scripts/setup.sh` — `install_tfsec_versioned()` now downloads `tfsec_checksums.txt` and verifies SHA-256 before installing; exits with error if verification fails
+- `.pre-commit-config.yaml` — `terraform_checkov` hook now passes `--config-file=__GIT_WORKING_DIR__/.checkov.yaml`; without it local pre-commit runs diverge from CI, causing false-positive commit failures
+- `.github/workflows/documentation.yml` — reviewer changed from hardcoded personal username to `${{ vars.DOCS_REVIEWER }}`; configure the `DOCS_REVIEWER` repository variable to set the reviewer
+- `scripts/terraform-roots.sh` — `collect_modules` maxdepth raised from 3 to 4; future depth-4 modules would be silently excluded from validate/lint/docs CI steps
 - `.github/workflows/reusable-security.yml` — tfsec `config_file` changed from `.tfsec.yml` (resolved relative to `working_directory`, silently missing) to `${{ github.workspace }}/.tfsec.yml` (absolute path, always resolves correctly); all exclusion rules were previously silently ignored for both modules and envs scans
 - `.github/workflows/security-scan.yml` — concurrency group now uses `'scheduled'` key for `schedule` events; `cancel-in-progress` is `false` for scheduled runs so a push never cancels a running nightly SARIF scan
 - `.github/workflows/documentation.yml` — checkout and create-pull-request now use `DOCS_BOT_PAT` (falls back to `GITHUB_TOKEN`); PRs from `GITHUB_TOKEN` do not trigger downstream CI; added `reviewers` field so auto-generated PRs require approval before merge

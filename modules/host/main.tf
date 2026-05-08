@@ -615,19 +615,20 @@ module "vpc_service_controls" {
   source   = "../network/vpc-sc"
   for_each = var.vpc_service_controls
 
-  organization_id      = each.value.organization_id
-  access_policy_name   = try(each.value.access_policy_name, null)
-  create_access_policy = try(each.value.create_access_policy, false)
-  perimeter_name       = each.key
-  perimeter_title      = each.value.perimeter_title
-  description          = try(each.value.description, "Managed by Terraform")
-  perimeter_type       = try(each.value.perimeter_type, "PERIMETER_TYPE_REGULAR")
-  protected_projects   = try(each.value.protected_projects, [])
-  restricted_services  = try(each.value.restricted_services, [])
-  access_levels        = try(each.value.access_levels, [])
-  ingress_policies     = try(each.value.ingress_policies, [])
-  egress_policies      = try(each.value.egress_policies, [])
-  enable_dry_run       = try(each.value.enable_dry_run, false)
+  organization_id            = each.value.organization_id
+  access_policy_name         = try(each.value.access_policy_name, null)
+  create_access_policy       = try(each.value.create_access_policy, false)
+  perimeter_name             = each.key
+  perimeter_title            = each.value.perimeter_title
+  description                = try(each.value.description, "Managed by Terraform")
+  perimeter_type             = try(each.value.perimeter_type, "PERIMETER_TYPE_REGULAR")
+  protected_projects         = try(each.value.protected_projects, [])
+  restricted_services        = try(each.value.restricted_services, [])
+  access_levels              = try(each.value.access_levels, [])
+  ingress_policies           = try(each.value.ingress_policies, [])
+  egress_policies            = try(each.value.egress_policies, [])
+  enable_dry_run             = try(each.value.enable_dry_run, false)
+  enable_deletion_protection = try(each.value.enable_deletion_protection, true)
 }
 
 # =============================================================================

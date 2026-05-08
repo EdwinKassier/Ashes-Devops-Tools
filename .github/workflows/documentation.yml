@@ -60,5 +60,7 @@ jobs:
             secret (see `.github/workflows/documentation.yml` for instructions).
           labels: "documentation,automated"
           # Require review to prevent auto-merge of unvalidated documentation changes.
-          # Override with team-reviewers if your org uses team-based review: "infra-reviewers"
-          reviewers: "edwinkassier"
+          # Set DOCS_REVIEWER to a GitHub username or use team-reviewers for team-based review.
+          # Falls back to a repository variable (DOCS_REVIEWER) if set, otherwise empty
+          # (no reviewer required). Override with team-reviewers: "infra-reviewers" if preferred.
+          reviewers: ${{ vars.DOCS_REVIEWER }}

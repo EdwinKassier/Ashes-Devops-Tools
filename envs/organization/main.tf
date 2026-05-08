@@ -142,9 +142,11 @@ module "network_hub" {
 
   hub_project_id = module.projects.project_ids["shared-hub"]
   dns_project_id = module.projects.project_ids["shared-dns"]
-  spoke_project_ids = {
+  # Use project_numbers (not project_ids): the VPC-SC / ACM API requires numeric project
+  # numbers (e.g. "123456789012"). Project ID strings cause a misleading permissions error.
+  spoke_project_numbers = {
     for env_key in sort(keys(var.environments)) :
-    env_key => module.projects.project_ids["${env_key}-host"]
+    env_key => module.projects.project_numbers["${env_key}-host"]
   }
 
   org_id  = data.google_organization.org.org_id
