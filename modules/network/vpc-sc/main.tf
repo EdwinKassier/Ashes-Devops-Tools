@@ -286,4 +286,15 @@ resource "google_access_context_manager_service_perimeter" "bridge" {
   status {
     resources = [for p in var.protected_projects : "projects/${p}"]
   }
+
+  lifecycle {
+    # Bridge perimeters do not support dry-run mode — the GCP API only accepts a status
+    # block (enforced), never a spec block (dry-run). Setting enable_dry_run = true while
+    # using a bridge perimeter would silently be ignored (no spec block is generated).
+    # Guard explicitly so operators know the combination is not supported.
+    precondition {
+      condition     = !var.enable_dry_run
+      error_message = "Bridge perimeters (PERIMETER_TYPE_BRIDGE) do not support dry-run mode. Set enable_dry_run = false when using perimeter_type = \"PERIMETER_TYPE_BRIDGE\"."
+    }
+  }
 }

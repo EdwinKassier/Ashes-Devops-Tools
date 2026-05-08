@@ -181,12 +181,12 @@ variable "billing_contact_email" {
 }
 
 variable "monthly_budget_amount" {
-  description = "Monthly budget cap in the configured currency. Must be greater than zero."
+  description = "Monthly budget cap in the configured currency. Set to 0 to disable budget alerts (no Budget resource will be created). Must be >= 0."
   type        = number
 
   validation {
-    condition     = var.monthly_budget_amount > 0
-    error_message = "monthly_budget_amount must be greater than zero."
+    condition     = var.monthly_budget_amount >= 0
+    error_message = "monthly_budget_amount must be 0 (disabled) or a positive number."
   }
 }
 

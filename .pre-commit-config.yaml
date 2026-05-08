@@ -119,8 +119,9 @@ repos:
         args: ['-d', '{extends: default, rules: {line-length: {max: 120}, document-start: disable}}']
 
 # Global configuration
-default_install_hook_types: [pre-commit, commit-msg, pre-push]
-default_stages: [commit, push]
+# Use [pre-commit] only — [commit, push] runs all expensive hooks TWICE per push.
+default_install_hook_types: [pre-commit, commit-msg]
+default_stages: [pre-commit]
 
 # Exclude patterns
 exclude: |

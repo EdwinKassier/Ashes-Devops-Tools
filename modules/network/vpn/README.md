@@ -76,7 +76,7 @@ module "example" {
 	# Required variables
 	name = 
 	network = 
-	peer_external_gateway_ip = 
+	peer_external_gateway_ips = 
 	project_id = 
 	region = 
 	shared_secret = 
@@ -106,10 +106,10 @@ The following resources are created:
 
 - resource.google_compute_external_vpn_gateway.peer (modules/network/vpn/main.tf#L23)
 - resource.google_compute_ha_vpn_gateway.gateway (modules/network/vpn/main.tf#L14)
-- resource.google_compute_router.router (modules/network/vpn/main.tf#L38)
-- resource.google_compute_router_interface.interfaces (modules/network/vpn/main.tf#L77)
-- resource.google_compute_router_peer.peers (modules/network/vpn/main.tf#L89)
-- resource.google_compute_vpn_tunnel.tunnels (modules/network/vpn/main.tf#L59)
+- resource.google_compute_router.router (modules/network/vpn/main.tf#L40)
+- resource.google_compute_router_interface.interfaces (modules/network/vpn/main.tf#L79)
+- resource.google_compute_router_peer.peers (modules/network/vpn/main.tf#L91)
+- resource.google_compute_vpn_tunnel.tunnels (modules/network/vpn/main.tf#L61)
 
 
 ## Inputs
@@ -118,7 +118,7 @@ The following resources are created:
 |------|-------------|------|---------|:--------:|
 | <a name="input_name"></a> [name](#input\_name) | Base name for VPN resources | `string` | n/a | yes |
 | <a name="input_network"></a> [network](#input\_network) | The self-link of the VPC network | `string` | n/a | yes |
-| <a name="input_peer_external_gateway_ip"></a> [peer\_external\_gateway\_ip](#input\_peer\_external\_gateway\_ip) | External IPv4 address of the peer VPN gateway | `string` | n/a | yes |
+| <a name="input_peer_external_gateway_ips"></a> [peer\_external\_gateway\_ips](#input\_peer\_external\_gateway\_ips) | List of external IPv4 addresses for the peer VPN gateway interfaces.<br/>Provide one IP for a single-IP gateway (tunnel\_count = 1) or two distinct IPs for<br/>an HA gateway (tunnel\_count = 2, TWO\_IPS\_REDUNDANCY).<br/>The GCP API rejects both interfaces sharing the same IP under TWO\_IPS\_REDUNDANCY.<br/>Example single: ["203.0.113.1"]<br/>Example HA:     ["203.0.113.1", "203.0.113.2"] | `list(string)` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID where the VPN will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region for the VPN gateway (e.g., 'us-central1', 'europe-west1') | `string` | n/a | yes |
 | <a name="input_shared_secret"></a> [shared\_secret](#input\_shared\_secret) | Shared secret for IKE authentication | `string` | n/a | yes |

@@ -112,7 +112,7 @@ resource "google_cloudfunctions_function" "budget_notifier" {
   name        = "${var.project_name}-budget-notifier"
   project     = var.project_id
   region      = var.region
-  runtime     = "python310"
+  runtime     = "python312"
   entry_point = "notify_budget_alert"
 
   available_memory_mb   = 256

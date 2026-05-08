@@ -58,4 +58,13 @@ resource "google_org_policy_custom_constraint" "custom_constraints" {
   condition      = each.value.condition
   method_types   = each.value.method_types
   resource_types = each.value.resource_types
+
+  lifecycle {
+    # Custom constraints are organization-level-only resources. The GCP API rejects
+    # creation under a folder or project parent with a non-obvious error. Guard early.
+    precondition {
+      condition     = startswith(var.parent, "organizations/")
+      error_message = "Custom org policy constraints can only be created at the organization level. Set parent to 'organizations/<ORG_ID>' (e.g., 'organizations/123456789')."
+    }
+  }
 }

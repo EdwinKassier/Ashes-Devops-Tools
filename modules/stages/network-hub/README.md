@@ -107,7 +107,10 @@ module "example" {
 | <a name="input_org_id"></a> [org\_id](#input\_org\_id) | The GCP organization ID. Accepts either a bare numeric ID (e.g. '123456789012') as returned<br/>by data.google\_organization.org.org\_id, or the 'organizations/<id>' prefixed form.<br/>The module normalizes to the prefixed form internally before passing to VPC-SC. | `string` | n/a | yes |
 | <a name="input_project_prefix"></a> [project\_prefix](#input\_project\_prefix) | Prefix used for project naming | `string` | n/a | yes |
 | <a name="input_spoke_project_ids"></a> [spoke\_project\_ids](#input\_spoke\_project\_ids) | Map of spoke project IDs to attach to Shared VPC | `map(string)` | n/a | yes |
+| <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | When true (the default), protects hub and DNS VPC resources from accidental deletion via<br/>terraform destroy. Set to false only during a planned teardown.<br/>IMPORTANT: Set to false and apply before attempting to destroy the hub network stack. | `bool` | `true` | no |
 | <a name="input_internal_domain"></a> [internal\_domain](#input\_internal\_domain) | Internal domain for private DNS zone (e.g., 'mycompany.com') | `string` | `"internal.local"` | no |
+| <a name="input_vpc_sc_access_policy_name"></a> [vpc\_sc\_access\_policy\_name](#input\_vpc\_sc\_access\_policy\_name) | Bare numeric ID of the existing organisation-level Access Context Manager access policy<br/>(e.g. '1234567890'). Required when the hub VPC-SC perimeter is enabled.<br/>Do NOT include the 'accessPolicies/' prefix. | `string` | `null` | no |
+| <a name="input_vpc_sc_enable_dry_run"></a> [vpc\_sc\_enable\_dry\_run](#input\_vpc\_sc\_enable\_dry\_run) | When true, the hub VPC-SC perimeter logs violations but does NOT block traffic (dry-run/simulation mode).<br/>When false (the default), the perimeter is ENFORCED.<br/>Only set to true temporarily during the enforcement transition validation window. | `bool` | `false` | no |
 
 ## Outputs
 

@@ -21,12 +21,13 @@ locals {
 module "on_prem_vpn" {
   source = "../../"
 
-  project_id               = local.project_id
-  name                     = "onprem-ha-vpn"
-  network                  = local.network
-  region                   = local.region
-  peer_external_gateway_ip = local.peer_ips[0]
-  shared_secret            = local.vpn_shared_secret
+  project_id = local.project_id
+  name       = "onprem-ha-vpn"
+  network    = local.network
+  region     = local.region
+  # Pass both peer gateway IPs — TWO_IPS_REDUNDANCY requires two distinct public IPs.
+  peer_external_gateway_ips = local.peer_ips
+  shared_secret             = local.vpn_shared_secret
 
   router_asn = 64514
   peer_asn   = 65000

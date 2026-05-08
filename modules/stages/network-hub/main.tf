@@ -15,10 +15,11 @@ module "hub_network" {
   region         = var.default_region
 
   # Enable Networking & Shared VPC Host
-  enable_networking      = true
-  enable_shared_vpc_host = true
-  vpc_name               = "hub-vpc-core"
-  vpc_cidr_block         = var.hub_vpc_cidr_block
+  enable_networking          = true
+  enable_shared_vpc_host     = true
+  enable_deletion_protection = var.enable_deletion_protection
+  vpc_name                   = "hub-vpc-core"
+  vpc_cidr_block             = var.hub_vpc_cidr_block
 
   # Observability: Enable Flow Logs for Audit
   log_config_flow_sampling        = 0.5
@@ -50,15 +51,15 @@ module "hub_network" {
   }
 
   # VPC Service Controls (Data Exfiltration Protection)
+  # Set vpc_sc_enable_dry_run = true temporarily during the enforcement transition window
+  # to validate that no legitimate traffic will be blocked, then switch to false (enforced).
   vpc_service_controls = {
-    "apps-data-perimeter" = {
-      organization_id = local.org_id_normalized
-      perimeter_title = "Application Data Protection Perimeter"
-      description     = "Prevents data exfiltration from managed application projects"
-
-      # ENFORCED: VPC-SC is now in enforcement mode
-      # Ensure all violations have been resolved before applying this change
-      enable_dry_run = true
+    "hub-data-perimeter" = {
+      organization_id    = local.org_id_normalized
+      access_policy_name = var.vpc_sc_access_policy_name
+      perimeter_title    = "Hub Network Data Protection Perimeter"
+      description        = "Prevents data exfiltration from hub-managed projects"
+      enable_dry_run     = var.vpc_sc_enable_dry_run
 
       protected_projects = values(var.spoke_project_ids)
       restricted_services = [
@@ -82,10 +83,11 @@ module "dns_hub_network" {
   region         = var.default_region
 
   # Just a simple VPC to anchor the private zone
-  enable_networking      = true
-  enable_shared_vpc_host = false
-  vpc_name               = "dns-vpc-core"
-  vpc_cidr_block         = var.dns_hub_vpc_cidr_block
+  enable_networking          = true
+  enable_shared_vpc_host     = false
+  enable_deletion_protection = var.enable_deletion_protection
+  vpc_name                   = "dns-vpc-core"
+  vpc_cidr_block             = var.dns_hub_vpc_cidr_block
 }
 
 module "dns_hub_zone" {

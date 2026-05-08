@@ -372,10 +372,15 @@ variable "vpn_peer_asn" {
   default     = 64513
 }
 
-variable "vpn_peer_gateway_ip" {
-  description = "External IP of the peer VPN gateway"
-  type        = string
-  default     = ""
+variable "vpn_peer_gateway_ips" {
+  description = <<-EOT
+    List of external IPv4 addresses for the peer VPN gateway interfaces.
+    Provide one IP for single-tunnel VPNs or two distinct IPs for HA (tunnel_count = 2).
+    Example single: ["203.0.113.1"]
+    Example HA:     ["203.0.113.1", "203.0.113.2"]
+  EOT
+  type        = list(string)
+  default     = []
 }
 
 variable "vpn_shared_secret" {

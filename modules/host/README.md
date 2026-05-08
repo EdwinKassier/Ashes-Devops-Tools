@@ -263,7 +263,7 @@ The following resources are created:
 | <a name="input_vpn_advertised_ip_ranges"></a> [vpn\_advertised\_ip\_ranges](#input\_vpn\_advertised\_ip\_ranges) | IP ranges to advertise via BGP | <pre>list(object({<br/>    range       = string<br/>    description = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_vpn_local_ips"></a> [vpn\_local\_ips](#input\_vpn\_local\_ips) | Local IP addresses for VPN interfaces | `list(string)` | <pre>[<br/>  "169.254.0.1",<br/>  "169.254.0.3"<br/>]</pre> | no |
 | <a name="input_vpn_peer_asn"></a> [vpn\_peer\_asn](#input\_vpn\_peer\_asn) | Peer router BGP ASN | `number` | `64513` | no |
-| <a name="input_vpn_peer_gateway_ip"></a> [vpn\_peer\_gateway\_ip](#input\_vpn\_peer\_gateway\_ip) | External IP of the peer VPN gateway | `string` | `""` | no |
+| <a name="input_vpn_peer_gateway_ips"></a> [vpn\_peer\_gateway\_ips](#input\_vpn\_peer\_gateway\_ips) | List of external IPv4 addresses for the peer VPN gateway interfaces.<br/>Provide one IP for single-tunnel VPNs or two distinct IPs for HA (tunnel\_count = 2).<br/>Example single: ["203.0.113.1"]<br/>Example HA:     ["203.0.113.1", "203.0.113.2"] | `list(string)` | `[]` | no |
 | <a name="input_vpn_peer_ips"></a> [vpn\_peer\_ips](#input\_vpn\_peer\_ips) | Peer IP addresses for BGP sessions | `list(string)` | <pre>[<br/>  "169.254.0.2",<br/>  "169.254.0.4"<br/>]</pre> | no |
 | <a name="input_vpn_router_asn"></a> [vpn\_router\_asn](#input\_vpn\_router\_asn) | Cloud Router BGP ASN | `number` | `64512` | no |
 | <a name="input_vpn_shared_secret"></a> [vpn\_shared\_secret](#input\_vpn\_shared\_secret) | VPN shared secret. Must be set when enable\_vpn = true. Consider injecting via Secret Manager rather than a plaintext tfvars value. | `string` | `null` | no |

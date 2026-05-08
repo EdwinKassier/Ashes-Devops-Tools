@@ -29,7 +29,11 @@ variable "data_buckets" {
       }
   EOT
   type = map(object({
-    name_suffix = string
+    name_suffix   = string
+    force_destroy = optional(bool, false)
+    # Soft-delete retention in seconds. Set to 0 to disable soft-delete (useful in dev/test).
+    # Default 604800 = 7 days (GCS default).
+    soft_delete_retention_seconds = optional(number, 604800)
   }))
   default = {}
 }

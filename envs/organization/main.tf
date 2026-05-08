@@ -82,6 +82,7 @@ module "bootstrap" {
   github_repo      = var.github_repo
   tfc_organization = var.tfc_organization
   tfc_workspaces   = local.tfc_workspaces
+  enable_tfc_oidc  = var.enable_tfc_oidc
 }
 
 # 2. Organization: Hierarchy & Governance
@@ -151,6 +152,9 @@ module "network_hub" {
 
   hub_vpc_cidr_block     = var.hub_vpc_cidr_block
   dns_hub_vpc_cidr_block = var.dns_hub_vpc_cidr_block
+
+  vpc_sc_access_policy_name = var.vpc_sc_access_policy_name
+  vpc_sc_enable_dry_run     = var.vpc_sc_enable_dry_run
 
   depends_on = [module.projects]
 }

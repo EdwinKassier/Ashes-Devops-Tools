@@ -131,6 +131,23 @@ variable "extra_labels" {
   default     = {}
 }
 
+variable "vpc_sc_access_policy_name" {
+  description = <<-EOT
+    Bare numeric ID of the existing organisation-level Access Context Manager access policy
+    that governs all VPC Service Controls perimeters in this org (e.g. '1234567890').
+    Do NOT include the 'accessPolicies/' prefix.
+    Find your policy ID: gcloud access-context-manager policies list --organization=ORG_ID
+    This value is required when enable_vpc_sc = true.
+  EOT
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.vpc_sc_access_policy_name == null || can(regex("^[0-9]+$", var.vpc_sc_access_policy_name))
+    error_message = "vpc_sc_access_policy_name must be a bare numeric ID (e.g. '1234567890'). Do not include the 'accessPolicies/' prefix."
+  }
+}
+
 variable "vpc_sc_enable_dry_run" {
   description = <<-EOT
     When true, VPC Service Controls logs violations but does NOT block any traffic (dry-run/simulation mode).

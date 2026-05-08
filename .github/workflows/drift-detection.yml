@@ -4,6 +4,14 @@ on:
   schedule:
     - cron: '0 8 * * 1-5'  # Weekdays at 08:00 UTC
   workflow_dispatch:
+    inputs:
+      workspaces:
+        description: >
+          Comma-separated list of TFC workspace names to check for drift.
+          Defaults to the standard set when left blank.
+          Example: organization,apps-dev,apps-prod
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -21,7 +29,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        workspace: [organization, apps]
+        # Default workspace set: the org control plane plus common app environments.
+        # Override at runtime via workflow_dispatch → workspaces input.
+        # NOTE: The "apps" workspace does NOT exist in TFC — actual workspace names follow
+        # the "apps-<env>" convention (apps-dev, apps-staging, apps-prod). Adjust this list
+        # to match your TFC workspace names. Using a repository variable (TFC_WORKSPACES)
+        # is recommended for environments with many app workspaces.
+        # Default workspace set — adjust to match your TFC workspace names.
+        # The "apps" workspace does NOT exist; real app workspace names are "apps-<env>"
+        # (e.g., apps-dev, apps-staging, apps-prod). Override at runtime using the
+        # workflow_dispatch input above, or set the TFC_DRIFT_WORKSPACES repository
+        # variable to a JSON array: '["organization","apps-dev","apps-prod"]'
+        workspace: ${{ fromJSON(vars.TFC_DRIFT_WORKSPACES || '["organization","apps-dev"]') }}
     steps:
       - name: Assert Terraform Cloud credentials are configured
         env:

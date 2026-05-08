@@ -418,19 +418,19 @@ module "vpn" {
   source = "../network/vpn"
   count  = var.enable_vpn ? 1 : 0
 
-  project_id               = var.project_id
-  name                     = "${var.project_prefix}-vpn"
-  region                   = var.region
-  network                  = var.enable_networking ? module.vpc[0].id : var.existing_network_id
-  tunnel_count             = var.vpn_tunnel_count
-  router_asn               = var.vpn_router_asn
-  peer_asn                 = var.vpn_peer_asn
-  peer_external_gateway_ip = var.vpn_peer_gateway_ip
-  shared_secret            = coalesce(var.vpn_shared_secret, "")
-  local_ip_addresses       = var.vpn_local_ips
-  peer_ip_addresses        = var.vpn_peer_ips
-  advertised_ip_ranges     = var.vpn_advertised_ip_ranges
-  labels                   = var.labels
+  project_id                = var.project_id
+  name                      = "${var.project_prefix}-vpn"
+  region                    = var.region
+  network                   = var.enable_networking ? module.vpc[0].id : var.existing_network_id
+  tunnel_count              = var.vpn_tunnel_count
+  router_asn                = var.vpn_router_asn
+  peer_asn                  = var.vpn_peer_asn
+  peer_external_gateway_ips = var.vpn_peer_gateway_ips
+  shared_secret             = var.vpn_shared_secret
+  local_ip_addresses        = var.vpn_local_ips
+  peer_ip_addresses         = var.vpn_peer_ips
+  advertised_ip_ranges      = var.vpn_advertised_ip_ranges
+  labels                    = var.labels
 }
 
 # =============================================================================

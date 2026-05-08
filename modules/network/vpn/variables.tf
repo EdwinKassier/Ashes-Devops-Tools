@@ -46,13 +46,30 @@ variable "router_asn" {
   default     = 64514
 }
 
-variable "peer_external_gateway_ip" {
-  description = "External IPv4 address of the peer VPN gateway"
-  type        = string
+variable "peer_external_gateway_ips" {
+  description = <<-EOT
+    List of external IPv4 addresses for the peer VPN gateway interfaces.
+    Provide one IP for a single-IP gateway (tunnel_count = 1) or two distinct IPs for
+    an HA gateway (tunnel_count = 2, TWO_IPS_REDUNDANCY).
+    The GCP API rejects both interfaces sharing the same IP under TWO_IPS_REDUNDANCY.
+    Example single: ["203.0.113.1"]
+    Example HA:     ["203.0.113.1", "203.0.113.2"]
+  EOT
+  type        = list(string)
 
   validation {
-    condition     = can(regex("^(\\d{1,3}\\.){3}\\d{1,3}$", var.peer_external_gateway_ip))
-    error_message = "peer_external_gateway_ip must be a valid IPv4 address (e.g., '203.0.113.1')."
+    condition     = length(var.peer_external_gateway_ips) >= 1
+    error_message = "peer_external_gateway_ips must contain at least one IP address."
+  }
+
+  validation {
+    condition     = length(var.peer_external_gateway_ips) >= var.tunnel_count
+    error_message = "peer_external_gateway_ips must have at least one entry per tunnel (tunnel_count = ${var.tunnel_count} requires ${var.tunnel_count} IPs)."
+  }
+
+  validation {
+    condition     = alltrue([for ip in var.peer_external_gateway_ips : can(regex("^(\\d{1,3}\\.){3}\\d{1,3}$", ip))])
+    error_message = "Every entry in peer_external_gateway_ips must be a valid IPv4 address (e.g., '203.0.113.1')."
   }
 }
 

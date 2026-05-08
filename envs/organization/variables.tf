@@ -4,9 +4,25 @@ variable "domain" {
 }
 
 variable "project_prefix" {
-  description = "Prefix to use for project names"
+  description = <<-EOT
+    Short prefix prepended to all GCP project IDs to ensure global uniqueness.
+    Must start with a lowercase letter; only lowercase letters, digits, and hyphens allowed.
+    Keep this to 6 characters or fewer — GCP project IDs are capped at 30 characters and
+    the prefix consumes part of that budget.
+    Set this to your organisation's identifier (e.g. "acme", "xyz-co"). Do NOT use the
+    default value "my-org" in a real deployment.
+  EOT
   type        = string
-  default     = "my-org"
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{0,9}$", var.project_prefix))
+    error_message = "project_prefix must start with a lowercase letter, contain only lowercase letters, digits, and hyphens, and be 10 characters or fewer."
+  }
+
+  validation {
+    condition     = var.project_prefix != "my-org"
+    error_message = "project_prefix is still set to the placeholder 'my-org'. Set it to your organisation's actual identifier before deploying."
+  }
 }
 
 variable "organization_name" {
@@ -177,4 +193,37 @@ variable "budget_currency" {
     condition     = can(regex("^[A-Z]{3}$", var.budget_currency))
     error_message = "budget_currency must be a 3-letter ISO 4217 currency code (e.g., USD, EUR)."
   }
+}
+
+variable "vpc_sc_access_policy_name" {
+  description = <<-EOT
+    Bare numeric ID of the existing organisation-level Access Context Manager access policy
+    used by the hub VPC-SC perimeter (e.g. '1234567890').
+    Do NOT include the 'accessPolicies/' prefix.
+    Optional — if null, no VPC-SC perimeter is created for the hub network.
+    Find your policy ID: gcloud access-context-manager policies list --organization=ORG_ID
+  EOT
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.vpc_sc_access_policy_name == null || can(regex("^[0-9]+$", var.vpc_sc_access_policy_name))
+    error_message = "vpc_sc_access_policy_name must be a bare numeric ID (e.g. '1234567890'). Do not include the 'accessPolicies/' prefix."
+  }
+}
+
+variable "vpc_sc_enable_dry_run" {
+  description = <<-EOT
+    When true, the hub VPC-SC perimeter logs violations but does NOT block traffic (dry-run/simulation mode).
+    When false (the default), the perimeter is ENFORCED.
+    Only set to true temporarily during the enforcement transition validation window.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "enable_tfc_oidc" {
+  description = "Whether to provision Workload Identity Federation pools for Terraform Cloud OIDC. Set to false if using a different CI/CD system."
+  type        = bool
+  default     = true
 }

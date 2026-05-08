@@ -129,10 +129,11 @@ module "host" {
 
   vpc_service_controls = {
     "${var.environment}_perimeter" = {
-      organization_id = "organizations/${data.terraform_remote_state.organization.outputs.org_id}"
-      perimeter_title = coalesce(var.vpc_sc_perimeter_title, "${upper(var.environment)} Perimeter")
-      perimeter_type  = "PERIMETER_TYPE_REGULAR"
-      enable_dry_run  = var.vpc_sc_enable_dry_run
+      organization_id    = "organizations/${data.terraform_remote_state.organization.outputs.org_id}"
+      access_policy_name = var.vpc_sc_access_policy_name
+      perimeter_title    = coalesce(var.vpc_sc_perimeter_title, "${upper(var.environment)} Perimeter")
+      perimeter_type     = "PERIMETER_TYPE_REGULAR"
+      enable_dry_run     = var.vpc_sc_enable_dry_run
       # VPC-SC requires numeric project numbers, not project IDs.
       # data.google_project.host_project is declared above and resolves the number at plan time.
       protected_projects = [

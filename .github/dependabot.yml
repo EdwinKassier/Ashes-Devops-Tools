@@ -399,6 +399,419 @@ updates:
       - "dependencies"
       - "module:monitoring"
 
+  # ─── Top-level examples ──────────────────────────────────────────────────────
+
+  - package-ecosystem: "terraform"
+    directory: "/examples/cloud-armor"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/examples/cloud-storage"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/examples/kms"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/examples/vpc-sc"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/examples/workloads"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  # ─── Module examples ─────────────────────────────────────────────────────────
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/artifact_registry/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/cloud_storage/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/firebase/project/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/governance/billing/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/governance/cloud-audit-logs/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/governance/kms/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/governance/org-policy/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/governance/scc/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/governance/tags/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/iam/identity_group/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/iam/identity_group_memberships/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/iam/organization/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/iam/role/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/iam/service_account/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/iam/workload_identity/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/monitoring/compute_dashboard/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/api_gateway/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/cdn/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/cloud_armor/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/dns/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/hierarchical-firewall/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/interconnect/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/internal-lb/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/nat/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/network-firewall/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/packet-mirroring/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/private-service-access/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/private-service-connect/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/shared-vpc-service/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/subnet/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/vpc-flow-logs/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/vpc-peering/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/vpc-sc/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/network/vpn/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/stages/bootstrap/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/stages/network-hub/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/stages/organization/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/stages/projects/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/stages/workload/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  # ─── Module template ─────────────────────────────────────────────────────────
+  # Keep the template providers current so new modules start with up-to-date
+  # version constraints.
+
+  - package-ecosystem: "terraform"
+    directory: "/templates/module"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "template"
+
   # ─── GitHub Actions ──────────────────────────────────────────────────────────
 
   - package-ecosystem: "github-actions"

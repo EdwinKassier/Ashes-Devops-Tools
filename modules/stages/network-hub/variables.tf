@@ -69,3 +69,38 @@ variable "internal_domain" {
   type        = string
   default     = "internal.local"
 }
+
+variable "vpc_sc_access_policy_name" {
+  description = <<-EOT
+    Bare numeric ID of the existing organisation-level Access Context Manager access policy
+    (e.g. '1234567890'). Required when the hub VPC-SC perimeter is enabled.
+    Do NOT include the 'accessPolicies/' prefix.
+  EOT
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.vpc_sc_access_policy_name == null || can(regex("^[0-9]+$", var.vpc_sc_access_policy_name))
+    error_message = "vpc_sc_access_policy_name must be a bare numeric ID (e.g. '1234567890'). Do not include the 'accessPolicies/' prefix."
+  }
+}
+
+variable "vpc_sc_enable_dry_run" {
+  description = <<-EOT
+    When true, the hub VPC-SC perimeter logs violations but does NOT block traffic (dry-run/simulation mode).
+    When false (the default), the perimeter is ENFORCED.
+    Only set to true temporarily during the enforcement transition validation window.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "enable_deletion_protection" {
+  description = <<-EOT
+    When true (the default), protects hub and DNS VPC resources from accidental deletion via
+    terraform destroy. Set to false only during a planned teardown.
+    IMPORTANT: Set to false and apply before attempting to destroy the hub network stack.
+  EOT
+  type        = bool
+  default     = true
+}

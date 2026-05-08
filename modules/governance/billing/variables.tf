@@ -148,9 +148,20 @@ variable "email_recipients" {
 }
 
 variable "pubsub_service_account" {
-  description = "Service account used by Pub/Sub to invoke Cloud Function"
+  description = <<-EOT
+    The Pub/Sub service account that invokes the Cloud Function for budget notifications.
+    Format: service-PROJECT_NUMBER@gcp-sa-pubsub.iam.gserviceaccount.com
+    Replace PROJECT_NUMBER with the numeric project number of the billing notification project.
+    Required when enable_email_notifications = true.
+    Obtain: gcloud projects describe PROJECT_ID --format='value(projectNumber)'
+  EOT
   type        = string
-  default     = "service-PROJECT_NUMBER@gcp-sa-pubsub.iam.gserviceaccount.com"
+  default     = null
+
+  validation {
+    condition     = !var.enable_email_notifications || (var.pubsub_service_account != null && var.pubsub_service_account != "")
+    error_message = "pubsub_service_account must be set when enable_email_notifications is true. Format: service-PROJECT_NUMBER@gcp-sa-pubsub.iam.gserviceaccount.com"
+  }
 }
 
 variable "tags" {

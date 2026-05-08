@@ -71,7 +71,7 @@ resource "google_storage_bucket" "data" {
   name                        = "${var.project_id}-${each.value.name_suffix}"
   project                     = var.project_id
   location                    = var.region
-  force_destroy               = false
+  force_destroy               = each.value.force_destroy
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
   versioning {

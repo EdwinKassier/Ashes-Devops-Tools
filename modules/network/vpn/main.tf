@@ -28,8 +28,10 @@ resource "google_compute_external_vpn_gateway" "peer" {
   dynamic "interface" {
     for_each = range(var.tunnel_count)
     content {
-      id         = interface.value
-      ip_address = var.peer_external_gateway_ip
+      id = interface.value
+      # Each interface needs a distinct IP for TWO_IPS_REDUNDANCY.
+      # peer_external_gateway_ips is validated to have >= tunnel_count entries.
+      ip_address = var.peer_external_gateway_ips[interface.value]
     }
   }
 }

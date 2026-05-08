@@ -195,6 +195,10 @@ resource "google_compute_forwarding_rule" "forwarding_rule" {
   port_range            = var.port_range
   allow_global_access   = var.allow_global_access
 
+  # For L7 (is_l7 = true): route through a target HTTP/S proxy (standard path).
+  # For L4 (is_l7 = false): INTERNAL_MANAGED with load_balancing_scheme="INTERNAL_MANAGED"
+  # and protocol="TCP" allows the forwarding rule to target the backend service directly —
+  # no explicit target TCP proxy resource is required for regional internal L4.
   target = var.is_l7 ? (
     var.enable_ssl ?
     google_compute_region_target_https_proxy.https_proxy[0].self_link :

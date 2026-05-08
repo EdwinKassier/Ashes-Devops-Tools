@@ -37,11 +37,11 @@ variable "boolean_policies" {
 variable "list_policies" {
   description = "List of list-type organization policies with allowed/denied values"
   type = list(object({
-    constraint     = string                # e.g., "gcp.resourceLocations"
-    allow_all      = optional(bool, false) # Allow all values (mutually exclusive with deny_all)
-    deny_all       = optional(bool, false) # Deny all values (mutually exclusive with allow_all)
-    allowed_values = list(string)          # Specific values to allow (ignored when allow_all = true)
-    denied_values  = list(string)          # Specific values to deny (ignored when deny_all = true)
+    constraint     = string                     # e.g., "gcp.resourceLocations"
+    allow_all      = optional(bool, false)      # Allow all values (mutually exclusive with deny_all)
+    deny_all       = optional(bool, false)      # Deny all values (mutually exclusive with allow_all)
+    allowed_values = optional(list(string), []) # Specific values to allow (ignored when allow_all = true)
+    denied_values  = optional(list(string), []) # Specific values to deny (ignored when deny_all = true)
   }))
   default = []
 
