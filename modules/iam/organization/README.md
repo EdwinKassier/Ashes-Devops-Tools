@@ -101,7 +101,6 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	customer_id = 
 	domain = 
 	project_id = 
 	
@@ -140,11 +139,9 @@ The following resources are created:
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_customer_id"></a> [customer\_id](#input\_customer\_id) | The customer ID of the Google Cloud organization (e.g., 'C0abc123') | `string` | n/a | yes |
 | <a name="input_domain"></a> [domain](#input\_domain) | The domain name of the organization (e.g., 'example.com') | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID to enable services in | `string` | n/a | yes |
 | <a name="input_billing_admin_members"></a> [billing\_admin\_members](#input\_billing\_admin\_members) | List of members to have billing admin role (format: user:email, group:email, serviceAccount:email, or domain:domain) | `list(string)` | `[]` | no |
-| <a name="input_group_defaults"></a> [group\_defaults](#input\_group\_defaults) | Deprecated. Group membership is no longer managed by this module. | `map(list(string))` | `{}` | no |
 | <a name="input_org_admin_members"></a> [org\_admin\_members](#input\_org\_admin\_members) | List of members to have organization admin role (format: user:email, group:email, serviceAccount:email, or domain:domain) | `list(string)` | `[]` | no |
 | <a name="input_organizational_units"></a> [organizational\_units](#input\_organizational\_units) | Map of organizational units to create | <pre>map(object({<br/>    display_name            = string<br/>    description             = optional(string, "")<br/>    iam_group_role_bindings = optional(map(set(string)), {})<br/>  }))</pre> | `{}` | no |
 

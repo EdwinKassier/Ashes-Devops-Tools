@@ -40,8 +40,3 @@ module "org_firewall" {
   # Attach the policy to all child folders and projects under the org.
   associations = [local.org_id]
 }
-
-output "policy_id" {
-  description = "Resource ID of the hierarchical firewall policy"
-  value       = module.org_firewall.id
-}

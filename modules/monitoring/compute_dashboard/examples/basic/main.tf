@@ -17,8 +17,3 @@ module "compute_dashboard" {
   # Set to false if the project uses only Cloud Run (Gen2) functions.
   include_gen1_functions = false
 }
-
-output "dashboard_url" {
-  description = "GCP Console URL to open the created dashboard"
-  value       = module.compute_dashboard.dashboard_console_url
-}

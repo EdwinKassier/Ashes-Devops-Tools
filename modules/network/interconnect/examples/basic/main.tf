@@ -25,9 +25,3 @@ module "partner_interconnect" {
   router_name = "interconnect-router"
   router_asn  = 64514
 }
-
-output "pairing_key" {
-  description = "Share this key with your service provider to activate the interconnect"
-  value       = module.partner_interconnect.attachment
-  sensitive   = true
-}

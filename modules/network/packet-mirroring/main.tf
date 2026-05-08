@@ -12,6 +12,11 @@
 # -----------------------------------------------------------------------------
 
 resource "google_compute_packet_mirroring" "mirroring" {
+  # GCP packet mirroring has no native "enabled" flag — the policy is active when
+  # it exists. Setting enable = false destroys the policy (zero-downtime traffic
+  # analysis pause without removing the surrounding ILB infrastructure).
+  count = var.enable ? 1 : 0
+
   project     = var.project_id
   name        = var.name
   region      = var.region

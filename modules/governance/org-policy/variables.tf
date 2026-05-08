@@ -60,16 +60,6 @@ variable "list_policies" {
   # - compute.trustedImageProjects    : Restrict allowed VM image projects
 }
 
-# -----------------------------------------------------------------------------
-# Optional: Resource Labels
-# -----------------------------------------------------------------------------
-
-variable "tags" {
-  description = "Tags to apply for tracking and organization"
-  type        = map(string)
-  default     = {}
-}
-
 variable "custom_constraints" {
   description = "List of custom organization policy constraints to create"
   type = list(object({

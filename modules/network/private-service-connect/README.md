@@ -85,10 +85,10 @@ The following resources are created:
 
 
 - resource.google_compute_global_address.psc_address (modules/network/private-service-connect/main.tf#L23)
-- resource.google_compute_global_forwarding_rule.psc_forwarding_rule (modules/network/private-service-connect/main.tf#L36)
-- resource.google_dns_managed_zone.psc_dns (modules/network/private-service-connect/main.tf#L50)
-- resource.google_dns_record_set.psc_googleapis (modules/network/private-service-connect/main.tf#L68)
-- resource.google_dns_record_set.psc_googleapis_base (modules/network/private-service-connect/main.tf#L80)
+- resource.google_compute_global_forwarding_rule.psc_forwarding_rule (modules/network/private-service-connect/main.tf#L37)
+- resource.google_dns_managed_zone.psc_dns (modules/network/private-service-connect/main.tf#L52)
+- resource.google_dns_record_set.psc_googleapis (modules/network/private-service-connect/main.tf#L70)
+- resource.google_dns_record_set.psc_googleapis_base (modules/network/private-service-connect/main.tf#L82)
 
 
 ## Inputs
@@ -104,8 +104,6 @@ The following resources are created:
 | <a name="input_description"></a> [description](#input\_description) | Description of the PSC endpoint | `string` | `"Private Service Connect endpoint managed by Terraform"` | no |
 | <a name="input_dns_zone_name"></a> [dns\_zone\_name](#input\_dns\_zone\_name) | Name of the private DNS zone for PSC | `string` | `"psc-googleapis"` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to the PSC resources | `map(string)` | `{}` | no |
-| <a name="input_region"></a> [region](#input\_region) | Region for the PSC endpoint (required for regional endpoints) | `string` | `null` | no |
-| <a name="input_subnetwork"></a> [subnetwork](#input\_subnetwork) | The self-link of the subnetwork for the PSC endpoint (optional) | `string` | `null` | no |
 | <a name="input_target"></a> [target](#input\_target) | The target service to connect to. Must be 'all-apis' or 'vpc-sc'. | `string` | `"all-apis"` | no |
 
 ## Outputs

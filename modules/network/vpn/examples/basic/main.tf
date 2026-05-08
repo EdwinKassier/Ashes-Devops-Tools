@@ -37,8 +37,3 @@ module "on_prem_vpn" {
   peer_ip_addresses  = local.peer_ips
   local_ip_addresses = ["169.254.0.1", "169.254.1.1"]
 }
-
-output "vpn_gateway_ip_addresses" {
-  description = "GCP HA VPN gateway public IP addresses — configure these on the on-premises device"
-  value       = module.on_prem_vpn.gateway_ip_addresses
-}

@@ -9,9 +9,8 @@ locals {
 module "org_iam" {
   source = "../../"
 
-  domain      = "example.com"
-  project_id  = local.project_id
-  customer_id = "C0abc1234"
+  domain     = "example.com"
+  project_id = local.project_id
 
   org_admin_members = [
     "group:gcp-organization-admins@example.com",
@@ -21,9 +20,4 @@ module "org_iam" {
     "group:gcp-billing-admins@example.com",
     "user:finance-lead@example.com",
   ]
-}
-
-output "organization_id" {
-  description = "The numeric GCP organization ID"
-  value       = module.org_iam.organization_id
 }

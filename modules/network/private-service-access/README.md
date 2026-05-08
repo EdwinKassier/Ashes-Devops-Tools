@@ -83,7 +83,7 @@ The following resources are created:
 
 
 - resource.google_compute_global_address.private_ip_alloc (modules/network/private-service-access/main.tf#L11)
-- resource.google_service_networking_connection.private_service_access (modules/network/private-service-access/main.tf#L24)
+- resource.google_service_networking_connection.private_service_access (modules/network/private-service-access/main.tf#L25)
 
 
 ## Inputs

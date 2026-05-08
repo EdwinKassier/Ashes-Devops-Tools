@@ -25,6 +25,7 @@ resource "google_compute_global_address" "psc_address" {
 
   project      = var.project_id
   name         = local.address_name
+  description  = var.description
   address_type = "INTERNAL"
   purpose      = "PRIVATE_SERVICE_CONNECT"
   network      = var.network
@@ -38,6 +39,7 @@ resource "google_compute_global_forwarding_rule" "psc_forwarding_rule" {
 
   project               = var.project_id
   name                  = var.name
+  description           = var.description
   target                = local.google_targets[var.target]
   network               = var.network
   ip_address            = google_compute_global_address.psc_address[0].id

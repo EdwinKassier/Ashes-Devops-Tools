@@ -15,8 +15,3 @@ module "psa" {
   address       = "10.200.0.0"
   prefix_length = 16
 }
-
-output "peering_name" {
-  description = "VPC peering connection name for the PSA range — required for some service configurations"
-  value       = module.psa.peering
-}

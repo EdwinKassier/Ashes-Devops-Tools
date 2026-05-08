@@ -19,8 +19,3 @@ module "private_subnet" {
   # private_ip_google_access = true (default) — VMs can reach Google APIs without external IPs.
   # enable_flow_logs = true (default) — captures traffic metadata for security auditing.
 }
-
-output "subnet_self_link" {
-  description = "Self-link of the created subnet — use this to reference the subnet in other modules"
-  value       = module.private_subnet.self_link
-}

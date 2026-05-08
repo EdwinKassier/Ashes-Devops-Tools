@@ -131,6 +131,25 @@ resource "google_compute_security_policy_rule" "owasp_rules" {
   }
 }
 
+# Log4Shell (CVE-2021-44228) Protection
+# Cloud Armor ships a dedicated canary rule for Log4j JNDI injection payloads.
+# Enabled by default because Log4Shell attacks remain active years after initial disclosure.
+resource "google_compute_security_policy_rule" "log4j_protection" {
+  count = var.enable_log4j_protection ? 1 : 0
+
+  project         = var.project_id
+  security_policy = google_compute_security_policy.policy.name
+  action          = "deny(403)"
+  priority        = 999 # Higher priority than OWASP rules (lower number = evaluated first)
+  description     = "Block Log4Shell (CVE-2021-44228) JNDI injection payloads"
+
+  match {
+    expr {
+      expression = "evaluatePreconfiguredWaf('log4j-v33-stable', {'sensitivity': 1})"
+    }
+  }
+}
+
 # Additional Preconfigured WAF Rules
 resource "google_compute_security_policy_rule" "preconfigured_waf_rules" {
   for_each = { for r in var.preconfigured_waf_rules : r.rule_id => r }

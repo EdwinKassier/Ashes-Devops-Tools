@@ -57,7 +57,3 @@ module "vpc_sc" {
   enable_dry_run = true
 }
 
-output "perimeter_name" {
-  description = "VPC-SC perimeter resource name"
-  value       = module.vpc_sc.name
-}

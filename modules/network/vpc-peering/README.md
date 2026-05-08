@@ -118,6 +118,7 @@ The following resources are created:
 | Name | Description |
 |------|-------------|
 | <a name="output_id"></a> [id](#output\_id) | The ID of the peering connection |
+| <a name="output_peer_project_id"></a> [peer\_project\_id](#output\_peer\_project\_id) | The project ID of the peer network (defaults to var.project\_id when peer\_project\_id is not set) |
 | <a name="output_peering"></a> [peering](#output\_peering) | The primary peering connection resource |
 | <a name="output_peering_name"></a> [peering\_name](#output\_peering\_name) | The name of the primary peering connection |
 | <a name="output_peering_state"></a> [peering\_state](#output\_peering\_state) | State of the primary peering (ACTIVE, INACTIVE) |

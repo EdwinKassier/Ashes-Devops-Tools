@@ -2,9 +2,8 @@
 module "organization" {
   source = "../../iam/organization"
 
-  domain      = var.domain
-  project_id  = var.admin_project_id
-  customer_id = var.customer_id
+  domain     = var.domain
+  project_id = var.admin_project_id
 
   # Default organization admins
   org_admin_members = distinct(concat(

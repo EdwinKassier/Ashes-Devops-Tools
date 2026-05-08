@@ -21,8 +21,3 @@ module "vpc_peering" {
   # the reverse side with a separate module call from that project.
   create_reverse_peering = true
 }
-
-output "peering_state" {
-  description = "Peering state (ACTIVE once both sides are configured)"
-  value       = module.vpc_peering.peering_state
-}

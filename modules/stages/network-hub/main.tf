@@ -3,6 +3,12 @@ locals {
   # The VPC-SC module requires the "organizations/<id>" prefix form.
   # Accept both inputs and normalize here so callers don't need to manually prefix.
   org_id_normalized = can(regex("^organizations/", var.org_id)) ? var.org_id : "organizations/${var.org_id}"
+
+  # Safe accessor for the "shared" folder in the folders map.
+  # Using try() rather than direct indexing (var.folders["shared"]) avoids a
+  # tflint false-positive evaluation error when linting with no default value for
+  # var.folders, while retaining a clear precondition error if the key is absent at apply time.
+  shared_folder = try(var.folders["shared"], null)
 }
 
 # Hub Network Actuation (The "Pipes")
@@ -30,10 +36,10 @@ module "hub_network" {
   # Hierarchical Firewall Policy (Defense in Depth)
   hierarchical_firewall_policies = {
     "policy-hub-shared" = {
-      parent      = var.folders["shared"].name
+      parent      = try(local.shared_folder.name, "")
       description = "Hub-level Defense in Depth Policy"
       associations = [
-        var.folders["shared"].name
+        try(local.shared_folder.name, "")
       ]
       rules = [
         {

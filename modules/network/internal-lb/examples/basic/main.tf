@@ -25,8 +25,3 @@ module "internal_lb" {
   health_check_type         = "HTTP"
   health_check_request_path = "/healthz"
 }
-
-output "load_balancer_ip" {
-  description = "Internal VIP of the load balancer"
-  value       = module.internal_lb.ip_address
-}

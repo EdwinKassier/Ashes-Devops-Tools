@@ -38,3 +38,8 @@ output "peering_state_details" {
   description = "Details about the peering state"
   value       = google_compute_network_peering.peering.state_details
 }
+
+output "peer_project_id" {
+  description = "The project ID of the peer network (defaults to var.project_id when peer_project_id is not set)"
+  value       = local.peer_project
+}

@@ -46,7 +46,3 @@ module "deny_internet_ingress" {
   target_tags    = ["internal-only"]
   enable_logging = true
 }
-
-output "health_check_rule_id" {
-  value = module.allow_health_checks.firewall_rule_id
-}

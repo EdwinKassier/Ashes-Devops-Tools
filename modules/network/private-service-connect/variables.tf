@@ -19,12 +19,6 @@ variable "network" {
   type        = string
 }
 
-variable "subnetwork" {
-  description = "The self-link of the subnetwork for the PSC endpoint (optional)"
-  type        = string
-  default     = null
-}
-
 variable "target" {
   description = "The target service to connect to. Must be 'all-apis' or 'vpc-sc'."
   type        = string
@@ -44,12 +38,6 @@ variable "address_name" {
 
 variable "address" {
   description = "Specific IP address to reserve (optional, auto-assigned if not specified)"
-  type        = string
-  default     = null
-}
-
-variable "region" {
-  description = "Region for the PSC endpoint (required for regional endpoints)"
   type        = string
   default     = null
 }

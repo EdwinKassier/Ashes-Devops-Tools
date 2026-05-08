@@ -18,8 +18,3 @@ module "nat" {
   # create_router = true (default) creates a new Cloud Router alongside the NAT.
   # Set create_router = false and provide router_name to attach to an existing router.
 }
-
-output "nat_ip_addresses" {
-  description = "The auto-allocated external IP addresses for outbound traffic"
-  value       = module.nat.nat_ips
-}

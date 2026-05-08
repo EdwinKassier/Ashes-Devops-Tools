@@ -36,21 +36,6 @@ variable "billing_admin_members" {
   }
 }
 
-
-
-
-variable "customer_id" {
-  description = "The customer ID of the Google Cloud organization (e.g., 'C0abc123')"
-  type        = string
-
-  validation {
-    condition     = can(regex("^[A-Za-z0-9]+$", var.customer_id))
-    error_message = "Customer ID must be alphanumeric (e.g., 'C0abc123')."
-  }
-}
-
-
-# Organizational Units Configuration
 # Organizational Units Configuration
 variable "organizational_units" {
   description = "Map of organizational units to create"
@@ -62,8 +47,3 @@ variable "organizational_units" {
   default = {}
 }
 
-variable "group_defaults" {
-  description = "Deprecated. Group membership is no longer managed by this module."
-  type        = map(list(string))
-  default     = {}
-}

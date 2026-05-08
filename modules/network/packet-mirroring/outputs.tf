@@ -6,18 +6,18 @@
 
 # Standard interface outputs
 output "id" {
-  description = "The ID of the packet mirroring policy"
-  value       = google_compute_packet_mirroring.mirroring.id
+  description = "The ID of the packet mirroring policy, or null when enable = false"
+  value       = var.enable ? google_compute_packet_mirroring.mirroring[0].id : null
 }
 
 output "name" {
-  description = "The name of the packet mirroring policy"
-  value       = google_compute_packet_mirroring.mirroring.name
+  description = "The name of the packet mirroring policy, or null when enable = false"
+  value       = var.enable ? google_compute_packet_mirroring.mirroring[0].name : null
 }
 
 output "policy" {
-  description = "The full packet mirroring policy resource"
-  value       = google_compute_packet_mirroring.mirroring
+  description = "The full packet mirroring policy resource object, or null when enable = false"
+  value       = var.enable ? google_compute_packet_mirroring.mirroring[0] : null
 }
 
 output "collector_ilb" {
@@ -27,5 +27,5 @@ output "collector_ilb" {
 
 output "region" {
   description = "The region of the packet mirroring policy"
-  value       = google_compute_packet_mirroring.mirroring.region
+  value       = var.region
 }

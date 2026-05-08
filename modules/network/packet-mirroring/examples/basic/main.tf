@@ -26,8 +26,3 @@ module "packet_mirroring" {
 
   filter_ip_protocols = ["tcp", "udp"]
 }
-
-output "policy_id" {
-  description = "Resource ID of the packet mirroring policy"
-  value       = module.packet_mirroring.id
-}

@@ -135,8 +135,8 @@ The following resources are created:
 | Name | Description |
 |------|-------------|
 | <a name="output_collector_ilb"></a> [collector\_ilb](#output\_collector\_ilb) | The collector ILB URL |
-| <a name="output_id"></a> [id](#output\_id) | The ID of the packet mirroring policy |
-| <a name="output_name"></a> [name](#output\_name) | The name of the packet mirroring policy |
-| <a name="output_policy"></a> [policy](#output\_policy) | The full packet mirroring policy resource |
+| <a name="output_id"></a> [id](#output\_id) | The ID of the packet mirroring policy, or null when enable = false |
+| <a name="output_name"></a> [name](#output\_name) | The name of the packet mirroring policy, or null when enable = false |
+| <a name="output_policy"></a> [policy](#output\_policy) | The full packet mirroring policy resource object, or null when enable = false |
 | <a name="output_region"></a> [region](#output\_region) | The region of the packet mirroring policy |
 <!-- END_TF_DOCS -->

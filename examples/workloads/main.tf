@@ -10,16 +10,6 @@ locals {
   private_subnet  = "private-subnet-europe-west1"
 }
 
-variable "project_prefix" {
-  type    = string
-  default = "example"
-}
-
-variable "environment" {
-  type    = string
-  default = "dev"
-}
-
 module "workload_api_service" {
   source = "../../modules/stages/workload"
 
