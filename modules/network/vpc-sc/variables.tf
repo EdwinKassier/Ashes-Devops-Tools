@@ -182,9 +182,31 @@ variable "enable_dry_run" {
     Enable dry run mode for the service perimeter.
     When enabled, VPC-SC violations are logged but not enforced.
     This is recommended for initial rollout to identify potential issues before enforcement.
-    
+
     Set to false once you've verified no unexpected violations occur.
   EOF
   type        = bool
   default     = false
+}
+
+# =============================================================================
+# DELETION PROTECTION
+# =============================================================================
+
+variable "enable_deletion_protection" {
+  description = <<-EOT
+    When true, a sentinel terraform_data resource with prevent_destroy = true is
+    created alongside the perimeter. Terraform will refuse to plan destruction of
+    the perimeter while this sentinel exists. To tear down a protected perimeter:
+
+      1. Set enable_deletion_protection = false and apply (removes the sentinel).
+      2. Run the destroy plan in a second apply.
+
+    IMPORTANT: Terraform's prevent_destroy is a static compile-time literal and
+    cannot be passed as a variable directly on the resource. The sentinel pattern
+    provides equivalent protection while remaining toggle-able without state
+    surgery.
+  EOT
+  type        = bool
+  default     = true
 }

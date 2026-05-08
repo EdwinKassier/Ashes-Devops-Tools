@@ -20,7 +20,26 @@ variable "description" {
 }
 
 variable "default_rule_action" {
-  description = "Default rule action (allow/deny)"
+  description = <<-EOT
+    Action applied to requests that do not match any higher-priority rule.
+    Accepted values: "allow" (default) | "deny".
+
+    ⚠️  SECURITY NOTE — Default is "allow" (allowlist mode):
+    Cloud Armor policies are typically deployed in front of public-facing load
+    balancers that must serve legitimate end-user traffic. In this mode, only
+    explicitly matched patterns (OWASP CRS, Log4Shell, custom IP rules) are
+    blocked; all other traffic is passed through.
+
+    For deny-by-default (denylist / zero-trust perimeter mode) set this to "deny"
+    and enumerate allowed IP ranges via var.custom_rules. Use this posture for
+    internal-only or admin endpoints where the client set is fully known.
+
+    Change decisions:
+    - "allow" → "deny" will immediately block all unmatched traffic. Test with
+      var.enable_adaptive_protection = true first to understand the traffic profile.
+    - "deny" → "allow" relaxes the perimeter; log and review before applying to
+      production environments.
+  EOT
   type        = string
   default     = "allow"
 

@@ -8,6 +8,26 @@
  */
 
 # -----------------------------------------------------------------------------
+# DELETION PROTECTION SENTINEL
+# -----------------------------------------------------------------------------
+# Terraform's prevent_destroy must be a static literal — it cannot reference
+# a variable. A sentinel terraform_data resource carries prevent_destroy = true
+# and is created conditionally on var.enable_deletion_protection. Removing the
+# sentinel (by setting enable_deletion_protection = false and applying) is also
+# blocked, which forces the operator to explicitly acknowledge the intent before
+# a second apply can destroy the perimeter.
+
+resource "terraform_data" "deletion_protection" {
+  count = var.enable_deletion_protection ? 1 : 0
+
+  input = var.perimeter_name
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# -----------------------------------------------------------------------------
 # ACCESS POLICY (if not provided)
 # -----------------------------------------------------------------------------
 

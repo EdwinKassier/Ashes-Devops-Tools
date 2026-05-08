@@ -43,8 +43,8 @@ variable "notification_webhook_urls" {
     Marked sensitive: URLs contain embedded auth tokens and must not appear in
     plan output or be stored unredacted in CI logs.
   EOT
-  type    = map(string)
-  default = {}
+  type        = map(string)
+  default     = {}
 
   validation {
     condition = alltrue([

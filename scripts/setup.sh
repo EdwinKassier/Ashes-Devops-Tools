@@ -48,31 +48,73 @@ check_or_install() {
   elif [[ "$installed" != "$required" ]]; then
     echo "WARNING: $tool $installed is installed but $required is required (matches CI/.tool-versions)."
     echo "         Run 'mise install' or update manually to avoid plan drift."
+    return 1  # version mismatch — caller can reinstall if it has a versioned installer
   else
     echo "$tool $installed OK"
+    return 0
   fi
-  return 0
 }
 
-# Terraform
-if ! check_or_install "terraform" "$REQUIRED_TERRAFORM_VERSION"; then
-  echo "Install Terraform $REQUIRED_TERRAFORM_VERSION from https://developer.hashicorp.com/terraform/downloads"
+# Terraform — must be installed manually (or via mise/tfenv) to guarantee exact version.
+# Package managers resolve to latest, which may differ from CI. Always instruct explicitly.
+terraform_installed=$(installed_version terraform)
+if [[ -z "$terraform_installed" ]]; then
+  echo "Terraform not found. Install $REQUIRED_TERRAFORM_VERSION from https://developer.hashicorp.com/terraform/downloads"
   echo "Tip: use 'mise install terraform' or 'tfenv install $REQUIRED_TERRAFORM_VERSION'"
+elif [[ "$terraform_installed" != "$REQUIRED_TERRAFORM_VERSION" ]]; then
+  echo "WARNING: terraform $terraform_installed is installed but $REQUIRED_TERRAFORM_VERSION is required."
+  echo "         Run 'mise install terraform' or 'tfenv install $REQUIRED_TERRAFORM_VERSION' to align with CI."
+else
+  echo "terraform $terraform_installed OK"
 fi
 
-# TFLint
-if ! check_or_install "tflint" "$REQUIRED_TFLINT_VERSION"; then
+# TFLint — package manager install may resolve to a different minor/patch version.
+# Version mismatch is treated as a warning; only absent installations trigger auto-install.
+tflint_installed=$(installed_version tflint)
+if [[ -z "$tflint_installed" ]]; then
+  echo "Installing tflint (version may differ from $REQUIRED_TFLINT_VERSION; pin with mise for exact match) ..."
   install_package tflint
+elif [[ "$tflint_installed" != "$REQUIRED_TFLINT_VERSION" ]]; then
+  echo "WARNING: tflint $tflint_installed is installed but $REQUIRED_TFLINT_VERSION is required."
+  echo "         Run 'mise install tflint' to align with CI."
+else
+  echo "tflint $tflint_installed OK"
 fi
 
-# TFSec
+# TFSec — download specific binary release from GitHub to guarantee exact version.
+# Package managers (brew, apt) may resolve to a different minor version at install time.
+install_tfsec_versioned() {
+  local version="$1"
+  local os arch install_dir="/usr/local/bin"
+  os=$(uname -s | tr '[:upper:]' '[:lower:]')
+  arch=$(uname -m)
+  [[ "$arch" == "x86_64" ]]              && arch="amd64"
+  [[ "$arch" == "aarch64" ]]             && arch="arm64"
+  local url="https://github.com/aquasecurity/tfsec/releases/download/v${version}/tfsec-${os}-${arch}"
+  echo "Downloading tfsec v${version} from GitHub releases ..."
+  curl -sSL "$url" -o /tmp/tfsec && chmod +x /tmp/tfsec
+  if [[ -w "$install_dir" ]]; then
+    mv /tmp/tfsec "${install_dir}/tfsec"
+  else
+    sudo mv /tmp/tfsec "${install_dir}/tfsec"
+  fi
+  echo "tfsec ${version} installed to ${install_dir}/tfsec"
+}
+
 if ! check_or_install "tfsec" "$REQUIRED_TFSEC_VERSION"; then
-  install_package tfsec
+  install_tfsec_versioned "$REQUIRED_TFSEC_VERSION"
 fi
 
 # terraform-docs
-if ! check_or_install "terraform-docs" "$REQUIRED_TERRAFORM_DOCS_VERSION"; then
+tfdocs_installed=$(installed_version terraform-docs)
+if [[ -z "$tfdocs_installed" ]]; then
+  echo "Installing terraform-docs (version may differ from $REQUIRED_TERRAFORM_DOCS_VERSION; pin with mise for exact match) ..."
   install_package terraform-docs
+elif [[ "$tfdocs_installed" != "$REQUIRED_TERRAFORM_DOCS_VERSION" ]]; then
+  echo "WARNING: terraform-docs $tfdocs_installed is installed but $REQUIRED_TERRAFORM_DOCS_VERSION is required."
+  echo "         Run 'mise install terraform-docs' to align with CI."
+else
+  echo "terraform-docs $tfdocs_installed OK"
 fi
 
 # pre-commit

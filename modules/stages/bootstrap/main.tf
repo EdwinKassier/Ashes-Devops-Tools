@@ -134,10 +134,26 @@ resource "google_organization_iam_member" "terraform_admin_standard_org_roles" {
 }
 
 resource "google_organization_iam_member" "terraform_admin_exception_org_roles" {
-  # checkov:skip=CKV_GCP_45:These org-level roles are intentionally isolated because the bootstrap service account must manage IAM and SCC centrally.
+  # checkov:skip=CKV_GCP_45:Justified — roles are intentionally isolated in a dedicated resource block
+  # with per-role commentary. See rationale below; these are the minimum org-level privileges the
+  # bootstrap SA requires to automate the full landing zone lifecycle.
+  #
+  # roles/securitycenter.admin:
+  #   Manages SCC notification configs, findings, and BigQuery exports created by the
+  #   organization and governance stages. No narrower predefined role exists for this.
+  #
+  # roles/iam.securityAdmin:
+  #   Grants resourcemanager.{projects,folders,organizations}.{get,set}IamPolicy so
+  #   the SA can create and manage IAM bindings across the org hierarchy. A custom role
+  #   scoped to only these permissions would require the SA to already hold
+  #   roles/iam.roleAdmin (which is equally privileged), creating a circular dependency.
+  #   Prefer over roles/resourcemanager.organizationAdmin, which additionally grants
+  #   full org resource management (create/delete folders, move projects, etc.).
+  #   Access is restricted to this single SA by org policy; rotation is automated via
+  #   the key-less WIF flows provisioned by this bootstrap module.
   for_each = toset([
     "roles/securitycenter.admin", # SCC findings and notifications management
-    "roles/iam.securityAdmin",    # IAM policy administration
+    "roles/iam.securityAdmin",    # Minimum IAM-policy management scope — see rationale above
   ])
 
   org_id = var.org_id
