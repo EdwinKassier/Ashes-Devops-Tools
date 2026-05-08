@@ -34,6 +34,9 @@ variable "data_buckets" {
     # Soft-delete retention in seconds. Set to 0 to disable soft-delete (useful in dev/test).
     # Default 604800 = 7 days (GCS default).
     soft_delete_retention_seconds = optional(number, 604800)
+    # Optional hard-delete lifecycle age in days. When set, objects are permanently deleted
+    # after this many days. Leave null for indefinite retention (default).
+    retention_days = optional(number, null)
   }))
   default = {}
 }
@@ -57,4 +60,10 @@ variable "log_retention_days" {
     condition     = var.log_retention_days >= 1
     error_message = "log_retention_days must be at least 1."
   }
+}
+
+variable "labels" {
+  description = "Labels to apply to all storage bucket resources in this module."
+  type        = map(string)
+  default     = {}
 }

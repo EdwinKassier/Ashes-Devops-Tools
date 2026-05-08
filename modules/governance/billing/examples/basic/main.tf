@@ -13,6 +13,7 @@ module "budget" {
   project_id           = local.project_id
   project_name         = "my-workload"
   monthly_budget_limit = 500
+  region               = "europe-west1"
 
   currency_code           = "USD"
   alert_threshold_percent = 0.8

@@ -85,6 +85,20 @@ variable "shared_vpc_subnets" {
 # IAM CONFIGURATION
 # -----------------------------------------------------------------------------
 
+variable "enable_gke_network_user" {
+  description = <<-EOT
+    When true, also grants the GKE robot service account
+    (service-PROJECT_NUMBER@container-engine-robot.iam.gserviceaccount.com)
+    the roles/compute.networkUser role on the shared VPC subnets. Set to true
+    only when this service project will use GKE — the GKE robot SA is created
+    lazily when container.googleapis.com is first activated, so enabling this
+    flag before GKE is enabled creates a dangling IAM binding that Terraform
+    will attempt to reconcile on every apply.
+  EOT
+  type        = bool
+  default     = false
+}
+
 variable "project_admin_group_email" {
   description = "Email of the Google Group to grant admin access"
   type        = string

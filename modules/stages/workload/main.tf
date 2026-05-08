@@ -47,34 +47,55 @@ resource "google_compute_shared_vpc_service_project" "attachment" {
 # IAM BINDINGS (Standardized Access)
 # =============================================================================
 
-# Grant "Service Project Admin" roles to the specified group
-resource "google_project_iam_binding" "project_admins" {
+# Grant "Service Project Admin" roles to the specified group.
+# Uses google_project_iam_member (additive) rather than google_project_iam_binding
+# (authoritative per role) so that bindings managed outside of Terraform are
+# preserved on every apply. Authoritative bindings would silently evict any member
+# not in this Terraform state on every plan+apply cycle.
+resource "google_project_iam_member" "project_admins" {
   for_each = toset(var.project_admin_roles)
 
   project = module.project.project_id
   role    = each.value
-
-  members = [
-    "group:${var.project_admin_group_email}"
-  ]
+  member  = "group:${var.project_admin_group_email}"
 }
 
-# Network User binding on specific subnets in the Host Project
-# This allows the service project to use the subnets without owning them
-resource "google_compute_subnetwork_iam_binding" "network_users" {
-  for_each = var.enable_shared_vpc_attachment ? var.shared_vpc_subnets : {}
+# Network User binding on specific subnets in the Host Project.
+# Uses additive google_compute_subnetwork_iam_member for the same reason as above.
+# The four standard members are:
+#   1. Default compute SA of the service project
+#   2. Admin group (so humans can schedule workloads)
+#   3. Google Cloud Services robot SA (required for managed services)
+#   4. GKE robot SA — only included when var.enable_gke_network_user = true,
+#      since the GKE robot SA is created lazily when container.googleapis.com is
+#      first enabled. Including it unconditionally on projects without GKE creates
+#      a binding referencing a non-existent principal.
+
+locals {
+  # Build a flat map of (subnet_key, member) pairs for the additive bindings.
+  subnet_members = var.enable_shared_vpc_attachment ? merge(
+    # Always-present members
+    { for k, s in var.shared_vpc_subnets : "${k}/default-sa" => { subnet = s, member = "serviceAccount:${module.project.service_account_email}" } },
+    { for k, s in var.shared_vpc_subnets : "${k}/admin-group" => { subnet = s, member = "group:${var.project_admin_group_email}" } },
+    { for k, s in var.shared_vpc_subnets : "${k}/cloud-services" => { subnet = s, member = "serviceAccount:${module.project.project_number}@cloudservices.gserviceaccount.com" } },
+    # GKE robot SA — conditional on enable_gke_network_user flag
+    var.enable_gke_network_user ? {
+      for k, s in var.shared_vpc_subnets : "${k}/gke-robot" => {
+        subnet = s
+        member = "serviceAccount:service-${module.project.project_number}@container-engine-robot.iam.gserviceaccount.com"
+      }
+    } : {}
+  ) : {}
+}
+
+resource "google_compute_subnetwork_iam_member" "network_users" {
+  for_each = local.subnet_members
 
   project    = var.shared_vpc_host_project_id
-  region     = each.value.region
-  subnetwork = each.value.subnet_name
+  region     = each.value.subnet.region
+  subnetwork = each.value.subnet.subnet_name
   role       = "roles/compute.networkUser"
-
-  members = [
-    "serviceAccount:${module.project.service_account_email}",
-    "group:${var.project_admin_group_email}",
-    "serviceAccount:${module.project.project_number}@cloudservices.gserviceaccount.com",
-    "serviceAccount:service-${module.project.project_number}@container-engine-robot.iam.gserviceaccount.com"
-  ]
+  member     = each.value.member
 
   depends_on = [google_compute_shared_vpc_service_project.attachment]
 }

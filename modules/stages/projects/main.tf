@@ -64,12 +64,15 @@ resource "google_project_service" "project_services" {
   disable_on_destroy         = false
 }
 
-# Monitoring for projects (Metrics Scope)
+# Monitoring for projects (Metrics Scope).
+# The google_monitoring_monitored_project resource `name` field must be in the
+# format "locations/global/metricsScopes/<scope_project_id>/projects/<monitored_project_id>".
+# The GCP provider >= 4.x accepts project IDs (not just project numbers) in this path.
 resource "google_monitoring_monitored_project" "projects" {
   for_each = google_project.projects
 
-  metrics_scope = var.admin_project_id
-  name          = each.value.project_id
+  metrics_scope = "locations/global/metricsScopes/${var.admin_project_id}"
+  name          = "locations/global/metricsScopes/${var.admin_project_id}/projects/${each.value.project_id}"
 
   depends_on = [google_project_service.project_services]
 }

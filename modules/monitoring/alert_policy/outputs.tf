@@ -10,8 +10,9 @@ output "email_notification_channel_ids" {
 }
 
 output "webhook_notification_channel_ids" {
-  description = "Map of webhook label to notification channel resource ID."
+  description = "Map of webhook label to notification channel resource ID. Marked sensitive: channel IDs are tied to webhook URLs that embed auth tokens."
   value       = { for label, ch in google_monitoring_notification_channel.webhook : label => ch.id }
+  sensitive   = true
 }
 
 output "all_notification_channel_ids" {

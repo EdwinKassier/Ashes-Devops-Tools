@@ -113,6 +113,28 @@ output "tag_values" {
   value       = module.organization.tag_value_ids
 }
 
+# Tag Keys — needed by envs/apps to bind tags to resources downstream
+output "tag_keys" {
+  description = "Map of tag key short names to their Resource Manager resource IDs"
+  value       = module.organization.tag_keys
+}
+
+# Audit & compliance outputs — consumed by downstream monitoring/SIEM configuration
+output "audit_logs_bucket_name" {
+  description = "Cloud Storage bucket receiving organization-wide audit logs"
+  value       = module.organization.audit_logs_bucket_name
+}
+
+output "billing_export_dataset_id" {
+  description = "BigQuery dataset ID for Cloud Billing export"
+  value       = module.organization.billing_export_dataset_id
+}
+
+output "scc_pubsub_topic_id" {
+  description = "Pub/Sub topic receiving Security Command Center findings"
+  value       = module.organization.scc_pubsub_topic_id
+}
+
 # Network Hub Details (for Peering)
 output "hub_network" {
   description = "Hub Network details for peering"

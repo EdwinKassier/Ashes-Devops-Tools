@@ -152,6 +152,17 @@ module "org_policies" {
       denied_values  = null
       allow_all      = null
       deny_all       = null
+    },
+    # CIS 4.9: Deny all external IPs for VM instances (list constraint — deny_all = true
+    # means no VM may have an external IP assigned unless an org policy override exists).
+    # compute.vmExternalIpAccess is a LIST constraint, not a boolean constraint.
+    # Using it in boolean_policies would silently send an invalid policy spec to the API.
+    {
+      constraint     = "compute.vmExternalIpAccess"
+      allowed_values = []
+      denied_values  = null
+      allow_all      = null
+      deny_all       = true
     }
   ]
 
@@ -183,11 +194,6 @@ module "org_policies" {
     # CIS 1.4: Disable automatic IAM grants for default service accounts
     {
       constraint = "iam.automaticIamGrantsForDefaultServiceAccounts"
-      enforce    = true
-    },
-    # CIS 4.9: Restrict VM external IP access (deny by default)
-    {
-      constraint = "compute.vmExternalIpAccess"
       enforce    = true
     },
     # Security: Disable service account key upload
@@ -272,6 +278,7 @@ module "org_budget" {
   monthly_budget_limit = var.monthly_budget_amount
   currency_code        = var.budget_currency
   kms_key_name         = module.cmek.key_names["billing-alerts"]
+  region               = var.default_region
 
   # Monitor the entire Billing Account by defaulting 'projects' to empty (null)
   # projects = ["projects/${var.admin_project_number}"]
@@ -289,6 +296,11 @@ resource "google_bigquery_dataset" "billing_export" {
 
   default_encryption_configuration {
     kms_key_name = module.cmek.key_names["billing-export"]
+  }
+
+  labels = {
+    purpose    = "billing-export"
+    managed-by = "terraform"
   }
 }
 

@@ -236,7 +236,7 @@ resource "google_monitoring_alert_policy" "uptime" {
       condition_threshold {
         filter = join(" AND ", [
           "metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\"",
-          "resource.type=\"uptime_url\"",
+          "resource.type=\"${var.uptime_check_resource_type}\"",
           "metric.labels.check_id=\"${conditions.value}\"",
         ])
         comparison      = "COMPARISON_LT"

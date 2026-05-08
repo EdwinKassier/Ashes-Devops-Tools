@@ -74,10 +74,10 @@ resource "google_storage_bucket" "audit_logs" {
 
 # Log sink to export audit logs to Cloud Storage
 resource "google_logging_project_sink" "audit_logs_sink" {
-  name        = "audit-logs-sink"
+  name        = var.sink_name
   project     = var.project_id
   destination = "storage.googleapis.com/${google_storage_bucket.audit_logs.name}"
-  filter      = "resource.type=project AND protoPayload.@type=type.googleapis.com/google.cloud.audit.AuditLog"
+  filter      = "logName:\"cloudaudit.googleapis.com\""
 
   unique_writer_identity = true
 }
@@ -89,9 +89,31 @@ resource "google_storage_bucket_iam_member" "log_writer" {
   member = google_logging_project_sink.audit_logs_sink.writer_identity
 }
 
-# Cloud Audit Logs configuration
+# Cloud Audit Logs configuration — applies DATA_READ/DATA_WRITE/ADMIN_READ to the
+# admin project itself. For org-wide enforcement see google_organization_iam_audit_config below.
 resource "google_project_iam_audit_config" "project_audit_logs" {
   project = var.project_id
+  service = "allServices"
+
+  audit_log_config {
+    log_type = "ADMIN_READ"
+  }
+
+  audit_log_config {
+    log_type = "DATA_READ"
+  }
+
+  audit_log_config {
+    log_type = "DATA_WRITE"
+  }
+}
+
+# Org-wide audit config — enforces Data Access logging across every project in
+# the organization, not just the admin project. Without this, workload projects
+# (dev/staging/prod) have no enforced data-access audit trail by default.
+resource "google_organization_iam_audit_config" "org_audit_config" {
+  count   = var.org_id != null ? 1 : 0
+  org_id  = var.org_id
   service = "allServices"
 
   audit_log_config {

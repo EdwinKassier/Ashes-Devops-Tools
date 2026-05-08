@@ -93,18 +93,19 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_bigquery_dataset.audit_logs_analytics (modules/governance/cloud-audit-logs/main.tf#L148)
-- resource.google_bigquery_dataset_iam_member.bq_sink_writer (modules/governance/cloud-audit-logs/main.tf#L196)
-- resource.google_logging_organization_sink.org_audit_bq_sink (modules/governance/cloud-audit-logs/main.tf#L174)
-- resource.google_logging_organization_sink.org_audit_sink (modules/governance/cloud-audit-logs/main.tf#L112)
+- resource.google_bigquery_dataset.audit_logs_analytics (modules/governance/cloud-audit-logs/main.tf#L170)
+- resource.google_bigquery_dataset_iam_member.bq_sink_writer (modules/governance/cloud-audit-logs/main.tf#L218)
+- resource.google_logging_organization_sink.org_audit_bq_sink (modules/governance/cloud-audit-logs/main.tf#L196)
+- resource.google_logging_organization_sink.org_audit_sink (modules/governance/cloud-audit-logs/main.tf#L134)
 - resource.google_logging_project_sink.audit_logs_sink (modules/governance/cloud-audit-logs/main.tf#L76)
-- resource.google_project_iam_audit_config.project_audit_logs (modules/governance/cloud-audit-logs/main.tf#L93)
+- resource.google_organization_iam_audit_config.org_audit_config (modules/governance/cloud-audit-logs/main.tf#L114)
+- resource.google_project_iam_audit_config.project_audit_logs (modules/governance/cloud-audit-logs/main.tf#L94)
 - resource.google_storage_bucket.audit_logs (modules/governance/cloud-audit-logs/main.tf#L39)
 - resource.google_storage_bucket.audit_logs_access (modules/governance/cloud-audit-logs/main.tf#L2)
 - resource.google_storage_bucket_iam_member.audit_logs_access_writer (modules/governance/cloud-audit-logs/main.tf#L32)
 - resource.google_storage_bucket_iam_member.log_writer (modules/governance/cloud-audit-logs/main.tf#L86)
-- resource.google_storage_bucket_iam_member.org_log_bucket_writer (modules/governance/cloud-audit-logs/main.tf#L135)
-- resource.google_storage_bucket_iam_member.org_log_writer (modules/governance/cloud-audit-logs/main.tf#L125)
+- resource.google_storage_bucket_iam_member.org_log_bucket_writer (modules/governance/cloud-audit-logs/main.tf#L157)
+- resource.google_storage_bucket_iam_member.org_log_writer (modules/governance/cloud-audit-logs/main.tf#L147)
 
 
 ## Inputs
@@ -121,6 +122,7 @@ The following resources are created:
 | <a name="input_kms_key_name"></a> [kms\_key\_name](#input\_kms\_key\_name) | The KMS key name to encrypt the audit logs bucket (optional). Format: projects/{project}/locations/{location}/keyRings/{keyring}/cryptoKeys/{key} | `string` | `null` | no |
 | <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | The number of days to retain audit logs in the storage bucket (minimum 1) | `number` | `365` | no |
 | <a name="input_org_id"></a> [org\_id](#input\_org\_id) | Organization ID for org-level log sink (optional). When provided, creates an org-level sink that captures audit logs from all projects. | `string` | `null` | no |
+| <a name="input_sink_name"></a> [sink\_name](#input\_sink\_name) | Name of the project-level log sink. Override when calling the module more than once in the same project. | `string` | `"audit-logs-sink"` | no |
 
 ## Outputs
 

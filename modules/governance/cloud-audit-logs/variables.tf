@@ -3,6 +3,12 @@ variable "project_id" {
   type        = string
 }
 
+variable "sink_name" {
+  description = "Name of the project-level log sink. Override when calling the module more than once in the same project."
+  type        = string
+  default     = "audit-logs-sink"
+}
+
 variable "bucket_location" {
   description = "The location of the bucket that will store audit logs"
   type        = string

@@ -20,8 +20,8 @@ output "service_account_email" {
 }
 
 output "subnet_iam_bindings" {
-  description = "Map of subnet key to IAM binding resource ID for the networkUser bindings granted to this service project"
-  value       = { for k, v in google_compute_subnetwork_iam_binding.network_users : k => v.id }
+  description = "Map of (subnet_key/member_type) to IAM member resource ID for the networkUser bindings granted to this service project"
+  value       = { for k, v in google_compute_subnetwork_iam_member.network_users : k => v.id }
 }
 
 output "host_project_id" {

@@ -67,7 +67,7 @@ resource "google_pubsub_topic" "budget_alerts" {
       purpose    = "billing-alerts"
       managed-by = "terraform"
     },
-    var.tags
+    var.labels
   )
 }
 
@@ -101,34 +101,68 @@ resource "google_pubsub_subscription" "budget_alerts_sub" {
       purpose    = "billing-alerts"
       managed-by = "terraform"
     },
-    var.tags
+    var.labels
   )
 }
 
-# Optional: Cloud Function to send email notifications
-resource "google_cloudfunctions_function" "budget_notifier" {
+# Optional: Cloud Functions gen2 to send email notifications.
+# Cloud Functions gen1 is deprecated and cannot satisfy the
+# cloudfunctions.requireVPCConnector org policy without a VPC connector argument
+# that gen1 exposes only as a direct attribute. Gen2 uses Cloud Run under the hood
+# and accepts vpc_connector via service_config, making it forward-compatible.
+resource "google_cloudfunctions2_function" "budget_notifier" {
   count = var.enable_email_notifications ? 1 : 0
 
-  name        = "${var.project_name}-budget-notifier"
-  project     = var.project_id
-  region      = var.region
-  runtime     = "python312"
-  entry_point = "notify_budget_alert"
+  name     = "${var.project_name}-budget-notifier"
+  project  = var.project_id
+  location = var.region
 
-  available_memory_mb   = 256
-  source_archive_bucket = var.functions_bucket
-  source_archive_object = var.function_source_object
-  timeout               = 60
+  build_config {
+    runtime     = "python312"
+    entry_point = "notify_budget_alert"
 
-  event_trigger {
-    event_type = "google.pubsub.topic.publish"
-    resource   = google_pubsub_topic.budget_alerts.id
+    source {
+      storage_source {
+        bucket = var.functions_bucket
+        object = var.function_source_object
+      }
+    }
   }
 
-  environment_variables = {
-    SENDGRID_API_KEY = var.sendgrid_api_key_secret_id
-    RECIPIENTS       = join(",", var.email_recipients)
-    PROJECT_NAME     = var.project_name
+  service_config {
+    max_instance_count = 5
+    available_memory   = "256M"
+    timeout_seconds    = 60
+
+    # Satisfy cloudfunctions.requireVPCConnector org policy.
+    # Pass a VPC connector resource ID when deploying in an org that enforces this policy.
+    vpc_connector                 = var.vpc_connector
+    vpc_connector_egress_settings = var.vpc_connector != null ? "PRIVATE_RANGES_ONLY" : null
+
+    environment_variables = {
+      RECIPIENTS   = join(",", var.email_recipients)
+      PROJECT_NAME = var.project_name
+    }
+
+    # SENDGRID_API_KEY is sourced from Secret Manager at runtime — never stored as
+    # a plaintext environment variable. The gen1 pattern of injecting via
+    # environment_variables exposed the key in GCP console and terraform state.
+    dynamic "secret_environment_variables" {
+      for_each = var.sendgrid_api_key_secret_id != "" ? [1] : []
+      content {
+        key        = "SENDGRID_API_KEY"
+        project_id = var.project_id
+        secret     = var.sendgrid_api_key_secret_id
+        version    = "latest"
+      }
+    }
+  }
+
+  event_trigger {
+    trigger_region = var.region
+    event_type     = "google.cloud.pubsub.topic.v1.messagePublished"
+    pubsub_topic   = google_pubsub_topic.budget_alerts.id
+    retry_policy   = "RETRY_POLICY_RETRY"
   }
 
   labels = merge(
@@ -136,17 +170,18 @@ resource "google_cloudfunctions_function" "budget_notifier" {
       purpose    = "billing-notifications"
       managed-by = "terraform"
     },
-    var.tags
+    var.labels
   )
 }
 
-# IAM binding for Pub/Sub to invoke Cloud Function
-resource "google_cloudfunctions_function_iam_member" "invoker" {
+# IAM binding: allow the Pub/Sub service account to invoke the Cloud Run service
+# backing the gen2 function (uses roles/run.invoker, not cloudfunctions.invoker).
+resource "google_cloud_run_service_iam_member" "budget_notifier_invoker" {
   count = var.enable_email_notifications ? 1 : 0
 
-  project        = var.project_id
-  region         = var.region
-  cloud_function = google_cloudfunctions_function.budget_notifier[0].name
-  role           = "roles/cloudfunctions.invoker"
-  member         = "serviceAccount:${var.pubsub_service_account}"
+  project  = var.project_id
+  location = var.region
+  service  = google_cloudfunctions2_function.budget_notifier[0].name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${var.pubsub_service_account}"
 }

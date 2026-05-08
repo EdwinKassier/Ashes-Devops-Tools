@@ -7,6 +7,7 @@ resource "google_storage_bucket" "access_logs" {
   force_destroy               = false
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
+  labels                      = var.labels
   versioning {
     enabled = true
   }
@@ -37,6 +38,7 @@ resource "google_storage_bucket" "logs" {
   force_destroy               = false
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
+  labels                      = var.labels
   versioning {
     enabled = true
   }
@@ -74,6 +76,7 @@ resource "google_storage_bucket" "data" {
   force_destroy               = each.value.force_destroy
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
+  labels                      = var.labels
   versioning {
     enabled = true
   }
@@ -83,6 +86,27 @@ resource "google_storage_bucket" "data" {
   encryption {
     default_kms_key_name = var.kms_key_name
   }
+
+  # H-1: Apply soft-delete retention from per-bucket config.
+  # Set soft_delete_retention_seconds = 0 to disable soft-delete (useful in dev/test).
+  soft_delete_policy {
+    retention_duration_seconds = each.value.soft_delete_retention_seconds
+  }
+
+  # M-7: Optional data retention lifecycle expiry.
+  # When retention_days is set, objects are automatically deleted after that many days.
+  dynamic "lifecycle_rule" {
+    for_each = each.value.retention_days != null ? [1] : []
+    content {
+      condition {
+        age = each.value.retention_days
+      }
+      action {
+        type = "Delete"
+      }
+    }
+  }
+
   depends_on = [google_storage_bucket_iam_member.log_writer]
 }
 

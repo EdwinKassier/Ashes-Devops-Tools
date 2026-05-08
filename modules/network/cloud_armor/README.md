@@ -91,9 +91,9 @@ The following resources are created:
 
 
 - resource.google_compute_security_policy.policy (modules/network/cloud_armor/main.tf#L1)
-- resource.google_compute_security_policy_rule.log4j_protection (modules/network/cloud_armor/main.tf#L137)
-- resource.google_compute_security_policy_rule.owasp_rules (modules/network/cloud_armor/main.tf#L118)
-- resource.google_compute_security_policy_rule.preconfigured_waf_rules (modules/network/cloud_armor/main.tf#L154)
+- resource.google_compute_security_policy_rule.log4j_protection (modules/network/cloud_armor/main.tf#L125)
+- resource.google_compute_security_policy_rule.owasp_rules (modules/network/cloud_armor/main.tf#L106)
+- resource.google_compute_security_policy_rule.preconfigured_waf_rules (modules/network/cloud_armor/main.tf#L142)
 
 
 ## Inputs

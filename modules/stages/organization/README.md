@@ -107,10 +107,10 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_bigquery_dataset.billing_export (modules/stages/organization/main.tf#L282)
-- resource.google_bigquery_dataset_iam_member.billing_export_writer (modules/stages/organization/main.tf#L300)
-- resource.google_essential_contacts_contact.billing (modules/stages/organization/main.tf#L255)
-- resource.google_essential_contacts_contact.security (modules/stages/organization/main.tf#L246)
+- resource.google_bigquery_dataset.billing_export (modules/stages/organization/main.tf#L289)
+- resource.google_bigquery_dataset_iam_member.billing_export_writer (modules/stages/organization/main.tf#L312)
+- resource.google_essential_contacts_contact.billing (modules/stages/organization/main.tf#L261)
+- resource.google_essential_contacts_contact.security (modules/stages/organization/main.tf#L252)
 - resource.google_folder_iam_member.terraform_admin_folder_roles (modules/stages/organization/main.tf#L26)
 - resource.google_tags_tag_binding.environment (modules/stages/organization/tags_binding.tf#L1)
 
@@ -145,9 +145,12 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
+| <a name="output_audit_logs_bucket_name"></a> [audit\_logs\_bucket\_name](#output\_audit\_logs\_bucket\_name) | Name of the Cloud Storage bucket receiving audit logs |
+| <a name="output_billing_export_dataset_id"></a> [billing\_export\_dataset\_id](#output\_billing\_export\_dataset\_id) | BigQuery dataset ID for Cloud Billing export data |
+| <a name="output_cmek_key_names"></a> [cmek\_key\_names](#output\_cmek\_key\_names) | Map of KMS key short names to fully qualified key resource IDs created by the CMEK module |
 | <a name="output_folders"></a> [folders](#output\_folders) | Map of created folders |
 | <a name="output_organization_id"></a> [organization\_id](#output\_organization\_id) | Organization ID |
+| <a name="output_scc_pubsub_topic_id"></a> [scc\_pubsub\_topic\_id](#output\_scc\_pubsub\_topic\_id) | Pub/Sub topic ID receiving Security Command Center findings notifications |
 | <a name="output_tag_keys"></a> [tag\_keys](#output\_tag\_keys) | Tag keys available to downstream consumers |
 | <a name="output_tag_value_ids"></a> [tag\_value\_ids](#output\_tag\_value\_ids) | Tag values available to downstream consumers |
-| <a name="output_tags"></a> [tags](#output\_tags) | Deprecated alias for downstream tag values |
 <!-- END_TF_DOCS -->

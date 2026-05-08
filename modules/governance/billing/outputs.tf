@@ -29,13 +29,13 @@ output "pubsub_subscription_name" {
 }
 
 output "budget_notifier_function_name" {
-  description = "The name of the Cloud Function for budget notifications"
-  value       = var.enable_email_notifications ? google_cloudfunctions_function.budget_notifier[0].name : null
+  description = "The name of the Cloud Functions gen2 budget notifier (null when disabled)"
+  value       = var.enable_email_notifications ? google_cloudfunctions2_function.budget_notifier[0].name : null
 }
 
-output "budget_notifier_function_url" {
-  description = "The URL of the Cloud Function for budget notifications"
-  value       = var.enable_email_notifications ? google_cloudfunctions_function.budget_notifier[0].https_trigger_url : null
+output "budget_notifier_function_uri" {
+  description = "The HTTPS URI of the Cloud Run service backing the gen2 budget notifier (null when disabled)"
+  value       = var.enable_email_notifications ? google_cloudfunctions2_function.budget_notifier[0].service_config[0].uri : null
 }
 
 output "budget_amount" {

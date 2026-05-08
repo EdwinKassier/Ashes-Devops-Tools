@@ -18,7 +18,22 @@ output "tag_value_ids" {
   value       = module.tags.tag_values
 }
 
-output "tags" {
-  description = "Deprecated alias for downstream tag values"
-  value       = module.tags.tag_values
+output "audit_logs_bucket_name" {
+  description = "Name of the Cloud Storage bucket receiving audit logs"
+  value       = module.audit_logs.storage_bucket_name
+}
+
+output "billing_export_dataset_id" {
+  description = "BigQuery dataset ID for Cloud Billing export data"
+  value       = google_bigquery_dataset.billing_export.dataset_id
+}
+
+output "scc_pubsub_topic_id" {
+  description = "Pub/Sub topic ID receiving Security Command Center findings notifications"
+  value       = module.scc_notifications.topic_id
+}
+
+output "cmek_key_names" {
+  description = "Map of KMS key short names to fully qualified key resource IDs created by the CMEK module"
+  value       = module.cmek.key_names
 }

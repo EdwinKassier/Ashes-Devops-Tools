@@ -25,9 +25,8 @@ variable "projects" {
 }
 
 variable "region" {
-  description = "The region where Cloud Function will be deployed"
+  description = "The region where the Cloud Function will be deployed. Must be compatible with any gcp.resourceLocations org policy in effect."
   type        = string
-  default     = "us-central1"
 }
 
 variable "kms_key_name" {
@@ -164,8 +163,24 @@ variable "pubsub_service_account" {
   }
 }
 
-variable "tags" {
-  description = "Tags to apply to all resources"
+variable "labels" {
+  description = "Labels to apply to all resources. Replaces the deprecated 'tags' variable for consistency with all other modules in this codebase."
   type        = map(string)
   default     = {}
+}
+
+variable "vpc_connector" {
+  description = <<-EOT
+    Fully qualified VPC connector resource ID used by the Cloud Functions gen2 budget
+    notifier. Required when the cloudfunctions.requireVPCConnector org policy is enforced.
+    Format: projects/<project>/locations/<region>/connectors/<connector_name>
+    Leave null to omit the connector (only valid in orgs without the policy).
+  EOT
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.vpc_connector == null || can(regex("^projects/.+/locations/.+/connectors/.+$", var.vpc_connector))
+    error_message = "vpc_connector must be in the format: projects/<project>/locations/<region>/connectors/<name>"
+  }
 }

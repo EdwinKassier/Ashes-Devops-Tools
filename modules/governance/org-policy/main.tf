@@ -50,7 +50,10 @@ resource "google_org_policy_policy" "list_policies" {
 resource "google_org_policy_custom_constraint" "custom_constraints" {
   for_each = { for c in var.custom_constraints : c.name => c }
 
-  name           = "${var.parent}/customConstraints/${each.value.name}"
+  # The `name` field accepts only the short constraint name (e.g. "custom.disableGkeAutoUpgrade").
+  # The parent field supplies the org path prefix. Combining them would produce a double-path
+  # that the GCP API rejects.
+  name           = each.value.name
   parent         = var.parent
   display_name   = each.value.display_name
   description    = each.value.description

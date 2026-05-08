@@ -37,13 +37,21 @@ variable "keys" {
   default = {}
 
   validation {
+    # First guard: format must be "<N>s" where N is a positive integer.
+    # This rejects "90d", "P90D", "7776000" (no suffix), etc. before numeric parsing.
     condition = alltrue([
       for key in values(var.keys) :
-      try(
-        tonumber(replace(coalesce(try(key.rotation_period, null), "7776000s"), "s", "")) >= 86400 &&
-        tonumber(replace(coalesce(try(key.rotation_period, null), "7776000s"), "s", "")) <= 7776000,
-        false
-      )
+      can(regex("^[0-9]+s$", coalesce(try(key.rotation_period, null), "7776000s")))
+    ])
+    error_message = "Every KMS key rotation_period must be in the format '<N>s' (e.g. '7776000s' for 90 days). ISO 8601 durations and day/hour suffixes are not accepted."
+  }
+
+  validation {
+    # Second guard: numeric range check (safe to do after format is guaranteed above).
+    condition = alltrue([
+      for key in values(var.keys) :
+      tonumber(trimsuffix(coalesce(try(key.rotation_period, null), "7776000s"), "s")) >= 86400 &&
+      tonumber(trimsuffix(coalesce(try(key.rotation_period, null), "7776000s"), "s")) <= 7776000
     ])
     error_message = "Every KMS key rotation_period must be between 86400s (1 day) and 7776000s (90 days)."
   }

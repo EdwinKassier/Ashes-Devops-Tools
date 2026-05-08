@@ -116,7 +116,7 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_monitoring_monitored_project.projects (modules/stages/projects/main.tf#L68)
+- resource.google_monitoring_monitored_project.projects (modules/stages/projects/main.tf#L71)
 - resource.google_project.projects (modules/stages/projects/main.tf#L12)
 - resource.google_project_service.project_services (modules/stages/projects/main.tf#L55)
 

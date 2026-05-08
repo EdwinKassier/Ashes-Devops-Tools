@@ -40,9 +40,11 @@ variable "notification_webhook_urls" {
     Map of label → HTTPS webhook URL for alert notifications.
     Supports Slack incoming webhooks, PagerDuty, and any generic HTTP endpoint.
     Example: { "slack-ops" = "https://hooks.slack.com/services/T.../B.../xxx" }
+    Marked sensitive: URLs contain embedded auth tokens and must not appear in
+    plan output or be stored unredacted in CI logs.
   EOT
-  type        = map(string)
-  default     = {}
+  type    = map(string)
+  default = {}
 
   validation {
     condition = alltrue([
@@ -171,6 +173,22 @@ variable "uptime_check_ids" {
   description = "List of existing uptime check IDs (format: 'projects/<project>/uptimeCheckConfigs/<id>') to create uptime failure alerts for. Required when enable_uptime_alert = true."
   type        = list(string)
   default     = []
+}
+
+variable "uptime_check_resource_type" {
+  description = <<-EOT
+    Monitored resource type used in the uptime check alert filter.
+    Use "uptime_url" for HTTP/HTTPS uptime checks (default).
+    Use "uptime_tcp" for TCP uptime checks.
+    See: https://cloud.google.com/monitoring/api/resources
+  EOT
+  type        = string
+  default     = "uptime_url"
+
+  validation {
+    condition     = contains(["uptime_url", "uptime_tcp"], var.uptime_check_resource_type)
+    error_message = "uptime_check_resource_type must be \"uptime_url\" (HTTP/HTTPS) or \"uptime_tcp\" (TCP)."
+  }
 }
 
 # ── Log-Based Alert ───────────────────────────────────────────────────────────

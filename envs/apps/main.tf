@@ -68,9 +68,8 @@ locals {
       ]
     }
   ]
-}
 
-locals {
+  # Effective VPC-SC policies: caller-supplied values override the defaults above.
   effective_vpc_sc_ingress_policies = length(var.vpc_sc_ingress_policies) > 0 ? var.vpc_sc_ingress_policies : tolist(local.default_vpc_sc_ingress_policies)
   effective_vpc_sc_egress_policies  = length(var.vpc_sc_egress_policies) > 0 ? var.vpc_sc_egress_policies : tolist(local.default_vpc_sc_egress_policies)
 }
@@ -155,6 +154,7 @@ module "budget" {
   project_name         = "${var.project_prefix}-${var.environment}"
   monthly_budget_limit = var.monthly_budget_limit
   currency_code        = var.budget_currency
+  region               = local.env_config.region
 
   projects = [
     "projects/${data.google_project.host_project.number}"
@@ -164,5 +164,5 @@ module "budget" {
     environment = var.environment
   }
 
-  tags = local.labels
+  labels = local.labels
 }

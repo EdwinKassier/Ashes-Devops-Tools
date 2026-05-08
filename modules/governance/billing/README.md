@@ -70,6 +70,7 @@ module "example" {
 	monthly_budget_limit = 
 	project_id = 
 	project_name = 
+	region = 
 	
 }
 ```
@@ -95,8 +96,8 @@ The following resources are created:
 
 
 - resource.google_billing_budget.monthly_budget (modules/governance/billing/main.tf#L5)
-- resource.google_cloudfunctions_function.budget_notifier (modules/governance/billing/main.tf#L109)
-- resource.google_cloudfunctions_function_iam_member.invoker (modules/governance/billing/main.tf#L144)
+- resource.google_cloud_run_service_iam_member.budget_notifier_invoker (modules/governance/billing/main.tf#L179)
+- resource.google_cloudfunctions2_function.budget_notifier (modules/governance/billing/main.tf#L113)
 - resource.google_pubsub_subscription.budget_alerts_sub (modules/governance/billing/main.tf#L75)
 - resource.google_pubsub_topic.budget_alerts (modules/governance/billing/main.tf#L60)
 
@@ -109,6 +110,7 @@ The following resources are created:
 | <a name="input_monthly_budget_limit"></a> [monthly\_budget\_limit](#input\_monthly\_budget\_limit) | The monthly budget limit in the specified currency | `number` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The GCP project ID where resources will be created | `string` | n/a | yes |
 | <a name="input_project_name"></a> [project\_name](#input\_project\_name) | The name prefix for resources | `string` | n/a | yes |
+| <a name="input_region"></a> [region](#input\_region) | The region where the Cloud Function will be deployed. Must be compatible with any gcp.resourceLocations org policy in effect. | `string` | n/a | yes |
 | <a name="input_alert_threshold_percent"></a> [alert\_threshold\_percent](#input\_alert\_threshold\_percent) | The percentage threshold for the first alert (0.5 = 50%) | `number` | `0.5` | no |
 | <a name="input_currency_code"></a> [currency\_code](#input\_currency\_code) | The currency code for the budget (e.g., USD, EUR, GBP) | `string` | `"USD"` | no |
 | <a name="input_email_recipients"></a> [email\_recipients](#input\_email\_recipients) | List of email addresses to receive budget alerts | `list(string)` | `[]` | no |
@@ -117,13 +119,13 @@ The following resources are created:
 | <a name="input_functions_bucket"></a> [functions\_bucket](#input\_functions\_bucket) | Cloud Storage bucket containing the Cloud Function source code | `string` | `""` | no |
 | <a name="input_kms_key_name"></a> [kms\_key\_name](#input\_kms\_key\_name) | Optional customer-managed KMS key used to encrypt the budget alert Pub/Sub topic | `string` | `null` | no |
 | <a name="input_label_filters"></a> [label\_filters](#input\_label\_filters) | Map of label keys to values for filtering budget scope (single value per key) | `map(string)` | `{}` | no |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to all resources. Replaces the deprecated 'tags' variable for consistency with all other modules in this codebase. | `map(string)` | `{}` | no |
 | <a name="input_notification_channels"></a> [notification\_channels](#input\_notification\_channels) | List of monitoring notification channel IDs | `list(string)` | `[]` | no |
 | <a name="input_projects"></a> [projects](#input\_projects) | List of project IDs to monitor in the budget | `list(string)` | `[]` | no |
 | <a name="input_pubsub_service_account"></a> [pubsub\_service\_account](#input\_pubsub\_service\_account) | The Pub/Sub service account that invokes the Cloud Function for budget notifications.<br/>Format: service-PROJECT\_NUMBER@gcp-sa-pubsub.iam.gserviceaccount.com<br/>Replace PROJECT\_NUMBER with the numeric project number of the billing notification project.<br/>Required when enable\_email\_notifications = true.<br/>Obtain: gcloud projects describe PROJECT\_ID --format='value(projectNumber)' | `string` | `null` | no |
-| <a name="input_region"></a> [region](#input\_region) | The region where Cloud Function will be deployed | `string` | `"us-central1"` | no |
 | <a name="input_sendgrid_api_key_secret_id"></a> [sendgrid\_api\_key\_secret\_id](#input\_sendgrid\_api\_key\_secret\_id) | Secret Manager secret ID for SendGrid API key (recommended to use Secret Manager) | `string` | `""` | no |
 | <a name="input_service_filters"></a> [service\_filters](#input\_service\_filters) | List of GCP service IDs to include in budget (empty = all services) | `list(string)` | `[]` | no |
-| <a name="input_tags"></a> [tags](#input\_tags) | Tags to apply to all resources | `map(string)` | `{}` | no |
+| <a name="input_vpc_connector"></a> [vpc\_connector](#input\_vpc\_connector) | Fully qualified VPC connector resource ID used by the Cloud Functions gen2 budget<br/>notifier. Required when the cloudfunctions.requireVPCConnector org policy is enforced.<br/>Format: projects/<project>/locations/<region>/connectors/<connector\_name><br/>Leave null to omit the connector (only valid in orgs without the policy). | `string` | `null` | no |
 | <a name="input_webhook_endpoint"></a> [webhook\_endpoint](#input\_webhook\_endpoint) | Optional webhook endpoint URL to receive budget alerts (must start with https://) | `string` | `""` | no |
 | <a name="input_webhook_service_account"></a> [webhook\_service\_account](#input\_webhook\_service\_account) | Service account email for authenticating webhook requests (format: name@project.iam.gserviceaccount.com) | `string` | `""` | no |
 
@@ -135,8 +137,8 @@ The following resources are created:
 | <a name="output_budget_amount"></a> [budget\_amount](#output\_budget\_amount) | The configured budget amount |
 | <a name="output_budget_id"></a> [budget\_id](#output\_budget\_id) | The ID of the budget |
 | <a name="output_budget_name"></a> [budget\_name](#output\_budget\_name) | The display name of the budget |
-| <a name="output_budget_notifier_function_name"></a> [budget\_notifier\_function\_name](#output\_budget\_notifier\_function\_name) | The name of the Cloud Function for budget notifications |
-| <a name="output_budget_notifier_function_url"></a> [budget\_notifier\_function\_url](#output\_budget\_notifier\_function\_url) | The URL of the Cloud Function for budget notifications |
+| <a name="output_budget_notifier_function_name"></a> [budget\_notifier\_function\_name](#output\_budget\_notifier\_function\_name) | The name of the Cloud Functions gen2 budget notifier (null when disabled) |
+| <a name="output_budget_notifier_function_uri"></a> [budget\_notifier\_function\_uri](#output\_budget\_notifier\_function\_uri) | The HTTPS URI of the Cloud Run service backing the gen2 budget notifier (null when disabled) |
 | <a name="output_pubsub_subscription_id"></a> [pubsub\_subscription\_id](#output\_pubsub\_subscription\_id) | The ID of the Pub/Sub subscription for budget alerts |
 | <a name="output_pubsub_subscription_name"></a> [pubsub\_subscription\_name](#output\_pubsub\_subscription\_name) | The name of the Pub/Sub subscription for budget alerts |
 | <a name="output_pubsub_topic_id"></a> [pubsub\_topic\_id](#output\_pubsub\_topic\_id) | The ID of the Pub/Sub topic for budget alerts |

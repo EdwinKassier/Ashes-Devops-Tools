@@ -160,8 +160,8 @@ The following resources are created:
 
 
 - resource.google_compute_shared_vpc_service_project.attachment (modules/stages/workload/main.tf#L39)
-- resource.google_compute_subnetwork_iam_binding.network_users (modules/stages/workload/main.tf#L64)
-- resource.google_project_iam_binding.project_admins (modules/stages/workload/main.tf#L51)
+- resource.google_compute_subnetwork_iam_member.network_users (modules/stages/workload/main.tf#L91)
+- resource.google_project_iam_member.project_admins (modules/stages/workload/main.tf#L55)
 
 
 ## Inputs
@@ -174,6 +174,7 @@ The following resources are created:
 | <a name="input_project_admin_group_email"></a> [project\_admin\_group\_email](#input\_project\_admin\_group\_email) | Email of the Google Group to grant admin access | `string` | n/a | yes |
 | <a name="input_project_name"></a> [project\_name](#input\_project\_name) | The name of the project to create | `string` | n/a | yes |
 | <a name="input_activate_apis"></a> [activate\_apis](#input\_activate\_apis) | List of APIs to enable in the project | `list(string)` | `[]` | no |
+| <a name="input_enable_gke_network_user"></a> [enable\_gke\_network\_user](#input\_enable\_gke\_network\_user) | When true, also grants the GKE robot service account<br/>(service-PROJECT\_NUMBER@container-engine-robot.iam.gserviceaccount.com)<br/>the roles/compute.networkUser role on the shared VPC subnets. Set to true<br/>only when this service project will use GKE — the GKE robot SA is created<br/>lazily when container.googleapis.com is first activated, so enabling this<br/>flag before GKE is enabled creates a dangling IAM binding that Terraform<br/>will attempt to reconcile on every apply. | `bool` | `false` | no |
 | <a name="input_enable_shared_vpc_attachment"></a> [enable\_shared\_vpc\_attachment](#input\_enable\_shared\_vpc\_attachment) | Whether to attach this project to a Shared VPC Host | `bool` | `true` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to the project | `map(string)` | `{}` | no |
 | <a name="input_project_admin_roles"></a> [project\_admin\_roles](#input\_project\_admin\_roles) | List of roles to grant to the admin group via google\_project\_iam\_binding.<br/><br/>WARNING: google\_project\_iam\_binding is AUTHORITATIVE per role. On every apply it<br/>removes any other member that holds the role, including manually-granted access.<br/>Any member not in this list will lose the role on the next terraform apply.<br/><br/>Consider using google\_project\_iam\_member (additive) instead if you need to<br/>coexist with bindings managed outside of Terraform. | `list(string)` | `[]` | no |
@@ -188,5 +189,5 @@ The following resources are created:
 | <a name="output_project_id"></a> [project\_id](#output\_project\_id) | The ID of the created project |
 | <a name="output_project_number"></a> [project\_number](#output\_project\_number) | The numeric identifier of the created project |
 | <a name="output_service_account_email"></a> [service\_account\_email](#output\_service\_account\_email) | The email of the default service account |
-| <a name="output_subnet_iam_bindings"></a> [subnet\_iam\_bindings](#output\_subnet\_iam\_bindings) | Map of subnet key to IAM binding resource ID for the networkUser bindings granted to this service project |
+| <a name="output_subnet_iam_bindings"></a> [subnet\_iam\_bindings](#output\_subnet\_iam\_bindings) | Map of (subnet\_key/member\_type) to IAM member resource ID for the networkUser bindings granted to this service project |
 <!-- END_TF_DOCS -->

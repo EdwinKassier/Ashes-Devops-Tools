@@ -8,6 +8,7 @@ variables {
   project_id           = "mock-project"
   project_name         = "mock-project"
   monthly_budget_limit = 500
+  region               = "europe-west1"
 }
 
 # ── monthly_budget_limit ───────────────────────────────────────────────────────
