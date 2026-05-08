@@ -189,7 +189,7 @@ The following resources are created:
 
 - resource.terraform_data.deletion_protection_guard (modules/host/main.tf#L55)
 - data source.google_compute_zones.available (modules/host/main.tf#L35)
-- data source.google_project.current (modules/host/main.tf#L524)
+- data source.google_project.current (modules/host/main.tf#L525)
 
 
 ## Inputs
@@ -219,6 +219,7 @@ The following resources are created:
 | <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | When true, creates a terraform\_data guard resource with prevent\_destroy = true<br/>that blocks any plan that would destroy the VPC/subnet stack.<br/><br/>NOTE: Terraform's prevent\_destroy cannot be set from a variable (it must be a<br/>static literal). The guard resource works around this by existing only when<br/>protection is enabled — removing it from the plan (e.g. by setting this to<br/>false) triggers the prevent\_destroy error. To intentionally deprovision a<br/>protected stack, first run:<br/>  terraform state rm '<module\_address>.terraform\_data.deletion\_protection\_guard[0]' | `bool` | `false` | no |
 | <a name="input_enable_firewall_logging"></a> [enable\_firewall\_logging](#input\_enable\_firewall\_logging) | Enable logging for all firewall rules | `bool` | `true` | no |
 | <a name="input_enable_iap_access"></a> [enable\_iap\_access](#input\_enable\_iap\_access) | Enable IAP SSH/RDP access | `bool` | `true` | no |
+| <a name="input_enable_log4j_protection"></a> [enable\_log4j\_protection](#input\_enable\_log4j\_protection) | Enable the Cloud Armor managed rule that blocks Log4Shell (CVE-2021-44228) exploit payloads. Requires enable\_cloud\_armor = true. | `bool` | `true` | no |
 | <a name="input_enable_networking"></a> [enable\_networking](#input\_enable\_networking) | Enable VPC and network infrastructure provisioning | `bool` | `true` | no |
 | <a name="input_enable_owasp_rules"></a> [enable\_owasp\_rules](#input\_enable\_owasp\_rules) | Enable OWASP Top 10 WAF rules | `bool` | `true` | no |
 | <a name="input_enable_private_service_access"></a> [enable\_private\_service\_access](#input\_enable\_private\_service\_access) | Enable Private Service Access for Cloud SQL, Redis, etc. | `bool` | `true` | no |

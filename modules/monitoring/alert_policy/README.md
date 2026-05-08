@@ -124,3 +124,108 @@ case to avoid noise.
 The identity running Terraform needs:
 - `roles/monitoring.alertPolicyEditor` — to create/update alert policies
 - `roles/monitoring.notificationChannelEditor` — to create notification channels
+
+<!-- BEGIN_TF_DOCS -->
+Copyright 2024 Ashes
+
+Monitoring Alert Policy Module
+
+Creates Cloud Monitoring alert policies and notification channels.
+Supports email, Slack/webhook notifications, and common GCP metric alerts
+(CPU, memory, error rate, latency, uptime, and log-based).
+
+Usage:
+  module "alerts" {
+    source     = "../../modules/monitoring/alert\_policy"
+    project\_id = "my-project"
+    notification\_email\_addresses = ["ops@example.com"]
+    notification\_webhook\_urls = {
+      "slack-ops" = "https://hooks.slack.com/services/..."
+    }
+  }
+
+## Usage
+
+Basic usage of this module is as follows:
+
+```hcl
+module "example" {
+	source = "<module-path>"
+
+	# Required variables
+	project_id = 
+	
+}
+```
+
+## Requirements
+
+| Name | Version |
+|------|---------|
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.0, < 8.0 |
+
+## Providers
+
+| Name | Version |
+|------|---------|
+| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
+
+
+
+## Resources
+
+The following resources are created:
+
+
+- resource.google_monitoring_alert_policy.error_rate (modules/monitoring/alert_policy/main.tf#L141)
+- resource.google_monitoring_alert_policy.high_cpu (modules/monitoring/alert_policy/main.tf#L66)
+- resource.google_monitoring_alert_policy.high_latency (modules/monitoring/alert_policy/main.tf#L183)
+- resource.google_monitoring_alert_policy.high_memory (modules/monitoring/alert_policy/main.tf#L103)
+- resource.google_monitoring_alert_policy.log_based (modules/monitoring/alert_policy/main.tf#L270)
+- resource.google_monitoring_alert_policy.uptime (modules/monitoring/alert_policy/main.tf#L224)
+- resource.google_monitoring_notification_channel.email (modules/monitoring/alert_policy/main.tf#L36)
+- resource.google_monitoring_notification_channel.webhook (modules/monitoring/alert_policy/main.tf#L50)
+
+
+## Inputs
+
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The GCP project ID in which to create alert policies and notification channels. | `string` | n/a | yes |
+| <a name="input_alert_alignment_period"></a> [alert\_alignment\_period](#input\_alert\_alignment\_period) | Alignment period (seconds) for time-series aggregation in alert conditions. Minimum 60. | `number` | `60` | no |
+| <a name="input_alert_display_name_prefix"></a> [alert\_display\_name\_prefix](#input\_alert\_display\_name\_prefix) | Prefix applied to all alert policy display names for easy filtering in the console (e.g., 'prod', 'ashes-dev'). | `string` | `""` | no |
+| <a name="input_alert_duration"></a> [alert\_duration](#input\_alert\_duration) | Duration (seconds) a condition must be sustained before the alert fires. Set to 0 to fire immediately on first violation. | `number` | `60` | no |
+| <a name="input_cpu_utilization_threshold"></a> [cpu\_utilization\_threshold](#input\_cpu\_utilization\_threshold) | Fractional CPU utilisation (0.0–1.0) that triggers the CPU alert (e.g., 0.8 = 80%). | `number` | `0.8` | no |
+| <a name="input_enable_error_rate_alert"></a> [enable\_error\_rate\_alert](#input\_enable\_error\_rate\_alert) | Create an alert policy that fires when the Cloud Run/GCF 5xx error rate exceeds var.error\_rate\_threshold\_percent. | `bool` | `true` | no |
+| <a name="input_enable_high_cpu_alert"></a> [enable\_high\_cpu\_alert](#input\_enable\_high\_cpu\_alert) | Create an alert policy that fires when CPU utilisation exceeds var.cpu\_utilization\_threshold. | `bool` | `true` | no |
+| <a name="input_enable_high_latency_alert"></a> [enable\_high\_latency\_alert](#input\_enable\_high\_latency\_alert) | Create an alert policy that fires when Cloud Run P99 request latency exceeds var.latency\_p99\_threshold\_ms. | `bool` | `true` | no |
+| <a name="input_enable_high_memory_alert"></a> [enable\_high\_memory\_alert](#input\_enable\_high\_memory\_alert) | Create an alert policy that fires when memory utilisation exceeds var.memory\_utilization\_threshold. | `bool` | `true` | no |
+| <a name="input_enable_log_based_alert"></a> [enable\_log\_based\_alert](#input\_enable\_log\_based\_alert) | Create a log-based alert that fires on matches to var.log\_filter. Useful for security events (e.g., org-policy violations). | `bool` | `false` | no |
+| <a name="input_enable_uptime_alert"></a> [enable\_uptime\_alert](#input\_enable\_uptime\_alert) | Create an uptime check alert policy. Requires var.uptime\_check\_ids to be set. | `bool` | `false` | no |
+| <a name="input_error_rate_threshold_percent"></a> [error\_rate\_threshold\_percent](#input\_error\_rate\_threshold\_percent) | 5xx error rate (requests/second) above which the error-rate alert fires. | `number` | `0.01` | no |
+| <a name="input_extra_notification_channel_ids"></a> [extra\_notification\_channel\_ids](#input\_extra\_notification\_channel\_ids) | Additional pre-existing notification channel IDs to attach to all alert policies. Format: 'projects/<project>/notificationChannels/<id>'. | `list(string)` | `[]` | no |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to all notification channel resources. | `map(string)` | `{}` | no |
+| <a name="input_latency_p99_threshold_ms"></a> [latency\_p99\_threshold\_ms](#input\_latency\_p99\_threshold\_ms) | P99 request latency in milliseconds above which the latency alert fires. | `number` | `2000` | no |
+| <a name="input_log_alert_display_name"></a> [log\_alert\_display\_name](#input\_log\_alert\_display\_name) | Display name for the log-based alert policy. | `string` | `"Log-Based Security Alert"` | no |
+| <a name="input_log_filter"></a> [log\_filter](#input\_log\_filter) | Log filter expression for the log-based alert. Required when enable\_log\_based\_alert = true. Example: 'severity=CRITICAL AND protoPayload.methodName="SetIamPolicy"'. | `string` | `null` | no |
+| <a name="input_memory_utilization_threshold"></a> [memory\_utilization\_threshold](#input\_memory\_utilization\_threshold) | Fractional memory utilisation (0.0–1.0) that triggers the memory alert (e.g., 0.85 = 85%). | `number` | `0.85` | no |
+| <a name="input_notification_email_addresses"></a> [notification\_email\_addresses](#input\_notification\_email\_addresses) | List of email addresses to notify when an alert fires. An<br/>google\_monitoring\_notification\_channel resource is created per address.<br/>Leave empty to skip email channel creation (use existing channel IDs via<br/>var.extra\_notification\_channel\_ids instead). | `list(string)` | `[]` | no |
+| <a name="input_notification_webhook_urls"></a> [notification\_webhook\_urls](#input\_notification\_webhook\_urls) | Map of label → HTTPS webhook URL for alert notifications.<br/>Supports Slack incoming webhooks, PagerDuty, and any generic HTTP endpoint.<br/>Example: { "slack-ops" = "https://hooks.slack.com/services/T.../B.../xxx" } | `map(string)` | `{}` | no |
+| <a name="input_uptime_check_ids"></a> [uptime\_check\_ids](#input\_uptime\_check\_ids) | List of existing uptime check IDs (format: 'projects/<project>/uptimeCheckConfigs/<id>') to create uptime failure alerts for. Required when enable\_uptime\_alert = true. | `list(string)` | `[]` | no |
+
+## Outputs
+
+| Name | Description |
+|------|-------------|
+| <a name="output_all_alert_policy_ids"></a> [all\_alert\_policy\_ids](#output\_all\_alert\_policy\_ids) | Map of alert name to policy resource ID for all enabled policies. |
+| <a name="output_all_notification_channel_ids"></a> [all\_notification\_channel\_ids](#output\_all\_notification\_channel\_ids) | All notification channel IDs (created + extra). Pass this to other alert\_policy module calls to share channels. |
+| <a name="output_email_notification_channel_ids"></a> [email\_notification\_channel\_ids](#output\_email\_notification\_channel\_ids) | Map of email address to notification channel resource ID. |
+| <a name="output_error_rate_alert_policy_id"></a> [error\_rate\_alert\_policy\_id](#output\_error\_rate\_alert\_policy\_id) | Resource ID of the error rate alert policy, or null when disabled. |
+| <a name="output_high_cpu_alert_policy_id"></a> [high\_cpu\_alert\_policy\_id](#output\_high\_cpu\_alert\_policy\_id) | Resource ID of the high CPU alert policy, or null when disabled. |
+| <a name="output_high_latency_alert_policy_id"></a> [high\_latency\_alert\_policy\_id](#output\_high\_latency\_alert\_policy\_id) | Resource ID of the high latency alert policy, or null when disabled. |
+| <a name="output_high_memory_alert_policy_id"></a> [high\_memory\_alert\_policy\_id](#output\_high\_memory\_alert\_policy\_id) | Resource ID of the high memory alert policy, or null when disabled. |
+| <a name="output_log_based_alert_policy_id"></a> [log\_based\_alert\_policy\_id](#output\_log\_based\_alert\_policy\_id) | Resource ID of the log-based alert policy, or null when disabled. |
+| <a name="output_uptime_alert_policy_id"></a> [uptime\_alert\_policy\_id](#output\_uptime\_alert\_policy\_id) | Resource ID of the uptime alert policy, or null when disabled. |
+| <a name="output_webhook_notification_channel_ids"></a> [webhook\_notification\_channel\_ids](#output\_webhook\_notification\_channel\_ids) | Map of webhook label to notification channel resource ID. |
+<!-- END_TF_DOCS -->
