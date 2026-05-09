@@ -40,6 +40,20 @@ jobs:
           # Fall back to GITHUB_TOKEN only when the PAT secret is absent (forks / first-time setup).
           token: ${{ secrets.DOCS_BOT_PAT || secrets.GITHUB_TOKEN }}
 
+      - name: Install terraform-docs
+        run: |
+          TDOCS_VERSION=0.19.0
+          BASE_URL="https://github.com/terraform-docs/terraform-docs/releases/download/v${TDOCS_VERSION}"
+          TARBALL="terraform-docs-v${TDOCS_VERSION}-linux-amd64.tar.gz"
+          CHECKSUM_FILE="terraform-docs-v${TDOCS_VERSION}.sha256sum"
+
+          curl -sSLO "${BASE_URL}/${TARBALL}"
+          curl -sSLO "${BASE_URL}/${CHECKSUM_FILE}"
+          sha256sum --check --ignore-missing "${CHECKSUM_FILE}"
+          tar -xz -C /usr/local/bin terraform-docs < "${TARBALL}"
+          terraform-docs --version
+          rm -f "${TARBALL}" "${CHECKSUM_FILE}"
+
       - name: Generate module documentation
         run: make docs
 
