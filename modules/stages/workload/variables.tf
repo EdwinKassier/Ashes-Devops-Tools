@@ -111,14 +111,16 @@ variable "project_admin_group_email" {
 
 variable "project_admin_roles" {
   description = <<-EOT
-    List of roles to grant to the admin group via google_project_iam_binding.
+    List of roles to grant to the admin group at project level.
 
-    WARNING: google_project_iam_binding is AUTHORITATIVE per role. On every apply it
-    removes any other member that holds the role, including manually-granted access.
-    Any member not in this list will lose the role on the next terraform apply.
+    Bindings are managed via google_project_iam_member (additive). Manually-granted
+    bindings or bindings managed by other tools are preserved on every apply — this
+    module will not evict them.
 
-    Consider using google_project_iam_member (additive) instead if you need to
-    coexist with bindings managed outside of Terraform.
+    Validation blocks reject primitive roles (owner/editor/viewer) and
+    cross-boundary privileged roles (organizationAdmin, folderAdmin, securityAdmin,
+    organizationRoleAdmin, billing.admin, billing.creator). Use least-privilege
+    predefined or custom roles only.
   EOT
   type        = list(string)
   default     = []

@@ -1,11 +1,21 @@
 variable "org_id" {
-  description = "The organization ID where SCC is enabled"
+  description = "Numeric GCP Organization ID where SCC is enabled (digits only, without 'organizations/' prefix)."
   type        = string
+
+  validation {
+    condition     = can(regex("^[0-9]+$", var.org_id))
+    error_message = "org_id must be a numeric organization ID (digits only, without 'organizations/' prefix)."
+  }
 }
 
 variable "project_id" {
-  description = "The project ID where the Pub/Sub topic will be created"
+  description = "The GCP project ID where the Pub/Sub topic will be created (lowercase letters, digits, hyphens; 6–30 characters; starts with a letter)."
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{4,28}[a-z0-9]$", var.project_id))
+    error_message = "project_id must be a valid GCP project ID: 6–30 characters, start with a lowercase letter, contain only lowercase letters, digits, and hyphens, and not end with a hyphen."
+  }
 }
 
 variable "kms_key_name" {

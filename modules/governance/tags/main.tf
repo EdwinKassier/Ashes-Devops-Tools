@@ -6,16 +6,17 @@ resource "google_tags_tag_key" "keys" {
 
   parent      = "organizations/${var.org_id}"
   short_name  = each.key
-  description = "Managed by Terraform"
+  description = each.value.description
 }
 
 resource "google_tags_tag_value" "values" {
   for_each = {
     for pair in flatten([
-      for key, values in var.tags : [
-        for value in values : {
-          key   = key
-          value = value
+      for key, cfg in var.tags : [
+        for value in cfg.values : {
+          key         = key
+          value       = value
+          description = cfg.description
         }
       ]
     ]) : "${pair.key}-${pair.value}" => pair
@@ -23,5 +24,5 @@ resource "google_tags_tag_value" "values" {
 
   parent      = google_tags_tag_key.keys[each.value.key].name
   short_name  = each.value.value
-  description = "Managed by Terraform"
+  description = each.value.description
 }

@@ -9,13 +9,33 @@ variable "org_id" {
 }
 
 variable "tags" {
-  description = "Map of Tag Keys to a list of allowed Tag Values. Keys and values follow GCP tag short_name constraints: 1-63 chars, must start with a lowercase letter, may contain lowercase letters, digits, hyphens, and underscores. No spaces or uppercase."
-  type        = map(list(string))
-  # Example:
-  # {
-  #   "environment" = ["dev", "prod", "uat"]
-  #   "cost-center" = ["engineering", "marketing"]
-  # }
+  description = <<-EOT
+    Map of Tag Keys to their configuration. Each entry creates one Tag Key and its
+    allowed Tag Values under the organization.
+
+    Keys and value short_names follow GCP tag constraints: 1–63 characters, must
+    start with a lowercase letter, may contain lowercase letters, digits, hyphens,
+    and underscores. No spaces or uppercase.
+
+    The optional `description` field sets a human-readable description on both the
+    Tag Key resource and each of its Tag Values. Defaults to "Managed by Terraform"
+    when omitted.
+
+    Example:
+      tags = {
+        "environment" = {
+          values      = ["dev", "staging", "prod"]
+          description = "Deployment environment tier"
+        }
+        "cost-center" = {
+          values = ["engineering", "marketing"]
+        }
+      }
+  EOT
+  type = map(object({
+    values      = list(string)
+    description = optional(string, "Managed by Terraform")
+  }))
 
   validation {
     condition     = length(var.tags) > 0
@@ -32,8 +52,8 @@ variable "tags" {
 
   validation {
     condition = alltrue(flatten([
-      for key, values in var.tags : [
-        for v in values : can(regex("^[a-z][a-z0-9_-]{0,62}$", v))
+      for key, cfg in var.tags : [
+        for v in cfg.values : can(regex("^[a-z][a-z0-9_-]{0,62}$", v))
       ]
     ]))
     error_message = "Tag values must start with a lowercase letter and contain only lowercase letters, digits, hyphens, and underscores (max 63 characters)."

@@ -26,9 +26,22 @@ resource "google_compute_security_policy" "policy" {
       description = rule.value.description
 
       match {
-        versioned_expr = rule.value.match_conditions.versioned_expr
-        config {
-          src_ip_ranges = try(rule.value.match_conditions.config.src_ip_ranges, null)
+        # versioned_expr path: IP-based matching (SRC_IPS_V1, etc.)
+        versioned_expr = try(rule.value.match_conditions.versioned_expr, null)
+
+        dynamic "config" {
+          for_each = try(rule.value.match_conditions.versioned_expr, null) != null ? [1] : []
+          content {
+            src_ip_ranges = try(rule.value.match_conditions.config.src_ip_ranges, null)
+          }
+        }
+
+        # CEL expression path: header/path/geo/custom logic
+        dynamic "expr" {
+          for_each = try(rule.value.match_conditions.expr, null) != null ? [1] : []
+          content {
+            expression = rule.value.match_conditions.expr
+          }
         }
       }
 
@@ -41,9 +54,16 @@ resource "google_compute_security_policy" "policy" {
           }
           conform_action = try(rate_limit_options.value.conform_action, "allow")
           exceed_action  = try(rate_limit_options.value.exceed_action, "deny(429)")
+          # enforce_on_key and enforce_on_key_configs are mutually exclusive in the
+          # Cloud Armor API. When enforce_on_key is set, use the scalar form; when
+          # it is null, use enforce_on_key_configs for fine-grained per-type config.
+          # Emitting both in the same request causes an HTTP 400 from the API.
           enforce_on_key = try(rate_limit_options.value.enforce_on_key, null)
-          enforce_on_key_configs {
-            enforce_on_key_type = try(rate_limit_options.value.enforce_on_key_type, "ALL")
+          dynamic "enforce_on_key_configs" {
+            for_each = try(rate_limit_options.value.enforce_on_key, null) == null ? [1] : []
+            content {
+              enforce_on_key_type = try(rate_limit_options.value.enforce_on_key_type, "ALL")
+            }
           }
         }
       }

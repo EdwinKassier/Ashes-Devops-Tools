@@ -37,7 +37,7 @@ This landing zone implements defense-in-depth across every layer:
 
 ### Data Protection
 - **CMEK (Customer-Managed Encryption Keys)** via Cloud KMS — all storage encrypted at rest
-- **Key rotation enforced** — rotation period validated between 1–90 days at plan time
+- **Key rotation enforced** — rotation period validated between 1–365 days at plan time
 - **Uniform bucket-level access** — no per-object ACLs on Cloud Storage
 
 ### Network Security

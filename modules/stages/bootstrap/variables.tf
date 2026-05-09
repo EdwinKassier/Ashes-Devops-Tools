@@ -1,11 +1,26 @@
 variable "project_prefix" {
-  description = "Prefix to use for project names"
+  description = <<-EOT
+    Short prefix prepended to all project names created by this bootstrap.
+    Constraints: 1–10 characters, starts with a lowercase letter, may contain
+    lowercase letters, digits, and hyphens. Kept short so the full project ID
+    stays within GCP's 30-character limit after suffixes are appended.
+  EOT
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{0,9}$", var.project_prefix))
+    error_message = "project_prefix must start with a lowercase letter, contain only lowercase letters, digits, and hyphens, and be at most 10 characters long."
+  }
 }
 
 variable "org_id" {
-  description = "Organization ID"
+  description = "Numeric GCP Organization ID (digits only, without the 'organizations/' prefix)."
   type        = string
+
+  validation {
+    condition     = can(regex("^[0-9]+$", var.org_id))
+    error_message = "org_id must be a numeric organization ID (digits only, without 'organizations/' prefix)."
+  }
 }
 
 variable "billing_account" {

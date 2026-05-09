@@ -21,6 +21,9 @@ variables {
 }
 
 # ── project_admin_roles ────────────────────────────────────────────────────────
+# Full coverage (primitives, cross-boundary privileged, edge cases) lives in
+# tests/iam_validation.tftest.hcl. Only smoke-test the happy path here to avoid
+# duplication and keep this file focused on cross-variable validation rules.
 
 run "accepts_predefined_least_privilege_roles" {
   command = plan
@@ -38,49 +41,6 @@ run "accepts_empty_roles_list" {
 
   variables {
     project_admin_roles = []
-  }
-}
-
-run "rejects_owner_basic_role" {
-  command = plan
-
-  expect_failures = [var.project_admin_roles]
-
-  variables {
-    project_admin_roles = ["roles/owner"]
-  }
-}
-
-run "rejects_editor_basic_role" {
-  command = plan
-
-  expect_failures = [var.project_admin_roles]
-
-  variables {
-    project_admin_roles = ["roles/editor"]
-  }
-}
-
-run "rejects_viewer_basic_role" {
-  command = plan
-
-  expect_failures = [var.project_admin_roles]
-
-  variables {
-    project_admin_roles = ["roles/viewer"]
-  }
-}
-
-run "rejects_list_containing_basic_role_alongside_predefined" {
-  command = plan
-
-  expect_failures = [var.project_admin_roles]
-
-  variables {
-    project_admin_roles = [
-      "roles/compute.admin",
-      "roles/owner",
-    ]
   }
 }
 

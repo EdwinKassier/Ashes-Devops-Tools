@@ -10,10 +10,18 @@ variable "region" {
 }
 
 variable "kms_key_name" {
-  description = "Fully qualified KMS key name for bucket encryption. Format: projects/<project>/locations/<location>/keyRings/<keyring>/cryptoKeys/<key>"
+  description = <<-EOT
+    Fully qualified KMS key name for bucket encryption.
+    Format: projects/<project>/locations/<location>/keyRings/<keyring>/cryptoKeys/<key>
+    Leave null to use Google-managed encryption (GMEK). For compliance environments,
+    always supply a CMEK key and ensure the GCS service account has
+    roles/cloudkms.cryptoKeyEncrypterDecrypter on the key.
+  EOT
   type        = string
+  default     = null
+
   validation {
-    condition     = can(regex("^projects/[^/]+/locations/[^/]+/keyRings/[^/]+/cryptoKeys/[^/]+$", var.kms_key_name))
+    condition     = var.kms_key_name == null || can(regex("^projects/[^/]+/locations/[^/]+/keyRings/[^/]+/cryptoKeys/[^/]+$", var.kms_key_name))
     error_message = "kms_key_name must be in the format: projects/<project>/locations/<location>/keyRings/<keyring>/cryptoKeys/<key>"
   }
 }

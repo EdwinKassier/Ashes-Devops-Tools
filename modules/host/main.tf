@@ -62,6 +62,28 @@ resource "terraform_data" "deletion_protection_guard" {
   }
 }
 
+# Guard: each explicitly-provided CIDR list must cover at least as many entries as
+# there are availability zones. When a list is shorter than the zone count, the
+# subnet for_each will attempt to read an out-of-bounds index (local.*_cidrs[each.value])
+# and produce a cryptic "Invalid index" error at plan time.
+# This precondition surfaces the root cause immediately with an actionable message.
+resource "terraform_data" "subnet_cidr_count_guard" {
+  count = var.enable_networking ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition = (
+        length(var.subnet_cidrs.public) == 0 || length(var.subnet_cidrs.public) >= length(local.zones)
+        ) && (
+        length(var.subnet_cidrs.private) == 0 || length(var.subnet_cidrs.private) >= length(local.zones)
+        ) && (
+        length(var.subnet_cidrs.database) == 0 || length(var.subnet_cidrs.database) >= length(local.zones)
+      )
+      error_message = "Each non-empty subnet_cidrs list must have at least as many entries as availability zones in the region. Detected ${length(local.zones)} zones; provided public=${length(var.subnet_cidrs.public)}, private=${length(var.subnet_cidrs.private)}, database=${length(var.subnet_cidrs.database)} CIDRs. Either add CIDRs or leave the list empty to use auto-generated values."
+    }
+  }
+}
+
 module "vpc" {
   source = "../network/vpc"
   count  = var.enable_networking ? 1 : 0

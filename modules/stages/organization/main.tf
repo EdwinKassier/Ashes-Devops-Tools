@@ -118,9 +118,18 @@ module "tags" {
   org_id = var.org_id
 
   tags = {
-    "environment"         = sort(keys(var.environments))
-    "business-unit"       = ["engineering", "product", "sales"]
-    "data-classification" = ["public", "internal", "confidential", "restricted"]
+    "environment" = {
+      values      = sort(keys(var.environments))
+      description = "Deployment environment tier (e.g. dev, staging, prod)"
+    }
+    "business-unit" = {
+      values      = ["engineering", "product", "sales"]
+      description = "Owning business unit for cost allocation and access scoping"
+    }
+    "data-classification" = {
+      values      = ["public", "internal", "confidential", "restricted"]
+      description = "Data sensitivity level per the organization data classification policy"
+    }
   }
 }
 

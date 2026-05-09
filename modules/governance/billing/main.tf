@@ -176,12 +176,17 @@ resource "google_cloudfunctions2_function" "budget_notifier" {
 
 # IAM binding: allow the Pub/Sub service account to invoke the Cloud Run service
 # backing the gen2 function (uses roles/run.invoker, not cloudfunctions.invoker).
-resource "google_cloud_run_service_iam_member" "budget_notifier_invoker" {
+#
+# Cloud Functions gen2 deploys as a Cloud Run **v2** service. The v1 resource
+# (google_cloud_run_service_iam_member) targets a different API path and will
+# fail to locate the function. Use google_cloud_run_v2_service_iam_member with
+# the `name` attribute (not `service`) instead.
+resource "google_cloud_run_v2_service_iam_member" "budget_notifier_invoker" {
   count = var.enable_email_notifications ? 1 : 0
 
   project  = var.project_id
   location = var.region
-  service  = google_cloudfunctions2_function.budget_notifier[0].name
+  name     = google_cloudfunctions2_function.budget_notifier[0].name
   role     = "roles/run.invoker"
   member   = "serviceAccount:${var.pubsub_service_account}"
 }

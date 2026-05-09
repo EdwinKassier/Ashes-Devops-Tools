@@ -144,3 +144,13 @@ run "rejects_billing_admin" {
     project_admin_roles = ["roles/billing.admin"]
   }
 }
+
+run "rejects_billing_creator" {
+  command = plan
+
+  expect_failures = [var.project_admin_roles]
+
+  variables {
+    project_admin_roles = ["roles/billing.creator"]
+  }
+}

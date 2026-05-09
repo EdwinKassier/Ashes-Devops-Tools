@@ -50,16 +50,38 @@ variable "default_rule_action" {
 }
 
 variable "custom_rules" {
-  description = "Map of custom rules to apply to the security policy"
+  description = <<-EOT
+    Map of custom Cloud Armor rules to add to the security policy.
+
+    Each rule supports two mutually-exclusive match types:
+
+    **IP/versioned_expr match** (use for IP allow/denylists):
+      match_conditions = {
+        versioned_expr = "SRC_IPS_V1"
+        config         = { src_ip_ranges = ["10.0.0.0/8"] }
+      }
+
+    **CEL expression match** (use for header/path/geographic rules):
+      match_conditions = {
+        expr = "request.headers['user-agent'].contains('bot')"
+      }
+
+    Exactly one of `versioned_expr` or `expr` must be set per rule. Providing
+    both or neither will fail validation.
+  EOT
   type = map(object({
     action      = string
     priority    = number
     description = optional(string)
     match_conditions = object({
-      versioned_expr = string
-      config = object({
+      # IP-based match (versioned_expr mode). Set versioned_expr AND config,
+      # or set expr — never both.
+      versioned_expr = optional(string)
+      config = optional(object({
         src_ip_ranges = list(string)
-      })
+      }))
+      # CEL expression match. Mutually exclusive with versioned_expr + config.
+      expr = optional(string)
     })
     rate_limit_options = optional(object({
       threshold_count     = number
@@ -79,6 +101,14 @@ variable "custom_rules" {
       can(regex("^deny(\\([0-9]+\\))?$", r.action))
     ])
     error_message = "custom_rules[*].action must be one of: allow, deny, deny(NNN), throttle, rate_based_ban, redirect."
+  }
+
+  validation {
+    condition = alltrue([
+      for k, r in var.custom_rules :
+      (r.match_conditions.versioned_expr != null) != (r.match_conditions.expr != null)
+    ])
+    error_message = "Each custom_rule match_conditions must specify exactly one of: versioned_expr (with config) OR expr (CEL expression). Providing both or neither is not allowed."
   }
 }
 
