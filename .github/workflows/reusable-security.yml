@@ -81,7 +81,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 
       - name: Run Checkov on modules
-        uses: bridgecrewio/checkov-action@9201a8e6eaa919e3444d7c4ca691896efde4f033  # v12
+        uses: bridgecrewio/checkov-action@4048c972aae68d0b983a48bb3479aab2d877b898  # v12
         with:
           directory: modules
           framework: terraform
@@ -93,7 +93,7 @@ jobs:
           output_file_path: ${{ inputs.sarif_output && 'checkov-results.sarif,checkov-report.txt' || 'console' }}
 
       - name: Run Checkov on envs
-        uses: bridgecrewio/checkov-action@9201a8e6eaa919e3444d7c4ca691896efde4f033  # v12
+        uses: bridgecrewio/checkov-action@4048c972aae68d0b983a48bb3479aab2d877b898  # v12
         with:
           directory: envs
           framework: terraform
