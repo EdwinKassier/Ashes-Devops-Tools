@@ -20,12 +20,12 @@ run "accepts_minimum_rotation_period" {
 }
 
 run "accepts_maximum_rotation_period" {
-  # 7776000s == 90 days — the highest allowed value
+  # 31536000s == 365 days — the highest allowed value
   command = plan
 
   variables {
     keys = {
-      test-key = { rotation_period = "7776000s" }
+      test-key = { rotation_period = "31536000s" }
     }
   }
 }
@@ -57,14 +57,14 @@ run "rejects_rotation_below_minimum" {
 }
 
 run "rejects_rotation_above_maximum" {
-  # 7776001s is 1 second beyond the 90-day ceiling
+  # 31536001s is 1 second beyond the 365-day ceiling
   command = plan
 
   expect_failures = [var.keys]
 
   variables {
     keys = {
-      test-key = { rotation_period = "7776001s" }
+      test-key = { rotation_period = "31536001s" }
     }
   }
 }

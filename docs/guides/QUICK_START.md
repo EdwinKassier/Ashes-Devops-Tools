@@ -34,6 +34,7 @@ gcloud services enable cloudresourcemanager.googleapis.com \
 - [ ] `terraform version` reports `>= 1.9.8` (see `.terraform-version`)
 - [ ] `gcloud version` reports `>= 450.0.0`
 - [ ] `jq` installed (used by CI scripts)
+- [ ] Node.js >= 18 installed (required only if using `enable_vault_secrets = true` in any `saas-workload` call)
 - [ ] A Terraform Cloud account with a workspace named `organization` (or the name in your `backend.hcl`)
 
 ---
@@ -62,6 +63,42 @@ gcloud config set project YOUR_SEED_PROJECT
 ```
 
 > **Note:** On a fresh org, you will use personal credentials for the bootstrap run only. After bootstrap creates the Workload Identity Federation (WIF) pool, all subsequent runs go through GitHub Actions using short-lived tokens — your personal credentials are no longer needed.
+
+---
+
+## 3a. Configure Supabase and Vercel Provider Credentials
+
+The `modules/supabase/*` and `modules/vercel/*` modules authenticate via API tokens set in the shell environment. These must be present before `terraform init` or `terraform plan` if any root uses these modules.
+
+**Supabase access token:**
+
+```bash
+export SUPABASE_ACCESS_TOKEN="sbp_your_token_here"
+```
+
+Generate a personal access token at [https://app.supabase.com/account/tokens](https://app.supabase.com/account/tokens). The token requires the **Manage organization** scope.
+
+**Vercel API token:**
+
+```bash
+export VERCEL_API_TOKEN="your_vercel_token_here"
+```
+
+Generate a token at [https://vercel.com/account/tokens](https://vercel.com/account/tokens). Prefer a **team token** scoped to the target Vercel team over a personal token for org-wide deployments.
+
+> **Note on `modules/stages/saas-workload`:** The stage module declares `supabase`, `vercel`, and `null` providers in its `required_providers` block. Terraform evaluates `required_providers` at init time regardless of feature flag values, so **all three providers must be configured** in the calling root even when `enable_vercel = false`. If you want to use Supabase without any Vercel dependency, call `modules/supabase/environment` directly — it has no Vercel provider declaration.
+
+**Node.js requirement for vault-secrets:**
+
+`enable_vault_secrets = true` executes a Node.js script to bootstrap and reconcile the Supabase Vault. Before the first apply with vault-secrets enabled, install the runtime dependency:
+
+```bash
+cd modules/supabase/vault-secrets/scripts
+npm install
+cd -
+```
+
+The `pg ^8.20.0` package connects to the Supabase session-mode pooler to execute the bootstrap SQL. CI runners (ubuntu-latest) have Node.js 18+ available by default. The `scripts/node_modules/` directory is gitignored; re-run `npm install` after a fresh clone.
 
 ---
 

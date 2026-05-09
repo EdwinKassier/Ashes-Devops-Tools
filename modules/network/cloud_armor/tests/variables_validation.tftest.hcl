@@ -162,8 +162,8 @@ run "rejects_neither_versioned_expr_nor_cel_expr" {
   variables {
     custom_rules = {
       empty-match-rule = {
-        action   = "deny(403)"
-        priority = 700
+        action           = "deny(403)"
+        priority         = 700
         match_conditions = {}
       }
     }

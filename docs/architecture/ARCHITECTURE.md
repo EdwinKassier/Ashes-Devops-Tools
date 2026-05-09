@@ -101,12 +101,28 @@ That keeps CIDRs explicit and stable. The old pattern of deriving CIDRs from key
 - `modules/stages/workload`
   - separate service projects that attach to a Shared VPC host
 
+- `modules/stages/saas-workload`
+  - Supabase project, settings, and API keys (via `supabase/environment`)
+  - Supabase Vault secret reconciliation — Node.js provisioner, UPPER_SNAKE_CASE namespace, safety guard (via `supabase/vault-secrets`, gated by `enable_vault_secrets`)
+  - Vercel project with QA/preview, UAT/custom, and production three-tier environments (via `vercel/project`, gated by `enable_vercel`)
+  - Designed for phased deployment: apply Supabase first, then opt in to vault-secrets and Vercel separately
+
 ### Shared Infrastructure Modules
 
 - `modules/network/*` contains the reusable network primitives
 - `modules/governance/*` contains budgets, logging, KMS, org policy, SCC, and tags
 - `modules/iam/*` contains reusable IAM primitives
 - `modules/host` remains the compatibility wrapper used by `envs/apps`
+
+### SaaS Modules
+
+- `modules/supabase/*` contains Supabase primitives consumed by the `saas-workload` stage:
+  - `project` — creates a `supabase_project`; lifecycle guard ignores `database_password` after initial creation (Management API limitation)
+  - `settings` — manages auth and API settings on an existing project via `supabase_settings`; destroying this resource is a no-op by provider design (settings revert to Supabase defaults)
+  - `environment` — composite module: project + settings + `data.supabase_apikeys`; primary building block for per-environment deployments
+  - `vault-secrets` — bootstraps the Supabase Vault with `SECURITY DEFINER` helper functions and reconciles a desired-state `map(string)` of secrets; requires Node.js >= 18 + `pg ^8.20.0`; IaC namespace is scoped to `UPPER_SNAKE_CASE` keys only; a safety guard blocks wiping a non-empty vault when the desired set is empty
+- `modules/vercel/*` contains Vercel primitives:
+  - `project` — creates a Vercel project with three environments (QA/preview, UAT/custom, production); sensitive environment variables are managed via `terraform_data` SHA256 drift-resistance triggers; `ignore_command` uses POSIX sh (`if/then/else/fi`, exit 1 = build, exit 0 = skip)
 
 ## State and Execution Model
 

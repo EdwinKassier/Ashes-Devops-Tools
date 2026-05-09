@@ -271,3 +271,117 @@ The following errors were present in earlier versions and have been resolved. If
 | `google_cloud_run_service_iam_member: resource not found` on budget notifier deploy | Cloud Functions gen2 deploys as Cloud Run v2; the wrong IAM resource type was used | Round 28 |
 | `Error: Invalid combination of arguments: enforce_on_key and enforce_on_key_configs are mutually exclusive` | Cloud Armor rate limit rule set both fields | Round 28 |
 | VPC-SC `permission denied` with project ID string (see above) | `spoke_project_ids` accepted strings; API requires numbers | Round 28 |
+
+
+---
+
+## Supabase module errors
+
+### `Error: supabase: Tenant or user not found`
+
+```
+╷
+│ Error: supabase: Tenant or user not found
+```
+
+**Cause:** `SUPABASE_ACCESS_TOKEN` is not set, expired, or lacks the **Manage organization** scope. The provider uses this token for all Management API calls; without it, every resource read returns a 404-like error instead of a 401.
+
+**Fix:** Regenerate the token at [https://app.supabase.com/account/tokens](https://app.supabase.com/account/tokens) and export it:
+
+```bash
+export SUPABASE_ACCESS_TOKEN="sbp_your_new_token_here"
+terraform init   # re-initialise if the provider was not previously installed
+terraform plan
+```
+
+---
+
+### `Error: Missing required argument: VERCEL_API_TOKEN`
+
+```
+╷
+│ Error: Missing required argument
+│ The argument "api_token" is required, but no definition was found.
+```
+
+Or from the provider itself:
+
+```
+╷
+│ Error: vercel: 403 Forbidden — API token not found
+```
+
+**Cause:** `VERCEL_API_TOKEN` is not set. The Vercel provider reads the token from the environment variable. This error appears even when `enable_vercel = false` if the calling root declares the Vercel provider in `required_providers` (e.g. when calling `modules/stages/saas-workload`).
+
+**Fix:** Export the token before running any Terraform command in that root:
+
+```bash
+export VERCEL_API_TOKEN="your_vercel_token_here"
+```
+
+To use Supabase without the Vercel provider requirement, call `modules/supabase/environment` directly instead of `modules/stages/saas-workload`. The primitive modules have no Vercel provider declaration.
+
+---
+
+### Node.js not found / vault-secrets provisioner fails
+
+```
+╷
+│ Error: local-exec provisioner error
+│ Error running command: exec: "node": executable file not found in $PATH
+```
+
+Or:
+
+```
+╷
+│ Error: local-exec provisioner error
+│ Error running command 'node scripts/bootstrap.mjs': exit status 1
+│ Cannot find module 'pg'
+```
+
+**Cause (first error):** Node.js is not installed or not on `$PATH`. The vault-secrets module runs `node scripts/bootstrap.mjs` and `node scripts/reconcile.mjs`. Node.js >= 18 is required.
+
+**Fix:** Install Node.js (use `nvm`, `mise`, `brew install node`, or the official installer), then verify:
+
+```bash
+node --version   # must report v18.x or higher
+```
+
+**Cause (second error):** `npm install` has not been run in the scripts directory — the `pg` package is missing.
+
+**Fix:**
+
+```bash
+cd modules/supabase/vault-secrets/scripts
+npm install
+cd -
+terraform apply
+```
+
+Re-run `npm install` after a fresh clone; `scripts/node_modules/` is gitignored.
+
+---
+
+### Vault safety guard refuses to wipe secrets
+
+```
+╷
+│ Error: local-exec provisioner error
+│ SAFETY_GUARD: desired secret set is empty but vault already contains N IaC-managed
+│ secrets. set VAULT_ALLOW_EMPTY_DESIRED=1 in the apply environment.
+```
+
+**Cause:** `var.secrets` was set to an empty map `{}` while the Supabase Vault still contains secrets written by a previous apply. The safety guard blocks this to prevent accidental data loss — a blank `secrets = {}` is more often a misconfiguration than an intentional delete-all.
+
+**Fix (to delete all secrets intentionally):** Set the `VAULT_ALLOW_EMPTY_DESIRED` environment variable to `1` before applying:
+
+```bash
+export VAULT_ALLOW_EMPTY_DESIRED=1
+terraform apply
+unset VAULT_ALLOW_EMPTY_DESIRED
+```
+
+**Fix (to preserve existing secrets and remove the error):** Restore the desired secrets map to include all currently-managed keys. The Vault is the source of truth for which keys exist; inspect via the Supabase dashboard or by connecting directly to the database.
+
+> **Scope note:** The safety guard and the reconcile script only manage secrets whose keys match `^[A-Z][A-Z0-9_]*$` (UPPER_SNAKE_CASE). Secrets created outside Terraform with lowercase or mixed-case names are not touched by `terraform apply` or `terraform destroy`.

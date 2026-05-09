@@ -10,6 +10,12 @@ Releases are tagged as `organization/vX.Y.Z` and `apps/<env>/vX.Y.Z`.
 ## [Unreleased]
 
 ### Added
+- `modules/supabase/project` — creates a single Supabase project via `supabase_project`; lifecycle guard ignores database_password after initial creation
+- `modules/supabase/settings` — manages auth and API settings for an existing project via `supabase_settings`; destruction is a no-op by provider design
+- `modules/supabase/environment` — composite module (project + settings + `data.supabase_apikeys`); primary building block for per-environment deployments; `anon_key` output is intentionally non-sensitive to allow for-expression filter conditions in callers
+- `modules/supabase/vault-secrets` — bootstraps the Supabase Vault with SECURITY DEFINER helpers and reconciles a desired-state `map(string)` of secrets; Node.js >= 18 + `pg ^8.20.0` runtime dependency; IaC namespace limited to UPPER_SNAKE_CASE names; safety guard refuses to wipe a non-empty vault when desired set is empty
+- `modules/vercel/project` — creates a Vercel project with QA/preview, UAT/custom, and production environments; drift-resistant sensitive env var handling via `terraform_data` SHA256 triggers; `ignore_command` uses POSIX sh (not bash); `root_directory = ""` converted to `null` to satisfy Vercel API
+- `modules/stages/saas-workload` — stage module composing the three child modules above; Vercel and vault-secrets are feature-flagged (`enable_vercel`, `enable_vault_secrets`) to support phased deployment
 - `modules/stages/bootstrap/variables.tf` — `project_prefix` validation: must start with lowercase letter, contain only lowercase letters/digits/hyphens, max 10 characters; prevents project IDs exceeding GCP's 30-character limit
 - `modules/stages/bootstrap/variables.tf` — `org_id` validation: digits-only, without `organizations/` prefix (matches pattern already enforced in other modules)
 - `modules/governance/scc/variables.tf` — `org_id` (digits-only) and `project_id` (GCP 6–30 character format) format validation blocks
