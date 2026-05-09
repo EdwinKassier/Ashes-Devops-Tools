@@ -93,7 +93,7 @@ run "rejects_mixed_list_containing_owner" {
 
 # ── Reject cross-boundary privileged roles ────────────────────────────────────
 # These roles span beyond the project boundary and must never be granted at
-# project level via an authoritative google_project_iam_binding.
+# project level via google_project_iam_member.
 
 run "rejects_organization_admin" {
   command = plan

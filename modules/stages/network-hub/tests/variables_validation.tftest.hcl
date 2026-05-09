@@ -15,7 +15,7 @@ variables {
   default_region         = "us-central1"
   hub_project_id         = "mock-hub-project"
   dns_project_id         = "mock-dns-project"
-  spoke_project_ids      = {}
+  spoke_project_numbers  = {}
   org_id                 = "organizations/123456789"
   folders = {
     shared = {

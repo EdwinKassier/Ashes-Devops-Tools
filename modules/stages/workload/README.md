@@ -79,7 +79,7 @@ module "workload_api_service" {
 - **Shared VPC**: Automatically attaches as service project to host
 - **IAM Bindings**: Grants admin roles to specified Google Group
 - **Network User**: Configures subnet-level access for workload service accounts
-- **GKE Ready**: Grants container engine robot permissions
+- **GKE Ready**: Optionally grants container engine robot subnet access (opt-in via `enable_gke_network_user`, default `false`)
 
 ## Inputs
 
@@ -90,7 +90,7 @@ module "workload_api_service" {
 | `folder_id` | Folder ID to create project in | Yes |
 | `billing_account` | Billing account ID | Yes |
 | `project_admin_group_email` | Google Group for project admins | Yes |
-| `shared_vpc_host_project_id` | Host project for Shared VPC | Yes |
+| `shared_vpc_host_project_id` | Host project for Shared VPC | No |
 | `shared_vpc_subnets` | Subnets to grant access to | No |
 | `activate_apis` | Additional APIs to enable | No |
 
