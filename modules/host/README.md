@@ -79,6 +79,40 @@ module "infrastructure" {
 }
 ```
 
+### Cloud Armor Custom Rules
+
+The `cloud_armor_custom_rules` variable supports two mutually-exclusive match types.
+Use exactly one per rule — providing both or neither fails validation at plan time.
+
+**IP/versioned_expr match** — use for IP allow/denylists:
+```hcl
+cloud_armor_custom_rules = {
+  block_untrusted_range = {
+    action   = "deny(403)"
+    priority = 100
+    match_conditions = {
+      versioned_expr = "SRC_IPS_V1"
+      config         = { src_ip_ranges = ["192.0.2.0/24"] }
+    }
+  }
+}
+```
+
+**CEL expression match** — use for header/path/geographic logic:
+```hcl
+cloud_armor_custom_rules = {
+  block_scrapers = {
+    action   = "deny(403)"
+    priority = 200
+    match_conditions = {
+      expr = "request.headers['user-agent'].lower().contains('scrapy')"
+    }
+  }
+}
+```
+
+See [`modules/network/cloud_armor/README.md`](../network/cloud_armor/README.md) for the full variable reference and rate-limiting options.
+
 The generated module reference below is the source of truth for inputs, outputs, and required providers.
 
 ## Architecture
@@ -209,7 +243,7 @@ The following resources are created:
 | <a name="input_cdn_domains"></a> [cdn\_domains](#input\_cdn\_domains) | Domains for managed SSL certificate | `list(string)` | `[]` | no |
 | <a name="input_cdn_enable_http_redirect"></a> [cdn\_enable\_http\_redirect](#input\_cdn\_enable\_http\_redirect) | Enable HTTP to HTTPS redirect | `bool` | `true` | no |
 | <a name="input_cdn_policy"></a> [cdn\_policy](#input\_cdn\_policy) | CDN caching policy configuration | <pre>object({<br/>    cache_mode                   = optional(string, "CACHE_ALL_STATIC")<br/>    client_ttl                   = optional(number, 3600)<br/>    default_ttl                  = optional(number, 3600)<br/>    max_ttl                      = optional(number, 86400)<br/>    negative_caching             = optional(bool, true)<br/>    signed_url_cache_max_age_sec = optional(number, 0)<br/>  })</pre> | `{}` | no |
-| <a name="input_cloud_armor_custom_rules"></a> [cloud\_armor\_custom\_rules](#input\_cloud\_armor\_custom\_rules) | Custom Cloud Armor rules (map of rule name to rule config) | <pre>map(object({<br/>    action      = string<br/>    priority    = number<br/>    description = optional(string)<br/>    match_conditions = object({<br/>      versioned_expr = string<br/>      config = object({<br/>        src_ip_ranges = list(string)<br/>      })<br/>    })<br/>    rate_limit_options = optional(object({<br/>      threshold_count     = number<br/>      interval_sec        = number<br/>      conform_action      = optional(string)<br/>      exceed_action       = optional(string)<br/>      enforce_on_key      = optional(string)<br/>      enforce_on_key_type = optional(string)<br/>    }))<br/>  }))</pre> | `{}` | no |
+| <a name="input_cloud_armor_custom_rules"></a> [cloud\_armor\_custom\_rules](#input\_cloud\_armor\_custom\_rules) | Custom Cloud Armor rules passed through to the cloud\_armor child module.<br/><br/>Two mutually-exclusive match types are supported per rule:<br/><br/>**IP-based (versioned\_expr):**<br/>  match\_conditions = {<br/>    versioned\_expr = "SRC\_IPS\_V1"<br/>    config         = { src\_ip\_ranges = ["10.0.0.0/8"] }<br/>  }<br/><br/>**CEL expression (expr):**<br/>  match\_conditions = {<br/>    expr = "request.headers['user-agent'].lower().contains('scrapy')"<br/>  }<br/><br/>Exactly one of `versioned_expr` or `expr` must be set. Providing both or<br/>neither is rejected at plan time by the cloud\_armor module. | <pre>map(object({<br/>    action      = string<br/>    priority    = number<br/>    description = optional(string)<br/>    match_conditions = object({<br/>      # IP-based match. Set versioned_expr AND config, or set expr — never both.<br/>      versioned_expr = optional(string)<br/>      config = optional(object({<br/>        src_ip_ranges = list(string)<br/>      }))<br/>      # CEL expression match. Mutually exclusive with versioned_expr + config.<br/>      expr = optional(string)<br/>    })<br/>    rate_limit_options = optional(object({<br/>      threshold_count     = number<br/>      interval_sec        = number<br/>      conform_action      = optional(string)<br/>      exceed_action       = optional(string)<br/>      enforce_on_key      = optional(string)<br/>      enforce_on_key_type = optional(string)<br/>    }))<br/>  }))</pre> | `{}` | no |
 | <a name="input_compute_tier_ports"></a> [compute\_tier\_ports](#input\_compute\_tier\_ports) | Ports allowed from public to compute tier. WARNING: Exposing ports directly to 0.0.0.0/0 is discouraged. Prefer using Global Load Balancers with Cloud Armor. | `list(string)` | <pre>[<br/>  "8080",<br/>  "8443",<br/>  "3000"<br/>]</pre> | no |
 | <a name="input_database_ports"></a> [database\_ports](#input\_database\_ports) | Database ports to allow from compute to database tier | `list(string)` | <pre>[<br/>  "3306",<br/>  "5432",<br/>  "6379"<br/>]</pre> | no |
 | <a name="input_dns_zones"></a> [dns\_zones](#input\_dns\_zones) | Map of DNS zones to create | <pre>map(object({<br/>    dns_name        = string<br/>    visibility      = string<br/>    description     = optional(string)<br/>    dnssec_enabled  = optional(bool, false)<br/>    peering_network = optional(string)<br/>    records = optional(list(object({<br/>      name    = string<br/>      type    = string<br/>      ttl     = number<br/>      rrdatas = list(string)<br/>    })), [])<br/>  }))</pre> | `{}` | no |

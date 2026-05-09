@@ -268,16 +268,37 @@ variable "owasp_sensitivity" {
 }
 
 variable "cloud_armor_custom_rules" {
-  description = "Custom Cloud Armor rules (map of rule name to rule config)"
+  description = <<-EOT
+    Custom Cloud Armor rules passed through to the cloud_armor child module.
+
+    Two mutually-exclusive match types are supported per rule:
+
+    **IP-based (versioned_expr):**
+      match_conditions = {
+        versioned_expr = "SRC_IPS_V1"
+        config         = { src_ip_ranges = ["10.0.0.0/8"] }
+      }
+
+    **CEL expression (expr):**
+      match_conditions = {
+        expr = "request.headers['user-agent'].lower().contains('scrapy')"
+      }
+
+    Exactly one of `versioned_expr` or `expr` must be set. Providing both or
+    neither is rejected at plan time by the cloud_armor module.
+  EOT
   type = map(object({
     action      = string
     priority    = number
     description = optional(string)
     match_conditions = object({
-      versioned_expr = string
-      config = object({
+      # IP-based match. Set versioned_expr AND config, or set expr — never both.
+      versioned_expr = optional(string)
+      config = optional(object({
         src_ip_ranges = list(string)
-      })
+      }))
+      # CEL expression match. Mutually exclusive with versioned_expr + config.
+      expr = optional(string)
     })
     rate_limit_options = optional(object({
       threshold_count     = number

@@ -18,23 +18,25 @@ module "tags" {
 
   tags = {
     "environment" = {
-      description = "Deployment environment"
-      values = {
-        "dev"  = "Development"
-        "uat"  = "User Acceptance Testing"
-        "prod" = "Production"
-      }
+      description = "Deployment environment tier"
+      values      = ["dev", "uat", "prod"]
     }
     "cost-center" = {
-      description = "Department for billing"
-      values = {
-        "engineering" = "Engineering Dept"
-        "marketing"   = "Marketing Dept"
-      }
+      description = "Owning department for cost allocation"
+      values      = ["engineering", "marketing"]
+    }
+    "data-classification" = {
+      # description is optional — defaults to "Managed by Terraform"
+      values = ["public", "internal", "confidential", "restricted"]
     }
   }
 }
 ```
+
+> **`values` is a `list(string)`**, not a map. Each string becomes one `google_tags_tag_value`
+> resource whose `short_name` is the list element itself.
+> Each tag key also accepts an optional `description` field (defaults to `"Managed by Terraform"`)
+> that is displayed in the GCP console.
 
 ## Inputs
 
