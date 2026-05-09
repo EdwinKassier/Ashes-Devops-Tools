@@ -1,3 +1,9 @@
+# firebase/project
+
+Bootstraps a Firebase project on an existing GCP project, registering Apple, Android, and Web app targets and exporting the Firebase config JSON to a GCS bucket for runtime consumption.  An optional CMEK key can be supplied to encrypt the config bucket.  All three Firebase SDKs (Firebase, Firestore, Identity Toolkit) are enabled automatically.
+
+**When to use:** use this module when a GCP project also needs a Firebase frontend (mobile or web).  It is intentionally narrow — it manages Firebase platform enablement and app registration only; backend resources (Firestore rules, Storage buckets, Functions) should be managed separately.
+
 <!-- BEGIN_TF_DOCS -->
 
 

@@ -3,6 +3,7 @@
 ## Start Here
 
 - [README](../README.md): repo overview, supported roots, and release model
+- [CLAUDE.md](../CLAUDE.md): onboarding guide for AI agents — repo layout, module authoring rules, common gotchas
 - [Quick Start](guides/QUICK_START.md): local setup and first validation run
 - [Architecture](architecture/ARCHITECTURE.md): control plane, app root, and CI/CD flow
 - [Troubleshooting](guides/TROUBLESHOOTING.md): common local and workflow failures

@@ -1,3 +1,9 @@
+# cloud_storage
+
+Provisions one or more GCS data buckets with a paired audit-log bucket, an access-log bucket, and lifecycle / CMEK controls.  Each bucket is named `<project_id>-<name_suffix>` and can be independently tuned for retention, soft-delete, and force-destroy behaviour.  All bucket-level access logs are written to a dedicated terminal log bucket to avoid circular logging.
+
+**When to use:** reach for this module whenever a workload needs structured, secure GCS storage with consistent naming, log separation, and optional customer-managed encryption.
+
 <!-- BEGIN_TF_DOCS -->
 
 
