@@ -53,10 +53,10 @@ module "cloud_armor" {
         }
       }
       rate_limit_options = {
-        threshold_count     = 100
-        interval_sec        = 60
-        conform_action      = "allow"
-        exceed_action       = "deny(429)"
+        threshold_count = 100
+        interval_sec    = 60
+        conform_action  = "allow"
+        exceed_action   = "deny(429)"
         # enforce_on_key: set to a scalar value (IP, ALL, HTTP_HEADER, etc.) OR
         # omit it to use enforce_on_key_configs instead. Never set both.
         enforce_on_key = "IP"

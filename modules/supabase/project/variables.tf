@@ -4,7 +4,7 @@ variable "organization_id" {
     Organisation Settings → General → Organisation ID.
     Format: lowercase alphanumeric, at least 8 characters.
   EOT
-  type = string
+  type        = string
 
   validation {
     condition     = can(regex("^[a-z0-9]{8,}$", var.organization_id))
@@ -30,8 +30,8 @@ variable "database_password" {
     does not support rotating the password programmatically. Manage
     password rotation directly in the Supabase dashboard.
   EOT
-  type      = string
-  sensitive = true
+  type        = string
+  sensitive   = true
 
   validation {
     condition     = length(var.database_password) >= 16
@@ -44,8 +44,8 @@ variable "region" {
     Supabase deployment region slug. See
     https://supabase.com/docs/guides/platform/regions for the full list.
   EOT
-  type    = string
-  default = "eu-west-2"
+  type        = string
+  default     = "eu-west-2"
 
   validation {
     condition = contains([

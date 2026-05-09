@@ -20,12 +20,12 @@ run "accepts_minimum_rotation_period_86400s" {
   }
 }
 
-run "accepts_maximum_rotation_period_7776000s" {
+run "accepts_maximum_rotation_period_31536000s" {
   command = plan
 
   variables {
     keys = {
-      my-key = { rotation_period = "7776000s" }
+      my-key = { rotation_period = "31536000s" }
     }
   }
 }
@@ -57,7 +57,7 @@ run "rejects_rotation_period_above_maximum" {
 
   variables {
     keys = {
-      too-long = { rotation_period = "7776001s" }
+      too-long = { rotation_period = "31536001s" }
     }
   }
 }

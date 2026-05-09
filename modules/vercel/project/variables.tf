@@ -53,8 +53,8 @@ variable "production_branch" {
     ⚠️  Must be an existing branch — Vercel validates branch existence at apply time.
     Setting a non-existent branch name will fail. Default "main" is safe for most repos.
   EOT
-  type    = string
-  default = "main"
+  type        = string
+  default     = "main"
 
   validation {
     condition     = length(var.production_branch) >= 1
@@ -68,8 +68,8 @@ variable "root_directory" {
     Leave empty ("") for the repository root. The module converts "" to null internally —
     the Vercel API rejects an empty string with invalid_root_directory.
   EOT
-  type    = string
-  default = ""
+  type        = string
+  default     = ""
 }
 
 variable "serverless_function_region" {
@@ -94,8 +94,8 @@ variable "allowed_branches" {
     executes this in /bin/sh. Do not add bash-specific syntax ([[ ]], ==).
     Must contain at least one branch name.
   EOT
-  type    = list(string)
-  default = ["main"]
+  type        = list(string)
+  default     = ["main"]
 
   validation {
     condition     = length(var.allowed_branches) >= 1

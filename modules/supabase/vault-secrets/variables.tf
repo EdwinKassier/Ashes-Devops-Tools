@@ -6,8 +6,8 @@ variable "postgres_url" {
     transaction-mode pooling.
     Format: postgresql://postgres.<project_ref>:<password>@<host>:5432/postgres
   EOT
-  type      = string
-  sensitive = true
+  type        = string
+  sensitive   = true
 }
 
 variable "supabase_ssl_cert" {
@@ -19,9 +19,9 @@ variable "supabase_ssl_cert" {
     Default "" means no cert supplied; the scripts will fail fast for
     pooler endpoints unless PGSSL_INSECURE_NO_VERIFY=1 is set (break-glass).
   EOT
-  type      = string
-  sensitive = true
-  default   = ""
+  type        = string
+  sensitive   = true
+  default     = ""
 }
 
 variable "secrets" {
@@ -45,6 +45,6 @@ variable "secrets" {
         OPENAI_API_KEY     = "sk-..."
       }
   EOT
-  type      = map(string)
-  sensitive = true
+  type        = map(string)
+  sensitive   = true
 }

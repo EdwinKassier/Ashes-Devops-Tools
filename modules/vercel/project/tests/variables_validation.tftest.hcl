@@ -3,8 +3,8 @@
 mock_provider "vercel" {}
 
 variables {
-  project_name  = "my-app"
-  github_repo   = "myorg/my-app"
+  project_name = "my-app"
+  github_repo  = "myorg/my-app"
 }
 
 # ── project_name ───────────────────────────────────────────────────────────────
@@ -15,13 +15,13 @@ run "valid_project_name_accepted" {
 }
 
 run "uppercase_project_name_rejected" {
-  command = plan
+  command         = plan
   expect_failures = [var.project_name]
   variables { project_name = "My-App" }
 }
 
 run "hyphen_start_project_name_rejected" {
-  command = plan
+  command         = plan
   expect_failures = [var.project_name]
   variables { project_name = "-my-app" }
 }
@@ -34,7 +34,7 @@ run "valid_github_repo_accepted" {
 }
 
 run "missing_slash_github_repo_rejected" {
-  command = plan
+  command         = plan
   expect_failures = [var.github_repo]
   variables { github_repo = "myorg-my-app" }
 }
@@ -52,7 +52,7 @@ run "valid_region_iad1_accepted" {
 }
 
 run "invalid_region_rejected" {
-  command = plan
+  command         = plan
   expect_failures = [var.serverless_function_region]
   variables { serverless_function_region = "mars-1" }
 }
@@ -63,15 +63,15 @@ run "valid_domains_accepted" {
   command = plan
   variables {
     domains = [
-      { domain = "qa.example.com",   environment = "qa" },
-      { domain = "uat.example.com",  environment = "uat" },
-      { domain = "example.com",      environment = "production" },
+      { domain = "qa.example.com", environment = "qa" },
+      { domain = "uat.example.com", environment = "uat" },
+      { domain = "example.com", environment = "production" },
     ]
   }
 }
 
 run "invalid_domain_environment_rejected" {
-  command = plan
+  command         = plan
   expect_failures = [var.domains]
   variables {
     domains = [{ domain = "staging.example.com", environment = "staging" }]
@@ -86,7 +86,7 @@ run "valid_allowed_branches_accepted" {
 }
 
 run "empty_allowed_branches_rejected" {
-  command = plan
+  command         = plan
   expect_failures = [var.allowed_branches]
   variables { allowed_branches = [] }
 }
@@ -138,13 +138,13 @@ run "valid_framework_accepted" {
 
 run "empty_string_framework_rejected" {
   # Empty string is NOT the same as null. The validation explicitly rejects "".
-  command = plan
+  command         = plan
   expect_failures = [var.framework]
   variables { framework = "" }
 }
 
 run "invalid_framework_rejected" {
-  command = plan
+  command         = plan
   expect_failures = [var.framework]
   variables { framework = "rails" }
 }

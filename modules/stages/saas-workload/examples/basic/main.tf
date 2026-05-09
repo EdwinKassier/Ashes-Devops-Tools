@@ -16,8 +16,8 @@ locals {
   organization_id   = "abcdefghijklmnop"
   database_password = "super-secret-password-16chars!"
 
-  vercel_team_id  = "team_abcdefghijklmno"
-  vercel_repo     = "myorg/my-app"
+  vercel_team_id = "team_abcdefghijklmno"
+  vercel_repo    = "myorg/my-app"
 
   # After phase 1, populate these from Supabase dashboard or module outputs.
   postgres_url      = "postgresql://postgres.abcdefghijklmnopqrst:password@aws-0-eu-west-2.pooler.supabase.com:5432/postgres"
@@ -32,7 +32,7 @@ module "qa_saas_workload" {
   supabase_project_name       = "my-app-qa"
   supabase_database_password  = local.database_password
   supabase_region             = "eu-west-2"
-  supabase_mailer_autoconfirm = true   # QA only
+  supabase_mailer_autoconfirm = true # QA only
   supabase_disable_signup     = false
 
   # Vault (phase 2)
@@ -54,17 +54,14 @@ module "qa_saas_workload" {
   vercel_serverless_region = "lhr1"
 
   vercel_domains = [
-    { domain = "qa.my-app.com",  environment = "qa" },
-    { domain = "my-app.com",     environment = "production" },
+    { domain = "qa.my-app.com", environment = "qa" },
+    { domain = "my-app.com", environment = "production" },
   ]
 
   vercel_qa_env_vars = [
-    { key = "NEXT_PUBLIC_SUPABASE_URL",      value = "https://abcdefghijklmnopqrst.supabase.co" },
+    { key = "NEXT_PUBLIC_SUPABASE_URL", value = "https://abcdefghijklmnopqrst.supabase.co" },
     { key = "NEXT_PUBLIC_SUPABASE_ANON_KEY", value = "eyJ..." },
-    { key = "NEXT_PUBLIC_APP_URL",           value = "https://qa.my-app.com" },
+    { key = "NEXT_PUBLIC_APP_URL", value = "https://qa.my-app.com" },
   ]
 }
 
-output "supabase_project_id"  { value = module.qa_saas_workload.supabase_project_id }
-output "supabase_api_url"     { value = module.qa_saas_workload.supabase_api_url }
-output "vercel_project_id"    { value = module.qa_saas_workload.vercel_project_id }

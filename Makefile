@@ -39,7 +39,14 @@ validate-all: ## Initialize without backends and validate every supported root
 	@set -e; \
 	for dir in $(TERRAFORM_ROOTS); do \
 		echo "$(YELLOW)Validating $$dir$(NC)"; \
-		$(TERRAFORM) -chdir=$$dir init -backend=false -input=false >/dev/null; \
+		for attempt in 1 2 3; do \
+			if [ -d "$$dir/.terraform/providers" ]; then \
+				$(TERRAFORM) -chdir=$$dir init -backend=false -input=false -upgrade=false -lockfile=readonly >/dev/null && break; \
+			else \
+				$(TERRAFORM) -chdir=$$dir init -backend=false -input=false >/dev/null && break; \
+			fi; \
+			[ $$attempt -lt 3 ] || exit 1; \
+		done; \
 		$(TERRAFORM) -chdir=$$dir validate; \
 	done
 
@@ -80,7 +87,14 @@ test: ## Run terraform test suites (searches module roots and their tests/ subdi
 	fi; \
 	for dir in $$test_dirs; do \
 		echo "$(YELLOW)Testing $$dir$(NC)"; \
-		$(TERRAFORM) -chdir=$$dir init -backend=false -input=false >/dev/null; \
+		for attempt in 1 2 3; do \
+			if [ -d "$$dir/.terraform/providers" ]; then \
+				$(TERRAFORM) -chdir=$$dir init -backend=false -input=false -upgrade=false -lockfile=readonly >/dev/null && break; \
+			else \
+				$(TERRAFORM) -chdir=$$dir init -backend=false -input=false >/dev/null && break; \
+			fi; \
+			[ $$attempt -lt 3 ] || exit 1; \
+		done; \
 		$(TERRAFORM) -chdir=$$dir test; \
 	done
 

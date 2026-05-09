@@ -15,12 +15,9 @@ module "qa_environment" {
   region            = "eu-west-2"
 
   # Auth settings — relax for QA, tighten for production
-  mailer_autoconfirm  = true   # skip email confirmation in QA
-  disable_signup      = false  # allow self-service signup in QA
-  password_min_length = 8      # lower bar for QA test accounts
+  mailer_autoconfirm  = true  # skip email confirmation in QA
+  disable_signup      = false # allow self-service signup in QA
+  password_min_length = 8     # lower bar for QA test accounts
   jwt_expiry          = 3600
 }
 
-output "project_id"      { value = module.qa_environment.project_id }
-output "api_url"         { value = module.qa_environment.api_url }
-output "anon_key"        { value = module.qa_environment.anon_key }

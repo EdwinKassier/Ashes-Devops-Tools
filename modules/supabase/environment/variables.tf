@@ -6,7 +6,7 @@ variable "organization_id" {
     Organisation Settings → General → Organisation ID.
     Format: lowercase alphanumeric, at least 8 characters.
   EOT
-  type = string
+  type        = string
 
   validation {
     condition     = can(regex("^[a-z0-9]{8,}$", var.organization_id))
@@ -29,8 +29,8 @@ variable "database_password" {
     Initial Postgres database password. Minimum 16 characters.
     Ignored after initial project creation — see modules/supabase/project for details.
   EOT
-  type      = string
-  sensitive = true
+  type        = string
+  sensitive   = true
 
   validation {
     condition     = length(var.database_password) >= 16

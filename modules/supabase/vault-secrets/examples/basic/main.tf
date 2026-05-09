@@ -20,7 +20,7 @@ module "vault_secrets" {
   source = "../../"
 
   postgres_url      = local.postgres_url
-  supabase_ssl_cert = ""  # supply base64-encoded CA bundle for pooler connections
+  supabase_ssl_cert = "" # supply base64-encoded CA bundle for pooler connections
 
   secrets = {
     XERO_CLIENT_ID     = "my-client-id"
@@ -29,6 +29,3 @@ module "vault_secrets" {
   }
 }
 
-output "managed_secrets" {
-  value = module.vault_secrets.managed_secret_names
-}

@@ -17,7 +17,7 @@ run "valid_org_id_accepted" {
   command = plan
 
   override_module {
-    target  = module.supabase_environment
+    target = module.supabase_environment
     outputs = {
       project_id        = "abcdefghijklmnopqrst"
       project_name      = "my-app-qa"
@@ -30,7 +30,7 @@ run "valid_org_id_accepted" {
 }
 
 run "short_org_id_rejected" {
-  command = plan
+  command         = plan
   expect_failures = [var.supabase_organization_id]
   variables { supabase_organization_id = "abc" }
 }
@@ -41,7 +41,7 @@ run "vault_disabled_no_url_accepted" {
   command = plan
 
   override_module {
-    target  = module.supabase_environment
+    target = module.supabase_environment
     outputs = {
       project_id        = "abcdefghijklmnopqrst"
       project_name      = "my-app-qa"
@@ -59,7 +59,7 @@ run "vault_disabled_no_url_accepted" {
 }
 
 run "vault_enabled_missing_url_rejected" {
-  command = plan
+  command         = plan
   expect_failures = [var.postgres_url]
   variables {
     enable_vault_secrets = true
@@ -73,7 +73,7 @@ run "vercel_disabled_no_team_accepted" {
   command = plan
 
   override_module {
-    target  = module.supabase_environment
+    target = module.supabase_environment
     outputs = {
       project_id        = "abcdefghijklmnopqrst"
       project_name      = "my-app-qa"
@@ -85,15 +85,15 @@ run "vercel_disabled_no_team_accepted" {
   }
 
   variables {
-    enable_vercel   = false
-    vercel_team_id  = ""
-    vercel_github_repo = ""
+    enable_vercel       = false
+    vercel_team_id      = ""
+    vercel_github_repo  = ""
     vercel_project_name = ""
   }
 }
 
 run "vercel_enabled_missing_team_rejected" {
-  command = plan
+  command         = plan
   expect_failures = [var.vercel_team_id]
   variables {
     enable_vercel       = true
@@ -104,7 +104,7 @@ run "vercel_enabled_missing_team_rejected" {
 }
 
 run "vercel_enabled_invalid_repo_rejected" {
-  command = plan
+  command         = plan
   expect_failures = [var.vercel_github_repo]
   variables {
     enable_vercel       = true
@@ -115,7 +115,7 @@ run "vercel_enabled_invalid_repo_rejected" {
 }
 
 run "vercel_enabled_invalid_project_name_rejected" {
-  command = plan
+  command         = plan
   expect_failures = [var.vercel_project_name]
   variables {
     enable_vercel       = true

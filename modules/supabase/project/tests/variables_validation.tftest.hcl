@@ -18,13 +18,13 @@ run "valid_organization_id_accepted" {
 }
 
 run "short_organization_id_rejected" {
-  command = plan
+  command         = plan
   expect_failures = [var.organization_id]
   variables { organization_id = "abc" }
 }
 
 run "uppercase_organization_id_rejected" {
-  command = plan
+  command         = plan
   expect_failures = [var.organization_id]
   variables { organization_id = "ABCDEFGHIJKLMNOP" }
 }
@@ -37,13 +37,13 @@ run "valid_project_name_accepted" {
 }
 
 run "too_short_project_name_rejected" {
-  command = plan
+  command         = plan
   expect_failures = [var.project_name]
   variables { project_name = "ab" }
 }
 
 run "too_long_project_name_rejected" {
-  command = plan
+  command         = plan
   expect_failures = [var.project_name]
   variables { project_name = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } # 65 chars
 }
@@ -56,7 +56,7 @@ run "valid_password_accepted" {
 }
 
 run "too_short_password_rejected" {
-  command = plan
+  command         = plan
   expect_failures = [var.database_password]
   variables { database_password = "short" }
 }
@@ -69,7 +69,7 @@ run "valid_region_accepted" {
 }
 
 run "invalid_region_rejected" {
-  command = plan
+  command         = plan
   expect_failures = [var.region]
   variables { region = "mars-west-1" }
 }

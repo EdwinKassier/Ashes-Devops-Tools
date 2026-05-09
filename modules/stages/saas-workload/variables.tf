@@ -22,8 +22,8 @@ variable "supabase_project_name" {
 
 variable "supabase_database_password" {
   description = "Initial Postgres database password. Minimum 16 characters. Ignored after initial creation."
-  type      = string
-  sensitive = true
+  type        = string
+  sensitive   = true
 
   validation {
     condition     = length(var.supabase_database_password) >= 16
@@ -118,9 +118,9 @@ variable "postgres_url" {
     Required when enable_vault_secrets = true. Leave empty when disabled.
     Format: postgresql://postgres.<project_ref>:<password>@<host>:5432/postgres
   EOT
-  type      = string
-  sensitive = true
-  default   = ""
+  type        = string
+  sensitive   = true
+  default     = ""
 
   validation {
     condition     = !var.enable_vault_secrets || length(var.postgres_url) > 0
@@ -130,16 +130,16 @@ variable "postgres_url" {
 
 variable "supabase_ssl_cert" {
   description = "Base64-encoded Supabase CA certificate bundle. Required for pooler connections when enable_vault_secrets = true."
-  type      = string
-  sensitive = true
-  default   = ""
+  type        = string
+  sensitive   = true
+  default     = ""
 }
 
 variable "vault_secrets" {
   description = "Desired vault state as name → value map. Only used when enable_vault_secrets = true. Names must be UPPER_SNAKE_CASE."
-  type      = map(string)
-  sensitive = true
-  default   = {}
+  type        = map(string)
+  sensitive   = true
+  default     = {}
 }
 
 # ── Vercel variables ───────────────────────────────────────────────────────────
@@ -272,8 +272,8 @@ variable "vercel_allowed_branches" {
     branches are skipped. Must contain at least one branch name.
     Only used when enable_vercel = true.
   EOT
-  type    = list(string)
-  default = ["main"]
+  type        = list(string)
+  default     = ["main"]
 
   validation {
     condition     = length(var.vercel_allowed_branches) >= 1

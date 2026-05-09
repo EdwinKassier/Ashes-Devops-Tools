@@ -22,8 +22,8 @@ module "project" {
 module "settings" {
   source = "../settings"
 
-  project_ref          = module.project.id
-  api_max_rows         = var.api_max_rows
+  project_ref  = module.project.id
+  api_max_rows = var.api_max_rows
   # Extends collects supabase-environment: collects does not pass db_schema,
   # db_extra_search_path, or jwt_expiry to module.settings (they are hardcoded
   # inside the settings module itself). We parameterise them at the environment

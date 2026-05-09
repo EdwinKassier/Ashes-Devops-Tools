@@ -29,7 +29,7 @@ run "valid_organization_id_accepted" {
 }
 
 run "short_organization_id_rejected" {
-  command = plan
+  command         = plan
   expect_failures = [var.organization_id]
   variables { organization_id = "abc" }
 }
@@ -52,13 +52,13 @@ run "min_jwt_expiry_accepted" {
 }
 
 run "below_min_jwt_expiry_rejected" {
-  command = plan
+  command         = plan
   expect_failures = [var.jwt_expiry]
   variables { jwt_expiry = 299 }
 }
 
 run "invalid_region_rejected" {
-  command = plan
+  command         = plan
   expect_failures = [var.region]
   variables { region = "mars-west-1" }
 }

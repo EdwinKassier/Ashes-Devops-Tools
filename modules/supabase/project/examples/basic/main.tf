@@ -15,6 +15,3 @@ module "supabase_project" {
   region            = "eu-west-2"
 }
 
-output "project_id" {
-  value = module.supabase_project.id
-}

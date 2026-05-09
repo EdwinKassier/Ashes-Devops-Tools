@@ -17,6 +17,6 @@ output "database_password" {
     is rotated via the Supabase dashboard this output will silently return the
     original creation-time value. Treat as a bootstrap convenience only.
   EOT
-  value     = supabase_project.this.database_password
-  sensitive = true
+  value       = supabase_project.this.database_password
+  sensitive   = true
 }

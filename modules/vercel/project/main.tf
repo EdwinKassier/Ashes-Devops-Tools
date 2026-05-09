@@ -42,7 +42,7 @@ locals {
   # Empty allowed_branches is rejected by var.allowed_branches validation
   # (length >= 1 required), so the length == 0 branch is unreachable here
   # but retained for defensive completeness.
-  branch_checks  = join(" ] || [ \"$VERCEL_GIT_COMMIT_REF\" = ", [
+  branch_checks = join(" ] || [ \"$VERCEL_GIT_COMMIT_REF\" = ", [
     for b in var.allowed_branches : "\"${b}\""
   ])
   ignore_command = length(var.allowed_branches) == 0 ? "exit 0" : (
@@ -68,9 +68,9 @@ locals {
   # Sorting key=value strings before hashing is order-independent: reordering
   # items in the variable definition (a refactor with no semantic effect) must
   # not flip the hash and force unnecessary Vercel env var replacements.
-  qa_vars_fingerprint     = nonsensitive(sha256(join("\n", sort([for v in var.qa_environment_variables     : "${v.key}=${v.value}"]))))
-  uat_vars_fingerprint    = nonsensitive(sha256(join("\n", sort([for v in var.uat_environment_variables    : "${v.key}=${v.value}"]))))
-  prod_vars_fingerprint   = nonsensitive(sha256(join("\n", sort([for v in var.prod_environment_variables   : "${v.key}=${v.value}"]))))
+  qa_vars_fingerprint     = nonsensitive(sha256(join("\n", sort([for v in var.qa_environment_variables : "${v.key}=${v.value}"]))))
+  uat_vars_fingerprint    = nonsensitive(sha256(join("\n", sort([for v in var.uat_environment_variables : "${v.key}=${v.value}"]))))
+  prod_vars_fingerprint   = nonsensitive(sha256(join("\n", sort([for v in var.prod_environment_variables : "${v.key}=${v.value}"]))))
   shared_vars_fingerprint = nonsensitive(sha256(join("\n", sort([for v in var.shared_environment_variables : "${v.key}=${v.value}"]))))
 
   # Convert env var lists to maps keyed by variable name for for_each.
@@ -142,7 +142,7 @@ resource "vercel_project_environment_variable" "qa" {
   project_id = vercel_project.this.id
   team_id    = var.team_id != "" ? var.team_id : null
   key        = each.key
-  value      = each.value.value   # provider marks `value` sensitive in schema — no wrapper needed
+  value      = each.value.value # provider marks `value` sensitive in schema — no wrapper needed
   target     = ["preview"]
   sensitive  = each.value.sensitive
 
@@ -163,7 +163,7 @@ resource "vercel_project_environment_variable" "uat" {
   project_id             = vercel_project.this.id
   team_id                = var.team_id != "" ? var.team_id : null
   key                    = each.key
-  value                  = each.value.value   # provider marks `value` sensitive in schema — no wrapper needed
+  value                  = each.value.value # provider marks `value` sensitive in schema — no wrapper needed
   target                 = []
   custom_environment_ids = [vercel_custom_environment.uat.id]
   sensitive              = each.value.sensitive
@@ -181,7 +181,7 @@ resource "vercel_project_environment_variable" "prod" {
   project_id = vercel_project.this.id
   team_id    = var.team_id != "" ? var.team_id : null
   key        = each.key
-  value      = each.value.value   # provider marks `value` sensitive in schema — no wrapper needed
+  value      = each.value.value # provider marks `value` sensitive in schema — no wrapper needed
   target     = ["production"]
   sensitive  = each.value.sensitive
 
@@ -198,7 +198,7 @@ resource "vercel_project_environment_variable" "shared" {
   project_id             = vercel_project.this.id
   team_id                = var.team_id != "" ? var.team_id : null
   key                    = each.key
-  value                  = each.value.value   # provider marks `value` sensitive in schema — no wrapper needed
+  value                  = each.value.value # provider marks `value` sensitive in schema — no wrapper needed
   target                 = ["preview", "production"]
   custom_environment_ids = [vercel_custom_environment.uat.id]
   sensitive              = each.value.sensitive
