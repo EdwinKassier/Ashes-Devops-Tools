@@ -22,6 +22,10 @@ Only secrets whose names match `^[A-Z][A-Z0-9_]*$` (UPPER_SNAKE_CASE) are manage
 
 If `var.secrets` is empty and the vault already contains entries, the reconcile script **refuses to apply** to prevent accidental data loss. Set `VAULT_ALLOW_EMPTY_DESIRED=1` in the environment to override.
 
+## Destroy Behaviour
+
+`terraform destroy` removes the `null_resource` records from Terraform state but does **not** wipe the Supabase Vault contents. Vault secrets persist after destroy. To remove vault secrets, set `secrets = {}` and apply (using `VAULT_ALLOW_EMPTY_DESIRED=1` if the vault already has entries) before destroying.
+
 <!-- BEGIN_TF_DOCS -->
 
 

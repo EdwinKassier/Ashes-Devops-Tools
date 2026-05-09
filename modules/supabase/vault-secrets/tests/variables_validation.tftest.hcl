@@ -20,3 +20,18 @@ run "empty_secrets_map_passes_variable_validation" {
   command = plan
   variables { secrets = {} }
 }
+
+run "managed_secret_names_output_is_sorted_and_not_sensitive" {
+  command = plan
+  variables {
+    secrets = {
+      XERO_CLIENT_SECRET = "my-secret"
+      OPENAI_API_KEY     = "sk-..."
+      XERO_CLIENT_ID     = "my-id"
+    }
+  }
+  assert {
+    condition     = output.managed_secret_names == tolist(["OPENAI_API_KEY", "XERO_CLIENT_ID", "XERO_CLIENT_SECRET"])
+    error_message = "managed_secret_names must be sorted and contain only key names (not values)"
+  }
+}
