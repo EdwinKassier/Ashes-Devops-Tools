@@ -76,6 +76,77 @@ updates:
       - "dependencies"
       - "module:stages"
 
+  # ─── Supabase modules ─────────────────────────────────────────────────────
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/supabase/project"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:supabase"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/supabase/settings"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:supabase"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/supabase/environment"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:supabase"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/supabase/vault-secrets"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:supabase"
+
+  - package-ecosystem: "npm"
+    directory: "/modules/supabase/vault-secrets/scripts"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:supabase"
+
+  # ─── Vercel modules ────────────────────────────────────────────────────────
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/vercel/project"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:vercel"
+
+  # ─── Stage modules (saas-workload) ─────────────────────────────────────────
+  # Placed after the provider-specific module blocks per existing repo ordering
+  # (all modules/stages/* entries live under the Stage modules header).
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/stages/saas-workload"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "module:stages"
+
   # ─── Governance modules ──────────────────────────────────────────────────────
 
   - package-ecosystem: "terraform"
@@ -810,6 +881,60 @@ updates:
 
   - package-ecosystem: "terraform"
     directory: "/modules/stages/workload/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/supabase/project/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/supabase/settings/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/supabase/environment/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/supabase/vault-secrets/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/vercel/project/examples/basic"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "example"
+
+  - package-ecosystem: "terraform"
+    directory: "/modules/stages/saas-workload/examples/basic"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
