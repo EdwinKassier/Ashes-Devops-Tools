@@ -11,6 +11,7 @@
 
 - `envs/organization` is the control-plane root.
 - `envs/apps` is the only deployable application-environment root.
+- `modules/stages/saas-workload` composes Supabase + Vercel for per-environment SaaS deployments.
 - Terraform Cloud owns live state and apply runs.
 - GitHub Actions validates code and publishes release metadata.
 
@@ -55,6 +56,13 @@ make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars
 - [KMS Rotation](runbooks/kms-rotation.md): rotate CMEK keys automatically or manually
 - [CIDR Expansion](runbooks/cidr-expansion.md): expand subnet ranges without downtime
 - [Break Glass](runbooks/break-glass.md): emergency access when Workload Identity Federation fails
+
+## SaaS Modules
+
+- [Quick Start → Section 3a](guides/QUICK_START.md#3a-configure-supabase-and-vercel-provider-credentials): Supabase + Vercel token setup, Node.js requirement
+- [Architecture → SaaS Modules](architecture/ARCHITECTURE.md#saas-modules): module descriptions and design decisions
+- [Troubleshooting → Supabase errors](guides/TROUBLESHOOTING.md#supabase-module-errors): token errors, provisioner failures, vault safety guard
+- Module READMEs: [`modules/supabase/environment`](../modules/supabase/environment/README.md) · [`modules/supabase/vault-secrets`](../modules/supabase/vault-secrets/README.md) · [`modules/vercel/project`](../modules/vercel/project/README.md) · [`modules/stages/saas-workload`](../modules/stages/saas-workload/README.md)
 
 ## Security & Governance
 

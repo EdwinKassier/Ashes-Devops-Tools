@@ -145,9 +145,16 @@ Terraform modules are organized by category:
 - `modules/governance/kms/` - Key Management Service
 - `modules/governance/tags/` - Resource Tags
 
+#### **SaaS Integrations**
+- `modules/supabase/project/` - Supabase project provisioning
+- `modules/supabase/settings/` - Auth and API settings management
+- `modules/supabase/environment/` - Composite project + settings + API keys
+- `modules/supabase/vault-secrets/` - Vault bootstrap and secret reconciliation (Node.js)
+- `modules/vercel/project/` - Vercel project with QA/UAT/production environments and drift resistance
+
 #### **Orchestration**
 - `modules/host/` - Compatibility wrapper used by the app root
-- `modules/stages/` - Landing Zone stages (Bootstrap, Org, Projects, Network Hub, Workload)
+- `modules/stages/` - Landing Zone stages (Bootstrap, Org, Projects, Network Hub, Workload, SaaS Workload)
 
 ---
 
