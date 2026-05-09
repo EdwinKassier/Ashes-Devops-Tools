@@ -1,0 +1,13 @@
+{
+  "name": "vault-secrets-scripts",
+  "version": "1.0.0",
+  "description": "Node.js scripts for the supabase/vault-secrets Terraform module",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "pg": "^8.20.0"
+  }
+}
