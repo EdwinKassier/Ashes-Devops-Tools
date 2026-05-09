@@ -45,14 +45,14 @@ jobs:
 
       - name: Upload TFSec modules SARIF
         if: inputs.sarif_output && always()
-        uses: github/codeql-action/upload-sarif@45775bd8235c68ba998cffa5171334d58593da47  # v3.28.15
+        uses: github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e  # v4.35.4
         with:
           sarif_file: tfsec-results.sarif
           category: tfsec
 
       - name: Upload TFSec envs SARIF
         if: inputs.sarif_output && always()
-        uses: github/codeql-action/upload-sarif@45775bd8235c68ba998cffa5171334d58593da47  # v3.28.15
+        uses: github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e  # v4.35.4
         with:
           sarif_file: tfsec-env-results.sarif
           category: tfsec-envs
@@ -106,14 +106,14 @@ jobs:
 
       - name: Upload Checkov modules SARIF
         if: inputs.sarif_output && always()
-        uses: github/codeql-action/upload-sarif@45775bd8235c68ba998cffa5171334d58593da47  # v3.28.15
+        uses: github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e  # v4.35.4
         with:
           sarif_file: checkov-results.sarif
           category: checkov
 
       - name: Upload Checkov envs SARIF
         if: inputs.sarif_output && always()
-        uses: github/codeql-action/upload-sarif@45775bd8235c68ba998cffa5171334d58593da47  # v3.28.15
+        uses: github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e  # v4.35.4
         with:
           sarif_file: checkov-env-results.sarif
           category: checkov-envs
