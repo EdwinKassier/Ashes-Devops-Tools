@@ -21,8 +21,11 @@ module "kms" {
 
   keys = {
     "storage-key" = {
-      rotation_period       = "7776000s"  # 90 days
-      encrypter_decrypters  = ["serviceAccount:my-sa@project.iam.gserviceaccount.com"]
+      # rotation_period: minimum 86400s (1 day), maximum 31536000s (365 days).
+      # The module enforces this range via a validation block and will reject
+      # values outside it at plan time.
+      rotation_period      = "7776000s"  # 90 days
+      encrypter_decrypters = ["serviceAccount:my-sa@project.iam.gserviceaccount.com"]
     }
     "bigquery-key" = {
       rotation_period = "7776000s"

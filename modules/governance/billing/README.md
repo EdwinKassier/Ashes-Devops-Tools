@@ -8,7 +8,7 @@ Creates billing budgets and alerts for Google Cloud projects.
 - Multiple threshold rules (50%, 90%, 100%)
 - Forecasted spend alerting
 - Pub/Sub notifications for programmatic reactions
-- Email notifications via Cloud Functions (optional)
+- Email notifications via **Cloud Functions gen2** (optional) — the function is backed by **Cloud Run v2** at runtime; use `var.vpc_connector` to attach it to a VPC when the `cloudfunctions.requireVPCConnector` org policy is enforced
 
 ## Usage
 

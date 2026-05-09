@@ -14,7 +14,9 @@ Applies organization policies (constraints) at org, folder, or project level.
 module "org_policies" {
   source = "../../governance/org-policy"
 
-  org_id = "123456789"
+  # Required: the resource to attach policies to.
+  # Accepts "organizations/<id>", "folders/<id>", or "projects/<id>".
+  parent = "organizations/123456789"
 
   boolean_policies = [
     {
@@ -55,9 +57,9 @@ module "org_policies" {
 
 | Name | Description | Type | Required |
 |------|-------------|------|:--------:|
-| org_id | Organization ID | string | yes |
-| boolean_policies | List of boolean constraints | list(object) | no |
-| list_policies | List of list constraints | list(object) | no |
+| parent | Resource to attach policies to (`organizations/<id>`, `folders/<id>`, or `projects/<id>`) | string | yes |
+| boolean_policies | List of boolean constraints — constraint names must be unique within the list | list(object) | no |
+| list_policies | List of list constraints — constraint names must be unique within the list | list(object) | no |
 
 <!-- BEGIN_TF_DOCS -->
 

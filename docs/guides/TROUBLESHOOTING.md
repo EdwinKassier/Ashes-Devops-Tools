@@ -192,3 +192,82 @@ resource "google_storage_bucket" "example" {
 ```
 
 Always include a justification after the colon. The CI Checkov run uses `.checkov.yaml` for repo-level exceptions; add an entry there only if the skip applies to every instance of that check across the entire codebase.
+
+---
+
+## Plan-time precondition failures
+
+### `Error: Resource precondition failed — subnet CIDR count guard`
+
+```
+╷
+│ Error: Resource precondition failed
+│ on modules/host/main.tf: var.private_subnet_cidrs has fewer entries than the
+│ number of zones in the selected region.
+```
+
+**Cause:** The number of CIDR blocks supplied for `private_subnet_cidrs` (or `database_subnet_cidrs`) is less than the number of availability zones `modules/host` will create subnets in.
+
+**Fix (option A — recommended for production):** Set `explicit_zones` to pin the exact zones you need:
+```hcl
+explicit_zones = ["us-central1-a", "us-central1-b", "us-central1-c"]
+```
+Then add one CIDR per zone:
+```hcl
+private_subnet_cidrs = ["10.0.0.0/24", "10.0.1.0/24", "10.0.2.0/24"]
+```
+
+**Fix (option B):** Add CIDRs until the count matches or exceeds the zone count returned by the region.
+
+---
+
+### `Error: Resource precondition failed — deletion protection guard`
+
+```
+╷
+│ Error: Resource precondition failed
+│ on modules/host/main.tf: set enable_deletion_protection = false and re-apply
+│ before running terraform destroy.
+```
+
+**Cause:** `enable_deletion_protection = true` (the default) blocks `terraform destroy` of the hub network stack.
+
+**Fix:** Set `enable_deletion_protection = false` and apply once before destroying:
+```hcl
+enable_deletion_protection = false
+```
+```bash
+terraform apply   # lifts the guard
+terraform destroy # now succeeds
+```
+
+---
+
+## VPC-SC `projects/` membership errors
+
+### `Error: Error creating Service Perimeter … "projects/my-project-id" is not a valid resource name`
+
+**Cause:** `spoke_project_numbers` was given a project ID string instead of a numeric project number. The Access Context Manager API only accepts the `projects/<number>` form.
+
+**Fix:** Replace project ID strings with numeric project numbers:
+```bash
+gcloud projects describe my-project-id --format='value(projectNumber)'
+```
+Then set:
+```hcl
+spoke_project_numbers = {
+  "my-project" = "123456789012"   # numeric number, not project ID
+}
+```
+
+---
+
+## Previously-reported bugs fixed in recent releases
+
+The following errors were present in earlier versions and have been resolved. If you encounter them on an older revision, upgrade to the latest release.
+
+| Symptom | Root cause | Fixed in |
+|---------|------------|----------|
+| `google_cloud_run_service_iam_member: resource not found` on budget notifier deploy | Cloud Functions gen2 deploys as Cloud Run v2; the wrong IAM resource type was used | Round 28 |
+| `Error: Invalid combination of arguments: enforce_on_key and enforce_on_key_configs are mutually exclusive` | Cloud Armor rate limit rule set both fields | Round 28 |
+| VPC-SC `permission denied` with project ID string (see above) | `spoke_project_ids` accepted strings; API requires numbers | Round 28 |

@@ -20,8 +20,11 @@ module "network_hub" {
   org_id                 = local.org_id
   internal_domain        = "internal.example.com."
 
-  # Map of spoke project names to project IDs that will peer to the hub VPC.
-  spoke_project_ids = {}
+  # Map of spoke project names to NUMERIC project numbers (not project ID strings).
+  # The Access Context Manager API requires numeric numbers; project ID strings are
+  # silently rejected or cause misleading permission errors.
+  # Example: { "prod-app" = "123456789012" }
+  spoke_project_numbers = {}
 
   # Folders from the organization stage — used to attach hub DNS policies.
   folders = {

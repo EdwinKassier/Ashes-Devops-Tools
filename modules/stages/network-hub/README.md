@@ -29,9 +29,11 @@ module "network_hub" {
   # DNS Configuration
   internal_domain = "internal.mycompany.com"
 
-  # Spoke Attachments
-  spoke_project_ids = {
-    "prod-app" = "project-123"
+  # Spoke project NUMBERS (not project ID strings) for VPC-SC perimeter membership.
+  # The Access Context Manager API requires numeric project numbers; project ID
+  # strings cause misleading "permission denied" errors at apply time.
+  spoke_project_numbers = {
+    "prod-app" = "123456789012"   # run: gcloud projects describe <id> --format='value(projectNumber)'
   }
 }
 ```

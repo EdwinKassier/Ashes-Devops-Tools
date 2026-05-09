@@ -85,7 +85,7 @@ That keeps CIDRs explicit and stable. The old pattern of deriving CIDRs from key
   - org policy
   - audit logging
   - SCC notifications
-  - billing export
+  - billing export and budget alerts — optional email notifications are delivered via a **Cloud Functions gen2** function backed by Cloud Run v2; set `vpc_connector` when the `cloudfunctions.requireVPCConnector` org policy is enforced
 
 - `modules/stages/projects`
   - shared platform projects
@@ -96,6 +96,7 @@ That keeps CIDRs explicit and stable. The old pattern of deriving CIDRs from key
   - shared DNS
   - hierarchical firewall
   - organization-spanning connectivity
+  - VPC Service Controls perimeter — `spoke_project_numbers` must contain **numeric project numbers** (e.g. `"123456789012"`), not project ID strings; the Access Context Manager API rejects project ID strings with a misleading permission error
 
 - `modules/stages/workload`
   - separate service projects that attach to a Shared VPC host

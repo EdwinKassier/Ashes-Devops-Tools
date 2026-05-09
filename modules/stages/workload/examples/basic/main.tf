@@ -51,8 +51,8 @@ module "backend_service_project" {
   shared_vpc_subnets           = local.subnets
 
   # Grant least-privilege roles to the team admin group.
-  # WARNING: google_project_iam_binding is AUTHORITATIVE per role — on every apply it
-  # removes any member not listed here. Use this only for roles Terraform owns.
+  # Bindings use google_project_iam_member (additive) — other members holding
+  # these roles are preserved on every apply; Terraform will not evict them.
   project_admin_group_email = local.team_admin_group
   project_admin_roles = [
     "roles/run.developer",

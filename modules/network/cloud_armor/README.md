@@ -15,20 +15,33 @@ This module manages Google Cloud Armor security policies, providing DDoS protect
 module "cloud_armor" {
   source = "./modules/network/cloud_armor"
 
-  project_id = "my-project-id"
-  name       = "edge-security-policy"
-  
-  # Enable OWASP Protection
-  enable_owasp_rules = true
-  owasp_sensitivity  = 1  # 0-4
-  
-  # Custom Whitelist
+  project_id  = "my-project-id"
+  policy_name = "edge-security-policy"
+
+  # Enable OWASP Protection (disabled by default; enable for public-facing apps)
+  enable_owasp_rules = false
+  owasp_sensitivity  = 2  # 1-4 (lower is more sensitive)
+
+  # Custom rules: use versioned_expr for IP matching, expr for CEL expressions
   custom_rules = {
     "allow-office-vpn" = {
       action      = "allow"
       priority    = 1000
-      expression  = "inIpRange(origin.ip, '203.0.113.0/24')"
-      description = "Allow Office IP"
+      description = "Allow Office VPN IP range"
+      match_conditions = {
+        versioned_expr = "SRC_IPS_V1"
+        config = {
+          src_ip_ranges = ["203.0.113.0/24"]
+        }
+      }
+    }
+    "block-bad-user-agent" = {
+      action      = "deny(403)"
+      priority    = 2000
+      description = "Block requests with a known-malicious User-Agent header"
+      match_conditions = {
+        expr = "request.headers['user-agent'].contains('BadBot')"
+      }
     }
   }
 }
@@ -39,11 +52,11 @@ module "cloud_armor" {
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | `project_id` | Project ID | `string` | n/a | yes |
-| `name` | Policy name | `string` | n/a | yes |
-| `enable_owasp_rules` | Enable OWASP CRS | `bool` | `true` | no |
-| `owasp_sensitivity` | WAF sensitivity (0-4) | `number` | `1` | no |
+| `policy_name` | Policy name | `string` | n/a | yes |
+| `enable_owasp_rules` | Enable OWASP CRS | `bool` | `false` | no |
+| `owasp_sensitivity` | WAF sensitivity (1-4, lower is more sensitive) | `number` | `2` | no |
 | `custom_rules` | Map of custom rules | `map(object)` | `{}` | no |
-| `default_rule_action`| Default action (`allow`/`deny`) | `string` | `"deny"` | no |
+| `default_rule_action`| Default action (`allow`/`deny`) | `string` | `"allow"` | no |
 
 ## Outputs
 

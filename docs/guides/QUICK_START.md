@@ -210,6 +210,8 @@ TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=examples/dev.tfv
 | `enable_interconnect` | `false` | Provision Dedicated Interconnect VLAN attachment |
 | `enable_vpn` | `false` | Provision HA-VPN tunnels |
 | `owasp_sensitivity` | `2` | Cloud Armor OWASP rule sensitivity (1=strict, 4=permissive) |
+| `explicit_zones` | `[]` | **Required for production.** Pin the availability zones used for subnet layout (e.g. `["us-central1-a","us-central1-b","us-central1-c"]`). Without this the module queries the GCP API at plan time; if the API returns a different number of zones between runs, Terraform will plan subnet destruction. |
+| `spoke_project_numbers` | `{}` | Map of spoke project **numeric numbers** (not project ID strings) to include in the VPC-SC perimeter. The Access Context Manager API rejects project ID strings with a misleading permission error. Obtain with: `gcloud projects describe <id> --format='value(projectNumber)'` |
 
 ---
 
