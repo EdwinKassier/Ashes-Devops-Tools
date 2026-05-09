@@ -113,3 +113,14 @@ run "vercel_enabled_invalid_repo_rejected" {
     vercel_github_repo  = "not-a-valid-repo"
   }
 }
+
+run "vercel_enabled_invalid_project_name_rejected" {
+  command = plan
+  expect_failures = [var.vercel_project_name]
+  variables {
+    enable_vercel       = true
+    vercel_team_id      = "team_abc"
+    vercel_project_name = "INVALID_NAME"
+    vercel_github_repo  = "myorg/my-app"
+  }
+}
