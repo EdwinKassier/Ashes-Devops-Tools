@@ -10,6 +10,44 @@ Releases are tagged as `organization/vX.Y.Z` and `apps/<env>/vX.Y.Z`.
 ## [Unreleased]
 
 ### Added
+- `modules/stages/bootstrap/variables.tf` — `project_prefix` validation: must start with lowercase letter, contain only lowercase letters/digits/hyphens, max 10 characters; prevents project IDs exceeding GCP's 30-character limit
+- `modules/stages/bootstrap/variables.tf` — `org_id` validation: digits-only, without `organizations/` prefix (matches pattern already enforced in other modules)
+- `modules/governance/scc/variables.tf` — `org_id` (digits-only) and `project_id` (GCP 6–30 character format) format validation blocks
+- `modules/governance/tags/variables.tf` — `var.tags` type changed from `map(list(string))` to `map(object({values = list(string), description = optional(string, "Managed by Terraform")}))` — each tag key/value can now carry a human-readable description shown in the GCP console; description defaults to `"Managed by Terraform"` when omitted
+- `modules/governance/tags/main.tf` — tag key and value `description` attributes now use `each.value.description` instead of the hardcoded `"Managed by Terraform"` string
+- `modules/host/main.tf` — `terraform_data.subnet_cidr_count_guard` precondition: fires when an explicitly-provided CIDR list is shorter than the number of availability zones, surfacing the root cause immediately instead of an opaque `Invalid index` error
+- `modules/network/cloud_armor/variables.tf` — CEL `expr` match type added to `custom_rules.match_conditions` alongside the existing `versioned_expr` path; allows header/path/geographic rules without switching to separate OWASP resources
+- `modules/network/cloud_armor/variables.tf` — mutual-exclusion validation: exactly one of `versioned_expr` or `expr` must be set per rule; providing both or neither fails at plan time with a clear error
+- `modules/stages/workload/tests/iam_validation.tftest.hcl` — `rejects_billing_creator` test (previously only `billing.admin` was tested despite both being in the deny list)
+
+### Changed
+- `modules/stages/workload/variables.tf` — `project_admin_roles` description corrected: module uses additive `google_project_iam_member` (not authoritative `google_project_iam_binding`); description now accurately documents the non-eviction behaviour
+- `modules/cloud_storage/variables.tf` — `kms_key_name` is now optional (`default = null`); GMEK (Google-managed encryption) is accepted when the variable is omitted; validation is null-safe; description adds upgrade guidance for compliance environments
+- `modules/network/cloud_armor/main.tf` — `enforce_on_key_configs` block wrapped in a `dynamic` block conditioned on `enforce_on_key == null`; the Cloud Armor API rejects requests that include both the scalar `enforce_on_key` and the structured `enforce_on_key_configs` in the same rule
+- `modules/network/cloud_armor/main.tf` — `match` block now handles both `versioned_expr` + `config` (IP matching) and `expr` (CEL) paths via `dynamic` blocks; both are mutually exclusive at the API layer
+- `modules/stages/organization/main.tf` — `module "tags"` call updated to the new `map(object({values, description}))` type with descriptive strings for `environment`, `business-unit`, and `data-classification` keys
+- `SECURITY.md` — corrected KMS rotation period documentation from `1–90 days` to `1–365 days` (validation upper bound was relaxed in a prior round)
+
+### Fixed
+- `modules/governance/billing/main.tf` — replaced `google_cloud_run_service_iam_member` (Cloud Run v1 IAM API) with `google_cloud_run_v2_service_iam_member` (Cloud Run v2 IAM API); Cloud Functions gen2 deploys as a Cloud Run v2 service, not v1 — the v1 resource cannot find the service and silently fails to set the invoker binding, preventing Pub/Sub from calling the budget notifier
+
+### Breaking Changes
+- **`modules/governance/tags`** — `var.tags` type changed. Callers must migrate from `map(list(string))` to `map(object({values = list(string), description = optional(string)}))`. Migration example:
+  ```hcl
+  # Before
+  tags = {
+    "environment" = ["dev", "prod"]
+  }
+
+  # After
+  tags = {
+    "environment" = {
+      values = ["dev", "prod"]  # description is optional, defaults to "Managed by Terraform"
+    }
+  }
+  ```
+
+### Added
 - `modules/stages/bootstrap/main.tf` — `google_billing_account_iam_member` grants `roles/billing.costsManager` to the Terraform admin SA; without this, `google_billing_budget` creation fails at apply time with a permissions error even when folder-level roles are present
 - `modules/governance/org-policy/variables.tf` — duplicate constraint validation on both `boolean_policies` and `list_policies`; prevents silent last-wins overwrite when the same constraint appears twice
 - `modules/governance/org-policy/tests/validation.tftest.hcl` — 2 new tests rejecting duplicate boolean and list policy constraints

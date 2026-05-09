@@ -97,7 +97,7 @@ The following resources are created:
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_org_id"></a> [org\_id](#input\_org\_id) | The numeric Organization ID where tags will be defined (digits only, without 'organizations/' prefix) | `string` | n/a | yes |
-| <a name="input_tags"></a> [tags](#input\_tags) | Map of Tag Keys to a list of allowed Tag Values. Keys and values follow GCP tag short\_name constraints: 1-63 chars, must start with a lowercase letter, may contain lowercase letters, digits, hyphens, and underscores. No spaces or uppercase. | `map(list(string))` | n/a | yes |
+| <a name="input_tags"></a> [tags](#input\_tags) | Map of Tag Keys to their configuration. Each entry creates one Tag Key and its<br/>allowed Tag Values under the organization.<br/><br/>Keys and value short\_names follow GCP tag constraints: 1–63 characters, must<br/>start with a lowercase letter, may contain lowercase letters, digits, hyphens,<br/>and underscores. No spaces or uppercase.<br/><br/>The optional `description` field sets a human-readable description on both the<br/>Tag Key resource and each of its Tag Values. Defaults to "Managed by Terraform"<br/>when omitted.<br/><br/>Example:<br/>  tags = {<br/>    "environment" = {<br/>      values      = ["dev", "staging", "prod"]<br/>      description = "Deployment environment tier"<br/>    }<br/>    "cost-center" = {<br/>      values = ["engineering", "marketing"]<br/>    }<br/>  } | <pre>map(object({<br/>    values      = list(string)<br/>    description = optional(string, "Managed by Terraform")<br/>  }))</pre> | n/a | yes |
 
 ## Outputs
 

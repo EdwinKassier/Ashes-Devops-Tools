@@ -96,7 +96,7 @@ The following resources are created:
 
 
 - resource.google_billing_budget.monthly_budget (modules/governance/billing/main.tf#L5)
-- resource.google_cloud_run_service_iam_member.budget_notifier_invoker (modules/governance/billing/main.tf#L179)
+- resource.google_cloud_run_v2_service_iam_member.budget_notifier_invoker (modules/governance/billing/main.tf#L184)
 - resource.google_cloudfunctions2_function.budget_notifier (modules/governance/billing/main.tf#L113)
 - resource.google_pubsub_subscription.budget_alerts_sub (modules/governance/billing/main.tf#L75)
 - resource.google_pubsub_topic.budget_alerts (modules/governance/billing/main.tf#L60)
@@ -115,8 +115,8 @@ The following resources are created:
 | <a name="input_currency_code"></a> [currency\_code](#input\_currency\_code) | The currency code for the budget (e.g., USD, EUR, GBP) | `string` | `"USD"` | no |
 | <a name="input_email_recipients"></a> [email\_recipients](#input\_email\_recipients) | List of email addresses to receive budget alerts | `list(string)` | `[]` | no |
 | <a name="input_enable_email_notifications"></a> [enable\_email\_notifications](#input\_enable\_email\_notifications) | Enable email notifications via Cloud Function | `bool` | `false` | no |
-| <a name="input_function_source_object"></a> [function\_source\_object](#input\_function\_source\_object) | Cloud Storage object name for the Cloud Function source | `string` | `""` | no |
-| <a name="input_functions_bucket"></a> [functions\_bucket](#input\_functions\_bucket) | Cloud Storage bucket containing the Cloud Function source code | `string` | `""` | no |
+| <a name="input_function_source_object"></a> [function\_source\_object](#input\_function\_source\_object) | Cloud Storage object name for the Cloud Function source. Required when enable\_email\_notifications = true. | `string` | `""` | no |
+| <a name="input_functions_bucket"></a> [functions\_bucket](#input\_functions\_bucket) | Cloud Storage bucket containing the Cloud Function source code. Required when enable\_email\_notifications = true. | `string` | `""` | no |
 | <a name="input_kms_key_name"></a> [kms\_key\_name](#input\_kms\_key\_name) | Optional customer-managed KMS key used to encrypt the budget alert Pub/Sub topic | `string` | `null` | no |
 | <a name="input_label_filters"></a> [label\_filters](#input\_label\_filters) | Map of label keys to values for filtering budget scope (single value per key) | `map(string)` | `{}` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to all resources. Replaces the deprecated 'tags' variable for consistency with all other modules in this codebase. | `map(string)` | `{}` | no |

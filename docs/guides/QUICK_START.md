@@ -183,7 +183,7 @@ TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=examples/dev.tfv
 |----------|---------|-------------|
 | `billing_account` | `null` | Billing account ID — required unless `billing_account_display_name` is set |
 | `billing_account_display_name` | `null` | Alternative to `billing_account` — looks up by display name |
-| `project_prefix` | `"my-org"` | Short prefix for all project names |
+| `project_prefix` | `"my-org"` | Short prefix for all project names (1–10 chars, lowercase, starts with a letter) |
 | `default_region` | `"europe-west1"` | Primary region for KMS, logging, network hub |
 | `tfc_organization` | `null` | Terraform Cloud org name for dynamic provider credentials |
 | `break_glass_user` | `null` | Email granted Organization Admin in emergencies |

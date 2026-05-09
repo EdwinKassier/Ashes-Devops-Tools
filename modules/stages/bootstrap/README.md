@@ -92,7 +92,8 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_organization_iam_member.terraform_admin_exception_org_roles (modules/stages/bootstrap/main.tf#L136)
+- resource.google_billing_account_iam_member.terraform_admin_billing_costs_manager (modules/stages/bootstrap/main.tf#L141)
+- resource.google_organization_iam_member.terraform_admin_exception_org_roles (modules/stages/bootstrap/main.tf#L150)
 - resource.google_organization_iam_member.terraform_admin_standard_org_roles (modules/stages/bootstrap/main.tf#L121)
 - resource.google_project.admin_project (modules/stages/bootstrap/main.tf#L15)
 - resource.google_project_service.admin_project_services (modules/stages/bootstrap/main.tf#L33)
@@ -108,10 +109,10 @@ The following resources are created:
 | <a name="input_billing_account"></a> [billing\_account](#input\_billing\_account) | Billing Account ID in format XXXXXX-XXXXXX-XXXXXX | `string` | n/a | yes |
 | <a name="input_github_org"></a> [github\_org](#input\_github\_org) | GitHub organization name. No defaults — must be set explicitly to avoid accidentally trusting the wrong org when forking. | `string` | n/a | yes |
 | <a name="input_github_repo"></a> [github\_repo](#input\_github\_repo) | GitHub repository name (without owner prefix). No defaults — must be set explicitly to avoid accidentally trusting the wrong repo when forking. | `string` | n/a | yes |
-| <a name="input_org_id"></a> [org\_id](#input\_org\_id) | Organization ID | `string` | n/a | yes |
-| <a name="input_project_prefix"></a> [project\_prefix](#input\_project\_prefix) | Prefix to use for project names | `string` | n/a | yes |
+| <a name="input_org_id"></a> [org\_id](#input\_org\_id) | Numeric GCP Organization ID (digits only, without the 'organizations/' prefix). | `string` | n/a | yes |
+| <a name="input_project_prefix"></a> [project\_prefix](#input\_project\_prefix) | Short prefix prepended to all project names created by this bootstrap.<br/>Constraints: 1–10 characters, starts with a lowercase letter, may contain<br/>lowercase letters, digits, and hyphens. Kept short so the full project ID<br/>stays within GCP's 30-character limit after suffixes are appended. | `string` | n/a | yes |
 | <a name="input_enable_tfc_oidc"></a> [enable\_tfc\_oidc](#input\_enable\_tfc\_oidc) | Enable Terraform Cloud OIDC for Dynamic Credentials | `bool` | `true` | no |
-| <a name="input_tfc_organization"></a> [tfc\_organization](#input\_tfc\_organization) | Terraform Cloud organization name | `string` | `null` | no |
+| <a name="input_tfc_organization"></a> [tfc\_organization](#input\_tfc\_organization) | Terraform Cloud organization name. Required (non-null) when enable\_tfc\_oidc = true — leaving it null while enable\_tfc\_oidc = true silently skips pool creation with no error. | `string` | `null` | no |
 | <a name="input_tfc_workspaces"></a> [tfc\_workspaces](#input\_tfc\_workspaces) | List of TFC workspaces to grant access to Terraform Admin SA. Must be non-empty when enable\_tfc\_oidc = true. | `list(string)` | `[]` | no |
 
 ## Outputs

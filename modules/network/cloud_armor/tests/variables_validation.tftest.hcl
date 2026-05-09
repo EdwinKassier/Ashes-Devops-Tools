@@ -111,3 +111,61 @@ run "rejects_invalid_custom_rule_action" {
     }
   }
 }
+
+# ── custom_rules match_conditions — CEL expr path ─────────────────────────────
+
+run "accepts_cel_expr_match_condition" {
+  # CEL expression match is mutually exclusive with versioned_expr.
+  command = plan
+
+  variables {
+    custom_rules = {
+      block-scrapers = {
+        action      = "deny(403)"
+        priority    = 500
+        description = "Block known scraper user agents via CEL"
+        match_conditions = {
+          expr = "request.headers['user-agent'].lower().contains('scrapy')"
+        }
+      }
+    }
+  }
+}
+
+run "rejects_both_versioned_expr_and_cel_expr" {
+  # Providing both match types in the same rule must fail validation.
+  command = plan
+
+  expect_failures = [var.custom_rules]
+
+  variables {
+    custom_rules = {
+      conflicting-rule = {
+        action   = "deny(403)"
+        priority = 600
+        match_conditions = {
+          versioned_expr = "SRC_IPS_V1"
+          config         = { src_ip_ranges = ["0.0.0.0/0"] }
+          expr           = "request.headers['user-agent'].contains('bot')"
+        }
+      }
+    }
+  }
+}
+
+run "rejects_neither_versioned_expr_nor_cel_expr" {
+  # Providing neither match type must also fail validation.
+  command = plan
+
+  expect_failures = [var.custom_rules]
+
+  variables {
+    custom_rules = {
+      empty-match-rule = {
+        action   = "deny(403)"
+        priority = 700
+        match_conditions = {}
+      }
+    }
+  }
+}

@@ -109,8 +109,8 @@ The following resources are created:
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_org_id"></a> [org\_id](#input\_org\_id) | The organization ID where SCC is enabled | `string` | n/a | yes |
-| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID where the Pub/Sub topic will be created | `string` | n/a | yes |
+| <a name="input_org_id"></a> [org\_id](#input\_org\_id) | Numeric GCP Organization ID where SCC is enabled (digits only, without 'organizations/' prefix). | `string` | n/a | yes |
+| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The GCP project ID where the Pub/Sub topic will be created (lowercase letters, digits, hyphens; 6–30 characters; starts with a letter). | `string` | n/a | yes |
 | <a name="input_config_id"></a> [config\_id](#input\_config\_id) | ID for the notification config (legacy single config) | `string` | `"scc-notification-config"` | no |
 | <a name="input_description"></a> [description](#input\_description) | Description of the notification config (legacy single config) | `string` | `"SCC notifications for active findings"` | no |
 | <a name="input_filter"></a> [filter](#input\_filter) | The filter string to trigger notifications (legacy single config) | `string` | `"state=\"ACTIVE\""` | no |
