@@ -36,6 +36,7 @@ Terraform modules implementing the **staged deployment pattern** for Google Clou
 | [projects](./projects/) | 2 | **Platform projects** (hosts, hubs) | `envs/organization/` |
 | [network-hub](./network-hub/) | 3 | Hub VPC, DNS, Hierarchical FW | `envs/organization/` |
 | [workload](./workload/) | N/A | **Application projects** (per-env) | `examples/workloads/` |
+| [saas-workload](./saas-workload/) | N/A | Supabase + Vercel full-stack environment | per-env workload root |
 
 ## Projects vs Workload: Key Distinction
 

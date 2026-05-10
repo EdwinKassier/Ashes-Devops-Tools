@@ -64,6 +64,3 @@ For enterprise setups, use the `vpc` module with `enable_shared_vpc_host = true`
 - **Firewalls**: Use `target_tags` for granular control instead of IP ranges where possible.
 - **Naming**: Module resources typically use the `name` variable as a prefix or full name.
 - **State**: Ensure remote state usage for production networking to prevent conflicts.
-
----
-*Copyright 2023 Ashes*

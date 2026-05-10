@@ -85,7 +85,7 @@ make ci
 
 ## Module Library
 
-48 modules across 8 categories, each with auto-generated docs and `mock_provider` tests.
+48 modules across 7 categories, each with auto-generated docs and `mock_provider` tests.
 
 ### SaaS Integrations
 
@@ -156,7 +156,7 @@ make ci
 </details>
 
 <details>
-<summary><strong>Stages & Platform (6 modules)</strong></summary>
+<summary><strong>Stages & Platform (7 modules)</strong></summary>
 
 | Module | Purpose |
 |:-------|:--------|
@@ -166,19 +166,28 @@ make ci
 | [`stages/network-hub`](modules/stages/network-hub/) | Hub VPC + DNS hub |
 | [`stages/workload`](modules/stages/workload/) | Shared VPC service project attachment |
 | [`stages/saas-workload`](modules/stages/saas-workload/) | Supabase + Vercel full-stack environment |
+| [`host`](modules/host/) | Compatibility wrapper for `envs/apps` — composes networking, security, and governance primitives |
 
 </details>
 
 <details>
-<summary><strong>Compute, Storage & Data (5 modules)</strong></summary>
+<summary><strong>Storage, Compute & Firebase (3 modules)</strong></summary>
 
 | Module | Purpose |
 |:-------|:--------|
-| [`cloud_storage`](modules/cloud_storage/) | GCS buckets |
+| [`cloud_storage`](modules/cloud_storage/) | GCS buckets with log separation and optional CMEK |
 | [`artifact_registry`](modules/artifact_registry/) | Container/package registries |
-| [`firebase/project`](modules/firebase/project/) | Firebase project setup |
-| [`monitoring/alert_policy`](modules/monitoring/alert_policy/) | Alerting policies |
-| [`monitoring/compute_dashboard`](modules/monitoring/compute_dashboard/) | Compute dashboards |
+| [`firebase/project`](modules/firebase/project/) | Firebase project setup with Apple, Android, and Web app targets |
+
+</details>
+
+<details>
+<summary><strong>Monitoring (2 modules)</strong></summary>
+
+| Module | Purpose |
+|:-------|:--------|
+| [`monitoring/alert_policy`](modules/monitoring/alert_policy/) | Cloud Monitoring alert policies and notification channels |
+| [`monitoring/compute_dashboard`](modules/monitoring/compute_dashboard/) | Compute observability dashboards |
 
 </details>
 
