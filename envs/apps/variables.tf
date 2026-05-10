@@ -22,8 +22,8 @@ variable "environment" {
   }
 }
 
-variable "provider_region" {
-  description = "Default provider region for the Google provider"
+variable "region" {
+  description = "Default Google Cloud region for this application environment (e.g. \"europe-west1\"). Must match the region used when provisioning spoke projects in the organization root."
   type        = string
   default     = "europe-west1"
 }

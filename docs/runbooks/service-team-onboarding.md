@@ -75,11 +75,11 @@ module "workload_payments" {
   # Subnet access — provide the region and subnet name for each subnet to grant
   shared_vpc_subnets = {
     "private" = {
-      region      = var.provider_region
+      region      = var.region
       subnet_name = "${var.project_prefix}-private"
     }
     "database" = {
-      region      = var.provider_region
+      region      = var.region
       subnet_name = "${var.project_prefix}-database"
     }
   }
