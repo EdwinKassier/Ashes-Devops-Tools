@@ -15,8 +15,13 @@ collect_modules() {
 }
 
 collect_envs() {
-  find envs -mindepth 1 -maxdepth 1 -type d \
-    ! -name '.terraform' | sort
+  # Only include env directories that are Terraform roots (contain at least one .tf file).
+  # Directories that hold only .tfvars examples (e.g. envs/workloads/) are excluded.
+  find envs -mindepth 1 -maxdepth 1 -type d ! -name '.terraform' | while read -r dir; do
+    if find "$dir" -maxdepth 1 -name '*.tf' | grep -q .; then
+      echo "$dir"
+    fi
+  done | sort
 }
 
 # Examples are only included when they have a versions.tf (self-contained).
