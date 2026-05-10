@@ -9,9 +9,9 @@ variable "project_name" {
 }
 
 variable "team_id" {
-  description = "Vercel team ID. Required for team-owned projects. Leave empty for personal account projects."
+  description = "Vercel team ID the project belongs to. Required for team-scoped projects; omit for personal account projects."
   type        = string
-  default     = ""
+  default     = null
 }
 
 variable "framework" {

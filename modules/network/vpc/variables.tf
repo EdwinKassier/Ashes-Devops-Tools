@@ -10,9 +10,9 @@ variable "project_id" {
 }
 
 variable "vpc_name" {
-  description = "The name of the VPC network"
+  description = "Name of the VPC network. Required — no default to prevent name collisions when calling this module multiple times."
   type        = string
-  default     = "main-vpc"
+  default     = null
   validation {
     condition     = can(regex("^[a-z][-a-z0-9]{0,62}$", var.vpc_name))
     error_message = "vpc_name must start with a lowercase letter and contain only lowercase letters, digits, and hyphens (max 63 characters)."

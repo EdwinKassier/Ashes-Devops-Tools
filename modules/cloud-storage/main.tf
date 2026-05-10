@@ -1,3 +1,9 @@
+locals {
+  # GCS service agent that writes access logs and storage logs on behalf of GCS buckets.
+  # This is a Google-managed group and does not change between projects or regions.
+  gcs_log_writer = "group:cloud-storage-analytics@google.com"
+}
+
 # Access log bucket for storage buckets.
 resource "google_storage_bucket" "access_logs" {
   # checkov:skip=CKV_GCP_62:This is the terminal access log bucket for the module and cannot recursively log to itself.
@@ -27,7 +33,7 @@ resource "google_storage_bucket" "access_logs" {
 resource "google_storage_bucket_iam_member" "access_log_writer" {
   bucket = google_storage_bucket.access_logs.name
   role   = "roles/storage.objectCreator"
-  member = "group:cloud-storage-analytics@google.com"
+  member = local.gcs_log_writer
 }
 
 # Logs bucket for audit logs
@@ -63,7 +69,7 @@ resource "google_storage_bucket" "logs" {
 resource "google_storage_bucket_iam_member" "log_writer" {
   bucket = google_storage_bucket.logs.name
   role   = "roles/storage.objectCreator"
-  member = "group:cloud-storage-analytics@google.com"
+  member = local.gcs_log_writer
 }
 
 # Generic data buckets — driven by var.data_buckets

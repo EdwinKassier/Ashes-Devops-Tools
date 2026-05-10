@@ -26,7 +26,7 @@ variable "display_name" {
 variable "description" {
   description = "A description of the service account"
   type        = string
-  default     = ""
+  default     = null
 }
 
 variable "project_roles" {

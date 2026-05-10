@@ -4,9 +4,9 @@ variable "project_id" {
 }
 
 variable "region" {
-  description = "The GCP region"
+  description = "The GCP region for all storage buckets in this module. Required — no default to avoid silent cross-region deployments."
   type        = string
-  default     = "us-central1"
+  default     = null
 }
 
 # Apple App Variables

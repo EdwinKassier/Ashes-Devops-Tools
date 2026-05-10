@@ -4,9 +4,9 @@ variable "project_id" {
 }
 
 variable "region" {
-  description = "The region where resources will be created"
+  description = "The GCP region for all storage buckets in this module. Required — no default to avoid silent cross-region deployments."
   type        = string
-  default     = "us-central1"
+  default     = null
 }
 
 variable "kms_key_name" {
