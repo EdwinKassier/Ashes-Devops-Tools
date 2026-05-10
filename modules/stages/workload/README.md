@@ -151,7 +151,7 @@ module "example" {
 ## Modules
 
 
-- project - terraform-google-modules/project-factory/google (~> 17.0)
+- project - terraform-google-modules/project-factory/google (~> 18.2)
 
 
 ## Resources
