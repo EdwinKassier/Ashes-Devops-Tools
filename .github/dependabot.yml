@@ -206,7 +206,7 @@ updates:
   # ─── IAM modules ─────────────────────────────────────────────────────────────
 
   - package-ecosystem: "terraform"
-    directory: "/modules/iam/identity_group"
+    directory: "/modules/iam/identity-group"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
@@ -215,7 +215,7 @@ updates:
       - "module:iam"
 
   - package-ecosystem: "terraform"
-    directory: "/modules/iam/identity_group_memberships"
+    directory: "/modules/iam/identity-group-memberships"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
@@ -242,7 +242,7 @@ updates:
       - "module:iam"
 
   - package-ecosystem: "terraform"
-    directory: "/modules/iam/service_account"
+    directory: "/modules/iam/service-account"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
@@ -251,7 +251,7 @@ updates:
       - "module:iam"
 
   - package-ecosystem: "terraform"
-    directory: "/modules/iam/workload_identity"
+    directory: "/modules/iam/workload-identity"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
@@ -262,7 +262,7 @@ updates:
   # ─── Network modules ─────────────────────────────────────────────────────────
 
   - package-ecosystem: "terraform"
-    directory: "/modules/network/api_gateway"
+    directory: "/modules/network/api-gateway"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
@@ -280,7 +280,7 @@ updates:
       - "module:network"
 
   - package-ecosystem: "terraform"
-    directory: "/modules/network/cloud_armor"
+    directory: "/modules/network/cloud-armor"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
@@ -435,7 +435,7 @@ updates:
   # ─── Application modules ──────────────────────────────────────────────────────
 
   - package-ecosystem: "terraform"
-    directory: "/modules/artifact_registry"
+    directory: "/modules/artifact-registry"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
@@ -444,7 +444,7 @@ updates:
       - "module:app"
 
   - package-ecosystem: "terraform"
-    directory: "/modules/cloud_storage"
+    directory: "/modules/cloud-storage"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
@@ -462,7 +462,7 @@ updates:
       - "module:app"
 
   - package-ecosystem: "terraform"
-    directory: "/modules/monitoring/alert_policy"
+    directory: "/modules/monitoring/alert-policy"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
@@ -471,7 +471,7 @@ updates:
       - "module:monitoring"
 
   - package-ecosystem: "terraform"
-    directory: "/modules/monitoring/alert_policy/examples/basic"
+    directory: "/modules/monitoring/alert-policy/examples/basic"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
@@ -480,7 +480,7 @@ updates:
       - "example"
 
   - package-ecosystem: "terraform"
-    directory: "/modules/monitoring/compute_dashboard"
+    directory: "/modules/monitoring/compute-dashboard"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
@@ -538,7 +538,7 @@ updates:
   # ─── Module examples ─────────────────────────────────────────────────────────
 
   - package-ecosystem: "terraform"
-    directory: "/modules/artifact_registry/examples/basic"
+    directory: "/modules/artifact-registry/examples/basic"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
@@ -547,7 +547,7 @@ updates:
       - "example"
 
   - package-ecosystem: "terraform"
-    directory: "/modules/cloud_storage/examples/basic"
+    directory: "/modules/cloud-storage/examples/basic"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
@@ -619,7 +619,7 @@ updates:
       - "example"
 
   - package-ecosystem: "terraform"
-    directory: "/modules/iam/identity_group/examples/basic"
+    directory: "/modules/iam/identity-group/examples/basic"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
@@ -628,7 +628,7 @@ updates:
       - "example"
 
   - package-ecosystem: "terraform"
-    directory: "/modules/iam/identity_group_memberships/examples/basic"
+    directory: "/modules/iam/identity-group-memberships/examples/basic"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
@@ -655,7 +655,7 @@ updates:
       - "example"
 
   - package-ecosystem: "terraform"
-    directory: "/modules/iam/service_account/examples/basic"
+    directory: "/modules/iam/service-account/examples/basic"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
@@ -664,7 +664,7 @@ updates:
       - "example"
 
   - package-ecosystem: "terraform"
-    directory: "/modules/iam/workload_identity/examples/basic"
+    directory: "/modules/iam/workload-identity/examples/basic"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
@@ -673,7 +673,7 @@ updates:
       - "example"
 
   - package-ecosystem: "terraform"
-    directory: "/modules/monitoring/compute_dashboard/examples/basic"
+    directory: "/modules/monitoring/compute-dashboard/examples/basic"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
@@ -682,7 +682,7 @@ updates:
       - "example"
 
   - package-ecosystem: "terraform"
-    directory: "/modules/network/api_gateway/examples/basic"
+    directory: "/modules/network/api-gateway/examples/basic"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
@@ -700,7 +700,7 @@ updates:
       - "example"
 
   - package-ecosystem: "terraform"
-    directory: "/modules/network/cloud_armor/examples/basic"
+    directory: "/modules/network/cloud-armor/examples/basic"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10

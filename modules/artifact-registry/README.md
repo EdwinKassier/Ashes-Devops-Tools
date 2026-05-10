@@ -43,7 +43,7 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_artifact_registry_repository.repo (modules/artifact_registry/main.tf#L7)
+- resource.google_artifact_registry_repository.repo (modules/artifact-registry/main.tf#L7)
 
 
 ## Inputs

@@ -149,12 +149,12 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_folder_iam_member.sa_folder_roles (modules/iam/service_account/main.tf#L22)
-- resource.google_organization_iam_member.sa_org_roles (modules/iam/service_account/main.tf#L31)
-- resource.google_project_iam_member.sa_project_roles (modules/iam/service_account/main.tf#L13)
-- resource.google_service_account.service_account (modules/iam/service_account/main.tf#L5)
-- resource.google_service_account_iam_member.impersonation (modules/iam/service_account/main.tf#L41)
-- resource.google_service_account_iam_member.workload_identity_user (modules/iam/service_account/main.tf#L50)
+- resource.google_folder_iam_member.sa_folder_roles (modules/iam/service-account/main.tf#L22)
+- resource.google_organization_iam_member.sa_org_roles (modules/iam/service-account/main.tf#L31)
+- resource.google_project_iam_member.sa_project_roles (modules/iam/service-account/main.tf#L13)
+- resource.google_service_account.service_account (modules/iam/service-account/main.tf#L5)
+- resource.google_service_account_iam_member.impersonation (modules/iam/service-account/main.tf#L41)
+- resource.google_service_account_iam_member.workload_identity_user (modules/iam/service-account/main.tf#L50)
 
 
 ## Inputs

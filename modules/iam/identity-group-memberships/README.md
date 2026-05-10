@@ -156,7 +156,7 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_cloud_identity_group_membership.membership (modules/iam/identity_group_memberships/main.tf#L3)
+- resource.google_cloud_identity_group_membership.membership (modules/iam/identity-group-memberships/main.tf#L3)
 
 
 ## Inputs

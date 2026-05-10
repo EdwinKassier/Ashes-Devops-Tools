@@ -4,7 +4,7 @@
 # Replace project_id and kms_key_name with real values.
 
 module "storage" {
-  source = "../../modules/cloud_storage"
+  source = "../../modules/cloud-storage"
 
   project_id = "my-project-id"
   region     = "europe-west1"

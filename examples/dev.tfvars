@@ -11,9 +11,9 @@
 
 # ── Project & identity ─────────────────────────────────────────────────────────
 
-project_prefix  = "ashes"
-environment     = "dev"
-region = "europe-west1"
+project_prefix = "ashes"
+environment    = "dev"
+region         = "europe-west1"
 
 # Service account that Terraform impersonates (created by bootstrap).
 # Format: terraform@{admin-project-id}.iam.gserviceaccount.com

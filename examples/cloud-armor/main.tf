@@ -3,7 +3,7 @@
 # Attach policy_id to a Backend Service or external load balancer backend.
 
 module "cloud_armor" {
-  source = "../../modules/network/cloud_armor"
+  source = "../../modules/network/cloud-armor"
 
   project_id  = "my-project-id"
   policy_name = "api-gateway-policy"

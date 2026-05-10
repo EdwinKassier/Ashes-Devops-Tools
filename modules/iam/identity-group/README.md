@@ -162,7 +162,7 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_cloud_identity_group.cloud_identity_group (modules/iam/identity_group/main.tf#L3)
+- resource.google_cloud_identity_group.cloud_identity_group (modules/iam/identity-group/main.tf#L3)
 
 
 ## Inputs

@@ -178,14 +178,14 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_monitoring_alert_policy.error_rate (modules/monitoring/alert_policy/main.tf#L141)
-- resource.google_monitoring_alert_policy.high_cpu (modules/monitoring/alert_policy/main.tf#L66)
-- resource.google_monitoring_alert_policy.high_latency (modules/monitoring/alert_policy/main.tf#L183)
-- resource.google_monitoring_alert_policy.high_memory (modules/monitoring/alert_policy/main.tf#L103)
-- resource.google_monitoring_alert_policy.log_based (modules/monitoring/alert_policy/main.tf#L270)
-- resource.google_monitoring_alert_policy.uptime (modules/monitoring/alert_policy/main.tf#L224)
-- resource.google_monitoring_notification_channel.email (modules/monitoring/alert_policy/main.tf#L36)
-- resource.google_monitoring_notification_channel.webhook (modules/monitoring/alert_policy/main.tf#L50)
+- resource.google_monitoring_alert_policy.error_rate (modules/monitoring/alert-policy/main.tf#L141)
+- resource.google_monitoring_alert_policy.high_cpu (modules/monitoring/alert-policy/main.tf#L66)
+- resource.google_monitoring_alert_policy.high_latency (modules/monitoring/alert-policy/main.tf#L183)
+- resource.google_monitoring_alert_policy.high_memory (modules/monitoring/alert-policy/main.tf#L103)
+- resource.google_monitoring_alert_policy.log_based (modules/monitoring/alert-policy/main.tf#L270)
+- resource.google_monitoring_alert_policy.uptime (modules/monitoring/alert-policy/main.tf#L224)
+- resource.google_monitoring_notification_channel.email (modules/monitoring/alert-policy/main.tf#L36)
+- resource.google_monitoring_notification_channel.webhook (modules/monitoring/alert-policy/main.tf#L50)
 
 
 ## Inputs

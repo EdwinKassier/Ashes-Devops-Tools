@@ -5,7 +5,7 @@
 #   (b) Checkov cannot fully resolve the check for a known Terraform pattern.
 #
 # Inline # checkov:skip= annotations are used for resource-level skips.
-# See modules/governance/kms, modules/cloud_storage, modules/stages/bootstrap.
+# See modules/governance/kms, modules/cloud-storage, modules/stages/bootstrap.
 #
 # REMOVED from this file (no resources to trigger them):
 #   CKV_GCP_46-50 — GKE checks: no google_container_* resources in this repo
@@ -19,7 +19,7 @@
 #   CKV_GCP_43  — KMS rotation: inline skip in modules/governance/kms/main.tf
 #   CKV_GCP_45  — Security Admin role: inline skip in modules/stages/bootstrap/main.tf
 #   CKV_GCP_62  — Log bucket self-logging: inline skips in 4 modules
-#   CKV_GCP_125 — WIF provider constraints: inline skip in modules/iam/workload_identity/main.tf
+#   CKV_GCP_125 — WIF provider constraints: inline skip in modules/iam/workload-identity/main.tf
 #   CKV_TF_1    — Module version pinning: inline skip in modules/stages/workload/main.tf
 #   CKV2_GCP_4  — Bucket lock: inline skip in modules/governance/cloud-audit-logs/main.tf
 #

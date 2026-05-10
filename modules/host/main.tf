@@ -377,7 +377,7 @@ module "firewall_deny_all" {
 # =============================================================================
 
 module "cloud_armor" {
-  source = "../network/cloud_armor"
+  source = "../network/cloud-armor"
   count  = var.enable_cloud_armor ? 1 : 0
 
   project_id                 = var.project_id
@@ -478,7 +478,7 @@ module "vpc_peering" {
 # =============================================================================
 
 module "api_gateway" {
-  source = "../network/api_gateway"
+  source = "../network/api-gateway"
   count  = var.enable_api_gateway ? 1 : 0
 
   project_id            = var.project_id

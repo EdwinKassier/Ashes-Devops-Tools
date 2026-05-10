@@ -111,7 +111,7 @@ cloud_armor_custom_rules = {
 }
 ```
 
-See [`modules/network/cloud_armor/README.md`](../network/cloud_armor/README.md) for the full variable reference and rate-limiting options.
+See [`modules/network/cloud-armor/README.md`](../network/cloud-armor/README.md) for the full variable reference and rate-limiting options.
 
 The generated module reference below is the source of truth for inputs, outputs, and required providers.
 
@@ -185,9 +185,9 @@ module "example" {
 
 
 - additional_firewall_rules - ../network/network-firewall
-- api_gateway - ../network/api_gateway
+- api_gateway - ../network/api-gateway
 - cdn - ../network/cdn
-- cloud_armor - ../network/cloud_armor
+- cloud_armor - ../network/cloud-armor
 - database_subnets - ../network/subnet
 - dns - ../network/dns
 - firewall_apigateway_to_public - ../network/network-firewall

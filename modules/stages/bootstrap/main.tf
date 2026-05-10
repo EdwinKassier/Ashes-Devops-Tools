@@ -62,7 +62,7 @@ resource "google_project_service" "admin_project_services" {
 
 # Terraform Admin Service Account
 module "terraform_admin_sa" {
-  source = "../../iam/service_account"
+  source = "../../iam/service-account"
 
   project_id   = google_project.admin_project.project_id
   account_id   = "terraform-admin"
@@ -75,7 +75,7 @@ module "terraform_admin_sa" {
 
 # Workload Identity for GitHub Actions (or TFC in future)
 module "gh_oidc" {
-  source = "../../iam/workload_identity"
+  source = "../../iam/workload-identity"
 
   project_id   = google_project.admin_project.project_id
   pool_id      = "github-pool"
@@ -98,7 +98,7 @@ module "gh_oidc" {
 
 # Workload Identity for Terraform Cloud (Dynamic Credentials)
 module "tfc_oidc" {
-  source = "../../iam/workload_identity"
+  source = "../../iam/workload-identity"
   count  = var.enable_tfc_oidc && var.tfc_organization != null ? 1 : 0
 
   project_id   = google_project.admin_project.project_id

@@ -110,8 +110,8 @@ make ci
 | [`network/dns`](modules/network/dns/) | Private/public DNS zones |
 | [`network/network-firewall`](modules/network/network-firewall/) | Network security rules |
 | [`network/hierarchical-firewall`](modules/network/hierarchical-firewall/) | Policy-based org firewall |
-| [`network/cloud_armor`](modules/network/cloud_armor/) | WAF / DDoS protection |
-| [`network/api_gateway`](modules/network/api_gateway/) | API management |
+| [`network/cloud-armor`](modules/network/cloud-armor/) | WAF / DDoS protection |
+| [`network/api-gateway`](modules/network/api-gateway/) | API management |
 | [`network/cdn`](modules/network/cdn/) | Content delivery network |
 | [`network/vpc-peering`](modules/network/vpc-peering/) | VPC peering connections |
 | [`network/private-service-connect`](modules/network/private-service-connect/) | Private Service Connect |
@@ -134,10 +134,10 @@ make ci
 |:-------|:--------|
 | [`iam/organization`](modules/iam/organization/) | Org-level IAM bindings |
 | [`iam/role`](modules/iam/role/) | Custom IAM roles |
-| [`iam/service_account`](modules/iam/service_account/) | Service account lifecycle |
-| [`iam/workload_identity`](modules/iam/workload_identity/) | Workload Identity Federation |
-| [`iam/identity_group`](modules/iam/identity_group/) | Google Cloud Identity groups |
-| [`iam/identity_group_memberships`](modules/iam/identity_group_memberships/) | Group membership management |
+| [`iam/service-account`](modules/iam/service-account/) | Service account lifecycle |
+| [`iam/workload-identity`](modules/iam/workload-identity/) | Workload Identity Federation |
+| [`iam/identity-group`](modules/iam/identity-group/) | Google Cloud Identity groups |
+| [`iam/identity-group-memberships`](modules/iam/identity-group-memberships/) | Group membership management |
 
 </details>
 
@@ -175,8 +175,8 @@ make ci
 
 | Module | Purpose |
 |:-------|:--------|
-| [`cloud_storage`](modules/cloud_storage/) | GCS buckets with log separation and optional CMEK |
-| [`artifact_registry`](modules/artifact_registry/) | Container/package registries |
+| [`cloud_storage`](modules/cloud-storage/) | GCS buckets with log separation and optional CMEK |
+| [`artifact_registry`](modules/artifact-registry/) | Container/package registries |
 | [`firebase/project`](modules/firebase/project/) | Firebase project setup with Apple, Android, and Web app targets |
 
 </details>
@@ -186,8 +186,8 @@ make ci
 
 | Module | Purpose |
 |:-------|:--------|
-| [`monitoring/alert_policy`](modules/monitoring/alert_policy/) | Cloud Monitoring alert policies and notification channels |
-| [`monitoring/compute_dashboard`](modules/monitoring/compute_dashboard/) | Compute observability dashboards |
+| [`monitoring/alert-policy`](modules/monitoring/alert-policy/) | Cloud Monitoring alert policies and notification channels |
+| [`monitoring/compute-dashboard`](modules/monitoring/compute-dashboard/) | Compute observability dashboards |
 
 </details>
 

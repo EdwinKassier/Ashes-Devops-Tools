@@ -9,7 +9,7 @@
  *
  * Usage:
  *   module "alerts" {
- *     source     = "../../modules/monitoring/alert_policy"
+ *     source     = "../../modules/monitoring/alert-policy"
  *     project_id = "my-project"
  *     notification_email_addresses = ["ops@example.com"]
  *     notification_webhook_urls = {

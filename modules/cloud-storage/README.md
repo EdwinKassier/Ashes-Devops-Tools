@@ -41,12 +41,12 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_storage_bucket.access_logs (modules/cloud_storage/main.tf#L2)
-- resource.google_storage_bucket.data (modules/cloud_storage/main.tf#L70)
-- resource.google_storage_bucket.logs (modules/cloud_storage/main.tf#L34)
-- resource.google_storage_bucket_iam_member.access_log_writer (modules/cloud_storage/main.tf#L27)
-- resource.google_storage_bucket_iam_member.log_writer (modules/cloud_storage/main.tf#L63)
-- resource.google_storage_bucket_iam_member.private (modules/cloud_storage/main.tf#L114)
+- resource.google_storage_bucket.access_logs (modules/cloud-storage/main.tf#L2)
+- resource.google_storage_bucket.data (modules/cloud-storage/main.tf#L70)
+- resource.google_storage_bucket.logs (modules/cloud-storage/main.tf#L34)
+- resource.google_storage_bucket_iam_member.access_log_writer (modules/cloud-storage/main.tf#L27)
+- resource.google_storage_bucket_iam_member.log_writer (modules/cloud-storage/main.tf#L63)
+- resource.google_storage_bucket_iam_member.private (modules/cloud-storage/main.tf#L114)
 
 
 ## Inputs
