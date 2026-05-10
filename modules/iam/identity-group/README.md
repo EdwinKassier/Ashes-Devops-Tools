@@ -176,5 +176,8 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
-| <a name="output_identity_groups"></a> [identity\_groups](#output\_identity\_groups) | Map of created identity groups with their details |
+| <a name="output_display_names"></a> [display\_names](#output\_display\_names) | Map of group key → display name, keyed by the group's email/id. |
+| <a name="output_group_ids"></a> [group\_ids](#output\_group\_ids) | Map of group key → unique resource ID (e.g. groups/123456789), keyed by the group's email/id. |
+| <a name="output_group_keys"></a> [group\_keys](#output\_group\_keys) | Map of group key → email address that identifies each group, keyed by the group's email/id. |
+| <a name="output_group_names"></a> [group\_names](#output\_group\_names) | Map of group key → resource name (e.g. groups/123456789), keyed by the group's email/id. |
 <!-- END_TF_DOCS -->

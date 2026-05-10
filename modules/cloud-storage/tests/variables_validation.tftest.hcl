@@ -3,6 +3,7 @@ mock_provider "google" {}
 # Minimum required variables shared across all runs
 variables {
   project_id   = "mock-project"
+  region       = "us-central1"
   kms_key_name = "projects/mock-project/locations/us-central1/keyRings/test-ring/cryptoKeys/test-key"
 }
 

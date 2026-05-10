@@ -41,12 +41,12 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_storage_bucket.access_logs (modules/cloud-storage/main.tf#L2)
-- resource.google_storage_bucket.data (modules/cloud-storage/main.tf#L70)
-- resource.google_storage_bucket.logs (modules/cloud-storage/main.tf#L34)
-- resource.google_storage_bucket_iam_member.access_log_writer (modules/cloud-storage/main.tf#L27)
-- resource.google_storage_bucket_iam_member.log_writer (modules/cloud-storage/main.tf#L63)
-- resource.google_storage_bucket_iam_member.private (modules/cloud-storage/main.tf#L114)
+- resource.google_storage_bucket.access_logs (modules/cloud-storage/main.tf#L8)
+- resource.google_storage_bucket.data (modules/cloud-storage/main.tf#L76)
+- resource.google_storage_bucket.logs (modules/cloud-storage/main.tf#L40)
+- resource.google_storage_bucket_iam_member.access_log_writer (modules/cloud-storage/main.tf#L33)
+- resource.google_storage_bucket_iam_member.log_writer (modules/cloud-storage/main.tf#L69)
+- resource.google_storage_bucket_iam_member.private (modules/cloud-storage/main.tf#L120)
 
 
 ## Inputs
@@ -59,7 +59,7 @@ The following resources are created:
 | <a name="input_kms_key_name"></a> [kms\_key\_name](#input\_kms\_key\_name) | Fully qualified KMS key name for bucket encryption.<br/>Format: projects/<project>/locations/<location>/keyRings/<keyring>/cryptoKeys/<key><br/>Leave null to use Google-managed encryption (GMEK). For compliance environments,<br/>always supply a CMEK key and ensure the GCS service account has<br/>roles/cloudkms.cryptoKeyEncrypterDecrypter on the key. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to all storage bucket resources in this module. | `map(string)` | `{}` | no |
 | <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | Number of days to retain logs in the logging bucket. Minimum 1 day. | `number` | `90` | no |
-| <a name="input_region"></a> [region](#input\_region) | The region where resources will be created | `string` | `"us-central1"` | no |
+| <a name="input_region"></a> [region](#input\_region) | The GCP region for all storage buckets in this module. Required — no default to avoid silent cross-region deployments. | `string` | `null` | no |
 
 ## Outputs
 

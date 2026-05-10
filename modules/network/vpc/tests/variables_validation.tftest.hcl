@@ -5,6 +5,7 @@ mock_provider "google" {}
 
 variables {
   project_id = "mock-project"
+  vpc_name   = "mock-vpc"
 }
 
 # ── routing_mode ───────────────────────────────────────────────────────────────

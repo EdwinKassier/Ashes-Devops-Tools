@@ -80,5 +80,7 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
+| <a name="output_bootstrap_trigger_id"></a> [bootstrap\_trigger\_id](#output\_bootstrap\_trigger\_id) | Unique ID of the bootstrap null\_resource; changes when the bootstrap script is re-run. |
 | <a name="output_managed_secret_names"></a> [managed\_secret\_names](#output\_managed\_secret\_names) | Sorted list of secret names managed by this module. Visible in plan output — useful for verifying the desired-state map without exposing values. |
+| <a name="output_reconcile_trigger_id"></a> [reconcile\_trigger\_id](#output\_reconcile\_trigger\_id) | Unique ID of the reconcile null\_resource; changes when secrets are reconciled. |
 <!-- END_TF_DOCS -->

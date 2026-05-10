@@ -164,7 +164,7 @@ The following resources are created:
 | <a name="input_account_id"></a> [account\_id](#input\_account\_id) | The service account ID (the part before @project.iam.gserviceaccount.com). 6-30 characters, starts with letter, ends with letter or digit, lowercase letters/digits/hyphens only, no consecutive hyphens. | `string` | n/a | yes |
 | <a name="input_display_name"></a> [display\_name](#input\_display\_name) | The display name for the service account | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The ID of the project where the service account will be created | `string` | n/a | yes |
-| <a name="input_description"></a> [description](#input\_description) | A description of the service account | `string` | `""` | no |
+| <a name="input_description"></a> [description](#input\_description) | A description of the service account | `string` | `null` | no |
 | <a name="input_folder_roles"></a> [folder\_roles](#input\_folder\_roles) | List of folder-level IAM role assignments | <pre>list(object({<br/>    folder_id = string<br/>    role      = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_impersonation_members"></a> [impersonation\_members](#input\_impersonation\_members) | List of members allowed to impersonate this service account (format: user:email, group:email, serviceAccount:email) | `list(string)` | `[]` | no |
 | <a name="input_organization_roles"></a> [organization\_roles](#input\_organization\_roles) | List of organization-level IAM role assignments | <pre>list(object({<br/>    org_id = string<br/>    role   = string<br/>  }))</pre> | `[]` | no |
@@ -176,9 +176,7 @@ The following resources are created:
 | Name | Description |
 |------|-------------|
 | <a name="output_email"></a> [email](#output\_email) | The email address of the service account |
-| <a name="output_impersonation_members"></a> [impersonation\_members](#output\_impersonation\_members) | List of members allowed to impersonate this service account |
 | <a name="output_member"></a> [member](#output\_member) | The service account member string for use in IAM policies |
 | <a name="output_name"></a> [name](#output\_name) | The fully-qualified name of the service account |
-| <a name="output_project_roles"></a> [project\_roles](#output\_project\_roles) | List of project-level roles granted to the service account |
 | <a name="output_unique_id"></a> [unique\_id](#output\_unique\_id) | The unique ID of the service account |
 <!-- END_TF_DOCS -->

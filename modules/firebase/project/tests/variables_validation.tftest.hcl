@@ -6,6 +6,7 @@ mock_provider "google-beta" {}
 
 variables {
   project_id = "mock-project"
+  region     = "us-central1"
 }
 
 # ── smoke test ─────────────────────────────────────────────────────────────────

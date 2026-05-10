@@ -115,7 +115,7 @@ The following resources are created:
 | <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | Prevent accidental destruction of the VPC network.<br/><br/>When true, a terraform\_data guard resource is created with prevent\_destroy = true.<br/>Terraform refuses to destroy this module while the guard exists. To intentionally<br/>remove a protected VPC, first run:<br/>  terraform state rm 'module.<name>.terraform\_data.deletion\_protection\_guard' | `bool` | `false` | no |
 | <a name="input_enable_shared_vpc_host"></a> [enable\_shared\_vpc\_host](#input\_enable\_shared\_vpc\_host) | Enable this project as a Shared VPC Host Project | `bool` | `false` | no |
 | <a name="input_routing_mode"></a> [routing\_mode](#input\_routing\_mode) | The network routing mode (default 'GLOBAL') | `string` | `"GLOBAL"` | no |
-| <a name="input_vpc_name"></a> [vpc\_name](#input\_vpc\_name) | The name of the VPC network | `string` | `"main-vpc"` | no |
+| <a name="input_vpc_name"></a> [vpc\_name](#input\_vpc\_name) | Name of the VPC network. Required — no default to prevent name collisions when calling this module multiple times. | `string` | `null` | no |
 
 ## Outputs
 

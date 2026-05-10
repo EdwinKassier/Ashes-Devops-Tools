@@ -64,4 +64,5 @@ The following resources are created:
 | Name | Description |
 |------|-------------|
 | <a name="output_project_ref"></a> [project\_ref](#output\_project\_ref) | The Supabase project ref this settings resource manages. |
+| <a name="output_settings_id"></a> [settings\_id](#output\_settings\_id) | The Terraform resource ID of the supabase\_settings resource. |
 <!-- END_TF_DOCS -->

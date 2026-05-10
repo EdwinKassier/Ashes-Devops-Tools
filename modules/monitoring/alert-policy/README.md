@@ -136,7 +136,7 @@ Supports email, Slack/webhook notifications, and common GCP metric alerts
 
 Usage:
   module "alerts" {
-    source     = "../../modules/monitoring/alert\_policy"
+    source     = "../../modules/monitoring/alert-policy"
     project\_id = "my-project"
     notification\_email\_addresses = ["ops@example.com"]
     notification\_webhook\_urls = {
