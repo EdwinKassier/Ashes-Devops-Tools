@@ -93,9 +93,9 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_bigquery_dataset.audit_logs_analytics (modules/governance/cloud-audit-logs/main.tf#L189)
-- resource.google_bigquery_dataset_iam_member.bq_sink_writer (modules/governance/cloud-audit-logs/main.tf#L237)
-- resource.google_logging_organization_sink.org_audit_bq_sink (modules/governance/cloud-audit-logs/main.tf#L215)
+- resource.google_bigquery_dataset.audit_logs_analytics (modules/governance/cloud-audit-logs/main.tf#L183)
+- resource.google_bigquery_dataset_iam_member.bq_sink_writer (modules/governance/cloud-audit-logs/main.tf#L231)
+- resource.google_logging_organization_sink.org_audit_bq_sink (modules/governance/cloud-audit-logs/main.tf#L209)
 - resource.google_logging_organization_sink.org_audit_sink (modules/governance/cloud-audit-logs/main.tf#L153)
 - resource.google_logging_project_sink.audit_logs_sink (modules/governance/cloud-audit-logs/main.tf#L95)
 - resource.google_organization_iam_audit_config.org_audit_config (modules/governance/cloud-audit-logs/main.tf#L133)
@@ -104,8 +104,7 @@ The following resources are created:
 - resource.google_storage_bucket.audit_logs_access (modules/governance/cloud-audit-logs/main.tf#L2)
 - resource.google_storage_bucket_iam_member.audit_logs_access_writer (modules/governance/cloud-audit-logs/main.tf#L32)
 - resource.google_storage_bucket_iam_member.log_writer (modules/governance/cloud-audit-logs/main.tf#L105)
-- resource.google_storage_bucket_iam_member.org_log_bucket_writer (modules/governance/cloud-audit-logs/main.tf#L176)
-- resource.google_storage_bucket_iam_member.org_log_writer (modules/governance/cloud-audit-logs/main.tf#L166)
+- resource.google_storage_bucket_iam_member.org_log_writer (modules/governance/cloud-audit-logs/main.tf#L170)
 
 
 ## Inputs
