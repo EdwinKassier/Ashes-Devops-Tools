@@ -29,7 +29,7 @@ variable "ip_cidr_range" {
   }
 
   validation {
-    condition     = !can(cidrnetmask(var.ip_cidr_range)) || cidrhost(var.ip_cidr_range, 0) == split("/", var.ip_cidr_range)[0]
+    condition     = can(cidrnetmask(var.ip_cidr_range)) ? cidrhost(var.ip_cidr_range, 0) == split("/", var.ip_cidr_range)[0] : true
     error_message = "ip_cidr_range must not have host bits set (e.g. use \"10.0.0.0/24\", not \"10.0.1.128/24\")."
   }
 }
