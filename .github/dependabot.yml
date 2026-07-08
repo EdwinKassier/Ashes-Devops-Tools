@@ -1,0 +1,26 @@
+# Dependabot is scoped to the github-actions ecosystem only. Every action in
+# .github/workflows/ is SHA-pinned (see SECURITY.md), so this is the sole
+# automated freshness signal for those pins — there is no other bump path.
+#
+# The `terraform` ecosystem is deliberately NOT configured here: provider
+# major bumps (google 6.x -> 7.x) broke `terraform validate` on example roots
+# when previously tried and require manual compatibility work before they can
+# be automated again.
+#
+# Required one-time repo setup (labels referenced below must exist or
+# Dependabot PR creation will warn): `gh label create dependencies --force`
+# and `gh label create github-actions --force`.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - "dependencies"
+      - "github-actions"
