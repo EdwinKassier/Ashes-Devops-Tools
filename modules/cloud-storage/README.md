@@ -43,11 +43,11 @@ The following resources are created:
 
 
 - resource.google_storage_bucket.access_logs (modules/cloud-storage/main.tf#L8)
-- resource.google_storage_bucket.data (modules/cloud-storage/main.tf#L76)
-- resource.google_storage_bucket.logs (modules/cloud-storage/main.tf#L40)
-- resource.google_storage_bucket_iam_member.access_log_writer (modules/cloud-storage/main.tf#L33)
-- resource.google_storage_bucket_iam_member.log_writer (modules/cloud-storage/main.tf#L69)
-- resource.google_storage_bucket_iam_member.private (modules/cloud-storage/main.tf#L120)
+- resource.google_storage_bucket.data (modules/cloud-storage/main.tf#L82)
+- resource.google_storage_bucket.logs (modules/cloud-storage/main.tf#L43)
+- resource.google_storage_bucket_iam_member.access_log_writer (modules/cloud-storage/main.tf#L36)
+- resource.google_storage_bucket_iam_member.log_writer (modules/cloud-storage/main.tf#L75)
+- resource.google_storage_bucket_iam_member.private (modules/cloud-storage/main.tf#L129)
 
 
 ## Inputs

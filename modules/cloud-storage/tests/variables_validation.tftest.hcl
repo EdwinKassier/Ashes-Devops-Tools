@@ -61,7 +61,7 @@ run "creates_no_data_buckets_by_default" {
 
 # ── Encryption ────────────────────────────────────────────────────────────────
 
-run "all_buckets_use_cmek" {
+run "all_buckets_use_cmek_when_key_set" {
   command = plan
 
   variables {
@@ -71,18 +71,48 @@ run "all_buckets_use_cmek" {
   }
 
   assert {
-    condition     = google_storage_bucket.access_logs.encryption[0].default_kms_key_name == var.kms_key_name
-    error_message = "access_logs bucket must use the provided KMS key"
+    condition     = length(google_storage_bucket.access_logs.encryption) == 1 && google_storage_bucket.access_logs.encryption[0].default_kms_key_name == var.kms_key_name
+    error_message = "access_logs bucket must have exactly one encryption block using the provided KMS key"
   }
 
   assert {
-    condition     = google_storage_bucket.logs.encryption[0].default_kms_key_name == var.kms_key_name
-    error_message = "logs bucket must use the provided KMS key"
+    condition     = length(google_storage_bucket.logs.encryption) == 1 && google_storage_bucket.logs.encryption[0].default_kms_key_name == var.kms_key_name
+    error_message = "logs bucket must have exactly one encryption block using the provided KMS key"
   }
 
   assert {
-    condition     = google_storage_bucket.data["test"].encryption[0].default_kms_key_name == var.kms_key_name
-    error_message = "data buckets must use the provided KMS key"
+    condition     = length(google_storage_bucket.data["test"].encryption) == 1 && google_storage_bucket.data["test"].encryption[0].default_kms_key_name == var.kms_key_name
+    error_message = "data buckets must have exactly one encryption block using the provided KMS key"
+  }
+}
+
+run "no_encryption_block_when_key_null_gmek" {
+  # GMEK (Google-managed) default: kms_key_name = null must plan NO encryption
+  # block. In google ~>6, default_kms_key_name is Required inside an encryption
+  # block, so a static block with a null key would error at apply — the dynamic
+  # block must omit the block entirely.
+  command = plan
+
+  variables {
+    kms_key_name = null
+    data_buckets = {
+      test = { name_suffix = "test-data" }
+    }
+  }
+
+  assert {
+    condition     = length(google_storage_bucket.access_logs.encryption) == 0
+    error_message = "access_logs bucket must have no encryption block when kms_key_name is null (GMEK)"
+  }
+
+  assert {
+    condition     = length(google_storage_bucket.logs.encryption) == 0
+    error_message = "logs bucket must have no encryption block when kms_key_name is null (GMEK)"
+  }
+
+  assert {
+    condition     = length(google_storage_bucket.data["test"].encryption) == 0
+    error_message = "data buckets must have no encryption block when kms_key_name is null (GMEK)"
   }
 }
 
