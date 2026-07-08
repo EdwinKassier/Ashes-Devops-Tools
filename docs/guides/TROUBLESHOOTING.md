@@ -71,7 +71,7 @@ Always verify the workspace before planning:
 
 ```bash
 echo "$TF_WORKSPACE"
-TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=examples/dev.tfvars
+TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=../../examples/dev.tfvars
 ```
 
 ## `envs/apps` cannot find the organization remote state
@@ -116,7 +116,7 @@ make pre-commit-install
 
 ```bash
 export TF_LOG=DEBUG
-TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=examples/dev.tfvars
+TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=../../examples/dev.tfvars
 ```
 
 ## WIF / ADC authentication failures in CI

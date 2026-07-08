@@ -111,7 +111,7 @@ Confirm the plan shows only new resource creation — no modifications to existi
 ```bash
 terraform -chdir=envs/apps apply \
   -target=module.workload_payments \
-  -var-file=examples/dev.tfvars
+  -var-file=../../examples/dev.tfvars
 ```
 
 ### Step 6 — Verify subnet access

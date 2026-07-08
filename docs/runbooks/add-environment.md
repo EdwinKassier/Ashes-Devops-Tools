@@ -86,7 +86,7 @@ And as an **environment variable**:
 
 | Key | Value |
 |-----|-------|
-| `TF_CLI_ARGS_plan` | `-var-file=examples/staging.tfvars` |
+| `TF_CLI_ARGS_plan` | `-var-file=../../examples/staging.tfvars` |
 
 ### 6. Trigger the first plan
 
@@ -123,7 +123,7 @@ gcloud compute networks describe $(terraform -chdir=envs/apps output -raw networ
 If the apply created partial resources and you need to clean up, the safest approach is:
 
 ```bash
-terraform -chdir=envs/apps destroy -target=module.host -var-file=examples/staging.tfvars
+terraform -chdir=envs/apps destroy -target=module.host -var-file=../../examples/staging.tfvars
 ```
 
 Do not use `terraform destroy` without `-target` in a shared workspace — it will attempt to destroy all resources including those managed by other workspace runs.

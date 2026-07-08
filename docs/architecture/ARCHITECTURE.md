@@ -181,7 +181,7 @@ terraform -chdir=envs/organization plan
 
 ```bash
 TF_WORKSPACE=apps-dev terraform -chdir=envs/apps init
-TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=examples/dev.tfvars
+TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=../../examples/dev.tfvars
 ```
 
 ### Workload Projects

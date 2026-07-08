@@ -196,7 +196,7 @@ To plan a change to the apps environment:
 ```bash
 # Set TF_WORKSPACE to match the TFC workspace name suffix
 TF_WORKSPACE=apps-dev terraform -chdir=envs/apps init -backend-config=backend.hcl
-TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=examples/dev.tfvars
+TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=../../examples/dev.tfvars
 ```
 
 ---

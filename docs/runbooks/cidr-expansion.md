@@ -67,7 +67,7 @@ The plan must show `~ update in-place` for the subnet, not `- destroy` + `+ crea
 ### Step 4 — Apply
 
 ```bash
-terraform -chdir=envs/apps apply -target=module.host.module.private_subnets -var-file=examples/dev.tfvars
+terraform -chdir=envs/apps apply -target=module.host.module.private_subnets -var-file=../../examples/dev.tfvars
 ```
 
 ---
@@ -144,7 +144,7 @@ Confirm the plan destroys only the subnet resources, not the project or VPC.
 ### Step 6 — Apply
 
 ```bash
-terraform -chdir=envs/apps apply -var-file=examples/dev.tfvars
+terraform -chdir=envs/apps apply -var-file=../../examples/dev.tfvars
 ```
 
 ### Step 7 — Restore workloads
@@ -170,5 +170,5 @@ enable_deletion_protection = true
 ```
 
 ```bash
-terraform -chdir=envs/apps apply -target=module.host.terraform_data.deletion_protection_guard -var-file=examples/dev.tfvars
+terraform -chdir=envs/apps apply -target=module.host.terraform_data.deletion_protection_guard -var-file=../../examples/dev.tfvars
 ```

@@ -133,7 +133,7 @@ plan-organization: ## Plan the organization root
 	@$(TERRAFORM) -chdir=envs/organization plan
 
 plan-apps: ## Plan the apps root for APP_ENV using APP_VARS
-	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/apps plan -var-file=$(APP_VARS)
+	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/apps plan -var-file=$(abspath $(APP_VARS))
 
 apply-organization: ## Apply the organization root (interactive confirmation required)
 	@echo "$(YELLOW)WARNING: You are about to apply changes to the ORGANIZATION root (folders, projects, org policies, hub network).$(NC)"
@@ -145,7 +145,7 @@ apply-apps: ## Apply the apps root for APP_ENV using APP_VARS (interactive confi
 	@echo "$(YELLOW)WARNING: You are about to apply changes to the APPS root for environment: $(APP_ENV)$(NC)"
 	@echo "$(YELLOW)Review the plan first with: make plan-apps APP_ENV=$(APP_ENV) APP_VARS=$(APP_VARS)$(NC)"
 	@printf "Type 'yes' to continue: " && read CONFIRM && [ "$$CONFIRM" = "yes" ] || (echo "Cancelled." && exit 1)
-	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/apps apply -var-file=$(APP_VARS)
+	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/apps apply -var-file=$(abspath $(APP_VARS))
 
 validate-requirements: ## Print local tool versions
 	@$(TERRAFORM) version
