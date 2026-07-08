@@ -111,9 +111,10 @@ The `modules/stages/bootstrap` module creates the WIF pool that GitHub Actions u
 ```bash
 cat > envs/organization/backend.hcl <<EOF
 organization = "YOUR_TFC_ORG_NAME"
-workspaces { name = "organization" }
 EOF
 ```
+
+`envs/organization/backend.tf` already hardcodes `workspaces { name = "organization" }` — do not pass a `workspaces` block via `-backend-config`; a second `workspaces` value conflicts with the one baked into `backend.tf`.
 
 This file is gitignored; it is never committed.
 
@@ -127,7 +128,8 @@ terraform -chdir=envs/organization init -backend-config=backend.hcl
 
 ```bash
 cp envs/organization/terraform.tfvars.example envs/organization/local.auto.tfvars
-# Edit local.auto.tfvars with your org_id, billing_account, github_org, github_repo
+# Edit local.auto.tfvars with your org_id, billing_account, github_org, github_repo,
+# and project_prefix — the "my-org" default is a deliberate tripwire and fails validation
 ```
 
 **Step 4 — Plan and apply bootstrap only:**
@@ -221,7 +223,7 @@ TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=examples/dev.tfv
 |----------|---------|-------------|
 | `billing_account` | `null` | Billing account ID — required unless `billing_account_display_name` is set |
 | `billing_account_display_name` | `null` | Alternative to `billing_account` — looks up by display name |
-| `project_prefix` | `"my-org"` | Short prefix for all project names (1–10 chars, lowercase, starts with a letter) |
+| `project_prefix` | `"my-org"` | Short prefix for all project names (1–10 chars, lowercase, starts with a letter). **Tripwire:** the default `"my-org"` is deliberately invalid — a `validation` block rejects it at plan time. You **must** change this to your real organization identifier before your first plan. |
 | `default_region` | `"europe-west1"` | Primary region for KMS, logging, network hub |
 | `tfc_organization` | `null` | Terraform Cloud org name for dynamic provider credentials |
 | `break_glass_user` | `null` | Email granted Organization Admin in emergencies |
@@ -234,9 +236,8 @@ TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=examples/dev.tfv
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `project_prefix` | Matches org root prefix | `"ashes"` |
-| `environment` | Short env name (used in resource naming) | `"dev"` |
-| `terraform_admin_email` | SA Terraform impersonates (from bootstrap output) | `"terraform-admin@ashes-admin-xxxx.iam.gserviceaccount.com"` |
-| `tfc_organization` | Terraform Cloud org name | `"my-tfc-org"` |
+| `environment` | Short env name (used in resource naming); must match a key in the org root's `environments` map | `"dev"` |
+| `tfc_organization` | Terraform Cloud org name — used to read organization remote state | `"my-tfc-org"` |
 
 > **VPC CIDR:** The per-environment CIDR is not set here — it is read from the `organization` workspace remote state via the `environments` map in `envs/organization`. Set the CIDR block in `envs/organization/terraform.tfvars.example` under the relevant environment key.
 
@@ -244,6 +245,8 @@ TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=examples/dev.tfv
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `region` | `"europe-west1"` | Default GCP region for this environment; should match the region used for its spoke/host project in the organization root |
+| `terraform_admin_email` | `null` | SA to impersonate for local runs (from bootstrap output). Example: `"terraform-admin@ashes-admin-xxxx.iam.gserviceaccount.com"` |
 | `enable_cloud_armor` | `false` | Attach WAF policy to external load balancers |
 | `enable_owasp_rules` | `false` | Enable Cloud Armor OWASP managed rules (requires `enable_cloud_armor`) |
 | `owasp_sensitivity` | `2` | Cloud Armor OWASP rule sensitivity (1=strict, 4=permissive) |
