@@ -169,6 +169,6 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
-| <a name="output_membership_ids"></a> [membership\_ids](#output\_membership\_ids) | Map of member email to membership resource ID. |
-| <a name="output_membership_names"></a> [membership\_names](#output\_membership\_names) | Map of member email to membership resource name. |
+| <a name="output_membership_ids"></a> [membership\_ids](#output\_membership\_ids) | Map keyed by "<group\_id>-<member\_id>" to the membership resource ID. |
+| <a name="output_membership_names"></a> [membership\_names](#output\_membership\_names) | Map keyed by "<group\_id>-<member\_id>" to the membership resource name. |
 <!-- END_TF_DOCS -->
