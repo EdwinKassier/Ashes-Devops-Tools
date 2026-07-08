@@ -30,7 +30,7 @@ resource "google_compute_firewall_policy_rule" "rules" {
   direction       = each.value.direction
   description     = try(each.value.description, null)
   disabled        = try(each.value.disabled, false)
-  enable_logging  = try(each.value.enable_logging, var.enable_logging)
+  enable_logging  = coalesce(each.value.enable_logging, var.enable_logging)
 
   # Match configuration
   match {
