@@ -72,7 +72,7 @@ resource "google_dns_managed_zone" "public_zone" {
   visibility  = "public"
 
   dnssec_config {
-    state = var.dnssec_enabled ? "on" : "transfer"
+    state = var.dnssec_enabled ? "on" : "off"
   }
 
   dynamic "cloud_logging_config" {
