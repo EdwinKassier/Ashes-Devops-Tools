@@ -88,6 +88,17 @@ run "all_buckets_use_cmek" {
 
 # ── Variable validation ────────────────────────────────────────────────────────
 
+run "rejects_null_region" {
+  # region has no default — omitting it (null) must fail clearly, not plan a null-location bucket
+  command = plan
+
+  expect_failures = [var.region]
+
+  variables {
+    region = null
+  }
+}
+
 run "rejects_invalid_kms_key_format" {
   command = plan
 

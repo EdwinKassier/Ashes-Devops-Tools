@@ -4,9 +4,14 @@ variable "project_id" {
 }
 
 variable "region" {
-  description = "The GCP region for all storage buckets in this module. Required — no default to avoid silent cross-region deployments."
+  description = "Region for the Firebase web-app storage resources. Required only when `web_display_name` is set (a web app is created); ignored otherwise."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.web_display_name == "" || var.region != null
+    error_message = "region is required when web_display_name is set (a Firebase web app is created)."
+  }
 }
 
 # Apple App Variables
