@@ -245,11 +245,12 @@ TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=examples/dev.tfv
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `enable_cloud_armor` | `false` | Attach WAF policy to external load balancers |
-| `enable_interconnect` | `false` | Provision Dedicated Interconnect VLAN attachment |
-| `enable_vpn` | `false` | Provision HA-VPN tunnels |
+| `enable_owasp_rules` | `false` | Enable Cloud Armor OWASP managed rules (requires `enable_cloud_armor`) |
 | `owasp_sensitivity` | `2` | Cloud Armor OWASP rule sensitivity (1=strict, 4=permissive) |
-| `explicit_zones` | `[]` | **Required for production.** Pin the availability zones used for subnet layout (e.g. `["us-central1-a","us-central1-b","us-central1-c"]`). Without this the module queries the GCP API at plan time; if the API returns a different number of zones between runs, Terraform will plan subnet destruction. |
-| `spoke_project_numbers` | `{}` | Map of spoke project **numeric numbers** (not project ID strings) to include in the VPC-SC perimeter. The Access Context Manager API rejects project ID strings with a misleading permission error. Obtain with: `gcloud projects describe <id> --format='value(projectNumber)'` |
+| `enable_deletion_protection` | `true` | Guard against accidental destruction of the VPC/subnets/DNS zones |
+| `vpc_sc_ingress_policies` / `vpc_sc_egress_policies` | `[]` | Optional VPC Service Controls ingress/egress policies for the perimeter |
+
+> **Host-level networking (Dedicated Interconnect, HA-VPN, explicit zone pinning):** `envs/apps` does not expose `enable_interconnect`, `enable_vpn`, or `explicit_zones` as its own variables — those are variables of the underlying `modules/host` module (`interconnects`, `enable_vpn`, `explicit_zones`). To use them, either call `modules/host` directly from a custom root, or extend `envs/apps/main.tf`'s `module "host"` call to pass them through.
 
 ---
 

@@ -213,11 +213,13 @@ Always include a justification after the colon. The CI Checkov run uses `.checko
 ```text
 ╷
 │ Error: Resource precondition failed
-│ on modules/host/main.tf: var.private_subnet_cidrs has fewer entries than the
-│ number of zones in the selected region.
+│ on modules/host/main.tf: Each non-empty subnet_cidrs list must have at least
+│ as many entries as availability zones in the region. Detected 3 zones;
+│ provided public=0, private=2, database=0 CIDRs. Either add CIDRs or leave
+│ the list empty to use auto-generated values.
 ```
 
-**Cause:** The number of CIDR blocks supplied for `private_subnet_cidrs` (or `database_subnet_cidrs`) is less than the number of availability zones `modules/host` will create subnets in.
+**Cause:** `modules/host` takes subnet CIDRs as a single `subnet_cidrs` object with `public`/`private`/`database` list keys (not separate `private_subnet_cidrs`/`database_subnet_cidrs` variables). If you supply a non-empty list for one of those keys, it must have at least one CIDR per availability zone in the region.
 
 **Fix (option A — recommended for production):** Set `explicit_zones` to pin the exact zones you need:
 
@@ -225,13 +227,17 @@ Always include a justification after the colon. The CI Checkov run uses `.checko
 explicit_zones = ["us-central1-a", "us-central1-b", "us-central1-c"]
 ```
 
-Then add one CIDR per zone:
+Then supply one CIDR per zone for each tier you override:
 
 ```hcl
-private_subnet_cidrs = ["10.0.0.0/24", "10.0.1.0/24", "10.0.2.0/24"]
+subnet_cidrs = {
+  public   = []
+  private  = ["10.0.0.0/24", "10.0.1.0/24", "10.0.2.0/24"]
+  database = []
+}
 ```
 
-**Fix (option B):** Add CIDRs until the count matches or exceeds the zone count returned by the region.
+**Fix (option B):** Add CIDRs until each non-empty list's count matches or exceeds the zone count returned by the region, or leave a tier's list empty (`[]`) to fall back to auto-generated CIDRs.
 
 ---
 
@@ -263,7 +269,7 @@ terraform destroy # now succeeds
 
 ### `Error: Error creating Service Perimeter … "projects/my-project-id" is not a valid resource name`
 
-**Cause:** `spoke_project_numbers` was given a project ID string instead of a numeric project number. The Access Context Manager API only accepts the `projects/<number>` form.
+**Cause:** The `modules/network/vpc-sc` module's `protected_projects` variable (and the `resources`/`sources[].resource` fields inside `vpc_sc_ingress_policies`/`vpc_sc_egress_policies` at the `envs/apps` root) require **numeric project numbers**, not project ID strings. The Access Context Manager API only accepts the `projects/<number>` form, and the module prepends the `projects/` prefix automatically — do not include it yourself.
 
 **Fix:** Replace project ID strings with numeric project numbers:
 
@@ -271,13 +277,20 @@ terraform destroy # now succeeds
 gcloud projects describe my-project-id --format='value(projectNumber)'
 ```
 
-Then set:
+Then set (e.g. in a custom `vpc_sc_ingress_policies` entry, `envs/apps` tfvars):
 
 ```hcl
-spoke_project_numbers = {
-  "my-project" = "123456789012"   # numeric number, not project ID
-}
+vpc_sc_ingress_policies = [
+  {
+    sources = [
+      { resource = "123456789012" }   # numeric project number, not project ID, and no "projects/" prefix
+    ]
+    resources = ["projects/123456789012"]
+  }
+]
 ```
+
+`envs/apps` itself already resolves and protects its own host project number automatically (`data.google_project.host_project.number` in `envs/apps/main.tf`) — you only need to supply numbers manually when referencing **other** (spoke) projects in custom ingress/egress policies.
 
 ---
 
