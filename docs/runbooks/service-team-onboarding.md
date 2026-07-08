@@ -87,7 +87,7 @@ module "workload_payments" {
   # Google Group that acts as project admin
   project_admin_group_email = "payments-admins@company.com"
 
-  # Roles granted to the admin group (authoritative per-role — do NOT include owner/editor/viewer)
+  # Roles granted to the admin group (additive per-role — do NOT include owner/editor/viewer)
   project_admin_roles = [
     "roles/bigquery.dataEditor",
     "roles/storage.objectAdmin",
@@ -96,7 +96,7 @@ module "workload_payments" {
 }
 ```
 
-> **IAM binding warning:** `google_project_iam_binding` is **authoritative per role** — it removes any member not in the list from that role on every apply. If the team's project has existing manual bindings on the same roles, those members will be removed. Import them into state first or use additive `google_project_iam_member` instead.
+> **IAM binding note:** the workload module grants these roles with additive `google_project_iam_member` (`modules/stages/workload/main.tf`), not authoritative `google_project_iam_binding`. Each apply only adds the specified group/role pairs — it does not evict any other member already bound to the same role, so pre-existing manual bindings on the project are preserved.
 
 ### Step 4 — Plan and review
 
