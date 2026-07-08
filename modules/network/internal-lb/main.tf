@@ -88,12 +88,14 @@ resource "google_compute_region_backend_service" "backend" {
   region  = var.region
 
   protocol              = var.is_l7 ? "HTTP" : "TCP"
-  load_balancing_scheme = "INTERNAL_MANAGED"
+  load_balancing_scheme = var.is_l7 ? "INTERNAL_MANAGED" : "INTERNAL"
   timeout_sec           = var.backend_timeout_sec
   health_checks         = [local.health_check]
 
-  session_affinity                = var.session_affinity
-  locality_lb_policy              = var.locality_lb_policy
+  session_affinity = var.session_affinity
+  # locality_lb_policy is only valid for INTERNAL_MANAGED (L7); INTERNAL
+  # passthrough (L4) backend services reject it.
+  locality_lb_policy              = var.is_l7 ? var.locality_lb_policy : null
   connection_draining_timeout_sec = var.connection_draining_timeout_sec
 
   dynamic "backend" {
@@ -187,7 +189,7 @@ resource "google_compute_forwarding_rule" "forwarding_rule" {
   name    = "${var.name}-forwarding-rule"
   region  = var.region
 
-  load_balancing_scheme = "INTERNAL_MANAGED"
+  load_balancing_scheme = var.is_l7 ? "INTERNAL_MANAGED" : "INTERNAL"
   network               = var.network
   subnetwork            = var.subnet
   ip_address            = local.ip_address
@@ -195,15 +197,15 @@ resource "google_compute_forwarding_rule" "forwarding_rule" {
   port_range            = var.port_range
   allow_global_access   = var.allow_global_access
 
-  # For L7 (is_l7 = true): route through a target HTTP/S proxy (standard path).
-  # For L4 (is_l7 = false): INTERNAL_MANAGED with load_balancing_scheme="INTERNAL_MANAGED"
-  # and protocol="TCP" allows the forwarding rule to target the backend service directly —
-  # no explicit target TCP proxy resource is required for regional internal L4.
+  # L7 (is_l7 = true): INTERNAL_MANAGED routes through a target HTTP/S proxy.
+  # L4 (is_l7 = false): INTERNAL passthrough forwards directly to the backend
+  # service — the forwarding rule must set backend_service, not target.
   target = var.is_l7 ? (
     var.enable_ssl ?
     google_compute_region_target_https_proxy.https_proxy[0].self_link :
     google_compute_region_target_http_proxy.http_proxy[0].self_link
-  ) : google_compute_region_backend_service.backend.self_link
+  ) : null
+  backend_service = var.is_l7 ? null : google_compute_region_backend_service.backend.self_link
 
   labels = var.labels
 }
