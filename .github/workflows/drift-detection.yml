@@ -1,5 +1,17 @@
 name: Drift Detection
 
+# Required repository configuration (see docs/guides/CI_SECRETS.md):
+#   - secrets.TFC_TOKEN        Terraform Cloud API token (Team or Organization token
+#                              with read access to the target workspaces).
+#   - vars.TFC_ORGANIZATION    Terraform Cloud organization name.
+#   - vars.TFC_DRIFT_WORKSPACES  (optional) JSON array of workspace names to check.
+#                              Defaults to '["organization","apps-dev"]' when unset.
+# When TFC_TOKEN/TFC_ORGANIZATION are not configured, the scheduled run SKIPS
+# cleanly (via the check-credentials gate below) instead of failing red — a
+# missing-secret condition is a configuration gap, not a CI failure.
+# workflow_dispatch always runs the credential assertion step so a manual
+# invocation still fails loudly if secrets are missing.
+
 on:
   schedule:
     - cron: '0 8 * * 1-5'  # Weekdays at 08:00 UTC
@@ -22,10 +34,39 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  check-credentials:
+    name: Check Terraform Cloud credentials
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - name: Check whether TFC_TOKEN / TFC_ORGANIZATION are configured
+        id: check
+        # `secrets.*` cannot be referenced directly in a job-level `if:`, so we
+        # evaluate it here (where secrets ARE available) and expose a plain
+        # job output that downstream `if:` conditions can safely read.
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+          TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
+        run: |
+          if [ -n "$TFC_TOKEN" ] && [ -n "$TFC_ORGANIZATION" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              echo "::error::TFC_TOKEN (secret) and/or TFC_ORGANIZATION (variable) are not configured. Manual runs require both — see docs/guides/CI_SECRETS.md."
+              exit 1
+            fi
+            echo "::warning::TFC_TOKEN (secret) and/or TFC_ORGANIZATION (variable) are not configured. Skipping scheduled drift detection cleanly. See docs/guides/CI_SECRETS.md for setup."
+          fi
+
   detect-drift:
     name: Detect Drift (${{ matrix.workspace }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    needs: check-credentials
+    if: needs.check-credentials.outputs.configured == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -196,22 +237,29 @@ jobs:
   summary:
     name: Drift Detection Summary
     runs-on: ubuntu-latest
-    needs: detect-drift
+    needs: [check-credentials, detect-drift]
     if: always()
     steps:
       - name: Publish summary
         # needs.detect-drift.result is the aggregated matrix result:
         #   success  = ALL workspace jobs passed (no drift detected in any workspace)
         #   failure  = ONE or more workspace jobs failed (drift or API error)
+        #   skipped  = check-credentials reported TFC_TOKEN/TFC_ORGANIZATION are not configured
         # Individual per-workspace results appear as annotations on each matrix job.
         env:
+          CONFIGURED: ${{ needs.check-credentials.outputs.configured }}
           RESULT: ${{ needs.detect-drift.result }}
           WORKSPACES: ${{ vars.TFC_DRIFT_WORKSPACES || '["organization","apps-dev"]' }}
         run: |
           {
             echo "## Drift Detection Summary"
             echo ""
-            if [ "$RESULT" = "success" ]; then
+            if [ "$CONFIGURED" != "true" ]; then
+              echo "⏭️ **Skipped — Terraform Cloud credentials are not configured.**"
+              echo ""
+              echo "Set the \`TFC_TOKEN\` repository secret and \`TFC_ORGANIZATION\` repository"
+              echo "variable to enable scheduled drift detection. See docs/guides/CI_SECRETS.md."
+            elif [ "$RESULT" = "success" ]; then
               echo "✅ **All workspace plans completed — no drift detected.**"
             else
               echo "❌ **One or more workspace plans detected drift or encountered an error.**"
