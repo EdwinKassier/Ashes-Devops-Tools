@@ -7,7 +7,7 @@ resource "google_billing_budget" "monthly_budget" {
   display_name    = "${var.project_name}-monthly-budget"
 
   budget_filter {
-    projects               = length(var.projects) > 0 ? var.projects : null
+    projects               = length(var.projects) > 0 ? [for p in var.projects : "projects/${p}"] : null
     credit_types_treatment = "INCLUDE_ALL_CREDITS"
     labels                 = var.label_filters
     services               = var.service_filters
