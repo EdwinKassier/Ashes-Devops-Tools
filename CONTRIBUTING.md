@@ -16,6 +16,35 @@ make pre-commit-install
 
 `make install` manages repo tooling. Terraform itself must already be installed separately.
 
+### Scanner versions: `.tool-versions` must be active before running pre-commit
+
+`.pre-commit-config.yaml`'s `terraform_tflint`, `terraform_tfsec`, `terraform_checkov`, and
+`terraform_docs` hooks (from `antonbabenko/pre-commit-terraform`) are implemented as
+`language: script` hooks — thin wrapper scripts that shell out to whatever `tflint`/`tfsec`/
+`checkov`/`terraform-docs` binary is first on your `PATH`. Unlike pre-commit's Python/Node/Go
+hook backends, `language: script` hooks have no `additional_dependencies` mechanism, so
+pre-commit itself **cannot** pin or sandbox these tool versions.
+
+This means local results only match CI if your locally installed tool versions match the
+ones CI uses. Those versions are recorded in `.tool-versions` and mirrored in
+`scripts/setup.sh`:
+
+| Tool | Required version |
+|------|-------------------|
+| terraform | 1.9.8 |
+| tflint | 0.62.0 |
+| tfsec | 1.28.6 |
+| terraform-docs | 0.19.0 |
+| checkov | 3.2.0 |
+
+Run `make install` before your first `pre-commit run` (and after pulling changes that bump
+these versions) — it checks each tool's installed version against the table above and warns
+on drift. If you use [asdf](https://asdf-vm.com/) or [mise](https://mise.jdx.dev/), installing
+from `.tool-versions` directly also works and is equivalent. Running pre-commit with stale or
+mismatched scanner versions can produce false passes or false failures relative to CI (e.g. a
+newer/older tflint may accept or reject CLI flags differently — see the `terraform_tflint`
+hook's `--call-module-type` comment in `.pre-commit-config.yaml`).
+
 ## Workflow
 
 1. Create a short descriptive branch.

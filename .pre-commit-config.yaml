@@ -26,7 +26,14 @@ repos:
         description: Lint Terraform files
         args:
           - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl
-          - --args=--module
+          # `--module` was removed in tflint v0.54.0 (tflint now errors: "Failed to
+          # parse CLI options; --module option was removed in v0.54.0. Use
+          # --call-module-type=all instead"). .tflint.hcl already sets
+          # `call_module_type = "all"`, which is the config-level equivalent and is
+          # honored automatically — no CLI flag is needed to get the same deep-module
+          # inspection that `make lint` uses. Do not add `--call-module-type=all` here
+          # either: passing it explicitly would just duplicate what .tflint.hcl already
+          # configures and risks drifting from it if the file is ever changed.
 
       - id: terraform_tfsec
         name: TFSec security scan
