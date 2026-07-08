@@ -8,7 +8,7 @@ We utilize a **Hub-and-Spoke** network topology with centralized governance.
 
 ### Roots
 * **`organization`**: The control-plane root. Creates the admin project, org policy, shared services projects, folders, and per-environment host projects.
-* **`apps`**: The single application-environment root. Select the environment with `TF_WORKSPACE=apps-<env>` and the matching tfvars file under `envs/apps/examples/`.
+* **`apps`**: The single application-environment root. Select the environment with `TF_WORKSPACE=apps-<env>` and the matching tfvars file under `examples/` (e.g. `examples/dev.tfvars`).
 
 ### Infrastructure Pattern
 Each application environment uses the shared `modules/host` foundation to stamp out:
