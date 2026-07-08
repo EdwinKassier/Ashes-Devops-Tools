@@ -148,7 +148,7 @@ resource "google_cloudfunctions2_function" "budget_notifier" {
     # a plaintext environment variable. The gen1 pattern of injecting via
     # environment_variables exposed the key in GCP console and terraform state.
     dynamic "secret_environment_variables" {
-      for_each = var.sendgrid_api_key_secret_id != "" ? [1] : []
+      for_each = nonsensitive(var.sendgrid_api_key_secret_id != "") ? [1] : []
       content {
         key        = "SENDGRID_API_KEY"
         project_id = var.project_id
