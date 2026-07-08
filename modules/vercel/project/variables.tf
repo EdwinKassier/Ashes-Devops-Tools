@@ -25,13 +25,15 @@ variable "framework" {
     # confusing error. The explicit `var.framework == null` arm short-circuits the
     # list check for the null/"framework-agnostic" case; the second arm rejects
     # empty string explicitly.
-    condition = (
-      var.framework == null ||
-      (var.framework != "" && contains([
+    # Ternary (not ||) so contains() is never evaluated on a null framework:
+    # Terraform 1.9.8 does not short-circuit || in validation conditions and would
+    # hard-error on contains(list, null). The null arm returns true directly.
+    condition = var.framework == null ? true : (
+      var.framework != "" && contains([
         "nextjs", "gatsby", "remix", "astro", "nuxt", "sveltekit",
         "vite", "create-react-app", "angular", "vue", "ember",
         "hugo", "eleventy", "jekyll", "blitzjs", "redwoodjs",
-      ], var.framework))
+      ], var.framework)
     )
     error_message = "framework must be a valid Vercel framework preset, or null for framework-agnostic projects. Empty string is not accepted — use null."
   }
