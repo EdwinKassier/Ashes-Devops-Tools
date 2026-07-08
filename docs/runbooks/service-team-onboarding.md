@@ -54,7 +54,7 @@ module "workload_payments" {
 
   project_name    = "payments"
   org_id          = data.terraform_remote_state.organization.outputs.org_id
-  folder_id       = data.terraform_remote_state.organization.outputs.workloads_folder_id
+  folder_id       = data.terraform_remote_state.organization.outputs.environment_config[var.environment].folder_id
   billing_account = data.terraform_remote_state.organization.outputs.billing_account
 
   activate_apis = [
