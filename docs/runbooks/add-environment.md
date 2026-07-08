@@ -20,7 +20,39 @@ In the Terraform Cloud UI (or via the TFC API):
 4. Configure VCS connection to this repository, triggering on changes to `envs/apps/**`
 5. Set the Terraform working directory to `envs/apps`
 
-### 2. Create a tfvars file for the new environment
+### 2. Add the environment to the organization root's `environments` map
+
+Per-environment CIDR, region, and other config are **not** set in `envs/apps` tfvars — they live in the `environments` map in `envs/organization` and are read by `envs/apps` via `terraform_remote_state` (`environment_config[var.environment]`). See [cidr-expansion.md](cidr-expansion.md) for the authoritative model.
+
+In your `envs/organization` tfvars (e.g. `local.auto.tfvars`), add a new entry:
+
+```hcl
+environments = {
+  # ... existing environments unchanged ...
+  staging = {
+    display_name            = "Staging"
+    region                  = "europe-west1"
+    cidr_block              = "10.129.0.0/16"   # must not overlap dev (10.128.0.0/16), the hub, or any other spoke
+    budget_monthly_limit    = 500
+    iam_group_role_bindings = {}
+  }
+}
+```
+
+Choose a non-overlapping CIDR. Refer to [network-topology.md](../architecture/network-topology.md) for the subnet layout.
+
+### 3. Apply the organization root
+
+Applying the org root creates the new environment's folder and host project, registers the new `apps-staging` TFC workspace (workspace registration is consumed by `module.bootstrap`), and publishes the new `environment_config["staging"]` entry to remote state:
+
+```bash
+make plan-organization
+# Confirm the plan creates the new folder, host project, and workspace registration —
+# no changes to existing environments.
+terraform -chdir=envs/organization apply
+```
+
+### 4. Create a tfvars file for the new environment
 
 ```bash
 cp examples/dev.tfvars examples/staging.tfvars
@@ -31,10 +63,9 @@ Edit `examples/staging.tfvars` and set at minimum:
 ```hcl
 environment    = "staging"
 project_prefix = "ashes"
-vpc_cidr_block = "10.129.0.0/16"   # must not overlap dev (10.128.0.0/16) or any other VPC
 ```
 
-Choose a non-overlapping CIDR. Refer to [network-topology.md](../architecture/network-topology.md) for the subnet layout.
+Do **not** set a CIDR here — `envs/apps` reads it from the organization remote state automatically.
 
 Commit the file:
 
@@ -43,22 +74,13 @@ git add examples/staging.tfvars
 git commit -m "feat: add staging environment tfvars"
 ```
 
-### 3. Add the new workspace to the TFC organization variables (if applicable)
+### 5. Set workspace variables in Terraform Cloud
 
-If your `envs/organization` root manages TFC workspace configuration, add the new workspace name to the relevant variable and apply:
-
-```bash
-terraform -chdir=envs/organization apply -target=module.projects
-```
-
-### 4. Set workspace variables in Terraform Cloud
-
-In the `apps-staging` workspace, set the following as **Terraform variables**:
+In the `apps-staging` workspace, set the following as a **Terraform variable**:
 
 | Key | Value | Sensitive? |
 |-----|-------|------------|
 | `environment` | `staging` | No |
-| `vpc_cidr_block` | `10.129.0.0/16` | No |
 
 And as an **environment variable**:
 
@@ -66,13 +88,12 @@ And as an **environment variable**:
 |-----|-------|
 | `TF_CLI_ARGS_plan` | `-var-file=examples/staging.tfvars` |
 
-### 5. Trigger the first plan
+### 6. Trigger the first plan
 
-Push to `main` or manually trigger the workspace run in TFC. Review the plan carefully — it should create new resources only (no modifications to existing environments).
+Push to `main` or manually trigger the `apps-staging` workspace run in TFC. Review the plan carefully — it should create new resources only (no modifications to existing environments and no project creation, since the host project already exists from Step 3).
 
 ```text
 Expected new resources:
-  + google_project.spoke_project
   + module.host.module.vpc.google_compute_network.vpc
   + module.host.module.private_subnets.*
   + module.host.module.database_subnets.*
@@ -80,7 +101,7 @@ Expected new resources:
   (etc.)
 ```
 
-### 6. Apply and verify
+### 7. Apply and verify
 
 After plan review, approve the apply in TFC.
 
