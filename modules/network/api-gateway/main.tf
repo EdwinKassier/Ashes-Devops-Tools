@@ -24,10 +24,14 @@ resource "google_api_gateway_api" "api" {
 
 # API Config resource
 resource "google_api_gateway_api_config" "api_config" {
-  provider      = google-beta
-  project       = var.project_id
-  api           = google_api_gateway_api.api.api_id
-  api_config_id = "${var.api_id}-config-${formatdate("YYYYMMDDhhmmss", timestamp())}"
+  provider = google-beta
+  project  = var.project_id
+  api      = google_api_gateway_api.api.api_id
+  # Derive the config id from a hash of the spec content so the config is
+  # replaced only when the spec actually changes. create_before_destroy (below)
+  # handles the replacement cleanly. Using timestamp() here forced a replacement
+  # on every apply even when nothing changed.
+  api_config_id = "${var.api_id}-config-${substr(sha256(local.openapi_content), 0, 12)}"
   display_name  = "${var.display_name} Config"
 
   openapi_documents {

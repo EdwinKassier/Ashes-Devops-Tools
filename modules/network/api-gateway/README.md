@@ -91,8 +91,8 @@ The following resources are created:
 
 - resource.google-beta_google_api_gateway_api.api (modules/network/api-gateway/main.tf#L17)
 - resource.google-beta_google_api_gateway_api_config.api_config (modules/network/api-gateway/main.tf#L26)
-- resource.google-beta_google_api_gateway_gateway.gateway (modules/network/api-gateway/main.tf#L52)
-- resource.google-beta_google_compute_region_network_endpoint_group.serverless_neg (modules/network/api-gateway/main.tf#L64)
+- resource.google-beta_google_api_gateway_gateway.gateway (modules/network/api-gateway/main.tf#L56)
+- resource.google-beta_google_compute_region_network_endpoint_group.serverless_neg (modules/network/api-gateway/main.tf#L68)
 
 
 ## Inputs
@@ -119,7 +119,7 @@ The following resources are created:
 | <a name="output_gateway"></a> [gateway](#output\_gateway) | The created API Gateway instance |
 | <a name="output_gateway_default_hostname"></a> [gateway\_default\_hostname](#output\_gateway\_default\_hostname) | The default hostname of the API Gateway |
 | <a name="output_id"></a> [id](#output\_id) | The ID of the API Gateway |
-| <a name="output_self_link"></a> [self\_link](#output\_self\_link) | The URI of the API Gateway |
+| <a name="output_self_link"></a> [self\_link](#output\_self\_link) | The HTTPS URI at which the API Gateway is reachable |
 | <a name="output_serverless_neg_id"></a> [serverless\_neg\_id](#output\_serverless\_neg\_id) | The ID of the Serverless NEG for Load Balancer integration |
 | <a name="output_service_name"></a> [service\_name](#output\_service\_name) | The full service name used for the API Gateway |
 <!-- END_TF_DOCS -->
