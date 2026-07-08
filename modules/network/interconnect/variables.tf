@@ -98,7 +98,7 @@ variable "vlan_tag" {
   default     = null
 
   validation {
-    condition     = var.vlan_tag == null || (var.vlan_tag >= 1 && var.vlan_tag <= 4094)
+    condition     = var.vlan_tag == null ? true : (var.vlan_tag >= 1 && var.vlan_tag <= 4094)
     error_message = "VLAN tag must be between 1 and 4094."
   }
 }

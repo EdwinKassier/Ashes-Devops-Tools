@@ -104,7 +104,7 @@ variable "purpose" {
   default     = null
 
   validation {
-    condition     = var.purpose == null || contains(["PRIVATE", "REGIONAL_MANAGED_PROXY", "GLOBAL_MANAGED_PROXY", "PRIVATE_SERVICE_CONNECT", "PEER_MIGRATION"], var.purpose)
+    condition     = var.purpose == null ? true : contains(["PRIVATE", "REGIONAL_MANAGED_PROXY", "GLOBAL_MANAGED_PROXY", "PRIVATE_SERVICE_CONNECT", "PEER_MIGRATION"], var.purpose)
     error_message = "purpose must be one of: PRIVATE, REGIONAL_MANAGED_PROXY, GLOBAL_MANAGED_PROXY, PRIVATE_SERVICE_CONNECT, PEER_MIGRATION."
   }
 }
@@ -115,7 +115,7 @@ variable "role" {
   default     = null
 
   validation {
-    condition     = var.role == null || contains(["ACTIVE", "BACKUP"], var.role)
+    condition     = var.role == null ? true : contains(["ACTIVE", "BACKUP"], var.role)
     error_message = "role must be either ACTIVE or BACKUP."
   }
 }
