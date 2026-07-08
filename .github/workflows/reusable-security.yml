@@ -87,7 +87,10 @@ jobs:
           framework: terraform
           quiet: true
           soft_fail: false
-          download_external_modules: false
+          # Resolve remote modules (e.g. terraform-google-modules/project-factory/google
+          # used by modules/stages/workload) so their contents are actually scanned
+          # instead of silently skipped with a "module not found" warning.
+          download_external_modules: true
           config_file: .checkov.yaml
           output_format: ${{ inputs.sarif_output && 'sarif,cli' || 'cli' }}
           output_file_path: ${{ inputs.sarif_output && 'checkov-results.sarif,checkov-report.txt' || 'console' }}
@@ -99,7 +102,8 @@ jobs:
           framework: terraform
           quiet: true
           soft_fail: false
-          download_external_modules: false
+          # See rationale on the modules invocation above.
+          download_external_modules: true
           config_file: .checkov.yaml
           output_format: ${{ inputs.sarif_output && 'sarif,cli' || 'cli' }}
           output_file_path: ${{ inputs.sarif_output && 'checkov-env-results.sarif,checkov-env-report.txt' || 'console' }}
