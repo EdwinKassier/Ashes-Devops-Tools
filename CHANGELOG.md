@@ -104,7 +104,7 @@ Releases are tagged as `organization/vX.Y.Z` and `apps/<env>/vX.Y.Z`.
 - `.github/dependabot.yml` — added `modules/monitoring/alert-policy` and `modules/monitoring/alert-policy/examples/basic` (previously missing; provider updates went untracked)
 - `Makefile` — `make security` and `make security-report` now pass `--config-file .checkov.yaml` to both Checkov invocations, matching CI behaviour; previously local runs produced different results than CI
 - `Makefile` — `make clean` no longer deletes committed `.terraform.lock.hcl` files (was deleting all lock files outside `envs/`); separated into a guarded `make clean-locks` target
-- `.tflint.hcl` — Google plugin bumped from `0.39.0` to `0.40.0`
+- `.tflint.hcl` — Google plugin remains pinned at `0.39.0` (the latest published release; `0.40.0` does not exist upstream — a prior entry in this file incorrectly claimed a bump to it)
 - `envs/apps/variables.tf` — `monthly_budget_limit` description updated to explicitly state that `0` disables budget alerts; added `>= 0` validation with clear error message
 - `modules/governance/kms/variables.tf` — rotation period upper bound relaxed from `7776000s` (90 days) to `31536000s` (365 days) to allow annual rotation for HSM-backed keys; comment documents NIST SP 800-57 recommendation for software keys
 - `.github/workflows/terraform-apply.yml` — added `--max-time 30 --connect-timeout 10` to TFC API curl; previously a slow or unresponsive TFC API would hang the step until the 15-minute job timeout

@@ -190,6 +190,6 @@ Service projects should be created from a dedicated workload root that calls `mo
 
 ## Current Boundaries
 
-- The repository does not yet include a first-class workload root beyond the examples.
+- The repository does not yet include a first-class workload root beyond `examples/workloads/`, which is a complete, working reference implementation of `modules/stages/workload`.
 - Local `make validate-all` requires access to `registry.terraform.io`.
 - Local `make lint` depends on a healthy TFLint Google ruleset plugin installation.

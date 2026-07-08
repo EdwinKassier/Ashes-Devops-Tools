@@ -2,6 +2,8 @@
 #
 # Runtime requirements:
 #   - Node.js >= 18 must be in PATH.
+#   - Before first apply, install the script dependencies:
+#       cd modules/supabase/vault-secrets/scripts/ && npm install
 #   - SUPABASE_ACCESS_TOKEN env var should be set in CI for the Management
 #     API path (bypasses the Supavisor pooler, avoiding "Tenant or user not
 #     found" on GitHub Actions runners).
