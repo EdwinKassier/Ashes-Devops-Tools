@@ -84,11 +84,11 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_compute_global_address.psc_address (modules/network/private-service-connect/main.tf#L23)
-- resource.google_compute_global_forwarding_rule.psc_forwarding_rule (modules/network/private-service-connect/main.tf#L37)
-- resource.google_dns_managed_zone.psc_dns (modules/network/private-service-connect/main.tf#L52)
-- resource.google_dns_record_set.psc_googleapis (modules/network/private-service-connect/main.tf#L70)
-- resource.google_dns_record_set.psc_googleapis_base (modules/network/private-service-connect/main.tf#L82)
+- resource.google_compute_global_address.psc_address (modules/network/private-service-connect/main.tf#L33)
+- resource.google_compute_global_forwarding_rule.psc_forwarding_rule (modules/network/private-service-connect/main.tf#L45)
+- resource.google_dns_managed_zone.psc_dns (modules/network/private-service-connect/main.tf#L58)
+- resource.google_dns_record_set.psc_googleapis (modules/network/private-service-connect/main.tf#L76)
+- resource.google_dns_record_set.psc_googleapis_base (modules/network/private-service-connect/main.tf#L88)
 
 
 ## Inputs

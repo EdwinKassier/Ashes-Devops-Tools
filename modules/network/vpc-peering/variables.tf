@@ -64,9 +64,3 @@ variable "create_reverse_peering" {
   type        = bool
   default     = true
 }
-
-variable "peer_project_id" {
-  description = "The project ID of the peer network (if different from project_id)"
-  type        = string
-  default     = null
-}

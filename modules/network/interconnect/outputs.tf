@@ -67,8 +67,3 @@ output "state" {
   description = "Current state of the interconnect attachment"
   value       = local.attachment != null ? local.attachment.state : null
 }
-
-output "operational_status" {
-  description = "Operational status of the interconnect attachment"
-  value       = local.attachment != null ? local.attachment.state : null
-}
