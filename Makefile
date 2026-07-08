@@ -55,6 +55,14 @@ lint: ## Run TFLint across the repository
 	@set -e; \
 	for dir in $(TERRAFORM_ROOTS); do \
 		echo "$(YELLOW)Linting $$dir$(NC)"; \
+		for attempt in 1 2 3; do \
+			if [ -d "$$dir/.terraform/modules" ]; then \
+				break; \
+			else \
+				$(TERRAFORM) -chdir=$$dir init -backend=false -input=false >/dev/null && break; \
+			fi; \
+			[ $$attempt -lt 3 ] || exit 1; \
+		done; \
 		$(TFLINT) --chdir=$$dir --config=$(PWD)/.tflint.hcl; \
 	done
 
