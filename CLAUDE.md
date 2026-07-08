@@ -14,16 +14,16 @@ envs/
 modules/
   stages/         # Orchestration wrappers: bootstrap, organization, projects,
                   #   network-hub, workload, saas-workload
-  network/        # ~19 primitives: vpc, subnet, dns, vpn, vpc-sc, cloud_armor, …
+  network/        # ~19 primitives: vpc, subnet, dns, vpn, vpc-sc, cloud-armor, …
   governance/     # billing, kms, org-policy, scc, tags, cloud-audit-logs
-  iam/            # organization, role, service_account, workload_identity, identity_group*
+  iam/            # organization, role, service-account, workload-identity, identity-group*
   supabase/       # project, settings, environment, vault-secrets
   vercel/         # project
   host/           # compatibility wrapper for envs/apps
-  monitoring/     # alert_policy, compute_dashboard
+  monitoring/     # alert-policy, compute-dashboard
   firebase/       # project
-  cloud_storage/
-  artifact_registry/
+  cloud-storage/
+  artifact-registry/
 ```
 
 ---

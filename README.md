@@ -176,8 +176,8 @@ make ci
 
 | Module | Purpose |
 |:-------|:--------|
-| [`cloud_storage`](modules/cloud-storage/) | GCS buckets with log separation and optional CMEK |
-| [`artifact_registry`](modules/artifact-registry/) | Container/package registries |
+| [`cloud-storage`](modules/cloud-storage/) | GCS buckets with log separation and optional CMEK |
+| [`artifact-registry`](modules/artifact-registry/) | Container/package registries |
 | [`firebase/project`](modules/firebase/project/) | Firebase project setup with Apple, Android, and Web app targets |
 
 </details>
