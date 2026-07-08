@@ -143,7 +143,7 @@ The following resources are created:
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID to enable services in | `string` | n/a | yes |
 | <a name="input_billing_admin_members"></a> [billing\_admin\_members](#input\_billing\_admin\_members) | List of members to have billing admin role (format: user:email, group:email, serviceAccount:email, or domain:domain) | `list(string)` | `[]` | no |
 | <a name="input_org_admin_members"></a> [org\_admin\_members](#input\_org\_admin\_members) | List of members to have organization admin role (format: user:email, group:email, serviceAccount:email, or domain:domain) | `list(string)` | `[]` | no |
-| <a name="input_organizational_units"></a> [organizational\_units](#input\_organizational\_units) | Map of organizational units to create | <pre>map(object({<br/>    display_name            = string<br/>    description             = optional(string, "")<br/>    iam_group_role_bindings = optional(map(set(string)), {})<br/>  }))</pre> | `{}` | no |
+| <a name="input_organizational_units"></a> [organizational\_units](#input\_organizational\_units) | Map of organizational units to create | <pre>map(object({<br/>    display_name            = string<br/>    iam_group_role_bindings = optional(map(set(string)), {})<br/>  }))</pre> | `{}` | no |
 
 ## Outputs
 
@@ -151,10 +151,9 @@ The following resources are created:
 |------|-------------|
 | <a name="output_enabled_apis"></a> [enabled\_apis](#output\_enabled\_apis) | List of APIs enabled in the organization |
 | <a name="output_folder_iam_members"></a> [folder\_iam\_members](#output\_folder\_iam\_members) | Map of folder IAM members |
-| <a name="output_folders"></a> [folders](#output\_folders) | Map of created folders |
+| <a name="output_folders"></a> [folders](#output\_folders) | Map of created folders (keyed by organizational-unit key) |
 | <a name="output_organization_directory_customer_id"></a> [organization\_directory\_customer\_id](#output\_organization\_directory\_customer\_id) | The directory customer ID of the organization |
 | <a name="output_organization_domain"></a> [organization\_domain](#output\_organization\_domain) | The domain of the organization |
 | <a name="output_organization_id"></a> [organization\_id](#output\_organization\_id) | The numeric ID of the organization |
 | <a name="output_organization_name"></a> [organization\_name](#output\_organization\_name) | The resource name of the organization |
-| <a name="output_organizational_units"></a> [organizational\_units](#output\_organizational\_units) | Map of created organizational units |
 <!-- END_TF_DOCS -->

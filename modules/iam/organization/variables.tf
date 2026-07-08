@@ -41,7 +41,6 @@ variable "organizational_units" {
   description = "Map of organizational units to create"
   type = map(object({
     display_name            = string
-    description             = optional(string, "")
     iam_group_role_bindings = optional(map(set(string)), {})
   }))
   default = {}

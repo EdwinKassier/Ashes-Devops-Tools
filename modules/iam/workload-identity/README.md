@@ -207,7 +207,7 @@ The following resources are created:
 | <a name="input_gitlab_sa_bindings"></a> [gitlab\_sa\_bindings](#input\_gitlab\_sa\_bindings) | List of GitLab project to service account bindings | <pre>list(object({<br/>    project_path          = string # Format: group/project<br/>    service_account_email = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_gitlab_url"></a> [gitlab\_url](#input\_gitlab\_url) | GitLab instance URL (e.g., https://gitlab.com) | `string` | `"https://gitlab.com"` | no |
 | <a name="input_tfc_organization"></a> [tfc\_organization](#input\_tfc\_organization) | Terraform Cloud organization name. Value is interpolated into a CEL expression — must not contain single quotes. | `string` | `null` | no |
-| <a name="input_tfc_sa_bindings"></a> [tfc\_sa\_bindings](#input\_tfc\_sa\_bindings) | List of TFC workspace to service account bindings | <pre>list(object({<br/>    workspace_name        = string<br/>    project_name          = optional(string, "*")<br/>    service_account_email = string<br/>  }))</pre> | `[]` | no |
+| <a name="input_tfc_sa_bindings"></a> [tfc\_sa\_bindings](#input\_tfc\_sa\_bindings) | List of TFC workspace to service account bindings | <pre>list(object({<br/>    workspace_name        = string<br/>    service_account_email = string<br/>  }))</pre> | `[]` | no |
 
 ## Outputs
 

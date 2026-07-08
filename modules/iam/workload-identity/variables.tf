@@ -147,7 +147,6 @@ variable "tfc_sa_bindings" {
   description = "List of TFC workspace to service account bindings"
   type = list(object({
     workspace_name        = string
-    project_name          = optional(string, "*")
     service_account_email = string
   }))
   default = []
