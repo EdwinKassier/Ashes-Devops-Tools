@@ -11,11 +11,11 @@
 output "id" {
   description = "The unique identifier of the MODULE_NAME resource. Replace with the actual resource reference."
   # REPLACE: value = google_RESOURCE_TYPE.main.id
-  value = null
+  value = google_project_service.example.id
 }
 
 output "name" {
   description = "The name of the MODULE_NAME resource. Replace with the actual resource reference."
   # REPLACE: value = google_RESOURCE_TYPE.main.name
-  value = null
+  value = google_project_service.example.service
 }

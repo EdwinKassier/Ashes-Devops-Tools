@@ -173,6 +173,44 @@ run "invalid_region_rejected" {
 - One test file per validation scope: `tests/variables_validation.tftest.hcl` for simple modules, or split by concern (e.g., `tests/iam_validation.tftest.hcl`, `tests/cidr_validation.tftest.hcl`) for modules with many validations.
 - `run` block names use `snake_case` and describe the specific behaviour: `valid_region_accepted`, `invalid_region_uppercase_rejected`.
 
+### Testing: resource-assertion tests are required
+
+Input-validation tests (`expect_failures`, accept/reject pairs) only prove that
+`variable` blocks accept or reject the right shapes — they never prove the
+module actually plans the resource you think it does, or that a value flows
+through to the attribute you expect. **Every module must include at least one
+`command = plan` test that asserts on a planned resource or output attribute**,
+not only on variable validation. Model this on
+`templates/module/tests/plan_assertions.tftest.hcl`:
+
+```hcl
+run "example_resource_plans_with_expected_attributes" {
+  command = plan
+
+  assert {
+    condition     = google_RESOURCE_TYPE.example.some_attribute == "expected-value"
+    error_message = "some_attribute must reflect the supplied input"
+  }
+}
+```
+
+**Avoid vacuous assertions.** `alltrue([for x in RESOURCE : ...])` evaluates to
+`true` when `RESOURCE` is an empty set or map — `alltrue([]) == true` — so an
+assertion over a `for_each`/`count` resource that happens to plan zero
+instances will pass even though nothing was actually verified. Any assertion
+over a `for_each`/`count` resource (especially one driven by an
+`override_module`-stubbed child module output) must also assert the set is
+non-empty, e.g.:
+
+```hcl
+assert {
+  condition = length(google_RESOURCE_TYPE.example) > 0 && alltrue([
+    for r in google_RESOURCE_TYPE.example : r.some_attribute == "expected-value"
+  ])
+  error_message = "at least one instance must be planned and every instance must satisfy the invariant"
+}
+```
+
 Keep generated README sections current with:
 
 ```bash
