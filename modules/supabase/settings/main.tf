@@ -18,11 +18,16 @@ resource "supabase_settings" "this" {
     max_rows             = var.api_max_rows
   })
 
-  # Diverges from collects: collects hardcodes jwt_expiry = 3600 (1 hour).
+  # Diverges from collects: collects hardcodes jwt_exp = 3600 (1 hour).
   # We parameterise it; the default of 3600 preserves collects' behaviour.
+  #
+  # The Management API / supabase provider field is `jwt_exp` (see the provider's
+  # UpdateAuthConfigBody struct tag and settings_resource_test.go). The provider
+  # unmarshals this JSON with lenient decoding, so a misnamed key like
+  # `jwt_expiry` is silently dropped and never applied — keep this as `jwt_exp`.
   auth = jsonencode({
     disable_signup      = var.disable_signup
-    jwt_expiry          = var.jwt_expiry
+    jwt_exp             = var.jwt_expiry
     mailer_autoconfirm  = var.mailer_autoconfirm
     password_min_length = var.password_min_length
   })
