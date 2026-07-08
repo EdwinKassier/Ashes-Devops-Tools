@@ -4,6 +4,17 @@
  * Supports Docker, Python, npm, Maven, Go, and Apt formats.
  */
 
+locals {
+  # Formats that expose a package-manager registry host. Others (APT/YUM/GOOGET/KFP/GENERIC)
+  # have no such host and are omitted from the repository_urls map.
+  ar_hosts = {
+    DOCKER = "docker"
+    MAVEN  = "maven"
+    NPM    = "npm"
+    PYTHON = "python"
+  }
+}
+
 resource "google_artifact_registry_repository" "repo" {
   for_each = var.repositories
 

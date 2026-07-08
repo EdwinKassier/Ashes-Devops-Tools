@@ -9,8 +9,10 @@ output "repository_names" {
 }
 
 output "repository_urls" {
-  description = "Map of repository names to their Docker registry URLs"
+  description = "Map of repository names to their package-registry URLs, built per format (docker/maven/npm/python). Formats without a registry host (APT/YUM/GOOGET/KFP/GENERIC) are omitted."
   value = {
-    for k, v in google_artifact_registry_repository.repo : k => "${var.region}-docker.pkg.dev/${var.project_id}/${k}"
+    for k, v in google_artifact_registry_repository.repo :
+    k => "${var.region}-${local.ar_hosts[v.format]}.pkg.dev/${var.project_id}/${k}"
+    if contains(keys(local.ar_hosts), v.format)
   }
 }
