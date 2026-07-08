@@ -45,6 +45,7 @@ variable "notification_webhook_urls" {
   EOT
   type        = map(string)
   default     = {}
+  sensitive   = true
 
   validation {
     condition = alltrue([
