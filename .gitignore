@@ -19,6 +19,10 @@ plan.out
 terraform.plan
 tfplan
 
+# Agent/worktree scratch directories (never commit)
+.claire/
+.claude/worktrees/
+
 # Lock files are intentionally committed so CI and all developers use the same
 # provider versions. Generate with:
 #   terraform providers lock -platform=linux_amd64 -platform=darwin_arm64
