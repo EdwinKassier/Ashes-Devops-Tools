@@ -14,12 +14,13 @@
 
 <br/>
 
-[![TFLint](https://img.shields.io/badge/TFLint-passing-success?style=flat-square&logo=terraform)](https://github.com/terraform-linters/tflint)
-[![TFSec](https://img.shields.io/badge/TFSec-passing-success?style=flat-square&logo=aqua)](https://github.com/aquasecurity/tfsec)
-[![Checkov](https://img.shields.io/badge/Checkov-passing-success?style=flat-square)](https://www.checkov.io/)
+[![Terraform Validation](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml)
+[![Security Scan](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml)
 [![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?style=flat-square&logo=pre-commit)](https://pre-commit.com)
 [![Modules](https://img.shields.io/badge/modules-48-blueviolet?style=flat-square)](modules/)
 [![Tests](https://img.shields.io/badge/test_suites-51-blue?style=flat-square)](modules/)
+
+<sub>Modules/test-suite counts above are hand-maintained, not live badges. Verify: <code>find modules -name main.tf -not -path '*/examples/*' -not -path '*/.terraform/*' | wc -l</code> (modules) and <code>find modules envs -name '*.tftest.hcl' -not -path '*/.terraform/*' | wc -l</code> (test suites). Last verified 2026-07-08: 48 modules, 51 test suites.</sub>
 
 </div>
 
