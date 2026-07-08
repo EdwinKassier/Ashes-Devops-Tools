@@ -20,10 +20,10 @@ severity_overrides:
 exclude_checks:
   - AWS*  # Exclude all AWS checks
   - AZU*  # Exclude all Azure checks
-  
+
 # Focus on GCP checks
 check_type:
   - google
 
 # Timeout settings (in seconds)
-timeout: 300 
+timeout: 300

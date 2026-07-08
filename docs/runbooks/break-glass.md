@@ -38,7 +38,7 @@ gcloud iam workload-identity-pools describe github-pool \
   --project=ADMIN_PROJECT_ID
 ```
 
-2. The Terraform SA still exists:
+1. The Terraform SA still exists:
 
 ```bash
 gcloud iam service-accounts describe terraform@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
@@ -186,6 +186,7 @@ gcloud logging read \
 ```
 
 Check specifically for:
+
 - `SetIamPolicy` calls (IAM mutations)
 - `DeleteBucket`, `DeleteDataset`, `DeleteObject` (data destruction)
 - Any project outside the expected scope of the change
@@ -208,6 +209,7 @@ gcloud iam service-accounts enable \
 ```
 
 Review and tighten the break-glass procedure based on findings — in particular:
+
 - Was the approver verification step followed?
 - Was the time box enforced?
 - Should break-glass access require a separate short-lived SA with narrower permissions?

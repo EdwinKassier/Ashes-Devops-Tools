@@ -27,11 +27,11 @@ assignees: ''
 <!-- Which module or component would this feature affect? -->
 
 - [ ] New module
-- [ ] Existing module: 
+- [ ] Existing module:
 - [ ] Core infrastructure
 - [ ] CI/CD pipeline
 - [ ] Documentation
-- [ ] Other: 
+- [ ] Other:
 
 ## Target Root / Surface
 
@@ -48,9 +48,9 @@ assignees: ''
 
 <!-- What are the benefits of implementing this feature? -->
 
-1. 
-2. 
-3. 
+1.
+2.
+3.
 
 ## Implementation Considerations
 
@@ -58,22 +58,22 @@ assignees: ''
 
 <!-- What technical requirements are needed? -->
 
-- 
-- 
+-
+-
 
 ### Security Considerations
 
 <!-- Are there any security implications? -->
 
-- 
-- 
+-
+-
 
 ### Compliance Requirements
 
 <!-- Any compliance or regulatory requirements? -->
 
-- 
-- 
+-
+-
 
 ### Breaking Changes
 
@@ -83,7 +83,6 @@ assignees: ''
 - [ ] Breaking changes (describe below)
 
 **Breaking changes description:**
-
 
 ## Example Usage
 
@@ -112,12 +111,13 @@ module "example" {
 
 <!-- How should this feature be tested? -->
 
-- 
-- 
+-
+-
 
 ## Priority
 
 **Business Priority:**
+
 - [ ] Critical (Blocking current work)
 - [ ] High (Important for roadmap)
 - [ ] Medium (Nice to have)
@@ -140,16 +140,16 @@ module "example" {
 
 <!-- Links to related documentation, issues, or PRs -->
 
-- 
-- 
+-
+-
 
 ## Acceptance Criteria
 
 <!-- Define what "done" looks like for this feature -->
 
-- [ ] 
-- [ ] 
-- [ ] 
+- [ ]
+- [ ]
+- [ ]
 
 ---
 

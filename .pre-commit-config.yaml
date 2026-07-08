@@ -123,6 +123,13 @@ repos:
         name: YAML lint
         description: Lint YAML files
         args: ['-d', '{extends: default, rules: {line-length: {max: 120}, document-start: disable}}']
+        # .terraform-docs.yml's `content:` block scalar deliberately contains a
+        # trailing space after `{{ .Name }} =` (renders as `variable_name = `,
+        # a fill-in-the-value placeholder in generated module READMEs). Fixing
+        # the trailing space would change terraform-docs output for all 48
+        # modules, so this file is excluded from the trailing-spaces check
+        # rather than "fixed".
+        exclude: ^\.terraform-docs\.yml$
 
 # Global configuration
 # Use [pre-commit] only — [commit, push] runs all expensive hooks TWICE per push.
@@ -138,4 +145,3 @@ exclude: |
     n8n\.json|
     ENHANCED_VALIDATION_SUMMARY\.md
   )$
-

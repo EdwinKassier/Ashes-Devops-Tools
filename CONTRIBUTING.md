@@ -28,7 +28,7 @@ make docs-check
 make security
 ```
 
-4. Run the deeper checks when your machine can support them:
+1. Run the deeper checks when your machine can support them:
 
 ```bash
 make validate-all
@@ -136,8 +136,8 @@ run "invalid_region_rejected" {
 | **Accept case** | At least one `run` block that passes a valid value and does NOT expect failure |
 | **Reject case** | At least one `run` block per distinct invalid pattern with `expect_failures = [var.<name>]` |
 | **Boundary values** | For numeric ranges (e.g. `0.0–1.0`), test exactly at the boundary (`0.0`, `1.0`) and one step outside (`-0.1`, `1.1`) |
-| **Cross-variable guards** | For `!var.enable_x || condition_on_y` patterns, test: (a) disabled + empty `y` (accept), (b) enabled + valid `y` (accept), (c) enabled + empty `y` (reject) |
-| **Null guards** | For optional variables with `!= null || can(regex(...))`, test both `null` (accept) and a malformed value (reject) |
+| **Cross-variable guards** | For `!var.enable_x \|\| condition_on_y` patterns, test: (a) disabled + empty `y` (accept), (b) enabled + valid `y` (accept), (c) enabled + empty `y` (reject) |
+| **Null guards** | For optional variables with `!= null \|\| can(regex(...))`, test both `null` (accept) and a malformed value (reject) |
 
 #### Naming conventions
 

@@ -62,7 +62,7 @@ make ci
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │                   GitHub Actions (CI)                   │
 │  fmt · validate · lint · tfsec · checkov · terraform-docs│
@@ -221,6 +221,7 @@ make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars
 | [`drift-detection.yml`](.github/workflows/drift-detection.yml) | Scheduled | Detect infrastructure drift |
 
 **Releasing:**
+
 ```bash
 git tag -a organization/v1.2.0 -m "Release organization v1.2.0"
 git push origin organization/v1.2.0

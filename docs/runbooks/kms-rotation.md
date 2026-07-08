@@ -13,6 +13,7 @@
 GCP supports automatic key rotation (configured via `rotation_period` in the KMS module). When a new key version is created by rotation, GCP automatically uses the new primary version for all **new** encrypt operations. Existing data encrypted with the old version remains readable — GCP transparently decrypts using the version that encrypted the data.
 
 This means:
+
 - **Automatic rotation** (set `rotation_period`) is safe and requires no data re-encryption.
 - **Manual rotation** (forced key version change) may require re-encryption if you want to eliminate the old version.
 - **Key destruction** is permanent and must never be done while encrypted data exists.

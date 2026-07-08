@@ -8,7 +8,7 @@ This guide covers everything needed to deploy the landing zone from scratch, inc
 
 Before running any Terraform, verify the following:
 
-**GCP Organisation**
+### GCP Organisation
 
 - [ ] You have a GCP Organization (not just a project). Find your org ID: `gcloud organizations list`
 - [ ] You have a Billing Account linked to the organization. Find it: `gcloud billing accounts list`
@@ -29,7 +29,7 @@ gcloud services enable cloudresourcemanager.googleapis.com \
   --project=YOUR_SEED_PROJECT
 ```
 
-**Tooling**
+### Tooling
 
 - [ ] `terraform version` reports `>= 1.9.8` (see `.terraform-version`)
 - [ ] `gcloud version` reports `>= 450.0.0`
@@ -123,7 +123,7 @@ This file is gitignored; it is never committed.
 terraform -chdir=envs/organization init -backend-config=backend.hcl
 ```
 
-**Step 3 — Create your tfvars file** (see [Variable Reference](#variable-reference) below):
+**Step 3 — Create your tfvars file** (see [Variable Reference](#6-variable-reference) below):
 
 ```bash
 cp examples/dev.tfvars envs/organization/local.auto.tfvars
@@ -138,6 +138,7 @@ terraform -chdir=envs/organization apply -target=module.bootstrap
 ```
 
 Terraform will create:
+
 - An admin project (`{prefix}-admin-{suffix}`)
 - A GitHub Actions WIF pool and provider (trusted to your repo's `main` branch)
 - A Terraform Cloud WIF pool and provider

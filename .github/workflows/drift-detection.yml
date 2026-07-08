@@ -55,10 +55,13 @@ jobs:
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
             if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-              echo "::error::TFC_TOKEN (secret) and/or TFC_ORGANIZATION (variable) are not configured. Manual runs require both — see docs/guides/CI_SECRETS.md."
+              echo "::error::TFC_TOKEN (secret) and/or TFC_ORGANIZATION (variable)" \
+                "are not configured. Manual runs require both — see docs/guides/CI_SECRETS.md."
               exit 1
             fi
-            echo "::warning::TFC_TOKEN (secret) and/or TFC_ORGANIZATION (variable) are not configured. Skipping scheduled drift detection cleanly. See docs/guides/CI_SECRETS.md for setup."
+            echo "::warning::TFC_TOKEN (secret) and/or TFC_ORGANIZATION (variable)" \
+              "are not configured. Skipping scheduled drift detection cleanly." \
+              "See docs/guides/CI_SECRETS.md for setup."
           fi
 
   detect-drift:
@@ -98,11 +101,14 @@ jobs:
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
           WORKSPACE: ${{ matrix.workspace }}
         run: |
+          RUNS_URL="https://app.terraform.io/api/v2/organizations/${TFC_ORGANIZATION}"
+          RUNS_URL="${RUNS_URL}/workspaces/${WORKSPACE}/runs?page%5Bsize%5D=1"
           response=$(curl --silent --show-error --fail-with-body \
             --header "Authorization: Bearer ${TFC_TOKEN}" \
             --header "Content-Type: application/vnd.api+json" \
-            "https://app.terraform.io/api/v2/organizations/${TFC_ORGANIZATION}/workspaces/${WORKSPACE}/runs?page%5Bsize%5D=1") \
-            || { echo "::error::TFC API request failed for workspace '${WORKSPACE}'. Check TFC_TOKEN and TFC_ORGANIZATION. Response: ${response}" >&2; exit 1; }
+            "${RUNS_URL}") \
+            || { echo "::error::TFC API request failed for workspace '${WORKSPACE}'." \
+              "Check TFC_TOKEN and TFC_ORGANIZATION. Response: ${response}" >&2; exit 1; }
 
           if ! echo "$response" | jq -e '.data | type == "array"' >/dev/null 2>&1; then
             echo "::error::Unexpected TFC API response format for workspace '${WORKSPACE}': ${response}" >&2
@@ -122,11 +128,14 @@ jobs:
           WORKSPACE: ${{ matrix.workspace }}
         run: |
           # Look up workspace ID and validate it exists
+          WS_URL="https://app.terraform.io/api/v2/organizations/${TFC_ORGANIZATION}"
+          WS_URL="${WS_URL}/workspaces/${WORKSPACE}"
           ws_response=$(curl --silent --show-error --fail-with-body \
             --header "Authorization: Bearer ${TFC_TOKEN}" \
             --header "Content-Type: application/vnd.api+json" \
-            "https://app.terraform.io/api/v2/organizations/${TFC_ORGANIZATION}/workspaces/${WORKSPACE}") \
-            || { echo "::error::Workspace '${WORKSPACE}' not found in TFC org '${TFC_ORGANIZATION}'. Verify the workspace exists. Response: ${ws_response}" >&2; exit 1; }
+            "${WS_URL}") \
+            || { echo "::error::Workspace '${WORKSPACE}' not found in TFC org" \
+              "'${TFC_ORGANIZATION}'. Verify the workspace exists. Response: ${ws_response}" >&2; exit 1; }
           ws_id=$(echo "$ws_response" | jq -r '.data.id')
           if [ -z "$ws_id" ] || [ "$ws_id" = "null" ]; then
             echo "::error::Could not parse workspace ID from TFC response for '${WORKSPACE}'" >&2
@@ -183,7 +192,9 @@ jobs:
                 echo "resource_additions=${resource_additions}" >> "$GITHUB_OUTPUT"
                 echo "resource_changes=${resource_changes}" >> "$GITHUB_OUTPUT"
                 echo "resource_destructions=${resource_destructions}" >> "$GITHUB_OUTPUT"
-                echo "run_url=https://app.terraform.io/app/${TFC_ORGANIZATION}/workspaces/${{ matrix.workspace }}/runs/${DRIFT_RUN_ID}" >> "$GITHUB_OUTPUT"
+                RUN_URL="https://app.terraform.io/app/${TFC_ORGANIZATION}"
+                RUN_URL="${RUN_URL}/workspaces/${{ matrix.workspace }}/runs/${DRIFT_RUN_ID}"
+                echo "run_url=${RUN_URL}" >> "$GITHUB_OUTPUT"
                 exit 0
                 ;;
               errored|canceled|discarded)

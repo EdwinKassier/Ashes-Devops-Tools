@@ -10,6 +10,7 @@ Releases are tagged as `organization/vX.Y.Z` and `apps/<env>/vX.Y.Z`.
 ## [Unreleased]
 
 ### Added
+
 - `modules/supabase/project` — creates a single Supabase project via `supabase_project`; lifecycle guard ignores database_password after initial creation
 - `modules/supabase/settings` — manages auth and API settings for an existing project via `supabase_settings`; destruction is a no-op by provider design
 - `modules/supabase/environment` — composite module (project + settings + `data.supabase_apikeys`); primary building block for per-environment deployments; `anon_key` output is intentionally non-sensitive to allow for-expression filter conditions in callers
@@ -68,6 +69,7 @@ Releases are tagged as `organization/vX.Y.Z` and `apps/<env>/vX.Y.Z`.
 - `make test` — 400+ test assertions across 41 test suites, all using `mock_provider`
 
 ### Changed
+
 - `modules/stages/workload/variables.tf` — `project_admin_roles` description corrected: module uses additive `google_project_iam_member` (not authoritative `google_project_iam_binding`); description now accurately documents the non-eviction behaviour
 - `modules/cloud-storage/variables.tf` — `kms_key_name` is now optional (`default = null`); GMEK (Google-managed encryption) is accepted when the variable is omitted; validation is null-safe; description adds upgrade guidance for compliance environments
 - `modules/network/cloud-armor/main.tf` — `enforce_on_key_configs` block wrapped in a `dynamic` block conditioned on `enforce_on_key == null`; the Cloud Armor API rejects requests that include both the scalar `enforce_on_key` and the structured `enforce_on_key_configs` in the same rule
@@ -84,6 +86,7 @@ Releases are tagged as `organization/vX.Y.Z` and `apps/<env>/vX.Y.Z`.
 - `envs/organization/moved.tf` — added cleanup instructions (safe to delete after first migration apply)
 
 ### Fixed
+
 - `modules/governance/billing/main.tf` — replaced `google_cloud_run_service_iam_member` (Cloud Run v1 IAM API) with `google_cloud_run_v2_service_iam_member` (Cloud Run v2 IAM API); Cloud Functions gen2 deploys as a Cloud Run v2 service, not v1 — the v1 resource cannot find the service and silently fails to set the invoker binding, preventing Pub/Sub from calling the budget notifier
 - **CRITICAL** `modules/stages/network-hub/main.tf:70` — VPC-SC `protected_projects` passed project ID strings instead of required project NUMBERS; the ACM API silently rejects or misinterprets IDs causing misleading permission errors. Renamed `spoke_project_ids` → `spoke_project_numbers` and updated callers to use `module.projects.project_numbers`
 - **CRITICAL** `modules/stages/network-hub/main.tf` — `vpc_service_controls` map was always populated unconditionally; when `vpc_sc_access_policy_name = null` the vpc-sc module's validation fires immediately (`access_policy_name must be set when create_access_policy = false`), making VPC-SC opt-out impossible without triggering a plan error. Wrapped in `var.vpc_sc_access_policy_name != null ? { ... } : {}`
@@ -141,9 +144,11 @@ Releases are tagged as `organization/vX.Y.Z` and `apps/<env>/vX.Y.Z`.
 - `modules/iam/identity-group/variables.tf` — email format validation on group emails
 
 ### Breaking Changes
+
 - **`modules/governance/tags`** — `var.tags` type changed from `map(list(string))` to
   `map(object({values = list(string), description = optional(string, "Managed by Terraform")}))`.
   Callers must migrate using the following pattern:
+
   ```hcl
   # Before
   tags = {
@@ -157,6 +162,7 @@ Releases are tagged as `organization/vX.Y.Z` and `apps/<env>/vX.Y.Z`.
     }
   }
   ```
+
   The `stages/organization` caller and `governance/tags/examples/basic` have been updated.
   Any direct caller of `modules/governance/tags` must update before the next `terraform apply`.
 
@@ -165,6 +171,7 @@ Releases are tagged as `organization/vX.Y.Z` and `apps/<env>/vX.Y.Z`.
 ## [organization/v1.0.0] — 2026-01-15
 
 ### Added
+
 - Initial landing zone release
 - Bootstrap stage: Terraform admin project, WIF pools for GitHub Actions and Terraform Cloud
 - Organization stage: folders, org policies, billing export, audit logs, SCC notifications, essential contacts

@@ -121,7 +121,7 @@ environments = {
 }
 ```
 
-2. Apply the organization root first so the new CIDR is committed to remote state:
+1. Apply the organization root first so the new CIDR is committed to remote state:
 
 ```bash
 make plan-organization
@@ -129,7 +129,7 @@ make plan-organization
 terraform -chdir=envs/organization apply
 ```
 
-3. The apps root will pick up the new CIDR on its next plan via `terraform_remote_state`.
+1. The apps root will pick up the new CIDR on its next plan via `terraform_remote_state`.
 
 > **IPAM:** Coordinate with your network team to allocate a non-overlapping block before applying. There is no CIDR hash fallback — the value you set is exactly what gets deployed.
 

@@ -63,7 +63,8 @@ jobs:
         # prevent supply-chain drift. The tfsec-action above is SHA-pinned; this
         # Docker invocation must match.
         run: |
-          docker run --rm -v "$(pwd):/src" aquasec/tfsec:v1.28.6 /src/modules --config-file /src/.tfsec.yml --format json > tfsec-report.json
+          docker run --rm -v "$(pwd):/src" aquasec/tfsec:v1.28.6 /src/modules \
+            --config-file /src/.tfsec.yml --format json > tfsec-report.json
 
       - name: Upload TFSec report artifact
         if: inputs.sarif_output && always()
@@ -106,7 +107,8 @@ jobs:
           download_external_modules: true
           config_file: .checkov.yaml
           output_format: ${{ inputs.sarif_output && 'sarif,cli' || 'cli' }}
-          output_file_path: ${{ inputs.sarif_output && 'checkov-env-results.sarif,checkov-env-report.txt' || 'console' }}
+          output_file_path: >-
+            ${{ inputs.sarif_output && 'checkov-env-results.sarif,checkov-env-report.txt' || 'console' }}
 
       - name: Upload Checkov modules SARIF
         if: inputs.sarif_output && always()

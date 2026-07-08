@@ -117,7 +117,7 @@ The generated module reference below is the source of truth for inputs, outputs,
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                         Host Module                              │
 ├─────────────────────────────────────────────────────────────────┤

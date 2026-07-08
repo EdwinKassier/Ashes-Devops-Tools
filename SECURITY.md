@@ -4,7 +4,7 @@
 
 **Do not open a public GitHub issue for security vulnerabilities.**
 
-Email **edwinkassier@gmail.com** with the details below. We will acknowledge within 48 hours and keep you informed of progress.
+Email **<edwinkassier@gmail.com>** with the details below. We will acknowledge within 48 hours and keep you informed of progress.
 
 ### What to Include
 
@@ -31,27 +31,32 @@ We will coordinate public disclosure with you. If you prefer to remain anonymous
 This landing zone implements defense-in-depth across every layer:
 
 ### Identity & Access
+
 - **Workload Identity Federation** — keyless authentication for CI/CD (no long-lived service account keys)
 - **IAM least privilege** — all module roles validated against a blocklist of primitive roles (`roles/owner`, `roles/editor`, `roles/viewer`)
 - **Separate service accounts** per stage (bootstrap, network, workload)
 
 ### Data Protection
+
 - **CMEK (Customer-Managed Encryption Keys)** via Cloud KMS — all storage encrypted at rest
 - **Key rotation enforced** — rotation period validated between 1–365 days at plan time
 - **Uniform bucket-level access** — no per-object ACLs on Cloud Storage
 
 ### Network Security
+
 - **VPC Service Controls** — data perimeter around sensitive projects
 - **Private Service Access** — RFC 1918 connectivity to Google APIs (no public egress for managed services)
 - **Cloud Armor** — WAF with OWASP rule sets for internet-facing workloads
 - **VPC Flow Logs** — full network telemetry retained in Cloud Storage
 
 ### Audit & Compliance
+
 - **Cloud Audit Logs** — Data Access logs enabled for all services; retention configurable via `audit_log_retention_days` (default 365 days; increase for PCI-DSS/HIPAA/FedRAMP)
 - **Security Command Center** — notifications for HIGH and CRITICAL findings
 - **Org Policies** — domain-restricted sharing, uniform bucket access, disable SA key creation
 
 ### CI/CD Security
+
 - **All GitHub Actions SHA-pinned** — no mutable tag references
 - **Branch protection** — required reviews and status checks before merge
 - **Secret scanning** — Gitleaks runs on every PR
@@ -85,5 +90,5 @@ SARIF results are uploaded to GitHub Security tab for all scans.
 
 ## Contact
 
-- Security issues: edwinkassier@gmail.com
-- General inquiries: edwinkassier@gmail.com
+- Security issues: <edwinkassier@gmail.com>
+- General inquiries: <edwinkassier@gmail.com>

@@ -23,7 +23,7 @@ Creates foundational infrastructure projects at the **organization layer** for:
 
 ## How It Works
 
-```
+```text
 envs/organization/main.tf
     │
     └── module "projects" (this module)

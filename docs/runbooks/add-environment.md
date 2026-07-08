@@ -70,7 +70,7 @@ And as an **environment variable**:
 
 Push to `main` or manually trigger the workspace run in TFC. Review the plan carefully — it should create new resources only (no modifications to existing environments).
 
-```
+```text
 Expected new resources:
   + google_project.spoke_project
   + module.host.module.vpc.google_compute_network.vpc

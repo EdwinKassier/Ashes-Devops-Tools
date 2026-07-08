@@ -35,9 +35,9 @@
 
 <!-- List the specific changes made in this PR -->
 
-- 
-- 
-- 
+-
+-
+-
 
 ## Related Issues
 
@@ -74,8 +74,8 @@ make lint
 
 - **Root/Surface**:
 - **Workspace**:
-- **Terraform Version**: 
-- **Provider Version**: 
+- **Terraform Version**:
+- **Provider Version**:
 
 ## Documentation
 
@@ -134,17 +134,17 @@ make lint
 **Impact**:
 
 **Migration Steps**:
-1. 
-2. 
-3. 
+1.
+2.
+3.
 
 ## Rollback Plan
 
 <!-- Describe how to rollback if issues are found after deployment -->
 
-1. 
-2. 
-3. 
+1.
+2.
+3.
 
 ## Additional Notes
 

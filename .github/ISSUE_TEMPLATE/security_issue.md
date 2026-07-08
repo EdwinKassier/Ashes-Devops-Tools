@@ -10,7 +10,7 @@ assignees: ''
 
 **If this is a critical security vulnerability, DO NOT create a public issue.**
 
-Please email security concerns to: **security@ashesproject.com**
+Please email security concerns to: **<security@ashesproject.com>**
 
 ---
 
@@ -27,7 +27,7 @@ Please email security concerns to: **security@ashesproject.com**
 - [ ] Missing audit logging
 - [ ] Exposed resource
 - [ ] Dependency vulnerability
-- [ ] Other: 
+- [ ] Other:
 
 ## Affected Components
 
@@ -35,6 +35,7 @@ Please email security concerns to: **security@ashesproject.com**
 <!-- Which module or resource is affected? -->
 
 **Affected Root / Surface:**
+
 - [ ] `envs/organization`
 - [ ] `envs/apps`
 - [ ] `examples/workloads`
@@ -55,6 +56,7 @@ Please email security concerns to: **security@ashesproject.com**
 ## Security Risk
 
 **Severity:**
+
 - [ ] High
 - [ ] Medium
 - [ ] Low
@@ -78,7 +80,7 @@ Please email security concerns to: **security@ashesproject.com**
 - [ ] ISO 27001
 - [ ] ISO 22301
 - [ ] GCP Security Best Practices
-- [ ] Other: 
+- [ ] Other:
 
 ## Detection Method
 
@@ -88,14 +90,14 @@ Please email security concerns to: **security@ashesproject.com**
 - [ ] Checkov scan
 - [ ] Manual review
 - [ ] Security audit
-- [ ] Other: 
+- [ ] Other:
 
 ## References
 
 <!-- Link to relevant security documentation or guidelines -->
 
-- 
-- 
+-
+-
 
 ## Additional Context
 
@@ -103,4 +105,4 @@ Please email security concerns to: **security@ashesproject.com**
 
 ---
 
-**For critical vulnerabilities, email security@ashesproject.com instead of creating a public issue.**
+**For critical vulnerabilities, email <security@ashesproject.com> instead of creating a public issue.**
