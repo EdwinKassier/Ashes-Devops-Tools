@@ -4,7 +4,14 @@
 
 **Do not open a public GitHub issue for security vulnerabilities.**
 
-Email **<edwinkassier@gmail.com>** with the details below. We will acknowledge within 48 hours and keep you informed of progress.
+Report vulnerabilities via the repository's **Security** tab → **"Report a vulnerability"**
+(GitHub private vulnerability reporting). This is the primary channel and reaches the
+maintainers directly and confidentially.
+
+If you are unable to use GitHub's private reporting flow, email
+**security@ashes-project.example** (role-based placeholder — configure this alias to
+route to the current maintainers before relying on it) with the details below. We will
+acknowledge within 48 hours and keep you informed of progress.
 
 ### What to Include
 
@@ -90,5 +97,8 @@ SARIF results are uploaded to GitHub Security tab for all scans.
 
 ## Contact
 
-- Security issues: <edwinkassier@gmail.com>
-- General inquiries: <edwinkassier@gmail.com>
+- Security issues: repository **Security** tab → **"Report a vulnerability"** (preferred),
+  or **security@ashes-project.example** (role-based placeholder — configure this alias
+  before relying on it)
+- General inquiries: open a [GitHub Discussion](../../discussions) or non-security issue
+  on this repository

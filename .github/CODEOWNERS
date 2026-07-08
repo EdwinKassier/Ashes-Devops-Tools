@@ -1,6 +1,7 @@
 # Default: all files require infra team review.
-# Replace @edwinkassier with your team handles (e.g., @org/infra-team, @org/security-team).
-# For multi-maintainer teams, add additional GitHub team handles on each line.
+# @edwinkassier is the current repository owner/maintainer. As the team grows,
+# org/team handles (e.g., @org/infra-team, @org/security-team) may be added
+# alongside or in place of individual reviewers on any line below.
 * @edwinkassier
 
 # CI/CD, security tooling, and scripts — require infrastructure lead review
