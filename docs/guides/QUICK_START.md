@@ -126,7 +126,7 @@ terraform -chdir=envs/organization init -backend-config=backend.hcl
 **Step 3 — Create your tfvars file** (see [Variable Reference](#6-variable-reference) below):
 
 ```bash
-cp examples/dev.tfvars envs/organization/local.auto.tfvars
+cp envs/organization/terraform.tfvars.example envs/organization/local.auto.tfvars
 # Edit local.auto.tfvars with your org_id, billing_account, github_org, github_repo
 ```
 
@@ -308,7 +308,7 @@ make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars
 | `make test` | Run all .tftest.hcl suites |
 | `make plan-organization` | Plan control-plane changes |
 | `make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars` | Plan an app environment |
-| `make ci` | Full local pipeline (fmt + validate + lint + security + test) |
+| `make ci` | Full local pipeline (fmt-check + docs-check + validate-all + lint + test + security) |
 
 ---
 
