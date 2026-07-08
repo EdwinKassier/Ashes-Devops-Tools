@@ -6,6 +6,11 @@ variable "project_id" {
 variable "firewall_rule_name" {
   description = "Name of the firewall rule"
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$", var.firewall_rule_name))
+    error_message = "firewall_rule_name must be a valid GCP resource name: 1-63 chars, lowercase letters/digits/hyphens, start with a letter, not end with a hyphen."
+  }
 }
 
 variable "network" {

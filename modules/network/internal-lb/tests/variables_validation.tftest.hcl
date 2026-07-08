@@ -67,6 +67,27 @@ run "rejects_name_with_uppercase" {
   }
 }
 
+# ── region ───────────────────────────────────────────────────────────────────
+
+run "accepts_two_digit_region" {
+  # europe-west12 has a two-digit index — the standardized regex must accept it
+  command = plan
+
+  variables {
+    region = "europe-west12"
+  }
+}
+
+run "rejects_region_with_trailing_hyphen" {
+  command = plan
+
+  expect_failures = [var.region]
+
+  variables {
+    region = "us-central1-"
+  }
+}
+
 # ── host_rules (L7 guard) ──────────────────────────────────────────────────────
 
 run "accepts_l7_with_host_rules" {
