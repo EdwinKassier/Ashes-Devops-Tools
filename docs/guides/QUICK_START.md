@@ -235,7 +235,7 @@ TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=examples/dev.tfv
 |----------|-------------|---------|
 | `project_prefix` | Matches org root prefix | `"ashes"` |
 | `environment` | Short env name (used in resource naming) | `"dev"` |
-| `terraform_admin_email` | SA Terraform impersonates (from bootstrap output) | `"terraform@ashes-admin-xxxx.iam.gserviceaccount.com"` |
+| `terraform_admin_email` | SA Terraform impersonates (from bootstrap output) | `"terraform-admin@ashes-admin-xxxx.iam.gserviceaccount.com"` |
 | `tfc_organization` | Terraform Cloud org name | `"my-tfc-org"` |
 
 > **VPC CIDR:** The per-environment CIDR is not set here — it is read from the `organization` workspace remote state via the `environments` map in `envs/organization`. Set the CIDR block in `envs/organization/terraform.tfvars.example` under the relevant environment key.
