@@ -70,7 +70,7 @@ gh api repos/OWNER/REPO/rulesets \
 Ensure Dependabot auto-approves and merges **security** PRs only:
 
 1. **Settings → Code security and analysis → Dependabot security updates**: Enable
-2. **Settings → Code security and analysis → Dependabot version updates**: Review `.github/dependabot.yml` (covers all Terraform roots and GitHub Actions)
+2. **Settings → Code security and analysis → Dependabot version updates**: Review `.github/dependabot.yml` (scoped to GitHub Actions only — Terraform provider bumps require manual compatibility work, see `docs/guides/provider-upgrades.md`)
 3. Create a branch protection rule that allows Dependabot to bypass review requirements for patch-level security updates
 
 ---

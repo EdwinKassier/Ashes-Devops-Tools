@@ -95,16 +95,6 @@ gcloud compute networks describe $(terraform -chdir=envs/apps output -raw networ
   --project=$(terraform -chdir=envs/apps output -raw host_project_id)
 ```
 
-### 7. Update Dependabot (if needed)
-
-If you committed a new root directory under `envs/`, add it to `.github/dependabot.yml`:
-
-```yaml
-- directory: "/envs/staging"
-  schedule:
-    interval: weekly
-```
-
 ---
 
 ## Rollback
