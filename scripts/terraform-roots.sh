@@ -41,7 +41,7 @@ emit_json() {
   printf '['
   local first=1
   local root
-  for root in "${roots[@]}"; do
+  for root in ${roots[@]+"${roots[@]}"}; do
     if [ $first -eq 0 ]; then
       printf ','
     fi
@@ -69,14 +69,15 @@ case "$mode" in
     } | sort -u
     ;;
   all-json)
-    mapfile -t roots < <(
+    roots=()
+    while IFS= read -r line; do roots+=("$line"); done < <(
       {
         collect_modules
         collect_envs
         collect_examples
       } | sort -u
     )
-    emit_json "${roots[@]}"
+    emit_json ${roots[@]+"${roots[@]}"}
     ;;
   *)
     echo "Usage: $0 [modules|envs|examples|all|all-json]" >&2

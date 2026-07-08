@@ -35,7 +35,7 @@ install_pip_package() { python3 -m pip install --user "$1==$2"; }
 installed_version() {
   local bin="$1" flag="${2:---version}"
   command -v "$bin" >/dev/null 2>&1 || { echo ""; return; }
-  "$bin" "$flag" 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1
+  "$bin" "$flag" 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true
 }
 
 check_or_install() {
