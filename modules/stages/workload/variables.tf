@@ -65,6 +65,11 @@ variable "shared_vpc_host_project_id" {
   description = "The Host Project ID for Shared VPC"
   type        = string
   default     = ""
+
+  validation {
+    condition     = !var.enable_shared_vpc_attachment || var.shared_vpc_host_project_id != ""
+    error_message = "shared_vpc_host_project_id is required when enable_shared_vpc_attachment is true."
+  }
 }
 
 variable "shared_vpc_subnets" {

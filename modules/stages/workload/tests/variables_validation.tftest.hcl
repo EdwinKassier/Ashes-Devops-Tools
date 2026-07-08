@@ -11,7 +11,9 @@ variables {
   folder_id                 = "987654321"
   billing_account           = "ABCDEF-123456-789012"
   project_admin_group_email = "team@example.com"
-  # enable_shared_vpc_attachment defaults to true; provide a stub subnet so validation passes.
+  # enable_shared_vpc_attachment defaults to true; provide a stub subnet and host
+  # project id so the shared-VPC validations pass.
+  shared_vpc_host_project_id = "mock-host-project"
   shared_vpc_subnets = {
     primary = {
       region      = "us-central1"
@@ -120,6 +122,26 @@ run "rejects_shared_vpc_with_no_subnets" {
   expect_failures = [var.shared_vpc_subnets]
   variables {
     enable_shared_vpc_attachment = true
+    shared_vpc_subnets           = {}
+  }
+}
+
+# ── shared_vpc_host_project_id ───────────────────────────────────────────────────
+
+run "rejects_shared_vpc_with_empty_host_project_id" {
+  command         = plan
+  expect_failures = [var.shared_vpc_host_project_id]
+  variables {
+    enable_shared_vpc_attachment = true
+    shared_vpc_host_project_id   = ""
+  }
+}
+
+run "accepts_no_shared_vpc_with_empty_host_project_id" {
+  command = plan
+  variables {
+    enable_shared_vpc_attachment = false
+    shared_vpc_host_project_id   = ""
     shared_vpc_subnets           = {}
   }
 }
