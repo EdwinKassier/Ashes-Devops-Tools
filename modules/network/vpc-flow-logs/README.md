@@ -168,6 +168,7 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
+	destination = 
 	project_id = 
 	sink_name = 
 	
@@ -208,6 +209,7 @@ The following resources are created:
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_destination"></a> [destination](#input\_destination) | The destination for the log sink. Format: bigquery.googleapis.com/projects/[PROJECT]/datasets/[DATASET], storage.googleapis.com/[BUCKET], or pubsub.googleapis.com/projects/[PROJECT]/topics/[TOPIC] | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The GCP project ID containing the VPC flow logs | `string` | n/a | yes |
 | <a name="input_sink_name"></a> [sink\_name](#input\_sink\_name) | Name of the log sink | `string` | n/a | yes |
 | <a name="input_bigquery_dataset_id"></a> [bigquery\_dataset\_id](#input\_bigquery\_dataset\_id) | BigQuery dataset ID for flow logs | `string` | `"vpc_flow_logs"` | no |
@@ -221,7 +223,6 @@ The following resources are created:
 | <a name="input_create_storage_bucket"></a> [create\_storage\_bucket](#input\_create\_storage\_bucket) | Whether to create a Cloud Storage bucket for flow logs | `bool` | `false` | no |
 | <a name="input_custom_filter"></a> [custom\_filter](#input\_custom\_filter) | Custom filter for the log sink. If empty, defaults to VPC flow logs filter. | `string` | `""` | no |
 | <a name="input_description"></a> [description](#input\_description) | Description of the log sink | `string` | `"VPC Flow Logs export sink"` | no |
-| <a name="input_destination"></a> [destination](#input\_destination) | The destination for the log sink. Format: bigquery.googleapis.com/projects/[PROJECT]/datasets/[DATASET], storage.googleapis.com/[BUCKET], or pubsub.googleapis.com/projects/[PROJECT]/topics/[TOPIC] | `string` | `""` | no |
 | <a name="input_destination_project_id"></a> [destination\_project\_id](#input\_destination\_project\_id) | Project ID where the destination resource exists (defaults to project\_id) | `string` | `""` | no |
 | <a name="input_destination_type"></a> [destination\_type](#input\_destination\_type) | Type of destination (bigquery, storage, pubsub). Auto-detected from destination if possible. | `string` | `"bigquery"` | no |
 | <a name="input_disabled"></a> [disabled](#input\_disabled) | Whether the sink is disabled | `bool` | `false` | no |
