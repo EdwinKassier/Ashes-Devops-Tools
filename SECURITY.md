@@ -59,7 +59,7 @@ This landing zone implements defense-in-depth across every layer:
 
 - **All GitHub Actions SHA-pinned** — no mutable tag references
 - **Branch protection** — required reviews and status checks before merge
-- **Secret scanning** — Gitleaks runs on every PR
+- **Secret scanning** — Gitleaks runs on push to `main`/`develop` and weekly (not on every PR; the PR gate runs TFSec + Checkov only)
 - **Static analysis** — TFSec and Checkov on every PR; TFSec, Checkov, and Trivy again on push to `main`/`develop` and weekly
 
 ---
@@ -82,7 +82,7 @@ This repo runs the following automated security tools:
 | [TFSec](https://aquasecurity.github.io/tfsec/) | Terraform static analysis | Every PR + push to main/develop + weekly |
 | [Checkov](https://www.checkov.io/) | Infrastructure policy compliance | Every PR + push to main/develop + weekly |
 | [Trivy](https://aquasecurity.github.io/trivy/) | Container + IaC scanning | Push to main/develop + weekly |
-| [Gitleaks](https://gitleaks.io/) | Secret detection in git history | Every PR |
+| [Gitleaks](https://gitleaks.io/) | Secret detection in git history | Push to main/develop + weekly |
 
 SARIF results are uploaded to GitHub Security tab for all scans.
 
