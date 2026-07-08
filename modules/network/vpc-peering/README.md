@@ -66,7 +66,6 @@ module "example" {
 	network = 
 	peer_network = 
 	peering_name = 
-	project_id = 
 	
 }
 ```
@@ -102,7 +101,6 @@ The following resources are created:
 | <a name="input_network"></a> [network](#input\_network) | The self-link of the local VPC network | `string` | n/a | yes |
 | <a name="input_peer_network"></a> [peer\_network](#input\_peer\_network) | The self-link of the peer VPC network | `string` | n/a | yes |
 | <a name="input_peering_name"></a> [peering\_name](#input\_peering\_name) | Name of the VPC peering connection | `string` | n/a | yes |
-| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID where the peering will be created | `string` | n/a | yes |
 | <a name="input_create_reverse_peering"></a> [create\_reverse\_peering](#input\_create\_reverse\_peering) | Create the reverse peering connection (for bi-directional peering) | `bool` | `true` | no |
 | <a name="input_export_custom_routes"></a> [export\_custom\_routes](#input\_export\_custom\_routes) | Export custom routes to the peer network | `bool` | `false` | no |
 | <a name="input_export_subnet_routes_with_public_ip"></a> [export\_subnet\_routes\_with\_public\_ip](#input\_export\_subnet\_routes\_with\_public\_ip) | Export subnet routes with public IP range to the peer network | `bool` | `true` | no |

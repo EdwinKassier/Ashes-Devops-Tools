@@ -224,7 +224,7 @@ The following resources are created:
 - resource.terraform_data.deletion_protection_guard (modules/host/main.tf#L55)
 - resource.terraform_data.subnet_cidr_count_guard (modules/host/main.tf#L70)
 - data source.google_compute_zones.available (modules/host/main.tf#L35)
-- data source.google_project.current (modules/host/main.tf#L547)
+- data source.google_project.current (modules/host/main.tf#L546)
 
 
 ## Inputs

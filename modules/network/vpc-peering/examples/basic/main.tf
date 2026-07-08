@@ -3,15 +3,13 @@
 # in a single module call (only valid when both networks are in the same project).
 
 locals {
-  project_id = "my-project"
-  network_a  = "projects/my-project/global/networks/vpc-a"
-  network_b  = "projects/my-project/global/networks/vpc-b"
+  network_a = "projects/my-project/global/networks/vpc-a"
+  network_b = "projects/my-project/global/networks/vpc-b"
 }
 
 module "vpc_peering" {
   source = "../../"
 
-  project_id   = local.project_id
   peering_name = "vpc-a-to-vpc-b"
   network      = local.network_a
   peer_network = local.network_b

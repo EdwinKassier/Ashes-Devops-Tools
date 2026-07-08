@@ -4,11 +4,6 @@
  * VPC Peering Module - Variables
  */
 
-variable "project_id" {
-  description = "The project ID where the peering will be created"
-  type        = string
-}
-
 variable "peering_name" {
   description = "Name of the VPC peering connection"
   type        = string

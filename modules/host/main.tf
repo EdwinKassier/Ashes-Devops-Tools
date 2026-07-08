@@ -464,7 +464,6 @@ module "vpc_peering" {
   source   = "../network/vpc-peering"
   for_each = var.vpc_peerings
 
-  project_id             = var.project_id
   peering_name           = each.key
   network                = var.enable_networking ? module.vpc[0].self_link : var.existing_network_self_link
   peer_network           = each.value.peer_network
