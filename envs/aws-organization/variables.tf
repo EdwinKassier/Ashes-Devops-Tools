@@ -1,15 +1,11 @@
 # -----------------------------------------------------------------------------
-# Terraform Cloud
-# -----------------------------------------------------------------------------
-
-variable "tfc_organization" {
-  description = "Terraform Cloud organization that owns this root's workspace. Supplied to the backend via backend.hcl / TF_CLI_ARGS_init (kept out of the code so the same root works across orgs and CI)."
-  type        = string
-  default     = null
-}
-
-# -----------------------------------------------------------------------------
 # Provider region (management account)
+#
+# NB: the Terraform Cloud organization for this phase-1 producer root's backend
+# is supplied to `terraform init` via backend.hcl / TF_CLI_ARGS_init (see
+# backend.tf) — a backend block cannot reference variables, so there is no
+# tfc_organization variable here (unlike the consumer roots, which reference it
+# inside a terraform_remote_state data source).
 # -----------------------------------------------------------------------------
 
 variable "aws_region" {
@@ -23,12 +19,6 @@ variable "aws_region" {
     condition     = can(regex("^[a-z]{2}-[a-z]+-[1-9][0-9]?$", var.aws_region))
     error_message = "aws_region must be a valid AWS region name, e.g. eu-west-2."
   }
-}
-
-variable "aws_enabled_regions" {
-  description = "Regions this root manages resources in. Defaults to the primary region only; extend for multi-region roots."
-  type        = list(string)
-  default     = ["eu-west-2"]
 }
 
 # -----------------------------------------------------------------------------

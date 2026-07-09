@@ -1,11 +1,18 @@
 # ── Terraform Cloud / cross-wiring ───────────────────────────────────────────
+#
+# Both inputs below are consumed only by the optional cross-cloud remote-state
+# seam in main.tf, which ships commented out (Convention 5). tflint cannot see
+# the commented usage, so the unused-declaration rule is suppressed per-
+# declaration rather than deleting inputs the documented opt-in relies on.
 
+# tflint-ignore: terraform_unused_declarations
 variable "tfc_organization" {
   description = "Terraform Cloud organization name. Only consumed by the optional cross-cloud remote-state seam in main.tf (commented out by default). Leave null for a standalone SaaS deployment."
   type        = string
   default     = null
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "upstream_workspace_name" {
   description = "Optional. Name of an upstream AWS/GCP workspace to read cross-cloud outputs from via the commented terraform_remote_state seam in main.tf. Leave null (default) to keep this root fully standalone."
   type        = string

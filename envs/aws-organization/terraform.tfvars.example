@@ -2,13 +2,12 @@
 # default — you MUST supply them (the two role ARNs, the log-archive bucket
 # name, and real root emails for every account).
 
-# REQUIRED — Terraform Cloud org that owns this root's workspace. Usually passed
-# to `terraform init` via backend.hcl / TF_CLI_ARGS_init rather than here.
-# tfc_organization = "your-tfc-org-name"
+# NB: the Terraform Cloud org that owns this root's workspace is a BACKEND config
+# value, not a tfvars input. Pass it to `terraform init` via backend.hcl or
+# TF_CLI_ARGS_init="-backend-config=organization=<your-tfc-org>" (see backend.tf).
 
 # Optional — primary region for the default (management-account) provider.
-aws_region          = "eu-west-2"
-aws_enabled_regions = ["eu-west-2"]
+aws_region = "eu-west-2"
 
 # Optional — regions permitted by the region-restriction SCP.
 allowed_regions = ["eu-west-2"]

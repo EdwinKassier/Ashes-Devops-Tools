@@ -13,9 +13,11 @@ data "aws_ssoadmin_instances" "this" {}
 
 locals {
   # An organization has exactly one Identity Center instance; take the first
-  # (and only) entry of each parallel list the data source returns.
-  instance_arn      = tolist(data.aws_ssoadmin_instances.this.arns)[0]
-  identity_store_id = tolist(data.aws_ssoadmin_instances.this.identity_store_ids)[0]
+  # (and only) entry of the ARN list the data source returns. (The parallel
+  # identity_store_ids list is not consumed here — this module takes principal
+  # IDs directly via var.assignments rather than resolving them against the
+  # identity store.)
+  instance_arn = tolist(data.aws_ssoadmin_instances.this.arns)[0]
 
   # Flatten permission_sets x their managed_policy_arns into a single map whose
   # keys are plan-known strings ("<permission set>/<policy arn>"), so each

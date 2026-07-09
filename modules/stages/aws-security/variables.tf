@@ -46,6 +46,12 @@ variable "security_tooling_account_id" {
   }
 }
 
+# Kept intentionally for input symmetry with the other foundational account IDs
+# and the cross-root contract: the log-archive account is targeted via the
+# aws.log_archive aliased provider rather than by ID, so this value is not
+# referenced in main.tf. Its regex validation still runs. tflint cannot see a
+# provider-alias-only usage, so the unused-declaration rule is suppressed here.
+# tflint-ignore: terraform_unused_declarations
 variable "log_archive_account_id" {
   description = "12-digit account ID of the Log-Archive account that owns the central log-archive bucket and the log CMK. Provided for completeness; the account is targeted via the aws.log_archive aliased provider rather than by ID."
   type        = string

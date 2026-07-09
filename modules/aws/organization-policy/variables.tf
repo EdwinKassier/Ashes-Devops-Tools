@@ -23,26 +23,6 @@ variable "allowed_regions" {
   }
 }
 
-variable "management_account_id" {
-  description = "The organization management (payer) account ID."
-  type        = string
-
-  validation {
-    condition     = can(regex("^[0-9]{12}$", var.management_account_id))
-    error_message = "management_account_id must be a 12-digit AWS account ID."
-  }
-}
-
-variable "security_account_id" {
-  description = "The delegated-administrator security account ID."
-  type        = string
-
-  validation {
-    condition     = can(regex("^[0-9]{12}$", var.security_account_id))
-    error_message = "security_account_id must be a 12-digit AWS account ID."
-  }
-}
-
 # -----------------------------------------------------------------------------
 # Carve-out principals — must be account-qualified exact ARNs (no ::*:: wildcards)
 # -----------------------------------------------------------------------------

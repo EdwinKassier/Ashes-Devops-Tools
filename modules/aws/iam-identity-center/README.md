@@ -72,11 +72,11 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_ssoadmin_account_assignment.this (modules/aws/iam-identity-center/main.tf#L56)
-- resource.aws_ssoadmin_instance_access_control_attributes.this (modules/aws/iam-identity-center/main.tf#L69)
-- resource.aws_ssoadmin_managed_policy_attachment.this (modules/aws/iam-identity-center/main.tf#L40)
-- resource.aws_ssoadmin_permission_set.this (modules/aws/iam-identity-center/main.tf#L31)
-- resource.aws_ssoadmin_permission_set_inline_policy.this (modules/aws/iam-identity-center/main.tf#L48)
+- resource.aws_ssoadmin_account_assignment.this (modules/aws/iam-identity-center/main.tf#L58)
+- resource.aws_ssoadmin_instance_access_control_attributes.this (modules/aws/iam-identity-center/main.tf#L71)
+- resource.aws_ssoadmin_managed_policy_attachment.this (modules/aws/iam-identity-center/main.tf#L42)
+- resource.aws_ssoadmin_permission_set.this (modules/aws/iam-identity-center/main.tf#L33)
+- resource.aws_ssoadmin_permission_set_inline_policy.this (modules/aws/iam-identity-center/main.tf#L50)
 - data source.aws_ssoadmin_instances.this (modules/aws/iam-identity-center/main.tf#L12)
 
 

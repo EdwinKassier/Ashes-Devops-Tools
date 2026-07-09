@@ -57,8 +57,6 @@ module "policies" {
 
   org_id                  = module.organization.organization_id
   allowed_regions         = var.allowed_regions
-  management_account_id   = module.organization.management_account_id
-  security_account_id     = module.account["security_tooling"].account_id
   terraform_run_role_arn  = var.terraform_run_role_arn
   break_glass_role_arn    = var.break_glass_role_arn
   log_archive_bucket_name = var.log_archive_bucket_name
