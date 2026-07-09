@@ -76,6 +76,58 @@ resource "aws_cloudwatch_event_target" "this" {
   arn       = aws_sns_topic.this[0].arn
 }
 
+# Break-glass CloudWatch metric ALARM (C14).
+#
+# Two complementary break-glass detective paths exist:
+#   * the always-on EventBridge rule above (break-glass-use) — log-group
+#     independent, fires on the live aws.sts event; and
+#   * this metric-filter + metric alarm — requires the org CloudTrail's
+#     CloudWatch Logs group (var.cloudtrail_log_group_name), and is the path
+#     that produces a durable CloudWatch ALARM state (dashboards / composite
+#     alarms / >=1-in-period thresholds).
+# The alarm is gated on both the log-group name AND the break-glass role ARN
+# being set, since the filter pattern matches that specific role ARN.
+locals {
+  enable_break_glass_alarm = (
+    var.enable_security_notifications &&
+    var.cloudtrail_log_group_name != "" &&
+    var.break_glass_role_arn != ""
+  )
+}
+
+resource "aws_cloudwatch_log_metric_filter" "break_glass" {
+  count          = local.enable_break_glass_alarm ? 1 : 0
+  name           = "sec-notify-break-glass-assume"
+  log_group_name = var.cloudtrail_log_group_name
+
+  # Match AssumeRole events whose requested role ARN is the break-glass role.
+  pattern = "{ ($.eventName = \"AssumeRole\") && ($.requestParameters.roleArn = \"${var.break_glass_role_arn}\") }"
+
+  metric_transformation {
+    name          = "BreakGlassAssumeRole"
+    namespace     = var.break_glass_metric_namespace
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "break_glass" {
+  count               = local.enable_break_glass_alarm ? 1 : 0
+  alarm_name          = "sec-notify-break-glass-assume"
+  alarm_description   = "Break-glass role was assumed (from the org CloudTrail log group). Investigate immediately."
+  namespace           = var.break_glass_metric_namespace
+  metric_name         = aws_cloudwatch_log_metric_filter.break_glass[0].metric_transformation[0].name
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.this[0].arn]
+  ok_actions    = [aws_sns_topic.this[0].arn]
+}
+
 # Security Hub automation rule: auto-note informational findings so operators
 # are not paged for background noise while keeping an audit trail.
 resource "aws_securityhub_automation_rule" "suppress_known" {

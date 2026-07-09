@@ -37,6 +37,18 @@ variable "break_glass_role_arn" {
   default     = ""
 }
 
+variable "cloudtrail_log_group_name" {
+  description = "Name of the CloudWatch Logs group the organization CloudTrail delivers into. When set (and break_glass_role_arn is set), a metric-filter + CloudWatch metric alarm on break-glass AssumeRole is created there, alarming into the SNS topic. Empty (default) omits the alarm; the always-on EventBridge rule remains the log-group-independent path."
+  type        = string
+  default     = ""
+}
+
+variable "break_glass_metric_namespace" {
+  description = "CloudWatch metric namespace for the break-glass metric filter and alarm."
+  type        = string
+  default     = "SecurityNotifications"
+}
+
 variable "automation_rule_name" {
   description = "Name of the Security Hub automation rule that auto-notes informational findings."
   type        = string
