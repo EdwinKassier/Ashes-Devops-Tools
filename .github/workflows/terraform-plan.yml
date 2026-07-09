@@ -200,8 +200,14 @@ jobs:
         run: |
           python -m pip install commitizen==4.16.4
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch origin "${{ github.base_ref }}" --depth=1
-            cz check --rev-range "origin/${{ github.base_ref }}..HEAD"
+            # Full fetch (not --depth=1) so the merge-base is resolvable, then
+            # anchor the range on it. A plain origin/<base>..HEAD range includes
+            # commits already merged into the base (e.g. when the base advanced
+            # via a merge commit), dragging in pre-linting history and failing
+            # the check spuriously. merge-base..HEAD is exactly this PR's commits.
+            git fetch --no-tags origin "${{ github.base_ref }}"
+            base_sha="$(git merge-base "origin/${{ github.base_ref }}" HEAD)"
+            cz check --rev-range "${base_sha}..HEAD"
           else
             cz check --rev-range "HEAD~1..HEAD"
           fi
