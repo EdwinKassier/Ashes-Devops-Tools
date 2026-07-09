@@ -1,0 +1,54 @@
+# Copy to terraform.tfvars and fill in. Inputs marked REQUIRED have no usable
+# default — you MUST supply them (the log-archive bucket name and the operator
+# role ARNs). The rest have working defaults you can override.
+
+# REQUIRED — Terraform Cloud org that owns this root's workspace and the
+# aws-organization workspace it reads. Usually passed to `terraform init` via
+# backend.hcl / TF_CLI_ARGS_init rather than here.
+# tfc_organization = "your-tfc-org-name"
+
+# Optional — workspace holding the phase-1 aws-organization root state.
+organization_workspace_name = "aws-organization"
+
+# Optional — home (aggregation) region and the regions the regional security
+# services are enabled in.
+aws_region          = "eu-west-2"
+aws_enabled_regions = ["eu-west-2"]
+
+# REQUIRED — central log-archive bucket name. MUST match the name the log-tamper
+# SCP references in the aws-organization root (cross-root naming contract).
+log_archive_bucket_name = "ashes-org-log-archive"
+
+# REQUIRED — account-qualified ARN of the KMS key administrator (kms:*) on the
+# log and forensics CMKs. Avoids locking the keys out of management.
+key_admin_arn = "arn:aws:iam::111111111111:role/key-admin"
+
+# REQUIRED — account-qualified ARN of the role AWS Config assumes to record
+# resource configurations.
+config_role_arn = "arn:aws:iam::222222222222:role/aws-config-recorder"
+
+# REQUIRED — account-qualified ARN of the role the Config org aggregator assumes.
+aggregator_role_arn = "arn:aws:iam::222222222222:role/aws-config-aggregator"
+
+# Optional (REQUIRED when enable_security_lake = true) — the
+# AmazonSecurityLakeMetaStoreManager role ARN.
+meta_store_manager_role_arn = "arn:aws:iam::222222222222:role/AmazonSecurityLakeMetaStoreManager"
+
+# Optional — break-glass role ARN the security-notifications control watches for
+# assumption. Leave empty to disable the watch.
+# break_glass_role_arn = "arn:aws:iam::111111111111:role/break-glass"
+
+# Optional — SNS subscribers for security notifications. Override the placeholder
+# SecOps email with a real endpoint.
+notification_subscribers = {
+  secops = { protocol = "email", endpoint = "secops@ashes.example.com" }
+}
+
+# Optional — org-security services to enable (detective/resource-explorer also
+# available; detective defaults off per SRA).
+enabled_security_services = ["macie", "inspector"]
+
+# Optional — cost / feature toggles.
+enable_security_lake     = true
+enable_incident_response = true
+enable_service_quotas    = false
