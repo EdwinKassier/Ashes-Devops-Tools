@@ -8,6 +8,11 @@ output "management_account_id" {
   value       = module.organization.management_account_id
 }
 
+output "organization_root_id" {
+  description = "The ID of the organization root (r-xxxx), under which the top-level OUs are created. Consumed by the aws-security root as the Security Hub configuration-policy association target."
+  value       = module.organization.roots_id
+}
+
 output "ou_ids" {
   description = "Map of OU name (or parent/name path for child OUs) to OU ID."
   value       = module.organization.ou_ids

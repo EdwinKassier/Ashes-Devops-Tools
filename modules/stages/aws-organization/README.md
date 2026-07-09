@@ -82,6 +82,7 @@ module "example" {
 | <a name="output_account_role_arns"></a> [account\_role\_arns](#output\_account\_role\_arns) | Map of member-account name to its cross-account access role ARN. |
 | <a name="output_management_account_id"></a> [management\_account\_id](#output\_management\_account\_id) | The account ID of the organization management (payer) account. |
 | <a name="output_organization_id"></a> [organization\_id](#output\_organization\_id) | The ID of the AWS organization. |
+| <a name="output_organization_root_id"></a> [organization\_root\_id](#output\_organization\_root\_id) | The ID of the organization root (r-xxxx), under which the top-level OUs are created. Consumed by the aws-security root as the Security Hub configuration-policy association target. |
 | <a name="output_ou_ids"></a> [ou\_ids](#output\_ou\_ids) | Map of OU name (or parent/name path for child OUs) to OU ID. |
 | <a name="output_policy_attachment_ids"></a> [policy\_attachment\_ids](#output\_policy\_attachment\_ids) | Map of guardrail attachment key to the attachment resource ID. |
 <!-- END_TF_DOCS -->

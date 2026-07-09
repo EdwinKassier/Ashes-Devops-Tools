@@ -12,6 +12,11 @@ output "management_account_id" {
   value       = module.aws_organization.management_account_id
 }
 
+output "organization_root_id" {
+  description = "The organization root ID (r-xxxx). Consumed by the aws-security root as the Security Hub configuration-policy association target."
+  value       = module.aws_organization.organization_root_id
+}
+
 output "ou_ids" {
   description = "Map of OU name (or parent/name path for child OUs) to OU ID."
   value       = module.aws_organization.ou_ids
