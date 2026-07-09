@@ -16,10 +16,11 @@
 # Security Tooling account only (recorder_only = false). Recorders for the other
 # member accounts come from their own layers / the out-of-band StackSet.
 #
-# NOTE: firewall-manager-org is intentionally NOT composed here. FMS admin
-# registration is an explicit, one-time decision that can live in this stage or
-# in the network stage; it is left out of the default security stage so the
-# choice of FMS administrator is made deliberately. See README.
+# NOTE: firewall-manager-org IS composed here but gated OFF by default
+# (enable_firewall_manager = false). Registering the FMS administrator is an
+# explicit, one-time decision and the module ships a placeholder security-group
+# policy, so the default plan creates no FMS resources; a deployment opts in and
+# overrides the policies deliberately. See README.
 
 # ---------------------------------------------------------------------------
 # KMS customer-managed keys (log-archive account + forensics account)
@@ -49,6 +50,26 @@ module "forensics_cmk" {
   org_id                = var.org_id
   management_account_id = var.management_account_id
   key_admin_arn         = var.key_admin_arn
+}
+
+# Security-tooling CMK. The log CMK lives in the log-archive account and its key
+# policy grants only log-delivery service principals + the key admin, so an SNS
+# topic or SSM session in the security-tooling account cannot use it (it would
+# get KMSAccessDenied). This key lives IN the security-tooling account and grants
+# the local detective/session services (SNS, SSM, CloudWatch) usage, scoped by
+# aws:SourceOrgID. It carries no log-delivery grants.
+module "sectool_cmk" {
+  source = "../../aws/kms-key"
+  providers = {
+    aws = aws.security_tooling
+  }
+
+  alias                  = "security-tooling"
+  org_id                 = var.org_id
+  management_account_id  = var.management_account_id
+  key_admin_arn          = var.key_admin_arn
+  log_service_principals = []
+  service_principals     = ["sns.amazonaws.com", "ssm.amazonaws.com", "cloudwatch.amazonaws.com"]
 }
 
 # ---------------------------------------------------------------------------
@@ -97,6 +118,8 @@ module "config" {
   aggregator_role_arn = var.aggregator_role_arn
   log_archive_bucket  = module.log_archive_bucket.bucket_name
   recorder_only       = false
+  # Record global resource types in the home Region only, not once per Region.
+  home_region = var.aws_region
 }
 
 # ---------------------------------------------------------------------------
@@ -197,7 +220,9 @@ module "systems_manager" {
   }
 
   log_bucket_name = module.log_archive_bucket.bucket_name
-  kms_key_id      = module.log_cmk.key_arn
+  # SSM sessions run in the security-tooling account, so they must use a key that
+  # account can access — the sectool CMK, not the cross-account log CMK.
+  kms_key_id = module.sectool_cmk.key_arn
 }
 
 # ---------------------------------------------------------------------------
@@ -213,6 +238,9 @@ module "incident_response" {
   enable_incident_response = var.enable_incident_response
   forensics_account_id     = var.forensics_account_id
   org_id                   = var.org_id
+  # Let the forensics role decrypt snapshots encrypted with the forensics CMK.
+  forensics_kms_key_arn = module.forensics_cmk.key_arn
+  quarantine_vpc_id     = var.quarantine_vpc_id
 }
 
 # ---------------------------------------------------------------------------
@@ -225,9 +253,13 @@ module "security_notifications" {
     aws = aws.security_tooling
   }
 
-  kms_key_id               = module.log_cmk.key_arn
-  notification_subscribers = var.notification_subscribers
-  break_glass_role_arn     = var.break_glass_role_arn
+  # The SNS topic is created in the security-tooling account, so it must be
+  # encrypted with a key that account can access — the sectool CMK, not the
+  # cross-account log CMK (which would fail with KMSAccessDenied on publish).
+  kms_key_id                = module.sectool_cmk.key_arn
+  notification_subscribers  = var.notification_subscribers
+  break_glass_role_arn      = var.break_glass_role_arn
+  cloudtrail_log_group_name = var.cloudtrail_log_group_name
 }
 
 # ---------------------------------------------------------------------------
@@ -242,4 +274,23 @@ module "service_quotas" {
 
   enable_service_quotas   = var.enable_service_quotas
   notifications_topic_arn = module.security_notifications.topic_arn
+}
+
+# ---------------------------------------------------------------------------
+# AWS Firewall Manager (admin = security tooling; registered from mgmt)
+#
+# Gated OFF by default: the FMS admin registration is a one-time decision and
+# the module ships a placeholder security-group policy. When enabled, the
+# Security Tooling account becomes the FMS administrator.
+# ---------------------------------------------------------------------------
+
+module "firewall_manager" {
+  source = "../../aws/firewall-manager-org"
+  providers = {
+    aws            = aws.security_tooling
+    aws.management = aws.management
+  }
+
+  enable_firewall_manager = var.enable_firewall_manager
+  fms_admin_account_id    = var.security_tooling_account_id
 }

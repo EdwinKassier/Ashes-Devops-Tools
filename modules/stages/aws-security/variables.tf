@@ -173,6 +173,12 @@ variable "break_glass_role_arn" {
   }
 }
 
+variable "cloudtrail_log_group_name" {
+  description = "Name of the CloudWatch Logs group the organization CloudTrail delivers into, in the security-tooling account. When set (with break_glass_role_arn), the security-notifications control adds a metric-filter + CloudWatch metric ALARM on break-glass AssumeRole. Empty (default) leaves only the always-on EventBridge rule."
+  type        = string
+  default     = ""
+}
+
 # -----------------------------------------------------------------------------
 # Service toggles + notification config
 # -----------------------------------------------------------------------------
@@ -202,8 +208,25 @@ variable "enable_incident_response" {
   default     = true
 }
 
+variable "quarantine_vpc_id" {
+  description = "VPC ID in which the incident-response deny-all quarantine security group is created. Empty (default) skips the SG. Supply the VPC holding the workloads the isolation Lambda may need to quarantine."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.quarantine_vpc_id == "" || can(regex("^vpc-[0-9a-f]{8,17}$", var.quarantine_vpc_id))
+    error_message = "quarantine_vpc_id must be empty or a valid VPC id of the form vpc-xxxxxxxx."
+  }
+}
+
 variable "enable_service_quotas" {
   description = "Master switch for service-quota management (opt-in). When false, no quota requests or usage alarms are created."
+  type        = bool
+  default     = false
+}
+
+variable "enable_firewall_manager" {
+  description = "Master switch for AWS Firewall Manager composition. Default false: registering the FMS administrator is an explicit, one-time decision, and the firewall-manager-org module ships a placeholder security-group policy that must be overridden before enabling. When true, the Security Tooling account is registered as FMS admin from the management account."
   type        = bool
   default     = false
 }

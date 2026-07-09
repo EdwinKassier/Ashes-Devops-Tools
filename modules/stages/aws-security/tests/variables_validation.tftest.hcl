@@ -31,6 +31,15 @@ variables {
   }
 }
 
+# The forensics CMK ARN flows into the incident-response module's
+# forensics_kms_key_arn, whose count keys off whether that ARN is set. Under
+# mock the CMK ARN is unknown at plan, which would make that count
+# indeterminate; override the CMK output with a known ARN so plan can resolve.
+override_module {
+  target  = module.forensics_cmk
+  outputs = { key_arn = "arn:aws:kms:eu-west-2:444444444444:key/forensics-0000" }
+}
+
 run "valid_var_set_accepted" {
   # Accept case: a complete, valid var set must pass all validations and plan.
   command = plan

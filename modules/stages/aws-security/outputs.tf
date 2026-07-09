@@ -18,6 +18,11 @@ output "forensics_cmk_arn" {
   value       = module.forensics_cmk.key_arn
 }
 
+output "sectool_cmk_arn" {
+  description = "ARN of the security-tooling customer-managed KMS key that encrypts the SNS topic and SSM session data (created in the security-tooling account so those local services can use it)."
+  value       = module.sectool_cmk.key_arn
+}
+
 output "guardduty_detector_ids" {
   description = "Map of Region to the GuardDuty detector ID created in that Region."
   value       = module.guardduty.detector_ids

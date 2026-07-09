@@ -13,10 +13,16 @@ four aliased providers:
 
 Composed children:
 
-- **log_cmk / forensics_cmk** (`kms-key`) — customer-managed keys in the
-  log-archive and forensics accounts. The log CMK encrypts the log-archive
-  bucket, CloudTrail, Config, Security Lake, Systems Manager, and the
-  notifications topic.
+- **log_cmk / forensics_cmk / sectool_cmk** (`kms-key`) — customer-managed keys.
+  The **log CMK** (log-archive account) encrypts the log-archive bucket,
+  CloudTrail, Config, and Security Lake. The **forensics CMK** (forensics
+  account) is for snapshot forensics. The **sectool CMK** (security-tooling
+  account) encrypts the SNS notifications topic and SSM session data — these
+  services run *in* the security-tooling account, so they cannot use the
+  cross-account log CMK (whose key policy grants only log-delivery service
+  principals + the key admin; a local SNS/SSM call would get `KMSAccessDenied`).
+  The sectool CMK grants the local SNS/SSM/CloudWatch service principals usage,
+  scoped by `aws:SourceOrgID`.
 - **log_archive_bucket** (`log-archive-bucket`) — the hardened, Object-Lock
   central log-archive bucket in the log-archive account.
 - **cloudtrail** (`cloudtrail-org`) — organization CloudTrail authored from the
@@ -39,23 +45,26 @@ Composed children:
 - **securitylake** (`securitylake`) — Amazon Security Lake (cost-gated).
 - **systems_manager** (`systems-manager`) — Session Manager, patch baseline, and
   software-inventory baseline.
-- **incident_response** (`incident-response`) — isolation Lambda, GuardDuty
-  EventBridge rule, and forensics snapshot-sharing role.
-- **security_notifications** (`security-notifications`) — KMS-encrypted SNS
-  topic and detective EventBridge rules.
+- **incident_response** (`incident-response`) — isolation Lambda (with the
+  EventBridge invoke permission), GuardDuty EventBridge rule, forensics
+  snapshot-sharing role (granted `kms:Decrypt`/`CreateGrant` on the forensics
+  CMK), and an optional deny-all quarantine SG (gated on `quarantine_vpc_id`).
+- **security_notifications** (`security-notifications`) — sectool-CMK-encrypted
+  SNS topic, detective EventBridge rules, and (when `cloudtrail_log_group_name`
+  is set) the break-glass CloudWatch metric alarm.
 - **service_quotas** (`service-quotas`) — opt-in quota-increase requests and
   usage alarms routed to the notifications topic.
-
-**Firewall Manager is intentionally not composed here.** FMS admin registration
-is an explicit, one-time decision that can live in this stage *or* in the
-network stage. It is left out of the default security stage so the choice of FMS
-administrator is made deliberately; add the `firewall-manager-org` module (with
-`providers = { aws = aws.security_tooling, aws.management = aws.management }`)
-where you decide it belongs.
+- **firewall_manager** (`firewall-manager-org`) — AWS Firewall Manager, **gated
+  OFF by default** (`enable_firewall_manager = false`). When enabled, the
+  Security Tooling account is registered as the FMS administrator from the
+  management account. It is off by default because registering the FMS admin is
+  an explicit, one-time decision and the module ships a placeholder
+  security-group policy that must be overridden before use; the default plan
+  therefore creates no FMS resources.
 
 The stage exports the cross-root security contract consumed by downstream roots:
 `log_archive_bucket_arn`, `log_archive_bucket_name`, `log_cmk_arn`,
-`forensics_cmk_arn`, `guardduty_detector_ids`,
+`forensics_cmk_arn`, `sectool_cmk_arn`, `guardduty_detector_ids`,
 `securityhub_configuration_policy_id`, `security_notifications_topic_arn`, and
 `forensics_account_id`.
 
@@ -159,12 +168,14 @@ module "example" {
 - cloudtrail - ../../aws/cloudtrail-org
 - config - ../../aws/config-org
 - delegated_admin - ../../aws/security-delegated-admin
+- firewall_manager - ../../aws/firewall-manager-org
 - forensics_cmk - ../../aws/kms-key
 - guardduty - ../../aws/guardduty-org
 - incident_response - ../../aws/incident-response
 - log_archive_bucket - ../../aws/log-archive-bucket
 - log_cmk - ../../aws/kms-key
 - org_security_service - ../../aws/org-security-service
+- sectool_cmk - ../../aws/kms-key
 - security_notifications - ../../aws/security-notifications
 - securityhub - ../../aws/securityhub-org
 - securitylake - ../../aws/securitylake
@@ -192,12 +203,15 @@ module "example" {
 | <a name="input_aws_enabled_regions"></a> [aws\_enabled\_regions](#input\_aws\_enabled\_regions) | Regions in which the regional security services (Config, GuardDuty, Security Lake) are enabled. One set of per-Region resources is created for each entry. | `list(string)` | <pre>[<br/>  "eu-west-2"<br/>]</pre> | no |
 | <a name="input_aws_region"></a> [aws\_region](#input\_aws\_region) | Home (aggregation) Region. Used as the Security Hub home\_region for the region-scoped standard ARNs. | `string` | `"eu-west-2"` | no |
 | <a name="input_break_glass_role_arn"></a> [break\_glass\_role\_arn](#input\_break\_glass\_role\_arn) | ARN of the break-glass IAM role the security-notifications control watches for assumption. Any AssumeRole against this ARN raises a notification. | `string` | `""` | no |
+| <a name="input_cloudtrail_log_group_name"></a> [cloudtrail\_log\_group\_name](#input\_cloudtrail\_log\_group\_name) | Name of the CloudWatch Logs group the organization CloudTrail delivers into, in the security-tooling account. When set (with break\_glass\_role\_arn), the security-notifications control adds a metric-filter + CloudWatch metric ALARM on break-glass AssumeRole. Empty (default) leaves only the always-on EventBridge rule. | `string` | `""` | no |
+| <a name="input_enable_firewall_manager"></a> [enable\_firewall\_manager](#input\_enable\_firewall\_manager) | Master switch for AWS Firewall Manager composition. Default false: registering the FMS administrator is an explicit, one-time decision, and the firewall-manager-org module ships a placeholder security-group policy that must be overridden before enabling. When true, the Security Tooling account is registered as FMS admin from the management account. | `bool` | `false` | no |
 | <a name="input_enable_incident_response"></a> [enable\_incident\_response](#input\_enable\_incident\_response) | Master switch for the incident-response automation (isolation Lambda, GuardDuty EventBridge rule, forensics snapshot-sharing role). | `bool` | `true` | no |
 | <a name="input_enable_security_lake"></a> [enable\_security\_lake](#input\_enable\_security\_lake) | Master COST toggle for Amazon Security Lake. Security Lake incurs ingestion, storage, and normalization charges. | `bool` | `true` | no |
 | <a name="input_enable_service_quotas"></a> [enable\_service\_quotas](#input\_enable\_service\_quotas) | Master switch for service-quota management (opt-in). When false, no quota requests or usage alarms are created. | `bool` | `false` | no |
 | <a name="input_enabled_security_services"></a> [enabled\_security\_services](#input\_enabled\_security\_services) | Set of org-security services (org-security-service module) to enable: any of macie, inspector, detective, resource-explorer. Detective defaults OFF per SRA. | `set(string)` | <pre>[<br/>  "macie",<br/>  "inspector"<br/>]</pre> | no |
 | <a name="input_meta_store_manager_role_arn"></a> [meta\_store\_manager\_role\_arn](#input\_meta\_store\_manager\_role\_arn) | ARN of the AmazonSecurityLakeMetaStoreManager IAM role Security Lake uses to manage the Lake Formation metastore. Required when enable\_security\_lake is true. | `string` | `""` | no |
 | <a name="input_notification_subscribers"></a> [notification\_subscribers](#input\_notification\_subscribers) | Subscribers attached to the security-notifications SNS topic, keyed by an arbitrary name. At least one is required (findings would otherwise fire into a void). Defaults to a placeholder SecOps email the root is expected to override. | <pre>map(object({<br/>    protocol = string # "email" | "https" | "sms" | "sqs" | "lambda" | ...<br/>    endpoint = string # e.g. an email address or HTTPS URL<br/>  }))</pre> | <pre>{<br/>  "secops": {<br/>    "endpoint": "secops@example.com",<br/>    "protocol": "email"<br/>  }<br/>}</pre> | no |
+| <a name="input_quarantine_vpc_id"></a> [quarantine\_vpc\_id](#input\_quarantine\_vpc\_id) | VPC ID in which the incident-response deny-all quarantine security group is created. Empty (default) skips the SG. Supply the VPC holding the workloads the isolation Lambda may need to quarantine. | `string` | `""` | no |
 
 ## Outputs
 
@@ -209,6 +223,7 @@ module "example" {
 | <a name="output_log_archive_bucket_arn"></a> [log\_archive\_bucket\_arn](#output\_log\_archive\_bucket\_arn) | ARN of the central log-archive bucket. |
 | <a name="output_log_archive_bucket_name"></a> [log\_archive\_bucket\_name](#output\_log\_archive\_bucket\_name) | Deterministic name of the central log-archive bucket (the cross-root naming contract). |
 | <a name="output_log_cmk_arn"></a> [log\_cmk\_arn](#output\_log\_cmk\_arn) | ARN of the log-archive customer-managed KMS key. |
+| <a name="output_sectool_cmk_arn"></a> [sectool\_cmk\_arn](#output\_sectool\_cmk\_arn) | ARN of the security-tooling customer-managed KMS key that encrypts the SNS topic and SSM session data (created in the security-tooling account so those local services can use it). |
 | <a name="output_security_notifications_topic_arn"></a> [security\_notifications\_topic\_arn](#output\_security\_notifications\_topic\_arn) | ARN of the security-notifications SNS topic (consumed by downstream usage/alarm actions). |
 | <a name="output_securityhub_configuration_policy_id"></a> [securityhub\_configuration\_policy\_id](#output\_securityhub\_configuration\_policy\_id) | UUID of the baseline Security Hub configuration policy. |
 <!-- END_TF_DOCS -->

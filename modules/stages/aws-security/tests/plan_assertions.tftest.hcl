@@ -48,6 +48,14 @@ override_module {
   outputs = { key_arn = "arn:aws:kms:eu-west-2:444444444444:key/forensics-0000" }
 }
 
+# Security-tooling CMK: created in the security-tooling account so the SNS topic
+# and SSM sessions there can actually use it (the log CMK is cross-account and
+# would deny them).
+override_module {
+  target  = module.sectool_cmk
+  outputs = { key_arn = "arn:aws:kms:eu-west-2:222222222222:key/sectool-0000" }
+}
+
 override_module {
   target = module.log_archive_bucket
   outputs = {
@@ -139,5 +147,20 @@ run "composes_security_baseline" {
   assert {
     condition     = output.forensics_account_id == "444444444444"
     error_message = "forensics_account_id output must echo the forensics account id"
+  }
+
+  # The security-tooling CMK ARN surfaces through the stage output; it is a
+  # distinct key from the log CMK (different account) so SNS/SSM in the
+  # security-tooling account can use it.
+  assert {
+    condition     = output.sectool_cmk_arn == "arn:aws:kms:eu-west-2:222222222222:key/sectool-0000"
+    error_message = "sectool_cmk_arn output must surface module.sectool_cmk.key_arn"
+  }
+
+  # Firewall Manager is composed but gated OFF by default, so no FMS admin
+  # registration is created (admin_account_id output is null).
+  assert {
+    condition     = module.firewall_manager.admin_account_id == null
+    error_message = "Firewall Manager must be gated off by default (enable_firewall_manager=false)"
   }
 }
