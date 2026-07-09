@@ -14,23 +14,22 @@ data "terraform_remote_state" "aws_organization" {
 }
 
 locals {
-  # Cross-root account-id map published by the aws-organization root.
-  account_ids = data.terraform_remote_state.aws_organization.outputs.account_ids
-
   # Assignments passed straight through. Callers may set account_id directly, or
-  # reference a member account by name from the org remote state, e.g.:
+  # reference a member account by name from the org cross-root contract
+  # (data.terraform_remote_state.aws_organization.outputs.account_ids), e.g. in
+  # tfvars:
   #
   #   assignments = {
   #     admins-shared-services = {
   #       permission_set = "AdministratorAccess"
   #       principal_type = "GROUP"
   #       principal_id   = "<identity-store-group-id>"
-  #       account_id     = local.account_ids["shared_services"]  # (in tfvars)
+  #       account_id     = "<shared_services account id from account_ids>"
   #     }
   #   }
   #
-  # The pass-through keeps the root generic; see the example wiring below for a
-  # concrete account_id resolved from remote state.
+  # The pass-through keeps the root generic. The account_ids map is exported
+  # below as an output so operators can resolve names to ids.
   assignments = var.assignments
 }
 
