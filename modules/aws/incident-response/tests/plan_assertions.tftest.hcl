@@ -20,6 +20,14 @@ mock_provider "aws" {
       arn = "arn:aws:lambda:us-east-1:111111111111:function:ir-isolate"
     }
   }
+
+  # The Lambda permission validates its source_arn (the event-rule ARN), so give
+  # the mocked event rule a valid ARN too.
+  mock_resource "aws_cloudwatch_event_rule" {
+    defaults = {
+      arn = "arn:aws:events:us-east-1:111111111111:rule/ir-guardduty-high-severity"
+    }
+  }
 }
 
 variables {
@@ -46,6 +54,69 @@ run "guardduty_isolation_and_forensics_wired" {
     condition     = can(regex("aws:PrincipalOrgID", aws_iam_role.forensics_snapshot[0].assume_role_policy))
     error_message = "Forensics role trust must be scoped by aws:PrincipalOrgID"
   }
+
+  # aws:SourceAccount scoping is present on the trust (belt-and-suspenders).
+  assert {
+    condition     = can(regex("aws:SourceAccount", aws_iam_role.forensics_snapshot[0].assume_role_policy))
+    error_message = "Forensics role trust must also be scoped by aws:SourceAccount"
+  }
+
+  # EventBridge must be granted permission to invoke the Lambda.
+  assert {
+    condition     = aws_lambda_permission.eventbridge[0].principal == "events.amazonaws.com"
+    error_message = "EventBridge must have lambda:InvokeFunction permission on the isolation Lambda"
+  }
+
+  assert {
+    condition     = aws_lambda_permission.eventbridge[0].source_arn == aws_cloudwatch_event_rule.guardduty_high[0].arn
+    error_message = "The Lambda permission must be scoped to the GuardDuty EventBridge rule ARN"
+  }
+
+  # With no quarantine_vpc_id and no forensics_kms_key_arn, those optional
+  # resources are gated off.
+  assert {
+    condition     = length(aws_security_group.quarantine) == 0
+    error_message = "No quarantine SG must be created when quarantine_vpc_id is unset"
+  }
+
+  assert {
+    condition     = length(aws_iam_role_policy.forensics_kms) == 0
+    error_message = "No forensics KMS policy must be created when forensics_kms_key_arn is unset"
+  }
+}
+
+run "quarantine_sg_and_forensics_kms_created" {
+  # With a VPC id and forensics CMK supplied, the deny-all quarantine SG and the
+  # forensics KMS role policy are created.
+  command = plan
+
+  variables {
+    quarantine_vpc_id     = "vpc-0abc123def4567890"
+    forensics_kms_key_arn = "arn:aws:kms:eu-west-2:333333333333:key/forensics-0000"
+  }
+
+  assert {
+    condition     = length(aws_security_group.quarantine) == 1
+    error_message = "A quarantine SG must be created when quarantine_vpc_id is set"
+  }
+
+  # The SG is created in the supplied VPC. Deny-all is achieved by declaring no
+  # ingress/egress rules at all (implicit deny-all); ingress/egress are computed
+  # and unknown at plan, so we assert the VPC placement here.
+  assert {
+    condition     = aws_security_group.quarantine[0].vpc_id == "vpc-0abc123def4567890"
+    error_message = "The quarantine SG must be created in the supplied VPC"
+  }
+
+  assert {
+    condition     = length(aws_iam_role_policy.forensics_kms) == 1
+    error_message = "A forensics KMS role policy must be created when forensics_kms_key_arn is set"
+  }
+
+  assert {
+    condition     = can(regex("aws:SourceOrgID", aws_iam_role_policy.forensics_kms[0].policy))
+    error_message = "The forensics KMS grant must be scoped by aws:SourceOrgID"
+  }
 }
 
 run "disabled_creates_nothing" {
@@ -65,5 +136,10 @@ run "disabled_creates_nothing" {
   assert {
     condition     = length(aws_iam_role.forensics_snapshot) == 0
     error_message = "No forensics role must be created when incident response is disabled"
+  }
+
+  assert {
+    condition     = length(aws_lambda_permission.eventbridge) == 0
+    error_message = "No Lambda permission must be created when incident response is disabled"
   }
 }

@@ -89,14 +89,48 @@ resource "aws_cloudwatch_event_target" "isolate" {
   arn       = aws_lambda_function.isolate[0].arn
 }
 
+# Grant EventBridge permission to invoke the isolation Lambda. Without this the
+# rule/target exist but EventBridge gets AccessDeniedException on invoke and the
+# finding is silently dropped. Scoped to the specific rule ARN.
+resource "aws_lambda_permission" "eventbridge" {
+  count         = var.enable_incident_response ? 1 : 0
+  statement_id  = "AllowEventBridgeInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.isolate[0].function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.guardduty_high[0].arn
+}
+
+# Quarantine security group: a deny-all SG (no ingress/egress rules => implicit
+# deny-all) that the isolation Lambda attaches to a flagged instance's ENIs to
+# cut off all traffic. Gated on quarantine_vpc_id because the SG must live in
+# the VPC that holds the workloads being isolated — supplied per deployment.
+resource "aws_security_group" "quarantine" {
+  # checkov:skip=CKV2_AWS_5:This SG is intentionally attached at runtime by the isolation Lambda to a flagged instance's ENIs, not statically to a resource in Terraform; Checkov cannot see the runtime attachment.
+  count       = var.enable_incident_response && var.quarantine_vpc_id != "" ? 1 : 0
+  name        = "ir-quarantine-deny-all"
+  description = "Incident-response quarantine SG: deny-all (no ingress/egress). Attached to flagged instances by the isolation Lambda."
+  vpc_id      = var.quarantine_vpc_id
+
+  # No ingress or egress rules => AWS applies an implicit deny-all in both
+  # directions, which is exactly the isolation posture we want.
+}
+
 # Intra-org forensics role: lets the forensics account assume in to share/copy
-# EBS snapshots. Trust is doubly scoped — the forensics account principal AND
-# the org id — so no principal outside the organization can assume it.
+# EBS snapshots. Trust is triply scoped — the forensics account principal, the
+# org id (aws:PrincipalOrgID), AND the forensics account (aws:SourceAccount,
+# belt-and-suspenders) — so no principal outside the organization, and no
+# account other than the forensics account, can assume it.
+#
+# Scope note: this is the SECURITY-TOOLING-side role. The reciprocal member-side
+# snapshot-SHARE roles (that permit ec2:ModifySnapshotAttribute to share
+# encrypted snapshots back to the forensics account) are deployed per-workload
+# by the workload stack, not here. See README.
 resource "aws_iam_role" "forensics_snapshot" {
   count = var.enable_incident_response ? 1 : 0
   name  = "ir-forensics-snapshot-share"
 
-  # checkov:skip=CKV_AWS_61:The trust policy grants sts:AssumeRole to a single, specific account principal (the forensics account root) and is additionally scoped by aws:PrincipalOrgID, so no principal outside this AWS Organization can assume it. Checkov flags the bare sts:AssumeRole action but does not resolve that the Principal is not a wildcard/service-wide grant.
+  # checkov:skip=CKV_AWS_61:The trust policy grants sts:AssumeRole to a single, specific account principal (the forensics account root) and is additionally scoped by aws:PrincipalOrgID and aws:SourceAccount, so no principal outside this AWS Organization can assume it. Checkov flags the bare sts:AssumeRole action but does not resolve that the Principal is not a wildcard/service-wide grant.
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -104,7 +138,36 @@ resource "aws_iam_role" "forensics_snapshot" {
       Effect    = "Allow"
       Principal = { AWS = "arn:aws:iam::${var.forensics_account_id}:root" }
       Action    = "sts:AssumeRole"
-      Condition = { StringEquals = { "aws:PrincipalOrgID" = var.org_id } }
+      Condition = {
+        StringEquals = {
+          "aws:PrincipalOrgID" = var.org_id
+          "aws:SourceAccount"  = var.forensics_account_id
+        }
+      }
+    }]
+  })
+}
+
+# When a forensics KMS key is supplied, allow the forensics role to decrypt and
+# create grants on it, scoped by aws:SourceOrgID. Shared encrypted EBS snapshots
+# are unusable in the forensics account without kms:Decrypt / kms:CreateGrant on
+# the key that encrypted them, so this closes the "shared but unreadable" gap.
+resource "aws_iam_role_policy" "forensics_kms" {
+  count = var.enable_incident_response && var.forensics_kms_key_arn != "" ? 1 : 0
+  name  = "ir-forensics-kms"
+  role  = aws_iam_role.forensics_snapshot[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "kms:Decrypt",
+        "kms:DescribeKey",
+        "kms:CreateGrant",
+      ]
+      Resource  = var.forensics_kms_key_arn
+      Condition = { StringEquals = { "aws:SourceOrgID" = var.org_id } }
     }]
   })
 }

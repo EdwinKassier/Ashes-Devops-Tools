@@ -12,3 +12,8 @@ output "forensics_role_arn" {
   description = "ARN of the forensics snapshot-sharing role, or null when disabled."
   value       = try(aws_iam_role.forensics_snapshot[0].arn, null)
 }
+
+output "quarantine_security_group_id" {
+  description = "ID of the deny-all quarantine security group, or null when incident response is disabled or quarantine_vpc_id is unset."
+  value       = try(aws_security_group.quarantine[0].id, null)
+}
