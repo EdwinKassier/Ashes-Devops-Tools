@@ -74,6 +74,17 @@ locals {
 }
 
 resource "aws_s3_bucket" "this" {
+  # checkov:skip=CKV2_AWS_62:No baseline S3 event notification by design. This is the
+  #   terminal org-wide log sink; downstream processing (Security Lake / SIEM ingestion)
+  #   is wired by the consuming account against this bucket, not baked into the reusable
+  #   module. An event-notification target is consumer-specific and would couple this
+  #   leaf to a particular subscriber.
+  # checkov:skip=CKV_AWS_144:No cross-region replication by design. Durability for this
+  #   immutable archive is provided by S3 Object Lock (COMPLIANCE by default) plus
+  #   versioning and lifecycle within the home Region. CRR to a second Region is an
+  #   explicit, documented cost/operational trade-off (mirrors the WORM trade-off noted
+  #   for CKV2_GCP_4 in .checkov.yaml); revisit if a multi-Region-durability compliance
+  #   regime later mandates it.
   bucket = var.log_archive_bucket_name
 
   # Object Lock must be enabled at creation; it cannot be toggled afterward.

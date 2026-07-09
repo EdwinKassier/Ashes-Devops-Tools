@@ -70,6 +70,7 @@ resource "aws_networkfirewall_firewall_policy" "this" {
 
 #checkov:skip=CKV_AWS_345:CMK encryption is opt-in via var.kms_key_arn (set by the network-hub stage that owns the KMS key); default falls back to an AWS-owned key.
 resource "aws_networkfirewall_firewall" "this" {
+  #checkov:skip=CKV2_AWS_63:Logging IS configured — aws_networkfirewall_logging_configuration.this delivers FLOW logs to var.log_bucket_name for this firewall. Both resources are count-gated on enable_network_firewall and reference each other via [0] indexing, which Checkov's cross-resource graph check cannot resolve, so it reports the firewall as unlogged. False positive.
   count = var.enable_network_firewall ? 1 : 0
 
   name                = var.firewall_name

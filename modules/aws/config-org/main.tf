@@ -18,6 +18,12 @@
 # no per-Region provider aliases are required.
 
 resource "aws_config_configuration_recorder" "this" {
+  # checkov:skip=CKV2_AWS_48:Recording all supported resource types IS the default —
+  #   recording_group.all_supported = var.record_all_supported, which defaults to true.
+  #   Checkov's graph check cannot resolve the variable-driven all_supported and flags
+  #   the recorder even though the default posture records every supported type (plus
+  #   global types in the home Region). The false toggle exists only as a documented
+  #   cost lever for narrowing the recording group out-of-band.
   for_each = toset(var.aws_enabled_regions)
   name     = var.recorder_name
   region   = each.value

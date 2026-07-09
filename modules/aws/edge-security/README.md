@@ -55,11 +55,11 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_acm_certificate.this (modules/aws/edge-security/main.tf#L81)
-- resource.aws_cloudfront_distribution.this (modules/aws/edge-security/main.tf#L92)
-- resource.aws_shield_protection.this (modules/aws/edge-security/main.tf#L148)
+- resource.aws_acm_certificate.this (modules/aws/edge-security/main.tf#L86)
+- resource.aws_cloudfront_distribution.this (modules/aws/edge-security/main.tf#L97)
+- resource.aws_shield_protection.this (modules/aws/edge-security/main.tf#L164)
 - resource.aws_wafv2_web_acl.cloudfront (modules/aws/edge-security/main.tf#L16)
-- resource.aws_wafv2_web_acl_logging_configuration.this (modules/aws/edge-security/main.tf#L156)
+- resource.aws_wafv2_web_acl_logging_configuration.this (modules/aws/edge-security/main.tf#L172)
 
 
 ## Inputs

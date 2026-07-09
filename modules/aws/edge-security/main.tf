@@ -14,6 +14,11 @@
 
 # CloudFront-scoped Web ACL. Must be created in us-east-1.
 resource "aws_wafv2_web_acl" "cloudfront" {
+  # checkov:skip=CKV2_AWS_31:WAF logging is opt-in via var.log_destination_arn,
+  #   which wires aws_wafv2_web_acl_logging_configuration.this to a caller-owned
+  #   destination. A logging config is intentionally not forced on every ACL (same
+  #   per-workload rationale as CKV_AWS_86 on the distribution); Checkov's graph
+  #   check cannot resolve the conditional logging resource.
   count    = var.enable_edge ? 1 : 0
   provider = aws.us_east_1
   name     = "${var.name_prefix}-cf-acl"
@@ -101,6 +106,17 @@ resource "aws_cloudfront_distribution" "this" {
   #   (e.g. index.html) and is left to the workload rather than defaulted here.
   # checkov:skip=CKV_AWS_374:geo_restriction is deliberately "none" — this is a
   #   generic edge; geo-blocking is a per-workload policy decision, not a baseline.
+  # checkov:skip=CKV2_AWS_42:A custom ACM certificate IS used when var.domain_name is
+  #   set (acm_certificate_arn + sni-only below). The default *.cloudfront.net cert is
+  #   only used when no domain is supplied; Checkov cannot resolve this conditional and
+  #   flags the default-cert branch. Same conditional as CKV_AWS_174 on viewer_certificate.
+  # checkov:skip=CKV2_AWS_32:A response-headers policy is application-specific (CSP, HSTS,
+  #   and permissions tuned to the workload's app) and is left to the caller, consistent
+  #   with CKV_AWS_305 (default root object). This module ships a generic single-origin edge.
+  # checkov:skip=CKV2_AWS_47:Log4Shell (CVE-2021-44228) protection IS present on the attached
+  #   web_acl_id — aws_wafv2_web_acl.cloudfront attaches AWSManagedRulesKnownBadInputsRuleSet
+  #   (which carries the Log4JRCE rule) at priority 2. Checkov's AMR graph check only
+  #   recognizes a specific managed-rule-group shape and does not resolve this association.
   count      = var.enable_edge ? 1 : 0
   enabled    = true
   web_acl_id = aws_wafv2_web_acl.cloudfront[0].arn

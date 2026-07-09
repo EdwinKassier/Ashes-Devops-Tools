@@ -51,11 +51,11 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_config_configuration_aggregator.org (modules/aws/config-org/main.tf#L57)
+- resource.aws_config_configuration_aggregator.org (modules/aws/config-org/main.tf#L63)
 - resource.aws_config_configuration_recorder.this (modules/aws/config-org/main.tf#L20)
-- resource.aws_config_configuration_recorder_status.this (modules/aws/config-org/main.tf#L46)
-- resource.aws_config_delivery_channel.this (modules/aws/config-org/main.tf#L37)
-- resource.aws_config_organization_conformance_pack.this (modules/aws/config-org/main.tf#L67)
+- resource.aws_config_configuration_recorder_status.this (modules/aws/config-org/main.tf#L52)
+- resource.aws_config_delivery_channel.this (modules/aws/config-org/main.tf#L43)
+- resource.aws_config_organization_conformance_pack.this (modules/aws/config-org/main.tf#L73)
 
 
 ## Inputs

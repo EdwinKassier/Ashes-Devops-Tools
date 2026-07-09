@@ -50,7 +50,7 @@ The following resources are created:
 
 - resource.aws_networkfirewall_firewall.this (modules/aws/network-firewall/main.tf#L72)
 - resource.aws_networkfirewall_firewall_policy.this (modules/aws/network-firewall/main.tf#L46)
-- resource.aws_networkfirewall_logging_configuration.this (modules/aws/network-firewall/main.tf#L99)
+- resource.aws_networkfirewall_logging_configuration.this (modules/aws/network-firewall/main.tf#L100)
 - resource.aws_networkfirewall_rule_group.stateful (modules/aws/network-firewall/main.tf#L23)
 
 

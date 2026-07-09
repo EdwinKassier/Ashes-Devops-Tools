@@ -18,6 +18,7 @@
 
 resource "aws_cloudtrail" "org" {
   # checkov:skip=CKV_AWS_252:No SNS topic is attached by design. Delivery notifications for this org trail are handled centrally — the Log-Archive bucket lives in a dedicated account and drives downstream processing via S3 event/notification wiring owned by that account, not per-trail SNS. Adding an SNS topic here would require a topic in the trail's account and duplicate that central path.
+  # checkov:skip=CKV2_AWS_10:No CloudWatch Logs group is attached by design. This org trail's authoritative, tamper-evident sink is the central Log-Archive S3 bucket (cross-account, with log-file validation digests). A CloudWatch Logs group would require a log group + IAM delivery role in the trail's account and duplicate the central S3-based delivery and downstream processing path; real-time analytics are handled by Security Lake / the SIEM reading from that bucket, not per-trail CloudWatch Logs.
   name                          = var.trail_name
   s3_bucket_name                = var.log_archive_bucket
   kms_key_id                    = var.kms_key_arn
