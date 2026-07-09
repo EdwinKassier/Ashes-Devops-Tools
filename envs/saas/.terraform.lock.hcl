@@ -5,6 +5,7 @@ provider "registry.terraform.io/hashicorp/null" {
   version     = "3.3.0"
   constraints = "~> 3.0"
   hashes = [
+    "h1:Gq+xRK4yvwDpBJ2KFJkrmcNZikDiAEuFhAWeDtzanJc=",
     "h1:a14TKo7Xvg4W8+H1VA6p+oLZTLxVQnYUD8LOaOs14A8=",
     "h1:l+dm3lhmu4ys7GbvIldfn544olSPH0DOiYruuFSfQkY=",
     "zh:021748b5ea3b5f6956f2e75c42c5cdc113b391fb98ac71364a4965d23b37000f",
@@ -28,6 +29,7 @@ provider "registry.terraform.io/supabase/supabase" {
   constraints = "~> 1.0"
   hashes = [
     "h1:3sJdtcXhRvCS52SC0DnGnHUeu2l9plSoT1BRdGlrUjs=",
+    "h1:Waltaeb202qqwPTudPjp/3D537bUl4k6jR2Yq4KWhJ8=",
     "h1:ZTmVkODWeBvyPqaAGTHgUayfnL9gsZ/cXKtTT1ZemAo=",
     "zh:0e4bedace67d4688bfdf677c71fdd93029c6393820af921121aa9d86d3f371c2",
     "zh:0ec2d76a30b2d72ed6670c35897bec6a511b8ad129ec9e9c6a2f341345972aeb",
@@ -52,6 +54,7 @@ provider "registry.terraform.io/vercel/vercel" {
   hashes = [
     "h1:MhzAmliF1bfToR+O65kY8+8o577SV8nHF+KteYfMABs=",
     "h1:dKb6T/1d1966tYl0TW7/79V2YdghiTmLYM7H2XSQopI=",
+    "h1:wpon/8MboR83zj9JXzIldIbp2TFvIHK0XBFrL7V5ZDo=",
     "zh:02c745e21fd3dbd89fa6762a41339d40f499a4f49e413a01baf34315db95c26e",
     "zh:0cd7daf928ffb6447ad9a0c92156b8fcdbb1bbd15c0dcf497ba5b27c64fb1806",
     "zh:125d0a32363598faf2effe2e4c81603e582615b11ccf4be0e07d1fcb7be79b05",
