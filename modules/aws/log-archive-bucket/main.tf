@@ -97,6 +97,15 @@ resource "aws_s3_bucket_versioning" "this" {
   }
 }
 
+# S3 server access logging. For the central log-archive bucket (the terminal
+# log sink) this self-logs to a dedicated prefix by default; set
+# var.access_log_bucket to ship access logs to a separate audit bucket instead.
+resource "aws_s3_bucket_logging" "this" {
+  bucket        = aws_s3_bucket.this.id
+  target_bucket = var.access_log_bucket != "" ? var.access_log_bucket : aws_s3_bucket.this.id
+  target_prefix = var.access_log_prefix
+}
+
 resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
   bucket = aws_s3_bucket.this.id
 

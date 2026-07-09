@@ -63,11 +63,12 @@ The following resources are created:
 
 
 - resource.aws_s3_bucket.this (modules/aws/log-archive-bucket/main.tf#L76)
-- resource.aws_s3_bucket_lifecycle_configuration.this (modules/aws/log-archive-bucket/main.tf#L123)
-- resource.aws_s3_bucket_object_lock_configuration.this (modules/aws/log-archive-bucket/main.tf#L112)
-- resource.aws_s3_bucket_policy.this (modules/aws/log-archive-bucket/main.tf#L143)
+- resource.aws_s3_bucket_lifecycle_configuration.this (modules/aws/log-archive-bucket/main.tf#L132)
+- resource.aws_s3_bucket_logging.this (modules/aws/log-archive-bucket/main.tf#L103)
+- resource.aws_s3_bucket_object_lock_configuration.this (modules/aws/log-archive-bucket/main.tf#L121)
+- resource.aws_s3_bucket_policy.this (modules/aws/log-archive-bucket/main.tf#L152)
 - resource.aws_s3_bucket_public_access_block.this (modules/aws/log-archive-bucket/main.tf#L83)
-- resource.aws_s3_bucket_server_side_encryption_configuration.this (modules/aws/log-archive-bucket/main.tf#L100)
+- resource.aws_s3_bucket_server_side_encryption_configuration.this (modules/aws/log-archive-bucket/main.tf#L109)
 - resource.aws_s3_bucket_versioning.this (modules/aws/log-archive-bucket/main.tf#L92)
 
 
@@ -78,6 +79,8 @@ The following resources are created:
 | <a name="input_kms_key_arn"></a> [kms\_key\_arn](#input\_kms\_key\_arn) | ARN of the CMK used for SSE-KMS default encryption on the bucket (e.g. the aws/kms-key module's key\_arn output). | `string` | n/a | yes |
 | <a name="input_log_archive_bucket_name"></a> [log\_archive\_bucket\_name](#input\_log\_archive\_bucket\_name) | Deterministic name of the central log-archive bucket. This is a cross-root naming contract: it must match the name the B3 SCP references. | `string` | n/a | yes |
 | <a name="input_org_id"></a> [org\_id](#input\_org\_id) | AWS Organizations organization ID (o-xxxxxxxxxx). Used in the aws:SourceOrgID condition that scopes log-delivery grants in the bucket policy. | `string` | n/a | yes |
+| <a name="input_access_log_bucket"></a> [access\_log\_bucket](#input\_access\_log\_bucket) | Target bucket for S3 server access logs. Empty (default) self-logs to this bucket under access\_log\_prefix, which is appropriate for the terminal log sink; set to a separate audit bucket to ship access logs elsewhere. | `string` | `""` | no |
+| <a name="input_access_log_prefix"></a> [access\_log\_prefix](#input\_access\_log\_prefix) | Key prefix for S3 server access logs. | `string` | `"s3-access-logs/"` | no |
 | <a name="input_object_lock_mode"></a> [object\_lock\_mode](#input\_object\_lock\_mode) | Default S3 Object Lock retention mode. COMPLIANCE is WORM against all principals (incl. root) and blocks destroy until retention lapses; GOVERNANCE is bypassable by privileged principals. | `string` | `"COMPLIANCE"` | no |
 | <a name="input_retention_days"></a> [retention\_days](#input\_retention\_days) | Default Object Lock retention period, in days. Also drives lifecycle expiration. | `number` | `365` | no |
 

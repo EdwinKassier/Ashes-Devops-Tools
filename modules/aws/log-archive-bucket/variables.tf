@@ -49,3 +49,15 @@ variable "retention_days" {
     error_message = "retention_days must be at least 1."
   }
 }
+
+variable "access_log_bucket" {
+  description = "Target bucket for S3 server access logs. Empty (default) self-logs to this bucket under access_log_prefix, which is appropriate for the terminal log sink; set to a separate audit bucket to ship access logs elsewhere."
+  type        = string
+  default     = ""
+}
+
+variable "access_log_prefix" {
+  description = "Key prefix for S3 server access logs."
+  type        = string
+  default     = "s3-access-logs/"
+}
