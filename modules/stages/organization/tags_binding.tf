@@ -7,6 +7,6 @@ resource "google_tags_tag_binding" "environment" {
     if contains(keys(module.tags.tag_values), "environment-${env_key}")
   }
 
-  parent    = each.value.parent
+  parent    = "//cloudresourcemanager.googleapis.com/${each.value.parent}"
   tag_value = each.value.tag_value
 }

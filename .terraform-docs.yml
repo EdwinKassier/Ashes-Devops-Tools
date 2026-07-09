@@ -1,6 +1,6 @@
 formatter: "markdown table"
 
-version: ">=0.16"
+version: ">=0.19"
 
 header-from: main.tf
 

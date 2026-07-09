@@ -6,7 +6,7 @@ Terraform/GCP landing zone. 48 modules, two deployable roots, remote state via T
 
 ## Repo Layout
 
-```
+```text
 envs/
   organization/   # Control plane: folders, org policies, KMS, network hub, bootstrap WIF
   apps/           # Per-environment app infra — TF_WORKSPACE=apps-<env>
@@ -14,16 +14,16 @@ envs/
 modules/
   stages/         # Orchestration wrappers: bootstrap, organization, projects,
                   #   network-hub, workload, saas-workload
-  network/        # ~19 primitives: vpc, subnet, dns, vpn, vpc-sc, cloud_armor, …
+  network/        # ~19 primitives: vpc, subnet, dns, vpn, vpc-sc, cloud-armor, …
   governance/     # billing, kms, org-policy, scc, tags, cloud-audit-logs
-  iam/            # organization, role, service_account, workload_identity, identity_group*
+  iam/            # organization, role, service-account, workload-identity, identity-group*
   supabase/       # project, settings, environment, vault-secrets
   vercel/         # project
   host/           # compatibility wrapper for envs/apps
-  monitoring/     # alert_policy, compute_dashboard
+  monitoring/     # alert-policy, compute-dashboard
   firebase/       # project
-  cloud_storage/
-  artifact_registry/
+  cloud-storage/
+  artifact-registry/
 ```
 
 ---
@@ -86,15 +86,20 @@ make ci             # fmt-check + docs-check + validate-all + lint + security + 
 ## Module Authoring Rules
 
 ### Docs
+
 Every module README must have these markers for `make docs` to work:
-```
+
+```markdown
 <!-- BEGIN_TF_DOCS -->
 <!-- END_TF_DOCS -->
 ```
+
 Run `make docs` after adding/changing variables or outputs.
 
 ### Sensitive values in `null_resource` triggers
+
 Terraform 1.9 rejects raw sensitive values in triggers. Always hash them:
+
 ```hcl
 triggers = {
   secret_hash = nonsensitive(sha256(var.sensitive_var))
@@ -102,7 +107,9 @@ triggers = {
 ```
 
 ### Vercel provider v4 — `git_repository`
+
 `git_repository` is a Single Nested Attribute in v4. Use assignment syntax, not block syntax:
+
 ```hcl
 # CORRECT
 git_repository = {
@@ -118,13 +125,17 @@ git_repository {
 ```
 
 ### Supabase `anon_key`
+
 The provider marks `anon_key` sensitive. Unwrap it explicitly in outputs:
+
 ```hcl
 value = nonsensitive(data.supabase_apikeys.this.anon_key)
 ```
 
 ### Vercel `ignore_command` scripts
+
 Vercel executes `ignore_command` in `/bin/sh`, not bash. Use POSIX sh syntax:
+
 ```sh
 # CORRECT
 [ "$VERCEL_ENV" = "production" ]
@@ -134,7 +145,9 @@ Vercel executes `ignore_command` in `/bin/sh`, not bash. Use POSIX sh syntax:
 ```
 
 ### vault-secrets Node.js dependency
+
 `modules/supabase/vault-secrets/scripts/` requires Node.js dependencies before first apply with `enable_vault_secrets = true`:
+
 ```bash
 cd modules/supabase/vault-secrets/scripts/
 npm install
@@ -161,6 +174,7 @@ npm install
 ## Common Workflows
 
 ### Adding a new module
+
 1. Create `modules/<category>/<name>/`.
 2. Add `main.tf`, `variables.tf`, `outputs.tf`.
 3. Add README with `<!-- BEGIN_TF_DOCS -->` / `<!-- END_TF_DOCS -->` markers.
@@ -168,12 +182,14 @@ npm install
 5. Run `make docs && make test && make ci`.
 
 ### Updating an existing module
+
 1. Edit the module.
 2. Run `make docs` to regenerate the README section.
 3. Run `make test` to verify.
 4. Run `make ci` before pushing.
 
 ### Working with environments
+
 ```bash
 # Target a specific app environment
 export TF_WORKSPACE=apps-staging

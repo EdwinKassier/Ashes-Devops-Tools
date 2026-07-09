@@ -14,12 +14,13 @@
 
 <br/>
 
-[![TFLint](https://img.shields.io/badge/TFLint-passing-success?style=flat-square&logo=terraform)](https://github.com/terraform-linters/tflint)
-[![TFSec](https://img.shields.io/badge/TFSec-passing-success?style=flat-square&logo=aqua)](https://github.com/aquasecurity/tfsec)
-[![Checkov](https://img.shields.io/badge/Checkov-passing-success?style=flat-square)](https://www.checkov.io/)
+[![Terraform Validation](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml)
+[![Security Scan](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml)
 [![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?style=flat-square&logo=pre-commit)](https://pre-commit.com)
 [![Modules](https://img.shields.io/badge/modules-48-blueviolet?style=flat-square)](modules/)
-[![Tests](https://img.shields.io/badge/test_suites-51-blue?style=flat-square)](modules/)
+[![Tests](https://img.shields.io/badge/test_suites-69-blue?style=flat-square)](modules/)
+
+<sub>Modules/test-suite counts above are hand-maintained, not live badges. Verify: <code>find modules -name main.tf -not -path '*/examples/*' -not -path '*/.terraform/*' | wc -l</code> (modules) and <code>find modules envs -name '*.tftest.hcl' -not -path '*/.terraform/*' | wc -l</code> (test suites). Last verified 2026-07-08: 48 modules, 69 test suites.</sub>
 
 </div>
 
@@ -62,7 +63,7 @@ make ci
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │                   GitHub Actions (CI)                   │
 │  fmt · validate · lint · tfsec · checkov · terraform-docs│
@@ -156,7 +157,7 @@ make ci
 </details>
 
 <details>
-<summary><strong>Stages & Platform (7 modules)</strong></summary>
+<summary><strong>Stages & Platform (6 orchestration modules + 1 top-level compatibility wrapper)</strong></summary>
 
 | Module | Purpose |
 |:-------|:--------|
@@ -166,7 +167,7 @@ make ci
 | [`stages/network-hub`](modules/stages/network-hub/) | Hub VPC + DNS hub |
 | [`stages/workload`](modules/stages/workload/) | Shared VPC service project attachment |
 | [`stages/saas-workload`](modules/stages/saas-workload/) | Supabase + Vercel full-stack environment |
-| [`host`](modules/host/) | Compatibility wrapper for `envs/apps` — composes networking, security, and governance primitives |
+| [`host`](modules/host/) | Top-level compatibility wrapper for `envs/apps` (not under `modules/stages/`) — composes networking, security, and governance primitives |
 
 </details>
 
@@ -175,8 +176,8 @@ make ci
 
 | Module | Purpose |
 |:-------|:--------|
-| [`cloud_storage`](modules/cloud-storage/) | GCS buckets with log separation and optional CMEK |
-| [`artifact_registry`](modules/artifact-registry/) | Container/package registries |
+| [`cloud-storage`](modules/cloud-storage/) | GCS buckets with log separation and optional CMEK |
+| [`artifact-registry`](modules/artifact-registry/) | Container/package registries |
 | [`firebase/project`](modules/firebase/project/) | Firebase project setup with Apple, Android, and Web app targets |
 
 </details>
@@ -198,7 +199,7 @@ make ci
 ```bash
 make ci                    # Full local pipeline (fmt + docs + validate + lint + security + test)
 make fmt                   # Format all Terraform files
-make test                  # Run all 51 .tftest.hcl suites (no cloud creds needed)
+make test                  # Run all 69 .tftest.hcl suites (no cloud creds needed)
 make validate-all          # terraform validate across all roots
 make lint                  # TFLint with GCP ruleset
 make security              # tfsec + Checkov
@@ -221,6 +222,7 @@ make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars
 | [`drift-detection.yml`](.github/workflows/drift-detection.yml) | Scheduled | Detect infrastructure drift |
 
 **Releasing:**
+
 ```bash
 git tag -a organization/v1.2.0 -m "Release organization v1.2.0"
 git push origin organization/v1.2.0

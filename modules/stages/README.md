@@ -4,7 +4,7 @@ Terraform modules implementing the **staged deployment pattern** for Google Clou
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                         envs/organization/                              │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌─────────────┐  │

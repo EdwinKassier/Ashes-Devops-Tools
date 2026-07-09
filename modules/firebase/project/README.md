@@ -72,7 +72,7 @@ The following resources are created:
 | <a name="input_apple_display_name"></a> [apple\_display\_name](#input\_apple\_display\_name) | Display name for the Apple app | `string` | `""` | no |
 | <a name="input_apple_team_id"></a> [apple\_team\_id](#input\_apple\_team\_id) | Apple Team ID for the Apple app (10-character uppercase alphanumeric) | `string` | `""` | no |
 | <a name="input_kms_key_name"></a> [kms\_key\_name](#input\_kms\_key\_name) | Optional customer-managed KMS key used for the Firebase web config bucket | `string` | `null` | no |
-| <a name="input_region"></a> [region](#input\_region) | The GCP region for all storage buckets in this module. Required — no default to avoid silent cross-region deployments. | `string` | `null` | no |
+| <a name="input_region"></a> [region](#input\_region) | Region for the Firebase web-app storage resources. Required only when `web_display_name` is set (a web app is created); ignored otherwise. | `string` | `null` | no |
 | <a name="input_web_display_name"></a> [web\_display\_name](#input\_web\_display\_name) | Display name for the web app | `string` | `""` | no |
 
 ## Outputs

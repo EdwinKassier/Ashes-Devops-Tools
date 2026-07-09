@@ -26,7 +26,7 @@ resource "google_compute_router" "router" {
   bgp {
     asn               = var.router_asn
     advertise_mode    = length(var.advertised_ip_ranges) > 0 ? "CUSTOM" : "DEFAULT"
-    advertised_groups = var.advertised_groups
+    advertised_groups = length(var.advertised_ip_ranges) > 0 ? var.advertised_groups : null
 
     dynamic "advertised_ip_ranges" {
       for_each = var.advertised_ip_ranges

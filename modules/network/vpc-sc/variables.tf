@@ -5,7 +5,7 @@
  */
 
 variable "organization_id" {
-  description = "The organization ID (e.g., 'organizations/123456789')"
+  description = "The organization ID in full resource form (e.g., 'organizations/123456789'). NOTE: unlike other repo modules (governance/tags, governance/cloud-audit-logs) which take a bare numeric org id, this module requires the 'organizations/' prefix because it is passed directly to the Access Context Manager access-policy parent. Callers holding a bare numeric id (e.g. the organization stage output) must prefix it."
   type        = string
 
   validation {

@@ -63,11 +63,13 @@ jobs:
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
           WORKSPACE: ${{ steps.parse.outputs.workspace }}
         run: |
+          RUNS_URL="https://app.terraform.io/api/v2/organizations/${TFC_ORGANIZATION}"
+          RUNS_URL="${RUNS_URL}/workspaces/${WORKSPACE}/runs?page%5Bsize%5D=1"
           response=$(curl --silent --show-error --fail-with-body \
             --max-time 30 --connect-timeout 10 \
             --header "Authorization: Bearer ${TFC_TOKEN}" \
             --header "Content-Type: application/vnd.api+json" \
-            "https://app.terraform.io/api/v2/organizations/${TFC_ORGANIZATION}/workspaces/${WORKSPACE}/runs?page%5Bsize%5D=1") \
+            "${RUNS_URL}") \
             || { echo "TFC API request failed — check TFC_TOKEN and TFC_ORGANIZATION secrets" >&2; exit 1; }
 
           # Validate that the response is valid JSON with a data array
@@ -92,7 +94,8 @@ jobs:
               # Run is pending manual apply approval in TFC — release tag is valid
               ;;
             *)
-              echo "Latest Terraform Cloud run for ${WORKSPACE} is '${status}' — expected applied, planned_and_finished, or apply_queued" >&2
+              echo "Latest Terraform Cloud run for ${WORKSPACE} is '${status}' —" \
+                "expected applied, planned_and_finished, or apply_queued" >&2
               exit 1
               ;;
           esac
@@ -118,5 +121,6 @@ jobs:
         with:
           name: ${{ needs.verify-run.outputs.release_name }}
           tag_name: ${{ github.ref_name }}
-          body: |
-            Terraform Cloud workspace `${{ needs.verify-run.outputs.workspace }}` has a successful run with status `${{ needs.verify-run.outputs.status }}`.
+          body: >-
+            Terraform Cloud workspace `${{ needs.verify-run.outputs.workspace }}`
+            has a successful run with status `${{ needs.verify-run.outputs.status }}`.

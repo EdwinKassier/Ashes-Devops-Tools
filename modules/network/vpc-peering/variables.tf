@@ -4,11 +4,6 @@
  * VPC Peering Module - Variables
  */
 
-variable "project_id" {
-  description = "The project ID where the peering will be created"
-  type        = string
-}
-
 variable "peering_name" {
   description = "Name of the VPC peering connection"
   type        = string
@@ -63,10 +58,4 @@ variable "create_reverse_peering" {
   description = "Create the reverse peering connection (for bi-directional peering)"
   type        = bool
   default     = true
-}
-
-variable "peer_project_id" {
-  description = "The project ID of the peer network (if different from project_id)"
-  type        = string
-  default     = null
 }

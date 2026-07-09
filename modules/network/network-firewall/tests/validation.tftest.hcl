@@ -61,6 +61,20 @@ run "invalid_direction_rejected" {
   expect_failures = [var.direction]
 }
 
+# Verify that an invalid firewall_rule_name is rejected.
+run "invalid_firewall_rule_name_rejected" {
+  variables {
+    project_id         = "my-project"
+    firewall_rule_name = "Bad_Name" # uppercase + underscore are invalid
+    network            = "default"
+    direction          = "INGRESS"
+  }
+
+  command = plan
+
+  expect_failures = [var.firewall_rule_name]
+}
+
 # Verify that logging configuration is applied when enabled.
 run "logging_enabled" {
   variables {

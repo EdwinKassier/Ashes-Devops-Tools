@@ -13,6 +13,11 @@ variable "project_id" {
   description = "The ID of the project where the custom role will be created (required when level is 'project')"
   type        = string
   default     = null
+
+  validation {
+    condition     = var.level != "project" || var.project_id != null
+    error_message = "project_id is required when level = \"project\"."
+  }
 }
 
 variable "org_id" {
@@ -21,8 +26,13 @@ variable "org_id" {
   default     = null
 
   validation {
-    condition     = var.org_id == null || can(regex("^[0-9]+$", var.org_id))
+    condition     = var.org_id == null ? true : can(regex("^[0-9]+$", var.org_id))
     error_message = "org_id must be a numeric organization ID (digits only, without 'organizations/' prefix)."
+  }
+
+  validation {
+    condition     = var.level != "organization" || var.org_id != null
+    error_message = "org_id is required when level = \"organization\"."
   }
 }
 

@@ -63,7 +63,8 @@ jobs:
         # prevent supply-chain drift. The tfsec-action above is SHA-pinned; this
         # Docker invocation must match.
         run: |
-          docker run --rm -v "$(pwd):/src" aquasec/tfsec:v1.28.6 /src/modules --config-file /src/.tfsec.yml --format json > tfsec-report.json
+          docker run --rm -v "$(pwd):/src" aquasec/tfsec:v1.28.6 /src/modules \
+            --config-file /src/.tfsec.yml --format json > tfsec-report.json
 
       - name: Upload TFSec report artifact
         if: inputs.sarif_output && always()
@@ -87,22 +88,32 @@ jobs:
           framework: terraform
           quiet: true
           soft_fail: false
+          # Do NOT download/scan external modules: we scan our OWN Terraform
+          # (checkov reads our modules' .tf regardless). Downloading and scanning
+          # third-party code (e.g. terraform-google-modules/project-factory) surfaces
+          # violations in code we do not own/control, which fails the scan. This
+          # matches the local `make security` gate (which does not download).
           download_external_modules: false
           config_file: .checkov.yaml
           output_format: ${{ inputs.sarif_output && 'sarif,cli' || 'cli' }}
           output_file_path: ${{ inputs.sarif_output && 'checkov-results.sarif,checkov-report.txt' || 'console' }}
 
       - name: Run Checkov on envs
+        # always() so a finding in the modules scan above does not skip this step and
+        # leave checkov-env-results.sarif uncreated (which would fail the upload).
+        if: always()
         uses: bridgecrewio/checkov-action@4048c972aae68d0b983a48bb3479aab2d877b898  # v12
         with:
           directory: envs
           framework: terraform
           quiet: true
           soft_fail: false
+          # See rationale on the modules invocation above.
           download_external_modules: false
           config_file: .checkov.yaml
           output_format: ${{ inputs.sarif_output && 'sarif,cli' || 'cli' }}
-          output_file_path: ${{ inputs.sarif_output && 'checkov-env-results.sarif,checkov-env-report.txt' || 'console' }}
+          output_file_path: >-
+            ${{ inputs.sarif_output && 'checkov-env-results.sarif,checkov-env-report.txt' || 'console' }}
 
       - name: Upload Checkov modules SARIF
         if: inputs.sarif_output && always()

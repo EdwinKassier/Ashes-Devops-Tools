@@ -35,6 +35,25 @@ run "accepts_kms_key_for_web_config_bucket" {
   }
 }
 
+# ── region (conditional on web_display_name) ────────────────────────────────────
+
+run "rejects_null_region_when_web_app_configured" {
+  command         = plan
+  expect_failures = [var.region]
+  variables {
+    region           = null
+    web_display_name = "My Web App"
+  }
+}
+
+run "accepts_null_region_when_no_web_app" {
+  # region is only consumed by the web-app path; without a web app it may be null
+  command = plan
+  variables {
+    region = null
+  }
+}
+
 # ── kms_key_name ───────────────────────────────────────────────────────────────
 
 run "rejects_invalid_kms_key_name" {

@@ -189,7 +189,6 @@ The following resources are created:
 | <a name="output_id"></a> [id](#output\_id) | The ID of the interconnect attachment |
 | <a name="output_interface"></a> [interface](#output\_interface) | The router interface resource |
 | <a name="output_name"></a> [name](#output\_name) | The name of the interconnect attachment |
-| <a name="output_operational_status"></a> [operational\_status](#output\_operational\_status) | Operational status of the interconnect attachment |
 | <a name="output_pairing_key"></a> [pairing\_key](#output\_pairing\_key) | The pairing key for partner interconnect (share with partner provider) |
 | <a name="output_router"></a> [router](#output\_router) | The Cloud Router resource (if created) |
 | <a name="output_router_name"></a> [router\_name](#output\_router\_name) | The name of the Cloud Router |

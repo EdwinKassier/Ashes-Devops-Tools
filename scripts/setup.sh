@@ -35,7 +35,7 @@ install_pip_package() { python3 -m pip install --user "$1==$2"; }
 installed_version() {
   local bin="$1" flag="${2:---version}"
   command -v "$bin" >/dev/null 2>&1 || { echo ""; return; }
-  "$bin" "$flag" 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1
+  "$bin" "$flag" 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true
 }
 
 check_or_install() {
@@ -83,35 +83,76 @@ fi
 
 # TFSec — download specific binary release from GitHub to guarantee exact version.
 # Package managers (brew, apt) may resolve to a different minor version at install time.
+# Picks a checksum-verification command that works on both macOS (no sha256sum by
+# default) and Linux. Prints the command (as a string to eval) to stdout.
+checksum_check_cmd() {
+  local checksum_file="$1" binary="$2"
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    # macOS ships `shasum`, not GNU coreutils' `sha256sum`.
+    echo "grep '${binary}' '${checksum_file}' | shasum -a 256 -c --status"
+  else
+    echo "grep '${binary}' '${checksum_file}' | sha256sum -c --status"
+  fi
+}
+
+# Chooses a writable install prefix without hardcoding /usr/local/bin — respects the
+# Homebrew prefix (e.g. /opt/homebrew on Apple Silicon) and falls back to a
+# user-writable bin directory on PATH.
+choose_install_dir() {
+  if command -v brew >/dev/null 2>&1; then
+    local brew_prefix
+    brew_prefix=$(brew --prefix)
+    if [[ -w "${brew_prefix}/bin" ]]; then
+      echo "${brew_prefix}/bin"
+      return
+    fi
+  fi
+  if [[ -w "/usr/local/bin" ]]; then
+    echo "/usr/local/bin"
+    return
+  fi
+  # Fall back to a per-user bin directory; ensure it exists and is on PATH.
+  local user_bin="${HOME}/.local/bin"
+  mkdir -p "$user_bin"
+  if [[ ":$PATH:" != *":${user_bin}:"* ]]; then
+    echo "WARNING: ${user_bin} is not on PATH. Add 'export PATH=\"${user_bin}:\$PATH\"' to your shell profile." >&2
+  fi
+  echo "$user_bin"
+}
+
 install_tfsec_versioned() {
   local version="$1"
-  local os arch install_dir="/usr/local/bin"
+  local os arch install_dir
   os=$(uname -s | tr '[:upper:]' '[:lower:]')
   arch=$(uname -m)
   [[ "$arch" == "x86_64" ]]  && arch="amd64"
   [[ "$arch" == "aarch64" ]] && arch="arm64"
+  install_dir=$(choose_install_dir)
   local base_url="https://github.com/aquasecurity/tfsec/releases/download/v${version}"
   local binary="tfsec-${os}-${arch}"
   local checksum_file="tfsec_checksums.txt"
 
   echo "Downloading tfsec v${version} from GitHub releases ..."
-  curl -sSL "${base_url}/${binary}"          -o /tmp/tfsec
+  curl -sSL "${base_url}/${binary}"          -o "/tmp/${binary}"
   curl -sSL "${base_url}/${checksum_file}"   -o /tmp/tfsec_checksums.txt
 
   # Verify SHA-256 integrity before installing — guards against compromised releases.
-  # The checksum file contains lines like: "abc123...  tfsec-linux-amd64"
-  if ! (cd /tmp && grep "${binary}" tfsec_checksums.txt | sha256sum --check --status); then
+  # The checksum file contains lines like: "abc123...  tfsec-linux-amd64" — the
+  # downloaded file must keep that exact name (not a generic "tfsec") for the
+  # checksum tool to find it in the working directory.
+  # Use shasum on macOS (no sha256sum by default) and sha256sum on Linux.
+  if ! (cd /tmp && eval "$(checksum_check_cmd "tfsec_checksums.txt" "$binary")"); then
     echo "ERROR: tfsec checksum verification FAILED. Aborting installation." >&2
-    rm -f /tmp/tfsec /tmp/tfsec_checksums.txt
+    rm -f "/tmp/${binary}" /tmp/tfsec_checksums.txt
     exit 1
   fi
   echo "tfsec v${version} checksum verified."
 
-  chmod +x /tmp/tfsec
+  chmod +x "/tmp/${binary}"
   if [[ -w "$install_dir" ]]; then
-    mv /tmp/tfsec "${install_dir}/tfsec"
+    mv "/tmp/${binary}" "${install_dir}/tfsec"
   else
-    sudo mv /tmp/tfsec "${install_dir}/tfsec"
+    sudo mv "/tmp/${binary}" "${install_dir}/tfsec"
   fi
   rm -f /tmp/tfsec_checksums.txt
   echo "tfsec ${version} installed to ${install_dir}/tfsec"

@@ -13,6 +13,7 @@ assignees: ''
 ## Environment
 
 **Affected Root / Surface:**
+
 - [ ] `envs/organization`
 - [ ] `envs/apps`
 - [ ] `examples/workloads`
@@ -33,9 +34,9 @@ assignees: ''
 
 ## Steps to Reproduce
 
-1. 
-2. 
-3. 
+1.
+2.
+3.
 
 ## Expected Behavior
 
@@ -49,7 +50,7 @@ assignees: ''
 
 <!-- Include any error messages or logs -->
 
-```
+```text
 Paste error messages here
 ```
 
@@ -75,12 +76,14 @@ Paste terraform output here
 ## Impact
 
 **Severity:**
+
 - [ ] Critical (platform unavailable)
 - [ ] High (Major functionality broken)
 - [ ] Medium (Workaround available)
 - [ ] Low (Minor issue)
 
 **Impact Scope:**
+
 - [ ] All users affected
 - [ ] Some users affected
 - [ ] No user impact

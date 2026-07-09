@@ -4,8 +4,21 @@
 mock_provider "google" {}
 
 variables {
-  project_id = "mock-project"
-  sink_name  = "flow-logs-sink"
+  project_id  = "mock-project"
+  sink_name   = "flow-logs-sink"
+  destination = "storage.googleapis.com/mock-flow-logs-bucket"
+}
+
+# ── destination ─────────────────────────────────────────────────────────────────
+
+run "rejects_empty_destination" {
+  command = plan
+
+  expect_failures = [var.destination]
+
+  variables {
+    destination = ""
+  }
 }
 
 # ── destination_type ───────────────────────────────────────────────────────────

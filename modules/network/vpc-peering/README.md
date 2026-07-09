@@ -22,8 +22,7 @@ module "peering_hub_spoke" {
 
   # Create the reverse connection automatically
   create_reverse_peering = true
-  peer_project_id        = "spoke-project"
-  
+
   export_custom_routes = true
   import_custom_routes = true
 }
@@ -38,7 +37,6 @@ module "peering_hub_spoke" {
 | `network` | Local network self-link | `string` | n/a | yes |
 | `peer_network` | Peer network self-link | `string` | n/a | yes |
 | `create_reverse_peering` | specific create the reverse connection | `bool` | `true` | no |
-| `peer_project_id` | Project ID of the peer network | `string` | `null` | no |
 | `export_custom_routes` | Export local custom routes | `bool` | `false` | no |
 | `import_custom_routes` | Import peer custom routes | `bool` | `false` | no |
 | `stack_type` | IP stack type (`IPV4_ONLY`) | `string` | `"IPV4_ONLY"` | no |
@@ -68,7 +66,6 @@ module "example" {
 	network = 
 	peer_network = 
 	peering_name = 
-	project_id = 
 	
 }
 ```
@@ -93,8 +90,8 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_compute_network_peering.peering (modules/network/vpc-peering/main.tf#L12)
-- resource.google_compute_network_peering.reverse_peering (modules/network/vpc-peering/main.tf#L25)
+- resource.google_compute_network_peering.peering (modules/network/vpc-peering/main.tf#L8)
+- resource.google_compute_network_peering.reverse_peering (modules/network/vpc-peering/main.tf#L21)
 
 
 ## Inputs
@@ -104,13 +101,11 @@ The following resources are created:
 | <a name="input_network"></a> [network](#input\_network) | The self-link of the local VPC network | `string` | n/a | yes |
 | <a name="input_peer_network"></a> [peer\_network](#input\_peer\_network) | The self-link of the peer VPC network | `string` | n/a | yes |
 | <a name="input_peering_name"></a> [peering\_name](#input\_peering\_name) | Name of the VPC peering connection | `string` | n/a | yes |
-| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID where the peering will be created | `string` | n/a | yes |
 | <a name="input_create_reverse_peering"></a> [create\_reverse\_peering](#input\_create\_reverse\_peering) | Create the reverse peering connection (for bi-directional peering) | `bool` | `true` | no |
 | <a name="input_export_custom_routes"></a> [export\_custom\_routes](#input\_export\_custom\_routes) | Export custom routes to the peer network | `bool` | `false` | no |
 | <a name="input_export_subnet_routes_with_public_ip"></a> [export\_subnet\_routes\_with\_public\_ip](#input\_export\_subnet\_routes\_with\_public\_ip) | Export subnet routes with public IP range to the peer network | `bool` | `true` | no |
 | <a name="input_import_custom_routes"></a> [import\_custom\_routes](#input\_import\_custom\_routes) | Import custom routes from the peer network | `bool` | `false` | no |
 | <a name="input_import_subnet_routes_with_public_ip"></a> [import\_subnet\_routes\_with\_public\_ip](#input\_import\_subnet\_routes\_with\_public\_ip) | Import subnet routes with public IP range from the peer network | `bool` | `false` | no |
-| <a name="input_peer_project_id"></a> [peer\_project\_id](#input\_peer\_project\_id) | The project ID of the peer network (if different from project\_id) | `string` | `null` | no |
 | <a name="input_stack_type"></a> [stack\_type](#input\_stack\_type) | The stack type for the peering (IPV4\_ONLY or IPV4\_IPV6) | `string` | `"IPV4_ONLY"` | no |
 
 ## Outputs
@@ -118,7 +113,6 @@ The following resources are created:
 | Name | Description |
 |------|-------------|
 | <a name="output_id"></a> [id](#output\_id) | The ID of the peering connection |
-| <a name="output_peer_project_id"></a> [peer\_project\_id](#output\_peer\_project\_id) | The project ID of the peer network (defaults to var.project\_id when peer\_project\_id is not set) |
 | <a name="output_peering"></a> [peering](#output\_peering) | The primary peering connection resource |
 | <a name="output_peering_name"></a> [peering\_name](#output\_peering\_name) | The name of the primary peering connection |
 | <a name="output_peering_state"></a> [peering\_state](#output\_peering\_state) | State of the primary peering (ACTIVE, INACTIVE) |

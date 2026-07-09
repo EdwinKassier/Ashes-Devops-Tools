@@ -40,6 +40,29 @@ run "rejects_invalid_level" {
   }
 }
 
+run "rejects_project_level_without_project_id" {
+  command = plan
+
+  expect_failures = [var.project_id]
+
+  variables {
+    level      = "project"
+    project_id = null
+  }
+}
+
+run "rejects_organization_level_without_org_id" {
+  command = plan
+
+  expect_failures = [var.org_id]
+
+  variables {
+    level      = "organization"
+    project_id = null
+    org_id     = null
+  }
+}
+
 # ── role_id ────────────────────────────────────────────────────────────────────
 
 run "accepts_valid_role_id" {

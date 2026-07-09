@@ -12,8 +12,9 @@ All of the following CI jobs must pass:
 
 | Workflow | Jobs required |
 |----------|--------------|
-| `terraform-plan.yml` | `fmt`, `docs-check`, `validate`, `lint`, `security` |
-| `security-scan.yml` | `tfsec-modules`, `tfsec-envs`, `checkov`, `trivy`, `gitleaks` |
+| `terraform-plan.yml` | `fmt`, `docs`, `validate`, `lint`, `meta-lint`, `security`, `test` |
+
+`security-scan.yml` (`static-analysis`, `trivy`, `secret-scan`, `summary`) runs on **push to `main`/`develop` and weekly on schedule** — it never runs on `pull_request`, so its jobs **cannot** be configured as required status checks; doing so would make `main` permanently unmergeable. Treat it as a non-blocking, post-merge/scheduled signal instead (monitor its `summary` job for regressions).
 
 Set via **Settings → Branches → main → Require status checks to pass before merging**.
 
@@ -35,7 +36,7 @@ Set via **Settings → Branches → main → Require status checks to pass befor
 ```bash
 gh api repos/OWNER/REPO/branches/main/protection \
   --method PUT \
-  --field required_status_checks='{"strict":true,"contexts":["fmt","docs-check","validate","lint","security","tfsec-modules","tfsec-envs","checkov","trivy","gitleaks"]}' \
+  --field required_status_checks='{"strict":true,"contexts":["fmt","docs","validate","lint","meta-lint","security","test"]}' \
   --field enforce_admins=true \
   --field required_pull_request_reviews='{"required_approving_review_count":1,"dismiss_stale_reviews":true,"require_code_owner_reviews":true}' \
   --field restrictions=null \
@@ -70,7 +71,7 @@ gh api repos/OWNER/REPO/rulesets \
 Ensure Dependabot auto-approves and merges **security** PRs only:
 
 1. **Settings → Code security and analysis → Dependabot security updates**: Enable
-2. **Settings → Code security and analysis → Dependabot version updates**: Review `.github/dependabot.yml` (covers all Terraform roots and GitHub Actions)
+2. **Settings → Code security and analysis → Dependabot version updates**: Review `.github/dependabot.yml` (scoped to GitHub Actions only — Terraform provider bumps require manual compatibility work, see `docs/guides/provider-upgrades.md`)
 3. Create a branch protection rule that allows Dependabot to bypass review requirements for patch-level security updates
 
 ---

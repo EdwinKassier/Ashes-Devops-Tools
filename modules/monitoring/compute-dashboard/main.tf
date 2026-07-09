@@ -13,7 +13,7 @@ locals {
     {
       xPos   = 0
       yPos   = 0
-      width  = 12
+      width  = 24
       height = 8
       widget = {
         title = "SLO: P99 Latency"
@@ -41,9 +41,9 @@ locals {
       }
     },
     {
-      xPos   = 12
+      xPos   = 24
       yPos   = 0
-      width  = 12
+      width  = 24
       height = 8
       widget = {
         title = "SLO: Error Rate"

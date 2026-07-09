@@ -42,6 +42,14 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
       - name: Run Trivy scanner
+        # Scope decision: Trivy intentionally scans the whole repo, including
+        # `examples/` and `modules/*/examples/*`. tfsec excludes examples via
+        # `--exclude-path examples` (see Makefile) because example roots are
+        # deliberately minimal/illustrative and would otherwise generate noisy
+        # tfsec findings; Checkov has no example skip-path and already scans
+        # them. Examples are real Terraform that gets `terraform init`/`validate`/
+        # tested in CI, so holding them to Trivy's CRITICAL/HIGH bar is intentional
+        # defense-in-depth rather than an oversight.
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
         with:
           scan-type: 'config'
@@ -90,10 +98,14 @@ jobs:
           echo "| Trivy | ${{ needs.trivy.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Secret Scan | ${{ needs.secret-scan.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "View detailed results in the [Security tab](https://github.com/${{ github.repository }}/security/code-scanning)" >> $GITHUB_STEP_SUMMARY
+          SECURITY_TAB="https://github.com/${{ github.repository }}/security/code-scanning"
+          echo "View detailed results in the [Security tab](${SECURITY_TAB})" >> $GITHUB_STEP_SUMMARY
 
       - name: Check for failures
-        if: needs.static-analysis.result == 'failure' || needs.trivy.result == 'failure' || needs.secret-scan.result == 'failure'
+        if: >-
+          needs.static-analysis.result == 'failure' ||
+          needs.trivy.result == 'failure' ||
+          needs.secret-scan.result == 'failure'
         run: |
           failed=""
           [ "${{ needs.static-analysis.result }}" = "failure" ] && failed="${failed} TFSec+Checkov"

@@ -21,7 +21,11 @@ variable "sink_name" {
 variable "destination" {
   description = "The destination for the log sink. Format: bigquery.googleapis.com/projects/[PROJECT]/datasets/[DATASET], storage.googleapis.com/[BUCKET], or pubsub.googleapis.com/projects/[PROJECT]/topics/[TOPIC]"
   type        = string
-  default     = ""
+
+  validation {
+    condition     = var.destination != ""
+    error_message = "destination must be a non-empty log sink destination (e.g. storage.googleapis.com/[BUCKET])."
+  }
 }
 
 # -----------------------------------------------------------------------------

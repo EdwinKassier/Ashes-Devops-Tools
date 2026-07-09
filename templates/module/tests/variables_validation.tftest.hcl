@@ -20,26 +20,28 @@ variables {
   # Add other required variables here
 }
 
-# ── Example: var.name ─────────────────────────────────────────────────────────
+# ── Example: var.project_id ───────────────────────────────────────────────────
 # Replace this section with tests for each validation block in variables.tf.
+# project_id is the template's only declared variable, so it is used here as
+# the worked example — swap in your module's real variable names.
 
-run "valid_name_accepted" {
+run "valid_project_id_accepted" {
   # Accept case: confirm that a valid input passes without error.
   command = plan
 
   variables {
-    name = "my-resource" # REPLACE: use a valid value for your variable
+    project_id = "my-project-id" # REPLACE: use a valid value for your variable
   }
 }
 
-run "invalid_name_rejected" {
+run "invalid_project_id_rejected" {
   # Reject case: confirm that an invalid input triggers the validation error.
   command = plan
 
-  expect_failures = [var.name] # REPLACE: reference the actual variable
+  expect_failures = [var.project_id] # REPLACE: reference the actual variable
 
   variables {
-    name = "INVALID NAME!" # REPLACE: use a value that violates the constraint
+    project_id = "INVALID PROJECT!" # REPLACE: use a value that violates the constraint
   }
 }
 

@@ -57,6 +57,7 @@ make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars
 - [KMS Rotation](runbooks/kms-rotation.md): rotate CMEK keys automatically or manually
 - [CIDR Expansion](runbooks/cidr-expansion.md): expand subnet ranges without downtime
 - [Break Glass](runbooks/break-glass.md): emergency access when Workload Identity Federation fails
+- [Provider Upgrades](guides/provider-upgrades.md): google/google-beta major-version compatibility posture and re-test procedure
 
 ## SaaS Modules
 

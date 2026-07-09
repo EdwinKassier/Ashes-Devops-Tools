@@ -32,6 +32,26 @@ run "accepts_default_target" {
   # Default is "all-apis" — verifies default is valid
 }
 
+run "creates_endpoint_with_resolved_target" {
+  # The PSC endpoint (address + forwarding rule) is always created and the
+  # forwarding rule target resolves from the google_targets map.
+  command = plan
+
+  variables {
+    target = "all-apis"
+  }
+
+  assert {
+    condition     = google_compute_global_forwarding_rule.psc_forwarding_rule.target == "all-apis"
+    error_message = "forwarding rule target must resolve from the google_targets map"
+  }
+
+  assert {
+    condition     = google_compute_global_address.psc_address.purpose == "PRIVATE_SERVICE_CONNECT"
+    error_message = "the PSC IP address must be reserved unconditionally"
+  }
+}
+
 run "rejects_invalid_target" {
   command = plan
 

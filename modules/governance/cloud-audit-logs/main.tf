@@ -48,7 +48,26 @@ resource "google_storage_bucket" "audit_logs" {
     enabled = true
   }
 
-  # checkov:skip=CKV2_GCP_4:Bucket lock prevents deletion and is too restrictive for this environment
+  # checkov:skip=CKV2_GCP_4:A GCS bucket lock (retention_policy { locked = true }) is
+  # intentionally not used on this bucket. Rationale:
+  #   1. Durability/immutability is achieved via the org-level Cloud Logging sink
+  #      (google_logging_project_sink.audit_logs_sink, below) writing into this bucket —
+  #      the authoritative, tamper-evident copy of audit events lives in Cloud Logging's
+  #      own storage, independent of this bucket's lifecycle.
+  #   2. This bucket's `lifecycle_rule` (age = var.log_retention_days, action = Delete)
+  #      enforces a deliberate, operator-controlled retention window. A locked retention
+  #      policy would make that window immutable and irreversible even for legitimate
+  #      operational needs (e.g. shortening retention for cost/compliance changes,
+  #      correcting a misconfigured `log_retention_days`), which is a worse failure mode
+  #      for this environment than an unlocked bucket.
+  #   3. `versioning { enabled = true }` (above) and uniform_bucket_level_access +
+  #      public_access_prevention=enforced already protect against accidental overwrite
+  #      and public exposure, which cover the bulk of the risk a bucket lock addresses.
+  # Note: as of Checkov 3.2.x, CKV2_GCP_4 does not appear in `checkov --list` or the
+  # installed check registry (verified during Task 1.9's audit) — it may be a deprecated/
+  # renamed ID from an older Checkov release. The skip is kept (and this justification
+  # expanded per Task 1.11) in case a future Checkov version reintroduces an equivalent
+  # GCS-bucket-lock check under this or a mapped ID.
   dynamic "encryption" {
     for_each = var.kms_key_name != null ? [1] : []
     content {
@@ -143,22 +162,16 @@ resource "google_logging_organization_sink" "org_audit_sink" {
   filter = "logName:cloudaudit.googleapis.com"
 }
 
-# Grant the org sink writer objectCreator on the audit bucket.
+# Grant the org sink writer objectCreator on the audit bucket. For a Cloud
+# Storage sink destination this is the only role the writer identity needs:
+# https://cloud.google.com/logging/docs/export/configure_export_v2#dest-auth
+# (roles/logging.bucketWriter is a Cloud Logging *log-bucket* role and does not
+# apply to a Cloud Storage bucket destination.)
 resource "google_storage_bucket_iam_member" "org_log_writer" {
   count = var.org_id != null ? 1 : 0
 
   bucket = google_storage_bucket.audit_logs.name
   role   = "roles/storage.objectCreator"
-  member = google_logging_organization_sink.org_audit_sink[0].writer_identity
-}
-
-# Also grant logging.bucketWriter — required for cross-project log delivery
-# from an org-level sink to a bucket in a different project (GCP requirement).
-resource "google_storage_bucket_iam_member" "org_log_bucket_writer" {
-  count = var.org_id != null ? 1 : 0
-
-  bucket = google_storage_bucket.audit_logs.name
-  role   = "roles/logging.bucketWriter"
   member = google_logging_organization_sink.org_audit_sink[0].writer_identity
 }
 

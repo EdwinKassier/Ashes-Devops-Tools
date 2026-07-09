@@ -36,12 +36,12 @@ gcloud compute networks subnets describe SUBNET_NAME \
 
 ### Step 2 — Update the secondary range in Terraform
 
-In `envs/apps/main.tf`, update the `secondary_ranges` argument on `module "host"`. The key is the subnet name (matching the host module's internal subnet names); the value is the list of secondary ranges:
+In `envs/apps/main.tf`, update the `secondary_ranges` argument on `module "host"`. The key is the **zone name** (matching the availability zone the private subnet is created in — not the subnet's tier name like `"private"`); the value is the list of secondary ranges for that zone's private subnet:
 
 ```hcl
 # In envs/apps/main.tf — module "host" block
 secondary_ranges = {
-  "private" = [
+  "europe-west1-a" = [
     {
       range_name    = "gke-pods"
       ip_cidr_range = "10.200.0.0/14"   # expanded from /16
@@ -54,7 +54,7 @@ secondary_ranges = {
 }
 ```
 
-> **Variable name:** The host module uses `secondary_ranges` (a `map(list(object))` keyed by subnet name), not `secondary_ip_ranges`. Passing an unrecognised argument causes a validation error.
+> **Variable name and key:** The host module uses `secondary_ranges` (a `map(list(object))` keyed by **zone name**), not `secondary_ip_ranges`, and not the subnet tier name. Private subnets are created per-zone (`for_each` over the region's zones), and the module looks up `secondary_ranges[each.key]` where `each.key` is the zone — so a key like `"private"` silently matches no zone and the secondary range is never created, with no error. Passing an unrecognised *argument* name (e.g. `secondary_ip_ranges`) causes a validation error, but passing a wrong *key* inside a valid `secondary_ranges` map does not — verify with `gcloud compute networks subnets describe` after applying.
 
 ### Step 3 — Plan and verify no primary CIDR change
 
@@ -67,7 +67,7 @@ The plan must show `~ update in-place` for the subnet, not `- destroy` + `+ crea
 ### Step 4 — Apply
 
 ```bash
-terraform -chdir=envs/apps apply -target=module.host.module.private_subnets -var-file=examples/dev.tfvars
+terraform -chdir=envs/apps apply -target=module.host.module.private_subnets -var-file=../../examples/dev.tfvars
 ```
 
 ---
@@ -121,7 +121,7 @@ environments = {
 }
 ```
 
-2. Apply the organization root first so the new CIDR is committed to remote state:
+1. Apply the organization root first so the new CIDR is committed to remote state:
 
 ```bash
 make plan-organization
@@ -129,7 +129,7 @@ make plan-organization
 terraform -chdir=envs/organization apply
 ```
 
-3. The apps root will pick up the new CIDR on its next plan via `terraform_remote_state`.
+1. The apps root will pick up the new CIDR on its next plan via `terraform_remote_state`.
 
 > **IPAM:** Coordinate with your network team to allocate a non-overlapping block before applying. There is no CIDR hash fallback — the value you set is exactly what gets deployed.
 
@@ -144,7 +144,7 @@ Confirm the plan destroys only the subnet resources, not the project or VPC.
 ### Step 6 — Apply
 
 ```bash
-terraform -chdir=envs/apps apply -var-file=examples/dev.tfvars
+terraform -chdir=envs/apps apply -var-file=../../examples/dev.tfvars
 ```
 
 ### Step 7 — Restore workloads
@@ -170,5 +170,5 @@ enable_deletion_protection = true
 ```
 
 ```bash
-terraform -chdir=envs/apps apply -target=module.host.terraform_data.deletion_protection_guard -var-file=examples/dev.tfvars
+terraform -chdir=envs/apps apply -target=module.host.terraform_data.deletion_protection_guard -var-file=../../examples/dev.tfvars
 ```

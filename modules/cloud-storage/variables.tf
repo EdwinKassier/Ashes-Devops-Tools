@@ -4,9 +4,14 @@ variable "project_id" {
 }
 
 variable "region" {
-  description = "The GCP region for all storage buckets in this module. Required — no default to avoid silent cross-region deployments."
+  description = "The GCP region/location for all buckets."
   type        = string
-  default     = null
+  # no default — region is required
+
+  validation {
+    condition     = var.region != null && var.region != ""
+    error_message = "region is required (a non-empty GCP location) for all buckets."
+  }
 }
 
 variable "kms_key_name" {

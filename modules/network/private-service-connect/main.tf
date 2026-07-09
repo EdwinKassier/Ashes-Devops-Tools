@@ -15,14 +15,22 @@ locals {
     "all-apis" = "all-apis"
     "vpc-sc"   = "vpc-sc"
   }
+}
 
-  is_google_api = contains(keys(local.google_targets), var.target)
+# The PSC endpoint is always created (target is validated to a Google-API value),
+# so these resources dropped their always-true count guard.
+moved {
+  from = google_compute_global_address.psc_address[0]
+  to   = google_compute_global_address.psc_address
+}
+
+moved {
+  from = google_compute_global_forwarding_rule.psc_forwarding_rule[0]
+  to   = google_compute_global_forwarding_rule.psc_forwarding_rule
 }
 
 # Reserve a global internal IP address for the PSC endpoint
 resource "google_compute_global_address" "psc_address" {
-  count = local.is_google_api ? 1 : 0
-
   project      = var.project_id
   name         = local.address_name
   description  = var.description
@@ -35,14 +43,12 @@ resource "google_compute_global_address" "psc_address" {
 
 # Global forwarding rule for Google APIs
 resource "google_compute_global_forwarding_rule" "psc_forwarding_rule" {
-  count = local.is_google_api ? 1 : 0
-
   project               = var.project_id
   name                  = var.name
   description           = var.description
   target                = local.google_targets[var.target]
   network               = var.network
-  ip_address            = google_compute_global_address.psc_address[0].id
+  ip_address            = google_compute_global_address.psc_address.id
   load_balancing_scheme = ""
 
   labels = var.labels
@@ -50,7 +56,7 @@ resource "google_compute_global_forwarding_rule" "psc_forwarding_rule" {
 
 # Private DNS zone to route Google API traffic through PSC
 resource "google_dns_managed_zone" "psc_dns" {
-  count = local.is_google_api && var.create_dns_zone ? 1 : 0
+  count = var.create_dns_zone ? 1 : 0
 
   project     = var.project_id
   name        = var.dns_zone_name
@@ -68,24 +74,24 @@ resource "google_dns_managed_zone" "psc_dns" {
 
 # DNS record to route *.googleapis.com to the PSC endpoint
 resource "google_dns_record_set" "psc_googleapis" {
-  count = local.is_google_api && var.create_dns_zone ? 1 : 0
+  count = var.create_dns_zone ? 1 : 0
 
   project      = var.project_id
   managed_zone = google_dns_managed_zone.psc_dns[0].name
   name         = "*.googleapis.com."
   type         = "A"
   ttl          = 300
-  rrdatas      = [google_compute_global_address.psc_address[0].address]
+  rrdatas      = [google_compute_global_address.psc_address.address]
 }
 
 # DNS record for the base googleapis.com domain
 resource "google_dns_record_set" "psc_googleapis_base" {
-  count = local.is_google_api && var.create_dns_zone ? 1 : 0
+  count = var.create_dns_zone ? 1 : 0
 
   project      = var.project_id
   managed_zone = google_dns_managed_zone.psc_dns[0].name
   name         = "googleapis.com."
   type         = "A"
   ttl          = 300
-  rrdatas      = [google_compute_global_address.psc_address[0].address]
+  rrdatas      = [google_compute_global_address.psc_address.address]
 }

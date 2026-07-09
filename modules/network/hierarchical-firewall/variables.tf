@@ -38,7 +38,7 @@ variable "rules" {
     direction      = string # "INGRESS" or "EGRESS"
     description    = optional(string)
     disabled       = optional(bool, false)
-    enable_logging = optional(bool, false)
+    enable_logging = optional(bool) # null when unset → falls back to var.enable_logging
 
     layer4_configs = list(object({
       ip_protocol = string

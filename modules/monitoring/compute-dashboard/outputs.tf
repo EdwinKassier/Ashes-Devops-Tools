@@ -9,5 +9,7 @@ output "dashboard_id" {
 
 output "dashboard_console_url" {
   description = "Direct URL to access the dashboard in the GCP Console"
-  value       = "https://console.cloud.google.com/monitoring/dashboards/builder/${google_monitoring_dashboard.compute_dashboard.id}?project=${var.project_id}"
+  # The `id` attribute is the full resource name (projects/N/dashboards/X); the
+  # console builder URL expects only the bare dashboard id, so strip the prefix.
+  value = "https://console.cloud.google.com/monitoring/dashboards/builder/${element(split("/", google_monitoring_dashboard.compute_dashboard.id), length(split("/", google_monitoring_dashboard.compute_dashboard.id)) - 1)}?project=${var.project_id}"
 }

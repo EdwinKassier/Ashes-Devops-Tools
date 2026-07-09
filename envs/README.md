@@ -7,15 +7,15 @@ This directory (`envs/`) contains the supported Terraform roots for the platform
 We utilize a **Hub-and-Spoke** network topology with centralized governance.
 
 ### Roots
-*   **`organization`**: The control-plane root. Creates the admin project, org policy, shared services projects, folders, and per-environment host projects.
-*   **`apps`**: The single application-environment root. Select the environment with `TF_WORKSPACE=apps-<env>` and the matching tfvars file under `envs/apps/examples/`.
+* **`organization`**: The control-plane root. Creates the admin project, org policy, shared services projects, folders, and per-environment host projects.
+* **`apps`**: The single application-environment root. Select the environment with `TF_WORKSPACE=apps-<env>` and the matching tfvars file under `examples/` (e.g. `examples/dev.tfvars`).
 
 ### Infrastructure Pattern
 Each application environment uses the shared `modules/host` foundation to stamp out:
-1.  **VPC Network**: Custom mode with explicit environment CIDR blocks from the organization state.
-2.  **Subnets**: 3-Tier architecture (Public, Private, Database).
-3.  **Security**: Firewall rules, Cloud Armor, DNS logging, and VPC Service Controls.
-4.  **Shared VPC**: Configured as a host project for service-project attachment.
+1. **VPC Network**: Custom mode with explicit environment CIDR blocks from the organization state.
+2. **Subnets**: 3-Tier architecture (Public, Private, Database).
+3. **Security**: Firewall rules, Cloud Armor, DNS logging, and VPC Service Controls.
+4. **Shared VPC**: Configured as a host project for service-project attachment.
 
 ### Workload Provisioning
 Do not deploy application services directly into the host project. Instead, use `modules/stages/workload` from a dedicated workload root and attach the resulting service project to the host VPC.

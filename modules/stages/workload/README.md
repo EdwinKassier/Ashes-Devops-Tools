@@ -24,7 +24,7 @@ Implements the **Project Factory** pattern for self-service provisioning of appl
 
 ## How It Works
 
-```
+```text
 examples/workloads/service-project.tf
     │
     └── module "workload_api_service" (this module)

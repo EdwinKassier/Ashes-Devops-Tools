@@ -121,7 +121,7 @@ variable "max_ports_per_vm" {
   default     = null
 
   validation {
-    condition = var.max_ports_per_vm == null || (
+    condition = var.max_ports_per_vm == null ? true : (
       var.max_ports_per_vm >= 64 &&
       var.max_ports_per_vm <= 32768 &&
       var.max_ports_per_vm >= var.min_ports_per_vm

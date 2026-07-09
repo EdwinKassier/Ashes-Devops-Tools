@@ -25,8 +25,8 @@ output "id" {
 }
 
 output "self_link" {
-  description = "The URI of the API Gateway"
-  value       = google_api_gateway_gateway.gateway.id
+  description = "The HTTPS URI at which the API Gateway is reachable"
+  value       = "https://${google_api_gateway_gateway.gateway.default_hostname}"
 }
 
 output "gateway_default_hostname" {

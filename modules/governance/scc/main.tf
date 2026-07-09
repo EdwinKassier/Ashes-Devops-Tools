@@ -23,10 +23,11 @@ resource "google_scc_notification_config" "notification_config" {
 
 # Grant SCC service account permissions to publish to the topic (legacy)
 resource "google_pubsub_topic_iam_member" "scc_publisher" {
-  count  = length(var.notification_configs) == 0 ? 1 : 0
-  topic  = google_pubsub_topic.scc_notifications[0].name
-  role   = "roles/pubsub.publisher"
-  member = "serviceAccount:${google_scc_notification_config.notification_config[0].service_account}"
+  count   = length(var.notification_configs) == 0 ? 1 : 0
+  topic   = google_pubsub_topic.scc_notifications[0].name
+  project = var.project_id
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_scc_notification_config.notification_config[0].service_account}"
 }
 
 # =============================================================================

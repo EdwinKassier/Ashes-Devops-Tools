@@ -6,6 +6,9 @@ mock_provider "google" {}
 variables {
   project_id = "mock-project"
   lb_name    = "test-lb"
+  # domains is required (>= 1) — the module always creates an HTTPS proxy backed
+  # by a managed SSL certificate. Provide one so unrelated validation runs plan.
+  domains = ["example.com"]
 }
 
 # ── cdn_policy.cache_mode ──────────────────────────────────────────────────────

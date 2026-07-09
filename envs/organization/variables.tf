@@ -234,7 +234,7 @@ variable "terraform_admin_email" {
     The organization providers impersonate this SA for all API calls, ensuring that
     even local runs operate with the SA's permissions rather than the caller's personal
     credentials.
-    Format: terraform@<admin-project-id>.iam.gserviceaccount.com
+    Format: terraform-admin@<admin-project-id>.iam.gserviceaccount.com
     Set to null only during the very first bootstrap apply when the SA does not exist yet.
   EOT
   type        = string

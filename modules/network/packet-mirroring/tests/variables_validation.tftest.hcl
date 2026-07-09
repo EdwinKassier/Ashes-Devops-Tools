@@ -9,6 +9,32 @@ variables {
   region            = "us-central1"
   network           = "projects/mock-project/global/networks/mock-vpc"
   collector_ilb_url = "projects/mock-project/regions/us-central1/forwardingRules/mock-ilb"
+  mirrored_subnetworks = [
+    "projects/mock-project/regions/us-central1/subnetworks/mock-subnet",
+  ]
+}
+
+# ── mirrored sources (at least one required) ────────────────────────────────────
+
+run "accepts_mirrored_tags_only" {
+  command = plan
+
+  variables {
+    mirrored_subnetworks = []
+    mirrored_tags        = ["web"]
+  }
+}
+
+run "rejects_no_mirrored_sources" {
+  command = plan
+
+  expect_failures = [var.mirrored_tags]
+
+  variables {
+    mirrored_instances   = []
+    mirrored_subnetworks = []
+    mirrored_tags        = []
+  }
 }
 
 # ── name ───────────────────────────────────────────────────────────────────────

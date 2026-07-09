@@ -15,9 +15,14 @@ variable "lb_name" {
 }
 
 variable "domains" {
-  description = "List of domains for the managed SSL certificate. If empty, no SSL cert is created."
+  description = "List of domains for the managed SSL certificate. At least one is required (the module always creates an HTTPS proxy backed by a managed SSL certificate)."
   type        = list(string)
   default     = []
+
+  validation {
+    condition     = length(var.domains) > 0
+    error_message = "At least one domain is required (a managed SSL certificate and HTTPS proxy are always created)."
+  }
 }
 
 variable "backend_groups" {

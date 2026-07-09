@@ -12,7 +12,7 @@ resource "google_compute_router" "router" {
   count = var.create_router ? 1 : 0
 
   project = var.project_id
-  name    = var.router_name
+  name    = var.router_name != "" ? var.router_name : "${var.name}-router"
   network = var.network
   region  = var.region
 

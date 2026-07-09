@@ -1,6 +1,22 @@
 ---
 # Minimum severity level to fail the commit (possible values: LOW, MEDIUM, HIGH, CRITICAL)
-minimum_severity: HIGH
+#
+# Threshold rationale (Task 1.4, 2026-07-08): originally HIGH, with `severity_overrides`
+# below promoting several checks *upward*. One override, `google-storage-enable-versioning:
+# MEDIUM`, was dead twice over: (a) MEDIUM < HIGH so it could never fail the build even if it
+# fired, and (b) `google-storage-enable-versioning` is not a real tfsec 1.28.6 check ID —
+# tfsec's GCP storage ruleset has no bucket-versioning rule (verified empirically: a bucket
+# resource with no `versioning` block at all produces zero versioning-related findings at
+# any severity; tfsec silently ignores unknown IDs in `severity_overrides` the same way it
+# would an unknown `--exclude` ID, so the entry was pure noise, not a control).
+#
+# Lowered the threshold to MEDIUM instead of just deleting the dead override: a full repo
+# scan with this config (`tfsec . --config-file .tfsec.yml --exclude-path examples`)
+# currently reports zero findings at MEDIUM or above, so there is no pre-existing MEDIUM
+# noise to suppress — lowering the floor costs nothing today and raises the bar for new
+# findings introduced later, which better matches a due-diligence-clean posture than
+# leaving MEDIUM findings able to pass silently.
+minimum_severity: MEDIUM
 
 # Exclude specific directories from scanning
 exclude:
@@ -12,7 +28,6 @@ severity_overrides:
   google-compute-enable-os-login: HIGH
   google-compute-no-project-wide-ssh-keys: CRITICAL
   google-compute-enable-shielded-vm: HIGH
-  google-storage-enable-versioning: MEDIUM
   google-sql-backup-configuration: CRITICAL
   google-storage-bucket-encryption: HIGH
 
@@ -20,10 +35,10 @@ severity_overrides:
 exclude_checks:
   - AWS*  # Exclude all AWS checks
   - AZU*  # Exclude all Azure checks
-  
+
 # Focus on GCP checks
 check_type:
   - google
 
 # Timeout settings (in seconds)
-timeout: 300 
+timeout: 300

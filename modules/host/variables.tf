@@ -26,7 +26,7 @@ variable "vpc_cidr_block" {
     error_message = "vpc_cidr_block must be a valid CIDR notation (e.g. \"10.0.0.0/16\")."
   }
   validation {
-    condition     = !can(cidrnetmask(var.vpc_cidr_block)) || cidrhost(var.vpc_cidr_block, 0) == split("/", var.vpc_cidr_block)[0]
+    condition     = can(cidrnetmask(var.vpc_cidr_block)) ? cidrhost(var.vpc_cidr_block, 0) == split("/", var.vpc_cidr_block)[0] : true
     error_message = "vpc_cidr_block must not have host bits set (e.g. use \"10.0.0.0/16\", not \"10.0.1.0/16\")."
   }
 }
@@ -47,7 +47,7 @@ variable "region" {
   default     = "us-central1"
 
   validation {
-    condition     = can(regex("^[a-z]+-[a-z]+[0-9]$", var.region))
+    condition     = can(regex("^[a-z]+-[a-z]+[0-9]+$", var.region))
     error_message = "region must be a valid GCP region name (e.g., 'us-central1', 'europe-west1')."
   }
 }
@@ -728,6 +728,13 @@ variable "hierarchical_firewall_policies" {
 variable "vpc_service_controls" {
   description = "Map of VPC Service Controls perimeters to create"
   type = map(object({
+    # organization_id must be the FULL resource form 'organizations/<numeric-id>'
+    # (Access Context Manager's access-policy parent requires this form). NOTE:
+    # this diverges from every other org-id input in the repo (governance/tags,
+    # governance/cloud-audit-logs, stages/organization var.org_id) which take the
+    # BARE numeric id. envs/apps prefixes the bare org_id output here accordingly.
+    # See docs: the vpc-sc module is the sole outlier; a future normalization
+    # would have vpc-sc accept the bare id and prefix internally.
     organization_id      = string
     access_policy_name   = optional(string)
     create_access_policy = optional(bool, false)

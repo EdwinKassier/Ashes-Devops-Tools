@@ -59,12 +59,13 @@ The following resources are created:
 - resource.terraform_data.uat_vars_version (modules/vercel/project/main.tf#L125)
 - resource.vercel_custom_environment.uat (modules/vercel/project/main.tf#L107)
 - resource.vercel_project.this (modules/vercel/project/main.tf#L88)
-- resource.vercel_project_domain.prod (modules/vercel/project/main.tf#L235)
-- resource.vercel_project_domain.qa (modules/vercel/project/main.tf#L213)
-- resource.vercel_project_domain.uat (modules/vercel/project/main.tf#L226)
+- resource.vercel_project_domain.prod (modules/vercel/project/main.tf#L257)
+- resource.vercel_project_domain.qa (modules/vercel/project/main.tf#L235)
+- resource.vercel_project_domain.uat (modules/vercel/project/main.tf#L248)
 - resource.vercel_project_environment_variable.prod (modules/vercel/project/main.tf#L178)
 - resource.vercel_project_environment_variable.qa (modules/vercel/project/main.tf#L139)
-- resource.vercel_project_environment_variable.shared (modules/vercel/project/main.tf#L195)
+- resource.vercel_project_environment_variable.shared (modules/vercel/project/main.tf#L202)
+- resource.vercel_project_environment_variable.shared_uat (modules/vercel/project/main.tf#L217)
 - resource.vercel_project_environment_variable.uat (modules/vercel/project/main.tf#L160)
 
 

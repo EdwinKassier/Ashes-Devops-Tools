@@ -4,10 +4,6 @@
  * VPC Peering Module - Main Configuration
  */
 
-locals {
-  peer_project = coalesce(var.peer_project_id, var.project_id)
-}
-
 # Primary peering connection (local -> peer)
 resource "google_compute_network_peering" "peering" {
   name         = var.peering_name

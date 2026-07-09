@@ -39,7 +39,7 @@ resource "google_firebase_apple_app" "default" {
   bundle_id    = var.apple_bundle_id
   app_store_id = var.apple_app_store_id
   team_id      = var.apple_team_id
-  api_key_id   = var.apple_bundle_id != "" ? google_apikeys_key.apple[0].uid : ""
+  api_key_id   = google_apikeys_key.apple[0].uid
 
   depends_on = [google_firebase_project.default]
 }
@@ -88,7 +88,7 @@ resource "google_firebase_web_app" "default" {
 data "google_firebase_web_app_config" "default" {
   count      = var.web_display_name != "" ? 1 : 0
   provider   = google-beta
-  web_app_id = var.web_display_name != "" ? google_firebase_web_app.default[0].app_id : ""
+  web_app_id = google_firebase_web_app.default[0].app_id
 }
 
 resource "google_storage_bucket" "firebase_web_config_access_logs" {

@@ -35,21 +35,9 @@ output "enabled_apis" {
   value       = [for api in google_project_service.required_apis : api.service]
 }
 
-# Organizational Units
-output "organizational_units" {
-  description = "Map of created organizational units"
-  value = {
-    for k, v in google_folder.ou_folders : k => {
-      id           = v.folder_id
-      name         = v.name
-      display_name = v.display_name
-    }
-  }
-}
-
-# Folders
+# Folders (created from the organizational_units input)
 output "folders" {
-  description = "Map of created folders"
+  description = "Map of created folders (keyed by organizational-unit key)"
   value = {
     for k, v in google_folder.ou_folders : k => {
       id           = v.folder_id

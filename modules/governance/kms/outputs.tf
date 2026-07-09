@@ -34,6 +34,6 @@ output "key_self_links" {
 }
 
 output "key_rotation_periods" {
-  description = "Map of key name to rotation period string (e.g. '7776000s'). Null for keys without rotation configured."
+  description = "Map of key name to rotation period string (e.g. '7776000s'). Always set — keys without an explicit rotation_period default to 90 days ('7776000s')."
   value       = { for k, v in google_kms_crypto_key.keys : k => v.rotation_period }
 }

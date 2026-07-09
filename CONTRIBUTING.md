@@ -1,5 +1,8 @@
 # Contributing to Ashes DevOps Tools
 
+By participating in this project, you agree to abide by our
+[Code of Conduct](CODE_OF_CONDUCT.md).
+
 This repository is centered on two supported Terraform roots:
 
 - `envs/organization`
@@ -16,6 +19,35 @@ make pre-commit-install
 
 `make install` manages repo tooling. Terraform itself must already be installed separately.
 
+### Scanner versions: `.tool-versions` must be active before running pre-commit
+
+`.pre-commit-config.yaml`'s `terraform_tflint`, `terraform_tfsec`, `terraform_checkov`, and
+`terraform_docs` hooks (from `antonbabenko/pre-commit-terraform`) are implemented as
+`language: script` hooks — thin wrapper scripts that shell out to whatever `tflint`/`tfsec`/
+`checkov`/`terraform-docs` binary is first on your `PATH`. Unlike pre-commit's Python/Node/Go
+hook backends, `language: script` hooks have no `additional_dependencies` mechanism, so
+pre-commit itself **cannot** pin or sandbox these tool versions.
+
+This means local results only match CI if your locally installed tool versions match the
+ones CI uses. Those versions are recorded in `.tool-versions` and mirrored in
+`scripts/setup.sh`:
+
+| Tool | Required version |
+|------|-------------------|
+| terraform | 1.9.8 |
+| tflint | 0.62.0 |
+| tfsec | 1.28.6 |
+| terraform-docs | 0.19.0 |
+| checkov | 3.2.0 |
+
+Run `make install` before your first `pre-commit run` (and after pulling changes that bump
+these versions) — it checks each tool's installed version against the table above and warns
+on drift. If you use [asdf](https://asdf-vm.com/) or [mise](https://mise.jdx.dev/), installing
+from `.tool-versions` directly also works and is equivalent. Running pre-commit with stale or
+mismatched scanner versions can produce false passes or false failures relative to CI (e.g. a
+newer/older tflint may accept or reject CLI flags differently — see the `terraform_tflint`
+hook's `--call-module-type` comment in `.pre-commit-config.yaml`).
+
 ## Workflow
 
 1. Create a short descriptive branch.
@@ -28,7 +60,7 @@ make docs-check
 make security
 ```
 
-4. Run the deeper checks when your machine can support them:
+1. Run the deeper checks when your machine can support them:
 
 ```bash
 make validate-all
@@ -136,13 +168,51 @@ run "invalid_region_rejected" {
 | **Accept case** | At least one `run` block that passes a valid value and does NOT expect failure |
 | **Reject case** | At least one `run` block per distinct invalid pattern with `expect_failures = [var.<name>]` |
 | **Boundary values** | For numeric ranges (e.g. `0.0–1.0`), test exactly at the boundary (`0.0`, `1.0`) and one step outside (`-0.1`, `1.1`) |
-| **Cross-variable guards** | For `!var.enable_x || condition_on_y` patterns, test: (a) disabled + empty `y` (accept), (b) enabled + valid `y` (accept), (c) enabled + empty `y` (reject) |
-| **Null guards** | For optional variables with `!= null || can(regex(...))`, test both `null` (accept) and a malformed value (reject) |
+| **Cross-variable guards** | For `!var.enable_x \|\| condition_on_y` patterns, test: (a) disabled + empty `y` (accept), (b) enabled + valid `y` (accept), (c) enabled + empty `y` (reject) |
+| **Null guards** | For optional variables with `!= null \|\| can(regex(...))`, test both `null` (accept) and a malformed value (reject) |
 
 #### Naming conventions
 
 - One test file per validation scope: `tests/variables_validation.tftest.hcl` for simple modules, or split by concern (e.g., `tests/iam_validation.tftest.hcl`, `tests/cidr_validation.tftest.hcl`) for modules with many validations.
 - `run` block names use `snake_case` and describe the specific behaviour: `valid_region_accepted`, `invalid_region_uppercase_rejected`.
+
+### Testing: resource-assertion tests are required
+
+Input-validation tests (`expect_failures`, accept/reject pairs) only prove that
+`variable` blocks accept or reject the right shapes — they never prove the
+module actually plans the resource you think it does, or that a value flows
+through to the attribute you expect. **Every module must include at least one
+`command = plan` test that asserts on a planned resource or output attribute**,
+not only on variable validation. Model this on
+`templates/module/tests/plan_assertions.tftest.hcl`:
+
+```hcl
+run "example_resource_plans_with_expected_attributes" {
+  command = plan
+
+  assert {
+    condition     = google_RESOURCE_TYPE.example.some_attribute == "expected-value"
+    error_message = "some_attribute must reflect the supplied input"
+  }
+}
+```
+
+**Avoid vacuous assertions.** `alltrue([for x in RESOURCE : ...])` evaluates to
+`true` when `RESOURCE` is an empty set or map — `alltrue([]) == true` — so an
+assertion over a `for_each`/`count` resource that happens to plan zero
+instances will pass even though nothing was actually verified. Any assertion
+over a `for_each`/`count` resource (especially one driven by an
+`override_module`-stubbed child module output) must also assert the set is
+non-empty, e.g.:
+
+```hcl
+assert {
+  condition = length(google_RESOURCE_TYPE.example) > 0 && alltrue([
+    for r in google_RESOURCE_TYPE.example : r.some_attribute == "expected-value"
+  ])
+  error_message = "at least one instance must be planned and every instance must satisfy the invariant"
+}
+```
 
 Keep generated README sections current with:
 

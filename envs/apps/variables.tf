@@ -34,8 +34,14 @@ variable "terraform_admin_email" {
   default     = null
 
   validation {
-    condition     = var.terraform_admin_email == null || can(regex("^[^@]+@[^@]+\\.[^@]+$", var.terraform_admin_email))
-    error_message = "terraform_admin_email must be a valid email address when provided."
+    # Matches the strict SA-email form required by envs/organization/variables.tf's
+    # terraform_admin_email: both roots impersonate this SA identically via the google
+    # provider's `impersonate_service_account`, which only accepts a real GCP service
+    # account email — a generic `user@domain.tld` address (previously accepted here) can
+    # never be impersonated and would fail at provider-init time with a confusing error
+    # instead of a clear validation message.
+    condition     = var.terraform_admin_email == null || can(regex("^[^@]+@[^@]+\\.iam\\.gserviceaccount\\.com$", var.terraform_admin_email))
+    error_message = "terraform_admin_email must be a GCP service account email (ends in .iam.gserviceaccount.com) or null."
   }
 }
 

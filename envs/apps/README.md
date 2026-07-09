@@ -6,7 +6,7 @@ Example:
 
 ```bash
 TF_WORKSPACE=apps-dev terraform -chdir=envs/apps init
-TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=examples/dev.tfvars
+TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=../../examples/dev.tfvars
 ```
 
 By default this root reads organization outputs from the Terraform Cloud workspace named `organization`.

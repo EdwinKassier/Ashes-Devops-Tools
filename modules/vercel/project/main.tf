@@ -191,15 +191,37 @@ resource "vercel_project_environment_variable" "prod" {
 }
 
 # ── Shared environment variables (all three environments) ───────────────────────
+#
+# Vercel v4 treats `target` and `custom_environment_ids` as mutually exclusive
+# (see the UAT note above): a single resource cannot combine standard targets
+# with a custom environment. The shared set is therefore split into two
+# resources over the same map — one for the standard preview/production targets
+# and one for the UAT custom environment (target = []). Both share the same
+# SHA256 drift fingerprint so any value change replaces the whole set.
 
 resource "vercel_project_environment_variable" "shared" {
+  for_each = nonsensitive(local.shared_vars_map)
+
+  project_id = vercel_project.this.id
+  team_id    = var.team_id != "" ? var.team_id : null
+  key        = each.key
+  value      = each.value.value # provider marks `value` sensitive in schema — no wrapper needed
+  target     = ["preview", "production"]
+  sensitive  = each.value.sensitive
+
+  lifecycle {
+    replace_triggered_by = [terraform_data.shared_vars_version]
+  }
+}
+
+resource "vercel_project_environment_variable" "shared_uat" {
   for_each = nonsensitive(local.shared_vars_map)
 
   project_id             = vercel_project.this.id
   team_id                = var.team_id != "" ? var.team_id : null
   key                    = each.key
   value                  = each.value.value # provider marks `value` sensitive in schema — no wrapper needed
-  target                 = ["preview", "production"]
+  target                 = []
   custom_environment_ids = [vercel_custom_environment.uat.id]
   sensitive              = each.value.sensitive
 

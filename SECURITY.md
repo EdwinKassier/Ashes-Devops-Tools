@@ -4,7 +4,14 @@
 
 **Do not open a public GitHub issue for security vulnerabilities.**
 
-Email **edwinkassier@gmail.com** with the details below. We will acknowledge within 48 hours and keep you informed of progress.
+Report vulnerabilities via the repository's **Security** tab → **"Report a vulnerability"**
+(GitHub private vulnerability reporting). This is the primary channel and reaches the
+maintainers directly and confidentially.
+
+If you are unable to use GitHub's private reporting flow, email
+**security@ashes-project.example** (role-based placeholder — configure this alias to
+route to the current maintainers before relying on it) with the details below. We will
+acknowledge within 48 hours and keep you informed of progress.
 
 ### What to Include
 
@@ -31,31 +38,36 @@ We will coordinate public disclosure with you. If you prefer to remain anonymous
 This landing zone implements defense-in-depth across every layer:
 
 ### Identity & Access
+
 - **Workload Identity Federation** — keyless authentication for CI/CD (no long-lived service account keys)
 - **IAM least privilege** — all module roles validated against a blocklist of primitive roles (`roles/owner`, `roles/editor`, `roles/viewer`)
 - **Separate service accounts** per stage (bootstrap, network, workload)
 
 ### Data Protection
+
 - **CMEK (Customer-Managed Encryption Keys)** via Cloud KMS — all storage encrypted at rest
 - **Key rotation enforced** — rotation period validated between 1–365 days at plan time
 - **Uniform bucket-level access** — no per-object ACLs on Cloud Storage
 
 ### Network Security
+
 - **VPC Service Controls** — data perimeter around sensitive projects
 - **Private Service Access** — RFC 1918 connectivity to Google APIs (no public egress for managed services)
 - **Cloud Armor** — WAF with OWASP rule sets for internet-facing workloads
 - **VPC Flow Logs** — full network telemetry retained in Cloud Storage
 
 ### Audit & Compliance
+
 - **Cloud Audit Logs** — Data Access logs enabled for all services; retention configurable via `audit_log_retention_days` (default 365 days; increase for PCI-DSS/HIPAA/FedRAMP)
 - **Security Command Center** — notifications for HIGH and CRITICAL findings
 - **Org Policies** — domain-restricted sharing, uniform bucket access, disable SA key creation
 
 ### CI/CD Security
+
 - **All GitHub Actions SHA-pinned** — no mutable tag references
 - **Branch protection** — required reviews and status checks before merge
-- **Secret scanning** — Gitleaks runs on every PR
-- **Static analysis** — TFSec, Checkov, and Trivy on every PR and nightly
+- **Secret scanning** — Gitleaks runs on push to `main`/`develop` and weekly (not on every PR; the PR gate runs TFSec + Checkov only)
+- **Static analysis** — TFSec and Checkov on every PR; TFSec, Checkov, and Trivy again on push to `main`/`develop` and weekly
 
 ---
 
@@ -74,10 +86,10 @@ This repo runs the following automated security tools:
 
 | Tool | Scope | Trigger |
 |------|-------|---------|
-| [TFSec](https://aquasecurity.github.io/tfsec/) | Terraform static analysis | Every PR + nightly |
-| [Checkov](https://www.checkov.io/) | Infrastructure policy compliance | Every PR + nightly |
-| [Trivy](https://aquasecurity.github.io/trivy/) | Container + IaC scanning | Every PR + nightly |
-| [Gitleaks](https://gitleaks.io/) | Secret detection in git history | Every PR |
+| [TFSec](https://aquasecurity.github.io/tfsec/) | Terraform static analysis | Every PR + push to main/develop + weekly |
+| [Checkov](https://www.checkov.io/) | Infrastructure policy compliance | Every PR + push to main/develop + weekly |
+| [Trivy](https://aquasecurity.github.io/trivy/) | Container + IaC scanning | Push to main/develop + weekly |
+| [Gitleaks](https://gitleaks.io/) | Secret detection in git history | Push to main/develop + weekly |
 
 SARIF results are uploaded to GitHub Security tab for all scans.
 
@@ -85,5 +97,8 @@ SARIF results are uploaded to GitHub Security tab for all scans.
 
 ## Contact
 
-- Security issues: edwinkassier@gmail.com
-- General inquiries: edwinkassier@gmail.com
+- Security issues: repository **Security** tab → **"Report a vulnerability"** (preferred),
+  or **security@ashes-project.example** (role-based placeholder — configure this alias
+  before relying on it)
+- General inquiries: open a [GitHub Discussion](../../discussions) or non-security issue
+  on this repository

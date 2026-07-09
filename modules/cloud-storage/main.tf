@@ -17,8 +17,11 @@ resource "google_storage_bucket" "access_logs" {
   versioning {
     enabled = true
   }
-  encryption {
-    default_kms_key_name = var.kms_key_name
+  dynamic "encryption" {
+    for_each = var.kms_key_name != null ? [1] : []
+    content {
+      default_kms_key_name = var.kms_key_name
+    }
   }
   lifecycle_rule {
     condition {
@@ -48,8 +51,11 @@ resource "google_storage_bucket" "logs" {
   versioning {
     enabled = true
   }
-  encryption {
-    default_kms_key_name = var.kms_key_name
+  dynamic "encryption" {
+    for_each = var.kms_key_name != null ? [1] : []
+    content {
+      default_kms_key_name = var.kms_key_name
+    }
   }
   lifecycle_rule {
     condition {
@@ -89,8 +95,11 @@ resource "google_storage_bucket" "data" {
   logging {
     log_bucket = google_storage_bucket.logs.name
   }
-  encryption {
-    default_kms_key_name = var.kms_key_name
+  dynamic "encryption" {
+    for_each = var.kms_key_name != null ? [1] : []
+    content {
+      default_kms_key_name = var.kms_key_name
+    }
   }
 
   # H-1: Apply soft-delete retention from per-bucket config.

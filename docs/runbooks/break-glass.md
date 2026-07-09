@@ -38,10 +38,10 @@ gcloud iam workload-identity-pools describe github-pool \
   --project=ADMIN_PROJECT_ID
 ```
 
-2. The Terraform SA still exists:
+1. The Terraform SA still exists:
 
 ```bash
-gcloud iam service-accounts describe terraform@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
+gcloud iam service-accounts describe terraform-admin@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
   --project=ADMIN_PROJECT_ID
 ```
 
@@ -64,7 +64,7 @@ Break-glass access requires a second human to authorize. Document the following 
 ```bash
 # Create a temporary key (valid until manually deleted)
 gcloud iam service-accounts keys create /tmp/break-glass-key.json \
-  --iam-account=terraform@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
+  --iam-account=terraform-admin@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
   --project=ADMIN_PROJECT_ID
 
 # Activate the key
@@ -113,12 +113,12 @@ After the fix, trigger a GitHub Actions workflow to confirm WIF authentication w
 ```bash
 # List all keys on the Terraform SA
 gcloud iam service-accounts keys list \
-  --iam-account=terraform@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
+  --iam-account=terraform-admin@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
   --project=ADMIN_PROJECT_ID
 
 # Delete the break-glass key by its KEY_ID
 gcloud iam service-accounts keys delete KEY_ID \
-  --iam-account=terraform@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
+  --iam-account=terraform-admin@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
   --project=ADMIN_PROJECT_ID
 
 # Remove the local key file
@@ -153,18 +153,18 @@ If the post-incident review reveals actions that were **not authorized** by the 
 ```bash
 # 1. Revoke ALL SA keys immediately (not just the break-glass key)
 for KEY_ID in $(gcloud iam service-accounts keys list \
-  --iam-account=terraform@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
+  --iam-account=terraform-admin@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
   --project=ADMIN_PROJECT_ID \
   --format="value(name)" \
   --filter="keyType=USER_MANAGED"); do
   gcloud iam service-accounts keys delete "$KEY_ID" \
-    --iam-account=terraform@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
+    --iam-account=terraform-admin@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
     --project=ADMIN_PROJECT_ID --quiet
 done
 
 # 2. Disable the Terraform SA entirely until the scope of damage is known
 gcloud iam service-accounts disable \
-  terraform@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
+  terraform-admin@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
   --project=ADMIN_PROJECT_ID
 ```
 
@@ -178,7 +178,7 @@ Pull a full audit trail for the window the break-glass key was active, saving to
 # Replace START and END with the key creation and deletion timestamps (from Step 7 output)
 gcloud logging read \
   'protoPayload.authenticationInfo.serviceAccountKeyName!="" OR
-   protoPayload.authenticationInfo.principalEmail="terraform@ADMIN_PROJECT_ID.iam.gserviceaccount.com"' \
+   protoPayload.authenticationInfo.principalEmail="terraform-admin@ADMIN_PROJECT_ID.iam.gserviceaccount.com"' \
   --project=ADMIN_PROJECT_ID \
   --freshness=72h \
   --format=json \
@@ -186,6 +186,7 @@ gcloud logging read \
 ```
 
 Check specifically for:
+
 - `SetIamPolicy` calls (IAM mutations)
 - `DeleteBucket`, `DeleteDataset`, `DeleteObject` (data destruction)
 - Any project outside the expected scope of the change
@@ -203,11 +204,12 @@ After the investigation is complete:
 ```bash
 # Re-enable the Terraform SA only after confirming scope and reverting unauthorized changes
 gcloud iam service-accounts enable \
-  terraform@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
+  terraform-admin@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
   --project=ADMIN_PROJECT_ID
 ```
 
 Review and tighten the break-glass procedure based on findings — in particular:
+
 - Was the approver verification step followed?
 - Was the time box enforced?
 - Should break-glass access require a separate short-lived SA with narrower permissions?

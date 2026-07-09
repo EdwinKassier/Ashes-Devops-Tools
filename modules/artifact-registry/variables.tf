@@ -14,8 +14,8 @@ variable "region" {
   default     = "us-central1"
 
   validation {
-    condition     = can(regex("^[a-z]+-[a-z]+[0-9]$", var.region))
-    error_message = "Region must be a valid GCP region format (e.g., us-central1)"
+    condition     = can(regex("^[a-z]+(-[a-z]+[0-9]+)?$", var.region))
+    error_message = "Region must be a valid GCP location (e.g., us-central1, europe-west1, or a multi-region like us/europe/asia)."
   }
 }
 
@@ -33,9 +33,11 @@ variable "kms_key_name" {
 variable "repositories" {
   description = "Map of repository configurations to create. Valid format values: DOCKER, MAVEN, NPM, PYTHON, APT, YUM, GOOGET, KFP, GENERIC."
   type = map(object({
-    description    = string
-    format         = optional(string, "DOCKER")
-    immutable_tags = optional(bool, true)
+    description               = string
+    format                    = optional(string, "DOCKER")
+    immutable_tags            = optional(bool, true)
+    allow_snapshot_overwrites = optional(bool, false)
+    version_policy            = optional(string, "VERSION_POLICY_UNSPECIFIED")
   }))
 
   validation {

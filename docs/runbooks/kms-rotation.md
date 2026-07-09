@@ -13,6 +13,7 @@
 GCP supports automatic key rotation (configured via `rotation_period` in the KMS module). When a new key version is created by rotation, GCP automatically uses the new primary version for all **new** encrypt operations. Existing data encrypted with the old version remains readable — GCP transparently decrypts using the version that encrypted the data.
 
 This means:
+
 - **Automatic rotation** (set `rotation_period`) is safe and requires no data re-encryption.
 - **Manual rotation** (forced key version change) may require re-encryption if you want to eliminate the old version.
 - **Key destruction** is permanent and must never be done while encrypted data exists.
@@ -36,8 +37,8 @@ gcloud kms keys describe KEY_NAME \
 To change the rotation period via Terraform, update `var.rotation_period` in the module call and apply:
 
 ```bash
-terraform -chdir=envs/organization plan -target=module.cmek
-terraform -chdir=envs/organization apply -target=module.cmek
+terraform -chdir=envs/organization plan -target=module.organization.cmek
+terraform -chdir=envs/organization apply -target=module.organization.cmek
 ```
 
 ---
@@ -135,7 +136,7 @@ Zero `WARNING` or `ERROR` entries means the rotation is clean.
 If you manually created a new key version outside of Terraform, the Terraform state will show a drift on the `primary_version` attribute. Run:
 
 ```bash
-terraform -chdir=envs/organization refresh -target=module.cmek
+terraform -chdir=envs/organization refresh -target=module.organization.cmek
 ```
 
 This updates the state to match the current GCP reality without making any resource changes.

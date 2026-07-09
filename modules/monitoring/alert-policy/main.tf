@@ -48,14 +48,17 @@ resource "google_monitoring_notification_channel" "email" {
 }
 
 resource "google_monitoring_notification_channel" "webhook" {
-  for_each = var.notification_webhook_urls
+  # notification_webhook_urls is sensitive (URLs embed auth tokens), so it cannot
+  # be used directly as a for_each argument. The map keys are non-secret labels —
+  # iterate over those and look up the sensitive URL value by key.
+  for_each = nonsensitive(toset(keys(var.notification_webhook_urls)))
 
   project      = var.project_id
   display_name = "Webhook: ${each.key}"
   type         = "webhook_tokenauth"
 
   labels = {
-    url = each.value
+    url = var.notification_webhook_urls[each.key]
   }
 
   user_labels = var.labels

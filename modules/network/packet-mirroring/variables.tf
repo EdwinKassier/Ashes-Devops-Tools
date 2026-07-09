@@ -60,6 +60,11 @@ variable "mirrored_tags" {
   description = "List of network tags to identify instances for mirroring"
   type        = list(string)
   default     = []
+
+  validation {
+    condition     = length(var.mirrored_instances) + length(var.mirrored_subnetworks) + length(var.mirrored_tags) > 0
+    error_message = "At least one of mirrored_instances, mirrored_subnetworks, or mirrored_tags must be set — the GCP API rejects a packet mirroring policy with no mirrored source."
+  }
 }
 
 # -----------------------------------------------------------------------------
