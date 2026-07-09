@@ -104,14 +104,14 @@ run "attachments_key_correctly" {
   command = plan
 
   variables {
-    attachments = [
-      { policy_key = "scp-baseline", target_id = "r-abcd" },
-      { policy_key = "rcp-data-perimeter", target_id = "ou-abcd-11111111" },
-    ]
+    attachments = {
+      "baseline@root"        = { policy_key = "scp-baseline", target_id = "r-abcd" }
+      "data-perimeter@wklds" = { policy_key = "rcp-data-perimeter", target_id = "ou-abcd-11111111" }
+    }
   }
 
   assert {
-    condition     = contains(keys(aws_organizations_policy_attachment.attach), "scp-baseline:r-abcd")
-    error_message = "attachments must key on policy_key:target_id"
+    condition     = contains(keys(aws_organizations_policy_attachment.attach), "baseline@root")
+    error_message = "attachments must key on the caller-provided map key"
   }
 }

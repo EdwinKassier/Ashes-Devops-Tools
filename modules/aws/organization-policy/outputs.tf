@@ -14,6 +14,6 @@ output "policy_types" {
 }
 
 output "attachment_ids" {
-  description = "Map of \"policy_key:target_id\" to the attachment resource ID."
+  description = "Map of caller attachment key to the attachment resource ID."
   value       = { for key, a in aws_organizations_policy_attachment.attach : key => a.id }
 }

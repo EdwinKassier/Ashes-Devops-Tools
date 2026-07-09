@@ -107,10 +107,10 @@ variable "policies" {
 }
 
 variable "attachments" {
-  description = "Policy attachments binding a policy_key (name in the effective policy set) to a target OU root/OU/account ID."
-  type = list(object({
+  description = "Policy attachments binding a policy_key (name in the effective policy set) to a target OU root/OU/account ID. Keyed by a stable caller-chosen string so for_each stays known at plan time even when target_id is a computed root/OU ID."
+  type = map(object({
     policy_key = string
     target_id  = string
   }))
-  default = []
+  default = {}
 }

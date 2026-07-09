@@ -13,8 +13,8 @@ module "organization_policy" {
   break_glass_role_arn    = "arn:aws:iam::111111111111:role/break-glass"
   log_archive_bucket_name = "sra-log-archive-111111111111"
 
-  attachments = [
-    { policy_key = "scp-baseline", target_id = "r-abcd" },
-    { policy_key = "rcp-data-perimeter", target_id = "r-abcd" },
-  ]
+  attachments = {
+    "baseline@root"       = { policy_key = "scp-baseline", target_id = "r-abcd" }
+    "data-perimeter@root" = { policy_key = "rcp-data-perimeter", target_id = "r-abcd" }
+  }
 }

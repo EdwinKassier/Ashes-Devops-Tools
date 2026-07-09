@@ -66,7 +66,7 @@ The following resources are created:
 | <a name="input_security_account_id"></a> [security\_account\_id](#input\_security\_account\_id) | The delegated-administrator security account ID. | `string` | n/a | yes |
 | <a name="input_terraform_run_role_arn"></a> [terraform\_run\_role\_arn](#input\_terraform\_run\_role\_arn) | Account-qualified exact ARN of the Terraform Cloud run role. Carved out of every deny statement so automation is not locked out. | `string` | n/a | yes |
 | <a name="input_allowed_regions"></a> [allowed\_regions](#input\_allowed\_regions) | Regions permitted by the region-restriction SCP. Requests to any other region are denied (global services are carved out). | `list(string)` | <pre>[<br/>  "eu-west-2",<br/>  "eu-west-1"<br/>]</pre> | no |
-| <a name="input_attachments"></a> [attachments](#input\_attachments) | Policy attachments binding a policy\_key (name in the effective policy set) to a target OU root/OU/account ID. | <pre>list(object({<br/>    policy_key = string<br/>    target_id  = string<br/>  }))</pre> | `[]` | no |
+| <a name="input_attachments"></a> [attachments](#input\_attachments) | Policy attachments binding a policy\_key (name in the effective policy set) to a target OU root/OU/account ID. Keyed by a stable caller-chosen string so for\_each stays known at plan time even when target\_id is a computed root/OU ID. | <pre>map(object({<br/>    policy_key = string<br/>    target_id  = string<br/>  }))</pre> | `{}` | no |
 | <a name="input_default_region"></a> [default\_region](#input\_default\_region) | Region used by the backup policy's default plan. | `string` | `"eu-west-2"` | no |
 | <a name="input_policies"></a> [policies](#input\_policies) | Override map of policies to create, keyed by policy name. When empty (default), the module computes the built-in guardrail set from the templated JSON files. Content is a raw Organizations policy JSON string. | <pre>map(object({<br/>    type    = string<br/>    content = string<br/>  }))</pre> | `{}` | no |
 
@@ -74,7 +74,7 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
-| <a name="output_attachment_ids"></a> [attachment\_ids](#output\_attachment\_ids) | Map of "policy\_key:target\_id" to the attachment resource ID. |
+| <a name="output_attachment_ids"></a> [attachment\_ids](#output\_attachment\_ids) | Map of caller attachment key to the attachment resource ID. |
 | <a name="output_policy_arns"></a> [policy\_arns](#output\_policy\_arns) | Map of policy name to created Organizations policy ARN. |
 | <a name="output_policy_ids"></a> [policy\_ids](#output\_policy\_ids) | Map of policy name to created Organizations policy ID. |
 | <a name="output_policy_types"></a> [policy\_types](#output\_policy\_types) | Map of policy name to its Organizations policy type. |

@@ -73,7 +73,7 @@ resource "aws_organizations_policy" "policy" {
 }
 
 resource "aws_organizations_policy_attachment" "attach" {
-  for_each  = { for a in var.attachments : "${a.policy_key}:${a.target_id}" => a }
+  for_each  = var.attachments
   policy_id = aws_organizations_policy.policy[each.value.policy_key].id
   target_id = each.value.target_id
 }
