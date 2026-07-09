@@ -76,11 +76,11 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_cloudwatch_event_rule.guardduty_high (modules/aws/incident-response/main.tf#L48)
-- resource.aws_cloudwatch_event_target.isolate (modules/aws/incident-response/main.tf#L60)
-- resource.aws_iam_role.forensics_snapshot (modules/aws/incident-response/main.tf#L70)
+- resource.aws_cloudwatch_event_rule.guardduty_high (modules/aws/incident-response/main.tf#L73)
+- resource.aws_cloudwatch_event_target.isolate (modules/aws/incident-response/main.tf#L85)
+- resource.aws_iam_role.forensics_snapshot (modules/aws/incident-response/main.tf#L95)
 - resource.aws_iam_role.isolation_lambda (modules/aws/incident-response/main.tf#L22)
-- resource.aws_lambda_function.isolate (modules/aws/incident-response/main.tf#L37)
+- resource.aws_lambda_function.isolate (modules/aws/incident-response/main.tf#L57)
 - data source.archive_file.isolate (modules/aws/incident-response/main.tf#L14)
 
 

@@ -17,6 +17,7 @@
 # integrity, and is a non-negotiable control for an audit-grade org trail.
 
 resource "aws_cloudtrail" "org" {
+  # checkov:skip=CKV_AWS_252:No SNS topic is attached by design. Delivery notifications for this org trail are handled centrally — the Log-Archive bucket lives in a dedicated account and drives downstream processing via S3 event/notification wiring owned by that account, not per-trail SNS. Adding an SNS topic here would require a topic in the trail's account and duplicate that central path.
   name                          = var.trail_name
   s3_bucket_name                = var.log_archive_bucket
   kms_key_id                    = var.kms_key_arn

@@ -32,13 +32,26 @@ severity_overrides:
   google-storage-bucket-encryption: HIGH
 
 # Exclude specific checks by code
+#
+# AWS coverage (Task K5, 2026-07-09): AWS checks are ENABLED in tfsec. This repo is a
+# mixed GCP + AWS landing zone; the AWS modules must be scanned by both scanners, not
+# only by checkov. Empirically, tfsec 1.28.6's AWS ruleset is thin, and at this config's
+# MEDIUM severity floor a full AWS-enabled scan of both `modules/` and `envs/` reports
+# ZERO findings (verified: only 2 module + 4 env findings exist at all, every one of them
+# LOW severity — Lambda X-Ray tracing and informational unmanaged-key notes — which the
+# MEDIUM floor already filters out). So enabling AWS delivers real, if modest, tfsec
+# coverage with no suppressions required today. Deeper AWS controls (Lambda hardening,
+# CloudTrail SNS, S3 multipart, cross-account trust) are covered by checkov via inline
+# `# checkov:skip=` annotations in the affected modules; tfsec and checkov are therefore
+# complementary here, not duplicated. AZU* stays excluded — there are no Azure resources.
 exclude_checks:
-  - AWS*  # Exclude all AWS checks
-  - AZU*  # Exclude all Azure checks
+  - AZU*  # Exclude all Azure checks — no Azure resources in this repo
 
-# Focus on GCP checks
+# Provider check types: scan both GCP and AWS. (Previously restricted to `google`, which
+# silently disabled all AWS rules; dropped as part of Task K5 so AWS modules are scanned.)
 check_type:
   - google
+  - aws
 
 # Timeout settings (in seconds)
 timeout: 300

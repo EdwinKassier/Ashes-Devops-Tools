@@ -66,7 +66,7 @@ The following resources are created:
 - resource.aws_s3_bucket_lifecycle_configuration.this (modules/aws/log-archive-bucket/main.tf#L132)
 - resource.aws_s3_bucket_logging.this (modules/aws/log-archive-bucket/main.tf#L103)
 - resource.aws_s3_bucket_object_lock_configuration.this (modules/aws/log-archive-bucket/main.tf#L121)
-- resource.aws_s3_bucket_policy.this (modules/aws/log-archive-bucket/main.tf#L152)
+- resource.aws_s3_bucket_policy.this (modules/aws/log-archive-bucket/main.tf#L159)
 - resource.aws_s3_bucket_public_access_block.this (modules/aws/log-archive-bucket/main.tf#L83)
 - resource.aws_s3_bucket_server_side_encryption_configuration.this (modules/aws/log-archive-bucket/main.tf#L109)
 - resource.aws_s3_bucket_versioning.this (modules/aws/log-archive-bucket/main.tf#L92)

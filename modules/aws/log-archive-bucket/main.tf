@@ -146,6 +146,13 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
     expiration {
       days = var.retention_days
     }
+
+    # Reclaim storage from interrupted multipart uploads (log delivery agents that
+    # start but never complete an upload). Satisfies CKV_AWS_300 and prevents
+    # orphaned parts from accruing cost against the archive bucket.
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
   }
 }
 
