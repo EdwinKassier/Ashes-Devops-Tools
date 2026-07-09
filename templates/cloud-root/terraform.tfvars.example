@@ -1,0 +1,6 @@
+# Copy to terraform.tfvars and fill in. Inputs marked REQUIRED have no default.
+
+# REQUIRED — Terraform Cloud org that owns the remote-state workspaces this root reads.
+tfc_organization = "REPLACE_ME"
+
+# Add your cloud's region / enabled-region inputs here once declared in variables.tf.
