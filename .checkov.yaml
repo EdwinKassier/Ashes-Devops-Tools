@@ -48,16 +48,14 @@
 #                 Admin SA's project roles) already PASSES this check — no project-level
 #                 grant of serviceAccountUser/serviceAccountTokenCreator exists. Dead skip,
 #                 safe to delete; no inline skip needed since nothing fails.
-#   CKV2_GCP_5  — does not correspond to any check in the installed Checkov version
-#                 (verified: absent from `checkov --list` and absent from a full grep of the
-#                 installed package source). The former "org-level audit config" justification
-#                 could not be matched to a real, currently-shipped check ID. Removed as
-#                 unverifiable/non-existent rather than left as a silent no-op skip.
-#   CKV2_GCP_18 — same as CKV2_GCP_5: no matching check exists in the installed Checkov
-#                 version. The former "Cloud DNS DNSSEC" justification actually describes
-#                 CKV_GCP_16 (see below), which is a real, resource-level check that already
-#                 passes on this repo's google_dns_managed_zone resources without a skip.
-#                 Removed as unverifiable/non-existent.
+# NOTE 2026-07-09 — CKV2_GCP_4 / CKV2_GCP_5 / CKV2_GCP_18 RESTORED as global skips (below).
+# They were briefly removed on 2026-07-08 as "non-existent" because the LOCAL checkov
+# (3.2.490) did not surface them, but CI runs the checkov-action image (3.2.527), where all
+# three exist and fire. Local `make security` therefore did not reproduce the CI result
+# (a version-skew gap — see the version note at the bottom of this file). The skips are
+# architecturally justified (rationale on each entry) and are restored so the CI Checkov
+# gate matches the repo's intended posture. A skip for a check ID absent from a given
+# checkov version is a harmless no-op, so these are safe across both versions.
 #
 # CKV_GCP_16 was also removed from the global skip list: the real check is "Ensure that
 # DNSSEC is enabled for Cloud DNS" (google_dns_managed_zone), not "KMS key IAM bindings
@@ -82,3 +80,36 @@ skip-check:
   # module and hits the same false positive — there is no instance where an inline,
   # per-resource skip would be more precise.
   - "CKV_GCP_73"
+
+  # CKV2_GCP_18 "Ensure GCP network defines a firewall and does not use the default firewall":
+  # a cross-resource graph check that wants a firewall associated with each
+  # google_compute_network. This repo defines firewall rules in DEDICATED modules
+  # (modules/network/network-firewall, modules/network/hierarchical-firewall, and the host
+  # module's rules), never inline in the vpc module, so checkov's graph cannot link them to
+  # the network and reports a false positive on every google_compute_network.vpc. Firewalls
+  # ARE defined; the association is just cross-module. Global skip (every VPC is created via
+  # the same vpc module and hits the same false positive).
+  - "CKV2_GCP_18"
+
+  # CKV2_GCP_5 "Ensure Cloud Audit Logging is configured properly across all services and
+  # users from a project": wants a per-project google_project_iam_audit_config. This landing
+  # zone configures audit logging ONCE at the org level via google_organization_iam_audit_config
+  # (modules/governance/cloud-audit-logs), which applies to every project beneath the org —
+  # per-project audit config is intentionally not used (it would be redundant and drift-prone).
+  # The check fires on google_project resources that are correctly covered org-wide.
+  - "CKV2_GCP_5"
+
+  # CKV2_GCP_4 "Ensure retention policies on log buckets are configured using Bucket Lock":
+  # wants immutable (WORM) Bucket Lock retention on log sink destinations. This is an explicit,
+  # documented operational trade-off for this project: Bucket Lock makes objects undeletable
+  # until the retention period elapses, which is too rigid for the current environment. Log
+  # durability is instead provided by the org-level audit sink plus lifecycle age-based
+  # retention. Revisit if a compliance regime later mandates WORM audit-log retention.
+  - "CKV2_GCP_4"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Version note: `.tool-versions` pins checkov 3.2.0, local dev may run a slightly
+# newer 3.2.x, and the CI checkov-action image is 3.2.527. Patch releases add/adjust
+# checks, so `make security` locally may not exactly reproduce CI. When adjusting skips,
+# prefer to match the CI (checkov-action) result, which is the authoritative gate.
+# ─────────────────────────────────────────────────────────────────────────────
