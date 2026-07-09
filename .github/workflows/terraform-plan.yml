@@ -135,7 +135,14 @@ jobs:
   lint:
     name: TFLint
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 30 (not 15): `make lint` runs `terraform init` across every root serially;
+    # with the AWS landing zone (~35 extra modules/roots) the provider fetches
+    # push a cold run past 15m. The plugin cache below keeps it well under 30m.
+    timeout-minutes: 30
+    env:
+      # Download each provider once and reuse it across all roots' inits,
+      # instead of re-fetching the ~500MB AWS provider per root.
+      TF_PLUGIN_CACHE_DIR: ${{ runner.temp }}/tf-plugin-cache
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -149,6 +156,9 @@ jobs:
         uses: terraform-linters/setup-tflint@b480b8fcdaa6f2c577f8e4fa799e89e756bb7c93  # v6.2.2
         with:
           tflint_version: "v0.62.0"
+
+      - name: Prepare provider plugin cache
+        run: mkdir -p "$TF_PLUGIN_CACHE_DIR"
 
       - name: Run TFLint
         run: make lint
