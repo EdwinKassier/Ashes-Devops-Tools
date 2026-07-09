@@ -21,6 +21,16 @@ variables {
   enable_security_lake = false
 }
 
+# The forensics CMK ARN flows through the stage into the incident-response
+# module's forensics_kms_key_arn, whose count keys off whether that ARN is set.
+# Under mock providers the CMK ARN is unknown at plan, which would make that
+# count indeterminate ("Invalid count argument"); override the nested CMK output
+# with a known ARN so the root can plan. Mirrors the stage-level tests.
+override_module {
+  target  = module.aws_security.module.forensics_cmk
+  outputs = { key_arn = "arn:aws:kms:eu-west-2:555555555555:key/forensics-0000" }
+}
+
 run "consumes_remote_state_contract" {
   command = plan
 
