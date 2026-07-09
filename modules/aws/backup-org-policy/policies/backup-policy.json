@@ -1,0 +1,43 @@
+{
+  "plans": {
+    "default": {
+      "regions": {
+        "@@assign": [
+          "${default_region}"
+        ]
+      },
+      "rules": {
+        "daily": {
+          "schedule_expression": {
+            "@@assign": "cron(0 5 ? * * *)"
+          },
+          "target_backup_vault_name": {
+            "@@assign": "${backup_vault_name}"
+          },
+          "lifecycle": {
+            "delete_after_days": {
+              "@@assign": "365"
+            }
+          }
+        }
+      },
+      "selections": {
+        "tags": {
+          "backup": {
+            "iam_role_arn": {
+              "@@assign": "${backup_role_arn}"
+            },
+            "tag_key": {
+              "@@assign": "backup"
+            },
+            "tag_value": {
+              "@@assign": [
+                "true"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

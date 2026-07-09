@@ -1,0 +1,31 @@
+# Copy to terraform.tfvars and fill in. Inputs marked REQUIRED have no usable
+# default for a real deployment — you MUST supply them. The rest have working
+# defaults you can override.
+
+# REQUIRED — Terraform Cloud org that owns this root's workspace and the
+# aws-organization workspace it reads. Usually passed to `terraform init` via
+# backend.hcl / TF_CLI_ARGS_init rather than here.
+# tfc_organization = "your-tfc-org-name"
+
+# Optional — workspace holding the phase-1 aws-organization root state.
+organization_workspace_name = "aws-organization"
+
+# Optional — deploy region (also the region the shared-services-account role is
+# assumed in).
+aws_region = "eu-west-2"
+
+# Optional — ACM Private CA. enable_private_ca is a COST TOGGLE (fixed monthly
+# per-CA charge) and is off by default. When enabled, the CA is shared org-wide
+# over RAM (the org ARN is derived from the aws-organization remote state).
+enable_private_ca = false
+ca_common_name    = "org-internal-ca"
+
+# Optional — Secrets Manager baseline. Off by default. When enabled, each secret
+# gets an org-scoped (aws:PrincipalOrgID) resource policy. Supply a
+# customer-managed KMS key id to override the default aws/secretsmanager key.
+enable_secrets_baseline = false
+secrets_kms_key_id      = ""
+# secrets = {
+#   "app/db-password" = {}
+#   "app/api-token"   = { rotation_lambda_arn = "arn:aws:lambda:eu-west-2:222222222222:function:rotate", rotation_days = 30 }
+# }

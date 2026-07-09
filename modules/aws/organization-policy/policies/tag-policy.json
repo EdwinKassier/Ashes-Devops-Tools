@@ -1,0 +1,19 @@
+{
+  "tags": {
+    "CostCenter": {
+      "tag_key": {
+        "@@assign": "CostCenter"
+      }
+    },
+    "Environment": {
+      "tag_key": {
+        "@@assign": "Environment"
+      }
+    },
+    "Owner": {
+      "tag_key": {
+        "@@assign": "Owner"
+      }
+    }
+  }
+}

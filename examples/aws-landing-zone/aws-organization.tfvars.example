@@ -1,0 +1,32 @@
+# aws-organization — minimal required inputs (phase-1, the producer root).
+# Reference only. The canonical, fully-commented template is
+# envs/aws-organization/terraform.tfvars.example — copy THAT to
+# envs/aws-organization/terraform.tfvars for a real apply.
+#
+# Derived from envs/aws-organization/variables.tf: any variable with no default
+# is REQUIRED. Everything else has a working default and is omitted here.
+
+# REQUIRED — account-qualified ARN of the Terraform Cloud run role. Carved out
+# of every guardrail deny statement so automation is never locked out.
+terraform_run_role_arn = "arn:aws:iam::111111111111:role/terraform-run"
+
+# REQUIRED — account-qualified ARN of the emergency break-glass role.
+break_glass_role_arn = "arn:aws:iam::111111111111:role/break-glass"
+
+# REQUIRED — central log-archive S3 bucket name, protected by the deny-tamper
+# SCP. This exact string is the cross-root naming contract: aws-security (which
+# creates the bucket), aws-network, and aws-workload must all use the same value.
+log_archive_bucket_name = "ashes-org-log-archive"
+
+# Near-required in practice — the six foundational SRA accounts ship with
+# PLACEHOLDER emails that AWS will reject (duplicate/undeliverable). Override
+# with real, unique root emails before apply. See the env template for the full
+# map shape.
+# accounts = {
+#   log_archive      = { email = "aws+log-archive@example.com", ou = "Security" }
+#   security_tooling = { email = "aws+security-tooling@example.com", ou = "Security" }
+#   network          = { email = "aws+network@example.com", ou = "Infrastructure" }
+#   shared_services  = { email = "aws+shared-services@example.com", ou = "Infrastructure" }
+#   backup           = { email = "aws+backup@example.com", ou = "Infrastructure" }
+#   forensics        = { email = "aws+forensics@example.com", ou = "Security" }
+# }

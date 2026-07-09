@@ -1,0 +1,21 @@
+# aws-workload — per-environment spoke (phase-7). One TFC workspace per env,
+# selected with TF_WORKSPACE=aws-workload-<env> (e.g. aws-workload-dev).
+# Reference only. Canonical template: envs/aws-workload/terraform.tfvars.example.
+#
+# Derived from envs/aws-workload/variables.tf: variables with no default = REQUIRED.
+
+# REQUIRED — key into the aws-organization account_role_arns map for THIS env's
+# workload account. Both providers assume this role.
+workload_account_key = "workload_dev"
+
+# REQUIRED — central log-archive bucket name. MUST match the value used in the
+# aws-organization / aws-network roots (cross-root naming contract).
+log_archive_bucket_name = "ashes-org-log-archive"
+
+# REQUIRED — IAM role AWS Config assumes to record resources in this account.
+config_role_arn = "arn:aws:iam::222222222222:role/config-recorder"
+
+# Effectively required in practice — the stage keeps Systems Manager ON, and
+# Session Manager requires a non-empty CMK, so supply a real key ARN here for a
+# real apply. Leaving it empty leaves EBS on the AWS-managed key.
+# kms_key_arn = "arn:aws:kms:eu-west-2:222222222222:key/abcd-1234"

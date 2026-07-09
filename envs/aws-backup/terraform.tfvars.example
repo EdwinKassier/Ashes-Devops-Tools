@@ -1,0 +1,35 @@
+# Copy to terraform.tfvars and fill in. Inputs marked REQUIRED have no usable
+# default — you MUST supply them (the TFC org and the two operator role ARNs).
+# The rest have working defaults you can override.
+
+# REQUIRED — Terraform Cloud org that owns this root's workspace and the
+# aws-organization workspace it reads. Usually passed to `terraform init` via
+# backend.hcl / TF_CLI_ARGS_init rather than here.
+# tfc_organization = "your-tfc-org-name"
+
+# Optional — workspace holding the phase-1 aws-organization root state.
+organization_workspace_name = "aws-organization"
+
+# Optional — home region; also the region the org backup plan copies into.
+aws_region = "eu-west-2"
+
+# Optional — backup vault name. Owned by the backup account; the org
+# BACKUP_POLICY targets it by name (cross-account naming contract).
+vault_name = "org-backup-vault"
+
+# Optional — CMK for recovery-point encryption. Empty uses the AWS-managed
+# default Backup key.
+# kms_key_arn = "arn:aws:kms:eu-west-2:444444444444:key/backup-cmk"
+
+# Optional — Vault Lock (WORM) retention window and cooling-off period.
+min_retention_days  = 7
+max_retention_days  = 3650
+changeable_for_days = 3
+
+# REQUIRED — account-qualified ARN of the role AWS Backup assumes to run backup
+# jobs for the org backup plan (rendered into the org BACKUP_POLICY).
+backup_role_arn = "arn:aws:iam::111111111111:role/aws-backup-role"
+
+# REQUIRED — account-qualified ARN of the role (in the backup account) AWS Backup
+# assumes to perform restore testing jobs.
+restore_testing_role_arn = "arn:aws:iam::444444444444:role/backup-restore-test"

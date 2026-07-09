@@ -1,0 +1,38 @@
+# Copy to terraform.tfvars and fill in. Inputs marked REQUIRED have no usable
+# default — you MUST supply them (the TFC org and the log-archive bucket name).
+# The rest have working defaults you can override.
+
+# REQUIRED — Terraform Cloud org that owns this root's workspace and the
+# aws-organization workspace it reads. Usually passed to `terraform init` via
+# backend.hcl / TF_CLI_ARGS_init rather than here.
+# tfc_organization = "your-tfc-org-name"
+
+# Optional — workspace holding the phase-1 aws-organization root state.
+organization_workspace_name = "aws-organization"
+
+# Optional — deploy region (also the region the network-account role is assumed
+# in) and the regions IPAM operates in.
+aws_region          = "eu-west-2"
+aws_enabled_regions = ["eu-west-2"]
+
+# REQUIRED — central log-archive bucket name. MUST match the name the
+# aws-organization and aws-security roots use (cross-root naming contract).
+# VPC flow logs and Network Firewall logs are delivered here.
+log_archive_bucket_name = "ashes-org-log-archive"
+
+# Optional — addressing plan for IPAM and the inspection/egress VPCs.
+top_cidr        = "10.0.0.0/8"
+regional_cidrs  = { eu-west-2 = "10.0.0.0/12" }
+inspection_cidr = "10.0.0.0/16"
+egress_cidr     = "10.1.0.0/16"
+
+# Optional — AZ spread for each subnet tier.
+availability_zones = ["eu-west-2a", "eu-west-2b"]
+az_count           = 2
+
+# Optional — shared Route 53 private hosted zone name. Empty skips the zone.
+private_hosted_zone_name = ""
+
+# Optional — cost / feature toggles.
+enable_network_firewall        = true
+enable_network_access_analyzer = false

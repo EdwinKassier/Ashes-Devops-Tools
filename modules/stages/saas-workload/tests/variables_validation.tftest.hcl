@@ -17,7 +17,7 @@ run "valid_org_id_accepted" {
   command = plan
 
   override_module {
-    target = module.supabase_environment
+    target = module.supabase_environment[0]
     outputs = {
       project_id        = "abcdefghijklmnopqrst"
       project_name      = "my-app-qa"
@@ -41,7 +41,7 @@ run "vault_disabled_no_url_accepted" {
   command = plan
 
   override_module {
-    target = module.supabase_environment
+    target = module.supabase_environment[0]
     outputs = {
       project_id        = "abcdefghijklmnopqrst"
       project_name      = "my-app-qa"
@@ -73,7 +73,7 @@ run "vercel_disabled_no_team_accepted" {
   command = plan
 
   override_module {
-    target = module.supabase_environment
+    target = module.supabase_environment[0]
     outputs = {
       project_id        = "abcdefghijklmnopqrst"
       project_name      = "my-app-qa"

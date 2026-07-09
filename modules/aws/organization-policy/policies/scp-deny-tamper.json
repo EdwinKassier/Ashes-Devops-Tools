@@ -1,0 +1,82 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyLeaveOrganization",
+      "Effect": "Deny",
+      "Action": "organizations:LeaveOrganization",
+      "Resource": "*",
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": [
+            "${terraform_run_role_arn}",
+            "${break_glass_role_arn}"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "DenyDisableSecurityServices",
+      "Effect": "Deny",
+      "Action": [
+        "cloudtrail:StopLogging",
+        "cloudtrail:DeleteTrail",
+        "guardduty:DeleteDetector",
+        "guardduty:DisassociateFromMasterAccount",
+        "config:DeleteConfigurationRecorder",
+        "config:StopConfigurationRecorder",
+        "securityhub:DisableSecurityHub",
+        "macie2:DisableMacie"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": [
+            "${terraform_run_role_arn}",
+            "${break_glass_role_arn}"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "DenyCreatePrivilegedRoleImpersonation",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateRole",
+        "iam:PutRolePolicy"
+      ],
+      "Resource": [
+        "${terraform_run_role_arn}",
+        "${break_glass_role_arn}"
+      ],
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": [
+            "${terraform_run_role_arn}",
+            "${break_glass_role_arn}"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "DenyLogArchiveObjectLockTampering",
+      "Effect": "Deny",
+      "Action": [
+        "s3:BypassGovernanceRetention",
+        "s3:PutBucketObjectLockConfiguration"
+      ],
+      "Resource": [
+        "arn:aws:s3:::${log_archive_bucket_name}",
+        "arn:aws:s3:::${log_archive_bucket_name}/*"
+      ],
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": [
+            "${terraform_run_role_arn}",
+            "${break_glass_role_arn}"
+          ]
+        }
+      }
+    }
+  ]
+}

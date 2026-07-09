@@ -1,6 +1,6 @@
 # CLAUDE.md — Agent Onboarding
 
-Terraform/GCP landing zone. 48 modules, two deployable roots, remote state via Terraform Cloud.
+Terraform GCP + AWS landing zone. 89 modules, 10 deployable roots, remote state via Terraform Cloud.
 
 ---
 
@@ -8,8 +8,16 @@ Terraform/GCP landing zone. 48 modules, two deployable roots, remote state via T
 
 ```text
 envs/
-  organization/   # Control plane: folders, org policies, KMS, network hub, bootstrap WIF
-  apps/           # Per-environment app infra — TF_WORKSPACE=apps-<env>
+  organization/         # GCP control plane: folders, org policies, KMS, network hub, bootstrap WIF
+  apps/                 # GCP per-environment app infra — TF_WORKSPACE=apps-<env>
+  aws-organization/     # AWS foundational accounts + org structure
+  aws-security/         # AWS security tooling / log archive (min baseline w/ aws-organization)
+  aws-network/          # AWS shared networking
+  aws-identity/         # AWS IAM Identity Center / SSO
+  aws-shared-services/  # AWS shared platform services
+  aws-backup/           # AWS centralized backup
+  aws-workload/         # AWS per-env workloads — TF_WORKSPACE=aws-workload-<env>
+  saas/                 # Supabase and/or Vercel only — TF_WORKSPACE=saas-<name>
 
 modules/
   stages/         # Orchestration wrappers: bootstrap, organization, projects,
@@ -24,7 +32,18 @@ modules/
   firebase/       # project
   cloud-storage/
   artifact-registry/
+  aws/            # AWS modules (organization, security, network, identity, backup, workload, …)
 ```
+
+---
+
+## Choosing providers
+
+Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud has its own root(s) and TFC workspace(s), so an unused cloud's provider is physically absent from the roots you apply.
+
+A `provider` block cannot be conditional, and Terraform authenticates any referenced provider even at `count = 0` — so **cloud selection is which workspaces you apply, not a runtime `enable_<cloud>` flag**. `enable_*` flags only gate features *within* a root (`enable_supabase`, `enable_vercel`, `enable_edge`).
+
+Full rationale, root inventory, and the any-combination matrix: [`docs/architecture/provider-selection.md`](docs/architecture/provider-selection.md).
 
 ---
 
@@ -34,6 +53,7 @@ modules/
 |------|-----------------|
 | Terraform | `~> 1.9` (uses `mock_provider`, `override_module`, `terraform_data`) |
 | google / google-beta | `~> 6.0` |
+| hashicorp/aws | `>= 6.46.0, < 7.0.0` (floored pin — deliberate, not `~> 6.0`) |
 | supabase/supabase | `~> 1.0` |
 | vercel/vercel | `~> 4.0` |
 | hashicorp/null | `~> 3.0` |
@@ -74,12 +94,16 @@ make ci             # fmt-check + docs-check + validate-all + lint + security + 
 
 ## Required Environment Variables
 
+Only the roots you apply pull in credentials — an unapplied workspace needs none. See [Choosing providers](#choosing-providers).
+
 | Variable | Purpose |
 |----------|---------|
-| `SUPABASE_ACCESS_TOKEN` | supabase provider |
-| `VERCEL_API_TOKEN` | vercel provider — required even when `enable_vercel=false` if root includes `saas-workload` |
-| `GOOGLE_CLOUD_PROJECT` / GCP ADC | google provider |
-| `TFC_TOKEN` | Terraform Cloud API |
+| `GOOGLE_CLOUD_PROJECT` / GCP ADC | google provider — GCP roots (`organization`, `apps`) only |
+| `TFC_AWS_PROVIDER_AUTH` + `TFC_AWS_RUN_ROLE_ARN` | AWS via TFC dynamic (OIDC) credentials — AWS roots only |
+| `AWS_PROFILE` | AWS local/OIDC fallback when not using TFC dynamic credentials — AWS roots only |
+| `SUPABASE_ACCESS_TOKEN` | supabase provider — `saas` root only, when `enable_supabase=true` |
+| `VERCEL_API_TOKEN` | vercel provider — `saas` root only, when `enable_vercel=true` |
+| `TFC_TOKEN` | Terraform Cloud API — always |
 
 ---
 

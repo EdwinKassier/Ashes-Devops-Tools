@@ -1,0 +1,49 @@
+{
+  "plans": {
+    "default": {
+      "regions": {
+        "@@assign": [
+          "${default_region}"
+        ]
+      },
+      "rules": {
+        "daily": {
+          "schedule_expression": {
+            "@@assign": "cron(0 5 ? * * *)"
+          },
+          "start_backup_window_minutes": {
+            "@@assign": "60"
+          },
+          "complete_backup_window_minutes": {
+            "@@assign": "1080"
+          },
+          "target_backup_vault_name": {
+            "@@assign": "Default"
+          },
+          "lifecycle": {
+            "delete_after_days": {
+              "@@assign": "35"
+            }
+          }
+        }
+      },
+      "selections": {
+        "tags": {
+          "backup-daily": {
+            "iam_role_arn": {
+              "@@assign": "arn:aws:iam::$${account}:role/service-role/AWSBackupDefaultServiceRole"
+            },
+            "tag_key": {
+              "@@assign": "Backup"
+            },
+            "tag_value": {
+              "@@assign": [
+                "daily"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

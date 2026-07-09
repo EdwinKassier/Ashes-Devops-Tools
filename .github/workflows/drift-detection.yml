@@ -84,6 +84,24 @@ jobs:
         # (e.g., apps-dev, apps-staging, apps-prod). Override at runtime using the
         # workflow_dispatch input above, or set the TFC_DRIFT_WORKSPACES repository
         # variable to a JSON array: '["organization","apps-dev","apps-prod"]'
+        #
+        # RECOMMENDED TFC_DRIFT_WORKSPACES value for the full GCP + AWS landing zone.
+        # Set this repository variable to a JSON array covering every foundational and
+        # workload workspace you want monitored (substitute real <env>/<name> values):
+        #   [
+        #     "organization",           # GCP control plane
+        #     "apps-dev",               # GCP app envs (add apps-staging, apps-prod, ...)
+        #     "aws-organization",       # AWS Organizations / SCPs / cost governance
+        #     "aws-security",           # GuardDuty, Security Hub, Config, CloudTrail
+        #     "aws-network",            # Transit Gateway, IPAM, Network Firewall
+        #     "aws-identity",           # IAM Identity Center
+        #     "aws-shared-services",    # Log archive, KMS, private CA, SSM
+        #     "aws-backup",             # Org-wide AWS Backup
+        #     "aws-workload-dev",       # AWS per-env workloads (aws-workload-<env>)
+        #     "saas-web"                # SaaS workspaces (saas-<name>)
+        #   ]
+        # The inline default below stays GCP-only so an unset variable never fails
+        # against AWS/saas workspaces that may not exist yet — set the variable to opt in.
         workspace: ${{ fromJSON(vars.TFC_DRIFT_WORKSPACES || '["organization","apps-dev"]') }}
     steps:
       - name: Assert Terraform Cloud credentials are configured

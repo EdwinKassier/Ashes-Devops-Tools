@@ -1,0 +1,15 @@
+# aws-backup — centralized AWS Backup vault + org plan + Vault Lock (phase-6).
+# Reference only. Canonical template: envs/aws-backup/terraform.tfvars.example.
+#
+# Derived from envs/aws-backup/variables.tf: variables with no default = REQUIRED.
+
+# REQUIRED — account-qualified ARN of the role AWS Backup assumes to run backup
+# jobs for the org backup plan (rendered into the org BACKUP_POLICY).
+backup_role_arn = "arn:aws:iam::111111111111:role/aws-backup-role"
+
+# REQUIRED — account-qualified ARN of the role (in the backup account) AWS Backup
+# assumes to perform restore-testing jobs.
+restore_testing_role_arn = "arn:aws:iam::444444444444:role/backup-restore-test"
+
+# Optional — vault name (cross-account naming contract with the org BACKUP_POLICY),
+# CMK, and Vault Lock (WORM) retention window all have working defaults.

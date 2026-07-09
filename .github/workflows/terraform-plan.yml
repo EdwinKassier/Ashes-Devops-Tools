@@ -122,12 +122,23 @@ jobs:
 
       - name: Terraform validate
         working-directory: ${{ matrix.root }}
-        run: terraform validate
+        run: |
+          if grep -rqE 'configuration_aliases' . --include='*.tf'; then
+            echo "Skipping standalone validate: module declares" \
+              "configuration_aliases (cannot be root-validated without a" \
+              "passed provider; covered by its examples/, the composing" \
+              "stage/root, and mock_provider tests)."
+          else
+            terraform validate
+          fi
 
   lint:
     name: TFLint
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 30 (not 15): `make lint` runs `terraform init` across every root serially;
+    # with the AWS landing zone (~35 extra modules/roots) the provider fetches
+    # push a cold run past 15m. The plugin cache below keeps it well under 30m.
+    timeout-minutes: 30
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -142,7 +153,21 @@ jobs:
         with:
           tflint_version: "v0.62.0"
 
+      # Download each provider once and reuse it across all roots' inits,
+      # instead of re-fetching the ~500MB AWS provider per root. Set via
+      # $GITHUB_ENV (not job-level env, where the runner context is unavailable).
+      - name: Prepare provider plugin cache
+        run: |
+          echo "TF_PLUGIN_CACHE_DIR=${RUNNER_TEMP}/tf-plugin-cache" >> "$GITHUB_ENV"
+          mkdir -p "${RUNNER_TEMP}/tf-plugin-cache"
+
       - name: Run TFLint
+        # tflint --init (inside `make lint`) downloads the google ruleset plugin
+        # from the GitHub API; without a token the unauthenticated request hits
+        # the 403 rate limit on shared CI egress. GITHUB_TOKEN authenticates it.
+        # (Step-level env — the secrets context is not available at job level.)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make lint
 
   meta-lint:
@@ -181,8 +206,14 @@ jobs:
         run: |
           python -m pip install commitizen==4.16.4
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch origin "${{ github.base_ref }}" --depth=1
-            cz check --rev-range "origin/${{ github.base_ref }}..HEAD"
+            # Full fetch (not --depth=1) so the merge-base is resolvable, then
+            # anchor the range on it. A plain origin/<base>..HEAD range includes
+            # commits already merged into the base (e.g. when the base advanced
+            # via a merge commit), dragging in pre-linting history and failing
+            # the check spuriously. merge-base..HEAD is exactly this PR's commits.
+            git fetch --no-tags origin "${{ github.base_ref }}"
+            base_sha="$(git merge-base "origin/${{ github.base_ref }}" HEAD)"
+            cz check --rev-range "${base_sha}..HEAD"
           else
             cz check --rev-range "HEAD~1..HEAD"
           fi

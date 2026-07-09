@@ -17,10 +17,10 @@
 [![Terraform Validation](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml)
 [![Security Scan](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml)
 [![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?style=flat-square&logo=pre-commit)](https://pre-commit.com)
-[![Modules](https://img.shields.io/badge/modules-48-blueviolet?style=flat-square)](modules/)
-[![Tests](https://img.shields.io/badge/test_suites-69-blue?style=flat-square)](modules/)
+[![Modules](https://img.shields.io/badge/modules-89-blueviolet?style=flat-square)](modules/)
+[![Tests](https://img.shields.io/badge/test_suites-153-blue?style=flat-square)](modules/)
 
-<sub>Modules/test-suite counts above are hand-maintained, not live badges. Verify: <code>find modules -name main.tf -not -path '*/examples/*' -not -path '*/.terraform/*' | wc -l</code> (modules) and <code>find modules envs -name '*.tftest.hcl' -not -path '*/.terraform/*' | wc -l</code> (test suites). Last verified 2026-07-08: 48 modules, 69 test suites.</sub>
+<sub>Modules/test-suite counts above are hand-maintained, not live badges. Verify: <code>find modules -name main.tf -not -path '*/examples/*' -not -path '*/.terraform/*' | wc -l</code> (modules) and <code>find modules envs -name '*.tftest.hcl' -not -path '*/.terraform/*' | wc -l</code> (test suites). Last verified 2026-07-09: 89 modules, 153 test suites.</sub>
 
 </div>
 
@@ -82,11 +82,17 @@ make ci
 └─────────────────────┘          └────────────────────────┘
 ```
 
+### Choosing providers
+
+Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives in its own root (and TFC workspace), so an unused cloud's provider is physically absent from what you apply — a `provider` block can't be conditional, and Terraform authenticates any referenced provider even at `count = 0`. **Cloud selection is therefore which workspaces you apply, not a runtime `enable_<cloud>` flag** (`enable_*` only gates features within a root). Every subset — including AWS-only, GCP-only, or SaaS-only — is just the union of the per-cloud workspaces and their credentials.
+
+> Full rationale, root inventory, minimum AWS footprint, and the any-combination matrix: **[Provider Selection →](docs/architecture/provider-selection.md)**
+
 ---
 
 ## Module Library
 
-48 modules across 7 categories, each with auto-generated docs and `mock_provider` tests.
+89 modules across 8 categories, each with auto-generated docs and `mock_provider` tests.
 
 ### SaaS Integrations
 
@@ -157,7 +163,7 @@ make ci
 </details>
 
 <details>
-<summary><strong>Stages & Platform (6 orchestration modules + 1 top-level compatibility wrapper)</strong></summary>
+<summary><strong>Stages & Platform (12 orchestration modules + 1 top-level compatibility wrapper)</strong></summary>
 
 | Module | Purpose |
 |:-------|:--------|
@@ -167,6 +173,12 @@ make ci
 | [`stages/network-hub`](modules/stages/network-hub/) | Hub VPC + DNS hub |
 | [`stages/workload`](modules/stages/workload/) | Shared VPC service project attachment |
 | [`stages/saas-workload`](modules/stages/saas-workload/) | Supabase + Vercel full-stack environment |
+| [`stages/aws-organization`](modules/stages/aws-organization/) | AWS Organizations, OUs, SCPs, cost governance |
+| [`stages/aws-security`](modules/stages/aws-security/) | GuardDuty, Security Hub, Config, CloudTrail, delegated admin |
+| [`stages/aws-network-hub`](modules/stages/aws-network-hub/) | Transit Gateway, IPAM, Network Firewall, Route 53 Resolver |
+| [`stages/aws-shared-services`](modules/stages/aws-shared-services/) | Log archive, KMS, private CA, Systems Manager |
+| [`stages/aws-backup`](modules/stages/aws-backup/) | Org-wide AWS Backup vaults and policies |
+| [`stages/aws-workload`](modules/stages/aws-workload/) | Per-account workload VPC + baseline |
 | [`host`](modules/host/) | Top-level compatibility wrapper for `envs/apps` (not under `modules/stages/`) — composes networking, security, and governance primitives |
 
 </details>
@@ -192,6 +204,51 @@ make ci
 
 </details>
 
+### Amazon Web Services
+
+<details>
+<summary><strong>AWS Landing Zone (35 modules)</strong></summary>
+
+| Module | Purpose |
+|:-------|:--------|
+| [`aws/organization`](modules/aws/organization/) | AWS Organizations, OUs, root config |
+| [`aws/organization-policy`](modules/aws/organization-policy/) | Service Control Policies (SCPs) |
+| [`aws/account`](modules/aws/account/) | Member account provisioning |
+| [`aws/account-baseline`](modules/aws/account-baseline/) | Per-account baseline guardrails |
+| [`aws/cost-governance`](modules/aws/cost-governance/) | Budgets, cost anomaly detection, allocation tags |
+| [`aws/service-quotas`](modules/aws/service-quotas/) | Service quota requests |
+| [`aws/iam-organizations-features`](modules/aws/iam-organizations-features/) | Org-wide IAM features |
+| [`aws/iam-identity-center`](modules/aws/iam-identity-center/) | IAM Identity Center (SSO) |
+| [`aws/iam-role`](modules/aws/iam-role/) | IAM roles |
+| [`aws/access-analyzer-org`](modules/aws/access-analyzer-org/) | Org-level IAM Access Analyzer |
+| [`aws/guardduty-org`](modules/aws/guardduty-org/) | Org-wide GuardDuty |
+| [`aws/securityhub-org`](modules/aws/securityhub-org/) | Org-wide Security Hub |
+| [`aws/config-org`](modules/aws/config-org/) | Org-wide AWS Config |
+| [`aws/cloudtrail-org`](modules/aws/cloudtrail-org/) | Org-wide CloudTrail |
+| [`aws/securitylake`](modules/aws/securitylake/) | Amazon Security Lake |
+| [`aws/security-delegated-admin`](modules/aws/security-delegated-admin/) | Delegated administrator registration |
+| [`aws/org-security-service`](modules/aws/org-security-service/) | Org security service enablement |
+| [`aws/security-notifications`](modules/aws/security-notifications/) | Security finding notifications |
+| [`aws/firewall-manager-org`](modules/aws/firewall-manager-org/) | Org-wide Firewall Manager |
+| [`aws/edge-security`](modules/aws/edge-security/) | Edge / WAF security |
+| [`aws/secrets-baseline`](modules/aws/secrets-baseline/) | Secrets Manager baseline |
+| [`aws/incident-response`](modules/aws/incident-response/) | Incident response tooling |
+| [`aws/kms-key`](modules/aws/kms-key/) | Customer-managed KMS keys |
+| [`aws/private-ca`](modules/aws/private-ca/) | AWS Private Certificate Authority |
+| [`aws/systems-manager`](modules/aws/systems-manager/) | Systems Manager configuration |
+| [`aws/log-archive-bucket`](modules/aws/log-archive-bucket/) | Centralized log archive bucket |
+| [`aws/vpc`](modules/aws/vpc/) | VPC with subnets and routing |
+| [`aws/vpc-endpoints`](modules/aws/vpc-endpoints/) | VPC interface/gateway endpoints |
+| [`aws/transit-gateway`](modules/aws/transit-gateway/) | Transit Gateway hub |
+| [`aws/ipam`](modules/aws/ipam/) | IP Address Manager |
+| [`aws/network-firewall`](modules/aws/network-firewall/) | AWS Network Firewall |
+| [`aws/network-access-analyzer`](modules/aws/network-access-analyzer/) | Network Access Analyzer |
+| [`aws/route53-resolver`](modules/aws/route53-resolver/) | Route 53 Resolver rules/endpoints |
+| [`aws/backup-vault`](modules/aws/backup-vault/) | AWS Backup vault |
+| [`aws/backup-org-policy`](modules/aws/backup-org-policy/) | Org-wide backup policies |
+
+</details>
+
 ---
 
 ## Commands
@@ -199,7 +256,7 @@ make ci
 ```bash
 make ci                    # Full local pipeline (fmt + docs + validate + lint + security + test)
 make fmt                   # Format all Terraform files
-make test                  # Run all 69 .tftest.hcl suites (no cloud creds needed)
+make test                  # Run all 153 .tftest.hcl suites (no cloud creds needed)
 make validate-all          # terraform validate across all roots
 make lint                  # TFLint with GCP ruleset
 make security              # tfsec + Checkov
@@ -237,6 +294,7 @@ git push origin organization/v1.2.0
 | [Documentation Index](docs/INDEX.md) | Complete navigation hub |
 | [Quick Start](docs/guides/QUICK_START.md) | Bootstrap, creds, first apply |
 | [Architecture](docs/architecture/ARCHITECTURE.md) | Roots, modules, execution model |
+| [Provider Selection](docs/architecture/provider-selection.md) | Any-combination cloud matrix, per-cloud-root model |
 | [Network Topology](docs/architecture/network-topology.md) | Hub-spoke layout, VPC-SC, WIF flows |
 | [Troubleshooting](docs/guides/TROUBLESHOOTING.md) | Common errors including Supabase/Vercel |
 | [Branch Protection](docs/guides/BRANCH_PROTECTION.md) | GitHub ruleset configuration |

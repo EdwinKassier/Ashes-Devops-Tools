@@ -7,6 +7,20 @@
 # Inline # checkov:skip= annotations are used for resource-level skips.
 # See modules/governance/kms, modules/cloud-storage, modules/stages/bootstrap.
 #
+# AWS coverage (Task K5, 2026-07-09): checkov is the PRIMARY scanner for the AWS modules
+# (tfsec 1.28.6's AWS ruleset is thin — see .tfsec.yml). All AWS-specific suppressions are
+# resource-level inline `# checkov:skip=` annotations in the affected modules, NOT global
+# entries, so each is scoped to the exact resource whose pattern is intentional:
+#   modules/aws/incident-response/main.tf — CKV_AWS_50/115/116/117/272 (scaffold isolation
+#     Lambda) and CKV_AWS_61 (forensics role trust scoped to one account + PrincipalOrgID)
+#   modules/aws/cloudtrail-org/main.tf     — CKV_AWS_252 (central notification path, no per-trail SNS)
+#   modules/aws/network-firewall, iam-role, edge-security, secrets-baseline,
+#     stages/aws-workload — pre-existing inline AWS skips (see `grep -rn 'checkov:skip=CKV_AWS'`)
+# CKV_AWS_300 (S3 abort-incomplete-multipart) was FIXED, not skipped: an
+# abort_incomplete_multipart_upload lifecycle rule was added to modules/aws/log-archive-bucket.
+# `checkov -d modules` and `checkov -d envs` are both green with these inline skips; no
+# global AWS skip-check entry is required.
+#
 # REMOVED from this file (no resources to trigger them):
 #   CKV_GCP_46-50 — GKE checks: no google_container_* resources in this repo
 #   CKV_GCP_27    — Cloud SQL public IP: no google_sql_* resources

@@ -37,9 +37,6 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	supabase_database_password = 
-	supabase_organization_id = 
-	supabase_project_name = 
 	
 }
 ```
@@ -69,19 +66,20 @@ module "example" {
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_supabase_database_password"></a> [supabase\_database\_password](#input\_supabase\_database\_password) | Initial Postgres database password. Minimum 16 characters. Ignored after initial creation. | `string` | n/a | yes |
-| <a name="input_supabase_organization_id"></a> [supabase\_organization\_id](#input\_supabase\_organization\_id) | Supabase organisation ID (from dashboard.supabase.com → Organisation Settings). Lowercase alphanumeric, at least 8 characters. | `string` | n/a | yes |
-| <a name="input_supabase_project_name"></a> [supabase\_project\_name](#input\_supabase\_project\_name) | Display name for the Supabase project (3–64 characters). | `string` | n/a | yes |
+| <a name="input_enable_supabase"></a> [enable\_supabase](#input\_enable\_supabase) | Whether to provision the Supabase project/settings/environment. Default true preserves existing behavior; set false for Vercel-only or no-SaaS deployments. | `bool` | `true` | no |
 | <a name="input_enable_vault_secrets"></a> [enable\_vault\_secrets](#input\_enable\_vault\_secrets) | When true, bootstrap and reconcile the Supabase Vault. Requires Node.js >= 18 in the execution environment and var.postgres\_url. | `bool` | `false` | no |
 | <a name="input_enable_vercel"></a> [enable\_vercel](#input\_enable\_vercel) | When true, create and configure the Vercel project. Requires var.vercel\_team\_id and var.vercel\_github\_repo. | `bool` | `false` | no |
 | <a name="input_postgres_url"></a> [postgres\_url](#input\_postgres\_url) | Session-mode pooler URL (port 5432) for vault bootstrap and reconcile.<br/>Required when enable\_vault\_secrets = true. Leave empty when disabled.<br/>Format: postgresql://postgres.<project\_ref>:<password>@<host>:5432/postgres | `string` | `""` | no |
 | <a name="input_supabase_api_max_rows"></a> [supabase\_api\_max\_rows](#input\_supabase\_api\_max\_rows) | Maximum rows returned by a single REST API request (100–100 000). | `number` | `1000` | no |
+| <a name="input_supabase_database_password"></a> [supabase\_database\_password](#input\_supabase\_database\_password) | Initial Postgres database password. Minimum 16 characters. Ignored after initial creation. Required when enable\_supabase = true. | `string` | `""` | no |
 | <a name="input_supabase_db_extra_search_path"></a> [supabase\_db\_extra\_search\_path](#input\_supabase\_db\_extra\_search\_path) | Comma-separated list of schemas appended to the Postgres search\_path. | `string` | `"public,extensions"` | no |
 | <a name="input_supabase_db_schema"></a> [supabase\_db\_schema](#input\_supabase\_db\_schema) | Comma-separated list of Postgres schemas exposed via the REST API. | `string` | `"public,graphql_public"` | no |
 | <a name="input_supabase_disable_signup"></a> [supabase\_disable\_signup](#input\_supabase\_disable\_signup) | Disable new user sign-ups. Recommended true for production. | `bool` | `false` | no |
 | <a name="input_supabase_jwt_expiry"></a> [supabase\_jwt\_expiry](#input\_supabase\_jwt\_expiry) | JWT access token expiry in seconds (300–604 800). | `number` | `3600` | no |
 | <a name="input_supabase_mailer_autoconfirm"></a> [supabase\_mailer\_autoconfirm](#input\_supabase\_mailer\_autoconfirm) | Auto-confirm email addresses. QA only; disable for production. | `bool` | `false` | no |
+| <a name="input_supabase_organization_id"></a> [supabase\_organization\_id](#input\_supabase\_organization\_id) | Supabase organisation ID (from dashboard.supabase.com → Organisation Settings). Lowercase alphanumeric, at least 8 characters. Required when enable\_supabase = true. | `string` | `""` | no |
 | <a name="input_supabase_password_min_length"></a> [supabase\_password\_min\_length](#input\_supabase\_password\_min\_length) | Minimum password length for user accounts (6–100). Default 12 matches the collects reference implementation. | `number` | `12` | no |
+| <a name="input_supabase_project_name"></a> [supabase\_project\_name](#input\_supabase\_project\_name) | Display name for the Supabase project (3–64 characters). Required when enable\_supabase = true. | `string` | `""` | no |
 | <a name="input_supabase_region"></a> [supabase\_region](#input\_supabase\_region) | Supabase deployment region slug (e.g. 'eu-west-2'). | `string` | `"eu-west-2"` | no |
 | <a name="input_supabase_ssl_cert"></a> [supabase\_ssl\_cert](#input\_supabase\_ssl\_cert) | Base64-encoded Supabase CA certificate bundle. Required for pooler connections when enable\_vault\_secrets = true. | `string` | `""` | no |
 | <a name="input_vault_secrets"></a> [vault\_secrets](#input\_vault\_secrets) | Desired vault state as name → value map. Only used when enable\_vault\_secrets = true. Names must be UPPER\_SNAKE\_CASE. | `map(string)` | `{}` | no |
@@ -103,11 +101,11 @@ module "example" {
 
 | Name | Description |
 |------|-------------|
-| <a name="output_supabase_anon_key"></a> [supabase\_anon\_key](#output\_supabase\_anon\_key) | The Supabase anon key (public credential). Not marked sensitive by design — see supabase/environment module. |
-| <a name="output_supabase_api_url"></a> [supabase\_api\_url](#output\_supabase\_api\_url) | The Supabase project REST API URL. |
-| <a name="output_supabase_database_password"></a> [supabase\_database\_password](#output\_supabase\_database\_password) | The initial Supabase database password. |
-| <a name="output_supabase_project_id"></a> [supabase\_project\_id](#output\_supabase\_project\_id) | The Supabase project ref. |
-| <a name="output_supabase_service_role_key"></a> [supabase\_service\_role\_key](#output\_supabase\_service\_role\_key) | The Supabase service role key. Treat as a secret. |
+| <a name="output_supabase_anon_key"></a> [supabase\_anon\_key](#output\_supabase\_anon\_key) | The Supabase anon key (public credential). Not marked sensitive by design — see supabase/environment module. Null when enable\_supabase = false. |
+| <a name="output_supabase_api_url"></a> [supabase\_api\_url](#output\_supabase\_api\_url) | The Supabase project REST API URL. Null when enable\_supabase = false. |
+| <a name="output_supabase_database_password"></a> [supabase\_database\_password](#output\_supabase\_database\_password) | The initial Supabase database password. Null when enable\_supabase = false. |
+| <a name="output_supabase_project_id"></a> [supabase\_project\_id](#output\_supabase\_project\_id) | The Supabase project ref. Null when enable\_supabase = false. |
+| <a name="output_supabase_service_role_key"></a> [supabase\_service\_role\_key](#output\_supabase\_service\_role\_key) | The Supabase service role key. Treat as a secret. Null when enable\_supabase = false. |
 | <a name="output_vault_managed_secret_names"></a> [vault\_managed\_secret\_names](#output\_vault\_managed\_secret\_names) | Names of vault secrets managed by this module. Null when enable\_vault\_secrets = false. |
 | <a name="output_vercel_project_id"></a> [vercel\_project\_id](#output\_vercel\_project\_id) | The Vercel project ID. Null when enable\_vercel = false. |
 | <a name="output_vercel_uat_environment_id"></a> [vercel\_uat\_environment\_id](#output\_vercel\_uat\_environment\_id) | The Vercel UAT custom environment ID. Null when enable\_vercel = false. |

@@ -1,15 +1,17 @@
 # SaaS Workload Stage Module
 #
 # Composes three child modules to provision a complete SaaS environment:
-#   1. supabase/environment  — Supabase project + settings + API keys (always)
+#   1. supabase/environment  — Supabase project + settings + API keys (optional, gated by enable_supabase)
 #   2. supabase/vault-secrets — Vault bootstrap and reconcile (optional, gated by enable_vault_secrets)
 #   3. vercel/project        — Vercel project + three environments + env vars (optional, gated by enable_vercel)
 #
-# Vercel and vault-secrets are gated by enable_vercel and enable_vault_secrets
-# respectively — set them to false in the first apply when the downstream
-# dependencies (Vercel team, Node.js in PATH) are not yet available.
+# Supabase, Vercel and vault-secrets are gated by enable_supabase, enable_vercel
+# and enable_vault_secrets respectively — set them to false to deploy any
+# combination (e.g. Vercel-only, or a first apply before the downstream
+# dependencies such as the Vercel team or Node.js in PATH are available).
 
 module "supabase_environment" {
+  count  = var.enable_supabase ? 1 : 0
   source = "../../supabase/environment"
 
   organization_id      = var.supabase_organization_id

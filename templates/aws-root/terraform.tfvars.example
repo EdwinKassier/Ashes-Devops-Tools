@@ -1,0 +1,10 @@
+# Copy to terraform.tfvars and fill in. Inputs marked REQUIRED have no default.
+
+# REQUIRED — Terraform Cloud org that owns the remote-state workspaces this root reads.
+tfc_organization = "REPLACE_ME"
+
+# Optional — primary region for the default aws provider (default: eu-west-2).
+aws_region = "eu-west-2"
+
+# Optional — regions this root manages resources in (default: ["eu-west-2"]).
+aws_enabled_regions = ["eu-west-2"]

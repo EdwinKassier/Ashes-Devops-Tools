@@ -1,0 +1,12 @@
+# aws-network — minimal required inputs (phase-3, TGW hub + shared networking).
+# Reference only. Canonical template: envs/aws-network/terraform.tfvars.example.
+#
+# Derived from envs/aws-network/variables.tf: variables with no default = REQUIRED.
+
+# REQUIRED — central log-archive bucket name. MUST match the value used in the
+# aws-organization / aws-security roots (cross-root naming contract). VPC flow
+# logs and Network Firewall logs are delivered here.
+log_archive_bucket_name = "ashes-org-log-archive"
+
+# Everything else (CIDR plan, AZ spread, firewall/analyzer toggles) has working
+# defaults — see the env template to override the addressing plan.

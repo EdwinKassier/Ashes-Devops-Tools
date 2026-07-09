@@ -1,0 +1,22 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyRootUserActions",
+      "Effect": "Deny",
+      "Action": "*",
+      "Resource": "*",
+      "Condition": {
+        "StringLike": {
+          "aws:PrincipalArn": "arn:aws:iam::*:root"
+        },
+        "ArnNotLike": {
+          "aws:PrincipalArn": [
+            "${terraform_run_role_arn}",
+            "${break_glass_role_arn}"
+          ]
+        }
+      }
+    }
+  ]
+}
