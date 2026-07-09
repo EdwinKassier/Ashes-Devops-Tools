@@ -26,3 +26,18 @@ run "empty_vpc_id_rejected" {
 
   expect_failures = [var.vpc_id]
 }
+
+run "query_logging_enabled_without_destination_rejected" {
+  # Enabling query logging with an empty destination arn ships logs nowhere
+  # and must trip the validation.
+  command = plan
+
+  variables {
+    vpc_id                    = "vpc-0123456789abcdef0"
+    org_arn                   = "arn:aws:organizations::111122223333:organization/o-exampleorgid"
+    enable_query_logging      = true
+    query_log_destination_arn = ""
+  }
+
+  expect_failures = [var.query_log_destination_arn]
+}

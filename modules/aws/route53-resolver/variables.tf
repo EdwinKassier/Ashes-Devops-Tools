@@ -82,6 +82,13 @@ variable "query_log_destination_arn" {
   description = "ARN of the destination (S3 bucket, CloudWatch log group, or Kinesis stream) that receives resolver query logs. Required when enable_query_logging is true."
   type        = string
   default     = ""
+
+  validation {
+    # Query logging enabled with an empty destination silently ships logs
+    # nowhere; require a destination whenever logging is on.
+    condition     = !var.enable_query_logging || length(trimspace(var.query_log_destination_arn)) > 0
+    error_message = "query_log_destination_arn is required when enable_query_logging is true."
+  }
 }
 
 variable "enable_dnssec" {

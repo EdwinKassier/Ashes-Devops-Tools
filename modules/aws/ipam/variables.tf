@@ -36,6 +36,13 @@ variable "regional_cidrs" {
     condition     = alltrue([for c in values(var.regional_cidrs) : can(cidrhost(c, 0))])
     error_message = "Every value in regional_cidrs must be a valid IPv4 CIDR block."
   }
+
+  validation {
+    # Every regional pool key must map to an operating region; a key not in
+    # aws_enabled_regions would carve a pool with no IPAM operating region.
+    condition     = alltrue([for k in keys(var.regional_cidrs) : contains(var.aws_enabled_regions, k)])
+    error_message = "Every regional_cidrs key must be a region present in aws_enabled_regions."
+  }
 }
 
 variable "share_name" {
