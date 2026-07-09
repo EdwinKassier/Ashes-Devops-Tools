@@ -1,33 +1,42 @@
 # ── Supabase variables ─────────────────────────────────────────────────────────
 
+variable "enable_supabase" {
+  description = "Whether to provision the Supabase project/settings/environment. Default true preserves existing behavior; set false for Vercel-only or no-SaaS deployments."
+  type        = bool
+  default     = true
+}
+
 variable "supabase_organization_id" {
-  description = "Supabase organisation ID (from dashboard.supabase.com → Organisation Settings). Lowercase alphanumeric, at least 8 characters."
+  description = "Supabase organisation ID (from dashboard.supabase.com → Organisation Settings). Lowercase alphanumeric, at least 8 characters. Required when enable_supabase = true."
   type        = string
+  default     = ""
 
   validation {
-    condition     = can(regex("^[a-z0-9]{8,}$", var.supabase_organization_id))
-    error_message = "supabase_organization_id must be at least 8 lowercase alphanumeric characters."
+    condition     = !var.enable_supabase || can(regex("^[a-z0-9]{8,}$", var.supabase_organization_id))
+    error_message = "supabase_organization_id must be at least 8 lowercase alphanumeric characters when enable_supabase = true."
   }
 }
 
 variable "supabase_project_name" {
-  description = "Display name for the Supabase project (3–64 characters)."
+  description = "Display name for the Supabase project (3–64 characters). Required when enable_supabase = true."
   type        = string
+  default     = ""
 
   validation {
-    condition     = length(var.supabase_project_name) >= 3 && length(var.supabase_project_name) <= 64
-    error_message = "supabase_project_name must be between 3 and 64 characters."
+    condition     = !var.enable_supabase || (length(var.supabase_project_name) >= 3 && length(var.supabase_project_name) <= 64)
+    error_message = "supabase_project_name must be between 3 and 64 characters when enable_supabase = true."
   }
 }
 
 variable "supabase_database_password" {
-  description = "Initial Postgres database password. Minimum 16 characters. Ignored after initial creation."
+  description = "Initial Postgres database password. Minimum 16 characters. Ignored after initial creation. Required when enable_supabase = true."
   type        = string
   sensitive   = true
+  default     = ""
 
   validation {
-    condition     = length(var.supabase_database_password) >= 16
-    error_message = "supabase_database_password must be at least 16 characters."
+    condition     = !var.enable_supabase || length(var.supabase_database_password) >= 16
+    error_message = "supabase_database_password must be at least 16 characters when enable_supabase = true."
   }
 }
 

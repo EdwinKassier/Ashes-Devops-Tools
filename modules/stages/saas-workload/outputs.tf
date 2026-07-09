@@ -1,29 +1,29 @@
 # ── Supabase outputs ───────────────────────────────────────────────────────────
 
 output "supabase_project_id" {
-  description = "The Supabase project ref."
-  value       = module.supabase_environment.project_id
+  description = "The Supabase project ref. Null when enable_supabase = false."
+  value       = var.enable_supabase ? module.supabase_environment[0].project_id : null
 }
 
 output "supabase_api_url" {
-  description = "The Supabase project REST API URL."
-  value       = module.supabase_environment.api_url
+  description = "The Supabase project REST API URL. Null when enable_supabase = false."
+  value       = var.enable_supabase ? module.supabase_environment[0].api_url : null
 }
 
 output "supabase_anon_key" {
-  description = "The Supabase anon key (public credential). Not marked sensitive by design — see supabase/environment module."
-  value       = module.supabase_environment.anon_key
+  description = "The Supabase anon key (public credential). Not marked sensitive by design — see supabase/environment module. Null when enable_supabase = false."
+  value       = var.enable_supabase ? module.supabase_environment[0].anon_key : null
 }
 
 output "supabase_service_role_key" {
-  description = "The Supabase service role key. Treat as a secret."
-  value       = module.supabase_environment.service_role_key
+  description = "The Supabase service role key. Treat as a secret. Null when enable_supabase = false."
+  value       = var.enable_supabase ? module.supabase_environment[0].service_role_key : null
   sensitive   = true
 }
 
 output "supabase_database_password" {
-  description = "The initial Supabase database password."
-  value       = module.supabase_environment.database_password
+  description = "The initial Supabase database password. Null when enable_supabase = false."
+  value       = var.enable_supabase ? module.supabase_environment[0].database_password : null
   sensitive   = true
 }
 
