@@ -12,6 +12,13 @@ variable "quota_increases" {
     value        = number # requested quota value
   }))
   default = {}
+
+  validation {
+    # A quota-increase request and its 80%-usage alarm are only meaningful for a
+    # positive requested value; reject zero/negative values.
+    condition     = alltrue([for q in values(var.quota_increases) : q.value > 0])
+    error_message = "Every quota_increases value must be greater than 0."
+  }
 }
 
 variable "notifications_topic_arn" {

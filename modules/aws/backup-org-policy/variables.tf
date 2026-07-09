@@ -30,4 +30,11 @@ variable "backup_role_arn" {
 variable "target_ou_id" {
   description = "ID of the OU the policy is attached to (typically the Workloads OU)."
   type        = string
+
+  validation {
+    # Organizations policy targets are either an OU (ou-...) or the org root
+    # (r-...); reject anything that is not one of those id shapes.
+    condition     = can(regex("^(r|ou)-[a-z0-9-]+$", var.target_ou_id))
+    error_message = "target_ou_id must be an Organizations OU id (ou-xxxx-yyyy) or root id (r-xxxx)."
+  }
 }

@@ -14,6 +14,13 @@ variable "match_paths" {
     source_resource_types      = ["AWS::EC2::InternetGateway"]
     destination_resource_types = ["AWS::EC2::Instance"]
   }]
+
+  validation {
+    # An enabled scope with no match paths creates a scope that can never flag
+    # a segmentation violation, so require at least one path when enabled.
+    condition     = !var.enable_network_access_analyzer || length(var.match_paths) > 0
+    error_message = "match_paths must contain at least one path when enable_network_access_analyzer is true."
+  }
 }
 
 variable "exclude_paths" {

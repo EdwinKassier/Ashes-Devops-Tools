@@ -31,4 +31,12 @@ variable "org_id" {
   description = "AWS organization ID (o-xxxxxxxxxx) used in the aws:PrincipalOrgID condition that scopes secret access to the organization. Required when enable_secrets_baseline is true."
   type        = string
   default     = ""
+
+  validation {
+    # When the module is enabled the org_id feeds the aws:PrincipalOrgID
+    # condition; an empty/malformed value silently produces an ineffective
+    # resource policy, so require a valid o-xxxx id whenever enabled.
+    condition     = !var.enable_secrets_baseline || can(regex("^o-[a-z0-9]+$", var.org_id))
+    error_message = "org_id must be a valid o-xxxx org id when enable_secrets_baseline is true."
+  }
 }
