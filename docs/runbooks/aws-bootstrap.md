@@ -107,7 +107,7 @@ Instead, for each downstream root, create its workspace out-of-band (same mechan
 | `aws-shared-services` | `account_role_arns["shared_services"]` | Optional/gated shared platform services. |
 | `aws-backup` | `account_role_arns["backup"]` | Centralized AWS Backup account. |
 | `aws-workload-<env>` | `account_role_arns["<workload-account>"]` | One workspace per env via the `aws-workload-` prefix; key is the workload account name you added under `workload_accounts`. |
-| `saas-<name>` | _(none — no AWS role)_ | Supabase/Vercel only; reads AWS/GCP remote state for values but configures no AWS provider. |
+| `saas-<name>` | *(none — no AWS role)* | Supabase/Vercel only; reads AWS/GCP remote state for values but configures no AWS provider. |
 
 > The account keys (`log_archive`, `security_tooling`, `network`, `shared_services`, `backup`, `forensics`) come from the `accounts` map in `envs/aws-organization/terraform.tfvars`. `account_role_arns` is keyed by exactly those names. Get the live values after phase-1 apply:
 >

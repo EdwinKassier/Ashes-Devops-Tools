@@ -57,7 +57,7 @@ variable "tags" {
 variable "alternate_contacts" {
   description = "Alternate contacts to register on the account, keyed by an arbitrary label. contact_type must be one of SECURITY, BILLING, or OPERATIONS."
   type = map(object({
-    contact_type  = string # SECURITY | BILLING | OPERATIONS
+    contact_type  = string # one of: SECURITY, BILLING, OPERATIONS
     name          = string
     title         = string
     email_address = string

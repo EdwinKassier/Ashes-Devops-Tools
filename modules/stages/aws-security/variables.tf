@@ -240,7 +240,7 @@ variable "enable_firewall_manager" {
 variable "notification_subscribers" {
   description = "Subscribers attached to the security-notifications SNS topic, keyed by an arbitrary name. At least one is required (findings would otherwise fire into a void). Defaults to a placeholder SecOps email the root is expected to override."
   type = map(object({
-    protocol = string # "email" | "https" | "sms" | "sqs" | "lambda" | ...
+    protocol = string # one of: email, https, sms, sqs, lambda, etc.
     endpoint = string # e.g. an email address or HTTPS URL
   }))
   default = {

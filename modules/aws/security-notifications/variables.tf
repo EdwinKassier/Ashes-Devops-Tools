@@ -18,7 +18,7 @@ variable "kms_key_id" {
 variable "notification_subscribers" {
   description = "Map of subscribers to attach to the SNS topic, keyed by an arbitrary name. A subscriber is required when the module is enabled — otherwise findings fire into a void."
   type = map(object({
-    protocol = string # "email" | "https" | "sms" | "sqs" | "lambda" | ...
+    protocol = string # one of: email, https, sms, sqs, lambda, etc.
     endpoint = string # e.g. an email address or HTTPS URL
   }))
   default = {}

@@ -36,7 +36,7 @@ Composed children:
 - **network_access_analyzer** (`network-access-analyzer`) — optional
   segmentation-intent scope, off by default (`enable_network_access_analyzer`).
 
-### Subnet tier layout
+## Subnet tier layout
 
 Each VPC is a `/16`; tiers are `/24`s (`newbits = 8`) with `number_offset` in
 units of one `/24`, spread over `az_count` AZs. Offsets are multiples of 8 so

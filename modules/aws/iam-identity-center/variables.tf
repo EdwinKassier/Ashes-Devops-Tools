@@ -42,7 +42,7 @@ variable "assignments" {
   description = "Map of assignment key to an assignment binding a permission set to a principal (GROUP or USER) in a target AWS account. permission_set must be a key in permission_sets. Prefer GROUP principals; reserve USER for the management account only."
   type = map(object({
     permission_set = string
-    principal_type = string # GROUP | USER
+    principal_type = string # one of: GROUP, USER
     principal_id   = string # Identity Store group or user ID
     account_id     = string # Target AWS account ID
   }))

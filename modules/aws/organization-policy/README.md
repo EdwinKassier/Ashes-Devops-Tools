@@ -3,9 +3,10 @@
 AWS Organizations guardrail policies for the SRA landing zone. Renders a set of
 organization policies from templated JSON files and attaches them to OU/account
 targets. Covers all five policy types: three SCPs (deny-tamper,
-region-restriction, baseline), a two-statement data-perimeter RCP (org-identity
-+ confused-deputy + secure-transport), an `@@assign` declarative EC2 policy
-(IMDSv2 + public-access blocks), a tag policy, and a daily backup policy.
+region-restriction, baseline), a two-statement data-perimeter RCP
+(org-identity, confused-deputy, and secure-transport), an `@@assign`
+declarative EC2 policy (IMDSv2 and public-access blocks), a tag policy, and a
+daily backup policy.
 
 `FullAWSAccess` / `RCPFullAWSAccess` are AWS-managed and never managed here.
 
