@@ -122,7 +122,15 @@ jobs:
 
       - name: Terraform validate
         working-directory: ${{ matrix.root }}
-        run: terraform validate
+        run: |
+          if grep -rqE 'configuration_aliases' . --include='*.tf'; then
+            echo "Skipping standalone validate: module declares" \
+              "configuration_aliases (cannot be root-validated without a" \
+              "passed provider; covered by its examples/, the composing" \
+              "stage/root, and mock_provider tests)."
+          else
+            terraform validate
+          fi
 
   lint:
     name: TFLint
