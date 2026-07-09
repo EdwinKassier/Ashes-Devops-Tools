@@ -42,9 +42,9 @@ One root per cloud + layer, named `envs/<cloud>-<layer>`. Each root declares exa
 | `envs/aws-shared-services` | `aws-shared-services` | AWS (shared platform services) | AWS |
 | `envs/aws-backup` | `aws-backup` | AWS (centralized backup) | AWS |
 | `envs/aws-workload` | `aws-workload-<env>` | AWS (per-env workloads) | AWS |
-| `envs/saas` | `saas-<name>` | Supabase and/or Vercel only | SaaS |
+| `envs/saas` | `saas-<name>` (via `TF_WORKSPACE=saas-<name>`) | Supabase and/or Vercel only | SaaS |
 
-The GCP roots (`organization`, `apps`) are the existing landing zone. The AWS roots follow the standard multi-account foundational layout. The `saas` root is the **only** place Supabase and Vercel providers live — they never live inside an AWS or GCP root.
+The GCP roots (`organization`, `apps`) are the existing landing zone. The AWS roots follow the standard multi-account foundational layout. The `saas` root is the **only** place Supabase and Vercel providers live — they never live inside an AWS or GCP root. It declares **no `aws` or `google` provider at all**, so a Supabase- and/or Vercel-only user needs no cloud credentials to plan or apply it. Its `enable_supabase` / `enable_vercel` flags gate the two SaaS features independently within the single root.
 
 ### Minimum AWS footprint
 
@@ -67,9 +67,9 @@ Pick what you want; apply exactly those workspaces. Credentials come from the ro
 |---|---|---|
 | GCP only | `organization`, `apps-<env>` | GCP ADC |
 | AWS only (baseline) | `aws-organization`, `aws-security` (+ `aws-network`/`aws-identity`/`aws-backup`/`aws-workload-<env>` as needed) | AWS (management + assume-role) |
-| Supabase only | `saas` with `enable_supabase=true, enable_vercel=false` | `SUPABASE_ACCESS_TOKEN` |
-| Vercel only | `saas` with `enable_vercel=true, enable_supabase=false` | `VERCEL_API_TOKEN` |
-| Supabase + Vercel | `saas` with both true | both SaaS tokens |
+| Supabase only | `saas-<name>` with `enable_supabase=true, enable_vercel=false` | `SUPABASE_ACCESS_TOKEN` only (no aws/google provider in the root) |
+| Vercel only | `saas-<name>` with `enable_vercel=true, enable_supabase=false` | `VERCEL_API_TOKEN` only (no aws/google provider in the root) |
+| Supabase + Vercel | `saas-<name>` with both true | `SUPABASE_ACCESS_TOKEN` + `VERCEL_API_TOKEN` (still no aws/google provider) |
 | AWS + GCP | AWS set + GCP set | AWS + GCP |
 | GCP + SaaS | GCP set + `saas` | GCP + SaaS token(s) |
 | AWS + SaaS | AWS set + `saas` | AWS + SaaS token(s) |
