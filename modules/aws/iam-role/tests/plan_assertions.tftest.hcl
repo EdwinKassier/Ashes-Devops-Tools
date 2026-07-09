@@ -39,4 +39,12 @@ run "workload_role_and_break_glass_defaults" {
     condition     = length(aws_iam_role_policy.break_glass_standing) == 1
     error_message = "With break_glass_active=false the deny-all standing policy must be present."
   }
+
+  assert {
+    # Non-vacuous: the standing policy body must be a genuine deny-all -
+    # Effect=Deny on Action=* - not merely present. jsonencode sorts keys,
+    # so the rendered form is {"Statement":[{"Action":"*","Effect":"Deny",...
+    condition     = can(regex("\"Effect\":\"Deny\"", aws_iam_role_policy.break_glass_standing[0].policy)) && can(regex("\"Action\":\"\\*\"", aws_iam_role_policy.break_glass_standing[0].policy))
+    error_message = "Break-glass standing policy must deny all actions (Effect=Deny, Action=*)."
+  }
 }

@@ -95,6 +95,30 @@ run "composes_network_hub" {
     error_message = "transit gateway must expose prod, nonprod, inspection and shared route tables"
   }
 
+  # Centralized-inspection routing edge (Epic D): the stage must send BOTH the
+  # prod and nonprod default routes (0.0.0.0/0) to the inspection attachment so
+  # all egress/east-west traffic is forced through the firewall. Non-vacuous:
+  # asserts on the concrete route_table/cidr/attachment the stage builds and
+  # feeds to module.transit_gateway (surfaced via the tgw_inspection_routes
+  # output because the TGW child is override_module'd).
+  assert {
+    condition = alltrue([
+      for seg in ["prod", "nonprod"] :
+      output.tgw_inspection_routes["${seg}:default"].route_table == seg &&
+      output.tgw_inspection_routes["${seg}:default"].cidr == "0.0.0.0/0" &&
+      output.tgw_inspection_routes["${seg}:default"].attachment == "inspection"
+    ])
+    error_message = "stage must route prod and nonprod default (0.0.0.0/0) traffic to the inspection attachment"
+  }
+
+  # And it must build exactly those two default routes - no segment missing.
+  assert {
+    condition = length(keys(output.tgw_inspection_routes)) == 2 && alltrue([
+      for k in ["prod:default", "nonprod:default"] : contains(keys(output.tgw_inspection_routes), k)
+    ])
+    error_message = "stage must construct exactly the prod:default and nonprod:default inspection routes"
+  }
+
   # tgw_id surfaces through the stage output (routing contract wiring proof).
   assert {
     condition     = output.tgw_id == "tgw-000000000000abcd"

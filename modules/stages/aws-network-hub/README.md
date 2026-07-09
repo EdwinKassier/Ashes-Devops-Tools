@@ -102,11 +102,11 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_eip.nat (modules/stages/aws-network-hub/main.tf#L112)
-- resource.aws_nat_gateway.this (modules/stages/aws-network-hub/main.tf#L120)
-- resource.aws_route.egress_default (modules/stages/aws-network-hub/main.tf#L140)
-- resource.aws_route_table.egress_private (modules/stages/aws-network-hub/main.tf#L134)
-- resource.aws_route_table_association.egress_private (modules/stages/aws-network-hub/main.tf#L146)
+- resource.aws_eip.nat (modules/stages/aws-network-hub/main.tf#L128)
+- resource.aws_nat_gateway.this (modules/stages/aws-network-hub/main.tf#L136)
+- resource.aws_route.egress_default (modules/stages/aws-network-hub/main.tf#L156)
+- resource.aws_route_table.egress_private (modules/stages/aws-network-hub/main.tf#L150)
+- resource.aws_route_table_association.egress_private (modules/stages/aws-network-hub/main.tf#L162)
 
 
 ## Inputs
@@ -139,4 +139,5 @@ The following resources are created:
 | <a name="output_ipam_pool_ids"></a> [ipam\_pool\_ids](#output\_ipam\_pool\_ids) | Map of region to the ID of its regional IPAM pool, consumed by app roots to allocate VPC CIDRs. |
 | <a name="output_resolver_profile_id"></a> [resolver\_profile\_id](#output\_resolver\_profile\_id) | The ID of the Route 53 Profile shared org-wide over RAM. |
 | <a name="output_tgw_id"></a> [tgw\_id](#output\_tgw\_id) | The ID of the transit gateway (the network cross-root routing contract). |
+| <a name="output_tgw_inspection_routes"></a> [tgw\_inspection\_routes](#output\_tgw\_inspection\_routes) | The centralized-inspection routing contract fed to the transit gateway: the segment default routes (0.0.0.0/0) pointed at the inspection attachment so prod and nonprod traffic is forced through the firewall. |
 <!-- END_TF_DOCS -->

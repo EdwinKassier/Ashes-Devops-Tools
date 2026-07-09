@@ -27,3 +27,8 @@ output "interface_endpoint_phz_id" {
   description = "Zone ID of the shared private hosted zone fronting the interface endpoints, or null when no zone was created."
   value       = module.vpc_endpoints.phz_id
 }
+
+output "tgw_inspection_routes" {
+  description = "The centralized-inspection routing contract fed to the transit gateway: the segment default routes (0.0.0.0/0) pointed at the inspection attachment so prod and nonprod traffic is forced through the firewall."
+  value       = local.tgw_routes
+}

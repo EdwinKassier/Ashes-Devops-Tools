@@ -40,6 +40,22 @@ locals {
     tgw     = { newbits = 8, number_offset = 8 }
     private = { newbits = 8, number_offset = 16 }
   }
+
+  # Centralized-inspection routing contract fed to the transit gateway. The
+  # prod & nonprod default routes point at the inspection attachment so all
+  # egress/east-west traffic is forced through the firewall. Extracted to a
+  # local so the wiring is assertable independently of the (override_module'd)
+  # transit_gateway child.
+  tgw_propagations = {
+    "inspection->prod"    = { attachment = "inspection", route_table = "prod" }
+    "inspection->nonprod" = { attachment = "inspection", route_table = "nonprod" }
+    "egress->shared"      = { attachment = "egress", route_table = "shared" }
+  }
+
+  tgw_routes = {
+    "prod:default"    = { route_table = "prod", cidr = "0.0.0.0/0", attachment = "inspection" }
+    "nonprod:default" = { route_table = "nonprod", cidr = "0.0.0.0/0", attachment = "inspection" }
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -177,18 +193,11 @@ module "transit_gateway" {
 
   # Inspection attachment propagates into prod & nonprod so their default route
   # (below) resolves to the firewall. Egress propagates into shared.
-  propagations = {
-    "inspection->prod"    = { attachment = "inspection", route_table = "prod" }
-    "inspection->nonprod" = { attachment = "inspection", route_table = "nonprod" }
-    "egress->shared"      = { attachment = "egress", route_table = "shared" }
-  }
+  propagations = local.tgw_propagations
 
   # Centralized inspection: prod & nonprod default routes point at the
   # inspection attachment so all egress/east-west traffic is inspected.
-  routes = {
-    "prod:default"    = { route_table = "prod", cidr = "0.0.0.0/0", attachment = "inspection" }
-    "nonprod:default" = { route_table = "nonprod", cidr = "0.0.0.0/0", attachment = "inspection" }
-  }
+  routes = local.tgw_routes
 }
 
 # ---------------------------------------------------------------------------
