@@ -5,6 +5,9 @@ on:
     tags:
       - "organization/v*"
       - "apps/*/v*"
+      - "aws-*/v*"
+      - "aws-workload/*/v*"
+      - "saas/*/v*"
 
 permissions: {}
 
@@ -34,6 +37,29 @@ jobs:
             VERSION="${TAG_NAME##*/}"
             echo "workspace=organization" >> "$GITHUB_OUTPUT"
             echo "release_name=Organization ${VERSION}" >> "$GITHUB_OUTPUT"
+            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          elif [[ "$TAG_NAME" == aws-workload/* ]]; then
+            # Tag shape: aws-workload/<env>/v1.2.3 -> workspace aws-workload-<env>
+            ENVIRONMENT=$(echo "$TAG_NAME" | cut -d'/' -f2)
+            VERSION=$(echo "$TAG_NAME" | cut -d'/' -f3)
+            echo "workspace=aws-workload-${ENVIRONMENT}" >> "$GITHUB_OUTPUT"
+            echo "release_name=AWS Workload ${ENVIRONMENT} ${VERSION}" >> "$GITHUB_OUTPUT"
+            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          elif [[ "$TAG_NAME" == saas/* ]]; then
+            # Tag shape: saas/<name>/v1.2.3 -> workspace saas-<name>
+            NAME=$(echo "$TAG_NAME" | cut -d'/' -f2)
+            VERSION=$(echo "$TAG_NAME" | cut -d'/' -f3)
+            echo "workspace=saas-${NAME}" >> "$GITHUB_OUTPUT"
+            echo "release_name=SaaS ${NAME} ${VERSION}" >> "$GITHUB_OUTPUT"
+            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          elif [[ "$TAG_NAME" == aws-organization/* || "$TAG_NAME" == aws-security/* \
+                || "$TAG_NAME" == aws-network/* || "$TAG_NAME" == aws-identity/* \
+                || "$TAG_NAME" == aws-shared-services/* || "$TAG_NAME" == aws-backup/* ]]; then
+            # Tag shape: <root>/v1.2.3 -> single-account root workspace == first path segment
+            WORKSPACE=$(echo "$TAG_NAME" | cut -d'/' -f1)
+            VERSION=$(echo "$TAG_NAME" | cut -d'/' -f2)
+            echo "workspace=${WORKSPACE}" >> "$GITHUB_OUTPUT"
+            echo "release_name=${WORKSPACE} ${VERSION}" >> "$GITHUB_OUTPUT"
             echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           else
             ENVIRONMENT=$(echo "$TAG_NAME" | cut -d'/' -f2)
