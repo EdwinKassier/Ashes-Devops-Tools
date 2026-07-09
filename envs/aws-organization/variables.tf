@@ -135,3 +135,50 @@ variable "log_archive_bucket_name" {
     error_message = "log_archive_bucket_name must be a non-empty S3 bucket name."
   }
 }
+
+# -----------------------------------------------------------------------------
+# Cost governance (management-account-scoped)
+#
+# Budgets, Cost Anomaly Detection and cost-allocation-tag activation live in the
+# management account. Defaults are usable as-is; override in terraform.tfvars to
+# set real budget limits, an SNS topic, and a real FinOps alert address.
+# -----------------------------------------------------------------------------
+
+variable "enable_cost_governance" {
+  description = "Gate for the cost-governance module (budgets, Cost Anomaly Detection, cost-allocation tags). When false the module composes as a no-op."
+  type        = bool
+  default     = true
+}
+
+variable "budgets" {
+  description = "Monthly COST budgets keyed by budget name. limit_amount is the USD limit; threshold_percent triggers an ACTUAL-spend notification; emails receive the notification."
+  type = map(object({
+    limit_amount      = string
+    threshold_percent = number
+    emails            = optional(list(string), [])
+  }))
+  default = {
+    org-monthly = {
+      limit_amount      = "1000"
+      threshold_percent = 80
+    }
+  }
+}
+
+variable "cost_allocation_tags" {
+  description = "Tag keys to activate as cost-allocation tags in Cost Explorer / the Cost & Usage Report. Should mirror the tag-policy keys."
+  type        = list(string)
+  default     = ["CostCenter", "Environment", "Owner"]
+}
+
+variable "cost_notifications_topic_arn" {
+  description = "Optional SNS topic ARN that budget notifications are published to, in addition to per-budget email subscribers. Empty string disables SNS fan-out."
+  type        = string
+  default     = ""
+}
+
+variable "cost_anomaly_email" {
+  description = "Email address that receives Cost Anomaly Detection alerts."
+  type        = string
+  default     = "finops@example.com"
+}

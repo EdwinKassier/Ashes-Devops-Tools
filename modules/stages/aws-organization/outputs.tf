@@ -32,3 +32,8 @@ output "policy_attachment_ids" {
   description = "Map of guardrail attachment key to the attachment resource ID."
   value       = module.policies.attachment_ids
 }
+
+output "cost_budget_ids" {
+  description = "Map of budget name to budget resource ID created by the cost-governance module. Empty when cost governance is disabled."
+  value       = module.cost_governance.budget_ids
+}

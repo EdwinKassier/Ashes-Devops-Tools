@@ -63,4 +63,10 @@ run "composes_accounts_and_guardrails" {
     condition     = length(output.policy_attachment_ids) >= 6
     error_message = "at least six guardrail attachments must be created"
   }
+
+  # cost-governance is composed: budget for_each keys are plan-known.
+  assert {
+    condition     = contains(keys(output.cost_budget_ids), "org-monthly")
+    error_message = "the cost-governance module must be composed with the default org-monthly budget"
+  }
 }

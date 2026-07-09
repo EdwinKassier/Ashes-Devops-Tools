@@ -40,3 +40,27 @@ break_glass_role_arn = "arn:aws:iam::111111111111:role/break-glass"
 
 # REQUIRED — central log-archive S3 bucket protected by the deny-tamper SCP.
 log_archive_bucket_name = "ashes-org-log-archive"
+
+# ---------------------------------------------------------------------------
+# Cost governance (management-account-scoped). All optional — defaults work.
+# ---------------------------------------------------------------------------
+
+# Optional — set false to disable budgets, Cost Anomaly Detection and cost-
+# allocation-tag activation entirely.
+enable_cost_governance = true
+
+# Optional — monthly COST budgets. Override the limit and add real email
+# subscribers before relying on the notifications.
+budgets = {
+  org-monthly = { limit_amount = "1000", threshold_percent = 80, emails = ["finops@ashes.example.com"] }
+}
+
+# Optional — tag keys activated as cost-allocation tags (should mirror the
+# tag-policy keys).
+cost_allocation_tags = ["CostCenter", "Environment", "Owner"]
+
+# Optional — SNS topic that budget notifications also publish to.
+# cost_notifications_topic_arn = "arn:aws:sns:eu-west-2:111111111111:cost-alerts"
+
+# Optional — address that receives Cost Anomaly Detection alerts.
+cost_anomaly_email = "finops@ashes.example.com"

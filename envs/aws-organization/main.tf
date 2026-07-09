@@ -13,4 +13,11 @@ module "aws_organization" {
   terraform_run_role_arn  = var.terraform_run_role_arn
   break_glass_role_arn    = var.break_glass_role_arn
   log_archive_bucket_name = var.log_archive_bucket_name
+
+  # Cost governance (management-account-scoped).
+  enable_cost_governance       = var.enable_cost_governance
+  budgets                      = var.budgets
+  cost_allocation_tags         = var.cost_allocation_tags
+  cost_notifications_topic_arn = var.cost_notifications_topic_arn
+  cost_anomaly_email           = var.cost_anomaly_email
 }

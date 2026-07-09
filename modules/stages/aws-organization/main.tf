@@ -69,3 +69,17 @@ module "policies" {
 module "root_access" {
   source = "../../aws/iam-organizations-features"
 }
+
+# Management-account-scoped cost governance: budgets, Cost Anomaly Detection and
+# cost-allocation-tag activation. Consolidated billing rolls all member-account
+# spend up to the payer, so this is organization-wide only from the management
+# account — which is this stage's default provider.
+module "cost_governance" {
+  source = "../../aws/cost-governance"
+
+  enable_cost_governance  = var.enable_cost_governance
+  budgets                 = var.budgets
+  cost_allocation_tags    = var.cost_allocation_tags
+  notifications_topic_arn = var.cost_notifications_topic_arn
+  anomaly_email           = var.cost_anomaly_email
+}
