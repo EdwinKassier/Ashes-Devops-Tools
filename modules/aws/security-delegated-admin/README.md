@@ -80,7 +80,7 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_organizations_delegated_administrator.this (modules/aws/security-delegated-admin/main.tf#L38)
+- resource.aws_organizations_delegated_administrator.this (modules/aws/security-delegated-admin/main.tf#L39)
 
 
 ## Inputs
@@ -88,7 +88,7 @@ The following resources are created:
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_identity_account_id"></a> [identity\_account\_id](#input\_identity\_account\_id) | 12-digit account ID of the Identity account, used as the delegated administrator for IAM Identity Center (sso.amazonaws.com) in the default registration set. Ignored when registrations is non-empty. | `string` | n/a | yes |
-| <a name="input_security_tooling_account_id"></a> [security\_tooling\_account\_id](#input\_security\_tooling\_account\_id) | 12-digit account ID of the Security Tooling account, used as the delegated administrator for the security services in the default registration set (Access Analyzer, Config, CloudTrail, FMS, SSM, Resource Explorer, Security Lake). Ignored when registrations is non-empty. | `string` | n/a | yes |
+| <a name="input_security_tooling_account_id"></a> [security\_tooling\_account\_id](#input\_security\_tooling\_account\_id) | 12-digit account ID of the Security Tooling account, used as the delegated administrator for the security services in the default registration set (Access Analyzer, Backup, Config, CloudTrail, FMS, SSM, Resource Explorer, Security Lake). Ignored when registrations is non-empty. | `string` | n/a | yes |
 | <a name="input_registrations"></a> [registrations](#input\_registrations) | Explicit map of AWS service principal to the account ID nominated as that service's delegated administrator. When non-empty this overrides the convenience default built from security\_tooling\_account\_id and identity\_account\_id. Do NOT include services that have a dedicated admin resource (guardduty, macie, inspector, detective, securityhub) — they are registered elsewhere. | `map(string)` | `{}` | no |
 
 ## Outputs

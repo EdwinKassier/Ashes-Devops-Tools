@@ -15,7 +15,7 @@ variable "registrations" {
 }
 
 variable "security_tooling_account_id" {
-  description = "12-digit account ID of the Security Tooling account, used as the delegated administrator for the security services in the default registration set (Access Analyzer, Config, CloudTrail, FMS, SSM, Resource Explorer, Security Lake). Ignored when registrations is non-empty."
+  description = "12-digit account ID of the Security Tooling account, used as the delegated administrator for the security services in the default registration set (Access Analyzer, Backup, Config, CloudTrail, FMS, SSM, Resource Explorer, Security Lake). Ignored when registrations is non-empty."
   type        = string
 
   validation {

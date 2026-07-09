@@ -54,6 +54,17 @@ variable "log_archive_bucket" {
   }
 }
 
+variable "home_region" {
+  description = "Home (aggregation) Region. Global resource types (IAM, etc.) are recorded ONLY by the recorder in this Region to avoid duplicating global configuration items in every Region. Must be one of aws_enabled_regions for global types to be recorded at all."
+  type        = string
+  default     = "eu-west-2"
+
+  validation {
+    condition     = length(trimspace(var.home_region)) > 0
+    error_message = "home_region must be a non-empty Region name."
+  }
+}
+
 variable "record_all_supported" {
   description = "COST TOGGLE. When true (default), each recorder records ALL supported resource types (and, being all_supported, global resource types too). Recording every resource type in every Region is the most expensive Config mode; set false to pair with a narrower recording_group managed out-of-band when cost matters."
   type        = bool

@@ -31,6 +31,17 @@ run "aggregator_and_recorders_materialized" {
     condition     = length(aws_config_delivery_channel.this) == 2
     error_message = "A delivery channel must be materialized for each of the two enabled Regions"
   }
+
+  # Global resource types are recorded ONLY by the home-Region recorder.
+  assert {
+    condition     = aws_config_configuration_recorder.this["eu-west-2"].recording_group[0].include_global_resource_types == true
+    error_message = "Home-Region recorder must record global resource types"
+  }
+
+  assert {
+    condition     = aws_config_configuration_recorder.this["eu-west-1"].recording_group[0].include_global_resource_types == false
+    error_message = "Non-home-Region recorders must NOT record global resource types"
+  }
 }
 
 run "recorder_only_gates_off_aggregator" {

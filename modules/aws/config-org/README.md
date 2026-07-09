@@ -51,11 +51,11 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_config_configuration_aggregator.org (modules/aws/config-org/main.tf#L54)
+- resource.aws_config_configuration_aggregator.org (modules/aws/config-org/main.tf#L57)
 - resource.aws_config_configuration_recorder.this (modules/aws/config-org/main.tf#L20)
-- resource.aws_config_configuration_recorder_status.this (modules/aws/config-org/main.tf#L43)
-- resource.aws_config_delivery_channel.this (modules/aws/config-org/main.tf#L34)
-- resource.aws_config_organization_conformance_pack.this (modules/aws/config-org/main.tf#L64)
+- resource.aws_config_configuration_recorder_status.this (modules/aws/config-org/main.tf#L46)
+- resource.aws_config_delivery_channel.this (modules/aws/config-org/main.tf#L37)
+- resource.aws_config_organization_conformance_pack.this (modules/aws/config-org/main.tf#L67)
 
 
 ## Inputs
@@ -69,6 +69,7 @@ The following resources are created:
 | <a name="input_aws_enabled_regions"></a> [aws\_enabled\_regions](#input\_aws\_enabled\_regions) | Regions in which to deploy a Config recorder, delivery channel, and recorder status. One set of per-Region resources is created for each entry. | `list(string)` | <pre>[<br/>  "eu-west-2"<br/>]</pre> | no |
 | <a name="input_conformance_packs"></a> [conformance\_packs](#input\_conformance\_packs) | Opt-in bring-your-own-pack hook: map of organization conformance packs to deploy (e.g. a NIST 800-53 sample YAML), keyed by pack name. Provide exactly one of template\_body or template\_s3\_uri per pack. No packs are bundled with this module. Ignored when recorder\_only = true. | <pre>map(object({<br/>    template_body   = optional(string)<br/>    template_s3_uri = optional(string)<br/>  }))</pre> | `{}` | no |
 | <a name="input_delivery_channel_name"></a> [delivery\_channel\_name](#input\_delivery\_channel\_name) | Name applied to every per-Region delivery channel. | `string` | `"org-delivery"` | no |
+| <a name="input_home_region"></a> [home\_region](#input\_home\_region) | Home (aggregation) Region. Global resource types (IAM, etc.) are recorded ONLY by the recorder in this Region to avoid duplicating global configuration items in every Region. Must be one of aws\_enabled\_regions for global types to be recorded at all. | `string` | `"eu-west-2"` | no |
 | <a name="input_record_all_supported"></a> [record\_all\_supported](#input\_record\_all\_supported) | COST TOGGLE. When true (default), each recorder records ALL supported resource types (and, being all\_supported, global resource types too). Recording every resource type in every Region is the most expensive Config mode; set false to pair with a narrower recording\_group managed out-of-band when cost matters. | `bool` | `true` | no |
 | <a name="input_recorder_name"></a> [recorder\_name](#input\_recorder\_name) | Name applied to every per-Region configuration recorder. | `string` | `"org-recorder"` | no |
 | <a name="input_recorder_only"></a> [recorder\_only](#input\_recorder\_only) | When true, deploy only the per-Region recorder/delivery-channel/status and skip the org aggregator and conformance packs. The aws-workload stage sets this true to deploy a single workload account's recorder; the home-account aws-config stage leaves it false. | `bool` | `false` | no |

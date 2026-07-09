@@ -22,6 +22,7 @@ locals {
   # account.
   default_registrations = {
     "access-analyzer.amazonaws.com"          = var.security_tooling_account_id
+    "backup.amazonaws.com"                   = var.security_tooling_account_id
     "config.amazonaws.com"                   = var.security_tooling_account_id
     "config-multiaccountsetup.amazonaws.com" = var.security_tooling_account_id
     "cloudtrail.amazonaws.com"               = var.security_tooling_account_id

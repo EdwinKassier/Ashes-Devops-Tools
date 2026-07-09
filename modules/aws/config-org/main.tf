@@ -25,9 +25,12 @@ resource "aws_config_configuration_recorder" "this" {
 
   recording_group {
     all_supported = var.record_all_supported
-    # include_global_resource_types is only valid when all_supported = true;
-    # gate it so a false all_supported config does not trip provider validation.
-    include_global_resource_types = var.record_all_supported
+    # Global resource types (IAM users, roles, policies, …) are global, so
+    # recording them in every Region duplicates the same configuration items
+    # once per Region — extra Config cost for no extra coverage. Record them in
+    # the home Region only. Still gated on all_supported, since
+    # include_global_resource_types is only valid when all_supported = true.
+    include_global_resource_types = (each.value == var.home_region) && var.record_all_supported
   }
 }
 
