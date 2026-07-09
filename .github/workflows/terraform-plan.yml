@@ -139,10 +139,6 @@ jobs:
     # with the AWS landing zone (~35 extra modules/roots) the provider fetches
     # push a cold run past 15m. The plugin cache below keeps it well under 30m.
     timeout-minutes: 30
-    env:
-      # Download each provider once and reuse it across all roots' inits,
-      # instead of re-fetching the ~500MB AWS provider per root.
-      TF_PLUGIN_CACHE_DIR: ${{ runner.temp }}/tf-plugin-cache
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -157,8 +153,13 @@ jobs:
         with:
           tflint_version: "v0.62.0"
 
+      # Download each provider once and reuse it across all roots' inits,
+      # instead of re-fetching the ~500MB AWS provider per root. Set via
+      # $GITHUB_ENV (not job-level env, where the runner context is unavailable).
       - name: Prepare provider plugin cache
-        run: mkdir -p "$TF_PLUGIN_CACHE_DIR"
+        run: |
+          echo "TF_PLUGIN_CACHE_DIR=${RUNNER_TEMP}/tf-plugin-cache" >> "$GITHUB_ENV"
+          mkdir -p "${RUNNER_TEMP}/tf-plugin-cache"
 
       - name: Run TFLint
         run: make lint
