@@ -1,0 +1,24 @@
+# saas — Supabase and/or Vercel only (phase-8, optional). NO aws/google provider,
+# so NO cloud credentials are needed. Select the workspace with
+# TF_WORKSPACE=saas-<name>.
+# Reference only. Canonical (three-stanza) template: envs/saas/terraform.tfvars.example.
+#
+# Derived from envs/saas/variables.tf: NO variable is UNCONDITIONALLY required —
+# everything is gated behind enable_supabase / enable_vercel and defaults are
+# supplied so the both-false case validates. But each feature you TURN ON makes a
+# set of inputs required (enforced by gated validations in the root). Provide the
+# matching token via env var only:
+#   SUPABASE_ACCESS_TOKEN  (when enable_supabase = true)
+#   VERCEL_API_TOKEN       (when enable_vercel   = true)
+
+# --- Supabase enabled: these become required ---
+# enable_supabase            = true
+# supabase_organization_id   = "abcdefghijklmnop"          # >= 8 lowercase alnum
+# supabase_project_name      = "my-app-prod"               # 3-64 chars
+# supabase_database_password = "super-secret-password-16!" # >= 16 chars (sensitive)
+
+# --- Vercel enabled: these become required ---
+# enable_vercel       = true
+# vercel_project_name = "my-app"
+# vercel_team_id      = "team_abcdefghijklmno"
+# vercel_github_repo  = "myorg/my-app"                     # "org/repo"

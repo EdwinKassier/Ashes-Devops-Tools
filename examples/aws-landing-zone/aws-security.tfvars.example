@@ -1,0 +1,24 @@
+# aws-security — minimal required inputs (phase-2, security tooling + log archive).
+# Reference only. Canonical template: envs/aws-security/terraform.tfvars.example.
+#
+# Derived from envs/aws-security/variables.tf: variables with no default = REQUIRED.
+
+# REQUIRED — central log-archive bucket name. MUST match the value used in the
+# aws-organization root (this root actually creates the bucket).
+log_archive_bucket_name = "ashes-org-log-archive"
+
+# REQUIRED — account-qualified ARN of the KMS key administrator (kms:*) on the
+# log and forensics CMKs. Prevents locking the keys out of management.
+key_admin_arn = "arn:aws:iam::111111111111:role/key-admin"
+
+# REQUIRED — account-qualified ARN of the role AWS Config assumes to record
+# resource configurations.
+config_role_arn = "arn:aws:iam::222222222222:role/aws-config-recorder"
+
+# REQUIRED — account-qualified ARN of the role the Config org aggregator assumes.
+aggregator_role_arn = "arn:aws:iam::222222222222:role/aws-config-aggregator"
+
+# Optional but REQUIRED when enable_security_lake = true (the default) — the
+# AmazonSecurityLakeMetaStoreManager role ARN. Set enable_security_lake = false
+# to drop this requirement.
+# meta_store_manager_role_arn = "arn:aws:iam::222222222222:role/AmazonSecurityLakeMetaStoreManager"

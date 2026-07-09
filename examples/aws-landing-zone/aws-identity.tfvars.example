@@ -1,0 +1,20 @@
+# aws-identity — IAM Identity Center permission sets + assignments (phase-4).
+# Reference only. Canonical template: envs/aws-identity/terraform.tfvars.example.
+#
+# Derived from envs/aws-identity/variables.tf: NO variables are strictly required
+# (all have working defaults — permission_sets defaults to AdministratorAccess +
+# ReadOnly). This root can apply with an empty tfvars.
+#
+# PREREQUISITE (out-of-band, not a tfvar): IAM Identity Center must be enabled in
+# the management account and delegated to the shared-services account first — see
+# the bootstrap runbook, "MANUAL GATE — IAM Identity Center".
+
+# Optional — bind Identity Store GROUPS to permission sets in target accounts.
+# assignments = {
+#   admins-shared-services = {
+#     permission_set = "AdministratorAccess"
+#     principal_type = "GROUP"
+#     principal_id   = "00000000-0000-0000-0000-000000000000" # Identity Store group ID
+#     account_id     = "111111111111"                         # target account ID
+#   }
+# }

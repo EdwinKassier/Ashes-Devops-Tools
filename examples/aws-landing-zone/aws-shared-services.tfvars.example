@@ -1,0 +1,17 @@
+# aws-shared-services — ACM Private CA + Secrets baseline (phase-5, gated/optional).
+# Reference only. Canonical template: envs/aws-shared-services/terraform.tfvars.example.
+#
+# Derived from envs/aws-shared-services/variables.tf: NO variables are strictly
+# required (all have working defaults). Both feature blocks are OFF by default,
+# so this root can apply with an empty tfvars and create nothing chargeable.
+
+# Optional — ACM Private CA. enable_private_ca is a COST TOGGLE (fixed monthly
+# per-CA charge). When true the CA is shared org-wide over RAM.
+# enable_private_ca = true
+# ca_common_name    = "org-internal-ca"
+
+# Optional — Secrets Manager baseline (org-scoped resource policies).
+# enable_secrets_baseline = true
+# secrets = {
+#   "app/db-password" = {}
+# }
