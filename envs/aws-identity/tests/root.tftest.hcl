@@ -44,7 +44,7 @@ run "consumes_remote_state_contract" {
   }
 
   assert {
-    condition     = local.account_ids["shared_services"] == "222222222222"
+    condition     = output.account_ids["shared_services"] == "222222222222"
     error_message = "remote-state account_ids must expose member-account IDs for wiring assignments"
   }
 }
