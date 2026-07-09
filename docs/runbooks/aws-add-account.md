@@ -80,6 +80,16 @@ export TF_WORKSPACE=aws-workload-payments_prod
 terraform -chdir=envs/aws-workload plan   # read-only local check; apply via TFC
 ```
 
+> **Deployment ordering — org first, always.** The workload entry must be added
+> to the `aws-organization` root's `workload_accounts` map **and**
+> `aws-organization` must be applied (Steps 1–2) *before* you plan or apply the
+> new `aws-workload-<env>` workspace. The workload root looks its role up as
+> `account_role_arns[<workload_account_key>]`; if the org root has not yet
+> published that key, the lookup fails **at plan time** (`Invalid index` /
+> key-not-found) — not at apply — so a workspace pointed at an unpublished key
+> cannot even produce a plan. This is the same cross-root contract described in
+> the header note: publish from the org root first, then consume downstream.
+
 This stands up the env's spoke VPC (attached to the TGW with the correct Prod/NonProd route table — see [network topology](../architecture/aws-landing-zone.md#network-topology)), workload roles, and the per-account baseline.
 
 > **New-account defaults not covered by Terraform.** A brand-new account still has a default VPC per Region and needs EBS-encryption-by-default, S3 Block Public Access, and a password policy. The default-VPC deletion is handled by the org-wide **auto-deploying StackSet** from [`aws-bootstrap.md`](aws-bootstrap.md#phase-05-org-wide-default-vpc-deletion-stackset-out-of-band); the rest is applied per layer via `modules/aws/account-baseline`. Confirm the StackSet auto-deployed to the new account.

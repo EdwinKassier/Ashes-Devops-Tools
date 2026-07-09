@@ -14,6 +14,18 @@ billing — while disabled.
 through the RAM share, and a CA resource policy is not required for the
 self-managed, org-shared model this module implements.
 
+## ROOT CA activation is out-of-band
+
+This module creates the CA (and its optional RAM share) only. A **ROOT** CA is
+created in `PENDING_CERTIFICATE` state and **cannot issue certificates until it
+is activated with a self-signed root certificate**. That activation is an
+out-of-band step this module does not perform: after apply, generate a CSR from
+the CA, sign it as a self-signed root (`aws_acmpca_certificate` with a
+`CertificateAuthorityCertificate/V1` `template_arn`), and install it back onto
+the CA (`aws_acmpca_certificate_authority_certificate`). Only then does the CA
+move to `ACTIVE` and begin issuing. Wire those two resources in a follow-up
+apply (or by hand via the console/CLI) once the CA exists.
+
 <!-- BEGIN_TF_DOCS -->
 
 

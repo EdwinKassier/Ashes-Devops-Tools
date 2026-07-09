@@ -24,6 +24,18 @@ Identity Center instance**.
   pipeline with a service control policy, so group membership stays sourced
   from the IdP and Terraform state stays authoritative.
 
+## Not yet wired: CMP and permissions-boundary attachments
+
+The module attaches AWS **managed** policies and **inline** policies to each
+permission set. It does **not** currently wire
+`aws_ssoadmin_customer_managed_policy_attachment` (customer-managed policies
+referenced by name/path in each member account) or
+`aws_ssoadmin_permissions_boundary_attachment` (a permissions boundary on the
+permission set's provisioned IAM role). If a use case needs a permission set
+scoped by a permissions boundary, or one that references a customer-managed
+policy deployed to member accounts, add those resources to `main.tf` and the
+corresponding input variables.
+
 <!-- BEGIN_TF_DOCS -->
 
 
