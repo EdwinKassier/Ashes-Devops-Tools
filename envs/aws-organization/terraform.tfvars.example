@@ -1,0 +1,42 @@
+# Copy to terraform.tfvars and fill in. Inputs marked REQUIRED have no usable
+# default — you MUST supply them (the two role ARNs, the log-archive bucket
+# name, and real root emails for every account).
+
+# REQUIRED — Terraform Cloud org that owns this root's workspace. Usually passed
+# to `terraform init` via backend.hcl / TF_CLI_ARGS_init rather than here.
+# tfc_organization = "your-tfc-org-name"
+
+# Optional — primary region for the default (management-account) provider.
+aws_region          = "eu-west-2"
+aws_enabled_regions = ["eu-west-2"]
+
+# Optional — regions permitted by the region-restriction SCP.
+allowed_regions = ["eu-west-2"]
+
+# REQUIRED — foundational member accounts. The keys default to the six SRA
+# accounts, but the placeholder emails below MUST be replaced with real, unique,
+# deliverable root addresses (AWS rejects duplicate root emails). Set the `ou`
+# to an OU name that exists in the organization OU tree.
+accounts = {
+  log_archive      = { email = "aws+log-archive@ashes.example.com", ou = "Security" }
+  security_tooling = { email = "aws+security-tooling@ashes.example.com", ou = "Security" }
+  network          = { email = "aws+network@ashes.example.com", ou = "Infrastructure" }
+  shared_services  = { email = "aws+shared-services@ashes.example.com", ou = "Infrastructure" }
+  backup           = { email = "aws+backup@ashes.example.com", ou = "Infrastructure" }
+  forensics        = { email = "aws+forensics@ashes.example.com", ou = "Security" }
+}
+
+# Optional — additional workload accounts, merged with `accounts`.
+# workload_accounts = {
+#   sandbox = { email = "aws+sandbox@ashes.example.com", ou = "Workloads" }
+# }
+
+# REQUIRED — account-qualified ARN of the Terraform Cloud run role. Carved out of
+# every guardrail deny statement so automation is not locked out.
+terraform_run_role_arn = "arn:aws:iam::111111111111:role/terraform-run"
+
+# REQUIRED — account-qualified ARN of the emergency break-glass role.
+break_glass_role_arn = "arn:aws:iam::111111111111:role/break-glass"
+
+# REQUIRED — central log-archive S3 bucket protected by the deny-tamper SCP.
+log_archive_bucket_name = "ashes-org-log-archive"
