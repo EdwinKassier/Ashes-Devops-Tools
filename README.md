@@ -82,6 +82,12 @@ make ci
 └─────────────────────┘          └────────────────────────┘
 ```
 
+### Choosing providers
+
+Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives in its own root (and TFC workspace), so an unused cloud's provider is physically absent from what you apply — a `provider` block can't be conditional, and Terraform authenticates any referenced provider even at `count = 0`. **Cloud selection is therefore which workspaces you apply, not a runtime `enable_<cloud>` flag** (`enable_*` only gates features within a root). Every subset — including AWS-only, GCP-only, or SaaS-only — is just the union of the per-cloud workspaces and their credentials.
+
+> Full rationale, root inventory, minimum AWS footprint, and the any-combination matrix: **[Provider Selection →](docs/architecture/provider-selection.md)**
+
 ---
 
 ## Module Library
@@ -237,6 +243,7 @@ git push origin organization/v1.2.0
 | [Documentation Index](docs/INDEX.md) | Complete navigation hub |
 | [Quick Start](docs/guides/QUICK_START.md) | Bootstrap, creds, first apply |
 | [Architecture](docs/architecture/ARCHITECTURE.md) | Roots, modules, execution model |
+| [Provider Selection](docs/architecture/provider-selection.md) | Any-combination cloud matrix, per-cloud-root model |
 | [Network Topology](docs/architecture/network-topology.md) | Hub-spoke layout, VPC-SC, WIF flows |
 | [Troubleshooting](docs/guides/TROUBLESHOOTING.md) | Common errors including Supabase/Vercel |
 | [Branch Protection](docs/guides/BRANCH_PROTECTION.md) | GitHub ruleset configuration |
