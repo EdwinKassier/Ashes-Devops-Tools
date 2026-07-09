@@ -1,0 +1,47 @@
+# Copy to terraform.tfvars and fill in. Inputs marked REQUIRED have no usable
+# default — you MUST supply them. The rest have working defaults you can
+# override.
+
+# REQUIRED — Terraform Cloud org that owns this root's workspace and the
+# aws-organization workspace it reads. Usually passed to `terraform init` via
+# backend.hcl / TF_CLI_ARGS_init rather than here.
+# tfc_organization = "your-tfc-org-name"
+
+# Optional — workspace holding the phase-1 aws-organization root state.
+organization_workspace_name = "aws-organization"
+
+# Optional — region the shared-services account role is assumed in (Identity
+# Center is global; this only scopes the API calls).
+aws_region = "eu-west-2"
+
+# Optional — permission sets. Defaults to AdministratorAccess + ReadOnly.
+# permission_sets = {
+#   AdministratorAccess = {
+#     description         = "Full administrative access. Assign only to break-glass groups."
+#     session_duration    = "PT1H"
+#     managed_policy_arns = ["arn:aws:iam::aws:policy/AdministratorAccess"]
+#   }
+#   ReadOnly = {
+#     description         = "Org-wide read-only for auditors."
+#     session_duration    = "PT8H"
+#     managed_policy_arns = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
+#   }
+# }
+
+# Optional — account assignments. Bind GROUPS (prefer) to permission sets in a
+# target account. account_id can be a literal or resolved from the org remote
+# state, e.g. account_id = data.terraform_remote_state... (set the literal in
+# tfvars; the id below is a placeholder).
+# assignments = {
+#   admins-shared-services = {
+#     permission_set = "AdministratorAccess"
+#     principal_type = "GROUP"
+#     principal_id   = "00000000-0000-0000-0000-000000000000" # Identity Store group ID
+#     account_id     = "111111111111"                         # shared_services account ID
+#   }
+# }
+
+# Optional — ABAC. Enable to reference IdP/session attributes in permission-set
+# policies via aws:PrincipalTag.
+enable_abac     = false
+abac_attributes = {}
