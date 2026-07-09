@@ -62,3 +62,38 @@ run "key_and_policy_configured" {
     error_message = "kms:ViaService must not appear on log-service grants"
   }
 }
+
+run "service_principals_grant_present" {
+  # A security-tooling CMK grants local AWS services (SNS/SSM/CloudWatch) usage,
+  # with no log-service grants at all. The ServiceUsage statement must appear,
+  # scoped by aws:SourceOrgID, and must NOT carry the CloudTrail
+  # EncryptionContext condition.
+  command = plan
+
+  variables {
+    alias                  = "security-tooling"
+    log_service_principals = []
+    service_principals     = ["sns.amazonaws.com", "ssm.amazonaws.com", "cloudwatch.amazonaws.com"]
+  }
+
+  assert {
+    condition     = can(regex("ServiceUsage", aws_kms_key_policy.this.policy))
+    error_message = "ServiceUsage statement must be present when service_principals is set"
+  }
+
+  assert {
+    condition     = can(regex("sns.amazonaws.com", aws_kms_key_policy.this.policy))
+    error_message = "The SNS service principal must appear in the ServiceUsage grant"
+  }
+
+  assert {
+    condition     = can(regex("aws:SourceOrgID", aws_kms_key_policy.this.policy))
+    error_message = "The ServiceUsage grant must be scoped by aws:SourceOrgID"
+  }
+
+  # No CloudTrail log-service grant means no EncryptionContext condition.
+  assert {
+    condition     = !can(regex("kms:EncryptionContext:aws:cloudtrail:arn", aws_kms_key_policy.this.policy))
+    error_message = "A service-tooling CMK with no log grants must not carry the CloudTrail EncryptionContext condition"
+  }
+}

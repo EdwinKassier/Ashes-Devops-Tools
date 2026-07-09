@@ -52,9 +52,9 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_kms_alias.this (modules/aws/kms-key/main.tf#L91)
-- resource.aws_kms_key.this (modules/aws/kms-key/main.tf#L85)
-- resource.aws_kms_key_policy.this (modules/aws/kms-key/main.tf#L96)
+- resource.aws_kms_alias.this (modules/aws/kms-key/main.tf#L120)
+- resource.aws_kms_key.this (modules/aws/kms-key/main.tf#L114)
+- resource.aws_kms_key_policy.this (modules/aws/kms-key/main.tf#L125)
 
 
 ## Inputs
@@ -68,6 +68,7 @@ The following resources are created:
 | <a name="input_deletion_window_in_days"></a> [deletion\_window\_in\_days](#input\_deletion\_window\_in\_days) | Waiting period, in days, before the CMK is deleted after scheduling deletion. AWS permits 7-30. | `number` | `30` | no |
 | <a name="input_key_users"></a> [key\_users](#input\_key\_users) | Optional list of principal ARNs granted general-usage (Encrypt/Decrypt/GenerateDataKey/etc.) on the CMK. Empty by default (no general-usage statement). | `list(string)` | `[]` | no |
 | <a name="input_log_service_principals"></a> [log\_service\_principals](#input\_log\_service\_principals) | AWS log-delivery service principals granted GenerateDataKey/Decrypt/DescribeKey on the CMK, scoped by aws:SourceOrgID. CloudTrail additionally gets an EncryptionContext condition. | `list(string)` | <pre>[<br/>  "cloudtrail.amazonaws.com",<br/>  "config.amazonaws.com",<br/>  "securitylake.amazonaws.com"<br/>]</pre> | no |
+| <a name="input_service_principals"></a> [service\_principals](#input\_service\_principals) | Optional list of AWS service principals (e.g. sns.amazonaws.com, ssm.amazonaws.com, cloudwatch.amazonaws.com) granted general-usage (Encrypt/Decrypt/GenerateDataKey/etc.) on the CMK, scoped by aws:SourceOrgID so only calls originating within this org can use the key. Unlike log\_service\_principals these carry no CloudTrail EncryptionContext condition. Empty by default (no service-principal statement). | `list(string)` | `[]` | no |
 | <a name="input_via_services"></a> [via\_services](#input\_via\_services) | Optional list of kms:ViaService values that scope the general-usage grant for key\_users (e.g. s3.eu-west-1.amazonaws.com). Never applied to the log-service grants. | `list(string)` | `[]` | no |
 
 ## Outputs

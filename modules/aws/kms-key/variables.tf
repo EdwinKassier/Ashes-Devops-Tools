@@ -71,3 +71,14 @@ variable "via_services" {
   type        = list(string)
   default     = []
 }
+
+variable "service_principals" {
+  description = "Optional list of AWS service principals (e.g. sns.amazonaws.com, ssm.amazonaws.com, cloudwatch.amazonaws.com) granted general-usage (Encrypt/Decrypt/GenerateDataKey/etc.) on the CMK, scoped by aws:SourceOrgID so only calls originating within this org can use the key. Unlike log_service_principals these carry no CloudTrail EncryptionContext condition. Empty by default (no service-principal statement)."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for p in var.service_principals : can(regex("[.]amazonaws[.]com$", p))])
+    error_message = "Each service_principals entry must be an AWS service principal ending in .amazonaws.com."
+  }
+}
