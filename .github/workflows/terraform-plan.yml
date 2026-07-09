@@ -162,6 +162,12 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/tf-plugin-cache"
 
       - name: Run TFLint
+        # tflint --init (inside `make lint`) downloads the google ruleset plugin
+        # from the GitHub API; without a token the unauthenticated request hits
+        # the 403 rate limit on shared CI egress. GITHUB_TOKEN authenticates it.
+        # (Step-level env — the secrets context is not available at job level.)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: make lint
 
   meta-lint:
