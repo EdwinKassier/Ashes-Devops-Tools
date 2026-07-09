@@ -1,3 +1,11 @@
+# AWS provider (hashicorp/aws) is NOT managed here. It is pinned per-module in
+# each module's/root's versions.tf (>= 6.46.0, < 7.0.0), not via asdf.
+# AWS roots/modules (modules/aws/**, envs/aws-*) auto-flow through
+# validate-all / lint / test / docs / security because scripts/terraform-roots.sh
+# discovers roots structurally and has no cloud filter.
+# Note: the validate matrix grows from ~103 to ~180 legs as AWS lands
+# (GitHub per-job matrix cap is 256 — thin margin), and CI needs registry
+# egress to download the hashicorp/aws provider.
 terraform 1.9.8
 tflint 0.62.0
 tfsec 1.28.6
