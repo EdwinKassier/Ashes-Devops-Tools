@@ -1,0 +1,69 @@
+# envs/saas — SaaS-only root (Supabase and/or Vercel). No aws/google provider,
+# so NO cloud credentials are required. Select the workspace with:
+#   export TF_WORKSPACE=saas-<name>          # e.g. saas-collects
+#
+# Provide the token(s) for the feature(s) you enable, via env vars only:
+#   export SUPABASE_ACCESS_TOKEN="..."       # needed when enable_supabase = true
+#   export VERCEL_API_TOKEN="..."            # needed when enable_vercel   = true
+#
+# Copy this file to terraform.tfvars and uncomment ONE of the three stanzas.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stanza A — Supabase only  (token: SUPABASE_ACCESS_TOKEN)
+# ─────────────────────────────────────────────────────────────────────────────
+# enable_supabase = true
+# enable_vercel   = false
+#
+# supabase_organization_id   = "abcdefghijklmnop"          # >= 8 lowercase alnum
+# supabase_project_name      = "my-app-prod"               # 3–64 chars
+# supabase_database_password = "super-secret-password-16!" # >= 16 chars (sensitive)
+# supabase_region            = "eu-west-2"
+# supabase_disable_signup    = true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stanza B — Vercel only  (token: VERCEL_API_TOKEN)
+# ─────────────────────────────────────────────────────────────────────────────
+# enable_supabase = false
+# enable_vercel   = true
+#
+# vercel_project_name      = "my-app"                # required
+# vercel_team_id           = "team_abcdefghijklmno"  # required
+# vercel_github_repo       = "myorg/my-app"          # "org/repo", required
+# vercel_production_branch = "main"
+# vercel_framework         = "nextjs"
+# vercel_serverless_region = "lhr1"
+# vercel_domains = [
+#   { domain = "my-app.com", environment = "production" },
+# ]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stanza C — Supabase + Vercel  (tokens: SUPABASE_ACCESS_TOKEN + VERCEL_API_TOKEN)
+# ─────────────────────────────────────────────────────────────────────────────
+# enable_supabase = true
+# enable_vercel   = true
+#
+# supabase_organization_id   = "abcdefghijklmnop"
+# supabase_project_name      = "my-app-prod"
+# supabase_database_password = "super-secret-password-16!"
+# supabase_region            = "eu-west-2"
+#
+# vercel_project_name = "my-app"
+# vercel_team_id      = "team_abcdefghijklmno"
+# vercel_github_repo  = "myorg/my-app"
+# vercel_shared_env_vars = [
+#   { key = "NEXT_PUBLIC_SUPABASE_URL", value = "https://<ref>.supabase.co" },
+# ]
+
+# Optional: Supabase Vault (both stanzas that enable Supabase). Requires Node.js
+# >= 18 in the execution environment. Do a first apply with this false.
+# enable_vault_secrets = false
+# postgres_url         = "postgresql://postgres.<ref>:<pw>@<host>:5432/postgres"
+# supabase_ssl_cert    = ""   # base64-encoded CA bundle
+# vault_secrets = {
+#   XERO_CLIENT_ID = "..."
+# }
+
+# Optional: cross-cloud wiring seam (see commented block in main.tf). Reads an
+# upstream AWS/GCP workspace's outputs from state — no cloud creds needed.
+# tfc_organization        = "my-tfc-org"
+# upstream_workspace_name = "apps-production"
