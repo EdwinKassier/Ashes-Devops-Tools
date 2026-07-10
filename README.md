@@ -4,9 +4,10 @@
 
 # Ashes DevOps Tools
 
-**Production-grade Terraform infrastructure for GCP, Supabase, and Vercel**
+**Production-grade Terraform infrastructure for AWS, GCP, Supabase, and Vercel**
 
 [![Terraform](https://img.shields.io/badge/Terraform-1.9%2B-7B42BC?style=for-the-badge&logo=terraform&logoColor=white)](https://terraform.io)
+[![AWS](https://img.shields.io/badge/AWS-FF9900?style=for-the-badge&logo=amazonwebservices&logoColor=white)](https://aws.amazon.com)
 [![Google Cloud](https://img.shields.io/badge/Google_Cloud-4285F4?style=for-the-badge&logo=google-cloud&logoColor=white)](https://cloud.google.com)
 [![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)](https://supabase.com)
 [![Vercel](https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://vercel.com)
@@ -28,12 +29,13 @@
 
 ## Overview
 
-**Ashes DevOps Tools** is a fully-tested, security-scanned Terraform platform covering three deployment surfaces:
+**Ashes DevOps Tools** is a fully-tested, security-scanned Terraform platform covering four deployment surfaces — deploy any combination:
 
 | Surface | What it manages |
 |:--------|:----------------|
 | **GCP Landing Zone** | Organization hierarchy, IAM, networking hub, VPC-SC, KMS, audit logs |
 | **Application Environments** | Per-env host projects, Shared VPC, Cloud Armor, VPN, Interconnect |
+| **AWS Landing Zone** | Multi-account SRA org + guardrails (SCP/RCP/declarative), security baseline (GuardDuty/Security Hub/Config/CloudTrail/Access Analyzer/Security Lake), Transit Gateway network, IAM Identity Center, org backup, cost governance |
 | **SaaS Workloads** | Supabase projects + vault secrets, Vercel projects + three-tier environments |
 
 **Execution model:** Terraform Cloud owns all live state and applies. GitHub Actions validates every PR. Tags trigger release metadata — never direct applies.
@@ -332,6 +334,6 @@ git push origin organization/v1.2.0
 
 <div align="center">
 
-Built with [Terraform](https://terraform.io) · [Google Cloud](https://cloud.google.com) · [Supabase](https://supabase.com) · [Vercel](https://vercel.com)
+Built with [Terraform](https://terraform.io) · [AWS](https://aws.amazon.com) · [Google Cloud](https://cloud.google.com) · [Supabase](https://supabase.com) · [Vercel](https://vercel.com)
 
 </div>
