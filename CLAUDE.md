@@ -177,6 +177,17 @@ cd modules/supabase/vault-secrets/scripts/
 npm install
 ```
 
+### AWS modules
+
+Gotchas the AWS landing-zone build surfaced — each one bit us in CI:
+
+1. **Pin `aws = ">= 6.46.0, < 7.0.0"`** — NOT a bare `~> 6.0`. The plan uses resources added mid-6.x; an older 6.x provider fails to plan.
+2. **Cross-account modules declare `configuration_aliases`** and therefore CANNOT be root-`terraform validate`d standalone. The CI validate step skips them; they are covered by `examples/`, the composing roots, and `mock_provider` tests instead.
+3. **Build policy JSON with `jsonencode()` / `templatefile()`**, NOT `data "aws_iam_policy_document"`. `mock_provider` mocks data sources, which breaks content assertions in tests.
+4. **`regex()` interval repeats cap at 1000** (RE2 engine) — a larger `{n,m}` repeat count is a plan-time error.
+5. **Log-service KMS grants must use per-service-principal statements with `aws:SourceOrgID`**, NOT `kms:ViaService` — `kms:ViaService` would deny CloudTrail.
+6. **Commit dual-platform `.terraform.lock.hcl`** (`linux_amd64` + `darwin_amd64`) so both CI runners and local macOS resolve the same provider hashes.
+
 ---
 
 ## Navigating the Codebase
@@ -192,6 +203,15 @@ npm install
 | Supabase integration | `modules/supabase/` |
 | Vercel integration | `modules/vercel/` |
 | Alerts / dashboards | `modules/monitoring/` |
+| AWS org / guardrails | `envs/aws-organization/` + `modules/stages/aws-organization/` |
+| AWS security baseline | `envs/aws-security/` + `modules/stages/aws-security/` |
+| AWS network hub | `envs/aws-network/` + `modules/stages/aws-network-hub/` |
+| AWS IAM Identity Center | `envs/aws-identity/` |
+| AWS backup | `envs/aws-backup/` + `modules/stages/aws-backup/` |
+| AWS workloads | `envs/aws-workload/` (set `TF_WORKSPACE=aws-workload-<env>`) |
+| AWS modules | `modules/aws/` |
+| SaaS-only (Supabase/Vercel) | `envs/saas/` |
+| AWS architecture | `docs/architecture/aws-landing-zone.md` |
 
 ---
 
@@ -204,6 +224,8 @@ npm install
 3. Add README with `<!-- BEGIN_TF_DOCS -->` / `<!-- END_TF_DOCS -->` markers.
 4. Add a `*.tftest.hcl` with at least one `mock_provider` test.
 5. Run `make docs && make test && make ci`.
+
+For **AWS modules**, clone `templates/aws-module/` instead — it pins `aws = ">= 6.46.0, < 7.0.0"` and ships a `mock_provider "aws"` test. Cross-account modules declare `configuration_aliases` (see [Module Authoring Rules → AWS modules](#aws-modules)).
 
 ### Updating an existing module
 
@@ -220,3 +242,11 @@ export TF_WORKSPACE=apps-staging
 cd envs/apps
 terraform plan   # read-only local check — apply only via TFC
 ```
+
+### Standing up the AWS landing zone
+
+Follow [`docs/runbooks/aws-bootstrap.md`](docs/runbooks/aws-bootstrap.md): run phase-0 (out-of-band org creation → a runnable `aws-organization` workspace), apply `aws-organization`, enable/delegate IAM Identity Center, then apply the remaining layers in order (`aws-security` → `aws-network` → `aws-identity` → `aws-shared-services` → `aws-backup` → `aws-workload`). Ordering is enforced by apply order + remote-state reads, not cross-root `depends_on`.
+
+### Adding an AWS account / workload
+
+Follow [`docs/runbooks/aws-add-account.md`](docs/runbooks/aws-add-account.md): add the account to the org map, apply `aws-organization`, create the TFC workspace and wire its run role, then apply the workload layer (`TF_WORKSPACE=aws-workload-<env>`).
