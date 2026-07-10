@@ -2,10 +2,12 @@
 
 ## Overview
 
-This repository implements a GCP landing zone with two supported Terraform roots:
+This repository implements a GCP landing zone alongside a Terraform-native AWS landing zone. The GCP surface has two supported roots:
 
 - `envs/organization` for the control plane
 - `envs/apps` for environment-specific application infrastructure
+
+The AWS surface adds a set of per-layer roots (`envs/aws-*`) plus a cloud-agnostic `envs/saas` root — see [AWS Landing Zone](#aws-landing-zone) below and the full detail in [`aws-landing-zone.md`](aws-landing-zone.md). Cloud selection is which workspaces you apply, not a runtime flag; the rationale lives in [`provider-selection.md`](provider-selection.md).
 
 The design target is a low-touch platform that is easy to extend without copying roots or editing workflow matrices.
 
@@ -13,8 +15,16 @@ The design target is a low-touch platform that is easy to extend without copying
 
 ```text
 envs/
-├── organization/
-└── apps/
+├── organization/         # GCP control plane
+├── apps/                 # GCP per-environment app infra
+├── aws-organization/     # AWS org, OUs, SCPs, foundational accounts
+├── aws-security/         # AWS log archive, CloudTrail, GuardDuty, Security Hub, Config
+├── aws-network/          # AWS Transit Gateway hub, inspection VPC, IPAM
+├── aws-identity/         # AWS IAM Identity Center permission sets/assignments
+├── aws-shared-services/  # AWS shared platform services (optional)
+├── aws-backup/           # AWS centralized backup vaults + org backup plan
+├── aws-workload/         # AWS per-env workloads (TF_WORKSPACE=aws-workload-<env>)
+└── saas/                 # Supabase and/or Vercel only — no AWS/GCP provider
 ```
 
 ### `envs/organization`
@@ -123,6 +133,31 @@ That keeps CIDRs explicit and stable. The old pattern of deriving CIDRs from key
   - `vault-secrets` — bootstraps the Supabase Vault with `SECURITY DEFINER` helper functions and reconciles a desired-state `map(string)` of secrets; requires Node.js >= 18 + `pg ^8.20.0`; IaC namespace is scoped to `UPPER_SNAKE_CASE` keys only; a safety guard blocks wiping a non-empty vault when the desired set is empty
 - `modules/vercel/*` contains Vercel primitives:
   - `project` — creates a Vercel project with three environments (QA/preview, UAT/custom, production); sensitive environment variables are managed via `terraform_data` SHA256 drift-resistance triggers; `ignore_command` uses POSIX sh (`if/then/else/fi`, exit 1 = build, exit 0 = skip)
+
+## AWS Landing Zone
+
+The AWS surface is a Terraform-native, multi-account landing zone modelled on the AWS Security Reference Architecture (SRA). It is composed of per-layer roots under `envs/aws-*` plus a cloud-agnostic `envs/saas` root, each mapping to exactly one Terraform Cloud workspace.
+
+### Account model
+
+The SRA account topology spans a **Management** account (org root), **Log Archive** and **Security Tooling** accounts (delegated security admin), a **Network** account (Transit Gateway hub + inspection), **Shared Services**, **Backup**, **Forensics**, and one or more **Workload** accounts. OU structure, guardrails (SCP/RCP/declarative/tag/backup policies), and account provisioning live in the `aws-organization` layer.
+
+### Layer order
+
+Each layer is one root = one workspace; ordering is enforced by **apply order + remote-state reads**, not cross-root `depends_on`:
+
+```text
+aws-organization → aws-security → aws-network → aws-identity
+                 → aws-shared-services → aws-backup → aws-workload
+```
+
+The **minimum governed footprint** is `aws-organization` + `aws-security`; everything from `aws-network` down is additive. `envs/saas` sits deliberately outside the AWS chain — it configures no AWS credentials and is selected purely by whether you apply its workspace.
+
+### Two-phase bootstrap
+
+AWS stand-up begins with a phase-0 bootstrap (out-of-band org creation and a runnable `aws-organization` workspace) before the layered roots can be applied. IAM Identity Center is enabled/delegated between the organization and security/identity layers.
+
+> Full account/OU diagrams, network and security topology, and the SRA conformance checklist: **[AWS Landing Zone →](aws-landing-zone.md)**. Stand-up procedure: **[AWS Bootstrap runbook →](../runbooks/aws-bootstrap.md)**.
 
 ## State and Execution Model
 
