@@ -1,13 +1,13 @@
 # Provider Major-Version Upgrade Posture
 
-This guide records the repo's current stance on `google`/`google-beta` provider major
-versions, what was actually tested, and the procedure for re-testing when the question
-comes up again (it will — Dependabot or a contributor will eventually try to bump past
-the current ceiling).
+This guide records the repo's current stance on the `google`/`google-beta`, `supabase`,
+`vercel`, and `aws` provider major versions, what was actually tested, and the procedure for
+re-testing when the question comes up again (it will — Dependabot or a contributor will
+eventually try to bump past the current ceiling).
 
 ## Current constraint
 
-All modules and environments pin:
+All GCP modules and environments pin:
 
 ```hcl
 required_providers {
@@ -23,6 +23,36 @@ required_providers {
 ```
 
 i.e. both provider 6.x and 7.x satisfy the constraint today.
+
+The SaaS modules pin `supabase = "~> 1.0"` and `vercel = "~> 4.0"`.
+
+## AWS provider
+
+All AWS modules and roots (`modules/aws/*`, `envs/aws-*`) pin:
+
+```hcl
+required_providers {
+  aws = {
+    source  = "hashicorp/aws"
+    version = ">= 6.46.0, < 7.0.0"
+  }
+}
+```
+
+This is a **floored** pin (`>= 6.46.0`), not a bare `~> 6.0`, and the floor is deliberate: the
+landing zone uses resources and arguments added mid-6.x, so an older 6.x provider fails to
+plan. The `7.0` major is **gated behind a deliberate upgrade** (`< 7.0.0`) rather than left
+open — 7.0 has not been validated against this codebase, so it is not silently permitted the
+way google 7.x is.
+
+The AWS `.terraform.lock.hcl` files are committed **dual-platform** (`linux_amd64` +
+`darwin_amd64`) so the CI Linux runners and local macOS machines resolve the identical provider
+hashes.
+
+The upgrade/testing procedure for `aws` is the **same as the other providers** (see "How to
+re-test this in the future" below): temporarily bump the constraint on a representative example
+root, re-lock, and run `make test` / `make validate-all` under the CI-pinned Terraform CLI. Only
+land a constraint change if the investigation concludes one is needed.
 
 ## 2026-07-08 investigation: is provider 7.x actually compatible?
 
