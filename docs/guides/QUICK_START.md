@@ -1,6 +1,8 @@
 # Quick Start Guide
 
-This guide covers everything needed to deploy the landing zone from scratch, including the manual bootstrap sequence that must run before CI/CD exists.
+This guide covers everything needed to deploy the **GCP** landing zone from scratch, including the manual bootstrap sequence that must run before CI/CD exists.
+
+> **Deploying AWS?** The AWS landing zone has its own phase-0 stand-up flow and credential model — see [AWS bootstrap](#4a-aws-bootstrap-separate-stand-up-flow) below and the full **[AWS Bootstrap runbook](../runbooks/aws-bootstrap.md)**. Cloud selection is which workspaces you apply, not a runtime flag: **[Provider Selection](../architecture/provider-selection.md)**.
 
 ---
 
@@ -180,6 +182,16 @@ gcloud auth application-default revoke
 
 ---
 
+## 4a. AWS Bootstrap (separate stand-up flow)
+
+The AWS landing zone does **not** share the GCP bootstrap above. It has its own phase-0 stand-up: creating the AWS organization out-of-band, then bringing a runnable `aws-organization` workspace online, then applying the layered roots in order (`aws-organization` → `aws-security` → `aws-network` → `aws-identity` → `aws-shared-services` → `aws-backup` → `aws-workload`). IAM Identity Center is enabled/delegated between the organization and security/identity layers.
+
+**AWS credentials:** the AWS roots authenticate via Terraform Cloud dynamic (OIDC) credentials — set `TFC_AWS_PROVIDER_AUTH=true` and `TFC_AWS_RUN_ROLE_ARN` on the workspace — or, for local runs, `AWS_PROFILE`. Only the roots you apply pull in credentials; an unapplied workspace needs none (see the env-var table in [CLAUDE.md](../../CLAUDE.md#required-environment-variables)).
+
+> Full phase-0 procedure, prerequisites, and layer-by-layer apply order: **[AWS Bootstrap runbook →](../runbooks/aws-bootstrap.md)**. To add an account/environment later: **[AWS Add Account →](../runbooks/aws-add-account.md)**.
+
+---
+
 ## 5. Apply Sequencing
 
 **Always apply `envs/organization` before `envs/apps`.**
@@ -320,6 +332,7 @@ make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars
 
 - Read the [Architecture Overview](../architecture/ARCHITECTURE.md)
 - Read the [Network Topology](../architecture/network-topology.md)
+- Standing up AWS? Read the [AWS Landing Zone](../architecture/aws-landing-zone.md) and the [AWS Bootstrap runbook](../runbooks/aws-bootstrap.md)
 - Read the [Contributing Guide](../../CONTRIBUTING.md)
 - **Configure [Branch Protection](BRANCH_PROTECTION.md)** — apply GitHub branch protection rules before granting team access
 - Browse the [Runbooks](../runbooks/) for Day 2 operations

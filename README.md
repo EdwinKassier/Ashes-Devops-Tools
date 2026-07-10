@@ -48,10 +48,12 @@ git clone https://github.com/EdwinKassier/Ashes-Devops-Tools.git
 cd Ashes-Devops-Tools
 make install && make pre-commit-install
 
-# 2. Authenticate (GCP ADC + optional SaaS tokens)
-gcloud auth application-default login
+# 2. Authenticate (only the clouds whose workspaces you apply)
+gcloud auth application-default login     # GCP roots (organization, apps)
 export SUPABASE_ACCESS_TOKEN="sbp_..."   # required for supabase modules
 export VERCEL_API_TOKEN="..."            # required for vercel modules
+# AWS roots use TFC dynamic credentials (TFC_AWS_PROVIDER_AUTH + TFC_AWS_RUN_ROLE_ARN)
+# or AWS_PROFILE for local runs — see the AWS Bootstrap runbook for the full flow.
 
 # 3. Run the local validation suite (no cloud credentials needed for tests)
 make ci
@@ -72,15 +74,22 @@ make ci
 ┌────────────────────────▼────────────────────────────────┐
 │                  Terraform Cloud (CD)                   │
 │              Remote state · Plan · Apply                │
-└──────────┬──────────────────────────────────┬───────────┘
-           │                                  │
-┌──────────▼──────────┐          ┌────────────▼──────────┐
-│  envs/organization  │          │      envs/apps         │
-│  Control plane      │◄─remote─►│  TF_WORKSPACE=apps-*  │
-│  (folders, VPC hub, │  state   │  (host project, spoke  │
-│   KMS, WIF, budgets)│          │   VPC, Cloud Armor)   │
-└─────────────────────┘          └────────────────────────┘
+│         one root = one workspace (per cloud)            │
+└──────┬───────────────────────┬───────────────────┬──────┘
+       │ GCP                   │ AWS               │ SaaS
+┌──────▼──────────┐   ┌────────▼─────────┐   ┌─────▼──────┐
+│ envs/organization│   │ envs/aws-*       │   │ envs/saas  │
+│ envs/apps        │   │ organization →   │   │ Supabase   │
+│ (control plane,  │   │ security →       │   │ and/or     │
+│  host/spoke VPC, │   │ network →        │   │ Vercel     │
+│  KMS, WIF)       │   │ identity →       │   │ (no cloud  │
+│                  │   │ shared-services →│   │  provider) │
+│                  │   │ backup →         │   │            │
+│                  │   │ workload         │   │            │
+└─────────────────┘   └──────────────────┘   └────────────┘
 ```
+
+> AWS is a multi-account SRA landing zone with its own layered roots. Full detail: **[AWS Landing Zone →](docs/architecture/aws-landing-zone.md)**. Cloud selection is which workspaces you apply, not a runtime flag: **[Provider Selection →](docs/architecture/provider-selection.md)**.
 
 ### Choosing providers
 
@@ -294,6 +303,8 @@ git push origin organization/v1.2.0
 | [Documentation Index](docs/INDEX.md) | Complete navigation hub |
 | [Quick Start](docs/guides/QUICK_START.md) | Bootstrap, creds, first apply |
 | [Architecture](docs/architecture/ARCHITECTURE.md) | Roots, modules, execution model |
+| [AWS Landing Zone](docs/architecture/aws-landing-zone.md) | Multi-account SRA model, layer map, SRA conformance checklist |
+| [Adding a Cloud](docs/architecture/adding-a-cloud.md) | Per-cloud-root contract for extending the platform |
 | [Provider Selection](docs/architecture/provider-selection.md) | Any-combination cloud matrix, per-cloud-root model |
 | [Network Topology](docs/architecture/network-topology.md) | Hub-spoke layout, VPC-SC, WIF flows |
 | [Troubleshooting](docs/guides/TROUBLESHOOTING.md) | Common errors including Supabase/Vercel |
@@ -302,7 +313,9 @@ git push origin organization/v1.2.0
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development workflow and standards |
 | [CHANGELOG.md](CHANGELOG.md) | Release notes |
 
-**Runbooks:** [Add Environment](docs/runbooks/add-environment.md) · [Service Team Onboarding](docs/runbooks/service-team-onboarding.md) · [KMS Rotation](docs/runbooks/kms-rotation.md) · [CIDR Expansion](docs/runbooks/cidr-expansion.md) · [Break Glass](docs/runbooks/break-glass.md)
+**GCP runbooks:** [Add Environment](docs/runbooks/add-environment.md) · [Service Team Onboarding](docs/runbooks/service-team-onboarding.md) · [KMS Rotation](docs/runbooks/kms-rotation.md) · [CIDR Expansion](docs/runbooks/cidr-expansion.md) · [Break Glass](docs/runbooks/break-glass.md)
+
+**AWS runbooks:** [AWS Bootstrap](docs/runbooks/aws-bootstrap.md) · [AWS Add Account](docs/runbooks/aws-add-account.md) · [AWS Break Glass](docs/runbooks/aws-break-glass.md) · [AWS Incident Response](docs/runbooks/aws-incident-response.md) · [AWS Teardown](docs/runbooks/aws-teardown.md)
 
 ---
 

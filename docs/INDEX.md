@@ -10,9 +10,11 @@
 
 ## Core Concepts
 
-- `envs/organization` is the control-plane root.
-- `envs/apps` is the only deployable application-environment root.
+- `envs/organization` is the GCP control-plane root.
+- `envs/apps` is the deployable GCP application-environment root.
+- `envs/aws-*` are the AWS landing-zone roots (one root = one TFC workspace); `envs/saas` deploys Supabase and/or Vercel only.
 - `modules/stages/saas-workload` composes Supabase + Vercel for per-environment SaaS deployments.
+- Cloud selection is which workspaces you apply, not a runtime flag — see [Provider Selection](architecture/provider-selection.md).
 - Terraform Cloud owns live state and apply runs.
 - GitHub Actions validates code and publishes release metadata.
 
@@ -59,6 +61,17 @@ make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars
 - [Break Glass](runbooks/break-glass.md): emergency access when Workload Identity Federation fails
 - [Provider Upgrades](guides/provider-upgrades.md): google/google-beta major-version compatibility posture and re-test procedure
 
+## AWS Landing Zone
+
+- [AWS Landing Zone](architecture/aws-landing-zone.md): multi-account SRA architecture — account/OU model, layer map, network/security topology, SRA conformance checklist
+- [Adding a Cloud](architecture/adding-a-cloud.md): the per-cloud-root contract (naming, one provider per root, credential-free remote state)
+- [Provider Selection](architecture/provider-selection.md): any-combination cloud matrix, per-cloud-root model, minimum AWS footprint
+- [AWS Bootstrap](runbooks/aws-bootstrap.md): phase-0 stand-up from zero state to a runnable `aws-organization` workspace
+- [AWS Add Account](runbooks/aws-add-account.md): add a new AWS account/environment to the org
+- [AWS Break Glass](runbooks/aws-break-glass.md): emergency access via the break-glass role
+- [AWS Incident Response](runbooks/aws-incident-response.md): quarantine and forensics flow
+- [AWS Teardown](runbooks/aws-teardown.md): reverse-order destroy, WORM/Vault Lock caveats
+
 ## SaaS Modules
 
 - [Quick Start → Section 3a](guides/QUICK_START.md#3a-configure-supabase-and-vercel-provider-credentials): Supabase + Vercel token setup, Node.js requirement
@@ -76,6 +89,9 @@ make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars
 
 - [Network Topology](architecture/network-topology.md): hub-spoke VPC layout, VPC-SC perimeter, WIF OIDC flow
 - [Architecture Overview](architecture/ARCHITECTURE.md): control plane, app root, and CI/CD flow
+- [AWS Landing Zone](architecture/aws-landing-zone.md): multi-account SRA model, layer map, and network/security topology
+- [Provider Selection](architecture/provider-selection.md): per-cloud-root model and any-combination matrix
+- [Adding a Cloud](architecture/adding-a-cloud.md): per-cloud-root contract for extending the platform
 
 ## Reference Files
 
