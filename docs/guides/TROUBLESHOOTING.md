@@ -306,6 +306,77 @@ The following errors were present in earlier versions and have been resolved. If
 
 ---
 
+## AWS
+
+### `terraform validate` fails with "Provider configuration not present"
+
+```text
+╷
+│ Error: Provider configuration not present
+│ To use module.example.aws_… its original provider configuration at
+│ provider["registry.terraform.io/hashicorp/aws"].management is required…
+```
+
+**Cause:** Cross-account AWS modules declare `configuration_aliases` (e.g. `aws.management`, `aws.log_archive`) so the caller must pass in per-account providers. Such a module has **no provider of its own** and therefore cannot be `terraform validate`d standalone — this error is expected, not a bug.
+
+**Fix:** Validate via the module's `examples/` root or the composing root (`envs/aws-*`), which supply the aliased providers. CI already skips these modules in the standalone validate step for the same reason.
+
+---
+
+### CloudTrail / Config / SNS fails with `KMSAccessDenied`
+
+```text
+╷
+│ Error: … KMSAccessDenied: The ciphertext refers to a customer master key
+│ that does not exist, does not exist in this region, or you are not allowed
+│ to access.
+```
+
+**Cause:** A service running in one account (CloudTrail, Config, an SNS topic) is trying to use a CMK whose **key policy** does not grant that service's principal. A CMK is account- and Region-scoped; a cross-account service principal has no access unless the key policy explicitly allows it.
+
+**Fix:** Either use a CMK in the **consuming** account, or grant the service principal in the key policy scoped by `aws:SourceOrgID` (org-wide) rather than a broad `kms:ViaService` grant. See the KMS-grant note in [CLAUDE.md → AWS modules](../../CLAUDE.md).
+
+---
+
+### `tflint --init` fails with a GitHub `403` rate limit
+
+```text
+Failed to install a plugin; … 403 API rate limit exceeded
+```
+
+**Cause:** `tflint --init` downloads ruleset plugins from GitHub releases; unauthenticated requests hit the anonymous rate limit, especially in CI.
+
+**Fix:** Export a token before running the install:
+
+```bash
+export GITHUB_TOKEN="<a token with public_repo / read access>"
+tflint --init
+```
+
+---
+
+### `terraform destroy` cannot delete an Object Lock (COMPLIANCE) bucket
+
+**Cause:** The Log Archive bucket is created with S3 Object Lock in **COMPLIANCE** mode (WORM). Objects — and the bucket — cannot be deleted within the retention window by anyone, including the account root. This is intended immutability, not a permissions failure.
+
+**Fix:** There is no override. Wait out the retention window, or (for a genuine teardown) follow the [`aws-teardown.md`](../runbooks/aws-teardown.md) runbook.
+
+---
+
+### `account_role_arns["<key>"]` fails at plan when applying `aws-workload`
+
+```text
+╷
+│ Error: Invalid index
+│ The given key does not identify an element in this collection value.
+```
+
+**Cause:** A downstream root (typically `aws-workload`) resolved `account_role_arns[<key>]` from the `aws-organization` remote state, but that account was never added to the org. `account_role_arns` only contains keys for accounts declared in the org root's `workload_accounts` (and `accounts`) map.
+
+**Fix:** Add the workload account to `envs/aws-organization` under `workload_accounts`, apply `aws-organization` first so it vends the account and republishes `account_role_arns`, then apply `aws-workload`. See [`aws-add-account.md`](../runbooks/aws-add-account.md).
+
+---
+
 ## Supabase module errors
 
 ### `Error: supabase: Tenant or user not found`

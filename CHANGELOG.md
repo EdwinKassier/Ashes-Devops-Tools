@@ -11,6 +11,8 @@ Releases are tagged as `organization/vX.Y.Z` and `apps/<env>/vX.Y.Z`.
 
 ### Added
 
+- **AWS Security Reference Architecture landing zone** — multi-account organization (SRA OU tree + foundational accounts); SCP/RCP/declarative/tag/backup guardrails; org CloudTrail, Config, GuardDuty, Security Hub, Access Analyzer, Macie, Inspector, Detective, and Security Lake; Systems Manager; incident-response/forensics; a Transit Gateway hub network; IAM Identity Center; org Backup with Vault Lock; and cost governance — across 35 `modules/aws/*`, 6 `modules/stages/aws-*` stages, and 8 roots (`envs/aws-{organization,security,network,identity,shared-services,backup,workload}` + `envs/saas`). Provider pinned `aws >= 6.46.0, < 7.0.0`. See [`docs/architecture/aws-landing-zone.md`](docs/architecture/aws-landing-zone.md).
+- **Any-combination provider selection** — aws/gcp/supabase/vercel are now independently selectable (one cloud = one root = one workspace). New `envs/saas` root deploys Supabase and/or Vercel with no AWS/GCP credentials; `enable_supabase` added to `modules/stages/saas-workload`. See [`docs/architecture/provider-selection.md`](docs/architecture/provider-selection.md).
 - `modules/supabase/project` — creates a single Supabase project via `supabase_project`; lifecycle guard ignores database_password after initial creation
 - `modules/supabase/settings` — manages auth and API settings for an existing project via `supabase_settings`; destruction is a no-op by provider design
 - `modules/supabase/environment` — composite module (project + settings + `data.supabase_apikeys`); primary building block for per-environment deployments; `anon_key` output is intentionally non-sensitive to allow for-expression filter conditions in callers

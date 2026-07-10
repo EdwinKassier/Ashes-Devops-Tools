@@ -94,6 +94,15 @@ cp -r templates/module/ modules/your-module-name
 # then rename MODULE_NAME placeholders and fill in the logic
 ```
 
+### AWS modules
+
+AWS modules clone `templates/aws-module/` instead of `templates/module/`. They pin
+`aws = ">= 6.46.0, < 7.0.0"`, use `mock_provider "aws"` tests (cross-account modules add an
+aliased `mock_provider "aws" { alias = ... }` per configuration alias), and build IAM/policy
+JSON with `jsonencode()` rather than `data "aws_iam_policy_document"` (which `mock_provider`
+mocks away, breaking content assertions). Follow the full AWS authoring rules in
+[CLAUDE.md → AWS modules](CLAUDE.md#aws-modules) — the detailed gotchas live there.
+
 ### Validation blocks are required
 
 Every variable that accepts a constrained value must have a `validation` block with an actionable error message. Examples:

@@ -16,6 +16,29 @@ Without both of these, `drift-detection.yml` **skips cleanly** on its scheduled 
 "Drift detection behavior without secrets" below) rather than failing red. `terraform-apply.yml`
 requires them to function since it drives real applies via the TFC API.
 
+## AWS roots — dynamic credentials
+
+The AWS roots (`envs/aws-*`) do not use static access keys in CI. Each root authenticates via
+**Terraform Cloud dynamic provider credentials**: TFC federates into an IAM role at run time
+and injects short-lived credentials, so no long-lived secret is stored. These are set as
+**workspace environment variables** on each `aws-*` workspace (not repository secrets):
+
+| Name | Kind | Scope | Purpose |
+|------|------|-------|---------|
+| `TFC_AWS_PROVIDER_AUTH` | Workspace env var | Per `aws-*` workspace | Set to `true` to enable TFC's AWS dynamic credentials for the workspace. |
+| `TFC_AWS_RUN_ROLE_ARN` | Workspace env var | Per `aws-*` workspace | The IAM role ARN the run assumes. Set each downstream workspace to its member-account role, published by the `aws-organization` root output `account_role_arns[<account-key>]` (e.g. `account_role_arns["security_tooling"]` for `aws-security`). The `aws-organization` workspace itself uses the phase-0 bootstrap role. |
+
+For **local** runs against an AWS root (read-only `terraform plan`), use the standard AWS SDK
+credential chain instead — `AWS_PROFILE` pointing at a profile that can assume the role, or an
+OIDC/SSO session — rather than the TFC-injected credentials, which only exist inside a TFC run.
+
+The SaaS root (`envs/saas`) declares **no AWS provider** and needs no AWS credentials. It
+requires `SUPABASE_ACCESS_TOKEN` and/or `VERCEL_API_TOKEN` only for whichever feature is
+enabled on that workspace (`enable_supabase` / `enable_vercel`).
+
+See [`docs/runbooks/aws-bootstrap.md`](../runbooks/aws-bootstrap.md) for phase-0 creation of the
+bootstrap role, the downstream member-account roles, and the workspaces that consume them.
+
 ## Optional
 
 | Name | Kind | Used by | Purpose | Default when unset |
