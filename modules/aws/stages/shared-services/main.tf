@@ -25,7 +25,7 @@
 # ---------------------------------------------------------------------------
 
 module "private_ca" {
-  source = "../../aws/private-ca"
+  source = "../../private-ca"
 
   enable_private_ca = var.enable_private_ca
   ca_type           = var.ca_type
@@ -39,7 +39,7 @@ module "private_ca" {
 # ---------------------------------------------------------------------------
 
 module "secrets_baseline" {
-  source = "../../aws/secrets-baseline"
+  source = "../../secrets-baseline"
 
   enable_secrets_baseline = var.enable_secrets_baseline
   secrets                 = var.secrets

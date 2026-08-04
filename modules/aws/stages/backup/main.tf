@@ -20,7 +20,7 @@
 # ---------------------------------------------------------------------------
 
 module "backup_vault" {
-  source = "../../aws/backup-vault"
+  source = "../../backup-vault"
   providers = {
     aws = aws.backup
   }
@@ -38,7 +38,7 @@ module "backup_vault" {
 # ---------------------------------------------------------------------------
 
 module "backup_org_policy" {
-  source = "../../aws/backup-org-policy"
+  source = "../../backup-org-policy"
 
   backup_vault_name = var.vault_name
   backup_role_arn   = var.backup_role_arn

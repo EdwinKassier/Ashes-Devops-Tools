@@ -23,7 +23,7 @@
 # cross-root inputs come from the remote state above (never hard-coded).
 #
 # module "workload" {
-#   source = "../../modules/stages/aws-workload"
+#   source = "../../modules/aws/stages/workload"
 #
 #   aws_region          = var.aws_region
 #   aws_enabled_regions = var.aws_enabled_regions
