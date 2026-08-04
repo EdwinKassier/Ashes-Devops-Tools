@@ -6,5 +6,5 @@ variable "tfc_organization" {
 }
 
 # Optional variables — add your cloud's region / enabled-region inputs here,
-# following templates/aws-root/variables.tf (region-shaped validation with
+# following templates/aws/root/variables.tf (region-shaped validation with
 # interval repeats kept <= 1000 for the RE2 engine).

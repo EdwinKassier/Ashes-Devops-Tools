@@ -9,6 +9,10 @@ Releases are tagged as `gcp-organization/vX.Y.Z` and `gcp-workload/<env>/vX.Y.Z`
 
 ## [Unreleased]
 
+### Changed
+
+- **Domain-driven repository reorganization** — modules, deployable roots, and scaffolds are now grouped by owning cloud. `modules/` → `modules/{gcp,aws,supabase,vercel,saas}/` (GCP-native modules and stages under `gcp/`, AWS stages under `aws/stages/`, `saas-workload` under `saas/stages/`); `envs/<cloud>-<layer>` → `envs/<cloud>/<layer>` (e.g. `envs/gcp-organization` → `envs/gcp/organization`); `templates/` → `templates/{aws,shared}/`. Relative module `source` paths were rewritten throughout, `scripts/terraform-roots.sh` discovery depth updated, and CODEOWNERS regrouped by cloud. **No Terraform state migration** — TFC workspace names, `backend.tf`, and `terraform_remote_state` (workspace-name) lookups are unchanged; the only operator action is repointing each workspace's VCS working directory, per [`docs/runbooks/ddd-reorg-migration.md`](docs/runbooks/ddd-reorg-migration.md). Delivered as three sequential PRs (modules → envs → templates).
+
 ### Added
 
 - **AWS Security Reference Architecture landing zone** — multi-account organization (SRA OU tree + foundational accounts); SCP/RCP/declarative/tag/backup guardrails; org CloudTrail, Config, GuardDuty, Security Hub, Access Analyzer, Macie, Inspector, Detective, and Security Lake; Systems Manager; incident-response/forensics; a Transit Gateway hub network; IAM Identity Center; org Backup with Vault Lock; and cost governance — across 35 `modules/aws/*`, 6 `modules/stages/aws-*` stages, and 8 roots (`envs/aws-{organization,security,network,identity,shared-services,backup,workload}` + `envs/saas`). Provider pinned `aws >= 6.46.0, < 7.0.0`. See [`docs/architecture/aws-landing-zone.md`](docs/architecture/aws-landing-zone.md).

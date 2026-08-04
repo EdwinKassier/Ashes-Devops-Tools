@@ -90,13 +90,13 @@ modules/your-module/
 ### Use the scaffold
 
 ```bash
-cp -r templates/module/ modules/your-module-name
+cp -r templates/shared/module/ modules/your-module-name
 # then rename MODULE_NAME placeholders and fill in the logic
 ```
 
 ### AWS modules
 
-AWS modules clone `templates/aws-module/` instead of `templates/module/`. They pin
+AWS modules clone `templates/aws/module/` instead of `templates/shared/module/`. They pin
 `aws = ">= 6.46.0, < 7.0.0"`, use `mock_provider "aws"` tests (cross-account modules add an
 aliased `mock_provider "aws" { alias = ... }` per configuration alias), and build IAM/policy
 JSON with `jsonencode()` rather than `data "aws_iam_policy_document"` (which `mock_provider`
@@ -193,7 +193,7 @@ module actually plans the resource you think it does, or that a value flows
 through to the attribute you expect. **Every module must include at least one
 `command = plan` test that asserts on a planned resource or output attribute**,
 not only on variable validation. Model this on
-`templates/module/tests/plan_assertions.tftest.hcl`:
+`templates/shared/module/tests/plan_assertions.tftest.hcl`:
 
 ```hcl
 run "example_resource_plans_with_expected_attributes" {
