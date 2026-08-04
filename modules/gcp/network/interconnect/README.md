@@ -137,11 +137,11 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_compute_interconnect_attachment.dedicated (modules/network/interconnect/main.tf#L45)
-- resource.google_compute_interconnect_attachment.partner (modules/network/interconnect/main.tf#L69)
-- resource.google_compute_router.router (modules/network/interconnect/main.tf#L18)
-- resource.google_compute_router_interface.interface (modules/network/interconnect/main.tf#L100)
-- resource.google_compute_router_peer.peer (modules/network/interconnect/main.tf#L115)
+- resource.google_compute_interconnect_attachment.dedicated (modules/gcp/network/interconnect/main.tf#L45)
+- resource.google_compute_interconnect_attachment.partner (modules/gcp/network/interconnect/main.tf#L69)
+- resource.google_compute_router.router (modules/gcp/network/interconnect/main.tf#L18)
+- resource.google_compute_router_interface.interface (modules/gcp/network/interconnect/main.tf#L100)
+- resource.google_compute_router_peer.peer (modules/gcp/network/interconnect/main.tf#L115)
 
 
 ## Inputs

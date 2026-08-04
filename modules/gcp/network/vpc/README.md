@@ -14,7 +14,7 @@ The central networking module for the Enterprise Boilerplate. It creates a robus
 
 ```hcl
 module "vpc" {
-  source = "./modules/network/vpc"
+  source = "./modules/gcp/network/vpc"
 
   project_id = "my-project-id"
   vpc_name   = "prod-vpc"
@@ -99,9 +99,9 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_compute_network.vpc (modules/network/vpc/main.tf#L26)
-- resource.google_compute_shared_vpc_host_project.host (modules/network/vpc/main.tf#L38)
-- resource.terraform_data.deletion_protection_guard (modules/network/vpc/main.tf#L15)
+- resource.google_compute_network.vpc (modules/gcp/network/vpc/main.tf#L26)
+- resource.google_compute_shared_vpc_host_project.host (modules/gcp/network/vpc/main.tf#L38)
+- resource.terraform_data.deletion_protection_guard (modules/gcp/network/vpc/main.tf#L15)
 
 
 ## Inputs

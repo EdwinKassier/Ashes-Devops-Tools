@@ -2,7 +2,7 @@
 
 > **Platform Infrastructure Projects Only**  
 > This module creates **platform/infrastructure projects** (VPC hosts, network hubs, shared services).  
-> For **application/workload projects**, use [`modules/stages/workload`](../workload/README.md) instead.
+> For **application/workload projects**, use [`modules/gcp/stages/workload`](../workload/README.md) instead.
 
 ## Purpose
 
@@ -39,7 +39,7 @@ This module is invoked **once** in `envs/gcp-organization/main.tf`:
 
 ```hcl
 module "projects" {
-  source = "../../modules/stages/projects"
+  source = "../../modules/gcp/stages/projects"
 
   project_prefix          = var.project_prefix
   organization_name       = var.organization_name
@@ -116,9 +116,9 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_monitoring_monitored_project.projects (modules/stages/projects/main.tf#L71)
-- resource.google_project.projects (modules/stages/projects/main.tf#L12)
-- resource.google_project_service.project_services (modules/stages/projects/main.tf#L55)
+- resource.google_monitoring_monitored_project.projects (modules/gcp/stages/projects/main.tf#L71)
+- resource.google_project.projects (modules/gcp/stages/projects/main.tf#L12)
+- resource.google_project_service.project_services (modules/gcp/stages/projects/main.tf#L55)
 
 
 ## Inputs

@@ -121,7 +121,7 @@ TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp-workload plan -var-file=
 
 ## WIF / ADC authentication failures in CI
 
-Workload Identity Federation is configured in `modules/stages/bootstrap`. If a GitHub Actions job fails with `google: could not find default credentials` or `Permission denied on resource project`:
+Workload Identity Federation is configured in `modules/gcp/stages/bootstrap`. If a GitHub Actions job fails with `google: could not find default credentials` or `Permission denied on resource project`:
 
 1. Confirm the WIF pool and provider were created:
 
@@ -213,13 +213,13 @@ Always include a justification after the colon. The CI Checkov run uses `.checko
 ```text
 ╷
 │ Error: Resource precondition failed
-│ on modules/host/main.tf: Each non-empty subnet_cidrs list must have at least
+│ on modules/gcp/host/main.tf: Each non-empty subnet_cidrs list must have at least
 │ as many entries as availability zones in the region. Detected 3 zones;
 │ provided public=0, private=2, database=0 CIDRs. Either add CIDRs or leave
 │ the list empty to use auto-generated values.
 ```
 
-**Cause:** `modules/host` takes subnet CIDRs as a single `subnet_cidrs` object with `public`/`private`/`database` list keys (not separate `private_subnet_cidrs`/`database_subnet_cidrs` variables). If you supply a non-empty list for one of those keys, it must have at least one CIDR per availability zone in the region.
+**Cause:** `modules/gcp/host` takes subnet CIDRs as a single `subnet_cidrs` object with `public`/`private`/`database` list keys (not separate `private_subnet_cidrs`/`database_subnet_cidrs` variables). If you supply a non-empty list for one of those keys, it must have at least one CIDR per availability zone in the region.
 
 **Fix (option A — recommended for production):** Set `explicit_zones` to pin the exact zones you need:
 
@@ -246,7 +246,7 @@ subnet_cidrs = {
 ```text
 ╷
 │ Error: Resource precondition failed
-│ on modules/host/main.tf: set enable_deletion_protection = false and re-apply
+│ on modules/gcp/host/main.tf: set enable_deletion_protection = false and re-apply
 │ before running terraform destroy.
 ```
 
@@ -269,7 +269,7 @@ terraform destroy # now succeeds
 
 ### `Error: Error creating Service Perimeter … "projects/my-project-id" is not a valid resource name`
 
-**Cause:** The `modules/network/vpc-sc` module's `protected_projects` variable (and the `resources`/`sources[].resource` fields inside `vpc_sc_ingress_policies`/`vpc_sc_egress_policies` at the `envs/gcp-workload` root) require **numeric project numbers**, not project ID strings. The Access Context Manager API only accepts the `projects/<number>` form, and the module prepends the `projects/` prefix automatically — do not include it yourself.
+**Cause:** The `modules/gcp/network/vpc-sc` module's `protected_projects` variable (and the `resources`/`sources[].resource` fields inside `vpc_sc_ingress_policies`/`vpc_sc_egress_policies` at the `envs/gcp-workload` root) require **numeric project numbers**, not project ID strings. The Access Context Manager API only accepts the `projects/<number>` form, and the module prepends the `projects/` prefix automatically — do not include it yourself.
 
 **Fix:** Replace project ID strings with numeric project numbers:
 
@@ -413,7 +413,7 @@ Or from the provider itself:
 │ Error: vercel: 403 Forbidden — API token not found
 ```
 
-**Cause:** `VERCEL_API_TOKEN` is not set. The Vercel provider reads the token from the environment variable. This error appears even when `enable_vercel = false` if the calling root declares the Vercel provider in `required_providers` (e.g. when calling `modules/stages/saas-workload`).
+**Cause:** `VERCEL_API_TOKEN` is not set. The Vercel provider reads the token from the environment variable. This error appears even when `enable_vercel = false` if the calling root declares the Vercel provider in `required_providers` (e.g. when calling `modules/saas/stages/saas-workload`).
 
 **Fix:** Export the token before running any Terraform command in that root:
 
@@ -421,7 +421,7 @@ Or from the provider itself:
 export VERCEL_API_TOKEN="your_vercel_token_here"
 ```
 
-To use Supabase without the Vercel provider requirement, call `modules/supabase/environment` directly instead of `modules/stages/saas-workload`. The primitive modules have no Vercel provider declaration.
+To use Supabase without the Vercel provider requirement, call `modules/supabase/environment` directly instead of `modules/saas/stages/saas-workload`. The primitive modules have no Vercel provider declaration.
 
 ---
 

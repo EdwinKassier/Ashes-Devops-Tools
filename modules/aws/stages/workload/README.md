@@ -76,12 +76,12 @@ module "example" {
 ## Modules
 
 
-- account_baseline - ../../aws/account-baseline
-- config_recorder - ../../aws/config-org
-- edge_security - ../../aws/edge-security
-- iam_role - ../../aws/iam-role
-- systems_manager - ../../aws/systems-manager
-- vpc - ../../aws/vpc
+- account_baseline - ../../account-baseline
+- config_recorder - ../../config-org
+- edge_security - ../../edge-security
+- iam_role - ../../iam-role
+- systems_manager - ../../systems-manager
+- vpc - ../../vpc
 
 
 ## Resources
@@ -89,7 +89,7 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_ec2_transit_gateway_vpc_attachment.spoke (modules/stages/aws-workload/main.tf#L66)
+- resource.aws_ec2_transit_gateway_vpc_attachment.spoke (modules/aws/stages/workload/main.tf#L66)
 
 
 ## Inputs

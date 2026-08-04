@@ -18,7 +18,7 @@ Creates Cloud Monitoring alert policies and notification channels for GCP worklo
 
 ```hcl
 module "alerts" {
-  source = "../../modules/monitoring/alert_policy"
+  source = "../../modules/gcp/monitoring/alert_policy"
 
   project_id = "my-workload-project"
 
@@ -89,13 +89,13 @@ Pass `all_notification_channel_ids` from one module call into
 
 ```hcl
 module "alerts_primary" {
-  source     = "../../modules/monitoring/alert_policy"
+  source     = "../../modules/gcp/monitoring/alert_policy"
   project_id = "my-project"
   notification_email_addresses = ["ops@example.com"]
 }
 
 module "alerts_secondary" {
-  source     = "../../modules/monitoring/alert_policy"
+  source     = "../../modules/gcp/monitoring/alert_policy"
   project_id = "my-project"
   # No new channels — reuse the ones created above
   extra_notification_channel_ids = module.alerts_primary.all_notification_channel_ids
@@ -136,7 +136,7 @@ Supports email, Slack/webhook notifications, and common GCP metric alerts
 
 Usage:
   module "alerts" {
-    source     = "../../modules/monitoring/alert-policy"
+    source     = "../../modules/gcp/monitoring/alert-policy"
     project\_id = "my-project"
     notification\_email\_addresses = ["ops@example.com"]
     notification\_webhook\_urls = {
@@ -178,14 +178,14 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_monitoring_alert_policy.error_rate (modules/monitoring/alert-policy/main.tf#L144)
-- resource.google_monitoring_alert_policy.high_cpu (modules/monitoring/alert-policy/main.tf#L69)
-- resource.google_monitoring_alert_policy.high_latency (modules/monitoring/alert-policy/main.tf#L186)
-- resource.google_monitoring_alert_policy.high_memory (modules/monitoring/alert-policy/main.tf#L106)
-- resource.google_monitoring_alert_policy.log_based (modules/monitoring/alert-policy/main.tf#L273)
-- resource.google_monitoring_alert_policy.uptime (modules/monitoring/alert-policy/main.tf#L227)
-- resource.google_monitoring_notification_channel.email (modules/monitoring/alert-policy/main.tf#L36)
-- resource.google_monitoring_notification_channel.webhook (modules/monitoring/alert-policy/main.tf#L50)
+- resource.google_monitoring_alert_policy.error_rate (modules/gcp/monitoring/alert-policy/main.tf#L144)
+- resource.google_monitoring_alert_policy.high_cpu (modules/gcp/monitoring/alert-policy/main.tf#L69)
+- resource.google_monitoring_alert_policy.high_latency (modules/gcp/monitoring/alert-policy/main.tf#L186)
+- resource.google_monitoring_alert_policy.high_memory (modules/gcp/monitoring/alert-policy/main.tf#L106)
+- resource.google_monitoring_alert_policy.log_based (modules/gcp/monitoring/alert-policy/main.tf#L273)
+- resource.google_monitoring_alert_policy.uptime (modules/gcp/monitoring/alert-policy/main.tf#L227)
+- resource.google_monitoring_notification_channel.email (modules/gcp/monitoring/alert-policy/main.tf#L36)
+- resource.google_monitoring_notification_channel.webhook (modules/gcp/monitoring/alert-policy/main.tf#L50)
 
 
 ## Inputs

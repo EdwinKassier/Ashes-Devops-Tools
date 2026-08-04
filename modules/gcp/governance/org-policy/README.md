@@ -98,9 +98,9 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_org_policy_custom_constraint.custom_constraints (modules/governance/org-policy/main.tf#L50)
-- resource.google_org_policy_policy.boolean_policies (modules/governance/org-policy/main.tf#L8)
-- resource.google_org_policy_policy.list_policies (modules/governance/org-policy/main.tf#L25)
+- resource.google_org_policy_custom_constraint.custom_constraints (modules/gcp/governance/org-policy/main.tf#L50)
+- resource.google_org_policy_policy.boolean_policies (modules/gcp/governance/org-policy/main.tf#L8)
+- resource.google_org_policy_policy.list_policies (modules/gcp/governance/org-policy/main.tf#L25)
 
 
 ## Inputs

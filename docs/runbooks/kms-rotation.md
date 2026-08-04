@@ -22,7 +22,7 @@ This means:
 
 ## Automatic Rotation (preferred)
 
-The `modules/governance/kms` module configures `rotation_period`. When Terraform manages the key, rotation is handled by GCP automatically. No operator action is needed.
+The `modules/gcp/governance/kms` module configures `rotation_period`. When Terraform manages the key, rotation is handled by GCP automatically. No operator action is needed.
 
 To verify the current rotation policy:
 

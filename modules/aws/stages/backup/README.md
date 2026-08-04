@@ -64,8 +64,8 @@ module "example" {
 ## Modules
 
 
-- backup_org_policy - ../../aws/backup-org-policy
-- backup_vault - ../../aws/backup-vault
+- backup_org_policy - ../../backup-org-policy
+- backup_vault - ../../backup-vault
 
 
 

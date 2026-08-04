@@ -5,7 +5,7 @@
 #   (b) Checkov cannot fully resolve the check for a known Terraform pattern.
 #
 # Inline # checkov:skip= annotations are used for resource-level skips.
-# See modules/governance/kms, modules/cloud-storage, modules/stages/bootstrap.
+# See modules/gcp/governance/kms, modules/gcp/cloud-storage, modules/gcp/stages/bootstrap.
 #
 # AWS coverage (Task K5, 2026-07-09): checkov is the PRIMARY scanner for the AWS modules
 # (tfsec 1.28.6's AWS ruleset is thin — see .tfsec.yml). All AWS-specific suppressions are
@@ -30,12 +30,12 @@
 #   CKV_GCP_84    — Disk public: no google_compute_disk resources
 #
 # REMOVED (already handled with inline skips at the resource level):
-#   CKV_GCP_43  — KMS rotation: inline skip in modules/governance/kms/main.tf
-#   CKV_GCP_45  — Security Admin role: inline skip in modules/stages/bootstrap/main.tf
+#   CKV_GCP_43  — KMS rotation: inline skip in modules/gcp/governance/kms/main.tf
+#   CKV_GCP_45  — Security Admin role: inline skip in modules/gcp/stages/bootstrap/main.tf
 #   CKV_GCP_62  — Log bucket self-logging: inline skips in 4 modules
-#   CKV_GCP_125 — WIF provider constraints: inline skip in modules/iam/workload-identity/main.tf
-#   CKV_TF_1    — Module version pinning: inline skip in modules/stages/workload/main.tf
-#   CKV2_GCP_4  — Bucket lock: inline skip in modules/governance/cloud-audit-logs/main.tf
+#   CKV_GCP_125 — WIF provider constraints: inline skip in modules/gcp/iam/workload-identity/main.tf
+#   CKV_TF_1    — Module version pinning: inline skip in modules/gcp/stages/workload/main.tf
+#   CKV2_GCP_4  — Bucket lock: inline skip in modules/gcp/governance/cloud-audit-logs/main.tf
 #
 # REMOVED (checks pass without skipping — verified by running Checkov across all modules):
 #   CKV_GCP_112 — KMS public access: all KMS IAM bindings use specific SAs, not allUsers
@@ -56,7 +56,7 @@
 #                 User or Service Account Token Creator roles at project level"
 #                 (google_project_iam_binding/member). Old comment conflated it with the
 #                 org-level admin-role check (that's CKV_GCP_45, already skipped inline in
-#                 modules/stages/bootstrap/main.tf). Verified by running
+#                 modules/gcp/stages/bootstrap/main.tf). Verified by running
 #                 `checkov --check CKV_GCP_41` across modules/ and envs/: every
 #                 google_project_iam_member in the repo (including the bootstrap Terraform
 #                 Admin SA's project roles) already PASSES this check — no project-level
@@ -75,14 +75,14 @@
 # DNSSEC is enabled for Cloud DNS" (google_dns_managed_zone), not "KMS key IAM bindings
 # publicly accessible" as the old comment claimed. Verified with
 # `checkov --check CKV_GCP_16` against modules/ and envs/: both google_dns_managed_zone
-# resources (modules/network/dns) already PASS — DNSSEC is enabled by default in that
+# resources (modules/gcp/network/dns) already PASS — DNSSEC is enabled by default in that
 # module — so no skip is needed at all, global or inline.
 
 skip-check:
   # Log4Shell (CVE-2021-44228) canary rule: CKV_GCP_73 ("Ensure Cloud Armor prevents
   # message lookup in Log4j2") only recognizes the literal expression
   # evaluatePreconfiguredExpr('cve-canary') / evaluatePreconfiguredWaf('cve-canary').
-  # modules/network/cloud-armor/main.tf implements the same protection via GCP's current
+  # modules/gcp/network/cloud-armor/main.tf implements the same protection via GCP's current
   # named preconfigured WAF rule set, evaluatePreconfiguredWaf('log4j-v33-stable', ...),
   # attached as a separate google_compute_security_policy_rule (see
   # google_compute_security_policy_rule.log4j_protection, enabled by default via
@@ -98,7 +98,7 @@ skip-check:
   # CKV2_GCP_18 "Ensure GCP network defines a firewall and does not use the default firewall":
   # a cross-resource graph check that wants a firewall associated with each
   # google_compute_network. This repo defines firewall rules in DEDICATED modules
-  # (modules/network/network-firewall, modules/network/hierarchical-firewall, and the host
+  # (modules/gcp/network/network-firewall, modules/gcp/network/hierarchical-firewall, and the host
   # module's rules), never inline in the vpc module, so checkov's graph cannot link them to
   # the network and reports a false positive on every google_compute_network.vpc. Firewalls
   # ARE defined; the association is just cross-module. Global skip (every VPC is created via
@@ -108,7 +108,7 @@ skip-check:
   # CKV2_GCP_5 "Ensure Cloud Audit Logging is configured properly across all services and
   # users from a project": wants a per-project google_project_iam_audit_config. This landing
   # zone configures audit logging ONCE at the org level via google_organization_iam_audit_config
-  # (modules/governance/cloud-audit-logs), which applies to every project beneath the org —
+  # (modules/gcp/governance/cloud-audit-logs), which applies to every project beneath the org —
   # per-project audit config is intentionally not used (it would be redundant and drift-prone).
   # The check fires on google_project resources that are correctly covered org-wide.
   - "CKV2_GCP_5"

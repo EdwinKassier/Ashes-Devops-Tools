@@ -96,7 +96,7 @@ provider "aws" {
 }
 
 module "aws_security" {
-  source = "../../modules/stages/aws-security"
+  source = "../../modules/aws/stages/security"
 
   providers = {
     aws.management       = aws.management
@@ -164,23 +164,23 @@ module "example" {
 ## Modules
 
 
-- access_analyzer - ../../aws/access-analyzer-org
-- cloudtrail - ../../aws/cloudtrail-org
-- config - ../../aws/config-org
-- delegated_admin - ../../aws/security-delegated-admin
-- firewall_manager - ../../aws/firewall-manager-org
-- forensics_cmk - ../../aws/kms-key
-- guardduty - ../../aws/guardduty-org
-- incident_response - ../../aws/incident-response
-- log_archive_bucket - ../../aws/log-archive-bucket
-- log_cmk - ../../aws/kms-key
-- org_security_service - ../../aws/org-security-service
-- sectool_cmk - ../../aws/kms-key
-- security_notifications - ../../aws/security-notifications
-- securityhub - ../../aws/securityhub-org
-- securitylake - ../../aws/securitylake
-- service_quotas - ../../aws/service-quotas
-- systems_manager - ../../aws/systems-manager
+- access_analyzer - ../../access-analyzer-org
+- cloudtrail - ../../cloudtrail-org
+- config - ../../config-org
+- delegated_admin - ../../security-delegated-admin
+- firewall_manager - ../../firewall-manager-org
+- forensics_cmk - ../../kms-key
+- guardduty - ../../guardduty-org
+- incident_response - ../../incident-response
+- log_archive_bucket - ../../log-archive-bucket
+- log_cmk - ../../kms-key
+- org_security_service - ../../org-security-service
+- sectool_cmk - ../../kms-key
+- security_notifications - ../../security-notifications
+- securityhub - ../../securityhub-org
+- securitylake - ../../securitylake
+- service_quotas - ../../service-quotas
+- systems_manager - ../../systems-manager
 
 
 

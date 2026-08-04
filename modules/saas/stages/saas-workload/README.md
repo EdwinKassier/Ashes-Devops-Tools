@@ -55,9 +55,9 @@ module "example" {
 ## Modules
 
 
-- supabase_environment - ../../supabase/environment
-- vault_secrets - ../../supabase/vault-secrets
-- vercel_project - ../../vercel/project
+- supabase_environment - ../../../supabase/environment
+- vault_secrets - ../../../supabase/vault-secrets
+- vercel_project - ../../../vercel/project
 
 
 

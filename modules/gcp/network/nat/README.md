@@ -151,8 +151,8 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_compute_router.router (modules/network/nat/main.tf#L11)
-- resource.google_compute_router_nat.nat (modules/network/nat/main.tf#L32)
+- resource.google_compute_router.router (modules/gcp/network/nat/main.tf#L11)
+- resource.google_compute_router_nat.nat (modules/gcp/network/nat/main.tf#L32)
 
 
 ## Inputs

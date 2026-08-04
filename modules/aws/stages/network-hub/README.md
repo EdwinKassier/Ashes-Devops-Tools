@@ -87,14 +87,14 @@ module "example" {
 ## Modules
 
 
-- egress_vpc - ../../aws/vpc
-- inspection_vpc - ../../aws/vpc
-- ipam - ../../aws/ipam
-- network_access_analyzer - ../../aws/network-access-analyzer
-- network_firewall - ../../aws/network-firewall
-- route53_resolver - ../../aws/route53-resolver
-- transit_gateway - ../../aws/transit-gateway
-- vpc_endpoints - ../../aws/vpc-endpoints
+- egress_vpc - ../../vpc
+- inspection_vpc - ../../vpc
+- ipam - ../../ipam
+- network_access_analyzer - ../../network-access-analyzer
+- network_firewall - ../../network-firewall
+- route53_resolver - ../../route53-resolver
+- transit_gateway - ../../transit-gateway
+- vpc_endpoints - ../../vpc-endpoints
 
 
 ## Resources
@@ -102,11 +102,11 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_eip.nat (modules/stages/aws-network-hub/main.tf#L128)
-- resource.aws_nat_gateway.this (modules/stages/aws-network-hub/main.tf#L136)
-- resource.aws_route.egress_default (modules/stages/aws-network-hub/main.tf#L156)
-- resource.aws_route_table.egress_private (modules/stages/aws-network-hub/main.tf#L150)
-- resource.aws_route_table_association.egress_private (modules/stages/aws-network-hub/main.tf#L162)
+- resource.aws_eip.nat (modules/aws/stages/network-hub/main.tf#L128)
+- resource.aws_nat_gateway.this (modules/aws/stages/network-hub/main.tf#L136)
+- resource.aws_route.egress_default (modules/aws/stages/network-hub/main.tf#L156)
+- resource.aws_route_table.egress_private (modules/aws/stages/network-hub/main.tf#L150)
+- resource.aws_route_table_association.egress_private (modules/aws/stages/network-hub/main.tf#L162)
 
 
 ## Inputs

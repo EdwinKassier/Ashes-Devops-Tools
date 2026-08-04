@@ -127,11 +127,11 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_access_context_manager_access_level.levels (modules/network/vpc-sc/main.tf#L49)
-- resource.google_access_context_manager_access_policy.policy (modules/network/vpc-sc/main.tf#L34)
-- resource.google_access_context_manager_service_perimeter.bridge (modules/network/vpc-sc/main.tf#L297)
-- resource.google_access_context_manager_service_perimeter.perimeter (modules/network/vpc-sc/main.tf#L98)
-- resource.terraform_data.deletion_protection (modules/network/vpc-sc/main.tf#L20)
+- resource.google_access_context_manager_access_level.levels (modules/gcp/network/vpc-sc/main.tf#L49)
+- resource.google_access_context_manager_access_policy.policy (modules/gcp/network/vpc-sc/main.tf#L34)
+- resource.google_access_context_manager_service_perimeter.bridge (modules/gcp/network/vpc-sc/main.tf#L297)
+- resource.google_access_context_manager_service_perimeter.perimeter (modules/gcp/network/vpc-sc/main.tf#L98)
+- resource.terraform_data.deletion_protection (modules/gcp/network/vpc-sc/main.tf#L20)
 
 
 ## Inputs

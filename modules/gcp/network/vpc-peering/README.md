@@ -13,7 +13,7 @@ This module manages VPC Network Peering connections, including bi-directional se
 
 ```hcl
 module "peering_hub_spoke" {
-  source = "./modules/network/vpc-peering"
+  source = "./modules/gcp/network/vpc-peering"
 
   project_id   = "hub-project"
   peering_name = "hub-to-spoke"
@@ -90,8 +90,8 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_compute_network_peering.peering (modules/network/vpc-peering/main.tf#L8)
-- resource.google_compute_network_peering.reverse_peering (modules/network/vpc-peering/main.tf#L21)
+- resource.google_compute_network_peering.peering (modules/gcp/network/vpc-peering/main.tf#L8)
+- resource.google_compute_network_peering.reverse_peering (modules/gcp/network/vpc-peering/main.tf#L21)
 
 
 ## Inputs

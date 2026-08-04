@@ -14,7 +14,7 @@ This module manages Google Cloud DNS Managed Zones and Record Sets.
 
 ```hcl
 module "dns_private_zone" {
-  source = "./modules/network/dns"
+  source = "./modules/gcp/network/dns"
 
   project_id = "my-project-id"
   zone_name  = "private-example-com"
@@ -102,9 +102,9 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_dns_managed_zone.private_zone (modules/network/dns/main.tf#L12)
-- resource.google_dns_managed_zone.public_zone (modules/network/dns/main.tf#L64)
-- resource.google_dns_record_set.records (modules/network/dns/main.tf#L88)
+- resource.google_dns_managed_zone.private_zone (modules/gcp/network/dns/main.tf#L12)
+- resource.google_dns_managed_zone.public_zone (modules/gcp/network/dns/main.tf#L64)
+- resource.google_dns_record_set.records (modules/gcp/network/dns/main.tf#L88)
 
 
 ## Inputs

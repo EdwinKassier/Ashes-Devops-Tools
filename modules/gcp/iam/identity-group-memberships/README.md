@@ -12,7 +12,7 @@ This module adds members to Cloud Identity groups created by the `identity_group
 
 ```hcl
 module "team_memberships" {
-  source = "./modules/iam/identity_group_memberships"
+  source = "./modules/gcp/iam/identity_group_memberships"
 
   members = [
     {
@@ -28,7 +28,7 @@ module "team_memberships" {
 
 ```hcl
 module "dev_team_members" {
-  source = "./modules/iam/identity_group_memberships"
+  source = "./modules/gcp/iam/identity_group_memberships"
 
   members = [
     # Regular team members
@@ -62,7 +62,7 @@ module "dev_team_members" {
 
 ```hcl
 module "nested_membership" {
-  source = "./modules/iam/identity_group_memberships"
+  source = "./modules/gcp/iam/identity_group_memberships"
 
   members = [
     {
@@ -156,7 +156,7 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_cloud_identity_group_membership.membership (modules/iam/identity-group-memberships/main.tf#L3)
+- resource.google_cloud_identity_group_membership.membership (modules/gcp/iam/identity-group-memberships/main.tf#L3)
 
 
 ## Inputs

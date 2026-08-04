@@ -168,12 +168,12 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_compute_shared_vpc_service_project.service_project (modules/network/shared-vpc-service/main.tf#L14)
-- resource.google_compute_subnetwork_iam_member.subnet_users (modules/network/shared-vpc-service/main.tf#L26)
-- resource.google_project_iam_member.gke_host_service_agent (modules/network/shared-vpc-service/main.tf#L63)
-- resource.google_project_iam_member.network_users (modules/network/shared-vpc-service/main.tf#L41)
-- resource.google_project_iam_member.network_viewers (modules/network/shared-vpc-service/main.tf#L50)
-- data source.google_project.service_project (modules/network/shared-vpc-service/main.tf#L74)
+- resource.google_compute_shared_vpc_service_project.service_project (modules/gcp/network/shared-vpc-service/main.tf#L14)
+- resource.google_compute_subnetwork_iam_member.subnet_users (modules/gcp/network/shared-vpc-service/main.tf#L26)
+- resource.google_project_iam_member.gke_host_service_agent (modules/gcp/network/shared-vpc-service/main.tf#L63)
+- resource.google_project_iam_member.network_users (modules/gcp/network/shared-vpc-service/main.tf#L41)
+- resource.google_project_iam_member.network_viewers (modules/gcp/network/shared-vpc-service/main.tf#L50)
+- data source.google_project.service_project (modules/gcp/network/shared-vpc-service/main.tf#L74)
 
 
 ## Inputs

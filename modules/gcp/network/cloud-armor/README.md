@@ -13,7 +13,7 @@ This module manages Google Cloud Armor security policies, providing DDoS protect
 
 ```hcl
 module "cloud_armor" {
-  source = "./modules/network/cloud_armor"
+  source = "./modules/gcp/network/cloud_armor"
 
   project_id  = "my-project-id"
   policy_name = "edge-security-policy"
@@ -103,10 +103,10 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_compute_security_policy.policy (modules/network/cloud-armor/main.tf#L1)
-- resource.google_compute_security_policy_rule.log4j_protection (modules/network/cloud-armor/main.tf#L145)
-- resource.google_compute_security_policy_rule.owasp_rules (modules/network/cloud-armor/main.tf#L126)
-- resource.google_compute_security_policy_rule.preconfigured_waf_rules (modules/network/cloud-armor/main.tf#L162)
+- resource.google_compute_security_policy.policy (modules/gcp/network/cloud-armor/main.tf#L1)
+- resource.google_compute_security_policy_rule.log4j_protection (modules/gcp/network/cloud-armor/main.tf#L145)
+- resource.google_compute_security_policy_rule.owasp_rules (modules/gcp/network/cloud-armor/main.tf#L126)
+- resource.google_compute_security_policy_rule.preconfigured_waf_rules (modules/gcp/network/cloud-armor/main.tf#L162)
 
 
 ## Inputs

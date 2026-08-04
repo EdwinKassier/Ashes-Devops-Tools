@@ -13,7 +13,7 @@ This module provisions a High Availability (HA) Cloud VPN Gateway with BGP routi
 
 ```hcl
 module "vpn_ha" {
-  source = "./modules/network/vpn"
+  source = "./modules/gcp/network/vpn"
 
   project_id = "my-project-id"
   name       = "on-prem-vpn"
@@ -104,12 +104,12 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_compute_external_vpn_gateway.peer (modules/network/vpn/main.tf#L23)
-- resource.google_compute_ha_vpn_gateway.gateway (modules/network/vpn/main.tf#L14)
-- resource.google_compute_router.router (modules/network/vpn/main.tf#L40)
-- resource.google_compute_router_interface.interfaces (modules/network/vpn/main.tf#L79)
-- resource.google_compute_router_peer.peers (modules/network/vpn/main.tf#L91)
-- resource.google_compute_vpn_tunnel.tunnels (modules/network/vpn/main.tf#L61)
+- resource.google_compute_external_vpn_gateway.peer (modules/gcp/network/vpn/main.tf#L23)
+- resource.google_compute_ha_vpn_gateway.gateway (modules/gcp/network/vpn/main.tf#L14)
+- resource.google_compute_router.router (modules/gcp/network/vpn/main.tf#L40)
+- resource.google_compute_router_interface.interfaces (modules/gcp/network/vpn/main.tf#L79)
+- resource.google_compute_router_peer.peers (modules/gcp/network/vpn/main.tf#L91)
+- resource.google_compute_vpn_tunnel.tunnels (modules/gcp/network/vpn/main.tf#L61)
 
 
 ## Inputs

@@ -97,12 +97,12 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_pubsub_topic.scc_notifications (modules/governance/scc/main.tf#L5)
-- resource.google_pubsub_topic.scc_notifications_multi (modules/governance/scc/main.tf#L38)
-- resource.google_pubsub_topic_iam_member.scc_publisher (modules/governance/scc/main.tf#L25)
-- resource.google_pubsub_topic_iam_member.scc_publisher_multi (modules/governance/scc/main.tf#L66)
-- resource.google_scc_notification_config.notification_config (modules/governance/scc/main.tf#L12)
-- resource.google_scc_notification_config.notification_config_multi (modules/governance/scc/main.tf#L52)
+- resource.google_pubsub_topic.scc_notifications (modules/gcp/governance/scc/main.tf#L5)
+- resource.google_pubsub_topic.scc_notifications_multi (modules/gcp/governance/scc/main.tf#L38)
+- resource.google_pubsub_topic_iam_member.scc_publisher (modules/gcp/governance/scc/main.tf#L25)
+- resource.google_pubsub_topic_iam_member.scc_publisher_multi (modules/gcp/governance/scc/main.tf#L66)
+- resource.google_scc_notification_config.notification_config (modules/gcp/governance/scc/main.tf#L12)
+- resource.google_scc_notification_config.notification_config_multi (modules/gcp/governance/scc/main.tf#L52)
 
 
 ## Inputs

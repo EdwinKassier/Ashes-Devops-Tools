@@ -1,8 +1,25 @@
-# Stages Modules
+# Modules
 
-Terraform modules implementing the **staged deployment pattern** for Google Cloud Landing Zones, aligned with [Foundation Fabric FAST](https://github.com/GoogleCloudPlatform/cloud-foundation-fabric).
+Terraform modules, **grouped by owning cloud (domain)**. Each cloud is a
+self-contained bounded context:
 
-## Architecture
+```text
+modules/
+  gcp/        GCP-native primitives + stages/ (bootstrap, organization, projects, network-hub, workload)
+  aws/        AWS primitives + stages/ (organization, security, network-hub, shared-services, backup, workload)
+  supabase/   project, settings, environment, vault-secrets
+  vercel/     project
+  saas/       stages/saas-workload — composes supabase + vercel
+```
+
+Primitives are single-purpose building blocks (a VPC, a KMS key, an IAM role).
+**Stages** are orchestration wrappers that compose primitives into a deployable
+layer, invoked from a root under `envs/`.
+
+## GCP staged deployment pattern
+
+The GCP landing zone follows a staged pattern aligned with
+[Foundation Fabric FAST](https://github.com/GoogleCloudPlatform/cloud-foundation-fabric):
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -23,27 +40,28 @@ Terraform modules implementing the **staged deployment pattern** for Google Clou
                         │ TF_WORKSPACE=gcp-workload-* │
                         │                             │
                         │ host module per env         │
-                        │ workload attachments        │◀── stages/workload
+                        │ workload attachments        │◀── gcp/stages/workload
                         └─────────────────────────────┘
 ```
 
-## Modules
-
 | Module | Stage | Purpose | Invoked From |
 |--------|:-----:|---------|--------------|
-| [bootstrap](./bootstrap/) | 0 | Admin project, Terraform SA, WIF | `envs/gcp-organization/` |
-| [organization](./organization/) | 1 | Folders, IAM, Org Policies, Tags | `envs/gcp-organization/` |
-| [projects](./projects/) | 2 | **Platform projects** (hosts, hubs) | `envs/gcp-organization/` |
-| [network-hub](./network-hub/) | 3 | Hub VPC, DNS, Hierarchical FW | `envs/gcp-organization/` |
-| [workload](./workload/) | N/A | **Application projects** (per-env) | `examples/workloads/` |
-| [saas-workload](./saas-workload/) | N/A | Supabase + Vercel full-stack environment | per-env workload root |
+| [gcp/stages/bootstrap](./gcp/stages/bootstrap/) | 0 | Admin project, Terraform SA, WIF | `envs/gcp-organization/` |
+| [gcp/stages/organization](./gcp/stages/organization/) | 1 | Folders, IAM, Org Policies, Tags | `envs/gcp-organization/` |
+| [gcp/stages/projects](./gcp/stages/projects/) | 2 | **Platform projects** (hosts, hubs) | `envs/gcp-organization/` |
+| [gcp/stages/network-hub](./gcp/stages/network-hub/) | 3 | Hub VPC, DNS, Hierarchical FW | `envs/gcp-organization/` |
+| [gcp/stages/workload](./gcp/stages/workload/) | N/A | **Application projects** (per-env) | `examples/workloads/` |
+| [saas/stages/saas-workload](./saas/stages/saas-workload/) | N/A | Supabase + Vercel full-stack environment | per-env workload root |
 
-## Projects vs Workload: Key Distinction
+The AWS landing zone follows the same primitive/stage split under `aws/` — see
+[AWS Landing Zone](../docs/architecture/aws-landing-zone.md).
 
-> **These two modules serve different purposes and are NOT interchangeable.**
+## Projects vs Workload: key distinction
 
-| Aspect | `projects` | `workload` |
-|--------|-----------|-----------|
+> **These two GCP stage modules serve different purposes and are NOT interchangeable.**
+
+| Aspect | `gcp/stages/projects` | `gcp/stages/workload` |
+|--------|-----------------------|-----------------------|
 | **Creates** | Platform infrastructure | Application services |
 | **When** | Once at org setup | On-demand per team |
 | **Examples** | `apps-host`, `shared-hub` | `api-service`, `payments-service` |

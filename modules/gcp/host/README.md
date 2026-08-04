@@ -4,7 +4,7 @@ Compatibility wrapper for the application environment root.
 
 ## Overview
 
-This module composes the lower-level networking, security, and governance modules used by [envs/gcp-workload](../../envs/gcp-workload/). It is retained for compatibility and internal orchestration; new consumers should prefer the staged roots and stage modules over calling `modules/host` directly.
+This module composes the lower-level networking, security, and governance modules used by [envs/gcp-workload](../../envs/gcp-workload/). It is retained for compatibility and internal orchestration; new consumers should prefer the staged roots and stage modules over calling `modules/gcp/host` directly.
 
 ## Features
 
@@ -22,7 +22,7 @@ This module composes the lower-level networking, security, and governance module
 
 ```hcl
 module "infrastructure" {
-  source = "../modules/host"
+  source = "../modules/gcp/host"
 
   project_id     = "my-project-id"
   project_prefix = "myapp-dev"
@@ -36,7 +36,7 @@ module "infrastructure" {
 
 ```hcl
 module "infrastructure" {
-  source = "../modules/host"
+  source = "../modules/gcp/host"
 
   project_id     = "my-project-id"
   project_prefix = "myapp-prod"
@@ -111,7 +111,7 @@ cloud_armor_custom_rules = {
 }
 ```
 
-See [`modules/network/cloud-armor/README.md`](../network/cloud-armor/README.md) for the full variable reference and rate-limiting options.
+See [`modules/gcp/network/cloud-armor/README.md`](../network/cloud-armor/README.md) for the full variable reference and rate-limiting options.
 
 The generated module reference below is the source of truth for inputs, outputs, and required providers.
 
@@ -221,10 +221,10 @@ module "example" {
 The following resources are created:
 
 
-- resource.terraform_data.deletion_protection_guard (modules/host/main.tf#L55)
-- resource.terraform_data.subnet_cidr_count_guard (modules/host/main.tf#L70)
-- data source.google_compute_zones.available (modules/host/main.tf#L35)
-- data source.google_project.current (modules/host/main.tf#L546)
+- resource.terraform_data.deletion_protection_guard (modules/gcp/host/main.tf#L55)
+- resource.terraform_data.subnet_cidr_count_guard (modules/gcp/host/main.tf#L70)
+- data source.google_compute_zones.available (modules/gcp/host/main.tf#L35)
+- data source.google_project.current (modules/gcp/host/main.tf#L546)
 
 
 ## Inputs

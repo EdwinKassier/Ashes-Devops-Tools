@@ -13,7 +13,7 @@
 - `envs/gcp-organization` is the GCP control-plane root.
 - `envs/gcp-workload` is the deployable GCP application-environment root.
 - `envs/aws-*` are the AWS landing-zone roots (one root = one TFC workspace); `envs/saas` deploys Supabase and/or Vercel only.
-- `modules/stages/saas-workload` composes Supabase + Vercel for per-environment SaaS deployments.
+- `modules/saas/stages/saas-workload` composes Supabase + Vercel for per-environment SaaS deployments.
 - Cloud selection is which workspaces you apply, not a runtime flag — see [Provider Selection](architecture/provider-selection.md).
 - Terraform Cloud owns live state and apply runs.
 - GitHub Actions validates code and publishes release metadata.
@@ -78,7 +78,7 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
 - [Quick Start → Section 3a](guides/QUICK_START.md#3a-configure-supabase-and-vercel-provider-credentials): Supabase + Vercel token setup, Node.js requirement
 - [Architecture → SaaS Modules](architecture/ARCHITECTURE.md#saas-modules): module descriptions and design decisions
 - [Troubleshooting → Supabase errors](guides/TROUBLESHOOTING.md#supabase-module-errors): token errors, provisioner failures, vault safety guard
-- Module READMEs: [`modules/supabase/environment`](../modules/supabase/environment/README.md) · [`modules/supabase/vault-secrets`](../modules/supabase/vault-secrets/README.md) · [`modules/vercel/project`](../modules/vercel/project/README.md) · [`modules/stages/saas-workload`](../modules/stages/saas-workload/README.md)
+- Module READMEs: [`modules/supabase/environment`](../modules/supabase/environment/README.md) · [`modules/supabase/vault-secrets`](../modules/supabase/vault-secrets/README.md) · [`modules/vercel/project`](../modules/vercel/project/README.md) · [`modules/saas/stages/saas-workload`](../modules/saas/stages/saas-workload/README.md)
 
 ## Security & Governance
 

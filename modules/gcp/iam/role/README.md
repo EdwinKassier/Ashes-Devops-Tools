@@ -12,7 +12,7 @@ Custom roles allow you to implement the **Principle of Least Privilege** by gran
 
 ```hcl
 module "storage_reader_role" {
-  source = "./modules/iam/role"
+  source = "./modules/gcp/iam/role"
 
   level       = "project"
   project_id  = "my-project"
@@ -31,7 +31,7 @@ module "storage_reader_role" {
 
 ```hcl
 module "org_security_viewer" {
-  source = "./modules/iam/role"
+  source = "./modules/gcp/iam/role"
 
   level       = "organization"
   org_id      = "123456789"
@@ -51,7 +51,7 @@ module "org_security_viewer" {
 
 ```hcl
 module "custom_role" {
-  source = "./modules/iam/role"
+  source = "./modules/gcp/iam/role"
 
   level       = "project"
   project_id  = "my-project"
@@ -66,7 +66,7 @@ module "custom_role" {
 }
 
 module "deployer_sa" {
-  source = "./modules/iam/service_account"
+  source = "./modules/gcp/iam/service_account"
 
   project_id   = "my-project"
   account_id   = "deployer"
@@ -162,8 +162,8 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_organization_iam_custom_role.org_role (modules/iam/role/main.tf#L17)
-- resource.google_project_iam_custom_role.project_role (modules/iam/role/main.tf#L5)
+- resource.google_organization_iam_custom_role.org_role (modules/gcp/iam/role/main.tf#L17)
+- resource.google_project_iam_custom_role.project_role (modules/gcp/iam/role/main.tf#L5)
 
 
 ## Inputs

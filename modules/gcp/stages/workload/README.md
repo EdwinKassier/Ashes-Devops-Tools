@@ -2,7 +2,7 @@
 
 > **Application/Service Projects**  
 > This module creates **application workload projects** for teams and attaches them to Shared VPC.  
-> For **platform infrastructure projects** (hosts, hubs), use [`modules/stages/projects`](../projects/README.md) instead.
+> For **platform infrastructure projects** (hosts, hubs), use [`modules/gcp/stages/projects`](../projects/README.md) instead.
 
 ## Purpose
 
@@ -41,7 +41,7 @@ Add workload projects in a dedicated workload root using the example under `exam
 
 ```hcl
 module "workload_api_service" {
-  source = "../../modules/stages/workload"
+  source = "../../modules/gcp/stages/workload"
 
   project_name = "${var.project_prefix}-${var.environment}-api"
 
@@ -159,9 +159,9 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_compute_shared_vpc_service_project.attachment (modules/stages/workload/main.tf#L39)
-- resource.google_compute_subnetwork_iam_member.network_users (modules/stages/workload/main.tf#L91)
-- resource.google_project_iam_member.project_admins (modules/stages/workload/main.tf#L55)
+- resource.google_compute_shared_vpc_service_project.attachment (modules/gcp/stages/workload/main.tf#L39)
+- resource.google_compute_subnetwork_iam_member.network_users (modules/gcp/stages/workload/main.tf#L91)
+- resource.google_project_iam_member.project_admins (modules/gcp/stages/workload/main.tf#L55)
 
 
 ## Inputs

@@ -46,10 +46,10 @@ Creates and manages:
 
 This root composes four stage modules:
 
-- `modules/stages/bootstrap`
-- `modules/stages/organization`
-- `modules/stages/projects`
-- `modules/stages/network-hub`
+- `modules/gcp/stages/bootstrap`
+- `modules/gcp/stages/organization`
+- `modules/gcp/stages/projects`
+- `modules/gcp/stages/network-hub`
 
 ### `envs/gcp-workload`
 
@@ -84,12 +84,12 @@ That keeps CIDRs explicit and stable. The old pattern of deriving CIDRs from key
 
 ### Stage Modules
 
-- `modules/stages/bootstrap`
+- `modules/gcp/stages/bootstrap`
   - admin project
   - Terraform admin service account
   - GitHub and Terraform Cloud workload identity
 
-- `modules/stages/organization`
+- `modules/gcp/stages/organization`
   - folders
   - tags
   - org policy
@@ -97,21 +97,21 @@ That keeps CIDRs explicit and stable. The old pattern of deriving CIDRs from key
   - SCC notifications
   - billing export and budget alerts — optional email notifications are delivered via a **Cloud Functions gen2** function backed by Cloud Run v2; set `vpc_connector` when the `cloudfunctions.requireVPCConnector` org policy is enforced
 
-- `modules/stages/projects`
+- `modules/gcp/stages/projects`
   - shared platform projects
   - one host project per declared environment
 
-- `modules/stages/network-hub`
+- `modules/gcp/stages/network-hub`
   - shared hub VPC
   - shared DNS
   - hierarchical firewall
   - organization-spanning connectivity
   - VPC Service Controls perimeter — `spoke_project_numbers` must contain **numeric project numbers** (e.g. `"123456789012"`), not project ID strings; the Access Context Manager API rejects project ID strings with a misleading permission error
 
-- `modules/stages/workload`
+- `modules/gcp/stages/workload`
   - separate service projects that attach to a Shared VPC host
 
-- `modules/stages/saas-workload`
+- `modules/saas/stages/saas-workload`
   - Supabase project, settings, and API keys (via `supabase/environment`)
   - Supabase Vault secret reconciliation — Node.js provisioner, UPPER_SNAKE_CASE namespace, safety guard (via `supabase/vault-secrets`, gated by `enable_vault_secrets`)
   - Vercel project with QA/preview, UAT/custom, and production three-tier environments (via `vercel/project`, gated by `enable_vercel`)
@@ -119,10 +119,10 @@ That keeps CIDRs explicit and stable. The old pattern of deriving CIDRs from key
 
 ### Shared Infrastructure Modules
 
-- `modules/network/*` contains the reusable network primitives
-- `modules/governance/*` contains budgets, logging, KMS, org policy, SCC, and tags
-- `modules/iam/*` contains reusable IAM primitives
-- `modules/host` remains the compatibility wrapper used by `envs/gcp-workload`
+- `modules/gcp/network/*` contains the reusable network primitives
+- `modules/gcp/governance/*` contains budgets, logging, KMS, org policy, SCC, and tags
+- `modules/gcp/iam/*` contains reusable IAM primitives
+- `modules/gcp/host` remains the compatibility wrapper used by `envs/gcp-workload`
 
 ### SaaS Modules
 
@@ -168,7 +168,7 @@ graph TD
     A["envs/gcp-organization"] -->|workspace: organization| B["Terraform Cloud state"]
     B --> C["envs/gcp-workload"]
     C -->|workspace: gcp-workload-<env>| D["Host project infrastructure"]
-    E["Dedicated workload root"] --> F["modules/stages/workload"]
+    E["Dedicated workload root"] --> F["modules/gcp/stages/workload"]
     F --> D
 ```
 
@@ -221,10 +221,10 @@ TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp-workload plan -var-file=
 
 ### Workload Projects
 
-Service projects should be created from a dedicated workload root that calls `modules/stages/workload`. They should not be created inside the host project itself.
+Service projects should be created from a dedicated workload root that calls `modules/gcp/stages/workload`. They should not be created inside the host project itself.
 
 ## Current Boundaries
 
-- The repository does not yet include a first-class workload root beyond `examples/workloads/`, which is a complete, working reference implementation of `modules/stages/workload`.
+- The repository does not yet include a first-class workload root beyond `examples/workloads/`, which is a complete, working reference implementation of `modules/gcp/stages/workload`.
 - Local `make validate-all` requires access to `registry.terraform.io`.
 - Local `make lint` depends on a healthy TFLint Google ruleset plugin installation.

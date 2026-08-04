@@ -18,7 +18,7 @@ Requires the `bootstrap` stage to be completed first. The Terraform Admin SA cre
 
 ```hcl
 module "organization" {
-  source = "../../modules/stages/organization"
+  source = "../../modules/gcp/stages/organization"
 
   org_id          = "123456789"
   billing_account = "000000-000000-000000"
@@ -107,12 +107,12 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_bigquery_dataset.billing_export (modules/stages/organization/main.tf#L298)
-- resource.google_bigquery_dataset_iam_member.billing_export_writer (modules/stages/organization/main.tf#L329)
-- resource.google_essential_contacts_contact.billing (modules/stages/organization/main.tf#L270)
-- resource.google_essential_contacts_contact.security (modules/stages/organization/main.tf#L261)
-- resource.google_folder_iam_member.terraform_admin_folder_roles (modules/stages/organization/main.tf#L26)
-- resource.google_tags_tag_binding.environment (modules/stages/organization/tags_binding.tf#L1)
+- resource.google_bigquery_dataset.billing_export (modules/gcp/stages/organization/main.tf#L298)
+- resource.google_bigquery_dataset_iam_member.billing_export_writer (modules/gcp/stages/organization/main.tf#L329)
+- resource.google_essential_contacts_contact.billing (modules/gcp/stages/organization/main.tf#L270)
+- resource.google_essential_contacts_contact.security (modules/gcp/stages/organization/main.tf#L261)
+- resource.google_folder_iam_member.terraform_admin_folder_roles (modules/gcp/stages/organization/main.tf#L26)
+- resource.google_tags_tag_binding.environment (modules/gcp/stages/organization/tags_binding.tf#L1)
 
 
 ## Inputs

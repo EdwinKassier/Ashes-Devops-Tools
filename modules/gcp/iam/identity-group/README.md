@@ -12,7 +12,7 @@ Cloud Identity groups provide a way to manage access to GCP resources by groupin
 
 ```hcl
 module "dev_team" {
-  source = "./modules/iam/identity_group"
+  source = "./modules/gcp/iam/identity_group"
 
   customer_id = "C0abc123"  # Your Cloud Identity customer ID
 
@@ -31,7 +31,7 @@ module "dev_team" {
 
 ```hcl
 module "teams" {
-  source = "./modules/iam/identity_group"
+  source = "./modules/gcp/iam/identity_group"
 
   customer_id = "C0abc123"
 
@@ -62,7 +62,7 @@ module "teams" {
 
 ```hcl
 module "labeled_group" {
-  source = "./modules/iam/identity_group"
+  source = "./modules/gcp/iam/identity_group"
 
   customer_id = "C0abc123"
 
@@ -162,7 +162,7 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_cloud_identity_group.cloud_identity_group (modules/iam/identity-group/main.tf#L3)
+- resource.google_cloud_identity_group.cloud_identity_group (modules/gcp/iam/identity-group/main.tf#L3)
 
 
 ## Inputs

@@ -18,7 +18,7 @@ This Terraform module sets up a Google Cloud Organization and configures essenti
 
 ```hcl
 module "organization" {
-  source = "./modules/iam/organization"
+  source = "./modules/gcp/iam/organization"
 
   domain     = "example.com"
   project_id = "my-project-id"
@@ -127,12 +127,12 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_folder.ou_folders (modules/iam/organization/main.tf#L38)
-- resource.google_folder_iam_member.folder_iam_members (modules/iam/organization/main.tf#L65)
-- resource.google_organization_iam_member.billing_admins (modules/iam/organization/main.tf#L30)
-- resource.google_organization_iam_member.org_admins (modules/iam/organization/main.tf#L22)
-- resource.google_project_service.required_apis (modules/iam/organization/main.tf#L8)
-- data source.google_organization.org (modules/iam/organization/main.tf#L3)
+- resource.google_folder.ou_folders (modules/gcp/iam/organization/main.tf#L38)
+- resource.google_folder_iam_member.folder_iam_members (modules/gcp/iam/organization/main.tf#L65)
+- resource.google_organization_iam_member.billing_admins (modules/gcp/iam/organization/main.tf#L30)
+- resource.google_organization_iam_member.org_admins (modules/gcp/iam/organization/main.tf#L22)
+- resource.google_project_service.required_apis (modules/gcp/iam/organization/main.tf#L8)
+- data source.google_organization.org (modules/gcp/iam/organization/main.tf#L3)
 
 
 ## Inputs

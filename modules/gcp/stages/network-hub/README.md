@@ -20,7 +20,7 @@ This module creates two core projects:
 
 ```hcl
 module "network_hub" {
-  source = "../../modules/stages/network-hub"
+  source = "../../modules/gcp/stages/network-hub"
 
   org_id          = "123456789"
   hub_project_id  = "my-org-net-hub"

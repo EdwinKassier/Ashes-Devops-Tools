@@ -13,7 +13,7 @@ This module is a reusable factory for creating Google Compute Subnetworks with s
 
 ```hcl
 module "app_subnet" {
-  source = "./modules/network/subnet"
+  source = "./modules/gcp/network/subnet"
 
   project_id    = "my-project-id"
   region        = "us-central1"
@@ -93,7 +93,7 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_compute_subnetwork.subnet (modules/network/subnet/main.tf#L7)
+- resource.google_compute_subnetwork.subnet (modules/gcp/network/subnet/main.tf#L7)
 
 
 ## Inputs

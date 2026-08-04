@@ -12,7 +12,7 @@
 
 Each service team gets:
 
-1. A GCP project (created in `modules/stages/workload`)
+1. A GCP project (created in `modules/gcp/stages/workload`)
 2. Shared VPC attachment (the team's VMs use the existing host network)
 3. IAM bindings for their admin Google Group
 
@@ -50,7 +50,7 @@ The `subnets` output is a map. Each key is a subnet identifier; each value conta
 
 ```hcl
 module "workload_payments" {
-  source = "../../modules/stages/workload"
+  source = "../../modules/gcp/stages/workload"
 
   project_name    = "payments"
   org_id          = data.terraform_remote_state.organization.outputs.org_id
@@ -96,7 +96,7 @@ module "workload_payments" {
 }
 ```
 
-> **IAM binding note:** the workload module grants these roles with additive `google_project_iam_member` (`modules/stages/workload/main.tf`), not authoritative `google_project_iam_binding`. Each apply only adds the specified group/role pairs — it does not evict any other member already bound to the same role, so pre-existing manual bindings on the project are preserved.
+> **IAM binding note:** the workload module grants these roles with additive `google_project_iam_member` (`modules/gcp/stages/workload/main.tf`), not authoritative `google_project_iam_binding`. Each apply only adds the specified group/role pairs — it does not evict any other member already bound to the same role, so pre-existing manual bindings on the project are preserved.
 
 ### Step 4 — Plan and review
 

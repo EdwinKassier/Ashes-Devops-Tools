@@ -1,6 +1,6 @@
 # Supabase Modules
 
-Terraform modules for provisioning and managing Supabase resources. These modules are consumed by [`modules/stages/saas-workload`](../stages/saas-workload/) and can also be called directly for Supabase-only deployments.
+Terraform modules for provisioning and managing Supabase resources. These modules are consumed by [`modules/saas/stages/saas-workload`](../stages/saas-workload/) and can also be called directly for Supabase-only deployments.
 
 ## Modules
 

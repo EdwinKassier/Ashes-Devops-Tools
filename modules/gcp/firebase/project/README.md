@@ -43,19 +43,19 @@ module "example" {
 The following resources are created:
 
 
-- resource.google-beta_google_apikeys_key.apple (modules/firebase/project/main.tf#L47)
-- resource.google-beta_google_firebase_android_app.default (modules/firebase/project/main.tf#L66)
-- resource.google-beta_google_firebase_apple_app.default (modules/firebase/project/main.tf#L34)
-- resource.google-beta_google_firebase_project.default (modules/firebase/project/main.tf#L3)
-- resource.google-beta_google_firebase_web_app.default (modules/firebase/project/main.tf#L79)
-- resource.google-beta_google_storage_bucket.firebase_web_config (modules/firebase/project/main.tf#L132)
-- resource.google-beta_google_storage_bucket.firebase_web_config_access_logs (modules/firebase/project/main.tf#L94)
-- resource.google-beta_google_storage_bucket_iam_member.firebase_web_config_access_log_writer (modules/firebase/project/main.tf#L123)
-- resource.google-beta_google_storage_bucket_object.firebase_config (modules/firebase/project/main.tf#L168)
-- resource.google_project_service.firebase (modules/firebase/project/main.tf#L9)
-- resource.google_project_service.firestore (modules/firebase/project/main.tf#L17)
-- resource.google_project_service.identitytoolkit (modules/firebase/project/main.tf#L25)
-- data source.google-beta_google_firebase_web_app_config.default (modules/firebase/project/main.tf#L88)
+- resource.google-beta_google_apikeys_key.apple (modules/gcp/firebase/project/main.tf#L47)
+- resource.google-beta_google_firebase_android_app.default (modules/gcp/firebase/project/main.tf#L66)
+- resource.google-beta_google_firebase_apple_app.default (modules/gcp/firebase/project/main.tf#L34)
+- resource.google-beta_google_firebase_project.default (modules/gcp/firebase/project/main.tf#L3)
+- resource.google-beta_google_firebase_web_app.default (modules/gcp/firebase/project/main.tf#L79)
+- resource.google-beta_google_storage_bucket.firebase_web_config (modules/gcp/firebase/project/main.tf#L132)
+- resource.google-beta_google_storage_bucket.firebase_web_config_access_logs (modules/gcp/firebase/project/main.tf#L94)
+- resource.google-beta_google_storage_bucket_iam_member.firebase_web_config_access_log_writer (modules/gcp/firebase/project/main.tf#L123)
+- resource.google-beta_google_storage_bucket_object.firebase_config (modules/gcp/firebase/project/main.tf#L168)
+- resource.google_project_service.firebase (modules/gcp/firebase/project/main.tf#L9)
+- resource.google_project_service.firestore (modules/gcp/firebase/project/main.tf#L17)
+- resource.google_project_service.identitytoolkit (modules/gcp/firebase/project/main.tf#L25)
+- data source.google-beta_google_firebase_web_app_config.default (modules/gcp/firebase/project/main.tf#L88)
 
 
 ## Inputs

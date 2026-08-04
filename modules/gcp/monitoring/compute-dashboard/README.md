@@ -15,7 +15,7 @@ Terraform module that creates a comprehensive Cloud Monitoring dashboard for vie
 
 ```hcl
 module "compute_dashboard" {
-  source = "./modules/monitoring/compute_dashboard"
+  source = "./modules/gcp/monitoring/compute_dashboard"
 
   project_id             = "my-project-id"
   dashboard_display_name = "Unified Compute Dashboard"
@@ -86,7 +86,7 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_monitoring_dashboard.compute_dashboard (modules/monitoring/compute-dashboard/main.tf#L77)
+- resource.google_monitoring_dashboard.compute_dashboard (modules/gcp/monitoring/compute-dashboard/main.tf#L77)
 
 
 ## Inputs

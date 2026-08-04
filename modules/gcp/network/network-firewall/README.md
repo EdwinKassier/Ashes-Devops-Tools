@@ -13,7 +13,7 @@ This module manages hierarchical firewall rules for a VPC network. It is designe
 
 ```hcl
 module "fw_allow_internal" {
-  source = "./modules/network/network-firewall"
+  source = "./modules/gcp/network/network-firewall"
 
   project_id         = "my-project-id"
   firewall_rule_name = "allow-internal-traffic"
@@ -89,7 +89,7 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_compute_firewall.firewall_rule (modules/network/network-firewall/main.tf#L1)
+- resource.google_compute_firewall.firewall_rule (modules/gcp/network/network-firewall/main.tf#L1)
 
 
 ## Inputs

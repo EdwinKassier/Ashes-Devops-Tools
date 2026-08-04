@@ -6,11 +6,13 @@ mode="${1:-all}"
 cd "$(dirname "$0")/.."
 
 collect_modules() {
-  # maxdepth 4 covers current structure (modules/<category>/<name>/main.tf = depth 3)
-  # and future depth-4 modules (modules/<category>/<name>/<submodule>/main.tf).
-  # Without depth 4, any new nested module would be silently excluded from CI validate,
+  # maxdepth 5 covers the cloud-grouped structure
+  # (modules/<cloud>/<category>/<name>/main.tf = depth 4, e.g. modules/gcp/network/vpc,
+  # modules/aws/stages/organization) plus a submodule level
+  # (modules/<cloud>/<category>/<name>/<submodule>/main.tf = depth 5).
+  # Without enough depth, any nested module would be silently excluded from CI validate,
   # lint, and docs generation.
-  find modules -mindepth 1 -maxdepth 4 -type f -name main.tf \
+  find modules -mindepth 1 -maxdepth 5 -type f -name main.tf \
     ! -path '*/.terraform/*' ! -path '*/examples/*' | sed 's#/main.tf##' | sort -u
 }
 
@@ -31,7 +33,7 @@ collect_examples() {
   {
     find examples -mindepth 1 -maxdepth 2 -type f -name versions.tf \
       ! -path '*/.terraform/*' | sed 's#/versions.tf##'
-    find modules -mindepth 3 -maxdepth 5 -type f -name versions.tf \
+    find modules -mindepth 3 -maxdepth 6 -type f -name versions.tf \
       -path '*/examples/*' ! -path '*/.terraform/*' | sed 's#/versions.tf##'
   } | sort -u
 }

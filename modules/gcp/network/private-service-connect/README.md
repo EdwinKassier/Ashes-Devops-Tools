@@ -12,7 +12,7 @@ This module creates a Private Service Connect (PSC) endpoint to access Google AP
 
 ```hcl
 module "psc_apis" {
-  source = "./modules/network/private-service-connect"
+  source = "./modules/gcp/network/private-service-connect"
 
   project_id = "my-project-id"
   name       = "psc-googleapis"
@@ -84,11 +84,11 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_compute_global_address.psc_address (modules/network/private-service-connect/main.tf#L33)
-- resource.google_compute_global_forwarding_rule.psc_forwarding_rule (modules/network/private-service-connect/main.tf#L45)
-- resource.google_dns_managed_zone.psc_dns (modules/network/private-service-connect/main.tf#L58)
-- resource.google_dns_record_set.psc_googleapis (modules/network/private-service-connect/main.tf#L76)
-- resource.google_dns_record_set.psc_googleapis_base (modules/network/private-service-connect/main.tf#L88)
+- resource.google_compute_global_address.psc_address (modules/gcp/network/private-service-connect/main.tf#L33)
+- resource.google_compute_global_forwarding_rule.psc_forwarding_rule (modules/gcp/network/private-service-connect/main.tf#L45)
+- resource.google_dns_managed_zone.psc_dns (modules/gcp/network/private-service-connect/main.tf#L58)
+- resource.google_dns_record_set.psc_googleapis (modules/gcp/network/private-service-connect/main.tf#L76)
+- resource.google_dns_record_set.psc_googleapis_base (modules/gcp/network/private-service-connect/main.tf#L88)
 
 
 ## Inputs

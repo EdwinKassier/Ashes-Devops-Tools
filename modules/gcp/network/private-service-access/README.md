@@ -12,7 +12,7 @@ This module configures **Private Service Access** (PSA), which allows your VPC t
 
 ```hcl
 module "psa_sql" {
-  source = "./modules/network/private-service-access"
+  source = "./modules/gcp/network/private-service-access"
 
   project_id    = "my-project-id"
   vpc_network   = "projects/my-project/global/networks/my-vpc"
@@ -82,8 +82,8 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_compute_global_address.private_ip_alloc (modules/network/private-service-access/main.tf#L11)
-- resource.google_service_networking_connection.private_service_access (modules/network/private-service-access/main.tf#L25)
+- resource.google_compute_global_address.private_ip_alloc (modules/gcp/network/private-service-access/main.tf#L11)
+- resource.google_service_networking_connection.private_service_access (modules/gcp/network/private-service-access/main.tf#L25)
 
 
 ## Inputs

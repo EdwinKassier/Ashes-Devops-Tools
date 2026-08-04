@@ -2,7 +2,7 @@
 
 Provisions Google Artifact Registry repositories for storing and managing container images and language packages. Supports Docker, Python (PyPI), npm, Maven, Go, and Apt formats with optional CMEK encryption and VPC Service Controls integration.
 
-**When to use:** use this module whenever a workload needs a private registry for container images or language packages. Pair with `modules/governance/kms` to supply a CMEK key for compliance environments.
+**When to use:** use this module whenever a workload needs a private registry for container images or language packages. Pair with `modules/gcp/governance/kms` to supply a CMEK key for compliance environments.
 
 <!-- BEGIN_TF_DOCS -->
 Artifact Registry Module
@@ -43,7 +43,7 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_artifact_registry_repository.repo (modules/artifact-registry/main.tf#L18)
+- resource.google_artifact_registry_repository.repo (modules/gcp/artifact-registry/main.tf#L18)
 
 
 ## Inputs

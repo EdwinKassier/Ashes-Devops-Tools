@@ -62,7 +62,7 @@ and both env roots. Because the constraint already permits `< 8.0`, that left a 
 unverified compatibility gap: the repo *claims* to support google provider 7.x but had
 never actually confirmed it end-to-end.
 
-**Method:** picked `modules/stages/organization/examples/basic` (the module most heavily
+**Method:** picked `modules/gcp/stages/organization/examples/basic` (the module most heavily
 implicated in the failing PRs), temporarily tightened its constraint to `google ~> 7.0`
 / `google-beta ~> 7.0`, and ran `terraform init -backend=false && terraform validate`
 against the newest available 7.x release at the time (**7.39.0**). Also re-ran the same
@@ -99,7 +99,7 @@ differently and do not fail. This is a **pre-existing, currently-live bug** inde
 of this investigation — see the follow-up items below.
 
 A second, unrelated cluster of failures in the same historical CI runs
-(`modules/network/nat`, `modules/network/subnet`, `modules/stages/network-hub`, and
+(`modules/gcp/network/nat`, `modules/gcp/network/subnet`, `modules/gcp/stages/network-hub`, and
 their examples) turned out to be a **different** pre-existing bug: a `validation` block
 comparing a nullable variable (`max_ports_per_vm`) with `>=`/`<=` without a `== null ||`
 guard, which Terraform 1.9.8 evaluates eagerly and fails with `argument must not be
@@ -135,19 +135,19 @@ refresh, a CI runner cache miss) would have surfaced the same failures just as e
 ### Related defects (tracked separately, not fixed by this task)
 
 1. `for_each = <cond> ? [1] : []` type-inference failure under Terraform 1.9.8 —
-   confirmed in `modules/governance/billing/main.tf:151`; the same idiom appears
+   confirmed in `modules/gcp/governance/billing/main.tf:151`; the same idiom appears
    in ~15 files repo-wide and needs verification/fixing file-by-file (e.g. switch to
    `toset([...])` with a consistent element type).
 2. Null-unsafe `validation` block comparisons under Terraform 1.9.8 — confirmed in
-   `modules/network/nat/variables.tf` (`max_ports_per_vm`); needs a `var.x == null ||
-   (...)` guard. `modules/network/subnet`, `modules/network/interconnect`, and
-   `modules/stages/network-hub` failed in the same historical CI run and should be
+   `modules/gcp/network/nat/variables.tf` (`max_ports_per_vm`); needs a `var.x == null ||
+   (...)` guard. `modules/gcp/network/subnet`, `modules/gcp/network/interconnect`, and
+   `modules/gcp/stages/network-hub` failed in the same historical CI run and should be
    checked for the same pattern.
 
 ## How to re-test this in the future
 
 1. Pick a representative example root (a leaf example like
-   `modules/stages/organization/examples/basic` that exercises most of the module graph
+   `modules/gcp/stages/organization/examples/basic` that exercises most of the module graph
    is a good choice — it will surface transitive issues from modules it depends on).
 2. Get the **exact CI-pinned Terraform CLI version** (see `.tool-versions`), not whatever
    is on your PATH. A newer local Terraform can mask real CI-only failures, as happened

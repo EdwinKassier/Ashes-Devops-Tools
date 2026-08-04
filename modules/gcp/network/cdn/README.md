@@ -14,7 +14,7 @@ This module provisions a Global External HTTPS Load Balancer served via Cloud CD
 
 ```hcl
 module "cdn" {
-  source = "./modules/network/cdn"
+  source = "./modules/gcp/network/cdn"
 
   project_id = "my-project-id"
   lb_name    = "main-lb"
@@ -89,15 +89,15 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_compute_backend_service.default (modules/network/cdn/main.tf#L31)
-- resource.google_compute_global_address.default (modules/network/cdn/main.tf#L12)
-- resource.google_compute_global_forwarding_rule.default (modules/network/cdn/main.tf#L82)
-- resource.google_compute_global_forwarding_rule.http_redirect (modules/network/cdn/main.tf#L120)
-- resource.google_compute_managed_ssl_certificate.default (modules/network/cdn/main.tf#L19)
-- resource.google_compute_target_http_proxy.redirect (modules/network/cdn/main.tf#L111)
-- resource.google_compute_target_https_proxy.default (modules/network/cdn/main.tf#L73)
-- resource.google_compute_url_map.default (modules/network/cdn/main.tf#L65)
-- resource.google_compute_url_map.redirect (modules/network/cdn/main.tf#L97)
+- resource.google_compute_backend_service.default (modules/gcp/network/cdn/main.tf#L31)
+- resource.google_compute_global_address.default (modules/gcp/network/cdn/main.tf#L12)
+- resource.google_compute_global_forwarding_rule.default (modules/gcp/network/cdn/main.tf#L82)
+- resource.google_compute_global_forwarding_rule.http_redirect (modules/gcp/network/cdn/main.tf#L120)
+- resource.google_compute_managed_ssl_certificate.default (modules/gcp/network/cdn/main.tf#L19)
+- resource.google_compute_target_http_proxy.redirect (modules/gcp/network/cdn/main.tf#L111)
+- resource.google_compute_target_https_proxy.default (modules/gcp/network/cdn/main.tf#L73)
+- resource.google_compute_url_map.default (modules/gcp/network/cdn/main.tf#L65)
+- resource.google_compute_url_map.redirect (modules/gcp/network/cdn/main.tf#L97)
 
 
 ## Inputs

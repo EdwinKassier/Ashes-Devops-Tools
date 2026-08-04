@@ -55,8 +55,8 @@ module "example" {
 ## Modules
 
 
-- private_ca - ../../aws/private-ca
-- secrets_baseline - ../../aws/secrets-baseline
+- private_ca - ../../private-ca
+- secrets_baseline - ../../secrets-baseline
 
 
 

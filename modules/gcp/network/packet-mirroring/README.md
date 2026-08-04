@@ -108,7 +108,7 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_compute_packet_mirroring.mirroring (modules/network/packet-mirroring/main.tf#L14)
+- resource.google_compute_packet_mirroring.mirroring (modules/gcp/network/packet-mirroring/main.tf#L14)
 
 
 ## Inputs

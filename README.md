@@ -114,7 +114,7 @@ Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives i
 | [`supabase/environment`](modules/supabase/environment/) | Supabase | Composite: project + settings + API keys |
 | [`supabase/vault-secrets`](modules/supabase/vault-secrets/) | Supabase + Node.js | Vault bootstrap and secret reconciliation |
 | [`vercel/project`](modules/vercel/project/) | Vercel | Three-environment project with drift resistance |
-| [`stages/saas-workload`](modules/stages/saas-workload/) | All three | Full SaaS environment in one call |
+| [`stages/saas-workload`](modules/saas/stages/saas-workload/) | All three | Full SaaS environment in one call |
 
 ### Google Cloud
 
@@ -123,25 +123,25 @@ Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives i
 
 | Module | Purpose |
 |:-------|:--------|
-| [`network/vpc`](modules/network/vpc/) | Virtual Private Cloud |
-| [`network/subnet`](modules/network/subnet/) | Standardized subnet creation |
-| [`network/dns`](modules/network/dns/) | Private/public DNS zones |
-| [`network/network-firewall`](modules/network/network-firewall/) | Network security rules |
-| [`network/hierarchical-firewall`](modules/network/hierarchical-firewall/) | Policy-based org firewall |
-| [`network/cloud-armor`](modules/network/cloud-armor/) | WAF / DDoS protection |
-| [`network/api-gateway`](modules/network/api-gateway/) | API management |
-| [`network/cdn`](modules/network/cdn/) | Content delivery network |
-| [`network/vpc-peering`](modules/network/vpc-peering/) | VPC peering connections |
-| [`network/private-service-connect`](modules/network/private-service-connect/) | Private Service Connect |
-| [`network/private-service-access`](modules/network/private-service-access/) | Private Service Access |
-| [`network/vpn`](modules/network/vpn/) | HA-VPN with BGP |
-| [`network/interconnect`](modules/network/interconnect/) | Dedicated Interconnect |
-| [`network/internal-lb`](modules/network/internal-lb/) | Internal Load Balancer |
-| [`network/nat`](modules/network/nat/) | Cloud NAT |
-| [`network/packet-mirroring`](modules/network/packet-mirroring/) | Packet Mirroring |
-| [`network/shared-vpc-service`](modules/network/shared-vpc-service/) | Shared VPC service attachment |
-| [`network/vpc-flow-logs`](modules/network/vpc-flow-logs/) | VPC Flow Logs |
-| [`network/vpc-sc`](modules/network/vpc-sc/) | VPC Service Controls |
+| [`network/vpc`](modules/gcp/network/vpc/) | Virtual Private Cloud |
+| [`network/subnet`](modules/gcp/network/subnet/) | Standardized subnet creation |
+| [`network/dns`](modules/gcp/network/dns/) | Private/public DNS zones |
+| [`network/network-firewall`](modules/gcp/network/network-firewall/) | Network security rules |
+| [`network/hierarchical-firewall`](modules/gcp/network/hierarchical-firewall/) | Policy-based org firewall |
+| [`network/cloud-armor`](modules/gcp/network/cloud-armor/) | WAF / DDoS protection |
+| [`network/api-gateway`](modules/gcp/network/api-gateway/) | API management |
+| [`network/cdn`](modules/gcp/network/cdn/) | Content delivery network |
+| [`network/vpc-peering`](modules/gcp/network/vpc-peering/) | VPC peering connections |
+| [`network/private-service-connect`](modules/gcp/network/private-service-connect/) | Private Service Connect |
+| [`network/private-service-access`](modules/gcp/network/private-service-access/) | Private Service Access |
+| [`network/vpn`](modules/gcp/network/vpn/) | HA-VPN with BGP |
+| [`network/interconnect`](modules/gcp/network/interconnect/) | Dedicated Interconnect |
+| [`network/internal-lb`](modules/gcp/network/internal-lb/) | Internal Load Balancer |
+| [`network/nat`](modules/gcp/network/nat/) | Cloud NAT |
+| [`network/packet-mirroring`](modules/gcp/network/packet-mirroring/) | Packet Mirroring |
+| [`network/shared-vpc-service`](modules/gcp/network/shared-vpc-service/) | Shared VPC service attachment |
+| [`network/vpc-flow-logs`](modules/gcp/network/vpc-flow-logs/) | VPC Flow Logs |
+| [`network/vpc-sc`](modules/gcp/network/vpc-sc/) | VPC Service Controls |
 
 </details>
 
@@ -150,12 +150,12 @@ Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives i
 
 | Module | Purpose |
 |:-------|:--------|
-| [`iam/organization`](modules/iam/organization/) | Org-level IAM bindings |
-| [`iam/role`](modules/iam/role/) | Custom IAM roles |
-| [`iam/service-account`](modules/iam/service-account/) | Service account lifecycle |
-| [`iam/workload-identity`](modules/iam/workload-identity/) | Workload Identity Federation |
-| [`iam/identity-group`](modules/iam/identity-group/) | Google Cloud Identity groups |
-| [`iam/identity-group-memberships`](modules/iam/identity-group-memberships/) | Group membership management |
+| [`iam/organization`](modules/gcp/iam/organization/) | Org-level IAM bindings |
+| [`iam/role`](modules/gcp/iam/role/) | Custom IAM roles |
+| [`iam/service-account`](modules/gcp/iam/service-account/) | Service account lifecycle |
+| [`iam/workload-identity`](modules/gcp/iam/workload-identity/) | Workload Identity Federation |
+| [`iam/identity-group`](modules/gcp/iam/identity-group/) | Google Cloud Identity groups |
+| [`iam/identity-group-memberships`](modules/gcp/iam/identity-group-memberships/) | Group membership management |
 
 </details>
 
@@ -164,12 +164,12 @@ Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives i
 
 | Module | Purpose |
 |:-------|:--------|
-| [`governance/billing`](modules/governance/billing/) | Budget alerts |
-| [`governance/cloud-audit-logs`](modules/governance/cloud-audit-logs/) | Centralized audit logging |
-| [`governance/kms`](modules/governance/kms/) | Customer-managed encryption keys |
-| [`governance/org-policy`](modules/governance/org-policy/) | Organization policies |
-| [`governance/scc`](modules/governance/scc/) | Security Command Center notifications |
-| [`governance/tags`](modules/governance/tags/) | Resource tag keys and values |
+| [`governance/billing`](modules/gcp/governance/billing/) | Budget alerts |
+| [`governance/cloud-audit-logs`](modules/gcp/governance/cloud-audit-logs/) | Centralized audit logging |
+| [`governance/kms`](modules/gcp/governance/kms/) | Customer-managed encryption keys |
+| [`governance/org-policy`](modules/gcp/governance/org-policy/) | Organization policies |
+| [`governance/scc`](modules/gcp/governance/scc/) | Security Command Center notifications |
+| [`governance/tags`](modules/gcp/governance/tags/) | Resource tag keys and values |
 
 </details>
 
@@ -178,19 +178,19 @@ Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives i
 
 | Module | Purpose |
 |:-------|:--------|
-| [`stages/bootstrap`](modules/stages/bootstrap/) | Admin project, WIF pool, Terraform SA |
-| [`stages/organization`](modules/stages/organization/) | Folders, org policy, audit logs, budgets |
-| [`stages/projects`](modules/stages/projects/) | Shared + host projects |
-| [`stages/network-hub`](modules/stages/network-hub/) | Hub VPC + DNS hub |
-| [`stages/workload`](modules/stages/workload/) | Shared VPC service project attachment |
-| [`stages/saas-workload`](modules/stages/saas-workload/) | Supabase + Vercel full-stack environment |
-| [`stages/aws-organization`](modules/stages/aws-organization/) | AWS Organizations, OUs, SCPs, cost governance |
-| [`stages/aws-security`](modules/stages/aws-security/) | GuardDuty, Security Hub, Config, CloudTrail, delegated admin |
-| [`stages/aws-network-hub`](modules/stages/aws-network-hub/) | Transit Gateway, IPAM, Network Firewall, Route 53 Resolver |
-| [`stages/aws-shared-services`](modules/stages/aws-shared-services/) | Log archive, KMS, private CA, Systems Manager |
-| [`stages/aws-backup`](modules/stages/aws-backup/) | Org-wide AWS Backup vaults and policies |
-| [`stages/aws-workload`](modules/stages/aws-workload/) | Per-account workload VPC + baseline |
-| [`host`](modules/host/) | Top-level compatibility wrapper for `envs/gcp-workload` (not under `modules/stages/`) — composes networking, security, and governance primitives |
+| [`stages/bootstrap`](modules/gcp/stages/bootstrap/) | Admin project, WIF pool, Terraform SA |
+| [`stages/organization`](modules/gcp/stages/organization/) | Folders, org policy, audit logs, budgets |
+| [`stages/projects`](modules/gcp/stages/projects/) | Shared + host projects |
+| [`stages/network-hub`](modules/gcp/stages/network-hub/) | Hub VPC + DNS hub |
+| [`stages/workload`](modules/gcp/stages/workload/) | Shared VPC service project attachment |
+| [`stages/saas-workload`](modules/saas/stages/saas-workload/) | Supabase + Vercel full-stack environment |
+| [`stages/aws-organization`](modules/aws/stages/organization/) | AWS Organizations, OUs, SCPs, cost governance |
+| [`stages/aws-security`](modules/aws/stages/security/) | GuardDuty, Security Hub, Config, CloudTrail, delegated admin |
+| [`stages/aws-network-hub`](modules/aws/stages/network-hub/) | Transit Gateway, IPAM, Network Firewall, Route 53 Resolver |
+| [`stages/aws-shared-services`](modules/aws/stages/shared-services/) | Log archive, KMS, private CA, Systems Manager |
+| [`stages/aws-backup`](modules/aws/stages/backup/) | Org-wide AWS Backup vaults and policies |
+| [`stages/aws-workload`](modules/aws/stages/workload/) | Per-account workload VPC + baseline |
+| [`host`](modules/gcp/host/) | Top-level compatibility wrapper for `envs/gcp-workload` (not under `modules/stages/`) — composes networking, security, and governance primitives |
 
 </details>
 
@@ -199,9 +199,9 @@ Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives i
 
 | Module | Purpose |
 |:-------|:--------|
-| [`cloud-storage`](modules/cloud-storage/) | GCS buckets with log separation and optional CMEK |
-| [`artifact-registry`](modules/artifact-registry/) | Container/package registries |
-| [`firebase/project`](modules/firebase/project/) | Firebase project setup with Apple, Android, and Web app targets |
+| [`cloud-storage`](modules/gcp/cloud-storage/) | GCS buckets with log separation and optional CMEK |
+| [`artifact-registry`](modules/gcp/artifact-registry/) | Container/package registries |
+| [`firebase/project`](modules/gcp/firebase/project/) | Firebase project setup with Apple, Android, and Web app targets |
 
 </details>
 
@@ -210,8 +210,8 @@ Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives i
 
 | Module | Purpose |
 |:-------|:--------|
-| [`monitoring/alert-policy`](modules/monitoring/alert-policy/) | Cloud Monitoring alert policies and notification channels |
-| [`monitoring/compute-dashboard`](modules/monitoring/compute-dashboard/) | Compute observability dashboards |
+| [`monitoring/alert-policy`](modules/gcp/monitoring/alert-policy/) | Cloud Monitoring alert policies and notification channels |
+| [`monitoring/compute-dashboard`](modules/gcp/monitoring/compute-dashboard/) | Compute observability dashboards |
 
 </details>
 

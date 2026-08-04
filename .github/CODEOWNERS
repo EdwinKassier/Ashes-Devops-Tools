@@ -21,16 +21,12 @@
 # Examples — require module owner review
 /examples/ @edwinkassier
 
-# Module directories — can be scoped to sub-teams once the org grows
-/modules/governance/ @edwinkassier
-/modules/host/ @edwinkassier
-/modules/iam/ @edwinkassier
-/modules/network/ @edwinkassier
-/modules/stages/ @edwinkassier
-/modules/artifact_registry/ @edwinkassier
-/modules/cloud_storage/ @edwinkassier
-/modules/firebase/ @edwinkassier
-/modules/monitoring/ @edwinkassier
+# Module directories — grouped by cloud; can be scoped to sub-teams once the org grows
+/modules/gcp/ @edwinkassier
+/modules/aws/ @edwinkassier
+/modules/supabase/ @edwinkassier
+/modules/vercel/ @edwinkassier
+/modules/saas/ @edwinkassier
 
 # Documentation — lower barrier, but still tracked
 /docs/ @edwinkassier

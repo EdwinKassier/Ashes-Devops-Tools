@@ -55,11 +55,11 @@ module "example" {
 ## Modules
 
 
-- account - ../../aws/account
-- cost_governance - ../../aws/cost-governance
-- organization - ../../aws/organization
-- policies - ../../aws/organization-policy
-- root_access - ../../aws/iam-organizations-features
+- account - ../../account
+- cost_governance - ../../cost-governance
+- organization - ../../organization
+- policies - ../../organization-policy
+- root_access - ../../iam-organizations-features
 
 
 

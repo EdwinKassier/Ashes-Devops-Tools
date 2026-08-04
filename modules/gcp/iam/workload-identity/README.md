@@ -21,7 +21,7 @@ This Terraform module sets up Workload Identity Federation for keyless authentic
 
 ```hcl
 module "github_workload_identity" {
-  source = "./modules/iam/workload_identity"
+  source = "./modules/gcp/iam/workload_identity"
 
   project_id   = "my-project"
   pool_id      = "github-pool"
@@ -59,7 +59,7 @@ jobs:
 
 ```hcl
 module "gitlab_workload_identity" {
-  source = "./modules/iam/workload_identity"
+  source = "./modules/gcp/iam/workload_identity"
 
   project_id   = "my-project"
   pool_id      = "gitlab-pool"
@@ -82,7 +82,7 @@ module "gitlab_workload_identity" {
 
 ```hcl
 module "aws_workload_identity" {
-  source = "./modules/iam/workload_identity"
+  source = "./modules/gcp/iam/workload_identity"
 
   project_id   = "my-project"
   pool_id      = "aws-pool"
@@ -175,14 +175,14 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_iam_workload_identity_pool.pool (modules/iam/workload-identity/main.tf#L5)
-- resource.google_iam_workload_identity_pool_provider.aws (modules/iam/workload-identity/main.tf#L85)
-- resource.google_iam_workload_identity_pool_provider.github (modules/iam/workload-identity/main.tf#L14)
-- resource.google_iam_workload_identity_pool_provider.gitlab (modules/iam/workload-identity/main.tf#L60)
-- resource.google_iam_workload_identity_pool_provider.tfc (modules/iam/workload-identity/main.tf#L126)
-- resource.google_service_account_iam_member.github_workload_identity (modules/iam/workload-identity/main.tf#L108)
-- resource.google_service_account_iam_member.gitlab_workload_identity (modules/iam/workload-identity/main.tf#L117)
-- resource.google_service_account_iam_member.tfc_workload_identity (modules/iam/workload-identity/main.tf#L157)
+- resource.google_iam_workload_identity_pool.pool (modules/gcp/iam/workload-identity/main.tf#L5)
+- resource.google_iam_workload_identity_pool_provider.aws (modules/gcp/iam/workload-identity/main.tf#L85)
+- resource.google_iam_workload_identity_pool_provider.github (modules/gcp/iam/workload-identity/main.tf#L14)
+- resource.google_iam_workload_identity_pool_provider.gitlab (modules/gcp/iam/workload-identity/main.tf#L60)
+- resource.google_iam_workload_identity_pool_provider.tfc (modules/gcp/iam/workload-identity/main.tf#L126)
+- resource.google_service_account_iam_member.github_workload_identity (modules/gcp/iam/workload-identity/main.tf#L108)
+- resource.google_service_account_iam_member.gitlab_workload_identity (modules/gcp/iam/workload-identity/main.tf#L117)
+- resource.google_service_account_iam_member.tfc_workload_identity (modules/gcp/iam/workload-identity/main.tf#L157)
 
 
 ## Inputs

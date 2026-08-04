@@ -90,8 +90,8 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_tags_tag_key.keys (modules/governance/tags/main.tf#L4)
-- resource.google_tags_tag_value.values (modules/governance/tags/main.tf#L12)
+- resource.google_tags_tag_key.keys (modules/gcp/governance/tags/main.tf#L4)
+- resource.google_tags_tag_value.values (modules/gcp/governance/tags/main.tf#L12)
 
 
 ## Inputs

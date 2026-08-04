@@ -88,7 +88,7 @@ export VERCEL_API_TOKEN="your_vercel_token_here"
 
 Generate a token at [https://vercel.com/account/tokens](https://vercel.com/account/tokens). Prefer a **team token** scoped to the target Vercel team over a personal token for org-wide deployments.
 
-> **Note on `modules/stages/saas-workload`:** The stage module declares `supabase`, `vercel`, and `null` providers in its `required_providers` block. Terraform evaluates `required_providers` at init time regardless of feature flag values, so **all three providers must be configured** in the calling root even when `enable_vercel = false`. If you want to use Supabase without any Vercel dependency, call `modules/supabase/environment` directly — it has no Vercel provider declaration.
+> **Note on `modules/saas/stages/saas-workload`:** The stage module declares `supabase`, `vercel`, and `null` providers in its `required_providers` block. Terraform evaluates `required_providers` at init time regardless of feature flag values, so **all three providers must be configured** in the calling root even when `enable_vercel = false`. If you want to use Supabase without any Vercel dependency, call `modules/supabase/environment` directly — it has no Vercel provider declaration.
 
 **Node.js requirement for vault-secrets:**
 
@@ -106,7 +106,7 @@ The `pg ^8.20.0` package connects to the Supabase session-mode pooler to execute
 
 ## 4. Bootstrap First Run (manual, one-time)
 
-The `modules/stages/bootstrap` module creates the WIF pool that GitHub Actions uses to authenticate. This creates a chicken-and-egg dependency: you need WIF to run Terraform via CI, but you need to run Terraform to create WIF. The solution is a single manual apply of the bootstrap module.
+The `modules/gcp/stages/bootstrap` module creates the WIF pool that GitHub Actions uses to authenticate. This creates a chicken-and-egg dependency: you need WIF to run Terraform via CI, but you need to run Terraform to create WIF. The solution is a single manual apply of the bootstrap module.
 
 **Step 1 — Create the backend configuration file:**
 
@@ -265,7 +265,7 @@ TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp-workload plan -var-file=
 | `enable_deletion_protection` | `true` | Guard against accidental destruction of the VPC/subnets/DNS zones |
 | `vpc_sc_ingress_policies` / `vpc_sc_egress_policies` | `[]` | Optional VPC Service Controls ingress/egress policies for the perimeter |
 
-> **Host-level networking (Dedicated Interconnect, HA-VPN, explicit zone pinning):** `envs/gcp-workload` does not expose `enable_interconnect`, `enable_vpn`, or `explicit_zones` as its own variables — those are variables of the underlying `modules/host` module (`interconnects`, `enable_vpn`, `explicit_zones`). To use them, either call `modules/host` directly from a custom root, or extend `envs/gcp-workload/main.tf`'s `module "host"` call to pass them through.
+> **Host-level networking (Dedicated Interconnect, HA-VPN, explicit zone pinning):** `envs/gcp-workload` does not expose `enable_interconnect`, `enable_vpn`, or `explicit_zones` as its own variables — those are variables of the underlying `modules/gcp/host` module (`interconnects`, `enable_vpn`, `explicit_zones`). To use them, either call `modules/gcp/host` directly from a custom root, or extend `envs/gcp-workload/main.tf`'s `module "host"` call to pass them through.
 
 ---
 

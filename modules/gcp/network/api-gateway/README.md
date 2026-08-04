@@ -12,7 +12,7 @@ This module provisions a Google Cloud API Gateway, including the API Config and 
 
 ```hcl
 module "api_gateway" {
-  source = "./modules/network/api_gateway"
+  source = "./modules/gcp/network/api_gateway"
 
   project_id = "my-project-id"
   api_id     = "my-api"
@@ -89,10 +89,10 @@ module "example" {
 The following resources are created:
 
 
-- resource.google-beta_google_api_gateway_api.api (modules/network/api-gateway/main.tf#L17)
-- resource.google-beta_google_api_gateway_api_config.api_config (modules/network/api-gateway/main.tf#L26)
-- resource.google-beta_google_api_gateway_gateway.gateway (modules/network/api-gateway/main.tf#L56)
-- resource.google-beta_google_compute_region_network_endpoint_group.serverless_neg (modules/network/api-gateway/main.tf#L68)
+- resource.google-beta_google_api_gateway_api.api (modules/gcp/network/api-gateway/main.tf#L17)
+- resource.google-beta_google_api_gateway_api_config.api_config (modules/gcp/network/api-gateway/main.tf#L26)
+- resource.google-beta_google_api_gateway_gateway.gateway (modules/gcp/network/api-gateway/main.tf#L56)
+- resource.google-beta_google_compute_region_network_endpoint_group.serverless_neg (modules/gcp/network/api-gateway/main.tf#L68)
 
 
 ## Inputs

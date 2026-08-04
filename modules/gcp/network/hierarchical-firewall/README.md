@@ -107,9 +107,9 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_compute_firewall_policy.policy (modules/network/hierarchical-firewall/main.tf#L14)
-- resource.google_compute_firewall_policy_association.associations (modules/network/hierarchical-firewall/main.tf#L70)
-- resource.google_compute_firewall_policy_rule.rules (modules/network/hierarchical-firewall/main.tf#L24)
+- resource.google_compute_firewall_policy.policy (modules/gcp/network/hierarchical-firewall/main.tf#L14)
+- resource.google_compute_firewall_policy_association.associations (modules/gcp/network/hierarchical-firewall/main.tf#L70)
+- resource.google_compute_firewall_policy_rule.rules (modules/gcp/network/hierarchical-firewall/main.tf#L24)
 
 
 ## Inputs

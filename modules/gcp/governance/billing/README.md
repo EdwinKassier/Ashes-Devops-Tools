@@ -95,11 +95,11 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_billing_budget.monthly_budget (modules/governance/billing/main.tf#L5)
-- resource.google_cloud_run_v2_service_iam_member.budget_notifier_invoker (modules/governance/billing/main.tf#L184)
-- resource.google_cloudfunctions2_function.budget_notifier (modules/governance/billing/main.tf#L113)
-- resource.google_pubsub_subscription.budget_alerts_sub (modules/governance/billing/main.tf#L75)
-- resource.google_pubsub_topic.budget_alerts (modules/governance/billing/main.tf#L60)
+- resource.google_billing_budget.monthly_budget (modules/gcp/governance/billing/main.tf#L5)
+- resource.google_cloud_run_v2_service_iam_member.budget_notifier_invoker (modules/gcp/governance/billing/main.tf#L184)
+- resource.google_cloudfunctions2_function.budget_notifier (modules/gcp/governance/billing/main.tf#L113)
+- resource.google_pubsub_subscription.budget_alerts_sub (modules/gcp/governance/billing/main.tf#L75)
+- resource.google_pubsub_topic.budget_alerts (modules/gcp/governance/billing/main.tf#L60)
 
 
 ## Inputs

@@ -11,18 +11,18 @@ We utilize a **Hub-and-Spoke** network topology with centralized governance.
 * **`gcp-workload`**: The single application-environment root. Select the environment with `TF_WORKSPACE=gcp-workload-<env>` and the matching tfvars file under `examples/` (e.g. `examples/dev.tfvars`).
 
 ### Infrastructure Pattern
-Each application environment uses the shared `modules/host` foundation to stamp out:
+Each application environment uses the shared `modules/gcp/host` foundation to stamp out:
 1. **VPC Network**: Custom mode with explicit environment CIDR blocks from the organization state.
 2. **Subnets**: 3-Tier architecture (Public, Private, Database).
 3. **Security**: Firewall rules, Cloud Armor, DNS logging, and VPC Service Controls.
 4. **Shared VPC**: Configured as a host project for service-project attachment.
 
 ### Workload Provisioning
-Do not deploy application services directly into the host project. Instead, use `modules/stages/workload` from a dedicated workload root and attach the resulting service project to the host VPC.
+Do not deploy application services directly into the host project. Instead, use `modules/gcp/stages/workload` from a dedicated workload root and attach the resulting service project to the host VPC.
 
 ```hcl
 module "my_app" {
-  source = "../../modules/stages/workload"
+  source = "../../modules/gcp/stages/workload"
 
   project_name = "my-app-prod"
 
