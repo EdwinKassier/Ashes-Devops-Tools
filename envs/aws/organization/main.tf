@@ -5,7 +5,7 @@
 # cross-root contract (organization_id, account_role_arns, ...) — it has no
 # terraform_remote_state data source, so it validates credential-free.
 module "aws_organization" {
-  source = "../../modules/aws/stages/organization"
+  source = "../../../modules/aws/stages/organization"
 
   accounts                = var.accounts
   workload_accounts       = var.workload_accounts

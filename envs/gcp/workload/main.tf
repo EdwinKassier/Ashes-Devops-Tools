@@ -1,9 +1,9 @@
-# This root depends on the organization root (envs/gcp-organization) via remote state.
+# This root depends on the organization root (envs/gcp/organization) via remote state.
 # Trade-offs of this coupling:
 #   Pro: avoids re-declaring org-level outputs (billing account, folder IDs, hub network).
-#   Con: envs/gcp-workload cannot be planned or applied in isolation — the organization workspace
+#   Con: envs/gcp/workload cannot be planned or applied in isolation — the organization workspace
 #        must exist and its outputs must be populated first.
-# If you are onboarding a new environment, run envs/gcp-organization first.
+# If you are onboarding a new environment, run envs/gcp/organization first.
 # If you need to work offline, override outputs with a stub backend using a local tfvars file.
 data "terraform_remote_state" "organization" {
   backend = "cloud"
@@ -79,7 +79,7 @@ data "google_project" "host_project" {
 }
 
 module "host" {
-  source = "../../modules/gcp/host"
+  source = "../../../modules/gcp/host"
 
   project_id     = local.env_config.host_project_id
   project_prefix = var.project_prefix
@@ -147,7 +147,7 @@ module "host" {
 
 module "budget" {
   count  = var.monthly_budget_limit > 0 ? 1 : 0
-  source = "../../modules/gcp/governance/billing"
+  source = "../../../modules/gcp/governance/billing"
 
   billing_account      = data.terraform_remote_state.organization.outputs.billing_account
   project_id           = local.env_config.host_project_id

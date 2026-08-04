@@ -17,9 +17,10 @@ collect_modules() {
 }
 
 collect_envs() {
-  # Only include env directories that are Terraform roots (contain at least one .tf file).
-  # Directories that hold only .tfvars examples (e.g. envs/workloads/) are excluded.
-  find envs -mindepth 1 -maxdepth 1 -type d ! -name '.terraform' | while read -r dir; do
+  # Env roots are grouped by cloud: envs/<cloud>/<root> (depth 2), plus the flat
+  # envs/saas leaf root (depth 1). maxdepth 2 covers both; the .tf check excludes
+  # the grouping dirs (envs/gcp, envs/aws hold no .tf) and any .tfvars-only dirs.
+  find envs -mindepth 1 -maxdepth 2 -type d ! -name '.terraform' | while read -r dir; do
     if find "$dir" -maxdepth 1 -name '*.tf' | grep -q .; then
       echo "$dir"
     fi
