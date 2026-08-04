@@ -3,7 +3,7 @@
 All notable changes to this landing zone are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
-Releases are tagged as `organization/vX.Y.Z` and `apps/<env>/vX.Y.Z`.
+Releases are tagged as `gcp-organization/vX.Y.Z` and `gcp-workload/<env>/vX.Y.Z`.
 
 ---
 
@@ -146,6 +146,25 @@ Releases are tagged as `organization/vX.Y.Z` and `apps/<env>/vX.Y.Z`.
 - `modules/iam/identity-group/variables.tf` — email format validation on group emails
 
 ### Breaking Changes
+
+- **GCP roots renamed for cross-cloud naming symmetry** — `envs/organization` → `envs/gcp-organization`
+  and `envs/apps` → `envs/gcp-workload`, mirroring the AWS `aws-organization` / `aws-workload` convention.
+  The GCP control plane stays a single root (it folds security/network/KMS/audit into the org layer); only
+  the names changed, not the layer topology.
+
+  Consequences that require operator action:
+  - **TFC workspaces must be renamed** to match: `organization` → `gcp-organization`, and each
+    `apps-<env>` → `gcp-workload-<env>`. Renaming a workspace in Terraform Cloud preserves its state.
+    Follow [`docs/runbooks/gcp-workspace-rename.md`](docs/runbooks/gcp-workspace-rename.md).
+  - **Release tags changed**: `organization/vX.Y.Z` → `gcp-organization/vX.Y.Z` and
+    `apps/<env>/vX.Y.Z` → `gcp-workload/<env>/vX.Y.Z` (enforced by `.github/workflows/terraform-apply.yml`).
+  - **Makefile targets renamed**: `*-organization` → `*-gcp-organization`, `*-apps` → `*-gcp-workload`
+    (e.g. `make plan-apps` → `make plan-gcp-workload`); `APP_WORKSPACE` now defaults to `gcp-workload-$(APP_ENV)`.
+  - The `gcp-organization` root's WIF bootstrap now binds `gcp-workload-<env>` workspace names; downstream
+    roots reading org state default `organization_workspace_name` to `gcp-organization`.
+
+  No Terraform resource addresses change, so no `moved` blocks or `state mv` are needed — only the TFC
+  workspace names and the backend `name`/`prefix` values.
 
 - **`modules/governance/tags`** — `var.tags` type changed from `map(list(string))` to
   `map(object({values = list(string), description = optional(string, "Managed by Terraform")}))`.

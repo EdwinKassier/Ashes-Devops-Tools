@@ -1,5 +1,5 @@
 # Example: deploy the hub VPC and DNS hub that all spoke projects peer to.
-# In a full landing zone this is called from envs/organization/main.tf.
+# In a full landing zone this is called from envs/gcp-organization/main.tf.
 # Replace locals with outputs from the organization stage or remote state.
 
 locals {

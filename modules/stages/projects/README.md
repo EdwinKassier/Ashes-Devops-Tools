@@ -17,25 +17,25 @@ Creates foundational infrastructure projects at the **organization layer** for:
 |--------|--------------------------|-------------------|
 | **Owner** | Platform Team | Application Teams |
 | **Lifecycle** | Created at org setup | Created on-demand |
-| **Location** | `envs/organization/` | `examples/workloads/` |
+| **Location** | `envs/gcp-organization/` | `examples/workloads/` |
 | **Purpose** | Infrastructure backbone | Application deployments |
 | **Examples** | `apps-host`, `shared-hub`, `dns-hub` | `api-service`, `payments-service` |
 
 ## How It Works
 
 ```text
-envs/organization/main.tf
+envs/gcp-organization/main.tf
     │
     └── module "projects" (this module)
             │
-            ├── <env>-host   ─→ Used by envs/apps (apps-<env>)
+            ├── <env>-host   ─→ Used by envs/gcp-workload (gcp-workload-<env>)
             ├── shared-hub   ─→ Network connectivity hub
             └── shared-dns   ─→ DNS resolution hub
 ```
 
 ## Usage
 
-This module is invoked **once** in `envs/organization/main.tf`:
+This module is invoked **once** in `envs/gcp-organization/main.tf`:
 
 ```hcl
 module "projects" {

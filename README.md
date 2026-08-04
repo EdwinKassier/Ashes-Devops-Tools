@@ -51,7 +51,7 @@ cd Ashes-Devops-Tools
 make install && make pre-commit-install
 
 # 2. Authenticate (only the clouds whose workspaces you apply)
-gcloud auth application-default login     # GCP roots (organization, apps)
+gcloud auth application-default login     # GCP roots (gcp-organization, gcp-workload)
 export SUPABASE_ACCESS_TOKEN="sbp_..."   # required for supabase modules
 export VERCEL_API_TOKEN="..."            # required for vercel modules
 # AWS roots use TFC dynamic credentials (TFC_AWS_PROVIDER_AUTH + TFC_AWS_RUN_ROLE_ARN)
@@ -77,18 +77,18 @@ make ci
 │                  Terraform Cloud (CD)                   │
 │              Remote state · Plan · Apply                │
 │         one root = one workspace (per cloud)            │
-└──────┬───────────────────────┬───────────────────┬──────┘
-       │ GCP                   │ AWS               │ SaaS
-┌──────▼──────────┐   ┌────────▼─────────┐   ┌─────▼──────┐
-│ envs/organization│   │ envs/aws-*       │   │ envs/saas  │
-│ envs/apps        │   │ organization →   │   │ Supabase   │
-│ (control plane,  │   │ security →       │   │ and/or     │
-│  host/spoke VPC, │   │ network →        │   │ Vercel     │
-│  KMS, WIF)       │   │ identity →       │   │ (no cloud  │
-│                  │   │ shared-services →│   │  provider) │
-│                  │   │ backup →         │   │            │
-│                  │   │ workload         │   │            │
-└─────────────────┘   └──────────────────┘   └────────────┘
+└─────────┬─────────────────────┬───────────────────┬─────┘
+          │ GCP                 │ AWS               │ SaaS
+┌─────────▼────────┐  ┌─────────▼─────────┐  ┌──────▼─────┐
+│ envs/gcp-*       │  │ envs/aws-*        │  │ envs/saas  │
+│ organization →   │  │ organization →    │  │ Supabase   │
+│ workload         │  │ security →        │  │ and/or     │
+│                  │  │ network →         │  │ Vercel     │
+│ (control plane,  │  │ identity →        │  │ (no cloud  │
+│  host/spoke VPC, │  │ shared-services → │  │  provider) │
+│  KMS, WIF)       │  │ backup →          │  │            │
+│                  │  │ workload          │  │            │
+└──────────────────┘  └───────────────────┘  └────────────┘
 ```
 
 > AWS is a multi-account SRA landing zone with its own layered roots. Full detail: **[AWS Landing Zone →](docs/architecture/aws-landing-zone.md)**. Cloud selection is which workspaces you apply, not a runtime flag: **[Provider Selection →](docs/architecture/provider-selection.md)**.
@@ -190,7 +190,7 @@ Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives i
 | [`stages/aws-shared-services`](modules/stages/aws-shared-services/) | Log archive, KMS, private CA, Systems Manager |
 | [`stages/aws-backup`](modules/stages/aws-backup/) | Org-wide AWS Backup vaults and policies |
 | [`stages/aws-workload`](modules/stages/aws-workload/) | Per-account workload VPC + baseline |
-| [`host`](modules/host/) | Top-level compatibility wrapper for `envs/apps` (not under `modules/stages/`) — composes networking, security, and governance primitives |
+| [`host`](modules/host/) | Top-level compatibility wrapper for `envs/gcp-workload` (not under `modules/stages/`) — composes networking, security, and governance primitives |
 
 </details>
 
@@ -273,8 +273,8 @@ make lint                  # TFLint with GCP ruleset
 make security              # tfsec + Checkov
 make docs                  # Regenerate all module READMEs via terraform-docs
 make docs-check            # Verify no README is stale
-make plan-organization     # Plan control-plane changes
-make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars
+make plan-gcp-organization     # Plan control-plane changes
+make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
 ```
 
 ---
@@ -284,7 +284,7 @@ make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars
 | Workflow | Trigger | What it does |
 |:---------|:--------|:-------------|
 | [`terraform-plan.yml`](.github/workflows/terraform-plan.yml) | Pull Request | fmt · docs-check · validate · lint · tfsec · checkov |
-| [`terraform-apply.yml`](.github/workflows/terraform-apply.yml) | Tags (`organization/v*`, `apps/*/v*`) | Verify TFC run → publish GitHub release |
+| [`terraform-apply.yml`](.github/workflows/terraform-apply.yml) | Tags (`gcp-organization/v*`, `gcp-workload/*/v*`) | Verify TFC run → publish GitHub release |
 | [`security-scan.yml`](.github/workflows/security-scan.yml) | Push + weekly | tfsec · checkov · Trivy · Gitleaks → SARIF |
 | [`documentation.yml`](.github/workflows/documentation.yml) | Module `*.tf` changes | Auto-generate docs → open PR |
 | [`drift-detection.yml`](.github/workflows/drift-detection.yml) | Scheduled | Detect infrastructure drift |
@@ -292,8 +292,8 @@ make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars
 **Releasing:**
 
 ```bash
-git tag -a organization/v1.2.0 -m "Release organization v1.2.0"
-git push origin organization/v1.2.0
+git tag -a gcp-organization/v1.2.0 -m "Release organization v1.2.0"
+git push origin gcp-organization/v1.2.0
 ```
 
 ---

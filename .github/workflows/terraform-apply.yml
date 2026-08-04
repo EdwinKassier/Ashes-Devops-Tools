@@ -3,8 +3,8 @@ name: Terraform Release Metadata
 on:
   push:
     tags:
-      - "organization/v*"
-      - "apps/*/v*"
+      - "gcp-organization/v*"
+      - "gcp-workload/*/v*"
       - "aws-*/v*"
       - "aws-workload/*/v*"
       - "saas/*/v*"
@@ -33,10 +33,17 @@ jobs:
         env:
           TAG_NAME: ${{ github.ref_name }}
         run: |
-          if [[ "$TAG_NAME" == organization/* ]]; then
+          if [[ "$TAG_NAME" == gcp-organization/* ]]; then
             VERSION="${TAG_NAME##*/}"
-            echo "workspace=organization" >> "$GITHUB_OUTPUT"
-            echo "release_name=Organization ${VERSION}" >> "$GITHUB_OUTPUT"
+            echo "workspace=gcp-organization" >> "$GITHUB_OUTPUT"
+            echo "release_name=GCP Organization ${VERSION}" >> "$GITHUB_OUTPUT"
+            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          elif [[ "$TAG_NAME" == gcp-workload/* ]]; then
+            # Tag shape: gcp-workload/<env>/v1.2.3 -> workspace gcp-workload-<env>
+            ENVIRONMENT=$(echo "$TAG_NAME" | cut -d'/' -f2)
+            VERSION=$(echo "$TAG_NAME" | cut -d'/' -f3)
+            echo "workspace=gcp-workload-${ENVIRONMENT}" >> "$GITHUB_OUTPUT"
+            echo "release_name=GCP Workload ${ENVIRONMENT} ${VERSION}" >> "$GITHUB_OUTPUT"
             echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           elif [[ "$TAG_NAME" == aws-workload/* ]]; then
             # Tag shape: aws-workload/<env>/v1.2.3 -> workspace aws-workload-<env>
@@ -62,11 +69,8 @@ jobs:
             echo "release_name=${WORKSPACE} ${VERSION}" >> "$GITHUB_OUTPUT"
             echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           else
-            ENVIRONMENT=$(echo "$TAG_NAME" | cut -d'/' -f2)
-            VERSION=$(echo "$TAG_NAME" | cut -d'/' -f3)
-            echo "workspace=apps-${ENVIRONMENT}" >> "$GITHUB_OUTPUT"
-            echo "release_name=Apps ${ENVIRONMENT} ${VERSION}" >> "$GITHUB_OUTPUT"
-            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+            echo "::error::Unrecognized release tag '$TAG_NAME'. Expected one of: gcp-organization/v*, gcp-workload/<env>/v*, aws-*/v*, aws-workload/<env>/v*, saas/<name>/v*." >&2
+            exit 1
           fi
 
       - name: Assert Terraform Cloud credentials are configured

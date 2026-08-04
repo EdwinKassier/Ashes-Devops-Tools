@@ -4,8 +4,8 @@
 
 This repository implements a GCP landing zone alongside a Terraform-native AWS landing zone. The GCP surface has two supported roots:
 
-- `envs/organization` for the control plane
-- `envs/apps` for environment-specific application infrastructure
+- `envs/gcp-organization` for the control plane
+- `envs/gcp-workload` for environment-specific application infrastructure
 
 The AWS surface adds a set of per-layer roots (`envs/aws-*`) plus a cloud-agnostic `envs/saas` root — see [AWS Landing Zone](#aws-landing-zone) below and the full detail in [`aws-landing-zone.md`](aws-landing-zone.md). Cloud selection is which workspaces you apply, not a runtime flag; the rationale lives in [`provider-selection.md`](provider-selection.md).
 
@@ -15,8 +15,8 @@ The design target is a low-touch platform that is easy to extend without copying
 
 ```text
 envs/
-├── organization/         # GCP control plane
-├── apps/                 # GCP per-environment app infra
+├── gcp-organization/     # GCP control plane
+├── gcp-workload/         # GCP per-environment app infra
 ├── aws-organization/     # AWS org, OUs, SCPs, foundational accounts
 ├── aws-security/         # AWS log archive, CloudTrail, GuardDuty, Security Hub, Config
 ├── aws-network/          # AWS Transit Gateway hub, inspection VPC, IPAM
@@ -27,7 +27,7 @@ envs/
 └── saas/                 # Supabase and/or Vercel only — no AWS/GCP provider
 ```
 
-### `envs/organization`
+### `envs/gcp-organization`
 
 Creates and manages:
 
@@ -51,21 +51,21 @@ This root composes four stage modules:
 - `modules/stages/projects`
 - `modules/stages/network-hub`
 
-### `envs/apps`
+### `envs/gcp-workload`
 
-Consumes remote state from the `organization` workspace and deploys one environment at a time into the selected host project.
+Consumes remote state from the `gcp-organization` workspace and deploys one environment at a time into the selected host project.
 
 The workspace naming contract is:
 
-- `organization`
-- `apps-dev`
-- `apps-uat`
-- `apps-prod`
-- `apps-<env>` for any new environment
+- `gcp-organization`
+- `gcp-workload-dev`
+- `gcp-workload-uat`
+- `gcp-workload-prod`
+- `gcp-workload-<env>` for any new environment
 
 ## Environment Model
 
-The canonical environment contract lives in `envs/organization/variables.tf`:
+The canonical environment contract lives in `envs/gcp-organization/variables.tf`:
 
 ```hcl
 map(object({
@@ -122,7 +122,7 @@ That keeps CIDRs explicit and stable. The old pattern of deriving CIDRs from key
 - `modules/network/*` contains the reusable network primitives
 - `modules/governance/*` contains budgets, logging, KMS, org policy, SCC, and tags
 - `modules/iam/*` contains reusable IAM primitives
-- `modules/host` remains the compatibility wrapper used by `envs/apps`
+- `modules/host` remains the compatibility wrapper used by `envs/gcp-workload`
 
 ### SaaS Modules
 
@@ -165,9 +165,9 @@ AWS stand-up begins with a phase-0 bootstrap (out-of-band org creation and a run
 
 ```mermaid
 graph TD
-    A["envs/organization"] -->|workspace: organization| B["Terraform Cloud state"]
-    B --> C["envs/apps"]
-    C -->|workspace: apps-<env>| D["Host project infrastructure"]
+    A["envs/gcp-organization"] -->|workspace: organization| B["Terraform Cloud state"]
+    B --> C["envs/gcp-workload"]
+    C -->|workspace: gcp-workload-<env>| D["Host project infrastructure"]
     E["Dedicated workload root"] --> F["modules/stages/workload"]
     F --> D
 ```
@@ -198,8 +198,8 @@ The validation workflow runs:
 
 The release-metadata workflow listens for:
 
-- `organization/vX.Y.Z`
-- `apps/<env>/vX.Y.Z`
+- `gcp-organization/vX.Y.Z`
+- `gcp-workload/<env>/vX.Y.Z`
 
 It verifies the latest Terraform Cloud run for the matching workspace and then publishes a GitHub release.
 
@@ -208,15 +208,15 @@ It verifies the latest Terraform Cloud run for the matching workspace and then p
 ### Control Plane
 
 ```bash
-terraform -chdir=envs/organization init
-terraform -chdir=envs/organization plan
+terraform -chdir=envs/gcp-organization init
+terraform -chdir=envs/gcp-organization plan
 ```
 
 ### App Environment
 
 ```bash
-TF_WORKSPACE=apps-dev terraform -chdir=envs/apps init
-TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=../../examples/dev.tfvars
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp-workload init
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp-workload plan -var-file=../../examples/dev.tfvars
 ```
 
 ### Workload Projects

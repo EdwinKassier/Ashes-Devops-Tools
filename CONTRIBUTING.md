@@ -5,8 +5,8 @@ By participating in this project, you agree to abide by our
 
 This repository is centered on two supported Terraform roots:
 
-- `envs/organization`
-- `envs/apps`
+- `envs/gcp-organization`
+- `envs/gcp-workload`
 
 Contributions should preserve that operator model and keep the repository easy to validate locally.
 
@@ -234,13 +234,13 @@ make docs
 ### Control Plane
 
 ```bash
-make plan-organization
+make plan-gcp-organization
 ```
 
 ### App Environment
 
 ```bash
-make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars
+make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
 ```
 
 ## Pull Requests
@@ -269,5 +269,5 @@ Additional guidelines:
 
 - GitHub validates code on pull requests.
 - Terraform Cloud remains the source of truth for live state and apply runs.
-- GitHub release tags such as `organization/vX.Y.Z` and `apps/<env>/vX.Y.Z` publish metadata after verifying a successful Terraform Cloud run.
+- GitHub release tags such as `gcp-organization/vX.Y.Z` and `gcp-workload/<env>/vX.Y.Z` publish metadata after verifying a successful Terraform Cloud run.
 - Those tags do not perform a live apply.

@@ -43,7 +43,7 @@ bootstrap role, the downstream member-account roles, and the workspaces that con
 
 | Name | Kind | Used by | Purpose | Default when unset |
 |------|------|---------|---------|---------------------|
-| `TFC_DRIFT_WORKSPACES` | Variable | `drift-detection.yml` | JSON array of TFC workspace names to check for drift, e.g. `["organization","apps-dev","apps-prod"]`. | `["organization","apps-dev"]` |
+| `TFC_DRIFT_WORKSPACES` | Variable | `drift-detection.yml` | JSON array of TFC workspace names to check for drift, e.g. `["gcp-organization","gcp-workload-dev","gcp-workload-prod"]`. | `["gcp-organization","gcp-workload-dev"]` |
 | `DOCS_BOT_PAT` | Secret | `documentation.yml` | Machine-account PAT (repo scope) used to open auto-generated docs PRs so they trigger downstream CI. `GITHUB_TOKEN`-authored PRs do not trigger other workflows. | Falls back to `secrets.GITHUB_TOKEN` (docs PRs will not trigger CI checks). |
 | `DOCS_REVIEWER` | Variable | `documentation.yml` | GitHub username to request as reviewer on auto-generated docs PRs. | No reviewer requested. |
 

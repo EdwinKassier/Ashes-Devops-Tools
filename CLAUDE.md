@@ -8,8 +8,8 @@ Terraform GCP + AWS landing zone. 89 modules, 10 deployable roots, remote state 
 
 ```text
 envs/
-  organization/         # GCP control plane: folders, org policies, KMS, network hub, bootstrap WIF
-  apps/                 # GCP per-environment app infra — TF_WORKSPACE=apps-<env>
+  gcp-organization/     # GCP control plane: folders, org policies, KMS, network hub, bootstrap WIF
+  gcp-workload/         # GCP per-environment app infra — TF_WORKSPACE=gcp-workload-<env>
   aws-organization/     # AWS foundational accounts + org structure
   aws-security/         # AWS security tooling / log archive (min baseline w/ aws-organization)
   aws-network/          # AWS shared networking
@@ -27,7 +27,7 @@ modules/
   iam/            # organization, role, service-account, workload-identity, identity-group*
   supabase/       # project, settings, environment, vault-secrets
   vercel/         # project
-  host/           # compatibility wrapper for envs/apps
+  host/           # compatibility wrapper for envs/gcp-workload
   monitoring/     # alert-policy, compute-dashboard
   firebase/       # project
   cloud-storage/
@@ -86,7 +86,7 @@ make ci             # fmt-check + docs-check + validate-all + lint + security + 
 ## State & Apply Rules
 
 - State backend: **Terraform Cloud** (remote).
-- **Never run `terraform apply` locally** against `envs/organization` or `envs/apps`.
+- **Never run `terraform apply` locally** against `envs/gcp-organization` or `envs/gcp-workload`.
 - CI (GitHub Actions) runs `fmt`, `validate`, `lint`, `tfsec`, `checkov` on PR.
 - Terraform Cloud executes the actual apply.
 
@@ -98,7 +98,7 @@ Only the roots you apply pull in credentials — an unapplied workspace needs no
 
 | Variable | Purpose |
 |----------|---------|
-| `GOOGLE_CLOUD_PROJECT` / GCP ADC | google provider — GCP roots (`organization`, `apps`) only |
+| `GOOGLE_CLOUD_PROJECT` / GCP ADC | google provider — GCP roots (`gcp-organization`, `gcp-workload`) only |
 | `TFC_AWS_PROVIDER_AUTH` + `TFC_AWS_RUN_ROLE_ARN` | AWS via TFC dynamic (OIDC) credentials — AWS roots only |
 | `AWS_PROFILE` | AWS local/OIDC fallback when not using TFC dynamic credentials — AWS roots only |
 | `SUPABASE_ACCESS_TOKEN` | supabase provider — `saas` root only, when `enable_supabase=true` |
@@ -194,8 +194,8 @@ Gotchas the AWS landing-zone build surfaced — each one bit us in CI:
 
 | Goal | Where to look |
 |------|--------------|
-| Org-level GCP resources | `envs/organization/` |
-| Per-env app infra | `envs/apps/` (set `TF_WORKSPACE=apps-<env>`) |
+| Org-level GCP resources | `envs/gcp-organization/` |
+| Per-env app infra | `envs/gcp-workload/` (set `TF_WORKSPACE=gcp-workload-<env>`) |
 | Full end-to-end workload | `modules/stages/workload/` or `modules/stages/saas-workload/` |
 | VPC / networking | `modules/network/` |
 | IAM / service accounts | `modules/iam/` |
@@ -238,8 +238,8 @@ For **AWS modules**, clone `templates/aws-module/` instead — it pins `aws = ">
 
 ```bash
 # Target a specific app environment
-export TF_WORKSPACE=apps-staging
-cd envs/apps
+export TF_WORKSPACE=gcp-workload-staging
+cd envs/gcp-workload
 terraform plan   # read-only local check — apply only via TFC
 ```
 

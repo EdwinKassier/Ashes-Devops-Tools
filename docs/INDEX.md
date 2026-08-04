@@ -10,8 +10,8 @@
 
 ## Core Concepts
 
-- `envs/organization` is the GCP control-plane root.
-- `envs/apps` is the deployable GCP application-environment root.
+- `envs/gcp-organization` is the GCP control-plane root.
+- `envs/gcp-workload` is the deployable GCP application-environment root.
 - `envs/aws-*` are the AWS landing-zone roots (one root = one TFC workspace); `envs/saas` deploys Supabase and/or Vercel only.
 - `modules/stages/saas-workload` composes Supabase + Vercel for per-environment SaaS deployments.
 - Cloud selection is which workspaces you apply, not a runtime flag — see [Provider Selection](architecture/provider-selection.md).
@@ -23,8 +23,8 @@
 ### Initialize the roots
 
 ```bash
-terraform -chdir=envs/organization init
-TF_WORKSPACE=apps-dev terraform -chdir=envs/apps init
+terraform -chdir=envs/gcp-organization init
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp-workload init
 ```
 
 ### Run fast local checks
@@ -47,8 +47,8 @@ make lint
 ### Plan changes
 
 ```bash
-make plan-organization
-make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars
+make plan-gcp-organization
+make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
 ```
 
 ## Runbooks
@@ -59,6 +59,7 @@ make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars
 - [KMS Rotation](runbooks/kms-rotation.md): rotate CMEK keys automatically or manually
 - [CIDR Expansion](runbooks/cidr-expansion.md): expand subnet ranges without downtime
 - [Break Glass](runbooks/break-glass.md): emergency access when Workload Identity Federation fails
+- [GCP Workspace Rename](runbooks/gcp-workspace-rename.md): migrate live TFC workspaces to the `gcp-organization` / `gcp-workload-<env>` names
 - [Provider Upgrades](guides/provider-upgrades.md): google/google-beta major-version compatibility posture and re-test procedure
 
 ## AWS Landing Zone

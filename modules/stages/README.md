@@ -6,7 +6,7 @@ Terraform modules implementing the **staged deployment pattern** for Google Clou
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         envs/organization/                              │
+│                          envs/gcp-organization/                         │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌─────────────┐  │
 │  │  bootstrap   │─▶│ organization │─▶│   projects   │─▶│ network-hub │  │
 │  │  (Stage 0)   │  │  (Stage 1)   │  │  (Stage 2)   │  │  (Stage 3)  │  │
@@ -18,23 +18,23 @@ Terraform modules implementing the **staged deployment pattern** for Google Clou
                                           │
                               ┌───────────┼───────────┐
                               ▼           ▼           ▼
-                        ┌───────────────────────┐
-                        │       envs/apps       │
-                        │  TF_WORKSPACE=apps-*  │
-                        │                       │
-                        │ host module per env   │
-                        │ workload attachments  │◀── stages/workload
-                        └───────────────────────┘
+                        ┌─────────────────────────────┐
+                        │      envs/gcp-workload      │
+                        │ TF_WORKSPACE=gcp-workload-* │
+                        │                             │
+                        │ host module per env         │
+                        │ workload attachments        │◀── stages/workload
+                        └─────────────────────────────┘
 ```
 
 ## Modules
 
 | Module | Stage | Purpose | Invoked From |
 |--------|:-----:|---------|--------------|
-| [bootstrap](./bootstrap/) | 0 | Admin project, Terraform SA, WIF | `envs/organization/` |
-| [organization](./organization/) | 1 | Folders, IAM, Org Policies, Tags | `envs/organization/` |
-| [projects](./projects/) | 2 | **Platform projects** (hosts, hubs) | `envs/organization/` |
-| [network-hub](./network-hub/) | 3 | Hub VPC, DNS, Hierarchical FW | `envs/organization/` |
+| [bootstrap](./bootstrap/) | 0 | Admin project, Terraform SA, WIF | `envs/gcp-organization/` |
+| [organization](./organization/) | 1 | Folders, IAM, Org Policies, Tags | `envs/gcp-organization/` |
+| [projects](./projects/) | 2 | **Platform projects** (hosts, hubs) | `envs/gcp-organization/` |
+| [network-hub](./network-hub/) | 3 | Hub VPC, DNS, Hierarchical FW | `envs/gcp-organization/` |
 | [workload](./workload/) | N/A | **Application projects** (per-env) | `examples/workloads/` |
 | [saas-workload](./saas-workload/) | N/A | Supabase + Vercel full-stack environment | per-env workload root |
 

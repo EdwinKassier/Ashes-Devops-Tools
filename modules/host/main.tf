@@ -3,7 +3,7 @@
  *
  * Host Module - Unified Infrastructure Orchestration
  *
- * Compatibility wrapper used by envs/apps to compose network,
+ * Compatibility wrapper used by envs/gcp-workload to compose network,
  * security, and governance modules into one environment stack.
  */
 

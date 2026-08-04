@@ -10,5 +10,5 @@ This directory groups Firebase-specific Terraform modules. It is a category inde
 
 ## Usage Guidance
 
-- Consume these modules from a real root such as [`envs/apps`](../../envs/apps/) or from a dedicated workload composition.
+- Consume these modules from a real root such as [`envs/gcp-workload`](../../envs/gcp-workload/) or from a dedicated workload composition.
 - Review the generated README inside the concrete module directory for provider requirements and inputs.

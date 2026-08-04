@@ -37,7 +37,7 @@ gcloud services enable cloudresourcemanager.googleapis.com \
 - [ ] `gcloud version` reports `>= 450.0.0`
 - [ ] `jq` installed (used by CI scripts)
 - [ ] Node.js >= 18 installed (required only if using `enable_vault_secrets = true` in any `saas-workload` call)
-- [ ] A Terraform Cloud account with a workspace named `organization` (or the name in your `backend.hcl`)
+- [ ] A Terraform Cloud account with a workspace named `gcp-organization` (or the name in your `backend.hcl`)
 
 ---
 
@@ -111,25 +111,25 @@ The `modules/stages/bootstrap` module creates the WIF pool that GitHub Actions u
 **Step 1 — Create the backend configuration file:**
 
 ```bash
-cat > envs/organization/backend.hcl <<EOF
+cat > envs/gcp-organization/backend.hcl <<EOF
 organization = "YOUR_TFC_ORG_NAME"
 EOF
 ```
 
-`envs/organization/backend.tf` already hardcodes `workspaces { name = "organization" }` — do not pass a `workspaces` block via `-backend-config`; a second `workspaces` value conflicts with the one baked into `backend.tf`.
+`envs/gcp-organization/backend.tf` already hardcodes `workspaces { name = "gcp-organization" }` — do not pass a `workspaces` block via `-backend-config`; a second `workspaces` value conflicts with the one baked into `backend.tf`.
 
 This file is gitignored; it is never committed.
 
 **Step 2 — Initialize:**
 
 ```bash
-terraform -chdir=envs/organization init -backend-config=backend.hcl
+terraform -chdir=envs/gcp-organization init -backend-config=backend.hcl
 ```
 
 **Step 3 — Create your tfvars file** (see [Variable Reference](#6-variable-reference) below):
 
 ```bash
-cp envs/organization/terraform.tfvars.example envs/organization/local.auto.tfvars
+cp envs/gcp-organization/terraform.tfvars.example envs/gcp-organization/local.auto.tfvars
 # Edit local.auto.tfvars with your org_id, billing_account, github_org, github_repo,
 # and project_prefix — the "my-org" default is a deliberate tripwire and fails validation
 ```
@@ -137,8 +137,8 @@ cp envs/organization/terraform.tfvars.example envs/organization/local.auto.tfvar
 **Step 4 — Plan and apply bootstrap only:**
 
 ```bash
-terraform -chdir=envs/organization plan -target=module.bootstrap
-terraform -chdir=envs/organization apply -target=module.bootstrap
+terraform -chdir=envs/gcp-organization plan -target=module.bootstrap
+terraform -chdir=envs/gcp-organization apply -target=module.bootstrap
 ```
 
 Terraform will create:
@@ -150,7 +150,7 @@ Terraform will create:
 **Step 5 — Record the outputs:**
 
 ```bash
-terraform -chdir=envs/organization output -json | jq '{
+terraform -chdir=envs/gcp-organization output -json | jq '{
   github_oidc_pool_id: .bootstrap.value.github_oidc_pool_id,
   tfc_oidc_pool_id:    .bootstrap.value.tfc_oidc_pool_id
 }'
@@ -164,14 +164,14 @@ In your GitHub repo → Settings → Secrets and variables → Actions:
 |------|------|-------|
 | `GOOGLE_PROJECT_ID` | Variable | Admin project ID from bootstrap output |
 | `TFC_ORGANIZATION` | Variable | Your Terraform Cloud org name |
-| `TFC_TOKEN` | Secret | A TFC team token scoped to "Read runs" on the `organization` workspace |
+| `TFC_TOKEN` | Secret | A TFC team token scoped to "Read runs" on the `gcp-organization` workspace |
 
 **Step 7 — Apply the rest of the organization root:**
 
 The remaining modules (org policies, KMS, audit logs, network hub) can now be applied via CI by pushing to `main`, or manually:
 
 ```bash
-terraform -chdir=envs/organization apply
+terraform -chdir=envs/gcp-organization apply
 ```
 
 After this apply, all future changes go through GitHub Actions. Revoke your personal ADC credentials:
@@ -194,28 +194,28 @@ The AWS landing zone does **not** share the GCP bootstrap above. It has its own 
 
 ## 5. Apply Sequencing
 
-**Always apply `envs/organization` before `envs/apps`.**
+**Always apply `envs/gcp-organization` before `envs/gcp-workload`.**
 
-`envs/apps` reads from `envs/organization` via `terraform_remote_state`. If organization has not been applied, apps will fail at plan time with "output not found" errors.
+`envs/gcp-workload` reads from `envs/gcp-organization` via `terraform_remote_state`. If organization has not been applied, apps will fail at plan time with "output not found" errors.
 
 | Step | Root | TFC Workspace | Notes |
 |------|------|---------------|-------|
-| 1 | `envs/organization` | `organization` | Creates shared VPC, KMS, org policies, WIF |
-| 2 | `envs/apps` | `apps-{env}` (e.g. `apps-dev`) | Reads org outputs, creates spoke projects |
+| 1 | `envs/gcp-organization` | `gcp-organization` | Creates shared VPC, KMS, org policies, WIF |
+| 2 | `envs/gcp-workload` | `gcp-workload-{env}` (e.g. `gcp-workload-dev`) | Reads org outputs, creates spoke projects |
 
-To plan a change to the apps environment:
+To plan a change to the gcp-workload environment:
 
 ```bash
 # Set TF_WORKSPACE to match the TFC workspace name suffix
-TF_WORKSPACE=apps-dev terraform -chdir=envs/apps init -backend-config=backend.hcl
-TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=../../examples/dev.tfvars
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp-workload init -backend-config=backend.hcl
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp-workload plan -var-file=../../examples/dev.tfvars
 ```
 
 ---
 
 ## 6. Variable Reference
 
-### `envs/organization` — Required Variables
+### `envs/gcp-organization` — Required Variables
 
 > **Note:** `org_id` and `billing_account_id` are **not input variables** — they are resolved automatically from data sources (`data.google_organization` and `data.google_billing_account`). Set `domain` and either `billing_account` or `billing_account_display_name` instead.
 
@@ -229,7 +229,7 @@ TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=../../examples/d
 | `dns_hub_vpc_cidr_block` | CIDR for the DNS hub VPC — must not overlap with hub or any spoke | `"10.1.0.0/16"` |
 | `environments` | Map of environment configs (region, CIDR, budget, IAM bindings) — see `terraform.tfvars.example` | _(see example)_ |
 
-### `envs/organization` — Key Optional Variables
+### `envs/gcp-organization` — Key Optional Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -243,7 +243,7 @@ TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=../../examples/d
 | `monthly_budget_amount` | `1000` | Org-level budget alert threshold (in `budget_currency`) |
 | `security_contact_email` | `null` | Email for security notifications via Essential Contacts |
 
-### `envs/apps` — Required Variables
+### `envs/gcp-workload` — Required Variables
 
 | Variable | Description | Example |
 |----------|-------------|---------|
@@ -251,9 +251,9 @@ TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=../../examples/d
 | `environment` | Short env name (used in resource naming); must match a key in the org root's `environments` map | `"dev"` |
 | `tfc_organization` | Terraform Cloud org name — used to read organization remote state | `"my-tfc-org"` |
 
-> **VPC CIDR:** The per-environment CIDR is not set here — it is read from the `organization` workspace remote state via the `environments` map in `envs/organization`. Set the CIDR block in `envs/organization/terraform.tfvars.example` under the relevant environment key.
+> **VPC CIDR:** The per-environment CIDR is not set here — it is read from the `gcp-organization` workspace remote state via the `environments` map in `envs/gcp-organization`. Set the CIDR block in `envs/gcp-organization/terraform.tfvars.example` under the relevant environment key.
 
-### `envs/apps` — Key Optional Variables
+### `envs/gcp-workload` — Key Optional Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -265,7 +265,7 @@ TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=../../examples/d
 | `enable_deletion_protection` | `true` | Guard against accidental destruction of the VPC/subnets/DNS zones |
 | `vpc_sc_ingress_policies` / `vpc_sc_egress_policies` | `[]` | Optional VPC Service Controls ingress/egress policies for the perimeter |
 
-> **Host-level networking (Dedicated Interconnect, HA-VPN, explicit zone pinning):** `envs/apps` does not expose `enable_interconnect`, `enable_vpn`, or `explicit_zones` as its own variables — those are variables of the underlying `modules/host` module (`interconnects`, `enable_vpn`, `explicit_zones`). To use them, either call `modules/host` directly from a custom root, or extend `envs/apps/main.tf`'s `module "host"` call to pass them through.
+> **Host-level networking (Dedicated Interconnect, HA-VPN, explicit zone pinning):** `envs/gcp-workload` does not expose `enable_interconnect`, `enable_vpn`, or `explicit_zones` as its own variables — those are variables of the underlying `modules/host` module (`interconnects`, `enable_vpn`, `explicit_zones`). To use them, either call `modules/host` directly from a custom root, or extend `envs/gcp-workload/main.tf`'s `module "host"` call to pass them through.
 
 ---
 
@@ -290,13 +290,13 @@ make test           # runs all .tftest.hcl suites with mock_provider (no GCP cre
 ### Control Plane
 
 ```bash
-make plan-organization
+make plan-gcp-organization
 ```
 
 ### App Environment
 
 ```bash
-make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars
+make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
 ```
 
 ---
@@ -307,7 +307,7 @@ make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars
 - [ ] `make help` prints supported commands
 - [ ] `make fmt-check`, `make docs-check`, and `make security` succeed
 - [ ] `make test` reports `X passed, 0 failed`
-- [ ] `terraform -chdir=envs/organization init -backend-config=backend.hcl` succeeds
+- [ ] `terraform -chdir=envs/gcp-organization init -backend-config=backend.hcl` succeeds
 - [ ] Bootstrap outputs include `github_oidc_pool_id` and `tfc_oidc_pool_id`
 
 ---
@@ -322,8 +322,8 @@ make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars
 | `make validate-all` | Validate all roots |
 | `make lint` | Run TFLint across all roots |
 | `make test` | Run all .tftest.hcl suites |
-| `make plan-organization` | Plan control-plane changes |
-| `make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars` | Plan an app environment |
+| `make plan-gcp-organization` | Plan control-plane changes |
+| `make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars` | Plan an app environment |
 | `make ci` | Full local pipeline (fmt-check + docs-check + validate-all + lint + test + security) |
 
 ---

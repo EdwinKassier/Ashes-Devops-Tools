@@ -35,14 +35,14 @@ assignees: ''
 
 ## Target Root / Surface
 
-- [ ] `envs/organization`
-- [ ] `envs/apps`
+- [ ] `envs/gcp-organization`
+- [ ] `envs/gcp-workload`
 - [ ] `examples/workloads`
 - [ ] CI/CD or repo tooling
 - [ ] Multiple surfaces
 
 **Target Workspace (if applicable):**
-<!-- Example: apps-dev, apps-prod, apps-preprod -->
+<!-- Example: gcp-workload-dev, gcp-workload-prod, gcp-workload-preprod -->
 
 ## Benefits
 

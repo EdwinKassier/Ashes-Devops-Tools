@@ -65,8 +65,8 @@ locals {
   )
 
   tfc_workspaces = concat(
-    ["organization"],
-    [for env_key in sort(keys(var.environments)) : "apps-${env_key}"]
+    ["gcp-organization"],
+    [for env_key in sort(keys(var.environments)) : "gcp-workload-${env_key}"]
   )
 }
 

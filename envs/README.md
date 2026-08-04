@@ -7,8 +7,8 @@ This directory (`envs/`) contains the supported Terraform roots for the platform
 We utilize a **Hub-and-Spoke** network topology with centralized governance.
 
 ### Roots
-* **`organization`**: The control-plane root. Creates the admin project, org policy, shared services projects, folders, and per-environment host projects.
-* **`apps`**: The single application-environment root. Select the environment with `TF_WORKSPACE=apps-<env>` and the matching tfvars file under `examples/` (e.g. `examples/dev.tfvars`).
+* **`gcp-organization`**: The control-plane root. Creates the admin project, org policy, shared services projects, folders, and per-environment host projects.
+* **`gcp-workload`**: The single application-environment root. Select the environment with `TF_WORKSPACE=gcp-workload-<env>` and the matching tfvars file under `examples/` (e.g. `examples/dev.tfvars`).
 
 ### Infrastructure Pattern
 Each application environment uses the shared `modules/host` foundation to stamp out:
