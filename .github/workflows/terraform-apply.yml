@@ -69,7 +69,9 @@ jobs:
             echo "release_name=${WORKSPACE} ${VERSION}" >> "$GITHUB_OUTPUT"
             echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           else
-            echo "::error::Unrecognized release tag '$TAG_NAME'. Expected one of: gcp-organization/v*, gcp-workload/<env>/v*, aws-*/v*, aws-workload/<env>/v*, saas/<name>/v*." >&2
+            echo "::error::Unrecognized release tag '$TAG_NAME'." >&2
+            echo "Expected: gcp-organization/v*, gcp-workload/<env>/v*," >&2
+            echo "aws-*/v*, aws-workload/<env>/v*, saas/<name>/v*." >&2
             exit 1
           fi
 
