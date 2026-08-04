@@ -29,14 +29,14 @@
 
 ## Overview
 
-**Ashes DevOps Tools** is a fully-tested, security-scanned Terraform platform covering four deployment surfaces — deploy any combination:
+**Ashes DevOps Tools** is a fully-tested, security-scanned Terraform platform covering the four clouds it supports — `{aws, gcp, supabase, vercel}`. Each cloud is its own root(s) and Terraform Cloud workspace(s), so you deploy **any combination**:
 
-| Surface | What it manages |
-|:--------|:----------------|
-| **GCP Landing Zone** | Organization hierarchy, IAM, networking hub, VPC-SC, KMS, audit logs |
-| **Application Environments** | Per-env host projects, Shared VPC, Cloud Armor, VPN, Interconnect |
-| **AWS Landing Zone** | Multi-account SRA org + guardrails (SCP/RCP/declarative), security baseline (GuardDuty/Security Hub/Config/CloudTrail/Access Analyzer/Security Lake), Transit Gateway network, IAM Identity Center, org backup, cost governance |
-| **SaaS Workloads** | Supabase projects + vault secrets, Vercel projects + three-tier environments |
+| Cloud | Roots | What it manages |
+|:--------|:--------|:----------------|
+| **GCP** | `gcp-organization` + `gcp-workload` | Landing zone (org hierarchy, IAM, networking hub, VPC-SC, KMS, audit logs) plus per-env application environments (host projects, Shared VPC, Cloud Armor, VPN, Interconnect) |
+| **AWS** | `aws-*` (7 layered roots) | Multi-account SRA org + guardrails (SCP/RCP/declarative), security baseline (GuardDuty/Security Hub/Config/CloudTrail/Access Analyzer/Security Lake), Transit Gateway network, IAM Identity Center, org backup, cost governance |
+| **Supabase** | `saas` (`enable_supabase`) | Projects + vault secrets, three-tier environments |
+| **Vercel** | `saas` (`enable_vercel`) | Projects, three-tier environments |
 
 **Execution model:** Terraform Cloud owns all live state and applies. GitHub Actions validates every PR. Tags trigger release metadata — never direct applies.
 
