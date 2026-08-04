@@ -1,5 +1,5 @@
 # Re-export the saas-workload module outputs. Each is null when the
-# corresponding feature flag is false (see modules/stages/saas-workload/outputs.tf).
+# corresponding feature flag is false (see modules/saas/stages/saas-workload/outputs.tf).
 
 # ── Supabase ─────────────────────────────────────────────────────────────────
 

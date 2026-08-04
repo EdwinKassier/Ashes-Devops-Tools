@@ -12,7 +12,7 @@
 
 module "supabase_environment" {
   count  = var.enable_supabase ? 1 : 0
-  source = "../../supabase/environment"
+  source = "../../../supabase/environment"
 
   organization_id      = var.supabase_organization_id
   project_name         = var.supabase_project_name
@@ -29,7 +29,7 @@ module "supabase_environment" {
 
 module "vault_secrets" {
   count  = var.enable_vault_secrets ? 1 : 0
-  source = "../../supabase/vault-secrets"
+  source = "../../../supabase/vault-secrets"
 
   postgres_url      = var.postgres_url
   supabase_ssl_cert = var.supabase_ssl_cert
@@ -38,7 +38,7 @@ module "vault_secrets" {
 
 module "vercel_project" {
   count  = var.enable_vercel ? 1 : 0
-  source = "../../vercel/project"
+  source = "../../../vercel/project"
 
   project_name               = var.vercel_project_name
   team_id                    = var.vercel_team_id
