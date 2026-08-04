@@ -1,25 +1,18 @@
 name: Terraform Validation
 
 on:
+  # No `paths:` filter on purpose. The jobs below (Terraform Format, Docs
+  # Check, TFLint, Meta Lint, Tests, Security, Discover Roots) are REQUIRED
+  # status checks in branch protection. A path-filtered workflow is skipped
+  # wholesale when a PR touches no matching file, so its required checks would
+  # never report and GitHub would block the PR forever ("Expected — waiting").
+  # Running on every PR keeps the required checks from deadlocking docs-only or
+  # workflow-only PRs. Fast jobs short-circuit cheaply; only the matrix/tests
+  # cost real time, which is the price of them being hard merge gates.
   pull_request:
     branches:
       - main
       - develop
-    paths:
-      - "**.tf"
-      - "**.tftest.hcl"
-      - "**.tfvars"
-      - "**.hcl"
-      - ".tfsec.yml"
-      - ".checkov.yaml"
-      - ".terraform-docs.yml"
-      - ".tflint.hcl"
-      - ".github/workflows/terraform-plan.yml"
-      - ".github/workflows/documentation.yml"
-      - ".github/workflows/reusable-security.yml"
-      - "scripts/terraform-roots.sh"
-      - "scripts/module-docs.sh"
-      - "Makefile"
 
 permissions:
   contents: read
