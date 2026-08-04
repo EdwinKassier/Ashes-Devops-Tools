@@ -25,7 +25,7 @@ modules/               # grouped by owning cloud (domain)
     network/            # ~19 primitives: vpc, subnet, dns, vpn, vpc-sc, cloud-armor, …
     governance/         # billing, kms, org-policy, scc, tags, cloud-audit-logs
     iam/                # organization, role, service-account, workload-identity, identity-group*
-    host/               # compatibility wrapper for envs/gcp-workload
+    host/               # compatibility wrapper for envs/gcp/workload
     monitoring/         # alert-policy, compute-dashboard
     firebase/           # project
     cloud-storage/
@@ -88,7 +88,7 @@ make ci             # fmt-check + docs-check + validate-all + lint + security + 
 ## State & Apply Rules
 
 - State backend: **Terraform Cloud** (remote).
-- **Never run `terraform apply` locally** against `envs/gcp-organization` or `envs/gcp-workload`.
+- **Never run `terraform apply` locally** against `envs/gcp/organization` or `envs/gcp/workload`.
 - CI (GitHub Actions) runs `fmt`, `validate`, `lint`, `tfsec`, `checkov` on PR.
 - Terraform Cloud executes the actual apply.
 
@@ -196,8 +196,8 @@ Gotchas the AWS landing-zone build surfaced — each one bit us in CI:
 
 | Goal | Where to look |
 |------|--------------|
-| Org-level GCP resources | `envs/gcp-organization/` |
-| Per-env app infra | `envs/gcp-workload/` (set `TF_WORKSPACE=gcp-workload-<env>`) |
+| Org-level GCP resources | `envs/gcp/organization/` |
+| Per-env app infra | `envs/gcp/workload/` (set `TF_WORKSPACE=gcp-workload-<env>`) |
 | Full end-to-end workload | `modules/gcp/stages/workload/` or `modules/saas/stages/saas-workload/` |
 | VPC / networking | `modules/gcp/network/` |
 | IAM / service accounts | `modules/gcp/iam/` |
@@ -205,12 +205,12 @@ Gotchas the AWS landing-zone build surfaced — each one bit us in CI:
 | Supabase integration | `modules/supabase/` |
 | Vercel integration | `modules/vercel/` |
 | Alerts / dashboards | `modules/gcp/monitoring/` |
-| AWS org / guardrails | `envs/aws-organization/` + `modules/aws/stages/organization/` |
-| AWS security baseline | `envs/aws-security/` + `modules/aws/stages/security/` |
-| AWS network hub | `envs/aws-network/` + `modules/aws/stages/network-hub/` |
-| AWS IAM Identity Center | `envs/aws-identity/` |
-| AWS backup | `envs/aws-backup/` + `modules/aws/stages/backup/` |
-| AWS workloads | `envs/aws-workload/` (set `TF_WORKSPACE=aws-workload-<env>`) |
+| AWS org / guardrails | `envs/aws/organization/` + `modules/aws/stages/organization/` |
+| AWS security baseline | `envs/aws/security/` + `modules/aws/stages/security/` |
+| AWS network hub | `envs/aws/network/` + `modules/aws/stages/network-hub/` |
+| AWS IAM Identity Center | `envs/aws/identity/` |
+| AWS backup | `envs/aws/backup/` + `modules/aws/stages/backup/` |
+| AWS workloads | `envs/aws/workload/` (set `TF_WORKSPACE=aws-workload-<env>`) |
 | AWS modules | `modules/aws/` |
 | SaaS-only (Supabase/Vercel) | `envs/saas/` |
 | AWS architecture | `docs/architecture/aws-landing-zone.md` |
@@ -241,7 +241,7 @@ For **AWS modules**, clone `templates/aws-module/` instead — it pins `aws = ">
 ```bash
 # Target a specific app environment
 export TF_WORKSPACE=gcp-workload-staging
-cd envs/gcp-workload
+cd envs/gcp/workload
 terraform plan   # read-only local check — apply only via TFC
 ```
 

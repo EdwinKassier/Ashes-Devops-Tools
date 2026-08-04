@@ -53,7 +53,7 @@ graph TB
 
 **Top-level OUs** (`modules/aws/organization` var `top_level_ous`, default the SRA set): `Security`, `Infrastructure`, `Workloads`, `Sandbox`, `Suspended`, `PolicyStaging`, `Exceptions`, `Transitional`. **Child OUs** under `Workloads` (`child_ous`): `Prod` and `NonProd`.
 
-**Foundational accounts** (`envs/aws-organization/terraform.tfvars` `accounts` map, keyed by name with an `ou` placement):
+**Foundational accounts** (`envs/aws/organization/terraform.tfvars` `accounts` map, keyed by name with an `ou` placement):
 
 | Account key | OU | Purpose |
 |---|---|---|
@@ -75,13 +75,13 @@ Each layer is one root = one Terraform Cloud workspace (see [provider-selection]
 
 | Order | Root | Workspace | Deploys | Stage module |
 |---|---|---|---|---|
-| 1 | `envs/aws-organization` | `aws-organization` | Org, SRA OU tree, foundational accounts, guardrails (SCP/RCP/declarative/tag/backup). Publishes `account_ids`, `account_role_arns`. | `modules/aws/stages/organization` |
-| 2 | `envs/aws-security` | `aws-security` | Log archive (WORM), org CloudTrail, Config aggregator, GuardDuty, Security Hub CSPM, Access Analyzer, Security Lake, delegated-admin wiring, incident-response. | `modules/aws/stages/security` |
-| 3 | `envs/aws-network` | `aws-network` | TGW hub, inspection VPC + Network Firewall, centralized egress (NAT), IPAM, centralized VPC endpoints, Route 53 resolver/DNS firewall. | `modules/aws/stages/network-hub` |
-| 4 | `envs/aws-identity` | `aws-identity` | IAM Identity Center permission sets and account assignments (after Identity Center is delegated to Shared Services). | — |
-| 5 | `envs/aws-shared-services` | `aws-shared-services` | Shared platform services (optional / gated). | `modules/aws/stages/shared-services` |
-| 6 | `envs/aws-backup` | `aws-backup` | Centralized backup vaults (Vault Lock) and org backup plan. | `modules/aws/stages/backup` |
-| 7 | `envs/aws-workload` | `aws-workload-<env>` | Per-env spoke VPC, workload roles, per-account baseline. One workspace per env via the `aws-workload-` prefix. | `modules/aws/stages/workload` |
+| 1 | `envs/aws/organization` | `aws-organization` | Org, SRA OU tree, foundational accounts, guardrails (SCP/RCP/declarative/tag/backup). Publishes `account_ids`, `account_role_arns`. | `modules/aws/stages/organization` |
+| 2 | `envs/aws/security` | `aws-security` | Log archive (WORM), org CloudTrail, Config aggregator, GuardDuty, Security Hub CSPM, Access Analyzer, Security Lake, delegated-admin wiring, incident-response. | `modules/aws/stages/security` |
+| 3 | `envs/aws/network` | `aws-network` | TGW hub, inspection VPC + Network Firewall, centralized egress (NAT), IPAM, centralized VPC endpoints, Route 53 resolver/DNS firewall. | `modules/aws/stages/network-hub` |
+| 4 | `envs/aws/identity` | `aws-identity` | IAM Identity Center permission sets and account assignments (after Identity Center is delegated to Shared Services). | — |
+| 5 | `envs/aws/shared-services` | `aws-shared-services` | Shared platform services (optional / gated). | `modules/aws/stages/shared-services` |
+| 6 | `envs/aws/backup` | `aws-backup` | Centralized backup vaults (Vault Lock) and org backup plan. | `modules/aws/stages/backup` |
+| 7 | `envs/aws/workload` | `aws-workload-<env>` | Per-env spoke VPC, workload roles, per-account baseline. One workspace per env via the `aws-workload-` prefix. | `modules/aws/stages/workload` |
 | — | `envs/saas` | `saas-<name>` | Supabase and/or Vercel only. **No AWS provider** — reads AWS/GCP remote state for values but configures no AWS credentials. | `modules/saas/stages/saas-workload` |
 
 The **minimum governed footprint** is `aws-organization` + `aws-security`; everything from `aws-network` down is additive. The `saas` root is deliberately outside the AWS chain: it is selected purely by whether you apply its workspace, and it needs no AWS credentials.
@@ -212,8 +212,8 @@ This table maps each AWS Security Reference Architecture (or associated best-pra
 
 | Control | SRA / best-practice source | Implemented by | Notes |
 |---|---|---|---|
-| Multi-account organization with SRA OU tree | SRA "Organization structure"; *Organizing Your AWS Environment* whitepaper | `modules/aws/organization` (`top_level_ous`, `child_ous`); `envs/aws-organization` | Default `top_level_ous` = `Security`, `Infrastructure`, `Workloads`, `Sandbox`, `Suspended`, `PolicyStaging`, `Exceptions`, `Transitional`; `child_ous` = `Prod`, `NonProd` under `Workloads`. |
-| Foundational accounts (Log Archive, Security Tooling, Network, Shared Services, Backup, Forensics) | SRA "Dedicated accounts for security functions" | `modules/aws/account` (member-account vending, `for_each`) + the `accounts` map in `modules/aws/stages/organization` / `envs/aws-organization/terraform.tfvars` | Stage merges `accounts` + `workload_accounts` and vends one `account` per key; each is placed in its OU. Forensics is a dedicated clean-room account in the Security OU. |
+| Multi-account organization with SRA OU tree | SRA "Organization structure"; *Organizing Your AWS Environment* whitepaper | `modules/aws/organization` (`top_level_ous`, `child_ous`); `envs/aws/organization` | Default `top_level_ous` = `Security`, `Infrastructure`, `Workloads`, `Sandbox`, `Suspended`, `PolicyStaging`, `Exceptions`, `Transitional`; `child_ous` = `Prod`, `NonProd` under `Workloads`. |
+| Foundational accounts (Log Archive, Security Tooling, Network, Shared Services, Backup, Forensics) | SRA "Dedicated accounts for security functions" | `modules/aws/account` (member-account vending, `for_each`) + the `accounts` map in `modules/aws/stages/organization` / `envs/aws/organization/terraform.tfvars` | Stage merges `accounts` + `workload_accounts` and vends one `account` per key; each is placed in its OU. Forensics is a dedicated clean-room account in the Security OU. |
 | SCP + RCP + declarative + tag + backup guardrails | SRA "Guardrails"; AWS Organizations policy types | `modules/aws/organization-policy` (all five types); `modules/aws/backup-org-policy` (`BACKUP_POLICY`) | SCPs: `deny-tamper`, `region-restriction`, `baseline`. RCP: data-perimeter (org-identity + confused-deputy + secure-transport / `aws:PrincipalOrgID`). Declarative EC2 policy: `@@assign` IMDSv2 + block public AMI/access. Tag policy: required tags. `FullAWSAccess`/`RCPFullAWSAccess` left AWS-managed. |
 | Centralized root-access management | SRA "Manage root access centrally"; IAM organization features | `modules/aws/iam-organizations-features` | Enables `RootCredentialsManagement` + `RootSessions` (both by default); removes standing root credentials from member accounts. |
 | Org CloudTrail (multi-Region, log-file validation, SSE-KMS, Object Lock, BPA) | SRA "Log Archive account" / CloudTrail baseline | `modules/aws/cloudtrail-org` + `modules/aws/log-archive-bucket` | Trail: `is_multi_region_trail = true`, `include_global_service_events = true`, `enable_log_file_validation = true`, `kms_key_id` set. Bucket: `object_lock_enabled = true` with `object_lock_mode` default `COMPLIANCE` (WORM), all four BPA dimensions, versioning, SSE-KMS with bucket key. |

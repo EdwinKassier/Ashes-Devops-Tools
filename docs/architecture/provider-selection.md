@@ -33,15 +33,15 @@ One root per cloud + layer, named `envs/<cloud>-<layer>`. Each root declares exa
 
 | Root | Workspace | Cloud | Status |
 |---|---|---|---|
-| `envs/gcp-organization` | `gcp-organization` | GCP (control plane) | existing |
-| `envs/gcp-workload` | `gcp-workload-<env>` | GCP (per-env app infra) | existing |
-| `envs/aws-organization` | `aws-organization` | AWS (foundational accounts + org) | AWS |
-| `envs/aws-security` | `aws-security` | AWS (security tooling / log archive) | AWS |
-| `envs/aws-network` | `aws-network` | AWS (shared networking) | AWS |
-| `envs/aws-identity` | `aws-identity` | AWS (IAM Identity Center / SSO) | AWS |
-| `envs/aws-shared-services` | `aws-shared-services` | AWS (shared platform services) | AWS |
-| `envs/aws-backup` | `aws-backup` | AWS (centralized backup) | AWS |
-| `envs/aws-workload` | `aws-workload-<env>` | AWS (per-env workloads) | AWS |
+| `envs/gcp/organization` | `gcp-organization` | GCP (control plane) | existing |
+| `envs/gcp/workload` | `gcp-workload-<env>` | GCP (per-env app infra) | existing |
+| `envs/aws/organization` | `aws-organization` | AWS (foundational accounts + org) | AWS |
+| `envs/aws/security` | `aws-security` | AWS (security tooling / log archive) | AWS |
+| `envs/aws/network` | `aws-network` | AWS (shared networking) | AWS |
+| `envs/aws/identity` | `aws-identity` | AWS (IAM Identity Center / SSO) | AWS |
+| `envs/aws/shared-services` | `aws-shared-services` | AWS (shared platform services) | AWS |
+| `envs/aws/backup` | `aws-backup` | AWS (centralized backup) | AWS |
+| `envs/aws/workload` | `aws-workload-<env>` | AWS (per-env workloads) | AWS |
 | `envs/saas` | `saas-<name>` (via `TF_WORKSPACE=saas-<name>`) | Supabase and/or Vercel only | SaaS |
 
 The GCP roots (`gcp-organization`, `gcp-workload`) are the existing landing zone. The AWS roots follow the standard multi-account foundational layout. The `saas` root is the **only** place Supabase and Vercel providers live — they never live inside an AWS or GCP root. It declares **no `aws` or `google` provider at all**, so a Supabase- and/or Vercel-only user needs no cloud credentials to plan or apply it. Its `enable_supabase` / `enable_vercel` flags gate the two SaaS features independently within the single root.

@@ -32,7 +32,7 @@ For each layer, apply via its TFC workspace:
 
 ```bash
 export TF_WORKSPACE=aws-workload-<env>   # for per-env roots
-terraform -chdir=envs/aws-workload destroy   # run through TFC, not locally
+terraform -chdir=envs/aws/workload destroy   # run through TFC, not locally
 ```
 
 ---

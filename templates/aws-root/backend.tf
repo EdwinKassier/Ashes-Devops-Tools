@@ -6,7 +6,7 @@
 #
 # The TFC organization is NOT hard-coded here — it comes from backend.hcl or
 # TF_CLI_ARGS_init so the same root works across orgs and CI without edits
-# (matches envs/gcp-organization/backend.tf).
+# (matches envs/gcp/organization/backend.tf).
 terraform {
   backend "cloud" {
     # Supply organization via TF_CLI_ARGS_init or a gitignored backend.hcl:

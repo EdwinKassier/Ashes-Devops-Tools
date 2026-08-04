@@ -1,7 +1,7 @@
 # Runbook — Rename GCP TFC Workspaces (`organization` → `gcp-organization`, `apps-<env>` → `gcp-workload-<env>`)
 
 **When to use:** Once, after pulling the change that renamed the GCP roots
-(`envs/organization` → `envs/gcp-organization`, `envs/apps` → `envs/gcp-workload`).
+(`envs/organization` → `envs/gcp/organization`, `envs/apps` → `envs/gcp/workload`).
 The code now expects Terraform Cloud workspaces named `gcp-organization` and
 `gcp-workload-<env>`. Until you rename the live workspaces to match, applies will
 target the old names via the old backend config and drift from the repo.
@@ -79,17 +79,17 @@ rename_ws apps-prod gcp-workload-prod
 ## Re-point local state and verify
 
 The backend config in the repo already carries the new names
-(`envs/gcp-organization/backend.tf` → `name = "gcp-organization"`;
-`envs/gcp-workload/backend.tf` → `prefix = "gcp-workload-"`). Re-init locally so your
+(`envs/gcp/organization/backend.tf` → `name = "gcp-organization"`;
+`envs/gcp/workload/backend.tf` → `prefix = "gcp-workload-"`). Re-init locally so your
 CLI state points at the renamed workspaces:
 
 ```bash
 # Control plane
-terraform -chdir=envs/gcp-organization init -reconfigure
+terraform -chdir=envs/gcp/organization init -reconfigure
 make plan-gcp-organization        # expect: no changes
 
 # Each workload environment
-TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp-workload init -reconfigure
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload init -reconfigure
 make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars   # expect: no changes
 ```
 

@@ -190,7 +190,7 @@ Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives i
 | [`stages/aws-shared-services`](modules/aws/stages/shared-services/) | Log archive, KMS, private CA, Systems Manager |
 | [`stages/aws-backup`](modules/aws/stages/backup/) | Org-wide AWS Backup vaults and policies |
 | [`stages/aws-workload`](modules/aws/stages/workload/) | Per-account workload VPC + baseline |
-| [`host`](modules/gcp/host/) | Top-level compatibility wrapper for `envs/gcp-workload` (not under `modules/stages/`) — composes networking, security, and governance primitives |
+| [`host`](modules/gcp/host/) | Top-level compatibility wrapper for `envs/gcp/workload` (not under `modules/stages/`) — composes networking, security, and governance primitives |
 
 </details>
 

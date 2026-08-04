@@ -63,10 +63,10 @@ For each root, copy the env template (not the reference file here), fill in the
 REQUIRED inputs, and apply. Example for phase-1:
 
 ```bash
-cp envs/aws-organization/terraform.tfvars.example envs/aws-organization/terraform.tfvars
+cp envs/aws/organization/terraform.tfvars.example envs/aws/organization/terraform.tfvars
 # edit terraform.tfvars: set the two role ARNs, log_archive_bucket_name, and
 # real unique root emails for every account
-terraform -chdir=envs/aws-organization apply
+terraform -chdir=envs/aws/organization apply
 ```
 
 > **Apply happens in Terraform Cloud**, not locally, against these roots. Local

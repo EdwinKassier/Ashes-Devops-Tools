@@ -5,8 +5,8 @@ By participating in this project, you agree to abide by our
 
 This repository is centered on two supported Terraform roots:
 
-- `envs/gcp-organization`
-- `envs/gcp-workload`
+- `envs/gcp/organization`
+- `envs/gcp/workload`
 
 Contributions should preserve that operator model and keep the repository easy to validate locally.
 

@@ -732,7 +732,7 @@ variable "vpc_service_controls" {
     # (Access Context Manager's access-policy parent requires this form). NOTE:
     # this diverges from every other org-id input in the repo (governance/tags,
     # governance/cloud-audit-logs, stages/organization var.org_id) which take the
-    # BARE numeric id. envs/gcp-workload prefixes the bare org_id output here accordingly.
+    # BARE numeric id. envs/gcp/workload prefixes the bare org_id output here accordingly.
     # See docs: the vpc-sc module is the sole outlier; a future normalization
     # would have vpc-sc accept the bare id and prefix internally.
     organization_id      = string

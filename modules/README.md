@@ -23,7 +23,7 @@ The GCP landing zone follows a staged pattern aligned with
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                          envs/gcp-organization/                         │
+│                          envs/gcp/organization/                         │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌─────────────┐  │
 │  │  bootstrap   │─▶│ organization │─▶│   projects   │─▶│ network-hub │  │
 │  │  (Stage 0)   │  │  (Stage 1)   │  │  (Stage 2)   │  │  (Stage 3)  │  │
@@ -36,7 +36,7 @@ The GCP landing zone follows a staged pattern aligned with
                               ┌───────────┼───────────┐
                               ▼           ▼           ▼
                         ┌─────────────────────────────┐
-                        │      envs/gcp-workload      │
+                        │      envs/gcp/workload      │
                         │ TF_WORKSPACE=gcp-workload-* │
                         │                             │
                         │ host module per env         │
@@ -46,10 +46,10 @@ The GCP landing zone follows a staged pattern aligned with
 
 | Module | Stage | Purpose | Invoked From |
 |--------|:-----:|---------|--------------|
-| [gcp/stages/bootstrap](./gcp/stages/bootstrap/) | 0 | Admin project, Terraform SA, WIF | `envs/gcp-organization/` |
-| [gcp/stages/organization](./gcp/stages/organization/) | 1 | Folders, IAM, Org Policies, Tags | `envs/gcp-organization/` |
-| [gcp/stages/projects](./gcp/stages/projects/) | 2 | **Platform projects** (hosts, hubs) | `envs/gcp-organization/` |
-| [gcp/stages/network-hub](./gcp/stages/network-hub/) | 3 | Hub VPC, DNS, Hierarchical FW | `envs/gcp-organization/` |
+| [gcp/stages/bootstrap](./gcp/stages/bootstrap/) | 0 | Admin project, Terraform SA, WIF | `envs/gcp/organization/` |
+| [gcp/stages/organization](./gcp/stages/organization/) | 1 | Folders, IAM, Org Policies, Tags | `envs/gcp/organization/` |
+| [gcp/stages/projects](./gcp/stages/projects/) | 2 | **Platform projects** (hosts, hubs) | `envs/gcp/organization/` |
+| [gcp/stages/network-hub](./gcp/stages/network-hub/) | 3 | Hub VPC, DNS, Hierarchical FW | `envs/gcp/organization/` |
 | [gcp/stages/workload](./gcp/stages/workload/) | N/A | **Application projects** (per-env) | `examples/workloads/` |
 | [saas/stages/saas-workload](./saas/stages/saas-workload/) | N/A | Supabase + Vercel full-stack environment | per-env workload root |
 

@@ -36,10 +36,10 @@ gcloud compute networks subnets describe SUBNET_NAME \
 
 ### Step 2 — Update the secondary range in Terraform
 
-In `envs/gcp-workload/main.tf`, update the `secondary_ranges` argument on `module "host"`. The key is the **zone name** (matching the availability zone the private subnet is created in — not the subnet's tier name like `"private"`); the value is the list of secondary ranges for that zone's private subnet:
+In `envs/gcp/workload/main.tf`, update the `secondary_ranges` argument on `module "host"`. The key is the **zone name** (matching the availability zone the private subnet is created in — not the subnet's tier name like `"private"`); the value is the list of secondary ranges for that zone's private subnet:
 
 ```hcl
-# In envs/gcp-workload/main.tf — module "host" block
+# In envs/gcp/workload/main.tf — module "host" block
 secondary_ranges = {
   "europe-west1-a" = [
     {
@@ -67,7 +67,7 @@ The plan must show `~ update in-place` for the subnet, not `- destroy` + `+ crea
 ### Step 4 — Apply
 
 ```bash
-terraform -chdir=envs/gcp-workload apply -target=module.host.module.private_subnets -var-file=../../examples/dev.tfvars
+terraform -chdir=envs/gcp/workload apply -target=module.host.module.private_subnets -var-file=../../../examples/dev.tfvars
 ```
 
 ---
@@ -97,19 +97,19 @@ If `enable_deletion_protection = true`, the plan will be blocked by the guard re
 
 ```bash
 # Find the guard resource address
-terraform -chdir=envs/gcp-workload state list | grep deletion_protection_guard
+terraform -chdir=envs/gcp/workload state list | grep deletion_protection_guard
 
 # Remove from state (this does NOT destroy the resource, just removes Terraform's tracking)
-terraform -chdir=envs/gcp-workload state rm 'module.host.terraform_data.deletion_protection_guard[0]'
+terraform -chdir=envs/gcp/workload state rm 'module.host.terraform_data.deletion_protection_guard[0]'
 ```
 
 After the CIDR change is applied, re-enable deletion protection by setting `enable_deletion_protection = true` and applying again.
 
 ### Step 4 — Update the CIDR in Terraform
 
-The `envs/gcp-workload` root reads its VPC CIDR from `envs/gcp-organization` remote state — it is **not** set in `examples/dev.tfvars`. To change it:
+The `envs/gcp/workload` root reads its VPC CIDR from `envs/gcp/organization` remote state — it is **not** set in `examples/dev.tfvars`. To change it:
 
-1. Update the `environments` map in `envs/gcp-organization` (your `local.auto.tfvars` or equivalent):
+1. Update the `environments` map in `envs/gcp/organization` (your `local.auto.tfvars` or equivalent):
 
 ```hcl
 environments = {
@@ -126,7 +126,7 @@ environments = {
 ```bash
 make plan-gcp-organization
 # Confirm only the environment map output changes — no network resources in the org root
-terraform -chdir=envs/gcp-organization apply
+terraform -chdir=envs/gcp/organization apply
 ```
 
 1. The gcp-workload root will pick up the new CIDR on its next plan via `terraform_remote_state`.
@@ -144,7 +144,7 @@ Confirm the plan destroys only the subnet resources, not the project or VPC.
 ### Step 6 — Apply
 
 ```bash
-terraform -chdir=envs/gcp-workload apply -var-file=../../examples/dev.tfvars
+terraform -chdir=envs/gcp/workload apply -var-file=../../../examples/dev.tfvars
 ```
 
 ### Step 7 — Restore workloads
@@ -170,5 +170,5 @@ enable_deletion_protection = true
 ```
 
 ```bash
-terraform -chdir=envs/gcp-workload apply -target=module.host.terraform_data.deletion_protection_guard -var-file=../../examples/dev.tfvars
+terraform -chdir=envs/gcp/workload apply -target=module.host.terraform_data.deletion_protection_guard -var-file=../../../examples/dev.tfvars
 ```
