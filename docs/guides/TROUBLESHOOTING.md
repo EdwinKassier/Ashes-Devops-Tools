@@ -65,18 +65,18 @@ checkov -d envs --framework terraform
 
 ## The wrong application environment is selected
 
-`envs/gcp-workload` is keyed by Terraform Cloud workspace, not by directory name.
+`envs/gcp/workload` is keyed by Terraform Cloud workspace, not by directory name.
 
 Always verify the workspace before planning:
 
 ```bash
 echo "$TF_WORKSPACE"
-TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp-workload plan -var-file=../../examples/dev.tfvars
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=../../../examples/dev.tfvars
 ```
 
-## `envs/gcp-workload` cannot find the organization remote state
+## `envs/gcp/workload` cannot find the organization remote state
 
-By default, `envs/gcp-workload` reads outputs from the Terraform Cloud workspace named `gcp-organization`.
+By default, `envs/gcp/workload` reads outputs from the Terraform Cloud workspace named `gcp-organization`.
 
 Verify:
 
@@ -116,7 +116,7 @@ make pre-commit-install
 
 ```bash
 export TF_LOG=DEBUG
-TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp-workload plan -var-file=../../examples/dev.tfvars
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=../../../examples/dev.tfvars
 ```
 
 ## WIF / ADC authentication failures in CI
@@ -138,7 +138,7 @@ Workload Identity Federation is configured in `modules/gcp/stages/bootstrap`. If
 
 3. Check the subject attribute in the workflow against the binding condition — it must match `attribute.repository/<org>/<repo>`. The attribute values come from GitHub's OIDC token claims.
 
-4. If using `google-github-actions/auth`, confirm `workload_identity_provider` is the full provider resource name (`projects/<number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>`), not the pool name. The `github_oidc_provider_name` output from `envs/gcp-organization` exposes this value.
+4. If using `google-github-actions/auth`, confirm `workload_identity_provider` is the full provider resource name (`projects/<number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>`), not the pool name. The `github_oidc_provider_name` output from `envs/gcp/organization` exposes this value.
 
 For local ADC issues (`gcloud auth application-default login` expired), refresh credentials:
 
@@ -269,7 +269,7 @@ terraform destroy # now succeeds
 
 ### `Error: Error creating Service Perimeter … "projects/my-project-id" is not a valid resource name`
 
-**Cause:** The `modules/gcp/network/vpc-sc` module's `protected_projects` variable (and the `resources`/`sources[].resource` fields inside `vpc_sc_ingress_policies`/`vpc_sc_egress_policies` at the `envs/gcp-workload` root) require **numeric project numbers**, not project ID strings. The Access Context Manager API only accepts the `projects/<number>` form, and the module prepends the `projects/` prefix automatically — do not include it yourself.
+**Cause:** The `modules/gcp/network/vpc-sc` module's `protected_projects` variable (and the `resources`/`sources[].resource` fields inside `vpc_sc_ingress_policies`/`vpc_sc_egress_policies` at the `envs/gcp/workload` root) require **numeric project numbers**, not project ID strings. The Access Context Manager API only accepts the `projects/<number>` form, and the module prepends the `projects/` prefix automatically — do not include it yourself.
 
 **Fix:** Replace project ID strings with numeric project numbers:
 
@@ -277,7 +277,7 @@ terraform destroy # now succeeds
 gcloud projects describe my-project-id --format='value(projectNumber)'
 ```
 
-Then set (e.g. in a custom `vpc_sc_ingress_policies` entry, `envs/gcp-workload` tfvars):
+Then set (e.g. in a custom `vpc_sc_ingress_policies` entry, `envs/gcp/workload` tfvars):
 
 ```hcl
 vpc_sc_ingress_policies = [
@@ -290,7 +290,7 @@ vpc_sc_ingress_policies = [
 ]
 ```
 
-`envs/gcp-workload` itself already resolves and protects its own host project number automatically (`data.google_project.host_project.number` in `envs/gcp-workload/main.tf`) — you only need to supply numbers manually when referencing **other** (spoke) projects in custom ingress/egress policies.
+`envs/gcp/workload` itself already resolves and protects its own host project number automatically (`data.google_project.host_project.number` in `envs/gcp/workload/main.tf`) — you only need to supply numbers manually when referencing **other** (spoke) projects in custom ingress/egress policies.
 
 ---
 
@@ -373,7 +373,7 @@ tflint --init
 
 **Cause:** A downstream root (typically `aws-workload`) resolved `account_role_arns[<key>]` from the `aws-organization` remote state, but that account was never added to the org. `account_role_arns` only contains keys for accounts declared in the org root's `workload_accounts` (and `accounts`) map.
 
-**Fix:** Add the workload account to `envs/aws-organization` under `workload_accounts`, apply `aws-organization` first so it vends the account and republishes `account_role_arns`, then apply `aws-workload`. See [`aws-add-account.md`](../runbooks/aws-add-account.md).
+**Fix:** Add the workload account to `envs/aws/organization` under `workload_accounts`, apply `aws-organization` first so it vends the account and republishes `account_role_arns`, then apply `aws-workload`. See [`aws-add-account.md`](../runbooks/aws-add-account.md).
 
 ---
 

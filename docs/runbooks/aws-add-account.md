@@ -4,7 +4,7 @@
 
 **Time:** 20–40 minutes of hands-on Terraform + TFC work, plus AWS account-creation wait (a few minutes) and any manual OU/email confirmation.
 **Risk:** Medium. Account creation is org-mutating and hard to reverse (see the `close_on_deletion` caveats in [`aws-teardown.md`](aws-teardown.md)). The apply happens in the `aws-organization` root, whose blast radius is the whole org.
-**Prerequisites:** The landing zone is already stood up per [`aws-bootstrap.md`](aws-bootstrap.md). You have write access to `envs/aws-organization/terraform.tfvars`, a unique root email for the new account, and permission to create a TFC workspace and set its variables.
+**Prerequisites:** The landing zone is already stood up per [`aws-bootstrap.md`](aws-bootstrap.md). You have write access to `envs/aws/organization/terraform.tfvars`, a unique root email for the new account, and permission to create a TFC workspace and set its variables.
 
 ---
 
@@ -14,7 +14,7 @@
 
 ## Step 1 — Add the account to the org map
 
-Edit `envs/aws-organization/terraform.tfvars`. For a **workload** account, add a row to `workload_accounts`; for a foundational account, add to `accounts`.
+Edit `envs/aws/organization/terraform.tfvars`. For a **workload** account, add a row to `workload_accounts`; for a foundational account, add to `accounts`.
 
 ```hcl
 # Workload account — placed under Workloads/Prod or Workloads/NonProd
@@ -37,7 +37,7 @@ Rules:
 This is the only Terraform step that touches the org. Apply via Terraform Cloud (never a local apply against this root):
 
 ```bash
-terraform -chdir=envs/aws-organization plan   # local read-only check
+terraform -chdir=envs/aws/organization plan   # local read-only check
 # then apply via the aws-organization TFC workspace
 ```
 
@@ -46,7 +46,7 @@ The apply creates the account, places it in the OU, and — for workload account
 Confirm the new role ARN is published:
 
 ```bash
-terraform -chdir=envs/aws-organization output -json account_role_arns
+terraform -chdir=envs/aws/organization output -json account_role_arns
 # expect a "payments_prod" key
 ```
 
@@ -57,7 +57,7 @@ terraform -chdir=envs/aws-organization output -json account_role_arns
 Create the downstream workspace out-of-band (the org root does **not** self-provision workspaces — see the decision section in [`aws-bootstrap.md`](aws-bootstrap.md#who-creates-the-downstream-workspaces-decision)):
 
 1. **Workspace name:** `aws-workload-<key>` (e.g. `aws-workload-payments_prod`). For a per-env root this matches the `aws-workload-` prefix; the env is selected with `TF_WORKSPACE`.
-2. **VCS + working directory:** connect to this repo, working directory `envs/aws-workload`.
+2. **VCS + working directory:** connect to this repo, working directory `envs/aws/workload`.
 3. **Run role:** set the workspace's `TFC_AWS_RUN_ROLE_ARN` to the matching value from `account_role_arns[...]`:
 
    ```text
@@ -77,7 +77,7 @@ Apply the relevant layer root for the new account. For a workload account:
 
 ```bash
 export TF_WORKSPACE=aws-workload-payments_prod
-terraform -chdir=envs/aws-workload plan   # read-only local check; apply via TFC
+terraform -chdir=envs/aws/workload plan   # read-only local check; apply via TFC
 ```
 
 > **Deployment ordering — org first, always.** The workload entry must be added

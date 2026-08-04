@@ -14,7 +14,7 @@ data "terraform_remote_state" "aws_organization" {
 }
 
 module "aws_security" {
-  source = "../../modules/aws/stages/security"
+  source = "../../../modules/aws/stages/security"
 
   # The default provider authenticates as / into the management account, so it is
   # mapped to both aws and aws.management. The other three are aliased providers

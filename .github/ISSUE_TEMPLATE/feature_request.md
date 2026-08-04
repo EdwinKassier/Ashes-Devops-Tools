@@ -35,8 +35,8 @@ assignees: ''
 
 ## Target Root / Surface
 
-- [ ] `envs/gcp-organization`
-- [ ] `envs/gcp-workload`
+- [ ] `envs/gcp/organization`
+- [ ] `envs/gcp/workload`
 - [ ] `examples/workloads`
 - [ ] CI/CD or repo tooling
 - [ ] Multiple surfaces

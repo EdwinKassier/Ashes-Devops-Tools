@@ -12,7 +12,7 @@
 
 The AWS landing zone is a **two-phase bootstrap**:
 
-1. **Phase-1** (`envs/aws-organization`) creates the AWS organization, the SRA OU tree, the foundational member accounts, and the guardrails. It is the **producer** of the cross-root contract: it publishes `account_ids` and `account_role_arns` and has no `terraform_remote_state` data source, so it validates credential-free.
+1. **Phase-1** (`envs/aws/organization`) creates the AWS organization, the SRA OU tree, the foundational member accounts, and the guardrails. It is the **producer** of the cross-root contract: it publishes `account_ids` and `account_role_arns` and has no `terraform_remote_state` data source, so it validates credential-free.
 2. **Every downstream root** (`aws-security`, `aws-network`, `aws-identity`, `aws-shared-services`, `aws-backup`, `aws-workload-<env>`, `saas`) **reads** the org remote state and assumes a member-account role from `account_role_arns`.
 
 But phase-1 itself cannot bootstrap the very things it needs to run: an AWS org to operate in, a TFC workspace to hold its state, and a run identity to authenticate with. Those are **phase-0** — created out-of-band, by hand, exactly once.
@@ -40,7 +40,7 @@ Either:
 - **Create a new AWS account** to be the management account (recommended for a clean landing zone), or
 - **Use an existing standalone account** that will become the org management account. If it already has resources, understand that the region-restriction SCP and other guardrails will apply org-wide once phase-1 runs.
 
-Sign in as the account root user (or an admin) and confirm you can reach the AWS Organizations console. Do **not** create the organization by hand — `envs/aws-organization` does that. You only need the account to exist.
+Sign in as the account root user (or an admin) and confirm you can reach the AWS Organizations console. Do **not** create the organization by hand — `envs/aws/organization` does that. You only need the account to exist.
 
 ### Step 2 — Create a bootstrap identity for run #1
 
@@ -65,15 +65,15 @@ Create the workspace that will hold phase-1 state. In the Terraform Cloud UI (**
 
 1. **Name:** `aws-organization` (must match `backend.tf`, which hard-codes `workspaces { name = "aws-organization" }`).
 2. **VCS connection:** connect it to this repository.
-3. **Working directory:** `envs/aws-organization`.
+3. **Working directory:** `envs/aws/organization`.
 4. **Execution mode:** Remote (or Agent for self-hosted runners).
 5. Set the AWS auth workspace variables from Step 2 (`TFC_AWS_PROVIDER_AUTH` + `TFC_AWS_RUN_ROLE_ARN`, or the static-key env vars).
 
 > **Exact CLI is environment-specific.** Whether you use the TFC UI, the `tfe` CLI, or a small `terraform` config using the `tfe` provider depends on your team's tooling. Any of them is fine — the workspace is out-of-band scaffolding, not part of the landing-zone code.
 
-**Run #1 state note (the chicken-and-egg).** If you prefer, run #1 can execute with **local state** first (`terraform -chdir=envs/aws-organization init -backend=false` then a local apply with credentials in your shell), and then `terraform init` again **with** the `cloud` backend to **migrate** the local state into the newly created TFC workspace. This is the escape hatch for the case where you want the org created before the workspace exists. In most cases, though, creating the workspace first (this step) and letting TFC run #1 remotely is cleaner.
+**Run #1 state note (the chicken-and-egg).** If you prefer, run #1 can execute with **local state** first (`terraform -chdir=envs/aws/organization init -backend=false` then a local apply with credentials in your shell), and then `terraform init` again **with** the `cloud` backend to **migrate** the local state into the newly created TFC workspace. This is the escape hatch for the case where you want the org created before the workspace exists. In most cases, though, creating the workspace first (this step) and letting TFC run #1 remotely is cleaner.
 
-Supply the TFC org to the backend the same way every root does — via a gitignored `backend.hcl` or `TF_CLI_ARGS_init` (see `envs/aws-organization/backend.tf` for the two forms).
+Supply the TFC org to the backend the same way every root does — via a gitignored `backend.hcl` or `TF_CLI_ARGS_init` (see `envs/aws/organization/backend.tf` for the two forms).
 
 ---
 
@@ -109,10 +109,10 @@ Instead, for each downstream root, create its workspace out-of-band (same mechan
 | `aws-workload-<env>` | `account_role_arns["<workload-account>"]` | One workspace per env via the `aws-workload-` prefix; key is the workload account name you added under `workload_accounts`. |
 | `saas-<name>` | *(none — no AWS role)* | Supabase/Vercel only; reads AWS/GCP remote state for values but configures no AWS provider. |
 
-> The account keys (`log_archive`, `security_tooling`, `network`, `shared_services`, `backup`, `forensics`) come from the `accounts` map in `envs/aws-organization/terraform.tfvars`. `account_role_arns` is keyed by exactly those names. Get the live values after phase-1 apply:
+> The account keys (`log_archive`, `security_tooling`, `network`, `shared_services`, `backup`, `forensics`) come from the `accounts` map in `envs/aws/organization/terraform.tfvars`. `account_role_arns` is keyed by exactly those names. Get the live values after phase-1 apply:
 >
 > ```bash
-> terraform -chdir=envs/aws-organization output -json account_role_arns
+> terraform -chdir=envs/aws/organization output -json account_role_arns
 > ```
 
 You must also ensure each member-account role **trusts** the downstream workspace's TFC identity. That trust is part of creating the workspace + role wiring in this same out-of-band step — it is not managed by the org root.
@@ -125,10 +125,10 @@ Follow this order top to bottom. **Manual gates** are inline and must be complet
 
 1. **Phase-0** — management account, bootstrap identity, `aws-organization` workspace (Steps 1–3 above).
 
-2. **Apply `aws-organization`.** Copy `envs/aws-organization/terraform.tfvars.example` to `terraform.tfvars`, set real unique root emails for every account, the `terraform_run_role_arn`, `break_glass_role_arn`, and `log_archive_bucket_name`, then apply:
+2. **Apply `aws-organization`.** Copy `envs/aws/organization/terraform.tfvars.example` to `terraform.tfvars`, set real unique root emails for every account, the `terraform_run_role_arn`, `break_glass_role_arn`, and `log_archive_bucket_name`, then apply:
 
    ```bash
-   terraform -chdir=envs/aws-organization apply
+   terraform -chdir=envs/aws/organization apply
    ```
 
    This creates the org, the OU tree, the foundational accounts, and the guardrails, and publishes `account_ids` and `account_role_arns`.

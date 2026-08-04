@@ -1,6 +1,6 @@
 # Example: provision the org-level resources — folder hierarchy, IAM groups,
 # tags, org policies, and CMEK keys for the landing zone.
-# In a full deployment this is invoked from envs/gcp-organization/main.tf.
+# In a full deployment this is invoked from envs/gcp/organization/main.tf.
 # Replace locals with bootstrap outputs or remote state references.
 
 locals {

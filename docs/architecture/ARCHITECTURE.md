@@ -4,8 +4,8 @@
 
 This repository implements a GCP landing zone alongside a Terraform-native AWS landing zone. The GCP surface has two supported roots:
 
-- `envs/gcp-organization` for the control plane
-- `envs/gcp-workload` for environment-specific application infrastructure
+- `envs/gcp/organization` for the control plane
+- `envs/gcp/workload` for environment-specific application infrastructure
 
 The AWS surface adds a set of per-layer roots (`envs/aws-*`) plus a cloud-agnostic `envs/saas` root — see [AWS Landing Zone](#aws-landing-zone) below and the full detail in [`aws-landing-zone.md`](aws-landing-zone.md). Cloud selection is which workspaces you apply, not a runtime flag; the rationale lives in [`provider-selection.md`](provider-selection.md).
 
@@ -27,7 +27,7 @@ envs/
 └── saas/                 # Supabase and/or Vercel only — no AWS/GCP provider
 ```
 
-### `envs/gcp-organization`
+### `envs/gcp/organization`
 
 Creates and manages:
 
@@ -51,7 +51,7 @@ This root composes four stage modules:
 - `modules/gcp/stages/projects`
 - `modules/gcp/stages/network-hub`
 
-### `envs/gcp-workload`
+### `envs/gcp/workload`
 
 Consumes remote state from the `gcp-organization` workspace and deploys one environment at a time into the selected host project.
 
@@ -65,7 +65,7 @@ The workspace naming contract is:
 
 ## Environment Model
 
-The canonical environment contract lives in `envs/gcp-organization/variables.tf`:
+The canonical environment contract lives in `envs/gcp/organization/variables.tf`:
 
 ```hcl
 map(object({
@@ -122,7 +122,7 @@ That keeps CIDRs explicit and stable. The old pattern of deriving CIDRs from key
 - `modules/gcp/network/*` contains the reusable network primitives
 - `modules/gcp/governance/*` contains budgets, logging, KMS, org policy, SCC, and tags
 - `modules/gcp/iam/*` contains reusable IAM primitives
-- `modules/gcp/host` remains the compatibility wrapper used by `envs/gcp-workload`
+- `modules/gcp/host` remains the compatibility wrapper used by `envs/gcp/workload`
 
 ### SaaS Modules
 
@@ -165,8 +165,8 @@ AWS stand-up begins with a phase-0 bootstrap (out-of-band org creation and a run
 
 ```mermaid
 graph TD
-    A["envs/gcp-organization"] -->|workspace: organization| B["Terraform Cloud state"]
-    B --> C["envs/gcp-workload"]
+    A["envs/gcp/organization"] -->|workspace: organization| B["Terraform Cloud state"]
+    B --> C["envs/gcp/workload"]
     C -->|workspace: gcp-workload-<env>| D["Host project infrastructure"]
     E["Dedicated workload root"] --> F["modules/gcp/stages/workload"]
     F --> D
@@ -208,15 +208,15 @@ It verifies the latest Terraform Cloud run for the matching workspace and then p
 ### Control Plane
 
 ```bash
-terraform -chdir=envs/gcp-organization init
-terraform -chdir=envs/gcp-organization plan
+terraform -chdir=envs/gcp/organization init
+terraform -chdir=envs/gcp/organization plan
 ```
 
 ### App Environment
 
 ```bash
-TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp-workload init
-TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp-workload plan -var-file=../../examples/dev.tfvars
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload init
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=../../../examples/dev.tfvars
 ```
 
 ### Workload Projects

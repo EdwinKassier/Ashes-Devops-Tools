@@ -22,7 +22,7 @@ locals {
 }
 
 module "aws_network_hub" {
-  source = "../../modules/aws/stages/network-hub"
+  source = "../../../modules/aws/stages/network-hub"
 
   org_id  = data.terraform_remote_state.aws_organization.outputs.organization_id
   org_arn = local.org_arn

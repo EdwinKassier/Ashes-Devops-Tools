@@ -9,10 +9,10 @@ locals {
   org_id          = "123456789012"
   billing_account = "ABCDEF-123456-789012"
 
-  # Folder for the service team environment (created by envs/gcp-organization)
+  # Folder for the service team environment (created by envs/gcp/organization)
   folder_id = "987654321098"
 
-  # Hub network project and subnet details (from envs/gcp-organization outputs or remote state)
+  # Hub network project and subnet details (from envs/gcp/organization outputs or remote state)
   hub_project_id = "my-hub-project"
   subnets = {
     private = {

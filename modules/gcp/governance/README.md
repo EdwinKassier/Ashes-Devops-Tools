@@ -1,6 +1,6 @@
 # Governance Modules
 
-This directory groups the governance and platform-control modules used by [`envs/gcp-organization`](../../envs/gcp-organization/). It is a category index, not a Terraform module.
+This directory groups the governance and platform-control modules used by [`envs/gcp/organization`](../../envs/gcp/organization/). It is a category index, not a Terraform module.
 
 ## Modules
 
