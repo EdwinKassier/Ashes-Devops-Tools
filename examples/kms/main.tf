@@ -3,7 +3,7 @@
 # Replace the project_id with your real project.
 
 module "kms" {
-  source = "../../modules/governance/kms"
+  source = "../../modules/gcp/governance/kms"
 
   project_id   = "my-project-id"
   keyring_name = "app-keyring"

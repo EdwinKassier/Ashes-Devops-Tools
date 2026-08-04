@@ -1,6 +1,6 @@
 # Vercel Modules
 
-Terraform modules for provisioning and managing Vercel projects. These modules are consumed by [`modules/stages/saas-workload`](../stages/saas-workload/) and can also be called directly.
+Terraform modules for provisioning and managing Vercel projects. These modules are consumed by [`modules/saas/stages/saas-workload`](../stages/saas-workload/) and can also be called directly.
 
 ## Modules
 
@@ -18,7 +18,7 @@ export VERCEL_API_TOKEN="your_vercel_token_here"
 
 Generate a token at [vercel.com/account/tokens](https://vercel.com/account/tokens). Prefer a **team token** for org-wide deployments.
 
-> **Note:** If calling `modules/stages/saas-workload`, the Vercel provider must be configured even when `enable_vercel = false`. For Supabase-only deployments without the Vercel provider dependency, call `modules/supabase/environment` directly.
+> **Note:** If calling `modules/saas/stages/saas-workload`, the Vercel provider must be configured even when `enable_vercel = false`. For Supabase-only deployments without the Vercel provider dependency, call `modules/supabase/environment` directly.
 
 ## See Also
 

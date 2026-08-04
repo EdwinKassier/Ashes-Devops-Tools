@@ -19,20 +19,22 @@ envs/
   aws-workload/         # AWS per-env workloads — TF_WORKSPACE=aws-workload-<env>
   saas/                 # Supabase and/or Vercel only — TF_WORKSPACE=saas-<name>
 
-modules/
-  stages/         # Orchestration wrappers: bootstrap, organization, projects,
-                  #   network-hub, workload, saas-workload
-  network/        # ~19 primitives: vpc, subnet, dns, vpn, vpc-sc, cloud-armor, …
-  governance/     # billing, kms, org-policy, scc, tags, cloud-audit-logs
-  iam/            # organization, role, service-account, workload-identity, identity-group*
-  supabase/       # project, settings, environment, vault-secrets
-  vercel/         # project
-  host/           # compatibility wrapper for envs/gcp-workload
-  monitoring/     # alert-policy, compute-dashboard
-  firebase/       # project
-  cloud-storage/
-  artifact-registry/
-  aws/            # AWS modules (organization, security, network, identity, backup, workload, …)
+modules/               # grouped by owning cloud (domain)
+  gcp/                  # GCP-native modules
+    stages/             # Orchestration wrappers: bootstrap, organization, projects, network-hub, workload
+    network/            # ~19 primitives: vpc, subnet, dns, vpn, vpc-sc, cloud-armor, …
+    governance/         # billing, kms, org-policy, scc, tags, cloud-audit-logs
+    iam/                # organization, role, service-account, workload-identity, identity-group*
+    host/               # compatibility wrapper for envs/gcp-workload
+    monitoring/         # alert-policy, compute-dashboard
+    firebase/           # project
+    cloud-storage/
+    artifact-registry/
+  aws/                  # AWS modules (organization, security, network, kms-key, vpc, …)
+    stages/             # organization, security, network-hub, shared-services, backup, workload
+  supabase/             # project, settings, environment, vault-secrets
+  vercel/               # project
+  saas/                 # stages/saas-workload — composes supabase + vercel
 ```
 
 ---
@@ -196,18 +198,18 @@ Gotchas the AWS landing-zone build surfaced — each one bit us in CI:
 |------|--------------|
 | Org-level GCP resources | `envs/gcp-organization/` |
 | Per-env app infra | `envs/gcp-workload/` (set `TF_WORKSPACE=gcp-workload-<env>`) |
-| Full end-to-end workload | `modules/stages/workload/` or `modules/stages/saas-workload/` |
-| VPC / networking | `modules/network/` |
-| IAM / service accounts | `modules/iam/` |
-| KMS / billing / org policy | `modules/governance/` |
+| Full end-to-end workload | `modules/gcp/stages/workload/` or `modules/saas/stages/saas-workload/` |
+| VPC / networking | `modules/gcp/network/` |
+| IAM / service accounts | `modules/gcp/iam/` |
+| KMS / billing / org policy | `modules/gcp/governance/` |
 | Supabase integration | `modules/supabase/` |
 | Vercel integration | `modules/vercel/` |
-| Alerts / dashboards | `modules/monitoring/` |
-| AWS org / guardrails | `envs/aws-organization/` + `modules/stages/aws-organization/` |
-| AWS security baseline | `envs/aws-security/` + `modules/stages/aws-security/` |
-| AWS network hub | `envs/aws-network/` + `modules/stages/aws-network-hub/` |
+| Alerts / dashboards | `modules/gcp/monitoring/` |
+| AWS org / guardrails | `envs/aws-organization/` + `modules/aws/stages/organization/` |
+| AWS security baseline | `envs/aws-security/` + `modules/aws/stages/security/` |
+| AWS network hub | `envs/aws-network/` + `modules/aws/stages/network-hub/` |
 | AWS IAM Identity Center | `envs/aws-identity/` |
-| AWS backup | `envs/aws-backup/` + `modules/stages/aws-backup/` |
+| AWS backup | `envs/aws-backup/` + `modules/aws/stages/backup/` |
 | AWS workloads | `envs/aws-workload/` (set `TF_WORKSPACE=aws-workload-<env>`) |
 | AWS modules | `modules/aws/` |
 | SaaS-only (Supabase/Vercel) | `envs/saas/` |

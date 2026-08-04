@@ -72,7 +72,7 @@ locals {
 
 # 1. Bootstrap: Automation Foundation
 module "bootstrap" {
-  source = "../../modules/stages/bootstrap"
+  source = "../../modules/gcp/stages/bootstrap"
 
   project_prefix   = var.project_prefix
   org_id           = data.google_organization.org.org_id
@@ -87,7 +87,7 @@ module "bootstrap" {
 
 # 2. Organization: Hierarchy & Governance
 module "organization" {
-  source = "../../modules/stages/organization"
+  source = "../../modules/gcp/stages/organization"
 
   domain               = var.domain
   org_id               = data.google_organization.org.org_id
@@ -117,7 +117,7 @@ module "organization" {
 
 # 3. Projects: Workload & Spoke Projects
 module "projects" {
-  source = "../../modules/stages/projects"
+  source = "../../modules/gcp/stages/projects"
 
   project_prefix          = var.project_prefix
   organization_name       = var.organization_name
@@ -135,7 +135,7 @@ module "projects" {
 
 # 4. Network Hub: Connectivity Layer
 module "network_hub" {
-  source = "../../modules/stages/network-hub"
+  source = "../../modules/gcp/stages/network-hub"
 
   project_prefix = var.project_prefix
   default_region = var.default_region

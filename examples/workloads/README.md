@@ -2,7 +2,7 @@
 
 A minimal but production-shaped example of how to attach a service project to the
 Shared VPC created by `envs/gcp-workload` and apply standardised IAM through the
-`modules/stages/workload` module.
+`modules/gcp/stages/workload` module.
 
 ## What this creates
 

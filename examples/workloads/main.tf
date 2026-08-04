@@ -11,7 +11,7 @@ locals {
 }
 
 module "workload_api_service" {
-  source = "../../modules/stages/workload"
+  source = "../../modules/gcp/stages/workload"
 
   project_name = "${var.project_prefix}-${var.environment}-api"
 

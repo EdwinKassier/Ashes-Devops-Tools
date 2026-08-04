@@ -1,0 +1,138 @@
+# Cloud Armor Module
+
+This module manages Google Cloud Armor security policies, providing DDoS protection and WAF (Web Application Firewall) capabilities.
+
+## Features
+
+- **OWASP Top 10**: Pre-configured ruleset to block common web attacks (SQLi, XSS, RCE, etc.).
+- **DDoS Protection**: Managed protection against volumetric attacks.
+- **Custom Rules**: Support for custom allow/deny logic based on IP, geolocation, or headers.
+- **Sensitivity Tuning**: Adjustable sensitivity levels for WAF rules.
+
+## Usage
+
+```hcl
+module "cloud_armor" {
+  source = "./modules/gcp/network/cloud_armor"
+
+  project_id  = "my-project-id"
+  policy_name = "edge-security-policy"
+
+  # Enable OWASP Protection (disabled by default; enable for public-facing apps)
+  enable_owasp_rules = false
+  owasp_sensitivity  = 2  # 1-4 (lower is more sensitive)
+
+  # Custom rules: use versioned_expr for IP matching, expr for CEL expressions
+  custom_rules = {
+    "allow-office-vpn" = {
+      action      = "allow"
+      priority    = 1000
+      description = "Allow Office VPN IP range"
+      match_conditions = {
+        versioned_expr = "SRC_IPS_V1"
+        config = {
+          src_ip_ranges = ["203.0.113.0/24"]
+        }
+      }
+    }
+    "block-bad-user-agent" = {
+      action      = "deny(403)"
+      priority    = 2000
+      description = "Block requests with a known-malicious User-Agent header"
+      match_conditions = {
+        expr = "request.headers['user-agent'].contains('BadBot')"
+      }
+    }
+  }
+}
+```
+
+## Inputs
+
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| `project_id` | Project ID | `string` | n/a | yes |
+| `policy_name` | Policy name | `string` | n/a | yes |
+| `enable_owasp_rules` | Enable OWASP CRS | `bool` | `false` | no |
+| `owasp_sensitivity` | WAF sensitivity (1-4, lower is more sensitive) | `number` | `2` | no |
+| `custom_rules` | Map of custom rules | `map(object)` | `{}` | no |
+| `default_rule_action`| Default action (`allow`/`deny`) | `string` | `"allow"` | no |
+
+## Outputs
+
+| Name | Description |
+|------|-------------|
+| `policy_self_link` | URI of the security policy |
+| `policy_name` | Name of the policy |
+
+<!-- BEGIN_TF_DOCS -->
+
+
+## Usage
+
+Basic usage of this module is as follows:
+
+```hcl
+module "example" {
+	source = "<module-path>"
+
+	# Required variables
+	policy_name = 
+	project_id = 
+	
+}
+```
+
+## Requirements
+
+| Name | Version |
+|------|---------|
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.0, < 8.0 |
+
+## Providers
+
+| Name | Version |
+|------|---------|
+| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
+
+
+
+## Resources
+
+The following resources are created:
+
+
+- resource.google_compute_security_policy.policy (modules/gcp/network/cloud-armor/main.tf#L1)
+- resource.google_compute_security_policy_rule.log4j_protection (modules/gcp/network/cloud-armor/main.tf#L145)
+- resource.google_compute_security_policy_rule.owasp_rules (modules/gcp/network/cloud-armor/main.tf#L126)
+- resource.google_compute_security_policy_rule.preconfigured_waf_rules (modules/gcp/network/cloud-armor/main.tf#L162)
+
+
+## Inputs
+
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| <a name="input_policy_name"></a> [policy\_name](#input\_policy\_name) | Name of the Cloud Armor security policy (lowercase letters, digits, hyphens; starts with letter) | `string` | n/a | yes |
+| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID where the security policy will be created | `string` | n/a | yes |
+| <a name="input_custom_rules"></a> [custom\_rules](#input\_custom\_rules) | Map of custom Cloud Armor rules to add to the security policy.<br/><br/>Each rule supports two mutually-exclusive match types:<br/><br/>**IP/versioned\_expr match** (use for IP allow/denylists):<br/>  match\_conditions = {<br/>    versioned\_expr = "SRC\_IPS\_V1"<br/>    config         = { src\_ip\_ranges = ["10.0.0.0/8"] }<br/>  }<br/><br/>**CEL expression match** (use for header/path/geographic rules):<br/>  match\_conditions = {<br/>    expr = "request.headers['user-agent'].contains('bot')"<br/>  }<br/><br/>Exactly one of `versioned_expr` or `expr` must be set per rule. Providing<br/>both or neither will fail validation. | <pre>map(object({<br/>    action      = string<br/>    priority    = number<br/>    description = optional(string)<br/>    match_conditions = object({<br/>      # IP-based match (versioned_expr mode). Set versioned_expr AND config,<br/>      # or set expr — never both.<br/>      versioned_expr = optional(string)<br/>      config = optional(object({<br/>        src_ip_ranges = list(string)<br/>      }))<br/>      # CEL expression match. Mutually exclusive with versioned_expr + config.<br/>      expr = optional(string)<br/>    })<br/>    rate_limit_options = optional(object({<br/>      threshold_count     = number<br/>      interval_sec        = number<br/>      conform_action      = optional(string)<br/>      exceed_action       = optional(string)<br/>      enforce_on_key      = optional(string)<br/>      enforce_on_key_type = optional(string)<br/>    }))<br/>  }))</pre> | `{}` | no |
+| <a name="input_default_rule_action"></a> [default\_rule\_action](#input\_default\_rule\_action) | Action applied to requests that do not match any higher-priority rule.<br/>Accepted values: "allow" (default) \| "deny".<br/><br/>⚠️  SECURITY NOTE — Default is "allow" (allowlist mode):<br/>Cloud Armor policies are typically deployed in front of public-facing load<br/>balancers that must serve legitimate end-user traffic. In this mode, only<br/>explicitly matched patterns (OWASP CRS, Log4Shell, custom IP rules) are<br/>blocked; all other traffic is passed through.<br/><br/>For deny-by-default (denylist / zero-trust perimeter mode) set this to "deny"<br/>and enumerate allowed IP ranges via var.custom\_rules. Use this posture for<br/>internal-only or admin endpoints where the client set is fully known.<br/><br/>Change decisions:<br/>- "allow" → "deny" will immediately block all unmatched traffic. Test with<br/>  var.enable\_adaptive\_protection = true first to understand the traffic profile.<br/>- "deny" → "allow" relaxes the perimeter; log and review before applying to<br/>  production environments. | `string` | `"allow"` | no |
+| <a name="input_description"></a> [description](#input\_description) | Description of the Cloud Armor security policy | `string` | `"Cloud Armor security policy managed by Terraform"` | no |
+| <a name="input_enable_adaptive_protection"></a> [enable\_adaptive\_protection](#input\_enable\_adaptive\_protection) | Enable adaptive protection features | `bool` | `false` | no |
+| <a name="input_enable_log4j_protection"></a> [enable\_log4j\_protection](#input\_enable\_log4j\_protection) | Enable the Cloud Armor canary rule that blocks Log4Shell-style payloads | `bool` | `true` | no |
+| <a name="input_enable_owasp_rules"></a> [enable\_owasp\_rules](#input\_enable\_owasp\_rules) | Enable preconfigured OWASP ModSecurity Core Rule Set | `bool` | `false` | no |
+| <a name="input_owasp_sensitivity"></a> [owasp\_sensitivity](#input\_owasp\_sensitivity) | OWASP rule sensitivity level (1-4, lower is more sensitive) | `number` | `2` | no |
+| <a name="input_preconfigured_waf_rules"></a> [preconfigured\_waf\_rules](#input\_preconfigured\_waf\_rules) | Additional preconfigured WAF rules to enable | <pre>list(object({<br/>    rule_id     = string<br/>    action      = string<br/>    priority    = number<br/>    description = optional(string)<br/>    sensitivity = optional(number, 2)<br/>  }))</pre> | `[]` | no |
+
+## Outputs
+
+| Name | Description |
+|------|-------------|
+| <a name="output_fingerprint"></a> [fingerprint](#output\_fingerprint) | Fingerprint of the security policy |
+| <a name="output_id"></a> [id](#output\_id) | The ID of the created security policy |
+| <a name="output_name"></a> [name](#output\_name) | The name of the created security policy |
+| <a name="output_policy_id"></a> [policy\_id](#output\_policy\_id) | The ID of the created security policy (deprecated: use 'id' instead) |
+| <a name="output_policy_name"></a> [policy\_name](#output\_policy\_name) | The name of the created security policy (deprecated: use 'name' instead) |
+| <a name="output_policy_self_link"></a> [policy\_self\_link](#output\_policy\_self\_link) | The self\_link of the created security policy (deprecated: use 'self\_link' instead) |
+| <a name="output_self_link"></a> [self\_link](#output\_self\_link) | The self\_link of the created security policy |
+<!-- END_TF_DOCS -->

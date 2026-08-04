@@ -22,7 +22,7 @@ data "terraform_remote_state" "aws_network" {
 }
 
 module "aws_workload" {
-  source = "../../modules/stages/aws-workload"
+  source = "../../modules/aws/stages/workload"
 
   providers = {
     aws           = aws

@@ -20,7 +20,7 @@ locals {
 }
 
 module "aws_shared_services" {
-  source = "../../modules/stages/aws-shared-services"
+  source = "../../modules/aws/stages/shared-services"
 
   org_id  = data.terraform_remote_state.aws_organization.outputs.organization_id
   org_arn = local.org_arn

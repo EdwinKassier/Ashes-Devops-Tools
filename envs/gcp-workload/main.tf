@@ -79,7 +79,7 @@ data "google_project" "host_project" {
 }
 
 module "host" {
-  source = "../../modules/host"
+  source = "../../modules/gcp/host"
 
   project_id     = local.env_config.host_project_id
   project_prefix = var.project_prefix
@@ -147,7 +147,7 @@ module "host" {
 
 module "budget" {
   count  = var.monthly_budget_limit > 0 ? 1 : 0
-  source = "../../modules/governance/billing"
+  source = "../../modules/gcp/governance/billing"
 
   billing_account      = data.terraform_remote_state.organization.outputs.billing_account
   project_id           = local.env_config.host_project_id

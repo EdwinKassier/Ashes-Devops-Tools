@@ -4,10 +4,10 @@
 # declares no aws/google provider, so applying saas-<name> pulls in no cloud
 # credentials. Within the root, enable_supabase / enable_vercel gate the two
 # SaaS features independently — either can be off and the root still validates
-# because modules/stages/saas-workload defaults the other's inputs.
+# because modules/saas/stages/saas-workload defaults the other's inputs.
 
 module "saas_workload" {
-  source = "../../modules/stages/saas-workload"
+  source = "../../modules/saas/stages/saas-workload"
 
   # ── Feature flags ─────────────────────────────────────────────────────────
   enable_supabase      = var.enable_supabase

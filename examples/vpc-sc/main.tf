@@ -8,7 +8,7 @@
 #   - The project number (not ID) of every project that should be inside the perimeter.
 
 module "vpc_sc" {
-  source = "../../modules/network/vpc-sc"
+  source = "../../modules/gcp/network/vpc-sc"
 
   organization_id = "organizations/123456789"
 

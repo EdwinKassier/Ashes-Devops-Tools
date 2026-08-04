@@ -12,7 +12,7 @@ terraform {
       source  = "vercel/vercel"
       version = "~> 4.0"
     }
-    # Required transitively by modules/stages/saas-workload (vault-secrets uses
+    # Required transitively by modules/saas/stages/saas-workload (vault-secrets uses
     # null_resource). Declared even when enable_vault_secrets = false because a
     # provider requirement cannot be made conditional.
     null = {
