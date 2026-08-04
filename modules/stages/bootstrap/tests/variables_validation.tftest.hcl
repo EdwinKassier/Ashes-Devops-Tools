@@ -60,7 +60,7 @@ run "accepts_tfc_oidc_enabled_with_workspaces" {
 
   variables {
     enable_tfc_oidc = true
-    tfc_workspaces  = ["organization", "apps-dev"]
+    tfc_workspaces  = ["gcp-organization", "gcp-workload-dev"]
   }
 }
 
@@ -106,6 +106,6 @@ run "rejects_tfc_oidc_enabled_without_tfc_organization" {
   variables {
     enable_tfc_oidc  = true
     tfc_organization = null
-    tfc_workspaces   = ["organization"]
+    tfc_workspaces   = ["gcp-organization"]
   }
 }

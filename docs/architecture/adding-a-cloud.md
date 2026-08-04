@@ -15,8 +15,8 @@ One root per cloud + layer, named `envs/<cloud>-<layer>`:
 
 ```text
 envs/
-├── organization/         # existing GCP control plane
-├── apps/                 # existing GCP per-env apps
+├── gcp-organization/     # existing GCP control plane
+├── gcp-workload/         # existing GCP per-env apps
 ├── aws-organization/     # AWS foundational accounts + org
 ├── aws-security/         # AWS security tooling / log archive
 └── aws-workload/         # AWS per-env workloads (fan out by workspace)

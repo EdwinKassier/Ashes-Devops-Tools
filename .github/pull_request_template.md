@@ -23,13 +23,13 @@
 
 <!-- Mark the roots or surfaces affected by this change -->
 
-- [ ] `envs/organization`
-- [ ] `envs/apps`
+- [ ] `envs/gcp-organization`
+- [ ] `envs/gcp-workload`
 - [ ] `examples/workloads`
 - [ ] CI/CD or repo tooling
 
 **Apps Workspace (if applicable):**
-<!-- Example: apps-dev, apps-prod, apps-preprod -->
+<!-- Example: gcp-workload-dev, gcp-workload-prod, gcp-workload-preprod -->
 
 ## Changes Made
 

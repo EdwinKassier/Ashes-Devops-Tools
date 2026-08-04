@@ -1,6 +1,6 @@
 # Organization Root
 
-`envs/organization` is the control-plane root for the platform. It creates the admin project, organization/folder policy, shared hub projects, per-environment host projects, and the downstream contract consumed by `envs/apps`.
+`envs/gcp-organization` is the control-plane root for the platform. It creates the admin project, organization/folder policy, shared hub projects, per-environment host projects, and the downstream contract consumed by `envs/gcp-workload`.
 
 ## What It Creates
 

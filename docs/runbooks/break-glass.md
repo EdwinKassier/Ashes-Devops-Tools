@@ -80,8 +80,8 @@ export GOOGLE_APPLICATION_CREDENTIALS=/tmp/break-glass-key.json
 With the break-glass credentials active, run the required Terraform operations:
 
 ```bash
-terraform -chdir=envs/organization plan
-terraform -chdir=envs/organization apply -target=module.bootstrap   # if WIF is broken
+terraform -chdir=envs/gcp-organization plan
+terraform -chdir=envs/gcp-organization apply -target=module.bootstrap   # if WIF is broken
 ```
 
 Or use `gcloud` commands directly if Terraform itself is the problem:

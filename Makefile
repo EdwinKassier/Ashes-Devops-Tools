@@ -1,4 +1,4 @@
-.PHONY: help install fmt fmt-check validate validate-all lint security security-report docs docs-check count test ci clean clean-locks init-organization init-apps plan-organization plan-apps apply-organization apply-apps validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-organization state-list-apps state-rm-organization state-rm-apps unlock-organization unlock-apps
+.PHONY: help install fmt fmt-check validate validate-all lint security security-report docs docs-check count test ci clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
 
 TERRAFORM := terraform
 TFLINT := tflint
@@ -9,7 +9,7 @@ PRE_COMMIT := pre-commit
 ROOT_DISCOVERY := ./scripts/terraform-roots.sh
 
 APP_ENV ?= dev
-APP_WORKSPACE ?= apps-$(APP_ENV)
+APP_WORKSPACE ?= gcp-workload-$(APP_ENV)
 APP_VARS ?= examples/dev.tfvars
 
 BLUE := \033[0;34m
@@ -128,29 +128,29 @@ ci: ## Run the local CI pipeline (fmt → docs → validate → lint → test �
 	@$(MAKE) test
 	@$(MAKE) security
 
-init-organization: ## Initialize the organization root
-	@$(TERRAFORM) -chdir=envs/organization init
+init-gcp-organization: ## Initialize the gcp-organization root
+	@$(TERRAFORM) -chdir=envs/gcp-organization init
 
-init-apps: ## Initialize the apps root
-	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/apps init
+init-gcp-workload: ## Initialize the gcp-workload root
+	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/gcp-workload init
 
-plan-organization: ## Plan the organization root
-	@$(TERRAFORM) -chdir=envs/organization plan
+plan-gcp-organization: ## Plan the gcp-organization root
+	@$(TERRAFORM) -chdir=envs/gcp-organization plan
 
-plan-apps: ## Plan the apps root for APP_ENV using APP_VARS
-	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/apps plan -var-file=$(abspath $(APP_VARS))
+plan-gcp-workload: ## Plan the gcp-workload root for APP_ENV using APP_VARS
+	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/gcp-workload plan -var-file=$(abspath $(APP_VARS))
 
-apply-organization: ## Apply the organization root (interactive confirmation required)
-	@echo "$(YELLOW)WARNING: You are about to apply changes to the ORGANIZATION root (folders, projects, org policies, hub network).$(NC)"
-	@echo "$(YELLOW)This affects all environments. Review the plan first with: make plan-organization$(NC)"
+apply-gcp-organization: ## Apply the gcp-organization root (interactive confirmation required)
+	@echo "$(YELLOW)WARNING: You are about to apply changes to the GCP-ORGANIZATION root (folders, projects, org policies, hub network).$(NC)"
+	@echo "$(YELLOW)This affects all environments. Review the plan first with: make plan-gcp-organization$(NC)"
 	@printf "Type 'yes' to continue: " && read CONFIRM && [ "$$CONFIRM" = "yes" ] || (echo "Cancelled." && exit 1)
-	@$(TERRAFORM) -chdir=envs/organization apply
+	@$(TERRAFORM) -chdir=envs/gcp-organization apply
 
-apply-apps: ## Apply the apps root for APP_ENV using APP_VARS (interactive confirmation required)
-	@echo "$(YELLOW)WARNING: You are about to apply changes to the APPS root for environment: $(APP_ENV)$(NC)"
-	@echo "$(YELLOW)Review the plan first with: make plan-apps APP_ENV=$(APP_ENV) APP_VARS=$(APP_VARS)$(NC)"
+apply-gcp-workload: ## Apply the gcp-workload root for APP_ENV using APP_VARS (interactive confirmation required)
+	@echo "$(YELLOW)WARNING: You are about to apply changes to the GCP-WORKLOAD root for environment: $(APP_ENV)$(NC)"
+	@echo "$(YELLOW)Review the plan first with: make plan-gcp-workload APP_ENV=$(APP_ENV) APP_VARS=$(APP_VARS)$(NC)"
 	@printf "Type 'yes' to continue: " && read CONFIRM && [ "$$CONFIRM" = "yes" ] || (echo "Cancelled." && exit 1)
-	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/apps apply -var-file=$(abspath $(APP_VARS))
+	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/gcp-workload apply -var-file=$(abspath $(APP_VARS))
 
 validate-requirements: ## Print local tool versions
 	@$(TERRAFORM) version
@@ -159,32 +159,32 @@ validate-requirements: ## Print local tool versions
 	@$(CHECKOV) --version
 	@$(TERRAFORM_DOCS) --version
 
-state-list-organization: ## List resources in the organization workspace state
-	@$(TERRAFORM) -chdir=envs/organization state list
+state-list-gcp-organization: ## List resources in the gcp-organization workspace state
+	@$(TERRAFORM) -chdir=envs/gcp-organization state list
 
-state-list-apps: ## List resources in the apps workspace state (APP_ENV=dev)
-	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/apps state list
+state-list-gcp-workload: ## List resources in the gcp-workload workspace state (APP_ENV=dev)
+	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/gcp-workload state list
 
-state-rm-organization: ## Remove a resource from the organization state (DANGEROUS — orphans the GCP resource): make state-rm-organization ADDR='module.foo.resource.bar'
-	@[ -n "$(ADDR)" ] || (echo "Error: ADDR is required. Usage: make state-rm-organization ADDR='module.foo.resource.bar'" && exit 1)
+state-rm-gcp-organization: ## Remove a resource from the gcp-organization state (DANGEROUS — orphans the GCP resource): make state-rm-gcp-organization ADDR='module.foo.resource.bar'
+	@[ -n "$(ADDR)" ] || (echo "Error: ADDR is required. Usage: make state-rm-gcp-organization ADDR='module.foo.resource.bar'" && exit 1)
 	@echo "$(YELLOW)WARNING: Removing '$(ADDR)' from state will ORPHAN this resource in GCP.$(NC)"
 	@echo "$(YELLOW)The resource will continue to exist but Terraform will no longer manage it.$(NC)"
 	@printf "Type 'yes' to confirm: " && read CONFIRM && [ "$$CONFIRM" = "yes" ] || (echo "Cancelled." && exit 1)
-	@$(TERRAFORM) -chdir=envs/organization state rm '$(ADDR)'
+	@$(TERRAFORM) -chdir=envs/gcp-organization state rm '$(ADDR)'
 
-state-rm-apps: ## Remove a resource from the apps state (DANGEROUS — orphans the GCP resource): make state-rm-apps ADDR='...' APP_ENV=dev
-	@[ -n "$(ADDR)" ] || (echo "Error: ADDR is required. Usage: make state-rm-apps ADDR='module.host.resource.bar'" && exit 1)
-	@echo "$(YELLOW)WARNING: Removing '$(ADDR)' from apps state (workspace: $(APP_WORKSPACE)) will ORPHAN this resource in GCP.$(NC)"
+state-rm-gcp-workload: ## Remove a resource from the apps state (DANGEROUS — orphans the GCP resource): make state-rm-gcp-workload ADDR='...' APP_ENV=dev
+	@[ -n "$(ADDR)" ] || (echo "Error: ADDR is required. Usage: make state-rm-gcp-workload ADDR='module.host.resource.bar'" && exit 1)
+	@echo "$(YELLOW)WARNING: Removing '$(ADDR)' from gcp-workload state (workspace: $(APP_WORKSPACE)) will ORPHAN this resource in GCP.$(NC)"
 	@printf "Type 'yes' to confirm: " && read CONFIRM && [ "$$CONFIRM" = "yes" ] || (echo "Cancelled." && exit 1)
-	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/apps state rm '$(ADDR)'
+	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/gcp-workload state rm '$(ADDR)'
 
-unlock-organization: ## Force-unlock a stuck Terraform lock on the organization workspace: make unlock-organization LOCK_ID=<id>
-	@[ -n "$(LOCK_ID)" ] || (echo "Error: LOCK_ID is required. Usage: make unlock-organization LOCK_ID=<lock-id>" && exit 1)
-	@$(TERRAFORM) -chdir=envs/organization force-unlock -force '$(LOCK_ID)'
+unlock-gcp-organization: ## Force-unlock a stuck Terraform lock on the gcp-organization workspace: make unlock-gcp-organization LOCK_ID=<id>
+	@[ -n "$(LOCK_ID)" ] || (echo "Error: LOCK_ID is required. Usage: make unlock-gcp-organization LOCK_ID=<lock-id>" && exit 1)
+	@$(TERRAFORM) -chdir=envs/gcp-organization force-unlock -force '$(LOCK_ID)'
 
-unlock-apps: ## Force-unlock a stuck Terraform lock on an apps workspace: make unlock-apps LOCK_ID=<id> APP_ENV=dev
-	@[ -n "$(LOCK_ID)" ] || (echo "Error: LOCK_ID is required. Usage: make unlock-apps LOCK_ID=<lock-id>" && exit 1)
-	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/apps force-unlock -force '$(LOCK_ID)'
+unlock-gcp-workload: ## Force-unlock a stuck Terraform lock on a gcp-workload workspace: make unlock-gcp-workload LOCK_ID=<id> APP_ENV=dev
+	@[ -n "$(LOCK_ID)" ] || (echo "Error: LOCK_ID is required. Usage: make unlock-gcp-workload LOCK_ID=<lock-id>" && exit 1)
+	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/gcp-workload force-unlock -force '$(LOCK_ID)'
 
 clean: ## Remove local Terraform caches (.terraform dirs, plan files, reports). Does NOT touch committed .terraform.lock.hcl files.
 	@find . -type d -name ".terraform" -exec rm -rf {} + 2>/dev/null || true

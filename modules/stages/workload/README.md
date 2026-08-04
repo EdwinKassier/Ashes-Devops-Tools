@@ -18,7 +18,7 @@ Implements the **Project Factory** pattern for self-service provisioning of appl
 |--------|--------------------------|-------------------|
 | **Owner** | Application Teams | Platform Team |
 | **Lifecycle** | Created on-demand | Created at org setup |
-| **Location** | `examples/workloads/` | `envs/organization/` |
+| **Location** | `examples/workloads/` | `envs/gcp-organization/` |
 | **Purpose** | Application deployments | Infrastructure backbone |
 | **Examples** | `api-service`, `payments-service` | `apps-host`, `shared-hub` |
 

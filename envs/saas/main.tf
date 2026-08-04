@@ -67,7 +67,7 @@ module "saas_workload" {
 #   config = {
 #     organization = var.tfc_organization
 #     workspaces = {
-#       # e.g. "aws-workload-production" or "apps-production"
+#       # e.g. "aws-workload-production" or "gcp-workload-production"
 #       name = var.upstream_workspace_name
 #     }
 #   }

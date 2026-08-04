@@ -34,7 +34,7 @@ variable "terraform_admin_email" {
   default     = null
 
   validation {
-    # Matches the strict SA-email form required by envs/organization/variables.tf's
+    # Matches the strict SA-email form required by envs/gcp-organization/variables.tf's
     # terraform_admin_email: both roots impersonate this SA identically via the google
     # provider's `impersonate_service_account`, which only accepts a real GCP service
     # account email — a generic `user@domain.tld` address (previously accepted here) can
@@ -53,7 +53,7 @@ variable "tfc_organization" {
 variable "organization_workspace_name" {
   description = "Workspace name that stores the organization root state"
   type        = string
-  default     = "organization"
+  default     = "gcp-organization"
 }
 
 variable "monthly_budget_limit" {

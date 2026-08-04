@@ -1,7 +1,7 @@
 # Workload Example
 
 A minimal but production-shaped example of how to attach a service project to the
-Shared VPC created by `envs/apps` and apply standardised IAM through the
+Shared VPC created by `envs/gcp-workload` and apply standardised IAM through the
 `modules/stages/workload` module.
 
 ## What this creates
@@ -15,7 +15,7 @@ Shared VPC created by `envs/apps` and apply standardised IAM through the
 
 ## Prerequisites
 
-- A running `envs/apps` deployment in Terraform Cloud — the workload reads
+- A running `envs/gcp-workload` deployment in Terraform Cloud — the workload reads
   `host_project_id`, `folder_id`, and subnet self-links from the org remote state.
 - A billing account ID.
 - An existing Google Group to act as the project admin group.

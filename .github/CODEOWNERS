@@ -15,8 +15,8 @@
 /.checkov.yaml @edwinkassier
 
 # Deployed root configurations — require explicit infrastructure approval
-/envs/organization/ @edwinkassier
-/envs/apps/ @edwinkassier
+/envs/gcp-organization/ @edwinkassier
+/envs/gcp-workload/ @edwinkassier
 
 # Examples — require module owner review
 /examples/ @edwinkassier

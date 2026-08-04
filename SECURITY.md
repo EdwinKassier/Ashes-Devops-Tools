@@ -75,8 +75,8 @@ This landing zone implements defense-in-depth across every layer:
 
 | Component | Supported Until |
 |-----------|----------------|
-| `organization/v1.x` | Active |
-| `apps/*/v1.x` | Active |
+| `gcp-organization/v1.x` | Active |
+| `gcp-workload/*/v1.x` | Active |
 
 ---
 

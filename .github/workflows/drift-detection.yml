@@ -5,7 +5,7 @@ name: Drift Detection
 #                              with read access to the target workspaces).
 #   - vars.TFC_ORGANIZATION    Terraform Cloud organization name.
 #   - vars.TFC_DRIFT_WORKSPACES  (optional) JSON array of workspace names to check.
-#                              Defaults to '["organization","apps-dev"]' when unset.
+#                              Defaults to '["gcp-organization","gcp-workload-dev"]' when unset.
 # When TFC_TOKEN/TFC_ORGANIZATION are not configured, the scheduled run SKIPS
 # cleanly (via the check-credentials gate below) instead of failing red — a
 # missing-secret condition is a configuration gap, not a CI failure.
@@ -21,7 +21,7 @@ on:
         description: >
           Comma-separated list of TFC workspace names to check for drift.
           Defaults to the standard set when left blank.
-          Example: organization,apps-dev,apps-prod
+          Example: gcp-organization,gcp-workload-dev,gcp-workload-prod
         required: false
         default: ""
 
@@ -75,22 +75,22 @@ jobs:
       matrix:
         # Default workspace set: the org control plane plus common app environments.
         # Override at runtime via workflow_dispatch → workspaces input.
-        # NOTE: The "apps" workspace does NOT exist in TFC — actual workspace names follow
-        # the "apps-<env>" convention (apps-dev, apps-staging, apps-prod). Adjust this list
+        # NOTE: The "gcp-workload" workspace does NOT exist in TFC — actual workspace names follow
+        # the "gcp-workload-<env>" convention (gcp-workload-dev, gcp-workload-staging, gcp-workload-prod). Adjust this list
         # to match your TFC workspace names. Using a repository variable (TFC_WORKSPACES)
         # is recommended for environments with many app workspaces.
         # Default workspace set — adjust to match your TFC workspace names.
-        # The "apps" workspace does NOT exist; real app workspace names are "apps-<env>"
-        # (e.g., apps-dev, apps-staging, apps-prod). Override at runtime using the
+        # The "gcp-workload" workspace does NOT exist; real app workspace names are "gcp-workload-<env>"
+        # (e.g., gcp-workload-dev, gcp-workload-staging, gcp-workload-prod). Override at runtime using the
         # workflow_dispatch input above, or set the TFC_DRIFT_WORKSPACES repository
-        # variable to a JSON array: '["organization","apps-dev","apps-prod"]'
+        # variable to a JSON array: '["gcp-organization","gcp-workload-dev","gcp-workload-prod"]'
         #
         # RECOMMENDED TFC_DRIFT_WORKSPACES value for the full GCP + AWS landing zone.
         # Set this repository variable to a JSON array covering every foundational and
         # workload workspace you want monitored (substitute real <env>/<name> values):
         #   [
-        #     "organization",           # GCP control plane
-        #     "apps-dev",               # GCP app envs (add apps-staging, apps-prod, ...)
+        #     "gcp-organization",           # GCP control plane
+        #     "gcp-workload-dev",               # GCP app envs (add gcp-workload-staging, gcp-workload-prod, ...)
         #     "aws-organization",       # AWS Organizations / SCPs / cost governance
         #     "aws-security",           # GuardDuty, Security Hub, Config, CloudTrail
         #     "aws-network",            # Transit Gateway, IPAM, Network Firewall
@@ -102,7 +102,7 @@ jobs:
         #   ]
         # The inline default below stays GCP-only so an unset variable never fails
         # against AWS/saas workspaces that may not exist yet — set the variable to opt in.
-        workspace: ${{ fromJSON(vars.TFC_DRIFT_WORKSPACES || '["organization","apps-dev"]') }}
+        workspace: ${{ fromJSON(vars.TFC_DRIFT_WORKSPACES || '["gcp-organization","gcp-workload-dev"]') }}
     steps:
       - name: Assert Terraform Cloud credentials are configured
         env:
@@ -278,7 +278,7 @@ jobs:
         env:
           CONFIGURED: ${{ needs.check-credentials.outputs.configured }}
           RESULT: ${{ needs.detect-drift.result }}
-          WORKSPACES: ${{ vars.TFC_DRIFT_WORKSPACES || '["organization","apps-dev"]' }}
+          WORKSPACES: ${{ vars.TFC_DRIFT_WORKSPACES || '["gcp-organization","gcp-workload-dev"]' }}
         run: |
           {
             echo "## Drift Detection Summary"

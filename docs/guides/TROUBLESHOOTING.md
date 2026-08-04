@@ -65,42 +65,42 @@ checkov -d envs --framework terraform
 
 ## The wrong application environment is selected
 
-`envs/apps` is keyed by Terraform Cloud workspace, not by directory name.
+`envs/gcp-workload` is keyed by Terraform Cloud workspace, not by directory name.
 
 Always verify the workspace before planning:
 
 ```bash
 echo "$TF_WORKSPACE"
-TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=../../examples/dev.tfvars
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp-workload plan -var-file=../../examples/dev.tfvars
 ```
 
-## `envs/apps` cannot find the organization remote state
+## `envs/gcp-workload` cannot find the organization remote state
 
-By default, `envs/apps` reads outputs from the Terraform Cloud workspace named `organization`.
+By default, `envs/gcp-workload` reads outputs from the Terraform Cloud workspace named `gcp-organization`.
 
 Verify:
 
 - `tfc_organization` is correct
-- `organization_workspace_name` is still `organization`, unless intentionally overridden
-- the `organization` workspace has already been applied
+- `organization_workspace_name` is still `gcp-organization`, unless intentionally overridden
+- the `gcp-organization` workspace has already been applied
 
 ## Release tags do not trigger
 
 The release-metadata workflow only listens for:
 
 ```text
-organization/vX.Y.Z
-apps/<env>/vX.Y.Z
+gcp-organization/vX.Y.Z
+gcp-workload/<env>/vX.Y.Z
 ```
 
 Examples:
 
 ```bash
-git tag -a organization/v1.0.0 -m "Organization v1.0.0"
-git push origin organization/v1.0.0
+git tag -a gcp-organization/v1.0.0 -m "Organization v1.0.0"
+git push origin gcp-organization/v1.0.0
 
-git tag -a apps/dev/v1.0.0 -m "Apps dev v1.0.0"
-git push origin apps/dev/v1.0.0
+git tag -a gcp-workload/dev/v1.0.0 -m "Apps dev v1.0.0"
+git push origin gcp-workload/dev/v1.0.0
 ```
 
 Those tags publish release metadata after a successful Terraform Cloud run. They do not perform a live apply.
@@ -116,7 +116,7 @@ make pre-commit-install
 
 ```bash
 export TF_LOG=DEBUG
-TF_WORKSPACE=apps-dev terraform -chdir=envs/apps plan -var-file=../../examples/dev.tfvars
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp-workload plan -var-file=../../examples/dev.tfvars
 ```
 
 ## WIF / ADC authentication failures in CI
@@ -138,7 +138,7 @@ Workload Identity Federation is configured in `modules/stages/bootstrap`. If a G
 
 3. Check the subject attribute in the workflow against the binding condition — it must match `attribute.repository/<org>/<repo>`. The attribute values come from GitHub's OIDC token claims.
 
-4. If using `google-github-actions/auth`, confirm `workload_identity_provider` is the full provider resource name (`projects/<number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>`), not the pool name. The `github_oidc_provider_name` output from `envs/organization` exposes this value.
+4. If using `google-github-actions/auth`, confirm `workload_identity_provider` is the full provider resource name (`projects/<number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>`), not the pool name. The `github_oidc_provider_name` output from `envs/gcp-organization` exposes this value.
 
 For local ADC issues (`gcloud auth application-default login` expired), refresh credentials:
 
@@ -269,7 +269,7 @@ terraform destroy # now succeeds
 
 ### `Error: Error creating Service Perimeter … "projects/my-project-id" is not a valid resource name`
 
-**Cause:** The `modules/network/vpc-sc` module's `protected_projects` variable (and the `resources`/`sources[].resource` fields inside `vpc_sc_ingress_policies`/`vpc_sc_egress_policies` at the `envs/apps` root) require **numeric project numbers**, not project ID strings. The Access Context Manager API only accepts the `projects/<number>` form, and the module prepends the `projects/` prefix automatically — do not include it yourself.
+**Cause:** The `modules/network/vpc-sc` module's `protected_projects` variable (and the `resources`/`sources[].resource` fields inside `vpc_sc_ingress_policies`/`vpc_sc_egress_policies` at the `envs/gcp-workload` root) require **numeric project numbers**, not project ID strings. The Access Context Manager API only accepts the `projects/<number>` form, and the module prepends the `projects/` prefix automatically — do not include it yourself.
 
 **Fix:** Replace project ID strings with numeric project numbers:
 
@@ -277,7 +277,7 @@ terraform destroy # now succeeds
 gcloud projects describe my-project-id --format='value(projectNumber)'
 ```
 
-Then set (e.g. in a custom `vpc_sc_ingress_policies` entry, `envs/apps` tfvars):
+Then set (e.g. in a custom `vpc_sc_ingress_policies` entry, `envs/gcp-workload` tfvars):
 
 ```hcl
 vpc_sc_ingress_policies = [
@@ -290,7 +290,7 @@ vpc_sc_ingress_policies = [
 ]
 ```
 
-`envs/apps` itself already resolves and protects its own host project number automatically (`data.google_project.host_project.number` in `envs/apps/main.tf`) — you only need to supply numbers manually when referencing **other** (spoke) projects in custom ingress/egress policies.
+`envs/gcp-workload` itself already resolves and protects its own host project number automatically (`data.google_project.host_project.number` in `envs/gcp-workload/main.tf`) — you only need to supply numbers manually when referencing **other** (spoke) projects in custom ingress/egress policies.
 
 ---
 

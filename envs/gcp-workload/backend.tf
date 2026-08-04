@@ -6,7 +6,7 @@ terraform {
     # and run: terraform init -backend-config=backend.hcl
 
     workspaces {
-      name = "organization"
+      prefix = "gcp-workload-"
     }
   }
 }

@@ -113,7 +113,7 @@ output "tag_values" {
   value       = module.organization.tag_value_ids
 }
 
-# Tag Keys — needed by envs/apps to bind tags to resources downstream
+# Tag Keys — needed by envs/gcp-workload to bind tags to resources downstream
 output "tag_keys" {
   description = "Map of tag key short names to their Resource Manager resource IDs"
   value       = module.organization.tag_keys

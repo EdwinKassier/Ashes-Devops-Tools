@@ -1,5 +1,5 @@
 # Example: provision a host project's core networking via the host
-# compatibility wrapper (as consumed by envs/apps).
+# compatibility wrapper (as consumed by envs/gcp-workload).
 #
 # This example creates a VPC, subnets, and supporting networking primitives
 # inside an existing GCP project. Replace all locals with real values or

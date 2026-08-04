@@ -1,5 +1,5 @@
 # Example: create environment project hierarchies under org folders.
-# In a full deployment this is invoked from envs/organization/main.tf.
+# In a full deployment this is invoked from envs/gcp-organization/main.tf.
 # The folders and suffix inputs come from the organization and bootstrap stages.
 
 locals {

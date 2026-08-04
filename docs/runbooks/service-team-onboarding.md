@@ -4,7 +4,7 @@
 
 **Time:** 20–30 minutes.  
 **Risk:** Low — adds new resources, does not modify existing spoke projects.  
-**Prerequisites:** `envs/organization` and at least one `envs/apps` environment have been applied. The team's admin group email and billing account are known.
+**Prerequisites:** `envs/gcp-organization` and at least one `envs/gcp-workload` environment have been applied. The team's admin group email and billing account are known.
 
 ---
 
@@ -40,13 +40,13 @@ Before starting, collect:
 
 ```bash
 # Get the host project ID and subnet names
-terraform -chdir=envs/apps output host_project_id
-terraform -chdir=envs/apps output subnets
+terraform -chdir=envs/gcp-workload output host_project_id
+terraform -chdir=envs/gcp-workload output subnets
 ```
 
 The `subnets` output is a map. Each key is a subnet identifier; each value contains `region` and `self_link`.
 
-### Step 3 — Add a workload module call in `envs/apps/main.tf`
+### Step 3 — Add a workload module call in `envs/gcp-workload/main.tf`
 
 ```hcl
 module "workload_payments" {
@@ -101,7 +101,7 @@ module "workload_payments" {
 ### Step 4 — Plan and review
 
 ```bash
-make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars 2>&1 | grep -A5 "workload_payments"
+make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars 2>&1 | grep -A5 "workload_payments"
 ```
 
 Confirm the plan shows only new resource creation — no modifications to existing workload modules.
@@ -109,7 +109,7 @@ Confirm the plan shows only new resource creation — no modifications to existi
 ### Step 5 — Apply
 
 ```bash
-terraform -chdir=envs/apps apply \
+terraform -chdir=envs/gcp-workload apply \
   -target=module.workload_payments \
   -var-file=../../examples/dev.tfvars
 ```
@@ -142,14 +142,14 @@ gcloud projects get-iam-policy PAYMENTS_PROJECT_ID \
 
 To remove a team's access:
 
-1. Remove the `module.workload_{team}` block from `envs/apps/main.tf`
+1. Remove the `module.workload_{team}` block from `envs/gcp-workload/main.tf`
 2. Run `terraform plan` and confirm only the workload module resources are in the destroy list
 3. Apply the change
 
 Before destroying, list all state resources to confirm scope:
 
 ```bash
-terraform -chdir=envs/apps state list | grep workload_payments
+terraform -chdir=envs/gcp-workload state list | grep workload_payments
 ```
 
 Confirm with the team that no data buckets or databases need to be retained before the destroy.

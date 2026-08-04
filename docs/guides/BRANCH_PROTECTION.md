@@ -47,7 +47,7 @@ gh api repos/OWNER/REPO/branches/main/protection \
 
 ## Release Tag Protection
 
-Tags that trigger the `terraform-apply.yml` workflow (`organization/v*`, `apps/*/v*`) should be protected:
+Tags that trigger the `terraform-apply.yml` workflow (`gcp-organization/v*`, `gcp-workload/*/v*`) should be protected:
 
 - Only allow tag creation by the **infra-admins** team or repository admins
 - Require signed tags if your signing policy enforces it
@@ -60,7 +60,7 @@ gh api repos/OWNER/REPO/rulesets \
   --field name="Release tag protection" \
   --field target="tag" \
   --field enforcement="active" \
-  --field conditions='{"ref_name":{"include":["refs/tags/organization/v*","refs/tags/apps/*/v*"],"exclude":[]}}' \
+  --field conditions='{"ref_name":{"include":["refs/tags/gcp-organization/v*","refs/tags/gcp-workload/*/v*"],"exclude":[]}}' \
   --field rules='[{"type":"deletion"},{"type":"non_fast_forward"}]'
 ```
 
