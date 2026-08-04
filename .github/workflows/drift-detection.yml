@@ -76,7 +76,7 @@ jobs:
         # Default workspace set: the org control plane plus common app environments.
         # Override at runtime via workflow_dispatch → workspaces input.
         # NOTE: The "gcp-workload" workspace does NOT exist in TFC — actual workspace names follow
-        # the "gcp-workload-<env>" convention (gcp-workload-dev, gcp-workload-staging, gcp-workload-prod). Adjust this list
+        # the "gcp-workload-<env>" convention (gcp-workload-dev, gcp-workload-prod, ...). Adjust this list
         # to match your TFC workspace names. Using a repository variable (TFC_WORKSPACES)
         # is recommended for environments with many app workspaces.
         # Default workspace set — adjust to match your TFC workspace names.
