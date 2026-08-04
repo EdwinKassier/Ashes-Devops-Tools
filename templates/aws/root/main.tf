@@ -1,5 +1,5 @@
 # SCAFFOLD — this is a cloneable AWS root, not a live root. Clone the whole
-# templates/aws-root/ directory to envs/<cloud>-<layer>/ (e.g. envs/aws/security),
+# templates/aws/root/ directory to envs/<cloud>/<layer>/ (e.g. envs/aws/security),
 # set the workspace name in backend.tf, uncomment the blocks below, and wire the
 # stage module for this layer. See docs/architecture/adding-a-cloud.md.
 #

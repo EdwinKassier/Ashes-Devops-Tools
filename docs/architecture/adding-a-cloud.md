@@ -4,14 +4,14 @@ This document codifies the per-cloud-root contract. Follow it to add a new cloud
 
 Start from a scaffold:
 
-- `templates/aws-root/` — concrete AWS root (default + aliased provider examples).
-- `templates/cloud-root/` — provider-agnostic version; the contract a new cloud fills in.
+- `templates/aws/root/` — concrete AWS root (default + aliased provider examples).
+- `templates/shared/cloud-root/` — provider-agnostic version; the contract a new cloud fills in.
 
 ---
 
 ## 1. Root naming
 
-One root per cloud + layer, named `envs/<cloud>-<layer>`:
+One root per cloud + layer, named `envs/<cloud>/<layer>`:
 
 ```text
 envs/
@@ -31,7 +31,7 @@ The workspace name matches the root: a fixed foundational root maps to one works
 - A **workload** root has exactly **one** default provider (`provider "aws" { region = var.aws_region }`). Workloads never fan out across accounts inside a single root — they fan out across **workspaces**.
 - A **cross-account foundational** root adds one **aliased** provider **per fixed foundational account** (e.g. `security_tooling`, `log_archive`). Each alias assumes a role whose ARN comes from the `<cloud>-organization` remote state (a two-phase bootstrap: the org root creates the accounts and emits the role ARNs; downstream roots assume them). The ARNs are known at plan time, so aliased providers configure without live credentials.
 
-See `templates/aws-root/providers.tf` for both patterns.
+See `templates/aws/root/providers.tf` for both patterns.
 
 ---
 
@@ -85,10 +85,10 @@ Keep these keys **stable**. Renaming a key breaks every root that reads it. `out
 
 New roots must be picked up automatically by CI and tooling — nothing hard-codes a root list.
 
-- `scripts/terraform-roots.sh` — enumerates roots (any `envs/<dir>` containing a `.tf` file) plus modules and examples. CI's validate/lint/fmt matrix is driven from this, so a new `envs/<cloud>-<layer>` is validated the moment it lands.
+- `scripts/terraform-roots.sh` — enumerates roots (any `envs/<dir>` containing a `.tf` file) plus modules and examples. CI's validate/lint/fmt matrix is driven from this, so a new `envs/<cloud>/<layer>` is validated the moment it lands.
 - `scripts/active-providers.sh` — derives which provider blocks / clouds are actually configured across roots (used to decide which credentials a run needs).
 
-Add a root by cloning a template into `envs/<cloud>-<layer>/`; both scripts discover it on the next run with no matrix edits.
+Add a root by cloning a template into `envs/<cloud>/<layer>/`; both scripts discover it on the next run with no matrix edits.
 
 ---
 
@@ -102,10 +102,10 @@ Within a root, `enable_*` variables toggle **features** (a Cloud Armor policy, a
 
 ## Checklist for a new cloud root
 
-1. Clone `templates/aws-root/` (or `templates/cloud-root/` for a non-AWS cloud) to `envs/<cloud>-<layer>/`.
+1. Clone `templates/aws/root/` (or `templates/shared/cloud-root/` for a non-AWS cloud) to `envs/<cloud>/<layer>/`.
 2. Set the workspace `name` (or `prefix`) in `backend.tf`.
 3. Fill in `versions.tf` (floored + capped provider pin) and `providers.tf` (one default provider, aliased-per-foundational-account if cross-account).
 4. Uncomment and wire the `terraform_remote_state` block(s) and the stage `module` call in `main.tf`.
 5. Re-export the stage contract in `outputs.tf` (stable keys).
 6. Copy `terraform.tfvars.example` to `terraform.tfvars` and set `tfc_organization`.
-7. `terraform -chdir=envs/<cloud>-<layer> init -backend=false && terraform ... validate` — must be green with no cloud credentials.
+7. `terraform -chdir=envs/<cloud>/<layer> init -backend=false && terraform ... validate` — must be green with no cloud credentials.

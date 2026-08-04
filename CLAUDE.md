@@ -227,7 +227,7 @@ Gotchas the AWS landing-zone build surfaced — each one bit us in CI:
 4. Add a `*.tftest.hcl` with at least one `mock_provider` test.
 5. Run `make docs && make test && make ci`.
 
-For **AWS modules**, clone `templates/aws-module/` instead — it pins `aws = ">= 6.46.0, < 7.0.0"` and ships a `mock_provider "aws"` test. Cross-account modules declare `configuration_aliases` (see [Module Authoring Rules → AWS modules](#aws-modules)).
+For **AWS modules**, clone `templates/aws/module/` instead — it pins `aws = ">= 6.46.0, < 7.0.0"` and ships a `mock_provider "aws"` test. Cross-account modules declare `configuration_aliases` (see [Module Authoring Rules → AWS modules](#aws-modules)).
 
 ### Updating an existing module
 

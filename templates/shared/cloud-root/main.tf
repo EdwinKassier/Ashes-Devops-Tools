@@ -1,6 +1,6 @@
 # SCAFFOLD — provider-agnostic cloneable root. This is the CONTRACT a new cloud
-# (Azure, etc.) follows; templates/aws-root/ is the concrete aws instance of it.
-# Clone to envs/<cloud>-<layer>/, fill in versions.tf + providers.tf for your
+# (Azure, etc.) follows; templates/aws/root/ is the concrete aws instance of it.
+# Clone to envs/<cloud>/<layer>/, fill in versions.tf + providers.tf for your
 # cloud, set the workspace in backend.tf, and wire the stage module below.
 # See docs/architecture/adding-a-cloud.md.
 #
