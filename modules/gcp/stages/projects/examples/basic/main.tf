@@ -7,7 +7,7 @@ locals {
   billing_account  = "ABCDEF-123456-789012"
   suffix           = "abc123"
 
-  # Folders output from modules/stages/organization.
+  # Folders output from modules/gcp/stages/organization.
   folders = {
     dev = {
       id           = "123456789001"

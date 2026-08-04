@@ -1,6 +1,6 @@
 # Example: mirror traffic from a subnet to an IDS/IPS collector for inspection.
 # Packet mirroring duplicates packets and sends them to a collector ILB.
-# The collector ILB must already exist (use modules/network/internal-lb).
+# The collector ILB must already exist (use modules/gcp/network/internal-lb).
 
 locals {
   project_id = "my-security-project"

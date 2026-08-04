@@ -1,5 +1,5 @@
 # Example: add specific engineers to the GCP platform team group.
-# Typically used alongside modules/iam/identity_group to populate newly created groups.
+# Typically used alongside modules/gcp/iam/identity_group to populate newly created groups.
 
 module "platform_team_members" {
   source = "../../"

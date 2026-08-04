@@ -9,7 +9,7 @@
  *
  * Usage:
  *   module "alerts" {
- *     source     = "../../modules/monitoring/alert-policy"
+ *     source     = "../../modules/gcp/monitoring/alert-policy"
  *     project_id = "my-project"
  *     notification_email_addresses = ["ops@example.com"]
  *     notification_webhook_urls = {

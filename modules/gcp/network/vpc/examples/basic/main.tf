@@ -12,7 +12,7 @@ module "example" {
   vpc_name   = "example-vpc"
 
   # auto_create_subnetworks = false (default) — subnets are managed explicitly,
-  # e.g. via modules/network/subnet.
+  # e.g. via modules/gcp/network/subnet.
   # delete_default_routes_on_create = true (default) — removes the implicit
   # 0.0.0.0/0 default route so routing is fully explicit.
 }
