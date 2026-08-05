@@ -63,7 +63,7 @@ locals {
 # ---------------------------------------------------------------------------
 
 module "ipam" {
-  source = "../../ipam"
+  source = "../../network/ipam"
 
   aws_enabled_regions = var.aws_enabled_regions
   top_cidr            = var.top_cidr
@@ -76,7 +76,7 @@ module "ipam" {
 # ---------------------------------------------------------------------------
 
 module "inspection_vpc" {
-  source = "../../vpc"
+  source = "../../network/vpc"
 
   name                     = "inspection"
   cidr_block               = var.inspection_cidr
@@ -93,7 +93,7 @@ module "inspection_vpc" {
 # ---------------------------------------------------------------------------
 
 module "egress_vpc" {
-  source = "../../vpc"
+  source = "../../network/vpc"
 
   name                     = "egress"
   cidr_block               = var.egress_cidr
@@ -171,7 +171,7 @@ resource "aws_route_table_association" "egress_private" {
 # ---------------------------------------------------------------------------
 
 module "transit_gateway" {
-  source = "../../transit-gateway"
+  source = "../../network/transit-gateway"
 
   org_arn = var.org_arn
 
@@ -205,7 +205,7 @@ module "transit_gateway" {
 # ---------------------------------------------------------------------------
 
 module "network_firewall" {
-  source = "../../network-firewall"
+  source = "../../network/network-firewall"
 
   enable_network_firewall = var.enable_network_firewall
   inspection_vpc_id       = module.inspection_vpc.vpc_id
@@ -218,7 +218,7 @@ module "network_firewall" {
 # ---------------------------------------------------------------------------
 
 module "vpc_endpoints" {
-  source = "../../vpc-endpoints"
+  source = "../../network/vpc-endpoints"
 
   vpc_id                   = module.egress_vpc.vpc_id
   region                   = var.aws_region
@@ -232,7 +232,7 @@ module "vpc_endpoints" {
 # ---------------------------------------------------------------------------
 
 module "route53_resolver" {
-  source = "../../route53-resolver"
+  source = "../../network/route53-resolver"
 
   vpc_id                    = module.egress_vpc.vpc_id
   subnet_ids                = module.egress_vpc.subnet_ids_by_tier["private"]
@@ -246,7 +246,7 @@ module "route53_resolver" {
 # ---------------------------------------------------------------------------
 
 module "network_access_analyzer" {
-  source = "../../network-access-analyzer"
+  source = "../../network/network-access-analyzer"
 
   enable_network_access_analyzer = var.enable_network_access_analyzer
 }

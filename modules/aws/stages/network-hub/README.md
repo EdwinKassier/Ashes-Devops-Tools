@@ -87,14 +87,14 @@ module "example" {
 ## Modules
 
 
-- egress_vpc - ../../vpc
-- inspection_vpc - ../../vpc
-- ipam - ../../ipam
-- network_access_analyzer - ../../network-access-analyzer
-- network_firewall - ../../network-firewall
-- route53_resolver - ../../route53-resolver
-- transit_gateway - ../../transit-gateway
-- vpc_endpoints - ../../vpc-endpoints
+- egress_vpc - ../../network/vpc
+- inspection_vpc - ../../network/vpc
+- ipam - ../../network/ipam
+- network_access_analyzer - ../../network/network-access-analyzer
+- network_firewall - ../../network/network-firewall
+- route53_resolver - ../../network/route53-resolver
+- transit_gateway - ../../network/transit-gateway
+- vpc_endpoints - ../../network/vpc-endpoints
 
 
 ## Resources

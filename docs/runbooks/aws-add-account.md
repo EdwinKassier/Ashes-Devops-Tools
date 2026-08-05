@@ -92,7 +92,7 @@ terraform -chdir=envs/aws/workload plan   # read-only local check; apply via TFC
 
 This stands up the env's spoke VPC (attached to the TGW with the correct Prod/NonProd route table — see [network topology](../architecture/aws-landing-zone.md#network-topology)), workload roles, and the per-account baseline.
 
-> **New-account defaults not covered by Terraform.** A brand-new account still has a default VPC per Region and needs EBS-encryption-by-default, S3 Block Public Access, and a password policy. The default-VPC deletion is handled by the org-wide **auto-deploying StackSet** from [`aws-bootstrap.md`](aws-bootstrap.md#phase-05-org-wide-default-vpc-deletion-stackset-out-of-band); the rest is applied per layer via `modules/aws/account-baseline`. Confirm the StackSet auto-deployed to the new account.
+> **New-account defaults not covered by Terraform.** A brand-new account still has a default VPC per Region and needs EBS-encryption-by-default, S3 Block Public Access, and a password policy. The default-VPC deletion is handled by the org-wide **auto-deploying StackSet** from [`aws-bootstrap.md`](aws-bootstrap.md#phase-05-org-wide-default-vpc-deletion-stackset-out-of-band); the rest is applied per layer via `modules/aws/governance/account-baseline`. Confirm the StackSet auto-deployed to the new account.
 
 ---
 

@@ -87,7 +87,7 @@ Every AWS account is created with a default VPC in every Region. A single Terraf
 2. The stack template deletes the default VPC (and its subnets, IGW, route tables) in each enabled Region.
 3. Deploy it **after** the foundational accounts exist (i.e. after phase-1 apply), and leave auto-deployment on so future accounts are cleaned up when they join the org.
 
-This links to the account-baseline concept: per-account defaults the declarative EC2 policy does **not** cover (default-VPC deletion, EBS-encryption-by-default, account S3 Block Public Access, password policy). The Terraform-managed slice of that baseline is applied per layer via `modules/aws/account-baseline`; the default-VPC deletion specifically stays a StackSet because it cannot be reliably done for every Region from one root.
+This links to the account-baseline concept: per-account defaults the declarative EC2 policy does **not** cover (default-VPC deletion, EBS-encryption-by-default, account S3 Block Public Access, password policy). The Terraform-managed slice of that baseline is applied per layer via `modules/aws/governance/account-baseline`; the default-VPC deletion specifically stays a StackSet because it cannot be reliably done for every Region from one root.
 
 ---
 

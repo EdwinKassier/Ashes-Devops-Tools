@@ -39,7 +39,7 @@
 # ---------------------------------------------------------------------------
 
 module "vpc" {
-  source = "../../vpc"
+  source = "../../network/vpc"
 
   name                     = "workload"
   cidr_block               = var.vpc_cidr
@@ -81,7 +81,7 @@ resource "aws_ec2_transit_gateway_vpc_attachment" "spoke" {
 # ---------------------------------------------------------------------------
 
 module "iam_role" {
-  source = "../../iam-role"
+  source = "../../iam/iam-role"
 
   roles = var.workload_roles
 
@@ -95,7 +95,7 @@ module "iam_role" {
 # ---------------------------------------------------------------------------
 
 module "account_baseline" {
-  source = "../../account-baseline"
+  source = "../../governance/account-baseline"
 
   aws_enabled_regions = var.aws_enabled_regions
   kms_key_arn         = var.kms_key_arn
@@ -111,7 +111,7 @@ module "account_baseline" {
 # ---------------------------------------------------------------------------
 
 module "config_recorder" {
-  source = "../../config-org"
+  source = "../../security/config-org"
 
   recorder_only = true
 
@@ -134,7 +134,7 @@ module "systems_manager" {
   #   unreachable at apply. The shared systems-manager module (and aws-security's
   #   use of it, which passes a real key) is unaffected — this skip is scoped to
   #   this stage's composition only.
-  source = "../../systems-manager"
+  source = "../../ops/systems-manager"
   count  = var.enable_ssm ? 1 : 0
 
   log_bucket_name = var.log_archive_bucket_name
@@ -146,7 +146,7 @@ module "systems_manager" {
 # ---------------------------------------------------------------------------
 
 module "edge_security" {
-  source = "../../edge-security"
+  source = "../../security/edge-security"
   count  = var.enable_edge ? 1 : 0
 
   providers = {

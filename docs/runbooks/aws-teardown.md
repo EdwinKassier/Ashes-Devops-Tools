@@ -39,7 +39,7 @@ terraform -chdir=envs/aws/workload destroy   # run through TFC, not locally
 
 ## Caveat 1 — Log Archive bucket: Object Lock COMPLIANCE (WORM, even against root)
 
-The Log Archive bucket (`modules/aws/log-archive-bucket`) defaults to **S3 Object Lock in COMPLIANCE mode** with a default retention of `retention_days`.
+The Log Archive bucket (`modules/aws/data/log-archive-bucket`) defaults to **S3 Object Lock in COMPLIANCE mode** with a default retention of `retention_days`.
 
 - In COMPLIANCE mode, **no one — including the AWS account root and the org management account — can delete or shorten the retention of a locked object** until its retention period expires. This is WORM by regulatory design.
 - Therefore the bucket **cannot be emptied or destroyed** while any object is still within its retention window, and the destroy of `aws-security` (and often the whole `log_archive` account) **will fail** until then.
@@ -50,7 +50,7 @@ The Log Archive bucket (`modules/aws/log-archive-bucket`) defaults to **S3 Objec
 
 ## Caveat 2 — Backup Vault Lock: Compliance mode is also immutable
 
-The Backup vaults (`modules/aws/backup-vault`) use **AWS Backup Vault Lock in Compliance mode** (a non-null `changeable_for_days` cooling-off window enables it).
+The Backup vaults (`modules/aws/backup/backup-vault`) use **AWS Backup Vault Lock in Compliance mode** (a non-null `changeable_for_days` cooling-off window enables it).
 
 - During the `changeable_for_days` cooling-off window the lock can still be removed. **After the window elapses the lock is immutable** — recovery points cannot be deleted and the vault cannot be emptied or destroyed until each recovery point's retention expires, again **not even by root**.
 - So `aws-backup` will not fully destroy while locked recovery points exist. Same posture as the log bucket: wait out retention.
@@ -59,7 +59,7 @@ The Backup vaults (`modules/aws/backup-vault`) use **AWS Backup Vault Lock in Co
 
 ## Caveat 3 — Account closure (`close_on_deletion`)
 
-The `account` module (`modules/aws/account`) exposes `close_on_deletion` (default `false`). Understand both settings:
+The `account` module (`modules/aws/governance/account`) exposes `close_on_deletion` (default `false`). Understand both settings:
 
 - **`close_on_deletion = false` (default):** destroying the account resource only **removes it from the organization**; the account itself survives as a standalone account. Nothing is closed.
 - **`close_on_deletion = true`:** destroying the account resource **closes** the AWS account. Beware:

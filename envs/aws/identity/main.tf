@@ -34,7 +34,7 @@ locals {
 }
 
 module "iam_identity_center" {
-  source = "../../../modules/aws/iam-identity-center"
+  source = "../../../modules/aws/iam/iam-identity-center"
 
   permission_sets = var.permission_sets
   assignments     = local.assignments

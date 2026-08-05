@@ -1,6 +1,6 @@
 # Runbook: AWS Incident Response — Quarantine & Forensics
 
-**When to use:** GuardDuty (or an operator) has flagged a compromised or suspect EC2 instance and you need to isolate it, preserve evidence, and analyze it in the Forensics account without contaminating the source environment. This is the operational counterpart to the auto-isolation wiring in `modules/aws/incident-response`.
+**When to use:** GuardDuty (or an operator) has flagged a compromised or suspect EC2 instance and you need to isolate it, preserve evidence, and analyze it in the Forensics account without contaminating the source environment. This is the operational counterpart to the auto-isolation wiring in `modules/aws/security/incident-response`.
 
 **Time:** Isolation is near-immediate (automated); forensic analysis is open-ended.
 **Risk:** High. You are operating on a live, possibly-compromised host and moving evidence between accounts. Preserve first, remediate second; do not terminate the instance before snapshots exist.
@@ -14,7 +14,7 @@
 
 ## Automated quarantine flow
 
-`modules/aws/incident-response` wires this automatically in the security stage:
+`modules/aws/security/incident-response` wires this automatically in the security stage:
 
 ```text
 GuardDuty finding (severity >= 7)
