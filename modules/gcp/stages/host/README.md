@@ -4,7 +4,7 @@ Compatibility wrapper for the application environment root.
 
 ## Overview
 
-This module composes the lower-level networking, security, and governance modules used by [envs/gcp/workload](../../envs/gcp/workload/). It is retained for compatibility and internal orchestration; new consumers should prefer the staged roots and stage modules over calling `modules/gcp/host` directly.
+This module composes the lower-level networking, security, and governance modules used by [envs/gcp/workload](../../envs/gcp/workload/). It is retained for compatibility and internal orchestration; new consumers should prefer the staged roots and stage modules over calling `modules/gcp/stages/host` directly.
 
 ## Features
 
@@ -22,7 +22,7 @@ This module composes the lower-level networking, security, and governance module
 
 ```hcl
 module "infrastructure" {
-  source = "../modules/gcp/host"
+  source = "../modules/gcp/stages/host"
 
   project_id     = "my-project-id"
   project_prefix = "myapp-dev"
@@ -36,7 +36,7 @@ module "infrastructure" {
 
 ```hcl
 module "infrastructure" {
-  source = "../modules/gcp/host"
+  source = "../modules/gcp/stages/host"
 
   project_id     = "my-project-id"
   project_prefix = "myapp-prod"
@@ -184,36 +184,36 @@ module "example" {
 ## Modules
 
 
-- additional_firewall_rules - ../network/network-firewall
-- api_gateway - ../network/api-gateway
-- cdn - ../network/cdn
-- cloud_armor - ../network/cloud-armor
-- database_subnets - ../network/subnet
-- dns - ../network/dns
-- firewall_apigateway_to_public - ../network/network-firewall
-- firewall_compute_to_database - ../network/network-firewall
-- firewall_database_deny_egress - ../network/network-firewall
-- firewall_deny_all - ../network/network-firewall
-- firewall_health_checks - ../network/network-firewall
-- firewall_iap_ssh_rdp - ../network/network-firewall
-- firewall_public_to_compute - ../network/network-firewall
-- flow_logs_kms - ../governance/kms
-- hierarchical_firewall_policies - ../network/hierarchical-firewall
-- integrated_nat - ../network/nat
-- interconnects - ../network/interconnect
-- internal_load_balancers - ../network/internal-lb
-- packet_mirroring - ../network/packet-mirroring
-- private_service_access - ../network/private-service-access
-- private_service_connect - ../network/private-service-connect
-- private_subnets - ../network/subnet
-- public_subnets - ../network/subnet
-- shared_vpc_service_projects - ../network/shared-vpc-service
-- standalone_nat - ../network/nat
-- vpc - ../network/vpc
-- vpc_flow_logs - ../network/vpc-flow-logs
-- vpc_peering - ../network/vpc-peering
-- vpc_service_controls - ../network/vpc-sc
-- vpn - ../network/vpn
+- additional_firewall_rules - ../../network/network-firewall
+- api_gateway - ../../network/api-gateway
+- cdn - ../../network/cdn
+- cloud_armor - ../../network/cloud-armor
+- database_subnets - ../../network/subnet
+- dns - ../../network/dns
+- firewall_apigateway_to_public - ../../network/network-firewall
+- firewall_compute_to_database - ../../network/network-firewall
+- firewall_database_deny_egress - ../../network/network-firewall
+- firewall_deny_all - ../../network/network-firewall
+- firewall_health_checks - ../../network/network-firewall
+- firewall_iap_ssh_rdp - ../../network/network-firewall
+- firewall_public_to_compute - ../../network/network-firewall
+- flow_logs_kms - ../../governance/kms
+- hierarchical_firewall_policies - ../../network/hierarchical-firewall
+- integrated_nat - ../../network/nat
+- interconnects - ../../network/interconnect
+- internal_load_balancers - ../../network/internal-lb
+- packet_mirroring - ../../network/packet-mirroring
+- private_service_access - ../../network/private-service-access
+- private_service_connect - ../../network/private-service-connect
+- private_subnets - ../../network/subnet
+- public_subnets - ../../network/subnet
+- shared_vpc_service_projects - ../../network/shared-vpc-service
+- standalone_nat - ../../network/nat
+- vpc - ../../network/vpc
+- vpc_flow_logs - ../../network/vpc-flow-logs
+- vpc_peering - ../../network/vpc-peering
+- vpc_service_controls - ../../network/vpc-sc
+- vpn - ../../network/vpn
 
 
 ## Resources
@@ -221,10 +221,10 @@ module "example" {
 The following resources are created:
 
 
-- resource.terraform_data.deletion_protection_guard (modules/gcp/host/main.tf#L55)
-- resource.terraform_data.subnet_cidr_count_guard (modules/gcp/host/main.tf#L70)
-- data source.google_compute_zones.available (modules/gcp/host/main.tf#L35)
-- data source.google_project.current (modules/gcp/host/main.tf#L546)
+- resource.terraform_data.deletion_protection_guard (modules/gcp/stages/host/main.tf#L55)
+- resource.terraform_data.subnet_cidr_count_guard (modules/gcp/stages/host/main.tf#L70)
+- data source.google_compute_zones.available (modules/gcp/stages/host/main.tf#L35)
+- data source.google_project.current (modules/gcp/stages/host/main.tf#L546)
 
 
 ## Inputs

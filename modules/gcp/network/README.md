@@ -46,7 +46,7 @@ This directory contains a suite of Terraform modules for building enterprise-gra
 ## Usage Guidelines
 
 ### 1. Orchestration
-New environment provisioning should start from [envs/gcp/organization](../../envs/gcp/organization/) and [envs/gcp/workload](../../envs/gcp/workload/). The `modules/gcp/host` wrapper is used by the app root and remains available for compatibility. The default network shape is a 3-tier architecture:
+New environment provisioning should start from [envs/gcp/organization](../../envs/gcp/organization/) and [envs/gcp/workload](../../envs/gcp/workload/). The `modules/gcp/stages/host` wrapper is used by the app root and remains available for compatibility. The default network shape is a 3-tier architecture:
 - **Public**: Exposed to internet via LB/Gateway.
 - **Compute**: Application logic, private IPs only, access to Internet via NAT.
 - **Database**: Strictly internal, no direct egress.

@@ -265,7 +265,7 @@ TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=
 | `enable_deletion_protection` | `true` | Guard against accidental destruction of the VPC/subnets/DNS zones |
 | `vpc_sc_ingress_policies` / `vpc_sc_egress_policies` | `[]` | Optional VPC Service Controls ingress/egress policies for the perimeter |
 
-> **Host-level networking (Dedicated Interconnect, HA-VPN, explicit zone pinning):** `envs/gcp/workload` does not expose `enable_interconnect`, `enable_vpn`, or `explicit_zones` as its own variables — those are variables of the underlying `modules/gcp/host` module (`interconnects`, `enable_vpn`, `explicit_zones`). To use them, either call `modules/gcp/host` directly from a custom root, or extend `envs/gcp/workload/main.tf`'s `module "host"` call to pass them through.
+> **Host-level networking (Dedicated Interconnect, HA-VPN, explicit zone pinning):** `envs/gcp/workload` does not expose `enable_interconnect`, `enable_vpn`, or `explicit_zones` as its own variables — those are variables of the underlying `modules/gcp/stages/host` module (`interconnects`, `enable_vpn`, `explicit_zones`). To use them, either call `modules/gcp/stages/host` directly from a custom root, or extend `envs/gcp/workload/main.tf`'s `module "host"` call to pass them through.
 
 ---
 

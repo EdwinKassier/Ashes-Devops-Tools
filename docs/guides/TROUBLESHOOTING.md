@@ -213,13 +213,13 @@ Always include a justification after the colon. The CI Checkov run uses `.checko
 ```text
 ╷
 │ Error: Resource precondition failed
-│ on modules/gcp/host/main.tf: Each non-empty subnet_cidrs list must have at least
+│ on modules/gcp/stages/host/main.tf: Each non-empty subnet_cidrs list must have at least
 │ as many entries as availability zones in the region. Detected 3 zones;
 │ provided public=0, private=2, database=0 CIDRs. Either add CIDRs or leave
 │ the list empty to use auto-generated values.
 ```
 
-**Cause:** `modules/gcp/host` takes subnet CIDRs as a single `subnet_cidrs` object with `public`/`private`/`database` list keys (not separate `private_subnet_cidrs`/`database_subnet_cidrs` variables). If you supply a non-empty list for one of those keys, it must have at least one CIDR per availability zone in the region.
+**Cause:** `modules/gcp/stages/host` takes subnet CIDRs as a single `subnet_cidrs` object with `public`/`private`/`database` list keys (not separate `private_subnet_cidrs`/`database_subnet_cidrs` variables). If you supply a non-empty list for one of those keys, it must have at least one CIDR per availability zone in the region.
 
 **Fix (option A — recommended for production):** Set `explicit_zones` to pin the exact zones you need:
 
@@ -246,7 +246,7 @@ subnet_cidrs = {
 ```text
 ╷
 │ Error: Resource precondition failed
-│ on modules/gcp/host/main.tf: set enable_deletion_protection = false and re-apply
+│ on modules/gcp/stages/host/main.tf: set enable_deletion_protection = false and re-apply
 │ before running terraform destroy.
 ```
 
