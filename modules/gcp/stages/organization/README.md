@@ -107,10 +107,10 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_bigquery_dataset.billing_export (modules/gcp/stages/organization/main.tf#L305)
-- resource.google_bigquery_dataset_iam_member.billing_export_writer (modules/gcp/stages/organization/main.tf#L336)
-- resource.google_essential_contacts_contact.billing (modules/gcp/stages/organization/main.tf#L277)
-- resource.google_essential_contacts_contact.security (modules/gcp/stages/organization/main.tf#L268)
+- resource.google_bigquery_dataset.billing_export (modules/gcp/stages/organization/main.tf#L311)
+- resource.google_bigquery_dataset_iam_member.billing_export_writer (modules/gcp/stages/organization/main.tf#L342)
+- resource.google_essential_contacts_contact.billing (modules/gcp/stages/organization/main.tf#L283)
+- resource.google_essential_contacts_contact.security (modules/gcp/stages/organization/main.tf#L274)
 - resource.google_folder_iam_member.terraform_admin_folder_roles (modules/gcp/stages/organization/main.tf#L26)
 - resource.google_tags_tag_binding.environment (modules/gcp/stages/organization/tags_binding.tf#L1)
 
@@ -139,6 +139,7 @@ The following resources are created:
 | <a name="input_audit_log_retention_days"></a> [audit\_log\_retention\_days](#input\_audit\_log\_retention\_days) | Number of days to retain audit logs in Cloud Storage. Adjust to meet your<br/>compliance requirements:<br/>  - Default (365 days) — sufficient for most cloud security baselines.<br/>  - PCI-DSS requires 12 months online + 12 months archival.<br/>  - HIPAA requires 6 years.<br/>  - FedRAMP requires 3 years.<br/>Must be >= 1. | `number` | `365` | no |
 | <a name="input_billing_contact_email"></a> [billing\_contact\_email](#input\_billing\_contact\_email) | Email address for billing notifications and budget alerts via Essential Contacts. Optional — if null, no Essential Contact is registered for the BILLING category. | `string` | `null` | no |
 | <a name="input_break_glass_user"></a> [break\_glass\_user](#input\_break\_glass\_user) | Optional email address of a break-glass emergency user granted org admin access | `string` | `null` | no |
+| <a name="input_logging_project_id"></a> [logging\_project\_id](#input\_logging\_project\_id) | Dedicated logging project ID for the org audit sink/bucket (audit G4 — separation of duties). Default null = the admin/bootstrap project (unchanged). When set, ensure the CMEK key is usable cross-project. UNVALIDATED — validate on a real org. | `string` | `null` | no |
 | <a name="input_security_contact_email"></a> [security\_contact\_email](#input\_security\_contact\_email) | Email address for security notifications via Essential Contacts (SCC alerts, compliance notifications). Optional — if null, no Essential Contact is registered for the SECURITY category. | `string` | `null` | no |
 
 ## Outputs

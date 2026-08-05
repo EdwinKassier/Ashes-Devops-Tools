@@ -96,3 +96,17 @@ variable "tfc_workspaces" {
     error_message = "tfc_workspaces must contain at least one workspace name when enable_tfc_oidc = true."
   }
 }
+
+# --- Audit finding G3: bootstrap privilege split (opt-in, default OFF) ---
+variable "enable_privilege_split" {
+  description = <<-EOT
+    When true, create a separate "terraform-resman" SA and grant the highest-privilege org
+    roles (org-policy, Access Context Manager, logging, SCC, IAM security admin) to it instead
+    of the everyday terraform-admin SA (audit G3). Default false = single-SA (unchanged).
+    ⚠️ Enabling ALSO requires: (1) WIF-binding the resman SA for the org workspace, and
+    (2) switching the organization/network stages' impersonation to the resman SA. UNVALIDATED
+    against a real org — do not enable without validating the full activation.
+  EOT
+  type        = bool
+  default     = false
+}

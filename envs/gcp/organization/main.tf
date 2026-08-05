@@ -74,15 +74,16 @@ locals {
 module "bootstrap" {
   source = "../../../modules/gcp/stages/bootstrap"
 
-  project_prefix   = var.project_prefix
-  org_id           = data.google_organization.org.org_id
-  billing_account  = data.google_billing_account.billing.id
-  admin_email      = var.admin_email
-  github_org       = var.github_org
-  github_repo      = var.github_repo
-  tfc_organization = var.tfc_organization
-  tfc_workspaces   = local.tfc_workspaces
-  enable_tfc_oidc  = var.enable_tfc_oidc
+  project_prefix         = var.project_prefix
+  org_id                 = data.google_organization.org.org_id
+  billing_account        = data.google_billing_account.billing.id
+  admin_email            = var.admin_email
+  github_org             = var.github_org
+  github_repo            = var.github_repo
+  tfc_organization       = var.tfc_organization
+  tfc_workspaces         = local.tfc_workspaces
+  enable_tfc_oidc        = var.enable_tfc_oidc
+  enable_privilege_split = var.enable_privilege_split
 }
 
 # 2. Organization: Hierarchy & Governance
@@ -111,6 +112,9 @@ module "organization" {
   billing_contact_email                 = var.billing_contact_email
   monthly_budget_amount                 = var.monthly_budget_amount
   budget_currency                       = var.budget_currency
+
+  # Audit G4: dedicated logging project for the org audit sink (default null = admin project).
+  logging_project_id = var.logging_project_id
 
   depends_on = [module.bootstrap]
 }
@@ -157,6 +161,9 @@ module "network_hub" {
 
   vpc_sc_access_policy_name = var.vpc_sc_access_policy_name
   vpc_sc_enable_dry_run     = var.vpc_sc_enable_dry_run
+
+  vpc_sc_additional_restricted_services = var.vpc_sc_additional_restricted_services
+  vpc_sc_ingress_identities             = var.vpc_sc_ingress_identities
 
   depends_on = [module.projects]
 }

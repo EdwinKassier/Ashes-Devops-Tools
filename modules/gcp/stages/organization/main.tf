@@ -87,7 +87,13 @@ module "cmek" {
 module "audit_logs" {
   source = "../../governance/cloud-audit-logs"
 
-  project_id         = var.admin_project_id
+  # Audit finding G4: separation of duties — point the org audit sink/bucket at a
+  # DEDICATED logging project instead of the admin/bootstrap project, so the highly
+  # privileged automation identity that owns the admin project does not also own the
+  # store that audits it. Default null = admin project (unchanged). When set, ensure
+  # the CMEK key (module.cmek, in the admin project) is usable cross-project by the
+  # logging project's log-sink writer identity. UNVALIDATED — validate on a real org.
+  project_id         = coalesce(var.logging_project_id, var.admin_project_id)
   bucket_location    = var.default_region
   log_retention_days = var.audit_log_retention_days
   org_id             = var.org_id

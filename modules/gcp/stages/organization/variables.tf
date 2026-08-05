@@ -218,3 +218,10 @@ variable "audit_log_retention_days" {
     error_message = "audit_log_retention_days must be at least 1."
   }
 }
+
+# --- Audit finding G4: dedicated logging project (opt-in, default = unchanged) ---
+variable "logging_project_id" {
+  description = "Dedicated logging project ID for the org audit sink/bucket (audit G4 — separation of duties). Default null = the admin/bootstrap project (unchanged). When set, ensure the CMEK key is usable cross-project. UNVALIDATED — validate on a real org."
+  type        = string
+  default     = null
+}

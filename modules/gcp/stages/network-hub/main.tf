@@ -76,12 +76,25 @@ module "hub_network" {
 
       # values() returns project numbers from the spoke_project_numbers map.
       protected_projects = values(var.spoke_project_numbers)
-      restricted_services = [
+      # Base set + opt-in additions (audit G5). Expanding this without the ingress
+      # policy below would block the automation SA under the enforced perimeter.
+      restricted_services = concat([
         "storage.googleapis.com",
         "bigquery.googleapis.com",
         "cloudfunctions.googleapis.com",
         "run.googleapis.com"
-      ]
+      ], var.vpc_sc_additional_restricted_services)
+
+      # Opt-in ingress policy (audit G5): grant the listed automation identities
+      # full ingress so an enforced perimeter does not block TFC-run applies.
+      # Empty identities -> no ingress policy (unchanged).
+      ingress_policies = length(var.vpc_sc_ingress_identities) == 0 ? [] : [{
+        identity_type = null
+        identities    = var.vpc_sc_ingress_identities
+        sources       = [{ access_level = "*", resource = null }]
+        resources     = ["*"]
+        operations    = [{ service_name = "*", method_selectors = [{ method = "*", permission = null }] }]
+      }]
     }
   } : {}
 }
