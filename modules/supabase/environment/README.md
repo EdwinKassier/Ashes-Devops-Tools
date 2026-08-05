@@ -48,7 +48,7 @@ module "example" {
 The following resources are created:
 
 
-- data source.supabase_apikeys.this (modules/supabase/environment/main.tf#L39)
+- data source.supabase_apikeys.this (modules/supabase/environment/main.tf#L49)
 
 
 ## Inputs

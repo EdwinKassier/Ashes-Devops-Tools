@@ -12,6 +12,15 @@
 #   of all env var values. Any value change forces replacement of the entire
 #   env var set for that environment — ensuring drift never goes silent.
 #
+# AUDIT S4 (write-only secrets — deferred, provider-blocked):
+#   Ideally env var values would use Terraform write-only arguments (`value_wo`
+#   + `value_wo_version`) so secrets never land in state. That requires the
+#   vercel provider 5.x AND Terraform >= 1.11 — the `value_wo` argument does NOT
+#   exist in the pinned 4.x line (verified: 4.8.2 rejects it). Adopting it is a
+#   separate provider-major upgrade (vercel ~> 4.0 -> ~> 5.0) + toolchain bump,
+#   tracked as future work. Until then, values remain in TFC state (encrypted at
+#   rest) and the SHA256 drift mechanism above is how changes are detected.
+#
 # POSIX SH:
 #   ignore_command is executed in /bin/sh by Vercel (not bash). All
 #   comparisons use [ ] and = (not [[ ]] or ==).
