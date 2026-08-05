@@ -252,3 +252,10 @@ variable "notification_subscribers" {
     error_message = "notification_subscribers must contain at least one subscriber."
   }
 }
+
+# --- Audit finding A3: dedicated IAM Identity Center account (opt-in, default = unchanged) ---
+variable "identity_account_id" {
+  description = "Dedicated identity account for IAM Identity Center delegated administration (audit A3). Default null = the shared-services account (unchanged). Set to a dedicated identity account to tighten the delegated-admin blast radius. UNVALIDATED — validate on a real org."
+  type        = string
+  default     = null
+}

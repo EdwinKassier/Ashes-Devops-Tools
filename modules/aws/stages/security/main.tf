@@ -175,7 +175,12 @@ module "delegated_admin" {
   }
 
   security_tooling_account_id = var.security_tooling_account_id
-  identity_account_id         = var.shared_services_account_id
+  # Audit finding A3: IAM Identity Center delegated admin should live in a dedicated
+  # identity account, not shared-services (delegated admin can assign access into the
+  # management account — keep its blast radius tight). Default null keeps the previous
+  # shared-services target (unchanged); set identity_account_id to a dedicated account.
+  # UNVALIDATED — validate on a real org before relying on the new target.
+  identity_account_id = coalesce(var.identity_account_id, var.shared_services_account_id)
 }
 
 # ---------------------------------------------------------------------------

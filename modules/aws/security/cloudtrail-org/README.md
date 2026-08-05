@@ -53,6 +53,11 @@ The following resources are created:
 
 
 - resource.aws_cloudtrail.org (modules/aws/security/cloudtrail-org/main.tf#L19)
+- resource.aws_cloudwatch_log_group.trail (modules/aws/security/cloudtrail-org/main.tf#L41)
+- resource.aws_cloudwatch_log_metric_filter.cis (modules/aws/security/cloudtrail-org/main.tf#L84)
+- resource.aws_cloudwatch_metric_alarm.cis (modules/aws/security/cloudtrail-org/main.tf#L96)
+- resource.aws_iam_role.cloudtrail_cw (modules/aws/security/cloudtrail-org/main.tf#L48)
+- resource.aws_iam_role_policy.cloudtrail_cw (modules/aws/security/cloudtrail-org/main.tf#L61)
 
 
 ## Inputs
@@ -61,6 +66,9 @@ The following resources are created:
 |------|-------------|------|---------|:--------:|
 | <a name="input_kms_key_arn"></a> [kms\_key\_arn](#input\_kms\_key\_arn) | ARN of the KMS key used to encrypt the CloudTrail log files delivered to the Log-Archive bucket. | `string` | n/a | yes |
 | <a name="input_log_archive_bucket"></a> [log\_archive\_bucket](#input\_log\_archive\_bucket) | Name of the central Log-Archive S3 bucket that receives the trail's log files. This bucket lives in the Log-Archive account (a different account from the trail owner); its resource policy authorizes CloudTrail delivery. | `string` | n/a | yes |
+| <a name="input_alarm_sns_topic_arn"></a> [alarm\_sns\_topic\_arn](#input\_alarm\_sns\_topic\_arn) | Optional SNS topic ARN for CIS alarm notifications (enable\_cloudwatch\_logs). Null = alarms created without notification action. | `string` | `null` | no |
+| <a name="input_cloudwatch_logs_retention_days"></a> [cloudwatch\_logs\_retention\_days](#input\_cloudwatch\_logs\_retention\_days) | Retention (days) for the CloudWatch Logs group when enable\_cloudwatch\_logs = true. | `number` | `365` | no |
+| <a name="input_enable_cloudwatch_logs"></a> [enable\_cloudwatch\_logs](#input\_enable\_cloudwatch\_logs) | When true, attach a CloudWatch Logs group to the org trail and create CIS control-plane metric-filter alarms (audit A4). Default false preserves the deliberate S3-only design. UNVALIDATED — validate on a real org. | `bool` | `false` | no |
 | <a name="input_trail_name"></a> [trail\_name](#input\_trail\_name) | Name of the organization CloudTrail trail. | `string` | `"org-trail"` | no |
 
 ## Outputs

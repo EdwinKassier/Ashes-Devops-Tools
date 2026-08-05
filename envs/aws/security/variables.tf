@@ -156,3 +156,10 @@ variable "enable_service_quotas" {
   type        = bool
   default     = false
 }
+
+# --- Audit finding A3: dedicated IAM Identity Center account (opt-in, default = unchanged) ---
+variable "identity_account_id" {
+  description = "Dedicated identity account for IAM Identity Center delegated admin (audit A3). Default null = shared-services account (unchanged). UNVALIDATED."
+  type        = string
+  default     = null
+}
