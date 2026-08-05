@@ -22,7 +22,24 @@
 # (UPPER_SNAKE_CASE) are managed by this module. Runtime-managed entries
 # (per-tenant OAuth tokens with lowercase names) are never touched.
 
+# Install the Node dependencies the provisioner scripts import (pg, etc.)
+# reproducibly before any script runs (audit finding S3). `npm ci` uses the
+# committed package-lock.json — deterministic, and fails loudly up front rather
+# than mid-apply with "Cannot find package 'pg'".
+resource "null_resource" "npm_install" {
+  triggers = {
+    lock_hash = filesha256("${path.module}/scripts/package-lock.json")
+  }
+
+  provisioner "local-exec" {
+    command     = "npm ci --prefix ${path.module}/scripts"
+    working_dir = path.root
+  }
+}
+
 resource "null_resource" "bootstrap" {
+  depends_on = [null_resource.npm_install]
+
   triggers = {
     script_hash = filesha256("${path.module}/scripts/bootstrap.mjs")
     # nonsensitive(sha256(...)): postgres_url is sensitive = true. Terraform >= 1.9

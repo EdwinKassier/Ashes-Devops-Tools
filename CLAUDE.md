@@ -54,7 +54,7 @@ Full rationale, root inventory, and the any-combination matrix: [`docs/architect
 | Tool | Required version |
 |------|-----------------|
 | Terraform | `~> 1.9` (uses `mock_provider`, `override_module`, `terraform_data`) |
-| google / google-beta | `~> 6.0` |
+| google / google-beta | `>= 6.0, < 8.0` (spans the in-progress 6→7 migration; locks are on 7.x, CI green. Finish the migration + tighten to `~> 7.0` as a follow-up.) |
 | hashicorp/aws | `>= 6.46.0, < 7.0.0` (floored pin — deliberate, not `~> 6.0`) |
 | supabase/supabase | `~> 1.0` |
 | vercel/vercel | `~> 4.0` |
@@ -79,7 +79,7 @@ make ci             # fmt-check + docs-check + validate-all + lint + security + 
 
 ## Testing
 
-- Tests live alongside modules as `*.tftest.hcl`.
+- Tests live in each module's `tests/` subdir as `*.tftest.hcl` (2 per module: `variables_validation` + `plan_assertions`).
 - `make test` calls `terraform test` with `mock_provider` — **no real cloud credentials needed**.
 - Always run `make test` before opening a PR.
 
@@ -187,7 +187,7 @@ Gotchas the AWS landing-zone build surfaced — each one bit us in CI:
 2. **Cross-account modules declare `configuration_aliases`** and therefore CANNOT be root-`terraform validate`d standalone. The CI validate step skips them; they are covered by `examples/`, the composing roots, and `mock_provider` tests instead.
 3. **Build policy JSON with `jsonencode()` / `templatefile()`**, NOT `data "aws_iam_policy_document"`. `mock_provider` mocks data sources, which breaks content assertions in tests.
 4. **`regex()` interval repeats cap at 1000** (RE2 engine) — a larger `{n,m}` repeat count is a plan-time error.
-5. **Log-service KMS grants must use per-service-principal statements with `aws:SourceOrgID`**, NOT `kms:ViaService` — `kms:ViaService` would deny CloudTrail.
+5. **Log-service KMS grants must use per-service-principal statements**, NOT `kms:ViaService` — `kms:ViaService` would deny CloudTrail. **⚠️ Open (audit A1, unvalidated):** the CloudTrail grant in `modules/aws/kms-key` currently scopes with `aws:SourceOrgID`, but AWS documents `aws:SourceArn` (the trail ARN) as the KMS-key-policy condition for CloudTrail — `aws:SourceOrgID` is documented for the S3 *bucket* policy, not KMS key policies. If CloudTrail does not populate `aws:SourceOrgID` on its KMS calls, log delivery fails. This has only been `mock_provider`-tested; **validate against a real org and switch CloudTrail to `aws:SourceArn` before relying on it.** See [AWS: KMS key policy for CloudTrail](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/create-kms-key-policy-for-cloudtrail.html).
 6. **Commit dual-platform `.terraform.lock.hcl`** (`linux_amd64` + `darwin_amd64`) so both CI runners and local macOS resolve the same provider hashes.
 
 ---

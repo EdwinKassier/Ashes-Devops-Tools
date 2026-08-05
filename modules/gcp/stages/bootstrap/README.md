@@ -92,12 +92,12 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_billing_account_iam_member.terraform_admin_billing_costs_manager (modules/gcp/stages/bootstrap/main.tf#L141)
-- resource.google_organization_iam_member.terraform_admin_exception_org_roles (modules/gcp/stages/bootstrap/main.tf#L150)
-- resource.google_organization_iam_member.terraform_admin_standard_org_roles (modules/gcp/stages/bootstrap/main.tf#L121)
+- resource.google_billing_account_iam_member.terraform_admin_billing_costs_manager (modules/gcp/stages/bootstrap/main.tf#L144)
+- resource.google_organization_iam_member.terraform_admin_exception_org_roles (modules/gcp/stages/bootstrap/main.tf#L153)
+- resource.google_organization_iam_member.terraform_admin_standard_org_roles (modules/gcp/stages/bootstrap/main.tf#L124)
 - resource.google_project.admin_project (modules/gcp/stages/bootstrap/main.tf#L15)
-- resource.google_project_service.admin_project_services (modules/gcp/stages/bootstrap/main.tf#L33)
-- resource.random_id.suffix (modules/gcp/stages/bootstrap/main.tf#L28)
+- resource.google_project_service.admin_project_services (modules/gcp/stages/bootstrap/main.tf#L36)
+- resource.random_id.suffix (modules/gcp/stages/bootstrap/main.tf#L31)
 - resource.terraform_data.tfc_workspaces_guard (modules/gcp/stages/bootstrap/main.tf#L4)
 
 

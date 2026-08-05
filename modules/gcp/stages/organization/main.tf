@@ -200,6 +200,13 @@ module "org_policies" {
       constraint = "storage.uniformBucketLevelAccess"
       enforce    = true
     },
+    # Block public access to Cloud Storage org-wide (audit finding G2). Uniform
+    # bucket-level access alone does NOT prevent allUsers/allAuthenticatedUsers
+    # grants; publicAccessPrevention is the constraint that does.
+    {
+      constraint = "storage.publicAccessPrevention"
+      enforce    = true
+    },
     # CIS 1.4: Disable automatic IAM grants for default service accounts
     {
       constraint = "iam.automaticIamGrantsForDefaultServiceAccounts"

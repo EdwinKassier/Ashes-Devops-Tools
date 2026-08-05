@@ -53,20 +53,21 @@ module "example" {
 The following resources are created:
 
 
-- resource.terraform_data.prod_vars_version (modules/vercel/project/main.tf#L129)
-- resource.terraform_data.qa_vars_version (modules/vercel/project/main.tf#L121)
-- resource.terraform_data.shared_vars_version (modules/vercel/project/main.tf#L133)
-- resource.terraform_data.uat_vars_version (modules/vercel/project/main.tf#L125)
-- resource.vercel_custom_environment.uat (modules/vercel/project/main.tf#L107)
-- resource.vercel_project.this (modules/vercel/project/main.tf#L88)
-- resource.vercel_project_domain.prod (modules/vercel/project/main.tf#L257)
-- resource.vercel_project_domain.qa (modules/vercel/project/main.tf#L235)
-- resource.vercel_project_domain.uat (modules/vercel/project/main.tf#L248)
-- resource.vercel_project_environment_variable.prod (modules/vercel/project/main.tf#L178)
-- resource.vercel_project_environment_variable.qa (modules/vercel/project/main.tf#L139)
-- resource.vercel_project_environment_variable.shared (modules/vercel/project/main.tf#L202)
-- resource.vercel_project_environment_variable.shared_uat (modules/vercel/project/main.tf#L217)
-- resource.vercel_project_environment_variable.uat (modules/vercel/project/main.tf#L160)
+- resource.terraform_data.env_key_uniqueness (modules/vercel/project/main.tf#L98)
+- resource.terraform_data.prod_vars_version (modules/vercel/project/main.tf#L156)
+- resource.terraform_data.qa_vars_version (modules/vercel/project/main.tf#L148)
+- resource.terraform_data.shared_vars_version (modules/vercel/project/main.tf#L160)
+- resource.terraform_data.uat_vars_version (modules/vercel/project/main.tf#L152)
+- resource.vercel_custom_environment.uat (modules/vercel/project/main.tf#L134)
+- resource.vercel_project.this (modules/vercel/project/main.tf#L115)
+- resource.vercel_project_domain.prod (modules/vercel/project/main.tf#L284)
+- resource.vercel_project_domain.qa (modules/vercel/project/main.tf#L262)
+- resource.vercel_project_domain.uat (modules/vercel/project/main.tf#L275)
+- resource.vercel_project_environment_variable.prod (modules/vercel/project/main.tf#L205)
+- resource.vercel_project_environment_variable.qa (modules/vercel/project/main.tf#L166)
+- resource.vercel_project_environment_variable.shared (modules/vercel/project/main.tf#L229)
+- resource.vercel_project_environment_variable.shared_uat (modules/vercel/project/main.tf#L244)
+- resource.vercel_project_environment_variable.uat (modules/vercel/project/main.tf#L187)
 
 
 ## Inputs

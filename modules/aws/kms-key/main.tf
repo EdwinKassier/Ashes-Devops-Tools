@@ -28,6 +28,16 @@
 
 locals {
   # Log-service grants. CloudTrail gets an extra EncryptionContext condition.
+  #
+  # ⚠️ AUDIT A1 (unvalidated, real-apply): AWS documents aws:SourceArn (the trail
+  # ARN) — not aws:SourceOrgID — as the CloudTrail KMS-key-policy condition
+  # (SourceOrgID is documented for the S3 bucket policy). If CloudTrail does not
+  # emit SourceOrgID on its KMS GenerateDataKey*/Decrypt calls, the StringEquals
+  # below fails closed and log delivery breaks. This has only been mock_provider-
+  # tested. Before relying on it in a real org, switch the CloudTrail branch to
+  # aws:SourceArn = arn:aws:cloudtrail:<region>:${var.management_account_id}:trail/<name>
+  # (or StringLike on the account-scoped pattern) and confirm Config/Security Lake
+  # actually emit SourceOrgID to KMS. See CLAUDE.md gotcha #5.
   log_service_statements = [
     for principal in var.log_service_principals : {
       Sid       = "Allow-${replace(principal, ".", "-")}"

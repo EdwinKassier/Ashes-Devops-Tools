@@ -211,6 +211,9 @@ jobs:
             cz check --rev-range "HEAD~1..HEAD"
           fi
 
+      - name: Consistency guards (canonical region regex + provider pins)
+        run: ./scripts/check-consistency.sh
+
   security:
     name: Security
     uses: ./.github/workflows/reusable-security.yml
