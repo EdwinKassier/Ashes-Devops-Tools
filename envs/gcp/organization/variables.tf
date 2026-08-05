@@ -245,3 +245,30 @@ variable "terraform_admin_email" {
     error_message = "terraform_admin_email must be a GCP service account email (ends in .iam.gserviceaccount.com) or null."
   }
 }
+
+# --- Audit finding G5: VPC-SC perimeter hardening (opt-in, default = unchanged) ---
+variable "vpc_sc_additional_restricted_services" {
+  description = "Extra service hostnames to add to the hub data perimeter (audit G5). Default [] = unchanged. Set the automation-ingress identities below before expanding under enforcement. UNVALIDATED — validate under vpc_sc_enable_dry_run first."
+  type        = list(string)
+  default     = []
+}
+
+variable "vpc_sc_ingress_identities" {
+  description = "Automation identities granted full ingress into the hub data perimeter (audit G5), e.g. the TFC-run SA. Set BEFORE expanding restricted_services under enforcement. Default [] = no ingress policy (unchanged)."
+  type        = list(string)
+  default     = []
+}
+
+# --- Audit finding G4: dedicated logging project (opt-in, default = unchanged) ---
+variable "logging_project_id" {
+  description = "Dedicated logging project ID for the org audit sink/bucket (audit G4 — separation of duties). Default null = admin project (unchanged). UNVALIDATED — validate on a real org; ensure CMEK cross-project access."
+  type        = string
+  default     = null
+}
+
+# --- Audit finding G3: bootstrap privilege split (opt-in, default OFF) ---
+variable "enable_privilege_split" {
+  description = "Enable the bootstrap SA privilege split (audit G3): route high-privilege org roles to a separate resman SA. Default false = unchanged. Enabling requires WIF binding + downstream impersonation switch. UNVALIDATED."
+  type        = bool
+  default     = false
+}

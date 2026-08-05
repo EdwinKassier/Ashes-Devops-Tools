@@ -112,3 +112,35 @@ variable "enable_deletion_protection" {
   type        = bool
   default     = true
 }
+
+# --- Audit finding G5: VPC-SC perimeter hardening (opt-in) -------------------
+# The base perimeter restricts only storage/bigquery/cloudfunctions/run and has
+# no ingress policy. Because the perimeter is ENFORCED by default
+# (vpc_sc_enable_dry_run = false), expanding restricted_services WITHOUT an
+# ingress policy for the automation identity would block the TFC-run SA from
+# managing those services in the spoke projects. Both variables default empty so
+# behavior is unchanged until you opt in. Harden by setting BOTH together
+# (validate under vpc_sc_enable_dry_run = true first).
+variable "vpc_sc_additional_restricted_services" {
+  description = <<-EOT
+    Extra service API hostnames to add to the hub data perimeter's restricted_services,
+    beyond the base set (storage/bigquery/cloudfunctions/run). Recommended additions once
+    an automation ingress policy is in place: logging.googleapis.com, monitoring.googleapis.com,
+    cloudkms.googleapis.com, secretmanager.googleapis.com, compute.googleapis.com,
+    container.googleapis.com, pubsub.googleapis.com, spanner.googleapis.com, sqladmin.googleapis.com.
+    Default [] = unchanged. UNVALIDATED against a real org — validate under dry-run first.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
+variable "vpc_sc_ingress_identities" {
+  description = <<-EOT
+    Identities (e.g. "serviceAccount:terraform-admin@<admin-project>.iam.gserviceaccount.com")
+    granted full ingress into the hub data perimeter — set this to the automation/TFC-run SA
+    BEFORE expanding restricted_services or the next enforced apply is blocked. Default [] =
+    no ingress policy (unchanged). UNVALIDATED — validate under dry-run first.
+  EOT
+  type        = list(string)
+  default     = []
+}

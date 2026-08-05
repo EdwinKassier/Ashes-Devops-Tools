@@ -76,6 +76,37 @@ module "terraform_admin_sa" {
   impersonation_members = ["user:${var.admin_email}"]
 }
 
+# Audit finding G3: privilege split (opt-in, default OFF = current single-SA behavior).
+# When enable_privilege_split = true, a second "terraform-resman" SA is created and the
+# highest-privilege org roles (org-policy, Access Context Manager, logging, SCC, IAM
+# security admin) are granted to IT instead of the everyday terraform-admin SA, so a
+# compromised routine run cannot rewrite guardrails/audit config.
+# ⚠️ INCOMPLETE + UNVALIDATED: fully activating the split ALSO requires switching the
+# downstream organization/network stages' impersonation to this resman SA (they currently
+# impersonate terraform_admin_email). Enable + validate on a real org before relying on it.
+module "resman_sa" {
+  source = "../../iam/service-account"
+  count  = var.enable_privilege_split ? 1 : 0
+
+  project_id            = google_project.admin_project.project_id
+  account_id            = "terraform-resman"
+  display_name          = "Terraform Resource Manager (privileged)"
+  description           = "Holds high-privilege org roles when the bootstrap privilege split is enabled (audit G3)"
+  impersonation_members = ["user:${var.admin_email}"]
+}
+
+locals {
+  # Roles that move to the resman SA when the split is enabled.
+  privileged_split_roles = toset([
+    "roles/orgpolicy.policyAdmin",
+    "roles/accesscontextmanager.policyAdmin",
+    "roles/logging.admin",
+    "roles/securitycenter.admin",
+    "roles/iam.securityAdmin",
+  ])
+  resman_sa_email = var.enable_privilege_split ? module.resman_sa[0].email : module.terraform_admin_sa.email
+}
+
 # Workload Identity for GitHub Actions (or TFC in future)
 module "gh_oidc" {
   source = "../../iam/workload-identity"
@@ -133,7 +164,9 @@ resource "google_organization_iam_member" "terraform_admin_standard_org_roles" {
 
   org_id = var.org_id
   role   = each.key #tfsec:ignore:google-iam-no-privileged-service-accounts
-  member = "serviceAccount:${module.terraform_admin_sa.email}"
+  # Audit G3: privileged roles route to the resman SA when the split is enabled;
+  # otherwise resman_sa_email == terraform-admin SA (unchanged).
+  member = "serviceAccount:${contains(local.privileged_split_roles, each.key) ? local.resman_sa_email : module.terraform_admin_sa.email}"
 }
 
 # Grant the Terraform admin SA the minimum billing-account-level role required to
@@ -175,5 +208,7 @@ resource "google_organization_iam_member" "terraform_admin_exception_org_roles" 
 
   org_id = var.org_id
   role   = each.key #tfsec:ignore:google-iam-no-privileged-service-accounts
-  member = "serviceAccount:${module.terraform_admin_sa.email}"
+  # Audit G3: privileged roles route to the resman SA when the split is enabled;
+  # otherwise resman_sa_email == terraform-admin SA (unchanged).
+  member = "serviceAccount:${contains(local.privileged_split_roles, each.key) ? local.resman_sa_email : module.terraform_admin_sa.email}"
 }

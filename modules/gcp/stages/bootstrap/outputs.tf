@@ -47,3 +47,8 @@ output "tfc_oidc_provider_name" {
   description = "Fully-qualified Workload Identity Provider name for Terraform Cloud OIDC (null if TFC OIDC not enabled)"
   value       = length(module.tfc_oidc) > 0 ? module.tfc_oidc[0].tfc_provider_name : null
 }
+
+output "resman_email" {
+  description = "Email of the privileged resman SA when enable_privilege_split = true; null otherwise (audit G3)."
+  value       = var.enable_privilege_split ? module.resman_sa[0].email : null
+}
