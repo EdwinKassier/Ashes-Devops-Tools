@@ -76,12 +76,12 @@ module "example" {
 ## Modules
 
 
-- account_baseline - ../../account-baseline
-- config_recorder - ../../config-org
-- edge_security - ../../edge-security
-- iam_role - ../../iam-role
-- systems_manager - ../../systems-manager
-- vpc - ../../vpc
+- account_baseline - ../../governance/account-baseline
+- config_recorder - ../../security/config-org
+- edge_security - ../../security/edge-security
+- iam_role - ../../iam/iam-role
+- systems_manager - ../../ops/systems-manager
+- vpc - ../../network/vpc
 
 
 ## Resources

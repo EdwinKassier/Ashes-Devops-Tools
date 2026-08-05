@@ -27,7 +27,7 @@
 # ---------------------------------------------------------------------------
 
 module "log_cmk" {
-  source = "../../kms-key"
+  source = "../../data/kms-key"
   providers = {
     aws = aws.log_archive
   }
@@ -41,7 +41,7 @@ module "log_cmk" {
 }
 
 module "forensics_cmk" {
-  source = "../../kms-key"
+  source = "../../data/kms-key"
   providers = {
     aws = aws.forensics
   }
@@ -59,7 +59,7 @@ module "forensics_cmk" {
 # the local detective/session services (SNS, SSM, CloudWatch) usage, scoped by
 # aws:SourceOrgID. It carries no log-delivery grants.
 module "sectool_cmk" {
-  source = "../../kms-key"
+  source = "../../data/kms-key"
   providers = {
     aws = aws.security_tooling
   }
@@ -77,7 +77,7 @@ module "sectool_cmk" {
 # ---------------------------------------------------------------------------
 
 module "log_archive_bucket" {
-  source = "../../log-archive-bucket"
+  source = "../../data/log-archive-bucket"
   providers = {
     aws = aws.log_archive
   }
@@ -92,7 +92,7 @@ module "log_archive_bucket" {
 # ---------------------------------------------------------------------------
 
 module "cloudtrail" {
-  source = "../../cloudtrail-org"
+  source = "../../security/cloudtrail-org"
   providers = {
     aws = aws.management
   }
@@ -108,7 +108,7 @@ module "cloudtrail" {
 # ---------------------------------------------------------------------------
 
 module "config" {
-  source = "../../config-org"
+  source = "../../security/config-org"
   providers = {
     aws = aws.security_tooling
   }
@@ -127,7 +127,7 @@ module "config" {
 # ---------------------------------------------------------------------------
 
 module "guardduty" {
-  source = "../../guardduty-org"
+  source = "../../security/guardduty-org"
   providers = {
     aws            = aws.security_tooling
     aws.management = aws.management
@@ -142,7 +142,7 @@ module "guardduty" {
 # ---------------------------------------------------------------------------
 
 module "securityhub" {
-  source = "../../securityhub-org"
+  source = "../../security/securityhub-org"
   providers = {
     aws            = aws.security_tooling
     aws.management = aws.management
@@ -158,7 +158,7 @@ module "securityhub" {
 # ---------------------------------------------------------------------------
 
 module "access_analyzer" {
-  source = "../../access-analyzer-org"
+  source = "../../security/access-analyzer-org"
   providers = {
     aws = aws.security_tooling
   }
@@ -169,7 +169,7 @@ module "access_analyzer" {
 # ---------------------------------------------------------------------------
 
 module "delegated_admin" {
-  source = "../../security-delegated-admin"
+  source = "../../security/security-delegated-admin"
   providers = {
     aws = aws.management
   }
@@ -183,7 +183,7 @@ module "delegated_admin" {
 # ---------------------------------------------------------------------------
 
 module "org_security_service" {
-  source = "../../org-security-service"
+  source = "../../security/org-security-service"
   providers = {
     aws            = aws.security_tooling
     aws.management = aws.management
@@ -198,7 +198,7 @@ module "org_security_service" {
 # ---------------------------------------------------------------------------
 
 module "securitylake" {
-  source = "../../securitylake"
+  source = "../../security/securitylake"
   providers = {
     aws = aws.security_tooling
   }
@@ -214,7 +214,7 @@ module "securitylake" {
 # ---------------------------------------------------------------------------
 
 module "systems_manager" {
-  source = "../../systems-manager"
+  source = "../../ops/systems-manager"
   providers = {
     aws = aws.security_tooling
   }
@@ -230,7 +230,7 @@ module "systems_manager" {
 # ---------------------------------------------------------------------------
 
 module "incident_response" {
-  source = "../../incident-response"
+  source = "../../security/incident-response"
   providers = {
     aws = aws.security_tooling
   }
@@ -248,7 +248,7 @@ module "incident_response" {
 # ---------------------------------------------------------------------------
 
 module "security_notifications" {
-  source = "../../security-notifications"
+  source = "../../security/security-notifications"
   providers = {
     aws = aws.security_tooling
   }
@@ -267,7 +267,7 @@ module "security_notifications" {
 # ---------------------------------------------------------------------------
 
 module "service_quotas" {
-  source = "../../service-quotas"
+  source = "../../governance/service-quotas"
   providers = {
     aws = aws.security_tooling
   }
@@ -285,7 +285,7 @@ module "service_quotas" {
 # ---------------------------------------------------------------------------
 
 module "firewall_manager" {
-  source = "../../firewall-manager-org"
+  source = "../../security/firewall-manager-org"
   providers = {
     aws            = aws.security_tooling
     aws.management = aws.management

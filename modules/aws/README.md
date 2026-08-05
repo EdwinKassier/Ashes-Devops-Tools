@@ -1,76 +1,74 @@
 # AWS Modules
 
 AWS-native Terraform modules implementing the [AWS Security Reference
-Architecture](../../docs/architecture/aws-landing-zone.md). Primitives are flat
-under `modules/aws/`; orchestration wrappers live under
-[`modules/aws/stages/`](./stages/). Grouped below by domain for navigation
-(the directories themselves are flat — the grouping is logical, mirroring the
-category structure of [`modules/gcp/`](../gcp/)).
+Architecture](../../docs/architecture/aws-landing-zone.md). Primitives are
+grouped into category subdirectories (mirroring [`modules/gcp/`](../gcp/));
+orchestration wrappers live under [`modules/aws/stages/`](./stages/).
 
 > Cross-provider comparison (AWS vs GCP capabilities): [`docs/architecture/cross-cloud-comparison.md`](../../docs/architecture/cross-cloud-comparison.md).
 
-## Governance & Organization
+## `governance/` — Organization & guardrails
 | Module | Purpose |
 |--------|---------|
-| [organization](./organization/) | AWS Organizations org + OUs, `feature_set = ALL` from creation |
-| [organization-policy](./organization-policy/) | SCPs, RCPs, and declarative policies (region restriction, data perimeter, IMDSv2) |
-| [iam-organizations-features](./iam-organizations-features/) | Centralized root-access management |
-| [account](./account/) | Member account creation |
-| [account-baseline](./account-baseline/) | Per-account guardrails: EBS default encryption, account S3 Block Public Access, password policy |
-| [cost-governance](./cost-governance/) | Budgets and cost allocation |
-| [service-quotas](./service-quotas/) | Service quota management |
+| [organization](./governance/organization/) | AWS Organizations org + OUs, `feature_set = ALL` from creation |
+| [organization-policy](./governance/organization-policy/) | SCPs, RCPs, and declarative policies (region restriction, data perimeter, IMDSv2) |
+| [iam-organizations-features](./governance/iam-organizations-features/) | Centralized root-access management |
+| [account](./governance/account/) | Member account creation |
+| [account-baseline](./governance/account-baseline/) | Per-account guardrails: EBS default encryption, account S3 Block Public Access, password policy |
+| [cost-governance](./governance/cost-governance/) | Budgets and cost allocation |
+| [service-quotas](./governance/service-quotas/) | Service quota management |
 
-## Security & Detection (delegated-admin)
+## `security/` — Detection & response (delegated-admin)
 | Module | Purpose |
 |--------|---------|
-| [security-delegated-admin](./security-delegated-admin/) | Registers delegated admins for security services (excludes those with dedicated `*_organization_admin_account` resources) |
-| [org-security-service](./org-security-service/) | Org enablement for Macie / Inspector / Detective / Resource Explorer (shared shape) |
-| [guardduty-org](./guardduty-org/) | GuardDuty organization (Runtime Monitoring, optional EBS malware) |
-| [securityhub-org](./securityhub-org/) | Security Hub organization (central configuration) |
-| [config-org](./config-org/) | AWS Config org recorder + aggregator |
-| [cloudtrail-org](./cloudtrail-org/) | Organization CloudTrail |
-| [access-analyzer-org](./access-analyzer-org/) | IAM Access Analyzer (external + unused access) |
-| [securitylake](./securitylake/) | Security Lake + subscriber |
-| [security-notifications](./security-notifications/) | Security alerting fan-out |
-| [incident-response](./incident-response/) | Incident-response scaffolding |
-| [firewall-manager-org](./firewall-manager-org/) | Firewall Manager organization |
-| [secrets-baseline](./secrets-baseline/) | Secrets Manager baseline |
-| [edge-security](./edge-security/) | WAF / edge protection |
+| [security-delegated-admin](./security/security-delegated-admin/) | Registers delegated admins for security services (excludes those with dedicated `*_organization_admin_account` resources) |
+| [org-security-service](./security/org-security-service/) | Org enablement for Macie / Inspector / Detective / Resource Explorer |
+| [guardduty-org](./security/guardduty-org/) | GuardDuty organization (Runtime Monitoring, optional EBS malware) |
+| [securityhub-org](./security/securityhub-org/) | Security Hub organization (central configuration) |
+| [config-org](./security/config-org/) | AWS Config org recorder + aggregator |
+| [cloudtrail-org](./security/cloudtrail-org/) | Organization CloudTrail |
+| [access-analyzer-org](./security/access-analyzer-org/) | IAM Access Analyzer (external + unused access) |
+| [securitylake](./security/securitylake/) | Security Lake + subscriber |
+| [security-notifications](./security/security-notifications/) | Security alerting fan-out |
+| [incident-response](./security/incident-response/) | Incident-response scaffolding |
+| [firewall-manager-org](./security/firewall-manager-org/) | Firewall Manager organization |
+| [secrets-baseline](./security/secrets-baseline/) | Secrets Manager baseline |
+| [edge-security](./security/edge-security/) | WAF / edge protection |
 
-## IAM & Identity
+## `network/`
 | Module | Purpose |
 |--------|---------|
-| [iam-role](./iam-role/) | Custom IAM role (policy JSON via `jsonencode`) |
-| [iam-identity-center](./iam-identity-center/) | IAM Identity Center / SSO permission sets + assignments |
+| [vpc](./network/vpc/) | VPC with tiered subnets |
+| [vpc-endpoints](./network/vpc-endpoints/) | Interface / gateway VPC endpoints |
+| [transit-gateway](./network/transit-gateway/) | Transit Gateway with prod/nonprod route-table isolation |
+| [network-firewall](./network/network-firewall/) | AWS Network Firewall |
+| [route53-resolver](./network/route53-resolver/) | Route 53 Resolver endpoints/rules |
+| [network-access-analyzer](./network/network-access-analyzer/) | Network Access Analyzer scopes |
+| [ipam](./network/ipam/) | IP Address Manager |
 
-## Networking
+## `iam/`
 | Module | Purpose |
 |--------|---------|
-| [vpc](./vpc/) | VPC with tiered subnets |
-| [vpc-endpoints](./vpc-endpoints/) | Interface / gateway VPC endpoints |
-| [transit-gateway](./transit-gateway/) | Transit Gateway with prod/nonprod route-table isolation |
-| [network-firewall](./network-firewall/) | AWS Network Firewall |
-| [route53-resolver](./route53-resolver/) | Route 53 Resolver endpoints/rules |
-| [network-access-analyzer](./network-access-analyzer/) | Network Access Analyzer scopes |
-| [ipam](./ipam/) | IP Address Manager |
+| [iam-role](./iam/iam-role/) | Custom IAM role (policy JSON via `jsonencode`) |
+| [iam-identity-center](./iam/iam-identity-center/) | IAM Identity Center / SSO permission sets + assignments |
 
-## Data protection, keys & storage
+## `data/` — Keys, storage & PKI
 | Module | Purpose |
 |--------|---------|
-| [kms-key](./kms-key/) | KMS CMK with rotation + log-service grants |
-| [log-archive-bucket](./log-archive-bucket/) | Immutable (Object Lock COMPLIANCE) log-archive S3 bucket |
-| [private-ca](./private-ca/) | ACM Private CA |
+| [kms-key](./data/kms-key/) | KMS CMK with rotation + log-service grants |
+| [log-archive-bucket](./data/log-archive-bucket/) | Immutable (Object Lock COMPLIANCE) log-archive S3 bucket |
+| [private-ca](./data/private-ca/) | ACM Private CA |
 
-## Backup
+## `backup/`
 | Module | Purpose |
 |--------|---------|
-| [backup-vault](./backup-vault/) | Backup vault with Vault Lock (compliance mode) + restore testing |
-| [backup-org-policy](./backup-org-policy/) | Organization backup policy |
+| [backup-vault](./backup/backup-vault/) | Backup vault with Vault Lock (compliance mode) + restore testing |
+| [backup-org-policy](./backup/backup-org-policy/) | Organization backup policy |
 
-## Operations
+## `ops/`
 | Module | Purpose |
 |--------|---------|
-| [systems-manager](./systems-manager/) | Systems Manager (SSM) baseline |
+| [systems-manager](./ops/systems-manager/) | Systems Manager (SSM) baseline |
 
 ---
 

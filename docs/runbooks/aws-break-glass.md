@@ -18,7 +18,7 @@ Understand the design before you rely on it:
 
 - **Disabled by default.** The break-glass role carries a **deny-all standing policy**. In normal operation it can do nothing — it is inert until activated (Step 2).
 - **MFA-required.** Its trust/permission conditions require MFA, so a leaked credential alone cannot use it.
-- **Carved out of the guardrails.** Its **account-qualified exact ARN** (`arn:aws:iam::<account>:role/...`) is listed as an exception in the SCP/RCP deny statements rendered by `modules/aws/organization-policy` (`break_glass_role_arn`). That carve-out is why, once activated, it can act where the deny statements would otherwise block everyone. Because the exception is by exact ARN, no other principal inherits the exemption.
+- **Carved out of the guardrails.** Its **account-qualified exact ARN** (`arn:aws:iam::<account>:role/...`) is listed as an exception in the SCP/RCP deny statements rendered by `modules/aws/governance/organization-policy` (`break_glass_role_arn`). That carve-out is why, once activated, it can act where the deny statements would otherwise block everyone. Because the exception is by exact ARN, no other principal inherits the exemption.
 
 ---
 
@@ -72,7 +72,7 @@ If an SCP change has locked out **all** member-account principals (including the
      --target-id <ou-or-account-id>
    ```
 
-3. Once access is restored, fix the policy in Terraform (`modules/aws/organization-policy`) and re-apply through the `aws-organization` workspace — do not leave the guardrail detached.
+3. Once access is restored, fix the policy in Terraform (`modules/aws/governance/organization-policy`) and re-apply through the `aws-organization` workspace — do not leave the guardrail detached.
 
 > **The management-account root is NOT SCP-protected and must be secured out-of-band.** Because no SCP can constrain it, its compromise is catastrophic. Enforce: a **hardware MFA** device on root, **no root access keys**, root email on a monitored, tightly controlled inbox, and root sign-in alarms. This is the ultimate break-glass path — treat it as such.
 

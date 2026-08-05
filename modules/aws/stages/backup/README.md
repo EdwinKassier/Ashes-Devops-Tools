@@ -64,8 +64,8 @@ module "example" {
 ## Modules
 
 
-- backup_org_policy - ../../backup-org-policy
-- backup_vault - ../../backup-vault
+- backup_org_policy - ../../backup/backup-org-policy
+- backup_vault - ../../backup/backup-vault
 
 
 

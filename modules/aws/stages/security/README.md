@@ -164,23 +164,23 @@ module "example" {
 ## Modules
 
 
-- access_analyzer - ../../access-analyzer-org
-- cloudtrail - ../../cloudtrail-org
-- config - ../../config-org
-- delegated_admin - ../../security-delegated-admin
-- firewall_manager - ../../firewall-manager-org
-- forensics_cmk - ../../kms-key
-- guardduty - ../../guardduty-org
-- incident_response - ../../incident-response
-- log_archive_bucket - ../../log-archive-bucket
-- log_cmk - ../../kms-key
-- org_security_service - ../../org-security-service
-- sectool_cmk - ../../kms-key
-- security_notifications - ../../security-notifications
-- securityhub - ../../securityhub-org
-- securitylake - ../../securitylake
-- service_quotas - ../../service-quotas
-- systems_manager - ../../systems-manager
+- access_analyzer - ../../security/access-analyzer-org
+- cloudtrail - ../../security/cloudtrail-org
+- config - ../../security/config-org
+- delegated_admin - ../../security/security-delegated-admin
+- firewall_manager - ../../security/firewall-manager-org
+- forensics_cmk - ../../data/kms-key
+- guardduty - ../../security/guardduty-org
+- incident_response - ../../security/incident-response
+- log_archive_bucket - ../../data/log-archive-bucket
+- log_cmk - ../../data/kms-key
+- org_security_service - ../../security/org-security-service
+- sectool_cmk - ../../data/kms-key
+- security_notifications - ../../security/security-notifications
+- securityhub - ../../security/securityhub-org
+- securitylake - ../../security/securitylake
+- service_quotas - ../../governance/service-quotas
+- systems_manager - ../../ops/systems-manager
 
 
 

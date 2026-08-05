@@ -222,41 +222,41 @@ Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives i
 
 | Module | Purpose |
 |:-------|:--------|
-| [`aws/organization`](modules/aws/organization/) | AWS Organizations, OUs, root config |
-| [`aws/organization-policy`](modules/aws/organization-policy/) | Service Control Policies (SCPs) |
-| [`aws/account`](modules/aws/account/) | Member account provisioning |
-| [`aws/account-baseline`](modules/aws/account-baseline/) | Per-account baseline guardrails |
-| [`aws/cost-governance`](modules/aws/cost-governance/) | Budgets, cost anomaly detection, allocation tags |
-| [`aws/service-quotas`](modules/aws/service-quotas/) | Service quota requests |
-| [`aws/iam-organizations-features`](modules/aws/iam-organizations-features/) | Org-wide IAM features |
-| [`aws/iam-identity-center`](modules/aws/iam-identity-center/) | IAM Identity Center (SSO) |
-| [`aws/iam-role`](modules/aws/iam-role/) | IAM roles |
-| [`aws/access-analyzer-org`](modules/aws/access-analyzer-org/) | Org-level IAM Access Analyzer |
-| [`aws/guardduty-org`](modules/aws/guardduty-org/) | Org-wide GuardDuty |
-| [`aws/securityhub-org`](modules/aws/securityhub-org/) | Org-wide Security Hub |
-| [`aws/config-org`](modules/aws/config-org/) | Org-wide AWS Config |
-| [`aws/cloudtrail-org`](modules/aws/cloudtrail-org/) | Org-wide CloudTrail |
-| [`aws/securitylake`](modules/aws/securitylake/) | Amazon Security Lake |
-| [`aws/security-delegated-admin`](modules/aws/security-delegated-admin/) | Delegated administrator registration |
-| [`aws/org-security-service`](modules/aws/org-security-service/) | Org security service enablement |
-| [`aws/security-notifications`](modules/aws/security-notifications/) | Security finding notifications |
-| [`aws/firewall-manager-org`](modules/aws/firewall-manager-org/) | Org-wide Firewall Manager |
-| [`aws/edge-security`](modules/aws/edge-security/) | Edge / WAF security |
-| [`aws/secrets-baseline`](modules/aws/secrets-baseline/) | Secrets Manager baseline |
-| [`aws/incident-response`](modules/aws/incident-response/) | Incident response tooling |
-| [`aws/kms-key`](modules/aws/kms-key/) | Customer-managed KMS keys |
-| [`aws/private-ca`](modules/aws/private-ca/) | AWS Private Certificate Authority |
-| [`aws/systems-manager`](modules/aws/systems-manager/) | Systems Manager configuration |
-| [`aws/log-archive-bucket`](modules/aws/log-archive-bucket/) | Centralized log archive bucket |
-| [`aws/vpc`](modules/aws/vpc/) | VPC with subnets and routing |
-| [`aws/vpc-endpoints`](modules/aws/vpc-endpoints/) | VPC interface/gateway endpoints |
-| [`aws/transit-gateway`](modules/aws/transit-gateway/) | Transit Gateway hub |
-| [`aws/ipam`](modules/aws/ipam/) | IP Address Manager |
-| [`aws/network-firewall`](modules/aws/network-firewall/) | AWS Network Firewall |
-| [`aws/network-access-analyzer`](modules/aws/network-access-analyzer/) | Network Access Analyzer |
-| [`aws/route53-resolver`](modules/aws/route53-resolver/) | Route 53 Resolver rules/endpoints |
-| [`aws/backup-vault`](modules/aws/backup-vault/) | AWS Backup vault |
-| [`aws/backup-org-policy`](modules/aws/backup-org-policy/) | Org-wide backup policies |
+| [`aws/organization`](modules/aws/governance/organization/) | AWS Organizations, OUs, root config |
+| [`aws/organization-policy`](modules/aws/governance/organization-policy/) | Service Control Policies (SCPs) |
+| [`aws/account`](modules/aws/governance/account/) | Member account provisioning |
+| [`aws/account-baseline`](modules/aws/governance/account-baseline/) | Per-account baseline guardrails |
+| [`aws/cost-governance`](modules/aws/governance/cost-governance/) | Budgets, cost anomaly detection, allocation tags |
+| [`aws/service-quotas`](modules/aws/governance/service-quotas/) | Service quota requests |
+| [`aws/iam-organizations-features`](modules/aws/governance/iam-organizations-features/) | Org-wide IAM features |
+| [`aws/iam-identity-center`](modules/aws/iam/iam-identity-center/) | IAM Identity Center (SSO) |
+| [`aws/iam-role`](modules/aws/iam/iam-role/) | IAM roles |
+| [`aws/access-analyzer-org`](modules/aws/security/access-analyzer-org/) | Org-level IAM Access Analyzer |
+| [`aws/guardduty-org`](modules/aws/security/guardduty-org/) | Org-wide GuardDuty |
+| [`aws/securityhub-org`](modules/aws/security/securityhub-org/) | Org-wide Security Hub |
+| [`aws/config-org`](modules/aws/security/config-org/) | Org-wide AWS Config |
+| [`aws/cloudtrail-org`](modules/aws/security/cloudtrail-org/) | Org-wide CloudTrail |
+| [`aws/securitylake`](modules/aws/security/securitylake/) | Amazon Security Lake |
+| [`aws/security-delegated-admin`](modules/aws/security/security-delegated-admin/) | Delegated administrator registration |
+| [`aws/org-security-service`](modules/aws/security/org-security-service/) | Org security service enablement |
+| [`aws/security-notifications`](modules/aws/security/security-notifications/) | Security finding notifications |
+| [`aws/firewall-manager-org`](modules/aws/security/firewall-manager-org/) | Org-wide Firewall Manager |
+| [`aws/edge-security`](modules/aws/security/edge-security/) | Edge / WAF security |
+| [`aws/secrets-baseline`](modules/aws/security/secrets-baseline/) | Secrets Manager baseline |
+| [`aws/incident-response`](modules/aws/security/incident-response/) | Incident response tooling |
+| [`aws/kms-key`](modules/aws/data/kms-key/) | Customer-managed KMS keys |
+| [`aws/private-ca`](modules/aws/data/private-ca/) | AWS Private Certificate Authority |
+| [`aws/systems-manager`](modules/aws/ops/systems-manager/) | Systems Manager configuration |
+| [`aws/log-archive-bucket`](modules/aws/data/log-archive-bucket/) | Centralized log archive bucket |
+| [`aws/vpc`](modules/aws/network/vpc/) | VPC with subnets and routing |
+| [`aws/vpc-endpoints`](modules/aws/network/vpc-endpoints/) | VPC interface/gateway endpoints |
+| [`aws/transit-gateway`](modules/aws/network/transit-gateway/) | Transit Gateway hub |
+| [`aws/ipam`](modules/aws/network/ipam/) | IP Address Manager |
+| [`aws/network-firewall`](modules/aws/network/network-firewall/) | AWS Network Firewall |
+| [`aws/network-access-analyzer`](modules/aws/network/network-access-analyzer/) | Network Access Analyzer |
+| [`aws/route53-resolver`](modules/aws/network/route53-resolver/) | Route 53 Resolver rules/endpoints |
+| [`aws/backup-vault`](modules/aws/backup/backup-vault/) | AWS Backup vault |
+| [`aws/backup-org-policy`](modules/aws/backup/backup-org-policy/) | Org-wide backup policies |
 
 </details>
 

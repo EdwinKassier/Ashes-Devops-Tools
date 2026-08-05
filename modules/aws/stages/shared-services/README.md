@@ -55,8 +55,8 @@ module "example" {
 ## Modules
 
 
-- private_ca - ../../private-ca
-- secrets_baseline - ../../secrets-baseline
+- private_ca - ../../data/private-ca
+- secrets_baseline - ../../security/secrets-baseline
 
 
 

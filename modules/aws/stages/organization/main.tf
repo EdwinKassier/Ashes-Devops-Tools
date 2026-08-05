@@ -13,7 +13,7 @@
 
 # Organization structure (OUs, enabled policy types, trusted access).
 module "organization" {
-  source = "../../organization"
+  source = "../../governance/organization"
 
   # top_level_ous / child_ous / enabled_policy_types / aws_service_access_principals
   # use the module's SRA foundational defaults.
@@ -27,7 +27,7 @@ locals {
 
 # Member accounts, one per entry in the merged account map.
 module "account" {
-  source   = "../../account"
+  source   = "../../governance/account"
   for_each = local.all_accounts
 
   account_name       = each.key
@@ -53,7 +53,7 @@ locals {
 
 # Guardrail policy set (SCPs, RCP, declarative EC2, tag policy) and attachments.
 module "policies" {
-  source = "../../organization-policy"
+  source = "../../governance/organization-policy"
 
   org_id                  = module.organization.organization_id
   allowed_regions         = var.allowed_regions
@@ -65,7 +65,7 @@ module "policies" {
 
 # Centralized root-access management for the organization.
 module "root_access" {
-  source = "../../iam-organizations-features"
+  source = "../../governance/iam-organizations-features"
 }
 
 # Management-account-scoped cost governance: budgets, Cost Anomaly Detection and
@@ -73,7 +73,7 @@ module "root_access" {
 # spend up to the payer, so this is organization-wide only from the management
 # account — which is this stage's default provider.
 module "cost_governance" {
-  source = "../../cost-governance"
+  source = "../../governance/cost-governance"
 
   enable_cost_governance  = var.enable_cost_governance
   budgets                 = var.budgets
