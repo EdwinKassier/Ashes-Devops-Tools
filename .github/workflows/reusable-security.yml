@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
       - name: Run TFSec on modules
         uses: aquasecurity/tfsec-action@b466648d6e39e7c75324f25d83891162a721f2d6  # v1.0.3
@@ -45,14 +45,14 @@ jobs:
 
       - name: Upload TFSec modules SARIF
         if: inputs.sarif_output && always()
-        uses: github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e  # v4.35.4
+        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9  # v4.37.0
         with:
           sarif_file: tfsec-results.sarif
           category: tfsec
 
       - name: Upload TFSec envs SARIF
         if: inputs.sarif_output && always()
-        uses: github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e  # v4.35.4
+        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9  # v4.37.0
         with:
           sarif_file: tfsec-env-results.sarif
           category: tfsec-envs
@@ -79,10 +79,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
       - name: Run Checkov on modules
-        uses: bridgecrewio/checkov-action@4048c972aae68d0b983a48bb3479aab2d877b898  # v12
+        uses: bridgecrewio/checkov-action@7b972723c44fb3d256283fac96fae5d7c1894bb7  # v12
         with:
           directory: modules
           framework: terraform
@@ -102,7 +102,7 @@ jobs:
         # always() so a finding in the modules scan above does not skip this step and
         # leave checkov-env-results.sarif uncreated (which would fail the upload).
         if: always()
-        uses: bridgecrewio/checkov-action@4048c972aae68d0b983a48bb3479aab2d877b898  # v12
+        uses: bridgecrewio/checkov-action@7b972723c44fb3d256283fac96fae5d7c1894bb7  # v12
         with:
           directory: envs
           framework: terraform
@@ -117,14 +117,14 @@ jobs:
 
       - name: Upload Checkov modules SARIF
         if: inputs.sarif_output && always()
-        uses: github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e  # v4.35.4
+        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9  # v4.37.0
         with:
           sarif_file: checkov-results.sarif
           category: checkov
 
       - name: Upload Checkov envs SARIF
         if: inputs.sarif_output && always()
-        uses: github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e  # v4.35.4
+        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9  # v4.37.0
         with:
           sarif_file: checkov-env-results.sarif
           category: checkov-envs
