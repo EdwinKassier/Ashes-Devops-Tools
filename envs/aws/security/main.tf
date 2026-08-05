@@ -33,6 +33,7 @@ module "aws_security" {
   security_tooling_account_id = data.terraform_remote_state.aws_organization.outputs.account_ids["security_tooling"]
   log_archive_account_id      = data.terraform_remote_state.aws_organization.outputs.account_ids["log_archive"]
   shared_services_account_id  = data.terraform_remote_state.aws_organization.outputs.account_ids["shared_services"]
+  identity_account_id         = var.identity_account_id
   forensics_account_id        = data.terraform_remote_state.aws_organization.outputs.account_ids["forensics"]
 
   aws_region          = var.aws_region

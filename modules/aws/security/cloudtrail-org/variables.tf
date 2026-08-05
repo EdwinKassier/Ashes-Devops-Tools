@@ -28,3 +28,22 @@ variable "kms_key_arn" {
     error_message = "kms_key_arn must be a non-empty KMS key ARN."
   }
 }
+
+# --- Audit finding A4: CloudWatch Logs + CIS alarms (opt-in, default OFF) ---
+variable "enable_cloudwatch_logs" {
+  description = "When true, attach a CloudWatch Logs group to the org trail and create CIS control-plane metric-filter alarms (audit A4). Default false preserves the deliberate S3-only design. UNVALIDATED — validate on a real org."
+  type        = bool
+  default     = false
+}
+
+variable "cloudwatch_logs_retention_days" {
+  description = "Retention (days) for the CloudWatch Logs group when enable_cloudwatch_logs = true."
+  type        = number
+  default     = 365
+}
+
+variable "alarm_sns_topic_arn" {
+  description = "Optional SNS topic ARN for CIS alarm notifications (enable_cloudwatch_logs). Null = alarms created without notification action."
+  type        = string
+  default     = null
+}
