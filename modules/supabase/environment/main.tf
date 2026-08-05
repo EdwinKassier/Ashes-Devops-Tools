@@ -36,6 +36,16 @@ module "settings" {
   password_min_length  = var.password_min_length
 }
 
+# Audit finding S1: Supabase is deprecating the legacy JWT keys (anon_key /
+# service_role_key) by end of 2026 in favour of publishable (sb_publishable_...)
+# and secret (sb_secret_...) keys. This module still consumes the legacy pair
+# because the supabase/supabase Terraform provider (pinned ~> 1.0, currently
+# 1.9.0) does NOT yet expose the new key types on the supabase_apikeys data
+# source — referencing sb_publishable_key / sb_secret_key here today would fail
+# `terraform validate`. TODO: once the provider adds new-key attributes, expose
+# them as additional outputs (publishable_key / secret_key) so callers can cut
+# over without a breaking change, then deprecate the anon_key/service_role_key
+# outputs. Tracking: https://supabase.com/docs/guides/getting-started/migrating-to-new-api-keys
 data "supabase_apikeys" "this" {
   # project_ref = module.project.id creates an implicit dependency on module.project.
   # No explicit depends_on needed — adding it would defer the data source to apply
