@@ -12,11 +12,7 @@ staged-deployment diagram is in the [top-level modules README](../../README.md).
 | [projects](./projects/) | 2 | Platform projects (host/spoke/DNS/hub) | `envs/gcp/organization` |
 | [network-hub](./network-hub/) | 3 | Hub VPC, DNS hub, VPC-SC, hierarchical firewall | `envs/gcp/organization` |
 | [workload](./workload/) | — | Per-env application projects (workload factory) | `envs/gcp/workload` / `examples/workloads` |
+| [host](./host/) | — | Per-env Shared VPC host-project network — composes ~30 `network/` + `governance/` primitives (VPC, subnets, firewalls, NAT, DNS, VPN, interconnect, VPC-SC, Cloud Armor, …) | `envs/gcp/workload` |
 
 The AWS landing zone uses the same primitive/stage split under
 [`modules/aws/stages/`](../../aws/stages/).
-
-> **Note (audit C3):** the GCP *workload networking* composition currently lives
-> in [`modules/gcp/host`](../host/) (a large wrapper sourced by `envs/gcp/workload`),
-> not under this `stages/` directory. Relocating/renaming it to `stages/` is a
-> tracked follow-up.

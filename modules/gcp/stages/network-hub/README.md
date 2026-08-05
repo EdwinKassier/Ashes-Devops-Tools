@@ -89,9 +89,9 @@ module "example" {
 ## Modules
 
 
-- dns_hub_network - ../../host
+- dns_hub_network - ../host
 - dns_hub_zone - ../../network/dns
-- hub_network - ../../host
+- hub_network - ../host
 
 
 

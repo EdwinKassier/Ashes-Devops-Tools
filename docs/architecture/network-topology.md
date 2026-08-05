@@ -161,8 +161,8 @@ Spoke projects use DNS peering to resolve records from the hub's private zone. N
 
 | Variable | Module | Description |
 |----------|--------|-------------|
-| `vpc_cidr_block` | `modules/gcp/host` | VPC address space — must not overlap other VPCs. Required; no default. |
-| `psa_prefix_length` | `modules/gcp/host` | Private Service Access prefix (16–29). Controls Cloud SQL connectivity range. |
-| `vpn_tunnel_count` | `modules/gcp/host` | Number of HA-VPN tunnels (1 or 2). Must be 2 for 99.99% SLA. |
-| `interconnects` | `modules/gcp/host` | Map of Cloud Interconnect (Dedicated/Partner) VLAN attachments to create. Empty map = no interconnect. |
-| `vpc_service_controls` | `modules/gcp/host` | Object controlling VPC-SC perimeter config. |
+| `vpc_cidr_block` | `modules/gcp/stages/host` | VPC address space — must not overlap other VPCs. Required; no default. |
+| `psa_prefix_length` | `modules/gcp/stages/host` | Private Service Access prefix (16–29). Controls Cloud SQL connectivity range. |
+| `vpn_tunnel_count` | `modules/gcp/stages/host` | Number of HA-VPN tunnels (1 or 2). Must be 2 for 99.99% SLA. |
+| `interconnects` | `modules/gcp/stages/host` | Map of Cloud Interconnect (Dedicated/Partner) VLAN attachments to create. Empty map = no interconnect. |
+| `vpc_service_controls` | `modules/gcp/stages/host` | Object controlling VPC-SC perimeter config. |

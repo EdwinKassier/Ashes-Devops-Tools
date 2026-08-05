@@ -85,7 +85,7 @@ resource "terraform_data" "subnet_cidr_count_guard" {
 }
 
 module "vpc" {
-  source = "../network/vpc"
+  source = "../../network/vpc"
   count  = var.enable_networking ? 1 : 0
 
   project_id = var.project_id
@@ -103,7 +103,7 @@ module "vpc" {
 
 # Public subnets
 module "public_subnets" {
-  source   = "../network/subnet"
+  source   = "../../network/subnet"
   for_each = var.enable_networking ? { for i, z in local.zones : z => i } : {}
 
   project_id    = var.project_id
@@ -119,7 +119,7 @@ module "public_subnets" {
 
 # Private subnets (compute tier)
 module "private_subnets" {
-  source   = "../network/subnet"
+  source   = "../../network/subnet"
   for_each = var.enable_networking ? { for i, z in local.zones : z => i } : {}
 
   project_id    = var.project_id
@@ -141,7 +141,7 @@ module "private_subnets" {
 
 # Database subnets
 module "database_subnets" {
-  source   = "../network/subnet"
+  source   = "../../network/subnet"
   for_each = var.enable_networking ? { for i, z in local.zones : z => i } : {}
 
   project_id    = var.project_id
@@ -168,7 +168,7 @@ module "database_subnets" {
 # dependencies and will not plan this NAT before subnet self-links are known.
 # No explicit depends_on is needed here.
 module "integrated_nat" {
-  source = "../network/nat"
+  source = "../../network/nat"
   count  = var.enable_networking ? 1 : 0
 
   project_id = var.project_id
@@ -193,7 +193,7 @@ module "integrated_nat" {
 
 # Private Service Access (for Cloud SQL, Redis, etc.)
 module "private_service_access" {
-  source = "../network/private-service-access"
+  source = "../../network/private-service-access"
   count  = var.enable_networking && var.enable_private_service_access ? 1 : 0
 
   project_id    = var.project_id
@@ -204,7 +204,7 @@ module "private_service_access" {
 
 # Private Service Connect (for Google APIs)
 module "private_service_connect" {
-  source = "../network/private-service-connect"
+  source = "../../network/private-service-connect"
   count  = var.enable_networking && var.enable_private_service_connect ? 1 : 0
 
   project_id = var.project_id
@@ -219,7 +219,7 @@ module "private_service_connect" {
 
 # Allow API Gateway to Public tier
 module "firewall_apigateway_to_public" {
-  source = "../network/network-firewall"
+  source = "../../network/network-firewall"
   count  = var.enable_networking ? 1 : 0
 
   project_id         = var.project_id
@@ -241,7 +241,7 @@ module "firewall_apigateway_to_public" {
 
 # Allow Public tier to Compute tier
 module "firewall_public_to_compute" {
-  source = "../network/network-firewall"
+  source = "../../network/network-firewall"
   count  = var.enable_networking ? 1 : 0
 
   project_id         = var.project_id
@@ -263,7 +263,7 @@ module "firewall_public_to_compute" {
 
 # Allow Compute tier to Database tier
 module "firewall_compute_to_database" {
-  source = "../network/network-firewall"
+  source = "../../network/network-firewall"
   count  = var.enable_networking ? 1 : 0
 
   project_id         = var.project_id
@@ -289,7 +289,7 @@ module "firewall_compute_to_database" {
 
 # Allow IAP access for secure SSH/RDP
 module "firewall_iap_ssh_rdp" {
-  source = "../network/network-firewall"
+  source = "../../network/network-firewall"
   count  = var.enable_networking && var.enable_iap_access ? 1 : 0
 
   project_id         = var.project_id
@@ -310,7 +310,7 @@ module "firewall_iap_ssh_rdp" {
 
 # Allow GCP Health Checks (required for Load Balancers)
 module "firewall_health_checks" {
-  source = "../network/network-firewall"
+  source = "../../network/network-firewall"
   count  = var.enable_networking ? 1 : 0
 
   project_id         = var.project_id
@@ -330,7 +330,7 @@ module "firewall_health_checks" {
 
 # Deny direct egress from database tier (defense in depth)
 module "firewall_database_deny_egress" {
-  source = "../network/network-firewall"
+  source = "../../network/network-firewall"
   count  = var.enable_networking ? 1 : 0
 
   project_id         = var.project_id
@@ -352,7 +352,7 @@ module "firewall_database_deny_egress" {
 
 # Deny all other ingress traffic (Logging / Catch-all)
 module "firewall_deny_all" {
-  source = "../network/network-firewall"
+  source = "../../network/network-firewall"
   count  = var.enable_networking ? 1 : 0
 
   project_id         = var.project_id
@@ -377,7 +377,7 @@ module "firewall_deny_all" {
 # =============================================================================
 
 module "cloud_armor" {
-  source = "../network/cloud-armor"
+  source = "../../network/cloud-armor"
   count  = var.enable_cloud_armor ? 1 : 0
 
   project_id                 = var.project_id
@@ -395,7 +395,7 @@ module "cloud_armor" {
 # =============================================================================
 
 module "cdn" {
-  source = "../network/cdn"
+  source = "../../network/cdn"
   count  = var.enable_cdn ? 1 : 0
 
   project_id           = var.project_id
@@ -413,7 +413,7 @@ module "cdn" {
 # =============================================================================
 
 module "dns" {
-  source   = "../network/dns"
+  source   = "../../network/dns"
   for_each = var.dns_zones
 
   project_id      = var.project_id
@@ -438,7 +438,7 @@ module "dns" {
 # =============================================================================
 
 module "vpn" {
-  source = "../network/vpn"
+  source = "../../network/vpn"
   count  = var.enable_vpn ? 1 : 0
 
   project_id                = var.project_id
@@ -461,7 +461,7 @@ module "vpn" {
 # =============================================================================
 
 module "vpc_peering" {
-  source   = "../network/vpc-peering"
+  source   = "../../network/vpc-peering"
   for_each = var.vpc_peerings
 
   peering_name           = each.key
@@ -477,7 +477,7 @@ module "vpc_peering" {
 # =============================================================================
 
 module "api_gateway" {
-  source = "../network/api-gateway"
+  source = "../../network/api-gateway"
   count  = var.enable_api_gateway ? 1 : 0
 
   project_id            = var.project_id
@@ -497,7 +497,7 @@ module "api_gateway" {
 # =============================================================================
 
 module "additional_firewall_rules" {
-  source   = "../network/network-firewall"
+  source   = "../../network/network-firewall"
   for_each = var.additional_firewall_rules
 
   project_id         = var.project_id
@@ -519,7 +519,7 @@ module "additional_firewall_rules" {
 # =============================================================================
 
 module "standalone_nat" {
-  source   = "../network/nat"
+  source   = "../../network/nat"
   for_each = var.standalone_nat_gateways
 
   project_id = var.project_id
@@ -550,7 +550,7 @@ data "google_project" "current" {
 }
 
 module "flow_logs_kms" {
-  source = "../governance/kms"
+  source = "../../governance/kms"
   count  = var.enable_vpc_flow_logs_export ? 1 : 0
 
   project_id   = var.project_id
@@ -568,7 +568,7 @@ module "flow_logs_kms" {
 }
 
 module "vpc_flow_logs" {
-  source = "../network/vpc-flow-logs"
+  source = "../../network/vpc-flow-logs"
   count  = var.enable_vpc_flow_logs_export ? 1 : 0
 
   project_id  = var.project_id
@@ -595,7 +595,7 @@ module "vpc_flow_logs" {
 # =============================================================================
 
 module "shared_vpc_service_projects" {
-  source   = "../network/shared-vpc-service"
+  source   = "../../network/shared-vpc-service"
   for_each = var.enable_shared_vpc_host ? var.shared_vpc_service_projects : {}
 
   host_project_id    = var.project_id
@@ -617,7 +617,7 @@ module "shared_vpc_service_projects" {
 # =============================================================================
 
 module "hierarchical_firewall_policies" {
-  source   = "../network/hierarchical-firewall"
+  source   = "../../network/hierarchical-firewall"
   for_each = var.hierarchical_firewall_policies
 
   parent         = each.value.parent
@@ -633,7 +633,7 @@ module "hierarchical_firewall_policies" {
 # =============================================================================
 
 module "vpc_service_controls" {
-  source   = "../network/vpc-sc"
+  source   = "../../network/vpc-sc"
   for_each = var.vpc_service_controls
 
   organization_id            = each.value.organization_id
@@ -657,7 +657,7 @@ module "vpc_service_controls" {
 # =============================================================================
 
 module "interconnects" {
-  source   = "../network/interconnect"
+  source   = "../../network/interconnect"
   for_each = var.interconnects
 
   project_id      = var.project_id
@@ -697,7 +697,7 @@ module "interconnects" {
 # =============================================================================
 
 module "packet_mirroring" {
-  source   = "../network/packet-mirroring"
+  source   = "../../network/packet-mirroring"
   for_each = var.packet_mirroring_policies
 
   project_id = var.project_id
@@ -721,7 +721,7 @@ module "packet_mirroring" {
 # =============================================================================
 
 module "internal_load_balancers" {
-  source   = "../network/internal-lb"
+  source   = "../../network/internal-lb"
   for_each = var.internal_load_balancers
 
   project_id = var.project_id

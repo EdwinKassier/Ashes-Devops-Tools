@@ -79,7 +79,7 @@ data "google_project" "host_project" {
 }
 
 module "host" {
-  source = "../../../modules/gcp/host"
+  source = "../../../modules/gcp/stages/host"
 
   project_id     = local.env_config.host_project_id
   project_prefix = var.project_prefix

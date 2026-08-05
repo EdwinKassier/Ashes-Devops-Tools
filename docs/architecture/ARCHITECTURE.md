@@ -122,7 +122,7 @@ That keeps CIDRs explicit and stable. The old pattern of deriving CIDRs from key
 - `modules/gcp/network/*` contains the reusable network primitives
 - `modules/gcp/governance/*` contains budgets, logging, KMS, org policy, SCC, and tags
 - `modules/gcp/iam/*` contains reusable IAM primitives
-- `modules/gcp/host` remains the compatibility wrapper used by `envs/gcp/workload`
+- `modules/gcp/stages/host` is the Shared VPC host-project network stage used by `envs/gcp/workload`
 
 ### SaaS Modules
 

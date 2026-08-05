@@ -11,7 +11,7 @@ We utilize a **Hub-and-Spoke** network topology with centralized governance.
 * **`gcp-workload`**: The single application-environment root. Select the environment with `TF_WORKSPACE=gcp-workload-<env>` and the matching tfvars file under `examples/` (e.g. `examples/dev.tfvars`).
 
 ### Infrastructure Pattern
-Each application environment uses the shared `modules/gcp/host` foundation to stamp out:
+Each application environment uses the shared `modules/gcp/stages/host` foundation to stamp out:
 1. **VPC Network**: Custom mode with explicit environment CIDR blocks from the organization state.
 2. **Subnets**: 3-Tier architecture (Public, Private, Database).
 3. **Security**: Firewall rules, Cloud Armor, DNS logging, and VPC Service Controls.

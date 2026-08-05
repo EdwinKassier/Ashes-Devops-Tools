@@ -13,7 +13,7 @@ locals {
 
 # Hub Network Actuation (The "Pipes")
 module "hub_network" {
-  source = "../../host"
+  source = "../host"
 
   # Target the 'net-hub' project created in the 'shared' environment
   project_id     = var.hub_project_id
@@ -89,7 +89,7 @@ module "hub_network" {
 
 # DNS Hub (Name Resolution)
 module "dns_hub_network" {
-  source = "../../host"
+  source = "../host"
 
   # Target the 'dns-hub' project created in the 'shared' environment
   project_id     = var.dns_project_id
