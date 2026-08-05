@@ -14,7 +14,7 @@ variable "region" {
 
   validation {
     # Matches AWS region ids like eu-west-2, us-east-1, ap-southeast-3.
-    condition     = can(regex("^[a-z]{2}-[a-z]+-[0-9]$", var.region))
+    condition     = can(regex("^[a-z]{2}-[a-z]+-[1-9][0-9]?$", var.region))
     error_message = "region must be a valid AWS region id (e.g. eu-west-2)."
   }
 }

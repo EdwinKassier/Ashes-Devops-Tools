@@ -1,4 +1,4 @@
-.PHONY: help install fmt fmt-check validate validate-all lint security security-report docs docs-check count test ci clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
+.PHONY: help install fmt fmt-check validate validate-all lint consistency security security-report docs docs-check count test ci clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
 
 TERRAFORM := terraform
 TFLINT := tflint
@@ -120,8 +120,12 @@ pre-commit-run: ## Run pre-commit across the repository
 pre-commit-update: ## Update pinned pre-commit hooks
 	@$(PRE_COMMIT) autoupdate
 
+consistency: ## Assert canonical strings (region regex, provider pins) haven't drifted across copies
+	@./scripts/check-consistency.sh
+
 ci: ## Run the local CI pipeline (fmt → docs → validate → lint → test → security)
 	@$(MAKE) fmt-check
+	@$(MAKE) consistency
 	@$(MAKE) docs-check
 	@$(MAKE) validate-all
 	@$(MAKE) lint

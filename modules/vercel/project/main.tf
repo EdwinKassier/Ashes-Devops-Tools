@@ -79,10 +79,37 @@ locals {
   prod_vars_map   = { for v in var.prod_environment_variables : v.key => v }
   shared_vars_map = { for v in var.shared_environment_variables : v.key => v }
 
+  # Key sets (var-name only, never sensitive) for the cross-set uniqueness guard.
+  qa_keys     = toset([for v in var.qa_environment_variables : v.key])
+  uat_keys    = toset([for v in var.uat_environment_variables : v.key])
+  prod_keys   = toset([for v in var.prod_environment_variables : v.key])
+  shared_keys = toset([for v in var.shared_environment_variables : v.key])
+
   # Domains partitioned by environment.
   qa_domains   = [for d in var.domains : d if d.environment == "qa"]
   uat_domains  = [for d in var.domains : d if d.environment == "uat"]
   prod_domains = [for d in var.domains : d if d.environment == "production"]
+}
+
+# Guard against duplicate env-var keys across sets that write the same Vercel
+# target — Vercel rejects a duplicate key+target with a 409 at apply time
+# (audit finding S7). Overlaps: qa+shared → "preview", prod+shared →
+# "production", uat+shared → the UAT custom environment. Fail at plan, not apply.
+resource "terraform_data" "env_key_uniqueness" {
+  lifecycle {
+    precondition {
+      condition     = length(setintersection(local.qa_keys, local.shared_keys)) == 0
+      error_message = "Duplicate env var key(s) in qa_environment_variables and shared_environment_variables (both target 'preview'): ${join(", ", setintersection(local.qa_keys, local.shared_keys))}"
+    }
+    precondition {
+      condition     = length(setintersection(local.prod_keys, local.shared_keys)) == 0
+      error_message = "Duplicate env var key(s) in prod_environment_variables and shared_environment_variables (both target 'production'): ${join(", ", setintersection(local.prod_keys, local.shared_keys))}"
+    }
+    precondition {
+      condition     = length(setintersection(local.uat_keys, local.shared_keys)) == 0
+      error_message = "Duplicate env var key(s) in uat_environment_variables and shared_environment_variables (both target the UAT custom environment): ${join(", ", setintersection(local.uat_keys, local.shared_keys))}"
+    }
+  }
 }
 
 resource "vercel_project" "this" {

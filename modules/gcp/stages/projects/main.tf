@@ -38,6 +38,9 @@ resource "google_project" "projects" {
   )
 
   auto_create_network = false
+
+  # Foundation projects must not be deletable by a routine plan (audit finding G8).
+  deletion_policy = "PREVENT"
 }
 
 # Enable required services for each project

@@ -18,7 +18,7 @@ This directory contains a suite of Terraform modules for building enterprise-gra
 | [`network-firewall`](./network-firewall) | VPC Firewall Rules | Ingress/Egress, Logging, Tag-based matching |
 | [`hierarchical-firewall`](./hierarchical-firewall) | Policy-based Firewall | Org/Folder level policies, Batch rules |
 | [`vpc-sc`](./vpc-sc) | VPC Service Controls | Service Perimeters, Access Levels |
-| [`cloud_armor`](./cloud_armor) | Web Application Firewall | OWASP rules, Adaptive Protection |
+| [`cloud-armor`](./cloud-armor) | Web Application Firewall | OWASP rules, Adaptive Protection |
 
 ### Connectivity
 | Module | Description | Key Features |

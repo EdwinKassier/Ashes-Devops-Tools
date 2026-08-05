@@ -64,8 +64,9 @@ module "example" {
 The following resources are created:
 
 
-- resource.null_resource.bootstrap (modules/supabase/vault-secrets/main.tf#L25)
-- resource.null_resource.reconcile (modules/supabase/vault-secrets/main.tf#L45)
+- resource.null_resource.bootstrap (modules/supabase/vault-secrets/main.tf#L40)
+- resource.null_resource.npm_install (modules/supabase/vault-secrets/main.tf#L29)
+- resource.null_resource.reconcile (modules/supabase/vault-secrets/main.tf#L62)
 
 
 ## Inputs

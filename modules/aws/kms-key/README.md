@@ -52,9 +52,9 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_kms_alias.this (modules/aws/kms-key/main.tf#L120)
-- resource.aws_kms_key.this (modules/aws/kms-key/main.tf#L114)
-- resource.aws_kms_key_policy.this (modules/aws/kms-key/main.tf#L125)
+- resource.aws_kms_alias.this (modules/aws/kms-key/main.tf#L130)
+- resource.aws_kms_key.this (modules/aws/kms-key/main.tf#L124)
+- resource.aws_kms_key_policy.this (modules/aws/kms-key/main.tf#L135)
 
 
 ## Inputs

@@ -23,6 +23,9 @@ resource "google_project" "admin_project" {
     purpose     = "administration"
     managed-by  = "terraform"
   }
+
+  # The admin/automation project must not be deletable by a routine plan (audit finding G8).
+  deletion_policy = "PREVENT"
 }
 
 resource "random_id" "suffix" {
