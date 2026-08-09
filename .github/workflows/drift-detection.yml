@@ -202,10 +202,12 @@ jobs:
               --header "Content-Type: application/vnd.api+json" \
               "https://app.terraform.io/api/v2/runs/${DRIFT_RUN_ID}?include=plan")
             status=$(echo "$run_response" | jq -r '.data.attributes.status')
-            plan_attrs='[.included[]? | select(.type=="plans") | .attributes]'
-            resource_additions=$(echo "$run_response" | jq -r "(${plan_attrs} | .[0][\"resource-additions\"]) // 0")
-            resource_changes=$(echo "$run_response" | jq -r "(${plan_attrs} | .[0][\"resource-changes\"]) // 0")
-            resource_destructions=$(echo "$run_response" | jq -r "(${plan_attrs} | .[0][\"resource-destructions\"]) // 0")
+            # Pre-extract the plan's attributes object (audit A1) so each count
+            # line stays short; default {} when no plan is included yet.
+            pa='([.included[]?|select(.type=="plans").attributes][0] // {})'
+            resource_additions=$(echo "$run_response" | jq -r "${pa}[\"resource-additions\"] // 0")
+            resource_changes=$(echo "$run_response" | jq -r "${pa}[\"resource-changes\"] // 0")
+            resource_destructions=$(echo "$run_response" | jq -r "${pa}[\"resource-destructions\"] // 0")
             echo "Attempt ${i}: status=${status} +${resource_additions} ~${resource_changes} -${resource_destructions}"
             case "$status" in
               planned_and_finished|planned)
