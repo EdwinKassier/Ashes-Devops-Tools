@@ -28,7 +28,7 @@ The SaaS modules pin `supabase = "~> 1.0"` and `vercel = "~> 4.0"`.
 
 ## AWS provider
 
-All AWS modules and roots (`modules/aws/*`, `envs/aws-*`) pin:
+All AWS modules and roots (`modules/aws/*`, `envs/aws/*`) pin:
 
 ```hcl
 required_providers {

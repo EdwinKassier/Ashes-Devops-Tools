@@ -27,7 +27,7 @@ The only way to make a cloud genuinely optional is to make its provider **absent
 
 ## The per-cloud-root model
 
-One root per cloud + layer, named `envs/<cloud>-<layer>`. Each root declares exactly the provider(s) it needs and nothing else. A run of that root only ever requires that cloud's credentials.
+One root per cloud + layer, named `envs/<cloud>/<layer>`. Each root declares exactly the provider(s) it needs and nothing else. A run of that root only ever requires that cloud's credentials.
 
 ### Root inventory
 
@@ -123,4 +123,4 @@ See [`docs/architecture/adding-a-cloud.md`](adding-a-cloud.md) for the full cros
 Nothing hard-codes the root list. Two scripts derive it:
 
 - `scripts/active-providers.sh` — lists which provider each root declares, so you can see which clouds are actually configured and therefore which credentials a run needs. *(Added in Task A4.)*
-- `scripts/terraform-roots.sh` — enumerates every root (any `envs/<dir>` containing a `.tf` file) plus modules and examples. CI's validate/lint/fmt matrix is driven from this, so a new `envs/<cloud>-<layer>` is picked up the moment it lands.
+- `scripts/terraform-roots.sh` — enumerates every root (any `envs/<dir>` containing a `.tf` file) plus modules and examples. CI's validate/lint/fmt matrix is driven from this, so a new `envs/<cloud>/<layer>` is picked up the moment it lands.

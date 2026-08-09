@@ -19,9 +19,9 @@
 [![Security Scan](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml)
 [![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?style=flat-square&logo=pre-commit)](https://pre-commit.com)
 [![Modules](https://img.shields.io/badge/modules-89-blueviolet?style=flat-square)](modules/)
-[![Tests](https://img.shields.io/badge/test_suites-153-blue?style=flat-square)](modules/)
+[![Tests](https://img.shields.io/badge/test_suites-157-blue?style=flat-square)](modules/)
 
-<sub>Modules/test-suite counts above are hand-maintained, not live badges. Verify: <code>find modules -name main.tf -not -path '*/examples/*' -not -path '*/.terraform/*' | wc -l</code> (modules) and <code>find modules envs -name '*.tftest.hcl' -not -path '*/.terraform/*' | wc -l</code> (test suites). Last verified 2026-07-09: 89 modules, 153 test suites.</sub>
+<sub>Modules/test-suite counts above are hand-maintained, not live badges. Verify: <code>find modules -name main.tf -not -path '*/examples/*' -not -path '*/.terraform/*' | wc -l</code> (modules) and <code>find modules envs -name '*.tftest.hcl' -not -path '*/.terraform/*' | wc -l</code> (test suites). Last verified 2026-08-05: 89 modules, 157 test suites.</sub>
 
 </div>
 
@@ -80,7 +80,7 @@ make ci
 └─────────┬─────────────────────┬───────────────────┬─────┘
           │ GCP                 │ AWS               │ SaaS
 ┌─────────▼────────┐  ┌─────────▼─────────┐  ┌──────▼─────┐
-│ envs/gcp-*       │  │ envs/aws-*        │  │ envs/saas  │
+│ envs/gcp/*       │  │ envs/aws/*        │  │ envs/saas  │
 │ organization →   │  │ organization →    │  │ Supabase   │
 │ workload         │  │ security →        │  │ and/or     │
 │                  │  │ network →         │  │ Vercel     │

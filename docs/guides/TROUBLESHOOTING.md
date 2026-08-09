@@ -319,7 +319,7 @@ The following errors were present in earlier versions and have been resolved. If
 
 **Cause:** Cross-account AWS modules declare `configuration_aliases` (e.g. `aws.management`, `aws.log_archive`) so the caller must pass in per-account providers. Such a module has **no provider of its own** and therefore cannot be `terraform validate`d standalone — this error is expected, not a bug.
 
-**Fix:** Validate via the module's `examples/` root or the composing root (`envs/aws-*`), which supply the aliased providers. CI already skips these modules in the standalone validate step for the same reason.
+**Fix:** Validate via the module's `examples/` root or the composing root (`envs/aws/*`), which supply the aliased providers. CI already skips these modules in the standalone validate step for the same reason.
 
 ---
 
@@ -450,18 +450,14 @@ Or:
 node --version   # must report v18.x or higher
 ```
 
-**Cause (second error):** `npm install` has not been run in the scripts directory — the `pg` package is missing.
+**Cause (second error):** the automated `npm ci` (run by `null_resource.npm_install` before the bootstrap/reconcile scripts) failed, or Node.js/npm is missing on the apply runner — so the `pg` package isn't available.
 
-**Fix:**
+**Fix:** ensure **Node.js 18+ and npm** are on the apply runner's PATH, then re-apply — the `null_resource.npm_install` installs `pg` automatically via `npm ci`. To reproduce/prime locally:
 
 ```bash
-cd modules/supabase/vault-secrets/scripts
-npm install
-cd -
+npm ci --prefix modules/supabase/vault-secrets/scripts
 terraform apply
 ```
-
-Re-run `npm install` after a fresh clone; `scripts/node_modules/` is gitignored.
 
 ---
 

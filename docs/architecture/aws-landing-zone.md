@@ -1,6 +1,6 @@
 # AWS Landing Zone
 
-This document is the authoritative description of the AWS landing zone deployed by this repository: the account and OU model, which root deploys which layer, the network topology, the security services and guardrails, the cost profile of the always-on baseline, and the IPv6 posture. It implements the **AWS Security Reference Architecture (SRA)** on top of the [per-cloud-root model](provider-selection.md) — AWS lives entirely in `envs/aws-*` roots, physically separate from the GCP control plane so that neither cloud forces the other's credentials.
+This document is the authoritative description of the AWS landing zone deployed by this repository: the account and OU model, which root deploys which layer, the network topology, the security services and guardrails, the cost profile of the always-on baseline, and the IPv6 posture. It implements the **AWS Security Reference Architecture (SRA)** on top of the [per-cloud-root model](provider-selection.md) — AWS lives entirely in `envs/aws/*` roots, physically separate from the GCP control plane so that neither cloud forces the other's credentials.
 
 For how to *stand this up* see [`docs/runbooks/aws-bootstrap.md`](../runbooks/aws-bootstrap.md); for the cross-root wiring contract see [`docs/architecture/adding-a-cloud.md`](adding-a-cloud.md).
 

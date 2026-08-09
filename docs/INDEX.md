@@ -12,7 +12,7 @@
 
 - `envs/gcp/organization` is the GCP control-plane root.
 - `envs/gcp/workload` is the deployable GCP application-environment root.
-- `envs/aws-*` are the AWS landing-zone roots (one root = one TFC workspace); `envs/saas` deploys Supabase and/or Vercel only.
+- `envs/aws/*` are the AWS landing-zone roots (one root = one TFC workspace); `envs/saas` deploys Supabase and/or Vercel only.
 - `modules/saas/stages/saas-workload` composes Supabase + Vercel for per-environment SaaS deployments.
 - Cloud selection is which workspaces you apply, not a runtime flag — see [Provider Selection](architecture/provider-selection.md).
 - Terraform Cloud owns live state and apply runs.
