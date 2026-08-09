@@ -92,15 +92,9 @@ Generate a token at [https://vercel.com/account/tokens](https://vercel.com/accou
 
 **Node.js requirement for vault-secrets:**
 
-`enable_vault_secrets = true` executes a Node.js script to bootstrap and reconcile the Supabase Vault. Before the first apply with vault-secrets enabled, install the runtime dependency:
+`enable_vault_secrets = true` executes a Node.js script to bootstrap and reconcile the Supabase Vault. Dependencies install **automatically** at apply time — a `null_resource.npm_install` runs `npm ci` in `modules/supabase/vault-secrets/scripts` before the bootstrap/reconcile scripts. No manual step is required; the apply runner only needs **Node.js 18+ and npm** on PATH (CI runners on ubuntu-latest have them).
 
-```bash
-cd modules/supabase/vault-secrets/scripts
-npm install
-cd -
-```
-
-The `pg ^8.20.0` package connects to the Supabase session-mode pooler to execute the bootstrap SQL. CI runners (ubuntu-latest) have Node.js 18+ available by default. The `scripts/node_modules/` directory is gitignored; re-run `npm install` after a fresh clone.
+The `pg ^8.20.0` package connects to the Supabase session-mode pooler to execute the bootstrap SQL. `scripts/node_modules/` is gitignored and rebuilt by the automated `npm ci`. To prime it locally: `npm ci --prefix modules/supabase/vault-secrets/scripts`.
 
 ---
 

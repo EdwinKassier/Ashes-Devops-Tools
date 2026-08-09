@@ -15,11 +15,13 @@ One root per cloud + layer, named `envs/<cloud>/<layer>`:
 
 ```text
 envs/
-├── gcp-organization/     # existing GCP control plane
-├── gcp-workload/         # existing GCP per-env apps
-├── aws-organization/     # AWS foundational accounts + org
-├── aws-security/         # AWS security tooling / log archive
-└── aws-workload/         # AWS per-env workloads (fan out by workspace)
+├── gcp/
+│   ├── organization/     # existing GCP control plane
+│   └── workload/         # existing GCP per-env apps
+└── aws/
+    ├── organization/     # AWS foundational accounts + org
+    ├── security/         # AWS security tooling / log archive
+    └── workload/         # AWS per-env workloads (fan out by workspace)
 ```
 
 The workspace name matches the root: a fixed foundational root maps to one workspace (`aws-security`); a per-env root uses a workspace **prefix** (`aws-workload-`) and selects the environment with `TF_WORKSPACE` (e.g. `TF_WORKSPACE=aws-workload-dev`).

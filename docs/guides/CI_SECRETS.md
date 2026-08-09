@@ -18,7 +18,7 @@ requires them to function since it drives real applies via the TFC API.
 
 ## AWS roots — dynamic credentials
 
-The AWS roots (`envs/aws-*`) do not use static access keys in CI. Each root authenticates via
+The AWS roots (`envs/aws/*`) do not use static access keys in CI. Each root authenticates via
 **Terraform Cloud dynamic provider credentials**: TFC federates into an IAM role at run time
 and injects short-lived credentials, so no long-lived secret is stored. These are set as
 **workspace environment variables** on each `aws-*` workspace (not repository secrets):

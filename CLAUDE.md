@@ -7,25 +7,26 @@ Terraform GCP + AWS landing zone. 89 modules, 10 deployable roots, remote state 
 ## Repo Layout
 
 ```text
-envs/
-  gcp-organization/     # GCP control plane: folders, org policies, KMS, network hub, bootstrap WIF
-  gcp-workload/         # GCP per-environment app infra — TF_WORKSPACE=gcp-workload-<env>
-  aws-organization/     # AWS foundational accounts + org structure
-  aws-security/         # AWS security tooling / log archive (min baseline w/ aws-organization)
-  aws-network/          # AWS shared networking
-  aws-identity/         # AWS IAM Identity Center / SSO
-  aws-shared-services/  # AWS shared platform services
-  aws-backup/           # AWS centralized backup
-  aws-workload/         # AWS per-env workloads — TF_WORKSPACE=aws-workload-<env>
+envs/                   # deployable roots, nested by cloud (workspace names keep the flat gcp-/aws- form)
+  gcp/
+    organization/       # GCP control plane: folders, org policies, KMS, network hub, bootstrap WIF
+    workload/           # GCP per-environment app infra — TF_WORKSPACE=gcp-workload-<env>
+  aws/
+    organization/       # AWS foundational accounts + org structure
+    security/           # AWS security tooling / log archive (min baseline w/ aws/organization)
+    network/            # AWS shared networking
+    identity/           # AWS IAM Identity Center / SSO
+    shared-services/    # AWS shared platform services
+    backup/             # AWS centralized backup
+    workload/           # AWS per-env workloads — TF_WORKSPACE=aws-workload-<env>
   saas/                 # Supabase and/or Vercel only — TF_WORKSPACE=saas-<name>
 
 modules/               # grouped by owning cloud (domain)
   gcp/                  # GCP-native modules
-    stages/             # Orchestration wrappers: bootstrap, organization, projects, network-hub, workload
+    stages/             # Orchestration wrappers: bootstrap, organization, projects, network-hub, workload, host
     network/            # ~19 primitives: vpc, subnet, dns, vpn, vpc-sc, cloud-armor, …
     governance/         # billing, kms, org-policy, scc, tags, cloud-audit-logs
     iam/                # organization, role, service-account, workload-identity, identity-group*
-    host/               # compatibility wrapper for envs/gcp/workload
     monitoring/         # alert-policy, compute-dashboard
     firebase/           # project
     cloud-storage/
@@ -179,12 +180,7 @@ Vercel executes `ignore_command` in `/bin/sh`, not bash. Use POSIX sh syntax:
 
 ### vault-secrets Node.js dependency
 
-`modules/supabase/vault-secrets/scripts/` requires Node.js dependencies before first apply with `enable_vault_secrets = true`:
-
-```bash
-cd modules/supabase/vault-secrets/scripts/
-npm install
-```
+`modules/supabase/vault-secrets` installs its Node.js dependencies **automatically** at apply time: a `null_resource.npm_install` runs `npm ci --prefix modules/supabase/vault-secrets/scripts` before the bootstrap/reconcile provisioners (which `import { Pool } from "pg"`). No manual step — the apply runner just needs **Node.js 18+ and npm** on PATH. To prime locally: `npm ci --prefix modules/supabase/vault-secrets/scripts`.
 
 ### AWS modules
 

@@ -7,7 +7,7 @@ This repository implements a GCP landing zone alongside a Terraform-native AWS l
 - `envs/gcp/organization` for the control plane
 - `envs/gcp/workload` for environment-specific application infrastructure
 
-The AWS surface adds a set of per-layer roots (`envs/aws-*`) plus a cloud-agnostic `envs/saas` root — see [AWS Landing Zone](#aws-landing-zone) below and the full detail in [`aws-landing-zone.md`](aws-landing-zone.md). Cloud selection is which workspaces you apply, not a runtime flag; the rationale lives in [`provider-selection.md`](provider-selection.md).
+The AWS surface adds a set of per-layer roots (`envs/aws/*`) plus a cloud-agnostic `envs/saas` root — see [AWS Landing Zone](#aws-landing-zone) below and the full detail in [`aws-landing-zone.md`](aws-landing-zone.md). Cloud selection is which workspaces you apply, not a runtime flag; the rationale lives in [`provider-selection.md`](provider-selection.md).
 
 The design target is a low-touch platform that is easy to extend without copying roots or editing workflow matrices.
 
@@ -15,15 +15,17 @@ The design target is a low-touch platform that is easy to extend without copying
 
 ```text
 envs/
-├── gcp-organization/     # GCP control plane
-├── gcp-workload/         # GCP per-environment app infra
-├── aws-organization/     # AWS org, OUs, SCPs, foundational accounts
-├── aws-security/         # AWS log archive, CloudTrail, GuardDuty, Security Hub, Config
-├── aws-network/          # AWS Transit Gateway hub, inspection VPC, IPAM
-├── aws-identity/         # AWS IAM Identity Center permission sets/assignments
-├── aws-shared-services/  # AWS shared platform services (optional)
-├── aws-backup/           # AWS centralized backup vaults + org backup plan
-├── aws-workload/         # AWS per-env workloads (TF_WORKSPACE=aws-workload-<env>)
+├── gcp/
+│   ├── organization/     # GCP control plane
+│   └── workload/         # GCP per-environment app infra
+├── aws/
+│   ├── organization/     # AWS org, OUs, SCPs, foundational accounts
+│   ├── security/         # AWS log archive, CloudTrail, GuardDuty, Security Hub, Config
+│   ├── network/          # AWS Transit Gateway hub, inspection VPC, IPAM
+│   ├── identity/         # AWS IAM Identity Center permission sets/assignments
+│   ├── shared-services/  # AWS shared platform services (optional)
+│   ├── backup/           # AWS centralized backup vaults + org backup plan
+│   └── workload/         # AWS per-env workloads (TF_WORKSPACE=aws-workload-<env>)
 └── saas/                 # Supabase and/or Vercel only — no AWS/GCP provider
 ```
 
@@ -136,7 +138,7 @@ That keeps CIDRs explicit and stable. The old pattern of deriving CIDRs from key
 
 ## AWS Landing Zone
 
-The AWS surface is a Terraform-native, multi-account landing zone modelled on the AWS Security Reference Architecture (SRA). It is composed of per-layer roots under `envs/aws-*` plus a cloud-agnostic `envs/saas` root, each mapping to exactly one Terraform Cloud workspace.
+The AWS surface is a Terraform-native, multi-account landing zone modelled on the AWS Security Reference Architecture (SRA). It is composed of per-layer roots under `envs/aws/*` plus a cloud-agnostic `envs/saas` root, each mapping to exactly one Terraform Cloud workspace.
 
 ### Account model
 
