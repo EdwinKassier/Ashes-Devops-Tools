@@ -38,9 +38,13 @@ run "firewall_enabled" {
     error_message = "Stateless default action must forward to the stateful engine."
   }
 
-  # One subnet_mapping per firewall subnet id. The subnet_mapping set is
-  # provider-computed at plan time, so assert on the toset() source that drives
-  # the dynamic block (which is what determines the mapping count).
+  # NOTE (audit round-3 §D8 / finding #10): ideally we'd assert on
+  # aws_networkfirewall_firewall.this[0].subnet_mapping directly, but under
+  # mock_provider that set resolves to an unknown value at plan ("Unknown
+  # condition value"), so it cannot be asserted here. The dynamic subnet_mapping
+  # block is driven 1:1 by toset(var.firewall_subnet_ids); real wiring is
+  # exercised by the composing network-hub stage + examples/ against real AWS.
+  # We assert the input contract that drives the block instead.
   assert {
     condition     = length(toset(var.firewall_subnet_ids)) == length(var.firewall_subnet_ids)
     error_message = "firewall_subnet_ids must be unique so one subnet_mapping is created per id."
