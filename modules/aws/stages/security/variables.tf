@@ -259,3 +259,28 @@ variable "identity_account_id" {
   type        = string
   default     = null
 }
+
+# --- Audit A3/A4: CloudTrail CloudWatch Logs + CIS alarms (opt-in, default off) ---
+variable "enable_cloudwatch_logs" {
+  description = "Attach a CloudWatch Logs group to the org trail + create CIS control-plane metric-filter alarms (audit A4). Default false = S3-only (unchanged). UNVALIDATED — validate on a real org."
+  type        = bool
+  default     = false
+}
+
+variable "cloudwatch_logs_retention_days" {
+  description = "Retention (days) for the CloudTrail CloudWatch Logs group when enable_cloudwatch_logs = true."
+  type        = number
+  default     = 365
+}
+
+variable "cloudwatch_logs_kms_key_arn" {
+  description = "Optional CMK ARN for the CloudTrail CloudWatch Logs group; its policy must grant logs.<region>.amazonaws.com (audit C1). Null = AWS-managed encryption."
+  type        = string
+  default     = null
+}
+
+variable "cloudtrail_alarm_sns_topic_arn" {
+  description = "Optional SNS topic ARN for the CIS control-plane alarms (enable_cloudwatch_logs). Null = alarms without a notification action."
+  type        = string
+  default     = null
+}

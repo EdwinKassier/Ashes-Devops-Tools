@@ -42,7 +42,11 @@ resource "aws_cloudwatch_log_group" "trail" {
   count             = var.enable_cloudwatch_logs ? 1 : 0
   name              = "/aws/cloudtrail/${var.trail_name}"
   retention_in_days = var.cloudwatch_logs_retention_days
-  kms_key_id        = var.kms_key_arn
+  # Audit C1: a CloudWatch Logs group can only use a CMK whose key policy grants
+  # logs.<region>.amazonaws.com — the S3 trail CMK (var.kms_key_arn) does NOT, so
+  # reusing it here fails CreateLogGroup. Use a SEPARATE, logs-granted key via
+  # var.cloudwatch_logs_kms_key_arn; null = AWS-managed encryption (no grant needed).
+  kms_key_id = var.cloudwatch_logs_kms_key_arn
 }
 
 resource "aws_iam_role" "cloudtrail_cw" {

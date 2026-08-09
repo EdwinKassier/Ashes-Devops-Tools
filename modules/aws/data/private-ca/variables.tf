@@ -72,4 +72,11 @@ variable "org_arn" {
   description = "ARN of the AWS organization (or an OU) granted access to the RAM share. Required when share_org is true."
   type        = string
   default     = ""
+
+  # Audit D6: with enabled + share_org (both default-relevant) but no org_arn,
+  # the RAM principal association gets principal = "" and fails at apply.
+  validation {
+    condition     = !(var.enable_private_ca && var.share_org) || can(regex("^arn:aws:organizations::", var.org_arn))
+    error_message = "org_arn must be a valid AWS Organizations ARN (arn:aws:organizations::...) when enable_private_ca and share_org are both true."
+  }
 }

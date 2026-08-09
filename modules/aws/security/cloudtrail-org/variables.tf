@@ -47,3 +47,9 @@ variable "alarm_sns_topic_arn" {
   type        = string
   default     = null
 }
+
+variable "cloudwatch_logs_kms_key_arn" {
+  description = "Optional CMK ARN for the CloudWatch Logs group when enable_cloudwatch_logs = true. Its key policy MUST grant logs.<region>.amazonaws.com (audit C1). Null = AWS-managed encryption (no grant required)."
+  type        = string
+  default     = null
+}

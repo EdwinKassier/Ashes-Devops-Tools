@@ -100,6 +100,12 @@ module "cloudtrail" {
   log_archive_bucket = module.log_archive_bucket.bucket_name
   kms_key_arn        = module.log_cmk.key_arn
 
+  # Audit A3/A4: CloudTrail CloudWatch Logs + CIS alarms opt-in (default off).
+  enable_cloudwatch_logs         = var.enable_cloudwatch_logs
+  cloudwatch_logs_retention_days = var.cloudwatch_logs_retention_days
+  cloudwatch_logs_kms_key_arn    = var.cloudwatch_logs_kms_key_arn
+  alarm_sns_topic_arn            = var.cloudtrail_alarm_sns_topic_arn
+
   depends_on = [module.log_archive_bucket]
 }
 

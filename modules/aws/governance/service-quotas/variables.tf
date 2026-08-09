@@ -10,6 +10,15 @@ variable "quota_increases" {
     service_code = string # e.g. "ec2"
     quota_code   = string # e.g. "L-1216C47A"
     value        = number # requested quota value
+    # AWS/Usage alarm dimensions (audit A2). REQUIRED for a functional usage
+    # alarm — omit and the entry files the quota request but gets no alarm.
+    # e.g. { service = "EC2", class = "Standard/OnDemand", type = "Resource", resource = "vCPU" }
+    usage_metric = optional(object({
+      service  = string
+      class    = string
+      type     = string
+      resource = string
+    }))
   }))
   default = {}
 
