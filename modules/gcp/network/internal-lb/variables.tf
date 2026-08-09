@@ -93,6 +93,13 @@ variable "health_check_self_link" {
   description = "Existing health check self_link (if create_health_check is false)"
   type        = string
   default     = null
+
+  # Audit D4: with create_health_check = false and no self_link, the backend
+  # service would receive health_checks = [null] and fail only at apply.
+  validation {
+    condition     = var.create_health_check || var.health_check_self_link != null
+    error_message = "health_check_self_link is required when create_health_check = false."
+  }
 }
 
 variable "health_check_type" {

@@ -51,4 +51,10 @@ module "aws_security" {
   enable_security_lake      = var.enable_security_lake
   enable_incident_response  = var.enable_incident_response
   enable_service_quotas     = var.enable_service_quotas
+
+  # Audit A3/A4: CloudTrail CloudWatch Logs + CIS control-plane alarms (opt-in).
+  enable_cloudwatch_logs         = var.enable_cloudwatch_logs
+  cloudwatch_logs_retention_days = var.cloudwatch_logs_retention_days
+  cloudwatch_logs_kms_key_arn    = var.cloudwatch_logs_kms_key_arn
+  cloudtrail_alarm_sns_topic_arn = var.cloudtrail_alarm_sns_topic_arn
 }
