@@ -90,6 +90,31 @@ run "rejects_duplicate_list_constraint" {
   expect_failures = [var.list_policies]
 }
 
+# Custom constraint is materialized into a google_org_policy_custom_constraint.
+run "custom_constraint_created" {
+  variables {
+    parent = "organizations/123456789"
+    custom_constraints = [
+      {
+        name           = "custom.requirePrivateGkeNodes"
+        display_name   = "Require private GKE nodes"
+        description    = "Deny GKE clusters without private nodes"
+        action_type    = "DENY"
+        condition      = "resource.privateClusterConfig.enablePrivateNodes == false"
+        method_types   = ["CREATE", "UPDATE"]
+        resource_types = ["container.googleapis.com/Cluster"]
+      }
+    ]
+  }
+
+  command = plan
+
+  assert {
+    condition     = length(google_org_policy_custom_constraint.custom_constraints) == 1
+    error_message = "Expected one custom org-policy constraint to be planned"
+  }
+}
+
 # List policy with deny_all creates exactly one policy resource.
 run "list_policy_deny_all" {
   variables {

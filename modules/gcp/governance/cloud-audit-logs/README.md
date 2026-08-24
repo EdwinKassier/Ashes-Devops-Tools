@@ -93,18 +93,18 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_bigquery_dataset.audit_logs_analytics (modules/gcp/governance/cloud-audit-logs/main.tf#L183)
-- resource.google_bigquery_dataset_iam_member.bq_sink_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L231)
-- resource.google_logging_organization_sink.org_audit_bq_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L209)
-- resource.google_logging_organization_sink.org_audit_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L153)
-- resource.google_logging_project_sink.audit_logs_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L95)
-- resource.google_organization_iam_audit_config.org_audit_config (modules/gcp/governance/cloud-audit-logs/main.tf#L133)
-- resource.google_project_iam_audit_config.project_audit_logs (modules/gcp/governance/cloud-audit-logs/main.tf#L113)
+- resource.google_bigquery_dataset.audit_logs_analytics (modules/gcp/governance/cloud-audit-logs/main.tf#L197)
+- resource.google_bigquery_dataset_iam_member.bq_sink_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L245)
+- resource.google_logging_organization_sink.org_audit_bq_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L223)
+- resource.google_logging_organization_sink.org_audit_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L167)
+- resource.google_logging_project_sink.audit_logs_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L109)
+- resource.google_organization_iam_audit_config.org_audit_config (modules/gcp/governance/cloud-audit-logs/main.tf#L147)
+- resource.google_project_iam_audit_config.project_audit_logs (modules/gcp/governance/cloud-audit-logs/main.tf#L127)
 - resource.google_storage_bucket.audit_logs (modules/gcp/governance/cloud-audit-logs/main.tf#L39)
 - resource.google_storage_bucket.audit_logs_access (modules/gcp/governance/cloud-audit-logs/main.tf#L2)
 - resource.google_storage_bucket_iam_member.audit_logs_access_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L32)
-- resource.google_storage_bucket_iam_member.log_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L105)
-- resource.google_storage_bucket_iam_member.org_log_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L170)
+- resource.google_storage_bucket_iam_member.log_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L119)
+- resource.google_storage_bucket_iam_member.org_log_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L184)
 
 
 ## Inputs
@@ -117,6 +117,7 @@ The following resources are created:
 | <a name="input_bigquery_retention_days"></a> [bigquery\_retention\_days](#input\_bigquery\_retention\_days) | Number of days to retain audit logs in BigQuery (via partition expiration). Minimum 1. | `number` | `365` | no |
 | <a name="input_bucket_location"></a> [bucket\_location](#input\_bucket\_location) | The location of the bucket that will store audit logs | `string` | `"US"` | no |
 | <a name="input_enable_bigquery_analytics"></a> [enable\_bigquery\_analytics](#input\_enable\_bigquery\_analytics) | Enable BigQuery sink for log analytics. Creates a BigQuery dataset and org-level sink for querying audit logs. | `bool` | `false` | no |
+| <a name="input_enable_bucket_lock"></a> [enable\_bucket\_lock](#input\_enable\_bucket\_lock) | Opt-in WORM lock: apply a LOCKED retention policy of log\_retention\_days to the audit-log bucket, making objects undeletable before the window elapses (even by an admin). Default false preserves the current operator-correctable behaviour. A locked retention policy is IRREVERSIBLE — enable only for compliance regimes that require tamper-proof retention. | `bool` | `false` | no |
 | <a name="input_force_destroy_bucket"></a> [force\_destroy\_bucket](#input\_force\_destroy\_bucket) | When deleting the bucket, automatically delete all objects | `bool` | `false` | no |
 | <a name="input_kms_key_name"></a> [kms\_key\_name](#input\_kms\_key\_name) | The KMS key name to encrypt the audit logs bucket (optional). Format: projects/{project}/locations/{location}/keyRings/{keyring}/cryptoKeys/{key} | `string` | `null` | no |
 | <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | The number of days to retain audit logs in the storage bucket (minimum 1) | `number` | `365` | no |

@@ -32,6 +32,12 @@ variable "force_destroy_bucket" {
   default     = false
 }
 
+variable "enable_bucket_lock" {
+  description = "Opt-in WORM lock: apply a LOCKED retention policy of log_retention_days to the audit-log bucket, making objects undeletable before the window elapses (even by an admin). Default false preserves the current operator-correctable behaviour. A locked retention policy is IRREVERSIBLE — enable only for compliance regimes that require tamper-proof retention."
+  type        = bool
+  default     = false
+}
+
 variable "kms_key_name" {
   description = "The KMS key name to encrypt the audit logs bucket (optional). Format: projects/{project}/locations/{location}/keyRings/{keyring}/cryptoKeys/{key}"
   type        = string

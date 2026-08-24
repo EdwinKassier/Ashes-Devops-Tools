@@ -96,6 +96,7 @@ module "audit_logs" {
   project_id         = coalesce(var.logging_project_id, var.admin_project_id)
   bucket_location    = var.default_region
   log_retention_days = var.audit_log_retention_days
+  enable_bucket_lock = var.enable_audit_bucket_lock
   org_id             = var.org_id
   kms_key_name       = module.cmek.key_names["audit-logs"]
 
@@ -234,6 +235,11 @@ module "org_policies" {
       enforce    = true
     }
   ]
+
+  # Opt-in custom organization-policy constraints (CEL-defined, resource-shape
+  # guardrails the fixed boolean/list constraints can't express). Default [] =
+  # none. See docs/known-gaps.md (G6).
+  custom_constraints = var.custom_org_constraints
 }
 
 # Folder-level Organization Policies for Production

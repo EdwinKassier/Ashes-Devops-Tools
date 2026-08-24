@@ -50,11 +50,12 @@ AWS:
 
 GCP:
 
-- **G6 — no Organization Policy custom or `*.managed.*` constraints** (HIGH,
-  SAFE-CONFIG). `modules/gcp/governance/org-policy` supports `custom_constraints`
-  but the org stage wires none, and all constraints use legacy (not `.managed.`)
-  names. Add an opt-in `custom_org_constraints` (default `[]`) + examples;
-  consider `gcp.restrictNonCmekServices`. Ref:
+- **G6 — Organization Policy custom constraints** — ✅ **SHIPPED opt-in**
+  (`custom_org_constraints` on `envs/gcp/organization` → `stages/organization` →
+  `org-policy`, default `[]`, mock-tested). CEL resource-shape guardrails now
+  wire through to the org node. Remaining follow-ups: migrating the existing
+  boolean/list constraints to the `*.managed.*` namespace and adding
+  `gcp.restrictNonCmekServices` are still open. Ref:
   <https://docs.cloud.google.com/resource-manager/docs/custom-constraints>
 - **G7 — host firewall uses legacy VPC firewall rules, not network firewall
   policies** (HIGH, BEHAVIOR-CHANGING). `modules/gcp/network/network-firewall`
@@ -63,10 +64,12 @@ GCP:
   builds to global/regional **network firewall policies** with IAM-governed
   secure tags. Migration changes rule evaluation → real apply. Ref:
   <https://docs.cloud.google.com/firewall/docs/firewall-policies-overview>
-- **G8 — audit-log bucket has no locked retention** (MEDIUM, SAFE-CONFIG). The
-  org audit sink bucket has versioning/UBLA but deliberately no
-  `retention_policy { locked = true }` and a lifecycle that *deletes* at 365d.
-  Add an opt-in `enable_audit_bucket_lock` (default off) for a WORM guarantee.
+- **G8 — audit-log bucket WORM lock** — ✅ **SHIPPED opt-in**
+  (`enable_audit_bucket_lock` on `envs/gcp/organization` → `stages/organization`
+  → `cloud-audit-logs`, default `false`, mock-tested). When enabled it applies a
+  **locked** retention policy of `audit_log_retention_days` (irreversible — for
+  compliance regimes that require tamper-proof retention). Default preserves the
+  prior operator-correctable behaviour.
 - **G9 — no IAM Deny policies** (MEDIUM, SAFE-CONFIG). No `google_iam_deny_policy`
   anywhere; guardrails are org-policy + allow-side IAM only. Add opt-in deny
   wiring (default empty) as the coarse backstop for sensitive permissions. Ref:
