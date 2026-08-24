@@ -62,7 +62,7 @@ The following resources are created:
 | <a name="input_target_ou_id"></a> [target\_ou\_id](#input\_target\_ou\_id) | ID of the OU the policy is attached to (typically the Workloads OU). | `string` | n/a | yes |
 | <a name="input_backup_vault_name"></a> [backup\_vault\_name](#input\_backup\_vault\_name) | Name of the central backup vault the daily rule targets. Rendered into the templated policy. | `string` | `"org-backup-vault"` | no |
 | <a name="input_content"></a> [content](#input\_content) | Full JSON policy document. When non-empty this overrides the templated default and is used verbatim (must be valid Organizations backup-policy @@assign JSON). | `string` | `""` | no |
-| <a name="input_default_region"></a> [default\_region](#input\_default\_region) | AWS region the org backup plan copies recovery points into. Rendered into the templated policy's regions @@assign. | `string` | `"eu-west-2"` | no |
+| <a name="input_default_region"></a> [default\_region](#input\_default\_region) | AWS region the org backup plan writes recovery points to (single region). Rendered into the templated policy's regions @@assign. No cross-region copy\_action is configured — see docs/known-gaps.md (A5). | `string` | `"eu-west-2"` | no |
 | <a name="input_policy_name"></a> [policy\_name](#input\_policy\_name) | Name of the AWS Organizations BACKUP\_POLICY. | `string` | `"org-backup-policy"` | no |
 
 ## Outputs

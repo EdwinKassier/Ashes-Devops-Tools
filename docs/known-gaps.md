@@ -19,6 +19,80 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   **Validate on a real org and switch CloudTrail to `aws:SourceArn` before
   relying on it.** Ref: <https://docs.aws.amazon.com/awscloudtrail/latest/userguide/create-kms-key-policy-for-cloudtrail.html>
 
+## MODERNIZATION — latest-best-practice gaps (2026 review)
+
+From a 2026 gap analysis of both landing zones against the current AWS SRA and
+Google enterprise-foundations / FAST guidance. Both clouds already adhere
+closely (see [`landing-zone-conformance.md`](architecture/landing-zone-conformance.md));
+these are the specific lags. `SAFE-CONFIG` = a default-off, opt-in code change
+that passes `validate` + mock tests; `BEHAVIOR-CHANGING` = needs a real apply or
+architectural change and is documented here rather than rushed.
+
+AWS:
+
+- **A5 — single-region backups, no cross-region / air-gapped copy** (MEDIUM,
+  BEHAVIOR-CHANGING). `modules/aws/backup/backup-org-policy` writes recovery
+  points to one region; there is no `copy_actions` stanza or Logically
+  Air-Gapped destination vault. Latest AWS Backup guidance makes cross-region /
+  cross-account copy the resilience baseline. Add a `copy_actions` destination +
+  second-region vault (needs a real apply). Ref:
+  <https://aws.amazon.com/blogs/storage/aws-backup-2025-year-in-review-advancing-recovery-resilience/>
+- **A6 — log-analytics primary lags the June-2026 SRA** (MEDIUM, SAFE-DOC done /
+  re-plumb BEHAVIOR-CHANGING). The June-2026 SRA names **CloudWatch Unified Data
+  Store** the preferred analytics *primary* and Security Lake secondary; this
+  zone keeps the S3 WORM archive as the immutable sink (still valid) and treats
+  CloudWatch as an out-of-band `awscc` enhancement (A4). Doc framing corrected;
+  actually re-plumbing log routing needs a real apply.
+- **A7 — Config conformance packs are an empty bring-your-own hook** (MEDIUM,
+  SAFE-DOC done / opt-in SAFE-CONFIG). `modules/aws/security/config-org` ships
+  the aggregator + pack *resource* but no bundled pack. Optionally ship an
+  `Operational-Best-Practices` pack reference defaulting off.
+
+GCP:
+
+- **G6 — no Organization Policy custom or `*.managed.*` constraints** (HIGH,
+  SAFE-CONFIG). `modules/gcp/governance/org-policy` supports `custom_constraints`
+  but the org stage wires none, and all constraints use legacy (not `.managed.`)
+  names. Add an opt-in `custom_org_constraints` (default `[]`) + examples;
+  consider `gcp.restrictNonCmekServices`. Ref:
+  <https://docs.cloud.google.com/resource-manager/docs/custom-constraints>
+- **G7 — host firewall uses legacy VPC firewall rules, not network firewall
+  policies** (HIGH, BEHAVIOR-CHANGING). `modules/gcp/network/network-firewall`
+  creates `google_compute_firewall` (legacy per-VPC rules with network tags);
+  `stages/host` instantiates it for all tier-to-tier rules. Google directs new
+  builds to global/regional **network firewall policies** with IAM-governed
+  secure tags. Migration changes rule evaluation → real apply. Ref:
+  <https://docs.cloud.google.com/firewall/docs/firewall-policies-overview>
+- **G8 — audit-log bucket has no locked retention** (MEDIUM, SAFE-CONFIG). The
+  org audit sink bucket has versioning/UBLA but deliberately no
+  `retention_policy { locked = true }` and a lifecycle that *deletes* at 365d.
+  Add an opt-in `enable_audit_bucket_lock` (default off) for a WORM guarantee.
+- **G9 — no IAM Deny policies** (MEDIUM, SAFE-CONFIG). No `google_iam_deny_policy`
+  anywhere; guardrails are org-policy + allow-side IAM only. Add opt-in deny
+  wiring (default empty) as the coarse backstop for sensitive permissions. Ref:
+  <https://docs.cloud.google.com/iam/docs/deny-overview>
+- **G10 — SCC is notification-only; no posture service or tier** (MEDIUM,
+  BEHAVIOR-CHANGING). `modules/gcp/governance/scc` wires only Pub/Sub findings
+  notification. The security posture service (drift detection) needs SCC Premium
+  activated org-wide (a paid, out-of-band apply). A `google_securityposture_posture`
+  definition could be added as opt-in scaffolding once a tier exists. Target
+  **Premium** — the Enterprise tier sunsets 2027-05-21. Ref:
+  <https://docs.cloud.google.com/security-command-center/docs/service-tiers>
+- **G11 — VPC-SC perimeters enforce-first, no dry-run default** (LOW–MEDIUM,
+  SAFE-CONFIG). `vpc_sc_enable_dry_run` and per-perimeter `enable_dry_run`
+  default `false` (enforced). Google recommends starting perimeters in dry-run
+  and promoting after validating violation logs. Mitigated today by perimeters
+  being default-off (gated on a null ACM policy). Ref:
+  <https://docs.cloud.google.com/vpc-service-controls/docs/dry-run-mode>
+- **KMS Autokey / HSM-for-sensitive** (LOW, SAFE-CONFIG, future). No Cloud KMS
+  Autokey; CMEK defaults to `SOFTWARE` protection (HSM is per-key selectable).
+  Autokey (GA 2024, dedicated-project storage GA 2026) and HSM-by-default for
+  audit/SCC keys are maturity improvements, not deficiencies.
+- **Flat folder tree** (LOW, BEHAVIOR-CHANGING, documented divergence). Folders
+  are parented directly at the org (one per env + shared), not under a
+  prod/nonprod grouping layer. Deliberate simplification for a smaller org;
+  a grouping layer would let tier-level guardrails inherit by folder.
+
 ## PREVIEW — opt-in, default-off, not yet validated (mock-tested only, no on-path coverage)
 
 Enable only after validating in a real/test org. Each defaults to prior behaviour.

@@ -23,14 +23,14 @@
 # security posture) is a future migration and is intentionally not modelled here.
 
 locals {
-  # A variable default cannot reference another variable, so the FSBP + CIS 1.4 +
-  # NIST 800-53 r5 standard ARN set is computed here from home_region and used
-  # only when the caller does not supply an explicit enabled_standard_arns list.
-  # CIS 1.4 is a region-agnostic ruleset ARN (no region segment); FSBP and NIST
-  # are region-scoped standards ARNs.
+  # A variable default cannot reference another variable, so the FSBP +
+  # CIS v3.0.0 + NIST 800-53 r5 standard ARN set is computed here from
+  # home_region and used only when the caller does not supply an explicit
+  # enabled_standard_arns list. CIS v3.0.0 is the current AWS Foundations
+  # Benchmark (region-scoped standards ARN); all three are region-scoped.
   default_standards = [
     "arn:aws:securityhub:${var.home_region}::standards/aws-foundational-security-best-practices/v/1.0.0",
-    "arn:aws:securityhub:::ruleset/cis-aws-foundations-benchmark/v/1.4.0",
+    "arn:aws:securityhub:${var.home_region}::standards/cis-aws-foundations-benchmark/v/3.0.0",
     "arn:aws:securityhub:${var.home_region}::standards/nist-800-53/v/5.0.0",
   ]
 
