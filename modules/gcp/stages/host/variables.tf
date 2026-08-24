@@ -783,7 +783,7 @@ variable "vpc_service_controls" {
         })))
       })))
     })), [])
-    enable_dry_run             = optional(bool, false)
+    enable_dry_run             = optional(bool, true)
     enable_deletion_protection = optional(bool, true)
   }))
   default = {}

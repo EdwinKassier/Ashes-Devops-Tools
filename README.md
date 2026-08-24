@@ -21,7 +21,7 @@
 [![Modules](https://img.shields.io/badge/modules-89-blueviolet?style=flat-square)](modules/)
 [![Tests](https://img.shields.io/badge/test_suites-157-blue?style=flat-square)](modules/)
 
-<sub>Modules/test-suite counts above are hand-maintained, not live badges. Verify: <code>find modules -name main.tf -not -path '*/examples/*' -not -path '*/.terraform/*' | wc -l</code> (modules) and <code>find modules envs -name '*.tftest.hcl' -not -path '*/.terraform/*' | wc -l</code> (test suites). Last verified 2026-08-05: 89 modules, 157 test suites.</sub>
+<sub>Modules/test-suite counts above are hand-maintained, not live badges. Verify: <code>find modules -name main.tf -not -path '*/examples/*' -not -path '*/.terraform/*' | wc -l</code> (modules) and <code>find modules envs -name '*.tftest.hcl' -not -path '*/.terraform/*' | wc -l</code> (test suites). Last verified 2026-08-24: 90 modules, 164 test suites.</sub>
 
 </div>
 
@@ -104,7 +104,7 @@ Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives i
 
 ## Module Library
 
-89 modules — **42 GCP · 41 AWS · 6 SaaS** — each with auto-generated docs and `mock_provider` tests.
+90 modules — **43 GCP · 41 AWS · 6 SaaS** — each with auto-generated docs and `mock_provider` tests.
 
 Both clouds are organized into the **same conceptual domains** so you can map a capability across providers at a glance. Each table reads: **capability → Google Cloud module → Amazon Web Services module**. A `—` means the platform has no dedicated module for that capability (often because it is native, or lives in an adjacent domain — noted inline). Link text is the module's path under `modules/<cloud>/`.
 
@@ -146,12 +146,13 @@ Both clouds build a hub-and-spoke private network from the same primitives; the 
 </details>
 
 <details>
-<summary><strong>IAM &amp; Identity</strong> — GCP 6 · AWS 2</summary>
+<summary><strong>IAM &amp; Identity</strong> — GCP 7 · AWS 2</summary>
 
 | Capability | Google Cloud | Amazon Web Services |
 |:-----------|:-------------|:--------------------|
 | Workforce identity / SSO | [`iam/identity-group`](modules/gcp/iam/identity-group/), [`iam/identity-group-memberships`](modules/gcp/iam/identity-group-memberships/) | [`iam/iam-identity-center`](modules/aws/iam/iam-identity-center/) |
 | Roles &amp; permissions | [`iam/organization`](modules/gcp/iam/organization/), [`iam/role`](modules/gcp/iam/role/) | [`iam/iam-role`](modules/aws/iam/iam-role/) |
+| Deny-policy guardrails | [`iam/deny-policy`](modules/gcp/iam/deny-policy/) | *(SCP/RCP — see Governance)* |
 | Service / machine identity | [`iam/service-account`](modules/gcp/iam/service-account/) | *(IAM roles + instance profiles)* |
 | Federated workload identity | [`iam/workload-identity`](modules/gcp/iam/workload-identity/) | *(OIDC via `iam/iam-role`)* |
 

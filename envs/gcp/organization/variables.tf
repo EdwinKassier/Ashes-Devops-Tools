@@ -232,14 +232,37 @@ variable "enable_audit_bucket_lock" {
   default     = false
 }
 
+variable "iam_deny_policies" {
+  description = "Opt-in IAM deny policies applied at the org node — a coarse, allow-independent backstop blocking specific permissions for specific principals regardless of roles (deny before allow). Default [] = none. See docs/known-gaps.md (G9)."
+  type = list(object({
+    name         = string
+    display_name = optional(string)
+    rules = list(object({
+      description           = optional(string)
+      denied_principals     = list(string)
+      denied_permissions    = list(string)
+      exception_principals  = optional(list(string), [])
+      exception_permissions = optional(list(string), [])
+      denial_condition = optional(object({
+        expression  = string
+        title       = optional(string)
+        description = optional(string)
+      }))
+    }))
+  }))
+  default = []
+}
+
 variable "vpc_sc_enable_dry_run" {
   description = <<-EOT
-    When true, the hub VPC-SC perimeter logs violations but does NOT block traffic (dry-run/simulation mode).
-    When false (the default), the perimeter is ENFORCED.
-    Only set to true temporarily during the enforcement transition validation window.
+    When true (the default), the hub VPC-SC perimeter logs violations but does NOT block traffic (dry-run/simulation mode).
+    When false, the perimeter is ENFORCED.
+    Google recommends starting perimeters in dry-run and promoting to enforcement only after validating the violation logs
+    (via Cloud Logging or the VPC-SC violations dashboard). Set to false once you have confirmed no legitimate traffic is denied.
+    See docs/known-gaps.md (G11).
   EOT
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "enable_tfc_oidc" {
