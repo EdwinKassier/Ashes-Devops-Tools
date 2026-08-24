@@ -121,10 +121,21 @@ That keeps CIDRs explicit and stable. The old pattern of deriving CIDRs from key
 
 ### Shared Infrastructure Modules
 
-- `modules/gcp/network/*` contains the reusable network primitives
-- `modules/gcp/governance/*` contains budgets, logging, KMS, org policy, SCC, and tags
-- `modules/gcp/iam/*` contains reusable IAM primitives
-- `modules/gcp/stages/host` is the Shared VPC host-project network stage used by `envs/gcp/workload`
+Both clouds expose reusable primitives under the **same domain folders**, so a capability maps across providers by directory name. Full capability-by-capability catalog: **[Module Library in the README →](../../README.md#module-library)**.
+
+| Domain | Google Cloud (`modules/gcp/*`) | Amazon Web Services (`modules/aws/*`) |
+|:-------|:-------------------------------|:--------------------------------------|
+| Networking | `network/*` — VPC, subnets, DNS, NAT, LB, firewalls, VPN, VPC-SC | `network/*` — VPC, Transit Gateway, IPAM, endpoints, Network Firewall, Route 53 Resolver |
+| IAM &amp; Identity | `iam/*` — org bindings, roles, service accounts, workload identity, groups | `iam/*` — IAM roles, IAM Identity Center |
+| Security &amp; detection | `governance/scc`, `governance/cloud-audit-logs` | `security/*` — GuardDuty, Security Hub, Config, CloudTrail, Security Lake, delegated admin, edge/WAF |
+| Governance | `governance/*` — org policy, tags, budgets | `governance/*` — Organizations, SCP/RCP, account baseline, cost governance, service quotas |
+| Data, storage &amp; encryption | `cloud-storage`, `artifact-registry`, `governance/kms` | `data/*` — log archive bucket, KMS keys, private CA |
+| Backup | *(GCS lifecycle / snapshots — no dedicated module)* | `backup/*` — vaults, org backup policy |
+| Observability &amp; ops | `monitoring/*` — alert policies, dashboards | `ops/systems-manager` |
+| Application platform | `firebase/project` | *(Amplify / App Runner — no module)* |
+| Orchestration stages | `stages/*` — bootstrap, organization, projects, network-hub, workload, host | `stages/*` — organization, security, network-hub, shared-services, backup, workload |
+
+`modules/gcp/stages/host` is the Shared VPC host-project network stage used by `envs/gcp/workload`; the AWS equivalent per-account baseline lives in `modules/aws/stages/workload`.
 
 ### SaaS Modules
 
