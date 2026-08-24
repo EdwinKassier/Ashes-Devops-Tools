@@ -103,7 +103,9 @@ Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives i
 
 ## Module Library
 
-89 modules across 8 categories, each with auto-generated docs and `mock_provider` tests.
+89 modules — **42 GCP · 41 AWS · 6 SaaS** — each with auto-generated docs and `mock_provider` tests.
+
+Both clouds are organized into the **same conceptual domains** so you can map a capability across providers at a glance. Each table reads: **capability → Google Cloud module → Amazon Web Services module**. A `—` means the platform has no dedicated module for that capability (often because it is native, or lives in an adjacent domain — noted inline). Link text is the module's path under `modules/<cloud>/`.
 
 ### SaaS Integrations
 
@@ -114,149 +116,139 @@ Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives i
 | [`supabase/environment`](modules/supabase/environment/) | Supabase | Composite: project + settings + API keys |
 | [`supabase/vault-secrets`](modules/supabase/vault-secrets/) | Supabase + Node.js | Vault bootstrap and secret reconciliation |
 | [`vercel/project`](modules/vercel/project/) | Vercel | Three-environment project with drift resistance |
-| [`stages/saas-workload`](modules/saas/stages/saas-workload/) | All three | Full SaaS environment in one call |
+| [`saas/stages/saas-workload`](modules/saas/stages/saas-workload/) | All three | Full SaaS environment in one call |
 
-### Google Cloud
+### Cloud modules by domain
 
 <details>
-<summary><strong>Networking (19 modules)</strong></summary>
+<summary><strong>Networking</strong> — GCP 19 · AWS 7</summary>
 
-| Module | Purpose |
-|:-------|:--------|
-| [`network/vpc`](modules/gcp/network/vpc/) | Virtual Private Cloud |
-| [`network/subnet`](modules/gcp/network/subnet/) | Standardized subnet creation |
-| [`network/dns`](modules/gcp/network/dns/) | Private/public DNS zones |
-| [`network/network-firewall`](modules/gcp/network/network-firewall/) | Network security rules |
-| [`network/hierarchical-firewall`](modules/gcp/network/hierarchical-firewall/) | Policy-based org firewall |
-| [`network/cloud-armor`](modules/gcp/network/cloud-armor/) | WAF / DDoS protection |
-| [`network/api-gateway`](modules/gcp/network/api-gateway/) | API management |
-| [`network/cdn`](modules/gcp/network/cdn/) | Content delivery network |
-| [`network/vpc-peering`](modules/gcp/network/vpc-peering/) | VPC peering connections |
-| [`network/private-service-connect`](modules/gcp/network/private-service-connect/) | Private Service Connect |
-| [`network/private-service-access`](modules/gcp/network/private-service-access/) | Private Service Access |
-| [`network/vpn`](modules/gcp/network/vpn/) | HA-VPN with BGP |
-| [`network/interconnect`](modules/gcp/network/interconnect/) | Dedicated Interconnect |
-| [`network/internal-lb`](modules/gcp/network/internal-lb/) | Internal Load Balancer |
-| [`network/nat`](modules/gcp/network/nat/) | Cloud NAT |
-| [`network/packet-mirroring`](modules/gcp/network/packet-mirroring/) | Packet Mirroring |
-| [`network/shared-vpc-service`](modules/gcp/network/shared-vpc-service/) | Shared VPC service attachment |
-| [`network/vpc-flow-logs`](modules/gcp/network/vpc-flow-logs/) | VPC Flow Logs |
-| [`network/vpc-sc`](modules/gcp/network/vpc-sc/) | VPC Service Controls |
+Both clouds build a hub-and-spoke private network from the same primitives; the names differ, the roles line up.
+
+| Capability | Google Cloud | Amazon Web Services |
+|:-----------|:-------------|:--------------------|
+| Core private network | [`network/vpc`](modules/gcp/network/vpc/), [`network/subnet`](modules/gcp/network/subnet/) | [`network/vpc`](modules/aws/network/vpc/) |
+| IP address management | *(manual CIDR planning)* | [`network/ipam`](modules/aws/network/ipam/) |
+| Hub interconnect / transit | [`network/shared-vpc-service`](modules/gcp/network/shared-vpc-service/), [`network/vpc-peering`](modules/gcp/network/vpc-peering/), [`network/interconnect`](modules/gcp/network/interconnect/) | [`network/transit-gateway`](modules/aws/network/transit-gateway/) |
+| Private service access | [`network/private-service-connect`](modules/gcp/network/private-service-connect/), [`network/private-service-access`](modules/gcp/network/private-service-access/) | [`network/vpc-endpoints`](modules/aws/network/vpc-endpoints/) |
+| DNS | [`network/dns`](modules/gcp/network/dns/) | [`network/route53-resolver`](modules/aws/network/route53-resolver/) |
+| Hybrid VPN | [`network/vpn`](modules/gcp/network/vpn/) | *(native, via transit-gateway)* |
+| Egress NAT | [`network/nat`](modules/gcp/network/nat/) | *(native, in `network/vpc`)* |
+| Load balancing | [`network/internal-lb`](modules/gcp/network/internal-lb/) | — |
+| Content delivery / API edge | [`network/cdn`](modules/gcp/network/cdn/), [`network/api-gateway`](modules/gcp/network/api-gateway/) | — |
+| Stateful firewall | [`network/network-firewall`](modules/gcp/network/network-firewall/), [`network/hierarchical-firewall`](modules/gcp/network/hierarchical-firewall/) | [`network/network-firewall`](modules/aws/network/network-firewall/) |
+| Web app firewall / DDoS | [`network/cloud-armor`](modules/gcp/network/cloud-armor/) | *(Security → `edge-security`, `firewall-manager-org`)* |
+| Traffic mirroring / analysis | [`network/packet-mirroring`](modules/gcp/network/packet-mirroring/) | [`network/network-access-analyzer`](modules/aws/network/network-access-analyzer/) |
+| Flow logging | [`network/vpc-flow-logs`](modules/gcp/network/vpc-flow-logs/) | *(native VPC flow logs)* |
+| Service perimeter | [`network/vpc-sc`](modules/gcp/network/vpc-sc/) | *(Governance → `organization-policy` SCP/RCP)* |
 
 </details>
 
 <details>
-<summary><strong>IAM & Security (6 modules)</strong></summary>
+<summary><strong>IAM &amp; Identity</strong> — GCP 6 · AWS 2</summary>
 
-| Module | Purpose |
-|:-------|:--------|
-| [`iam/organization`](modules/gcp/iam/organization/) | Org-level IAM bindings |
-| [`iam/role`](modules/gcp/iam/role/) | Custom IAM roles |
-| [`iam/service-account`](modules/gcp/iam/service-account/) | Service account lifecycle |
-| [`iam/workload-identity`](modules/gcp/iam/workload-identity/) | Workload Identity Federation |
-| [`iam/identity-group`](modules/gcp/iam/identity-group/) | Google Cloud Identity groups |
-| [`iam/identity-group-memberships`](modules/gcp/iam/identity-group-memberships/) | Group membership management |
+| Capability | Google Cloud | Amazon Web Services |
+|:-----------|:-------------|:--------------------|
+| Workforce identity / SSO | [`iam/identity-group`](modules/gcp/iam/identity-group/), [`iam/identity-group-memberships`](modules/gcp/iam/identity-group-memberships/) | [`iam/iam-identity-center`](modules/aws/iam/iam-identity-center/) |
+| Roles &amp; permissions | [`iam/organization`](modules/gcp/iam/organization/), [`iam/role`](modules/gcp/iam/role/) | [`iam/iam-role`](modules/aws/iam/iam-role/) |
+| Service / machine identity | [`iam/service-account`](modules/gcp/iam/service-account/) | *(IAM roles + instance profiles)* |
+| Federated workload identity | [`iam/workload-identity`](modules/gcp/iam/workload-identity/) | *(OIDC via `iam/iam-role`)* |
 
 </details>
 
 <details>
-<summary><strong>Governance (6 modules)</strong></summary>
+<summary><strong>Security &amp; Threat Detection</strong> — GCP 2 · AWS 13</summary>
 
-| Module | Purpose |
-|:-------|:--------|
-| [`governance/billing`](modules/gcp/governance/billing/) | Budget alerts |
-| [`governance/cloud-audit-logs`](modules/gcp/governance/cloud-audit-logs/) | Centralized audit logging |
-| [`governance/kms`](modules/gcp/governance/kms/) | Customer-managed encryption keys |
-| [`governance/org-policy`](modules/gcp/governance/org-policy/) | Organization policies |
-| [`governance/scc`](modules/gcp/governance/scc/) | Security Command Center notifications |
-| [`governance/tags`](modules/gcp/governance/tags/) | Resource tag keys and values |
+GCP consolidates detection into Security Command Center plus audit logs; the AWS SRA breaks the same surface into many org-wide, delegated-admin services — hence the count asymmetry.
 
-</details>
-
-<details>
-<summary><strong>Stages & Platform (13 orchestration modules)</strong></summary>
-
-| Module | Purpose |
-|:-------|:--------|
-| [`stages/bootstrap`](modules/gcp/stages/bootstrap/) | Admin project, WIF pool, Terraform SA |
-| [`stages/organization`](modules/gcp/stages/organization/) | Folders, org policy, audit logs, budgets |
-| [`stages/projects`](modules/gcp/stages/projects/) | Shared + host projects |
-| [`stages/network-hub`](modules/gcp/stages/network-hub/) | Hub VPC + DNS hub |
-| [`stages/workload`](modules/gcp/stages/workload/) | Shared VPC service project attachment |
-| [`stages/saas-workload`](modules/saas/stages/saas-workload/) | Supabase + Vercel full-stack environment |
-| [`stages/aws-organization`](modules/aws/stages/organization/) | AWS Organizations, OUs, SCPs, cost governance |
-| [`stages/aws-security`](modules/aws/stages/security/) | GuardDuty, Security Hub, Config, CloudTrail, delegated admin |
-| [`stages/aws-network-hub`](modules/aws/stages/network-hub/) | Transit Gateway, IPAM, Network Firewall, Route 53 Resolver |
-| [`stages/aws-shared-services`](modules/aws/stages/shared-services/) | Log archive, KMS, private CA, Systems Manager |
-| [`stages/aws-backup`](modules/aws/stages/backup/) | Org-wide AWS Backup vaults and policies |
-| [`stages/aws-workload`](modules/aws/stages/workload/) | Per-account workload VPC + baseline |
-| [`host`](modules/gcp/stages/host/) | GCP Shared VPC host-project network stage for `envs/gcp/workload` — composes networking, security, and governance primitives |
+| Capability | Google Cloud | Amazon Web Services |
+|:-----------|:-------------|:--------------------|
+| Posture / findings management | [`governance/scc`](modules/gcp/governance/scc/) | [`security/securityhub-org`](modules/aws/security/securityhub-org/) |
+| Threat detection | *(SCC / Event Threat Detection)* | [`security/guardduty-org`](modules/aws/security/guardduty-org/) |
+| Audit &amp; activity logging | [`governance/cloud-audit-logs`](modules/gcp/governance/cloud-audit-logs/) | [`security/cloudtrail-org`](modules/aws/security/cloudtrail-org/) |
+| Config &amp; compliance recording | *(SCC posture)* | [`security/config-org`](modules/aws/security/config-org/) |
+| Security data lake | — | [`security/securitylake`](modules/aws/security/securitylake/) |
+| Delegated security administration | — | [`security/security-delegated-admin`](modules/aws/security/security-delegated-admin/), [`security/org-security-service`](modules/aws/security/org-security-service/) |
+| IAM access analysis | *(IAM Recommender / Policy Analyzer)* | [`security/access-analyzer-org`](modules/aws/security/access-analyzer-org/) |
+| Edge / WAF management | *(Networking → `cloud-armor`)* | [`security/edge-security`](modules/aws/security/edge-security/), [`security/firewall-manager-org`](modules/aws/security/firewall-manager-org/) |
+| Secrets baseline | *(SaaS → `supabase/vault-secrets`)* | [`security/secrets-baseline`](modules/aws/security/secrets-baseline/) |
+| Incident response | — | [`security/incident-response`](modules/aws/security/incident-response/) |
+| Finding notifications | *(Observability → `alert-policy`)* | [`security/security-notifications`](modules/aws/security/security-notifications/) |
 
 </details>
 
 <details>
-<summary><strong>Storage, Compute & Firebase (3 modules)</strong></summary>
+<summary><strong>Governance &amp; Org Management</strong> — GCP 3 · AWS 7</summary>
 
-| Module | Purpose |
-|:-------|:--------|
-| [`cloud-storage`](modules/gcp/cloud-storage/) | GCS buckets with log separation and optional CMEK |
-| [`artifact-registry`](modules/gcp/artifact-registry/) | Container/package registries |
-| [`firebase/project`](modules/gcp/firebase/project/) | Firebase project setup with Apple, Android, and Web app targets |
+| Capability | Google Cloud | Amazon Web Services |
+|:-----------|:-------------|:--------------------|
+| Org / account structure | *(folders via `stages/organization`)* | [`governance/organization`](modules/aws/governance/organization/), [`governance/account`](modules/aws/governance/account/) |
+| Policy guardrails | [`governance/org-policy`](modules/gcp/governance/org-policy/) | [`governance/organization-policy`](modules/aws/governance/organization-policy/) |
+| Account / project baseline | *(via `stages/projects`)* | [`governance/account-baseline`](modules/aws/governance/account-baseline/) |
+| Cost &amp; budgets | [`governance/billing`](modules/gcp/governance/billing/) | [`governance/cost-governance`](modules/aws/governance/cost-governance/) |
+| Resource tagging | [`governance/tags`](modules/gcp/governance/tags/) | *(tag policies via `governance/organization-policy`)* |
+| Service quotas | — | [`governance/service-quotas`](modules/aws/governance/service-quotas/) |
+| Org-wide IAM features | *(via `iam/organization`)* | [`governance/iam-organizations-features`](modules/aws/governance/iam-organizations-features/) |
 
 </details>
 
 <details>
-<summary><strong>Monitoring (2 modules)</strong></summary>
+<summary><strong>Data, Storage &amp; Encryption</strong> — GCP 3 · AWS 3</summary>
 
-| Module | Purpose |
-|:-------|:--------|
-| [`monitoring/alert-policy`](modules/gcp/monitoring/alert-policy/) | Cloud Monitoring alert policies and notification channels |
-| [`monitoring/compute-dashboard`](modules/gcp/monitoring/compute-dashboard/) | Compute observability dashboards |
+| Capability | Google Cloud | Amazon Web Services |
+|:-----------|:-------------|:--------------------|
+| Object storage / log archive | [`cloud-storage`](modules/gcp/cloud-storage/) | [`data/log-archive-bucket`](modules/aws/data/log-archive-bucket/) |
+| Artifact / image registry | [`artifact-registry`](modules/gcp/artifact-registry/) | *(ECR — no module)* |
+| Encryption keys (CMEK / KMS) | [`governance/kms`](modules/gcp/governance/kms/) | [`data/kms-key`](modules/aws/data/kms-key/) |
+| Private certificate authority | — | [`data/private-ca`](modules/aws/data/private-ca/) |
 
 </details>
 
-### Amazon Web Services
+<details>
+<summary><strong>Backup &amp; Resilience</strong> — GCP 0 · AWS 2</summary>
+
+| Capability | Google Cloud | Amazon Web Services |
+|:-----------|:-------------|:--------------------|
+| Backup vaults | *(GCS lifecycle / snapshot schedules — no dedicated module)* | [`backup/backup-vault`](modules/aws/backup/backup-vault/) |
+| Org-wide backup policy | — | [`backup/backup-org-policy`](modules/aws/backup/backup-org-policy/) |
+
+</details>
 
 <details>
-<summary><strong>AWS Landing Zone (35 modules)</strong></summary>
+<summary><strong>Observability &amp; Operations</strong> — GCP 2 · AWS 1</summary>
 
-| Module | Purpose |
-|:-------|:--------|
-| [`aws/organization`](modules/aws/governance/organization/) | AWS Organizations, OUs, root config |
-| [`aws/organization-policy`](modules/aws/governance/organization-policy/) | Service Control Policies (SCPs) |
-| [`aws/account`](modules/aws/governance/account/) | Member account provisioning |
-| [`aws/account-baseline`](modules/aws/governance/account-baseline/) | Per-account baseline guardrails |
-| [`aws/cost-governance`](modules/aws/governance/cost-governance/) | Budgets, cost anomaly detection, allocation tags |
-| [`aws/service-quotas`](modules/aws/governance/service-quotas/) | Service quota requests |
-| [`aws/iam-organizations-features`](modules/aws/governance/iam-organizations-features/) | Org-wide IAM features |
-| [`aws/iam-identity-center`](modules/aws/iam/iam-identity-center/) | IAM Identity Center (SSO) |
-| [`aws/iam-role`](modules/aws/iam/iam-role/) | IAM roles |
-| [`aws/access-analyzer-org`](modules/aws/security/access-analyzer-org/) | Org-level IAM Access Analyzer |
-| [`aws/guardduty-org`](modules/aws/security/guardduty-org/) | Org-wide GuardDuty |
-| [`aws/securityhub-org`](modules/aws/security/securityhub-org/) | Org-wide Security Hub |
-| [`aws/config-org`](modules/aws/security/config-org/) | Org-wide AWS Config |
-| [`aws/cloudtrail-org`](modules/aws/security/cloudtrail-org/) | Org-wide CloudTrail |
-| [`aws/securitylake`](modules/aws/security/securitylake/) | Amazon Security Lake |
-| [`aws/security-delegated-admin`](modules/aws/security/security-delegated-admin/) | Delegated administrator registration |
-| [`aws/org-security-service`](modules/aws/security/org-security-service/) | Org security service enablement |
-| [`aws/security-notifications`](modules/aws/security/security-notifications/) | Security finding notifications |
-| [`aws/firewall-manager-org`](modules/aws/security/firewall-manager-org/) | Org-wide Firewall Manager |
-| [`aws/edge-security`](modules/aws/security/edge-security/) | Edge / WAF security |
-| [`aws/secrets-baseline`](modules/aws/security/secrets-baseline/) | Secrets Manager baseline |
-| [`aws/incident-response`](modules/aws/security/incident-response/) | Incident response tooling |
-| [`aws/kms-key`](modules/aws/data/kms-key/) | Customer-managed KMS keys |
-| [`aws/private-ca`](modules/aws/data/private-ca/) | AWS Private Certificate Authority |
-| [`aws/systems-manager`](modules/aws/ops/systems-manager/) | Systems Manager configuration |
-| [`aws/log-archive-bucket`](modules/aws/data/log-archive-bucket/) | Centralized log archive bucket |
-| [`aws/vpc`](modules/aws/network/vpc/) | VPC with subnets and routing |
-| [`aws/vpc-endpoints`](modules/aws/network/vpc-endpoints/) | VPC interface/gateway endpoints |
-| [`aws/transit-gateway`](modules/aws/network/transit-gateway/) | Transit Gateway hub |
-| [`aws/ipam`](modules/aws/network/ipam/) | IP Address Manager |
-| [`aws/network-firewall`](modules/aws/network/network-firewall/) | AWS Network Firewall |
-| [`aws/network-access-analyzer`](modules/aws/network/network-access-analyzer/) | Network Access Analyzer |
-| [`aws/route53-resolver`](modules/aws/network/route53-resolver/) | Route 53 Resolver rules/endpoints |
-| [`aws/backup-vault`](modules/aws/backup/backup-vault/) | AWS Backup vault |
-| [`aws/backup-org-policy`](modules/aws/backup/backup-org-policy/) | Org-wide backup policies |
+| Capability | Google Cloud | Amazon Web Services |
+|:-----------|:-------------|:--------------------|
+| Metrics &amp; alerting | [`monitoring/alert-policy`](modules/gcp/monitoring/alert-policy/) | *(CloudWatch alarms via stages)* |
+| Dashboards | [`monitoring/compute-dashboard`](modules/gcp/monitoring/compute-dashboard/) | — |
+| Fleet / config management | — | [`ops/systems-manager`](modules/aws/ops/systems-manager/) |
+
+</details>
+
+<details>
+<summary><strong>Application Platform</strong> — GCP 1 · AWS 0</summary>
+
+| Capability | Google Cloud | Amazon Web Services |
+|:-----------|:-------------|:--------------------|
+| App / mobile backend | [`firebase/project`](modules/gcp/firebase/project/) | *(Amplify / App Runner — no module)* |
+
+</details>
+
+<details>
+<summary><strong>Orchestration Stages</strong> — GCP 6 · AWS 6</summary>
+
+Composite stages wrap the primitives above into deployable landing-zone layers, one per root/workspace. Layers line up across clouds even where a cloud folds two responsibilities into one stage.
+
+| Layer | Google Cloud | Amazon Web Services |
+|:------|:-------------|:--------------------|
+| Bootstrap / foundation | [`stages/bootstrap`](modules/gcp/stages/bootstrap/) | *(phase-0, out-of-band — see aws-bootstrap runbook)* |
+| Organization &amp; guardrails | [`stages/organization`](modules/gcp/stages/organization/) | [`stages/organization`](modules/aws/stages/organization/) |
+| Security baseline | *(folded into `stages/organization`)* | [`stages/security`](modules/aws/stages/security/) |
+| Projects / accounts | [`stages/projects`](modules/gcp/stages/projects/) | *(accounts via `stages/organization`)* |
+| Network hub | [`stages/network-hub`](modules/gcp/stages/network-hub/) | [`stages/network-hub`](modules/aws/stages/network-hub/) |
+| Shared services | *(via `stages/projects`)* | [`stages/shared-services`](modules/aws/stages/shared-services/) |
+| Backup | — | [`stages/backup`](modules/aws/stages/backup/) |
+| Workload (per environment) | [`stages/workload`](modules/gcp/stages/workload/), [`stages/host`](modules/gcp/stages/host/) | [`stages/workload`](modules/aws/stages/workload/) |
 
 </details>
 
