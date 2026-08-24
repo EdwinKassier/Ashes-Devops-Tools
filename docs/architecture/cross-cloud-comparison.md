@@ -29,8 +29,11 @@ for control-for-control comparison.
 | Firewall | [`gcp/network/network-firewall`](../../modules/gcp/network/network-firewall/), `hierarchical-firewall` | [`aws/network-firewall`](../../modules/aws/network/network-firewall/) |
 | Private connectivity | [`gcp/network/private-service-connect`](../../modules/gcp/network/private-service-connect/), [`private-service-access`](../../modules/gcp/network/private-service-access/) | [`aws/vpc-endpoints`](../../modules/aws/network/vpc-endpoints/) |
 | DNS | [`gcp/network/dns`](../../modules/gcp/network/dns/) | [`aws/route53-resolver`](../../modules/aws/network/route53-resolver/) |
+| Load balancing | [`gcp/network/internal-lb`](../../modules/gcp/network/internal-lb/) | [`aws/load-balancer`](../../modules/aws/network/load-balancer/) (ALB/NLB) |
+| CDN | [`gcp/network/cdn`](../../modules/gcp/network/cdn/) | [`aws/edge-security`](../../modules/aws/security/edge-security/) (CloudFront) |
+| API gateway | [`gcp/network/api-gateway`](../../modules/gcp/network/api-gateway/) | [`aws/api-gateway`](../../modules/aws/network/api-gateway/) |
 | WAF / edge | [`gcp/network/cloud-armor`](../../modules/gcp/network/cloud-armor/) | [`aws/edge-security`](../../modules/aws/security/edge-security/) (WAF/FMS) |
-| IP address mgmt | (project CIDRs) | [`aws/ipam`](../../modules/aws/network/ipam/) |
+| IP address mgmt | (project CIDRs — no GCP IPAM product) | [`aws/ipam`](../../modules/aws/network/ipam/) |
 | Service perimeter | [`gcp/network/vpc-sc`](../../modules/gcp/network/vpc-sc/) | (RCP data perimeter in `organization-policy`) |
 
 ## Security & detection
@@ -51,9 +54,12 @@ for control-for-control comparison.
 |---|---|---|
 | Human SSO | Cloud Identity groups | [`aws/iam-identity-center`](../../modules/aws/iam/iam-identity-center/) |
 | Custom roles | [`gcp/iam/role`](../../modules/gcp/iam/role/) | [`aws/iam-role`](../../modules/aws/iam/iam-role/) |
-| Backup | (snapshot schedules) | [`aws/backup-vault`](../../modules/aws/backup/backup-vault/) + `backup-org-policy` |
+| Deny guardrails | [`gcp/iam/deny-policy`](../../modules/gcp/iam/deny-policy/) | (SCP/RCP in `organization-policy`) |
+| Private CA | [`gcp/governance/private-ca`](../../modules/gcp/governance/private-ca/) (CAS) | [`aws/private-ca`](../../modules/aws/data/private-ca/) (ACM PCA) |
+| Backup | [`gcp/backup/backup-plan`](../../modules/gcp/backup/backup-plan/) (snapshot schedules) | [`aws/backup-vault`](../../modules/aws/backup/backup-vault/) + `backup-org-policy` |
+| Monitoring / alerts | [`gcp/monitoring/alert-policy`](../../modules/gcp/monitoring/alert-policy/), [`compute-dashboard`](../../modules/gcp/monitoring/compute-dashboard/) | [`aws/ops/cloudwatch`](../../modules/aws/ops/cloudwatch/) |
 | Object storage | [`gcp/cloud-storage`](../../modules/gcp/cloud-storage/) | (per-module S3, e.g. `log-archive-bucket`) |
-| Artifacts | [`gcp/artifact-registry`](../../modules/gcp/artifact-registry/) | (ECR — not yet modularized) |
+| Artifacts / image registry | [`gcp/artifact-registry`](../../modules/gcp/artifact-registry/) | [`aws/data/ecr`](../../modules/aws/data/ecr/) |
 
 ## SaaS
 

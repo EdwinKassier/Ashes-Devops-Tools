@@ -121,6 +121,27 @@ Enable only after validating in a real/test org. Each defaults to prior behaviou
   via `cloudwatch_logs_kms_key_arn`, and note the break-glass alarm lives in a
   different account.
 
+## Capability parity (2026 review)
+
+A capability-table audit found several `—` cells that were **real missing
+modules**, not true "not applicable". Closed by adding modules on the lagging
+side (all mock-tested, secure defaults):
+
+- **Load balancing** — added `modules/aws/network/load-balancer` (ALB/NLB) ↔ GCP `network/internal-lb`.
+- **API gateway** — added `modules/aws/network/api-gateway` (API Gateway v2) ↔ GCP `network/api-gateway`.
+- **CDN / edge** — no new module; corrected a **doc mis-mapping**: AWS CloudFront already lives in `modules/aws/security/edge-security`, not `—`.
+- **Private CA** — added `modules/gcp/governance/private-ca` (CAS) ↔ AWS `data/private-ca`.
+- **Scheduled backups** — added `modules/gcp/backup/backup-plan` (snapshot schedules) ↔ AWS `backup/*`.
+- **Metrics / dashboards** — added `modules/aws/ops/cloudwatch` (alarms + SNS + dashboard) ↔ GCP `monitoring/*`.
+- **Image registry** — added `modules/aws/data/ecr` ↔ GCP `artifact-registry`.
+
+**Remaining `—` cells are intentional asymmetries, not gaps:**
+
+- **GCP IPAM** — Google has no distinct IPAM product; CIDR planning is per-project subnets. AWS IPAM has no GCP analogue to modularize.
+- **Firebase** (`modules/gcp/firebase/project`) — GCP-specific; no AWS equivalent (Amplify is a different, niche product).
+- **AWS site-to-site VPN** — modelled as a Transit Gateway attachment rather than a standalone module; GCP's HA-VPN is a discrete product hence a discrete `network/vpn` module.
+- **GCP service-quotas** — GCP quota management (consumer overrides) differs enough that no parity module is warranted today; AWS `governance/service-quotas` has no clean GCP mirror.
+
 ## BLOCKED — waiting on provider capability
 
 - **S1 — Supabase new API keys.** The `supabase/supabase` provider (`~> 1.0`)
