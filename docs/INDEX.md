@@ -62,6 +62,16 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
 - [GCP Workspace Rename](runbooks/gcp-workspace-rename.md): migrate live TFC workspaces to the `gcp-organization` / `gcp-workload-<env>` names
 - [Provider Upgrades](guides/provider-upgrades.md): google/google-beta major-version compatibility posture and re-test procedure
 
+## GCP Landing Zone
+
+- [GCP Landing Zone](architecture/gcp-landing-zone.md): enterprise-foundations architecture — folder/project model, two-root layer map, Shared VPC hub-spoke topology, security services, foundation conformance checklist
+- [Adding a Cloud](architecture/adding-a-cloud.md): the per-cloud-root contract (naming, one provider per root, credential-free remote state)
+- [Provider Selection](architecture/provider-selection.md): any-combination cloud matrix, per-cloud-root model
+- [Add Environment](runbooks/add-environment.md): provision a new dev/staging/prod environment (a `gcp-workload-<env>` workspace)
+- [Service Team Onboarding](runbooks/service-team-onboarding.md): create a service project with Shared VPC attachment
+- [Break Glass](runbooks/break-glass.md): emergency access when Workload Identity Federation fails
+- [GCP Workspace Rename](runbooks/gcp-workspace-rename.md): migrate live TFC workspaces to the `gcp-organization` / `gcp-workload-<env>` names
+
 ## AWS Landing Zone
 
 - [AWS Landing Zone](architecture/aws-landing-zone.md): multi-account SRA architecture — account/OU model, layer map, network/security topology, SRA conformance checklist
@@ -90,7 +100,9 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
 
 - [Network Topology](architecture/network-topology.md): hub-spoke VPC layout, VPC-SC perimeter, WIF OIDC flow
 - [Architecture Overview](architecture/ARCHITECTURE.md): control plane, app root, and CI/CD flow
+- [GCP Landing Zone](architecture/gcp-landing-zone.md): folder/project model, two-root layer map, and Shared VPC hub-spoke topology
 - [AWS Landing Zone](architecture/aws-landing-zone.md): multi-account SRA model, layer map, and network/security topology
+- [Cross-Cloud Comparison](architecture/cross-cloud-comparison.md): where each capability lives per provider, side by side
 - [Provider Selection](architecture/provider-selection.md): per-cloud-root model and any-combination matrix
 - [Adding a Cloud](architecture/adding-a-cloud.md): per-cloud-root contract for extending the platform
 

@@ -264,6 +264,8 @@ This architecture follows AWS Prescriptive Guidance. Primary sources:
 
 ## See also
 
+- [GCP Landing Zone](gcp-landing-zone.md) — the GCP counterpart, same section structure, for control-for-control comparison.
+- [Cross-Cloud Comparison](cross-cloud-comparison.md) — where each capability lives per cloud.
 - [Provider Selection](provider-selection.md) — why one cloud = one root = one workspace.
 - [Adding a Cloud](adding-a-cloud.md) — the cross-root contract.
 - [AWS Bootstrap](../runbooks/aws-bootstrap.md) — phase-0 stand-up.

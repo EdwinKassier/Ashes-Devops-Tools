@@ -5,6 +5,11 @@ How the same capability is implemented across providers, so you can navigate
 Each cell links the module (or notes N/A). Naming and structure conventions
 differ by cloud because each mirrors its own provider ecosystem — see the notes.
 
+For the full per-capability module catalog see the [Module Library](../../README.md#module-library);
+for each cloud's end-to-end architecture see the [GCP Landing Zone](gcp-landing-zone.md)
+and [AWS Landing Zone](aws-landing-zone.md), which follow the same section structure
+for control-for-control comparison.
+
 ## Foundation / organization
 
 | Capability | GCP | AWS | SaaS |
@@ -22,7 +27,7 @@ differ by cloud because each mirrors its own provider ecosystem — see the note
 | Subnets | [`gcp/network/subnet`](../../modules/gcp/network/subnet/) | (tiers inside `aws/vpc`) |
 | Hub / transit | Shared VPC + hub ([`gcp/stages/network-hub`](../../modules/gcp/stages/network-hub/)) | [`aws/transit-gateway`](../../modules/aws/network/transit-gateway/) |
 | Firewall | [`gcp/network/network-firewall`](../../modules/gcp/network/network-firewall/), `hierarchical-firewall` | [`aws/network-firewall`](../../modules/aws/network/network-firewall/) |
-| Private connectivity | [`gcp/network/psc`](../../modules/gcp/network/) / PSA | [`aws/vpc-endpoints`](../../modules/aws/network/vpc-endpoints/) |
+| Private connectivity | [`gcp/network/private-service-connect`](../../modules/gcp/network/private-service-connect/), [`private-service-access`](../../modules/gcp/network/private-service-access/) | [`aws/vpc-endpoints`](../../modules/aws/network/vpc-endpoints/) |
 | DNS | [`gcp/network/dns`](../../modules/gcp/network/dns/) | [`aws/route53-resolver`](../../modules/aws/network/route53-resolver/) |
 | WAF / edge | [`gcp/network/cloud-armor`](../../modules/gcp/network/cloud-armor/) | [`aws/edge-security`](../../modules/aws/security/edge-security/) (WAF/FMS) |
 | IP address mgmt | (project CIDRs) | [`aws/ipam`](../../modules/aws/network/ipam/) |
