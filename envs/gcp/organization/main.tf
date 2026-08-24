@@ -122,6 +122,9 @@ module "organization" {
   # G8: opt-in WORM lock on the audit-log bucket (default false).
   enable_audit_bucket_lock = var.enable_audit_bucket_lock
 
+  # G9: opt-in IAM deny policies at the org node (default [] = none).
+  iam_deny_policies = var.iam_deny_policies
+
   depends_on = [module.bootstrap]
 }
 

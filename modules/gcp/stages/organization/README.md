@@ -94,6 +94,7 @@ module "example" {
 
 - audit_logs - ../../governance/cloud-audit-logs
 - cmek - ../../governance/kms
+- iam_deny - ../../iam/deny-policy
 - org_budget - ../../governance/billing
 - org_policies - ../../governance/org-policy
 - organization - ../../iam/organization
@@ -107,10 +108,10 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_bigquery_dataset.billing_export (modules/gcp/stages/organization/main.tf#L317)
-- resource.google_bigquery_dataset_iam_member.billing_export_writer (modules/gcp/stages/organization/main.tf#L348)
-- resource.google_essential_contacts_contact.billing (modules/gcp/stages/organization/main.tf#L289)
-- resource.google_essential_contacts_contact.security (modules/gcp/stages/organization/main.tf#L280)
+- resource.google_bigquery_dataset.billing_export (modules/gcp/stages/organization/main.tf#L326)
+- resource.google_bigquery_dataset_iam_member.billing_export_writer (modules/gcp/stages/organization/main.tf#L357)
+- resource.google_essential_contacts_contact.billing (modules/gcp/stages/organization/main.tf#L298)
+- resource.google_essential_contacts_contact.security (modules/gcp/stages/organization/main.tf#L289)
 - resource.google_folder_iam_member.terraform_admin_folder_roles (modules/gcp/stages/organization/main.tf#L26)
 - resource.google_tags_tag_binding.environment (modules/gcp/stages/organization/tags_binding.tf#L1)
 
@@ -141,6 +142,7 @@ The following resources are created:
 | <a name="input_break_glass_user"></a> [break\_glass\_user](#input\_break\_glass\_user) | Optional email address of a break-glass emergency user granted org admin access | `string` | `null` | no |
 | <a name="input_custom_org_constraints"></a> [custom\_org\_constraints](#input\_custom\_org\_constraints) | Opt-in custom organization-policy constraints (CEL-defined resource-shape guardrails) applied at the org node. Default [] = none. Latest Google guidance recommends layering custom constraints on the managed baseline; see docs/known-gaps.md (G6). | <pre>list(object({<br/>    name           = string<br/>    display_name   = string<br/>    description    = string<br/>    action_type    = string<br/>    condition      = string<br/>    method_types   = list(string)<br/>    resource_types = list(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_enable_audit_bucket_lock"></a> [enable\_audit\_bucket\_lock](#input\_enable\_audit\_bucket\_lock) | Opt-in WORM lock on the org audit-log GCS bucket (a locked retention policy of audit\_log\_retention\_days). Default false preserves the current behaviour (versioned + access-controlled but not immutable, and a lifecycle delete that can be corrected). Enable only for compliance regimes that require tamper-proof retention — a locked policy CANNOT be shortened or removed. See docs/known-gaps.md (G8). | `bool` | `false` | no |
+| <a name="input_iam_deny_policies"></a> [iam\_deny\_policies](#input\_iam\_deny\_policies) | Opt-in IAM deny policies applied at the org node — a coarse, allow-independent backstop that blocks specific permissions for specific principals regardless of roles held (deny is evaluated before allow). Default [] = none. See docs/known-gaps.md (G9). | <pre>list(object({<br/>    name         = string<br/>    display_name = optional(string)<br/>    rules = list(object({<br/>      description           = optional(string)<br/>      denied_principals     = list(string)<br/>      denied_permissions    = list(string)<br/>      exception_principals  = optional(list(string), [])<br/>      exception_permissions = optional(list(string), [])<br/>      denial_condition = optional(object({<br/>        expression  = string<br/>        title       = optional(string)<br/>        description = optional(string)<br/>      }))<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_logging_project_id"></a> [logging\_project\_id](#input\_logging\_project\_id) | Dedicated logging project ID for the org audit sink/bucket (separation of duties). Default null = the admin/bootstrap project (unchanged). When set, ensure the CMEK key is usable cross-project. PREVIEW: opt-in (default off), not yet validated against a real apply. | `string` | `null` | no |
 | <a name="input_security_contact_email"></a> [security\_contact\_email](#input\_security\_contact\_email) | Email address for security notifications via Essential Contacts (SCC alerts, compliance notifications). Optional — if null, no Essential Contact is registered for the SECURITY category. | `string` | `null` | no |
 

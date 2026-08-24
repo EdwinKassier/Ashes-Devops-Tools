@@ -95,12 +95,13 @@ variable "vpc_sc_access_policy_name" {
 
 variable "vpc_sc_enable_dry_run" {
   description = <<-EOT
-    When true, the hub VPC-SC perimeter logs violations but does NOT block traffic (dry-run/simulation mode).
-    When false (the default), the perimeter is ENFORCED.
-    Only set to true temporarily during the enforcement transition validation window.
+    When true (the default), the hub VPC-SC perimeter logs violations but does NOT block traffic (dry-run/simulation mode).
+    When false, the perimeter is ENFORCED.
+    Google recommends dry-run first: validate the violation logs, then promote to enforcement by setting this false.
+    See docs/known-gaps.md (G11).
   EOT
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "enable_deletion_protection" {
@@ -115,12 +116,13 @@ variable "enable_deletion_protection" {
 
 # --- Audit finding G5: VPC-SC perimeter hardening (opt-in) -------------------
 # The base perimeter restricts only storage/bigquery/cloudfunctions/run and has
-# no ingress policy. Because the perimeter is ENFORCED by default
-# (vpc_sc_enable_dry_run = false), expanding restricted_services WITHOUT an
-# ingress policy for the automation identity would block the TFC-run SA from
+# no ingress policy. The perimeter now defaults to DRY-RUN
+# (vpc_sc_enable_dry_run = true, G11), so expanding restricted_services is safe
+# to trial first — violations are logged, not blocked. Before PROMOTING to
+# enforcement (vpc_sc_enable_dry_run = false), set an ingress policy for the
+# automation identity, or the enforced perimeter will block the TFC-run SA from
 # managing those services in the spoke projects. Both variables default empty so
-# behavior is unchanged until you opt in. Harden by setting BOTH together
-# (validate under vpc_sc_enable_dry_run = true first).
+# behavior is unchanged until you opt in. Harden by setting BOTH together.
 variable "vpc_sc_additional_restricted_services" {
   description = <<-EOT
     Extra service API hostnames to add to the hub data perimeter's restricted_services,

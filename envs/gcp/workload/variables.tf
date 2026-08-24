@@ -166,15 +166,17 @@ variable "vpc_sc_access_policy_name" {
 
 variable "vpc_sc_enable_dry_run" {
   description = <<-EOT
-    When true, VPC Service Controls logs violations but does NOT block any traffic (dry-run/simulation mode).
-    When false (the default), the perimeter is in ENFORCED mode and will block unauthorised cross-perimeter traffic.
+    When true (the default), VPC Service Controls logs violations but does NOT block any traffic (dry-run/simulation mode).
+    When false, the perimeter is in ENFORCED mode and will block unauthorised cross-perimeter traffic.
 
-    WARNING: dry-run mode provides NO data-exfiltration protection. Only use true temporarily to
-    validate that no legitimate traffic will be blocked before switching to enforcement.
-    See docs/architecture/network-topology.md for the enforcement transition procedure.
+    Google recommends dry-run FIRST: a perimeter that goes straight to enforcement can block all legitimate
+    API traffic on a bad rule. Validate the violation logs (Cloud Logging / the VPC-SC violations dashboard),
+    then PROMOTE to enforcement by setting this false.
+    NOTE: dry-run provides NO data-exfiltration protection — do not leave a production perimeter in dry-run.
+    See docs/architecture/network-topology.md and docs/known-gaps.md (G11).
   EOT
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "vpc_sc_perimeter_title" {

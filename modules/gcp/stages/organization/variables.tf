@@ -245,3 +245,24 @@ variable "enable_audit_bucket_lock" {
   type        = bool
   default     = false
 }
+
+variable "iam_deny_policies" {
+  description = "Opt-in IAM deny policies applied at the org node — a coarse, allow-independent backstop that blocks specific permissions for specific principals regardless of roles held (deny is evaluated before allow). Default [] = none. See docs/known-gaps.md (G9)."
+  type = list(object({
+    name         = string
+    display_name = optional(string)
+    rules = list(object({
+      description           = optional(string)
+      denied_principals     = list(string)
+      denied_permissions    = list(string)
+      exception_principals  = optional(list(string), [])
+      exception_permissions = optional(list(string), [])
+      denial_condition = optional(object({
+        expression  = string
+        title       = optional(string)
+        description = optional(string)
+      }))
+    }))
+  }))
+  default = []
+}

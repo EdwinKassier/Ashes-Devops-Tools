@@ -70,10 +70,12 @@ GCP:
   **locked** retention policy of `audit_log_retention_days` (irreversible — for
   compliance regimes that require tamper-proof retention). Default preserves the
   prior operator-correctable behaviour.
-- **G9 — no IAM Deny policies** (MEDIUM, SAFE-CONFIG). No `google_iam_deny_policy`
-  anywhere; guardrails are org-policy + allow-side IAM only. Add opt-in deny
-  wiring (default empty) as the coarse backstop for sensitive permissions. Ref:
-  <https://docs.cloud.google.com/iam/docs/deny-overview>
+- **G9 — IAM Deny policies** — ✅ **SHIPPED opt-in**. New leaf module
+  `modules/gcp/iam/deny-policy` (its own mock tests) wired into
+  `stages/organization` at the org node via `iam_deny_policies` (on
+  `envs/gcp/organization`, default `[]`). Coarse allow-independent backstop that
+  blocks sensitive permissions regardless of roles (deny before allow). Inert
+  until populated. Ref: <https://docs.cloud.google.com/iam/docs/deny-overview>
 - **G10 — SCC is notification-only; no posture service or tier** (MEDIUM,
   BEHAVIOR-CHANGING). `modules/gcp/governance/scc` wires only Pub/Sub findings
   notification. The security posture service (drift detection) needs SCC Premium
@@ -81,11 +83,14 @@ GCP:
   definition could be added as opt-in scaffolding once a tier exists. Target
   **Premium** — the Enterprise tier sunsets 2027-05-21. Ref:
   <https://docs.cloud.google.com/security-command-center/docs/service-tiers>
-- **G11 — VPC-SC perimeters enforce-first, no dry-run default** (LOW–MEDIUM,
-  SAFE-CONFIG). `vpc_sc_enable_dry_run` and per-perimeter `enable_dry_run`
-  default `false` (enforced). Google recommends starting perimeters in dry-run
-  and promoting after validating violation logs. Mitigated today by perimeters
-  being default-off (gated on a null ACM policy). Ref:
+- **G11 — VPC-SC dry-run-first default** — ✅ **SHIPPED**. Flipped the default
+  of `vpc_sc_enable_dry_run` (hub, via `envs/gcp/organization` + `network-hub`)
+  and the per-perimeter `enable_dry_run` (host stage) and the workload perimeter
+  (`envs/gcp/workload`) from enforce to **dry-run**, matching Google's
+  "start in dry-run, promote after validating violation logs" guidance. **Action
+  for operators:** promote to enforcement (`vpc_sc_enable_dry_run = false`) once
+  the violation logs are clean — dry-run gives no exfiltration protection, so do
+  not leave a production perimeter in dry-run. Ref:
   <https://docs.cloud.google.com/vpc-service-controls/docs/dry-run-mode>
 - **KMS Autokey / HSM-for-sensitive** (LOW, SAFE-CONFIG, future). No Cloud KMS
   Autokey; CMEK defaults to `SOFTWARE` protection (HSM is per-key selectable).

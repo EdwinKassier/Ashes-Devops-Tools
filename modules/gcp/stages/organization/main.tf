@@ -242,6 +242,15 @@ module "org_policies" {
   custom_constraints = var.custom_org_constraints
 }
 
+# G9: opt-in IAM deny policies at the org node — a coarse, allow-independent
+# backstop for sensitive permissions (evaluated before allow). Default [] = none.
+module "iam_deny" {
+  source = "../../iam/deny-policy"
+
+  parent        = urlencode("cloudresourcemanager.googleapis.com/organizations/${module.organization.organization_id}")
+  deny_policies = var.iam_deny_policies
+}
+
 # Folder-level Organization Policies for Production
 module "prod_folder_policies" {
   source = "../../governance/org-policy"

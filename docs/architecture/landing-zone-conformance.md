@@ -51,14 +51,16 @@ Severity H/M/L. Class: **DOC** (fixed in this review) · **CONFIG** (default-off
 
 | ID | Gap | Sev | Class |
 |:---|:----|:----|:------|
-| [G6](../known-gaps.md#modernization--latest-best-practice-gaps-2026-review) | No Organization Policy custom or `*.managed.*` constraints (module supports custom; stage wires none) | H | CONFIG |
+| [G6](../known-gaps.md#modernization--latest-best-practice-gaps-2026-review) | Custom Organization Policy constraints — ✅ **shipped** opt-in (`custom_org_constraints`); `*.managed.*` migration still open | H | CONFIG |
 | [G7](../known-gaps.md#modernization--latest-best-practice-gaps-2026-review) | Host firewall uses legacy `google_compute_firewall` rules, not network firewall policies with IAM-governed tags | H | BEHAVIOR |
-| [G8](../known-gaps.md#modernization--latest-best-practice-gaps-2026-review) | Audit-log bucket has no locked (WORM) retention | M | CONFIG |
-| [G9](../known-gaps.md#modernization--latest-best-practice-gaps-2026-review) | No IAM Deny policies as a coarse permission backstop | M | CONFIG |
+| [G8](../known-gaps.md#modernization--latest-best-practice-gaps-2026-review) | Audit-log bucket WORM lock — ✅ **shipped** opt-in (`enable_audit_bucket_lock`) | M | CONFIG |
+| [G9](../known-gaps.md#modernization--latest-best-practice-gaps-2026-review) | IAM Deny policies — ✅ **shipped** opt-in (new `iam/deny-policy` module + `iam_deny_policies`) | M | CONFIG |
 | [G10](../known-gaps.md#modernization--latest-best-practice-gaps-2026-review) | SCC notification-only — no posture service / tier (target Premium; Enterprise sunsets 2027-05-21) | M | BEHAVIOR |
-| [G11](../known-gaps.md#modernization--latest-best-practice-gaps-2026-review) | VPC-SC perimeters enforce-first, no dry-run default | L–M | CONFIG |
+| [G11](../known-gaps.md#modernization--latest-best-practice-gaps-2026-review) | VPC-SC dry-run-first default — ✅ **shipped** (flipped to dry-run; promote to enforce after validating) | L–M | CONFIG |
 | — | No KMS Autokey; CMEK defaults to SOFTWARE protection | L | CONFIG |
 | — | Flat folder tree (no prod/nonprod grouping layer) | L | BEHAVIOR |
+
+**Status:** every GCP `CONFIG`-class gap (G6, G8, G9, G11) is now closed — shipped opt-in/default-safe with mock tests. What remains is `BEHAVIOR`-class (G7 firewall-policy migration, G10 SCC posture/tier) and needs a real apply.
 
 Already tracked separately (not repeated here): AWS **A1/A3/A4**, GCP **G3/G4/G5** and the break-glass note — see [`known-gaps.md`](../known-gaps.md).
 
