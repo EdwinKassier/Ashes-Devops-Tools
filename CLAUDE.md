@@ -1,6 +1,6 @@
 # CLAUDE.md — Agent Onboarding
 
-Terraform GCP + AWS landing zone. 96 modules, 10 deployable roots, remote state via Terraform Cloud.
+Terraform GCP + AWS landing zone. 98 modules, 10 deployable roots, remote state via Terraform Cloud.
 
 ---
 
@@ -28,6 +28,7 @@ modules/               # grouped by owning cloud (domain)
     governance/         # billing, kms, org-policy, scc, tags, cloud-audit-logs, private-ca
     iam/                # organization, role, service-account, workload-identity, identity-group*, deny-policy
     monitoring/         # alert-policy, compute-dashboard
+    ops/                # os-config (VM Manager patch deployments)
     backup/             # backup-plan (snapshot schedules)
     firebase/           # project
     cloud-storage/
@@ -35,7 +36,7 @@ modules/               # grouped by owning cloud (domain)
   aws/                  # AWS-native modules (categorized, mirroring gcp/)
     governance/         # organization, organization-policy, account, cost-governance, service-quotas
     security/           # guardduty-org, securityhub-org, config-org, cloudtrail-org, securitylake, edge-security (CloudFront/WAF), …
-    network/            # vpc, transit-gateway, network-firewall, route53-resolver, ipam, vpc-endpoints, load-balancer, api-gateway
+    network/            # vpc, transit-gateway, network-firewall, route53-resolver, ipam, vpc-endpoints, load-balancer, api-gateway, vpn
     iam/                # iam-role, iam-identity-center
     data/               # kms-key, log-archive-bucket, private-ca, ecr
     backup/             # backup-vault, backup-org-policy

@@ -29,6 +29,7 @@ for control-for-control comparison.
 | Firewall | [`gcp/network/network-firewall`](../../modules/gcp/network/network-firewall/), `hierarchical-firewall` | [`aws/network-firewall`](../../modules/aws/network/network-firewall/) |
 | Private connectivity | [`gcp/network/private-service-connect`](../../modules/gcp/network/private-service-connect/), [`private-service-access`](../../modules/gcp/network/private-service-access/) | [`aws/vpc-endpoints`](../../modules/aws/network/vpc-endpoints/) |
 | DNS | [`gcp/network/dns`](../../modules/gcp/network/dns/) | [`aws/route53-resolver`](../../modules/aws/network/route53-resolver/) |
+| Hybrid VPN | [`gcp/network/vpn`](../../modules/gcp/network/vpn/) (HA-VPN) | [`aws/network/vpn`](../../modules/aws/network/vpn/) (Site-to-Site) |
 | Load balancing | [`gcp/network/internal-lb`](../../modules/gcp/network/internal-lb/) | [`aws/load-balancer`](../../modules/aws/network/load-balancer/) (ALB/NLB) |
 | CDN | [`gcp/network/cdn`](../../modules/gcp/network/cdn/) | [`aws/edge-security`](../../modules/aws/security/edge-security/) (CloudFront) |
 | API gateway | [`gcp/network/api-gateway`](../../modules/gcp/network/api-gateway/) | [`aws/api-gateway`](../../modules/aws/network/api-gateway/) |
@@ -58,6 +59,7 @@ for control-for-control comparison.
 | Private CA | [`gcp/governance/private-ca`](../../modules/gcp/governance/private-ca/) (CAS) | [`aws/private-ca`](../../modules/aws/data/private-ca/) (ACM PCA) |
 | Backup | [`gcp/backup/backup-plan`](../../modules/gcp/backup/backup-plan/) (snapshot schedules) | [`aws/backup-vault`](../../modules/aws/backup/backup-vault/) + `backup-org-policy` |
 | Monitoring / alerts | [`gcp/monitoring/alert-policy`](../../modules/gcp/monitoring/alert-policy/), [`compute-dashboard`](../../modules/gcp/monitoring/compute-dashboard/) | [`aws/ops/cloudwatch`](../../modules/aws/ops/cloudwatch/) |
+| Fleet / patch mgmt | [`gcp/ops/os-config`](../../modules/gcp/ops/os-config/) (VM Manager) | [`aws/ops/systems-manager`](../../modules/aws/ops/systems-manager/) |
 | Object storage | [`gcp/cloud-storage`](../../modules/gcp/cloud-storage/) | (per-module S3, e.g. `log-archive-bucket`) |
 | Artifacts / image registry | [`gcp/artifact-registry`](../../modules/gcp/artifact-registry/) | [`aws/data/ecr`](../../modules/aws/data/ecr/) |
 

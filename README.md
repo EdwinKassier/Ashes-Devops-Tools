@@ -18,10 +18,10 @@
 [![Terraform Validation](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml)
 [![Security Scan](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml)
 [![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?style=flat-square&logo=pre-commit)](https://pre-commit.com)
-[![Modules](https://img.shields.io/badge/modules-89-blueviolet?style=flat-square)](modules/)
-[![Tests](https://img.shields.io/badge/test_suites-157-blue?style=flat-square)](modules/)
+[![Modules](https://img.shields.io/badge/modules-98-blueviolet?style=flat-square)](modules/)
+[![Tests](https://img.shields.io/badge/test_suites-180-blue?style=flat-square)](modules/)
 
-<sub>Modules/test-suite counts above are hand-maintained, not live badges. Verify: <code>find modules -name main.tf -not -path '*/examples/*' -not -path '*/.terraform/*' | wc -l</code> (modules) and <code>find modules envs -name '*.tftest.hcl' -not -path '*/.terraform/*' | wc -l</code> (test suites). Last verified 2026-08-24: 96 modules, 176 test suites.</sub>
+<sub>Modules/test-suite counts above are hand-maintained, not live badges. Verify: <code>find modules -name main.tf -not -path '*/examples/*' -not -path '*/.terraform/*' | wc -l</code> (modules) and <code>find modules envs -name '*.tftest.hcl' -not -path '*/.terraform/*' | wc -l</code> (test suites). Last verified 2026-08-24: 98 modules, 180 test suites.</sub>
 
 </div>
 
@@ -104,7 +104,7 @@ Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives i
 
 ## Module Library
 
-96 modules — **45 GCP · 45 AWS · 6 SaaS** — each with auto-generated docs and `mock_provider` tests.
+98 modules — **46 GCP · 46 AWS · 6 SaaS** — each with auto-generated docs and `mock_provider` tests.
 
 Both clouds are organized into the **same conceptual domains** so you can map a capability across providers at a glance. Each table reads: **capability → Google Cloud module → Amazon Web Services module**. A `—` means the platform has no dedicated module for that capability (often because it is native, or lives in an adjacent domain — noted inline). Link text is the module's path under `modules/<cloud>/`.
 
@@ -122,7 +122,7 @@ Both clouds are organized into the **same conceptual domains** so you can map a 
 ### Cloud modules by domain
 
 <details>
-<summary><strong>Networking</strong> — GCP 19 · AWS 9</summary>
+<summary><strong>Networking</strong> — GCP 19 · AWS 10</summary>
 
 Both clouds build a hub-and-spoke private network from the same primitives; the names differ, the roles line up.
 
@@ -133,7 +133,7 @@ Both clouds build a hub-and-spoke private network from the same primitives; the 
 | Hub interconnect / transit | [`network/shared-vpc-service`](modules/gcp/network/shared-vpc-service/), [`network/vpc-peering`](modules/gcp/network/vpc-peering/), [`network/interconnect`](modules/gcp/network/interconnect/) | [`network/transit-gateway`](modules/aws/network/transit-gateway/) |
 | Private service access | [`network/private-service-connect`](modules/gcp/network/private-service-connect/), [`network/private-service-access`](modules/gcp/network/private-service-access/) | [`network/vpc-endpoints`](modules/aws/network/vpc-endpoints/) |
 | DNS | [`network/dns`](modules/gcp/network/dns/) | [`network/route53-resolver`](modules/aws/network/route53-resolver/) |
-| Hybrid VPN | [`network/vpn`](modules/gcp/network/vpn/) | *(native, via transit-gateway)* |
+| Hybrid VPN | [`network/vpn`](modules/gcp/network/vpn/) (HA-VPN) | [`network/vpn`](modules/aws/network/vpn/) (Site-to-Site) |
 | Egress NAT | [`network/nat`](modules/gcp/network/nat/) | *(native, in `network/vpc`)* |
 | Load balancing | [`network/internal-lb`](modules/gcp/network/internal-lb/) | [`network/load-balancer`](modules/aws/network/load-balancer/) (ALB/NLB) |
 | Content delivery / CDN | [`network/cdn`](modules/gcp/network/cdn/) | [`security/edge-security`](modules/aws/security/edge-security/) (CloudFront + WAF/Shield) |
@@ -218,13 +218,13 @@ GCP consolidates detection into Security Command Center plus audit logs; the AWS
 </details>
 
 <details>
-<summary><strong>Observability &amp; Operations</strong> — GCP 2 · AWS 2</summary>
+<summary><strong>Observability &amp; Operations</strong> — GCP 3 · AWS 2</summary>
 
 | Capability | Google Cloud | Amazon Web Services |
 |:-----------|:-------------|:--------------------|
 | Metrics &amp; alerting | [`monitoring/alert-policy`](modules/gcp/monitoring/alert-policy/) | [`ops/cloudwatch`](modules/aws/ops/cloudwatch/) (metric alarms + SNS) |
 | Dashboards | [`monitoring/compute-dashboard`](modules/gcp/monitoring/compute-dashboard/) | [`ops/cloudwatch`](modules/aws/ops/cloudwatch/) (dashboard) |
-| Fleet / config management | — | [`ops/systems-manager`](modules/aws/ops/systems-manager/) |
+| Fleet / patch management | [`ops/os-config`](modules/gcp/ops/os-config/) (VM Manager) | [`ops/systems-manager`](modules/aws/ops/systems-manager/) |
 
 </details>
 
