@@ -1,6 +1,6 @@
 # CLAUDE.md — Agent Onboarding
 
-Terraform GCP + AWS landing zone. 90 modules, 10 deployable roots, remote state via Terraform Cloud.
+Terraform GCP + AWS landing zone. 96 modules, 10 deployable roots, remote state via Terraform Cloud.
 
 ---
 
@@ -24,21 +24,22 @@ envs/                   # deployable roots, nested by cloud (workspace names kee
 modules/               # grouped by owning cloud (domain)
   gcp/                  # GCP-native modules
     stages/             # Orchestration wrappers: bootstrap, organization, projects, network-hub, workload, host
-    network/            # ~19 primitives: vpc, subnet, dns, vpn, vpc-sc, cloud-armor, …
-    governance/         # billing, kms, org-policy, scc, tags, cloud-audit-logs
+    network/            # ~21 primitives: vpc, subnet, dns, vpn, vpc-sc, cloud-armor, internal-lb, api-gateway, cdn, …
+    governance/         # billing, kms, org-policy, scc, tags, cloud-audit-logs, private-ca
     iam/                # organization, role, service-account, workload-identity, identity-group*, deny-policy
     monitoring/         # alert-policy, compute-dashboard
+    backup/             # backup-plan (snapshot schedules)
     firebase/           # project
     cloud-storage/
     artifact-registry/
   aws/                  # AWS-native modules (categorized, mirroring gcp/)
     governance/         # organization, organization-policy, account, cost-governance, service-quotas
-    security/           # guardduty-org, securityhub-org, config-org, cloudtrail-org, securitylake, …
-    network/            # vpc, transit-gateway, network-firewall, route53-resolver, ipam, vpc-endpoints
+    security/           # guardduty-org, securityhub-org, config-org, cloudtrail-org, securitylake, edge-security (CloudFront/WAF), …
+    network/            # vpc, transit-gateway, network-firewall, route53-resolver, ipam, vpc-endpoints, load-balancer, api-gateway
     iam/                # iam-role, iam-identity-center
-    data/               # kms-key, log-archive-bucket, private-ca
+    data/               # kms-key, log-archive-bucket, private-ca, ecr
     backup/             # backup-vault, backup-org-policy
-    ops/                # systems-manager
+    ops/                # systems-manager, cloudwatch
     stages/             # organization, security, network-hub, shared-services, backup, workload
   supabase/             # project, settings, environment, vault-secrets
   vercel/               # project

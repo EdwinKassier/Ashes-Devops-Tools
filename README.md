@@ -21,7 +21,7 @@
 [![Modules](https://img.shields.io/badge/modules-89-blueviolet?style=flat-square)](modules/)
 [![Tests](https://img.shields.io/badge/test_suites-157-blue?style=flat-square)](modules/)
 
-<sub>Modules/test-suite counts above are hand-maintained, not live badges. Verify: <code>find modules -name main.tf -not -path '*/examples/*' -not -path '*/.terraform/*' | wc -l</code> (modules) and <code>find modules envs -name '*.tftest.hcl' -not -path '*/.terraform/*' | wc -l</code> (test suites). Last verified 2026-08-24: 90 modules, 164 test suites.</sub>
+<sub>Modules/test-suite counts above are hand-maintained, not live badges. Verify: <code>find modules -name main.tf -not -path '*/examples/*' -not -path '*/.terraform/*' | wc -l</code> (modules) and <code>find modules envs -name '*.tftest.hcl' -not -path '*/.terraform/*' | wc -l</code> (test suites). Last verified 2026-08-24: 96 modules, 176 test suites.</sub>
 
 </div>
 
@@ -104,7 +104,7 @@ Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives i
 
 ## Module Library
 
-90 modules — **43 GCP · 41 AWS · 6 SaaS** — each with auto-generated docs and `mock_provider` tests.
+96 modules — **45 GCP · 45 AWS · 6 SaaS** — each with auto-generated docs and `mock_provider` tests.
 
 Both clouds are organized into the **same conceptual domains** so you can map a capability across providers at a glance. Each table reads: **capability → Google Cloud module → Amazon Web Services module**. A `—` means the platform has no dedicated module for that capability (often because it is native, or lives in an adjacent domain — noted inline). Link text is the module's path under `modules/<cloud>/`.
 
@@ -122,7 +122,7 @@ Both clouds are organized into the **same conceptual domains** so you can map a 
 ### Cloud modules by domain
 
 <details>
-<summary><strong>Networking</strong> — GCP 19 · AWS 7</summary>
+<summary><strong>Networking</strong> — GCP 19 · AWS 9</summary>
 
 Both clouds build a hub-and-spoke private network from the same primitives; the names differ, the roles line up.
 
@@ -135,8 +135,9 @@ Both clouds build a hub-and-spoke private network from the same primitives; the 
 | DNS | [`network/dns`](modules/gcp/network/dns/) | [`network/route53-resolver`](modules/aws/network/route53-resolver/) |
 | Hybrid VPN | [`network/vpn`](modules/gcp/network/vpn/) | *(native, via transit-gateway)* |
 | Egress NAT | [`network/nat`](modules/gcp/network/nat/) | *(native, in `network/vpc`)* |
-| Load balancing | [`network/internal-lb`](modules/gcp/network/internal-lb/) | — |
-| Content delivery / API edge | [`network/cdn`](modules/gcp/network/cdn/), [`network/api-gateway`](modules/gcp/network/api-gateway/) | — |
+| Load balancing | [`network/internal-lb`](modules/gcp/network/internal-lb/) | [`network/load-balancer`](modules/aws/network/load-balancer/) (ALB/NLB) |
+| Content delivery / CDN | [`network/cdn`](modules/gcp/network/cdn/) | [`security/edge-security`](modules/aws/security/edge-security/) (CloudFront + WAF/Shield) |
+| API gateway / edge | [`network/api-gateway`](modules/gcp/network/api-gateway/) | [`network/api-gateway`](modules/aws/network/api-gateway/) |
 | Stateful firewall | [`network/network-firewall`](modules/gcp/network/network-firewall/), [`network/hierarchical-firewall`](modules/gcp/network/hierarchical-firewall/) | [`network/network-firewall`](modules/aws/network/network-firewall/) |
 | Web app firewall / DDoS | [`network/cloud-armor`](modules/gcp/network/cloud-armor/) | *(Security → `edge-security`, `firewall-manager-org`)* |
 | Traffic mirroring / analysis | [`network/packet-mirroring`](modules/gcp/network/packet-mirroring/) | [`network/network-access-analyzer`](modules/aws/network/network-access-analyzer/) |
@@ -195,34 +196,34 @@ GCP consolidates detection into Security Command Center plus audit logs; the AWS
 </details>
 
 <details>
-<summary><strong>Data, Storage &amp; Encryption</strong> — GCP 3 · AWS 3</summary>
+<summary><strong>Data, Storage &amp; Encryption</strong> — GCP 4 · AWS 4</summary>
 
 | Capability | Google Cloud | Amazon Web Services |
 |:-----------|:-------------|:--------------------|
 | Object storage / log archive | [`cloud-storage`](modules/gcp/cloud-storage/) | [`data/log-archive-bucket`](modules/aws/data/log-archive-bucket/) |
-| Artifact / image registry | [`artifact-registry`](modules/gcp/artifact-registry/) | *(ECR — no module)* |
+| Artifact / image registry | [`artifact-registry`](modules/gcp/artifact-registry/) | [`data/ecr`](modules/aws/data/ecr/) |
 | Encryption keys (CMEK / KMS) | [`governance/kms`](modules/gcp/governance/kms/) | [`data/kms-key`](modules/aws/data/kms-key/) |
-| Private certificate authority | — | [`data/private-ca`](modules/aws/data/private-ca/) |
+| Private certificate authority | [`governance/private-ca`](modules/gcp/governance/private-ca/) (CAS) | [`data/private-ca`](modules/aws/data/private-ca/) |
 
 </details>
 
 <details>
-<summary><strong>Backup &amp; Resilience</strong> — GCP 0 · AWS 2</summary>
+<summary><strong>Backup &amp; Resilience</strong> — GCP 1 · AWS 2</summary>
 
 | Capability | Google Cloud | Amazon Web Services |
 |:-----------|:-------------|:--------------------|
-| Backup vaults | *(GCS lifecycle / snapshot schedules — no dedicated module)* | [`backup/backup-vault`](modules/aws/backup/backup-vault/) |
-| Org-wide backup policy | — | [`backup/backup-org-policy`](modules/aws/backup/backup-org-policy/) |
+| Scheduled backups / snapshots | [`backup/backup-plan`](modules/gcp/backup/backup-plan/) (snapshot schedules + retention) | [`backup/backup-vault`](modules/aws/backup/backup-vault/) |
+| Org-wide backup policy | *(per-project resource policies)* | [`backup/backup-org-policy`](modules/aws/backup/backup-org-policy/) |
 
 </details>
 
 <details>
-<summary><strong>Observability &amp; Operations</strong> — GCP 2 · AWS 1</summary>
+<summary><strong>Observability &amp; Operations</strong> — GCP 2 · AWS 2</summary>
 
 | Capability | Google Cloud | Amazon Web Services |
 |:-----------|:-------------|:--------------------|
-| Metrics &amp; alerting | [`monitoring/alert-policy`](modules/gcp/monitoring/alert-policy/) | *(CloudWatch alarms via stages)* |
-| Dashboards | [`monitoring/compute-dashboard`](modules/gcp/monitoring/compute-dashboard/) | — |
+| Metrics &amp; alerting | [`monitoring/alert-policy`](modules/gcp/monitoring/alert-policy/) | [`ops/cloudwatch`](modules/aws/ops/cloudwatch/) (metric alarms + SNS) |
+| Dashboards | [`monitoring/compute-dashboard`](modules/gcp/monitoring/compute-dashboard/) | [`ops/cloudwatch`](modules/aws/ops/cloudwatch/) (dashboard) |
 | Fleet / config management | — | [`ops/systems-manager`](modules/aws/ops/systems-manager/) |
 
 </details>
