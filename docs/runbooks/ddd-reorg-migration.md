@@ -1,5 +1,7 @@
 # Runbook — DDD reorg: repoint TFC workspace working directories
 
+> **ONE-TIME MIGRATION (not a standing procedure).** Run once during the associated migration, then this runbook is historical — archive or ignore. See [`docs/known-gaps.md`](../known-gaps.md) for current status.
+
 **When to use:** After the DDD-reorg `envs/` nesting PR merges. The env root
 directories moved from a flat `envs/<cloud>-<layer>/` layout to a cloud-grouped
 `envs/<cloud>/<layer>/` layout. Each Terraform Cloud workspace has a **VCS

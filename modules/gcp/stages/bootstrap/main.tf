@@ -24,7 +24,7 @@ resource "google_project" "admin_project" {
     managed-by  = "terraform"
   }
 
-  # The admin/automation project must not be deletable by a routine plan (audit finding G8).
+  # The admin/automation project must not be deletable by a routine plan.
   deletion_policy = "PREVENT"
 }
 
@@ -81,7 +81,7 @@ module "terraform_admin_sa" {
 # highest-privilege org roles (org-policy, Access Context Manager, logging, SCC, IAM
 # security admin) are granted to IT instead of the everyday terraform-admin SA, so a
 # compromised routine run cannot rewrite guardrails/audit config.
-# ⚠️ INCOMPLETE + UNVALIDATED: fully activating the split ALSO requires switching the
+# ⚠️ INCOMPLETE + PREVIEW (not yet validated against a real apply): fully activating the split ALSO requires switching the
 # downstream organization/network stages' impersonation to this resman SA (they currently
 # impersonate terraform_admin_email). Enable + validate on a real org before relying on it.
 module "resman_sa" {
@@ -91,7 +91,7 @@ module "resman_sa" {
   project_id            = google_project.admin_project.project_id
   account_id            = "terraform-resman"
   display_name          = "Terraform Resource Manager (privileged)"
-  description           = "Holds high-privilege org roles when the bootstrap privilege split is enabled (audit G3)"
+  description           = "Holds high-privilege org roles when the bootstrap privilege split is enabled"
   impersonation_members = ["user:${var.admin_email}"]
 }
 

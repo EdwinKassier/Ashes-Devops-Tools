@@ -102,7 +102,7 @@ locals {
 
 # Guard against duplicate env-var keys across sets that write the same Vercel
 # target — Vercel rejects a duplicate key+target with a 409 at apply time
-# (audit finding S7). Overlaps: qa+shared → "preview", prod+shared →
+#. Overlaps: qa+shared → "preview", prod+shared →
 # "production", uat+shared → the UAT custom environment. Fail at plan, not apply.
 resource "terraform_data" "env_key_uniqueness" {
   lifecycle {

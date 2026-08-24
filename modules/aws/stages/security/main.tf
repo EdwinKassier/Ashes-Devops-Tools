@@ -185,7 +185,7 @@ module "delegated_admin" {
   # identity account, not shared-services (delegated admin can assign access into the
   # management account — keep its blast radius tight). Default null keeps the previous
   # shared-services target (unchanged); set identity_account_id to a dedicated account.
-  # UNVALIDATED — validate on a real org before relying on the new target.
+  # PREVIEW: opt-in (default off), not yet validated against a real apply. before relying on the new target.
   identity_account_id = coalesce(var.identity_account_id, var.shared_services_account_id)
 }
 

@@ -1,5 +1,7 @@
 # Runbook — Rename GCP TFC Workspaces (`organization` → `gcp-organization`, `apps-<env>` → `gcp-workload-<env>`)
 
+> **ONE-TIME MIGRATION (not a standing procedure).** Run once during the associated migration, then this runbook is historical — archive or ignore. See [`docs/known-gaps.md`](../known-gaps.md) for current status.
+
 **When to use:** Once, after pulling the change that renamed the GCP roots
 (`envs/organization` → `envs/gcp/organization`, `envs/apps` → `envs/gcp/workload`).
 The code now expects Terraform Cloud workspaces named `gcp-organization` and

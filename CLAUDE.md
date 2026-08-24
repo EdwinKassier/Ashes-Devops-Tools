@@ -130,6 +130,15 @@ Every module README must have these markers for `make docs` to work:
 
 Run `make docs` after adding/changing variables or outputs.
 
+### Variable naming: `enable_*` vs `create_*`
+
+Two intentional toggle prefixes — keep them distinct:
+
+- `enable_<feature>` — a **feature gate** (turn a capability on/off, e.g. `enable_cloudwatch_logs`, `enable_vault_secrets`).
+- `create_<resource>` — **resource ownership** (does this module create the resource, or is an existing one passed in, e.g. `create_health_check`, `create_router`).
+
+Do not introduce a third `use_*`/`with_*` variant. Keep variable descriptions free of internal provenance codes; open/preview/deferred items live in [`docs/known-gaps.md`](docs/known-gaps.md), not in `description` strings.
+
 ### Sensitive values in `null_resource` triggers
 
 Terraform 1.9 rejects raw sensitive values in triggers. Always hash them:
@@ -190,7 +199,7 @@ Gotchas the AWS landing-zone build surfaced — each one bit us in CI:
 2. **Cross-account modules declare `configuration_aliases`** and therefore CANNOT be root-`terraform validate`d standalone. The CI validate step skips them; they are covered by `examples/`, the composing roots, and `mock_provider` tests instead.
 3. **Build policy JSON with `jsonencode()` / `templatefile()`**, NOT `data "aws_iam_policy_document"`. `mock_provider` mocks data sources, which breaks content assertions in tests.
 4. **`regex()` interval repeats cap at 1000** (RE2 engine) — a larger `{n,m}` repeat count is a plan-time error.
-5. **Log-service KMS grants must use per-service-principal statements**, NOT `kms:ViaService` — `kms:ViaService` would deny CloudTrail. **⚠️ Open (audit A1, unvalidated):** the CloudTrail grant in `modules/aws/data/kms-key` currently scopes with `aws:SourceOrgID`, but AWS documents `aws:SourceArn` (the trail ARN) as the KMS-key-policy condition for CloudTrail — `aws:SourceOrgID` is documented for the S3 *bucket* policy, not KMS key policies. If CloudTrail does not populate `aws:SourceOrgID` on its KMS calls, log delivery fails. This has only been `mock_provider`-tested; **validate against a real org and switch CloudTrail to `aws:SourceArn` before relying on it.** See [AWS: KMS key policy for CloudTrail](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/create-kms-key-policy-for-cloudtrail.html).
+5. **Log-service KMS grants must use per-service-principal statements**, NOT `kms:ViaService` — `kms:ViaService` would deny CloudTrail. (The CloudTrail grant's `aws:SourceOrgID`-vs-`aws:SourceArn` condition is an open, unvalidated item — tracked in [`docs/known-gaps.md`](docs/known-gaps.md#open--validate-before-relying-on), not here.)
 6. **Commit dual-platform `.terraform.lock.hcl`** (`linux_amd64` + `darwin_amd64`) so both CI runners and local macOS resolve the same provider hashes.
 
 ---

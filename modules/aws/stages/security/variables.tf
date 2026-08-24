@@ -255,14 +255,14 @@ variable "notification_subscribers" {
 
 # --- Audit finding A3: dedicated IAM Identity Center account (opt-in, default = unchanged) ---
 variable "identity_account_id" {
-  description = "Dedicated identity account for IAM Identity Center delegated administration (audit A3). Default null = the shared-services account (unchanged). Set to a dedicated identity account to tighten the delegated-admin blast radius. UNVALIDATED — validate on a real org."
+  description = "Dedicated identity account for IAM Identity Center delegated administration. Default null = the shared-services account (unchanged). Set to a dedicated identity account to tighten the delegated-admin blast radius. PREVIEW: opt-in (default off), not yet validated against a real apply."
   type        = string
   default     = null
 }
 
 # --- Audit A3/A4: CloudTrail CloudWatch Logs + CIS alarms (opt-in, default off) ---
 variable "enable_cloudwatch_logs" {
-  description = "Attach a CloudWatch Logs group to the org trail + create CIS control-plane metric-filter alarms (audit A4). Default false = S3-only (unchanged). UNVALIDATED — validate on a real org."
+  description = "Attach a CloudWatch Logs group to the org trail + create CIS control-plane metric-filter alarms. Default false = S3-only (unchanged). PREVIEW: opt-in (default off), not yet validated against a real apply."
   type        = bool
   default     = false
 }
@@ -274,7 +274,7 @@ variable "cloudwatch_logs_retention_days" {
 }
 
 variable "cloudwatch_logs_kms_key_arn" {
-  description = "Optional CMK ARN for the CloudTrail CloudWatch Logs group; its policy must grant logs.<region>.amazonaws.com (audit C1). Null = AWS-managed encryption."
+  description = "Optional CMK ARN for the CloudTrail CloudWatch Logs group; its policy must grant logs.<region>.amazonaws.com. Null = AWS-managed encryption."
   type        = string
   default     = null
 }

@@ -36,7 +36,7 @@ resource "aws_cloudtrail" "org" {
 
 # ---------------------------------------------------------------------------
 # Audit finding A4 (opt-in, default OFF): near-real-time CIS control-plane alarms.
-# UNVALIDATED against a real org — validate before enabling.
+# PREVIEW (not yet validated against a real apply) against a real org — validate before enabling.
 # ---------------------------------------------------------------------------
 resource "aws_cloudwatch_log_group" "trail" {
   count             = var.enable_cloudwatch_logs ? 1 : 0

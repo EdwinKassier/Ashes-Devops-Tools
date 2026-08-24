@@ -39,7 +39,7 @@ resource "google_project" "projects" {
 
   auto_create_network = false
 
-  # Foundation projects must not be deletable by a routine plan (audit finding G8).
+  # Foundation projects must not be deletable by a routine plan.
   deletion_policy = "PREVENT"
 }
 

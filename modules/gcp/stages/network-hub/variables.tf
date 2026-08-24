@@ -128,7 +128,7 @@ variable "vpc_sc_additional_restricted_services" {
     an automation ingress policy is in place: logging.googleapis.com, monitoring.googleapis.com,
     cloudkms.googleapis.com, secretmanager.googleapis.com, compute.googleapis.com,
     container.googleapis.com, pubsub.googleapis.com, spanner.googleapis.com, sqladmin.googleapis.com.
-    Default [] = unchanged. UNVALIDATED against a real org — validate under dry-run first.
+    Default [] = unchanged. PREVIEW (not yet validated against a real apply) against a real org — validate under dry-run first.
   EOT
   type        = list(string)
   default     = []
@@ -139,7 +139,7 @@ variable "vpc_sc_ingress_identities" {
     Identities (e.g. "serviceAccount:terraform-admin@<admin-project>.iam.gserviceaccount.com")
     granted full ingress into the hub data perimeter — set this to the automation/TFC-run SA
     BEFORE expanding restricted_services or the next enforced apply is blocked. Default [] =
-    no ingress policy (unchanged). UNVALIDATED — validate under dry-run first.
+    no ingress policy (unchanged). PREVIEW (not yet validated against a real apply) — validate under dry-run first.
   EOT
   type        = list(string)
   default     = []
