@@ -145,3 +145,8 @@ output "hub_network" {
     dns_domain    = module.network_hub.hub_dns_domain
   }
 }
+
+output "cmek_key_names" {
+  description = "Map of CMEK key short-name to key ID created by the organization stage. Lets downstream roots (e.g. gcp/workload) encrypt resources with org-managed keys via remote state. Re-exports modules/gcp/stages/organization output cmek_key_names."
+  value       = module.organization.cmek_key_names
+}
