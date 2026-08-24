@@ -67,30 +67,31 @@ make ci
 
 ## Architecture
 
-```text
-┌─────────────────────────────────────────────────────────┐
-│                   GitHub Actions (CI)                   │
-│  fmt · validate · lint · tfsec · checkov · terraform-docs│
-└────────────────────────┬────────────────────────────────┘
-                         │ PR gates
-┌────────────────────────▼────────────────────────────────┐
-│                  Terraform Cloud (CD)                   │
-│              Remote state · Plan · Apply                │
-│         one root = one workspace (per cloud)            │
-└─────────┬─────────────────────┬───────────────────┬─────┘
-          │ GCP                 │ AWS               │ SaaS
-┌─────────▼────────┐  ┌─────────▼─────────┐  ┌──────▼─────┐
-│ envs/gcp/*       │  │ envs/aws/*        │  │ envs/saas  │
-│ organization →   │  │ organization →    │  │ Supabase   │
-│ workload         │  │ security →        │  │ and/or     │
-│                  │  │ network →         │  │ Vercel     │
-│ (control plane,  │  │ identity →        │  │ (no cloud  │
-│  host/spoke VPC, │  │ shared-services → │  │  provider) │
-│  KMS, WIF)       │  │ backup →          │  │            │
-│                  │  │ workload          │  │            │
-└──────────────────┘  └───────────────────┘  └────────────┘
+```mermaid
+flowchart TB
+    CI["<b>GitHub Actions</b> — PR gates<br/>fmt · validate · lint · tfsec · checkov · docs"]
+    TFC["<b>Terraform Cloud</b> — remote state · plan · apply<br/>one root = one workspace, per cloud"]
+    CI -->|"merge to main"| TFC
+    TFC --> GCP["<b>GCP</b><br/>envs/gcp/*<br/>2 roots"]
+    TFC --> AWS["<b>AWS</b><br/>envs/aws/*<br/>7 layered roots"]
+    TFC --> SAAS["<b>SaaS</b><br/>envs/saas<br/>no cloud provider"]
 ```
 
+Both clouds are full landing zones; the difference is only how the same responsibilities are packaged into roots — GCP folds into **two** what the AWS SRA spreads across **seven**. This table aligns them layer-for-layer:
+
+| Responsibility band | GCP root | AWS root |
+|:--------------------|:---------|:---------|
+| Org structure, guardrails, foundation identity (WIF), org CMEK | `gcp-organization` *(bootstrap + organization stages)* | `aws-organization` |
+| Security & threat-detection baseline | *folded into* `gcp-organization` *(SCC, audit logs)* | `aws-security` |
+| Network hub (shared/transit backbone + DNS) | *folded into* `gcp-organization` *(network-hub stage)* | `aws-network` |
+| Human SSO / access management | *folded into* `gcp-organization` *(Cloud Identity groups)* | `aws-identity` |
+| Shared platform services | *folded into* `gcp-organization` *(projects stage)* | `aws-shared-services` |
+| Centralized backup | *native GCS lifecycle / snapshots — no dedicated root* | `aws-backup` |
+| Per-environment workload | `gcp-workload-<env>` | `aws-workload-<env>` |
+| SaaS (Supabase / Vercel) | `saas-<name>` *(cloud-agnostic — no cloud provider)* | `saas-<name>` *(same root)* |
+
+> Ordering is enforced by apply order + remote-state reads, not cross-root `depends_on`. Deploy any subset — a cloud you don't apply pulls in no credentials.
+>
 > Each cloud is a full landing zone with its own layered roots, documented to the same structure so you can compare them control-for-control: **[GCP Landing Zone →](docs/architecture/gcp-landing-zone.md)** · **[AWS Landing Zone →](docs/architecture/aws-landing-zone.md)**. Cloud selection is which workspaces you apply, not a runtime flag: **[Provider Selection →](docs/architecture/provider-selection.md)**.
 
 ### Choosing providers
@@ -309,9 +310,18 @@ git push origin gcp-organization/v1.2.0
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development workflow and standards |
 | [CHANGELOG.md](CHANGELOG.md) | Release notes |
 
-**GCP runbooks:** [Add Environment](docs/runbooks/add-environment.md) · [Service Team Onboarding](docs/runbooks/service-team-onboarding.md) · [KMS Rotation](docs/runbooks/kms-rotation.md) · [CIDR Expansion](docs/runbooks/cidr-expansion.md) · [Break Glass](docs/runbooks/break-glass.md)
+**Runbook parity** — the same operational scenarios exist for both clouds, so an operator fluent in one can follow the other:
 
-**AWS runbooks:** [AWS Bootstrap](docs/runbooks/aws-bootstrap.md) · [AWS Add Account](docs/runbooks/aws-add-account.md) · [AWS Break Glass](docs/runbooks/aws-break-glass.md) · [AWS Incident Response](docs/runbooks/aws-incident-response.md) · [AWS Teardown](docs/runbooks/aws-teardown.md)
+| Scenario | Google Cloud | Amazon Web Services |
+|:---------|:-------------|:--------------------|
+| First-time stand-up | [Bootstrap](docs/runbooks/bootstrap.md) | [AWS Bootstrap](docs/runbooks/aws-bootstrap.md) |
+| Add a deployable unit | [Add Environment](docs/runbooks/add-environment.md) | [AWS Add Account](docs/runbooks/aws-add-account.md) |
+| Onboard a service team | [Service Team Onboarding](docs/runbooks/service-team-onboarding.md) | *(via Add Account)* |
+| Break-glass access | [Break Glass](docs/runbooks/break-glass.md) | [AWS Break Glass](docs/runbooks/aws-break-glass.md) |
+| Incident response | [Incident Response](docs/runbooks/incident-response.md) | [AWS Incident Response](docs/runbooks/aws-incident-response.md) |
+| KMS key rotation | [KMS Rotation](docs/runbooks/kms-rotation.md) | [AWS KMS Rotation](docs/runbooks/aws-kms-rotation.md) |
+| CIDR expansion | [CIDR Expansion](docs/runbooks/cidr-expansion.md) | [AWS CIDR Expansion](docs/runbooks/aws-cidr-expansion.md) |
+| Teardown | [Teardown](docs/runbooks/teardown.md) | [AWS Teardown](docs/runbooks/aws-teardown.md) |
 
 ---
 
