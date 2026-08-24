@@ -134,12 +134,14 @@ side (all mock-tested, secure defaults):
 - **Scheduled backups** — added `modules/gcp/backup/backup-plan` (snapshot schedules) ↔ AWS `backup/*`.
 - **Metrics / dashboards** — added `modules/aws/ops/cloudwatch` (alarms + SNS + dashboard) ↔ GCP `monitoring/*`.
 - **Image registry** — added `modules/aws/data/ecr` ↔ GCP `artifact-registry`.
+- **Hybrid VPN** — added `modules/aws/network/vpn` (Site-to-Site, IKEv2/AES-GCM, TGW or VGW) ↔ GCP `network/vpn` (HA-VPN).
+- **Fleet / patch management** — added `modules/gcp/ops/os-config` (VM Manager patch deployments) ↔ AWS `ops/systems-manager`.
 
 **Remaining `—` cells are intentional asymmetries, not gaps:**
 
 - **GCP IPAM** — Google has no distinct IPAM product; CIDR planning is per-project subnets. AWS IPAM has no GCP analogue to modularize.
 - **Firebase** (`modules/gcp/firebase/project`) — GCP-specific; no AWS equivalent (Amplify is a different, niche product).
-- **AWS site-to-site VPN** — modelled as a Transit Gateway attachment rather than a standalone module; GCP's HA-VPN is a discrete product hence a discrete `network/vpn` module.
+- **NAT / VPC flow logs** — on AWS these are attributes of the `network/vpc` module (native), whereas GCP exposes discrete `network/nat` and `network/vpc-flow-logs` modules. Same capability, different modularization; not a missing module.
 - **GCP service-quotas** — GCP quota management (consumer overrides) differs enough that no parity module is warranted today; AWS `governance/service-quotas` has no clean GCP mirror.
 
 ## BLOCKED — waiting on provider capability
