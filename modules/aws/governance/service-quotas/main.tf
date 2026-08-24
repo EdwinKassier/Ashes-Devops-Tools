@@ -16,7 +16,7 @@ resource "aws_servicequotas_service_quota" "this" {
 
 locals {
   # AWS/Usage ResourceCount REQUIRES Service/Class/Type/Resource dimensions
-  # (audit A2). Without them the alarm binds to no metric and is stuck in
+  #. Without them the alarm binds to no metric and is stuck in
   # INSUFFICIENT_DATA forever. Only build alarms for entries that supply the
   # usage_metric dimensions — an entry without them files the quota request but
   # gets no (inert) alarm.

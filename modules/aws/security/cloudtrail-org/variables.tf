@@ -31,7 +31,7 @@ variable "kms_key_arn" {
 
 # --- Audit finding A4: CloudWatch Logs + CIS alarms (opt-in, default OFF) ---
 variable "enable_cloudwatch_logs" {
-  description = "When true, attach a CloudWatch Logs group to the org trail and create CIS control-plane metric-filter alarms (audit A4). Default false preserves the deliberate S3-only design. UNVALIDATED — validate on a real org."
+  description = "When true, attach a CloudWatch Logs group to the org trail and create CIS control-plane metric-filter alarms. Default false preserves the deliberate S3-only design. PREVIEW: opt-in (default off), not yet validated against a real apply."
   type        = bool
   default     = false
 }
@@ -49,7 +49,7 @@ variable "alarm_sns_topic_arn" {
 }
 
 variable "cloudwatch_logs_kms_key_arn" {
-  description = "Optional CMK ARN for the CloudWatch Logs group when enable_cloudwatch_logs = true. Its key policy MUST grant logs.<region>.amazonaws.com (audit C1). Null = AWS-managed encryption (no grant required)."
+  description = "Optional CMK ARN for the CloudWatch Logs group when enable_cloudwatch_logs = true. Its key policy MUST grant logs.<region>.amazonaws.com. Null = AWS-managed encryption (no grant required)."
   type        = string
   default     = null
 }

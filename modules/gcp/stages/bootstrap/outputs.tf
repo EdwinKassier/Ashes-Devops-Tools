@@ -49,6 +49,6 @@ output "tfc_oidc_provider_name" {
 }
 
 output "resman_email" {
-  description = "Email of the privileged resman SA when enable_privilege_split = true; null otherwise (audit G3)."
+  description = "Email of the privileged resman SA when enable_privilege_split = true; null otherwise."
   value       = var.enable_privilege_split ? module.resman_sa[0].email : null
 }

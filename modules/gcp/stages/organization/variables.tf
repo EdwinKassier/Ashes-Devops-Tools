@@ -221,7 +221,7 @@ variable "audit_log_retention_days" {
 
 # --- Audit finding G4: dedicated logging project (opt-in, default = unchanged) ---
 variable "logging_project_id" {
-  description = "Dedicated logging project ID for the org audit sink/bucket (audit G4 — separation of duties). Default null = the admin/bootstrap project (unchanged). When set, ensure the CMEK key is usable cross-project. UNVALIDATED — validate on a real org."
+  description = "Dedicated logging project ID for the org audit sink/bucket (separation of duties). Default null = the admin/bootstrap project (unchanged). When set, ensure the CMEK key is usable cross-project. PREVIEW: opt-in (default off), not yet validated against a real apply."
   type        = string
   default     = null
 }

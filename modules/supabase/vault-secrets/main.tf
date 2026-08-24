@@ -23,7 +23,7 @@
 # (per-tenant OAuth tokens with lowercase names) are never touched.
 
 # Install the Node dependencies the provisioner scripts import (pg, etc.)
-# reproducibly before any script runs (audit finding S3). `npm ci` uses the
+# reproducibly before any script runs. `npm ci` uses the
 # committed package-lock.json — deterministic, and fails loudly up front rather
 # than mid-apply with "Cannot find package 'pg'".
 resource "null_resource" "npm_install" {

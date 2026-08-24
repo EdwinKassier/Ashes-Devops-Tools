@@ -92,7 +92,7 @@ module "audit_logs" {
   # privileged automation identity that owns the admin project does not also own the
   # store that audits it. Default null = admin project (unchanged). When set, ensure
   # the CMEK key (module.cmek, in the admin project) is usable cross-project by the
-  # logging project's log-sink writer identity. UNVALIDATED — validate on a real org.
+  # logging project's log-sink writer identity. PREVIEW: opt-in (default off), not yet validated against a real apply.
   project_id         = coalesce(var.logging_project_id, var.admin_project_id)
   bucket_location    = var.default_region
   log_retention_days = var.audit_log_retention_days
@@ -206,7 +206,7 @@ module "org_policies" {
       constraint = "storage.uniformBucketLevelAccess"
       enforce    = true
     },
-    # Block public access to Cloud Storage org-wide (audit finding G2). Uniform
+    # Block public access to Cloud Storage org-wide. Uniform
     # bucket-level access alone does NOT prevent allUsers/allAuthenticatedUsers
     # grants; publicAccessPrevention is the constraint that does.
     {
