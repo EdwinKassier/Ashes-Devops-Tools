@@ -9,7 +9,7 @@
 ---
 
 > **GCP ships no automated isolation function.** Unlike the AWS side (which wires a GuardDuty finding through EventBridge to an `ir-isolate` Lambda in `modules/aws/security/incident-response`), there is **no packaged auto-isolation module on GCP**. Everything below Step 1 is a **manual, operator-driven procedure** you run with `gcloud`/Terraform. Detection is automated (SCC → Pub/Sub, org audit sink); containment and forensics are not. See [Honest gaps](#honest-gaps).
-
+>
 > Evidence handling: snapshot **before** you change anything you can avoid changing. Isolation (cutting networking, disabling identities) is acceptable and expected; deleting disks, key versions, or the project destroys volatile state and must wait until forensic copies are confirmed.
 
 ---

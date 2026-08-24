@@ -91,7 +91,7 @@ Both clouds are full landing zones; the difference is only how the same responsi
 | SaaS (Supabase / Vercel) | `saas-<name>` *(cloud-agnostic — no cloud provider)* | `saas-<name>` *(same root)* |
 
 > Ordering is enforced by apply order + remote-state reads, not cross-root `depends_on`. Deploy any subset — a cloud you don't apply pulls in no credentials.
-
+>
 > Each cloud is a full landing zone with its own layered roots, documented to the same structure so you can compare them control-for-control: **[GCP Landing Zone →](docs/architecture/gcp-landing-zone.md)** · **[AWS Landing Zone →](docs/architecture/aws-landing-zone.md)**. Cloud selection is which workspaces you apply, not a runtime flag: **[Provider Selection →](docs/architecture/provider-selection.md)**.
 
 ### Choosing providers
