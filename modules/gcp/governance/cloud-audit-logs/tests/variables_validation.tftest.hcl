@@ -45,6 +45,35 @@ run "rejects_negative_retention_days" {
   }
 }
 
+# ── enable_bucket_lock (G8 opt-in WORM) ─────────────────────────────────────────
+
+run "bucket_lock_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(google_storage_bucket.audit_logs.retention_policy) == 0
+    error_message = "Audit bucket must have NO retention policy by default (enable_bucket_lock defaults false)"
+  }
+}
+
+run "bucket_lock_on_sets_locked_retention" {
+  command = plan
+
+  variables {
+    enable_bucket_lock = true
+    log_retention_days = 365
+  }
+
+  assert {
+    condition     = one(google_storage_bucket.audit_logs.retention_policy).is_locked == true
+    error_message = "enable_bucket_lock = true must set a locked retention policy on the audit bucket"
+  }
+
+  # Note: retention_period value is not asserted — it is a provider-normalized
+  # numeric attribute that resolves to an unknown/typed value under mock_provider.
+  # The is_locked assertion above confirms the opt-in wires the locked policy.
+}
+
 # ── bigquery_retention_days ────────────────────────────────────────────────────
 
 run "accepts_valid_bigquery_retention" {

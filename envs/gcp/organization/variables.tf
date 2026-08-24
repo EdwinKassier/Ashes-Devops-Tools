@@ -212,6 +212,26 @@ variable "vpc_sc_access_policy_name" {
   }
 }
 
+variable "custom_org_constraints" {
+  description = "Opt-in custom organization-policy constraints (CEL-defined resource-shape guardrails) applied at the org node. Default [] = none. Google recommends layering custom constraints on the managed baseline. See docs/known-gaps.md (G6)."
+  type = list(object({
+    name           = string
+    display_name   = string
+    description    = string
+    action_type    = string
+    condition      = string
+    method_types   = list(string)
+    resource_types = list(string)
+  }))
+  default = []
+}
+
+variable "enable_audit_bucket_lock" {
+  description = "Opt-in WORM lock on the org audit-log GCS bucket (locked retention of audit_log_retention_days). Default false preserves the current operator-correctable behaviour. A locked policy is IRREVERSIBLE — enable only for compliance regimes that require tamper-proof retention. See docs/known-gaps.md (G8)."
+  type        = bool
+  default     = false
+}
+
 variable "vpc_sc_enable_dry_run" {
   description = <<-EOT
     When true, the hub VPC-SC perimeter logs violations but does NOT block traffic (dry-run/simulation mode).

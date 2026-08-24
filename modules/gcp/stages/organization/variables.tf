@@ -225,3 +225,23 @@ variable "logging_project_id" {
   type        = string
   default     = null
 }
+
+variable "custom_org_constraints" {
+  description = "Opt-in custom organization-policy constraints (CEL-defined resource-shape guardrails) applied at the org node. Default [] = none. Latest Google guidance recommends layering custom constraints on the managed baseline; see docs/known-gaps.md (G6)."
+  type = list(object({
+    name           = string
+    display_name   = string
+    description    = string
+    action_type    = string
+    condition      = string
+    method_types   = list(string)
+    resource_types = list(string)
+  }))
+  default = []
+}
+
+variable "enable_audit_bucket_lock" {
+  description = "Opt-in WORM lock on the org audit-log GCS bucket (a locked retention policy of audit_log_retention_days). Default false preserves the current behaviour (versioned + access-controlled but not immutable, and a lifecycle delete that can be corrected). Enable only for compliance regimes that require tamper-proof retention — a locked policy CANNOT be shortened or removed. See docs/known-gaps.md (G8)."
+  type        = bool
+  default     = false
+}

@@ -116,6 +116,12 @@ module "organization" {
   # Audit G4: dedicated logging project for the org audit sink (default null = admin project).
   logging_project_id = var.logging_project_id
 
+  # G6: opt-in custom org-policy constraints (default [] = none).
+  custom_org_constraints = var.custom_org_constraints
+
+  # G8: opt-in WORM lock on the audit-log bucket (default false).
+  enable_audit_bucket_lock = var.enable_audit_bucket_lock
+
   depends_on = [module.bootstrap]
 }
 

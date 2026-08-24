@@ -48,8 +48,22 @@ resource "google_storage_bucket" "audit_logs" {
     enabled = true
   }
 
+  # Opt-in WORM lock (G8): when enable_bucket_lock = true, a LOCKED retention
+  # policy of log_retention_days makes the audit export tamper-proof (undeletable
+  # before the window elapses, even by an admin). Default false keeps the
+  # operator-correctable behaviour described below. A locked policy is
+  # irreversible — enable only for compliance regimes that require it.
+  dynamic "retention_policy" {
+    for_each = var.enable_bucket_lock ? [1] : []
+    content {
+      is_locked        = true
+      retention_period = var.log_retention_days * 86400
+    }
+  }
+
   # checkov:skip=CKV2_GCP_4:A GCS bucket lock (retention_policy { locked = true }) is
-  # intentionally not used on this bucket. Rationale:
+  # not used BY DEFAULT on this bucket (it is available opt-in via
+  # var.enable_bucket_lock — see the dynamic block above). Rationale for the default:
   #   1. Durability/immutability is achieved via the org-level Cloud Logging sink
   #      (google_logging_project_sink.audit_logs_sink, below) writing into this bucket —
   #      the authoritative, tamper-evident copy of audit events lives in Cloud Logging's
