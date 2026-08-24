@@ -30,7 +30,7 @@ variable "home_region" {
 }
 
 variable "enabled_standard_arns" {
-  description = "Security standard ARNs enabled by the baseline configuration policy. Defaults (when empty) to FSBP + CIS 1.4 + NIST 800-53 r5, built from home_region."
+  description = "Security standard ARNs enabled by the baseline configuration policy. Defaults (when empty) to FSBP + CIS v3.0.0 + NIST 800-53 r5, built from home_region."
   type        = list(string)
   default     = []
 }

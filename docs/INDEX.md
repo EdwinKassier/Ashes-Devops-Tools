@@ -110,6 +110,7 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
 - [GCP Landing Zone](architecture/gcp-landing-zone.md): folder/project model, two-root layer map, and Shared VPC hub-spoke topology
 - [AWS Landing Zone](architecture/aws-landing-zone.md): multi-account SRA model, layer map, and network/security topology
 - [Cross-Cloud Comparison](architecture/cross-cloud-comparison.md): where each capability lives per provider, side by side
+- [Landing-Zone Conformance](architecture/landing-zone-conformance.md): 2026 best-practice adherence review and gap register for both clouds
 - [Provider Selection](architecture/provider-selection.md): per-cloud-root model and any-combination matrix
 - [Adding a Cloud](architecture/adding-a-cloud.md): per-cloud-root contract for extending the platform
 

@@ -185,15 +185,15 @@ This table maps each Google enterprise-foundations / CIS control to the module a
 
 | Control | Source | Implemented by | Notes |
 |---|---|---|---|
-| Numbered foundation stages (bootstrap → org → projects → network) | Cloud Foundation Fabric **FAST** | `envs/gcp/organization` composing `modules/gcp/stages/{bootstrap,organization,projects,network-hub}` | Single apply; stage order by module dependency. Explicitly FAST-aligned (`modules/gcp/stages/README.md`). |
+| Numbered foundation stages (bootstrap → org → projects → network) | Cloud Foundation Fabric **FAST** | `envs/gcp/organization` composing `modules/gcp/stages/{bootstrap,organization,projects,network-hub}` | Single apply; stage order by module dependency. Tracks FAST's **classic numbered-stage model** (`modules/gcp/stages/README.md`); note upstream FAST has since restructured (e.g. a merged `0-org-setup` stage), so this is the classic layout, not the current upstream tree. |
 | Folder hierarchy + per-env isolation | Enterprise foundations "resource hierarchy" | `modules/gcp/iam/organization` (`google_folder`, `prevent_destroy`) | Flat: one `Shared Services` folder + one per environment; `environment` tag bound to each folder. |
 | Keyless automation identity (WIF) | Foundations "no service-account keys" | `modules/gcp/stages/bootstrap` + `modules/gcp/iam/workload-identity` | GitHub + TFC OIDC pools; SA key creation **and** upload disabled by org policy. |
-| Org policy guardrails | CIS GCP Foundations Benchmark | `modules/gcp/governance/org-policy` | ~15 constraints incl. deny external IP (CIS 4.9), no default-SA auto-grants (CIS 1.4), Shielded VM, UBLA, restrict SQL public IP, domain-restricted sharing. Stricter set on prod folders. |
-| Org-wide audit logging → immutable sink | CIS "Logging & monitoring" | `modules/gcp/governance/cloud-audit-logs` | ADMIN_READ/DATA_READ/DATA_WRITE on all services; org sink `include_children` → CMEK GCS bucket (UBLA, public-access-prevention enforced, versioned, retention default 365d) + BigQuery analytics. |
-| Security Command Center findings pipeline | Foundations "threat detection" | `modules/gcp/governance/scc` | Pub/Sub notification of ACTIVE findings, CMEK-encrypted; severity routing supported. SCC **tier enablement is out-of-band**. |
+| Org policy guardrails | CIS GCP Foundations Benchmark (latest v5.0.0, 2026-05); Google managed baseline | `modules/gcp/governance/org-policy` | ~15 constraints incl. deny external IP (CIS 4.9), no default-SA auto-grants (CIS 1.4), Shielded VM, UBLA, restrict SQL public IP, domain-restricted sharing. Stricter set on prod folders. Uses **legacy constraint names** (not the `*.managed.*` namespace) and **no custom constraints** yet — see [known-gaps G6](../known-gaps.md#modernization--latest-best-practice-gaps-2026-review). |
+| Org-wide audit logging → retained, access-controlled sink | CIS "Logging & monitoring" | `modules/gcp/governance/cloud-audit-logs` | ADMIN_READ/DATA_READ/DATA_WRITE on all services; org sink `include_children` → CMEK GCS bucket (UBLA, public-access-prevention enforced, versioned, lifecycle retention default 365d) + BigQuery analytics. **Bucket lock (WORM) is not enabled** — the sink is durable and access-controlled but not immutable ([known-gaps G8](../known-gaps.md#modernization--latest-best-practice-gaps-2026-review)). |
+| Security Command Center findings notification | Foundations "threat detection" | `modules/gcp/governance/scc` | Pub/Sub notification of ACTIVE findings, CMEK-encrypted; severity routing supported. This is **notification-only** — SCC tier enablement and the **security posture service** (drift detection) are out-of-band ([known-gaps G10](../known-gaps.md#modernization--latest-best-practice-gaps-2026-review)); target **Premium** (Enterprise tier sunsets 2027-05-21). |
 | CMEK on sensitive stores | CIS "Encryption" / NIST SP 800-57 | `modules/gcp/governance/kms` | Org CMEK keyring; audit-logs, analytics, SCC, billing keys granted to the right service agents; 90-day rotation. |
 | Shared VPC hub-and-spoke | Foundations "networking" | `modules/gcp/stages/network-hub` + `modules/gcp/stages/host` | Hub VPC + DNS hub; each env host VPC peers to the hub with custom routes; three-tier subnets. |
-| Layered firewall (VPC + hierarchical) | CIS "Networking" / foundations | `modules/gcp/network/network-firewall` + `modules/gcp/network/hierarchical-firewall` | Tier-to-tier VPC rules + logged deny-all backstop; folder-level deny of internet 22/3389 (IAP instead). |
+| Layered firewall (VPC + hierarchical) | CIS "Networking" / foundations | `modules/gcp/network/network-firewall` + `modules/gcp/network/hierarchical-firewall` | Tier-to-tier rules + logged deny-all backstop; folder-level deny of internet 22/3389 (IAP instead). The VPC layer uses **legacy `google_compute_firewall` rules**; Google now directs new builds to global/regional **network firewall policies** with IAM-governed secure tags — migration tracked in [known-gaps G7](../known-gaps.md#modernization--latest-best-practice-gaps-2026-review). The hierarchical layer already uses the modern `firewall_policy` construct. |
 | Private connectivity, no external IPs | CIS 4.9 / foundations | host stage (PSA + PSC on by default) + `compute.vmExternalIpAccess` deny | Private Google Access on private/database tiers; managed services reached privately. |
 | VPC Service Controls data perimeter | Foundations "data exfiltration protection" | `modules/gcp/network/vpc-sc` | Hub + per-env perimeters over storage/bigquery/secretmanager/kms/pubsub/etc.; gated on an ACM access policy; dry-run supported. |
 | Cost governance (budgets, billing export) | Foundations "billing" | `modules/gcp/governance/billing` + org billing export | Per-env + org budgets (count-gated `> 0`); Cloud Billing → BigQuery export dataset + IAM. |
@@ -216,12 +216,12 @@ This table maps each Google enterprise-foundations / CIS control to the module a
 
 ## Citations
 
-This architecture follows Google Cloud enterprise-foundations guidance. Primary sources:
+This architecture follows Google Cloud enterprise-foundations guidance. Primary sources (versions current as of this doc's 2026 review):
 
-- **Cloud Foundation Fabric / FAST** — <https://github.com/GoogleCloudPlatform/cloud-foundation-fabric>
-- **Google Cloud enterprise foundations blueprint** — <https://cloud.google.com/architecture/security-foundations>
-- **CIS Google Cloud Platform Foundation Benchmark** — <https://www.cisecurity.org/benchmark/google_cloud_computing_platform>
-- **GCP landing zone design** — <https://cloud.google.com/architecture/landing-zones>
+- **Google Cloud enterprise foundations blueprint** (last reviewed 2025-05-15; ref impl `terraform-example-foundation` v5.0.0, 2026-07-01) — <https://docs.cloud.google.com/architecture/blueprints/security-foundations>
+- **Cloud Foundation Fabric / FAST** (classic staged model; upstream since restructured) — <https://github.com/GoogleCloudPlatform/cloud-foundation-fabric>
+- **CIS Google Cloud Platform Foundation Benchmark** (latest v5.0.0, 2026-05-09; prior v4.0.0, 2025-05) — <https://www.cisecurity.org/benchmark/google_cloud_computing_platform>
+- **GCP landing zone design** — <https://docs.cloud.google.com/architecture/landing-zones>
 
 ---
 
