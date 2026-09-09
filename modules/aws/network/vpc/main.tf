@@ -62,7 +62,7 @@ resource "aws_subnet" "this" {
   # Auto-assigning public IPs is the intended behaviour of a tier explicitly
   # declared public = true (e.g. the public/ingress tier). Non-public tiers
   # leave this false, so only tiers the caller opts into as public get one.
-  map_public_ip_on_launch = try(each.value.cfg.public, false) #tfsec:ignore:aws-ec2-no-public-ip-subnet
+  map_public_ip_on_launch = try(each.value.cfg.public, false) #tfsec:ignore:aws-ec2-no-public-ip-subnet - only tiers the caller explicitly opts into with public=true get a public IP; every other tier defaults to false
 
   tags = {
     Name = "${var.name}-${each.value.tier}-${each.value.az}"

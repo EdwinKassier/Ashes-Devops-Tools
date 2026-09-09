@@ -32,7 +32,10 @@ jobs:
           # repo root regardless of working_directory.
           config_file: ${{ github.workspace }}/.tfsec.yml
           format: ${{ inputs.sarif_output && 'sarif' || 'default' }}
-          additional_args: ${{ inputs.sarif_output && '--out tfsec-results.sarif' || '' }}
+          # --force-all-dirs: scan EVERY module directory, not just those reachable via
+          # module{} references from the working_directory root (which left most standalone
+          # modules unscanned). Matches the local `make security` gate.
+          additional_args: --force-all-dirs ${{ inputs.sarif_output && '--out tfsec-results.sarif' || '' }}
 
       - name: Run TFSec on envs
         uses: aquasecurity/tfsec-action@b466648d6e39e7c75324f25d83891162a721f2d6  # v1.0.3
@@ -41,7 +44,7 @@ jobs:
           soft_fail: false
           config_file: ${{ github.workspace }}/.tfsec.yml
           format: ${{ inputs.sarif_output && 'sarif' || 'default' }}
-          additional_args: ${{ inputs.sarif_output && '--out tfsec-env-results.sarif' || '' }}
+          additional_args: --force-all-dirs ${{ inputs.sarif_output && '--out tfsec-env-results.sarif' || '' }}
 
       - name: Upload TFSec modules SARIF
         if: inputs.sarif_output && always()
@@ -64,7 +67,7 @@ jobs:
         # Docker invocation must match.
         run: |
           docker run --rm -v "$(pwd):/src" aquasec/tfsec:v1.28.6 /src/modules \
-            --config-file /src/.tfsec.yml --format json > tfsec-report.json
+            --force-all-dirs --config-file /src/.tfsec.yml --format json > tfsec-report.json
 
       - name: Upload TFSec report artifact
         if: inputs.sarif_output && always()

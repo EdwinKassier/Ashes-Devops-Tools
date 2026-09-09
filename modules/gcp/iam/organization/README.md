@@ -127,9 +127,9 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_folder.ou_folders (modules/gcp/iam/organization/main.tf#L38)
-- resource.google_folder_iam_member.folder_iam_members (modules/gcp/iam/organization/main.tf#L65)
-- resource.google_organization_iam_member.billing_admins (modules/gcp/iam/organization/main.tf#L30)
+- resource.google_folder.ou_folders (modules/gcp/iam/organization/main.tf#L41)
+- resource.google_folder_iam_member.folder_iam_members (modules/gcp/iam/organization/main.tf#L68)
+- resource.google_organization_iam_member.billing_admins (modules/gcp/iam/organization/main.tf#L32)
 - resource.google_organization_iam_member.org_admins (modules/gcp/iam/organization/main.tf#L22)
 - resource.google_project_service.required_apis (modules/gcp/iam/organization/main.tf#L8)
 - data source.google_organization.org (modules/gcp/iam/organization/main.tf#L3)

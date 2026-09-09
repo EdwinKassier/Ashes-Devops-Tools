@@ -94,7 +94,9 @@ resource "aws_acm_certificate" "this" {
   }
 }
 
-resource "aws_cloudfront_distribution" "this" {
+resource "aws_cloudfront_distribution" "this" { #tfsec:ignore:aws-cloudfront-enable-logging
+  # tfsec ignore above: CloudFront access logging is a per-workload choice wired to the
+  # caller's own logging bucket (same rationale as the CKV_AWS_86 skip below).
   # checkov:skip=CKV_AWS_86:Access logging is a per-workload choice wired via the
   #   caller's own logging bucket; WAF request logging is offered here via
   #   var.log_destination_arn. A baseline logging_config is intentionally not
