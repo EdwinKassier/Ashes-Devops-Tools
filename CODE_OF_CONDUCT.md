@@ -61,10 +61,10 @@ appointed representative at an online or offline event.
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported to the community leaders responsible for enforcement via **GitHub's
 private vulnerability/abuse reporting channel** for this repository
-(repository **Security** tab → **Report a vulnerability**), or by email to
-**conduct@ashes-project.example** (role-based placeholder — configure this
-alias to route to the current maintainers before relying on it).
-All complaints will be reviewed and investigated promptly and fairly.
+(repository **Security** tab → **Report a vulnerability**), which is the only
+guaranteed channel. A `conduct@…` email alias is planned but is **not yet
+configured** — do not rely on it until maintainers wire a real alias and remove
+this notice. All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the
 reporter of any incident.

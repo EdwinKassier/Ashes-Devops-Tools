@@ -9,14 +9,19 @@ Releases are tagged as `gcp-organization/vX.Y.Z` and `gcp-workload/<env>/vX.Y.Z`
 
 ## [Unreleased]
 
+> **Path note:** entries below were written across the domain-driven reorg (see the first
+> "Changed" item). Module/root paths in this section reflect the **current** post-reorg
+> layout (`modules/<cloud>/…`, `envs/<cloud>/<layer>`); a few older entries name the former
+> flat paths (`modules/<category>/…`, `envs/<cloud>-<layer>`) as a historical record.
+
 ### Changed
 
 - **Domain-driven repository reorganization** — modules, deployable roots, and scaffolds are now grouped by owning cloud. `modules/` → `modules/{gcp,aws,supabase,vercel,saas}/` (GCP-native modules and stages under `gcp/`, AWS stages under `aws/stages/`, `saas-workload` under `saas/stages/`); `envs/<cloud>-<layer>` → `envs/<cloud>/<layer>` (e.g. `envs/gcp-organization` → `envs/gcp/organization`); `templates/` → `templates/{aws,shared}/`. Relative module `source` paths were rewritten throughout, `scripts/terraform-roots.sh` discovery depth updated, and CODEOWNERS regrouped by cloud. **No Terraform state migration** — TFC workspace names, `backend.tf`, and `terraform_remote_state` (workspace-name) lookups are unchanged; the only operator action is repointing each workspace's VCS working directory, per [`docs/runbooks/ddd-reorg-migration.md`](docs/runbooks/ddd-reorg-migration.md). Delivered as three sequential PRs (modules → envs → templates).
 
 ### Added
 
-- **AWS Security Reference Architecture landing zone** — multi-account organization (SRA OU tree + foundational accounts); SCP/RCP/declarative/tag/backup guardrails; org CloudTrail, Config, GuardDuty, Security Hub, Access Analyzer, Macie, Inspector, Detective, and Security Lake; Systems Manager; incident-response/forensics; a Transit Gateway hub network; IAM Identity Center; org Backup with Vault Lock; and cost governance — across 35 `modules/aws/*`, 6 `modules/stages/aws-*` stages, and 8 roots (`envs/aws-{organization,security,network,identity,shared-services,backup,workload}` + `envs/saas`). Provider pinned `aws >= 6.46.0, < 7.0.0`. See [`docs/architecture/aws-landing-zone.md`](docs/architecture/aws-landing-zone.md).
-- **Any-combination provider selection** — aws/gcp/supabase/vercel are now independently selectable (one cloud = one root = one workspace). New `envs/saas` root deploys Supabase and/or Vercel with no AWS/GCP credentials; `enable_supabase` added to `modules/stages/saas-workload`. See [`docs/architecture/provider-selection.md`](docs/architecture/provider-selection.md).
+- **AWS Security Reference Architecture landing zone** — multi-account organization (SRA OU tree + foundational accounts); SCP/RCP/declarative/tag/backup guardrails; org CloudTrail, Config, GuardDuty, Security Hub, Access Analyzer, Macie, Inspector, Detective, and Security Lake; Systems Manager; incident-response/forensics; a Transit Gateway hub network; IAM Identity Center; org Backup with Vault Lock; and cost governance — across 46 `modules/aws/*` modules (including `modules/aws/stages/*`), and 7 `envs/aws/*` roots (`organization`, `security`, `network`, `identity`, `shared-services`, `backup`, `workload`) plus the `envs/saas` root. Provider pinned `aws >= 6.46.0, < 7.0.0`. See [`docs/architecture/aws-landing-zone.md`](docs/architecture/aws-landing-zone.md).
+- **Any-combination provider selection** — aws/gcp/supabase/vercel are now independently selectable (one cloud = one root = one workspace). New `envs/saas` root deploys Supabase and/or Vercel with no AWS/GCP credentials; `enable_supabase` added to `modules/saas/stages/saas-workload`. See [`docs/architecture/provider-selection.md`](docs/architecture/provider-selection.md).
 - `modules/supabase/project` — creates a single Supabase project via `supabase_project`; lifecycle guard ignores database_password after initial creation
 - `modules/supabase/settings` — manages auth and API settings for an existing project via `supabase_settings`; destruction is a no-op by provider design
 - `modules/supabase/environment` — composite module (project + settings + `data.supabase_apikeys`); primary building block for per-environment deployments; `anon_key` output is intentionally non-sensitive to allow for-expression filter conditions in callers
@@ -33,7 +38,7 @@ Releases are tagged as `gcp-organization/vX.Y.Z` and `gcp-workload/<env>/vX.Y.Z`
 - `modules/stages/workload/tests/iam_validation.tftest.hcl` — `rejects_billing_creator` test (previously only `billing.admin` was tested despite both being in the deny list)
 - `modules/stages/bootstrap/main.tf` — `google_billing_account_iam_member` grants `roles/billing.costsManager` to the Terraform admin SA; without this, `google_billing_budget` creation fails at apply time with a permissions error even when folder-level roles are present
 - `modules/governance/org-policy/variables.tf` — duplicate constraint validation on both `boolean_policies` and `list_policies`; prevents silent last-wins overwrite when the same constraint appears twice
-- `modules/governance/org-policy/tests/validation.tftest.hcl` — 2 new tests rejecting duplicate boolean and list policy constraints
+- `modules/gcp/governance/org-policy/tests/variables_validation.tftest.hcl` — 2 new tests rejecting duplicate boolean and list policy constraints
 - `modules/network/vpc-sc/variables.tf` — `enable_deletion_protection` variable (default `true`); protects service perimeters from accidental destruction via sentinel pattern
 - `modules/network/vpc-sc/main.tf` — `terraform_data.deletion_protection` sentinel resource with `prevent_destroy = true`; guards both regular and bridge perimeters when enabled
 - `modules/stages/bootstrap/variables.tf` — cross-variable validation: `tfc_organization` must be non-null when `enable_tfc_oidc = true` (previously silent no-op)
@@ -193,11 +198,15 @@ Releases are tagged as `gcp-organization/vX.Y.Z` and `gcp-workload/<env>/vX.Y.Z`
 
 ---
 
-## [organization/v1.0.0] — 2026-01-15
+## Initial baseline (pre-1.0 — not yet tagged)
+
+> Snapshot of the initial landing-zone build (baseline dated 2026-01-15). This has **not**
+> been cut as a Git tag or GitHub Release yet; it is documented here for provenance. The
+> first tagged release will use the `gcp-organization/vX.Y.Z` scheme described at the top.
 
 ### Added
 
-- Initial landing zone release
+- Initial landing zone baseline
 - Bootstrap stage: Terraform admin project, WIF pools for GitHub Actions and Terraform Cloud
 - Organization stage: folders, org policies, billing export, audit logs, SCC notifications, essential contacts
 - Projects stage: environment project factory with monitoring scope
@@ -213,5 +222,4 @@ Releases are tagged as `gcp-organization/vX.Y.Z` and `gcp-workload/<env>/vX.Y.Z`
 - Runbooks: add-environment, break-glass, cidr-expansion, kms-rotation, service-team-onboarding
 - CODEOWNERS, PR template, issue templates (bug, feature, security)
 
-[Unreleased]: https://github.com/EdwinKassier/Ashes-Devops-Tools/compare/organization/v1.0.0...HEAD
-[organization/v1.0.0]: https://github.com/EdwinKassier/Ashes-Devops-Tools/releases/tag/organization/v1.0.0
+[Unreleased]: https://github.com/EdwinKassier/Ashes-Devops-Tools/commits/main

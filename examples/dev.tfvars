@@ -1,9 +1,9 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# envs/apps — development environment tfvars
+# envs/gcp/workload — development environment tfvars
 #
 # Usage:
-#   terraform -chdir=envs/apps plan -var-file=examples/dev.tfvars
-#   make plan-apps APP_ENV=dev APP_VARS=examples/dev.tfvars
+#   terraform -chdir=envs/gcp/workload plan -var-file=examples/dev.tfvars
+#   make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
 #
 # Copy this file and adjust values for staging/production environments.
 # Never commit secrets or real billing account IDs to version control.

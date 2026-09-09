@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Required tool versions — kept in sync with .tool-versions and CI (terraform-plan.yml).
-REQUIRED_TERRAFORM_VERSION="1.9.8"
-REQUIRED_TFLINT_VERSION="0.62.0"
-REQUIRED_TFSEC_VERSION="1.28.6"
-REQUIRED_TERRAFORM_DOCS_VERSION="0.19.0"
-REQUIRED_CHECKOV_VERSION="3.2.0"
+# Required tool versions — all derived from .tool-versions (single source of truth,
+# shared with CI via terraform-plan.yml) so this script can never drift from the pins.
+# The second argument is a fallback used only if .tool-versions can't be read/parsed.
+_TOOL_VERSIONS_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.tool-versions"
+_tool_version() {
+  local v
+  v="$(awk -v t="$1" '$1 == t {print $2; exit}' "${_TOOL_VERSIONS_FILE}" 2>/dev/null || true)"
+  printf '%s' "${v:-$2}"
+}
+REQUIRED_TERRAFORM_VERSION="$(_tool_version terraform 1.14.3)"
+REQUIRED_TFLINT_VERSION="$(_tool_version tflint 0.62.0)"
+REQUIRED_TFSEC_VERSION="$(_tool_version tfsec 1.28.6)"
+REQUIRED_TERRAFORM_DOCS_VERSION="$(_tool_version terraform-docs 0.19.0)"
+REQUIRED_CHECKOV_VERSION="$(_tool_version checkov 3.2.0)"
 
 install_with_brew() { brew install "$1"; }
 install_with_apt() { sudo apt-get update && sudo apt-get install -y "$1"; }

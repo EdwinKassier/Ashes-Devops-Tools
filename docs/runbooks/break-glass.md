@@ -59,19 +59,64 @@ Break-glass access requires a second human to authorize. Document the following 
 
 ---
 
-## Step 3 — Create a Time-Boxed Service Account Key
+## Step 3 — Grant Time-Boxed KEYLESS Access
+
+> **Why keyless:** the org baseline **enforces `iam.disableServiceAccountKeyCreation`
+> org-wide** (`modules/gcp/stages/organization/main.tf`, and the `org-policy`
+> recommended preset). Service-account **key creation is blocked by policy** — the old
+> "create a key" flow would fail with a policy-violation error exactly when you need it.
+> Use short-lived impersonation, which needs no key and works under the enforced policy.
+
+### Primary path — impersonate the Terraform admin SA (keyless)
+
+Grant the approved on-call operator's **human** identity the token-creator role on the
+Terraform admin SA. It is scoped to that one SA and time-boxed by the revocation in
+Step 6:
 
 ```bash
-# Create a temporary key (valid until manually deleted)
+gcloud iam service-accounts add-iam-policy-binding \
+  terraform-admin@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
+  --project=ADMIN_PROJECT_ID \
+  --member="user:ONCALL_OPERATOR@example.com" \
+  --role="roles/iam.serviceAccountTokenCreator"
+```
+
+Then run everything through impersonation — no key file is ever created:
+
+```bash
+# gcloud commands: impersonate directly
+export CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT=terraform-admin@ADMIN_PROJECT_ID.iam.gserviceaccount.com
+
+# Terraform: export a short-lived (1h) access token for the google provider
+export GOOGLE_OAUTH_ACCESS_TOKEN="$(gcloud auth print-access-token \
+  --impersonate-service-account=terraform-admin@ADMIN_PROJECT_ID.iam.gserviceaccount.com)"
+```
+
+### Fallback path — scoped org-policy exception (only if impersonation is impossible)
+
+Use this **only** when the token-creator grant cannot be made (e.g. the IAM control
+plane itself is broken) and a key is genuinely required. It temporarily lifts the
+enforced policy **on the admin project only**; re-enforcing it in Step 6 is MANDATORY.
+
+```bash
+# 1. Scoped, project-level exception to the enforced org policy (admin project ONLY)
+gcloud org-policies set-policy - <<'EOF'
+name: projects/ADMIN_PROJECT_ID/policies/iam.disableServiceAccountKeyCreation
+spec:
+  rules:
+    - enforce: false
+EOF
+
+# 2. Create the time-boxed key now that the exception is in place
 gcloud iam service-accounts keys create /tmp/break-glass-key.json \
   --iam-account=terraform-admin@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
   --project=ADMIN_PROJECT_ID
-
-# Activate the key
 export GOOGLE_APPLICATION_CREDENTIALS=/tmp/break-glass-key.json
 ```
 
-> **Security:** The key file at `/tmp/break-glass-key.json` must not be committed, shared, or left on disk after the incident. Treat it as a one-time credential.
+> **Security:** if you used the fallback, the key file at `/tmp/break-glass-key.json`
+> must not be committed, shared, or left on disk after the incident, **and** you MUST
+> re-enforce the org policy in Step 6. Treat it as a one-time credential.
 
 ---
 
@@ -110,31 +155,57 @@ After the fix, trigger a GitHub Actions workflow to confirm WIF authentication w
 
 **This step must be completed before closing the incident.**
 
+### Primary path — revoke the keyless impersonation grant
+
 ```bash
-# List all keys on the Terraform SA
+# Remove the token-creator grant added in Step 3
+gcloud iam service-accounts remove-iam-policy-binding \
+  terraform-admin@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
+  --project=ADMIN_PROJECT_ID \
+  --member="user:ONCALL_OPERATOR@example.com" \
+  --role="roles/iam.serviceAccountTokenCreator"
+
+# Drop the short-lived token / impersonation from this shell
+unset GOOGLE_OAUTH_ACCESS_TOKEN CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT
+```
+
+### Fallback path — ONLY if you used the org-policy exception + key
+
+```bash
+# 1. Delete the break-glass key by its KEY_ID
 gcloud iam service-accounts keys list \
   --iam-account=terraform-admin@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
   --project=ADMIN_PROJECT_ID
-
-# Delete the break-glass key by its KEY_ID
 gcloud iam service-accounts keys delete KEY_ID \
   --iam-account=terraform-admin@ADMIN_PROJECT_ID.iam.gserviceaccount.com \
   --project=ADMIN_PROJECT_ID
-
-# Remove the local key file
-rm /tmp/break-glass-key.json
+rm -f /tmp/break-glass-key.json
 unset GOOGLE_APPLICATION_CREDENTIALS
+
+# 2. MANDATORY: re-enforce the org policy exception you lifted in Step 3.
+#    Deleting the project-level policy restores inheritance of the enforced org default.
+gcloud org-policies delete iam.disableServiceAccountKeyCreation \
+  --project=ADMIN_PROJECT_ID
+
+# 3. Confirm the enforced policy is back in effect
+gcloud org-policies describe iam.disableServiceAccountKeyCreation \
+  --project=ADMIN_PROJECT_ID
 ```
 
 ---
 
 ## Step 7 — Post-Incident Review
 
-Within 24 hours, review all actions taken with the break-glass key:
+Within 24 hours, review all actions taken during break-glass — both keyless
+impersonation (the primary path) and, if used, the fallback key:
 
 ```bash
+# All actions performed AS the Terraform admin SA (captures impersonation) plus any
+# key-authenticated calls, in the incident window.
 gcloud logging read \
-  'protoPayload.authenticationInfo.serviceAccountKeyName!=""' \
+  'protoPayload.authenticationInfo.principalEmail="terraform-admin@ADMIN_PROJECT_ID.iam.gserviceaccount.com"
+   OR protoPayload.authenticationInfo.serviceAccountKeyName!=""
+   OR protoPayload.authenticationInfo.serviceAccountDelegationInfo.firstPartyPrincipal.principalEmail:"terraform-admin"' \
   --project=ADMIN_PROJECT_ID \
   --freshness=24h \
   --format="table(timestamp, protoPayload.methodName, protoPayload.authenticationInfo.principalEmail)"
