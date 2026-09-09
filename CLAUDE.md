@@ -89,7 +89,7 @@ make ci             # fmt-check + docs-check + validate-all + lint + security + 
 
 ## Testing
 
-- Tests live in each module's `tests/` subdir as `*.tftest.hcl` (2 per module: `variables_validation` + `plan_assertions`).
+- Tests live in each module's `tests/` subdir as `*.tftest.hcl`. Every module ships **at least two** suites: a `variables_validation` suite (input validation via `expect_failures`) **and** at least one plan/behaviour suite that asserts on planned resources — usually named `plan_assertions.tftest.hcl`, occasionally a descriptively named suite (e.g. `budget_filter.tftest.hcl`, `router_bgp.tftest.hcl`).
 - `make test` calls `terraform test` with `mock_provider` — **no real cloud credentials needed**.
 - Always run `make test` before opening a PR.
 
