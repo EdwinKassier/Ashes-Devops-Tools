@@ -116,7 +116,7 @@ The following resources are created:
 | <a name="input_zone_name"></a> [zone\_name](#input\_zone\_name) | Name of the DNS zone (used as resource identifier) | `string` | n/a | yes |
 | <a name="input_description"></a> [description](#input\_description) | Description of the DNS zone | `string` | `"Private DNS zone managed by Terraform"` | no |
 | <a name="input_dnssec_enabled"></a> [dnssec\_enabled](#input\_dnssec\_enabled) | Enable DNSSEC for public zones. Private zones ignore this setting. | `bool` | `true` | no |
-| <a name="input_enable_logging"></a> [enable\_logging](#input\_enable\_logging) | Enable query logging for the zone | `bool` | `false` | no |
+| <a name="input_enable_logging"></a> [enable\_logging](#input\_enable\_logging) | Enable DNS query logging for the zone. Defaults to false at this primitive level because query logging is high-volume and cost-sensitive; enable it for zones where DNS query auditing is required (composing stages opt in per zone). Only public managed zones support query logging. | `bool` | `false` | no |
 | <a name="input_forwarding_targets"></a> [forwarding\_targets](#input\_forwarding\_targets) | List of forwarding target IP addresses (for forwarding zones) | `list(string)` | `[]` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to the DNS zone | `map(string)` | `{}` | no |
 | <a name="input_peering_network"></a> [peering\_network](#input\_peering\_network) | The target VPC network for a peering zone (required when type is 'peering') | `string` | `""` | no |

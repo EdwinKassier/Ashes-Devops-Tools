@@ -1,5 +1,5 @@
 variable "repositories" {
-  description = "Map of ECR repositories to create, keyed by repository name. The parity counterpart to GCP's artifact-registry."
+  description = "Map of ECR repositories to create, keyed by repository name. The parity counterpart to GCP's artifact-registry. Per-repo encryption is optional: leave kms_key_arn null for AES256 (AWS-managed), or supply a customer-managed KMS key ARN for regulated images (composing stages wire the CMK in production)."
   type = map(object({
     image_tag_mutability = optional(string, "IMMUTABLE")
     scan_on_push         = optional(bool, true)

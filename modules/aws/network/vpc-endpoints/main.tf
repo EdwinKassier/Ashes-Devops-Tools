@@ -22,8 +22,11 @@ resource "aws_vpc_endpoint" "interface" {
   subnet_ids          = var.subnet_ids
   security_group_ids  = var.security_group_ids
 
-  # Org-scoped endpoint policy: allow only principals in this AWS Organization.
-  policy = jsonencode({
+  # Endpoint policy. Default: allow only principals in this AWS Organization
+  # (aws:PrincipalOrgID). Action="*" here relies on IAM for per-service authz and
+  # keeps this shared hub endpoint service-agnostic; callers who want tighter,
+  # per-service least-privilege pass a scoped policy via var.endpoint_policy_json.
+  policy = var.endpoint_policy_json != null ? var.endpoint_policy_json : jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"

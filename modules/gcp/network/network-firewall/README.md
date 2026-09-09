@@ -104,7 +104,7 @@ The following resources are created:
 | <a name="input_description"></a> [description](#input\_description) | Description of the firewall rule | `string` | `null` | no |
 | <a name="input_direction"></a> [direction](#input\_direction) | Direction of the firewall rule (INGRESS or EGRESS) | `string` | `"INGRESS"` | no |
 | <a name="input_disabled"></a> [disabled](#input\_disabled) | Denotes whether the firewall rule is disabled | `bool` | `false` | no |
-| <a name="input_enable_logging"></a> [enable\_logging](#input\_enable\_logging) | Whether to enable logging for the firewall rule | `bool` | `false` | no |
+| <a name="input_enable_logging"></a> [enable\_logging](#input\_enable\_logging) | Whether to enable logging for the firewall rule. Defaults to false at this primitive level because firewall-rule logging is high-volume and cost-sensitive; the composing host/network-hub stages set enable\_firewall\_logging = true so real landing-zone deployments log firewall rules by default. Enable here when using the primitive standalone and you need per-rule connection logs. | `bool` | `false` | no |
 | <a name="input_log_metadata"></a> [log\_metadata](#input\_log\_metadata) | Logging metadata configuration (INCLUDE\_ALL\_METADATA or EXCLUDE\_ALL\_METADATA) | `string` | `"INCLUDE_ALL_METADATA"` | no |
 | <a name="input_priority"></a> [priority](#input\_priority) | Priority of the firewall rule (default: 1000) | `number` | `1000` | no |
 | <a name="input_source_ranges"></a> [source\_ranges](#input\_source\_ranges) | List of source IP CIDR ranges | `list(string)` | `null` | no |

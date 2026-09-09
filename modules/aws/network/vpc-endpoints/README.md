@@ -57,7 +57,7 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_route53_zone.shared (modules/aws/network/vpc-endpoints/main.tf#L44)
+- resource.aws_route53_zone.shared (modules/aws/network/vpc-endpoints/main.tf#L47)
 - resource.aws_vpc_endpoint.interface (modules/aws/network/vpc-endpoints/main.tf#L15)
 
 
@@ -68,6 +68,7 @@ The following resources are created:
 | <a name="input_org_id"></a> [org\_id](#input\_org\_id) | AWS Organizations org id (o-xxxxxxxxxx) used in the endpoint policy aws:PrincipalOrgID condition to scope access to this organization. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | AWS region, used to build interface endpoint service names (com.amazonaws.<region>.<service>). | `string` | n/a | yes |
 | <a name="input_vpc_id"></a> [vpc\_id](#input\_vpc\_id) | ID of the central hub VPC that hosts the interface endpoints and the shared private hosted zone. | `string` | n/a | yes |
+| <a name="input_endpoint_policy_json"></a> [endpoint\_policy\_json](#input\_endpoint\_policy\_json) | Optional override for the interface-endpoint policy (a JSON document). When null (default), the module applies an org-scoped allow-all policy gated by aws:PrincipalOrgID and relies on IAM for authorization. Supply a scoped policy to enforce per-service least privilege on the shared endpoints. | `string` | `null` | no |
 | <a name="input_interface_services"></a> [interface\_services](#input\_interface\_services) | AWS services to create centralized Interface VPC endpoints for. Service names are built as com.amazonaws.<region>.<service>. | `list(string)` | <pre>[<br/>  "ec2",<br/>  "ssm",<br/>  "ssmmessages",<br/>  "ec2messages",<br/>  "kms",<br/>  "logs",<br/>  "sts"<br/>]</pre> | no |
 | <a name="input_private_hosted_zone_name"></a> [private\_hosted\_zone\_name](#input\_private\_hosted\_zone\_name) | Name of the shared Route 53 private hosted zone for split-horizon DNS. Empty string skips creating the zone. | `string` | `""` | no |
 | <a name="input_security_group_ids"></a> [security\_group\_ids](#input\_security\_group\_ids) | Security group IDs to associate with the interface endpoint ENIs. | `list(string)` | `[]` | no |

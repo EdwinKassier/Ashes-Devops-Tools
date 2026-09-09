@@ -80,7 +80,7 @@ variable "dnssec_enabled" {
 }
 
 variable "enable_logging" {
-  description = "Enable query logging for the zone"
+  description = "Enable DNS query logging for the zone. Defaults to false at this primitive level because query logging is high-volume and cost-sensitive; enable it for zones where DNS query auditing is required (composing stages opt in per zone). Only public managed zones support query logging."
   type        = bool
   default     = false
 }
