@@ -5,13 +5,14 @@
 **Do not open a public GitHub issue for security vulnerabilities.**
 
 Report vulnerabilities via the repository's **Security** tab → **"Report a vulnerability"**
-(GitHub private vulnerability reporting). This is the primary channel and reaches the
-maintainers directly and confidentially.
+(GitHub private vulnerability reporting). **This is the only guaranteed channel** and
+reaches the maintainers directly and confidentially. We aim to acknowledge within 48
+hours and keep you informed of progress.
 
-If you are unable to use GitHub's private reporting flow, email
-**security@ashes-project.example** (role-based placeholder — configure this alias to
-route to the current maintainers before relying on it) with the details below. We will
-acknowledge within 48 hours and keep you informed of progress.
+> **Email backstop not yet configured.** A role-based alias (`security@…`) is intended
+> as a fallback but is **not live yet** — do not rely on email until this notice is
+> removed. Until then, use GitHub private vulnerability reporting above. Maintainers:
+> configure a real alias and replace this notice before any public release.
 
 ### What to Include
 
@@ -45,13 +46,14 @@ This landing zone implements defense-in-depth across every layer:
 
 ### Data Protection
 
-- **CMEK (Customer-Managed Encryption Keys)** via Cloud KMS — all storage encrypted at rest
+- **CMEK (Customer-Managed Encryption Keys)** via Cloud KMS — available across storage primitives. Storage is always encrypted at rest; buckets default to Google-managed keys (GMEK) and accept a CMEK via `kms_key_name`, with the composing stages wiring a CMK for regulated data. Require a CMEK at the module boundary for compliance environments.
 - **Key rotation enforced** — rotation period validated between 1–365 days at plan time
 - **Uniform bucket-level access** — no per-object ACLs on Cloud Storage
+- **Opt-in WORM retention** — audit-log buckets support a locked retention policy via `enable_bucket_lock` (default off; the org-level Cloud Logging sink is the authoritative tamper-evident copy)
 
 ### Network Security
 
-- **VPC Service Controls** — data perimeter around sensitive projects
+- **VPC Service Controls** — data perimeter around sensitive projects. **Ships in dry-run mode by default** (audit-only; it logs would-be violations but does not block them). Promote to enforced per environment once ingress/egress rules are validated — see [known-gaps.md](docs/known-gaps.md).
 - **Private Service Access** — RFC 1918 connectivity to Google APIs (no public egress for managed services)
 - **Cloud Armor** — WAF with OWASP rule sets for internet-facing workloads
 - **VPC Flow Logs** — full network telemetry retained in Cloud Storage
@@ -73,10 +75,19 @@ This landing zone implements defense-in-depth across every layer:
 
 ## Supported Versions
 
-| Component | Supported Until |
-|-----------|----------------|
-| `gcp-organization/v1.x` | Active |
-| `gcp-workload/*/v1.x` | Active |
+This is a **pre-1.0 boilerplate with no tagged releases yet** (`git tag` is currently
+empty). Consume it by pinning to a specific commit SHA; `main` is the supported line and
+receives the security fixes described above.
+
+A tag-based release and support model (`gcp-organization/vX.Y.Z`, `gcp-workload/<env>/vX.Y.Z`)
+is wired in `terraform-apply.yml` and the CHANGELOG for when the first release is cut. The
+table below becomes authoritative at that point:
+
+| Component | Supported |
+|-----------|-----------|
+| `main` (untagged) | Active — pin to a commit SHA |
+| `gcp-organization/v1.x` | Not yet released |
+| `gcp-workload/*/v1.x` | Not yet released |
 
 ---
 
@@ -97,8 +108,8 @@ SARIF results are uploaded to GitHub Security tab for all scans.
 
 ## Contact
 
-- Security issues: repository **Security** tab → **"Report a vulnerability"** (preferred),
-  or **security@ashes-project.example** (role-based placeholder — configure this alias
-  before relying on it)
+- Security issues: repository **Security** tab → **"Report a vulnerability"** (the only
+  guaranteed channel). A `security@…` email backstop is planned but **not yet configured**
+  — see the notice under "Reporting a Vulnerability" above.
 - General inquiries: open a [GitHub Discussion](../../discussions) or non-security issue
   on this repository

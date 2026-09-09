@@ -8,11 +8,30 @@ Recommended GitHub branch protection settings for this repository. Apply these b
 
 ### Status Checks (required before merge)
 
-All of the following CI jobs must pass:
+Required status-check **contexts** are the job **display names** (`name:`), not the job
+IDs — and for the reusable security workflow they are prefixed by the calling job's
+name. Use exactly these strings from `terraform-plan.yml`:
 
-| Workflow | Jobs required |
-|----------|--------------|
-| `terraform-plan.yml` | `fmt`, `docs`, `validate`, `lint`, `meta-lint`, `security`, `test` |
+| Required context | Source job |
+|------------------|-----------|
+| `Terraform Format` | `fmt` |
+| `Terraform Docs Check` | `docs` |
+| `TFLint` | `lint` |
+| `Meta Lint (yaml/markdown/commits)` | `meta-lint` |
+| `Terraform Tests` | `test` |
+| `Security / TFSec` | `security` → reusable `tfsec` |
+| `Security / Checkov` | `security` → reusable `checkov` |
+| `Validation Summary` | `summary` (fail-closed aggregator) |
+
+Two important gotchas this list already accounts for:
+
+- **The `validate` job is a matrix** (`name: Validate ${{ matrix.root }}`) that emits one
+  context *per root* (~180 of them), never a single `validate` context. Do **not** list
+  `validate` (or per-leg names) as required — they change as roots are added/removed.
+  Instead require **`Validation Summary`**, which `needs:` the whole matrix and fails
+  closed if any leg fails, so it gates the matrix through one stable context.
+- **The `security` job calls a reusable workflow**, so its contexts are
+  `Security / TFSec` and `Security / Checkov` — never a bare `security`.
 
 `security-scan.yml` (`static-analysis`, `trivy`, `secret-scan`, `summary`) runs on **push to `main`/`develop` and weekly on schedule** — it never runs on `pull_request`, so its jobs **cannot** be configured as required status checks; doing so would make `main` permanently unmergeable. Treat it as a non-blocking, post-merge/scheduled signal instead (monitor its `summary` job for regressions).
 
@@ -36,7 +55,7 @@ Set via **Settings → Branches → main → Require status checks to pass befor
 ```bash
 gh api repos/OWNER/REPO/branches/main/protection \
   --method PUT \
-  --field required_status_checks='{"strict":true,"contexts":["fmt","docs","validate","lint","meta-lint","security","test"]}' \
+  --field required_status_checks='{"strict":true,"contexts":["Terraform Format","Terraform Docs Check","TFLint","Meta Lint (yaml/markdown/commits)","Terraform Tests","Security / TFSec","Security / Checkov","Validation Summary"]}' \
   --field enforce_admins=true \
   --field required_pull_request_reviews='{"required_approving_review_count":1,"dismiss_stale_reviews":true,"require_code_owner_reviews":true}' \
   --field restrictions=null \
