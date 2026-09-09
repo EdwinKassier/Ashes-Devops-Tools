@@ -163,7 +163,7 @@ resource "google_organization_iam_member" "terraform_admin_standard_org_roles" {
   ])
 
   org_id = var.org_id
-  role   = each.key #tfsec:ignore:google-iam-no-privileged-service-accounts
+  role   = each.key #tfsec:ignore:google-iam-no-privileged-service-accounts - the bootstrap SA legitimately requires these elevated org roles to stand up the landing zone; access is restricted to this single SA and key-less via WIF
   # Audit G3: privileged roles route to the resman SA when the split is enabled;
   # otherwise resman_sa_email == terraform-admin SA (unchanged).
   member = "serviceAccount:${contains(local.privileged_split_roles, each.key) ? local.resman_sa_email : module.terraform_admin_sa.email}"
@@ -207,7 +207,7 @@ resource "google_organization_iam_member" "terraform_admin_exception_org_roles" 
   ])
 
   org_id = var.org_id
-  role   = each.key #tfsec:ignore:google-iam-no-privileged-service-accounts
+  role   = each.key #tfsec:ignore:google-iam-no-privileged-service-accounts - securitycenter.admin and iam.securityAdmin are the minimum org-level privileges the bootstrap SA needs (see per-role rationale above); a narrower custom role would require the equally-privileged roles/iam.roleAdmin
   # Audit G3: privileged roles route to the resman SA when the split is enabled;
   # otherwise resman_sa_email == terraform-admin SA (unchanged).
   member = "serviceAccount:${contains(local.privileged_split_roles, each.key) ? local.resman_sa_email : module.terraform_admin_sa.email}"

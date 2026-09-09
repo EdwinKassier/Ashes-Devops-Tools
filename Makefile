@@ -1,4 +1,4 @@
-.PHONY: help install fmt fmt-check validate validate-all lint consistency security security-report docs docs-check count test ci clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
+.PHONY: help install fmt fmt-check validate validate-all lint consistency security security-low security-report docs docs-check count test ci clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
 
 TERRAFORM := terraform
 TFLINT := tflint
@@ -66,14 +66,19 @@ lint: ## Run TFLint across the repository
 		$(TFLINT) --chdir=$$dir --config=$(PWD)/.tflint.hcl; \
 	done
 
-security: ## Run tfsec and checkov and fail on real findings
-	@$(TFSEC) . --config-file .tfsec.yml --exclude-path examples
+security: ## Run tfsec (full tree) and checkov and fail on real findings
+	# --force-all-dirs makes tfsec scan EVERY module/root directory, not just the ones
+	# reachable via module{} references from the repo root (which covered ~99 of 800+ files).
+	@$(TFSEC) . --force-all-dirs --config-file .tfsec.yml --exclude-path examples --exclude-path .terraform
 	@$(CHECKOV) -d modules --quiet --compact --framework terraform --config-file .checkov.yaml
 	@$(CHECKOV) -d envs --quiet --compact --framework terraform --config-file .checkov.yaml
 
+security-low: ## Advisory-only: run tfsec at LOW severity across the full tree (non-blocking)
+	@$(TFSEC) . --force-all-dirs --config-file .tfsec.yml --exclude-path examples --exclude-path .terraform --minimum-severity LOW --soft-fail
+
 security-report: ## Generate detailed security reports
 	@mkdir -p reports
-	@$(TFSEC) . --config-file .tfsec.yml --exclude-path examples --format json > reports/tfsec-report.json
+	@$(TFSEC) . --force-all-dirs --config-file .tfsec.yml --exclude-path examples --exclude-path .terraform --format json > reports/tfsec-report.json
 	@$(CHECKOV) -d modules --framework terraform --output json --config-file .checkov.yaml > reports/checkov-modules-report.json
 	@$(CHECKOV) -d envs --framework terraform --output json --config-file .checkov.yaml > reports/checkov-envs-report.json
 

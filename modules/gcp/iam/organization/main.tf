@@ -19,19 +19,22 @@ resource "google_project_service" "required_apis" {
 }
 
 # Organization IAM members (non-authoritative - preserves existing IAM)
-resource "google_organization_iam_member" "org_admins" {
+resource "google_organization_iam_member" "org_admins" { #tfsec:ignore:google-iam-no-user-granted-permissions
   for_each = toset(var.org_admin_members)
 
   org_id = data.google_organization.org.org_id
   role   = "roles/resourcemanager.organizationAdmin"
+  # Generic non-authoritative binder; members are caller-supplied. Group-vs-user is the
+  # caller's governance decision (production callers pass groups; the example passes a user).
   member = each.value
 }
 
-resource "google_organization_iam_member" "billing_admins" {
+resource "google_organization_iam_member" "billing_admins" { #tfsec:ignore:google-iam-no-user-granted-permissions
   for_each = toset(var.billing_admin_members)
 
   org_id = data.google_organization.org.org_id
   role   = "roles/billing.admin"
+  # Generic non-authoritative binder; members are caller-supplied (production passes groups).
   member = each.value
 }
 

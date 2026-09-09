@@ -214,7 +214,7 @@ resource "google_compute_forwarding_rule" "forwarding_rule" {
 # FIREWALL RULE (for proxy-only subnet)
 # -----------------------------------------------------------------------------
 
-resource "google_compute_firewall" "allow_proxy" {
+resource "google_compute_firewall" "allow_proxy" { #tfsec:ignore:google-compute-no-public-ingress
   count = var.create_firewall_rule ? 1 : 0
 
   project = var.project_id
@@ -229,6 +229,8 @@ resource "google_compute_firewall" "allow_proxy" {
     ports    = [var.backend_port]
   }
 
+  # proxy_only_subnet_ranges are the internal RFC1918 CIDRs of the regional proxy-only
+  # subnet, supplied by the caller (see the resource-level tfsec:ignore above).
   source_ranges = var.proxy_only_subnet_ranges
   target_tags   = var.backend_target_tags
 }

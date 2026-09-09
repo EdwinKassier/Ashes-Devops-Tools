@@ -57,9 +57,9 @@ The following resources are created:
 
 - resource.aws_acm_certificate.this (modules/aws/security/edge-security/main.tf#L86)
 - resource.aws_cloudfront_distribution.this (modules/aws/security/edge-security/main.tf#L97)
-- resource.aws_shield_protection.this (modules/aws/security/edge-security/main.tf#L164)
+- resource.aws_shield_protection.this (modules/aws/security/edge-security/main.tf#L166)
 - resource.aws_wafv2_web_acl.cloudfront (modules/aws/security/edge-security/main.tf#L16)
-- resource.aws_wafv2_web_acl_logging_configuration.this (modules/aws/security/edge-security/main.tf#L172)
+- resource.aws_wafv2_web_acl_logging_configuration.this (modules/aws/security/edge-security/main.tf#L174)
 
 
 ## Inputs
