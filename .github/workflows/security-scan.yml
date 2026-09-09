@@ -80,6 +80,11 @@ jobs:
         uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7  # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # gitleaks-action v2 requires a GITLEAKS_LICENSE for repos owned by a
+          # GitHub *organization*. Harmless (ignored) for user-owned repos where the
+          # secret is unset; provision the secret before migrating this repo to an org
+          # or the secret-scan job will start failing.
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
 
   summary:
     name: Security Scan Summary

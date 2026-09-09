@@ -191,6 +191,9 @@ jobs:
           TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
           DRIFT_RUN_ID: ${{ steps.trigger_plan.outputs.drift_run_id }}
+          # Mapped via env (not inlined into the run script) to avoid interpolating
+          # an expression directly into shell — matches the pattern used elsewhere.
+          WORKSPACE: ${{ matrix.workspace }}
         run: |
           for i in $(seq 1 20); do
             sleep 30
@@ -217,7 +220,7 @@ jobs:
                 echo "resource_changes=${resource_changes}" >> "$GITHUB_OUTPUT"
                 echo "resource_destructions=${resource_destructions}" >> "$GITHUB_OUTPUT"
                 RUN_URL="https://app.terraform.io/app/${TFC_ORGANIZATION}"
-                RUN_URL="${RUN_URL}/workspaces/${{ matrix.workspace }}/runs/${DRIFT_RUN_ID}"
+                RUN_URL="${RUN_URL}/workspaces/${WORKSPACE}/runs/${DRIFT_RUN_ID}"
                 echo "run_url=${RUN_URL}" >> "$GITHUB_OUTPUT"
                 exit 0
                 ;;
@@ -235,6 +238,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WORKSPACE: ${{ matrix.workspace }}
+          # Route poll outputs through env (not inlined into the script) so no
+          # workflow expression is interpolated directly into shell.
+          RESOURCE_ADDITIONS: ${{ steps.poll.outputs.resource_additions }}
+          RESOURCE_CHANGES: ${{ steps.poll.outputs.resource_changes }}
+          RESOURCE_DESTRUCTIONS: ${{ steps.poll.outputs.resource_destructions }}
+          RUN_URL: ${{ steps.poll.outputs.run_url }}
         run: |
           TITLE="[Drift] Infrastructure drift detected in workspace: ${WORKSPACE}"
           BODY="## Infrastructure Drift Detected
@@ -243,11 +252,11 @@ jobs:
 
           | Metric | Count |
           |--------|-------|
-          | Additions | ${{ steps.poll.outputs.resource_additions }} |
-          | Changes | ${{ steps.poll.outputs.resource_changes }} |
-          | Destructions | ${{ steps.poll.outputs.resource_destructions }} |
+          | Additions | ${RESOURCE_ADDITIONS} |
+          | Changes | ${RESOURCE_CHANGES} |
+          | Destructions | ${RESOURCE_DESTRUCTIONS} |
 
-          **Plan URL:** ${{ steps.poll.outputs.run_url }}
+          **Plan URL:** ${RUN_URL}
 
           Review and apply the changes to bring the workspace back into compliance.
           "

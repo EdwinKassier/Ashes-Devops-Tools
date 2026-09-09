@@ -14,12 +14,13 @@ on:
       - main
       - develop
 
+# Least privilege: the workflow default is read-only. Only the `security` job,
+# which calls reusable-security.yml with sarif_output: true, is granted
+# security-events: write (at the job level, below). GitHub bounds a reusable
+# workflow's token to the calling job's permissions, so scoping it there keeps
+# every other job (fmt/docs/validate/lint/meta-lint/test) read-only.
 permissions:
   contents: read
-  # Required: the security job calls reusable-security.yml with sarif_output: true.
-  # GitHub bounds reusable workflow token permissions to the caller's permissions,
-  # so without this grant all SARIF uploads would receive a 403.
-  security-events: write
 
 concurrency:
   group: terraform-plan-${{ github.ref_name }}
@@ -216,6 +217,10 @@ jobs:
 
   security:
     name: Security
+    # Only this job needs SARIF upload rights; every other job stays read-only.
+    permissions:
+      contents: read
+      security-events: write
     uses: ./.github/workflows/reusable-security.yml
     with:
       sarif_output: true
@@ -256,3 +261,26 @@ jobs:
           echo "| Meta Lint | ${{ needs.meta-lint.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Security | ${{ needs.security.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Tests | ${{ needs.test.result }} |" >> "$GITHUB_STEP_SUMMARY"
+
+      # Fail-closed aggregator: because this job runs with if: always(), it must
+      # explicitly fail when any upstream job failed/was cancelled — otherwise it
+      # would report success even on a failed `validate` leg. This makes
+      # "Validation Summary" a reliable single required status check that covers the
+      # whole validate matrix (see docs/guides/BRANCH_PROTECTION.md).
+      - name: Gate on upstream results
+        run: |
+          for r in \
+            "fmt=${{ needs.fmt.result }}" \
+            "docs=${{ needs.docs.result }}" \
+            "validate=${{ needs.validate.result }}" \
+            "lint=${{ needs.lint.result }}" \
+            "meta-lint=${{ needs.meta-lint.result }}" \
+            "security=${{ needs.security.result }}" \
+            "test=${{ needs.test.result }}"; do
+            name="${r%%=*}"; result="${r#*=}"
+            if [ "$result" = "failure" ] || [ "$result" = "cancelled" ]; then
+              echo "::error::Required job '${name}' result: ${result}"
+              fail=1
+            fi
+          done
+          [ -z "${fail:-}" ] || exit 1

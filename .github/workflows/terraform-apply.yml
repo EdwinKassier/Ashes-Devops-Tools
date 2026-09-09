@@ -118,12 +118,19 @@ jobs:
 
           status=$(echo "$response" | jq -r '.data[0].attributes.status')
           echo "status=${status}" >> "$GITHUB_OUTPUT"
+          # Only `applied` means the infrastructure is actually deployed. The other
+          # two statuses are accepted so the workflow can run and report, but the
+          # release job below publishes a GitHub Release ONLY when status == applied
+          # (see its `if:` conditions) so a release never falsely asserts a deploy.
           case "$status" in
-            applied|planned_and_finished)
-              # Run completed successfully
+            applied)
+              # Run applied — infrastructure is live; release will be published.
+              ;;
+            planned_and_finished)
+              # Plan-only run (no changes / speculative) — NOT applied; release held.
               ;;
             apply_queued)
-              # Run is pending manual apply approval in TFC — release tag is valid
+              # Pending manual apply approval in TFC — NOT applied yet; release held.
               ;;
             *)
               echo "Latest Terraform Cloud run for ${WORKSPACE} is '${status}' —" \
@@ -149,10 +156,26 @@ jobs:
           echo "- Terraform Cloud status: ${{ needs.verify-run.outputs.status }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Create GitHub release
+        # Publish a Release only when the infrastructure is actually applied, so a
+        # release tag can never assert a deploy that is only queued or plan-only.
+        if: needs.verify-run.outputs.status == 'applied'
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3.0.0
         with:
           name: ${{ needs.verify-run.outputs.release_name }}
           tag_name: ${{ github.ref_name }}
           body: >-
             Terraform Cloud workspace `${{ needs.verify-run.outputs.workspace }}`
-            has a successful run with status `${{ needs.verify-run.outputs.status }}`.
+            was successfully applied (status `${{ needs.verify-run.outputs.status }}`).
+
+      - name: Release held (run not applied)
+        # Non-applied statuses (apply_queued / planned_and_finished) do not publish a
+        # release; record why so the tag's state is traceable instead of silently missing.
+        if: needs.verify-run.outputs.status != 'applied'
+        run: |
+          {
+            echo "## Release held"
+            echo ""
+            echo "No GitHub Release was published for tag \`${{ github.ref_name }}\`."
+            echo "Terraform Cloud status is \`${{ needs.verify-run.outputs.status }}\`, not \`applied\`."
+            echo "Re-run this workflow (or re-tag) once the apply completes to publish the release."
+          } >> "$GITHUB_STEP_SUMMARY"
