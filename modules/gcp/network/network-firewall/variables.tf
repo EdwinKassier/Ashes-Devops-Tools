@@ -83,7 +83,7 @@ variable "disabled" {
 }
 
 variable "enable_logging" {
-  description = "Whether to enable logging for the firewall rule"
+  description = "Whether to enable logging for the firewall rule. Defaults to false at this primitive level because firewall-rule logging is high-volume and cost-sensitive; the composing host/network-hub stages set enable_firewall_logging = true so real landing-zone deployments log firewall rules by default. Enable here when using the primitive standalone and you need per-rule connection logs."
   type        = bool
   default     = false
 }

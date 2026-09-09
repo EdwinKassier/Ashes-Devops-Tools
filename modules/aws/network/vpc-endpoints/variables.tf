@@ -57,3 +57,9 @@ variable "private_hosted_zone_name" {
   type        = string
   default     = ""
 }
+
+variable "endpoint_policy_json" {
+  description = "Optional override for the interface-endpoint policy (a JSON document). When null (default), the module applies an org-scoped allow-all policy gated by aws:PrincipalOrgID and relies on IAM for authorization. Supply a scoped policy to enforce per-service least privilege on the shared endpoints."
+  type        = string
+  default     = null
+}
