@@ -159,7 +159,7 @@ jobs:
         # Publish a Release only when the infrastructure is actually applied, so a
         # release tag can never assert a deploy that is only queued or plan-only.
         if: needs.verify-run.outputs.status == 'applied'
-        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3.0.0
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3.0.3
         with:
           name: ${{ needs.verify-run.outputs.release_name }}
           tag_name: ${{ github.ref_name }}
