@@ -169,7 +169,7 @@ module "database_subnets" {
 # No explicit depends_on is needed here.
 module "integrated_nat" {
   source = "../../network/nat"
-  count  = var.enable_networking ? 1 : 0
+  count  = var.enable_networking && var.enable_cloud_nat ? 1 : 0
 
   project_id = var.project_id
   name       = "${var.vpc_name}-nat"

@@ -161,9 +161,21 @@ run "composes_network_hub" {
     error_message = "stage must create one NAT gateway per egress public subnet"
   }
 
-  # The egress private route table default route egresses via a NAT gateway.
+  # Per-AZ HA egress (F3): one route table and one default route per AZ, each
+  # pointing at the NAT gateway in the SAME AZ (not all at NAT[0]).
   assert {
-    condition     = aws_route.egress_default.destination_cidr_block == "0.0.0.0/0"
-    error_message = "egress private default route must be 0.0.0.0/0 via NAT"
+    condition     = length(aws_route_table.egress_private) == 2 && length(aws_route.egress_default) == 2
+    error_message = "stage must create one egress private route table and default route per AZ"
+  }
+
+  assert {
+    condition     = alltrue([for r in values(aws_route.egress_default) : r.destination_cidr_block == "0.0.0.0/0"])
+    error_message = "each AZ's egress default route must be 0.0.0.0/0 via NAT"
+  }
+
+  # One route-table association per AZ (each AZ's private subnet to its own RT).
+  assert {
+    condition     = length(aws_route_table_association.egress_private) == 2
+    error_message = "each AZ's egress private subnet must associate with its own route table"
   }
 }

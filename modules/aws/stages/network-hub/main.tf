@@ -144,26 +144,31 @@ resource "aws_nat_gateway" "this" {
   depends_on = [module.egress_vpc]
 }
 
-# One private route table for the egress private tier; default route egresses
-# through the first NAT gateway (single-NAT keeps the stage simple; make it
-# per-AZ by keying the route table off private subnets if HA egress is needed).
+# One private route table PER AZ; each AZ's default route egresses through the
+# NAT gateway in the SAME AZ. This gives true per-AZ high availability (a NAT or
+# AZ failure is contained to that AZ) and avoids cross-AZ NAT data charges. With
+# az_count = 1 this collapses to a single route table and NAT (FinOps F3).
 resource "aws_route_table" "egress_private" {
+  for_each = toset([for i in local.nat_az_indexes : tostring(i)])
+
   vpc_id = module.egress_vpc.vpc_id
 
-  tags = { Name = "egress-private" }
+  tags = { Name = "egress-private-${each.key}" }
 }
 
 resource "aws_route" "egress_default" {
-  route_table_id         = aws_route_table.egress_private.id
+  for_each = toset([for i in local.nat_az_indexes : tostring(i)])
+
+  route_table_id         = aws_route_table.egress_private[each.key].id
   destination_cidr_block = "0.0.0.0/0"
-  nat_gateway_id         = values(aws_nat_gateway.this)[0].id
+  nat_gateway_id         = aws_nat_gateway.this[each.key].id
 }
 
 resource "aws_route_table_association" "egress_private" {
   for_each = toset([for i in local.nat_az_indexes : tostring(i)])
 
   subnet_id      = local.egress_private_subnet_ids[tonumber(each.key)]
-  route_table_id = aws_route_table.egress_private.id
+  route_table_id = aws_route_table.egress_private[each.key].id
 }
 
 # ---------------------------------------------------------------------------

@@ -81,6 +81,9 @@ jobs:
         # publishing a GitHub release — it does not trigger or modify any run.
         # Create a dedicated team in TFC with "Read runs" permission and store
         # its token as the TFC_TOKEN secret (not an org-level or user token).
+        # Drift detection needs to CREATE speculative runs and therefore uses a
+        # SEPARATE token, TFC_TOKEN_DRIFT (Queue Plans). Keep the two distinct so
+        # this release token stays read-only (see drift-detection.yml).
         env:
           TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}

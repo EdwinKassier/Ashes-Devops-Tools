@@ -117,7 +117,7 @@ jobs:
       - name: Terraform validate
         working-directory: ${{ matrix.root }}
         run: |
-          if grep -rqE 'configuration_aliases' . --include='*.tf'; then
+          if grep -rqE 'configuration_aliases[[:space:]]*=' . --include='*.tf'; then
             echo "Skipping standalone validate: module declares" \
               "configuration_aliases (cannot be root-validated without a" \
               "passed provider; covered by its examples/, the composing" \

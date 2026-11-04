@@ -52,11 +52,11 @@ providers_for_root() {
 
 # Collect envs/* roots (dirs containing at least one .tf), sorted by name.
 collect_roots() {
-  find envs -mindepth 1 -maxdepth 1 -type d ! -name '.terraform' | while read -r dir; do
-    if find "$dir" -maxdepth 1 -name '*.tf' | grep -q .; then
-      echo "$dir"
-    fi
-  done | sort
+  # Roots live at envs/<cloud>/<root> (depth 2, e.g. envs/aws/organization) and
+  # envs/saas (depth 1). A root is any directory under envs/ that directly holds
+  # a .tf file. Searching by .tf (not a fixed depth) finds all of them and skips
+  # the cloud-group dirs (envs/aws, envs/gcp) that hold no .tf.
+  find envs -name '*.tf' -not -path '*/.terraform/*' -exec dirname {} \; | sort -u
 }
 
 main() {

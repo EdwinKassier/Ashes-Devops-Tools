@@ -47,7 +47,11 @@ validate-all: ## Initialize without backends and validate every supported root
 			fi; \
 			[ $$attempt -lt 3 ] || exit 1; \
 		done; \
-		$(TERRAFORM) -chdir=$$dir validate; \
+		if grep -rqE 'configuration_aliases[[:space:]]*=' "$$dir" --include='*.tf'; then \
+			echo "$(YELLOW)Skipping validate for $$dir (declares configuration_aliases; covered by examples/, composing roots and mock tests)$(NC)"; \
+		else \
+			$(TERRAFORM) -chdir=$$dir validate; \
+		fi; \
 	done
 
 lint: ## Run TFLint across the repository

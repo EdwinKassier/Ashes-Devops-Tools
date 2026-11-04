@@ -19,7 +19,7 @@ name. Use exactly these strings from `terraform-plan.yml`:
 | `TFLint` | `lint` |
 | `Meta Lint (yaml/markdown/commits)` | `meta-lint` |
 | `Terraform Tests` | `test` |
-| `Security / TFSec` | `security` → reusable `tfsec` |
+| `Security / Trivy` | `security` → reusable `trivy` |
 | `Security / Checkov` | `security` → reusable `checkov` |
 | `Validation Summary` | `summary` (fail-closed aggregator) |
 
@@ -31,7 +31,7 @@ Two important gotchas this list already accounts for:
   Instead require **`Validation Summary`**, which `needs:` the whole matrix and fails
   closed if any leg fails, so it gates the matrix through one stable context.
 - **The `security` job calls a reusable workflow**, so its contexts are
-  `Security / TFSec` and `Security / Checkov` — never a bare `security`.
+  `Security / Trivy` and `Security / Checkov` — never a bare `security`.
 
 `security-scan.yml` (`static-analysis`, `trivy`, `secret-scan`, `summary`) runs on **push to `main`/`develop` and weekly on schedule** — it never runs on `pull_request`, so its jobs **cannot** be configured as required status checks; doing so would make `main` permanently unmergeable. Treat it as a non-blocking, post-merge/scheduled signal instead (monitor its `summary` job for regressions).
 
@@ -55,7 +55,7 @@ Set via **Settings → Branches → main → Require status checks to pass befor
 ```bash
 gh api repos/OWNER/REPO/branches/main/protection \
   --method PUT \
-  --field required_status_checks='{"strict":true,"contexts":["Terraform Format","Terraform Docs Check","TFLint","Meta Lint (yaml/markdown/commits)","Terraform Tests","Security / TFSec","Security / Checkov","Validation Summary"]}' \
+  --field required_status_checks='{"strict":true,"contexts":["Terraform Format","Terraform Docs Check","TFLint","Meta Lint (yaml/markdown/commits)","Terraform Tests","Security / Trivy","Security / Checkov","Validation Summary"]}' \
   --field enforce_admins=true \
   --field required_pull_request_reviews='{"required_approving_review_count":1,"dismiss_stale_reviews":true,"require_code_owner_reviews":true}' \
   --field restrictions=null \

@@ -13,68 +13,48 @@ permissions:
   security-events: write
 
 jobs:
-  tfsec:
-    name: TFSec
+  # Trivy is the blocking IaC misconfiguration gate. It replaces tfsec, which is
+  # end-of-life (Aqua folded it into Trivy) and whose rule set no longer advances.
+  # Severity CRITICAL,HIGH matches the already-green post-merge Trivy scan in
+  # security-scan.yml, so promoting it to the PR gate does not move the bar.
+  # Trivy recurses the whole tree natively (no --force-all-dirs needed). Suppress
+  # false positives in a .trivyignore file, never by lowering the severity floor.
+  trivy:
+    name: Trivy
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
-      - name: Run TFSec on modules
-        uses: aquasecurity/tfsec-action@b466648d6e39e7c75324f25d83891162a721f2d6  # v1.0.3
+      - name: Run Trivy config scan (blocking)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
         with:
-          working_directory: modules
-          soft_fail: false
-          # Use absolute path: tfsec resolves config_file relative to working_directory,
-          # so a bare ".tfsec.yml" would look for modules/.tfsec.yml (which doesn't exist)
-          # and silently skip all exclusion rules. GITHUB_WORKSPACE always points to the
-          # repo root regardless of working_directory.
-          config_file: ${{ github.workspace }}/.tfsec.yml
-          format: ${{ inputs.sarif_output && 'sarif' || 'default' }}
-          # --force-all-dirs: scan EVERY module directory, not just those reachable via
-          # module{} references from the working_directory root (which left most standalone
-          # modules unscanned). Matches the local `make security` gate.
-          additional_args: --force-all-dirs ${{ inputs.sarif_output && '--out tfsec-results.sarif' || '' }}
+          scan-type: 'config'
+          scan-ref: '.'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+          skip-dirs: '.terraform'
+          format: 'table'
 
-      - name: Run TFSec on envs
-        uses: aquasecurity/tfsec-action@b466648d6e39e7c75324f25d83891162a721f2d6  # v1.0.3
+      - name: Generate Trivy SARIF
+        if: inputs.sarif_output && always()
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
         with:
-          working_directory: envs
-          soft_fail: false
-          config_file: ${{ github.workspace }}/.tfsec.yml
-          format: ${{ inputs.sarif_output && 'sarif' || 'default' }}
-          additional_args: --force-all-dirs ${{ inputs.sarif_output && '--out tfsec-env-results.sarif' || '' }}
+          scan-type: 'config'
+          scan-ref: '.'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+          skip-dirs: '.terraform'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
 
-      - name: Upload TFSec modules SARIF
+      - name: Upload Trivy SARIF
         if: inputs.sarif_output && always()
         uses: github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e  # v4.35.4
         with:
-          sarif_file: tfsec-results.sarif
-          category: tfsec
-
-      - name: Upload TFSec envs SARIF
-        if: inputs.sarif_output && always()
-        uses: github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e  # v4.35.4
-        with:
-          sarif_file: tfsec-env-results.sarif
-          category: tfsec-envs
-
-      - name: Generate TFSec JSON report
-        if: inputs.sarif_output && always()
-        # Pin the Docker image to the same version as .tool-versions (v1.28.6) to
-        # prevent supply-chain drift. The tfsec-action above is SHA-pinned; this
-        # Docker invocation must match.
-        run: |
-          docker run --rm -v "$(pwd):/src" aquasec/tfsec:v1.28.6 /src/modules \
-            --force-all-dirs --config-file /src/.tfsec.yml --format json > tfsec-report.json
-
-      - name: Upload TFSec report artifact
-        if: inputs.sarif_output && always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        with:
-          name: tfsec-report
-          path: tfsec-report.json
+          sarif_file: trivy-results.sarif
+          category: trivy-config
 
   checkov:
     name: Checkov
