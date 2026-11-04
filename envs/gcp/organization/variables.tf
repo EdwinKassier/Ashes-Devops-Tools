@@ -156,14 +156,10 @@ variable "project_services" {
   ]
 }
 
-variable "github_org" {
-  description = "GitHub organization name for WIF OIDC trust condition. Must be set explicitly — no default to prevent accidentally trusting the wrong org when forking."
+variable "bootstrap_workspace_name" {
+  description = "Name of the gcp-bootstrap TFC workspace this root reads via remote state for the admin project, Terraform admin SA, and WIF pools."
   type        = string
-}
-
-variable "github_repo" {
-  description = "GitHub repository name (without org prefix) for WIF OIDC trust condition. Must be set explicitly — no default to prevent accidentally trusting the wrong repo when forking."
-  type        = string
+  default     = "gcp-bootstrap"
 }
 
 variable "security_contact_email" {
@@ -265,12 +261,6 @@ variable "vpc_sc_enable_dry_run" {
   default     = true
 }
 
-variable "enable_tfc_oidc" {
-  description = "Whether to provision Workload Identity Federation pools for Terraform Cloud OIDC. Set to false if using a different CI/CD system."
-  type        = bool
-  default     = true
-}
-
 variable "terraform_admin_email" {
   description = <<-EOT
     Service account email for the Terraform admin SA created by the bootstrap stage.
@@ -307,11 +297,4 @@ variable "logging_project_id" {
   description = "Dedicated logging project ID for the org audit sink/bucket (separation of duties). Default null = admin project (unchanged). PREVIEW: opt-in (default off), not yet validated against a real apply.; ensure CMEK cross-project access."
   type        = string
   default     = null
-}
-
-# --- Audit finding G3: bootstrap privilege split (opt-in, default OFF) ---
-variable "enable_privilege_split" {
-  description = "Enable the bootstrap SA privilege split: route high-privilege org roles to a separate resman SA. Default false = unchanged. Enabling requires WIF binding + downstream impersonation switch. PREVIEW (not yet validated against a real apply)."
-  type        = bool
-  default     = false
 }

@@ -4,7 +4,7 @@ This document is the authoritative description of the GCP landing zone deployed 
 
 This is the GCP counterpart to [`aws-landing-zone.md`](aws-landing-zone.md); the two are written to the same section structure so you can compare the clouds control-for-control. For a capability-by-capability module map see the [Cross-Cloud Comparison](cross-cloud-comparison.md) and the [Module Library](../../README.md#module-library). For how to *stand this up* see [`docs/runbooks/add-environment.md`](../runbooks/add-environment.md); for the cross-root wiring contract see [`docs/architecture/adding-a-cloud.md`](adding-a-cloud.md).
 
-> **Structural note.** Where the AWS SRA mandates seven layered roots (organization, security, network, identity, shared-services, backup, workload), GCP folds the same responsibilities into **two roots** — `gcp-organization` (bootstrap → organization → projects → network-hub, one apply) and `gcp-workload-<env>` (host + budget, per environment). Fewer accounts/roots is idiomatic for GCP, where a Shared VPC and org policies do centrally what AWS distributes across dedicated accounts.
+> **Structural note.** Where the AWS SRA mandates seven layered roots (organization, security, network, identity, shared-services, backup, workload), GCP uses **three roots** — `gcp-bootstrap` (admin project, Terraform admin SA, WIF pools; apply first), `gcp-organization` (organization → projects → network-hub, one apply, reads gcp-bootstrap), and `gcp-workload-<env>` (host + budget, per environment). Bootstrap has its own state to shrink the control-plane blast radius (audit H3). Fewer accounts/roots is still idiomatic for GCP, where a Shared VPC and org policies do centrally what AWS distributes across dedicated accounts.
 
 ---
 

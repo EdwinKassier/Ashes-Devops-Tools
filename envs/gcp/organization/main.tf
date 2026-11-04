@@ -64,44 +64,28 @@ locals {
     }
   )
 
-  tfc_workspaces = concat(
-    ["gcp-organization"],
-    [for env_key in sort(keys(var.environments)) : "gcp-workload-${env_key}"]
-  )
+  # Outputs from the gcp-bootstrap root (admin project, Terraform admin SA, WIF
+  # pools). gcp-bootstrap is applied first; this root reads it via remote state
+  # (audit H3 — control-plane state decomposition).
+  bootstrap = data.terraform_remote_state.gcp_bootstrap.outputs
 }
 
-# 1. Bootstrap: Automation Foundation
-module "bootstrap" {
-  source = "../../../modules/gcp/stages/bootstrap"
-
-  project_prefix         = var.project_prefix
-  org_id                 = data.google_organization.org.org_id
-  billing_account        = data.google_billing_account.billing.id
-  admin_email            = var.admin_email
-  github_org             = var.github_org
-  github_repo            = var.github_repo
-  tfc_organization       = var.tfc_organization
-  tfc_workspaces         = local.tfc_workspaces
-  enable_tfc_oidc        = var.enable_tfc_oidc
-  enable_privilege_split = var.enable_privilege_split
-}
-
-# 2. Organization: Hierarchy & Governance
+# 1. Organization: Hierarchy & Governance
 module "organization" {
   source = "../../../modules/gcp/stages/organization"
 
   domain               = var.domain
   org_id               = data.google_organization.org.org_id
   customer_id          = data.google_organization.org.directory_customer_id
-  admin_project_id     = module.bootstrap.admin_project_id
-  admin_project_number = module.bootstrap.admin_project_number
+  admin_project_id     = local.bootstrap.admin_project_id
+  admin_project_number = local.bootstrap.admin_project_number
   billing_account      = data.google_billing_account.billing.id
   project_prefix       = var.project_prefix
   environments         = local.organization_units
 
   admin_email               = var.admin_email
   break_glass_user          = var.break_glass_user
-  terraform_admin_email     = module.bootstrap.terraform_admin_email
+  terraform_admin_email     = local.bootstrap.terraform_admin_email
   organization_admin_groups = var.organization_admin_groups
   billing_admin_groups      = var.billing_admin_groups
 
@@ -124,8 +108,6 @@ module "organization" {
 
   # G9: opt-in IAM deny policies at the org node (default [] = none).
   iam_deny_policies = var.iam_deny_policies
-
-  depends_on = [module.bootstrap]
 }
 
 # 3. Projects: Workload & Spoke Projects
@@ -135,13 +117,13 @@ module "projects" {
   project_prefix          = var.project_prefix
   organization_name       = var.organization_name
   default_billing_account = data.google_billing_account.billing.id
-  admin_project_id        = module.bootstrap.admin_project_id
+  admin_project_id        = local.bootstrap.admin_project_id
   folders                 = module.organization.folders
   environments            = local.project_environments
   project_services        = var.project_services
 
-  # Pass the suffix from bootstrap to ensure ID consistency
-  suffix = module.bootstrap.suffix
+  # Pass the suffix from the bootstrap root (remote state) for ID consistency.
+  suffix = local.bootstrap.suffix
 
   depends_on = [module.organization]
 }

@@ -10,14 +10,15 @@
 
 ## Overview
 
-Where the AWS SRA spreads its foundation across seven layered roots, GCP folds the same responsibilities into **two roots** (see the [GCP landing zone](../architecture/gcp-landing-zone.md#layer-map--which-root-deploys-what)):
+Where the AWS SRA spreads its foundation across seven layered roots, GCP uses **three roots** (see the [GCP landing zone](../architecture/gcp-landing-zone.md#layer-map--which-root-deploys-what)):
 
-1. **`envs/gcp/organization`** (workspace `gcp-organization`) composes four stage modules in a **single apply** — `bootstrap` → `organization` → `projects` → `network-hub`. It is the **producer** of the cross-root contract: it publishes `environment_config`, `hub_network`, `cmek_key_names`, the WIF pool IDs, and the other outputs in `envs/gcp/organization/outputs.tf`.
-2. **`envs/gcp/workload`** (workspace `gcp-workload-<env>`, one per environment) **reads** the org remote state via `terraform_remote_state` and stands up that environment's Shared VPC host network + budget.
+1. **`envs/gcp/bootstrap`** (workspace `gcp-bootstrap`) stands up the automation foundation: the admin project, the `terraform-admin` service account, and the WIF pools. Apply it **first**. It is the phase-0 **producer** of `admin_project_id`, `admin_project_number`, `terraform_admin_email`, `suffix`, and the OIDC pool outputs (`envs/gcp/bootstrap/outputs.tf`). The bootstrap stage was split into its own root and state to shrink the control-plane blast radius (audit H3).
+2. **`envs/gcp/organization`** (workspace `gcp-organization`) **reads** the bootstrap remote state and composes the remaining three stages in a single apply — `organization` → `projects` → `network-hub`. It is the **producer** of the cross-root contract: `environment_config`, `hub_network`, `cmek_key_names`, the WIF pool IDs (re-exported from bootstrap), and the other outputs in `envs/gcp/organization/outputs.tf`.
+3. **`envs/gcp/workload`** (workspace `gcp-workload-<env>`, one per environment) **reads** the org remote state via `terraform_remote_state` and stands up that environment's Shared VPC host network + budget.
 
-The wrinkle unique to GCP is inside step 1: the providers **impersonate** a `terraform-admin` service account, but *that SA is created by the bootstrap stage of the very same apply*. So the first apply cannot impersonate a SA that does not exist yet — it must run as the human `admin_email`. This runbook calls that the **two-phase first apply** and details it below.
+The wrinkle unique to GCP is in step 1: the providers **impersonate** a `terraform-admin` service account, but *that SA is created by the `gcp-bootstrap` apply itself*. So the first `gcp-bootstrap` apply cannot impersonate a SA that does not exist yet — it must run as the human `admin_email`. This runbook calls that the **two-phase first apply** and details it below.
 
-> **No cross-root `depends_on`.** Terraform has no dependency edge between roots. Ordering between `gcp-organization` and each `gcp-workload-<env>` is enforced entirely by **apply order** (this runbook) plus the fact that `envs/gcp/workload` reads the org remote state and fails at plan time with an "output not found" error if `gcp-organization` has not been applied yet. Ordering *inside* the org root is by module dependency (`depends_on` on the four stage modules).
+> **No cross-root `depends_on`.** Terraform has no dependency edge between roots. Ordering between `gcp-bootstrap` → `gcp-organization` → each `gcp-workload-<env>` is enforced entirely by **apply order** (this runbook) plus remote-state reads: a downstream root fails at plan time with an "output not found" error if its upstream has not been applied yet. Ordering *inside* the org root is by module dependency (`depends_on` on its three stage modules).
 
 ---
 
@@ -98,7 +99,7 @@ Set at minimum:
 
 ## The two-phase first apply (impersonation chicken-and-egg)
 
-Both providers in `envs/gcp/organization/providers.tf` are configured with `impersonate_service_account = var.terraform_admin_email`:
+Both the `gcp-bootstrap` and `gcp-organization` roots use the same provider config (`providers.tf`), with `impersonate_service_account = var.terraform_admin_email`:
 
 ```hcl
 provider "google" {
@@ -107,32 +108,34 @@ provider "google" {
 }
 ```
 
-The `terraform-admin` SA those providers want to impersonate is *created by* `module.bootstrap` — the first stage of this very root. That is a bootstrap paradox: you cannot impersonate an identity the apply has not created yet.
+The `terraform-admin` SA those providers want to impersonate is *created by the `gcp-bootstrap` root*. That is a bootstrap paradox: you cannot impersonate an identity that has not been created yet.
 
-The resolution is that `terraform_admin_email` is **nullable** (default `null`, with a validation that accepts `null` or a `…iam.gserviceaccount.com` address). When it is `null`, `impersonate_service_account` is empty and the providers authenticate **directly as your personal ADC** — the human `admin_email`, who holds org-admin and can create the SA. This is intended to be used exactly once.
+The resolution is that `terraform_admin_email` is **nullable** (default `null`, with a validation that accepts `null` or a `…iam.gserviceaccount.com` address). When it is `null`, `impersonate_service_account` is empty and the providers authenticate **directly as your personal ADC** — the human `admin_email`, who holds org-admin and can create the SA. This is intended to be used exactly once, on the first `gcp-bootstrap` apply.
 
-**Phase 1 — first apply, as the human admin (`terraform_admin_email = null`):**
+**Phase 1 — apply `gcp-bootstrap` as the human admin (`terraform_admin_email = null`):**
 
 ```bash
-# Optional but recommended: create the automation foundation first, in isolation.
-terraform -chdir=envs/gcp/organization plan  -target=module.bootstrap
-terraform -chdir=envs/gcp/organization apply -target=module.bootstrap
-
-# Then apply the rest of the root (org policies, KMS, audit logs, projects, network hub):
-terraform -chdir=envs/gcp/organization apply
+terraform -chdir=envs/gcp/bootstrap plan
+terraform -chdir=envs/gcp/bootstrap apply
 ```
 
-`module.bootstrap` creates the admin project (`${project_prefix}-admin-${suffix}`, `deletion_policy = "PREVENT"`), enables its API set, and creates the `terraform-admin` SA (via `modules/gcp/iam/service-account`) with your `user:${admin_email}` as an impersonation member. Record the SA email from the outputs:
+The `gcp-bootstrap` root creates the admin project (`${project_prefix}-admin-${suffix}`, `deletion_policy = "PREVENT"`), enables its API set, creates the `terraform-admin` SA (via `modules/gcp/iam/service-account`) with your `user:${admin_email}` as an impersonation member, and provisions the WIF pools. Record the SA email from its outputs:
 
 ```bash
-terraform -chdir=envs/gcp/organization output -raw terraform_service_account_email
+terraform -chdir=envs/gcp/bootstrap output -raw terraform_admin_email
 # e.g. terraform-admin@ashes-admin-1a2b3c4d.iam.gserviceaccount.com
 ```
 
-**Phase 2 — set `terraform_admin_email` and hand over to the SA.** Put that address into your tfvars (or the TFC workspace variable) so all **subsequent** applies impersonate the SA rather than running as a human:
+**Phase 2 — set `terraform_admin_email` and apply `gcp-organization`.** Put that address into the tfvars (or TFC workspace variable) for **both** the `gcp-bootstrap` and `gcp-organization` workspaces, so all **subsequent** applies impersonate the SA rather than running as a human:
 
 ```hcl
 terraform_admin_email = "terraform-admin@ashes-admin-1a2b3c4d.iam.gserviceaccount.com"
+```
+
+Then apply the organization root, which reads the bootstrap remote state for the admin project, SA, and WIF pools:
+
+```bash
+terraform -chdir=envs/gcp/organization apply
 ```
 
 Because your `admin_email` was granted impersonation on the SA in phase 1, the very next `terraform plan`/`apply` transparently switches to impersonation. Once CI is wired (below), revoke your personal ADC:

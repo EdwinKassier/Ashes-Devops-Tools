@@ -8,31 +8,11 @@
 # no-ops and can be safely deleted. After running `terraform apply` once against
 # an existing deployment to complete the migration, delete this file.
 
-# Bootstrap Module Mappings
-moved {
-  from = google_project.admin_project
-  to   = module.bootstrap.google_project.admin_project
-}
-
-moved {
-  from = random_id.suffix
-  to   = module.bootstrap.random_id.suffix
-}
-
-moved {
-  from = google_project_service.admin_project_services
-  to   = module.bootstrap.google_project_service.admin_project_services
-}
-
-moved {
-  from = module.terraform_admin_sa
-  to   = module.bootstrap.module.terraform_admin_sa
-}
-
-moved {
-  from = module.gh_oidc
-  to   = module.bootstrap.module.gh_oidc
-}
+# NOTE: the former "Bootstrap Module Mappings" were removed when the bootstrap
+# stage was split into its own root and state (envs/gcp/bootstrap, audit H3).
+# Relocating those resources out of this state is a cross-STATE migration
+# (terraform state mv / removed + import), which a `moved` block cannot express.
+# See docs/architecture/gcp-state-decomposition.md.
 
 # Organization Module Mappings
 moved {

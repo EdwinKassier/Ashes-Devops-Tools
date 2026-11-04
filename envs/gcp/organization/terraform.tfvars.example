@@ -78,9 +78,10 @@ allowed_regions = ["europe-west1", "europe-west2", "us-central1"]
 hub_vpc_cidr_block     = "10.0.0.0/16"
 dns_hub_vpc_cidr_block = "10.1.0.0/16"
 
-# GitHub OIDC (for CI/CD) — required, no defaults
-github_org  = "MyOrg"
-github_repo = "devops-infra"
+# GitHub OIDC (github_org / github_repo), enable_tfc_oidc and
+# enable_privilege_split moved to the gcp-bootstrap root
+# (envs/gcp/bootstrap/terraform.tfvars.example) when the bootstrap stage was
+# split out (audit H3).
 
 # Notifications (Optional)
 # security_contact_email = "security@example.com"

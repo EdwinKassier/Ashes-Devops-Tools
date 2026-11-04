@@ -8,15 +8,15 @@ output "billing_account" {
 output "admin_project" {
   description = "Details of the admin project"
   value = {
-    project_id = module.bootstrap.admin_project_id
-    number     = module.bootstrap.admin_project_number
+    project_id = local.bootstrap.admin_project_id
+    number     = local.bootstrap.admin_project_number
   }
 }
 
 # Admin Project Number (for VPC-SC ingress policies referencing Workload Identity)
 output "admin_project_number" {
   description = "Admin project number for Workload Identity pool references"
-  value       = module.bootstrap.admin_project_number
+  value       = local.bootstrap.admin_project_number
 }
 
 # Organization Details
@@ -64,28 +64,28 @@ output "default_region" {
 # Service Accounts
 output "terraform_service_account_email" {
   description = "Email of the Terraform Admin Service Account"
-  value       = module.bootstrap.terraform_admin_email
+  value       = local.bootstrap.terraform_admin_email
 }
 
 # Workload Identity Federation — needed by GitHub Actions and Terraform Cloud after bootstrap
 output "github_oidc_pool_id" {
   description = "Workload Identity Pool ID for GitHub Actions OIDC"
-  value       = module.bootstrap.github_oidc_pool_id
+  value       = local.bootstrap.github_oidc_pool_id
 }
 
 output "github_oidc_provider_name" {
   description = "Fully-qualified WIF provider name for use in GitHub Actions (google-github-actions/auth)"
-  value       = module.bootstrap.github_oidc_provider_name
+  value       = local.bootstrap.github_oidc_provider_name
 }
 
 output "tfc_oidc_pool_id" {
   description = "Workload Identity Pool ID for Terraform Cloud OIDC (null if TFC OIDC not configured)"
-  value       = module.bootstrap.tfc_oidc_pool_id
+  value       = local.bootstrap.tfc_oidc_pool_id
 }
 
 output "tfc_oidc_provider_name" {
   description = "Fully-qualified WIF provider name for Terraform Cloud OIDC (null if TFC OIDC not configured)"
-  value       = module.bootstrap.tfc_oidc_provider_name
+  value       = local.bootstrap.tfc_oidc_provider_name
 }
 
 # Unified environment configuration for downstream consumption
