@@ -1,0 +1,22 @@
+# gcp-projects root — example variables. Apply after gcp-organization and before
+# gcp-network-hub. Reads folders/tags/billing from gcp-organization and the admin
+# project/suffix from gcp-bootstrap via remote state.
+
+project_prefix    = "verify-org"
+organization_name = "My Organization"
+tfc_organization  = "your-tfc-org-name"
+
+# Set after the first gcp-bootstrap apply (see docs/runbooks/bootstrap.md):
+# terraform_admin_email = "terraform-admin@<admin-project-id>.iam.gserviceaccount.com"
+
+# Keep `environments` identical across gcp-organization, gcp-projects and
+# gcp-network-hub — the keys drive folders, projects, and workspace names.
+environments = {
+  dev = {
+    display_name            = "Development"
+    region                  = "europe-west1"
+    cidr_block              = "10.10.0.0/16"
+    budget_monthly_limit    = 100
+    iam_group_role_bindings = {}
+  }
+}

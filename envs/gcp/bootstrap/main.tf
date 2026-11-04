@@ -6,10 +6,10 @@
 # reads these via terraform_remote_state. Apply this root before gcp-organization.
 
 locals {
-  # Workspaces that receive WIF trust: this bootstrap workspace, the organization
-  # workspace, and one per application environment.
+  # Workspaces that receive WIF trust: the four control-plane workspaces and one
+  # per application environment.
   tfc_workspaces = concat(
-    ["gcp-bootstrap", "gcp-organization"],
+    ["gcp-bootstrap", "gcp-organization", "gcp-projects", "gcp-network-hub"],
     [for env_key in sort(keys(var.environments)) : "gcp-workload-${env_key}"]
   )
 }

@@ -14,16 +14,19 @@
 
 ## Reverse-order destroy
 
-Destroy in the **exact reverse** of the stand-up order. Every workload environment must be fully destroyed before the organization control plane:
+Destroy in the **exact reverse** of the stand-up order. Every workload environment must be fully destroyed before the control-plane roots, and the control-plane roots in reverse of their apply order:
 
 ```text
-2. gcp-workload-<env>   (per env — destroy EVERY workload workspace first)
-1. gcp-organization     (last — folders, projects, KMS, network hub, audit sinks)
+5. gcp-workload-<env>   (per env — destroy EVERY workload workspace first)
+4. gcp-network-hub      (hub VPC, DNS hub, hub VPC-SC)
+3. gcp-projects         (host/spoke projects)
+2. gcp-organization     (folders, KMS, audit sinks, budgets)
+1. gcp-bootstrap        (admin project, Terraform SA, WIF — destroy last)
 ```
 
 Why this order:
 
-- **Remote-state dependency.** `envs/gcp/workload/main.tf` reads `data.terraform_remote_state.organization` for `environment_config`, `admin_project_number`, `hub_network`, and `billing_account`. Destroy the organization root first and every workload plan breaks.
+- **Remote-state dependency.** `envs/gcp/workload/main.tf` reads `environment_config` from `gcp-projects`, `hub_network` from `gcp-network-hub`, and `admin_project_number` / `billing_account` from `gcp-organization`; each control-plane root in turn reads the one before it (network-hub → projects → organization → bootstrap). Destroy an upstream before its downstream and the downstream plan breaks, so unwind from the workload end inward.
 - **Shared VPC / peering ordering.** Each workload attaches its host project to the org hub network (VPC peering + DNS peering against `hub_network.vpc_self_link`). Service-project attachments and peerings must be torn down before the hub VPC they point at, or the hub destroy fails with dependent-resource errors.
 
 The `saas` root (Supabase/Vercel) is independent of the GCP chain — destroy it whenever; it holds no GCP resources.

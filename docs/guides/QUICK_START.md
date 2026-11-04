@@ -190,12 +190,15 @@ The AWS landing zone does **not** share the GCP bootstrap above. It has its own 
 
 **Always apply `envs/gcp/organization` before `envs/gcp/workload`.**
 
-`envs/gcp/workload` reads from `envs/gcp/organization` via `terraform_remote_state`. If organization has not been applied, apps will fail at plan time with "output not found" errors.
+`envs/gcp/workload` reads from `envs/gcp/projects` (`environment_config`), `envs/gcp/network-hub` (`hub_network`), and `envs/gcp/organization` via `terraform_remote_state`. Apply the four control-plane roots first, in order; otherwise apps fail at plan time with "output not found" errors.
 
 | Step | Root | TFC Workspace | Notes |
 |------|------|---------------|-------|
-| 1 | `envs/gcp/organization` | `gcp-organization` | Creates shared VPC, KMS, org policies, WIF |
-| 2 | `envs/gcp/workload` | `gcp-workload-{env}` (e.g. `gcp-workload-dev`) | Reads org outputs, creates spoke projects |
+| 1 | `envs/gcp/bootstrap` | `gcp-bootstrap` | Admin project, Terraform admin SA, WIF pools (apply first, as the human admin) |
+| 2 | `envs/gcp/organization` | `gcp-organization` | Folders, org policies, KMS, audit logging, billing |
+| 3 | `envs/gcp/projects` | `gcp-projects` | Host/spoke projects; publishes `environment_config` |
+| 4 | `envs/gcp/network-hub` | `gcp-network-hub` | Hub VPC, DNS, VPC-SC; publishes `hub_network` |
+| 5 | `envs/gcp/workload` | `gcp-workload-{env}` (e.g. `gcp-workload-dev`) | Reads env config + hub network, builds the spoke |
 
 To plan a change to the gcp-workload environment:
 
@@ -245,7 +248,7 @@ TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=
 | `environment` | Short env name (used in resource naming); must match a key in the org root's `environments` map | `"dev"` |
 | `tfc_organization` | Terraform Cloud org name — used to read organization remote state | `"my-tfc-org"` |
 
-> **VPC CIDR:** The per-environment CIDR is not set here — it is read from the `gcp-organization` workspace remote state via the `environments` map in `envs/gcp/organization`. Set the CIDR block in `envs/gcp/organization/terraform.tfvars.example` under the relevant environment key.
+> **VPC CIDR:** The per-environment CIDR is not set here — it comes from the `environments` map (its `cidr_block`), which flows into the `environment_config` published by `gcp-projects` and consumed by `gcp-workload`. The `environments` map is required by the `gcp-organization`, `gcp-projects`, and `gcp-network-hub` workspaces; set it consistently on all three (see their `terraform.tfvars.example`).
 
 ### `envs/gcp/workload` — Key Optional Variables
 

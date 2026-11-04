@@ -152,16 +152,18 @@ gcloud auth application-default revoke
 
 ---
 
-## What the `gcp-organization` apply creates
+## What the control-plane roots create
 
-A single apply of `envs/gcp/organization` composes four stages (`main.tf`):
+The GCP control plane is four roots (audit H3), one stage each, applied in order
+(`gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub`). The
+stages and what each creates:
 
 **`module.bootstrap`** — the automation foundation:
 
 - **Admin project** `${project_prefix}-admin-${random_id.suffix.hex}`, `deletion_policy = "PREVENT"`, with the full API set enabled (resourcemanager, IAM, IAM Credentials, logging, storage, orgpolicy, accesscontextmanager, securitycenter, essentialcontacts, pubsub, bigquery, monitoring, …).
 - **`terraform-admin` SA**, impersonable by `user:${admin_email}`, and granted the org-level roles it needs (orgpolicy admin, ACM policy admin, logging admin, org viewer, `compute.xpnAdmin`, tag admin, plus `securitycenter.admin` and `iam.securityAdmin` in a separately-justified block) and `roles/billing.costsManager` at the billing account (so it can create budgets).
 - **GitHub WIF pool** `github-pool` with a provider whose attribute condition is pinned to `assertion.sub == 'repo:${github_org}/${github_repo}:ref:refs/heads/main'` — i.e. **only** `refs/heads/main` of the exact org/repo can assume the admin SA.
-- **TFC WIF pool** `tfc-pool` (when `enable_tfc_oidc = true` and `tfc_organization != null`), binding **each** workspace in `local.tfc_workspaces` (`gcp-organization` plus `gcp-workload-<env>` for every environment key) to the admin SA.
+- **TFC WIF pool** `tfc-pool` (when `enable_tfc_oidc = true` and `tfc_organization != null`), binding **each** workspace in `local.tfc_workspaces` (the four control-plane workspaces `gcp-bootstrap`, `gcp-organization`, `gcp-projects`, `gcp-network-hub`, plus `gcp-workload-<env>` for every environment key) to the admin SA.
 - A `terraform_data` guard that fails fast if TFC OIDC is on but the workspace list is empty.
 
 **`module.organization`** — hierarchy & governance: org folders (one `Shared Services` folder + one per `environments` key, `prevent_destroy`), org policies (the ~15-constraint guardrail set, stricter on the `strict_folder_policy_environment_keys` folders, default `["prod"]`), tag keys/values bound per folder, org-wide audit logs → CMEK GCS sink (+ BigQuery analytics), SCC Pub/Sub notifications, org CMEK keyring, org budget, and Essential Contacts.

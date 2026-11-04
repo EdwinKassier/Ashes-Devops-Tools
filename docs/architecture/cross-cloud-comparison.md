@@ -84,6 +84,9 @@ for control-for-control comparison.
   (unprefixed `id`, `self_link`); AWS modules use the community convention
   (`vpc_id`, `subnet_ids_by_tier`). Each mirrors its ecosystem — consumers wiring
   multi-cloud roots should expect per-cloud output vocabularies.
-- **Env roots:** AWS has more deployable roots (SRA mandates more accounts:
-  security, network, identity, shared-services, backup); GCP folds security and
-  networking into the organization + workload roots. See [`envs/README.md`](../../envs/README.md).
+- **Env roots:** AWS has seven deployable roots (SRA mandates more accounts:
+  security, network, identity, shared-services, backup). GCP uses five roots
+  (bootstrap, organization, projects, network-hub, workload): it folds security
+  and governance into the organization root, but keeps bootstrap, projects, and
+  networking as their own roots and states (audit H3). See
+  [`envs/README.md`](../../envs/README.md).

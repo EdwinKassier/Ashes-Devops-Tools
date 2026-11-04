@@ -29,37 +29,27 @@ envs/
 └── saas/                 # Supabase and/or Vercel only — no AWS/GCP provider
 ```
 
-### `envs/gcp/organization`
+### `envs/gcp/{bootstrap,organization,projects,network-hub}` (control plane)
 
-Creates and manages:
+The GCP control plane is split across four roots and states (audit H3), one
+stage module each, applied in order. Each reads its upstreams via remote state
+(see [gcp-state-decomposition.md](gcp-state-decomposition.md)):
 
-- admin project
-- Terraform admin service account
-- workload identity providers
-- folders and folder IAM
-- shared projects
-- per-environment host projects
-- org policy
-- tags
-- centralized audit logging
-- SCC notifications
-- billing export and budgets
-- hub networking
-
-This root composes four stage modules:
-
-- `modules/gcp/stages/bootstrap`
-- `modules/gcp/stages/organization`
-- `modules/gcp/stages/projects`
-- `modules/gcp/stages/network-hub`
+- `envs/gcp/bootstrap` (`modules/gcp/stages/bootstrap`) — admin project, Terraform admin service account, GitHub/TFC workload identity providers.
+- `envs/gcp/organization` (`modules/gcp/stages/organization`) — folders and folder IAM, org policy, tags, centralized audit logging, SCC notifications, org CMEK, billing export and budgets.
+- `envs/gcp/projects` (`modules/gcp/stages/projects`) — shared (hub/dns) projects and per-environment host projects; publishes `environment_config`.
+- `envs/gcp/network-hub` (`modules/gcp/stages/network-hub`) — hub VPC, DNS hub, hub VPC-SC perimeter; publishes `hub_network`.
 
 ### `envs/gcp/workload`
 
-Consumes remote state from the `gcp-organization` workspace and deploys one environment at a time into the selected host project.
+Consumes remote state from the `gcp-projects` (`environment_config`), `gcp-network-hub` (`hub_network`), and `gcp-organization` (`org_id`, `billing_account`, `admin_project_number`) workspaces, and deploys one environment at a time into the selected host project.
 
 The workspace naming contract is:
 
+- `gcp-bootstrap`
 - `gcp-organization`
+- `gcp-projects`
+- `gcp-network-hub`
 - `gcp-workload-dev`
 - `gcp-workload-uat`
 - `gcp-workload-prod`
