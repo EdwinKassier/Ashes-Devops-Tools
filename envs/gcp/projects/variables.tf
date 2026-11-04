@@ -1,0 +1,80 @@
+variable "project_prefix" {
+  description = "Short prefix prepended to all GCP project IDs. Keep in sync with the gcp-organization root."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{0,9}$", var.project_prefix))
+    error_message = "project_prefix must start with a lowercase letter, contain only lowercase letters, digits, and hyphens, and be 10 characters or fewer."
+  }
+
+  validation {
+    condition     = var.project_prefix != "my-org"
+    error_message = "project_prefix is still set to the placeholder 'my-org'. Set it to your organisation's actual identifier before deploying."
+  }
+}
+
+variable "organization_name" {
+  description = "Name of the organization"
+  type        = string
+  default     = "My Organization"
+}
+
+variable "project_services" {
+  description = "List of APIs to enable on all projects"
+  type        = list(string)
+  default = [
+    "cloudresourcemanager.googleapis.com",
+    "compute.googleapis.com",
+    "serviceusage.googleapis.com",
+    "iam.googleapis.com",
+    "cloudbilling.googleapis.com",
+    "monitoring.googleapis.com"
+  ]
+}
+
+variable "environments" {
+  description = "Map of application environment definitions. Keep in sync with the gcp-organization root."
+  type = map(object({
+    display_name            = string
+    region                  = string
+    cidr_block              = string
+    budget_monthly_limit    = number
+    iam_group_role_bindings = map(set(string))
+    labels                  = optional(map(string), {})
+  }))
+}
+
+variable "default_region" {
+  description = "Default region for resources"
+  type        = string
+  default     = "europe-west1"
+}
+
+variable "terraform_admin_email" {
+  description = "Terraform admin SA email the providers impersonate. Read from the gcp-bootstrap output; set it on this workspace to match."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.terraform_admin_email == null || can(regex("^[^@]+@[^@]+\\.iam\\.gserviceaccount\\.com$", var.terraform_admin_email))
+    error_message = "terraform_admin_email must be a GCP service account email (ends in .iam.gserviceaccount.com) or null."
+  }
+}
+
+variable "tfc_organization" {
+  description = "Terraform Cloud organization that owns the upstream workspaces read via remote state."
+  type        = string
+  default     = null
+}
+
+variable "bootstrap_workspace_name" {
+  description = "Name of the gcp-bootstrap TFC workspace (read via remote state for admin_project_id and suffix)."
+  type        = string
+  default     = "gcp-bootstrap"
+}
+
+variable "organization_workspace_name" {
+  description = "Name of the gcp-organization TFC workspace (read via remote state for folders, tag values, and billing account)."
+  type        = string
+  default     = "gcp-organization"
+}

@@ -18,52 +18,6 @@ locals {
     }
   )
 
-  project_environments = merge(
-    {
-      shared = {
-        display_name = local.shared_environment.display_name
-        description  = local.shared_environment.description
-        projects = {
-          hub = {
-            name            = "hub"
-            billing_account = null
-            labels = {
-              type    = "hub"
-              purpose = "network-core"
-            }
-          }
-          dns = {
-            name            = "dns"
-            billing_account = null
-            labels = {
-              type    = "dns"
-              purpose = "dns-core"
-            }
-          }
-        }
-      }
-    },
-    {
-      for env_key, env in var.environments : env_key => {
-        display_name = env.display_name
-        description  = "${env.display_name} environment"
-        projects = {
-          host = {
-            name            = "host"
-            billing_account = null
-            labels = merge(
-              {
-                environment = env_key
-                type        = "host"
-              },
-              env.labels
-            )
-          }
-        }
-      }
-    }
-  )
-
   # Outputs from the gcp-bootstrap root (admin project, Terraform admin SA, WIF
   # pools). gcp-bootstrap is applied first; this root reads it via remote state
   # (audit H3 — control-plane state decomposition).
@@ -110,51 +64,7 @@ module "organization" {
   iam_deny_policies = var.iam_deny_policies
 }
 
-# 3. Projects: Workload & Spoke Projects
-module "projects" {
-  source = "../../../modules/gcp/stages/projects"
-
-  project_prefix          = var.project_prefix
-  organization_name       = var.organization_name
-  default_billing_account = data.google_billing_account.billing.id
-  admin_project_id        = local.bootstrap.admin_project_id
-  folders                 = module.organization.folders
-  environments            = local.project_environments
-  project_services        = var.project_services
-
-  # Pass the suffix from the bootstrap root (remote state) for ID consistency.
-  suffix = local.bootstrap.suffix
-
-  depends_on = [module.organization]
-}
-
-# 4. Network Hub: Connectivity Layer
-module "network_hub" {
-  source = "../../../modules/gcp/stages/network-hub"
-
-  project_prefix = var.project_prefix
-  default_region = var.default_region
-
-  hub_project_id = module.projects.project_ids["shared-hub"]
-  dns_project_id = module.projects.project_ids["shared-dns"]
-  # Use project_numbers (not project_ids): the VPC-SC / ACM API requires numeric project
-  # numbers (e.g. "123456789012"). Project ID strings cause a misleading permissions error.
-  spoke_project_numbers = {
-    for env_key in sort(keys(var.environments)) :
-    env_key => module.projects.project_numbers["${env_key}-host"]
-  }
-
-  org_id  = data.google_organization.org.org_id
-  folders = module.organization.folders
-
-  hub_vpc_cidr_block     = var.hub_vpc_cidr_block
-  dns_hub_vpc_cidr_block = var.dns_hub_vpc_cidr_block
-
-  vpc_sc_access_policy_name = var.vpc_sc_access_policy_name
-  vpc_sc_enable_dry_run     = var.vpc_sc_enable_dry_run
-
-  vpc_sc_additional_restricted_services = var.vpc_sc_additional_restricted_services
-  vpc_sc_ingress_identities             = var.vpc_sc_ingress_identities
-
-  depends_on = [module.projects]
-}
+# The projects stage (gcp-projects) and network-hub stage (gcp-network-hub) were
+# split into their own roots and states (audit H3). gcp-projects reads this
+# root's folders/tag values; gcp-network-hub reads gcp-projects' host project
+# IDs. See docs/architecture/gcp-state-decomposition.md.

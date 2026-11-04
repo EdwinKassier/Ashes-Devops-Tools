@@ -39,11 +39,10 @@ output "folders" {
   value       = module.organization.folders
 }
 
-# Projects
-output "projects" {
-  description = "Map of created projects"
-  value       = module.projects.projects
-}
+# Projects, environment_config and hub_network moved to the gcp-projects and
+# gcp-network-hub roots when those stages were split out (audit H3). Downstream
+# gcp-workload reads environment_config from gcp-projects and hub_network from
+# gcp-network-hub.
 
 # Environment Variables
 output "project_prefix" {
@@ -88,25 +87,6 @@ output "tfc_oidc_provider_name" {
   value       = local.bootstrap.tfc_oidc_provider_name
 }
 
-# Unified environment configuration for downstream consumption
-output "environment_config" {
-  description = "Stable configuration contract for downstream application environments"
-  value = {
-    for env_key, env in var.environments : env_key => {
-      folder_id           = module.organization.folders[env_key].id
-      folder_name         = module.organization.folders[env_key].display_name
-      host_project_id     = module.projects.project_ids["${env_key}-host"]
-      host_project_number = module.projects.project_numbers["${env_key}-host"]
-      region              = env.region
-      cidr_block          = env.cidr_block
-      labels              = env.labels
-      tag_value_ids = {
-        environment = module.organization.tag_value_ids["environment-${env_key}"]
-      }
-    }
-  }
-}
-
 # Tag Values (for downstream usage)
 output "tag_values" {
   description = "Map of available Resource Manager Tag Values"
@@ -133,17 +113,6 @@ output "billing_export_dataset_id" {
 output "scc_pubsub_topic_id" {
   description = "Pub/Sub topic receiving Security Command Center findings"
   value       = module.organization.scc_pubsub_topic_id
-}
-
-# Network Hub Details (for Peering)
-output "hub_network" {
-  description = "Hub Network details for peering"
-  value = {
-    vpc_self_link = module.network_hub.hub_vpc_self_link
-    vpc_name      = module.network_hub.hub_vpc_name
-    dns_zone_name = module.network_hub.dns_zone_name
-    dns_domain    = module.network_hub.hub_dns_domain
-  }
 }
 
 output "cmek_key_names" {

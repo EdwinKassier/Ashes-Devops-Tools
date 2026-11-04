@@ -1,4 +1,12 @@
-# GCP Control-Plane State Decomposition (design for audit H3)
+# GCP Control-Plane State Decomposition (audit H3)
+
+> **Status: implemented.** All four control-plane roots now exist and are split
+> into separate states: `gcp-bootstrap`, `gcp-organization`, `gcp-projects`,
+> `gcp-network-hub` (plus `gcp-workload-<env>`). Each has a `root.tftest.hcl`
+> contract test, and all roots `terraform validate`. The design below is retained
+> for the rationale and for the cross-STATE migration procedure that an
+> already-deployed organization needs (this repo is never-applied, so no
+> migration was required here).
 
 ## Problem
 

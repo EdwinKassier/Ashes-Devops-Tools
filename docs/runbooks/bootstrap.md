@@ -10,15 +10,19 @@
 
 ## Overview
 
-Where the AWS SRA spreads its foundation across seven layered roots, GCP uses **three roots** (see the [GCP landing zone](../architecture/gcp-landing-zone.md#layer-map--which-root-deploys-what)):
+Where the AWS SRA spreads its foundation across seven layered roots, GCP uses **five roots**, applied in order (see the [GCP landing zone](../architecture/gcp-landing-zone.md#layer-map--which-root-deploys-what)):
 
-1. **`envs/gcp/bootstrap`** (workspace `gcp-bootstrap`) stands up the automation foundation: the admin project, the `terraform-admin` service account, and the WIF pools. Apply it **first**. It is the phase-0 **producer** of `admin_project_id`, `admin_project_number`, `terraform_admin_email`, `suffix`, and the OIDC pool outputs (`envs/gcp/bootstrap/outputs.tf`). The bootstrap stage was split into its own root and state to shrink the control-plane blast radius (audit H3).
-2. **`envs/gcp/organization`** (workspace `gcp-organization`) **reads** the bootstrap remote state and composes the remaining three stages in a single apply — `organization` → `projects` → `network-hub`. It is the **producer** of the cross-root contract: `environment_config`, `hub_network`, `cmek_key_names`, the WIF pool IDs (re-exported from bootstrap), and the other outputs in `envs/gcp/organization/outputs.tf`.
-3. **`envs/gcp/workload`** (workspace `gcp-workload-<env>`, one per environment) **reads** the org remote state via `terraform_remote_state` and stands up that environment's Shared VPC host network + budget.
+1. **`envs/gcp/bootstrap`** (workspace `gcp-bootstrap`) stands up the automation foundation: the admin project, the `terraform-admin` service account, and the WIF pools. Apply it **first**. It is the phase-0 **producer** of `admin_project_id`, `admin_project_number`, `terraform_admin_email`, `suffix`, and the OIDC pool outputs (`envs/gcp/bootstrap/outputs.tf`).
+2. **`envs/gcp/organization`** (workspace `gcp-organization`) **reads** the bootstrap remote state and runs the organization stage: folders, org policy, KMS, audit logging, billing. Producer of `org_id`, `folders`, `tag_values`/`tag_keys`, `cmek_key_names`, `billing_account`, and the re-exported WIF pool IDs.
+3. **`envs/gcp/projects`** (workspace `gcp-projects`) **reads** gcp-organization (folders, tags, billing) and gcp-bootstrap (admin project, suffix), and vends the host/spoke projects. Producer of `project_ids`, `project_numbers`, and the `environment_config` contract that gcp-workload consumes.
+4. **`envs/gcp/network-hub`** (workspace `gcp-network-hub`) **reads** gcp-projects (host project IDs) and gcp-organization (folders, org_id), and builds the hub VPC, DNS anchor, and hub VPC-SC perimeter. Producer of `hub_network`.
+5. **`envs/gcp/workload`** (workspace `gcp-workload-<env>`, one per environment) **reads** gcp-projects (`environment_config`), gcp-network-hub (`hub_network`), and gcp-organization (`org_id`, `billing_account`, `admin_project_number`), and stands up that environment's Shared VPC host network + budget.
+
+The control plane was split into separate states (bootstrap / organization / projects / network-hub) to shrink the blast radius — see [gcp-state-decomposition.md](../architecture/gcp-state-decomposition.md) (audit H3).
 
 The wrinkle unique to GCP is in step 1: the providers **impersonate** a `terraform-admin` service account, but *that SA is created by the `gcp-bootstrap` apply itself*. So the first `gcp-bootstrap` apply cannot impersonate a SA that does not exist yet — it must run as the human `admin_email`. This runbook calls that the **two-phase first apply** and details it below.
 
-> **No cross-root `depends_on`.** Terraform has no dependency edge between roots. Ordering between `gcp-bootstrap` → `gcp-organization` → each `gcp-workload-<env>` is enforced entirely by **apply order** (this runbook) plus remote-state reads: a downstream root fails at plan time with an "output not found" error if its upstream has not been applied yet. Ordering *inside* the org root is by module dependency (`depends_on` on its three stage modules).
+> **No cross-root `depends_on`.** Terraform has no dependency edge between roots. Ordering across the five roots is enforced entirely by **apply order** (this runbook) plus remote-state reads: a downstream root fails at plan time with an "output not found" error if its upstream has not been applied yet.
 
 ---
 

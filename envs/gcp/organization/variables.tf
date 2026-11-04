@@ -80,24 +80,6 @@ variable "default_region" {
   default     = "europe-west1"
 }
 
-variable "hub_vpc_cidr_block" {
-  description = "CIDR block for the hub network VPC. Must not overlap with DNS hub or spoke CIDRs."
-  type        = string
-  validation {
-    condition     = can(cidrnetmask(var.hub_vpc_cidr_block))
-    error_message = "hub_vpc_cidr_block must be a valid CIDR notation (e.g. \"10.0.0.0/16\")."
-  }
-}
-
-variable "dns_hub_vpc_cidr_block" {
-  description = "CIDR block for the DNS hub VPC. Must not overlap with hub_vpc_cidr_block or spoke CIDRs."
-  type        = string
-  validation {
-    condition     = can(cidrnetmask(var.dns_hub_vpc_cidr_block))
-    error_message = "dns_hub_vpc_cidr_block must be a valid CIDR notation (e.g. \"10.1.0.0/16\")."
-  }
-}
-
 variable "allowed_regions" {
   description = "List of allowed GCP regions for resource creation"
   type        = list(string)
@@ -143,19 +125,6 @@ variable "billing_admin_groups" {
   default     = []
 }
 
-variable "project_services" {
-  description = "List of APIs to enable on all projects"
-  type        = list(string)
-  default = [
-    "cloudresourcemanager.googleapis.com",
-    "compute.googleapis.com",
-    "serviceusage.googleapis.com",
-    "iam.googleapis.com",
-    "cloudbilling.googleapis.com",
-    "monitoring.googleapis.com"
-  ]
-}
-
 variable "bootstrap_workspace_name" {
   description = "Name of the gcp-bootstrap TFC workspace this root reads via remote state for the admin project, Terraform admin SA, and WIF pools."
   type        = string
@@ -188,23 +157,6 @@ variable "budget_currency" {
   validation {
     condition     = can(regex("^[A-Z]{3}$", var.budget_currency))
     error_message = "budget_currency must be a 3-letter ISO 4217 currency code (e.g., USD, EUR)."
-  }
-}
-
-variable "vpc_sc_access_policy_name" {
-  description = <<-EOT
-    Bare numeric ID of the existing organisation-level Access Context Manager access policy
-    used by the hub VPC-SC perimeter (e.g. '1234567890').
-    Do NOT include the 'accessPolicies/' prefix.
-    Optional — if null, no VPC-SC perimeter is created for the hub network.
-    Find your policy ID: gcloud access-context-manager policies list --organization=ORG_ID
-  EOT
-  type        = string
-  default     = null
-
-  validation {
-    condition     = var.vpc_sc_access_policy_name == null || can(regex("^[0-9]+$", var.vpc_sc_access_policy_name))
-    error_message = "vpc_sc_access_policy_name must be a bare numeric ID (e.g. '1234567890'). Do not include the 'accessPolicies/' prefix."
   }
 }
 
@@ -249,18 +201,6 @@ variable "iam_deny_policies" {
   default = []
 }
 
-variable "vpc_sc_enable_dry_run" {
-  description = <<-EOT
-    When true (the default), the hub VPC-SC perimeter logs violations but does NOT block traffic (dry-run/simulation mode).
-    When false, the perimeter is ENFORCED.
-    Google recommends starting perimeters in dry-run and promoting to enforcement only after validating the violation logs
-    (via Cloud Logging or the VPC-SC violations dashboard). Set to false once you have confirmed no legitimate traffic is denied.
-    See docs/known-gaps.md (G11).
-  EOT
-  type        = bool
-  default     = true
-}
-
 variable "terraform_admin_email" {
   description = <<-EOT
     Service account email for the Terraform admin SA created by the bootstrap stage.
@@ -277,19 +217,6 @@ variable "terraform_admin_email" {
     condition     = var.terraform_admin_email == null || can(regex("^[^@]+@[^@]+\\.iam\\.gserviceaccount\\.com$", var.terraform_admin_email))
     error_message = "terraform_admin_email must be a GCP service account email (ends in .iam.gserviceaccount.com) or null."
   }
-}
-
-# --- Audit finding G5: VPC-SC perimeter hardening (opt-in, default = unchanged) ---
-variable "vpc_sc_additional_restricted_services" {
-  description = "Extra service hostnames to add to the hub data perimeter. Default [] = unchanged. Set the automation-ingress identities below before expanding under enforcement. PREVIEW (not yet validated against a real apply) — validate under vpc_sc_enable_dry_run first."
-  type        = list(string)
-  default     = []
-}
-
-variable "vpc_sc_ingress_identities" {
-  description = "Automation identities granted full ingress into the hub data perimeter, e.g. the TFC-run SA. Set BEFORE expanding restricted_services under enforcement. Default [] = no ingress policy (unchanged)."
-  type        = list(string)
-  default     = []
 }
 
 # --- Audit finding G4: dedicated logging project (opt-in, default = unchanged) ---

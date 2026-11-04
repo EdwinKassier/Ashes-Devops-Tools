@@ -72,12 +72,12 @@ flowchart TB
     CI["<b>GitHub Actions</b> — PR gates<br/>fmt · validate · lint · tfsec · checkov · docs"]
     TFC["<b>Terraform Cloud</b> — remote state · plan · apply<br/>one root = one workspace, per cloud"]
     CI -->|"merge to main"| TFC
-    TFC --> GCP["<b>GCP</b><br/>envs/gcp/*<br/>3 roots"]
+    TFC --> GCP["<b>GCP</b><br/>envs/gcp/*<br/>5 roots"]
     TFC --> AWS["<b>AWS</b><br/>envs/aws/*<br/>7 layered roots"]
     TFC --> SAAS["<b>SaaS</b><br/>envs/saas<br/>no cloud provider"]
 ```
 
-Both clouds are full landing zones; the difference is only how the same responsibilities are packaged into roots — GCP uses **three** roots where the AWS SRA spreads across **seven**. This table aligns them layer-for-layer:
+Both clouds are full landing zones; the difference is only how the same responsibilities are packaged into roots — GCP uses **five** roots where the AWS SRA spreads across **seven**. This table aligns them layer-for-layer:
 
 | Responsibility band | GCP root | AWS root |
 |:--------------------|:---------|:---------|

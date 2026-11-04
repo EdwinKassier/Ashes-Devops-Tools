@@ -26,14 +26,14 @@ module "my_app" {
 
   project_name = "my-app-prod"
 
-  folder_id     = data.terraform_remote_state.organization.outputs.environment_config[var.environment].folder_id
+  folder_id     = data.terraform_remote_state.projects.outputs.environment_config[var.environment].folder_id
   org_id        = data.terraform_remote_state.organization.outputs.org_id
   billing_account = data.terraform_remote_state.organization.outputs.billing_account
 
-  shared_vpc_host_project_id = data.terraform_remote_state.organization.outputs.environment_config[var.environment].host_project_id
+  shared_vpc_host_project_id = data.terraform_remote_state.projects.outputs.environment_config[var.environment].host_project_id
   shared_vpc_subnets = {
     private = {
-      region      = data.terraform_remote_state.organization.outputs.environment_config[var.environment].region
+      region      = data.terraform_remote_state.projects.outputs.environment_config[var.environment].region
       subnet_name = "replace-with-private-subnet-name"
     }
   }
