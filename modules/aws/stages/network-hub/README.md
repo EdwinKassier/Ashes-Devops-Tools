@@ -104,9 +104,9 @@ The following resources are created:
 
 - resource.aws_eip.nat (modules/aws/stages/network-hub/main.tf#L128)
 - resource.aws_nat_gateway.this (modules/aws/stages/network-hub/main.tf#L136)
-- resource.aws_route.egress_default (modules/aws/stages/network-hub/main.tf#L156)
-- resource.aws_route_table.egress_private (modules/aws/stages/network-hub/main.tf#L150)
-- resource.aws_route_table_association.egress_private (modules/aws/stages/network-hub/main.tf#L162)
+- resource.aws_route.egress_default (modules/aws/stages/network-hub/main.tf#L159)
+- resource.aws_route_table.egress_private (modules/aws/stages/network-hub/main.tf#L151)
+- resource.aws_route_table_association.egress_private (modules/aws/stages/network-hub/main.tf#L167)
 
 
 ## Inputs

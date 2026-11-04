@@ -175,19 +175,19 @@ The combination of M0, H3 and H4. This repository reads as production-ready, has
 
 **Structural, before scaling adoption:**
 
-4. Split the GCP control plane along the same seams as AWS (H3). Add a cross-root output-contract CI test and document the teardown trap (H4).
-5. Promote Trivy to the PR gate and retire the EOL tfsec gate; flip the inert secure defaults to default-on (M1, M3).
-6. Promote VPC-SC out of dry-run for production and scope the automation ingress (M2).
+1. Split the GCP control plane along the same seams as AWS (H3). Add a cross-root output-contract CI test and document the teardown trap (H4).
+2. Promote Trivy to the PR gate and retire the EOL tfsec gate; flip the inert secure defaults to default-on (M1, M3).
+3. Promote VPC-SC out of dry-run for production and scope the automation ingress (M2).
 
 **Sprint-sized:**
 
-7. Add root contract tests to the 4 untested roots; upgrade the highest-stakes policy assertions to structural (M5, M6).
-8. Source the workload audit-logging contract from `aws-security` remote state (M7). Split the TFC token (M8).
-9. Codify the workspace-and-trust bootstrap; widen default drift coverage to the AWS guardrail workspaces (M4, L5).
+1. Add root contract tests to the 4 untested roots; upgrade the highest-stakes policy assertions to structural (M5, M6).
+2. Source the workload audit-logging contract from `aws-security` remote state (M7). Split the TFC token (M8).
+3. Codify the workspace-and-trust bootstrap; widen default drift coverage to the AWS guardrail workspaces (M4, L5).
 
 **Cleanup:**
 
-10. Fix `make count`, `active-providers.sh`, the local/CI validate divergence, the full-major provider pin, release provenance, and the global CIDR plan (L2-L8).
+1. Fix `make count`, `active-providers.sh`, the local/CI validate divergence, the full-major provider pin, release provenance, and the global CIDR plan (L2-L8).
 
 ---
 
