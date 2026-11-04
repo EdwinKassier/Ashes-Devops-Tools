@@ -59,6 +59,31 @@ run "guardrail_policies_render_correctly" {
     error_message = "deny-tamper SCP must render to valid IAM policy JSON"
   }
 
+  # H1: the Terraform run role must NOT be exempt from the tamper-deny statements,
+  # so a pipeline compromise cannot disable security services or leave the org.
+  assert {
+    condition = alltrue([
+      for sid in ["DenyLeaveOrganization", "DenyDisableSecurityServices"] :
+      !contains(
+        one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == sid]).Condition.ArnNotLike["aws:PrincipalArn"],
+        var.terraform_run_role_arn
+      )
+    ])
+    error_message = "run role must NOT be exempt from DenyLeaveOrganization/DenyDisableSecurityServices"
+  }
+
+  # Break-glass remains the sole exemption for the tamper-deny statements.
+  assert {
+    condition = alltrue([
+      for sid in ["DenyLeaveOrganization", "DenyDisableSecurityServices"] :
+      contains(
+        one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == sid]).Condition.ArnNotLike["aws:PrincipalArn"],
+        var.break_glass_role_arn
+      )
+    ])
+    error_message = "break-glass role must remain exempt from the tamper-deny statements"
+  }
+
   assert {
     condition     = jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement[0].Principal == "*"
     error_message = "RCP statements must set Principal to *"

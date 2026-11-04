@@ -16,6 +16,14 @@
 # managed here.
 
 locals {
+  # scp-deny-tamper: only the break-glass role is exempt from DenyLeaveOrganization
+  # and DenyDisableSecurityServices. The Terraform run role is NOT exempt from those
+  # two statements, so a pipeline compromise cannot stop CloudTrail, delete GuardDuty
+  # or leave the organization. Trade-off: tearing down or replacing a managed security
+  # service (trail / detector / Config recorder) must be performed via break-glass,
+  # not a routine Terraform apply. The run role remains exempt where it legitimately
+  # needs the action: self-management (DenyCreatePrivilegedRoleImpersonation) and
+  # building the WORM log-archive bucket (DenyLogArchiveObjectLockTampering).
   default_policies = {
     scp-deny-tamper = {
       type = "SERVICE_CONTROL_POLICY"

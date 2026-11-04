@@ -90,7 +90,7 @@ docs-check: ## Verify Terraform docs are up to date
 
 count: ## Recompute the hand-maintained module/root/test counts in CLAUDE.md and README.md
 	@echo "modules:         $$(find modules -name main.tf -not -path '*/examples/*' -not -path '*/.terraform/*' | wc -l | tr -d ' ')"
-	@echo "deployable roots: $$(find envs -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
+	@echo "deployable roots: $$(find envs -name '*.tf' -not -path '*/.terraform/*' | xargs -n1 dirname | sort -u | wc -l | tr -d ' ')"
 	@echo "test suites:     $$(find modules envs -name '*.tftest.hcl' -not -path '*/.terraform/*' | wc -l | tr -d ' ')"
 
 test: ## Run terraform test suites (searches module roots and their tests/ subdirs)
