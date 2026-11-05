@@ -240,7 +240,9 @@ so `terraform test`, `checkov`, and `make docs-check` are the gate):
 | M3 | Break-glass principal is an unmanaged, unmonitored string | The `aws-security` stage gains opt-in `create_break_glass`: it creates the managed role (MFA-gated trust, deny-all standing policy, AdministratorAccess only while `break_glass_active`) in the management account and feeds its ARN into the existing assumption alarm, so the role is managed and monitored together. Runbook updated. |
 | C1-delivery | Reference delivery pipeline was Cloud Run only | Added `examples/app-delivery/ecs-fargate-delivery.example.yml` (AWS OIDC, ECR, task-def deploy) and `gke-autopilot-delivery.example.yml` (WIF, Artifact Registry, `kubectl` rollout), so all three runtimes have a build-scan-push-deploy template. |
 
-Still open: **H9** (SaaS integration needs an architecture decision) and CODEOWNERS
+Still open: **H9** (SaaS integration) — the options are now scoped in
+[saas-integration.md](../architecture/saas-integration.md) with a recommendation
+(hybrid opt-in seams); it awaits an owner's decision before building. **CODEOWNERS**
 (a repo-ownership change).
 
 ---
