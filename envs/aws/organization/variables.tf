@@ -72,7 +72,8 @@ variable "accounts" {
   # fails fast instead of trying to create real AWS accounts with example.com
   # addresses (each account needs a unique, deliverable root email).
   validation {
-    condition     = alltrue([for a in values(var.accounts) : !can(regex("@example\\.(com|org|net)$", lower(a.email)))])
+    # [@.] also catches subdomains of the reserved example domains (e.g. @acme.example.com).
+    condition     = alltrue([for a in values(var.accounts) : !can(regex("[@.]example\\.(com|org|net)$", lower(a.email)))])
     error_message = "accounts still uses placeholder @example.com emails. Set real, unique root email addresses for each account before applying."
   }
 }
@@ -96,6 +97,11 @@ variable "workload_accounts" {
   validation {
     condition     = alltrue([for a in values(var.workload_accounts) : can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", a.email))])
     error_message = "Every workload_accounts entry must have a valid root email address."
+  }
+
+  validation {
+    condition     = alltrue([for a in values(var.workload_accounts) : !can(regex("[@.]example\\.(com|org|net)$", lower(a.email)))])
+    error_message = "workload_accounts still uses placeholder example.com/org/net emails. Set real, unique root email addresses before applying."
   }
 }
 

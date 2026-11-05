@@ -159,8 +159,8 @@ run "saas_secret_bridge_creates_secret_when_enabled" {
     target = data.terraform_remote_state.saas[0]
     values = {
       outputs = {
-        supabase_api_url          = "https://abcd.supabase.co"
-        supabase_service_role_key = "service-role-key-xxxx"
+        supabase_api_url           = "https://abcd.supabase.co"
+        supabase_service_role_key  = "service-role-key-xxxx"
         supabase_database_password = "db-password-xxxx"
       }
     }

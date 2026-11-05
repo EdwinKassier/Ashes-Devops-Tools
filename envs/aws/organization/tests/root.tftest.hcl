@@ -92,3 +92,34 @@ run "output_contract_is_stable" {
     error_message = "ou_ids must be re-exported as part of the cross-root contract."
   }
 }
+
+# The placeholder guard must also catch subdomains of the reserved example domains
+# (the shipped terraform.tfvars.example uses @ashes.example.com).
+run "rejects_example_subdomain_emails" {
+  command = plan
+
+  variables {
+    accounts = {
+      log_archive      = { email = "aws+log-archive@ashes.example.com", ou = "Security" }
+      security_tooling = { email = "aws+security-tooling@acme.test", ou = "Security" }
+      network          = { email = "aws+network@acme.test", ou = "Infrastructure" }
+      shared_services  = { email = "aws+shared-services@acme.test", ou = "Infrastructure" }
+      backup           = { email = "aws+backup@acme.test", ou = "Infrastructure" }
+      forensics        = { email = "aws+forensics@acme.test", ou = "Security" }
+    }
+  }
+
+  expect_failures = [var.accounts]
+}
+
+run "rejects_example_workload_account_emails" {
+  command = plan
+
+  variables {
+    workload_accounts = {
+      sandbox = { email = "aws+sandbox@acme.example.org", ou = "Workloads" }
+    }
+  }
+
+  expect_failures = [var.workload_accounts]
+}

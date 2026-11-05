@@ -33,9 +33,16 @@ module "vpc_flow_logs" {
   source = "../../network/vpc-flow-logs"
   count  = var.enable_vpc_flow_logs_export ? 1 : 0
 
-  project_id  = var.project_id
-  sink_name   = var.vpc_flow_logs_sink_name
-  destination = var.vpc_flow_logs_destination
+  project_id = var.project_id
+  sink_name  = var.vpc_flow_logs_sink_name
+  # When this stage creates the BigQuery dataset, derive the sink destination from it
+  # (the vpc-flow-logs module always requires a non-empty destination). An explicit
+  # vpc_flow_logs_destination still wins.
+  destination = (
+    var.vpc_flow_logs_destination != "" ? var.vpc_flow_logs_destination :
+    var.vpc_flow_logs_create_bigquery_dataset ? "bigquery.googleapis.com/projects/${var.project_id}/datasets/${var.vpc_flow_logs_bigquery_dataset_id}" :
+    ""
+  )
 
   create_bigquery_dataset            = var.vpc_flow_logs_create_bigquery_dataset
   bigquery_dataset_id                = var.vpc_flow_logs_bigquery_dataset_id

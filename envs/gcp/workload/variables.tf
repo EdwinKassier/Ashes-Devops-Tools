@@ -165,7 +165,7 @@ variable "vpc_sc_access_policy_name" {
     that governs all VPC Service Controls perimeters in this org (e.g. '1234567890').
     Do NOT include the 'accessPolicies/' prefix.
     Find your policy ID: gcloud access-context-manager policies list --organization=ORG_ID
-    This value is required when enable_vpc_sc = true.
+    When null (the default) no environment perimeter is created; set it to create one.
   EOT
   type        = string
   default     = null

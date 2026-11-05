@@ -55,9 +55,9 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_sql_database.this (modules/gcp/data/cloud-sql/main.tf#L134)
+- resource.google_sql_database.this (modules/gcp/data/cloud-sql/main.tf#L135)
 - resource.google_sql_database_instance.this (modules/gcp/data/cloud-sql/main.tf#L60)
-- resource.google_sql_user.this (modules/gcp/data/cloud-sql/main.tf#L142)
+- resource.google_sql_user.this (modules/gcp/data/cloud-sql/main.tf#L143)
 - resource.terraform_data.deletion_protection_guard (modules/gcp/data/cloud-sql/main.tf#L50)
 
 

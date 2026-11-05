@@ -69,8 +69,8 @@ The following resources are created:
 
 - resource.aws_db_subnet_group.this (modules/aws/data/rds-aurora/main.tf#L35)
 - resource.aws_rds_cluster.this (modules/aws/data/rds-aurora/main.tf#L44)
-- resource.aws_rds_cluster_instance.this (modules/aws/data/rds-aurora/main.tf#L93)
-- resource.terraform_data.deletion_guard (modules/aws/data/rds-aurora/main.tf#L129)
+- resource.aws_rds_cluster_instance.this (modules/aws/data/rds-aurora/main.tf#L95)
+- resource.terraform_data.deletion_guard (modules/aws/data/rds-aurora/main.tf#L131)
 
 
 ## Inputs

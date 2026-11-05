@@ -20,6 +20,7 @@ commented, deliberate opt-in. See [`docs/runbooks/production-hardening.md`](../.
 | `prod-gcp-bootstrap.tfvars` | `envs/gcp/bootstrap` | `enable_privilege_split` (PREVIEW) |
 | `prod-gcp-organization.tfvars` | `envs/gcp/organization` | `enable_cmek_org_policy`; WORM lock left commented |
 | `prod-gcp-network-hub.tfvars` | `envs/gcp/network-hub` | VPC-SC enforced (`vpc_sc_enable_dry_run = false`) |
+| `prod-gcp-workload.tfvars` | `envs/gcp/workload` | Environment VPC-SC enforced, Cloud Armor + OWASP rules |
 | `prod-aws-security.tfvars` | `envs/aws/security` | CloudWatch Logs + CIS alarms, full Config/GuardDuty |
 
 ```bash
@@ -27,6 +28,9 @@ terraform -chdir=envs/gcp/network-hub plan \
   -var-file=your.tfvars \
   -var-file=../../../examples/presets/prod-gcp-network-hub.tfvars
 ```
+
+`scripts/check-consistency.sh` (run in CI) fails if a preset sets a variable its root
+does not declare, or if any doc references a preset that does not exist.
 
 Read each preset's comments first: some controls have prerequisites (CMEK keys
 before CMEK enforcement, clean dry-run logs before VPC-SC enforcement, a

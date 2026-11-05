@@ -150,7 +150,10 @@ module "host" {
   vpc_flow_logs_bigquery_location   = local.env_config.region
   vpc_flow_logs_retention_days      = var.vpc_flow_logs_retention_days
 
-  vpc_service_controls = {
+  # Only created when vpc_sc_access_policy_name is set (same gate as gcp-network-hub).
+  # Passing a perimeter with a null access policy trips the vpc-sc module's validation,
+  # which made the default plan of this root fail.
+  vpc_service_controls = var.vpc_sc_access_policy_name == null ? {} : {
     "${var.environment}_perimeter" = {
       organization_id    = "organizations/${data.terraform_remote_state.organization.outputs.org_id}"
       access_policy_name = var.vpc_sc_access_policy_name

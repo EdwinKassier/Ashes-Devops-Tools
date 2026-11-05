@@ -64,9 +64,9 @@ run "cross_cloud_seam_injects_env_var" {
   command = plan
 
   variables {
-    enable_supabase  = false
-    enable_vercel    = true
-    tfc_organization = "acme-tfc"
+    enable_supabase     = false
+    enable_vercel       = true
+    tfc_organization    = "acme-tfc"
     vercel_project_name = "acme-web"
     vercel_team_id      = "team_abc"
     vercel_github_repo  = "acme/web"

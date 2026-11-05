@@ -85,6 +85,7 @@ resource "google_sql_database_instance" "this" {
   # checkov:skip=CKV_GCP_110:pgAudit needs the extension; opt-in via var.database_flags.
   # checkov:skip=CKV_GCP_111:log_statement=ddl via local.default_log_flags.
   # checkov:skip=CKV_GCP_79:database_version is the caller's choice (default POSTGRES_16).
+  # checkov:skip=CKV2_GCP_13:log_duration logs every statement (high volume/cost); opt-in via var.database_flags.
   name             = var.name
   project          = var.project_id
   region           = var.region

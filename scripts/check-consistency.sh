@@ -24,6 +24,30 @@ badgcp=$(grep -rl 'hashicorp/google' --include='versions.tf' --exclude-dir='.ter
   | while read -r f; do grep -q '"~> 7.0"' "$f" || echo "$f"; done)
 [ -z "$badgcp" ] || { echo "$badgcp" | while read -r f; do note "google pin not '~> 7.0': $f"; done; fail=1; }
 
+echo "==> Every examples/presets/*.tfvars key is a variable of its target root"
+# Naming: <prod|nonprod>-<cloud>-<root>.tfvars  ->  envs/<cloud>/<root>/variables.tf
+for preset in examples/presets/*.tfvars; do
+  [ -e "$preset" ] || continue
+  base=$(basename "$preset" .tfvars)
+  rest=${base#*-}            # drop prod-/nonprod-
+  cloud=${rest%%-*}
+  root=${rest#*-}
+  vars="envs/$cloud/$root/variables.tf"
+  if [ ! -f "$vars" ]; then
+    note "preset $preset targets missing root envs/$cloud/$root"
+    continue
+  fi
+  # Active (uncommented) and commented-out assignments must both name real variables.
+  for key in $(sed -nE 's/^#?[[:space:]]*([a-z][a-z0-9_]*)[[:space:]]+=.*/\1/p' "$preset"); do
+    grep -q "variable \"$key\"" "$vars" || note "preset $preset sets unknown variable '$key' (not in $vars)"
+  done
+done
+
+echo "==> Every preset referenced in the docs exists"
+for ref in $(grep -rhoE 'presets/[a-z0-9-]+\.tfvars' --include='*.md' --include='*.tf' --exclude-dir='.terraform' --exclude-dir='audit' . 2>/dev/null | sort -u); do
+  [ -f "examples/$ref" ] || note "docs reference missing preset examples/$ref"
+done
+
 if [ "$fail" -eq 0 ]; then
   echo "OK: all consistency invariants hold."
 else

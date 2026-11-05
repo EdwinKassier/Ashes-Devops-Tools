@@ -3,7 +3,12 @@
 TERRAFORM := terraform
 TFLINT := tflint
 TFSEC := tfsec
-CHECKOV := checkov
+# Checkov MUST match the version CI runs (checkov-action pins the image; keep
+# .tool-versions in sync). Newer checkov ships new checks, so a skewed local
+# binary gives a false green. Prefer an exact-version uvx run; otherwise the
+# local binary is used and `make security` refuses to run on a version mismatch.
+CHECKOV_VERSION := $(shell awk '$$1=="checkov"{print $$2}' .tool-versions)
+CHECKOV := $(shell if command -v uvx >/dev/null 2>&1; then echo "uvx --python 3.12 checkov==$(CHECKOV_VERSION)"; else echo checkov; fi)
 TERRAFORM_DOCS := terraform-docs
 PRE_COMMIT := pre-commit
 ROOT_DISCOVERY := ./scripts/terraform-roots.sh
@@ -71,6 +76,11 @@ lint: ## Run TFLint across the repository
 	done
 
 security: ## Run tfsec (full tree) and checkov and fail on real findings
+	@v="$$($(CHECKOV) --version 2>/dev/null | tail -1)"; \
+	if [ "$$v" != "$(CHECKOV_VERSION)" ]; then \
+		echo "checkov $$v does not match the CI-pinned $(CHECKOV_VERSION) (.tool-versions). Install uv or checkov==$(CHECKOV_VERSION)."; \
+		exit 1; \
+	fi
 	# --force-all-dirs makes tfsec scan EVERY module/root directory, not just the ones
 	# reachable via module{} references from the repo root (which covered ~99 of 800+ files).
 	@$(TFSEC) . --force-all-dirs --config-file .tfsec.yml --exclude-path examples --exclude-path .terraform

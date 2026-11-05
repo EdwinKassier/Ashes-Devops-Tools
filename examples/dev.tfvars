@@ -21,7 +21,7 @@ terraform_admin_email = "terraform@ashes-admin-xxxx.iam.gserviceaccount.com"
 
 # Terraform Cloud configuration
 tfc_organization            = "your-tfc-org-name"
-organization_workspace_name = "organization"
+organization_workspace_name = "gcp-organization"
 
 # ── Networking ─────────────────────────────────────────────────────────────────
 #
