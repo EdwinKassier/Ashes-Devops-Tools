@@ -73,8 +73,20 @@ run "projects_output_contract" {
     error_message = "project_ids must expose the shared hub/dns and per-environment host projects (consumed by gcp-network-hub)."
   }
 
+  # Bind producer to consumer (audit M-iac): assert the FULL key set gcp-workload
+  # consumes from environment_config, so a rename or drop of any key fails HERE,
+  # at the producer. The consumer's own test mocks this shape and cannot catch
+  # producer drift, so this is the real guard on the seam.
   assert {
-    condition     = output.environment_config["dev"].host_project_id == "acme-dev-host-abcd" && output.environment_config["dev"].folder_id == "folders/111" && output.environment_config["dev"].tag_value_ids.environment == "tagValues/123"
+    condition = alltrue([
+      for k in ["folder_id", "folder_name", "host_project_id", "host_project_number", "region", "cidr_block", "labels", "tag_value_ids"] :
+      contains(keys(output.environment_config["dev"]), k)
+    ])
+    error_message = "environment_config must expose every key gcp-workload consumes: folder_id, folder_name, host_project_id, host_project_number, region, cidr_block, labels, tag_value_ids."
+  }
+
+  assert {
+    condition     = output.environment_config["dev"].host_project_id == "acme-dev-host-abcd" && output.environment_config["dev"].host_project_number == "333333333333" && output.environment_config["dev"].folder_name == "Development" && output.environment_config["dev"].tag_value_ids.environment == "tagValues/123"
     error_message = "environment_config must combine org folders/tag values with this root's project IDs/numbers (consumed by gcp-workload)."
   }
 }
