@@ -11,7 +11,8 @@ name: Drift Detection
 #                              then also needs queue-plans).
 #   - vars.TFC_ORGANIZATION    Terraform Cloud organization name.
 #   - vars.TFC_DRIFT_WORKSPACES  (optional) JSON array of workspace names to check.
-#                              Defaults to '["gcp-organization","gcp-workload-dev"]' when unset.
+#                              Defaults to the full GCP control plane + dev workload
+#                              when unset; set it to add the AWS guardrail workspaces.
 # When TFC_TOKEN/TFC_ORGANIZATION are not configured, the scheduled run SKIPS
 # cleanly (via the check-credentials gate below) instead of failing red — a
 # missing-secret condition is a configuration gap, not a CI failure.
@@ -106,9 +107,15 @@ jobs:
         #     "aws-workload-dev",       # AWS per-env workloads (aws-workload-<env>)
         #     "saas-web"                # SaaS workspaces (saas-<name>)
         #   ]
-        # The inline default below stays GCP-only so an unset variable never fails
-        # against AWS/saas workspaces that may not exist yet — set the variable to opt in.
-        workspace: ${{ fromJSON(vars.TFC_DRIFT_WORKSPACES || '["gcp-organization","gcp-workload-dev"]') }}
+        # The inline default covers the full GCP control plane (all four roots of
+        # the H3 split; gcp-network-hub holds the hub VPC and is a prime drift
+        # target) plus the dev workload. It stays GCP-only so an unset variable
+        # never fails against AWS/saas workspaces that may not exist (the
+        # any-combination-of-clouds property); set TFC_DRIFT_WORKSPACES to add the
+        # AWS guardrail workspaces (aws-organization, aws-security, aws-network) and
+        # any other envs you run (L5).
+        # yamllint disable-line rule:line-length
+        workspace: ${{ fromJSON(vars.TFC_DRIFT_WORKSPACES || '["gcp-bootstrap","gcp-organization","gcp-projects","gcp-network-hub","gcp-workload-dev"]') }}
     steps:
       - name: Assert Terraform Cloud credentials are configured
         env:

@@ -23,4 +23,18 @@ run "org_trail_is_multi_region_with_log_validation" {
     condition     = aws_cloudtrail.org.include_global_service_events == true
     error_message = "Org trail must include global service events"
   }
+
+  # Structural (M6): the trail is CMEK-encrypted with the supplied key and
+  # delivers to the log-archive bucket.
+  assert {
+    condition     = aws_cloudtrail.org.kms_key_id == var.kms_key_arn && aws_cloudtrail.org.s3_bucket_name == var.log_archive_bucket
+    error_message = "Org trail must be CMEK-encrypted with the provided key and deliver to the log-archive bucket"
+  }
+
+  # Structural (M6): management events only — no data-event selectors (the
+  # cost-conscious default; data events would add per-event charges).
+  assert {
+    condition     = length(aws_cloudtrail.org.event_selector) == 0 && length(aws_cloudtrail.org.advanced_event_selector) == 0
+    error_message = "Org trail must record management events only (no data-event selectors)"
+  }
 }

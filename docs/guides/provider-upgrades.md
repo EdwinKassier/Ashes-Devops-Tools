@@ -120,10 +120,12 @@ refresh, a CI runner cache miss) would have surfaced the same failures just as e
 - **Provider 7.x itself is compatible** with this codebase, as far as this investigation
   could determine — `terraform validate` under a modern Terraform CLI (1.14.3) passes
   cleanly against google/google-beta 7.39.0 with no code changes.
-- **The constraint is being kept at `>= 6.0, < 8.0`** (no change) — there is no evidence
-  provider 7.x itself requires narrowing this. Narrowing to `< 7.0` would not have fixed
-  the original CI failures (they reproduce on 6.x too) and would incorrectly signal a
-  provider incompatibility that doesn't exist.
+- **The constraint was kept at `>= 6.0, < 8.0` at the time of this investigation** —
+  there was no evidence provider 7.x itself required narrowing it, and narrowing to
+  `< 7.0` would not have fixed the original CI failures (they reproduce on 6.x too).
+  **Update (audit L4):** once every lock had resolved to 7.x and CI was green on 7.x,
+  the constraint was tightened to `~> 7.0` across all modules and roots to complete the
+  6→7 migration and stop spanning two majors.
 - **The real, actionable defects are the two Terraform-1.9.8-specific bugs above.** These
   are tracked as separate follow-ups (see "Related defects" below) — they are unrelated
   to provider version and should be fixed independently of any future provider bump.

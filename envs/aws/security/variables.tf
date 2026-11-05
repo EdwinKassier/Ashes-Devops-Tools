@@ -139,6 +139,18 @@ variable "enabled_security_services" {
   }
 }
 
+variable "config_record_all_supported" {
+  description = "AWS Config records ALL supported resource types (default true — the full-coverage but most expensive Config mode). Set false for cost-sensitive non-prod (FinOps F5). See examples/presets/nonprod-aws-security.tfvars."
+  type        = bool
+  default     = true
+}
+
+variable "guardduty_enable_ebs_malware_protection" {
+  description = "GuardDuty agentless EBS malware scanning (default true; billed per GB scanned). Set false for non-prod where it is not required (FinOps F5)."
+  type        = bool
+  default     = true
+}
+
 variable "enable_security_lake" {
   description = "Master COST toggle for Amazon Security Lake. Security Lake incurs ingestion, storage, and normalization charges."
   type        = bool
