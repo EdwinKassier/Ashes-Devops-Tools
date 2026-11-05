@@ -242,8 +242,11 @@ so `terraform test`, `checkov`, and `make docs-check` are the gate):
 
 | H9 | SaaS is a disconnected island | Decided on **Option C (hybrid, opt-in seams)**, scoped in [saas-integration.md](../architecture/saas-integration.md). All three Option C seams shipped, opt-in and off by default: the secret bridge on both clouds (`enable_saas_secret_bridge`), the frontend-URL seam (`cross_cloud_references` on `envs/saas`), and DNS unification (`modules/gcp/network/dns-records` and `modules/aws/network/dns-records`, SaaS records into an existing Cloud DNS or Route 53 zone). |
 
-Still open: **CODEOWNERS** (a repo-ownership change). Every substantive code-level
-finding from this audit is now resolved.
+| L-codeowners | CODEOWNERS was a bus-factor of one | Restructured `.github/CODEOWNERS` to team ownership: a platform team by default, a distinct security team co-required on all guardrail paths (org/security/identity roots, IAM, governance, KMS, the TFC layer, and the CI security gates), and an app-platform team on the SaaS modules. Placeholder `@your-org/*` handles; the operator fills in real teams and enables code-owner review in branch protection. |
+
+Every substantive code-level finding from this audit is now resolved. The
+remaining operator actions are not code: fill in the CODEOWNERS team handles and
+enable "Require review from Code Owners" in branch protection, and merge #587.
 
 ---
 

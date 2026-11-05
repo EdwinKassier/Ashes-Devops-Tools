@@ -1,35 +1,77 @@
-# Default: all files require infra team review.
-# @edwinkassier is the current repository owner/maintainer. As the team grows,
-# org/team handles (e.g., @org/infra-team, @org/security-team) may be added
-# alongside or in place of individual reviewers on any line below.
-* @edwinkassier
+# CODEOWNERS — team ownership for the landing zone (audit L / bus-factor).
+#
+# ACTION REQUIRED: replace every @your-org/* placeholder below with your real
+# GitHub teams. This scaffold is INERT until all of the following are true:
+#   1. The teams exist and each has at least one member.
+#   2. Branch protection on the default branch has "Require review from Code
+#      Owners" enabled (docs/guides/BRANCH_PROTECTION.md).
+#   3. The required teams together have at least two people, so a guardrail change
+#      cannot be self-approved. The previous single-owner file made the
+#      "CODEOWNERS review + 1 approval" gate a bus-factor of one; team ownership
+#      with a distinct security team removes that.
+#
+# The current maintainer should join @your-org/platform-team (and the security
+# team) rather than being named here, so ownership survives one person leaving.
+#
+# PRECEDENCE: GitHub applies the LAST matching line only, and every owner on that
+# line is required. General areas are listed first; security-sensitive paths come
+# LATER so they win and require BOTH the platform and the security team. Keep that
+# order when editing.
 
-# CI/CD, security tooling, and scripts — require infrastructure lead review
-/.github/ @edwinkassier
-/scripts/ @edwinkassier
-/Makefile @edwinkassier
-/.terraform-docs.yml @edwinkassier
-/.tfsec.yml @edwinkassier
-/.tflint.hcl @edwinkassier
-/.pre-commit-config.yaml @edwinkassier
-/.checkov.yaml @edwinkassier
+# ── Default ──────────────────────────────────────────────────────────────────
+* @your-org/platform-team
 
-# Deployed root configurations — require explicit infrastructure approval
-/envs/gcp/ @edwinkassier
-/envs/aws/ @edwinkassier
-/envs/saas/ @edwinkassier
+# ── CI/CD, supply-chain, and security gates ──────────────────────────────────
+# The scanners and the pipeline are a security control, so the security team is
+# a required reviewer alongside platform.
+/.github/                 @your-org/platform-team @your-org/security-team
+/scripts/                 @your-org/platform-team
+/Makefile                 @your-org/platform-team
+/.terraform-docs.yml      @your-org/platform-team
+/.tflint.hcl              @your-org/platform-team
+/.tfsec.yml               @your-org/platform-team @your-org/security-team
+/.checkov.yaml            @your-org/platform-team @your-org/security-team
+/.pre-commit-config.yaml  @your-org/platform-team @your-org/security-team
 
-# Examples — require module owner review
-/examples/ @edwinkassier
+# ── Deployable roots ─────────────────────────────────────────────────────────
+/envs/           @your-org/platform-team
+/envs/saas/      @your-org/app-platform-team
 
-# Module directories — grouped by cloud; can be scoped to sub-teams once the org grows
-/modules/gcp/ @edwinkassier
-/modules/aws/ @edwinkassier
-/modules/supabase/ @edwinkassier
-/modules/vercel/ @edwinkassier
-/modules/saas/ @edwinkassier
+# ── Modules ──────────────────────────────────────────────────────────────────
+/modules/gcp/        @your-org/platform-team
+/modules/aws/        @your-org/platform-team
+/modules/tfc/        @your-org/platform-team
+/modules/supabase/   @your-org/app-platform-team
+/modules/vercel/     @your-org/app-platform-team
+/modules/saas/       @your-org/app-platform-team
 
-# Documentation — lower barrier, but still tracked
-/docs/ @edwinkassier
-SECURITY.md @edwinkassier
-CHANGELOG.md @edwinkassier
+# ── Examples and docs ────────────────────────────────────────────────────────
+/examples/     @your-org/platform-team
+/docs/         @your-org/docs-team
+SECURITY.md    @your-org/security-team
+CHANGELOG.md   @your-org/platform-team
+
+# ── Control-plane and security roots (platform + security REQUIRED) ──────────
+# Listed after the general /envs/ line so they take precedence. A change to the
+# org structure, guardrails, audit logging, the TFC workspace layer, or the
+# identity plane needs a second, security-team approval.
+/envs/gcp/bootstrap/      @your-org/platform-team @your-org/security-team
+/envs/gcp/organization/   @your-org/platform-team @your-org/security-team
+/envs/aws/organization/   @your-org/platform-team @your-org/security-team
+/envs/aws/security/       @your-org/platform-team @your-org/security-team
+/envs/aws/identity/       @your-org/platform-team @your-org/security-team
+/envs/aws/backup/         @your-org/platform-team @your-org/security-team
+/envs/tfc-admin/          @your-org/platform-team @your-org/security-team
+
+# ── Security-sensitive modules (platform + security REQUIRED) ────────────────
+# IAM, governance/guardrails, KMS, deny policies, break-glass, and the whole AWS
+# security baseline. Listed after the general /modules/ lines so they win.
+/modules/gcp/governance/  @your-org/platform-team @your-org/security-team
+/modules/gcp/iam/         @your-org/platform-team @your-org/security-team
+/modules/aws/governance/  @your-org/platform-team @your-org/security-team
+/modules/aws/iam/         @your-org/platform-team @your-org/security-team
+/modules/aws/security/    @your-org/platform-team @your-org/security-team
+
+# ── This file ────────────────────────────────────────────────────────────────
+# Changing ownership itself needs both teams.
+/.github/CODEOWNERS  @your-org/platform-team @your-org/security-team
