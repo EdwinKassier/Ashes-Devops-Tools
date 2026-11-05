@@ -1,9 +1,9 @@
 # SaaS Integration: Options and Decision (audit H9)
 
 **Status:** Decided — **Option C (hybrid, opt-in seams)**. Secret bridge delivered
-for both clouds: `enable_saas_secret_bridge` on `envs/gcp/workload` (GCP Secret
-Manager) and `envs/aws/workload` (AWS Secrets Manager). Remaining increments: the
-frontend-URL seam and DNS unification.
+for both clouds (`enable_saas_secret_bridge` on `envs/gcp/workload` and
+`envs/aws/workload`), and the frontend-URL seam delivered (`cross_cloud_references`
+on `envs/saas`). Remaining increment: DNS unification.
 
 **Audit finding (H9):** the SaaS tier (Supabase and Vercel) is a disconnected
 island. `modules/saas/stages/saas-workload` composes the SaaS modules, but no
@@ -99,8 +99,11 @@ config.
      Manager on `envs/gcp/workload` (reusing `modules/gcp/data/secret-manager`),
      and AWS Secrets Manager on `envs/aws/workload` (granting named task roles
      GetSecretValue). Default off on both.
-  2. **Frontend URL seam (finish A's helper):** `cross_cloud_references` on the
-     SaaS root, default empty. Not yet built.
+  2. **Frontend-URL seam — DELIVERED.** `cross_cloud_references` on `envs/saas`
+     resolves an upstream AWS/GCP workspace output (for example a runtime's API
+     endpoint) from remote state and injects it as a Vercel shared env var, so the
+     frontend learns the backend URL. No cloud credentials, only tfc_organization.
+     Default empty: the root stays standalone.
   3. **DNS (opt-in):** let the managed DNS zone optionally hold the Vercel and
      Supabase custom-domain records. Not yet built.
 - **Pro:** matches the repo's provider-selection philosophy (deploy any

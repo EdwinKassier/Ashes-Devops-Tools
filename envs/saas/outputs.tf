@@ -48,3 +48,8 @@ output "vercel_uat_environment_id" {
   description = "The Vercel UAT custom environment ID. Null when enable_vercel = false."
   value       = module.saas_workload.vercel_uat_environment_id
 }
+
+output "cross_cloud_injected_env_keys" {
+  description = "Vercel shared env var keys injected from cross_cloud_references (audit H9). Empty when the frontend-URL seam is unused."
+  value       = [for v in local.cross_cloud_env_vars : v.key]
+}
