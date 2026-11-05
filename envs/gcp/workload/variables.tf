@@ -310,3 +310,57 @@ variable "service_teams" {
     error_message = "A service team with enable_shared_vpc_attachment = true (the default) must grant at least one entry in shared_vpc_subnets."
   }
 }
+
+# -----------------------------------------------------------------------------
+# SaaS secret bridge (audit H9, hybrid option C — first increment)
+#
+# Opt-in. When enabled, this workload reads the Supabase outputs from a saas-<name>
+# workspace and writes them into a GCP Secret Manager secret in the host project,
+# so a GCP runtime can use Supabase as a managed datastore by secret reference.
+# Default off: no SaaS coupling, and the workload reads no saas state.
+#
+# NOTE: the bridged values (service role key, database password) are sensitive and
+# will be stored as a secret version, so they are persisted in THIS root's state as
+# well as the saas root's. Teams that require zero secret duplication should instead
+# create the secret container with modules/gcp/data/secret-manager and set the value
+# out of band, leaving this bridge disabled.
+# -----------------------------------------------------------------------------
+
+variable "enable_saas_secret_bridge" {
+  description = "Bridge Supabase connection details from a saas-<name> workspace into a GCP Secret Manager secret in the host project (opt-in, audit H9). Default false."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.enable_saas_secret_bridge || (var.saas_workspace_name != null && length(var.saas_secret_accessor_members) > 0)
+    error_message = "enable_saas_secret_bridge = true requires saas_workspace_name and at least one saas_secret_accessor_members entry (the runtime that reads the secret)."
+  }
+}
+
+variable "saas_workspace_name" {
+  description = "TFC workspace (saas-<name>) to read Supabase outputs from when enable_saas_secret_bridge is true."
+  type        = string
+  default     = null
+}
+
+variable "saas_secret_name" {
+  description = "Name of the Secret Manager secret that holds the bridged Supabase connection JSON (api_url, service_role_key, database_password)."
+  type        = string
+  default     = "supabase-connection"
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9_-]{1,255}$", var.saas_secret_name))
+    error_message = "saas_secret_name must be 1-255 characters of letters, digits, hyphens, or underscores."
+  }
+}
+
+variable "saas_secret_accessor_members" {
+  description = "IAM members granted read access to the bridged Supabase secret (e.g. the app runtime service account), in serviceAccount:... form. Required when the bridge is enabled."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for m in var.saas_secret_accessor_members : can(regex("^(serviceAccount|user|group):", m))])
+    error_message = "Each saas_secret_accessor_members entry must be a prefixed IAM member (serviceAccount:, user:, or group:)."
+  }
+}

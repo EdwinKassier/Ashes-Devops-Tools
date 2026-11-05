@@ -62,3 +62,8 @@ output "service_team_project_ids" {
   description = "Map of service team name to the created GCP service project ID (empty when no service_teams are declared)."
   value       = { for k, m in module.service_team : k => m.project_id }
 }
+
+output "saas_secret_id" {
+  description = "Resource ID of the bridged Supabase connection secret in Secret Manager, or null when enable_saas_secret_bridge is false."
+  value       = var.enable_saas_secret_bridge ? module.saas_secret_bridge[0].secret_ids[var.saas_secret_name] : null
+}

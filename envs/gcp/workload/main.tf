@@ -233,3 +233,50 @@ module "service_team" {
   # Attach service projects only after the host project is a Shared VPC host.
   depends_on = [module.host]
 }
+
+# =============================================================================
+# SaaS SECRET BRIDGE (audit H9, hybrid option C — first increment)
+#
+# Opt-in. Reads the Supabase outputs from a saas-<name> workspace and writes them
+# into a GCP Secret Manager secret in the host project, so a GCP runtime can use
+# Supabase as a managed datastore by secret reference. Default off: no saas state
+# is read and nothing is created. See docs/architecture/saas-integration.md.
+# =============================================================================
+
+data "terraform_remote_state" "saas" {
+  count   = var.enable_saas_secret_bridge ? 1 : 0
+  backend = "cloud"
+  config = {
+    organization = var.tfc_organization
+    workspaces = {
+      name = var.saas_workspace_name
+    }
+  }
+}
+
+module "saas_secret_bridge" {
+  count  = var.enable_saas_secret_bridge ? 1 : 0
+  source = "../../../modules/gcp/data/secret-manager"
+
+  project_id = local.env_config.host_project_id
+
+  secrets = {
+    (var.saas_secret_name) = {
+      labels = local.labels
+    }
+  }
+
+  # Bridged connection details. Sensitive values are stored as a secret version,
+  # so they persist in this root's state (see the variable note).
+  secret_values = {
+    (var.saas_secret_name) = jsonencode({
+      api_url           = data.terraform_remote_state.saas[0].outputs.supabase_api_url
+      service_role_key  = data.terraform_remote_state.saas[0].outputs.supabase_service_role_key
+      database_password = data.terraform_remote_state.saas[0].outputs.supabase_database_password
+    })
+  }
+
+  secret_accessors = {
+    (var.saas_secret_name) = var.saas_secret_accessor_members
+  }
+}

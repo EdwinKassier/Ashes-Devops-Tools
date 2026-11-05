@@ -133,3 +133,41 @@ run "service_team_registry_fans_out" {
     error_message = "the service project must attach to the environment host project as its Shared VPC host"
   }
 }
+
+# SaaS secret bridge (audit H9, hybrid option C): opt-in, default off, and when
+# enabled it writes the Supabase connection details into a Secret Manager secret.
+run "saas_secret_bridge_default_off" {
+  command = plan
+
+  assert {
+    condition     = length(module.saas_secret_bridge) == 0
+    error_message = "the SaaS secret bridge must create nothing when disabled (default)."
+  }
+}
+
+run "saas_secret_bridge_creates_secret_when_enabled" {
+  command = plan
+
+  variables {
+    enable_saas_secret_bridge    = true
+    saas_workspace_name          = "saas-web"
+    saas_secret_name             = "supabase-connection"
+    saas_secret_accessor_members = ["serviceAccount:app@acme-dev-host-abcd.iam.gserviceaccount.com"]
+  }
+
+  override_data {
+    target = data.terraform_remote_state.saas[0]
+    values = {
+      outputs = {
+        supabase_api_url          = "https://abcd.supabase.co"
+        supabase_service_role_key = "service-role-key-xxxx"
+        supabase_database_password = "db-password-xxxx"
+      }
+    }
+  }
+
+  assert {
+    condition     = length(module.saas_secret_bridge) == 1
+    error_message = "enabling the bridge must instantiate the secret-manager module once."
+  }
+}

@@ -1,7 +1,9 @@
 # SaaS Integration: Options and Decision (audit H9)
 
-**Status:** Decision needed. This document scopes the choices so an owner can pick
-one. It does not change any code.
+**Status:** Decided — **Option C (hybrid, opt-in seams)**. First increment
+delivered: the GCP Supabase-to-Secret-Manager secret bridge
+(`enable_saas_secret_bridge` on `envs/gcp/workload`). Remaining increments: the
+AWS Secrets Manager bridge, the frontend-URL seam, and DNS unification.
 
 **Audit finding (H9):** the SaaS tier (Supabase and Vercel) is a disconnected
 island. `modules/saas/stages/saas-workload` composes the SaaS modules, but no
@@ -91,15 +93,16 @@ one-directional seam that is off by default. Nothing is forced; integration is
 config.
 
 - **Build, incrementally:**
-  1. **Frontend URL seam (finish A's helper):** `cross_cloud_references` on the
-     SaaS root, default empty.
-  2. **Secret bridge (opt-in):** a small module, or an opt-in block on the
-     consuming cloud workload root, that reads the `saas-<name>` remote state and
-     writes the Supabase connection secret into that cloud's secret store. Gated
-     by a flag; default off. The cloud runtime then reads Supabase by reference,
-     exactly as it reads any other secret.
+  1. **Secret bridge (opt-in) — DELIVERED for GCP.** `enable_saas_secret_bridge`
+     on `envs/gcp/workload` reads the `saas-<name>` remote state and writes the
+     Supabase connection details into a GCP Secret Manager secret in the host
+     project (reusing `modules/gcp/data/secret-manager`), granting the runtime SA
+     read access. Default off. The AWS Secrets Manager counterpart is the next
+     increment.
+  2. **Frontend URL seam (finish A's helper):** `cross_cloud_references` on the
+     SaaS root, default empty. Not yet built.
   3. **DNS (opt-in):** let the managed DNS zone optionally hold the Vercel and
-     Supabase custom-domain records.
+     Supabase custom-domain records. Not yet built.
 - **Pro:** matches the repo's provider-selection philosophy (deploy any
   combination, opt in per feature); keeps the SaaS root credential-free; each
   seam is independently testable and reversible.

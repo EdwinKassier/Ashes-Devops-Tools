@@ -74,3 +74,17 @@ service_teams = {}
 #     # enable_gke_network_user = true   # only for GKE projects
 #   }
 # }
+
+# -----------------------------------------------------------------------------
+# SaaS secret bridge (audit H9, hybrid option C) — opt-in, default off.
+# When enabled, Supabase connection details from the named saas-<name> workspace
+# are written into a Secret Manager secret the runtime SA can read.
+# See docs/architecture/saas-integration.md.
+# -----------------------------------------------------------------------------
+enable_saas_secret_bridge = false
+
+# Example (uncomment and adapt):
+# enable_saas_secret_bridge    = true
+# saas_workspace_name          = "saas-web"
+# saas_secret_name             = "supabase-connection"
+# saas_secret_accessor_members = ["serviceAccount:app@ashes-dev-host-xxxx.iam.gserviceaccount.com"]
