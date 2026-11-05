@@ -302,3 +302,9 @@ variable "containment_exempt_principals" {
     error_message = "containment_exempt_principals still contains a placeholder (REPLACE-ME / your-domain / example.com / .invalid). Set your real break-glass group before enabling admin containment."
   }
 }
+
+variable "enable_legacy_admin_folder_roles" {
+  description = "Grant the phase-0 bootstrap SA (terraform_admin_email) folderAdmin/projectCreator/billing.projectManager/networkAdmin on every folder. Legacy single-identity model; default false because the per-stage plan/apply service accounts replace it. Enable only while migrating an existing deployment."
+  type        = bool
+  default     = false
+}

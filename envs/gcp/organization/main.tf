@@ -37,11 +37,12 @@ module "organization" {
   project_prefix       = var.project_prefix
   environments         = local.organization_units
 
-  admin_email               = var.admin_email
-  break_glass_user          = var.break_glass_user
-  terraform_admin_email     = local.bootstrap.terraform_admin_email
-  organization_admin_groups = var.organization_admin_groups
-  billing_admin_groups      = var.billing_admin_groups
+  admin_email                      = var.admin_email
+  break_glass_user                 = var.break_glass_user
+  terraform_admin_email            = local.bootstrap.terraform_admin_email
+  enable_legacy_admin_folder_roles = var.enable_legacy_admin_folder_roles
+  organization_admin_groups        = var.organization_admin_groups
+  billing_admin_groups             = var.billing_admin_groups
 
   default_region                        = var.default_region
   allowed_regions                       = var.allowed_regions

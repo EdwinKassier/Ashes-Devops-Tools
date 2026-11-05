@@ -198,6 +198,20 @@ resource "aws_route" "egress_tgw_default" {
   nat_gateway_id         = aws_nat_gateway.this[each.key].id
 }
 
+# Centralized inspection: traffic the TGW hands to the inspection VPC lands in the
+# tgw tier and must be sent to the Network Firewall endpoint in the SAME AZ (the
+# inspection attachment runs in appliance mode, so flows stay symmetric). The
+# firewall tier then returns inspected traffic to the TGW (hub_to_tgw above).
+# Without these routes the tgw tier has no default route and inspected traffic
+# is black-holed / never reaches the firewall.
+resource "aws_route" "inspection_tgw_to_firewall" {
+  for_each = var.enable_network_firewall ? local.nat_az_keys : toset([])
+
+  route_table_id         = module.inspection_vpc.route_table_ids_by_tier["tgw"][tonumber(each.key)]
+  destination_cidr_block = "0.0.0.0/0"
+  vpc_endpoint_id        = module.network_firewall.firewall_endpoint_ids_by_az[var.availability_zones[tonumber(each.key)]]
+}
+
 resource "aws_route" "hub_to_tgw" {
   for_each = local.hub_tgw_routes
 

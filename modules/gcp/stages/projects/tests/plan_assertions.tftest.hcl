@@ -48,3 +48,24 @@ run "project_id_follows_prefix_env_name_suffix_convention" {
     error_message = "the project must be wired to the folder_id of its owning environment (var.folders[ou].id)"
   }
 }
+
+run "short_project_names_get_env_prefixed_display_name" {
+  command = plan
+
+  variables {
+    environments = {
+      dev = {
+        display_name = "Development"
+        description  = "Development environment"
+        projects = {
+          hub = { name = "hub", labels = {} }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = google_project.projects["dev-hub"].name == "dev-hub" && google_project.projects["dev-hub"].project_id == "my-org-dev-hub-abcd1234"
+    error_message = "A <4-char project name must get an env-prefixed display name (provider requires 4-30) without changing project_id."
+  }
+}

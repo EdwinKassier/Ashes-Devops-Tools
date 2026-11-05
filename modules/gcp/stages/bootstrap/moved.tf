@@ -1,0 +1,29 @@
+# Safe state migration for the audit C2 identity refactor.
+#
+# Bindings whose (role, member) are UNCHANGED are moved so they are not
+# destroyed-then-recreated (which would briefly drop the bootstrap SA's org IAM
+# admin mid-apply). Bindings that are intentionally REVOKED from the shared
+# terraform-admin SA (orgpolicy/ACM/logging/SCC/xpn/tag admin, billing
+# costsManager, the GitHub trust) are NOT moved: Terraform destroys them, which is
+# the point of the fix. Their replacements live on the per-stage apply SAs.
+
+moved {
+  from = google_organization_iam_member.terraform_admin_standard_org_roles["roles/resourcemanager.organizationViewer"]
+  to   = google_organization_iam_member.stage_org_roles["bootstrap-apply|roles/resourcemanager.organizationViewer"]
+}
+
+moved {
+  from = google_organization_iam_member.terraform_admin_exception_org_roles["roles/iam.securityAdmin"]
+  to   = google_organization_iam_member.stage_org_security_admin["bootstrap-apply|roles/iam.securityAdmin"]
+}
+
+# The GitHub pool is now count-gated (enable_github_wif, default false). Moving
+# it to index [0] keeps it intact for anyone who sets enable_github_wif = true;
+# with the default (false) Terraform destroys the unused pool, provider and the
+# binding to the terraform-admin SA. NOTE: GCP soft-deletes WIF pools for 30 days
+# and the pool ID cannot be reused in that window — set github_wif_pool_id to a
+# new ID if you re-enable within 30 days.
+moved {
+  from = module.gh_oidc
+  to   = module.gh_oidc[0]
+}

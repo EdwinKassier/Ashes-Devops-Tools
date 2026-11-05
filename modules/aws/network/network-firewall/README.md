@@ -76,6 +76,7 @@ The following resources are created:
 |------|-------------|
 | <a name="output_firewall_arn"></a> [firewall\_arn](#output\_firewall\_arn) | ARN of the Network Firewall, or null when the firewall is disabled. |
 | <a name="output_firewall_endpoint_ids"></a> [firewall\_endpoint\_ids](#output\_firewall\_endpoint\_ids) | VPC endpoint IDs from the firewall's per-AZ sync states, or the firewall ID as a fallback (sync-state endpoint IDs are provider-computed and may be unknown at plan time). Null when disabled. |
+| <a name="output_firewall_endpoint_ids_by_az"></a> [firewall\_endpoint\_ids\_by\_az](#output\_firewall\_endpoint\_ids\_by\_az) | Map of availability zone -> Network Firewall VPC endpoint ID, from the firewall's per-AZ sync states. Used to route each AZ's inspection traffic to the SAME-AZ endpoint (symmetric routing with TGW appliance mode). Empty when disabled; values are provider-computed (known after apply). |
 <!-- END_TF_DOCS -->
 
 ## Usage

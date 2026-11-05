@@ -6,7 +6,8 @@ project_prefix    = "verify-org"
 organization_name = "My Organization"
 tfc_organization  = "your-tfc-org-name"
 
-# Set after the first gcp-bootstrap apply (see docs/runbooks/bootstrap.md):
+# Leave terraform_admin_email unset in TFC: dynamic credentials run plan/apply as
+# the gcp-projects plan/apply SAs (audit C2). Only a local human run may set it.
 # terraform_admin_email = "terraform-admin@<admin-project-id>.iam.gserviceaccount.com"
 
 # Keep `environments` identical across gcp-organization, gcp-projects and

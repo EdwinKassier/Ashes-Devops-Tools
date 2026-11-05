@@ -17,7 +17,7 @@ commented, deliberate opt-in. See [`docs/runbooks/production-hardening.md`](../.
 
 | Preset | Root | Turns on |
 |---|---|---|
-| `prod-gcp-bootstrap.tfvars` | `envs/gcp/bootstrap` | `enable_privilege_split` (PREVIEW) |
+| `prod-gcp-bootstrap.tfvars` | `envs/gcp/bootstrap` | Keeps the GitHub WIF pool off (`enable_github_wif = false`); per-stage identities are default |
 | `prod-gcp-organization.tfvars` | `envs/gcp/organization` | `enable_cmek_org_policy`; WORM lock left commented |
 | `prod-gcp-network-hub.tfvars` | `envs/gcp/network-hub` | VPC-SC enforced (`vpc_sc_enable_dry_run = false`) |
 | `prod-gcp-workload.tfvars` | `envs/gcp/workload` | Environment VPC-SC enforced, Cloud Armor + OWASP rules |

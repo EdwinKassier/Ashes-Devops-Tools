@@ -1,7 +1,9 @@
-# The provider impersonates the Terraform admin SA, exactly as the other GCP
-# roots do. On the very first bootstrap apply the SA does not exist yet, so set
-# terraform_admin_email = null and run as the caller's own credentials; set it to
-# the SA email on subsequent applies.
+# Impersonation is OPTIONAL (audit C2). In Terraform Cloud leave
+# terraform_admin_email unset: dynamic credentials already authenticate the run as
+# the phase-specific SA (plan -> <prefix>-bootstrap-plan, apply -> terraform-admin),
+# and a null impersonate_service_account means "use the ambient credentials".
+# Set it only for a local human re-apply (phase-0 first apply: leave it null and
+# run as your own admin credentials while the SA is created).
 provider "google" {
   region                      = var.default_region
   impersonate_service_account = var.terraform_admin_email

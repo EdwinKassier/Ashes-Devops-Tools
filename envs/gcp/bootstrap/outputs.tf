@@ -13,7 +13,7 @@ output "admin_project_number" {
 }
 
 output "terraform_admin_email" {
-  description = "Email of the Terraform admin service account the other roots impersonate."
+  description = "Email of the Terraform admin SA (phase-0 human bootstrap + gcp-bootstrap APPLY identity only). Kept for backward compatibility; TFC workspaces now use tfc_plan_service_accounts / tfc_apply_service_accounts."
   value       = module.bootstrap.terraform_admin_email
 }
 
@@ -53,6 +53,46 @@ output "tfc_oidc_provider_name" {
 }
 
 output "resman_email" {
-  description = "Email of the resource-management SA (populated when the privilege split is enabled)."
+  description = "DEPRECATED — use stage_service_accounts. Email of the organization-stage apply SA."
   value       = module.bootstrap.resman_email
+}
+
+# ── Audit C2: per-stage / per-phase identities ───────────────────────────────
+# Consumed by envs/tfc-admin to set TFC_GCP_PLAN_SERVICE_ACCOUNT_EMAIL,
+# TFC_GCP_APPLY_SERVICE_ACCOUNT_EMAIL and TFC_GCP_WORKLOAD_PROVIDER_NAME on each
+# workspace. Keep these keys stable.
+
+output "tfc_plan_service_accounts" {
+  description = "Map of TFC workspace name -> plan-phase (read-only) SA email."
+  value       = module.bootstrap.tfc_plan_service_accounts
+}
+
+output "tfc_apply_service_accounts" {
+  description = "Map of TFC workspace name -> apply-phase SA email."
+  value       = module.bootstrap.tfc_apply_service_accounts
+}
+
+output "tfc_workload_provider_name" {
+  description = "Full TFC WIF provider resource name (projects/<number>/locations/global/workloadIdentityPools/tfc-pool/providers/terraform-cloud), for TFC_GCP_WORKLOAD_PROVIDER_NAME. Null if TFC OIDC is disabled."
+  value       = module.bootstrap.tfc_workload_provider_name
+}
+
+output "stage_service_accounts" {
+  description = "Map of control-plane stage -> { plan, apply } SA emails (e.g. for VPC-SC ingress identities)."
+  value       = module.bootstrap.stage_service_accounts
+}
+
+output "workload_service_accounts" {
+  description = "Map of environment key -> { plan, apply } SA emails. Consumed by gcp-projects (env-folder grants)."
+  value       = module.bootstrap.workload_service_accounts
+}
+
+output "workload_folder_roles" {
+  description = "Env-folder roles for workload SAs ({ plan, apply }); consumed by gcp-projects."
+  value       = module.bootstrap.workload_folder_roles
+}
+
+output "network_folder_roles" {
+  description = "Shared-folder roles for the network-hub SAs ({ plan, apply }); consumed by gcp-projects."
+  value       = module.bootstrap.network_folder_roles
 }

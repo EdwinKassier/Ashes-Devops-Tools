@@ -22,9 +22,14 @@ module "organization" {
   organizational_units = var.environments
 }
 
-# Grant Terraform Admin SA rights on the created folders
+# LEGACY: grant the phase-0 bootstrap SA (terraform-admin) rights on every folder.
+# Superseded by the per-stage plan/apply service accounts (audit C2): gcp-projects
+# creates projects as projects-apply (org-level projectCreator/billing) and grants
+# the network-hub and wl-<env> SAs their folder roles. Off by default so the
+# bootstrap identity holds no standing folder-admin rights; enable only while
+# migrating an existing deployment that still runs every stage as terraform-admin.
 resource "google_folder_iam_member" "terraform_admin_folder_roles" {
-  for_each = {
+  for_each = !var.enable_legacy_admin_folder_roles ? {} : {
     for pair in flatten([
       for folder_key, folder in module.organization.folders : [
         for role in [

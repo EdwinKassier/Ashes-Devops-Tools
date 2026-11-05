@@ -34,6 +34,21 @@ Promotion steps:
 5. Apply and confirm no legitimate traffic breaks. Keep the dry-run logs for one
    more cycle as a rollback signal.
 
+**Staging later changes on an enforced perimeter.** Once enforced, you no longer
+have to drop back to dry-run to trial a change. The vpc-sc module renders the
+enforced `status` and a separate dry-run `spec` when any `dry_run_*` override is
+set (`dry_run_restricted_services`, `dry_run_ingress_policies`,
+`dry_run_egress_policies`). Root knobs: `vpc_sc_dry_run_restricted_services`
+(`envs/gcp/workload`) and `vpc_sc_dry_run_additional_restricted_services`
+(`envs/gcp/network-hub`). Validate the delta's dry-run violations, then copy it
+into the enforced input and clear the override.
+
+**Prod guard.** `envs/gcp/workload` (check `vpc_sc_enforced_in_prod`) and
+`envs/gcp/network-hub` (check `hub_vpc_sc_enforced_when_prod_present`) emit a plan
+**warning** when a production-like environment (name contains `prod`) has no
+perimeter or a dry-run one. It warns rather than fails so the dry-run rollout
+above stays possible.
+
 ## 2. Inert controls to enable for production (audit M3)
 
 These ship off because enabling them changes posture in ways that need a real
@@ -78,33 +93,118 @@ an attacker remove the guardrails and erase the audit trail. Unlike AWS (where a
 SCP denies the run role from disabling security services), GCP has no equivalent
 by default. Two controls, applied together:
 
-### 1. Privilege split (the structural fix)
+### 1. Per-stage identities (the structural fix, default on)
 
-`enable_privilege_split = true` (gcp-bootstrap) routes the high-privilege org
-roles to a separate resman service account, so a compromise of the
-CI-impersonable SA does not hold them. This is the primary containment. It is in
-`examples/presets/prod-gcp-bootstrap.tfvars`. It is PREVIEW: validate on a
-throwaway org before production.
+Every TFC workspace runs as its own service account, split by run phase
+(Cloud Foundation Fabric FAST pattern): `<prefix>-<stage>-plan` (read-only) and
+`<prefix>-<stage>-apply` (only the roles that stage manages) for bootstrap,
+organization, projects and network-hub, plus `<prefix>-wl-<env>-plan|apply` with
+**no org-level roles** (gcp-projects grants them their env folder only). WIF
+bindings key on `workspace:run_phase` (or the immutable workspace ID), so a PR's
+speculative plan can only ever obtain a read-only identity. The phase-0
+`terraform-admin` SA is used by humans for the first gcp-bootstrap apply only.
+The GitHub Actions pool is off by default (`enable_github_wif = false`, kept off by
+`examples/presets/prod-gcp-bootstrap.tfvars`). See `docs/runbooks/bootstrap.md`.
 
-### 2. Deny-policy backstop
+### 2. Deny-policy backstop (audit C2/C3)
 
-`enable_admin_containment = true` (gcp-organization) adds an org-node IAM deny
-policy that denies deletion of audit sinks/buckets and VPC-SC perimeters to every
-principal except `containment_exempt_principals` (your break-glass group). A
-steady-state declarative apply never deletes these resources, so the automation
-SA keeps working; only a destructive action or a rare resource recreate needs
-break-glass. It deliberately does not deny `setIamPolicy` or `orgpolicy.policy.set`,
-which Terraform uses legitimately.
+`enable_admin_containment = true` (gcp-organization; **on** in
+`examples/presets/prod-gcp-organization.tfvars`) adds an org-node IAM deny policy
+`contain-admin-identity` with two rules. Both deny `principalSet://goog/public:all`
+and exempt only `containment_exempt_principals` (your break-glass group).
 
-Enable it from `examples/presets/prod-gcp-organization.tfvars` (left commented
-there). VALIDATE ON A NON-PROD ORG FIRST: confirm a normal plan/apply is a no-op
-on the audit and perimeter resources, then promote. Set your break-glass
-principal, or the validation blocks the apply.
+| Rule | Scope | Denied permissions |
+|---|---|---|
+| 1 | Whole org (no condition) | `logging` `sinks.update`, `sinks.delete`, `exclusions.create/update/delete`, `buckets.delete`; `accesscontextmanager` `servicePerimeters.update/delete/replaceAll/commit`, `policies.delete` |
+| 2 | Resources tagged `containment/protected`: the audit bucket, its access-log bucket and the audit CMEK keyring (keys and versions inherit the tag) | `storage` `buckets.delete`, `buckets.setIamPolicy`, `objects.delete`; `cloudkms` `cryptoKeyVersions.destroy`, `cryptoKeys.setIamPolicy` |
 
-### Break-glass (audit M3, both clouds)
+IAM deny conditions can match **only resource tags**, so rule 2 uses a tag to
+reach the audit bucket rather than every bucket in the org.
+
+These permissions are **not** in Google's deny-supported list, so the policy can't
+include them. Each one has an alert instead:
+
+- `iam.denypolicies.update` / `iam.denypolicies.delete`: a deny policy can't
+  protect itself. The `deny_policy_change` alert covers this.
+- `orgpolicy.policy.set`: this one is deliberately left open. Terraform uses it on
+  every baseline change. The `org_policy_change` alert covers it.
+
+**Operational consequence.** Terraform legitimately calls `sinks.update` and
+`servicePerimeters.update`. Once containment is on, any change to any logging
+sink, exclusion or VPC-SC perimeter in the org fails with a deny for the
+automation SA. That includes workload perimeters and flow-log sinks. Run such
+changes as a break-glass principal, or add a dedicated, tightly held change
+identity to `containment_exempt_principals`. Creating sinks and perimeters is
+still allowed. The deny policy is applied by the automation SA itself, and
+`iam.denypolicies.*` can't be denied. The real fix for both is still the privilege
+split (step 1) plus the `deny_policy_change` alert.
+
+The preset ships the placeholder
+`principalSet://goog/group/break-glass@REPLACE-ME.invalid`. Variable validation
+rejects it, along with `your-domain`, `example.com` and `.invalid`, so a copied
+preset fails loudly until you set your real group. VALIDATE ON A NON-PROD ORG
+FIRST. Confirm that a no-change plan/apply succeeds and that a sink update is
+denied for the SA, then promote.
+
+### 3. Dedicated logging project (audit G4/C3)
+
+Set `logging_project_id` and `logging_project_number` (gcp-organization). The
+following then move out of the admin project into that project:
+
+- the org audit bucket
+- the BigQuery audit dataset
+- the audit CMEK keyring (`<prefix>-audit-cmek`)
+- the control-plane alerts
+
+**The logging project must not be owned by the Terraform admin/automation SA.**
+That means no `roles/owner`, `roles/editor`, `roles/storage.admin` or
+`roles/cloudkms.admin` at project level. Otherwise the audited identity can purge
+its own trail. Create the project out-of-band, or from a separate identity, and
+grant the SA only the narrow roles it needs.
+
+Decide this before the first apply. KMS keys can't be deleted, so moving the audit
+keys later leaves orphaned keys behind.
+
+### 4. Audit bucket immutability (audit M-4)
+
+On by default:
+
+- Object Versioning on both audit buckets
+- a 30-day soft-delete window (`audit_soft_delete_retention_days`, 7-90 days, or 0
+  to disable)
+
+Together these mean a deleted or overwritten audit object stays recoverable. The
+WORM lock (`enable_audit_bucket_lock`) remains opt-in because it is
+irreversible. GCS doesn't allow Object Versioning and a retention policy on the
+same bucket, so enabling the lock turns versioning off on the audit bucket. The
+locked retention policy is the stronger control, and soft delete stays on.
+
+## Control-plane alerting (audit Security High)
+
+`enable_control_plane_alerting` defaults to `true` (gcp-organization). It wires
+`modules/gcp/monitoring/control-plane` into the organization stage, in the audit
+project (the logging project if set, otherwise the admin project). An aggregated
+org sink, `org-control-plane-to-monitoring`, routes org and folder Admin
+Activity/Policy logs into that project, because those entries are never stored in
+any project. Log-match alerts fire on:
+
+- org/folder IAM changes
+- org policy changes
+- VPC-SC changes
+- sink and exclusion changes
+- custom role changes
+- deny policy changes
+- KMS key-version destroy
+- audit-config changes
+- any action by `break_glass_user` / `break_glass_principal_emails` (CRITICAL)
+
+Set `alert_notification_emails` and/or `alert_notification_channels`. With neither,
+the alerts still fire but nobody is notified, and a plan-time check warns.
+
+## Break-glass (audit M3, both clouds)
 
 The break-glass principal that the GCP containment and every AWS SCP exempt is a
 standing backdoor around the guardrails. Manage it deliberately: a tight trust
 policy, no standing credentials, and a mandatory alarm on its use (a CloudTrail /
-EventBridge rule on AWS `AssumeRole` of the break-glass role, and a Cloud Logging
-alert on the GCP break-glass principal). Review its scope on every access.
+EventBridge rule on AWS `AssumeRole` of the break-glass role; on GCP the
+`break_glass_use` control-plane watch above). Review its scope on every access.

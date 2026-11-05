@@ -19,6 +19,31 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   **Validate on a real org and switch CloudTrail to `aws:SourceArn` before
   relying on it.** Ref: <https://docs.aws.amazon.com/awscloudtrail/latest/userguide/create-kms-key-policy-for-cloudtrail.html>
 
+- **C2 — per-stage GCP automation identities (supersedes G3).** Shipped
+  default-ON in `modules/gcp/stages/bootstrap` (`service_accounts.tf`): a
+  read-only plan SA and a least-privilege apply SA per control-plane stage and
+  per `gcp-workload-<env>`, WIF-bound per (workspace, run phase) via composite
+  `attribute.workspace_phase` / `workspace_id_phase`; workload SAs hold no
+  org-level role (env-folder grants in `modules/gcp/stages/projects`); GitHub
+  WIF off by default and ID-pinned. The old opt-in `enable_privilege_split` /
+  resman SA is **removed**. Mock-tested only — **validate on a real org**:
+  (1) the composite `<name>:<phase>` principalSet values authenticate as
+  expected; (2) the role matrix is sufficient for each stage's first apply
+  (notably `logging.configWriter` vs `logging.admin`,
+  `securitycenter.notificationConfigEditor`, `monitoring.metricsScopesAdmin`,
+  plan-SA `roles/viewer` reading GCS bucket metadata, and that bootstrap-apply's
+  org `iam.securityAdmin` covers billing-account and access-policy IAM);
+  (3) the projects-apply `modifiedGrantsByRole` delegated-grant condition is
+  accepted for the full role list; (4) brownfield projects created by
+  `terraform-admin` may need a one-off owner grant to projects-apply. Residual:
+  bootstrap-apply and organization-apply still hold org `iam.securityAdmin`
+  (inherent to managing org IAM); projects-apply's delegated grant can target
+  any folder, so keep privileged projects (e.g. a G4 logging project) outside
+  folders it can reach; `vpc_sc_access_policy_id` grants workload apply SAs
+  editor on the whole access policy (scoped access policies would narrow this);
+  `envs/gcp/organization` still grants `terraform-admin` env-folder roles
+  (`terraform_admin_folder_roles`) that are now unused.
+
 ## MODERNIZATION — latest-best-practice gaps (2026 review)
 
 From a 2026 gap analysis of both landing zones against the current AWS SRA and
@@ -69,13 +94,23 @@ GCP:
   → `cloud-audit-logs`, default `false`, mock-tested). When enabled it applies a
   **locked** retention policy of `audit_log_retention_days` (irreversible — for
   compliance regimes that require tamper-proof retention). Default preserves the
-  prior operator-correctable behaviour.
+  prior operator-correctable behaviour. **2026-11-05 (M-4):** both audit buckets now
+  ship Object Versioning + a 30-day soft-delete policy by default
+  (`audit_soft_delete_retention_days`); enabling the lock turns versioning off on
+  the audit bucket because GCS forbids versioning together with a retention policy.
 - **G9 — IAM Deny policies** — ✅ **SHIPPED opt-in**. New leaf module
   `modules/gcp/iam/deny-policy` (its own mock tests) wired into
   `stages/organization` at the org node via `iam_deny_policies` (on
   `envs/gcp/organization`, default `[]`). Coarse allow-independent backstop that
   blocks sensitive permissions regardless of roles (deny before allow). Inert
   until populated. Ref: <https://docs.cloud.google.com/iam/docs/deny-overview>
+  **2026-11-05 (C3):** the built-in `enable_admin_containment` policy now denies
+  org-wide sink update/delete, exclusion changes, perimeter update/delete and
+  `policies.delete` (the old `accessPolicies.delete` string was not a valid deny
+  permission), plus tag-scoped (`containment/protected`) audit-bucket/object/CMEK
+  destruction. On in the prod preset. `iam.denypolicies.*` is not deny-supported →
+  covered by the `deny_policy_change` control-plane alert instead. Needs real-org
+  validation.
 - **G10 — SCC is notification-only; no posture service or tier** (MEDIUM,
   BEHAVIOR-CHANGING). `modules/gcp/governance/scc` wires only Pub/Sub findings
   notification. The security posture service (drift detection) needs SCC Premium
@@ -92,6 +127,11 @@ GCP:
   the violation logs are clean — dry-run gives no exfiltration protection, so do
   not leave a production perimeter in dry-run. Ref:
   <https://docs.cloud.google.com/vpc-service-controls/docs/dry-run-mode>
+  **2026-11-05 (SOTA M):** the vpc-sc module now supports an enforced `status`
+  plus a staged dry-run `spec` (`dry_run_restricted_services` /
+  `dry_run_ingress_policies` / `dry_run_egress_policies`), and the workload and
+  network-hub roots warn (check blocks) when a prod-like environment has no
+  perimeter or a dry-run one.
 - **KMS Autokey / HSM-for-sensitive** (LOW, SAFE-CONFIG, future). No Cloud KMS
   Autokey; CMEK defaults to `SOFTWARE` protection (HSM is per-key selectable).
   Autokey (GA 2024, dedicated-project storage GA 2026) and HSM-by-default for
@@ -105,12 +145,12 @@ GCP:
 
 Enable only after validating in a real/test org. Each defaults to prior behaviour.
 
-- **G3 — bootstrap SA privilege split** (`enable_privilege_split`,
-  `modules/gcp/stages/bootstrap`). **Self-declared INCOMPLETE**: fully activating
-  the split also requires WIF-binding the resman SA and switching downstream
-  impersonation. Do **not** enable as-is.
-- **G4 — dedicated logging project** (`logging_project_id`,
-  `modules/gcp/stages/organization`). Also needs cross-project CMEK grant wiring.
+- **G4 — dedicated logging project** (`logging_project_id` +
+  `logging_project_number`, `modules/gcp/stages/organization`). The audit bucket,
+  BigQuery dataset, audit CMEK keyring (`<prefix>-audit-cmek`, granted to the
+  logging project's own service agents — no cross-project KMS grant) and the
+  control-plane alerts all move there. The project must NOT be owned by the
+  automation SA. Decide before the first apply (KMS keys are undeletable).
 - **G5 — VPC-SC perimeter expansion** (`vpc_sc_additional_restricted_services`,
   `vpc_sc_ingress_identities`, `modules/gcp/stages/network-hub`). Set the ingress
   identity BEFORE expanding services or an enforced apply is blocked.

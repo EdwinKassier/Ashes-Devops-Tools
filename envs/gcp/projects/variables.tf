@@ -56,7 +56,7 @@ variable "default_region" {
 }
 
 variable "terraform_admin_email" {
-  description = "Terraform admin SA email the providers impersonate. Read from the gcp-bootstrap output; set it on this workspace to match."
+  description = "OPTIONAL SA for the providers to impersonate, for deliberate LOCAL human runs only. Leave null in Terraform Cloud: dynamic credentials already authenticate plan as <prefix>-projects-plan and apply as <prefix>-projects-apply (audit C2)."
   type        = string
   default     = null
 

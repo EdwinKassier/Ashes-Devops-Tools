@@ -155,7 +155,7 @@ Tag keys `environment`, `business-unit`, `data-classification` are created org-w
 - **Keyless CI/CD.** The bootstrap stage creates the admin project, a `terraform-admin` service account (impersonated by the human `admin_email`), and two WIF pools: `github-pool` (restricted to `refs/heads/main` of the exact `org/repo`) and `tfc-pool` (each TFC workspace bound to the admin SA). No exported service-account keys — enforced by the org policy above.
 - **First-apply bootstrap.** The providers impersonate the `terraform-admin` SA, but that SA is *created* by the bootstrap apply, so `terraform_admin_email` is nullable **only** for the very first apply (which runs as the human `admin_email`); subsequent applies impersonate the SA.
 - **Break-glass.** `break_glass_user` (default `null`) is granted `roles/resourcemanager.organizationAdmin`. Note this differs from the AWS model: GCP org policies here do not carve a guardrail-exempt isolated principal — break-glass is a standing org-admin grant secured out-of-band. Hardening this into an isolated, audited role is tracked in [`known-gaps.md`](../known-gaps.md).
-- **Privilege split (opt-in).** `enable_privilege_split` (default `false`, PREVIEW) creates a second `terraform-resman` SA and routes high-privilege roles (org policy, access-context-manager, logging admin, SCC admin, IAM security admin) to it, for separation of duties.
+- **Per-stage identities (default).** Each stage gets a read-only `<prefix>-<stage>-plan` and a least-privilege `<prefix>-<stage>-apply` SA; each environment gets `<prefix>-wl-<env>-plan|apply` with no org-level roles. TFC WIF bindings are keyed on `workspace:run_phase`, so a speculative plan only ever receives the read-only identity (FAST pattern, audit C2).
 
 ---
 
@@ -213,7 +213,7 @@ This table maps each Google enterprise-foundations / CIS control to the module a
 - **Cloud Billing → BigQuery export stream** — the dataset + IAM are created by Terraform, but toggling the export in the Billing console is manual.
 - **TFC backend organization** — supplied out-of-band via `backend.hcl` / `TF_CLI_ARGS_init`.
 
-**Gated / opt-in** (present but default-off, enable per environment): Cloud Armor at the workload root (`enable_cloud_armor`), HA-VPN (`enable_vpn`), Interconnect (`interconnects`), packet mirroring, CDN (`enable_cdn`), API Gateway (`enable_api_gateway`), the dedicated logging project (`logging_project_id`), and the bootstrap privilege split (`enable_privilege_split`). The last two, plus VPC-SC service expansion, are PREVIEW separation-of-duties items — see [`known-gaps.md`](../known-gaps.md).
+**Gated / opt-in** (present but default-off, enable per environment): Cloud Armor at the workload root (`enable_cloud_armor`), HA-VPN (`enable_vpn`), Interconnect (`interconnects`), packet mirroring, CDN (`enable_cdn`), API Gateway (`enable_api_gateway`), the dedicated logging project (`logging_project_id`). The dedicated logging project, plus VPC-SC service expansion, are PREVIEW separation-of-duties items — see [`known-gaps.md`](../known-gaps.md).
 
 ---
 

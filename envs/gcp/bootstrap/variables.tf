@@ -53,13 +53,33 @@ variable "admin_email" {
 }
 
 variable "github_org" {
-  description = "GitHub organization name for WIF OIDC trust condition. Must be set explicitly — no default to prevent accidentally trusting the wrong org when forking."
+  description = "GitHub organization name. Only used when enable_github_wif = true."
   type        = string
+  default     = null
 }
 
 variable "github_repo" {
-  description = "GitHub repository name (without org prefix) for WIF OIDC trust condition. Must be set explicitly — no default to prevent accidentally trusting the wrong repo when forking."
+  description = "GitHub repository name (without org prefix). Only used when enable_github_wif = true."
   type        = string
+  default     = null
+}
+
+variable "enable_github_wif" {
+  description = "Create the GitHub Actions WIF pool (default false — no workflow uses GCP OIDC). When true it trusts github_repository_id/github_repository_owner_id on refs/heads/main and binds ONLY the read-only organization plan SA."
+  type        = bool
+  default     = false
+}
+
+variable "github_repository_id" {
+  description = "Immutable numeric GitHub repository ID (GET /repos/<owner>/<repo> -> .id). Required when enable_github_wif = true."
+  type        = string
+  default     = null
+}
+
+variable "github_repository_owner_id" {
+  description = "Immutable numeric GitHub owner ID (GET /repos/<owner>/<repo> -> .owner.id). Required when enable_github_wif = true."
+  type        = string
+  default     = null
 }
 
 variable "tfc_organization" {
@@ -74,14 +94,32 @@ variable "enable_tfc_oidc" {
   default     = true
 }
 
-variable "enable_privilege_split" {
-  description = "Enable the bootstrap SA privilege split: route high-privilege org roles to a separate resman SA. Default false = unchanged. Enabling requires WIF binding + downstream impersonation switch. PREVIEW (not yet validated against a real apply)."
-  type        = bool
-  default     = false
+variable "tfc_organization_id" {
+  description = "Optional immutable TFC organization ID (org-xxxxxxxx) pinned in the WIF provider condition in addition to the organization name."
+  type        = string
+  default     = null
+}
+
+variable "tfc_project_ids" {
+  description = "Optional allow-list of TFC project IDs (prj-xxxxxxxx) holding the GCP workspaces. When set, tokens from workspaces in other TFC projects are rejected."
+  type        = list(string)
+  default     = []
+}
+
+variable "tfc_workspace_ids" {
+  description = "Optional map of TFC workspace name -> immutable workspace ID (ws-xxxxxxxx). Workspaces listed here are WIF-bound by ID instead of by (mutable, squattable) name. Populate from the tfc-admin root once the workspaces exist."
+  type        = map(string)
+  default     = {}
+}
+
+variable "vpc_sc_access_policy_id" {
+  description = "Optional numeric Access Context Manager policy ID. When set, workload apply SAs get policyEditor (plan SAs policyReader) on this policy only, so gcp-workload-<env> can manage its perimeter without an org-level role."
+  type        = string
+  default     = null
 }
 
 variable "environments" {
-  description = "Map of application environment definitions. Only the keys are used here (to derive the per-environment TFC workspace names that receive WIF trust); the full objects are consumed by the gcp-organization root."
+  description = "Map of application environment definitions. Only the keys are used here (each key gets a <prefix>-wl-<env>-plan/-apply SA pair bound to TFC workspace gcp-workload-<env>); the full objects are consumed by the gcp-organization root."
   type = map(object({
     display_name            = string
     region                  = string
@@ -105,12 +143,12 @@ variable "default_region" {
 
 variable "terraform_admin_email" {
   description = <<-EOT
-    Service account email for the Terraform admin SA created by the bootstrap stage.
-    The providers impersonate this SA for all API calls, ensuring that even local
-    runs operate with the SA's permissions rather than the caller's personal
-    credentials.
-    Format: terraform-admin@<admin-project-id>.iam.gserviceaccount.com
-    Set to null only during the very first bootstrap apply when the SA does not exist yet.
+    OPTIONAL service account for the providers to impersonate — for LOCAL human
+    runs only (e.g. terraform-admin@<admin-project-id>.iam.gserviceaccount.com
+    for a phase-0 re-apply). Leave null (the default) in Terraform Cloud: TFC
+    dynamic credentials already authenticate each run as the phase-specific
+    plan/apply SA (TFC_GCP_PLAN/APPLY_SERVICE_ACCOUNT_EMAIL), and a plan SA
+    cannot (and must not) impersonate the admin SA.
   EOT
   type        = string
   default     = null

@@ -36,3 +36,8 @@ output "environment_config" {
     }
   }
 }
+
+output "automation_folder_grants" {
+  description = "Folder IAM grants made to the workload / network-hub automation SAs (audit C2)."
+  value       = module.projects.automation_folder_grants
+}

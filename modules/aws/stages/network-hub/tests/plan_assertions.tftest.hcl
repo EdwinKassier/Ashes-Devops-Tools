@@ -89,7 +89,17 @@ override_module {
   outputs = { phz_id = "Z0000000000000000000" }
 }
 
-override_module { target = module.network_firewall }
+override_module {
+  target = module.network_firewall
+  outputs = {
+    firewall_arn          = "arn:aws:network-firewall:eu-west-2:111111111111:firewall/inspection"
+    firewall_endpoint_ids = ["vpce-fw-a", "vpce-fw-b"]
+    firewall_endpoint_ids_by_az = {
+      "eu-west-2a" = "vpce-fw-a"
+      "eu-west-2b" = "vpce-fw-b"
+    }
+  }
+}
 override_module { target = module.network_access_analyzer }
 
 run "composes_network_hub" {
@@ -127,6 +137,19 @@ run "composes_network_hub" {
       for k in ["prod:default", "nonprod:default"] : contains(keys(output.tgw_inspection_routes), k)
     ])
     error_message = "stage must construct exactly the prod:default and nonprod:default inspection routes"
+  }
+
+  # Centralized inspection inside the inspection VPC: each AZ's tgw-tier table
+  # must send 0.0.0.0/0 to the SAME-AZ firewall endpoint (symmetric routing).
+  assert {
+    condition = (
+      aws_route.inspection_tgw_to_firewall["0"].route_table_id == "rtb-insp-tgw-a" &&
+      aws_route.inspection_tgw_to_firewall["0"].vpc_endpoint_id == "vpce-fw-a" &&
+      aws_route.inspection_tgw_to_firewall["1"].route_table_id == "rtb-insp-tgw-b" &&
+      aws_route.inspection_tgw_to_firewall["1"].vpc_endpoint_id == "vpce-fw-b" &&
+      aws_route.inspection_tgw_to_firewall["0"].destination_cidr_block == "0.0.0.0/0"
+    )
+    error_message = "inspection tgw tier must default-route to the same-AZ Network Firewall endpoint"
   }
 
   # tgw_id surfaces through the stage output (routing contract wiring proof).

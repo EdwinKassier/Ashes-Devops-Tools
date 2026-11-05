@@ -44,23 +44,64 @@ variable "admin_email" {
 }
 
 variable "github_org" {
-  description = "GitHub organization name. No defaults — must be set explicitly to avoid accidentally trusting the wrong org when forking."
+  description = "GitHub organization (owner) name. Only used when enable_github_wif = true (the trust itself keys on github_repository_owner_id, not this mutable name)."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^[a-zA-Z0-9][a-zA-Z0-9-]*$", var.github_org))
+    condition     = var.github_org == null || can(regex("^[a-zA-Z0-9][a-zA-Z0-9-]*$", var.github_org))
     error_message = "github_org must contain only alphanumeric characters and hyphens, starting with an alphanumeric character."
   }
 }
 
 variable "github_repo" {
-  description = "GitHub repository name (without owner prefix). No defaults — must be set explicitly to avoid accidentally trusting the wrong repo when forking."
+  description = "GitHub repository name (without owner prefix). Only used when enable_github_wif = true (the trust itself keys on github_repository_id, not this mutable name)."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^[a-zA-Z0-9][a-zA-Z0-9._-]*$", var.github_repo))
+    condition     = var.github_repo == null || can(regex("^[a-zA-Z0-9][a-zA-Z0-9._-]*$", var.github_repo))
     error_message = "github_repo must contain only alphanumeric characters, hyphens, underscores, and dots, starting with an alphanumeric character."
   }
+}
+
+variable "enable_github_wif" {
+  description = "Create the GitHub Actions WIF pool. Default false: no workflow in this repo uses GCP OIDC, so a standing trust is unused privilege (audit C2). When true, the trust is pinned to github_repository_id + github_repository_owner_id on refs/heads/main and bound ONLY to the read-only organization plan SA."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.enable_github_wif || (var.github_org != null && var.github_repo != null && var.github_repository_id != null && var.github_repository_owner_id != null)
+    error_message = "enable_github_wif = true requires github_org, github_repo, github_repository_id and github_repository_owner_id (the immutable numeric IDs from the GitHub API: GET /repos/<owner>/<repo> -> .id and .owner.id)."
+  }
+}
+
+variable "github_repository_id" {
+  description = "Immutable numeric GitHub repository ID (GET /repos/<owner>/<repo> -> .id). Required when enable_github_wif = true."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.github_repository_id == null || can(regex("^[0-9]+$", var.github_repository_id))
+    error_message = "github_repository_id must be numeric (digits only)."
+  }
+}
+
+variable "github_repository_owner_id" {
+  description = "Immutable numeric GitHub owner ID (GET /repos/<owner>/<repo> -> .owner.id). Required when enable_github_wif = true."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.github_repository_owner_id == null || can(regex("^[0-9]+$", var.github_repository_owner_id))
+    error_message = "github_repository_owner_id must be numeric (digits only)."
+  }
+}
+
+variable "github_wif_pool_id" {
+  description = "Workload Identity Pool ID for the GitHub pool. Change it if you re-enable GitHub WIF within 30 days of the old pool being deleted (pool IDs are soft-deleted and not reusable for 30 days)."
+  type        = string
+  default     = "github-pool"
 }
 
 # Terraform Cloud Configuration
@@ -86,27 +127,145 @@ variable "tfc_organization" {
   }
 }
 
-variable "tfc_workspaces" {
-  description = "List of TFC workspaces to grant access to Terraform Admin SA. Must be non-empty when enable_tfc_oidc = true."
+variable "tfc_organization_id" {
+  description = "Optional immutable TFC organization ID (org-xxxxxxxx). When set, the WIF provider condition also pins it, so a renamed/re-registered organization name cannot satisfy the trust."
+  type        = string
+  default     = null
+}
+
+variable "tfc_project_ids" {
+  description = "Optional allow-list of TFC project IDs (prj-xxxxxxxx) the GCP workspaces live in. When non-empty, the WIF provider condition rejects tokens from workspaces in any other TFC project (blocks workspace-name squatting elsewhere in the org)."
   type        = list(string)
   default     = []
+}
+
+variable "control_plane_workspaces" {
+  description = "TFC workspace name for each GCP control-plane stage. Keys are fixed: bootstrap, organization, projects, network-hub. Each workspace's plan phase is bound to <prefix>-<stage>-plan and its apply phase to <prefix>-<stage>-apply (bootstrap apply = the terraform-admin SA)."
+  type        = map(string)
+  default = {
+    bootstrap     = "gcp-bootstrap"
+    organization  = "gcp-organization"
+    projects      = "gcp-projects"
+    "network-hub" = "gcp-network-hub"
+  }
 
   validation {
-    condition     = !var.enable_tfc_oidc || length(var.tfc_workspaces) > 0
-    error_message = "tfc_workspaces must contain at least one workspace name when enable_tfc_oidc = true."
+    condition     = toset(keys(var.control_plane_workspaces)) == toset(["bootstrap", "organization", "projects", "network-hub"])
+    error_message = "control_plane_workspaces must have exactly the keys bootstrap, organization, projects, network-hub."
   }
 }
 
-# --- Audit finding G3: bootstrap privilege split (opt-in, default OFF) ---
-variable "enable_privilege_split" {
-  description = <<-EOT
-    When true, create a separate "terraform-resman" SA and grant the highest-privilege org
-    roles (org-policy, Access Context Manager, logging, SCC, IAM security admin) to it instead
-    of the everyday terraform-admin SA. Default false = single-SA (unchanged).
-    ⚠️ Enabling ALSO requires: (1) WIF-binding the resman SA for the org workspace, and
-    (2) switching the organization/network stages' impersonation to the resman SA. PREVIEW (not yet validated against a real apply)
-    against a real org — do not enable without validating the full activation.
-  EOT
-  type        = bool
-  default     = false
+variable "workload_environments" {
+  description = "Application environment keys. Each gets a <prefix>-wl-<env>-plan / -apply SA pair, bound to TFC workspace <tfc_workload_workspace_prefix><env>. These SAs get NO org-level role; their folder roles are granted by the gcp-projects stage."
+  type        = set(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for e in var.workload_environments : can(regex("^[a-z][a-z0-9-]*[a-z0-9]$", e)) && length("${var.project_prefix}-wl-${e}-apply") <= 30])
+    error_message = "Each workload environment key must be lowercase alphanumeric/hyphen, and <project_prefix>-wl-<env>-apply must be <= 30 characters (GCP SA account_id limit). Shorten the env key or project_prefix."
+  }
+}
+
+variable "tfc_workload_workspace_prefix" {
+  description = "TFC workspace name prefix for per-environment workload workspaces (workspace = <prefix><env>)."
+  type        = string
+  default     = "gcp-workload-"
+}
+
+variable "tfc_workspace_ids" {
+  description = "Optional map of TFC workspace NAME -> immutable workspace ID (ws-xxxxxxxx). When a workspace has an entry, its WIF bindings match the immutable ID (attribute.workspace_id_phase) instead of the name, so deleting/recreating or squatting the name gains nothing."
+  type        = map(string)
+  default     = {}
+}
+
+variable "workload_folder_roles" {
+  description = "Roles the gcp-projects stage grants each workload plan/apply SA on its OWN environment folder. Also the allow-list (with network_folder_roles) for the projects-apply SA's delegated folder-IAM grant. Avoid roles/owner: anything listed here becomes grantable on ANY folder by projects-apply."
+  type = object({
+    plan  = list(string)
+    apply = list(string)
+  })
+  default = {
+    plan = [
+      "roles/viewer",
+      "roles/iam.securityReviewer",
+      "roles/resourcemanager.folderViewer",
+    ]
+    apply = [
+      "roles/resourcemanager.projectIamAdmin",
+      "roles/iam.serviceAccountAdmin",
+      "roles/iam.serviceAccountUser",
+      "roles/serviceusage.serviceUsageAdmin",
+      "roles/compute.admin",
+      "roles/compute.xpnAdmin",
+      "roles/servicenetworking.networksAdmin",
+      "roles/dns.admin",
+      "roles/secretmanager.admin",
+      "roles/storage.admin",
+      "roles/cloudkms.admin",
+      "roles/bigquery.admin",
+      "roles/logging.admin",
+      "roles/monitoring.admin",
+      "roles/pubsub.admin",
+      "roles/run.admin",
+      "roles/artifactregistry.admin",
+    ]
+  }
+
+  validation {
+    condition     = !contains(concat(var.workload_folder_roles.plan, var.workload_folder_roles.apply), "roles/owner")
+    error_message = "roles/owner must not be a workload folder role: it would become delegable by projects-apply on every folder."
+  }
+}
+
+variable "network_folder_roles" {
+  description = "Roles the gcp-projects stage grants the network-hub plan/apply SAs on the `shared` folder (hub + DNS projects, hierarchical firewall policy, Shared VPC host)."
+  type = object({
+    plan  = list(string)
+    apply = list(string)
+  })
+  default = {
+    plan = [
+      "roles/compute.viewer",
+      "roles/dns.reader",
+      "roles/serviceusage.serviceUsageViewer",
+    ]
+    apply = [
+      "roles/compute.networkAdmin",
+      "roles/compute.securityAdmin",
+      "roles/compute.xpnAdmin",
+      "roles/compute.orgFirewallPolicyAdmin",
+      "roles/compute.orgSecurityResourceAdmin",
+      "roles/dns.admin",
+      "roles/servicenetworking.networksAdmin",
+      "roles/serviceusage.serviceUsageAdmin",
+    ]
+  }
+
+  validation {
+    condition     = !contains(concat(var.network_folder_roles.plan, var.network_folder_roles.apply), "roles/owner")
+    error_message = "roles/owner must not be a network folder role: it would become delegable by projects-apply on every folder."
+  }
+}
+
+variable "workload_billing_roles" {
+  description = "Billing-account roles for each workload SA (budgets live on the billing account, not a folder). Not org-level."
+  type = object({
+    plan  = list(string)
+    apply = list(string)
+  })
+  default = {
+    plan  = ["roles/billing.viewer"]
+    apply = ["roles/billing.costsManager"]
+  }
+}
+
+variable "vpc_sc_access_policy_id" {
+  description = "Optional numeric Access Context Manager policy ID. When set, workload apply SAs get roles/accesscontextmanager.policyEditor (plan: policyReader) on THIS policy only, so gcp-workload-<env> can manage its own perimeter without an org-level role."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.vpc_sc_access_policy_id == null || can(regex("^[0-9]+$", var.vpc_sc_access_policy_id))
+    error_message = "vpc_sc_access_policy_id must be the numeric access policy ID (without the accessPolicies/ prefix)."
+  }
 }

@@ -106,7 +106,8 @@ The following resources are created:
 - resource.aws_nat_gateway.this (modules/aws/stages/network-hub/main.tf#L168)
 - resource.aws_route.egress_default (modules/aws/stages/network-hub/main.tf#L183)
 - resource.aws_route.egress_tgw_default (modules/aws/stages/network-hub/main.tf#L193)
-- resource.aws_route.hub_to_tgw (modules/aws/stages/network-hub/main.tf#L201)
+- resource.aws_route.hub_to_tgw (modules/aws/stages/network-hub/main.tf#L215)
+- resource.aws_route.inspection_tgw_to_firewall (modules/aws/stages/network-hub/main.tf#L207)
 
 
 ## Inputs

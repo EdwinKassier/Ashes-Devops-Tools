@@ -18,10 +18,10 @@
 [![Terraform Validation](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml)
 [![Security Scan](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml)
 [![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?style=flat-square&logo=pre-commit)](https://pre-commit.com)
-[![Modules](https://img.shields.io/badge/modules-98-blueviolet?style=flat-square)](modules/)
-[![Tests](https://img.shields.io/badge/test_suites-203-blue?style=flat-square)](modules/)
+[![Modules](https://img.shields.io/badge/modules-111-blueviolet?style=flat-square)](modules/)
+[![Tests](https://img.shields.io/badge/test_suites-244-blue?style=flat-square)](modules/)
 
-<sub>Modules/test-suite counts above are hand-maintained, not live badges. Verify: <code>find modules -name main.tf -not -path '*/examples/*' -not -path '*/.terraform/*' | wc -l</code> (modules) and <code>find modules envs -name '*.tftest.hcl' -not -path '*/.terraform/*' | wc -l</code> (test suites). Last verified 2026-09-09: 98 modules, 203 test suites.</sub>
+<sub>Module/test-suite counts are static badges, enforced in CI: <code>make count</code> prints the live figures and <code>scripts/check-docs-counts.sh</code> (meta-lint) fails when this README or CLAUDE.md disagrees with the tree.</sub>
 
 </div>
 
@@ -33,7 +33,7 @@
 
 | Cloud | Roots | What it manages |
 |:--------|:--------|:----------------|
-| **GCP** | `gcp-organization` + `gcp-workload` | Landing zone (org hierarchy, IAM, networking hub, VPC-SC, KMS, audit logs) plus per-env application environments (host projects, Shared VPC, Cloud Armor, VPN, Interconnect) |
+| **GCP** | `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` (5 layered roots) | Landing zone (admin project + WIF, org hierarchy, IAM, org policies, KMS, audit logs, shared projects, networking hub, VPC-SC) plus per-env application environments (host projects, Shared VPC, Cloud Armor, VPN, Interconnect) |
 | **AWS** | `aws-*` (7 layered roots) | Multi-account SRA org + guardrails (SCP/RCP/declarative), security baseline (GuardDuty/Security Hub/Config/CloudTrail/Access Analyzer/Security Lake), Transit Gateway network, IAM Identity Center, org backup, cost governance |
 | **Supabase** | `saas` (`enable_supabase`) | Projects + vault secrets, three-tier environments |
 | **Vercel** | `saas` (`enable_vercel`) | Projects, three-tier environments |
@@ -51,7 +51,7 @@ cd Ashes-Devops-Tools
 make install && make pre-commit-install
 
 # 2. Authenticate (only the clouds whose workspaces you apply)
-gcloud auth application-default login     # GCP roots (gcp-bootstrap, gcp-organization, gcp-workload)
+gcloud auth application-default login     # GCP roots (gcp-bootstrap, gcp-organization, gcp-projects, gcp-network-hub, gcp-workload-<env>)
 export SUPABASE_ACCESS_TOKEN="sbp_..."   # required for supabase modules
 export VERCEL_API_TOKEN="..."            # required for vercel modules
 # AWS roots use TFC dynamic credentials (TFC_AWS_PROVIDER_AUTH + TFC_AWS_RUN_ROLE_ARN)
@@ -69,7 +69,7 @@ make ci
 
 ```mermaid
 flowchart TB
-    CI["<b>GitHub Actions</b> — PR gates<br/>fmt · validate · lint · tfsec · checkov · docs"]
+    CI["<b>GitHub Actions</b> — PR gates<br/>fmt · validate · lint · trivy · checkov · docs · test"]
     TFC["<b>Terraform Cloud</b> — remote state · plan · apply<br/>one root = one workspace, per cloud"]
     CI -->|"merge to main"| TFC
     TFC --> GCP["<b>GCP</b><br/>envs/gcp/*<br/>5 roots"]
@@ -81,11 +81,12 @@ Both clouds are full landing zones; the difference is only how the same responsi
 
 | Responsibility band | GCP root | AWS root |
 |:--------------------|:---------|:---------|
-| Org structure, guardrails, foundation identity (WIF), org CMEK | `gcp-organization` *(bootstrap + organization stages)* | `aws-organization` |
-| Security & threat-detection baseline | *folded into* `gcp-organization` *(SCC, audit logs)* | `aws-security` |
-| Network hub (shared/transit backbone + DNS) | *folded into* `gcp-organization` *(network-hub stage)* | `aws-network` |
-| Human SSO / access management | *folded into* `gcp-organization` *(Cloud Identity groups)* | `aws-identity` |
-| Shared platform services | *folded into* `gcp-organization` *(projects stage)* | `aws-shared-services` |
+| Foundation identity (admin project, Terraform SA, WIF pools) | `gcp-bootstrap` *(bootstrap stage; phase-0, applied first)* | *(phase-0, out-of-band — see AWS Bootstrap runbook)* |
+| Org structure, guardrails, org CMEK | `gcp-organization` *(organization stage)* | `aws-organization` |
+| Security & threat-detection baseline | *in* `gcp-organization` *(SCC notifications, audit logs, control-plane alerting)* | `aws-security` |
+| Human SSO / access management | *in* `gcp-organization` *(Cloud Identity groups, IAM)* | `aws-identity` |
+| Shared platform services (hub/host/spoke projects) | `gcp-projects` *(projects stage)* | `aws-shared-services` |
+| Network hub (shared/transit backbone + DNS) | `gcp-network-hub` *(network-hub stage)* | `aws-network` |
 | Centralized backup | *native GCS lifecycle / snapshots — no dedicated root* | `aws-backup` |
 | Per-environment workload | `gcp-workload-<env>` | `aws-workload-<env>` |
 | SaaS (Supabase / Vercel) | `saas-<name>` *(cloud-agnostic — no cloud provider)* | `saas-<name>` *(same root)* |
@@ -104,7 +105,7 @@ Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives i
 
 ## Module Library
 
-98 modules — **46 GCP · 46 AWS · 6 SaaS** — each with auto-generated docs and `mock_provider` tests.
+111 modules — **54 GCP · 50 AWS · 6 SaaS · 1 TFC** — each with auto-generated docs and `mock_provider` tests.
 
 Both clouds are organized into the **same conceptual domains** so you can map a capability across providers at a glance. Each table reads: **capability → Google Cloud module → Amazon Web Services module**. A `—` means the platform has no dedicated module for that capability (often because it is native, or lives in an adjacent domain — noted inline). Link text is the module's path under `modules/<cloud>/`.
 
@@ -262,10 +263,11 @@ Composite stages wrap the primitives above into deployable landing-zone layers, 
 ```bash
 make ci                    # Full local pipeline (fmt + docs + validate + lint + security + test)
 make fmt                   # Format all Terraform files
-make test                  # Run all 153 .tftest.hcl suites (no cloud creds needed)
+make test                  # Run every .tftest.hcl suite (no cloud creds needed)
 make validate-all          # terraform validate across all roots
-make lint                  # TFLint with GCP ruleset
-make security              # tfsec + Checkov
+make lint                  # TFLint with the GCP + AWS rulesets
+make security              # Trivy (IaC config) + Checkov — tfsec is EOL and no longer used
+make count                 # Live module / root / test-suite counts
 make docs                  # Regenerate all module READMEs via terraform-docs
 make docs-check            # Verify no README is stale
 make plan-gcp-organization     # Plan control-plane changes
@@ -278,13 +280,16 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
 
 | Workflow | Trigger | What it does |
 |:---------|:--------|:-------------|
-| [`terraform-plan.yml`](.github/workflows/terraform-plan.yml) | Pull Request | fmt · docs-check · validate · lint · tfsec · checkov |
-| [`terraform-apply.yml`](.github/workflows/terraform-apply.yml) | Tags (`gcp-organization/v*`, `gcp-workload/*/v*`) | Verify TFC run → publish GitHub release |
-| [`security-scan.yml`](.github/workflows/security-scan.yml) | Push + weekly | tfsec · checkov · Trivy · Gitleaks → SARIF |
+| [`terraform-plan.yml`](.github/workflows/terraform-plan.yml) | Pull Request | fmt · docs-check · validate (sharded) · lint · Trivy · Checkov · tests · meta-lint → `Validation Summary` |
+| [`terraform-apply.yml`](.github/workflows/terraform-apply.yml) | Workspace tags (`gcp-*/v*`, `gcp-workload/*/v*`, `aws-*/v*`, `saas/*/v*`, `tfc-admin/v*`) | Verify TFC run → publish release metadata |
+| [`release.yml`](.github/workflows/release.yml) | Push to `main` | release-please: maintain the release PR; merging it tags `vX.Y.Z` + updates CHANGELOG |
+| [`security-scan.yml`](.github/workflows/security-scan.yml) | Push + weekly | Trivy · Checkov · Gitleaks → SARIF |
 | [`documentation.yml`](.github/workflows/documentation.yml) | Module `*.tf` changes | Auto-generate docs → open PR |
 | [`drift-detection.yml`](.github/workflows/drift-detection.yml) | Scheduled | Detect infrastructure drift |
 
-**Releasing:**
+**Releasing:** the repository is versioned `vX.Y.Z` by release-please from Conventional Commits — merge the
+open release PR to cut a release (see [CHANGELOG.md](CHANGELOG.md)). Separately, a per-workspace deployment
+tag records release metadata for a Terraform Cloud run:
 
 ```bash
 git tag -a gcp-organization/v1.2.0 -m "Release organization v1.2.0"
@@ -300,7 +305,7 @@ git push origin gcp-organization/v1.2.0
 | [Documentation Index](docs/INDEX.md) | Complete navigation hub |
 | [Quick Start](docs/guides/QUICK_START.md) | Bootstrap, creds, first apply |
 | [Architecture](docs/architecture/ARCHITECTURE.md) | Roots, modules, execution model |
-| [GCP Landing Zone](docs/architecture/gcp-landing-zone.md) | Folder/project model, two-root layer map, Shared VPC hub-spoke, foundation conformance checklist |
+| [GCP Landing Zone](docs/architecture/gcp-landing-zone.md) | Folder/project model, five-root layer map, Shared VPC hub-spoke, foundation conformance checklist |
 | [AWS Landing Zone](docs/architecture/aws-landing-zone.md) | Multi-account SRA model, layer map, SRA conformance checklist |
 | [Cross-Cloud Comparison](docs/architecture/cross-cloud-comparison.md) | Where each capability lives per provider, side by side |
 | [Landing-Zone Conformance](docs/architecture/landing-zone-conformance.md) | 2026 best-practice adherence review + gap register, both clouds |
@@ -309,6 +314,7 @@ git push origin gcp-organization/v1.2.0
 | [Network Topology](docs/architecture/network-topology.md) | Hub-spoke layout, VPC-SC, WIF flows |
 | [Troubleshooting](docs/guides/TROUBLESHOOTING.md) | Common errors including Supabase/Vercel |
 | [Branch Protection](docs/guides/BRANCH_PROTECTION.md) | GitHub ruleset configuration |
+| [Known Gaps](docs/known-gaps.md) | Open, preview and deferred items |
 | [CLAUDE.md](CLAUDE.md) | Onboarding guide for AI agents |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development workflow and standards |
 | [CHANGELOG.md](CHANGELOG.md) | Release notes |
@@ -332,10 +338,10 @@ git push origin gcp-organization/v1.2.0
 
 > Report vulnerabilities via [SECURITY.md](SECURITY.md) — do not open a public issue.
 
-- **PR gates:** TFSec + Checkov on every pull request
+- **PR gates:** Trivy + Checkov on every pull request (tfsec is end-of-life and no longer run)
 - **Scheduled scans:** Trivy (container/IaC) + Gitleaks (secrets) weekly
 - **SARIF upload:** All findings surface in the GitHub Security tab
-- **Inline skips only:** False positives are suppressed with `# tfsec:ignore` / `# checkov:skip` on the specific resource — never via global skip lists
+- **Inline skips preferred:** False positives are suppressed with `# checkov:skip` / Trivy ignore comments on the specific resource; the few global skips in `.checkov.yaml` each carry a justification
 
 ---
 

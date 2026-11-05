@@ -71,3 +71,73 @@ variable "suffix" {
     error_message = "suffix must be a lowercase hexadecimal string (e.g., 'abc123')."
   }
 }
+
+# ─── Automation identities (audit C2) ────────────────────────────────────────
+
+variable "workload_service_accounts" {
+  description = "Map of environment key -> { plan, apply } SA emails (gcp-bootstrap output workload_service_accounts). Each pair is granted var.workload_folder_roles on its OWN environment folder (var.folders[<env>]). Default {} = no grants."
+  type = map(object({
+    plan  = string
+    apply = string
+  }))
+  default = {}
+
+  validation {
+    condition     = alltrue([for env, sas in var.workload_service_accounts : can(regex("^[^@]+@[^@]+\\.iam\\.gserviceaccount\\.com$", sas.plan)) && can(regex("^[^@]+@[^@]+\\.iam\\.gserviceaccount\\.com$", sas.apply)) && sas.plan != sas.apply])
+    error_message = "Each workload_service_accounts entry needs distinct plan and apply service-account emails (*.iam.gserviceaccount.com)."
+  }
+
+  validation {
+    condition     = alltrue([for env in keys(var.workload_service_accounts) : contains(keys(var.folders), env)])
+    error_message = "Every workload_service_accounts key must be an environment present in var.folders (grants are scoped to that environment's folder)."
+  }
+}
+
+variable "workload_folder_roles" {
+  description = "Roles granted to each workload SA on its environment folder ({ plan, apply }). Must match the gcp-bootstrap delegation allow-list (read it from the gcp-bootstrap output workload_folder_roles)."
+  type = object({
+    plan  = list(string)
+    apply = list(string)
+  })
+  default = {
+    plan  = []
+    apply = []
+  }
+
+  validation {
+    condition     = !contains(concat(var.workload_folder_roles.plan, var.workload_folder_roles.apply), "roles/owner")
+    error_message = "roles/owner must not be granted to workload SAs."
+  }
+}
+
+variable "network_service_accounts" {
+  description = "The network-hub stage { plan, apply } SA emails (gcp-bootstrap output stage_service_accounts[\"network-hub\"]). Granted var.network_folder_roles on the var.network_folder_key folder. Null = no grants."
+  type = object({
+    plan  = string
+    apply = string
+  })
+  default = null
+
+  validation {
+    condition     = var.network_service_accounts == null || contains(keys(var.folders), var.network_folder_key)
+    error_message = "network_service_accounts is set but var.folders has no network_folder_key entry (default \"shared\") to scope the grants to."
+  }
+}
+
+variable "network_folder_roles" {
+  description = "Roles granted to the network-hub SAs on the shared/network folder ({ plan, apply }); read from the gcp-bootstrap output network_folder_roles."
+  type = object({
+    plan  = list(string)
+    apply = list(string)
+  })
+  default = {
+    plan  = []
+    apply = []
+  }
+}
+
+variable "network_folder_key" {
+  description = "Key in var.folders of the folder holding the hub/DNS projects (network-hub SAs are granted roles there)."
+  type        = string
+  default     = "shared"
+}

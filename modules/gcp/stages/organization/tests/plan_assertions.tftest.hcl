@@ -267,3 +267,27 @@ run "logging_project_requires_number" {
 
   expect_failures = [var.logging_project_number]
 }
+
+# Audit C2: the phase-0 bootstrap SA holds no standing folder-admin rights by
+# default; per-stage plan/apply SAs replace the legacy single-identity grants.
+run "no_legacy_admin_folder_grants_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(google_folder_iam_member.terraform_admin_folder_roles) == 0
+    error_message = "terraform-admin must not receive folder roles unless enable_legacy_admin_folder_roles = true"
+  }
+}
+
+run "legacy_admin_folder_grants_opt_in" {
+  command = plan
+
+  variables {
+    enable_legacy_admin_folder_roles = true
+  }
+
+  assert {
+    condition     = length(google_folder_iam_member.terraform_admin_folder_roles) > 0
+    error_message = "enable_legacy_admin_folder_roles = true must restore the legacy folder grants"
+  }
+}
