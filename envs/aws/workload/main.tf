@@ -64,3 +64,60 @@ module "aws_workload" {
   enable_edge    = var.enable_edge
   workload_roles = var.workload_roles
 }
+
+# =============================================================================
+# SaaS SECRET BRIDGE (audit H9, hybrid option C — AWS counterpart)
+#
+# Opt-in. Reads the Supabase outputs from a saas-<name> workspace and writes them
+# into an AWS Secrets Manager secret, so an ECS/Fargate task can consume Supabase
+# as a managed datastore via its container-secret valueFrom. Default off: no saas
+# state is read and nothing is created. See docs/architecture/saas-integration.md.
+# =============================================================================
+
+data "terraform_remote_state" "saas" {
+  count   = var.enable_saas_secret_bridge ? 1 : 0
+  backend = "cloud"
+  config = {
+    organization = var.tfc_organization
+    workspaces   = { name = var.saas_workspace_name }
+  }
+}
+
+resource "aws_secretsmanager_secret" "saas_bridge" {
+  # checkov:skip=CKV_AWS_149:Encrypted with the workload CMK (var.kms_key_arn) when
+  # supplied, otherwise the account's default aws/secretsmanager key. Encryption at
+  # rest is always in effect.
+  # checkov:skip=CKV2_AWS_57:This secret mirrors Supabase-managed credentials whose
+  # lifecycle Supabase owns; rotating a copy here would diverge from the source.
+  # Re-apply the bridge to refresh it instead.
+  count       = var.enable_saas_secret_bridge ? 1 : 0
+  name        = var.saas_secret_name
+  description = "Bridged Supabase connection details from ${var.saas_workspace_name} (audit H9)."
+  kms_key_id  = var.kms_key_arn != "" ? var.kms_key_arn : null
+}
+
+resource "aws_secretsmanager_secret_version" "saas_bridge" {
+  count     = var.enable_saas_secret_bridge ? 1 : 0
+  secret_id = aws_secretsmanager_secret.saas_bridge[0].id
+  secret_string = jsonencode({
+    api_url           = data.terraform_remote_state.saas[0].outputs.supabase_api_url
+    service_role_key  = data.terraform_remote_state.saas[0].outputs.supabase_service_role_key
+    database_password = data.terraform_remote_state.saas[0].outputs.supabase_database_password
+  })
+}
+
+# Grant only the named task roles GetSecretValue on the bridged secret.
+resource "aws_secretsmanager_secret_policy" "saas_bridge" {
+  count      = var.enable_saas_secret_bridge ? 1 : 0
+  secret_arn = aws_secretsmanager_secret.saas_bridge[0].arn
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "AllowNamedReaders"
+      Effect    = "Allow"
+      Principal = { AWS = var.saas_secret_reader_arns }
+      Action    = "secretsmanager:GetSecretValue"
+      Resource  = "*"
+    }]
+  })
+}
