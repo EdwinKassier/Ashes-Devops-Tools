@@ -1,6 +1,6 @@
 # CLAUDE.md — Agent Onboarding
 
-Terraform GCP + AWS landing zone. 98 modules, 13 deployable roots, remote state via Terraform Cloud.
+Terraform GCP + AWS landing zone. 105 modules, 14 deployable roots, remote state via Terraform Cloud.
 
 ---
 
@@ -23,6 +23,7 @@ envs/                   # deployable roots, nested by cloud (workspace names kee
     backup/             # AWS centralized backup
     workload/           # AWS per-env workloads — TF_WORKSPACE=aws-workload-<env>
   saas/                 # Supabase and/or Vercel only — TF_WORKSPACE=saas-<name>
+  tfc-admin/            # Codifies the TFC workspace layer (tfe provider) — TF_WORKSPACE=tfc-admin (apply first)
 
 modules/               # grouped by owning cloud (domain)
   gcp/                  # GCP-native modules
