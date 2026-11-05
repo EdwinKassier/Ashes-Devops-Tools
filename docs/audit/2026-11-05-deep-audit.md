@@ -240,10 +240,10 @@ so `terraform test`, `checkov`, and `make docs-check` are the gate):
 | M3 | Break-glass principal is an unmanaged, unmonitored string | The `aws-security` stage gains opt-in `create_break_glass`: it creates the managed role (MFA-gated trust, deny-all standing policy, AdministratorAccess only while `break_glass_active`) in the management account and feeds its ARN into the existing assumption alarm, so the role is managed and monitored together. Runbook updated. |
 | C1-delivery | Reference delivery pipeline was Cloud Run only | Added `examples/app-delivery/ecs-fargate-delivery.example.yml` (AWS OIDC, ECR, task-def deploy) and `gke-autopilot-delivery.example.yml` (WIF, Artifact Registry, `kubectl` rollout), so all three runtimes have a build-scan-push-deploy template. |
 
-| H9 | SaaS is a disconnected island | Decided on **Option C (hybrid, opt-in seams)**, scoped in [saas-integration.md](../architecture/saas-integration.md). All three Option C seams shipped, opt-in and off by default: the secret bridge on both clouds (`enable_saas_secret_bridge`), the frontend-URL seam (`cross_cloud_references` on `envs/saas`), and DNS unification (`modules/gcp/network/dns-records`, SaaS records into an existing Cloud DNS zone). AWS Route 53 records module is a symmetric follow-up. |
+| H9 | SaaS is a disconnected island | Decided on **Option C (hybrid, opt-in seams)**, scoped in [saas-integration.md](../architecture/saas-integration.md). All three Option C seams shipped, opt-in and off by default: the secret bridge on both clouds (`enable_saas_secret_bridge`), the frontend-URL seam (`cross_cloud_references` on `envs/saas`), and DNS unification (`modules/gcp/network/dns-records` and `modules/aws/network/dns-records`, SaaS records into an existing Cloud DNS or Route 53 zone). |
 
-Still open: the AWS Route 53 counterpart of the DNS records module (symmetric
-follow-up) and **CODEOWNERS** (a repo-ownership change).
+Still open: **CODEOWNERS** (a repo-ownership change). Every substantive code-level
+finding from this audit is now resolved.
 
 ---
 

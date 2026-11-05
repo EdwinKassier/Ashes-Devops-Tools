@@ -4,8 +4,8 @@
 delivered: the secret bridge on both clouds (`enable_saas_secret_bridge` on
 `envs/gcp/workload` and `envs/aws/workload`), the frontend-URL seam
 (`cross_cloud_references` on `envs/saas`), and DNS unification
-(`modules/gcp/network/dns-records`). Each is opt-in and off by default. The AWS
-Route 53 counterpart of the DNS records module is a symmetric follow-up.
+(`modules/gcp/network/dns-records`). Each is opt-in and off by default, and the DNS records module ships for both
+Cloud DNS and Route 53.
 
 **Audit finding (H9):** the SaaS tier (Supabase and Vercel) is a disconnected
 island. `modules/saas/stages/saas-workload` composes the SaaS modules, but no
@@ -110,7 +110,7 @@ config.
      writes SaaS custom-domain records (Vercel, Supabase) into an existing Cloud
      DNS managed zone, so they live in the org's zone instead of a separate
      registrar. Opt-in (empty records map creates nothing). The AWS Route 53
-     counterpart is a symmetric follow-up.
+     counterpart ships as `modules/aws/network/dns-records`.
 - **Pro:** matches the repo's provider-selection philosophy (deploy any
   combination, opt in per feature); keeps the SaaS root credential-free; each
   seam is independently testable and reversible.
