@@ -1,0 +1,88 @@
+# Reference application-delivery pipeline for AWS ECS/Fargate (audit C1).
+# COPY this into an application repository's .github/workflows/ and adjust. It is
+# a template, not a workflow for THIS repo (hence the .example.yml suffix), so it
+# never runs here. This is the AWS counterpart to cloud-run-delivery.example.yml.
+#
+# Flow: build -> scan -> push to ECR -> register a new task-definition revision
+# and deploy to the ECS service created by modules/aws/compute/ecs-fargate. Auth
+# is keyless via GitHub OIDC assuming a deploy role. No long-lived AWS keys.
+#
+# Prerequisites (provisioned by the landing zone, not by this pipeline):
+#   - An ECS service from modules/aws/compute/ecs-fargate (service_name below).
+#   - An ECR repository from modules/aws/data/ecr (its repository_urls output).
+#   - A deploy IAM role trusting this repo via GitHub OIDC, with permission to
+#     push to the ECR repo and to update the ECS service / register task defs.
+#   - Container secrets delivered via the task definition's valueFrom (Secrets
+#     Manager), so they never pass through this pipeline.
+
+name: Deploy service (ECS/Fargate)
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write # required for keyless OIDC auth to AWS
+
+env:
+  AWS_REGION: eu-west-2
+  ECR_REPO: ${{ vars.ECR_REPOSITORY_URL }}   # modules/aws/data/ecr repository_urls[...]
+  ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}       # ecs-fargate cluster (name or ARN)
+  ECS_SERVICE: ${{ vars.ECS_SERVICE }}       # ecs-fargate service_name
+  CONTAINER_NAME: ${{ vars.CONTAINER_NAME }} # ecs-fargate container_name
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Authenticate to AWS (keyless OIDC)
+        uses: aws-actions/configure-aws-credentials@v4 # pin to a SHA in your repo
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }} # OIDC deploy role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2 # pin to a SHA in your repo
+
+      - name: Build image
+        run: docker build -t "${ECR_REPO}:${GITHUB_SHA}" .
+
+      - name: Scan image (block on CRITICAL/HIGH, matching the IaC gate)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.ECR_REPO }}:${{ github.sha }}
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+
+      - name: Push image
+        run: docker push "${ECR_REPO}:${GITHUB_SHA}"
+
+      # Render a new task-definition revision from the Terraform-managed one,
+      # swapping only the image, then deploy it. In a GitOps setup, instead bump
+      # the image variable and let Terraform Cloud apply.
+      - name: Download current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition "${ECS_SERVICE}" \
+            --query taskDefinition > task-definition.json
+
+      - name: Render new image into the task definition
+        id: render
+        uses: aws-actions/amazon-ecs-render-task-definition@v1 # pin to a SHA
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ env.ECR_REPO }}:${{ github.sha }}
+
+      - name: Deploy to ECS (wait for a stable service)
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2 # pin to a SHA
+        with:
+          task-definition: ${{ steps.render.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
