@@ -61,14 +61,50 @@ module "service" {
 Apply this once to create the service with a placeholder image. From then on,
 the delivery pipeline builds and ships new images.
 
+## Exposing the service (front door)
+
+Cloud Run gives the service an internal endpoint. To publish it on your own
+domain behind a global HTTPS load balancer with a managed certificate, add
+`modules/gcp/network/app-ingress`:
+
+```hcl
+module "ingress" {
+  source                 = "../../../modules/gcp/network/app-ingress"
+  project_id             = local.env_config.host_project_id
+  region                 = local.env_config.region
+  name                   = "my-api"
+  domains                = ["api.example.com"]
+  cloud_run_service_name = module.service.name
+  dns_managed_zone       = "app-zone"  # optional: creates the A record for you
+  # security_policy_id   = module.edge.policy_id  # optional Cloud Armor WAF
+  # ssl_policy_id        = ...                     # optional TLS floor
+}
+```
+
+The module serves HTTPS only (HTTP redirects), keeps backend access logging on,
+and provisions a Google-managed certificate. The certificate turns active once
+the domain resolves to the load balancer IP (`module.ingress.ip_address`). Cloud
+Armor and a TLS-version floor are opt-in for internet-facing services.
+
 ## Delivery pipeline
 
-`examples/app-delivery/cloud-run-delivery.example.yml` is a reference GitHub
-Actions workflow: build, scan (Trivy, same CRITICAL/HIGH bar as the IaC gate),
-push to Artifact Registry (keyless WIF, no SA keys), and deploy. Copy it into the
-application repository and set the WIF provider and deploy SA from the
-`gcp-bootstrap` outputs. For a GitOps model, have the pipeline bump the image
-variable and let Terraform Cloud apply instead of calling `gcloud run` directly.
+Reference GitHub Actions workflows live in `examples/app-delivery/`, one per
+runtime. All share the same shape: build, scan (Trivy, same CRITICAL/HIGH bar as
+the IaC gate), push to the registry with keyless auth (no long-lived keys), and
+deploy. Copy the one for your runtime into the application repository and set the
+listed repository variables.
+
+| Runtime | Pipeline | Auth | Deploy step |
+|---------|----------|------|-------------|
+| Cloud Run | `cloud-run-delivery.example.yml` | WIF | `gcloud run services update` |
+| GKE Autopilot | `gke-autopilot-delivery.example.yml` | WIF | `kubectl set image` + rollout status |
+| ECS/Fargate | `ecs-fargate-delivery.example.yml` | AWS OIDC | new task-def revision + service deploy |
+
+The GCP pipelines take the WIF provider and deploy SA from the `gcp-bootstrap`
+outputs; the AWS pipeline assumes an OIDC deploy role. For a GitOps model, have
+the pipeline bump the image variable (or commit the new tag to a manifests repo)
+and let Terraform Cloud / Argo CD apply, instead of calling the deploy CLI
+directly.
 
 ## AWS golden path (containers)
 
@@ -77,13 +113,15 @@ password managed in Secrets Manager) plus `modules/aws/compute/ecs-fargate`
 (private subnets, no public IP, secrets via `valueFrom`, optional ALB and
 autoscaling), composed in `envs/aws/workload`. Point the task definition's
 container secrets at the RDS-managed master-user secret ARN the data module
-outputs.
+outputs. Ship new images with `examples/app-delivery/ecs-fargate-delivery.example.yml`
+(keyless OIDC, Trivy scan, ECR push, task-def revision deploy).
 
 ## What is still your responsibility
 
 These modules are the building blocks and the secure defaults. You still own the
-application IAM role contents (least privilege is yours to define), the ingress
-certificate and DNS records, and the service's own SLOs. Ingress composition
-(service + cert + DNS), per-service dashboards and SLOs, and a formal dev to prod
-promotion flow are the next platform additions; until then, use the network and
-monitoring primitive modules directly.
+application IAM role contents (least privilege is yours to define) and the content
+of your domain's DNS zone. For service objectives, attach
+`modules/gcp/monitoring/slo` to the workload's monitored service to track
+availability or latency against a goal and alert on fast error-budget burn. To
+promote a service from dev to prod, follow
+[`../runbooks/promotion.md`](../runbooks/promotion.md).

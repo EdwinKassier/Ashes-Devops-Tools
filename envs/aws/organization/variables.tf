@@ -67,6 +67,14 @@ variable "accounts" {
     condition     = alltrue([for a in values(var.accounts) : can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", a.email))])
     error_message = "Every accounts entry must have a valid root email address."
   }
+
+  # L2: the default emails are placeholders. Reject them so an unmodified apply
+  # fails fast instead of trying to create real AWS accounts with example.com
+  # addresses (each account needs a unique, deliverable root email).
+  validation {
+    condition     = alltrue([for a in values(var.accounts) : !can(regex("@example\\.(com|org|net)$", lower(a.email)))])
+    error_message = "accounts still uses placeholder @example.com emails. Set real, unique root email addresses for each account before applying."
+  }
 }
 
 variable "workload_accounts" {

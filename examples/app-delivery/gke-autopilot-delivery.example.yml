@@ -1,0 +1,83 @@
+# Reference application-delivery pipeline for GKE Autopilot (audit C1).
+# COPY this into an application repository's .github/workflows/ and adjust. It is
+# a template, not a workflow for THIS repo (hence the .example.yml suffix), so it
+# never runs here. This is the Kubernetes counterpart to
+# cloud-run-delivery.example.yml.
+#
+# Flow: build -> scan -> push to Artifact Registry -> roll out the new image to a
+# Deployment on the GKE Autopilot cluster created by
+# modules/gcp/compute/gke-autopilot. Auth is keyless (WIF), using the
+# pool/provider from the gcp-bootstrap root. No service-account keys.
+#
+# Prerequisites (provisioned by the landing zone, not by this pipeline):
+#   - A GKE Autopilot cluster from modules/gcp/compute/gke-autopilot (name below).
+#   - An Artifact Registry repo from modules/gcp/artifact-registry.
+#   - A deploy service account with roles/container.developer +
+#     artifactregistry.writer, and a WIF binding for this repo
+#     (modules/gcp/iam/workload-identity).
+#   - A Kubernetes Deployment (the k8s manifests live in the app repo); this
+#     pipeline updates its image. Secrets come from Secret Manager via the
+#     workload's CSI driver / env, not from this pipeline.
+
+name: Deploy service (GKE Autopilot)
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write # required for keyless WIF auth
+
+env:
+  REGION: europe-west1
+  CLUSTER: ${{ vars.GKE_CLUSTER }}       # gke-autopilot name output
+  DEPLOYMENT: my-api                     # the Kubernetes Deployment to update
+  NAMESPACE: default
+  CONTAINER: my-api                      # the container within the Deployment
+  AR_REPO: europe-west1-docker.pkg.dev/${{ vars.GOOGLE_PROJECT_ID }}/apps
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Authenticate to Google Cloud (keyless)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }} # from gcp-bootstrap output
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - name: Build image
+        run: docker build -t "${AR_REPO}/${DEPLOYMENT}:${GITHUB_SHA}" .
+
+      - name: Scan image (block on CRITICAL/HIGH, matching the IaC gate)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.AR_REPO }}/${{ env.DEPLOYMENT }}:${{ github.sha }}
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+
+      - name: Push image
+        run: |
+          gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
+          docker push "${AR_REPO}/${DEPLOYMENT}:${GITHUB_SHA}"
+
+      - name: Get cluster credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.CLUSTER }}
+          location: ${{ env.REGION }}
+
+      # Roll out the new image. In a GitOps setup, instead have the pipeline
+      # commit the new image tag to the manifests repo and let Argo CD / Config
+      # Sync apply it.
+      - name: Roll out the new image
+        run: |
+          kubectl set image "deployment/${DEPLOYMENT}" \
+            "${CONTAINER}=${AR_REPO}/${DEPLOYMENT}:${GITHUB_SHA}" \
+            --namespace "${NAMESPACE}"
+          kubectl rollout status "deployment/${DEPLOYMENT}" \
+            --namespace "${NAMESPACE}" --timeout=300s

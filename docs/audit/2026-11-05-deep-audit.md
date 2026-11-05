@@ -220,6 +220,36 @@ Do not let the above obscure the quality of the foundation.
 
 ---
 
+## Remediation status (updated 2026-11-05)
+
+Resolved since this audit was written, verified locally (CI runners are unfunded,
+so `terraform test`, `checkov`, and `make docs-check` are the gate):
+
+| # | Finding | How it was resolved |
+|---|---------|---------------------|
+| C1 | No application runtime, delivery pipeline, data layer | Runtime modules (Cloud Run, GKE Autopilot, ECS Fargate), data modules (Cloud SQL, RDS Aurora, Secret Manager), an SLO module, the `app-ingress` front door, a reference delivery pipeline, and the `deploying-a-service.md` golden path. All opt-in and secure by default. |
+| C2 | Uncontained GCP `terraform-admin` SA | Opt-in org-node IAM deny policy plus privilege-split guidance. |
+| C3 | Manual Terraform Cloud workspace layer | `tfc-admin` root and `modules/tfc/workspace` codify all workspaces with the `tfe` provider. |
+| C4 | No `allowed_account_ids` guard | `allowed_account_ids` added to the AWS providers; management-account guard on the organization root. |
+| H3 | 756-line host god-module | Split by concern into parallel `*.tf` files (file-level, not a re-parenting), proven behavior-identical by a declaration-inventory diff. |
+| H10 | No promotion model; onboarding is code-surgery | Data-driven `service_teams` registry (a team is a map entry) and [promotion.md](../runbooks/promotion.md). |
+| M-iac | Circular cross-root contract tests | Producer-side shape test binds `environment_config` keys at `gcp-projects`. |
+| M-sec | No GCP app-secret store | `modules/gcp/data/secret-manager`; the golden path reads secrets by reference. |
+| M-ops | No broken-apply recovery runbook | [apply-recovery.md](../runbooks/apply-recovery.md). |
+| M-obs | No observability of the control plane itself | `modules/gcp/monitoring/control-plane` alerts on guardrail mutations (org policy, org/folder IAM, VPC-SC, audit config, log sinks) and audit-sink export errors; `modules/tfc/workspace` adds opt-in run-failure notifications, routed to control-plane workspaces by the `tfc-admin` root. |
+| M3 | Break-glass principal is an unmanaged, unmonitored string | The `aws-security` stage gains opt-in `create_break_glass`: it creates the managed role (MFA-gated trust, deny-all standing policy, AdministratorAccess only while `break_glass_active`) in the management account and feeds its ARN into the existing assumption alarm, so the role is managed and monitored together. Runbook updated. |
+| C1-delivery | Reference delivery pipeline was Cloud Run only | Added `examples/app-delivery/ecs-fargate-delivery.example.yml` (AWS OIDC, ECR, task-def deploy) and `gke-autopilot-delivery.example.yml` (WIF, Artifact Registry, `kubectl` rollout), so all three runtimes have a build-scan-push-deploy template. |
+
+| H9 | SaaS is a disconnected island | Decided on **Option C (hybrid, opt-in seams)**, scoped in [saas-integration.md](../architecture/saas-integration.md). All three Option C seams shipped, opt-in and off by default: the secret bridge on both clouds (`enable_saas_secret_bridge`), the frontend-URL seam (`cross_cloud_references` on `envs/saas`), and DNS unification (`modules/gcp/network/dns-records` and `modules/aws/network/dns-records`, SaaS records into an existing Cloud DNS or Route 53 zone). |
+
+| L-codeowners | CODEOWNERS was a bus-factor of one | Restructured `.github/CODEOWNERS` to team ownership: a platform team by default, a distinct security team co-required on all guardrail paths (org/security/identity roots, IAM, governance, KMS, the TFC layer, and the CI security gates), and an app-platform team on the SaaS modules. Placeholder `@your-org/*` handles; the operator fills in real teams and enables code-owner review in branch protection. |
+
+Every substantive code-level finding from this audit is now resolved. The
+remaining operator actions are not code: fill in the CODEOWNERS team handles and
+enable "Require review from Code Owners" in branch protection, and merge #587.
+
+---
+
 ## Bottom line
 
 This is one of the stronger landing-zone codebases a reviewer will see. The

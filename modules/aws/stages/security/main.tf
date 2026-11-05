@@ -22,6 +22,36 @@
 # policy, so the default plan creates no FMS resources; a deployment opts in and
 # overrides the policies deliberately. See README.
 
+locals {
+  # The ARN the assumption alarm watches: the role this stage creates when
+  # create_break_glass is true, otherwise the externally-managed ARN the caller
+  # passes. So "managed here" and "monitored here" stay in lockstep (audit M3).
+  effective_break_glass_role_arn = var.create_break_glass ? module.break_glass[0].break_glass_role_arn : var.break_glass_role_arn
+}
+
+# ---------------------------------------------------------------------------
+# Managed break-glass role (management account) — audit M3
+#
+# Opt-in. Deny-all by default; AdministratorAccess only while break_glass_active.
+# MFA-required trust scoped to break_glass_trusted_principals. Its assumption is
+# alarmed by the security_notifications module below via the effective ARN.
+# ---------------------------------------------------------------------------
+
+module "break_glass" {
+  source = "../../iam/iam-role"
+  count  = var.create_break_glass ? 1 : 0
+  providers = {
+    aws = aws.management
+  }
+
+  roles                          = {}
+  enable_break_glass             = true
+  break_glass_role_name          = var.break_glass_role_name
+  break_glass_trusted_principals = var.break_glass_trusted_principals
+  break_glass_mfa_max_age        = var.break_glass_mfa_max_age
+  break_glass_active             = var.break_glass_active
+}
+
 # ---------------------------------------------------------------------------
 # KMS customer-managed keys (log-archive account + forensics account)
 # ---------------------------------------------------------------------------
@@ -275,7 +305,7 @@ module "security_notifications" {
   # cross-account log CMK (which would fail with KMSAccessDenied on publish).
   kms_key_id                = module.sectool_cmk.key_arn
   notification_subscribers  = var.notification_subscribers
-  break_glass_role_arn      = var.break_glass_role_arn
+  break_glass_role_arn      = local.effective_break_glass_role_arn
   cloudtrail_log_group_name = var.cloudtrail_log_group_name
 }
 

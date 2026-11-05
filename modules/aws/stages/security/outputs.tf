@@ -42,3 +42,8 @@ output "forensics_account_id" {
   description = "12-digit account ID of the forensics account (echo of the input, part of the cross-root contract)."
   value       = var.forensics_account_id
 }
+
+output "break_glass_role_arn" {
+  description = "ARN of the break-glass role the assumption alarm watches: the stage-managed role when create_break_glass is true, else the externally-managed ARN passed in. Use it to set the org SCP break-glass exemptions. Empty when neither is set."
+  value       = local.effective_break_glass_role_arn
+}

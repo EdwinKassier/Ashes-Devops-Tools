@@ -210,3 +210,37 @@ variable "cloudtrail_alarm_sns_topic_arn" {
   type        = string
   default     = null
 }
+
+# -----------------------------------------------------------------------------
+# Managed break-glass role (audit M3) — opt-in passthrough to the security stage.
+# -----------------------------------------------------------------------------
+
+variable "create_break_glass" {
+  description = "Create and manage the break-glass role in the management account (opt-in). When true, break_glass_role_arn is ignored and the stage-created role's ARN is watched and exported."
+  type        = bool
+  default     = false
+}
+
+variable "break_glass_role_name" {
+  description = "Name of the managed break-glass role (used only when create_break_glass is true). Set the org SCP exemption to arn:aws:iam::<management-account>:role/<this name>."
+  type        = string
+  default     = "OrganizationBreakGlass"
+}
+
+variable "break_glass_trusted_principals" {
+  description = "Account-qualified ARNs permitted to assume the managed break-glass role (used only when create_break_glass is true). Keep small; MFA is always required."
+  type        = list(string)
+  default     = []
+}
+
+variable "break_glass_mfa_max_age" {
+  description = "Maximum MFA session age in seconds allowed to assume the managed break-glass role (used only when create_break_glass is true)."
+  type        = number
+  default     = 3600
+}
+
+variable "break_glass_active" {
+  description = "Set true ONLY during a declared incident to attach AdministratorAccess to the managed break-glass role. False keeps the deny-all standing policy."
+  type        = bool
+  default     = false
+}

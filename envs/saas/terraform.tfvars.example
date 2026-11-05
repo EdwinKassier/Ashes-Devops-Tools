@@ -63,7 +63,14 @@
 #   XERO_CLIENT_ID = "..."
 # }
 
-# Optional: cross-cloud wiring seam (see commented block in main.tf). Reads an
-# upstream AWS/GCP workspace's outputs from state — no cloud creds needed.
-# tfc_organization        = "my-tfc-org"
-# upstream_workspace_name = "apps-production"
+# Optional: frontend-URL seam (audit H9, option C). Inject an upstream AWS/GCP
+# workspace output into a Vercel env var, resolved from state — no cloud creds.
+# See docs/architecture/saas-integration.md.
+# tfc_organization = "my-tfc-org"
+# cross_cloud_references = {
+#   api_url = {
+#     workspace_name = "gcp-workload-prod"
+#     output_key     = "api_endpoint"
+#     vercel_env_key = "NEXT_PUBLIC_API_URL"
+#   }
+# }

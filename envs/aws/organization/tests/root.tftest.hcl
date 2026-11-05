@@ -16,7 +16,15 @@
 mock_provider "aws" {}
 
 variables {
-  management_account_id   = "111111111111" # C4 account guard
+  management_account_id = "111111111111" # C4 account guard
+  accounts = {                           # L2: non-placeholder emails
+    log_archive      = { email = "aws+log-archive@acme.test", ou = "Security" }
+    security_tooling = { email = "aws+security-tooling@acme.test", ou = "Security" }
+    network          = { email = "aws+network@acme.test", ou = "Infrastructure" }
+    shared_services  = { email = "aws+shared-services@acme.test", ou = "Infrastructure" }
+    backup           = { email = "aws+backup@acme.test", ou = "Infrastructure" }
+    forensics        = { email = "aws+forensics@acme.test", ou = "Security" }
+  }
   terraform_run_role_arn  = "arn:aws:iam::111111111111:role/tfc-run-role"
   break_glass_role_arn    = "arn:aws:iam::111111111111:role/break-glass"
   log_archive_bucket_name = "ashes-org-log-archive"

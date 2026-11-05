@@ -43,49 +43,49 @@ module "saas_workload" {
   vercel_allowed_branches  = var.vercel_allowed_branches
   vercel_domains           = var.vercel_domains
 
-  vercel_qa_env_vars     = var.vercel_qa_env_vars
-  vercel_uat_env_vars    = var.vercel_uat_env_vars
-  vercel_prod_env_vars   = var.vercel_prod_env_vars
-  vercel_shared_env_vars = var.vercel_shared_env_vars
+  vercel_qa_env_vars   = var.vercel_qa_env_vars
+  vercel_uat_env_vars  = var.vercel_uat_env_vars
+  vercel_prod_env_vars = var.vercel_prod_env_vars
+  # Caller-supplied shared env vars plus any resolved cross-cloud references.
+  vercel_shared_env_vars = local.effective_vercel_shared_env_vars
 }
 
-# ── OPTIONAL: cross-cloud wiring seam (Convention 5) ─────────────────────────
+# ── Cross-cloud wiring seam (audit H9, option C — frontend-URL seam) ──────────
 #
 # A SaaS root can consume an output from another cloud's root (AWS or GCP)
-# WITHOUT ever configuring that cloud's provider: terraform_remote_state reads
-# from state at plan time and needs only the TFC organization — no cloud creds.
+# WITHOUT configuring that cloud's provider: terraform_remote_state reads from
+# state at plan time and needs only the TFC organization, no cloud credentials.
 # This keeps `terraform validate -backend=false` credential-free (what CI runs).
 #
-# Everything below is COMMENTED so this root validates standalone. Uncomment,
-# set var.tfc_organization + var.upstream_workspace_name, and wire the output
-# into a Vercel env var or Supabase input as shown. It is inert until then.
-#
-# data "terraform_remote_state" "upstream" {
-#   # Guarded: only reads state when an upstream workspace name is configured.
-#   count   = var.upstream_workspace_name == null ? 0 : 1
-#   backend = "cloud"
-#   config = {
-#     organization = var.tfc_organization
-#     workspaces = {
-#       # e.g. "aws-workload-production" or "gcp-workload-production"
-#       name = var.upstream_workspace_name
-#     }
-#   }
-# }
-#
-# locals {
-#   # Inert when the remote state is not wired in; resolves from state otherwise.
-#   upstream_api_endpoint = try(
-#     data.terraform_remote_state.upstream[0].outputs.api_endpoint,
-#     null,
-#   )
-# }
-#
-# Feed it into a Vercel env var (append to var.vercel_shared_env_vars), e.g.:
-#   vercel_shared_env_vars = concat(var.vercel_shared_env_vars, compact([
-#     local.upstream_api_endpoint == null ? null : jsonencode({
-#       key = "UPSTREAM_API_URL", value = local.upstream_api_endpoint
-#     })
-#   ]))
-# ...or into a Supabase input the same way. Because the lookup resolves from
-# state (not the live cloud API), no AWS/GCP credentials are ever required.
+# Opt-in via var.cross_cloud_references. Default empty: no upstream state is read
+# and this root stays standalone. Each reference resolves an upstream output (for
+# example a GCP/AWS runtime's API endpoint) into a shared Vercel env var, so the
+# frontend learns the backend URL.
+
+data "terraform_remote_state" "cross_cloud" {
+  for_each = local.cross_cloud_workspaces
+
+  backend = "cloud"
+  config = {
+    organization = var.tfc_organization
+    workspaces = {
+      name = each.value
+    }
+  }
+}
+
+locals {
+  # Distinct upstream workspaces referenced (for_each key = workspace name).
+  cross_cloud_workspaces = toset([for r in values(var.cross_cloud_references) : r.workspace_name])
+
+  # Resolve each reference to a Vercel shared env var.
+  cross_cloud_env_vars = [
+    for k, r in var.cross_cloud_references : {
+      key       = r.vercel_env_key
+      value     = tostring(data.terraform_remote_state.cross_cloud[r.workspace_name].outputs[r.output_key])
+      sensitive = r.sensitive
+    }
+  ]
+
+  effective_vercel_shared_env_vars = concat(var.vercel_shared_env_vars, local.cross_cloud_env_vars)
+}

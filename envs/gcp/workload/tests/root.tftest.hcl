@@ -94,4 +94,80 @@ run "workload_consumes_cross_root_contract" {
     condition     = output.network_name == "acme-dev-vpc"
     error_message = "workload must re-export the host network name"
   }
+
+  # No service_teams by default: the registry creates nothing (audit H10).
+  assert {
+    condition     = length(module.service_team) == 0
+    error_message = "with no service_teams declared, the registry must create no service projects"
+  }
+}
+
+# Data-driven service-team registry (audit H10): declaring a team is a map entry,
+# which fans out to one workload module instance with normalised folder/billing IDs.
+run "service_team_registry_fans_out" {
+  command = plan
+
+  variables {
+    service_teams = {
+      payments = {
+        project_admin_group_email = "payments-admins@acme.test"
+        activate_apis             = ["run.googleapis.com", "bigquery.googleapis.com"]
+        project_admin_roles       = ["roles/run.developer"]
+        shared_vpc_subnets = {
+          private = { region = "europe-west1", subnet_name = "acme-dev-vpc-private-europe-west1-b" }
+        }
+      }
+    }
+  }
+
+  # One module instance is created for the declared team.
+  assert {
+    condition     = length(module.service_team) == 1
+    error_message = "one service_teams entry must create exactly one workload module instance"
+  }
+
+  # folder_id is normalised from the folders/NNN remote-state value to the bare
+  # numeric ID the workload module requires.
+  assert {
+    condition     = module.service_team["payments"].host_project_id == "acme-dev-host-abcd"
+    error_message = "the service project must attach to the environment host project as its Shared VPC host"
+  }
+}
+
+# SaaS secret bridge (audit H9, hybrid option C): opt-in, default off, and when
+# enabled it writes the Supabase connection details into a Secret Manager secret.
+run "saas_secret_bridge_default_off" {
+  command = plan
+
+  assert {
+    condition     = length(module.saas_secret_bridge) == 0
+    error_message = "the SaaS secret bridge must create nothing when disabled (default)."
+  }
+}
+
+run "saas_secret_bridge_creates_secret_when_enabled" {
+  command = plan
+
+  variables {
+    enable_saas_secret_bridge    = true
+    saas_workspace_name          = "saas-web"
+    saas_secret_name             = "supabase-connection"
+    saas_secret_accessor_members = ["serviceAccount:app@acme-dev-host-abcd.iam.gserviceaccount.com"]
+  }
+
+  override_data {
+    target = data.terraform_remote_state.saas[0]
+    values = {
+      outputs = {
+        supabase_api_url          = "https://abcd.supabase.co"
+        supabase_service_role_key = "service-role-key-xxxx"
+        supabase_database_password = "db-password-xxxx"
+      }
+    }
+  }
+
+  assert {
+    condition     = length(module.saas_secret_bridge) == 1
+    error_message = "enabling the bridge must instantiate the secret-manager module once."
+  }
 }

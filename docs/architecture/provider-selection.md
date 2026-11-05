@@ -99,6 +99,8 @@ So the credentials a deployment needs are exactly the union of the credentials o
 
 Roots that need a value from another root read it with `terraform_remote_state` against the `cloud` backend. This is how the `saas` root can consume, say, a DNS zone name or a project ID emitted by a GCP or AWS root without ever configuring that cloud's provider.
 
+How far to take SaaS-to-cloud integration (standalone, fully integrated, or hybrid opt-in seams) is a scoped decision: see [saas-integration.md](saas-integration.md).
+
 Critically, the lookup resolves at **plan time from state** and needs **no cloud credentials** — only the TFC organization, supplied as a variable:
 
 ```hcl

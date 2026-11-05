@@ -75,3 +75,70 @@ run "consumes_remote_state_contracts" {
     error_message = "aws_network ipam_pool_ids must expose a pool for var.aws_region"
   }
 }
+
+# SaaS secret bridge (audit H9, hybrid option C): opt-in, default off; when
+# enabled it writes the Supabase connection into an AWS Secrets Manager secret.
+run "saas_secret_bridge_default_off" {
+  command = plan
+
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = { outputs = { account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_network
+    values = { outputs = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_security
+    values = { outputs = { log_archive_bucket_name = "ashes-org-log-archive" } }
+  }
+
+  assert {
+    condition     = length(aws_secretsmanager_secret.saas_bridge) == 0
+    error_message = "the SaaS secret bridge must create nothing when disabled (default)."
+  }
+}
+
+run "saas_secret_bridge_creates_secret_when_enabled" {
+  command = plan
+
+  variables {
+    enable_saas_secret_bridge = true
+    saas_workspace_name       = "saas-web"
+    saas_secret_reader_arns   = ["arn:aws:iam::222222222222:role/app-task-role"]
+  }
+
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = { outputs = { account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_network
+    values = { outputs = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_security
+    values = { outputs = { log_archive_bucket_name = "ashes-org-log-archive" } }
+  }
+  override_data {
+    target = data.terraform_remote_state.saas[0]
+    values = {
+      outputs = {
+        supabase_api_url           = "https://abcd.supabase.co"
+        supabase_service_role_key  = "service-role-key-xxxx"
+        supabase_database_password = "db-password-xxxx"
+      }
+    }
+  }
+
+  assert {
+    condition     = length(aws_secretsmanager_secret.saas_bridge) == 1
+    error_message = "enabling the bridge must create exactly one Secrets Manager secret."
+  }
+
+  assert {
+    condition     = length(aws_secretsmanager_secret_policy.saas_bridge) == 1
+    error_message = "the bridge must attach a resource policy granting the reader roles access."
+  }
+}

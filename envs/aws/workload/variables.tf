@@ -121,3 +121,56 @@ variable "workload_roles" {
   }))
   default = {}
 }
+
+# -----------------------------------------------------------------------------
+# SaaS secret bridge (audit H9, hybrid option C) — AWS counterpart to the GCP one.
+#
+# Opt-in. When enabled, this workload reads the Supabase outputs from a saas-<name>
+# workspace and writes them into an AWS Secrets Manager secret, so an ECS/Fargate
+# task can consume Supabase as a managed datastore via the container secrets
+# valueFrom. Default off: no SaaS coupling, and the workload reads no saas state.
+#
+# NOTE: the bridged values (service role key, database password) are stored as a
+# secret version, so they persist in THIS root's state as well as the saas root's.
+# Teams that require zero secret duplication should create the secret out of band
+# and leave this bridge disabled.
+# -----------------------------------------------------------------------------
+
+variable "enable_saas_secret_bridge" {
+  description = "Bridge Supabase connection details from a saas-<name> workspace into an AWS Secrets Manager secret (opt-in, audit H9). Default false."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.enable_saas_secret_bridge || (var.saas_workspace_name != null && length(var.saas_secret_reader_arns) > 0)
+    error_message = "enable_saas_secret_bridge = true requires saas_workspace_name and at least one saas_secret_reader_arns entry (the task role that reads the secret)."
+  }
+}
+
+variable "saas_workspace_name" {
+  description = "TFC workspace (saas-<name>) to read Supabase outputs from when enable_saas_secret_bridge is true."
+  type        = string
+  default     = null
+}
+
+variable "saas_secret_name" {
+  description = "Name of the Secrets Manager secret that holds the bridged Supabase connection JSON (api_url, service_role_key, database_password)."
+  type        = string
+  default     = "supabase-connection"
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9/_+=.@-]{1,512}$", var.saas_secret_name))
+    error_message = "saas_secret_name must be a valid Secrets Manager name (1-512 chars of alphanumerics and /_+=.@-)."
+  }
+}
+
+variable "saas_secret_reader_arns" {
+  description = "IAM principal ARNs granted secretsmanager:GetSecretValue on the bridged secret (e.g. the ECS task role). Required when the bridge is enabled."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for a in var.saas_secret_reader_arns : can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:", a))])
+    error_message = "Each saas_secret_reader_arns entry must be an account-qualified IAM ARN (arn:aws:iam::<12-digit>:...)."
+  }
+}

@@ -6,6 +6,21 @@ Compatibility wrapper for the application environment root.
 
 This module composes the lower-level networking, security, and governance modules used by [envs/gcp/workload](../../envs/gcp/workload/). It is retained for compatibility and internal orchestration; new consumers should prefer the staged roots and stage modules over calling `modules/gcp/stages/host` directly.
 
+## File layout
+
+The configuration is split by concern across `*.tf` files (Terraform reads them as one module, so resource addresses are unaffected). Each concern has a matching `variables-<concern>.tf` and `outputs-<concern>.tf`:
+
+| File | Contents |
+|------|----------|
+| `main.tf` | Locals, zone discovery, deletion and CIDR-count guards |
+| `foundation.tf` | VPC, three-tier subnets, integrated NAT, Private Service Access, Private Service Connect |
+| `firewall.tf` | Tiered, utility, additional, and hierarchical firewall rules |
+| `edge.tf` | Cloud Armor, CDN, API Gateway, internal load balancers |
+| `dns.tf` | Cloud DNS managed zones |
+| `connectivity.tf` | VPN, VPC peering, standalone NAT, interconnects |
+| `observability.tf` | VPC flow logs export, packet mirroring |
+| `governance.tf` | Shared VPC service projects, VPC Service Controls |
+
 ## Features
 
 - **Core Networking**: VPC with tiered subnets (public/private/database), NAT gateway, and flow logging
@@ -224,7 +239,7 @@ The following resources are created:
 - resource.terraform_data.deletion_protection_guard (modules/gcp/stages/host/main.tf#L55)
 - resource.terraform_data.subnet_cidr_count_guard (modules/gcp/stages/host/main.tf#L70)
 - data source.google_compute_zones.available (modules/gcp/stages/host/main.tf#L35)
-- data source.google_project.current (modules/gcp/stages/host/main.tf#L546)
+- data source.google_project.current (modules/gcp/stages/host/observability.tf#L8)
 
 
 ## Inputs

@@ -41,3 +41,17 @@ enable_edge = false
 
 # Optional — workload / cross-account IAM roles.
 workload_roles = {}
+
+# -----------------------------------------------------------------------------
+# SaaS secret bridge (audit H9, hybrid option C) — opt-in, default off.
+# When enabled, Supabase connection details from the named saas-<name> workspace
+# are written into a Secrets Manager secret the ECS task role can read via
+# valueFrom. See docs/architecture/saas-integration.md.
+# -----------------------------------------------------------------------------
+enable_saas_secret_bridge = false
+
+# Example (uncomment and adapt):
+# enable_saas_secret_bridge = true
+# saas_workspace_name       = "saas-web"
+# saas_secret_name          = "supabase-connection"
+# saas_secret_reader_arns   = ["arn:aws:iam::222222222222:role/app-task-role"]

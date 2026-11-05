@@ -169,7 +169,7 @@ variable "meta_store_manager_role_arn" {
 }
 
 variable "break_glass_role_arn" {
-  description = "ARN of the break-glass IAM role the security-notifications control watches for assumption. Any AssumeRole against this ARN raises a notification."
+  description = "ARN of an EXTERNALLY-managed break-glass role to watch for assumption. Ignored when create_break_glass is true (the stage then creates and watches its own role). Any AssumeRole against the effective ARN raises a notification."
   type        = string
   default     = ""
 
@@ -295,4 +295,65 @@ variable "cloudtrail_alarm_sns_topic_arn" {
   description = "Optional SNS topic ARN for the CIS control-plane alarms (enable_cloudwatch_logs). Null = alarms without a notification action."
   type        = string
   default     = null
+}
+
+# -----------------------------------------------------------------------------
+# Managed break-glass role (audit M3)
+#
+# When create_break_glass is true, the stage creates the emergency-access role
+# itself (MFA-gated trust, deny-all standing policy, AdministratorAccess only
+# while break_glass_active) in the management account, and feeds its ARN into the
+# assumption alarm automatically. This turns the break-glass principal from an
+# unmanaged ARN string into a managed, monitored resource. Default false keeps the
+# previous behaviour: pass an externally-managed break_glass_role_arn.
+# -----------------------------------------------------------------------------
+
+variable "create_break_glass" {
+  description = "Create and manage the break-glass role in the management account (opt-in), instead of referencing an external one. When true the role's ARN is wired into the assumption alarm automatically and exported."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.create_break_glass || length(var.break_glass_trusted_principals) > 0
+    error_message = "create_break_glass = true requires at least one break_glass_trusted_principals entry (an empty trust policy is rejected by AWS)."
+  }
+}
+
+variable "break_glass_role_name" {
+  description = "Name of the managed break-glass role (used only when create_break_glass is true). Its ARN is arn:aws:iam::<management-account>:role/<this name> — set the org SCP exemptions to match."
+  type        = string
+  default     = "OrganizationBreakGlass"
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9+=,.@_-]{1,64}$", var.break_glass_role_name))
+    error_message = "break_glass_role_name must be a valid IAM role name (1-64 chars of A-Z a-z 0-9 +=,.@_-)."
+  }
+}
+
+variable "break_glass_trusted_principals" {
+  description = "Account-qualified ARNs permitted to assume the managed break-glass role (used only when create_break_glass is true). Keep this to a small set of senior responders. MFA is always required."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for p in var.break_glass_trusted_principals : can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:", p))])
+    error_message = "Each break_glass_trusted_principals entry must be an account-qualified IAM ARN (arn:aws:iam::<12-digit>:...)."
+  }
+}
+
+variable "break_glass_mfa_max_age" {
+  description = "Maximum age in seconds of the MFA session allowed to assume the managed break-glass role (used only when create_break_glass is true)."
+  type        = number
+  default     = 3600
+
+  validation {
+    condition     = var.break_glass_mfa_max_age >= 300 && var.break_glass_mfa_max_age <= 43200
+    error_message = "break_glass_mfa_max_age must be between 300 and 43200 seconds."
+  }
+}
+
+variable "break_glass_active" {
+  description = "Set true ONLY during a declared incident to attach AdministratorAccess to the managed break-glass role. False (default) keeps the deny-all standing policy. Flipping this to true should itself be a reviewed, alarmed change."
+  type        = bool
+  default     = false
 }

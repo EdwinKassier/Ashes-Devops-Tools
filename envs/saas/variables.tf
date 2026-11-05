@@ -1,22 +1,45 @@
-# ── Terraform Cloud / cross-wiring ───────────────────────────────────────────
-#
-# Both inputs below are consumed only by the optional cross-cloud remote-state
-# seam in main.tf, which ships commented out (Convention 5). tflint cannot see
-# the commented usage, so the unused-declaration rule is suppressed per-
-# declaration rather than deleting inputs the documented opt-in relies on.
+# ── Terraform Cloud / cross-cloud wiring (audit H9, option C) ────────────────
 
-# tflint-ignore: terraform_unused_declarations
 variable "tfc_organization" {
-  description = "Terraform Cloud organization name. Only consumed by the optional cross-cloud remote-state seam in main.tf (commented out by default). Leave null for a standalone SaaS deployment."
+  description = "Terraform Cloud organization name. Required only when cross_cloud_references is non-empty (it reads upstream workspace state). Leave null for a standalone SaaS deployment."
   type        = string
   default     = null
 }
 
-# tflint-ignore: terraform_unused_declarations
-variable "upstream_workspace_name" {
-  description = "Optional. Name of an upstream AWS/GCP workspace to read cross-cloud outputs from via the commented terraform_remote_state seam in main.tf. Leave null (default) to keep this root fully standalone."
-  type        = string
-  default     = null
+variable "cross_cloud_references" {
+  description = <<-EOT
+    Opt-in frontend-URL seam. Inject outputs from AWS/GCP workspaces into the
+    Vercel app as shared environment variables, resolved from remote state at plan
+    time (no AWS or GCP credentials needed, only tfc_organization). Keyed by a
+    label; each entry names the upstream workspace, the output to read, and the
+    Vercel env var to set. Default empty: no cross-cloud reads, and this root stays
+    standalone.
+
+      workspace_name  upstream TFC workspace, e.g. "gcp-workload-prod".
+      output_key      the output to read from that workspace, e.g. "api_endpoint".
+      vercel_env_key  the Vercel env var name to set, e.g. "NEXT_PUBLIC_API_URL".
+      sensitive       mark the resulting Vercel env var sensitive (default false).
+  EOT
+  type = map(object({
+    workspace_name = string
+    output_key     = string
+    vercel_env_key = string
+    sensitive      = optional(bool, false)
+  }))
+  default = {}
+
+  validation {
+    condition = alltrue([
+      for r in values(var.cross_cloud_references) :
+      length(trimspace(r.workspace_name)) > 0 && length(trimspace(r.output_key)) > 0 && can(regex("^[A-Za-z_][A-Za-z0-9_]*$", r.vercel_env_key))
+    ])
+    error_message = "Each cross_cloud_references entry needs a non-empty workspace_name and output_key, and a vercel_env_key that is a valid environment variable name."
+  }
+
+  validation {
+    condition     = length(var.cross_cloud_references) == 0 || var.tfc_organization != null
+    error_message = "cross_cloud_references requires tfc_organization to be set (it reads upstream workspace state)."
+  }
 }
 
 # ── Feature flags ─────────────────────────────────────────────────────────────

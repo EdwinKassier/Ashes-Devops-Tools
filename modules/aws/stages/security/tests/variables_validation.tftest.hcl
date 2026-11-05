@@ -56,3 +56,14 @@ run "invalid_management_account_id_rejected" {
 
   expect_failures = [var.management_account_id]
 }
+
+run "create_break_glass_without_principals_rejected" {
+  command = plan
+
+  variables {
+    create_break_glass             = true
+    break_glass_trusted_principals = []
+  }
+
+  expect_failures = [var.create_break_glass]
+}

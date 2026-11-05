@@ -164,3 +164,38 @@ run "composes_security_baseline" {
     error_message = "Firewall Manager must be gated off by default (enable_firewall_manager=false)"
   }
 }
+
+# Managed break-glass role (audit M3): when create_break_glass is true, the stage
+# creates the role and the assumption alarm watches the stage-created ARN, not an
+# external string.
+run "managed_break_glass_is_created_and_watched" {
+  command = plan
+
+  variables {
+    create_break_glass             = true
+    break_glass_trusted_principals = ["arn:aws:iam::111111111111:role/IncidentCommander"]
+    break_glass_role_arn           = "" # not used when creating
+  }
+
+  # Make the created role's ARN known at plan so the wiring assertion is non-vacuous.
+  override_module {
+    target = module.break_glass[0]
+    outputs = {
+      role_arns            = {}
+      break_glass_role_arn = "arn:aws:iam::111111111111:role/OrganizationBreakGlass"
+    }
+  }
+
+  # The break-glass role module is instantiated.
+  assert {
+    condition     = length(module.break_glass) == 1
+    error_message = "create_break_glass = true must instantiate the managed break-glass role."
+  }
+
+  # The effective ARN wired to the alarm is the created role's ARN, not the
+  # (empty) external string.
+  assert {
+    condition     = local.effective_break_glass_role_arn == "arn:aws:iam::111111111111:role/OrganizationBreakGlass"
+    error_message = "the assumption alarm must watch the stage-created break-glass role ARN."
+  }
+}

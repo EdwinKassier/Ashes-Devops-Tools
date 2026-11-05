@@ -1,6 +1,6 @@
 # CLAUDE.md — Agent Onboarding
 
-Terraform GCP + AWS landing zone. 98 modules, 13 deployable roots, remote state via Terraform Cloud.
+Terraform GCP + AWS landing zone. 110 modules, 14 deployable roots, remote state via Terraform Cloud.
 
 ---
 
@@ -23,14 +23,15 @@ envs/                   # deployable roots, nested by cloud (workspace names kee
     backup/             # AWS centralized backup
     workload/           # AWS per-env workloads — TF_WORKSPACE=aws-workload-<env>
   saas/                 # Supabase and/or Vercel only — TF_WORKSPACE=saas-<name>
+  tfc-admin/            # Codifies the TFC workspace layer (tfe provider) — TF_WORKSPACE=tfc-admin (apply first)
 
 modules/               # grouped by owning cloud (domain)
   gcp/                  # GCP-native modules
     stages/             # Orchestration wrappers: bootstrap, organization, projects, network-hub, workload, host
-    network/            # ~21 primitives: vpc, subnet, dns, vpn, vpc-sc, cloud-armor, internal-lb, api-gateway, cdn, …
+    network/            # ~23 primitives: vpc, subnet, dns, dns-records, vpn, vpc-sc, cloud-armor, internal-lb, api-gateway, cdn, app-ingress, …
     governance/         # billing, kms, org-policy, scc, tags, cloud-audit-logs, private-ca
     iam/                # organization, role, service-account, workload-identity, identity-group*, deny-policy
-    monitoring/         # alert-policy, compute-dashboard
+    monitoring/         # alert-policy, compute-dashboard, slo, control-plane (landing-zone self-observability)
     ops/                # os-config (VM Manager patch deployments)
     backup/             # backup-plan (snapshot schedules)
     firebase/           # project
@@ -39,7 +40,7 @@ modules/               # grouped by owning cloud (domain)
   aws/                  # AWS-native modules (categorized, mirroring gcp/)
     governance/         # organization, organization-policy, account, cost-governance, service-quotas
     security/           # guardduty-org, securityhub-org, config-org, cloudtrail-org, securitylake, edge-security (CloudFront/WAF), …
-    network/            # vpc, transit-gateway, network-firewall, route53-resolver, ipam, vpc-endpoints, load-balancer, api-gateway, vpn
+    network/            # vpc, transit-gateway, network-firewall, route53-resolver, dns-records, ipam, vpc-endpoints, load-balancer, api-gateway, vpn
     iam/                # iam-role, iam-identity-center
     data/               # kms-key, log-archive-bucket, private-ca, ecr
     backup/             # backup-vault, backup-org-policy
