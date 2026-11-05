@@ -72,16 +72,15 @@ run "guardrail_policies_render_correctly" {
     error_message = "run role must NOT be exempt from DenyLeaveOrganization/DenyDisableSecurityServices"
   }
 
-  # Break-glass remains the sole exemption for the tamper-deny statements.
+  # Break-glass remains the SOLE exemption for the destructive tamper-deny
+  # statements, keyed on a member-account role-name pattern (SCPs never apply to
+  # the management account, so a management-account ARN would never match).
   assert {
     condition = alltrue([
-      for sid in ["DenyLeaveOrganization", "DenyDisableSecurityServices"] :
-      contains(
-        one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == sid]).Condition.ArnNotLike["aws:PrincipalArn"],
-        var.break_glass_role_arn
-      )
+      for sid in ["DenyLeaveOrganization", "DenyDisableSecurityServices", "DenyProtectedKeyDestruction", "DenyProtectedKeyUntag"] :
+      one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == sid]).Condition.ArnNotLike["aws:PrincipalArn"] == ["arn:aws:iam::*:role/break-glass"]
     ])
-    error_message = "break-glass role must remain exempt from the tamper-deny statements"
+    error_message = "break-glass (arn:aws:iam::*:role/break-glass) must be the sole exemption from the destructive tamper-deny statements"
   }
 
   assert {
@@ -107,6 +106,169 @@ run "guardrail_policies_render_correctly" {
   assert {
     condition     = length(keys(aws_organizations_policy.policy)) == 7
     error_message = "the built-in guardrail set must produce all seven policies"
+  }
+}
+
+run "deny_tamper_scp_hardened" {
+  command = plan
+
+  # Carve-outs must match MEMBER-account sessions: no account-qualified ARN
+  # (management-account ARNs are inert in an SCP) may appear anywhere.
+  assert {
+    condition     = !can(regex("arn:aws:iam::[0-9]{12}:", aws_organizations_policy.policy["scp-deny-tamper"].content))
+    error_message = "deny-tamper SCP must not reference account-qualified (management-account) role ARNs"
+  }
+
+  # Previously-missing tamper actions are now denied.
+  assert {
+    condition = length(setsubtract(
+      [
+        "cloudtrail:StopLogging", "cloudtrail:DeleteTrail", "cloudtrail:PutEventSelectors", "cloudtrail:UpdateTrail", "cloudtrail:PutInsightSelectors",
+        "guardduty:DeleteDetector", "guardduty:CreateFilter", "guardduty:UpdateFilter", "guardduty:UpdateDetector", "guardduty:DeleteMembers", "guardduty:DisassociateFromAdministratorAccount",
+        "config:DeleteConfigurationRecorder", "config:StopConfigurationRecorder", "config:PutConfigurationRecorder", "config:DeleteDeliveryChannel",
+        "securityhub:BatchDisableStandards", "securityhub:DisableSecurityHub", "access-analyzer:DeleteAnalyzer", "ec2:DeleteFlowLogs",
+        "macie2:DisableMacie", "inspector2:Disable", "kms:ScheduleKeyDeletion", "kms:DisableKey", "kms:PutKeyPolicy",
+      ],
+      flatten([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s.Action])
+    )) == 0
+    error_message = "deny-tamper SCP must deny every audited tamper action"
+  }
+
+  # Pipeline roles are exempt from reconfiguration (workload Config recorders are
+  # Terraform-managed in member accounts) but NOT from the destructive statements.
+  assert {
+    condition = alltrue([
+      for p in ["arn:aws:iam::*:role/tfc-apply", "arn:aws:iam::*:role/OrganizationAccountAccessRole", "arn:aws:iam::*:role/break-glass"] :
+      contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyWeakenSecurityServices"]).Condition.ArnNotLike["aws:PrincipalArn"], p)
+    ])
+    error_message = "pipeline roles and break-glass must be exempt from DenyWeakenSecurityServices"
+  }
+
+  # Pipeline roles, OAAR and break-glass are protected from IAM modification.
+  assert {
+    condition = alltrue([
+      for p in ["arn:aws:iam::*:role/tfc-apply", "arn:aws:iam::*:role/OrganizationAccountAccessRole", "arn:aws:iam::*:role/break-glass"] :
+      contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyPrivilegedRoleTampering"]).Resource, p)
+    ]) && contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyPrivilegedRoleTampering"]).Action, "iam:UpdateAssumeRolePolicy")
+    error_message = "DenyPrivilegedRoleTampering must protect pipeline roles, OAAR and break-glass from trust-policy changes"
+  }
+
+  # Protected KMS keys: destruction is keyed on the protection resource tag.
+  assert {
+    condition     = one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyProtectedKeyDestruction"]).Condition.StringEquals["aws:ResourceTag/protected"] == "true"
+    error_message = "DenyProtectedKeyDestruction must be scoped to keys tagged protected=true"
+  }
+
+  # SCP size quota (5,120 characters).
+  assert {
+    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 5120
+    error_message = "deny-tamper SCP must stay under the 5,120-character SCP size quota"
+  }
+}
+
+run "deny_tamper_scp_size_with_custom_names" {
+  # Realistic worst case: several path-prefixed pipeline roles plus a separate
+  # member-account break-glass name must still fit the 5,120-character quota.
+  command = plan
+
+  variables {
+    pipeline_role_names    = ["automation/tfc-plan", "automation/tfc-apply", "OrganizationAccountAccessRole", "stacksets-exec-*"]
+    break_glass_role_names = ["emergency/break-glass-admin"]
+  }
+
+  assert {
+    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 5120
+    error_message = "deny-tamper SCP must stay under the 5,120-character SCP size quota"
+  }
+
+  assert {
+    condition     = contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyLeaveOrganization"]).Condition.ArnNotLike["aws:PrincipalArn"], "arn:aws:iam::*:role/emergency/break-glass-admin")
+    error_message = "explicit break_glass_role_names must override the name derived from break_glass_role_arn"
+  }
+}
+
+run "rcp_data_perimeter_safe_for_federation_and_service_roles" {
+  command = plan
+
+  # C4: EnforceOrgIdentities must NOT deny sts:* — that blocks OIDC/SAML
+  # federation (TFC dynamic credentials) whose sessions carry no PrincipalOrgID.
+  assert {
+    condition     = !contains(one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == "EnforceOrgIdentities"]).Action, "sts:*")
+    error_message = "EnforceOrgIdentities must not use sts:*"
+  }
+
+  assert {
+    condition = alltrue([
+      for sid in ["EnforceOrgIdentities", "ConfusedDeputyProtection"] : alltrue([
+        for a in ["sts:AssumeRoleWithWebIdentity", "sts:AssumeRoleWithSAML", "sts:*"] :
+        !contains(one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == sid]).Action, a)
+      ])
+    ])
+    error_message = "RCP perimeter statements must not cover AssumeRoleWithWebIdentity / AssumeRoleWithSAML"
+  }
+
+  assert {
+    condition     = contains(one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == "EnforceOrgIdentities"]).Action, "sts:AssumeRole")
+    error_message = "EnforceOrgIdentities must still cover sts:AssumeRole"
+  }
+
+  assert {
+    condition     = one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == "EnforceOrgIdentities"]).Condition.StringNotEqualsIfExists["aws:PrincipalOrgID"] == var.org_id
+    error_message = "EnforceOrgIdentities must anchor on aws:PrincipalOrgID = org_id"
+  }
+
+  assert {
+    condition     = one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == "EnforceOrgIdentities"]).Condition.StringNotEqualsIfExists["aws:ResourceTag/dp:exclude:identity"] == "true"
+    error_message = "EnforceOrgIdentities must honour the dp:exclude:identity resource-tag escape hatch"
+  }
+
+  # Null aws:SourceAccount guard: service-principal calls with no source context
+  # (EC2 instance profiles, Lambda/ECS task roles) are not denied.
+  assert {
+    condition     = one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == "ConfusedDeputyProtection"]).Condition.Null["aws:SourceAccount"] == "false"
+    error_message = "ConfusedDeputyProtection must carry the Null aws:SourceAccount = false guard"
+  }
+
+  assert {
+    condition     = one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == "ConfusedDeputyProtection"]).Condition.StringNotEqualsIfExists["aws:SourceOrgID"] == var.org_id
+    error_message = "ConfusedDeputyProtection must anchor on aws:SourceOrgID = org_id"
+  }
+
+  # No trusted accounts by default: the PrincipalAccount key is omitted entirely
+  # (an empty condition-value array is not valid policy).
+  assert {
+    condition     = !can(regex("aws:PrincipalAccount", aws_organizations_policy.policy["rcp-data-perimeter"].content))
+    error_message = "aws:PrincipalAccount must be omitted when no trusted accounts are configured"
+  }
+
+  # VPC BPA exclusions are disabled by default.
+  assert {
+    condition     = jsondecode(aws_organizations_policy.policy["declarative-ec2"].content).ec2_attributes.vpc_block_public_access.internet_gateway_block.exclusions_allowed["@@assign"] == "disabled"
+    error_message = "VPC Block Public Access exclusions must be disabled by default"
+  }
+}
+
+run "rcp_trusted_accounts_and_bpa_opt_in" {
+  command = plan
+
+  variables {
+    data_perimeter_trusted_account_ids = ["222222222222"]
+    allow_vpc_bpa_exclusions           = true
+  }
+
+  assert {
+    condition     = one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == "EnforceOrgIdentities"]).Condition.StringNotEqualsIfExists["aws:PrincipalAccount"] == ["222222222222"]
+    error_message = "trusted account IDs must render into aws:PrincipalAccount"
+  }
+
+  assert {
+    condition     = one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == "ConfusedDeputyProtection"]).Condition.StringNotEqualsIfExists["aws:SourceAccount"] == ["222222222222"]
+    error_message = "trusted account IDs must render into aws:SourceAccount"
+  }
+
+  assert {
+    condition     = jsondecode(aws_organizations_policy.policy["declarative-ec2"].content).ec2_attributes.vpc_block_public_access.internet_gateway_block.exclusions_allowed["@@assign"] == "enabled"
+    error_message = "allow_vpc_bpa_exclusions = true must enable VPC BPA exclusions"
   }
 }
 

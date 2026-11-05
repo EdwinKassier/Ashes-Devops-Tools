@@ -9,6 +9,25 @@ locals {
   # tflint false-positive evaluation error when linting with no default value for
   # var.folders, while retaining a clear precondition error if the key is absent at apply time.
   shared_folder = try(var.folders["shared"], null)
+
+  # Audit M (network gaps): the SSH/RDP-from-internet deny must cover EVERY
+  # folder (shared + each environment folder), not just shared. The policy is
+  # owned by the shared folder and associated with all folders from
+  # gcp-organization's folders output (keys: shared + environment keys).
+  firewall_association_targets = distinct([
+    for k in sort(keys(var.folders)) : var.folders[k].name
+    if try(var.folders[k].name, "") != ""
+  ])
+
+  # Staged dry-run delta for the hub perimeter (see network/vpc-sc): null =
+  # no staged spec; a list = enforced status keeps the base set, the dry-run
+  # spec trials base set + these.
+  hub_base_restricted_services = distinct(concat([
+    "storage.googleapis.com",
+    "bigquery.googleapis.com",
+    "cloudfunctions.googleapis.com",
+    "run.googleapis.com"
+  ], var.vpc_sc_additional_restricted_services))
 }
 
 # Hub Network Actuation (The "Pipes")
@@ -36,11 +55,9 @@ module "hub_network" {
   # Hierarchical Firewall Policy (Defense in Depth)
   hierarchical_firewall_policies = {
     "policy-hub-shared" = {
-      parent      = try(local.shared_folder.name, "")
-      description = "Hub-level Defense in Depth Policy"
-      associations = [
-        try(local.shared_folder.name, "")
-      ]
+      parent       = try(local.shared_folder.name, "")
+      description  = "Hub-level Defense in Depth Policy"
+      associations = local.firewall_association_targets
       rules = [
         {
           priority    = 500
@@ -78,12 +95,9 @@ module "hub_network" {
       protected_projects = values(var.spoke_project_numbers)
       # Base set + opt-in additions. Expanding this without the ingress
       # policy below would block the automation SA under the enforced perimeter.
-      restricted_services = distinct(concat([
-        "storage.googleapis.com",
-        "bigquery.googleapis.com",
-        "cloudfunctions.googleapis.com",
-        "run.googleapis.com"
-      ], var.vpc_sc_additional_restricted_services))
+      restricted_services = local.hub_base_restricted_services
+      # Enforced perimeter + staged dry-run delta (null = no staged spec).
+      dry_run_restricted_services = var.vpc_sc_dry_run_additional_restricted_services == null ? null : distinct(concat(local.hub_base_restricted_services, var.vpc_sc_dry_run_additional_restricted_services))
 
       # Opt-in ingress policy: grant the listed automation identities
       # full ingress so an enforced perimeter does not block TFC-run applies.

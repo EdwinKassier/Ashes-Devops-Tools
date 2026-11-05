@@ -20,4 +20,13 @@ module "aws_organization" {
   cost_allocation_tags         = var.cost_allocation_tags
   cost_notifications_topic_arn = var.cost_notifications_topic_arn
   cost_anomaly_email           = var.cost_anomaly_email
+
+  # Member-account TFC workload identity (OIDC provider + tfc-plan / tfc-apply).
+  enable_tfc_oidc_baseline           = var.enable_tfc_oidc_baseline
+  tfc_organization                   = var.tfc_organization
+  tfc_hostname                       = var.tfc_hostname
+  tfc_project                        = var.tfc_project
+  tfc_workspace_bindings             = var.tfc_workspace_bindings
+  tfc_oidc_allow_workspace_wildcards = var.tfc_oidc_allow_workspace_wildcards
+  tfc_apply_role_policy_arns         = var.tfc_apply_role_policy_arns
 }

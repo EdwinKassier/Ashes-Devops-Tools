@@ -199,3 +199,129 @@ variable "cost_anomaly_email" {
   type        = string
   default     = "finops@example.com"
 }
+
+# -----------------------------------------------------------------------------
+# Tagging — provider default_tags (FinOps / governance)
+#
+# Every resource the aws provider(s) in this root create gets the canonical tag
+# set: CostCenter / Environment / Owner (the keys the tag policy enforces and
+# cost-governance activates as cost-allocation tags) plus ManagedBy /
+# LandingZone / Workspace. default_tags is merged LAST, so it can add keys or
+# override any canonical value.
+# -----------------------------------------------------------------------------
+
+variable "landing_zone_name" {
+  description = "Landing-zone identifier written to the LandingZone tag on every resource."
+  type        = string
+  default     = "ashes"
+
+  validation {
+    condition     = length(trimspace(var.landing_zone_name)) > 0
+    error_message = "landing_zone_name must be a non-empty string."
+  }
+}
+
+variable "cost_center" {
+  description = "Value of the CostCenter cost-allocation tag on every resource in this root."
+  type        = string
+  default     = "platform"
+
+  validation {
+    condition     = length(trimspace(var.cost_center)) > 0
+    error_message = "cost_center must be a non-empty string (empty tag values cause perpetual diffs)."
+  }
+}
+
+variable "owner" {
+  description = "Value of the Owner cost-allocation tag on every resource in this root (team or distribution list)."
+  type        = string
+  default     = "platform-team"
+
+  validation {
+    condition     = length(trimspace(var.owner)) > 0
+    error_message = "owner must be a non-empty string (empty tag values cause perpetual diffs)."
+  }
+}
+
+variable "default_tags" {
+  description = "Extra tags merged into the aws provider default_tags (after the canonical set, so they may override it). Values must be non-empty."
+  type        = map(string)
+  default     = {}
+
+  validation {
+    # An empty-string default tag makes the provider plan a perpetual diff.
+    condition     = alltrue([for v in values(var.default_tags) : length(trimspace(v)) > 0])
+    error_message = "default_tags values must be non-empty strings."
+  }
+}
+
+# -----------------------------------------------------------------------------
+# Terraform Cloud OIDC baseline (member-account workload identity)
+#
+# A SERVICE_MANAGED CloudFormation StackSet deploys an app.terraform.io OIDC
+# provider plus tfc-plan (ReadOnlyAccess) / tfc-apply roles into each bound
+# member account. Each role trusts ONLY
+#   <tfc_hostname>:sub = organization:<tfc_organization>:project:<project>:workspace:<ws>:run_phase:<plan|apply>
+#   <tfc_hostname>:aud = aws.workload.identity
+# so downstream workspaces authenticate DIRECTLY into their own account and
+# management-account credentials are used only by this root (and the
+# management-account default provider of aws-security / aws-backup). The
+# resulting ARNs are published as tfc_plan_role_arns / tfc_apply_role_arns.
+# -----------------------------------------------------------------------------
+
+variable "enable_tfc_oidc_baseline" {
+  description = "Deploy the TFC OIDC baseline StackSet (OIDC provider + tfc-plan/tfc-apply roles) into the bound member accounts. Requires tfc_organization."
+  type        = bool
+  default     = true
+}
+
+variable "tfc_organization" {
+  description = "Terraform Cloud organization whose workspaces the member-account roles trust. Matched literally (no wildcards). Required when enable_tfc_oidc_baseline is true. Not the same mechanism as the backend organization (backend.hcl), but normally the same value."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.enable_tfc_oidc_baseline ? var.tfc_organization != null : true
+    error_message = "tfc_organization is required when enable_tfc_oidc_baseline is true."
+  }
+}
+
+variable "tfc_hostname" {
+  description = "Terraform Cloud / Enterprise hostname issuing workload-identity tokens."
+  type        = string
+  default     = "app.terraform.io"
+}
+
+variable "tfc_project" {
+  description = "Default TFC project of the bound workspaces (matched literally in the trust sub). Override per account with tfc_workspace_bindings[*].project."
+  type        = string
+  default     = "Default Project"
+}
+
+variable "tfc_workspace_bindings" {
+  description = "Map of account key (from accounts / workload_accounts) -> TFC workspaces allowed to assume that account's tfc-plan / tfc-apply roles (optional per-account project override). Add one entry per workload account, e.g. workload_dev = { workspaces = [\"aws-workload-dev\"] }."
+  type = map(object({
+    workspaces = list(string)
+    project    = optional(string)
+  }))
+  default = {
+    security_tooling = { workspaces = ["aws-security"] }
+    log_archive      = { workspaces = ["aws-security"] }
+    forensics        = { workspaces = ["aws-security"] }
+    network          = { workspaces = ["aws-network"] }
+    shared_services  = { workspaces = ["aws-identity", "aws-shared-services"] }
+    backup           = { workspaces = ["aws-backup"] }
+  }
+}
+
+variable "tfc_oidc_allow_workspace_wildcards" {
+  description = "Allow '*' inside bound workspace names (StringLike). The organization and project are always literal. Default false: exact names."
+  type        = bool
+  default     = false
+}
+
+variable "tfc_apply_role_policy_arns" {
+  description = "Managed policy ARNs attached to every member-account tfc-apply role."
+  type        = list(string)
+  default     = ["arn:aws:iam::aws:policy/AdministratorAccess"]
+}

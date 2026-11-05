@@ -1,4 +1,36 @@
 # -----------------------------------------------------------------------------
+# Naming + tagging
+# -----------------------------------------------------------------------------
+
+variable "environment" {
+  description = "Environment this workload account serves (e.g. dev, staging, prod). Used to derive the default resource name workload-<environment>. null keeps the legacy name \"workload\"."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.environment == null || can(regex("^[a-z][a-z0-9-]{0,30}$", coalesce(var.environment, "x")))
+    error_message = "environment must be null or a lowercase name (letters, digits, hyphens; max 31 chars)."
+  }
+}
+
+variable "name" {
+  description = "Name of the spoke VPC (and prefix for its subnets, route tables and TGW attachment). null derives workload-<environment> (or \"workload\" when environment is null)."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.name == null || length(trimspace(coalesce(var.name, " "))) > 0
+    error_message = "name must be null or a non-empty string."
+  }
+}
+
+variable "tags" {
+  description = "Tags applied to the stage's own taggable resources (spoke VPC and its children, TGW attachment). Org-wide tags (CostCenter, Environment, Owner, ...) normally come from the provider default_tags; use this for stage-specific additions."
+  type        = map(string)
+  default     = {}
+}
+
+# -----------------------------------------------------------------------------
 # Region + addressing
 # -----------------------------------------------------------------------------
 
@@ -108,6 +140,33 @@ variable "flow_log_destination_arn" {
   validation {
     condition     = can(regex("^arn:aws:s3:::", var.flow_log_destination_arn))
     error_message = "flow_log_destination_arn must be an S3 bucket ARN beginning with arn:aws:s3:::."
+  }
+}
+
+variable "tgw_route_tiers" {
+  description = "Spoke subnet tiers whose route tables send tgw_destination_cidrs to the shared transit gateway. Defaults to the private tier; the isolated tier stays local-only by design."
+  type        = list(string)
+  default     = ["private"]
+
+  validation {
+    condition     = alltrue([for t in var.tgw_route_tiers : contains(keys(var.subnets), t)])
+    error_message = "Every tgw_route_tiers entry must be a tier defined in subnets."
+  }
+}
+
+variable "tgw_destination_cidrs" {
+  description = "Destination CIDRs routed from tgw_route_tiers to the shared transit gateway. Default 0.0.0.0/0 sends all non-local traffic to the hub (centralized egress + inspection); use the org supernet (e.g. [\"10.0.0.0/8\"]) for east-west only."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+
+  validation {
+    condition     = alltrue([for c in var.tgw_destination_cidrs : can(cidrnetmask(c))])
+    error_message = "Every tgw_destination_cidrs entry must be a valid IPv4 CIDR block."
+  }
+
+  validation {
+    condition     = length(var.tgw_destination_cidrs) == length(distinct(var.tgw_destination_cidrs))
+    error_message = "tgw_destination_cidrs must not contain duplicates."
   }
 }
 

@@ -159,3 +159,33 @@ run "rejects_alphabetic_org_id" {
     org_id = "my-org"
   }
 }
+
+# ── soft_delete_retention_days ─────────────────────────────────────────────────
+
+run "accepts_soft_delete_disabled" {
+  command = plan
+
+  variables {
+    soft_delete_retention_days = 0
+  }
+}
+
+run "rejects_soft_delete_below_minimum" {
+  command = plan
+
+  expect_failures = [var.soft_delete_retention_days]
+
+  variables {
+    soft_delete_retention_days = 3
+  }
+}
+
+run "rejects_soft_delete_above_maximum" {
+  command = plan
+
+  expect_failures = [var.soft_delete_retention_days]
+
+  variables {
+    soft_delete_retention_days = 120
+  }
+}

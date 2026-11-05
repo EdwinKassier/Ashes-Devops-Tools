@@ -12,14 +12,25 @@
 #   of all env var values. Any value change forces replacement of the entire
 #   env var set for that environment — ensuring drift never goes silent.
 #
-# AUDIT S4 (write-only secrets — deferred, provider-blocked):
-#   Ideally env var values would use Terraform write-only arguments (`value_wo`
-#   + `value_wo_version`) so secrets never land in state. That requires the
-#   vercel provider 5.x AND Terraform >= 1.11 — the `value_wo` argument does NOT
-#   exist in the pinned 4.x line (verified: 4.8.2 rejects it). Adopting it is a
-#   separate provider-major upgrade (vercel ~> 4.0 -> ~> 5.0) + toolchain bump,
-#   tracked as future work. Until then, values remain in TFC state (encrypted at
-#   rest) and the SHA256 drift mechanism above is how changes are detected.
+# SENSITIVE BY DEFAULT:
+#   Every env var input defaults to sensitive = true (the value can never be
+#   read back via the Vercel API or dashboard). Set sensitive = false only for
+#   non-secret values you need to read in the dashboard. Vercel forbids
+#   sensitive = true only on variables that target `development` alone; this
+#   module never targets `development` (only preview, production and the UAT
+#   custom environment), so the secure default is always valid. A team-wide
+#   "sensitive env var policy" may additionally REQUIRE sensitive = true.
+#   Upgrade note: flipping an existing variable's sensitive flag makes the
+#   provider replace that env var (destroy + create).
+#
+# AUDIT S4 (write-only secrets — deferred, toolchain-blocked):
+#   Ideally env var values would use the Terraform write-only argument
+#   `value_wo` so secrets never land in state. The vercel 4.8.x provider schema
+#   DOES expose `value_wo` (write-only, mutually exclusive with `value`), but
+#   write-only arguments need Terraform >= 1.11 and the repo pins ~> 1.9.
+#   Adopting it is a toolchain bump; the replace_triggered_by fingerprint
+#   mechanism above would then provide change detection. Until then, values
+#   remain in TFC state (encrypted at rest).
 #
 # POSIX SH:
 #   ignore_command is executed in /bin/sh by Vercel (not bash). All

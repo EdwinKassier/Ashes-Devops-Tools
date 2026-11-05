@@ -12,7 +12,7 @@ _tool_version() {
 }
 REQUIRED_TERRAFORM_VERSION="$(_tool_version terraform 1.14.3)"
 REQUIRED_TFLINT_VERSION="$(_tool_version tflint 0.62.0)"
-REQUIRED_TFSEC_VERSION="$(_tool_version tfsec 1.28.6)"
+REQUIRED_TRIVY_VERSION="$(_tool_version trivy 0.70.0)"
 REQUIRED_TERRAFORM_DOCS_VERSION="$(_tool_version terraform-docs 0.19.0)"
 REQUIRED_CHECKOV_VERSION="$(_tool_version checkov 3.2.0)"
 
@@ -89,85 +89,25 @@ else
   echo "tflint $tflint_installed OK"
 fi
 
-# TFSec — download specific binary release from GitHub to guarantee exact version.
-# Package managers (brew, apt) may resolve to a different minor version at install time.
-# Picks a checksum-verification command that works on both macOS (no sha256sum by
-# default) and Linux. Prints the command (as a string to eval) to stdout.
-checksum_check_cmd() {
-  local checksum_file="$1" binary="$2"
-  if [[ "$(uname -s)" == "Darwin" ]]; then
-    # macOS ships `shasum`, not GNU coreutils' `sha256sum`.
-    echo "grep '${binary}' '${checksum_file}' | shasum -a 256 -c --status"
-  else
-    echo "grep '${binary}' '${checksum_file}' | sha256sum -c --status"
-  fi
-}
-
-# Chooses a writable install prefix without hardcoding /usr/local/bin — respects the
-# Homebrew prefix (e.g. /opt/homebrew on Apple Silicon) and falls back to a
-# user-writable bin directory on PATH.
-choose_install_dir() {
+# Trivy — the IaC misconfiguration scanner behind `make security` and the CI gate.
+# (tfsec is end-of-life — Aqua folded it into Trivy — and is no longer installed.)
+# `make security` refuses a version other than .tool-versions, so a mismatch here is
+# reported loudly; install the exact version with mise/asdf if the package manager
+# resolves to a different one.
+trivy_installed=$(installed_version trivy)
+if [[ -z "$trivy_installed" ]]; then
   if command -v brew >/dev/null 2>&1; then
-    local brew_prefix
-    brew_prefix=$(brew --prefix)
-    if [[ -w "${brew_prefix}/bin" ]]; then
-      echo "${brew_prefix}/bin"
-      return
-    fi
-  fi
-  if [[ -w "/usr/local/bin" ]]; then
-    echo "/usr/local/bin"
-    return
-  fi
-  # Fall back to a per-user bin directory; ensure it exists and is on PATH.
-  local user_bin="${HOME}/.local/bin"
-  mkdir -p "$user_bin"
-  if [[ ":$PATH:" != *":${user_bin}:"* ]]; then
-    echo "WARNING: ${user_bin} is not on PATH. Add 'export PATH=\"${user_bin}:\$PATH\"' to your shell profile." >&2
-  fi
-  echo "$user_bin"
-}
-
-install_tfsec_versioned() {
-  local version="$1"
-  local os arch install_dir
-  os=$(uname -s | tr '[:upper:]' '[:lower:]')
-  arch=$(uname -m)
-  [[ "$arch" == "x86_64" ]]  && arch="amd64"
-  [[ "$arch" == "aarch64" ]] && arch="arm64"
-  install_dir=$(choose_install_dir)
-  local base_url="https://github.com/aquasecurity/tfsec/releases/download/v${version}"
-  local binary="tfsec-${os}-${arch}"
-  local checksum_file="tfsec_checksums.txt"
-
-  echo "Downloading tfsec v${version} from GitHub releases ..."
-  curl -sSL "${base_url}/${binary}"          -o "/tmp/${binary}"
-  curl -sSL "${base_url}/${checksum_file}"   -o /tmp/tfsec_checksums.txt
-
-  # Verify SHA-256 integrity before installing — guards against compromised releases.
-  # The checksum file contains lines like: "abc123...  tfsec-linux-amd64" — the
-  # downloaded file must keep that exact name (not a generic "tfsec") for the
-  # checksum tool to find it in the working directory.
-  # Use shasum on macOS (no sha256sum by default) and sha256sum on Linux.
-  if ! (cd /tmp && eval "$(checksum_check_cmd "tfsec_checksums.txt" "$binary")"); then
-    echo "ERROR: tfsec checksum verification FAILED. Aborting installation." >&2
-    rm -f "/tmp/${binary}" /tmp/tfsec_checksums.txt
-    exit 1
-  fi
-  echo "tfsec v${version} checksum verified."
-
-  chmod +x "/tmp/${binary}"
-  if [[ -w "$install_dir" ]]; then
-    mv "/tmp/${binary}" "${install_dir}/tfsec"
+    echo "Installing trivy (version may differ from $REQUIRED_TRIVY_VERSION; pin with mise for exact match) ..."
+    brew install trivy
   else
-    sudo mv "/tmp/${binary}" "${install_dir}/tfsec"
+    echo "trivy not found. Install $REQUIRED_TRIVY_VERSION: 'mise install trivy@$REQUIRED_TRIVY_VERSION'"
+    echo "or see https://trivy.dev/latest/getting-started/installation/"
   fi
-  rm -f /tmp/tfsec_checksums.txt
-  echo "tfsec ${version} installed to ${install_dir}/tfsec"
-}
-
-if ! check_or_install "tfsec" "$REQUIRED_TFSEC_VERSION"; then
-  install_tfsec_versioned "$REQUIRED_TFSEC_VERSION"
+elif [[ "$trivy_installed" != "$REQUIRED_TRIVY_VERSION" ]]; then
+  echo "WARNING: trivy $trivy_installed is installed but $REQUIRED_TRIVY_VERSION is required (make security will refuse)."
+  echo "         Run 'mise install trivy@$REQUIRED_TRIVY_VERSION' to align with CI."
+else
+  echo "trivy $trivy_installed OK"
 fi
 
 # terraform-docs

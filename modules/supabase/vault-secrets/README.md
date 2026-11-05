@@ -8,11 +8,52 @@ Bootstraps the Supabase Vault with helper functions and reconciles a desired-sta
 - **`SUPABASE_ACCESS_TOKEN`** (env var) — required in CI to use the Management API path, which bypasses the Supavisor pooler and avoids the common _"Tenant or user not found"_ error on GitHub Actions runners.
 - **`SUPABASE_SSL_CERT`** (base64-encoded CA bundle) — required for `*.pooler.supabase.com` connections. Fetch from the Supabase dashboard → Project Settings → Database → SSL Certificate.
 
-## Install script dependencies
+## Script dependencies
+
+Installed **automatically** at apply time by `terraform_data.npm_install`:
 
 ```bash
-cd modules/supabase/vault-secrets/scripts && npm install
+npm ci --ignore-scripts --no-audit --no-fund --prefix modules/supabase/vault-secrets/scripts
 ```
+
+`npm ci` installs exactly the committed `package-lock.json` (integrity-checked); `--ignore-scripts` means no dependency lifecycle script ever runs on the apply runner (`pg` and its dependencies are pure JavaScript and need none). The runner needs Node.js 18+ and npm on `PATH` plus registry access. To prime locally, run the same command.
+
+## Database objects and privileges
+
+`bootstrap.mjs` creates two `SECURITY DEFINER` helpers in the private schema **`iac_vault`**:
+
+| Function | Purpose |
+|----------|---------|
+| `iac_vault.upsert_vault_secret(name, value, description)` | create or update an IaC-managed secret |
+| `iac_vault.delete_vault_secret(name)` | delete an IaC-managed secret (orphan sweep) |
+
+Hardening:
+
+- **Not API-exposed.** `iac_vault` is not in PostgREST's exposed schemas, so `/rest/v1/rpc/...` cannot reach the helpers with any API key. **Never add `iac_vault` to the project's exposed schemas** (`supabase_db_schema`; the settings module rejects it).
+- **Explicit revokes.** `EXECUTE` and schema `USAGE` are revoked from `PUBLIC`, `anon` and `authenticated`. Supabase grants `anon`/`authenticated` directly through default privileges, so revoking from `PUBLIC` alone is not enough. Only `service_role` and the owning role can call the helpers.
+- **`SET search_path = ''`** with schema-qualified references (`vault.secrets`, `vault.create_secret`, `pg_catalog` operators), so a caller cannot hijack name resolution.
+- **Namespace-restricted.** Both helpers raise `insufficient_privilege` for any name outside `^[A-Z][A-Z0-9_]*$`, so they cannot read-modify or delete runtime-managed entries.
+
+The reconcile script calls the helpers over a direct `pg` connection or the Supabase Management API, never PostgREST.
+
+### Upgrading from the `public.*` helpers (breaking change)
+
+Earlier versions created `public.upsert_vault_secret`, `public.delete_vault_secret` and `public.delete_vault_secrets_by_prefix`. Supabase's default privileges made those callable with the **public anon key**, so any visitor could overwrite or delete vault secrets. On the next apply, bootstrap **drops** all three. Application code that called them over RPC must ship its own reviewed helpers for runtime-managed (non-IaC) secrets. If you could not upgrade immediately, check exposure with:
+
+```sql
+select p.proname, has_function_privilege('anon', p.oid, 'EXECUTE')
+from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public' and p.proname like '%vault_secret%';
+```
+
+The provisioner resources moved from `null_resource` to built-in `terraform_data`. `moved` blocks migrate existing state in place (`npm_install` is not re-run). `bootstrap` and `reconcile` run once on upgrade because their scripts and trigger inputs changed, which applies the privilege migration above.
+
+## Trigger hashing
+
+Triggers must not hold sensitive values, and a bare `sha256` of a low-entropy secret can be brute-forced from state. So:
+
+- `db` hashes the postgres URL **with the password stripped**. Rotating only the DB password does not re-run bootstrap.
+- `desired_hash` must change whenever a secret value changes, so it is keyed with the DB URL (including its high-entropy password, which is not in this module's state): `sha256("vault-secrets/desired/v2" \n postgres_url \n jsonencode(secrets))`. Rotating the DB password re-runs reconcile once, which is harmless because reconcile is idempotent.
 
 ## IaC Namespace
 
@@ -24,7 +65,7 @@ If `var.secrets` is empty and the vault already contains entries, the reconcile 
 
 ## Destroy Behaviour
 
-`terraform destroy` removes the `null_resource` records from Terraform state but does **not** wipe the Supabase Vault contents. Vault secrets persist after destroy. To remove vault secrets, set `secrets = {}` and apply (using `VAULT_ALLOW_EMPTY_DESIRED=1` if the vault already has entries) before destroying.
+`terraform destroy` removes the `terraform_data` records from Terraform state but does **not** wipe the Supabase Vault contents. Vault secrets persist after destroy. To remove vault secrets, set `secrets = {}` and apply (using `VAULT_ALLOW_EMPTY_DESIRED=1` if the vault already has entries) before destroying.
 
 <!-- BEGIN_TF_DOCS -->
 
@@ -49,13 +90,12 @@ module "example" {
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
-| <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_null"></a> [null](#provider\_null) | 3.2.4 |
+| <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 
 
@@ -64,9 +104,9 @@ module "example" {
 The following resources are created:
 
 
-- resource.null_resource.bootstrap (modules/supabase/vault-secrets/main.tf#L40)
-- resource.null_resource.npm_install (modules/supabase/vault-secrets/main.tf#L29)
-- resource.null_resource.reconcile (modules/supabase/vault-secrets/main.tf#L62)
+- resource.terraform_data.bootstrap (modules/supabase/vault-secrets/main.tf#L78)
+- resource.terraform_data.npm_install (modules/supabase/vault-secrets/main.tf#L67)
+- resource.terraform_data.reconcile (modules/supabase/vault-secrets/main.tf#L97)
 
 
 ## Inputs
@@ -81,7 +121,7 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
-| <a name="output_bootstrap_trigger_id"></a> [bootstrap\_trigger\_id](#output\_bootstrap\_trigger\_id) | Unique ID of the bootstrap null\_resource; changes when the bootstrap script is re-run. |
+| <a name="output_bootstrap_trigger_id"></a> [bootstrap\_trigger\_id](#output\_bootstrap\_trigger\_id) | Unique ID of the bootstrap terraform\_data resource; changes when the bootstrap script is re-run. |
 | <a name="output_managed_secret_names"></a> [managed\_secret\_names](#output\_managed\_secret\_names) | Sorted list of secret names managed by this module. Visible in plan output — useful for verifying the desired-state map without exposing values. |
-| <a name="output_reconcile_trigger_id"></a> [reconcile\_trigger\_id](#output\_reconcile\_trigger\_id) | Unique ID of the reconcile null\_resource; changes when secrets are reconciled. |
+| <a name="output_reconcile_trigger_id"></a> [reconcile\_trigger\_id](#output\_reconcile\_trigger\_id) | Unique ID of the reconcile terraform\_data resource; changes when secrets are reconciled. |
 <!-- END_TF_DOCS -->

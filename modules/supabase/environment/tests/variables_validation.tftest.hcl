@@ -62,3 +62,22 @@ run "invalid_region_rejected" {
   expect_failures = [var.region]
   variables { region = "mars-west-1" }
 }
+
+# ── db_schema: never expose the vault / iac_vault schemas via PostgREST ──────────────
+
+run "db_schema_default_accepted" {
+  command = plan
+  variables { db_schema = "public,graphql_public" }
+}
+
+run "db_schema_iac_vault_rejected" {
+  command         = plan
+  expect_failures = [var.db_schema]
+  variables { db_schema = "public, IAC_VAULT" }
+}
+
+run "db_schema_vault_rejected" {
+  command         = plan
+  expect_failures = [var.db_schema]
+  variables { db_schema = "public,vault" }
+}

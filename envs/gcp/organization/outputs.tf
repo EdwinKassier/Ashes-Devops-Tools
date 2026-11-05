@@ -119,3 +119,13 @@ output "cmek_key_names" {
   description = "Map of CMEK key short-name to key ID created by the organization stage. Lets downstream roots (e.g. gcp/workload) encrypt resources with org-managed keys via remote state. Re-exports modules/gcp/stages/organization output cmek_key_names."
   value       = module.organization.cmek_key_names
 }
+
+output "audit_project_id" {
+  description = "Project holding the org audit bucket, audit CMEK and control-plane alerts (logging_project_id, or the admin project)."
+  value       = module.organization.audit_project_id
+}
+
+output "control_plane_alert_policy_ids" {
+  description = "Map of control-plane watch name to alert policy ID."
+  value       = module.organization.control_plane_alert_policy_ids
+}

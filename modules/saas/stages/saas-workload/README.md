@@ -23,7 +23,7 @@ This module declares `supabase`, `vercel`, and `null` providers in `versions.tf`
 
 ## Node.js Requirement
 
-`enable_vault_secrets = true` requires **Node.js >= 18** in the execution environment and the `pg` package installed in `modules/supabase/vault-secrets/scripts/`. Run `npm install` in that directory before applying.
+`enable_vault_secrets = true` requires **Node.js >= 18** and npm in the execution environment. The `pg` dependency is installed automatically at apply time (`npm ci --ignore-scripts`). See the vault-secrets README for the `iac_vault` privilege model.
 
 <!-- BEGIN_TF_DOCS -->
 
@@ -46,7 +46,6 @@ module "example" {
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
-| <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.0 |
 | <a name="requirement_supabase"></a> [supabase](#requirement\_supabase) | ~> 1.0 |
 | <a name="requirement_vercel"></a> [vercel](#requirement\_vercel) | ~> 4.0 |
 
@@ -87,15 +86,15 @@ module "example" {
 | <a name="input_vercel_domains"></a> [vercel\_domains](#input\_vercel\_domains) | Domain assignments for the Vercel project. environment must be one of: qa, uat, production. | <pre>list(object({<br/>    domain      = string<br/>    environment = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_vercel_framework"></a> [vercel\_framework](#input\_vercel\_framework) | Framework preset for the Vercel project (e.g. 'nextjs', 'remix', 'astro'). Set null for framework-agnostic projects. Only used when enable\_vercel = true. | `string` | `"nextjs"` | no |
 | <a name="input_vercel_github_repo"></a> [vercel\_github\_repo](#input\_vercel\_github\_repo) | GitHub repository in 'org/repo' format. Required when enable\_vercel = true. | `string` | `""` | no |
-| <a name="input_vercel_prod_env_vars"></a> [vercel\_prod\_env\_vars](#input\_vercel\_prod\_env\_vars) | Vercel environment variables for the production environment. | <pre>list(object({<br/>    key       = string<br/>    value     = string<br/>    sensitive = optional(bool, false)<br/>  }))</pre> | `[]` | no |
+| <a name="input_vercel_prod_env_vars"></a> [vercel\_prod\_env\_vars](#input\_vercel\_prod\_env\_vars) | Vercel environment variables for the production environment. Each entry's sensitive defaults to true (secure by default). | <pre>list(object({<br/>    key       = string<br/>    value     = string<br/>    sensitive = optional(bool, true)<br/>  }))</pre> | `[]` | no |
 | <a name="input_vercel_production_branch"></a> [vercel\_production\_branch](#input\_vercel\_production\_branch) | Git branch for the Vercel production environment. Must be an existing branch. | `string` | `"main"` | no |
 | <a name="input_vercel_project_name"></a> [vercel\_project\_name](#input\_vercel\_project\_name) | Vercel project name. Required when enable\_vercel = true. | `string` | `""` | no |
-| <a name="input_vercel_qa_env_vars"></a> [vercel\_qa\_env\_vars](#input\_vercel\_qa\_env\_vars) | Vercel environment variables for the QA (preview) environment. | <pre>list(object({<br/>    key       = string<br/>    value     = string<br/>    sensitive = optional(bool, false)<br/>  }))</pre> | `[]` | no |
+| <a name="input_vercel_qa_env_vars"></a> [vercel\_qa\_env\_vars](#input\_vercel\_qa\_env\_vars) | Vercel environment variables for the QA (preview) environment. Each entry's sensitive defaults to true (secure by default). | <pre>list(object({<br/>    key       = string<br/>    value     = string<br/>    sensitive = optional(bool, true)<br/>  }))</pre> | `[]` | no |
 | <a name="input_vercel_root_directory"></a> [vercel\_root\_directory](#input\_vercel\_root\_directory) | Root directory within the repository for the Vercel project. Empty string means repository root. | `string` | `""` | no |
 | <a name="input_vercel_serverless_region"></a> [vercel\_serverless\_region](#input\_vercel\_serverless\_region) | Vercel serverless function region code. | `string` | `"lhr1"` | no |
-| <a name="input_vercel_shared_env_vars"></a> [vercel\_shared\_env\_vars](#input\_vercel\_shared\_env\_vars) | Vercel environment variables shared across all three environments. | <pre>list(object({<br/>    key       = string<br/>    value     = string<br/>    sensitive = optional(bool, false)<br/>  }))</pre> | `[]` | no |
+| <a name="input_vercel_shared_env_vars"></a> [vercel\_shared\_env\_vars](#input\_vercel\_shared\_env\_vars) | Vercel environment variables shared across all three environments. Each entry's sensitive defaults to true (secure by default). | <pre>list(object({<br/>    key       = string<br/>    value     = string<br/>    sensitive = optional(bool, true)<br/>  }))</pre> | `[]` | no |
 | <a name="input_vercel_team_id"></a> [vercel\_team\_id](#input\_vercel\_team\_id) | Vercel team ID. Required when enable\_vercel = true. | `string` | `""` | no |
-| <a name="input_vercel_uat_env_vars"></a> [vercel\_uat\_env\_vars](#input\_vercel\_uat\_env\_vars) | Vercel environment variables for the UAT custom environment. | <pre>list(object({<br/>    key       = string<br/>    value     = string<br/>    sensitive = optional(bool, false)<br/>  }))</pre> | `[]` | no |
+| <a name="input_vercel_uat_env_vars"></a> [vercel\_uat\_env\_vars](#input\_vercel\_uat\_env\_vars) | Vercel environment variables for the UAT custom environment. Each entry's sensitive defaults to true (secure by default). | <pre>list(object({<br/>    key       = string<br/>    value     = string<br/>    sensitive = optional(bool, true)<br/>  }))</pre> | `[]` | no |
 
 ## Outputs
 

@@ -842,6 +842,36 @@ variable "vpc_service_controls" {
     })), [])
     enable_dry_run             = optional(bool, true)
     enable_deletion_protection = optional(bool, true)
+    # Staged dry-run delta on an ENFORCED perimeter (see network/vpc-sc). null = same as enforced.
+    dry_run_restricted_services = optional(list(string))
+    dry_run_ingress_policies = optional(list(object({
+      identity_type = optional(string)
+      identities    = optional(list(string))
+      sources = optional(list(object({
+        access_level = optional(string)
+        resource     = optional(string)
+      })))
+      resources = optional(list(string))
+      operations = optional(list(object({
+        service_name = string
+        method_selectors = optional(list(object({
+          method     = optional(string)
+          permission = optional(string)
+        })))
+      })))
+    })))
+    dry_run_egress_policies = optional(list(object({
+      identity_type = optional(string)
+      identities    = optional(list(string))
+      resources     = optional(list(string))
+      operations = optional(list(object({
+        service_name = string
+        method_selectors = optional(list(object({
+          method     = optional(string)
+          permission = optional(string)
+        })))
+      })))
+    })))
   }))
   default = {}
 }
@@ -946,4 +976,3 @@ variable "packet_mirroring_policies" {
   }))
   default = {}
 }
-

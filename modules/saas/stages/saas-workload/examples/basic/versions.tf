@@ -10,10 +10,6 @@ terraform {
       source  = "vercel/vercel"
       version = "~> 4.0"
     }
-    null = {
-      source  = "hashicorp/null"
-      version = "~> 3.0"
-    }
   }
 }
 
@@ -22,4 +18,3 @@ terraform {
 #   export VERCEL_API_TOKEN="<your-vercel-token>"
 provider "supabase" {}
 provider "vercel" {}
-provider "null" {}

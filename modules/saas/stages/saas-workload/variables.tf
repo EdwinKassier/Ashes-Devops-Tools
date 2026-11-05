@@ -94,6 +94,16 @@ variable "supabase_db_schema" {
   description = "Comma-separated list of Postgres schemas exposed via the REST API."
   type        = string
   default     = "public,graphql_public"
+
+  validation {
+    # iac_vault holds the vault-secrets SECURITY DEFINER helpers; exposing it via
+    # PostgREST would let API keys reach them. vault holds the encrypted secrets.
+    condition = length(setintersection(
+      toset([for s in split(",", var.supabase_db_schema) : lower(trimspace(s))]),
+      toset(["iac_vault", "vault"]),
+    )) == 0
+    error_message = "supabase_db_schema must not expose the iac_vault or vault schemas via the REST API (they hold the Vault secrets and their privileged helpers)."
+  }
 }
 
 variable "supabase_db_extra_search_path" {
@@ -236,41 +246,41 @@ variable "vercel_domains" {
 }
 
 variable "vercel_qa_env_vars" {
-  description = "Vercel environment variables for the QA (preview) environment."
+  description = "Vercel environment variables for the QA (preview) environment. Each entry's sensitive defaults to true (secure by default)."
   type = list(object({
     key       = string
     value     = string
-    sensitive = optional(bool, false)
+    sensitive = optional(bool, true)
   }))
   default = []
 }
 
 variable "vercel_uat_env_vars" {
-  description = "Vercel environment variables for the UAT custom environment."
+  description = "Vercel environment variables for the UAT custom environment. Each entry's sensitive defaults to true (secure by default)."
   type = list(object({
     key       = string
     value     = string
-    sensitive = optional(bool, false)
+    sensitive = optional(bool, true)
   }))
   default = []
 }
 
 variable "vercel_prod_env_vars" {
-  description = "Vercel environment variables for the production environment."
+  description = "Vercel environment variables for the production environment. Each entry's sensitive defaults to true (secure by default)."
   type = list(object({
     key       = string
     value     = string
-    sensitive = optional(bool, false)
+    sensitive = optional(bool, true)
   }))
   default = []
 }
 
 variable "vercel_shared_env_vars" {
-  description = "Vercel environment variables shared across all three environments."
+  description = "Vercel environment variables shared across all three environments. Each entry's sensitive defaults to true (secure by default)."
   type = list(object({
     key       = string
     value     = string
-    sensitive = optional(bool, false)
+    sensitive = optional(bool, true)
   }))
   default = []
 }

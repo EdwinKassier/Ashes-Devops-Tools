@@ -37,3 +37,73 @@ run "dry_run_toggles_explicit_dry_run_spec" {
     error_message = "enable_dry_run = true must set use_explicit_dry_run_spec on the perimeter."
   }
 }
+
+# ── SOTA M: enforced status + staged dry-run spec ──────────────────────────────
+
+run "enforced_without_overrides_has_no_spec" {
+  command = plan
+
+  variables {
+    enable_dry_run      = false
+    restricted_services = ["storage.googleapis.com"]
+  }
+
+  assert {
+    condition     = google_access_context_manager_service_perimeter.perimeter[0].use_explicit_dry_run_spec == false
+    error_message = "An enforced perimeter without dry_run_* overrides must not use an explicit dry-run spec (backward compatible)."
+  }
+
+  assert {
+    condition     = length(google_access_context_manager_service_perimeter.perimeter[0].status) == 1 && length(google_access_context_manager_service_perimeter.perimeter[0].spec) == 0
+    error_message = "An enforced perimeter without overrides must render status only."
+  }
+}
+
+run "enforced_with_dry_run_override_stages_spec" {
+  command = plan
+
+  variables {
+    enable_dry_run              = false
+    restricted_services         = ["storage.googleapis.com"]
+    dry_run_restricted_services = ["storage.googleapis.com", "bigquery.googleapis.com"]
+  }
+
+  assert {
+    condition     = google_access_context_manager_service_perimeter.perimeter[0].use_explicit_dry_run_spec == true
+    error_message = "A dry_run_* override on an enforced perimeter must enable the explicit dry-run spec."
+  }
+
+  assert {
+    condition     = toset(google_access_context_manager_service_perimeter.perimeter[0].status[0].restricted_services) == toset(["storage.googleapis.com"])
+    error_message = "status must keep enforcing restricted_services."
+  }
+
+  assert {
+    condition     = toset(google_access_context_manager_service_perimeter.perimeter[0].spec[0].restricted_services) == toset(["storage.googleapis.com", "bigquery.googleapis.com"])
+    error_message = "spec must stage dry_run_restricted_services."
+  }
+
+  assert {
+    condition     = output.enforced && output.dry_run_spec_staged
+    error_message = "outputs must report an enforced perimeter with a staged dry-run spec."
+  }
+}
+
+run "pure_dry_run_has_spec_only" {
+  command = plan
+
+  variables {
+    enable_dry_run      = true
+    restricted_services = ["storage.googleapis.com"]
+  }
+
+  assert {
+    condition     = length(google_access_context_manager_service_perimeter.perimeter[0].status) == 0 && length(google_access_context_manager_service_perimeter.perimeter[0].spec) == 1
+    error_message = "enable_dry_run = true must keep the legacy behaviour: spec only, nothing enforced."
+  }
+
+  assert {
+    condition     = !output.enforced && !output.dry_run_spec_staged
+    error_message = "a pure dry-run perimeter is neither enforced nor 'staged'."
+  }
+}

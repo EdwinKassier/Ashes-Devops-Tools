@@ -46,7 +46,7 @@ open — 7.0 has not been validated against this codebase, so it is not silently
 way google 7.x is.
 
 The AWS `.terraform.lock.hcl` files are committed **dual-platform** (`linux_amd64` +
-`darwin_amd64`) so the CI Linux runners and local macOS machines resolve the identical provider
+`darwin_arm64`) so the CI Linux runners and local macOS machines resolve the identical provider
 hashes.
 
 The upgrade/testing procedure for `aws` is the **same as the other providers** (see "How to

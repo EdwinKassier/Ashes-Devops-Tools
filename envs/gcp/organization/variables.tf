@@ -224,11 +224,47 @@ variable "terraform_admin_email" {
   }
 }
 
-# --- Audit finding G4: dedicated logging project (opt-in, default = unchanged) ---
+# --- Audit finding G4 / C3: dedicated logging project (opt-in, default = unchanged) ---
 variable "logging_project_id" {
-  description = "Dedicated logging project ID for the org audit sink/bucket (separation of duties). Default null = admin project (unchanged). PREVIEW: opt-in (default off), not yet validated against a real apply.; ensure CMEK cross-project access."
+  description = "Dedicated logging project for the org audit sink/bucket, audit CMEK keyring and control-plane alerts (separation of duties). Default null = admin project. MUST NOT be owned by the Terraform admin/automation SA (create it out-of-band or from a separate identity). Decide before the first apply. Requires logging_project_number. PREVIEW: not yet validated against a real apply."
   type        = string
   default     = null
+}
+
+variable "logging_project_number" {
+  description = "Project number of logging_project_id (required when it is set); used for the audit CMEK service-agent grants."
+  type        = string
+  default     = null
+}
+
+variable "audit_soft_delete_retention_days" {
+  description = "Soft-delete window (days) on the org audit-log buckets (M-4). 7-90, or 0 to disable. Default 30."
+  type        = number
+  default     = 30
+}
+
+variable "enable_control_plane_alerting" {
+  description = "Log-match alerts on org IAM / org policy / VPC-SC / sink / custom-role / deny-policy / KMS-destroy changes and on break-glass use (audit Security High). Default true."
+  type        = bool
+  default     = true
+}
+
+variable "alert_notification_emails" {
+  description = "Email addresses notified by the control-plane alerts. Default [] (a check warns when no destination is set)."
+  type        = list(string)
+  default     = []
+}
+
+variable "alert_notification_channels" {
+  description = "Existing Cloud Monitoring notification channel IDs (projects/<p>/notificationChannels/<id>) attached to every control-plane alert. Default []."
+  type        = list(string)
+  default     = []
+}
+
+variable "break_glass_principal_emails" {
+  description = "Extra break-glass account emails whose admin actions raise a CRITICAL alert (break_glass_user is always included). List the members of a break-glass group here — group membership is not visible in audit logs."
+  type        = list(string)
+  default     = []
 }
 
 variable "enable_cmek_org_policy" {
@@ -251,13 +287,18 @@ variable "cmek_required_services" {
 }
 
 variable "enable_admin_containment" {
-  description = "C2: deny deletion of audit sinks/buckets and VPC-SC perimeters to all but break-glass, containing a compromised automation identity. Default false. Enable via examples/presets/prod-gcp-organization.tfvars after validating on a non-prod org, and set containment_exempt_principals."
+  description = "C2/C3: IAM deny policy blocking (for all but containment_exempt_principals) org-wide sink update/delete, exclusion changes, log-bucket delete and VPC-SC perimeter update/delete, plus — tag-scoped to the audit store — bucket delete/IAM change, object delete, key-version destroy and key IAM change. Once on, any sink/exclusion/perimeter change must be applied by break-glass. Default false; examples/presets/prod-gcp-organization.tfvars turns it on."
   type        = bool
   default     = false
 }
 
 variable "containment_exempt_principals" {
-  description = "Break-glass principals exempt from the C2 containment deny policy. Required (non-empty) when enable_admin_containment is true."
+  description = "Break-glass principals exempt from the C2/C3 containment deny policy, as IAM v2 principal identifiers (e.g. principalSet://goog/group/break-glass@acme.com). Required (non-empty) when enable_admin_containment is true. Placeholder values (REPLACE-ME, your-domain, example.com, .invalid) are rejected so a copied preset fails loudly."
   type        = list(string)
   default     = []
+
+  validation {
+    condition     = !anytrue([for p in var.containment_exempt_principals : can(regex("(?i)(replace-me|your-domain|example\\.(com|org|net)|\\.invalid$|changeme)", p))])
+    error_message = "containment_exempt_principals still contains a placeholder (REPLACE-ME / your-domain / example.com / .invalid). Set your real break-glass group before enabling admin containment."
+  }
 }

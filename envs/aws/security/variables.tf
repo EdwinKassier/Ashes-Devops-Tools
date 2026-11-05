@@ -65,13 +65,30 @@ variable "log_archive_bucket_name" {
 }
 
 variable "key_admin_arn" {
-  description = "Account-qualified ARN of the principal granted key administration (kms:*) on both the log and forensics CMKs. REQUIRED to avoid locking the keys out of management."
+  description = "Account-qualified ARN of the principal granted key ADMINISTRATION (management actions only: no Encrypt/Decrypt/GenerateDataKey/ReEncrypt, no CreateGrant) on the log-archive, forensics and security-tooling CMKs. REQUIRED to avoid locking the keys out of management. Grant key usage separately via kms_key_user_arns."
   type        = string
 
   validation {
     condition     = can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:(role|user)/.+$", var.key_admin_arn))
     error_message = "key_admin_arn must be an account-qualified IAM role/user ARN."
   }
+}
+
+variable "kms_key_user_arns" {
+  description = "Principals granted key USAGE (Encrypt/Decrypt/ReEncrypt/GenerateDataKey/DescribeKey) per CMK, keyed by log_archive / forensics / security_tooling. Separate from key_admin_arn (administration only). Missing keys mean no general-usage grant beyond the built-in service-principal grants."
+  type        = map(list(string))
+  default     = {}
+
+  validation {
+    condition     = alltrue([for k in keys(var.kms_key_user_arns) : contains(["log_archive", "forensics", "security_tooling"], k)])
+    error_message = "kms_key_user_arns keys must be one of log_archive, forensics, security_tooling."
+  }
+}
+
+variable "enable_kms_protection_tag" {
+  description = "Tag the log-archive, forensics and security-tooling CMKs protected = \"true\" so the organization deny-tamper SCP blocks key deletion/disablement and protection-tag removal except via break-glass. Default true."
+  type        = bool
+  default     = true
 }
 
 variable "config_role_arn" {
@@ -243,4 +260,72 @@ variable "break_glass_active" {
   description = "Set true ONLY during a declared incident to attach AdministratorAccess to the managed break-glass role. False keeps the deny-all standing policy."
   type        = bool
   default     = false
+}
+
+# -----------------------------------------------------------------------------
+# Tagging — provider default_tags (FinOps / governance)
+#
+# Every resource the aws provider(s) in this root create gets the canonical tag
+# set: CostCenter / Environment / Owner (the keys the tag policy enforces and
+# cost-governance activates as cost-allocation tags) plus ManagedBy /
+# LandingZone / Workspace. default_tags is merged LAST, so it can add keys or
+# override any canonical value.
+# -----------------------------------------------------------------------------
+
+variable "landing_zone_name" {
+  description = "Landing-zone identifier written to the LandingZone tag on every resource."
+  type        = string
+  default     = "ashes"
+
+  validation {
+    condition     = length(trimspace(var.landing_zone_name)) > 0
+    error_message = "landing_zone_name must be a non-empty string."
+  }
+}
+
+variable "cost_center" {
+  description = "Value of the CostCenter cost-allocation tag on every resource in this root."
+  type        = string
+  default     = "platform"
+
+  validation {
+    condition     = length(trimspace(var.cost_center)) > 0
+    error_message = "cost_center must be a non-empty string (empty tag values cause perpetual diffs)."
+  }
+}
+
+variable "owner" {
+  description = "Value of the Owner cost-allocation tag on every resource in this root (team or distribution list)."
+  type        = string
+  default     = "platform-team"
+
+  validation {
+    condition     = length(trimspace(var.owner)) > 0
+    error_message = "owner must be a non-empty string (empty tag values cause perpetual diffs)."
+  }
+}
+
+variable "default_tags" {
+  description = "Extra tags merged into the aws provider default_tags (after the canonical set, so they may override it). Values must be non-empty."
+  type        = map(string)
+  default     = {}
+
+  validation {
+    # An empty-string default tag makes the provider plan a perpetual diff.
+    condition     = alltrue([for v in values(var.default_tags) : length(trimspace(v)) > 0])
+    error_message = "default_tags values must be non-empty strings."
+  }
+}
+
+# -----------------------------------------------------------------------------
+# Credentials — TFC multi-configuration dynamic credentials
+# -----------------------------------------------------------------------------
+
+variable "tfc_aws_dynamic_credentials" {
+  description = "Injected by Terraform Cloud when the workspace uses AWS dynamic credentials with multiple configurations: default = the management-account role, aliases[security_tooling, log_archive, forensics] = each member account's tfc-plan / tfc-apply role (TFC_AWS_PROVIDER_AUTH_<alias>, TFC_AWS_PLAN_ROLE_ARN_<alias>, TFC_AWS_APPLY_ROLE_ARN_<alias>). Leave null for local / legacy runs: the member-account providers then assume account_role_arns (OrganizationAccountAccessRole) from management-account credentials."
+  type = object({
+    default = object({ shared_config_file = string })
+    aliases = map(object({ shared_config_file = string }))
+  })
+  default = null
 }

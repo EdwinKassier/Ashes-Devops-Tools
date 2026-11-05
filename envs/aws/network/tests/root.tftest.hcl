@@ -12,6 +12,7 @@ mock_provider "aws" {}
 
 variables {
   log_archive_bucket_name = "ashes-org-log-archive"
+  default_tags            = { CostCenter = "networking" }
 }
 
 run "consumes_remote_state_contract" {
@@ -38,6 +39,22 @@ run "consumes_remote_state_contract" {
   assert {
     condition     = data.terraform_remote_state.aws_organization.outputs.account_role_arns["network"] != ""
     error_message = "remote-state account_role_arns must expose the network role the provider assumes"
+  }
+
+  # Provider default_tags carry the canonical cost-allocation keys.
+  assert {
+    condition = (
+      local.aws_default_tags["Workspace"] == "aws-network" &&
+      local.aws_default_tags["ManagedBy"] == "terraform" &&
+      alltrue([for k in ["CostCenter", "Environment", "Owner", "LandingZone"] : contains(keys(local.aws_default_tags), k)])
+    )
+    error_message = "aws provider default_tags must carry the canonical tag set"
+  }
+
+  # A default_tags override wins over the canonical value.
+  assert {
+    condition     = local.aws_default_tags["CostCenter"] == "networking"
+    error_message = "var.default_tags must be merged last so it can override canonical tags"
   }
 
   assert {

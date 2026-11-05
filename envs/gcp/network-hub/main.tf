@@ -34,4 +34,19 @@ module "network_hub" {
 
   vpc_sc_additional_restricted_services = var.vpc_sc_additional_restricted_services
   vpc_sc_ingress_identities             = var.vpc_sc_ingress_identities
+
+  vpc_sc_dry_run_additional_restricted_services = var.vpc_sc_dry_run_additional_restricted_services
+}
+
+# SOTA M: nothing ties prod to an enforced perimeter. The hub perimeter protects
+# every environment's host project, so if any environment looks like production
+# the hub perimeter must exist AND be enforced. A check block WARNS (it does not
+# fail the plan) so a staged rollout under dry-run stays possible.
+check "hub_vpc_sc_enforced_when_prod_present" {
+  assert {
+    condition = !anytrue([for k in keys(var.environments) : can(regex("prod", lower(k)))]) || (
+      var.vpc_sc_access_policy_name != null && !var.vpc_sc_enable_dry_run
+    )
+    error_message = "A production-like environment is present but the hub VPC-SC perimeter is ${var.vpc_sc_access_policy_name == null ? "NOT CREATED (vpc_sc_access_policy_name is null)" : "in DRY-RUN (vpc_sc_enable_dry_run = true)"}. Dry-run gives no exfiltration protection: validate the violation logs, then set vpc_sc_enable_dry_run = false (use vpc_sc_dry_run_additional_restricted_services to keep staging further changes)."
+  }
 }

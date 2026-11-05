@@ -31,3 +31,23 @@ output "account_role_arns" {
   description = "Map of member-account name to its cross-account access role ARN, consumed by downstream aws roots."
   value       = module.aws_organization.account_role_arns
 }
+
+# Member-account TFC dynamic-credential roles, keyed by account key. Set on each
+# downstream workspace bound to that account (tfc_workspace_bindings):
+#   TFC_AWS_PROVIDER_AUTH  = true
+#   TFC_AWS_PLAN_ROLE_ARN  = tfc_plan_role_arns[<account key>]
+#   TFC_AWS_APPLY_ROLE_ARN = tfc_apply_role_arns[<account key>]
+output "tfc_plan_role_arns" {
+  description = "Map of account key -> member-account tfc-plan (read-only) role ARN, for TFC_AWS_PLAN_ROLE_ARN. Empty when the TFC OIDC baseline is disabled."
+  value       = module.aws_organization.tfc_plan_role_arns
+}
+
+output "tfc_apply_role_arns" {
+  description = "Map of account key -> member-account tfc-apply role ARN, for TFC_AWS_APPLY_ROLE_ARN. Empty when the TFC OIDC baseline is disabled."
+  value       = module.aws_organization.tfc_apply_role_arns
+}
+
+output "tfc_workspace_bindings" {
+  description = "Map of account key -> TFC workspace names bound to that account's tfc-plan / tfc-apply roles."
+  value       = module.aws_organization.tfc_workspace_bindings
+}

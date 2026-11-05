@@ -146,3 +146,73 @@ variable "enable_network_access_analyzer" {
   type        = bool
   default     = false
 }
+
+# -----------------------------------------------------------------------------
+# Tagging — provider default_tags (FinOps / governance)
+#
+# Every resource the aws provider(s) in this root create gets the canonical tag
+# set: CostCenter / Environment / Owner (the keys the tag policy enforces and
+# cost-governance activates as cost-allocation tags) plus ManagedBy /
+# LandingZone / Workspace. default_tags is merged LAST, so it can add keys or
+# override any canonical value.
+# -----------------------------------------------------------------------------
+
+variable "landing_zone_name" {
+  description = "Landing-zone identifier written to the LandingZone tag on every resource."
+  type        = string
+  default     = "ashes"
+
+  validation {
+    condition     = length(trimspace(var.landing_zone_name)) > 0
+    error_message = "landing_zone_name must be a non-empty string."
+  }
+}
+
+variable "cost_center" {
+  description = "Value of the CostCenter cost-allocation tag on every resource in this root."
+  type        = string
+  default     = "platform"
+
+  validation {
+    condition     = length(trimspace(var.cost_center)) > 0
+    error_message = "cost_center must be a non-empty string (empty tag values cause perpetual diffs)."
+  }
+}
+
+variable "owner" {
+  description = "Value of the Owner cost-allocation tag on every resource in this root (team or distribution list)."
+  type        = string
+  default     = "platform-team"
+
+  validation {
+    condition     = length(trimspace(var.owner)) > 0
+    error_message = "owner must be a non-empty string (empty tag values cause perpetual diffs)."
+  }
+}
+
+variable "default_tags" {
+  description = "Extra tags merged into the aws provider default_tags (after the canonical set, so they may override it). Values must be non-empty."
+  type        = map(string)
+  default     = {}
+
+  validation {
+    # An empty-string default tag makes the provider plan a perpetual diff.
+    condition     = alltrue([for v in values(var.default_tags) : length(trimspace(v)) > 0])
+    error_message = "default_tags values must be non-empty strings."
+  }
+}
+
+# -----------------------------------------------------------------------------
+# Credentials
+# -----------------------------------------------------------------------------
+
+variable "assume_role_arn" {
+  description = "Optional role the aws provider(s) assume. Default null: the workspace's TFC dynamic credentials (TFC_AWS_PROVIDER_AUTH + TFC_AWS_PLAN_ROLE_ARN / TFC_AWS_APPLY_ROLE_ARN, from the aws-organization outputs tfc_plan_role_arns / tfc_apply_role_arns) already resolve to the target member account, so no hop is made. Legacy / local runs from management-account credentials set this to the account's account_role_arns entry (OrganizationAccountAccessRole)."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.assume_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", coalesce(var.assume_role_arn, "x")))
+    error_message = "assume_role_arn must be null or an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/...)."
+  }
+}

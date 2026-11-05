@@ -11,7 +11,6 @@
 #   5. All tests must pass before submitting a PR.
 
 mock_provider "google" {}
-mock_provider "google-beta" {}
 
 # Minimum required variables shared across all runs (set defaults here to avoid
 # repeating them in every run block).
@@ -42,6 +41,17 @@ run "invalid_project_id_rejected" {
 
   variables {
     project_id = "INVALID PROJECT!" # REPLACE: use a value that violates the constraint
+  }
+}
+
+run "invalid_label_key_rejected" {
+  # Labels must use lowercase GCP label syntax (managed-by, not ManagedBy).
+  command = plan
+
+  expect_failures = [var.labels]
+
+  variables {
+    labels = { "ManagedBy" = "terraform" }
   }
 }
 

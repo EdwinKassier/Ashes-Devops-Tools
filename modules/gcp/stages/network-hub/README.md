@@ -25,7 +25,7 @@ module "network_hub" {
   org_id          = "123456789"
   hub_project_id  = "my-org-net-hub"
   dns_project_id  = "my-org-dns-hub"
-  
+
   # DNS Configuration
   internal_domain = "internal.mycompany.com"
 
@@ -113,6 +113,7 @@ module "example" {
 | <a name="input_internal_domain"></a> [internal\_domain](#input\_internal\_domain) | Internal domain for private DNS zone (e.g., 'mycompany.com') | `string` | `"internal.local"` | no |
 | <a name="input_vpc_sc_access_policy_name"></a> [vpc\_sc\_access\_policy\_name](#input\_vpc\_sc\_access\_policy\_name) | Bare numeric ID of the existing organisation-level Access Context Manager access policy<br/>(e.g. '1234567890'). Required when the hub VPC-SC perimeter is enabled.<br/>Do NOT include the 'accessPolicies/' prefix. | `string` | `null` | no |
 | <a name="input_vpc_sc_additional_restricted_services"></a> [vpc\_sc\_additional\_restricted\_services](#input\_vpc\_sc\_additional\_restricted\_services) | Extra service API hostnames to add to the hub data perimeter's restricted\_services,<br/>beyond the base set (storage/bigquery/cloudfunctions/run). Recommended additions once<br/>an automation ingress policy is in place: logging.googleapis.com, monitoring.googleapis.com,<br/>cloudkms.googleapis.com, secretmanager.googleapis.com, compute.googleapis.com,<br/>container.googleapis.com, pubsub.googleapis.com, spanner.googleapis.com, sqladmin.googleapis.com.<br/>Default [] = unchanged. PREVIEW (not yet validated against a real apply) against a real org — validate under dry-run first. | `list(string)` | `[]` | no |
+| <a name="input_vpc_sc_dry_run_additional_restricted_services"></a> [vpc\_sc\_dry\_run\_additional\_restricted\_services](#input\_vpc\_sc\_dry\_run\_additional\_restricted\_services) | Services to TRIAL in a staged dry-run spec on top of the enforced hub perimeter (base set + vpc\_sc\_additional\_restricted\_services). Only meaningful when vpc\_sc\_enable\_dry\_run = false: status keeps enforcing, the dry-run spec logs what these extra services would block. Default null = no staged spec. | `list(string)` | `null` | no |
 | <a name="input_vpc_sc_enable_dry_run"></a> [vpc\_sc\_enable\_dry\_run](#input\_vpc\_sc\_enable\_dry\_run) | When true (the default), the hub VPC-SC perimeter logs violations but does NOT block traffic (dry-run/simulation mode).<br/>When false, the perimeter is ENFORCED.<br/>Google recommends dry-run first: validate the violation logs, then promote to enforcement by setting this false.<br/>See docs/known-gaps.md (G11). | `bool` | `true` | no |
 | <a name="input_vpc_sc_ingress_identities"></a> [vpc\_sc\_ingress\_identities](#input\_vpc\_sc\_ingress\_identities) | Identities (e.g. "serviceAccount:terraform-admin@<admin-project>.iam.gserviceaccount.com")<br/>granted full ingress into the hub data perimeter — set this to the automation/TFC-run SA<br/>BEFORE expanding restricted\_services or the next enforced apply is blocked. Default [] =<br/>no ingress policy (unchanged). PREVIEW (not yet validated against a real apply) — validate under dry-run first. | `list(string)` | `[]` | no |
 
@@ -121,6 +122,7 @@ module "example" {
 | Name | Description |
 |------|-------------|
 | <a name="output_dns_zone_name"></a> [dns\_zone\_name](#output\_dns\_zone\_name) | Name of the managed private DNS zone |
+| <a name="output_hierarchical_firewall_association_targets"></a> [hierarchical\_firewall\_association\_targets](#output\_hierarchical\_firewall\_association\_targets) | Folders the hub SSH/RDP-from-internet deny policy is associated with (shared + every environment folder). |
 | <a name="output_hub_dns_domain"></a> [hub\_dns\_domain](#output\_hub\_dns\_domain) | DNS suffix served by the hub DNS project |
 | <a name="output_hub_nat_ips"></a> [hub\_nat\_ips](#output\_hub\_nat\_ips) | External NAT IP addresses allocated to the hub Cloud NAT gateway (null if integrated NAT is disabled) |
 | <a name="output_hub_subnet_self_links"></a> [hub\_subnet\_self\_links](#output\_hub\_subnet\_self\_links) | Map of private subnet name to self\_link for the hub VPC — useful for Shared VPC service project attachments and peering configuration |

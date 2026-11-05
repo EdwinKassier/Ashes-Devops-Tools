@@ -49,3 +49,43 @@ run "bucket_lock_locks_retention_when_enabled" {
     error_message = "The opt-in retention policy must be locked (WORM)."
   }
 }
+
+# ── M-4: versioning + soft delete on by default ────────────────────────────────
+
+run "versioning_and_soft_delete_on_by_default" {
+  command = plan
+
+  assert {
+    condition     = google_storage_bucket.audit_logs.versioning[0].enabled == true
+    error_message = "Object Versioning must be enabled on the audit bucket by default."
+  }
+
+  assert {
+    condition     = google_storage_bucket.audit_logs.soft_delete_policy[0].retention_duration_seconds == 30 * 86400
+    error_message = "The audit bucket must have a 30-day soft-delete policy by default."
+  }
+
+  assert {
+    condition     = google_storage_bucket.audit_logs_access.soft_delete_policy[0].retention_duration_seconds == 30 * 86400
+    error_message = "The access-log bucket must have a 30-day soft-delete policy by default."
+  }
+}
+
+run "bucket_lock_disables_versioning" {
+  command = plan
+
+  variables {
+    enable_bucket_lock = true
+  }
+
+  # GCS rejects Object Versioning on a bucket with a retention policy.
+  assert {
+    condition     = google_storage_bucket.audit_logs.versioning[0].enabled == false
+    error_message = "Versioning must be off when the retention lock is on (GCS forbids both)."
+  }
+
+  assert {
+    condition     = google_storage_bucket.audit_logs.soft_delete_policy[0].retention_duration_seconds == 30 * 86400
+    error_message = "Soft delete must stay on alongside the retention lock."
+  }
+}

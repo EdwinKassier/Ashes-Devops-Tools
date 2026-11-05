@@ -27,6 +27,7 @@ variables {
   billing_contact_email                 = "billing@example.com"
   monthly_budget_amount                 = 1000
   budget_currency                       = "USD"
+  alert_notification_emails             = ["secops@example.com"]
   environments = {
     dev = {
       display_name            = "Development"

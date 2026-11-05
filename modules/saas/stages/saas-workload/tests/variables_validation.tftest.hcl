@@ -2,7 +2,6 @@
 
 mock_provider "supabase" {}
 mock_provider "vercel" {}
-mock_provider "null" {}
 
 variables {
   supabase_organization_id   = "abcdefghijklmnop"
@@ -123,4 +122,23 @@ run "vercel_enabled_invalid_project_name_rejected" {
     vercel_project_name = "INVALID_NAME"
     vercel_github_repo  = "myorg/my-app"
   }
+}
+
+# ── supabase_db_schema: never expose the vault / iac_vault schemas via PostgREST ──────────────
+
+run "supabase_db_schema_default_accepted" {
+  command = plan
+  variables { supabase_db_schema = "public,graphql_public" }
+}
+
+run "supabase_db_schema_iac_vault_rejected" {
+  command         = plan
+  expect_failures = [var.supabase_db_schema]
+  variables { supabase_db_schema = "public, IAC_VAULT" }
+}
+
+run "supabase_db_schema_vault_rejected" {
+  command         = plan
+  expect_failures = [var.supabase_db_schema]
+  variables { supabase_db_schema = "public,vault" }
 }

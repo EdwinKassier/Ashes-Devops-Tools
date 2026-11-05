@@ -38,3 +38,36 @@ run "unqualified_run_role_arn_rejected" {
 
   expect_failures = [var.terraform_run_role_arn]
 }
+
+run "wildcard_pipeline_role_name_rejected" {
+  # Reject case: a bare "*" pipeline role name would exempt every principal.
+  command = plan
+
+  variables {
+    pipeline_role_names = ["*"]
+  }
+
+  expect_failures = [var.pipeline_role_names]
+}
+
+run "invalid_trusted_account_id_rejected" {
+  # Reject case: trusted perimeter accounts must be 12-digit account IDs.
+  command = plan
+
+  variables {
+    data_perimeter_trusted_account_ids = ["not-an-account"]
+  }
+
+  expect_failures = [var.data_perimeter_trusted_account_ids]
+}
+
+run "wildcard_break_glass_name_rejected" {
+  # Reject case: a wildcard break-glass name would widen the sole destructive carve-out.
+  command = plan
+
+  variables {
+    break_glass_role_names = ["break-*"]
+  }
+
+  expect_failures = [var.break_glass_role_names]
+}

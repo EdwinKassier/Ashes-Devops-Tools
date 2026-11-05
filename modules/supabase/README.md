@@ -1,6 +1,6 @@
 # Supabase Modules
 
-Terraform modules for provisioning and managing Supabase resources. These modules are consumed by [`modules/saas/stages/saas-workload`](../stages/saas-workload/) and can also be called directly for Supabase-only deployments.
+Terraform modules for provisioning and managing Supabase resources. These modules are consumed by [`modules/saas/stages/saas-workload`](../saas/stages/saas-workload/) and can also be called directly for Supabase-only deployments.
 
 ## Modules
 
@@ -23,12 +23,7 @@ Generate a token at [app.supabase.com/account/tokens](https://app.supabase.com/a
 
 ## Node.js Requirement
 
-`vault-secrets` executes Node.js scripts at apply time. Install dependencies once after cloning:
-
-```bash
-cd modules/supabase/vault-secrets/scripts
-npm install
-```
+`vault-secrets` executes Node.js scripts at apply time. The apply runner needs Node.js 18+ and npm on `PATH`. Dependencies are installed automatically during apply with `npm ci --ignore-scripts --no-audit --no-fund` from the committed lockfile, so there is no manual step.
 
 ## See Also
 

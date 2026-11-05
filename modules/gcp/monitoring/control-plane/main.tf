@@ -17,7 +17,44 @@ locals {
     var.extra_notification_channel_ids,
   ) : []
 
-  active_watches = var.enable ? var.watches : {}
+  # Break-glass use watch: any Admin Activity by a break-glass principal.
+  break_glass_watch = length(var.break_glass_principal_emails) == 0 ? {} : {
+    break_glass_use = {
+      display_name  = "Break-glass principal used"
+      filter        = "logName:\"cloudaudit.googleapis.com\" AND (${join(" OR ", [for e in var.break_glass_principal_emails : "protoPayload.authenticationInfo.principalEmail=\"${e}\""])})"
+      severity      = "CRITICAL"
+      documentation = "A break-glass principal performed an administrative action. Confirm an incident is open and the use was authorised; rotate the credential afterwards."
+    }
+  }
+
+  active_watches = var.enable ? merge(var.watches, local.break_glass_watch) : {}
+
+  route_org_logs = var.enable && var.org_id != null
+}
+
+# Org- and folder-level audit entries (org IAM, org policy, VPC-SC, org sinks,
+# deny policies) live in the organization's own log buckets, not in any project,
+# so a project-scoped log-match alert never sees them. Route the org's Admin
+# Activity + Policy audit logs into project_id (excluding project_id's own logs,
+# which are already there) so the watches below can match them.
+resource "google_logging_organization_sink" "control_plane" {
+  count = local.route_org_logs ? 1 : 0
+
+  name             = var.org_log_route_sink_name
+  org_id           = var.org_id
+  destination      = "logging.googleapis.com/projects/${var.project_id}"
+  include_children = true
+  filter           = "(logName:\"cloudaudit.googleapis.com%2Factivity\" OR logName:\"cloudaudit.googleapis.com%2Fpolicy\") AND NOT logName:\"projects/${var.project_id}/\""
+  description      = "Routes org Admin Activity/Policy audit logs to the control-plane monitoring project for log-match alerting."
+}
+
+# A sink whose destination is another project needs logging.logWriter there.
+resource "google_project_iam_member" "control_plane_sink_writer" {
+  count = local.route_org_logs ? 1 : 0
+
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = google_logging_organization_sink.control_plane[0].writer_identity
 }
 
 resource "google_monitoring_notification_channel" "email" {

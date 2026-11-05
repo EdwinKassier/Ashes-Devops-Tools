@@ -3,7 +3,9 @@
 # The saas root's defining property (provider-selection thesis) is that it plans
 # standalone with NO aws/google provider and no cloud credentials, with each SaaS
 # feature independently gated. This test exercises both the no-op path and a
-# single-feature path under mocked Supabase/Vercel providers.
+# single-feature path under mocked Supabase/Vercel providers. The real-provider
+# single-provider-mode regression tests (credential-free, one provider left
+# unmocked) live in single_provider_*.tftest.hcl.
 
 mock_provider "supabase" {}
 mock_provider "vercel" {}
@@ -39,6 +41,36 @@ run "saas_supabase_only" {
   assert {
     condition     = output.vercel_project_id == null
     error_message = "with enable_vercel=false, vercel_project_id must be null"
+  }
+}
+
+# Vercel enabled, Supabase off: the mirror of the case above.
+run "saas_vercel_only" {
+  command = plan
+
+  variables {
+    enable_supabase     = false
+    enable_vercel       = true
+    vercel_project_name = "acme-web"
+    vercel_team_id      = "team_abc"
+    vercel_github_repo  = "acme/web"
+  }
+
+  assert {
+    condition     = output.supabase_project_id == null
+    error_message = "with enable_supabase=false, supabase_project_id must be null"
+  }
+}
+
+# Never expose the vault schemas through PostgREST.
+run "exposing_iac_vault_schema_rejected" {
+  command         = plan
+  expect_failures = [var.supabase_db_schema]
+
+  variables {
+    enable_supabase    = false
+    enable_vercel      = false
+    supabase_db_schema = "public,iac_vault"
   }
 }
 

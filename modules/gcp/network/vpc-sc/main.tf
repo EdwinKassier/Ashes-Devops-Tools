@@ -2,7 +2,7 @@
  * Copyright 2023 Ashes
  *
  * VPC Service Controls Module - Main Configuration
- * 
+ *
  * Creates service perimeters to protect GCP resources from data exfiltration
  * and unauthorized access, even from within Google Cloud.
  */
@@ -40,6 +40,23 @@ resource "google_access_context_manager_access_policy" "policy" {
 
 locals {
   access_policy_name = var.create_access_policy ? google_access_context_manager_access_policy.policy[0].name : var.access_policy_name
+
+  # SOTA M (dry-run XOR enforced): an ENFORCED perimeter can also carry a staged
+  # dry-run `spec` that differs from `status`, so a delta (e.g. extra restricted
+  # services) is trialled in dry-run while the current config keeps enforcing.
+  # Staging is triggered by any dry_run_* override while enable_dry_run = false.
+  stage_dry_run_spec = !var.enable_dry_run && (
+    var.dry_run_restricted_services != null ||
+    var.dry_run_ingress_policies != null ||
+    var.dry_run_egress_policies != null
+  )
+
+  # The spec block exists in pure dry-run mode (enable_dry_run) and when staging.
+  render_spec = var.enable_dry_run || local.stage_dry_run_spec
+
+  spec_restricted_services = var.dry_run_restricted_services != null ? var.dry_run_restricted_services : var.restricted_services
+  spec_ingress_policies    = var.dry_run_ingress_policies != null ? var.dry_run_ingress_policies : var.ingress_policies
+  spec_egress_policies     = var.dry_run_egress_policies != null ? var.dry_run_egress_policies : var.egress_policies
 }
 
 # -----------------------------------------------------------------------------
@@ -104,8 +121,9 @@ resource "google_access_context_manager_service_perimeter" "perimeter" {
   description    = var.description
   perimeter_type = "PERIMETER_TYPE_REGULAR"
 
-  # Use explicit dry run spec when dry run is enabled
-  use_explicit_dry_run_spec = var.enable_dry_run
+  # Explicit dry-run spec when in pure dry-run mode OR when an enforced
+  # perimeter stages a dry-run delta (dry_run_* overrides).
+  use_explicit_dry_run_spec = local.render_spec
 
   # ENFORCED configuration (always defined for active perimeters)
   dynamic "status" {
@@ -197,12 +215,14 @@ resource "google_access_context_manager_service_perimeter" "perimeter" {
     }
   }
 
-  # DRY RUN configuration (spec block - used when dry run is enabled)
+  # DRY RUN configuration (spec block). Rendered when dry run is enabled (spec
+  # only, nothing enforced) or when an enforced perimeter stages a delta via the
+  # dry_run_* overrides (status enforced + spec evaluated in dry-run).
   dynamic "spec" {
-    for_each = var.enable_dry_run ? [1] : []
+    for_each = local.render_spec ? [1] : []
     content {
       resources           = [for p in var.protected_projects : "projects/${p}"]
-      restricted_services = var.restricted_services
+      restricted_services = local.spec_restricted_services
       access_levels = [
         for level in var.access_levels :
         "accessPolicies/${local.access_policy_name}/accessLevels/${level.name}"
@@ -219,7 +239,7 @@ resource "google_access_context_manager_service_perimeter" "perimeter" {
 
       # Ingress policies
       dynamic "ingress_policies" {
-        for_each = var.ingress_policies
+        for_each = local.spec_ingress_policies
         content {
           ingress_from {
             identity_type = try(ingress_policies.value.identity_type, null)
@@ -257,7 +277,7 @@ resource "google_access_context_manager_service_perimeter" "perimeter" {
 
       # Egress policies
       dynamic "egress_policies" {
-        for_each = var.egress_policies
+        for_each = local.spec_egress_policies
         content {
           egress_from {
             identity_type = try(egress_policies.value.identity_type, null)

@@ -1,8 +1,13 @@
-.PHONY: help install fmt fmt-check validate validate-all lint consistency security security-low security-report docs docs-check count test ci clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
+.PHONY: help install fmt fmt-check validate validate-all lint consistency security security-low security-report docs docs-check count count-check links shellcheck test ci clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
 
 TERRAFORM := terraform
 TFLINT := tflint
-TFSEC := tfsec
+# Trivy replaces tfsec (EOL - Aqua folded it into Trivy). The version MUST match
+# what reusable-security.yml runs (trivy-action `version:`), pinned in .tool-versions.
+TRIVY := trivy
+TRIVY_VERSION := $(shell awk '$$1=="trivy"{print $$2}' .tool-versions)
+TRIVY_ARGS := config . --skip-dirs '**/.terraform'
+SHELLCHECK_VERSION := $(shell awk '$$1=="shellcheck"{print $$2}' .tool-versions)
 # Checkov MUST match the version CI runs (checkov-action pins the image; keep
 # .tool-versions in sync). Newer checkov ships new checks, so a skewed local
 # binary gives a false green. Prefer an exact-version uvx run; otherwise the
@@ -75,24 +80,32 @@ lint: ## Run TFLint across the repository
 		$(TFLINT) --chdir=$$dir --config=$(PWD)/.tflint.hcl; \
 	done
 
-security: ## Run tfsec (full tree) and checkov and fail on real findings
+security: ## Run Trivy (IaC config) and checkov and fail on real findings
+	@command -v $(TRIVY) >/dev/null 2>&1 || { \
+		echo "trivy not found. Install trivy $(TRIVY_VERSION) (pinned in .tool-versions), e.g. 'asdf install trivy $(TRIVY_VERSION)'"; \
+		echo "or see https://trivy.dev/latest/getting-started/installation/. tfsec is EOL and no longer used."; \
+		exit 1; }
+	@v="$$($(TRIVY) --version 2>/dev/null | awk '/^Version:/{print $$2; exit}')"; \
+	if [ "$$v" != "$(TRIVY_VERSION)" ]; then \
+		echo "trivy $$v does not match the CI-pinned $(TRIVY_VERSION) (.tool-versions). Install trivy $(TRIVY_VERSION)."; \
+		exit 1; \
+	fi
 	@v="$$($(CHECKOV) --version 2>/dev/null | tail -1)"; \
 	if [ "$$v" != "$(CHECKOV_VERSION)" ]; then \
 		echo "checkov $$v does not match the CI-pinned $(CHECKOV_VERSION) (.tool-versions). Install uv or checkov==$(CHECKOV_VERSION)."; \
 		exit 1; \
 	fi
-	# --force-all-dirs makes tfsec scan EVERY module/root directory, not just the ones
-	# reachable via module{} references from the repo root (which covered ~99 of 800+ files).
-	@$(TFSEC) . --force-all-dirs --config-file .tfsec.yml --exclude-path examples --exclude-path .terraform
+	# Same blocking gate as CI (reusable-security.yml). Trivy recurses the whole tree natively.
+	@$(TRIVY) $(TRIVY_ARGS) --severity CRITICAL,HIGH --exit-code 1
 	@$(CHECKOV) -d modules --quiet --compact --framework terraform --config-file .checkov.yaml
 	@$(CHECKOV) -d envs --quiet --compact --framework terraform --config-file .checkov.yaml
 
-security-low: ## Advisory-only: run tfsec at LOW severity across the full tree (non-blocking)
-	@$(TFSEC) . --force-all-dirs --config-file .tfsec.yml --exclude-path examples --exclude-path .terraform --minimum-severity LOW --soft-fail
+security-low: ## Advisory-only: run Trivy at LOW+ severity across the full tree (non-blocking)
+	@$(TRIVY) $(TRIVY_ARGS) --severity LOW,MEDIUM,HIGH,CRITICAL --exit-code 0
 
 security-report: ## Generate detailed security reports
 	@mkdir -p reports
-	@$(TFSEC) . --force-all-dirs --config-file .tfsec.yml --exclude-path examples --exclude-path .terraform --format json > reports/tfsec-report.json
+	@$(TRIVY) $(TRIVY_ARGS) --format json --output reports/trivy-report.json --exit-code 0
 	@$(CHECKOV) -d modules --framework terraform --output json --config-file .checkov.yaml > reports/checkov-modules-report.json
 	@$(CHECKOV) -d envs --framework terraform --output json --config-file .checkov.yaml > reports/checkov-envs-report.json
 
@@ -102,10 +115,21 @@ docs: ## Generate Terraform docs from repo root
 docs-check: ## Verify Terraform docs are up to date
 	@bash scripts/module-docs.sh check
 
-count: ## Recompute the hand-maintained module/root/test counts in CLAUDE.md and README.md
-	@echo "modules:         $$(find modules -name main.tf -not -path '*/examples/*' -not -path '*/.terraform/*' | wc -l | tr -d ' ')"
-	@echo "deployable roots: $$(find envs -name '*.tf' -not -path '*/.terraform/*' | xargs -n1 dirname | sort -u | wc -l | tr -d ' ')"
-	@echo "test suites:     $$(find modules envs -name '*.tftest.hcl' -not -path '*/.terraform/*' | wc -l | tr -d ' ')"
+count: ## Print the live module/root/test-suite counts (the figures README.md and CLAUDE.md must quote)
+	@./scripts/check-docs-counts.sh --print
+
+count-check: ## Fail if README.md / CLAUDE.md counts drifted from the tree (CI: meta-lint)
+	@./scripts/check-docs-counts.sh
+
+links: ## Fail on broken repo-relative links in any Markdown file (offline; CI: meta-lint)
+	@python3 scripts/check-md-links.py
+
+shellcheck: ## Run shellcheck (pinned shellcheck-py, same as pre-commit) on scripts/*.sh
+	@if command -v uvx >/dev/null 2>&1; then \
+		uvx --from shellcheck-py==$(SHELLCHECK_VERSION).1 shellcheck --severity=warning scripts/*.sh; \
+	else \
+		shellcheck --severity=warning scripts/*.sh; \
+	fi
 
 test: ## Run terraform test suites (searches module roots and their tests/ subdirs)
 	@set -e; \
@@ -142,9 +166,12 @@ pre-commit-update: ## Update pinned pre-commit hooks
 consistency: ## Assert canonical strings (region regex, provider pins) haven't drifted across copies
 	@./scripts/check-consistency.sh
 
-ci: ## Run the local CI pipeline (fmt → docs → validate → lint → test → security)
+ci: ## Run the local CI pipeline (fmt → consistency → counts → links → shellcheck → docs → validate → lint → test → security)
 	@$(MAKE) fmt-check
 	@$(MAKE) consistency
+	@$(MAKE) count-check
+	@$(MAKE) links
+	@$(MAKE) shellcheck
 	@$(MAKE) docs-check
 	@$(MAKE) validate-all
 	@$(MAKE) lint
@@ -163,22 +190,22 @@ plan-gcp-organization: ## Plan the gcp-organization root
 plan-gcp-workload: ## Plan the gcp-workload root for APP_ENV using APP_VARS
 	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/gcp/workload plan -var-file=$(abspath $(APP_VARS))
 
-apply-gcp-organization: ## Apply the gcp-organization root (interactive confirmation required)
-	@echo "$(YELLOW)WARNING: You are about to apply changes to the GCP-ORGANIZATION root (folders, projects, org policies, hub network).$(NC)"
-	@echo "$(YELLOW)This affects all environments. Review the plan first with: make plan-gcp-organization$(NC)"
-	@printf "Type 'yes' to continue: " && read CONFIRM && [ "$$CONFIRM" = "yes" ] || (echo "Cancelled." && exit 1)
-	@$(TERRAFORM) -chdir=envs/gcp/organization apply
+apply-gcp-organization: ## Refuses: applies run in Terraform Cloud only (CLAUDE.md "State & Apply Rules")
+	@echo "Local apply is not supported. gcp-organization is applied by Terraform Cloud:"
+	@echo "merge to main (VCS-driven run) or queue a run on the gcp-organization workspace in TFC."
+	@echo "Preview locally with: make plan-gcp-organization. Failed applies: docs/runbooks/apply-recovery.md"
+	@exit 1
 
-apply-gcp-workload: ## Apply the gcp-workload root for APP_ENV using APP_VARS (interactive confirmation required)
-	@echo "$(YELLOW)WARNING: You are about to apply changes to the GCP-WORKLOAD root for environment: $(APP_ENV)$(NC)"
-	@echo "$(YELLOW)Review the plan first with: make plan-gcp-workload APP_ENV=$(APP_ENV) APP_VARS=$(APP_VARS)$(NC)"
-	@printf "Type 'yes' to continue: " && read CONFIRM && [ "$$CONFIRM" = "yes" ] || (echo "Cancelled." && exit 1)
-	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/gcp/workload apply -var-file=$(abspath $(APP_VARS))
+apply-gcp-workload: ## Refuses: applies run in Terraform Cloud only (CLAUDE.md "State & Apply Rules")
+	@echo "Local apply is not supported. $(APP_WORKSPACE) is applied by Terraform Cloud:"
+	@echo "merge to main (VCS-driven run) or queue a run on the $(APP_WORKSPACE) workspace in TFC."
+	@echo "Preview locally with: make plan-gcp-workload APP_ENV=$(APP_ENV). Promotion: docs/runbooks/promotion.md"
+	@exit 1
 
 validate-requirements: ## Print local tool versions
 	@$(TERRAFORM) version
 	@$(TFLINT) --version
-	@$(TFSEC) --version
+	@$(TRIVY) --version
 	@$(CHECKOV) --version
 	@$(TERRAFORM_DOCS) --version
 

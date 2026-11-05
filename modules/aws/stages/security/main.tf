@@ -54,6 +54,13 @@ module "break_glass" {
 
 # ---------------------------------------------------------------------------
 # KMS customer-managed keys (log-archive account + forensics account)
+#
+# key_admin_arn gets management actions only; usage is granted separately via
+# kms_key_user_arns (separation of duties — the key admin cannot decrypt logs).
+# The keys are tagged protected = "true" (enable_kms_protection_tag) so the
+# org deny-tamper SCP blocks ScheduleKeyDeletion/DisableKey except via
+# break-glass: the log archive cannot be crypto-shredded by a pipeline or
+# member-account admin compromise.
 # ---------------------------------------------------------------------------
 
 module "log_cmk" {
@@ -66,6 +73,8 @@ module "log_cmk" {
   org_id                = var.org_id
   management_account_id = var.management_account_id
   key_admin_arn         = var.key_admin_arn
+  key_user_arns         = try(var.kms_key_user_arns["log_archive"], [])
+  enable_protection_tag = var.enable_kms_protection_tag
   # log_service_principals uses the module SRA default
   # (cloudtrail / config / securitylake).
 }
@@ -80,6 +89,8 @@ module "forensics_cmk" {
   org_id                = var.org_id
   management_account_id = var.management_account_id
   key_admin_arn         = var.key_admin_arn
+  key_user_arns         = try(var.kms_key_user_arns["forensics"], [])
+  enable_protection_tag = var.enable_kms_protection_tag
 }
 
 # Security-tooling CMK. The log CMK lives in the log-archive account and its key
@@ -98,6 +109,8 @@ module "sectool_cmk" {
   org_id                 = var.org_id
   management_account_id  = var.management_account_id
   key_admin_arn          = var.key_admin_arn
+  key_user_arns          = try(var.kms_key_user_arns["security_tooling"], [])
+  enable_protection_tag  = var.enable_kms_protection_tag
   log_service_principals = []
   service_principals     = ["sns.amazonaws.com", "ssm.amazonaws.com", "cloudwatch.amazonaws.com"]
 }

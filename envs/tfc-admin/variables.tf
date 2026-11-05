@@ -9,16 +9,252 @@ variable "environments" {
   default     = {}
 }
 
+variable "enable_gcp" {
+  description = "Declare the GCP control-plane (gcp-bootstrap/organization/projects/network-hub) and gcp-workload-<env> workspaces. Default true (current behaviour); set false for an AWS-only or SaaS-only estate."
+  type        = bool
+  default     = true
+}
+
 variable "enable_aws" {
-  description = "Also declare the AWS control-plane and per-env workload workspaces. Default false keeps this GCP-only; set true for an AWS or multi-cloud estate."
+  description = "Declare the AWS control-plane and aws-workload-<env> workspaces. Default false; set true for an AWS or multi-cloud estate."
   type        = bool
   default     = false
 }
 
+variable "enable_saas" {
+  description = "Declare one saas-<name> workspace (working dir envs/saas) per saas_workspaces entry. Default false."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.enable_saas || length(var.saas_workspaces) > 0
+    error_message = "enable_saas = true requires at least one saas_workspaces entry."
+  }
+}
+
 variable "saas_workspaces" {
-  description = "SaaS workspace names to declare (saas-<name>, working dir envs/saas). Default [] = none."
+  description = "SaaS workspace name suffixes (saas-<name>). Only used when enable_saas = true."
   type        = list(string)
   default     = []
+
+  validation {
+    condition     = alltrue([for n in var.saas_workspaces : can(regex("^[a-z0-9][a-z0-9-]*$", n))])
+    error_message = "saas_workspaces entries must be lowercase alphanumeric with hyphens."
+  }
+}
+
+variable "manage_tfc_admin_workspace" {
+  description = "Adopt the hand-created tfc-admin workspace (import block) so its triggers, speculative-plan and remote-state settings are codified too. Default false."
+  type        = bool
+  default     = false
+}
+
+variable "import_tfc_admin_workspace" {
+  description = "With manage_tfc_admin_workspace, adopt the existing workspace via an import block. Leave true for the adopting apply; it is a no-op afterwards and may be set false."
+  type        = bool
+  default     = true
+}
+
+variable "tfc_admin_workspace_name" {
+  description = "Name of the hand-created workspace that runs this root."
+  type        = string
+  default     = "tfc-admin"
+}
+
+variable "execution_mode" {
+  description = "Execution mode for every managed workspace: remote (default) or agent (self-hosted agents; set agent_pool_id)."
+  type        = string
+  default     = "remote"
+
+  validation {
+    condition     = contains(["remote", "agent"], var.execution_mode)
+    error_message = "execution_mode must be remote or agent (local would skip TFC-held credentials and policy)."
+  }
+}
+
+variable "agent_pool_id" {
+  description = "Agent pool ID (apool-...) used when execution_mode = agent."
+  type        = string
+  default     = null
+}
+
+variable "speculative_disabled_workspaces" {
+  description = "Workspaces that must NOT run automatic speculative plans on pull requests (control plane: a PR must not get a plan with privileged credentials). Names not managed here are ignored."
+  type        = list(string)
+  default = [
+    "gcp-bootstrap", "gcp-organization", "gcp-projects", "gcp-network-hub",
+    "aws-organization", "aws-security", "aws-backup", "aws-identity",
+    "tfc-admin",
+  ]
+}
+
+variable "enable_health_assessments" {
+  description = "Enable TFC health assessments (native drift detection + continuous validation) on every managed workspace. Requires an HCP Terraform tier that includes them."
+  type        = bool
+  default     = true
+}
+
+variable "extra_remote_state_consumers" {
+  description = <<-EOT
+    Additional remote-state edges, producer workspace => consumer workspaces, merged
+    into the built-in graph derived from the envs/** terraform_remote_state blocks.
+    Use for the opt-in cross-cloud seams: a saas-<name> producer read by
+    gcp-workload-<env>/aws-workload-<env> (enable_saas_secret_bridge), or a
+    gcp-/aws-workload producer read by saas-<name> (cross_cloud_references).
+    Every name must be a managed workspace.
+  EOT
+  type        = map(list(string))
+  default     = {}
+}
+
+# ── Dynamic provider credentials ─────────────────────────────────────────────
+
+variable "gcp_workload_provider_name" {
+  description = "Full WIF provider name for TFC_GCP_WORKLOAD_PROVIDER_NAME (projects/<number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>); gcp-bootstrap output tfc_workload_provider_name. Null = not set (or read from gcp-bootstrap when gcp_bootstrap_outputs_from_tfc)."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.gcp_workload_provider_name == null || can(regex("^projects/[0-9]+/locations/global/workloadIdentityPools/[a-z0-9-]+/providers/[a-z0-9-]+$", var.gcp_workload_provider_name))
+    error_message = "gcp_workload_provider_name must be projects/<number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>."
+  }
+}
+
+variable "gcp_plan_service_accounts" {
+  description = "Workspace name => SA email impersonated during PLAN (TFC_GCP_PLAN_SERVICE_ACCOUNT_EMAIL); gcp-bootstrap output tfc_plan_service_accounts. Empty = not set. Overrides values read via gcp_bootstrap_outputs_from_tfc."
+  type        = map(string)
+  default     = {}
+
+  validation {
+    condition     = alltrue([for e in values(var.gcp_plan_service_accounts) : can(regex("^[^@]+@[a-z0-9-]+\\.iam\\.gserviceaccount\\.com$", e))])
+    error_message = "gcp_plan_service_accounts values must be service-account emails (...@<project>.iam.gserviceaccount.com)."
+  }
+}
+
+variable "gcp_apply_service_accounts" {
+  description = "Workspace name => SA email impersonated during APPLY (TFC_GCP_APPLY_SERVICE_ACCOUNT_EMAIL); gcp-bootstrap output tfc_apply_service_accounts. Must have the same keys as gcp_plan_service_accounts."
+  type        = map(string)
+  default     = {}
+
+  validation {
+    condition     = alltrue([for e in values(var.gcp_apply_service_accounts) : can(regex("^[^@]+@[a-z0-9-]+\\.iam\\.gserviceaccount\\.com$", e))])
+    error_message = "gcp_apply_service_accounts values must be service-account emails (...@<project>.iam.gserviceaccount.com)."
+  }
+
+  validation {
+    condition     = toset(keys(var.gcp_plan_service_accounts)) == toset(keys(var.gcp_apply_service_accounts))
+    error_message = "gcp_plan_service_accounts and gcp_apply_service_accounts must have the same workspace keys (a run phase without an SA would fail)."
+  }
+}
+
+variable "gcp_bootstrap_outputs_from_tfc" {
+  description = "Read tfc_workload_provider_name / tfc_plan_service_accounts / tfc_apply_service_accounts from the gcp-bootstrap workspace outputs (tfe_outputs) instead of copying them into variables. Enable only after gcp-bootstrap has applied; grants tfc-admin read on gcp-bootstrap state."
+  type        = bool
+  default     = false
+}
+
+variable "aws_plan_role_arns" {
+  description = "Workspace name => IAM role ARN assumed during PLAN (TFC_AWS_PLAN_ROLE_ARN). Empty = not set. Overrides values derived via aws_organization_outputs_from_tfc."
+  type        = map(string)
+  default     = {}
+
+  validation {
+    condition     = alltrue([for a in values(var.aws_plan_role_arns) : can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", a))])
+    error_message = "aws_plan_role_arns values must be IAM role ARNs."
+  }
+}
+
+variable "aws_apply_role_arns" {
+  description = "Workspace name => IAM role ARN assumed during APPLY (TFC_AWS_APPLY_ROLE_ARN). Must have the same keys as aws_plan_role_arns."
+  type        = map(string)
+  default     = {}
+
+  validation {
+    condition     = alltrue([for a in values(var.aws_apply_role_arns) : can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", a))])
+    error_message = "aws_apply_role_arns values must be IAM role ARNs."
+  }
+
+  validation {
+    condition     = toset(keys(var.aws_plan_role_arns)) == toset(keys(var.aws_apply_role_arns))
+    error_message = "aws_plan_role_arns and aws_apply_role_arns must have the same workspace keys."
+  }
+}
+
+variable "aws_organization_outputs_from_tfc" {
+  description = "Derive per-workspace plan/apply role ARNs from the aws-organization outputs tfc_plan_role_arns / tfc_apply_role_arns (keyed by account key) via tfe_outputs, using aws_workspace_account_keys. Grants tfc-admin read on aws-organization state."
+  type        = bool
+  default     = false
+}
+
+variable "aws_workspace_account_keys" {
+  description = "Workspace name => aws-organization account key whose tfc-plan/tfc-apply roles the workspace uses, e.g. {\"aws-security\" = \"security_tooling\"}. Only used with aws_organization_outputs_from_tfc; overrides the mapping derived from the aws-organization output tfc_workspace_bindings."
+  type        = map(string)
+  default     = {}
+}
+
+variable "workspace_variables" {
+  description = "Per-workspace variables, workspace name => {key => {value, category (terraform|env, default terraform), hcl?, sensitive?, description?}}. Overrides derived values (e.g. environment) and dynamic-credential env vars. Supply real secrets out-of-band."
+  type = map(map(object({
+    value       = string
+    category    = optional(string, "terraform")
+    hcl         = optional(bool, false)
+    sensitive   = optional(bool, false)
+    description = optional(string)
+  })))
+  default = {}
+
+  validation {
+    condition     = alltrue(flatten([for ws in values(var.workspace_variables) : [for v in values(ws) : contains(["terraform", "env"], v.category)]]))
+    error_message = "workspace_variables categories must be terraform or env."
+  }
+}
+
+# ── Projects, teams, policy ──────────────────────────────────────────────────
+
+variable "enable_projects" {
+  description = "Group workspaces into one TFC project per cloud (<prefix>gcp, <prefix>aws, <prefix>saas, <prefix>platform). Default true. Required for team access."
+  type        = bool
+  default     = true
+}
+
+variable "project_name_prefix" {
+  description = "Prefix for TFC project, variable-set and policy-set names."
+  type        = string
+  default     = "landing-zone-"
+}
+
+variable "platform_team_id" {
+  description = "TFC team ID (team-...) granted WRITE on every landing-zone project. Null = no grant."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.platform_team_id == null || can(regex("^team-[A-Za-z0-9]+$", var.platform_team_id))
+    error_message = "platform_team_id must be a TFC team ID (team-...)."
+  }
+}
+
+variable "viewer_team_ids" {
+  description = "TFC team IDs (team-...) granted READ on every landing-zone project."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for t in var.viewer_team_ids : can(regex("^team-[A-Za-z0-9]+$", t))])
+    error_message = "viewer_team_ids entries must be TFC team IDs (team-...)."
+  }
+}
+
+variable "enable_policy_sets" {
+  description = "Create an OPA policy set sourced from policies/opa in the VCS repo, attached to every managed workspace. Policies are advisory (see policies/opa/policies.hcl). Requires vcs_repo and a tier with policy enforcement. Default false."
+  type        = bool
+  default     = false
+}
+
+variable "opa_version" {
+  description = "OPA version for the policy set. Null = the TFC default (latest)."
+  type        = string
+  default     = null
 }
 
 variable "terraform_version" {
@@ -28,17 +264,18 @@ variable "terraform_version" {
 }
 
 variable "vcs_repo" {
-  description = "Optional VCS connection applied to every workspace: {identifier = \"org/repo\", branch = \"main\", oauth_token_id = \"ot-...\"}. Null = API/CLI-driven workspaces."
+  description = "Optional VCS connection applied to every workspace (and the OPA policy set): {identifier = \"org/repo\", branch = \"main\", oauth_token_id = \"ot-...\"} or github_app_installation_id. Null = API/CLI-driven workspaces."
   type = object({
-    identifier     = string
-    branch         = optional(string, "main")
-    oauth_token_id = string
+    identifier                 = string
+    branch                     = optional(string, "main")
+    oauth_token_id             = optional(string)
+    github_app_installation_id = optional(string)
   })
   default = null
 }
 
 variable "common_workspace_variables" {
-  description = "Variables set on EVERY managed workspace (in addition to tfc_organization), e.g. TFC_AWS_PROVIDER_AUTH. Keyed by name: {value, category (terraform|env), hcl?, sensitive?, description?}. Supply real secrets out-of-band, not here."
+  description = "Org-wide variables placed in the shared <prefix>common variable set (alongside tfc_organization) attached to EVERY managed workspace. Keyed by name: {value, category (terraform|env), hcl?, sensitive?, description?}. Per-workspace credentials belong in the dynamic-credential maps, not here. Supply real secrets out-of-band."
   type = map(object({
     value       = string
     category    = string

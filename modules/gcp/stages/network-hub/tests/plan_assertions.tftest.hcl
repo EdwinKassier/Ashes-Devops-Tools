@@ -59,3 +59,31 @@ run "dns_zone_binds_to_dns_hub_network_self_link" {
     error_message = "the private DNS zone must bind to the DNS hub's own VPC self_link (module.dns_hub_network.network_self_link), not the shared-vpc hub network"
   }
 }
+
+# Audit M (network gaps): the SSH/RDP deny must be associated with every folder,
+# not just the shared folder.
+run "ssh_rdp_deny_associated_with_every_folder" {
+  command = plan
+
+  variables {
+    folders = {
+      shared = { id = "folders/111111111", name = "folders/111111111", display_name = "Shared" }
+      dev    = { id = "folders/222222222", name = "folders/222222222", display_name = "Development" }
+      prod   = { id = "folders/333333333", name = "folders/333333333", display_name = "Production" }
+    }
+  }
+
+  override_module {
+    target  = module.hub_network
+    outputs = { network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core" }
+  }
+  override_module {
+    target  = module.dns_hub_network
+    outputs = { network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core" }
+  }
+
+  assert {
+    condition     = toset(output.hierarchical_firewall_association_targets) == toset(["folders/111111111", "folders/222222222", "folders/333333333"])
+    error_message = "the hub SSH/RDP deny policy must be associated with the shared folder AND every environment folder."
+  }
+}

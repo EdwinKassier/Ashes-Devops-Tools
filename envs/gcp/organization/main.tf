@@ -51,8 +51,20 @@ module "organization" {
   monthly_budget_amount                 = var.monthly_budget_amount
   budget_currency                       = var.budget_currency
 
-  # Audit G4: dedicated logging project for the org audit sink (default null = admin project).
-  logging_project_id = var.logging_project_id
+  # Audit G4/C3: dedicated logging project for the org audit sink, bucket, audit
+  # CMEK and control-plane alerts (default null = admin project).
+  logging_project_id     = var.logging_project_id
+  logging_project_number = var.logging_project_number
+
+  # M-4: soft delete on the audit buckets (Object Versioning is always on unless
+  # the WORM lock is enabled, which GCS does not allow together with versioning).
+  audit_soft_delete_retention_days = var.audit_soft_delete_retention_days
+
+  # Security High: control-plane alerting (on by default).
+  enable_control_plane_alerting = var.enable_control_plane_alerting
+  alert_notification_emails     = var.alert_notification_emails
+  alert_notification_channels   = var.alert_notification_channels
+  break_glass_principal_emails  = var.break_glass_principal_emails
 
   # G6: opt-in custom org-policy constraints (default [] = none).
   custom_org_constraints = var.custom_org_constraints
@@ -68,8 +80,9 @@ module "organization" {
   enable_cmek_org_policy = var.enable_cmek_org_policy
   cmek_required_services = var.cmek_required_services
 
-  # C2: opt-in containment of the automation identity (default off). Set
-  # containment_exempt_principals to your break-glass principal when enabling.
+  # C2/C3: opt-in containment of the automation identity (default off; the prod
+  # preset turns it on). Set containment_exempt_principals to your break-glass
+  # principal when enabling — placeholders are rejected.
   enable_admin_containment      = var.enable_admin_containment
   containment_exempt_principals = var.containment_exempt_principals
 }

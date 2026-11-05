@@ -122,3 +122,64 @@ variable "gateway_endpoints" {
   type        = list(string)
   default     = ["s3", "dynamodb"]
 }
+
+variable "gateway_endpoint_tiers" {
+  description = "Subnet tiers whose route tables the gateway endpoints are associated with. null (default) associates them with every non-public tier."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = var.gateway_endpoint_tiers == null || alltrue([for t in coalesce(var.gateway_endpoint_tiers, []) : contains(keys(var.subnets), t)])
+    error_message = "Every gateway_endpoint_tiers entry must be a tier defined in subnets."
+  }
+}
+
+variable "create_internet_gateway" {
+  description = "Whether this module creates an internet gateway. When true, every public tier (public = true) route table gets a 0.0.0.0/0 default route to it."
+  type        = bool
+  default     = false
+}
+
+variable "routes" {
+  description = "Static routes keyed by subnet tier; each route is added to EVERY AZ route table of that tier. Set exactly one target per route (e.g. transit_gateway_id for spoke default routing to the hub). Per-AZ targets (such as per-AZ NAT gateways) should instead be added by the caller against route_table_ids_by_tier."
+  type = map(list(object({
+    destination_cidr_block    = string
+    transit_gateway_id        = optional(string)
+    nat_gateway_id            = optional(string)
+    gateway_id                = optional(string)
+    vpc_endpoint_id           = optional(string)
+    network_interface_id      = optional(string)
+    vpc_peering_connection_id = optional(string)
+  })))
+  default = {}
+
+  validation {
+    condition     = alltrue([for tier in keys(var.routes) : contains(keys(var.subnets), tier)])
+    error_message = "Every routes key must be a tier defined in subnets."
+  }
+
+  validation {
+    condition     = alltrue(flatten([for rs in values(var.routes) : [for r in rs : can(cidrnetmask(r.destination_cidr_block))]]))
+    error_message = "Every route destination_cidr_block must be a valid IPv4 CIDR block."
+  }
+
+  validation {
+    # Exactly one target per route. Uses null-ness (not values) so targets that
+    # are unknown until apply (e.g. a TGW id from another resource) still pass.
+    condition = alltrue(flatten([for rs in values(var.routes) : [for r in rs : length([
+      for t in [r.transit_gateway_id, r.nat_gateway_id, r.gateway_id, r.vpc_endpoint_id, r.network_interface_id, r.vpc_peering_connection_id] : t if t != null
+    ]) == 1]]))
+    error_message = "Every route must set exactly one target (transit_gateway_id, nat_gateway_id, gateway_id, vpc_endpoint_id, network_interface_id or vpc_peering_connection_id)."
+  }
+
+  validation {
+    condition     = alltrue([for rs in values(var.routes) : length(rs) == length(distinct([for r in rs : r.destination_cidr_block]))])
+    error_message = "Destination CIDRs must be unique within a tier."
+  }
+}
+
+variable "tags" {
+  description = "Tags applied to every taggable resource this module creates (merged under the per-resource Name/Tier tags). Org-wide tags (CostCenter, Environment, Owner, ...) normally come from the provider default_tags; use this for module-specific additions."
+  type        = map(string)
+  default     = {}
+}

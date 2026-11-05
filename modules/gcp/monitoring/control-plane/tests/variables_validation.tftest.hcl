@@ -47,3 +47,23 @@ run "rejects_out_of_range_rate_limit" {
   }
   expect_failures = [var.notification_rate_limit_seconds]
 }
+
+run "rejects_non_numeric_org_id" {
+  command = plan
+
+  variables {
+    org_id = "organizations/123"
+  }
+
+  expect_failures = [var.org_id]
+}
+
+run "rejects_bad_break_glass_email" {
+  command = plan
+
+  variables {
+    break_glass_principal_emails = ["not-an-email"]
+  }
+
+  expect_failures = [var.break_glass_principal_emails]
+}

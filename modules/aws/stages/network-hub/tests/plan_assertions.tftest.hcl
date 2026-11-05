@@ -30,6 +30,11 @@ override_module {
       tgw      = ["subnet-insp-tgw-a", "subnet-insp-tgw-b"]
       private  = ["subnet-insp-prv-a", "subnet-insp-prv-b"]
     }
+    route_table_ids_by_tier = {
+      firewall = ["rtb-insp-fw-a", "rtb-insp-fw-b"]
+      tgw      = ["rtb-insp-tgw-a", "rtb-insp-tgw-b"]
+      private  = ["rtb-insp-prv-a", "rtb-insp-prv-b"]
+    }
   }
 }
 
@@ -42,6 +47,11 @@ override_module {
       public  = ["subnet-egr-pub-a", "subnet-egr-pub-b"]
       tgw     = ["subnet-egr-tgw-a", "subnet-egr-tgw-b"]
       private = ["subnet-egr-prv-a", "subnet-egr-prv-b"]
+    }
+    route_table_ids_by_tier = {
+      public  = ["rtb-egr-pub-a", "rtb-egr-pub-b"]
+      tgw     = ["rtb-egr-tgw-a", "rtb-egr-tgw-b"]
+      private = ["rtb-egr-prv-a", "rtb-egr-prv-b"]
     }
   }
 }
@@ -161,11 +171,19 @@ run "composes_network_hub" {
     error_message = "stage must create one NAT gateway per egress public subnet"
   }
 
-  # Per-AZ HA egress (F3): one route table and one default route per AZ, each
-  # pointing at the NAT gateway in the SAME AZ (not all at NAT[0]).
+  # Per-AZ HA egress (F3): one default route per AZ, each written into the
+  # vpc-module-owned private route table of the SAME AZ (no stage-owned tables).
   assert {
-    condition     = length(aws_route_table.egress_private) == 2 && length(aws_route.egress_default) == 2
-    error_message = "stage must create one egress private route table and default route per AZ"
+    condition     = length(aws_route.egress_default) == 2
+    error_message = "stage must create one egress private default route per AZ"
+  }
+
+  assert {
+    condition = (
+      aws_route.egress_default["0"].route_table_id == "rtb-egr-prv-a" &&
+      aws_route.egress_default["1"].route_table_id == "rtb-egr-prv-b"
+    )
+    error_message = "each AZ's NAT default route must target the module-owned private route table of the same AZ"
   }
 
   assert {
@@ -173,9 +191,43 @@ run "composes_network_hub" {
     error_message = "each AZ's egress default route must be 0.0.0.0/0 via NAT"
   }
 
-  # One route-table association per AZ (each AZ's private subnet to its own RT).
+  # Spoke traffic arriving on the egress tgw tier leaves via the same-AZ NAT.
   assert {
-    condition     = length(aws_route_table_association.egress_private) == 2
-    error_message = "each AZ's egress private subnet must associate with its own route table"
+    condition = (
+      length(aws_route.egress_tgw_default) == 2 &&
+      aws_route.egress_tgw_default["1"].route_table_id == "rtb-egr-tgw-b" &&
+      aws_route.egress_tgw_default["1"].destination_cidr_block == "0.0.0.0/0"
+    )
+    error_message = "egress tgw-tier route tables must default-route to the same-AZ NAT gateway"
+  }
+
+  # Return / hand-off routes to the TGW: egress public + private -> top_cidr,
+  # inspection firewall -> 0.0.0.0/0 (2 AZs x 3 tables).
+  assert {
+    condition     = length(aws_route.hub_to_tgw) == 6
+    error_message = "stage must create TGW routes for egress public/private and inspection firewall tables in every AZ"
+  }
+
+  assert {
+    condition = alltrue([
+      for r in values(aws_route.hub_to_tgw) : r.transit_gateway_id == "tgw-000000000000abcd"
+    ])
+    error_message = "hub TGW routes must target the hub transit gateway"
+  }
+
+  assert {
+    condition = (
+      aws_route.hub_to_tgw["egress-private-0"].destination_cidr_block == var.top_cidr &&
+      aws_route.hub_to_tgw["egress-private-0"].route_table_id == "rtb-egr-prv-a" &&
+      aws_route.hub_to_tgw["inspection-firewall-1"].destination_cidr_block == "0.0.0.0/0" &&
+      aws_route.hub_to_tgw["inspection-firewall-1"].route_table_id == "rtb-insp-fw-b"
+    )
+    error_message = "egress return routes must cover top_cidr and the inspection firewall tier must default-route to the TGW"
+  }
+
+  # Route tables are surfaced from the vpc module, not rebuilt by the stage.
+  assert {
+    condition     = output.egress_route_table_ids_by_tier["private"][0] == "rtb-egr-prv-a"
+    error_message = "egress_route_table_ids_by_tier must surface module.egress_vpc.route_table_ids_by_tier"
   }
 }

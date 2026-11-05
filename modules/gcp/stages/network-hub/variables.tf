@@ -146,3 +146,9 @@ variable "vpc_sc_ingress_identities" {
   type        = list(string)
   default     = []
 }
+
+variable "vpc_sc_dry_run_additional_restricted_services" {
+  description = "Services to TRIAL in a staged dry-run spec on top of the enforced hub perimeter (base set + vpc_sc_additional_restricted_services). Only meaningful when vpc_sc_enable_dry_run = false: status keeps enforcing, the dry-run spec logs what these extra services would block. Default null = no staged spec."
+  type        = list(string)
+  default     = null
+}

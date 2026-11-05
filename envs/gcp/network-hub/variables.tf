@@ -72,6 +72,12 @@ variable "vpc_sc_additional_restricted_services" {
   default     = []
 }
 
+variable "vpc_sc_dry_run_additional_restricted_services" {
+  description = "Services to trial in a staged dry-run spec on top of the ENFORCED hub perimeter (only meaningful with vpc_sc_enable_dry_run = false). Status keeps enforcing; the dry-run spec logs what these would block. Default null = no staged spec."
+  type        = list(string)
+  default     = null
+}
+
 variable "vpc_sc_ingress_identities" {
   description = "Automation identities granted ingress into the hub data perimeter, e.g. the TFC-run SA. Set BEFORE expanding restricted_services under enforcement. Default [] = no ingress policy."
   type        = list(string)

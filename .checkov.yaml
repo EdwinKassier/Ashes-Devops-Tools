@@ -8,7 +8,7 @@
 # See modules/gcp/governance/kms, modules/gcp/cloud-storage, modules/gcp/stages/bootstrap.
 #
 # AWS coverage (Task K5, 2026-07-09): checkov is the PRIMARY scanner for the AWS modules
-# (tfsec 1.28.6's AWS ruleset is thin — see .tfsec.yml). All AWS-specific suppressions are
+# (Trivy's AWS ruleset complements it). All AWS-specific suppressions are
 # resource-level inline `# checkov:skip=` annotations in the affected modules, NOT global
 # entries, so each is scoped to the exact resource whose pattern is intentional:
 #   modules/aws/incident-response/main.tf — CKV_AWS_50/115/116/117/272 (scaffold isolation

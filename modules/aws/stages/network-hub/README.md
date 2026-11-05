@@ -102,11 +102,11 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_eip.nat (modules/aws/stages/network-hub/main.tf#L128)
-- resource.aws_nat_gateway.this (modules/aws/stages/network-hub/main.tf#L136)
-- resource.aws_route.egress_default (modules/aws/stages/network-hub/main.tf#L159)
-- resource.aws_route_table.egress_private (modules/aws/stages/network-hub/main.tf#L151)
-- resource.aws_route_table_association.egress_private (modules/aws/stages/network-hub/main.tf#L167)
+- resource.aws_eip.nat (modules/aws/stages/network-hub/main.tf#L160)
+- resource.aws_nat_gateway.this (modules/aws/stages/network-hub/main.tf#L168)
+- resource.aws_route.egress_default (modules/aws/stages/network-hub/main.tf#L183)
+- resource.aws_route.egress_tgw_default (modules/aws/stages/network-hub/main.tf#L193)
+- resource.aws_route.hub_to_tgw (modules/aws/stages/network-hub/main.tf#L201)
 
 
 ## Inputs
@@ -127,13 +127,16 @@ The following resources are created:
 | <a name="input_inspection_cidr"></a> [inspection\_cidr](#input\_inspection\_cidr) | IPv4 CIDR of the inspection VPC that hosts the Network Firewall endpoints and its transit-gateway attachment. | `string` | `"10.0.0.0/16"` | no |
 | <a name="input_private_hosted_zone_name"></a> [private\_hosted\_zone\_name](#input\_private\_hosted\_zone\_name) | Name of the shared Route 53 private hosted zone for split-horizon DNS in the egress VPC. Empty string skips creating the zone. | `string` | `""` | no |
 | <a name="input_regional_cidrs"></a> [regional\_cidrs](#input\_regional\_cidrs) | Map of region to the CIDR each regional IPAM pool provisions. Every CIDR should fall within top\_cidr. | `map(string)` | <pre>{<br/>  "eu-west-2": "10.0.0.0/12"<br/>}</pre> | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to the stage's own taggable resources (NAT gateways, EIPs) and passed to the hub VPCs. Org-wide tags normally come from the provider default\_tags; use this for stage-specific additions. | `map(string)` | `{}` | no |
 | <a name="input_top_cidr"></a> [top\_cidr](#input\_top\_cidr) | CIDR of the top-level supernet owned by the top IPAM pool. | `string` | `"10.0.0.0/8"` | no |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
+| <a name="output_egress_route_table_ids_by_tier"></a> [egress\_route\_table\_ids\_by\_tier](#output\_egress\_route\_table\_ids\_by\_tier) | Map of egress VPC subnet tier to its per-AZ route table IDs (owned by the vpc module). |
 | <a name="output_egress_vpc_id"></a> [egress\_vpc\_id](#output\_egress\_vpc\_id) | The ID of the centralized egress VPC that hosts NAT, interface endpoints, and resolver endpoints. |
+| <a name="output_inspection_route_table_ids_by_tier"></a> [inspection\_route\_table\_ids\_by\_tier](#output\_inspection\_route\_table\_ids\_by\_tier) | Map of inspection VPC subnet tier to its per-AZ route table IDs (owned by the vpc module). |
 | <a name="output_inspection_vpc_id"></a> [inspection\_vpc\_id](#output\_inspection\_vpc\_id) | The ID of the inspection VPC that hosts the Network Firewall. |
 | <a name="output_interface_endpoint_phz_id"></a> [interface\_endpoint\_phz\_id](#output\_interface\_endpoint\_phz\_id) | Zone ID of the shared private hosted zone fronting the interface endpoints, or null when no zone was created. |
 | <a name="output_ipam_pool_ids"></a> [ipam\_pool\_ids](#output\_ipam\_pool\_ids) | Map of region to the ID of its regional IPAM pool, consumed by app roots to allocate VPC CIDRs. |

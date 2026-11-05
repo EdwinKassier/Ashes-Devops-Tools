@@ -10,7 +10,7 @@ Repository secrets and variables referenced by `.github/workflows/`. Configure t
 | Name | Kind | Used by | Purpose |
 |------|------|---------|---------|
 | `TFC_TOKEN` | Secret | `terraform-apply.yml` | Terraform Cloud team token with **READ** access to workspace runs. Used only to verify run status before publishing a release; it does not trigger or modify runs. |
-| `TFC_TOKEN_DRIFT` | Secret | `drift-detection.yml` | Terraform Cloud team token with **Queue Plans (write)** on the target workspaces. Drift detection creates speculative plan-only runs (`POST /runs`), which read access cannot do. Falls back to `TFC_TOKEN` if unset (that token would then also need Queue Plans). Keep separate so the release token stays read-only. |
+| `TFC_TOKEN_DRIFT` | Secret | `drift-detection.yml` | Terraform Cloud team token with **Queue Plans (write)** on the target workspaces. Drift detection creates speculative plan-only runs (`POST /runs`), which read access cannot do. There is **no fallback** to `TFC_TOKEN`: if unset, scheduled runs skip and manual runs fail with an explicit error, so the release token is never silently granted Queue Plans. |
 | `TFC_ORGANIZATION` | Variable | `drift-detection.yml`, `terraform-apply.yml` | Terraform Cloud organization name that owns the workspaces. |
 
 Without both of these, `drift-detection.yml` **skips cleanly** on its scheduled runs (see
@@ -22,17 +22,31 @@ a GitHub Release when the run applied and its commit matches the tag. (The workf
 runs `terraform validate` and the mock tests, and likewise never produces a real plan - that is
 the TFC speculative plan.)
 
-## AWS roots — dynamic credentials
+## Dynamic provider credentials (GCP and AWS roots) — managed by tfc-admin
 
-The AWS roots (`envs/aws/*`) do not use static access keys in CI. Each root authenticates via
-**Terraform Cloud dynamic provider credentials**: TFC federates into an IAM role at run time
-and injects short-lived credentials, so no long-lived secret is stored. These are set as
-**workspace environment variables** on each `aws-*` workspace (not repository secrets):
+No cloud root uses static keys. Each workspace authenticates via **HCP Terraform dynamic
+provider credentials** (OIDC/WIF): TFC federates into a cloud identity at run time with
+separate **plan** (read-only) and **apply** identities. These are **workspace environment
+variables**, not repository secrets, and they are written by the
+[`envs/tfc-admin`](../../envs/tfc-admin/README.md) root — do not hand-set them in the UI
+(tfc-admin would revert them). They are only set on a workspace once its inputs are supplied.
 
-| Name | Kind | Scope | Purpose |
-|------|------|-------|---------|
-| `TFC_AWS_PROVIDER_AUTH` | Workspace env var | Per `aws-*` workspace | Set to `true` to enable TFC's AWS dynamic credentials for the workspace. |
-| `TFC_AWS_RUN_ROLE_ARN` | Workspace env var | Per `aws-*` workspace | The IAM role ARN the run assumes. Set each downstream workspace to its member-account role, published by the `aws-organization` root output `account_role_arns[<account-key>]` (e.g. `account_role_arns["security_tooling"]` for `aws-security`). The `aws-organization` workspace itself uses the phase-0 bootstrap role. |
+| Env var | Workspaces | Source (tfc-admin input, or upstream output via `tfe_outputs`) |
+|---------|-----------|-----------------------------------------------------------------|
+| `TFC_GCP_PROVIDER_AUTH` = `true` | `gcp-*` with an SA | set automatically |
+| `TFC_GCP_WORKLOAD_PROVIDER_NAME` | `gcp-*` with an SA | `gcp_workload_provider_name` ← gcp-bootstrap `tfc_workload_provider_name` |
+| `TFC_GCP_PLAN_SERVICE_ACCOUNT_EMAIL` | per `gcp-*` | `gcp_plan_service_accounts[<ws>]` ← gcp-bootstrap `tfc_plan_service_accounts` |
+| `TFC_GCP_APPLY_SERVICE_ACCOUNT_EMAIL` | per `gcp-*` | `gcp_apply_service_accounts[<ws>]` ← gcp-bootstrap `tfc_apply_service_accounts` |
+| `TFC_AWS_PROVIDER_AUTH` = `true` | `aws-*` with a role | set automatically |
+| `TFC_AWS_PLAN_ROLE_ARN` | per `aws-*` | `aws_plan_role_arns[<ws>]` ← aws-organization `tfc_plan_role_arns[<account-key>]` via `tfc_workspace_bindings` / `aws_workspace_account_keys` |
+| `TFC_AWS_APPLY_ROLE_ARN` | per `aws-*` | `aws_apply_role_arns[<ws>]` ← aws-organization `tfc_apply_role_arns[<account-key>]` via `tfc_workspace_bindings` / `aws_workspace_account_keys` |
+
+Wiring is two-pass because the identities are created by roots whose workspaces tfc-admin
+creates: apply tfc-admin → apply gcp-bootstrap / aws-organization → feed their outputs back
+(copy into the variables, or set `gcp_bootstrap_outputs_from_tfc` /
+`aws_organization_outputs_from_tfc = true`) → re-apply tfc-admin. See
+[`docs/runbooks/bootstrap.md`](../runbooks/bootstrap.md#creating-and-wiring-the-tfc-workspaces-tfc-admin-two-pass).
+The `aws-organization` workspace itself uses the phase-0 bootstrap role.
 
 For **local** runs against an AWS root (read-only `terraform plan`), use the standard AWS SDK
 credential chain instead — `AWS_PROFILE` pointing at a profile that can assume the role, or an
@@ -56,7 +70,7 @@ bootstrap role, the downstream member-account roles, and the workspaces that con
 ## Drift detection behavior without secrets
 
 `drift-detection.yml` runs a `check-credentials` job before the matrix job. It evaluates
-`secrets.TFC_TOKEN` and `vars.TFC_ORGANIZATION` (secrets cannot be referenced directly in a
+`secrets.TFC_TOKEN_DRIFT` and `vars.TFC_ORGANIZATION` (secrets cannot be referenced directly in a
 job-level `if:`, so the check runs in a step and exposes a plain job output that the downstream
 `if:` can read) and exposes a `configured` output:
 

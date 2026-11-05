@@ -12,7 +12,12 @@
 #   - vpc (spoke)          — a private/isolated/tgw spoke VPC. CIDR is either the
 #                            literal vpc_cidr or allocated from the shared IPAM
 #                            pool (ipam_pool_id). Gateway endpoints for s3 +
-#                            dynamodb keep that traffic off the TGW.
+#                            dynamodb keep that traffic off the TGW (associated
+#                            with the module-owned non-public route tables).
+#   - spoke routes         — the configured tiers (var.tgw_route_tiers, default
+#                            private) route var.tgw_destination_cidrs (default
+#                            0.0.0.0/0 -> centralized egress/inspection) to the
+#                            shared TGW via the vpc module's `routes` input.
 #   - spoke TGW attachment — attaches the spoke VPC to the SHARED transit gateway
 #                            (tgw_id, shared with this account via RAM by the
 #                            network account). Route-table association/propagation
@@ -38,10 +43,29 @@
 # Spoke VPC — private/isolated/tgw tiers; CIDR literal or from shared IPAM
 # ---------------------------------------------------------------------------
 
+locals {
+  # VPC / attachment name: explicit var.name, else workload-<environment>, else
+  # the legacy "workload".
+  name = coalesce(var.name, var.environment != null ? "workload-${var.environment}" : "workload")
+
+  # Spoke routing contract: every tier in tgw_route_tiers sends each
+  # tgw_destination_cidrs entry to the shared TGW. The target is read from the
+  # attachment resource so the routes are only created once the VPC is attached
+  # (a VPC route to a TGW is rejected before the attachment exists).
+  spoke_routes = {
+    for tier in var.tgw_route_tiers : tier => [
+      for cidr in var.tgw_destination_cidrs : {
+        destination_cidr_block = cidr
+        transit_gateway_id     = aws_ec2_transit_gateway_vpc_attachment.spoke.transit_gateway_id
+      }
+    ]
+  }
+}
+
 module "vpc" {
   source = "../../network/vpc"
 
-  name                     = "workload"
+  name                     = local.name
   cidr_block               = var.vpc_cidr
   region                   = var.aws_region
   availability_zones       = var.availability_zones
@@ -50,6 +74,8 @@ module "vpc" {
   flow_log_destination_arn = var.flow_log_destination_arn
   ipam_pool_id             = var.ipam_pool_id
   gateway_endpoints        = ["s3", "dynamodb"]
+  routes                   = local.spoke_routes
+  tags                     = var.tags
 }
 
 # ---------------------------------------------------------------------------
@@ -73,7 +99,7 @@ resource "aws_ec2_transit_gateway_vpc_attachment" "spoke" {
   transit_gateway_default_route_table_association = false
   transit_gateway_default_route_table_propagation = false
 
-  tags = { Name = "workload-spoke" }
+  tags = merge(var.tags, { Name = "${local.name}-spoke" })
 }
 
 # ---------------------------------------------------------------------------

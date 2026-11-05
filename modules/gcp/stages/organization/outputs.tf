@@ -34,6 +34,60 @@ output "scc_pubsub_topic_id" {
 }
 
 output "cmek_key_names" {
-  description = "Map of KMS key short names to fully qualified key resource IDs created by the CMEK module"
-  value       = module.cmek.key_names
+  description = "Map of KMS key short names to fully qualified key resource IDs created by the CMEK modules (org keyring plus, when logging_project_id is set, the audit keyring in the logging project)"
+  value       = merge(module.cmek.key_names, local.separate_logging_project ? module.audit_cmek[0].key_names : {})
+}
+
+output "audit_project_id" {
+  description = "Project holding the org audit bucket, audit CMEK and control-plane alerts (logging_project_id, or the admin project when unset)"
+  value       = local.audit_project_id
+}
+
+output "control_plane_alert_policy_ids" {
+  description = "Map of control-plane watch name to alert policy ID (empty when enable_control_plane_alerting = false)"
+  value       = module.control_plane_alerting.watch_alert_policy_ids
+}
+
+output "admin_containment_rules" {
+  description = "Rules of the C2/C3 admin-containment IAM deny policy (empty when enable_admin_containment = false): denied permissions, exempt principals and whether the rule is tag-scoped to the audit store."
+  value = flatten([
+    for p in local.containment_deny_policy : [
+      for r in p.rules : {
+        description          = r.description
+        denied_permissions   = r.denied_permissions
+        exception_principals = r.exception_principals
+        tag_scoped           = r.denial_condition != null
+      }
+    ]
+  ])
+}
+
+output "audit_org_sink_name" {
+  description = "Name of the org-level audit-log sink that exports to the audit bucket"
+  value       = module.audit_logs.org_log_sink_name
+}
+
+output "org_policy_constraints" {
+  description = "Org-node policy constraints this stage manages (boolean + list), for downstream verification"
+  value       = sort(concat(keys(module.org_policies.boolean_policy_names), keys(module.org_policies.list_policy_names)))
+}
+
+output "strict_folder_policy_environment_keys" {
+  description = "Environment folders that received the strict folder org-policy bundle"
+  value       = sort(keys(module.prod_folder_policies))
+}
+
+output "control_plane_watched_names" {
+  description = "Names of the active control-plane alert watches"
+  value       = module.control_plane_alerting.watched_names
+}
+
+output "control_plane_org_log_route_sink_name" {
+  description = "Aggregated org sink routing Admin Activity logs to the alerting project (null when alerting is off)"
+  value       = module.control_plane_alerting.org_log_route_sink_name
+}
+
+output "iam_deny_policy_names" {
+  description = "Names of the IAM deny policies planned at the org node (containment + iam_deny_policies)"
+  value       = module.iam_deny.deny_policy_names
 }

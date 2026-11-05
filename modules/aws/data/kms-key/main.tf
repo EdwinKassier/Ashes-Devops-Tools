@@ -5,17 +5,21 @@
 # `mock_provider "aws"` and its content can be asserted on in tests.
 #
 # Statement design:
-#   * KeyAdministration — a kms:* grant to var.key_admin_arn. REQUIRED to avoid
-#     locking the key: AWS treats a CMK with no admin as effectively
-#     unmanageable. This grants PutKeyPolicy/GetKeyPolicy/etc. to a key admin in
-#     the CMK's own account.
+#   * KeyAdministration — management-plane actions ONLY for var.key_admin_arn
+#     (PutKeyPolicy, Enable/Disable, rotation, tagging, deletion scheduling...).
+#     REQUIRED to avoid locking the key. It deliberately grants NO cryptographic
+#     operations (Encrypt/Decrypt/ReEncrypt/GenerateDataKey) and NO
+#     kms:CreateGrant, so the key administrator cannot read data protected by
+#     the key nor grant itself usage — separation of key administration from key
+#     usage (AWS KMS best practice). Destruction of protected keys is further
+#     gated by the deny-tamper SCP (protection tag, break-glass only).
 #   * Per-log-service grants — one Allow per entry in log_service_principals,
 #     scoped by aws:SourceOrgID so only principals in this org can use the key.
 #     CloudTrail additionally requires an EncryptionContext condition on the
 #     trail ARN. These grants deliberately DO NOT use kms:ViaService: CloudTrail
 #     (and Config/Security Lake) call KMS under their own service principal, not
 #     via S3, so a ViaService condition would deny log delivery.
-#   * Optional general-usage grant for var.key_users, optionally scoped by
+#   * Optional general-usage grant for var.key_user_arns, optionally scoped by
 #     var.via_services. This ViaService scoping applies only to generic
 #     application usage, never to the log-service grants above.
 #   * Optional service-principal grant for var.service_principals — one Allow for
@@ -60,12 +64,12 @@ locals {
 
   # Optional general-usage grant for application principals. Scoped by
   # via_services when that list is non-empty.
-  key_user_statements = length(var.key_users) > 0 ? [
+  key_user_statements = length(var.key_user_arns) > 0 ? [
     merge(
       {
         Sid       = "KeyUsage"
         Effect    = "Allow"
-        Principal = { AWS = var.key_users }
+        Principal = { AWS = var.key_user_arns }
         Action = [
           "kms:Encrypt",
           "kms:Decrypt",
@@ -102,13 +106,38 @@ locals {
     }
   ] : []
 
+  # Management-plane actions only. kms:Create* is narrowed to CreateAlias so the
+  # admin cannot CreateGrant itself cryptographic usage.
+  key_admin_actions = [
+    "kms:CreateAlias",
+    "kms:Describe*",
+    "kms:Enable*",
+    "kms:List*",
+    "kms:Put*",
+    "kms:Update*",
+    "kms:Revoke*",
+    "kms:Disable*",
+    "kms:Get*",
+    "kms:Delete*",
+    "kms:TagResource",
+    "kms:UntagResource",
+    "kms:ScheduleKeyDeletion",
+    "kms:CancelKeyDeletion",
+    "kms:RotateKeyOnDemand",
+  ]
+
   key_admin_statement = {
     Sid       = "KeyAdministration"
     Effect    = "Allow"
     Principal = { AWS = var.key_admin_arn }
-    Action    = ["kms:*"]
+    Action    = local.key_admin_actions
     Resource  = "*"
   }
+
+  key_tags = merge(
+    var.tags,
+    var.enable_protection_tag ? { (var.protection_tag_key) = "true" } : {},
+  )
 
   key_policy = jsonencode({
     Version = "2012-10-17"
@@ -125,6 +154,7 @@ resource "aws_kms_key" "this" {
   description             = "CMK: ${var.alias}"
   enable_key_rotation     = true
   deletion_window_in_days = var.deletion_window_in_days
+  tags                    = local.key_tags
 }
 
 resource "aws_kms_alias" "this" {

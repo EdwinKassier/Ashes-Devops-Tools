@@ -32,3 +32,13 @@ output "tgw_inspection_routes" {
   description = "The centralized-inspection routing contract fed to the transit gateway: the segment default routes (0.0.0.0/0) pointed at the inspection attachment so prod and nonprod traffic is forced through the firewall."
   value       = local.tgw_routes
 }
+
+output "egress_route_table_ids_by_tier" {
+  description = "Map of egress VPC subnet tier to its per-AZ route table IDs (owned by the vpc module)."
+  value       = module.egress_vpc.route_table_ids_by_tier
+}
+
+output "inspection_route_table_ids_by_tier" {
+  description = "Map of inspection VPC subnet tier to its per-AZ route table IDs (owned by the vpc module)."
+  value       = module.inspection_vpc.route_table_ids_by_tier
+}

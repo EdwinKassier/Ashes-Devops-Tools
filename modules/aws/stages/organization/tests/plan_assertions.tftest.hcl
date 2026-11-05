@@ -12,6 +12,7 @@ variables {
   terraform_run_role_arn  = "arn:aws:iam::111111111111:role/tfc-run-role"
   break_glass_role_arn    = "arn:aws:iam::111111111111:role/break-glass"
   log_archive_bucket_name = "sra-log-archive-111111111111"
+  tfc_organization        = "acme"
 }
 
 override_module {
@@ -68,5 +69,50 @@ run "composes_accounts_and_guardrails" {
   assert {
     condition     = contains(keys(output.cost_budget_ids), "org-monthly")
     error_message = "the cost-governance module must be composed with the default org-monthly budget"
+  }
+}
+
+# TFC OIDC baseline: member-account plan/apply roles are published per bound
+# account, and the StackSet targets the OUs of those accounts.
+run "tfc_oidc_baseline_is_composed" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for k in ["security_tooling", "log_archive", "forensics", "network", "shared_services", "backup"] :
+      contains(keys(output.tfc_plan_role_arns), k) && contains(keys(output.tfc_apply_role_arns), k)
+    ])
+    error_message = "every default-bound foundational account must publish tfc_plan_role_arns / tfc_apply_role_arns"
+  }
+
+  assert {
+    # Account IDs are computed at plan (new accounts), so assert the role names
+    # the ARNs are built from; the module's own tests assert the full ARN shape.
+    condition     = module.tfc_oidc_baseline[0].plan_role_name == "tfc-plan" && module.tfc_oidc_baseline[0].apply_role_name == "tfc-apply"
+    error_message = "role ARNs must point at the tfc-plan / tfc-apply roles"
+  }
+
+  assert {
+    condition     = keys(module.tfc_oidc_baseline[0].stack_set_instance_ids) == ["Infrastructure", "Security"]
+    error_message = "the StackSet must target exactly the OUs of the bound accounts (Security + Infrastructure by default)"
+  }
+
+  assert {
+    condition     = tolist(output.tfc_workspace_bindings["shared_services"]) == tolist(["aws-identity", "aws-shared-services"])
+    error_message = "shared_services must be bound to the aws-identity and aws-shared-services workspaces"
+  }
+}
+
+run "tfc_oidc_baseline_can_be_disabled" {
+  command = plan
+
+  variables {
+    enable_tfc_oidc_baseline = false
+    tfc_organization         = null
+  }
+
+  assert {
+    condition     = length(module.tfc_oidc_baseline) == 0 && output.tfc_plan_role_arns == {} && output.tfc_oidc_stack_set_name == null
+    error_message = "enable_tfc_oidc_baseline = false must compose no baseline and publish empty role maps"
   }
 }

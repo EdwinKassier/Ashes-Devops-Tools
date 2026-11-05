@@ -71,3 +71,39 @@ run "network_hub_output_contract" {
     error_message = "hub_network must re-export vpc_self_link, vpc_name, dns_zone_name and dns_domain (consumed by gcp-workload)."
   }
 }
+
+# SOTA M: dev-only estates do not trip the prod-enforcement check.
+run "no_prod_env_no_vpc_sc_warning" {
+  command = plan
+}
+
+# SOTA M: a prod environment with the hub perimeter missing / in dry-run warns.
+run "prod_env_with_dry_run_hub_perimeter_warns" {
+  command = plan
+
+  variables {
+    environments = {
+      prod = {
+        display_name            = "Production"
+        region                  = "europe-west1"
+        cidr_block              = "10.30.0.0/16"
+        budget_monthly_limit    = 100
+        iam_group_role_bindings = {}
+      }
+    }
+    vpc_sc_access_policy_name = "1234567890"
+    vpc_sc_enable_dry_run     = true
+  }
+
+  override_data {
+    target = data.terraform_remote_state.gcp_projects
+    values = {
+      outputs = {
+        project_ids     = { "shared-hub" = "acme-hub-abcd", "shared-dns" = "acme-dns-abcd", "prod-host" = "acme-prod-host-abcd" }
+        project_numbers = { "shared-hub" = "111111111111", "shared-dns" = "222222222222", "prod-host" = "333333333333" }
+      }
+    }
+  }
+
+  expect_failures = [check.hub_vpc_sc_enforced_when_prod_present]
+}

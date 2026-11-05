@@ -6,6 +6,9 @@
 #     directly on the resource) when deletion protection is user-controlled.
 #   - Use data sources only when required — prefer passing values as variables.
 #   - checkov:skip annotations require a justification comment on the same line.
+#   - Wire var.tags onto EVERY taggable resource (merge in any per-resource
+#     Name tag). Org-wide tags (CostCenter/Environment/Owner/ManagedBy/...) come
+#     from the root's aws provider default_tags — do not re-declare them here.
 #   - Do NOT declare a provider {} block here — the root module supplies the
 #     configured aws provider (see examples/aliased for the cross-account
 #     providers = { aws = aws.member } pattern).
@@ -20,4 +23,6 @@ resource "aws_ssm_parameter" "example" {
   name  = var.name
   type  = "String"
   value = var.value
+
+  tags = var.tags
 }

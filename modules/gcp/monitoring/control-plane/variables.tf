@@ -76,9 +76,26 @@ variable "watches" {
       severity     = "ERROR"
     }
     log_sink_change = {
-      display_name = "Logging sink updated or deleted"
-      filter       = "protoPayload.serviceName=\"logging.googleapis.com\" AND protoPayload.methodName:(\"DeleteSink\" OR \"UpdateSink\")"
+      display_name = "Logging sink or exclusion created, updated or deleted"
+      filter       = "protoPayload.serviceName=\"logging.googleapis.com\" AND protoPayload.methodName:(\"CreateSink\" OR \"DeleteSink\" OR \"UpdateSink\" OR \"CreateExclusion\" OR \"UpdateExclusion\" OR \"DeleteExclusion\")"
+      severity     = "ERROR"
+    }
+    custom_role_change = {
+      display_name = "Custom IAM role created, updated or deleted"
+      filter       = "protoPayload.serviceName=\"iam.googleapis.com\" AND protoPayload.methodName:(\"CreateRole\" OR \"UpdateRole\" OR \"DeleteRole\" OR \"UndeleteRole\")"
       severity     = "WARNING"
+    }
+    deny_policy_change = {
+      # iam.denypolicies.* cannot itself be denied by an IAM deny policy (not in
+      # the supported-permissions list), so detection is the control here.
+      display_name = "IAM deny policy changed"
+      filter       = "protoPayload.serviceName=\"iam.googleapis.com\" AND protoPayload.methodName:(\"Policies.CreatePolicy\" OR \"Policies.UpdatePolicy\" OR \"Policies.DeletePolicy\")"
+      severity     = "ERROR"
+    }
+    kms_key_destroy = {
+      display_name = "KMS key version destroy scheduled"
+      filter       = "protoPayload.serviceName=\"cloudkms.googleapis.com\" AND protoPayload.methodName=\"DestroyCryptoKeyVersion\""
+      severity     = "ERROR"
     }
   }
 
@@ -120,4 +137,38 @@ variable "labels" {
   description = "User labels applied to the notification channels."
   type        = map(string)
   default     = {}
+}
+
+variable "break_glass_principal_emails" {
+  description = "Emails of break-glass principals (users or service accounts). When non-empty, adds a CRITICAL watch that fires on ANY Admin Activity performed by one of them, so break-glass use is always noticed. Default [] = no break-glass watch."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for e in var.break_glass_principal_emails : can(regex("^[^@\\s\"]+@[^@\\s\"]+\\.[^@\\s\"]+$", e))])
+    error_message = "Every break_glass_principal_emails entry must be a plain email address."
+  }
+}
+
+variable "org_id" {
+  description = <<-EOT
+    Numeric organization ID. When set, the module creates an aggregated org log sink
+    that routes the org's Admin Activity and Policy audit logs (including org- and
+    folder-level entries, which are never stored in any project) into project_id, so the
+    log-match watches can see them. Leave null only if logs are already routed into
+    project_id by other means.
+  EOT
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.org_id == null || can(regex("^[0-9]+$", var.org_id))
+    error_message = "org_id must be a numeric organization ID (digits only) or null."
+  }
+}
+
+variable "org_log_route_sink_name" {
+  description = "Name of the aggregated org sink created when org_id is set."
+  type        = string
+  default     = "org-control-plane-to-monitoring"
 }

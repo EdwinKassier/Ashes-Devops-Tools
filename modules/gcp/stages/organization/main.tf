@@ -48,6 +48,33 @@ resource "google_folder_iam_member" "terraform_admin_folder_roles" {
 
 
 # Centralized Audit Logs
+locals {
+  # Audit G4 / C3: separation of duties. When logging_project_id is set, the org
+  # audit bucket AND its CMEK keys live in that dedicated logging project (which
+  # the Terraform admin/automation SA must NOT own — see variable docs), instead
+  # of the admin/bootstrap project. Default null = admin project (unchanged).
+  separate_logging_project = var.logging_project_id != null
+  audit_project_id         = coalesce(var.logging_project_id, var.admin_project_id)
+  audit_project_number     = local.separate_logging_project ? coalesce(var.logging_project_number, "0") : var.admin_project_number
+
+  # CMEK keys for the audit store, granted to the GCS / BigQuery service agents
+  # of the project that actually holds the bucket and dataset.
+  audit_cmek_keys = {
+    "audit-logs" = {
+      encrypter_decrypters = [
+        "serviceAccount:service-${local.audit_project_number}@gs-project-accounts.iam.gserviceaccount.com",
+      ]
+    }
+    "audit-analytics" = {
+      encrypter_decrypters = [
+        "serviceAccount:bq-${local.audit_project_number}@bigquery-encryption.iam.gserviceaccount.com",
+      ]
+    }
+  }
+
+  audit_key_names = local.separate_logging_project ? module.audit_cmek[0].key_names : module.cmek.key_names
+}
+
 module "cmek" {
   source = "../../governance/kms"
 
@@ -55,55 +82,88 @@ module "cmek" {
   keyring_name = "${var.project_prefix}-org-cmek"
   location     = var.default_region
 
-  keys = {
-    "audit-logs" = {
-      encrypter_decrypters = [
-        "serviceAccount:service-${var.admin_project_number}@gs-project-accounts.iam.gserviceaccount.com",
-      ]
+  # The audit keys stay here only when there is no dedicated logging project.
+  # Decide logging_project_id BEFORE the first apply: KMS keys cannot be deleted,
+  # so moving them later leaves orphaned (prevent_destroy) keys behind.
+  keys = merge(
+    local.separate_logging_project ? {} : local.audit_cmek_keys,
+    {
+      "billing-alerts" = {
+        encrypter_decrypters = [
+          "serviceAccount:service-${var.admin_project_number}@gcp-sa-pubsub.iam.gserviceaccount.com",
+        ]
+      }
+      "scc-notifications" = {
+        encrypter_decrypters = [
+          "serviceAccount:service-${var.admin_project_number}@gcp-sa-pubsub.iam.gserviceaccount.com",
+        ]
+      }
+      "billing-export" = {
+        encrypter_decrypters = [
+          "serviceAccount:bq-${var.admin_project_number}@bigquery-encryption.iam.gserviceaccount.com",
+        ]
+      }
     }
-    "audit-analytics" = {
-      encrypter_decrypters = [
-        "serviceAccount:bq-${var.admin_project_number}@bigquery-encryption.iam.gserviceaccount.com",
-      ]
-    }
-    "billing-alerts" = {
-      encrypter_decrypters = [
-        "serviceAccount:service-${var.admin_project_number}@gcp-sa-pubsub.iam.gserviceaccount.com",
-      ]
-    }
-    "scc-notifications" = {
-      encrypter_decrypters = [
-        "serviceAccount:service-${var.admin_project_number}@gcp-sa-pubsub.iam.gserviceaccount.com",
-      ]
-    }
-    "billing-export" = {
-      encrypter_decrypters = [
-        "serviceAccount:bq-${var.admin_project_number}@bigquery-encryption.iam.gserviceaccount.com",
-      ]
-    }
-  }
+  )
+}
+
+# Audit-store CMEK in the dedicated logging project (only when logging_project_id is set).
+module "audit_cmek" {
+  source = "../../governance/kms"
+  count  = local.separate_logging_project ? 1 : 0
+
+  project_id   = local.audit_project_id
+  keyring_name = "${var.project_prefix}-audit-cmek"
+  location     = var.default_region
+  keys         = local.audit_cmek_keys
 }
 
 module "audit_logs" {
   source = "../../governance/cloud-audit-logs"
 
-  # Audit finding G4: separation of duties — point the org audit sink/bucket at a
-  # DEDICATED logging project instead of the admin/bootstrap project, so the highly
-  # privileged automation identity that owns the admin project does not also own the
-  # store that audits it. Default null = admin project (unchanged). When set, ensure
-  # the CMEK key (module.cmek, in the admin project) is usable cross-project by the
-  # logging project's log-sink writer identity. PREVIEW: opt-in (default off), not yet validated against a real apply.
-  project_id         = coalesce(var.logging_project_id, var.admin_project_id)
-  bucket_location    = var.default_region
-  log_retention_days = var.audit_log_retention_days
-  enable_bucket_lock = var.enable_audit_bucket_lock
-  org_id             = var.org_id
-  kms_key_name       = module.cmek.key_names["audit-logs"]
+  # Audit G4: the org audit sink/bucket go to the dedicated logging project when
+  # set (default null = admin project). The bucket's CMEK key comes from the same
+  # project (module.audit_cmek) so no cross-project KMS grant is needed.
+  project_id                 = local.audit_project_id
+  bucket_location            = var.default_region
+  log_retention_days         = var.audit_log_retention_days
+  enable_bucket_lock         = var.enable_audit_bucket_lock
+  soft_delete_retention_days = var.audit_soft_delete_retention_days
+  org_id                     = var.org_id
+  kms_key_name               = local.audit_key_names["audit-logs"]
 
   # Enable BigQuery Analytics for improved security investigation
   enable_bigquery_analytics = true
   bigquery_location         = var.default_region
-  bigquery_kms_key_name     = module.cmek.key_names["audit-analytics"]
+  bigquery_kms_key_name     = local.audit_key_names["audit-analytics"]
+}
+
+# Control-plane alerting (audit Security High: "No control-plane alerting").
+# Log-match alerts on org IAM, org policy, VPC-SC, sink/exclusion, custom-role,
+# deny-policy and KMS-destroy changes, plus any break-glass use. Lives in the
+# audit/logging project; an aggregated org sink routes org- and folder-level
+# Admin Activity logs there so the watches can see them. With no notification
+# channels the alerts still fire (visible in Cloud Monitoring) but notify no-one
+# — the check block below warns about that.
+module "control_plane_alerting" {
+  source = "../../monitoring/control-plane"
+
+  enable                         = var.enable_control_plane_alerting
+  project_id                     = local.audit_project_id
+  org_id                         = var.org_id
+  notification_email_addresses   = var.alert_notification_emails
+  extra_notification_channel_ids = var.alert_notification_channels
+  break_glass_principal_emails = distinct(concat(
+    var.break_glass_user != null ? [var.break_glass_user] : [],
+    var.break_glass_principal_emails,
+  ))
+}
+
+check "control_plane_alerts_have_a_destination" {
+  assert {
+    condition     = !var.enable_control_plane_alerting || length(var.alert_notification_emails) + length(var.alert_notification_channels) > 0
+    error_message = "Control-plane alerting is enabled but neither alert_notification_emails nor alert_notification_channels is set: guardrail-change alerts will fire without notifying anyone."
+  }
 }
 
 # Security Command Center Notifications
@@ -124,7 +184,7 @@ module "tags" {
 
   org_id = var.org_id
 
-  tags = {
+  tags = merge({
     "environment" = {
       values      = sort(keys(var.environments))
       description = "Deployment environment tier (e.g. dev, staging, prod)"
@@ -137,7 +197,14 @@ module "tags" {
       values      = ["public", "internal", "confidential", "restricted"]
       description = "Data sensitivity level per the organization data classification policy"
     }
-  }
+    }, var.enable_admin_containment ? {
+    # C3: marks the audit store (buckets + CMEK keyring) for the tag-conditioned
+    # containment deny rule. IAM deny conditions can only match resource tags.
+    "containment" = {
+      values      = ["protected"]
+      description = "Resources protected by the admin-containment IAM deny policy (audit C3). Do not bind elsewhere without review."
+    }
+  } : {})
 }
 
 # Organization Policies (Governance)
@@ -156,31 +223,76 @@ locals {
     }
   ] : []
 
-  # C2: opt-in containment of the automation (Terraform-admin) identity. A
-  # CI/WIF compromise of that SA otherwise lets it erase the audit trail and
-  # remove the VPC-SC data perimeter. This denies the DELETE permissions for
-  # audit sinks/buckets and perimeters to ALL principals except the break-glass
-  # set. A steady-state declarative apply never deletes these, so the SA keeps
-  # working; only a destructive action (or a rare recreate) needs break-glass.
-  # It deliberately does NOT deny setIamPolicy or orgpolicy.policy.set, which
-  # Terraform uses legitimately; the privilege split addresses that vector.
+  # C2/C3: opt-in containment of the automation (Terraform-admin) identity. A
+  # CI/WIF compromise of that SA could otherwise erase or blind the audit trail
+  # and remove the VPC-SC data perimeter. Two deny rules, both exempting only
+  # containment_exempt_principals (break-glass):
+  #
+  #  1. ORG-WIDE (unconditional): mutation of logging sinks/exclusions/log
+  #     buckets and of VPC-SC perimeters/access policies. NOTE: this includes
+  #     sinks.update and servicePerimeters.update, which Terraform uses
+  #     legitimately — once enabled, ANY change to a sink, exclusion or perimeter
+  #     anywhere in the org (including workload perimeters/flow-log sinks) must be
+  #     applied by a break-glass/exempt principal. That is the point: the
+  #     automation identity can no longer retarget or blank the audit sink or
+  #     empty a perimeter. Sink/perimeter CREATION stays allowed.
+  #  2. TAG-SCOPED to the audit store (tag containment/protected, bound to the
+  #     audit + access-log buckets and the audit CMEK keyring in containment.tf):
+  #     bucket delete/IAM change, object delete, key-version destroy, key IAM
+  #     change. IAM deny conditions can ONLY match resource tags, so the tag is
+  #     how the deny is scoped to the audit bucket rather than every bucket.
+  #
+  # Permissions requested but OMITTED because they are not in the IAM deny
+  # supported-permissions list (docs.cloud.google.com/iam/docs/deny-permissions-support):
+  #  - iam.denypolicies.update / iam.denypolicies.delete — a deny policy cannot
+  #    protect itself; the control-plane watch "deny_policy_change" alerts instead.
+  #  - accesscontextmanager.accessPolicies.delete — the supported name is
+  #    accesscontextmanager.googleapis.com/policies.delete (used below; the
+  #    previous accessPolicies.delete string was invalid).
+  # orgpolicy.policy.set is deliberately NOT denied: Terraform sets org policies
+  # every time the baseline changes; the org_policy_change watch covers it.
   # Default off: enable only after validating on a non-prod org.
   containment_deny_policy = var.enable_admin_containment ? [
     {
       name         = "contain-admin-identity"
-      display_name = "Contain automation identity (audit C2)"
+      display_name = "Contain automation identity (audit C2/C3)"
       rules = [
         {
-          description       = "Deny deletion of audit sinks/buckets and VPC-SC perimeters to all but break-glass."
+          description       = "Org-wide: deny mutation of logging sinks/exclusions/log buckets and VPC-SC perimeters to all but break-glass."
           denied_principals = ["principalSet://goog/public:all"]
           denied_permissions = [
+            "logging.googleapis.com/sinks.update",
             "logging.googleapis.com/sinks.delete",
+            "logging.googleapis.com/exclusions.create",
+            "logging.googleapis.com/exclusions.update",
+            "logging.googleapis.com/exclusions.delete",
             "logging.googleapis.com/buckets.delete",
+            "accesscontextmanager.googleapis.com/servicePerimeters.update",
             "accesscontextmanager.googleapis.com/servicePerimeters.delete",
-            "accesscontextmanager.googleapis.com/accessPolicies.delete",
+            "accesscontextmanager.googleapis.com/servicePerimeters.replaceAll",
+            "accesscontextmanager.googleapis.com/servicePerimeters.commit",
+            "accesscontextmanager.googleapis.com/policies.delete",
           ]
           exception_principals = var.containment_exempt_principals
-        }
+          denial_condition     = null
+        },
+        {
+          description       = "Audit store (tag containment/protected): deny bucket delete/IAM change, object delete, key-version destroy and key IAM change to all but break-glass."
+          denied_principals = ["principalSet://goog/public:all"]
+          denied_permissions = [
+            "storage.googleapis.com/buckets.delete",
+            "storage.googleapis.com/buckets.setIamPolicy",
+            "storage.googleapis.com/objects.delete",
+            "cloudkms.googleapis.com/cryptoKeyVersions.destroy",
+            "cloudkms.googleapis.com/cryptoKeys.setIamPolicy",
+          ]
+          exception_principals = var.containment_exempt_principals
+          denial_condition = {
+            title       = "audit-store-only"
+            description = "Applies only to resources carrying the containment/protected tag (the audit buckets and audit CMEK keyring)."
+            expression  = "resource.matchTagId('${try(module.tags.tag_keys["containment"], "")}', '${try(module.tags.tag_values["containment-protected"], "")}')"
+          }
+        },
       ]
     }
   ] : []

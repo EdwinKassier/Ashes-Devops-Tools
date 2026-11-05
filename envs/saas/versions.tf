@@ -12,9 +12,12 @@ terraform {
       source  = "vercel/vercel"
       version = "~> 4.0"
     }
-    # Required transitively by modules/saas/stages/saas-workload (vault-secrets uses
-    # null_resource). Declared even when enable_vault_secrets = false because a
-    # provider requirement cannot be made conditional.
+    # MIGRATION ONLY: modules/supabase/vault-secrets now uses built-in
+    # terraform_data and no longer needs hashicorp/null. It stays declared (and
+    # pinned in the lockfile) because workspaces created before 2026-11 hold
+    # null_resource state, and Terraform needs this provider to execute the
+    # module's null_resource -> terraform_data `moved` blocks. Remove once every
+    # saas-* workspace has applied the move.
     null = {
       source  = "hashicorp/null"
       version = "~> 3.0"

@@ -89,7 +89,7 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_ec2_transit_gateway_vpc_attachment.spoke (modules/aws/stages/workload/main.tf#L66)
+- resource.aws_ec2_transit_gateway_vpc_attachment.spoke (modules/aws/stages/workload/main.tf#L92)
 
 
 ## Inputs
@@ -108,9 +108,14 @@ The following resources are created:
 | <a name="input_edge_origin_domain_name"></a> [edge\_origin\_domain\_name](#input\_edge\_origin\_domain\_name) | DNS name of the origin the edge CloudFront distribution fetches from. Ignored when enable\_edge is false. | `string` | `"origin.example.com"` | no |
 | <a name="input_enable_edge"></a> [enable\_edge](#input\_enable\_edge) | Deploy the per-workload edge-security stack (CloudFront + WAF, in us-east-1). Off by default; a workload opts in when it fronts an internet-facing app. | `bool` | `false` | no |
 | <a name="input_enable_ssm"></a> [enable\_ssm](#input\_enable\_ssm) | Deploy the Systems Manager baseline (Session Manager preferences, patch baseline, inventory). On by default. Requires a non-empty kms\_key\_arn (Session Manager sessions/logs are KMS-encrypted; an empty key would leave the session document's kmsKeyId blank). | `bool` | `true` | no |
+| <a name="input_environment"></a> [environment](#input\_environment) | Environment this workload account serves (e.g. dev, staging, prod). Used to derive the default resource name workload-<environment>. null keeps the legacy name "workload". | `string` | `null` | no |
 | <a name="input_ipam_pool_id"></a> [ipam\_pool\_id](#input\_ipam\_pool\_id) | IPAM pool ID to allocate the spoke VPC CIDR from (the network account's regional pool, shared over RAM). Empty string uses the literal vpc\_cidr instead. | `string` | `""` | no |
 | <a name="input_kms_key_arn"></a> [kms\_key\_arn](#input\_kms\_key\_arn) | ARN of the CMK used as the account default EBS encryption key and (when enable\_ssm is true) to encrypt Session Manager sessions/logs. Empty string leaves default EBS encryption on the AWS-managed key; must be a non-empty key when enable\_ssm is true. | `string` | `""` | no |
+| <a name="input_name"></a> [name](#input\_name) | Name of the spoke VPC (and prefix for its subnets, route tables and TGW attachment). null derives workload-<environment> (or "workload" when environment is null). | `string` | `null` | no |
 | <a name="input_subnets"></a> [subnets](#input\_subnets) | Spoke subnet tiers, keyed by tier name. newbits/number\_offset drive cidrsubnet(vpc\_cidr, newbits, number\_offset + az\_index); the tgw tier holds the transit-gateway attachment ENIs. Offsets are multiples of 8 (> az\_count) so per-AZ subnets never collide. | <pre>map(object({<br/>    newbits       = number<br/>    number_offset = number<br/>    public        = optional(bool, false)<br/>  }))</pre> | <pre>{<br/>  "isolated": {<br/>    "newbits": 8,<br/>    "number_offset": 8<br/>  },<br/>  "private": {<br/>    "newbits": 8,<br/>    "number_offset": 0<br/>  },<br/>  "tgw": {<br/>    "newbits": 8,<br/>    "number_offset": 16<br/>  }<br/>}</pre> | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to the stage's own taggable resources (spoke VPC and its children, TGW attachment). Org-wide tags (CostCenter, Environment, Owner, ...) normally come from the provider default\_tags; use this for stage-specific additions. | `map(string)` | `{}` | no |
+| <a name="input_tgw_destination_cidrs"></a> [tgw\_destination\_cidrs](#input\_tgw\_destination\_cidrs) | Destination CIDRs routed from tgw\_route\_tiers to the shared transit gateway. Default 0.0.0.0/0 sends all non-local traffic to the hub (centralized egress + inspection); use the org supernet (e.g. ["10.0.0.0/8"]) for east-west only. | `list(string)` | <pre>[<br/>  "0.0.0.0/0"<br/>]</pre> | no |
+| <a name="input_tgw_route_tiers"></a> [tgw\_route\_tiers](#input\_tgw\_route\_tiers) | Spoke subnet tiers whose route tables send tgw\_destination\_cidrs to the shared transit gateway. Defaults to the private tier; the isolated tier stays local-only by design. | `list(string)` | <pre>[<br/>  "private"<br/>]</pre> | no |
 | <a name="input_vpc_cidr"></a> [vpc\_cidr](#input\_vpc\_cidr) | IPv4 CIDR of the workload spoke VPC. Used for subnet math; also the literal VPC CIDR when ipam\_pool\_id is empty. | `string` | `"10.20.0.0/16"` | no |
 | <a name="input_workload_roles"></a> [workload\_roles](#input\_workload\_roles) | Map of workload / cross-account IAM role name to its configuration (trust\_policy JSON, managed\_policy\_arns, inline\_policy, etc.). Empty by default. | <pre>map(object({<br/>    trust_policy         = string<br/>    max_session_duration = optional(number, 3600)<br/>    managed_policy_arns  = optional(list(string), [])<br/>    inline_policy        = optional(string, "")<br/>    permissions_boundary = optional(string)<br/>  }))</pre> | `{}` | no |
 
@@ -118,8 +123,11 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
+| <a name="output_name"></a> [name](#output\_name) | The resolved spoke name (var.name, else workload-<environment>). |
+| <a name="output_route_table_ids_by_tier"></a> [route\_table\_ids\_by\_tier](#output\_route\_table\_ids\_by\_tier) | Map of spoke subnet tier to its per-AZ route table IDs (owned by the vpc module). |
 | <a name="output_subnet_ids_by_tier"></a> [subnet\_ids\_by\_tier](#output\_subnet\_ids\_by\_tier) | Map of subnet tier name to the list of subnet IDs created for that tier (one per AZ) in the spoke VPC. |
 | <a name="output_tgw_attachment_id"></a> [tgw\_attachment\_id](#output\_tgw\_attachment\_id) | The ID of the spoke VPC's transit-gateway attachment to the shared hub. |
+| <a name="output_tgw_routes"></a> [tgw\_routes](#output\_tgw\_routes) | The spoke routing contract handed to the vpc module: tier -> list of {destination\_cidr\_block, transit\_gateway\_id} routes to the shared transit gateway. |
 | <a name="output_vpc_id"></a> [vpc\_id](#output\_vpc\_id) | The ID of the workload spoke VPC. |
 | <a name="output_workload_role_arns"></a> [workload\_role\_arns](#output\_workload\_role\_arns) | Map of workload IAM role name to role ARN. |
 <!-- END_TF_DOCS -->

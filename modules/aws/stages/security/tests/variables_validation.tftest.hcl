@@ -67,3 +67,14 @@ run "create_break_glass_without_principals_rejected" {
 
   expect_failures = [var.create_break_glass]
 }
+
+run "unknown_kms_key_user_target_rejected" {
+  # Reject case: kms_key_user_arns may only target the three stage CMKs.
+  command = plan
+
+  variables {
+    kms_key_user_arns = { audit = ["arn:aws:iam::333333333333:role/LogReader"] }
+  }
+
+  expect_failures = [var.kms_key_user_arns]
+}

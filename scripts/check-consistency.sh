@@ -3,7 +3,7 @@
 # many files (and have drifted before, e.g. the AWS region regex). Cheap grep
 # checks that fail CI when a copy diverges. Add new invariants here.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 fail=0
 note() { echo "  - $1"; fail=1; }
@@ -46,6 +46,19 @@ done
 echo "==> Every preset referenced in the docs exists"
 for ref in $(grep -rhoE 'presets/[a-z0-9-]+\.tfvars' --include='*.md' --include='*.tf' --exclude-dir='.terraform' --exclude-dir='audit' . 2>/dev/null | sort -u); do
   [ -f "examples/$ref" ] || note "docs reference missing preset examples/$ref"
+done
+
+echo "==> Every aws provider block in envs/aws/*/providers.tf sets default_tags"
+# FinOps/governance: the canonical tag set (CostCenter/Environment/Owner/...) is
+# written via provider default_tags, so every aws provider block (default AND
+# aliased) must carry one. Counts provider "aws" blocks vs default_tags blocks.
+for pf in envs/aws/*/providers.tf; do
+  [ -e "$pf" ] || continue
+  nprov=$(grep -cE '^provider "aws"' "$pf" || true)
+  ntags=$(grep -cE '^[[:space:]]*default_tags[[:space:]]*\{' "$pf" || true)
+  if [ "$nprov" -eq 0 ] || [ "$ntags" -lt "$nprov" ]; then
+    note "$pf: $nprov aws provider block(s) but $ntags default_tags block(s)"
+  fi
 done
 
 if [ "$fail" -eq 0 ]; then

@@ -37,3 +37,23 @@ output "cost_budget_ids" {
   description = "Map of budget name to budget resource ID created by the cost-governance module. Empty when cost governance is disabled."
   value       = module.cost_governance.budget_ids
 }
+
+output "tfc_plan_role_arns" {
+  description = "Map of account key -> member-account tfc-plan (read-only) role ARN. Set as TFC_AWS_PLAN_ROLE_ARN on the workspaces bound to that account. Empty when the TFC OIDC baseline is disabled."
+  value       = var.enable_tfc_oidc_baseline ? module.tfc_oidc_baseline[0].plan_role_arns : {}
+}
+
+output "tfc_apply_role_arns" {
+  description = "Map of account key -> member-account tfc-apply role ARN. Set as TFC_AWS_APPLY_ROLE_ARN on the workspaces bound to that account. Empty when the TFC OIDC baseline is disabled."
+  value       = var.enable_tfc_oidc_baseline ? module.tfc_oidc_baseline[0].apply_role_arns : {}
+}
+
+output "tfc_workspace_bindings" {
+  description = "Map of account key -> TFC workspace names bound to that account's tfc-plan / tfc-apply roles (empty when the baseline is disabled)."
+  value       = var.enable_tfc_oidc_baseline ? { for k, b in var.tfc_workspace_bindings : k => b.workspaces } : {}
+}
+
+output "tfc_oidc_stack_set_name" {
+  description = "Name of the StackSet deploying the TFC OIDC baseline, or null when disabled."
+  value       = var.enable_tfc_oidc_baseline ? module.tfc_oidc_baseline[0].stack_set_name : null
+}

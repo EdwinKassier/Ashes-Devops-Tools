@@ -128,13 +128,30 @@ variable "log_archive_bucket_name" {
 }
 
 variable "key_admin_arn" {
-  description = "Account-qualified ARN of the principal granted key administration (kms:*) on both the log and forensics CMKs. REQUIRED to avoid locking the keys out of management."
+  description = "Account-qualified ARN of the principal granted key ADMINISTRATION (management actions only: no Encrypt/Decrypt/GenerateDataKey/ReEncrypt, no CreateGrant) on the log-archive, forensics and security-tooling CMKs. REQUIRED to avoid locking the keys out of management. Grant key usage separately via kms_key_user_arns."
   type        = string
 
   validation {
     condition     = can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:(role|user)/.+$", var.key_admin_arn))
     error_message = "key_admin_arn must be an account-qualified IAM role/user ARN."
   }
+}
+
+variable "kms_key_user_arns" {
+  description = "Principals granted key USAGE (Encrypt/Decrypt/ReEncrypt/GenerateDataKey/DescribeKey) per CMK, keyed by log_archive / forensics / security_tooling. Separate from key_admin_arn (administration only). Missing keys mean no general-usage grant beyond the built-in service-principal grants."
+  type        = map(list(string))
+  default     = {}
+
+  validation {
+    condition     = alltrue([for k in keys(var.kms_key_user_arns) : contains(["log_archive", "forensics", "security_tooling"], k)])
+    error_message = "kms_key_user_arns keys must be one of log_archive, forensics, security_tooling."
+  }
+}
+
+variable "enable_kms_protection_tag" {
+  description = "Tag the log-archive, forensics and security-tooling CMKs protected = \"true\" so the organization deny-tamper SCP blocks key deletion/disablement and protection-tag removal except via break-glass. Default true."
+  type        = bool
+  default     = true
 }
 
 variable "config_role_arn" {

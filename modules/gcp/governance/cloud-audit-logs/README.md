@@ -93,18 +93,18 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_bigquery_dataset.audit_logs_analytics (modules/gcp/governance/cloud-audit-logs/main.tf#L197)
-- resource.google_bigquery_dataset_iam_member.bq_sink_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L245)
-- resource.google_logging_organization_sink.org_audit_bq_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L223)
-- resource.google_logging_organization_sink.org_audit_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L167)
-- resource.google_logging_project_sink.audit_logs_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L109)
-- resource.google_organization_iam_audit_config.org_audit_config (modules/gcp/governance/cloud-audit-logs/main.tf#L147)
-- resource.google_project_iam_audit_config.project_audit_logs (modules/gcp/governance/cloud-audit-logs/main.tf#L127)
-- resource.google_storage_bucket.audit_logs (modules/gcp/governance/cloud-audit-logs/main.tf#L39)
+- resource.google_bigquery_dataset.audit_logs_analytics (modules/gcp/governance/cloud-audit-logs/main.tf#L216)
+- resource.google_bigquery_dataset_iam_member.bq_sink_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L264)
+- resource.google_logging_organization_sink.org_audit_bq_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L242)
+- resource.google_logging_organization_sink.org_audit_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L186)
+- resource.google_logging_project_sink.audit_logs_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L128)
+- resource.google_organization_iam_audit_config.org_audit_config (modules/gcp/governance/cloud-audit-logs/main.tf#L166)
+- resource.google_project_iam_audit_config.project_audit_logs (modules/gcp/governance/cloud-audit-logs/main.tf#L146)
+- resource.google_storage_bucket.audit_logs (modules/gcp/governance/cloud-audit-logs/main.tf#L46)
 - resource.google_storage_bucket.audit_logs_access (modules/gcp/governance/cloud-audit-logs/main.tf#L2)
-- resource.google_storage_bucket_iam_member.audit_logs_access_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L32)
-- resource.google_storage_bucket_iam_member.log_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L119)
-- resource.google_storage_bucket_iam_member.org_log_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L184)
+- resource.google_storage_bucket_iam_member.audit_logs_access_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L39)
+- resource.google_storage_bucket_iam_member.log_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L138)
+- resource.google_storage_bucket_iam_member.org_log_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L203)
 
 
 ## Inputs
@@ -123,11 +123,13 @@ The following resources are created:
 | <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | The number of days to retain audit logs in the storage bucket (minimum 1) | `number` | `365` | no |
 | <a name="input_org_id"></a> [org\_id](#input\_org\_id) | Organization ID for org-level log sink (optional). When provided, creates an org-level sink that captures audit logs from all projects. | `string` | `null` | no |
 | <a name="input_sink_name"></a> [sink\_name](#input\_sink\_name) | Name of the project-level log sink. Override when calling the module more than once in the same project. | `string` | `"audit-logs-sink"` | no |
+| <a name="input_soft_delete_retention_days"></a> [soft\_delete\_retention\_days](#input\_soft\_delete\_retention\_days) | Soft-delete retention (days) on the audit-log buckets: deleted or overwritten objects stay restorable for this window. GCS accepts 7-90 days, or 0 to disable. Default 30. | `number` | `30` | no |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
+| <a name="output_access_log_bucket_name"></a> [access\_log\_bucket\_name](#output\_access\_log\_bucket\_name) | The name of the storage bucket receiving access logs for the audit-log bucket |
 | <a name="output_audit_config_id"></a> [audit\_config\_id](#output\_audit\_config\_id) | The ID of the created audit config |
 | <a name="output_bigquery_dataset_id"></a> [bigquery\_dataset\_id](#output\_bigquery\_dataset\_id) | The ID of the BigQuery dataset for audit log analytics (if created) |
 | <a name="output_bigquery_dataset_self_link"></a> [bigquery\_dataset\_self\_link](#output\_bigquery\_dataset\_self\_link) | The self link of the BigQuery dataset for audit log analytics (if created) |

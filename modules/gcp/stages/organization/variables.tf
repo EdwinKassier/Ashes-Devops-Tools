@@ -219,11 +219,89 @@ variable "audit_log_retention_days" {
   }
 }
 
-# --- Audit finding G4: dedicated logging project (opt-in, default = unchanged) ---
+# --- Audit finding G4 / C3: dedicated logging project (opt-in, default = unchanged) ---
 variable "logging_project_id" {
-  description = "Dedicated logging project ID for the org audit sink/bucket (separation of duties). Default null = the admin/bootstrap project (unchanged). When set, ensure the CMEK key is usable cross-project. PREVIEW: opt-in (default off), not yet validated against a real apply."
+  description = <<-EOT
+    Dedicated logging project ID for the org audit sink, audit bucket, BigQuery audit
+    dataset, audit CMEK keyring and control-plane alerts (separation of duties).
+    Default null = the admin/bootstrap project (unchanged).
+    The project MUST NOT be owned (roles/owner, roles/editor, or storage/KMS admin) by the
+    Terraform admin / automation service account — otherwise the identity being audited
+    can delete object generations or destroy the key protecting its own audit trail.
+    Create it out-of-band (or from a separate identity) and grant the automation SA only
+    what it needs to manage the resources here. Decide BEFORE the first apply: KMS keys
+    cannot be deleted, so moving the audit keys later orphans the old ones.
+    Requires logging_project_number. PREVIEW: not yet validated against a real apply.
+  EOT
   type        = string
   default     = null
+
+  validation {
+    condition     = var.logging_project_id == null || can(regex("^[a-z][a-z0-9-]{4,28}[a-z0-9]$", var.logging_project_id))
+    error_message = "logging_project_id must be null or a valid GCP project ID."
+  }
+}
+
+variable "logging_project_number" {
+  description = "Numeric project number of logging_project_id (required when it is set). Used to grant the logging project's GCS and BigQuery service agents access to the audit CMEK keys."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.logging_project_number == null || can(regex("^[0-9]+$", var.logging_project_number))
+    error_message = "logging_project_number must contain only digits."
+  }
+
+  validation {
+    condition     = var.logging_project_id == null || var.logging_project_number != null
+    error_message = "logging_project_number is required when logging_project_id is set."
+  }
+}
+
+variable "audit_soft_delete_retention_days" {
+  description = "Soft-delete window (days) on the org audit-log buckets (M-4): deleted/overwritten objects stay restorable for this long. 7-90, or 0 to disable. Default 30."
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.audit_soft_delete_retention_days == 0 || (var.audit_soft_delete_retention_days >= 7 && var.audit_soft_delete_retention_days <= 90)
+    error_message = "audit_soft_delete_retention_days must be 0 or between 7 and 90."
+  }
+}
+
+# --- Control-plane alerting (audit Security High) ---
+variable "enable_control_plane_alerting" {
+  description = "Create log-match alerts on control-plane changes (org IAM, org policy, VPC-SC, sinks/exclusions, custom roles, deny policies, KMS key destroy) and on break-glass use, in the audit/logging project. Default true."
+  type        = bool
+  default     = true
+}
+
+variable "alert_notification_emails" {
+  description = "Email addresses notified by the control-plane alerts (one email channel each). Default [] — a check warns if no destination is set."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for e in var.alert_notification_emails : can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", e))])
+    error_message = "Each alert_notification_emails entry must be a valid email address."
+  }
+}
+
+variable "alert_notification_channels" {
+  description = "IDs of existing Cloud Monitoring notification channels (projects/<p>/notificationChannels/<id>) attached to every control-plane alert. Default []."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for c in var.alert_notification_channels : can(regex("^projects/[^/]+/notificationChannels/[^/]+$", c))])
+    error_message = "Each alert_notification_channels entry must be projects/<project>/notificationChannels/<id>."
+  }
+}
+
+variable "break_glass_principal_emails" {
+  description = "Extra break-glass principal emails (users/SAs) whose ANY admin action raises a CRITICAL control-plane alert. break_glass_user is always included. Group membership is not visible in audit logs, so list the member accounts of a break-glass group here."
+  type        = list(string)
+  default     = []
 }
 
 variable "custom_org_constraints" {
@@ -287,7 +365,7 @@ variable "cmek_required_services" {
 }
 
 variable "enable_admin_containment" {
-  description = "C2: deny deletion of audit sinks/buckets and VPC-SC perimeters to all principals except containment_exempt_principals (break-glass), so a compromised automation identity cannot erase the audit trail or remove the data perimeter. Default false. Enable only after validating on a non-prod org; a rare resource recreate then needs break-glass."
+  description = "C2/C3: IAM deny policy at the org node that blocks, for all principals except containment_exempt_principals (break-glass): org-wide update/delete of logging sinks, exclusion changes, log-bucket delete, VPC-SC perimeter update/delete/replaceAll/commit and access-policy delete; and, scoped by the containment/protected tag to the audit buckets + audit CMEK keyring, bucket delete/setIamPolicy, object delete, key-version destroy and key setIamPolicy. Once on, Terraform changes to ANY sink, exclusion or perimeter must run as break-glass. Default false; the prod preset turns it on."
   type        = bool
   default     = false
 }
@@ -300,5 +378,15 @@ variable "containment_exempt_principals" {
   validation {
     condition     = !var.enable_admin_containment || length(var.containment_exempt_principals) > 0
     error_message = "containment_exempt_principals must be non-empty when enable_admin_containment is true, or the deny applies to everyone including break-glass."
+  }
+
+  validation {
+    condition     = alltrue([for p in var.containment_exempt_principals : can(regex("^principal(Set)?://", p))])
+    error_message = "containment_exempt_principals entries must be IAM v2 principal identifiers (principal://... or principalSet://...), e.g. principalSet://goog/group/break-glass@acme.com."
+  }
+
+  validation {
+    condition     = !anytrue([for p in var.containment_exempt_principals : can(regex("(?i)(replace-me|your-domain|example\\.(com|org|net)|\\.invalid$|changeme)", p))])
+    error_message = "containment_exempt_principals still contains a placeholder (REPLACE-ME / your-domain / example.com / .invalid). Set your real break-glass group before enabling admin containment."
   }
 }

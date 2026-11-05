@@ -37,7 +37,7 @@ gcloud services enable cloudresourcemanager.googleapis.com \
 - [ ] `gcloud version` reports `>= 450.0.0`
 - [ ] `jq` installed (used by CI scripts)
 - [ ] Node.js >= 18 installed (required only if using `enable_vault_secrets = true` in any `saas-workload` call)
-- [ ] A Terraform Cloud account with a workspace named `gcp-organization` (or the name in your `backend.hcl`)
+- [ ] A Terraform Cloud organization with the five GCP workspaces: `gcp-bootstrap`, `gcp-organization`, `gcp-projects`, `gcp-network-hub` and one `gcp-workload-<env>` per environment (codify them with `envs/tfc-admin`, or create them by hand)
 
 ---
 
@@ -55,7 +55,7 @@ make install
 make pre-commit-install
 ```
 
-`make install` installs repo-managed tools: TFLint, tfsec, Checkov, terraform-docs, and pre-commit at the exact versions in `.tool-versions`. Terraform itself must be installed separately — use `tfenv` or `mise` with the version in `.terraform-version`.
+`make install` installs repo-managed tools: TFLint, Checkov, terraform-docs, and pre-commit at the exact versions in `.tool-versions`. Install Trivy at the `.tool-versions` version too — `make security` refuses a mismatched binary (tfsec is end-of-life and no longer used). Terraform itself must be installed separately — use `tfenv` or `mise` with the version in `.terraform-version`.
 
 ## 3. Authenticate to Google Cloud
 
@@ -102,30 +102,43 @@ The `pg ^8.20.0` package connects to the Supabase session-mode pooler to execute
 
 The `modules/gcp/stages/bootstrap` module creates the WIF pool that GitHub Actions uses to authenticate. This creates a chicken-and-egg dependency: you need WIF to run Terraform via CI, but you need to run Terraform to create WIF. The solution is a single manual apply of the bootstrap module.
 
-**Step 1 — Create the backend configuration file:**
+**Step 1 — Point every GCP root at your Terraform Cloud organization:**
+
+Each root's `backend.tf` hard-codes its workspace name (`gcp-bootstrap`, `gcp-organization`,
+`gcp-projects`, `gcp-network-hub`, or the `gcp-workload-` prefix) and takes only the TFC
+**organization** out-of-band. Either export it once for every `init`:
 
 ```bash
-cat > envs/gcp/organization/backend.hcl <<EOF
-organization = "YOUR_TFC_ORG_NAME"
-EOF
+export TF_CLI_ARGS_init="-backend-config=organization=YOUR_TFC_ORG_NAME"
 ```
 
-`envs/gcp/organization/backend.tf` already hardcodes `workspaces { name = "gcp-organization" }` — do not pass a `workspaces` block via `-backend-config`; a second `workspaces` value conflicts with the one baked into `backend.tf`.
-
-This file is gitignored; it is never committed.
-
-**Step 2 — Initialize:**
+or write a gitignored `backend.hcl` (never committed) into each root:
 
 ```bash
-terraform -chdir=envs/gcp/organization init -backend-config=backend.hcl
+for r in bootstrap organization projects network-hub workload; do
+  printf 'organization = "YOUR_TFC_ORG_NAME"\n' > "envs/gcp/$r/backend.hcl"
+done
 ```
 
-**Step 3 — Create your tfvars file** (see [Variable Reference](#6-variable-reference) below):
+Do not pass a `workspaces` block via `-backend-config`; it conflicts with the one baked into `backend.tf`.
+
+**Step 2 — Initialize the roots, in apply order:**
 
 ```bash
-cp envs/gcp/organization/terraform.tfvars.example envs/gcp/organization/local.auto.tfvars
-# Edit local.auto.tfvars with your org_id, billing_account, github_org, github_repo,
-# and project_prefix — the "my-org" default is a deliberate tripwire and fails validation
+for r in bootstrap organization projects network-hub; do
+  terraform -chdir=envs/gcp/$r init -backend-config=backend.hcl   # omit -backend-config if using TF_CLI_ARGS_init
+done
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload init -backend-config=backend.hcl
+```
+
+**Step 3 — Create the bootstrap tfvars** (see [Variable Reference](#6-variable-reference) below):
+
+```bash
+cp envs/gcp/bootstrap/terraform.tfvars.example envs/gcp/bootstrap/local.auto.tfvars
+# Edit with your domain, billing account, admin_email, github_org, github_repo,
+# tfc_organization and project_prefix. The other roots take their inputs as
+# Terraform Cloud workspace variables (each has a terraform.tfvars.example);
+# set `environments` and `project_prefix` identically on all of them.
 ```
 
 **Step 4 — Apply the bootstrap root first (two-phase, as the human admin):**
@@ -170,19 +183,21 @@ In your GitHub repo → Settings → Secrets and variables → Actions:
 | `TFC_ORGANIZATION` | Variable | Your Terraform Cloud org name |
 | `TFC_TOKEN` | Secret | A TFC team token scoped to "Read runs" on the GCP workspaces |
 
-**Step 7 — Set `terraform_admin_email` and apply the remaining roots in order:**
+**Step 7 — Set `terraform_admin_email` and apply the remaining roots in order, in Terraform Cloud:**
 
-Put the `terraform_admin_email` from step 5 on every GCP workspace variable set,
-then apply the remaining control-plane roots in order (each reads the previous via
-remote state), via CI by pushing to `main`, or manually:
+Put the `terraform_admin_email` from step 5 on every GCP workspace variable set, then
+apply the remaining roots **in Terraform Cloud** (never locally — see
+[CLAUDE.md → State & Apply Rules](../../CLAUDE.md#state--apply-rules)): merge to `main`
+for VCS-driven runs, or queue a run on each workspace in order. Each root reads the
+previous one's remote state, so wait for each apply to finish:
 
-```bash
-terraform -chdir=envs/gcp/organization apply
-terraform -chdir=envs/gcp/projects apply
-terraform -chdir=envs/gcp/network-hub apply
-```
+1. `gcp-organization` — folders, org policies, KMS, audit logging, billing
+2. `gcp-projects` — host/spoke projects, `environment_config`
+3. `gcp-network-hub` — hub VPC, DNS, hub VPC-SC
+4. `gcp-workload-<env>` — one per environment (see [Add Environment](../runbooks/add-environment.md))
 
-After this apply, all future changes go through GitHub Actions. Revoke your personal ADC credentials:
+You can preview any root locally first, e.g. `terraform -chdir=envs/gcp/projects plan`.
+Once bootstrap has run, revoke your personal ADC credentials:
 
 ```bash
 gcloud auth application-default revoke
@@ -226,6 +241,17 @@ TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=
 
 ## 6. Variable Reference
 
+### `envs/gcp/bootstrap` — Required Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `domain` | GCP organization domain name — used to look up the org ID | `"example.com"` |
+| `admin_email` | Email of the organization administrator | `"admin@example.com"` |
+| `github_org` | GitHub organization name for WIF OIDC trust (no default, on purpose) | `"my-github-org"` |
+| `github_repo` | GitHub repository name (without org prefix) for WIF OIDC trust | `"my-infra-repo"` |
+| `project_prefix` | Short prefix for all project names (same value on every GCP root) | `"ashes"` |
+| `tfc_organization` | Terraform Cloud org name, for the TFC WIF provider | `"my-tfc-org"` |
+
 ### `envs/gcp/organization` — Required Variables
 
 > **Note:** `org_id` and `billing_account_id` are **not input variables** — they are resolved automatically from data sources (`data.google_organization` and `data.google_billing_account`). Set `domain` and either `billing_account` or `billing_account_display_name` instead.
@@ -233,12 +259,15 @@ TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `domain` | GCP organization domain name — used to look up the org ID | `"example.com"` |
-| `admin_email` | Email of the organization administrator; the bootstrap SA is created under this identity | `"admin@example.com"` |
-| `github_org` | GitHub organization name for WIF OIDC trust | `"my-github-org"` |
-| `github_repo` | GitHub repository name (without org prefix) for WIF OIDC trust | `"my-infra-repo"` |
+| `admin_email` | Email of the organization administrator | `"admin@example.com"` |
+| `environments` | Map of environment configs (region, CIDR, budget, IAM bindings) — see `terraform.tfvars.example`; must match `gcp-projects` and `gcp-network-hub` | _(see example)_ |
+
+### `envs/gcp/network-hub` — Required Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
 | `hub_vpc_cidr_block` | CIDR for the hub VPC — must not overlap with DNS hub or any spoke | `"10.0.0.0/16"` |
 | `dns_hub_vpc_cidr_block` | CIDR for the DNS hub VPC — must not overlap with hub or any spoke | `"10.1.0.0/16"` |
-| `environments` | Map of environment configs (region, CIDR, budget, IAM bindings) — see `terraform.tfvars.example` | _(see example)_ |
 
 ### `envs/gcp/organization` — Key Optional Variables
 
@@ -285,14 +314,16 @@ TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=
 ```bash
 make fmt-check
 make docs-check
-make security
+make count-check   # README/CLAUDE.md counts match the tree
+make links         # no broken relative Markdown links
+make security      # Trivy + Checkov at the CI-pinned versions
 ```
 
 ## 8. Run Deeper Checks
 
 ```bash
 make validate-all   # requires registry.terraform.io access
-make lint           # requires TFLint Google plugin (see .tool-versions)
+make lint           # requires the TFLint google + aws ruleset plugins (tflint --init)
 make test           # runs all .tftest.hcl suites with mock_provider (no GCP creds needed)
 ```
 
@@ -318,7 +349,7 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
 - [ ] `make help` prints supported commands
 - [ ] `make fmt-check`, `make docs-check`, and `make security` succeed
 - [ ] `make test` reports `X passed, 0 failed`
-- [ ] `terraform -chdir=envs/gcp/organization init -backend-config=backend.hcl` succeeds
+- [ ] `terraform init` succeeds for all five GCP roots (`bootstrap`, `organization`, `projects`, `network-hub`, `workload`)
 - [ ] Bootstrap outputs include `github_oidc_pool_id` and `tfc_oidc_pool_id`
 
 ---
@@ -329,13 +360,13 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
 |:---|:---|
 | `make fmt-check` | Check Terraform formatting |
 | `make docs-check` | Check terraform-docs drift |
-| `make security` | Run tfsec + Checkov |
+| `make security` | Run Trivy + Checkov |
 | `make validate-all` | Validate all roots |
 | `make lint` | Run TFLint across all roots |
 | `make test` | Run all .tftest.hcl suites |
 | `make plan-gcp-organization` | Plan control-plane changes |
 | `make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars` | Plan an app environment |
-| `make ci` | Full local pipeline (fmt-check + docs-check + validate-all + lint + test + security) |
+| `make ci` | Full local pipeline (fmt-check + consistency + count-check + links + shellcheck + docs-check + validate-all + lint + test + security) |
 
 ---
 

@@ -63,3 +63,26 @@ cost_allocation_tags = ["CostCenter", "Environment", "Owner"]
 
 # Optional — address that receives Cost Anomaly Detection alerts.
 cost_anomaly_email = "finops@ashes.example.com"
+
+# ---------------------------------------------------------------------------
+# Terraform Cloud OIDC baseline (member-account workload identity)
+# ---------------------------------------------------------------------------
+
+# REQUIRED while enable_tfc_oidc_baseline = true (the default) — the TFC
+# organization whose workspaces the member-account tfc-plan / tfc-apply roles
+# trust. Matched literally in every trust policy.
+tfc_organization = "ashes"
+
+# Optional — TFC project the workspaces live in (literal match in the sub claim).
+# tfc_project = "Default Project"
+
+# Optional — account key -> bound workspaces. Add one entry per workload account.
+# tfc_workspace_bindings = {
+#   security_tooling = { workspaces = ["aws-security"] }
+#   log_archive      = { workspaces = ["aws-security"] }
+#   forensics        = { workspaces = ["aws-security"] }
+#   network          = { workspaces = ["aws-network"] }
+#   shared_services  = { workspaces = ["aws-identity", "aws-shared-services"] }
+#   backup           = { workspaces = ["aws-backup"] }
+#   workload_dev     = { workspaces = ["aws-workload-dev"] }
+# }

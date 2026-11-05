@@ -13,7 +13,9 @@
 The AWS landing zone is a **two-phase bootstrap**:
 
 1. **Phase-1** (`envs/aws/organization`) creates the AWS organization, the SRA OU tree, the foundational member accounts, and the guardrails. It is the **producer** of the cross-root contract: it publishes `account_ids` and `account_role_arns` and has no `terraform_remote_state` data source, so it validates credential-free.
-2. **Every downstream root** (`aws-security`, `aws-network`, `aws-identity`, `aws-shared-services`, `aws-backup`, `aws-workload-<env>`, `saas`) **reads** the org remote state and assumes a member-account role from `account_role_arns`.
+2. **Every downstream root** (`aws-security`, `aws-network`, `aws-identity`, `aws-shared-services`, `aws-backup`, `aws-workload-<env>`) **reads** the org remote state. It authenticates **directly into its own member account** through TFC dynamic credentials for that account's `tfc-plan` / `tfc-apply` role. Phase-1 creates those roles (the [TFC OIDC baseline](#member-account-credentials-tfc-oidc-baseline)) and publishes them as `tfc_plan_role_arns` / `tfc_apply_role_arns`. `saas` configures no AWS provider.
+
+> **Credential model.** Management-account credentials are used only by `aws-organization` and by the management-account *default* provider of `aws-security` and `aws-backup`. Those two roots own org-level resources: the org CloudTrail, delegated-admin registrations and the org backup policy. No other workspace receives a management-account principal. A speculative PR plan runs with the read-only `tfc-plan` role of its own member account.
 
 But phase-1 itself cannot bootstrap the very things it needs to run: an AWS org to operate in, a TFC workspace to hold its state, and a run identity to authenticate with. Those are **phase-0** — created out-of-band, by hand, exactly once.
 
@@ -48,16 +50,40 @@ Run #1 of `aws-organization` needs AWS credentials in the management account **b
 
 **Option A — Static admin credentials (simplest, least secure).** Create a temporary IAM admin user (or use root, discouraged) in the management account and generate an access key. Set it as workspace environment variables (Step 4). Delete the key immediately after run #1.
 
-**Option B — Hand-created OIDC / TFC dynamic-credentials role (recommended).** Manually create an IAM OIDC identity provider for Terraform Cloud (`app.terraform.io`) in the management account and a `terraform-bootstrap` role that trusts it, with an admin-scoped permission policy for run #1. Then drive it with TFC's native [dynamic credentials](https://developer.hashicorp.com/terraform/cloud-docs/workspaces/dynamic-provider-credentials/aws-configuration) — set these as **workspace environment variables**:
+**Option B — Hand-created OIDC / TFC dynamic-credentials roles (recommended).** In the **management account**, create:
 
-```text
-TFC_AWS_PROVIDER_AUTH = true
-TFC_AWS_RUN_ROLE_ARN  = arn:aws:iam::<mgmt-account-id>:role/terraform-bootstrap
+1. An IAM OIDC identity provider for `https://app.terraform.io` with audience `aws.workload.identity`.
+2. A **plan** role, e.g. `tfc-mgmt-plan`, with `ReadOnlyAccess`, and an **apply** role, e.g. `tfc-mgmt-apply`, with an admin-scoped policy. Each trusts only the management-account workspaces, for its own run phase:
+
+```json
+{
+  "Effect": "Allow",
+  "Principal": { "Federated": "arn:aws:iam::<mgmt-account-id>:oidc-provider/app.terraform.io" },
+  "Action": "sts:AssumeRoleWithWebIdentity",
+  "Condition": {
+    "StringEquals": {
+      "app.terraform.io:aud": "aws.workload.identity",
+      "app.terraform.io:sub": [
+        "organization:<tfc-org>:project:<project>:workspace:aws-organization:run_phase:apply",
+        "organization:<tfc-org>:project:<project>:workspace:aws-security:run_phase:apply",
+        "organization:<tfc-org>:project:<project>:workspace:aws-backup:run_phase:apply"
+      ]
+    }
+  }
+}
 ```
 
-> The exact OIDC provider thumbprint, the trust-policy `sub`/`aud` conditions, and the console click-path for creating the identity provider are **environment-specific** and change with TFC's published configuration — follow the HashiCorp doc linked above rather than a hard-coded snippet here. The `<mgmt-account-id>` is the 12-digit ID of the account from Step 1.
+In the plan role, use `run_phase:plan` in place of `run_phase:apply`. Never wildcard the organization. Then drive the roles with TFC's native [dynamic credentials](https://developer.hashicorp.com/terraform/cloud-docs/workspaces/dynamic-provider-credentials/aws-configuration) by setting these **workspace environment variables**:
 
-Whichever option you choose, this bootstrap identity is temporary. Once phase-1 has created the real `terraform-run` role (the ARN you pass as `terraform_run_role_arn`), migrate the workspace to that role and retire the bootstrap identity.
+```text
+TFC_AWS_PROVIDER_AUTH  = true
+TFC_AWS_PLAN_ROLE_ARN  = arn:aws:iam::<mgmt-account-id>:role/tfc-mgmt-plan
+TFC_AWS_APPLY_ROLE_ARN = arn:aws:iam::<mgmt-account-id>:role/tfc-mgmt-apply
+```
+
+> **Why the management-account roles stay manual.** The member-account roles are created in code by a service-managed CloudFormation StackSet (phase-1). Service-managed StackSets **never deploy to the management account**, so these roles stay a phase-0, human-created step. Pass the apply role's ARN as `terraform_run_role_arn` to `aws-organization`. Phase-1 does **not** create a separate "terraform-run" role.
+
+With Option A, retire the static key after run #1 and move the workspace to Option B.
 
 ### Step 3 — Create the `aws-organization` TFC workspace
 
@@ -67,7 +93,7 @@ Create the workspace that will hold phase-1 state. In the Terraform Cloud UI (**
 2. **VCS connection:** connect it to this repository.
 3. **Working directory:** `envs/aws/organization`.
 4. **Execution mode:** Remote (or Agent for self-hosted runners).
-5. Set the AWS auth workspace variables from Step 2 (`TFC_AWS_PROVIDER_AUTH` + `TFC_AWS_RUN_ROLE_ARN`, or the static-key env vars).
+5. Set the AWS auth workspace variables from Step 2 (`TFC_AWS_PROVIDER_AUTH` + `TFC_AWS_PLAN_ROLE_ARN` + `TFC_AWS_APPLY_ROLE_ARN`, or the static-key env vars).
 
 > **Exact CLI is environment-specific.** Whether you use the TFC UI, the `tfe` CLI, or a small `terraform` config using the `tfe` provider depends on your team's tooling. Any of them is fine — the workspace is out-of-band scaffolding, not part of the landing-zone code.
 
@@ -93,31 +119,70 @@ This links to the account-baseline concept: per-account defaults the declarative
 
 ## Who creates the downstream workspaces (decision)
 
-**The downstream TFC workspaces and their TFC→AWS assume-role trust are created by a documented manual / `tfe`-CLI step — NOT by a `tfe` provider inside the `aws-organization` root.**
+**The downstream TFC workspaces are created out-of-band, not by a `tfe` provider inside the `aws-organization` root.** Use `envs/tfc-admin`, the `tfe` CLI or the UI. The AWS org root declares exactly **one** provider (`aws`, management account) and does not self-provision workspaces (see [provider-selection](../architecture/provider-selection.md)).
 
-Putting a `tfe` provider in the AWS org root would pull a **fifth provider** into a root whose whole design point is provider-optionality (see [provider-selection](../architecture/provider-selection.md)). The org root declares exactly **one** provider (`aws`, management account). We do not compromise that to self-provision workspaces.
+The **AWS side of the trust is in code.** See the next section.
 
-Instead, for each downstream root, create its workspace out-of-band (same mechanism as Step 3) and point its run identity at the corresponding member-account role. That role's ARN is published by the `aws-organization` root output **`account_role_arns`** — a map of member-account name → cross-account access role ARN. Set the downstream workspace's `TFC_AWS_RUN_ROLE_ARN` to the right entry:
+## Member-account credentials (TFC OIDC baseline)
 
-| Downstream workspace | `account_role_arns` key | Notes |
-|---|---|---|
-| `aws-security` | `account_role_arns["security_tooling"]` | Delegated admin for GuardDuty / Security Hub / Config aggregator; also drives `log_archive` via an aliased provider. |
-| `aws-network` | `account_role_arns["network"]` | Shared TGW / networking account. |
-| `aws-identity` | `account_role_arns["shared_services"]` | Runs after Identity Center is delegated to Shared Services (see gate below). |
-| `aws-shared-services` | `account_role_arns["shared_services"]` | Optional/gated shared platform services. |
-| `aws-backup` | `account_role_arns["backup"]` | Centralized AWS Backup account. |
-| `aws-workload-<env>` | `account_role_arns["<workload-account>"]` | One workspace per env via the `aws-workload-` prefix; key is the workload account name you added under `workload_accounts`. |
-| `saas-<name>` | *(none — no AWS role)* | Supabase/Vercel only; reads AWS/GCP remote state for values but configures no AWS provider. |
+`aws-organization` (`enable_tfc_oidc_baseline = true`, the default) deploys a **service-managed CloudFormation StackSet** (`tfc-oidc-baseline`, module `modules/aws/iam/tfc-oidc-baseline`). The StackSet targets the OUs of the bound accounts and auto-deploys to accounts that join them. Every bound member account receives:
 
-> The account keys (`log_archive`, `security_tooling`, `network`, `shared_services`, `backup`, `forensics`) come from the `accounts` map in `envs/aws/organization/terraform.tfvars`. `account_role_arns` is keyed by exactly those names. Get the live values after phase-1 apply:
+- an IAM OIDC provider for `https://app.terraform.io` (aud `aws.workload.identity`);
+- `tfc-plan` — `ReadOnlyAccess`, trusting only `organization:<tfc_organization>:project:<tfc_project>:workspace:<ws>:run_phase:plan`;
+- `tfc-apply` — `AdministratorAccess` by default (`tfc_apply_role_policy_arns`), trusting only `...:workspace:<ws>:run_phase:apply`.
+
+`<ws>` comes from `tfc_workspace_bindings`, a map of account key to workspace names. Workspace names match exactly. The organization and project are always literal. Accounts in a targeted OU without a binding receive only the inert OIDC provider.
+
+Default bindings:
+
+| Account key | Bound workspaces |
+|---|---|
+| `security_tooling`, `log_archive`, `forensics` | `aws-security` |
+| `network` | `aws-network` |
+| `shared_services` | `aws-identity`, `aws-shared-services` |
+| `backup` | `aws-backup` |
+| *(each workload account)* | add e.g. `workload_dev = { workspaces = ["aws-workload-dev"] }` |
+
+The role ARNs are published as **`tfc_plan_role_arns`** and **`tfc_apply_role_arns`**. Both are maps keyed by account key:
+
+```bash
+terraform -chdir=envs/aws/organization output -json tfc_plan_role_arns
+terraform -chdir=envs/aws/organization output -json tfc_apply_role_arns
+```
+
+### Per-workspace environment variables
+
+**Single-account roots** authenticate directly as the member role and make no role hop (`assume_role_arn` stays `null`):
+
+| Workspace | `TFC_AWS_PROVIDER_AUTH` | `TFC_AWS_PLAN_ROLE_ARN` | `TFC_AWS_APPLY_ROLE_ARN` |
+|---|---|---|---|
+| `aws-network` | `true` | `tfc_plan_role_arns["network"]` | `tfc_apply_role_arns["network"]` |
+| `aws-identity` | `true` | `tfc_plan_role_arns["shared_services"]` | `tfc_apply_role_arns["shared_services"]` |
+| `aws-shared-services` | `true` | `tfc_plan_role_arns["shared_services"]` | `tfc_apply_role_arns["shared_services"]` |
+| `aws-workload-<env>` | `true` | `tfc_plan_role_arns["<workload key>"]` | `tfc_apply_role_arns["<workload key>"]` |
+
+**Multi-account roots** (`aws-security`, `aws-backup`) use TFC [multiple dynamic-credential configurations](https://developer.hashicorp.com/terraform/cloud-docs/workspaces/dynamic-provider-credentials/specifying-multiple-configurations):
+
+- The **default** configuration is the phase-0 management-account plan/apply role from Step 2.
+- Each member-account provider alias authenticates **directly** as that account's `tfc-plan` / `tfc-apply` role. There is no role chaining from the management account. TFC injects `var.tfc_aws_dynamic_credentials` and the provider aliases read their `shared_config_file` from it.
+
+```text
+# default — management account (org CloudTrail, delegated admin, org backup policy)
+TFC_AWS_PROVIDER_AUTH  = true
+TFC_AWS_PLAN_ROLE_ARN  = arn:aws:iam::<mgmt-account-id>:role/tfc-mgmt-plan
+TFC_AWS_APPLY_ROLE_ARN = arn:aws:iam::<mgmt-account-id>:role/tfc-mgmt-apply
+
+# one block per alias: aws-security -> security_tooling, log_archive, forensics; aws-backup -> backup
+TFC_AWS_PROVIDER_AUTH_<alias>  = true
+TFC_AWS_PLAN_ROLE_ARN_<alias>  = tfc_plan_role_arns["<alias>"]
+TFC_AWS_APPLY_ROLE_ARN_<alias> = tfc_apply_role_arns["<alias>"]
+```
+
+> **Legacy / local fallback (not recommended).** To run from management-account credentials, as before the baseline existed:
+> - **Single-account roots:** set the Terraform variable `assume_role_arn = account_role_arns["<key>"]` (OrganizationAccountAccessRole).
+> - **`aws-security` / `aws-backup`:** leave `tfc_aws_dynamic_credentials` unset; their aliases then assume `account_role_arns[...]`.
 >
-> ```bash
-> terraform -chdir=envs/aws/organization output -json account_role_arns
-> ```
-
-You must also ensure each member-account role **trusts** the downstream workspace's TFC identity. That trust is part of creating the workspace + role wiring in this same out-of-band step — it is not managed by the org root.
-
----
+> This brings back management-rooted credentials for member-account work. Use it only for break-glass or local debugging.
 
 ## Full first-time stand-up order
 
@@ -131,11 +196,13 @@ Follow this order top to bottom. **Manual gates** are inline and must be complet
    terraform -chdir=envs/aws/organization apply
    ```
 
-   This creates the org, the OU tree, the foundational accounts, and the guardrails, and publishes `account_ids` and `account_role_arns`.
+   Also set `tfc_organization`, plus `tfc_project` if your workspaces are not in the `Default Project`. The apply creates the org, the OU tree, the foundational accounts, the guardrails and the **TFC OIDC baseline StackSet**. It publishes `account_ids`, `account_role_arns`, `tfc_plan_role_arns` and `tfc_apply_role_arns`.
+
+   > **StackSets trusted access.** The organization module enables `member.org.stacksets.cloudformation.amazonaws.com` trusted access. If the StackSet create fails with an organizations-access error, run `aws cloudformation activate-organizations-access` once in the management account and re-apply. It is idempotent, and it is the AWS-recommended way to enable StackSets trusted access.
 
 3. **MANUAL GATE — IAM Identity Center.** In the **management account**, enable IAM Identity Center (console action — cannot be created by Terraform here), then **delegate administration to the Shared Services account**. The `aws-identity` root manages permission sets and assignments *after* this delegation exists; it cannot enable Identity Center for you.
 
-4. **Create the downstream workspaces + role trust** (see the decision section above). For each of `aws-security`, `aws-network`, `aws-identity`, `aws-shared-services`, `aws-backup`, and each `aws-workload-<env>`, create the workspace out-of-band and set `TFC_AWS_RUN_ROLE_ARN` to the matching `account_role_arns[...]` value.
+4. **Create the downstream workspaces and set their credentials** (see [Member-account credentials](#member-account-credentials-tfc-oidc-baseline)). For each of `aws-security`, `aws-network`, `aws-identity`, `aws-shared-services`, `aws-backup` and each `aws-workload-<env>`, create the workspace. Set `TFC_AWS_PROVIDER_AUTH`, `TFC_AWS_PLAN_ROLE_ARN` and `TFC_AWS_APPLY_ROLE_ARN` from `tfc_plan_role_arns` / `tfc_apply_role_arns`. Set the `_<alias>` variants for the security and backup aliases. The role trust is already in place from step 2, provided the workspace name is in `tfc_workspace_bindings`.
 
 5. **Phase-0.5 — default-VPC-deletion StackSet.** Deploy the org-wide StackSet now that the accounts exist (see phase-0.5 section). Leave auto-deployment on.
 
@@ -153,7 +220,7 @@ Follow this order top to bottom. **Manual gates** are inline and must be complet
 
 12. **Apply `saas`** *(optional).* Supabase and/or Vercel only, gated by `enable_supabase` / `enable_vercel`. Configures no AWS provider.
 
-> Each downstream root **reads the `aws-organization` remote state** for `account_role_arns` and other contract outputs. If you apply one before `aws-organization`, it fails at plan time. The minimum governed footprint is just `aws-organization` + `aws-security`; everything else is additive (see [provider-selection](../architecture/provider-selection.md#minimum-aws-footprint)).
+> Each downstream root **reads the `aws-organization` remote state** for `account_ids` (its `allowed_account_ids` guard), `account_role_arns` (legacy fallback only) and other contract outputs. If you apply one before `aws-organization`, it fails at plan time. The minimum governed footprint is just `aws-organization` + `aws-security`; everything else is additive (see [provider-selection](../architecture/provider-selection.md#minimum-aws-footprint)).
 
 ---
 

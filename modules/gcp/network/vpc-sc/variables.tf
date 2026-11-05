@@ -190,6 +190,59 @@ variable "enable_dry_run" {
 }
 
 # =============================================================================
+# STAGED DRY-RUN SPEC (enforced status + dry-run delta)
+# =============================================================================
+# Each override defaults to null = "same as the enforced value". Setting ANY of
+# them while enable_dry_run = false keeps the perimeter ENFORCED (status) and
+# adds a dry-run spec built from the overrides (unset ones fall back to the
+# enforced values), so a change can be validated in the violation logs before
+# promoting it into status. With enable_dry_run = true they shape the (only) spec.
+
+variable "dry_run_restricted_services" {
+  description = "Optional dry-run restricted_services. When set on an enforced perimeter, stages this list in the dry-run spec while status keeps enforcing restricted_services. Default null = same as restricted_services."
+  type        = list(string)
+  default     = null
+}
+
+variable "dry_run_ingress_policies" {
+  description = "Optional dry-run ingress policies (same shape as ingress_policies). When set on an enforced perimeter, stages them in the dry-run spec. Default null = same as ingress_policies."
+  type = list(object({
+    identity_type = optional(string)
+    identities    = optional(list(string))
+    sources = optional(list(object({
+      access_level = optional(string)
+      resource     = optional(string)
+    })))
+    resources = optional(list(string))
+    operations = optional(list(object({
+      service_name = string
+      method_selectors = optional(list(object({
+        method     = optional(string)
+        permission = optional(string)
+      })))
+    })))
+  }))
+  default = null
+}
+
+variable "dry_run_egress_policies" {
+  description = "Optional dry-run egress policies (same shape as egress_policies). When set on an enforced perimeter, stages them in the dry-run spec. Default null = same as egress_policies."
+  type = list(object({
+    identity_type = optional(string)
+    identities    = optional(list(string))
+    resources     = optional(list(string))
+    operations = optional(list(object({
+      service_name = string
+      method_selectors = optional(list(object({
+        method     = optional(string)
+        permission = optional(string)
+      })))
+    })))
+  }))
+  default = null
+}
+
+# =============================================================================
 # DELETION PROTECTION
 # =============================================================================
 

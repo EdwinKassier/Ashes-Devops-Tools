@@ -18,5 +18,10 @@ output "notification_channel_ids" {
 
 output "watched_names" {
   description = "Names of the guardrail watches that are active."
-  value       = keys(var.enable ? var.watches : {})
+  value       = keys(local.active_watches)
+}
+
+output "org_log_route_sink_name" {
+  description = "Name of the aggregated org sink routing audit logs into project_id, or null when org_id is unset."
+  value       = local.route_org_logs ? google_logging_organization_sink.control_plane[0].name : null
 }

@@ -28,6 +28,7 @@ variables {
   terraform_run_role_arn  = "arn:aws:iam::111111111111:role/tfc-run-role"
   break_glass_role_arn    = "arn:aws:iam::111111111111:role/break-glass"
   log_archive_bucket_name = "ashes-org-log-archive"
+  tfc_organization        = "acme"
 }
 
 override_module {
@@ -55,6 +56,30 @@ override_module {
       shared_services  = "arn:aws:iam::555555555555:role/OrganizationAccountAccessRole"
       backup           = "arn:aws:iam::666666666666:role/OrganizationAccountAccessRole"
       forensics        = "arn:aws:iam::777777777777:role/OrganizationAccountAccessRole"
+    }
+    tfc_plan_role_arns = {
+      security_tooling = "arn:aws:iam::222222222222:role/tfc-plan"
+      log_archive      = "arn:aws:iam::333333333333:role/tfc-plan"
+      network          = "arn:aws:iam::444444444444:role/tfc-plan"
+      shared_services  = "arn:aws:iam::555555555555:role/tfc-plan"
+      backup           = "arn:aws:iam::666666666666:role/tfc-plan"
+      forensics        = "arn:aws:iam::777777777777:role/tfc-plan"
+    }
+    tfc_apply_role_arns = {
+      security_tooling = "arn:aws:iam::222222222222:role/tfc-apply"
+      log_archive      = "arn:aws:iam::333333333333:role/tfc-apply"
+      network          = "arn:aws:iam::444444444444:role/tfc-apply"
+      shared_services  = "arn:aws:iam::555555555555:role/tfc-apply"
+      backup           = "arn:aws:iam::666666666666:role/tfc-apply"
+      forensics        = "arn:aws:iam::777777777777:role/tfc-apply"
+    }
+    tfc_workspace_bindings = {
+      security_tooling = ["aws-security"]
+      log_archive      = ["aws-security"]
+      forensics        = ["aws-security"]
+      network          = ["aws-network"]
+      shared_services  = ["aws-identity", "aws-shared-services"]
+      backup           = ["aws-backup"]
     }
   }
 }
@@ -90,6 +115,40 @@ run "output_contract_is_stable" {
   assert {
     condition     = contains(keys(output.ou_ids), "Security")
     error_message = "ou_ids must be re-exported as part of the cross-root contract."
+  }
+
+  # Per-workspace TFC dynamic credentials (TFC_AWS_PLAN_ROLE_ARN /
+  # TFC_AWS_APPLY_ROLE_ARN) are read from these maps by tfc-admin and the runbooks.
+  assert {
+    condition = alltrue([
+      for k in ["security_tooling", "log_archive", "network", "shared_services", "backup", "forensics"] :
+      endswith(output.tfc_plan_role_arns[k], ":role/tfc-plan") && endswith(output.tfc_apply_role_arns[k], ":role/tfc-apply")
+    ])
+    error_message = "tfc_plan_role_arns / tfc_apply_role_arns must re-export every foundational account's member-account roles."
+  }
+
+  assert {
+    condition     = contains(output.tfc_workspace_bindings["shared_services"], "aws-identity")
+    error_message = "tfc_workspace_bindings must be re-exported."
+  }
+}
+
+run "tfc_organization_required_when_baseline_enabled" {
+  command = plan
+
+  variables {
+    tfc_organization = null
+  }
+
+  expect_failures = [var.tfc_organization]
+}
+
+run "baseline_can_be_disabled_without_tfc_organization" {
+  command = plan
+
+  variables {
+    enable_tfc_oidc_baseline = false
+    tfc_organization         = null
   }
 }
 

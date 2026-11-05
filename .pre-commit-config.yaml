@@ -35,11 +35,9 @@ repos:
           # either: passing it explicitly would just duplicate what .tflint.hcl already
           # configures and risks drifting from it if the file is ever changed.
 
-      - id: terraform_tfsec
-        name: TFSec security scan
-        description: Security scan for Terraform
-        args:
-          - --args=--config-file=__GIT_WORKING_DIR__/.tfsec.yml
+      # tfsec is end-of-life (Aqua folded it into Trivy), so it is no longer run;
+      # terraform_trivy below is the IaC misconfiguration hook, matching CI's
+      # blocking Trivy gate in reusable-security.yml and `make security`.
 
       - id: terraform_checkov
         name: Checkov security scan
@@ -60,6 +58,7 @@ repos:
         description: Security scanner for Terraform
         args:
           - --args=--skip-dirs="**/.terraform"
+          - --args=--severity=CRITICAL,HIGH
 
   # General hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -76,7 +75,6 @@ repos:
       - id: check-yaml
         name: Check YAML
         description: Validate YAML files
-        args: ['--safe']
 
       - id: check-json
         name: Check JSON
@@ -103,6 +101,16 @@ repos:
       - id: check-case-conflict
         name: Check filename case
         description: Check for files with names that would conflict on case-insensitive filesystems
+
+  # Shell script linting (pinned binary via shellcheck-py; no system install
+  # needed). Same severity floor as `make shellcheck`.
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: 745eface02aef23e168a8afb6b5737818efbea95  # v0.11.0.1
+    hooks:
+      - id: shellcheck
+        name: ShellCheck
+        description: Lint shell scripts
+        args: ['--severity=warning']
 
   # Git commit message hooks
   - repo: https://github.com/commitizen-tools/commitizen

@@ -89,9 +89,46 @@ This composes cleanly because **no root forces another cloud's credentials**:
 
 - The GCP roots need only GCP ADC.
 - The AWS roots need only AWS credentials.
-- The `saas` root needs only the SaaS token(s) for the features you enable — and SaaS never lives inside an AWS or GCP root.
+- The `saas` root needs only the SaaS token(s) for the features you enable — and SaaS never lives inside an AWS or GCP root. (Within that one root, see [Single-provider mode in the `saas` root](#single-provider-mode-in-the-saas-root) for how the disabled SaaS provider avoids needing its token.)
 
 So the credentials a deployment needs are exactly the union of the credentials of the roots you apply. There is no hidden cross-cloud coupling, and there is no top-level `enable_aws` / `enable_gcp` switch — selection is purely which workspaces you run.
+
+---
+
+## Single-provider mode in the `saas` root
+
+`envs/saas` declares both the `supabase` and `vercel` providers, because a `provider` block cannot be conditional. Terraform configures **every** provider a root declares, even when all of its resources are at `count = 0`. Both providers fail at configure time when their token is empty (`Missing Supabase API Access Token` and `Unable to find api_token`), so until 2026-11 a Supabase-only plan demanded `VERCEL_API_TOKEN` and the reverse was also true. The 2026-11-05 audit verified this.
+
+**Fix: an inert placeholder token for the disabled provider** (`envs/saas/providers.tf`):
+
+```hcl
+provider "supabase" {
+  access_token = var.enable_supabase ? null : local.supabase_disabled_placeholder_token
+}
+
+provider "vercel" {
+  api_token = var.enable_vercel ? null : local.vercel_disabled_placeholder_token
+}
+```
+
+- **Enabled:** the attribute is `null`, so the provider reads `SUPABASE_ACCESS_TOKEN` / `VERCEL_API_TOKEN` from the environment exactly as before.
+- **Disabled:** the provider gets a format-valid placeholder (`sbp_` + 40 zeros, or 24 zeros). Neither provider calls its API while configuring, and with the feature off no resource or data source uses it, so the placeholder is never sent anywhere. It is not a credential. Provider configuration takes precedence over the environment, so a stray token in the environment is ignored for the disabled provider.
+
+**Evidence** (2026-11-05, `supabase/supabase` 1.9.1, `vercel/vercel` 4.8.2, Terraform 1.14). A real `terraform plan` ran against a local-backend copy of the root with both token variables unset, not under `mock_provider`:
+
+| Mode | Environment | Before | After |
+|---|---|---|---|
+| Supabase only | `SUPABASE_ACCESS_TOKEN` only | `Error: Unable to find api_token` (vercel) | `Plan: 2 to add` |
+| Vercel only | `VERCEL_API_TOKEN` only | `Error: Missing Supabase API Access Token` | `Plan: 7 to add` |
+| Supabase only | no tokens | error | error for **supabase only** (the enabled provider) |
+| Vercel only | no tokens | error | error for **vercel only** (the enabled provider) |
+| Neither | no tokens | error | plans (outputs only) |
+
+Regression tests: `envs/saas/tests/single_provider_supabase_only.tftest.hcl` and `single_provider_vercel_only.tftest.hcl` mock **only the enabled** provider. The disabled provider is the real plugin, configured by `providers.tf`. Both tests fail against the old `providers.tf` and pass now. They need no credentials or network.
+
+**Caveat: turning a feature off after it has been applied.** If the disabled provider's resources are still in state, Terraform refreshes and destroys them with the placeholder token. That fails with an auth error, which is fail-closed: nothing is changed. Destroy them first with the feature still enabled (for example `terraform destroy -target=module.saas_workload.module.vercel_project`), then flip the flag.
+
+A split into separate `saas-supabase` / `saas-vercel` roots was considered and is not needed: the placeholder keeps one root, one workspace and the cross-SaaS wiring (Supabase outputs feeding Vercel env vars) intact.
 
 ---
 

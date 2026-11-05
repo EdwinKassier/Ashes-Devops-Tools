@@ -1,6 +1,6 @@
 # CLAUDE.md — Agent Onboarding
 
-Terraform GCP + AWS landing zone. 110 modules, 14 deployable roots, remote state via Terraform Cloud.
+Terraform GCP + AWS landing zone. 111 modules, 14 deployable roots, remote state via Terraform Cloud.
 
 ---
 
@@ -34,6 +34,8 @@ modules/               # grouped by owning cloud (domain)
     monitoring/         # alert-policy, compute-dashboard, slo, control-plane (landing-zone self-observability)
     ops/                # os-config (VM Manager patch deployments)
     backup/             # backup-plan (snapshot schedules)
+    compute/            # cloud-run, gke-autopilot (application runtimes)
+    data/               # cloud-sql, secret-manager
     firebase/           # project
     cloud-storage/
     artifact-registry/
@@ -41,14 +43,16 @@ modules/               # grouped by owning cloud (domain)
     governance/         # organization, organization-policy, account, cost-governance, service-quotas
     security/           # guardduty-org, securityhub-org, config-org, cloudtrail-org, securitylake, edge-security (CloudFront/WAF), …
     network/            # vpc, transit-gateway, network-firewall, route53-resolver, dns-records, ipam, vpc-endpoints, load-balancer, api-gateway, vpn
-    iam/                # iam-role, iam-identity-center
-    data/               # kms-key, log-archive-bucket, private-ca, ecr
+    iam/                # iam-role, iam-identity-center, tfc-oidc-baseline
+    compute/            # ecs-fargate (application runtime)
+    data/               # kms-key, log-archive-bucket, private-ca, ecr, rds-aurora
     backup/             # backup-vault, backup-org-policy
     ops/                # systems-manager, cloudwatch
     stages/             # organization, security, network-hub, shared-services, backup, workload
   supabase/             # project, settings, environment, vault-secrets
   vercel/               # project
   saas/                 # stages/saas-workload — composes supabase + vercel
+  tfc/                  # workspace — one Terraform Cloud workspace (used by envs/tfc-admin)
 ```
 
 ---
@@ -85,8 +89,11 @@ make docs-check     # same but exits non-zero if READMEs are stale
 make test           # runs all *.tftest.hcl with mock_provider — no real creds needed
 make validate-all   # terraform validate across all modules
 make lint           # tflint
-make security       # tfsec + checkov
-make ci             # fmt-check + docs-check + validate-all + lint + security + test
+make security       # trivy config + checkov (versions pinned in .tool-versions; tfsec is EOL/removed)
+make count          # print live module/root/test-suite counts (make count-check enforces README/CLAUDE.md)
+make links          # fail on broken repo-relative Markdown links
+make shellcheck     # shellcheck scripts/*.sh
+make ci             # fmt-check + consistency + count-check + links + shellcheck + docs-check + validate-all + lint + test + security
 ```
 
 ---
@@ -102,8 +109,8 @@ make ci             # fmt-check + docs-check + validate-all + lint + security + 
 ## State & Apply Rules
 
 - State backend: **Terraform Cloud** (remote).
-- **Never run `terraform apply` locally** against `envs/gcp/bootstrap`, `envs/gcp/organization` or `envs/gcp/workload` (except the documented phase-0 `gcp-bootstrap` first apply, which runs as a human admin by design).
-- CI (GitHub Actions) runs `fmt`, `validate`, `lint`, `tfsec`, `checkov` on PR.
+- **Never run `terraform apply` locally** against any GCP root — `envs/gcp/bootstrap`, `envs/gcp/organization`, `envs/gcp/projects`, `envs/gcp/network-hub` or `envs/gcp/workload` (except the documented phase-0 `gcp-bootstrap` first apply, which runs as a human admin by design). The Makefile `apply-gcp-*` targets deliberately refuse.
+- CI (GitHub Actions) runs `fmt`, `docs-check`, `validate` (10 shards), `lint`, Trivy, `checkov`, `test` and meta-lint (yaml/markdown/commits, counts, links) on PR; `Validation Summary` is the single required check.
 - Terraform Cloud executes the actual apply.
 
 ---
@@ -114,7 +121,7 @@ Only the roots you apply pull in credentials — an unapplied workspace needs no
 
 | Variable | Purpose |
 |----------|---------|
-| `GOOGLE_CLOUD_PROJECT` / GCP ADC | google provider — GCP roots (`gcp-organization`, `gcp-workload`) only |
+| `GOOGLE_CLOUD_PROJECT` / GCP ADC | google provider — GCP roots (`gcp-bootstrap`, `gcp-organization`, `gcp-projects`, `gcp-network-hub`, `gcp-workload-<env>`) only |
 | `TFC_AWS_PROVIDER_AUTH` + `TFC_AWS_RUN_ROLE_ARN` | AWS via TFC dynamic (OIDC) credentials — AWS roots only |
 | `AWS_PROFILE` | AWS local/OIDC fallback when not using TFC dynamic credentials — AWS roots only |
 | `SUPABASE_ACCESS_TOKEN` | supabase provider — `saas` root only, when `enable_supabase=true` |
@@ -206,7 +213,7 @@ Gotchas the AWS landing-zone build surfaced — each one bit us in CI:
 3. **Build policy JSON with `jsonencode()` / `templatefile()`**, NOT `data "aws_iam_policy_document"`. `mock_provider` mocks data sources, which breaks content assertions in tests.
 4. **`regex()` interval repeats cap at 1000** (RE2 engine) — a larger `{n,m}` repeat count is a plan-time error.
 5. **Log-service KMS grants must use per-service-principal statements**, NOT `kms:ViaService` — `kms:ViaService` would deny CloudTrail. (The CloudTrail grant's `aws:SourceOrgID`-vs-`aws:SourceArn` condition is an open, unvalidated item — tracked in [`docs/known-gaps.md`](docs/known-gaps.md#open--validate-before-relying-on), not here.)
-6. **Commit dual-platform `.terraform.lock.hcl`** (`linux_amd64` + `darwin_amd64`) so both CI runners and local macOS resolve the same provider hashes.
+6. **Commit multi-platform `.terraform.lock.hcl`** so CI (Linux) and local macOS resolve the same provider hashes: `terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64`. Note: many committed lockfiles currently hold only the `darwin_arm64` `h1:` hash (written by a local `terraform init`); regenerate with the command above when you touch one.
 
 ---
 

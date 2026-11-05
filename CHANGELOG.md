@@ -2,12 +2,98 @@
 
 All notable changes to this landing zone are documented here.
 
-Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
-Releases are tagged as `gcp-organization/vX.Y.Z` and `gcp-workload/<env>/vX.Y.Z`.
+Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the repository
+follows [Semantic Versioning](https://semver.org/) (pre-1.0: a minor bump may break).
+
+**Versioning.** The repository as a whole is released as `vX.Y.Z` by
+[release-please](https://github.com/googleapis/release-please) (`.github/workflows/release.yml`,
+`release-please-config.json`): every merge to `main` updates a release PR whose version and notes
+are derived from Conventional Commit subjects (`feat:` → minor, `fix:` → patch while pre-1.0).
+Merging that PR tags `vX.Y.Z` and publishes the GitHub Release. These repo-version tags are
+distinct from the per-workspace **deployment** tags (`gcp-organization/vX.Y.Z`,
+`gcp-workload/<env>/vX.Y.Z`, `aws-*/vX.Y.Z`, …) that `terraform-apply.yml` uses to record
+release metadata for a Terraform Cloud run.
 
 ---
 
 ## [Unreleased]
+
+Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/2026-11-05-enterprise-boilerplate-audit.md).
+
+### Added
+
+- **Release discipline** — release-please (`release-please-config.json`, `.release-please-manifest.json`,
+  `.github/workflows/release.yml`) cuts SemVer `vX.Y.Z` releases from Conventional Commits; baseline `0.1.0`.
+- **Docs drift gates** — `scripts/check-docs-counts.sh` (`make count` / `make count-check`) recomputes the
+  module, root and test-suite counts and fails CI (meta-lint) when README.md / CLAUDE.md disagree;
+  `scripts/check-md-links.py` (`make links`) fails on broken repo-relative Markdown links.
+- **TFLint AWS ruleset** — `tflint-ruleset-aws` 0.50.0 alongside the google ruleset, covering the AWS modules.
+- **ShellCheck** — pinned `shellcheck-py` pre-commit hook and `make shellcheck` for `scripts/*.sh`.
+- Commit the `examples/presets/*.tfvars` production/cost presets, with a CI guard that every referenced preset exists.
+- `envs/gcp/workload` `default_plan` test that plans the real host stage with no module override.
+
+### Changed
+
+- **CI performance** — the per-root validate matrix (218 legs, near GitHub's 256-leg cap) is now 10
+  round-robin shards; validate, lint and test share a provider plugin cache (`actions/cache`, keyed on all
+  `.terraform.lock.hcl` files) and TFLint caches its ruleset plugins. `Validation Summary` remains the
+  single fail-closed required check.
+- **tfsec removed** (end-of-life, folded into Trivy): `make security` and pre-commit now run
+  `trivy config` (CRITICAL/HIGH, same as the CI gate); Trivy pinned to 0.70.0 in `.tool-versions` and in
+  `reusable-security.yml`.
+- Checkov pinned to the CI version (3.3.17); `make security` refuses a skewed local binary.
+- `make apply-gcp-organization` / `make apply-gcp-workload` now refuse and point to Terraform Cloud —
+  local apply contradicted the documented apply rules.
+- README, CLAUDE.md, docs/INDEX.md, Quick Start and Add Environment updated for the five-root GCP flow
+  (`gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>`).
+
+### Fixed
+
+- Restored green CI gates on `main`: `terraform fmt`, TFLint standard module structure (host split
+  outputs/variables merged), Checkov 3.3.17 failures (justified skips).
+- `gcp-workload`: VPC-SC gated on an access policy being supplied; flow-logs BigQuery destination derived;
+  null-safe `for_each` in `vpc-sc` (three default-path plan failures).
+- Example workspace name and example-subdomain email guard, with tests.
+
+## [0.1.0] - 2026-11-05
+
+Baseline version for release-please (no tag was cut; the next release PR is computed from
+commit `4e05c90`). Summarises the work merged between 2026-09-09 and 2026-11-05 (PR #587).
+
+### Added
+
+- **Application platform core** — runtime, data and secret modules, plus a golden path to deploy a service
+  ([deploying-a-service](docs/guides/deploying-a-service.md)) (audit C1).
+- **Delivery pipelines** for ECS/Fargate and GKE Autopilot (audit C1).
+- `app-ingress` front-door module and an SLO module for application observability (audit C1).
+- **Terraform Cloud workspace layer codified** — `envs/tfc-admin` and `modules/tfc/workspace` (audit C3).
+- Data-driven service-team registry and promotion model ([promotion runbook](docs/runbooks/promotion.md)) (audit H10).
+- **Control-plane self-observability** — `modules/gcp/monitoring/control-plane` (audit M-obs).
+- AWS security: manage the break-glass role, not just alarm on it (audit M3).
+- **SaaS integration (audit H9, option C)** — opt-in Supabase→GCP and Supabase→AWS secret bridges, a
+  frontend-URL seam via `cross_cloud_references`, and `dns-records` modules for Cloud DNS and Route 53.
+- CODEOWNERS team-ownership scaffold (removes the bus factor of one).
+- Audit remediation batches B (modular production hardening, H1/M2) and C (contain the GCP automation
+  identity, C2); FinOps cost toggles, wider drift default, release provenance, CIDR plan.
+- Root contract tests (M5), structural assertions (M6) and audit-log wiring tests (M7).
+
+### Changed
+
+- **GCP roots split** — `gcp-bootstrap`, `gcp-projects` and `gcp-network-hub` now have their own roots and
+  state alongside `gcp-organization` and `gcp-workload-<env>` (audit H3); WIF trusts the new workspaces.
+- `host` god-module decomposed by concern (audit H3).
+- google / google-beta pinned `~> 7.0`.
+- GitHub Actions bumped (actions group, 8 updates).
+
+### Fixed
+
+- Audit remediation batch A (correctness, WIF and account guards) and batch E (operability, CI accuracy).
+- `environments` map validated across the GCP roots (audit H4).
+- L2 placeholder-email guard, M-iac contract binding; new [apply-recovery runbook](docs/runbooks/apply-recovery.md).
+- Platform modules pass the security and consistency gates; PR gates repaired (stale 6.x locks, long YAML lines).
+- Three verified findings from the 2026-11-04 audit; regenerated module READMEs and Markdown list numbering.
+
+## Pre-0.1.0 history (2026-07 to 2026-09-09)
 
 > **Path note:** entries below were written across the domain-driven reorg (see the first
 > "Changed" item). Module/root paths in this section reflect the **current** post-reorg

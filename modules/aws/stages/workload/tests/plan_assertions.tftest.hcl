@@ -29,6 +29,11 @@ override_module {
       isolated = ["subnet-wl-iso-a", "subnet-wl-iso-b"]
       tgw      = ["subnet-wl-tgw-a", "subnet-wl-tgw-b"]
     }
+    route_table_ids_by_tier = {
+      private  = ["rtb-wl-prv-a", "rtb-wl-prv-b"]
+      isolated = ["rtb-wl-iso-a", "rtb-wl-iso-b"]
+      tgw      = ["rtb-wl-tgw-a", "rtb-wl-tgw-b"]
+    }
   }
 }
 
@@ -77,6 +82,23 @@ run "composes_workload_edge_disabled" {
   assert {
     condition     = contains(module.account_baseline.ebs_encryption_regions, "eu-west-2")
     error_message = "account_baseline must enforce EBS encryption in the enabled region"
+  }
+
+  # Spoke routing: the private tier default-routes (0.0.0.0/0) to the shared
+  # TGW; the isolated tier gets no TGW route.
+  assert {
+    condition = (
+      keys(output.tgw_routes) == ["private"] &&
+      output.tgw_routes["private"][0].destination_cidr_block == "0.0.0.0/0" &&
+      output.tgw_routes["private"][0].transit_gateway_id == var.tgw_id
+    )
+    error_message = "spoke private tier must route 0.0.0.0/0 to the shared transit gateway"
+  }
+
+  # Name is derived, not hard-coded (legacy "workload" when environment is unset).
+  assert {
+    condition     = output.name == "workload" && aws_ec2_transit_gateway_vpc_attachment.spoke.tags["Name"] == "workload-spoke"
+    error_message = "with no environment/name the legacy workload name must be kept"
   }
 
   # spoke vpc id surfaces through the stage output (wiring proof).

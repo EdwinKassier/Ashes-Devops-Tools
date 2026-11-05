@@ -17,3 +17,18 @@ output "workload_role_arns" {
   description = "Map of workload IAM role name to role ARN."
   value       = module.iam_role.role_arns
 }
+
+output "route_table_ids_by_tier" {
+  description = "Map of spoke subnet tier to its per-AZ route table IDs (owned by the vpc module)."
+  value       = module.vpc.route_table_ids_by_tier
+}
+
+output "tgw_routes" {
+  description = "The spoke routing contract handed to the vpc module: tier -> list of {destination_cidr_block, transit_gateway_id} routes to the shared transit gateway."
+  value       = local.spoke_routes
+}
+
+output "name" {
+  description = "The resolved spoke name (var.name, else workload-<environment>)."
+  value       = local.name
+}

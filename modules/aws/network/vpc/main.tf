@@ -3,9 +3,16 @@
 # Subnets are NOT enumerated by a fixed role list. Instead the caller describes
 # tiers in var.subnets (tier -> {newbits, number_offset, public}) and the module
 # builds one subnet per tier per AZ, carving CIDRs from the VPC supernet with
-# cidrsubnet(). This keeps the module composable: NAT/egress and firewall
-# subnets, route tables, and the transit gateway wiring are layered on by the
-# aws-network-hub STAGE, not by this leaf module.
+# cidrsubnet().
+#
+# Routing ownership: the module OWNS one route table per tier per AZ (keyed
+# "<tier>-<az_index>"), its subnet association, the optional internet gateway
+# (+ the public tiers' default route to it), and any caller-declared static
+# routes (var.routes, applied to every AZ table of a tier). Gateway endpoints
+# (S3/DynamoDB) are associated with the non-public tiers' route tables. Targets
+# the module does NOT own and that differ per AZ (e.g. stage-built NAT gateways)
+# are layered on by the caller as aws_route resources against the
+# route_table_ids_by_tier output, so route TABLES are never duplicated.
 #
 # IPAM vs cidrsubnet, resolved:
 #   When ipam_pool_id is set, the VPC's real CIDR is allocated by IPAM and is
@@ -35,6 +42,40 @@ locals {
       }
     }
   ]...)
+
+  # Route tables are keyed by AZ INDEX ("<tier>-<i>") rather than AZ name so the
+  # address is stable (and statically addressable by `moved` blocks) regardless
+  # of the caller's availability_zones list.
+  route_table_defs = {
+    for key, def in local.subnet_defs : "${def.tier}-${def.index}" => merge(def, { subnet_key = key })
+  }
+
+  public_tiers = [for tier, cfg in var.subnets : tier if try(cfg.public, false)]
+
+  # Tiers whose route tables receive the gateway endpoints: caller-chosen, or by
+  # default every non-public tier (private/isolated/tgw/...).
+  gateway_endpoint_tiers = var.gateway_endpoint_tiers != null ? var.gateway_endpoint_tiers : [
+    for tier, cfg in var.subnets : tier if !try(cfg.public, false)
+  ]
+
+  # Flatten (route table x caller route) into a map keyed
+  # "<tier>-<i>|<destination>". Keys use only plan-known values (tier, index,
+  # destination CIDR), so targets (e.g. a TGW id) may be apply-time unknown.
+  static_routes = merge([
+    for rt_key, def in local.route_table_defs : {
+      for r in lookup(var.routes, def.tier, []) :
+      "${rt_key}|${r.destination_cidr_block}" => merge(r, { rt_key = rt_key })
+    }
+  ]...)
+
+  # (endpoint x route table) associations, keyed "<service>|<tier>-<i>".
+  gateway_endpoint_associations = merge([
+    for svc in var.gateway_endpoints : {
+      for rt_key, def in local.route_table_defs :
+      "${svc}|${rt_key}" => { service = svc, rt_key = rt_key }
+      if contains(local.gateway_endpoint_tiers, def.tier)
+    }
+  ]...)
 }
 
 resource "aws_vpc" "this" {
@@ -49,7 +90,7 @@ resource "aws_vpc" "this" {
   enable_dns_support               = true
   enable_dns_hostnames             = true
 
-  tags = { Name = var.name }
+  tags = merge(var.tags, { Name = var.name })
 }
 
 resource "aws_subnet" "this" {
@@ -64,16 +105,18 @@ resource "aws_subnet" "this" {
   # leave this false, so only tiers the caller opts into as public get one.
   map_public_ip_on_launch = try(each.value.cfg.public, false) #tfsec:ignore:aws-ec2-no-public-ip-subnet - only tiers the caller explicitly opts into with public=true get a public IP; every other tier defaults to false
 
-  tags = {
+  tags = merge(var.tags, {
     Name = "${var.name}-${each.value.tier}-${each.value.az}"
     Tier = each.value.tier
-  }
+  })
 }
 
 # Restrict the default security group to deny all traffic (tfsec/CIS): declaring
 # the resource with no ingress/egress rules removes AWS's permissive defaults.
 resource "aws_default_security_group" "this" {
   vpc_id = aws_vpc.this.id
+
+  tags = merge(var.tags, { Name = "${var.name}-default-deny" })
 }
 
 # VPC flow logs to the central log archive (tfsec aws-ec2-require-vpc-flow-logs).
@@ -82,6 +125,8 @@ resource "aws_flow_log" "this" {
   log_destination_type = "s3"
   traffic_type         = "ALL"
   vpc_id               = aws_vpc.this.id
+
+  tags = merge(var.tags, { Name = "${var.name}-flow-log" })
 }
 
 # Gateway endpoints (S3, DynamoDB) keep that traffic on the AWS backbone.
@@ -91,4 +136,69 @@ resource "aws_vpc_endpoint" "gateway" {
   vpc_id            = aws_vpc.this.id
   service_name      = "com.amazonaws.${var.region}.${each.value}"
   vpc_endpoint_type = "Gateway"
+
+  tags = merge(var.tags, { Name = "${var.name}-${each.value}" })
+}
+
+resource "aws_vpc_endpoint_route_table_association" "gateway" {
+  for_each = local.gateway_endpoint_associations
+
+  vpc_endpoint_id = aws_vpc_endpoint.gateway[each.value.service].id
+  route_table_id  = aws_route_table.this[each.value.rt_key].id
+}
+
+# ---------------------------------------------------------------------------
+# Routing — one route table per tier per AZ
+# ---------------------------------------------------------------------------
+
+resource "aws_route_table" "this" {
+  for_each = local.route_table_defs
+
+  vpc_id = aws_vpc.this.id
+
+  tags = merge(var.tags, {
+    Name = "${var.name}-${each.value.tier}-${each.value.az}"
+    Tier = each.value.tier
+  })
+}
+
+resource "aws_route_table_association" "this" {
+  for_each = local.route_table_defs
+
+  subnet_id      = aws_subnet.this[each.value.subnet_key].id
+  route_table_id = aws_route_table.this[each.key].id
+}
+
+# Optional internet gateway. When created, every public tier's route table gets a
+# 0.0.0.0/0 default route to it (required for NAT gateways in a public tier).
+resource "aws_internet_gateway" "this" {
+  count = var.create_internet_gateway ? 1 : 0
+
+  vpc_id = aws_vpc.this.id
+
+  tags = merge(var.tags, { Name = var.name })
+}
+
+resource "aws_route" "public_internet" {
+  for_each = var.create_internet_gateway ? {
+    for rt_key, def in local.route_table_defs : rt_key => def if contains(local.public_tiers, def.tier)
+  } : {}
+
+  route_table_id         = aws_route_table.this[each.key].id
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id             = aws_internet_gateway.this[0].id
+}
+
+# Caller-declared static routes (var.routes), applied to every AZ table of a tier.
+resource "aws_route" "this" {
+  for_each = local.static_routes
+
+  route_table_id            = aws_route_table.this[each.value.rt_key].id
+  destination_cidr_block    = each.value.destination_cidr_block
+  transit_gateway_id        = each.value.transit_gateway_id
+  nat_gateway_id            = each.value.nat_gateway_id
+  gateway_id                = each.value.gateway_id
+  vpc_endpoint_id           = each.value.vpc_endpoint_id
+  network_interface_id      = each.value.network_interface_id
+  vpc_peering_connection_id = each.value.vpc_peering_connection_id
 }

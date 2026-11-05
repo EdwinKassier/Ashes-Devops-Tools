@@ -29,3 +29,8 @@ output "hub_dns_domain" {
   description = "DNS suffix served by the hub DNS project"
   value       = module.dns_hub_zone.dns_name
 }
+
+output "hierarchical_firewall_association_targets" {
+  description = "Folders the hub SSH/RDP-from-internet deny policy is associated with (shared + every environment folder)."
+  value       = local.firewall_association_targets
+}

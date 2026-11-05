@@ -45,5 +45,8 @@ module "vpc_service_controls" {
   egress_policies            = try(each.value.egress_policies, [])
   enable_dry_run             = try(each.value.enable_dry_run, false)
   enable_deletion_protection = try(each.value.enable_deletion_protection, true)
-}
 
+  dry_run_restricted_services = try(each.value.dry_run_restricted_services, null)
+  dry_run_ingress_policies    = try(each.value.dry_run_ingress_policies, null)
+  dry_run_egress_policies     = try(each.value.dry_run_egress_policies, null)
+}

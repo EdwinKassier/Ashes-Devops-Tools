@@ -15,10 +15,14 @@
 # See docs/architecture/gcp-state-decomposition.md.
 
 # Organization Module Mappings
-moved {
-  from = module.organization
-  to   = module.organization.module.organization
-}
+#
+# The former `moved { from = module.organization  to = module.organization.module.organization }`
+# was removed (2026-11-05 audit): `module.organization` is still declared (it is
+# now the organization STAGE), so Terraform rejects that block with "Moved object
+# still exists" and EVERY plan of this root failed. A legacy state whose root-level
+# module.organization was the iam/organization module needs a one-off
+#   terraform state mv module.organization.<addr> module.organization.module.organization.<addr>
+# per resource instead.
 
 moved {
   from = module.tags

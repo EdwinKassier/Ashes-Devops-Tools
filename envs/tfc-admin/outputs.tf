@@ -7,3 +7,31 @@ output "workspace_names" {
   description = "The set of managed workspace names."
   value       = sort(keys(module.workspace))
 }
+
+output "project_ids" {
+  description = "Map of project key (gcp, aws, saas, platform) to TFC project ID. Empty when enable_projects = false."
+  value       = { for k, p in tfe_project.this : k => p.id }
+}
+
+output "common_variable_set_id" {
+  description = "ID of the shared variable set attached to every managed workspace."
+  value       = tfe_variable_set.common.id
+}
+
+output "remote_state_consumers" {
+  description = "Remote-state sharing graph actually applied: producer workspace => consumer workspace names (tfc-admin added separately when *_outputs_from_tfc)."
+  value       = { for k, v in local.consumer_names : k => sort(v) if length(v) > 0 }
+}
+
+output "dynamic_credential_workspaces" {
+  description = "Workspaces that receive dynamic-credential env vars, by cloud."
+  value = {
+    gcp = sort(keys(local.gcp_credential_env))
+    aws = sort(keys(local.aws_credential_env))
+  }
+}
+
+output "policy_set_id" {
+  description = "ID of the OPA policy set, or null when enable_policy_sets = false."
+  value       = try(tfe_policy_set.opa[0].id, null)
+}

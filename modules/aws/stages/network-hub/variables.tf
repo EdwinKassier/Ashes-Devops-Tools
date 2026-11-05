@@ -148,3 +148,9 @@ variable "enable_network_access_analyzer" {
   type        = bool
   default     = false
 }
+
+variable "tags" {
+  description = "Tags applied to the stage's own taggable resources (NAT gateways, EIPs) and passed to the hub VPCs. Org-wide tags normally come from the provider default_tags; use this for stage-specific additions."
+  type        = map(string)
+  default     = {}
+}

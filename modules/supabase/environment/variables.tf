@@ -71,6 +71,16 @@ variable "db_schema" {
   description = "Comma-separated list of Postgres schemas exposed via the REST API."
   type        = string
   default     = "public,graphql_public"
+
+  validation {
+    # iac_vault holds the vault-secrets SECURITY DEFINER helpers; exposing it via
+    # PostgREST would let API keys reach them. vault holds the encrypted secrets.
+    condition = length(setintersection(
+      toset([for s in split(",", var.db_schema) : lower(trimspace(s))]),
+      toset(["iac_vault", "vault"]),
+    )) == 0
+    error_message = "db_schema must not expose the iac_vault or vault schemas via the REST API (they hold the Vault secrets and their privileged helpers)."
+  }
 }
 
 variable "db_extra_search_path" {
