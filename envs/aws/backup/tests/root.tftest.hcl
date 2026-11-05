@@ -12,6 +12,7 @@ mock_provider "aws" {}
 mock_provider "aws" { alias = "backup" }
 
 variables {
+  management_account_id    = "111111111111" # C4 account guard
   backup_role_arn          = "arn:aws:iam::111111111111:role/aws-backup-role"
   restore_testing_role_arn = "arn:aws:iam::444444444444:role/backup-restore-test"
 }

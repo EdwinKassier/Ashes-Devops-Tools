@@ -16,6 +16,7 @@
 mock_provider "aws" {}
 
 variables {
+  management_account_id   = "111111111111" # C4 account guard
   terraform_run_role_arn  = "arn:aws:iam::111111111111:role/tfc-run-role"
   break_glass_role_arn    = "arn:aws:iam::111111111111:role/break-glass"
   log_archive_bucket_name = "ashes-org-log-archive"

@@ -13,6 +13,7 @@ mock_provider "aws" { alias = "log_archive" }
 mock_provider "aws" { alias = "forensics" }
 
 variables {
+  management_account_id   = "111111111111" # C4 account guard
   log_archive_bucket_name = "ashes-org-log-archive"
   key_admin_arn           = "arn:aws:iam::111111111111:role/key-admin"
   config_role_arn         = "arn:aws:iam::222222222222:role/aws-config-recorder"

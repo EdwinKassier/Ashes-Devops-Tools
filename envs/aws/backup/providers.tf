@@ -7,6 +7,10 @@
 # remote state.
 provider "aws" {
   region = var.aws_region
+  # C4: fail fast if the resolved credentials are not the management (payer)
+  # account. The default provider owns the org BACKUP_POLICY; the backup account
+  # is reached via the aliased assume-role provider below.
+  allowed_account_ids = [var.management_account_id]
 }
 
 provider "aws" {
