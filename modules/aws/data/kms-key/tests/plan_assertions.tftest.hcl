@@ -55,6 +55,20 @@ run "key_and_policy_configured" {
     error_message = "CloudTrail grant must include the EncryptionContext condition"
   }
 
+  # Structural (M6): the CloudTrail grant statement itself (Sid Allow-cloudtrail-*)
+  # carries aws:SourceOrgID = org_id AND the EncryptionContext condition — not just
+  # the strings appearing somewhere in the document. Catches a refactor that moves
+  # either condition onto the wrong statement.
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_kms_key_policy.this.policy).Statement :
+      can(regex("cloudtrail", s.Sid))
+      && try(s.Condition.StringEquals["aws:SourceOrgID"], null) == var.org_id
+      && can(regex("kms:EncryptionContext:aws:cloudtrail:arn", jsonencode(s.Condition)))
+    ])
+    error_message = "the CloudTrail grant statement must carry aws:SourceOrgID = org_id and the CloudTrail EncryptionContext condition"
+  }
+
   # ViaService must be ABSENT — it is never applied to the default (log-service
   # only) configuration, and would deny CloudTrail delivery if present.
   assert {
@@ -89,6 +103,15 @@ run "service_principals_grant_present" {
   assert {
     condition     = can(regex("aws:SourceOrgID", aws_kms_key_policy.this.policy))
     error_message = "The ServiceUsage grant must be scoped by aws:SourceOrgID"
+  }
+
+  # Structural (M6): the SourceOrgID scope is on the ServiceUsage statement itself.
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_kms_key_policy.this.policy).Statement :
+      s.Sid == "ServiceUsage" && try(s.Condition.StringEquals["aws:SourceOrgID"], null) == var.org_id
+    ])
+    error_message = "the ServiceUsage statement must carry aws:SourceOrgID = org_id"
   }
 
   # No CloudTrail log-service grant means no EncryptionContext condition.

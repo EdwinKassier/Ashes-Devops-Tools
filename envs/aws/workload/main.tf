@@ -21,6 +21,22 @@ data "terraform_remote_state" "aws_network" {
   }
 }
 
+data "terraform_remote_state" "aws_security" {
+  backend = "cloud"
+  config = {
+    organization = var.tfc_organization
+    workspaces   = { name = var.security_workspace_name }
+  }
+}
+
+locals {
+  # Source the central log-archive bucket name from aws-security (its owner), so a
+  # rename/rotation there cannot silently leave this workload writing flow logs,
+  # Config snapshots and Session Manager logs to a stale bucket (audit M7).
+  # var.log_archive_bucket_name, if set, overrides for out-of-band setups.
+  log_archive_bucket_name = coalesce(var.log_archive_bucket_name, data.terraform_remote_state.aws_security.outputs.log_archive_bucket_name)
+}
+
 module "aws_workload" {
   source = "../../../modules/aws/stages/workload"
 
@@ -40,8 +56,8 @@ module "aws_workload" {
 
   # Flow logs + Config snapshots + Session Manager logs all land in the central
   # log-archive bucket (cross-root naming contract).
-  flow_log_destination_arn = "arn:aws:s3:::${var.log_archive_bucket_name}"
-  log_archive_bucket_name  = var.log_archive_bucket_name
+  flow_log_destination_arn = "arn:aws:s3:::${local.log_archive_bucket_name}"
+  log_archive_bucket_name  = local.log_archive_bucket_name
   config_role_arn          = var.config_role_arn
   kms_key_arn              = var.kms_key_arn
 

@@ -7,6 +7,11 @@ output "log_archive_bucket_arn" {
   value       = module.aws_security.log_archive_bucket_arn
 }
 
+output "log_archive_bucket_name" {
+  description = "Name of the central log-archive bucket. Consumed by aws-workload for flow logs / Config / Session Manager delivery (audit M7), so a rename here does not silently break downstream logging."
+  value       = module.aws_security.log_archive_bucket_name
+}
+
 output "log_cmk_arn" {
   description = "ARN of the log-archive customer-managed KMS key."
   value       = module.aws_security.log_cmk_arn

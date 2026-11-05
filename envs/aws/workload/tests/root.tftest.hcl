@@ -12,7 +12,7 @@ mock_provider "aws" { alias = "us_east_1" }
 
 variables {
   workload_account_key    = "workload_dev"
-  log_archive_bucket_name = "ashes-org-log-archive"
+  log_archive_bucket_name = null # sourced from the aws-security remote state (audit M7)
   config_role_arn         = "arn:aws:iam::222222222222:role/config-recorder"
   kms_key_arn             = "arn:aws:kms:eu-west-2:222222222222:key/abcd-1234"
 }
@@ -39,6 +39,22 @@ run "consumes_remote_state_contracts" {
         ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" }
       }
     }
+  }
+
+  override_data {
+    target = data.terraform_remote_state.aws_security
+    values = {
+      outputs = {
+        log_archive_bucket_name = "ashes-org-log-archive"
+      }
+    }
+  }
+
+  # M7: with var.log_archive_bucket_name = null, the central bucket name is sourced
+  # from the aws-security remote state (its owner), not a hand-typed string.
+  assert {
+    condition     = data.terraform_remote_state.aws_security.outputs.log_archive_bucket_name == "ashes-org-log-archive"
+    error_message = "aws_security must expose log_archive_bucket_name for aws-workload to consume"
   }
 
   # The workload-account role the providers assume is readable from the org contract.

@@ -72,13 +72,20 @@ variable "vpc_cidr" {
 # -----------------------------------------------------------------------------
 
 variable "log_archive_bucket_name" {
-  description = "Deterministic name of the central log-archive bucket that receives this workload's VPC flow logs, Config snapshots/history, and Session Manager session logs. Cross-root naming contract: it MUST match the name the aws-organization and aws-network roots use."
+  description = "Name of the central log-archive bucket (receives this workload's VPC flow logs, Config snapshots/history, and Session Manager logs). Default null sources it from the aws-security root's remote state (its owner — see audit M7), so a rename there flows through automatically. Set a value only to override for an out-of-band setup."
   type        = string
+  default     = null
 
   validation {
-    condition     = length(trimspace(var.log_archive_bucket_name)) > 0
-    error_message = "log_archive_bucket_name must be a non-empty S3 bucket name."
+    condition     = var.log_archive_bucket_name == null || length(trimspace(coalesce(var.log_archive_bucket_name, " "))) > 0
+    error_message = "log_archive_bucket_name must be null (source from aws-security) or a non-empty S3 bucket name."
   }
+}
+
+variable "security_workspace_name" {
+  description = "Name of the aws-security TFC workspace, read via remote state for the central log-archive bucket name (audit M7)."
+  type        = string
+  default     = "aws-security"
 }
 
 variable "config_role_arn" {
