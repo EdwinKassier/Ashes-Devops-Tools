@@ -1,5 +1,5 @@
 /**
- * # gcp/project
+ * ## Overview
  *
  * The single GCP **project primitive** for the landing zone (Cloud Foundation
  * Fabric `project`-module style). Every stage that creates a project —
