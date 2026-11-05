@@ -30,9 +30,10 @@ locals {
   # material is ever embedded in the task definition or Terraform state.
   container_definitions = [
     {
-      name        = local.container_name
-      image       = var.container_image
-      essential   = true
+      name      = local.container_name
+      image     = var.container_image
+      essential = true
+
       portMappings = [
         {
           containerPort = var.container_port

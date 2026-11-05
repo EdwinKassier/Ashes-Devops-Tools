@@ -2,7 +2,6 @@
 # All runs use mock_provider so no GCP credentials are required.
 
 mock_provider "google" {}
-mock_provider "google-beta" {}
 
 variables {
   project_id            = "mock-project-id"
@@ -14,7 +13,7 @@ variables {
 
 # ── var.project_id ────────────────────────────────────────────────────────────
 run "valid_project_id_accepted" {
-  command   = plan
+  command = plan
   variables { project_id = "my-project-id" }
 }
 

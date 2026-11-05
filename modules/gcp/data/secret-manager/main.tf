@@ -80,10 +80,12 @@ resource "google_secret_manager_secret" "this" {
 
 # Optional initial secret versions — created ONLY for names present in secret_values.
 resource "google_secret_manager_secret_version" "this" {
-  for_each = var.secret_values
+  # for_each cannot take a sensitive value; iterate the (non-secret) names and
+  # look the sensitive value up by key so only secret_data stays sensitive.
+  for_each = nonsensitive(toset(keys(var.secret_values)))
 
   secret      = google_secret_manager_secret.this[each.key].id
-  secret_data = each.value
+  secret_data = var.secret_values[each.key]
 }
 
 # Per-secret accessor bindings (roles/secretmanager.secretAccessor).

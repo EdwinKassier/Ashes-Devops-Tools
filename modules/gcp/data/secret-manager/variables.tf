@@ -52,9 +52,9 @@ variable "secret_values" {
     band (console, CI with a privileged SA, or `gcloud secrets versions add`) to keep
     plaintext out of Terraform state. Every key must also exist in var.secrets.
   EOT
-  type      = map(string)
-  default   = {}
-  sensitive = true
+  type        = map(string)
+  default     = {}
+  sensitive   = true
 
   validation {
     condition = alltrue([
@@ -71,8 +71,8 @@ variable "secret_accessors" {
     on that secret (e.g. "serviceAccount:app@project.iam.gserviceaccount.com"). Every key
     must also exist in var.secrets.
   EOT
-  type    = map(list(string))
-  default = {}
+  type        = map(list(string))
+  default     = {}
 
   validation {
     condition = alltrue([
@@ -92,6 +92,6 @@ variable "enable_deletion_protection" {
     remove protected secrets, first run:
       terraform state rm 'module.<name>.terraform_data.deletion_protection_guard'
   EOT
-  type    = bool
-  default = true
+  type        = bool
+  default     = true
 }

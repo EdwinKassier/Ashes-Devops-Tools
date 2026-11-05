@@ -3,7 +3,6 @@
 # attributes and that the unauthenticated binding is created only on opt-in.
 
 mock_provider "google" {}
-mock_provider "google-beta" {}
 
 variables {
   project_id            = "mock-project-id"
@@ -58,8 +57,12 @@ run "service_plans_with_secure_defaults" {
   }
 
   # Secret env var must be wired via secret_key_ref, never a plaintext value.
+  # env is a TypeSet, so iterate rather than index.
   assert {
-    condition     = google_cloud_run_v2_service.this.template[0].containers[0].env[0].value_source[0].secret_key_ref[0].secret == "database-url"
+    condition = anytrue([
+      for e in google_cloud_run_v2_service.this.template[0].containers[0].env :
+      try(e.value_source[0].secret_key_ref[0].secret == "database-url", false)
+    ])
     error_message = "secret env var must reference the Secret Manager secret via secret_key_ref."
   }
 

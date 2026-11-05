@@ -102,7 +102,12 @@ run "public_endpoint_with_authorized_networks" {
   }
 
   assert {
-    condition     = google_container_cluster.this.master_authorized_networks_config[0].cidr_blocks[0].cidr_block == "10.0.0.0/8"
+    condition     = length(google_container_cluster.this.master_authorized_networks_config[0].cidr_blocks) == 1
+    error_message = "One authorized-network CIDR block must be planned."
+  }
+
+  assert {
+    condition     = contains([for b in google_container_cluster.this.master_authorized_networks_config[0].cidr_blocks : b.cidr_block], "10.0.0.0/8")
     error_message = "Authorized network CIDR must be wired into master_authorized_networks_config."
   }
 }

@@ -95,8 +95,8 @@ run "load_balancer_and_autoscaling_enabled" {
   command = plan
 
   variables {
-    target_group_arn   = "arn:aws:elasticloadbalancing:eu-west-2:123456789012:targetgroup/orders/abc123"
-    enable_autoscaling = true
+    target_group_arn         = "arn:aws:elasticloadbalancing:eu-west-2:123456789012:targetgroup/orders/abc123"
+    enable_autoscaling       = true
     autoscaling_max_capacity = 12
   }
 

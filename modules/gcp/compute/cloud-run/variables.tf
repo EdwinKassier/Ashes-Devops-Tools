@@ -205,8 +205,8 @@ variable "enable_unauthenticated" {
     invokable without authentication. Defaults to false — the service is private and
     only callable by principals with an explicit invoker binding.
   EOT
-  type    = bool
-  default = false
+  type        = bool
+  default     = false
 }
 
 # -----------------------------------------------------------------------------
@@ -219,6 +219,6 @@ variable "enable_deletion_protection" {
     resource's deletion_protection attribute. Defaults to true; set to false to allow
     `terraform destroy` to remove the service.
   EOT
-  type    = bool
-  default = true
+  type        = bool
+  default     = true
 }
