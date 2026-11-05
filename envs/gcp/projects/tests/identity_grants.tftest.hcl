@@ -103,3 +103,23 @@ run "pre_c2_bootstrap_state_plans_without_grants" {
     error_message = "A bootstrap state without the C2 outputs must plan cleanly with no automation grants."
   }
 }
+
+# "shared" is reserved for the hub/DNS projects; an environment with that key
+# would silently replace them via merge().
+run "rejects_reserved_shared_environment_key" {
+  command = plan
+
+  variables {
+    environments = {
+      shared = {
+        display_name            = "Shared"
+        cidr_block              = "10.99.0.0/16"
+        region                  = "europe-west1"
+        budget_monthly_limit    = 100
+        iam_group_role_bindings = {}
+      }
+    }
+  }
+
+  expect_failures = [var.environments]
+}

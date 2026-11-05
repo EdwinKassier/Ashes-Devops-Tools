@@ -25,6 +25,15 @@ variable "environments" {
     labels                  = optional(map(string), {})
   }))
 
+  # Environment keys become project/workspace keys (e.g. "<env>-host",
+  # "gcp-workload-<env>"). "shared" is reserved for the hub/DNS projects: a
+  # right-wins merge() would silently replace them with an environment named
+  # "shared". Keys must also be a valid lowercase token.
+  validation {
+    condition     = alltrue([for k in keys(var.environments) : k != "shared" && can(regex("^[a-z][a-z0-9-]{0,14}$", k))])
+    error_message = "environments keys must be lowercase tokens (^[a-z][a-z0-9-]{0,14}$) and must not be the reserved key \"shared\"."
+  }
+
   validation {
     condition     = alltrue([for e in values(var.environments) : can(cidrnetmask(e.cidr_block))])
     error_message = "Each environment's cidr_block must be valid CIDR notation, e.g. 10.10.0.0/16. Keep the environments map identical across the GCP roots."
