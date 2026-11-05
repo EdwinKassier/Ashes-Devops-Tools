@@ -67,7 +67,7 @@ Full rationale, root inventory, and the any-combination matrix: [`docs/architect
 | Tool | Required version |
 |------|-----------------|
 | Terraform | `~> 1.9` (uses `mock_provider`, `override_module`, `terraform_data`) |
-| google / google-beta | `>= 6.0, < 8.0` (spans the in-progress 6→7 migration; locks are on 7.x, CI green. Finish the migration + tighten to `~> 7.0` as a follow-up.) |
+| google / google-beta | `~> 7.0` (6→7 migration complete; locks on 7.x, CI green — audit L4) |
 | hashicorp/aws | `>= 6.46.0, < 7.0.0` (floored pin — deliberate, not `~> 6.0`) |
 | supabase/supabase | `~> 1.0` |
 | vercel/vercel | `~> 4.0` |

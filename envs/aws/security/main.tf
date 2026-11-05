@@ -49,8 +49,13 @@ module "aws_security" {
   notification_subscribers  = var.notification_subscribers
   enabled_security_services = var.enabled_security_services
   enable_security_lake      = var.enable_security_lake
-  enable_incident_response  = var.enable_incident_response
-  enable_service_quotas     = var.enable_service_quotas
+
+  # FinOps F5: cost toggles for the two most expensive always-on security
+  # services. Default true (full coverage); set false for non-prod.
+  config_record_all_supported             = var.config_record_all_supported
+  guardduty_enable_ebs_malware_protection = var.guardduty_enable_ebs_malware_protection
+  enable_incident_response                = var.enable_incident_response
+  enable_service_quotas                   = var.enable_service_quotas
 
   # Audit A3/A4: CloudTrail CloudWatch Logs + CIS control-plane alarms (opt-in).
   enable_cloudwatch_logs         = var.enable_cloudwatch_logs

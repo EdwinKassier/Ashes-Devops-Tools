@@ -59,12 +59,12 @@ presets in [`examples/presets/`](../../examples/presets/):
 - Network: `nonprod-aws-network.tfvars` (`az_count = 1`, `enable_network_firewall = false`).
 - Security: `nonprod-aws-security.tfvars` (`enable_security_lake = false`, `enabled_security_services = []`).
 
-Deeper cuts that are currently module-level overrides (surface them at the root
-if you need them routinely):
+Deeper cuts, now exposed as `envs/aws/security` root variables (FinOps F5):
 
-- `record_all_supported = false` in `modules/aws/security/config-org` (Config is
-  the most expensive in record-all mode).
-- `enable_ebs_malware_protection = false` in `modules/aws/security/guardduty-org`.
+- `config_record_all_supported = false` — Config is most expensive in record-all mode.
+- `guardduty_enable_ebs_malware_protection = false` — agentless EBS malware scanning.
+
+Both are in `examples/presets/nonprod-aws-security.tfvars`.
 
 Keep the full posture for production. See the cost model in
 [`docs/audit/2026-11-04-finops-deep-dive.md`](../audit/2026-11-04-finops-deep-dive.md).

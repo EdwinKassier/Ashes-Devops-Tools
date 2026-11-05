@@ -126,6 +126,9 @@ module "config" {
   recorder_only       = false
   # Record global resource types in the home Region only, not once per Region.
   home_region = var.aws_region
+  # F5: record ALL supported resource types (default true, the full-coverage but
+  # most expensive Config mode). Set false for cost-sensitive non-prod.
+  record_all_supported = var.config_record_all_supported
 }
 
 # ---------------------------------------------------------------------------
@@ -141,6 +144,9 @@ module "guardduty" {
 
   aws_enabled_regions         = var.aws_enabled_regions
   security_tooling_account_id = var.security_tooling_account_id
+  # F5: agentless EBS malware scanning (default true, billed per GB scanned). Set
+  # false for non-prod where it is not required.
+  enable_ebs_malware_protection = var.guardduty_enable_ebs_malware_protection
 }
 
 # ---------------------------------------------------------------------------
