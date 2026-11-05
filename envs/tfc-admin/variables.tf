@@ -48,3 +48,34 @@ variable "common_workspace_variables" {
   }))
   default = {}
 }
+
+variable "control_plane_notifications" {
+  description = <<-EOT
+    Run notifications applied to every control-plane and bootstrap workspace
+    (audit M-ops). Default empty. Set a Slack or generic webhook to be alerted when
+    a foundational apply fails or needs attention. Entry shape matches
+    modules/tfc/workspace var.notifications.
+  EOT
+  type = map(object({
+    destination_type = string
+    url              = optional(string)
+    token            = optional(string)
+    email_user_ids   = optional(list(string), [])
+    triggers         = optional(list(string), ["run:errored", "run:needs_attention"])
+    enabled          = optional(bool, true)
+  }))
+  default = {}
+}
+
+variable "workload_notifications" {
+  description = "Run notifications applied to every workload workspace. Default empty, so workloads do not page the control-plane channel unless opted in. Same entry shape as control_plane_notifications."
+  type = map(object({
+    destination_type = string
+    url              = optional(string)
+    token            = optional(string)
+    email_user_ids   = optional(list(string), [])
+    triggers         = optional(list(string), ["run:errored", "run:needs_attention"])
+    enabled          = optional(bool, true)
+  }))
+  default = {}
+}

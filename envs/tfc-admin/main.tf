@@ -71,4 +71,8 @@ module "workspace" {
     { tfc_organization = { value = var.tfc_organization, category = "terraform" } },
     var.common_workspace_variables,
   )
+
+  # Control-plane and bootstrap workspaces alert on failed runs (audit M-ops);
+  # workload workspaces use the separate workload channel (both default empty).
+  notifications = (contains(each.value.tags, "layer:control-plane") || contains(each.value.tags, "layer:bootstrap")) ? var.control_plane_notifications : var.workload_notifications
 }

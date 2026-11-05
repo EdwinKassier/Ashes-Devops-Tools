@@ -97,3 +97,48 @@ variable "variables" {
     error_message = "Each variable's category must be 'terraform' or 'env'."
   }
 }
+
+variable "notifications" {
+  description = <<-EOT
+    Run notifications for this workspace, keyed by name. Default empty. Use this to
+    alert on failed control-plane runs (audit M-ops): a failed apply on a
+    foundational workspace is a control-plane event that should page someone.
+
+    Per entry:
+      destination_type  generic | slack | microsoft-teams | email.
+      url               webhook URL (required for non-email destinations).
+      token             optional HMAC token for a generic webhook.
+      email_user_ids    TFC user IDs to email (email destination only).
+      triggers          run events to notify on; default is a failed run plus a
+                        run that needs attention (manual apply waiting).
+      enabled           default true.
+  EOT
+  type = map(object({
+    destination_type = string
+    url              = optional(string)
+    token            = optional(string)
+    email_user_ids   = optional(list(string), [])
+    triggers         = optional(list(string), ["run:errored", "run:needs_attention"])
+    enabled          = optional(bool, true)
+  }))
+  default = {}
+
+  validation {
+    condition     = alltrue([for n in values(var.notifications) : contains(["generic", "slack", "microsoft-teams", "email"], n.destination_type)])
+    error_message = "Each notification destination_type must be generic, slack, microsoft-teams, or email."
+  }
+
+  validation {
+    condition     = alltrue([for n in values(var.notifications) : n.destination_type == "email" || try(length(n.url) > 0, false)])
+    error_message = "A non-email notification must set a webhook url."
+  }
+
+  validation {
+    condition = alltrue([
+      for n in values(var.notifications) : alltrue([
+        for t in n.triggers : contains(["run:created", "run:planning", "run:needs_attention", "run:applying", "run:completed", "run:errored"], t)
+      ])
+    ])
+    error_message = "Each trigger must be a valid TFC run trigger (run:created, run:planning, run:needs_attention, run:applying, run:completed, run:errored)."
+  }
+}

@@ -1,0 +1,118 @@
+# control-plane
+
+Control-plane observability for the landing zone itself (audit M-ops). Alerts when
+the guardrails that protect the organization change, and optionally when the
+audit-log export pipeline fails.
+
+## What it watches
+
+Default watches, each a log-match alert on Admin Activity audit logs:
+
+- Organization policy changes (`orgpolicy.googleapis.com`).
+- Organization or folder IAM policy changes (`SetIamPolicy`).
+- VPC Service Controls perimeter changes (`accesscontextmanager.googleapis.com`).
+- Audit logging configuration changes (`auditConfigDeltas`).
+- Logging sink updates or deletes.
+
+Plus, optionally, an alert when the audit-log export sink reports delivery errors
+(`logging.googleapis.com/exports/error_count`), which signals a stalled audit
+pipeline.
+
+Terraform Cloud run-failure alerting (a failed apply) is configured separately on
+each workspace via `modules/tfc/workspace`.
+
+## Admin control
+
+- `enable = false` makes the module a no-op.
+- `watches` is a map with a full default set. Remove an entry to stop watching it,
+  change a `filter`, or add your own watches. Replacing the map replaces the set.
+- Channels are yours: `notification_email_addresses`, `notification_webhook_urls`
+  (Slack or generic), and `extra_notification_channel_ids` for pre-existing ones.
+- `enable_log_export_error_alert` toggles the audit-sink error alert.
+
+## Where to apply it
+
+Apply in the project that receives the aggregated organization Admin Activity audit
+logs (usually the org logging or audit project), so the filters have logs to match.
+
+## Usage
+
+```hcl
+module "control_plane_alerts" {
+  source                       = "../../modules/gcp/monitoring/control-plane"
+  project_id                   = local.audit_logs_project_id
+  notification_email_addresses = ["secops@example.com"]
+  notification_webhook_urls = {
+    slack-secops = "https://hooks.slack.com/services/..."
+  }
+  # watches defaults to the full control-plane set; override to customise.
+}
+```
+
+<!-- BEGIN_TF_DOCS -->
+
+
+## Usage
+
+Basic usage of this module is as follows:
+
+```hcl
+module "example" {
+	source = "<module-path>"
+
+	# Required variables
+	project_id = 
+	
+}
+```
+
+## Requirements
+
+| Name | Version |
+|------|---------|
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
+
+## Providers
+
+| Name | Version |
+|------|---------|
+| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
+
+
+
+## Resources
+
+The following resources are created:
+
+
+- resource.google_monitoring_alert_policy.log_export_error (modules/gcp/monitoring/control-plane/main.tf#L79)
+- resource.google_monitoring_alert_policy.watch (modules/gcp/monitoring/control-plane/main.tf#L47)
+- resource.google_monitoring_notification_channel.email (modules/gcp/monitoring/control-plane/main.tf#L23)
+- resource.google_monitoring_notification_channel.webhook (modules/gcp/monitoring/control-plane/main.tf#L33)
+
+
+## Inputs
+
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project that holds the alert policies and notification channels. Use the project that receives the aggregated org Admin Activity audit logs, so the watch filters have logs to match. | `string` | n/a | yes |
+| <a name="input_alert_display_name_prefix"></a> [alert\_display\_name\_prefix](#input\_alert\_display\_name\_prefix) | Prefix prepended to every alert policy display name, e.g. "Control plane: ". | `string` | `"Control plane: "` | no |
+| <a name="input_enable"></a> [enable](#input\_enable) | Master gate. When false the module creates nothing (no channels, no alert policies). | `bool` | `true` | no |
+| <a name="input_enable_log_export_error_alert"></a> [enable\_log\_export\_error\_alert](#input\_enable\_log\_export\_error\_alert) | Also alert when the audit-log export sink reports delivery errors (a stalled audit pipeline). Requires the logging\_sink metric to exist in project\_id. | `bool` | `true` | no |
+| <a name="input_extra_notification_channel_ids"></a> [extra\_notification\_channel\_ids](#input\_extra\_notification\_channel\_ids) | IDs of pre-existing notification channels to attach to every alert, in addition to the channels this module creates. | `list(string)` | `[]` | no |
+| <a name="input_labels"></a> [labels](#input\_labels) | User labels applied to the notification channels. | `map(string)` | `{}` | no |
+| <a name="input_notification_email_addresses"></a> [notification\_email\_addresses](#input\_notification\_email\_addresses) | Email addresses to notify. Each becomes an email notification channel attached to every alert. | `list(string)` | `[]` | no |
+| <a name="input_notification_rate_limit_seconds"></a> [notification\_rate\_limit\_seconds](#input\_notification\_rate\_limit\_seconds) | Minimum seconds between notifications for a single watch, so a burst of matching entries does not flood the channel. | `number` | `300` | no |
+| <a name="input_notification_webhook_urls"></a> [notification\_webhook\_urls](#input\_notification\_webhook\_urls) | Map of label to webhook URL (e.g. Slack) to notify, in addition to email. Marked sensitive because URLs can embed tokens. | `map(string)` | `{}` | no |
+| <a name="input_watches"></a> [watches](#input\_watches) | Guardrail-mutation watches, keyed by a short name. Each creates one log-match<br/>alert policy: a matching Admin Activity audit-log entry fires the alert. The<br/>default set covers the landing zone's control plane (org policy, org/folder<br/>IAM, VPC Service Controls, audit config, and logging sinks). Admins have full<br/>control: remove entries to stop watching them, change a filter, or add custom<br/>watches. Each entry sets display\_name, filter, optional severity (defaults to<br/>WARNING), and optional documentation. | <pre>map(object({<br/>    display_name  = string<br/>    filter        = string<br/>    severity      = optional(string, "WARNING")<br/>    documentation = optional(string)<br/>  }))</pre> | <pre>{<br/>  "audit_config_change": {<br/>    "display_name": "Audit logging configuration changed",<br/>    "filter": "protoPayload.methodName=\"SetIamPolicy\" AND protoPayload.serviceData.policyDelta.auditConfigDeltas:*",<br/>    "severity": "ERROR"<br/>  },<br/>  "log_sink_change": {<br/>    "display_name": "Logging sink updated or deleted",<br/>    "filter": "protoPayload.serviceName=\"logging.googleapis.com\" AND protoPayload.methodName:(\"DeleteSink\" OR \"UpdateSink\")",<br/>    "severity": "WARNING"<br/>  },<br/>  "org_iam_change": {<br/>    "display_name": "Organization or folder IAM policy changed",<br/>    "filter": "protoPayload.methodName=\"SetIamPolicy\" AND (resource.type=\"organization\" OR resource.type=\"folder\")",<br/>    "severity": "ERROR"<br/>  },<br/>  "org_policy_change": {<br/>    "display_name": "Organization policy changed",<br/>    "filter": "protoPayload.serviceName=\"orgpolicy.googleapis.com\" AND protoPayload.methodName:(\"SetOrgPolicy\" OR \"CreatePolicy\" OR \"UpdatePolicy\" OR \"DeletePolicy\")",<br/>    "severity": "ERROR"<br/>  },<br/>  "vpc_sc_change": {<br/>    "display_name": "VPC Service Controls perimeter changed",<br/>    "filter": "protoPayload.serviceName=\"accesscontextmanager.googleapis.com\" AND protoPayload.methodName:(\"Create\" OR \"Update\" OR \"Replace\" OR \"Delete\")",<br/>    "severity": "ERROR"<br/>  }<br/>}</pre> | no |
+
+## Outputs
+
+| Name | Description |
+|------|-------------|
+| <a name="output_log_export_error_alert_policy_id"></a> [log\_export\_error\_alert\_policy\_id](#output\_log\_export\_error\_alert\_policy\_id) | ID of the audit-sink export-error alert policy, or null when disabled. |
+| <a name="output_notification_channel_ids"></a> [notification\_channel\_ids](#output\_notification\_channel\_ids) | IDs of the notification channels this module created (email and webhook). |
+| <a name="output_watch_alert_policy_ids"></a> [watch\_alert\_policy\_ids](#output\_watch\_alert\_policy\_ids) | Map of watch name to the created alert policy ID. |
+| <a name="output_watched_names"></a> [watched\_names](#output\_watched\_names) | Names of the guardrail watches that are active. |
+<!-- END_TF_DOCS -->

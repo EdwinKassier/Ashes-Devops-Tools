@@ -35,3 +35,23 @@ run "rejects_invalid_variable_category" {
 run "accepts_valid_inputs" {
   command = plan
 }
+
+run "rejects_bad_notification_destination" {
+  command = plan
+  variables {
+    notifications = {
+      bad = { destination_type = "carrier-pigeon", url = "https://x" }
+    }
+  }
+  expect_failures = [var.notifications]
+}
+
+run "rejects_non_email_without_url" {
+  command = plan
+  variables {
+    notifications = {
+      webhook = { destination_type = "generic" }
+    }
+  }
+  expect_failures = [var.notifications]
+}

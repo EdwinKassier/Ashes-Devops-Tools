@@ -47,3 +47,29 @@ run "gcp_only_by_default" {
     error_message = "with enable_aws=false and no saas, only the GCP workspaces are declared."
   }
 }
+
+# Control-plane run notifications (audit M-ops): a configured control-plane
+# notification reaches foundational workspaces but not workload workspaces.
+run "control_plane_notifications_routed_by_tag" {
+  command = plan
+
+  variables {
+    enable_aws      = false
+    saas_workspaces = []
+    control_plane_notifications = {
+      cp-webhook = { destination_type = "generic", url = "https://example.com/hooks/ci" }
+    }
+  }
+
+  # A control-plane workspace (gcp-organization) gets the notification.
+  assert {
+    condition     = length(module.workspace["gcp-organization"].notification_ids) == 1
+    error_message = "control-plane workspaces must receive the control_plane_notifications."
+  }
+
+  # A workload workspace (gcp-workload-dev) does not, since workload_notifications is empty.
+  assert {
+    condition     = length(module.workspace["gcp-workload-dev"].notification_ids) == 0
+    error_message = "workload workspaces must not receive control-plane notifications unless opted in."
+  }
+}

@@ -42,3 +42,19 @@ resource "tfe_variable" "this" {
   sensitive    = try(each.value.sensitive, false)
   description  = try(each.value.description, null)
 }
+
+# Optional run notifications (audit M-ops): alert on failed or attention-needing
+# runs for this workspace. Default empty, so this is opt-in per workspace.
+resource "tfe_notification_configuration" "this" {
+  for_each = var.notifications
+
+  name             = each.key
+  workspace_id     = tfe_workspace.this.id
+  destination_type = each.value.destination_type
+  enabled          = each.value.enabled
+  triggers         = each.value.triggers
+
+  url            = each.value.destination_type == "email" ? null : each.value.url
+  token          = try(each.value.token, null)
+  email_user_ids = each.value.destination_type == "email" ? each.value.email_user_ids : null
+}

@@ -37,3 +37,37 @@ run "workspace_configured" {
     error_message = "variable categories must be wired through (terraform vs env)."
   }
 }
+
+# Opt-in run notifications (audit M-ops): default off, and a configured one wires
+# through to a tfe_notification_configuration with the failed-run triggers.
+run "notifications_default_off" {
+  command = plan
+
+  assert {
+    condition     = length(tfe_notification_configuration.this) == 0
+    error_message = "with no notifications declared, no notification configuration is created."
+  }
+}
+
+run "notifications_wire_through" {
+  command = plan
+
+  variables {
+    notifications = {
+      ci-webhook = {
+        destination_type = "generic"
+        url              = "https://example.com/hooks/ci"
+      }
+    }
+  }
+
+  assert {
+    condition     = length(tfe_notification_configuration.this) == 1
+    error_message = "one notification configuration must be created per entry."
+  }
+
+  assert {
+    condition     = contains(tfe_notification_configuration.this["ci-webhook"].triggers, "run:errored")
+    error_message = "the default triggers must include a failed run (run:errored)."
+  }
+}

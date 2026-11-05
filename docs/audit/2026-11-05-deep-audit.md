@@ -236,10 +236,11 @@ so `terraform test`, `checkov`, and `make docs-check` are the gate):
 | M-iac | Circular cross-root contract tests | Producer-side shape test binds `environment_config` keys at `gcp-projects`. |
 | M-sec | No GCP app-secret store | `modules/gcp/data/secret-manager`; the golden path reads secrets by reference. |
 | M-ops | No broken-apply recovery runbook | [apply-recovery.md](../runbooks/apply-recovery.md). |
+| M-obs | No observability of the control plane itself | `modules/gcp/monitoring/control-plane` alerts on guardrail mutations (org policy, org/folder IAM, VPC-SC, audit config, log sinks) and audit-sink export errors; `modules/tfc/workspace` adds opt-in run-failure notifications, routed to control-plane workspaces by the `tfc-admin` root. |
 
 Still open: **H9** (SaaS integration needs an architecture decision), **M3**
-(break-glass role management and alarm), control-plane self-observability, AWS and
-GKE delivery-pipeline parity, and CODEOWNERS (a repo-ownership change).
+(break-glass role management and alarm), AWS and GKE delivery-pipeline parity, and
+CODEOWNERS (a repo-ownership change).
 
 ---
 
