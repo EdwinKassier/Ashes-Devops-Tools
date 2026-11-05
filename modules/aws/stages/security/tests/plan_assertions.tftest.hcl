@@ -88,7 +88,13 @@ override_module {
 # AWS-side format validation under `command = apply` (e.g. patch-baseline IDs,
 # IAM role ARNs). They produce no cross-child or asserted outputs, so override
 # them out to keep the apply clean while still exercising their wiring.
-override_module { target = module.cloudtrail }
+override_module {
+  target = module.cloudtrail
+  outputs = {
+    cloudwatch_log_group_name = "/aws/cloudtrail/org-trail"
+    cis_alarm_sns_topic_arn   = "arn:aws:sns:eu-west-2:111111111111:org-trail-cis-alarms"
+  }
+}
 override_module { target = module.access_analyzer }
 override_module { target = module.delegated_admin }
 override_module { target = module.org_security_service }
@@ -98,6 +104,18 @@ override_module { target = module.incident_response }
 override_module { target = module.service_quotas }
 
 run "composes_security_baseline" {
+  # CIS section-4 alarms are on by default: the trail's log group and the
+  # alarm topic are surfaced as stage outputs.
+  assert {
+    condition     = output.cloudtrail_log_group_name == "/aws/cloudtrail/org-trail" && output.cis_alarm_sns_topic_arn == "arn:aws:sns:eu-west-2:111111111111:org-trail-cis-alarms"
+    error_message = "Stage must surface the CloudTrail log group and CIS alarm topic"
+  }
+
+  assert {
+    condition     = var.enable_cloudwatch_logs == true && var.cloudtrail_s3_data_events == "write"
+    error_message = "CIS 4.x alarms and S3 write data events (CIS 3.8) must be on by default"
+  }
+
   command = apply
 
   # GuardDuty detector map is keyed by the (plan-known) enabled Region.

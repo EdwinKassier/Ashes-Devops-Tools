@@ -25,4 +25,3 @@ module "dns" {
 
   records = try(each.value.records, [])
 }
-

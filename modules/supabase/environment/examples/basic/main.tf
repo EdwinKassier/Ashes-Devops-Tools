@@ -20,4 +20,3 @@ module "qa_environment" {
   password_min_length = 8     # lower bar for QA test accounts
   jwt_expiry          = 3600
 }
-

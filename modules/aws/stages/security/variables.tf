@@ -289,11 +289,11 @@ variable "identity_account_id" {
   default     = null
 }
 
-# --- Audit A3/A4: CloudTrail CloudWatch Logs + CIS alarms (opt-in, default off) ---
+# --- CloudTrail: CloudWatch Logs + CIS section-4 alarms, data events (CIS 3.8/3.9) ---
 variable "enable_cloudwatch_logs" {
-  description = "Attach a CloudWatch Logs group to the org trail + create CIS control-plane metric-filter alarms. Default false = S3-only (unchanged). PREVIEW: opt-in (default off), not yet validated against a real apply."
+  description = "Attach a CloudWatch Logs group to the org trail and create the full CIS AWS section-4 metric-filter alarm set (4.1-4.15) with a KMS-encrypted SNS topic, all in the management account. Self-sufficient: a logs-granted CMK is created when cloudwatch_logs_kms_key_arn is null. Default true; set false for S3-only delivery."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "cloudwatch_logs_retention_days" {
@@ -303,15 +303,53 @@ variable "cloudwatch_logs_retention_days" {
 }
 
 variable "cloudwatch_logs_kms_key_arn" {
-  description = "Optional CMK ARN for the CloudTrail CloudWatch Logs group; its policy must grant logs.<region>.amazonaws.com. Null = AWS-managed encryption."
+  description = "Optional existing CMK ARN (management account) for the CloudTrail CloudWatch Logs group and CIS alarm topic; its policy must grant logs.<region>.amazonaws.com and cloudwatch.amazonaws.com. Null (default) = a dedicated CMK is created."
   type        = string
   default     = null
 }
 
 variable "cloudtrail_alarm_sns_topic_arn" {
-  description = "Optional SNS topic ARN for the CIS control-plane alarms (enable_cloudwatch_logs). Null = alarms without a notification action."
+  description = "Optional existing SNS topic ARN for the CIS alarms. Null (default) = a KMS-encrypted topic is created and subscribed with cloudtrail_alarm_subscribers."
   type        = string
   default     = null
+}
+
+variable "cloudtrail_alarm_subscribers" {
+  description = "Subscribers of the CIS alarm topic. Null (default) = reuse notification_subscribers."
+  type = map(object({
+    protocol = string
+    endpoint = string
+  }))
+  default = null
+}
+
+variable "cloudtrail_cis_alarms_excluded" {
+  description = "CIS alarm keys to skip (see modules/aws/security/cloudtrail-org cis_alarms_excluded), e.g. [\"unauthorized-api-calls\"] if too noisy org-wide."
+  type        = list(string)
+  default     = []
+}
+
+variable "cloudtrail_s3_data_events" {
+  description = "S3 object-level data events on the org trail: none, write (CIS 3.8, default), read (CIS 3.9) or all. COST: billed per event across every org account."
+  type        = string
+  default     = "write"
+
+  validation {
+    condition     = contains(["none", "write", "read", "all"], var.cloudtrail_s3_data_events)
+    error_message = "cloudtrail_s3_data_events must be one of: none, write, read, all."
+  }
+}
+
+variable "cloudtrail_s3_data_events_excluded_bucket_arns" {
+  description = "Extra S3 bucket ARNs excluded from data events (the log-archive bucket is always excluded)."
+  type        = list(string)
+  default     = []
+}
+
+variable "cloudtrail_lambda_data_events" {
+  description = "Record Lambda Invoke data events on the org trail (default false; per-invocation cost)."
+  type        = bool
+  default     = false
 }
 
 # -----------------------------------------------------------------------------

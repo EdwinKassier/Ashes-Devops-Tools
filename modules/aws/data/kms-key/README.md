@@ -29,11 +29,11 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	alias = 
-	key_admin_arn = 
-	management_account_id = 
-	org_id = 
-	
+	alias =
+	key_admin_arn =
+	management_account_id =
+	org_id =
+
 }
 ```
 
@@ -41,7 +41,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.46.0, < 7.0.0 |
 
 ## Providers
@@ -73,7 +73,7 @@ The following resources are created:
 | <a name="input_deletion_window_in_days"></a> [deletion\_window\_in\_days](#input\_deletion\_window\_in\_days) | Waiting period, in days, before the CMK is deleted after scheduling deletion. AWS permits 7-30. | `number` | `30` | no |
 | <a name="input_enable_protection_tag"></a> [enable\_protection\_tag](#input\_enable\_protection\_tag) | Tag the key <protection\_tag\_key> = "true" so the organization deny-tamper SCP blocks ScheduleKeyDeletion/DisableKey/DisableKeyRotation and protection-tag removal except via break-glass. Default false; the security stage enables it for the log-archive, forensics and security-tooling keys. | `bool` | `false` | no |
 | <a name="input_key_user_arns"></a> [key\_user\_arns](#input\_key\_user\_arns) | Optional list of principal ARNs granted key USAGE (Encrypt/Decrypt/ReEncrypt/GenerateDataKey/DescribeKey) on the CMK. Kept separate from key\_admin\_arn, which receives management actions only. Empty by default (no general-usage statement). | `list(string)` | `[]` | no |
-| <a name="input_log_service_principals"></a> [log\_service\_principals](#input\_log\_service\_principals) | AWS log-delivery service principals granted GenerateDataKey/Decrypt/DescribeKey on the CMK, scoped by aws:SourceOrgID. CloudTrail additionally gets an EncryptionContext condition. | `list(string)` | <pre>[<br/>  "cloudtrail.amazonaws.com",<br/>  "config.amazonaws.com",<br/>  "securitylake.amazonaws.com"<br/>]</pre> | no |
+| <a name="input_log_service_principals"></a> [log\_service\_principals](#input\_log\_service\_principals) | AWS log-delivery service principals granted GenerateDataKey/Decrypt/DescribeKey on the CMK, scoped by aws:SourceOrgID. CloudTrail additionally gets an EncryptionContext condition. | `list(string)` | <pre>[<br/>  "cloudtrail.amazonaws.com",<br/>  "config.amazonaws.com",<br/>  "securitylake.amazonaws.com",<br/>  "delivery.logs.amazonaws.com"<br/>]</pre> | no |
 | <a name="input_protection_tag_key"></a> [protection\_tag\_key](#input\_protection\_tag\_key) | Tag key used when enable\_protection\_tag is true. Must match the organization-policy module's kms\_protection\_tag\_key. | `string` | `"protected"` | no |
 | <a name="input_service_principals"></a> [service\_principals](#input\_service\_principals) | Optional list of AWS service principals (e.g. sns.amazonaws.com, ssm.amazonaws.com, cloudwatch.amazonaws.com) granted general-usage (Encrypt/Decrypt/GenerateDataKey/etc.) on the CMK, scoped by aws:SourceOrgID so only calls originating within this org can use the key. Unlike log\_service\_principals these carry no CloudTrail EncryptionContext condition. Empty by default (no service-principal statement). | `list(string)` | `[]` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Additional tags applied to the CMK. | `map(string)` | `{}` | no |

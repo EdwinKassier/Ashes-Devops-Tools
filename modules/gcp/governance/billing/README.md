@@ -66,12 +66,12 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	billing_account = 
-	monthly_budget_limit = 
-	project_id = 
-	project_name = 
-	region = 
-	
+	billing_account =
+	monthly_budget_limit =
+	project_id =
+	project_name =
+	region =
+
 }
 ```
 
@@ -79,7 +79,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
 
 ## Providers

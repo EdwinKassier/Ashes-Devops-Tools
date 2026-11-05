@@ -2,8 +2,8 @@
 
 **When to use:** A subnet is exhausted (< 10% free IPs remaining), GKE secondary ranges need more space, or a new workload requires a larger address block.
 
-**Time:** 1–4 hours (primarily waiting for workload drain if resizing a subnet used by running VMs).  
-**Risk:** High — subnet recreation destroys and re-creates all resources in the subnet (VMs, Cloud SQL instances, PSA ranges). Plan carefully.  
+**Time:** 1–4 hours (primarily waiting for workload drain if resizing a subnet used by running VMs).
+**Risk:** High — subnet recreation destroys and re-creates all resources in the subnet (VMs, Cloud SQL instances, PSA ranges). Plan carefully.
 **Prerequisites:** `enable_deletion_protection` must be set to `false` (or the guard resource removed from state) before any subnet destruction.
 
 ---

@@ -78,3 +78,13 @@ run "unknown_kms_key_user_target_rejected" {
 
   expect_failures = [var.kms_key_user_arns]
 }
+
+run "invalid_cloudtrail_s3_data_events_rejected" {
+  command = plan
+
+  variables {
+    cloudtrail_s3_data_events = "objects"
+  }
+
+  expect_failures = [var.cloudtrail_s3_data_events]
+}

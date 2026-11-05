@@ -19,7 +19,7 @@ module "api_gateway" {
   region     = "us-central1"
 
   openapi_spec_path = "api-spec.yaml.tftpl"
-  
+
   managed_service_ids = {
     "users-service" = "https://users-run-service-url..."
     "auth-service"  = "https://auth-run-service-url..."
@@ -62,9 +62,9 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	project_id = 
-	service_account_email = 
-	
+	project_id =
+	service_account_email =
+
 }
 ```
 
@@ -72,7 +72,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | ~> 7.0 |
 

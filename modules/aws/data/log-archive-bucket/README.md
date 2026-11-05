@@ -35,10 +35,10 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	kms_key_arn = 
-	log_archive_bucket_name = 
-	org_id = 
-	
+	kms_key_arn =
+	log_archive_bucket_name =
+	org_id =
+
 }
 ```
 
@@ -46,7 +46,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.46.0, < 7.0.0 |
 
 ## Providers
@@ -62,14 +62,14 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_s3_bucket.this (modules/aws/data/log-archive-bucket/main.tf#L76)
-- resource.aws_s3_bucket_lifecycle_configuration.this (modules/aws/data/log-archive-bucket/main.tf#L143)
-- resource.aws_s3_bucket_logging.this (modules/aws/data/log-archive-bucket/main.tf#L114)
-- resource.aws_s3_bucket_object_lock_configuration.this (modules/aws/data/log-archive-bucket/main.tf#L132)
-- resource.aws_s3_bucket_policy.this (modules/aws/data/log-archive-bucket/main.tf#L170)
-- resource.aws_s3_bucket_public_access_block.this (modules/aws/data/log-archive-bucket/main.tf#L94)
-- resource.aws_s3_bucket_server_side_encryption_configuration.this (modules/aws/data/log-archive-bucket/main.tf#L120)
-- resource.aws_s3_bucket_versioning.this (modules/aws/data/log-archive-bucket/main.tf#L103)
+- resource.aws_s3_bucket.this (modules/aws/data/log-archive-bucket/main.tf#L101)
+- resource.aws_s3_bucket_lifecycle_configuration.this (modules/aws/data/log-archive-bucket/main.tf#L168)
+- resource.aws_s3_bucket_logging.this (modules/aws/data/log-archive-bucket/main.tf#L139)
+- resource.aws_s3_bucket_object_lock_configuration.this (modules/aws/data/log-archive-bucket/main.tf#L157)
+- resource.aws_s3_bucket_policy.this (modules/aws/data/log-archive-bucket/main.tf#L195)
+- resource.aws_s3_bucket_public_access_block.this (modules/aws/data/log-archive-bucket/main.tf#L119)
+- resource.aws_s3_bucket_server_side_encryption_configuration.this (modules/aws/data/log-archive-bucket/main.tf#L145)
+- resource.aws_s3_bucket_versioning.this (modules/aws/data/log-archive-bucket/main.tf#L128)
 
 
 ## Inputs

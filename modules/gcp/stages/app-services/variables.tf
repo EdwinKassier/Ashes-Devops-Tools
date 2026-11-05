@@ -96,6 +96,18 @@ variable "enable_project_services" {
   default     = true
 }
 
+variable "enable_vulnerability_scanning" {
+  description = "Scan every service's container images automatically on push (Artifact Analysis): enables containerscanning.googleapis.com (with enable_project_services) and sets each repository's vulnerability scanning to INHERITED. Billed per scanned image. Default true."
+  type        = bool
+  default     = true
+}
+
+variable "enable_on_demand_scanning" {
+  description = "Also enable ondemandscanning.googleapis.com so CI can scan images before pushing (`gcloud artifacts docker images scan`). Default false."
+  type        = bool
+  default     = false
+}
+
 variable "artifact_registry_kms_key_name" {
   description = "Optional CMEK (projects/<p>/locations/<l>/keyRings/<r>/cryptoKeys/<k>) for every service's Artifact Registry repository. Null uses Google-managed encryption. The Artifact Registry service agent needs roles/cloudkms.cryptoKeyEncrypterDecrypter on the key first."
   type        = string

@@ -1,11 +1,11 @@
 output "admin_project_id" {
   description = "Project ID of the admin project"
-  value       = google_project.admin_project.project_id
+  value       = module.admin_project.project_id
 }
 
 output "admin_project_number" {
   description = "Project Number of the admin project"
-  value       = google_project.admin_project.number
+  value       = module.admin_project.number
 }
 
 output "terraform_admin_email" {

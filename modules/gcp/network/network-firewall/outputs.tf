@@ -34,4 +34,4 @@ output "firewall_rule_creation_timestamp" {
 output "name" {
   description = "The name of the created firewall rule"
   value       = google_compute_firewall.firewall_rule.name
-} 
+}

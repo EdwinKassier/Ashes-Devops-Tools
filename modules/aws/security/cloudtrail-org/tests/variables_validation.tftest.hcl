@@ -26,3 +26,39 @@ run "empty_trail_name_rejected" {
 
   expect_failures = [var.trail_name]
 }
+
+run "invalid_s3_data_events_rejected" {
+  command = plan
+
+  variables {
+    log_archive_bucket        = "sra-log-archive-bucket"
+    kms_key_arn               = "arn:aws:kms:us-east-1:111111111111:key/00000000-0000-0000-0000-000000000000"
+    cloudtrail_s3_data_events = "everything"
+  }
+
+  expect_failures = [var.cloudtrail_s3_data_events]
+}
+
+run "unknown_cis_alarm_key_rejected" {
+  command = plan
+
+  variables {
+    log_archive_bucket  = "sra-log-archive-bucket"
+    kms_key_arn         = "arn:aws:kms:us-east-1:111111111111:key/00000000-0000-0000-0000-000000000000"
+    cis_alarms_excluded = ["not-a-cis-alarm"]
+  }
+
+  expect_failures = [var.cis_alarms_excluded]
+}
+
+run "invalid_retention_rejected" {
+  command = plan
+
+  variables {
+    log_archive_bucket             = "sra-log-archive-bucket"
+    kms_key_arn                    = "arn:aws:kms:us-east-1:111111111111:key/00000000-0000-0000-0000-000000000000"
+    cloudwatch_logs_retention_days = 42
+  }
+
+  expect_failures = [var.cloudwatch_logs_retention_days]
+}

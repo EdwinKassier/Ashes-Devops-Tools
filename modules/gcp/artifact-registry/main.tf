@@ -2,6 +2,10 @@
  * Artifact Registry Module
  * Creates repositories for storing container images and language packages.
  * Supports Docker, Python, npm, Maven, Go, and Apt formats.
+ *
+ * Vulnerability scanning (enable_vulnerability_scanning, default on) enables the
+ * Container Scanning API and sets DOCKER repositories to scan automatically on push
+ * (vulnerability_scanning_config = INHERITED, following the project setting).
  */
 
 locals {
@@ -13,6 +17,16 @@ locals {
     NPM    = "npm"
     PYTHON = "python"
   }
+}
+
+# Automatic scanning of pushed images is a project-level setting: the Container
+# Scanning API being enabled. INHERITED on a repository follows it.
+resource "google_project_service" "container_scanning" {
+  count = var.enable_vulnerability_scanning && var.enable_container_scanning_api ? 1 : 0
+
+  project            = var.project_id
+  service            = "containerscanning.googleapis.com"
+  disable_on_destroy = false
 }
 
 resource "google_artifact_registry_repository" "repo" {
@@ -65,6 +79,14 @@ resource "google_artifact_registry_repository" "repo" {
     }
   }
 
+  # Automatic vulnerability scanning (DOCKER only; other formats keep the API default).
+  dynamic "vulnerability_scanning_config" {
+    for_each = each.value.format == "DOCKER" ? [1] : []
+    content {
+      enablement_config = var.enable_vulnerability_scanning ? "INHERITED" : "DISABLED"
+    }
+  }
+
   # Maven-specific configuration (only for MAVEN format)
   dynamic "maven_config" {
     for_each = each.value.format == "MAVEN" ? [1] : []
@@ -82,4 +104,6 @@ resource "google_artifact_registry_repository" "repo" {
     },
     var.labels
   )
+
+  depends_on = [google_project_service.container_scanning]
 }

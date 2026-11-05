@@ -206,3 +206,37 @@ run "gke_autopilot_opt_in" {
     error_message = "enable_gke_autopilot must create one cluster named <env>-apps."
   }
 }
+
+# Artifact Registry images are vulnerability-scanned on push by default.
+run "registry_vulnerability_scanning_on_by_default" {
+  command = plan
+
+  variables {
+    services = { api = {} }
+  }
+
+  assert {
+    condition     = contains(keys(google_project_service.this), "containerscanning.googleapis.com") && !contains(keys(google_project_service.this), "ondemandscanning.googleapis.com")
+    error_message = "a declared service must enable the Container Scanning API (and not on-demand scanning) by default."
+  }
+
+  assert {
+    condition     = module.registry["api"].vulnerability_scanning_enabled
+    error_message = "the service repository must be configured for automatic vulnerability scanning."
+  }
+}
+
+run "registry_vulnerability_scanning_can_be_disabled" {
+  command = plan
+
+  variables {
+    services                      = { api = {} }
+    enable_vulnerability_scanning = false
+    enable_on_demand_scanning     = true
+  }
+
+  assert {
+    condition     = !contains(keys(google_project_service.this), "containerscanning.googleapis.com") && contains(keys(google_project_service.this), "ondemandscanning.googleapis.com") && !module.registry["api"].vulnerability_scanning_enabled
+    error_message = "enable_vulnerability_scanning = false must drop the Container Scanning API; enable_on_demand_scanning adds the On-Demand Scanning API."
+  }
+}

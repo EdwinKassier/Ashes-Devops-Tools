@@ -139,6 +139,12 @@ run "audit_sink_and_org_policies" {
     error_message = "strict folder policies must be planned for the prod folder."
   }
 
+  # CIS GCP 4.4: OS Login is required at the org node by default.
+  assert {
+    condition     = contains(module.organization.org_policy_constraints, "compute.requireOsLogin")
+    error_message = "the root must plan compute.requireOsLogin at the org node."
+  }
+
   assert {
     condition     = output.org_id == "111122223333"
     error_message = "org_id must be re-exported for downstream roots."
@@ -164,6 +170,11 @@ run "control_plane_alerting_present_by_default" {
   assert {
     condition     = length(output.control_plane_alert_policy_ids) >= 8
     error_message = "the root must expose the control-plane alert policy IDs."
+  }
+
+  assert {
+    condition     = length(module.organization.control_plane_cis_log_metric_names) == 8
+    error_message = "the root must plan the CIS GCP 2.4-2.11 log metrics by default."
   }
 }
 

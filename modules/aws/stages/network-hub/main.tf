@@ -301,6 +301,17 @@ module "network_firewall" {
   inspection_vpc_id       = module.inspection_vpc.vpc_id
   firewall_subnet_ids     = module.inspection_vpc.subnet_ids_by_tier["firewall"]
   log_bucket_name         = var.log_bucket_name
+  region                  = var.aws_region
+
+  # STRICT_ORDER baseline: AWS-managed threat groups, optional custom rules and
+  # egress allowlist, log-but-pass default until allow rules are in place.
+  # HOME_NET = the org supernet so rules match spoke traffic, not just the
+  # inspection VPC's own CIDR.
+  managed_rule_groups      = var.network_firewall_managed_rule_groups
+  stateful_default_actions = var.network_firewall_stateful_default_actions
+  egress_domain_allowlist  = var.network_firewall_egress_domain_allowlist
+  suricata_rules           = var.network_firewall_suricata_rules
+  home_net_cidrs           = [var.top_cidr]
 }
 
 # ---------------------------------------------------------------------------

@@ -76,7 +76,7 @@ module "log_cmk" {
   key_user_arns         = try(var.kms_key_user_arns["log_archive"], [])
   enable_protection_tag = var.enable_kms_protection_tag
   # log_service_principals uses the module SRA default
-  # (cloudtrail / config / securitylake).
+  # (cloudtrail / config / securitylake / delivery.logs for vended logs).
 }
 
 module "forensics_cmk" {
@@ -143,11 +143,21 @@ module "cloudtrail" {
   log_archive_bucket = module.log_archive_bucket.bucket_name
   kms_key_arn        = module.log_cmk.key_arn
 
-  # Audit A3/A4: CloudTrail CloudWatch Logs + CIS alarms opt-in (default off).
+  # CIS AWS 3.8/3.9: S3 object-level data events (WriteOnly by default; the
+  # log-archive bucket is excluded inside the module to avoid recursion).
+  cloudtrail_s3_data_events           = var.cloudtrail_s3_data_events
+  s3_data_events_excluded_bucket_arns = var.cloudtrail_s3_data_events_excluded_bucket_arns
+  enable_lambda_data_events           = var.cloudtrail_lambda_data_events
+
+  # CIS AWS section 4: CloudWatch Logs + metric-filter alarms (default ON). The
+  # module creates its own logs-granted CMK and KMS-encrypted SNS topic in the
+  # management account unless existing ones are supplied.
   enable_cloudwatch_logs         = var.enable_cloudwatch_logs
   cloudwatch_logs_retention_days = var.cloudwatch_logs_retention_days
   cloudwatch_logs_kms_key_arn    = var.cloudwatch_logs_kms_key_arn
   alarm_sns_topic_arn            = var.cloudtrail_alarm_sns_topic_arn
+  alarm_subscriptions            = coalesce(var.cloudtrail_alarm_subscribers, var.notification_subscribers)
+  cis_alarms_excluded            = var.cloudtrail_cis_alarms_excluded
 
   depends_on = [module.log_archive_bucket]
 }

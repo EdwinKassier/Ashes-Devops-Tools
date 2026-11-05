@@ -28,7 +28,7 @@ content: |-
 
   	# Required variables
   	{{ range .Module.Inputs }}{{ if .Required -}}
-  	{{ .Name }} = 
+  	{{ .Name }} =
   	{{ end }}{{ end }}
   }
   ```

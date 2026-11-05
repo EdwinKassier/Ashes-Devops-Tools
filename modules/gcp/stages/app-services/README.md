@@ -68,10 +68,10 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	environment = 
-	project_id = 
-	region = 
-	
+	environment =
+	project_id =
+	region =
+
 }
 ```
 
@@ -79,7 +79,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
 
 ## Providers
@@ -102,19 +102,19 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_artifact_registry_repository_iam_member.deploy (modules/gcp/stages/app-services/main.tf#L364)
-- resource.google_cloud_run_v2_service_iam_member.deploy (modules/gcp/stages/app-services/main.tf#L352)
-- resource.google_cloud_run_v2_service_iam_member.invoker (modules/gcp/stages/app-services/main.tf#L215)
-- resource.google_iam_workload_identity_pool.apps (modules/gcp/stages/app-services/main.tf#L291)
-- resource.google_iam_workload_identity_pool_provider.github (modules/gcp/stages/app-services/main.tf#L302)
-- resource.google_project_iam_member.runtime_extra (modules/gcp/stages/app-services/main.tf#L149)
-- resource.google_project_iam_member.runtime_sql (modules/gcp/stages/app-services/main.tf#L266)
-- resource.google_project_service.this (modules/gcp/stages/app-services/main.tf#L80)
-- resource.google_secret_manager_secret_iam_member.runtime (modules/gcp/stages/app-services/main.tf#L138)
-- resource.google_service_account.deploy (modules/gcp/stages/app-services/main.tf#L330)
-- resource.google_service_account.runtime (modules/gcp/stages/app-services/main.tf#L127)
-- resource.google_service_account_iam_member.deploy_act_as_runtime (modules/gcp/stages/app-services/main.tf#L377)
-- resource.google_service_account_iam_member.deploy_wif (modules/gcp/stages/app-services/main.tf#L342)
+- resource.google_artifact_registry_repository_iam_member.deploy (modules/gcp/stages/app-services/main.tf#L371)
+- resource.google_cloud_run_v2_service_iam_member.deploy (modules/gcp/stages/app-services/main.tf#L359)
+- resource.google_cloud_run_v2_service_iam_member.invoker (modules/gcp/stages/app-services/main.tf#L222)
+- resource.google_iam_workload_identity_pool.apps (modules/gcp/stages/app-services/main.tf#L298)
+- resource.google_iam_workload_identity_pool_provider.github (modules/gcp/stages/app-services/main.tf#L309)
+- resource.google_project_iam_member.runtime_extra (modules/gcp/stages/app-services/main.tf#L156)
+- resource.google_project_iam_member.runtime_sql (modules/gcp/stages/app-services/main.tf#L273)
+- resource.google_project_service.this (modules/gcp/stages/app-services/main.tf#L82)
+- resource.google_secret_manager_secret_iam_member.runtime (modules/gcp/stages/app-services/main.tf#L145)
+- resource.google_service_account.deploy (modules/gcp/stages/app-services/main.tf#L337)
+- resource.google_service_account.runtime (modules/gcp/stages/app-services/main.tf#L134)
+- resource.google_service_account_iam_member.deploy_act_as_runtime (modules/gcp/stages/app-services/main.tf#L384)
+- resource.google_service_account_iam_member.deploy_wif (modules/gcp/stages/app-services/main.tf#L349)
 
 
 ## Inputs
@@ -129,7 +129,9 @@ The following resources are created:
 | <a name="input_enable_app_deploy_wif"></a> [enable\_app\_deploy\_wif](#input\_enable\_app\_deploy\_wif) | Create a Workload Identity pool for APPLICATION deploys in the host project (separate from the infra pool in gcp-bootstrap), with one GitHub OIDC provider. Required for any service that sets `github`. | `bool` | `false` | no |
 | <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | Default deletion protection for Cloud Run services, Cloud SQL instances and the GKE cluster. Per-service `enable_deletion_protection` / `database.enable_deletion_protection` override it. | `bool` | `true` | no |
 | <a name="input_enable_gke_autopilot"></a> [enable\_gke\_autopilot](#input\_enable\_gke\_autopilot) | Create one private GKE Autopilot cluster for the environment on var.subnetwork\_id. Default off. | `bool` | `false` | no |
+| <a name="input_enable_on_demand_scanning"></a> [enable\_on\_demand\_scanning](#input\_enable\_on\_demand\_scanning) | Also enable ondemandscanning.googleapis.com so CI can scan images before pushing (`gcloud artifacts docker images scan`). Default false. | `bool` | `false` | no |
 | <a name="input_enable_project_services"></a> [enable\_project\_services](#input\_enable\_project\_services) | Enable the Google APIs the declared resources need (run, artifactregistry, sqladmin, secretmanager, iamcredentials, sts, container) on the host project. Only APIs for features actually in use are enabled; disable\_on\_destroy is false. | `bool` | `true` | no |
+| <a name="input_enable_vulnerability_scanning"></a> [enable\_vulnerability\_scanning](#input\_enable\_vulnerability\_scanning) | Scan every service's container images automatically on push (Artifact Analysis): enables containerscanning.googleapis.com (with enable\_project\_services) and sets each repository's vulnerability scanning to INHERITED. Billed per scanned image. Default true. | `bool` | `true` | no |
 | <a name="input_github_repository_owner_id"></a> [github\_repository\_owner\_id](#input\_github\_repository\_owner\_id) | Optional IMMUTABLE numeric GitHub organization/user ID. When set, the provider additionally rejects any token whose repository\_owner\_id differs (defence in depth on top of the per-repository\_id condition). | `string` | `null` | no |
 | <a name="input_gke_cluster_name"></a> [gke\_cluster\_name](#input\_gke\_cluster\_name) | Name of the GKE Autopilot cluster. Null defaults to "<environment>-apps". | `string` | `null` | no |
 | <a name="input_gke_cluster_secondary_range_name"></a> [gke\_cluster\_secondary\_range\_name](#input\_gke\_cluster\_secondary\_range\_name) | Subnet secondary range name for pod IPs. Null lets GKE allocate one. | `string` | `null` | no |

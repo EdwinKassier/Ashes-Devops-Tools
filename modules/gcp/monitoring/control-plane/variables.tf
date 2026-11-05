@@ -172,3 +172,100 @@ variable "org_log_route_sink_name" {
   type        = string
   default     = "org-control-plane-to-monitoring"
 }
+
+variable "enable_cis_log_metrics" {
+  description = <<-EOT
+    Create the CIS GCP Foundations 2.4-2.11 log-based metrics in project_id, each with
+    a threshold alert policy that fires on any matching entry. With org_id set, the
+    aggregated org sink (include_children = true) routes every project's Admin Activity
+    logs into project_id, so one set of metrics and alerts covers the whole org.
+  EOT
+  type        = bool
+  default     = true
+}
+
+variable "cis_log_metric_name_prefix" {
+  description = "Prefix for the names of the CIS log-based metrics (the map key is appended)."
+  type        = string
+  default     = "cis-"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_.-]*$", var.cis_log_metric_name_prefix))
+    error_message = "cis_log_metric_name_prefix may contain only letters, digits, '_', '-' and '.'."
+  }
+}
+
+variable "cis_log_metrics" {
+  description = <<-EOT
+    CIS log-based metrics, keyed by a short name (used in the metric name). Each entry
+    creates one google_logging_metric (DELTA / INT64 counter) and one alert policy on
+    it. The default set is the CIS GCP Foundations v3.0 section 2.4-2.11 recommended
+    filters, verbatim. Remove entries to stop monitoring them or add your own.
+  EOT
+  type = map(object({
+    display_name  = string
+    cis_control   = optional(string)
+    filter        = string
+    severity      = optional(string, "WARNING")
+    documentation = optional(string)
+  }))
+  default = {
+    project_ownership_change = {
+      display_name = "Project ownership assignment or change"
+      cis_control  = "2.4"
+      filter       = "(protoPayload.serviceName=\"cloudresourcemanager.googleapis.com\") AND (ProjectOwnership OR projectOwnerInvitee) OR (protoPayload.serviceData.policyDelta.bindingDeltas.action=\"REMOVE\" AND protoPayload.serviceData.policyDelta.bindingDeltas.role=\"roles/owner\") OR (protoPayload.serviceData.policyDelta.bindingDeltas.action=\"ADD\" AND protoPayload.serviceData.policyDelta.bindingDeltas.role=\"roles/owner\")"
+      severity     = "ERROR"
+    }
+    audit_config_change = {
+      display_name = "Audit configuration change"
+      cis_control  = "2.5"
+      filter       = "protoPayload.methodName=\"SetIamPolicy\" AND protoPayload.serviceData.policyDelta.auditConfigDeltas:*"
+      severity     = "ERROR"
+    }
+    custom_role_change = {
+      display_name = "Custom role change"
+      cis_control  = "2.6"
+      filter       = "resource.type=\"iam_role\" AND (protoPayload.methodName=\"google.iam.admin.v1.CreateRole\" OR protoPayload.methodName=\"google.iam.admin.v1.DeleteRole\" OR protoPayload.methodName=\"google.iam.admin.v1.UpdateRole\")"
+    }
+    vpc_firewall_rule_change = {
+      display_name = "VPC firewall rule change"
+      cis_control  = "2.7"
+      filter       = "resource.type=\"gce_firewall_rule\" AND (protoPayload.methodName:\"compute.firewalls.patch\" OR protoPayload.methodName:\"compute.firewalls.insert\" OR protoPayload.methodName:\"compute.firewalls.delete\")"
+    }
+    vpc_route_change = {
+      display_name = "VPC network route change"
+      cis_control  = "2.8"
+      filter       = "resource.type=\"gce_route\" AND (protoPayload.methodName:\"compute.routes.delete\" OR protoPayload.methodName:\"compute.routes.insert\")"
+    }
+    vpc_network_change = {
+      display_name = "VPC network change"
+      cis_control  = "2.9"
+      filter       = "resource.type=\"gce_network\" AND (protoPayload.methodName:\"compute.networks.insert\" OR protoPayload.methodName:\"compute.networks.patch\" OR protoPayload.methodName:\"compute.networks.delete\" OR protoPayload.methodName:\"compute.networks.removePeering\" OR protoPayload.methodName:\"compute.networks.addPeering\")"
+    }
+    storage_iam_change = {
+      display_name = "Cloud Storage IAM permission change"
+      cis_control  = "2.10"
+      filter       = "resource.type=\"gcs_bucket\" AND protoPayload.methodName=\"storage.setIamPermissions\""
+    }
+    sql_instance_config_change = {
+      display_name = "Cloud SQL instance configuration change"
+      cis_control  = "2.11"
+      filter       = "protoPayload.methodName=\"cloudsql.instances.update\""
+    }
+  }
+
+  validation {
+    condition     = alltrue([for m in values(var.cis_log_metrics) : contains(["ERROR", "WARNING", "CRITICAL"], try(m.severity, "WARNING"))])
+    error_message = "Each cis_log_metrics severity must be one of ERROR, WARNING, or CRITICAL."
+  }
+
+  validation {
+    condition     = alltrue([for m in values(var.cis_log_metrics) : length(trimspace(m.filter)) > 0 && length(trimspace(m.display_name)) > 0])
+    error_message = "Each cis_log_metrics entry must set a non-empty filter and display_name."
+  }
+
+  validation {
+    condition     = alltrue([for k in keys(var.cis_log_metrics) : can(regex("^[a-z0-9_-]{1,64}$", k))])
+    error_message = "cis_log_metrics keys must be 1-64 chars of lowercase letters, digits, '_' or '-' (they form the metric name)."
+  }
+}

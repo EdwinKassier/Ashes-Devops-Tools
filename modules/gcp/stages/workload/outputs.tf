@@ -11,12 +11,12 @@ output "project_id" {
 
 output "project_number" {
   description = "The numeric identifier of the created project"
-  value       = module.project.project_number
+  value       = module.project.number
 }
 
 output "service_account_email" {
-  description = "The email of the default service account"
-  value       = module.project.service_account_email
+  description = "The email of the dedicated project service account (project-service-account@...); null when create_project_service_account = false"
+  value       = one(google_service_account.project[*].email)
 }
 
 output "subnet_iam_bindings" {

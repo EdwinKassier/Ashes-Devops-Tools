@@ -114,3 +114,14 @@ enable_gke_autopilot  = false # optional env-level GKE Autopilot cluster
 #     }
 #   }
 # }
+
+# --- VM backup + OS patching (BCK-05, VUL-05) ---------------------------------
+# A daily snapshot-schedule policy is created in the host and each service-team
+# project by default (free until a disk is attached). VM Manager patching is
+# opt-in: add roles/osconfig.patchDeploymentAdmin to the gcp-bootstrap
+# workload_folder_roles allow-list first.
+# enable_vm_backup_policy    = true
+# enable_os_patch_management = true
+# os_patch_deployments = {
+#   weekly-os-patch = { day_of_week = "SUNDAY", start_time = "03:00", reboot_config = "DEFAULT" }
+# }

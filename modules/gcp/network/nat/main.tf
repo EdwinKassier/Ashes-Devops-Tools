@@ -2,7 +2,7 @@
  * Copyright 2023 Ashes
  *
  * Cloud NAT Module - Main Configuration
- * 
+ *
  * Creates a Cloud NAT gateway with configurable NAT IP allocation,
  * subnetwork targeting, and logging options.
  */

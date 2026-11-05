@@ -52,3 +52,8 @@ output "template_body" {
   description = "The rendered CloudFormation template (JSON) deployed by the StackSet."
   value       = local.template_body
 }
+
+output "apply_permissions_boundary" {
+  description = "Permissions boundary on the apply roles: \"embedded:<policy-name>\" for the StackSet-managed boundary, the supplied ARN, or null when disabled."
+  value       = !var.enable_apply_permissions_boundary ? null : (local.create_apply_boundary ? "embedded:${var.apply_boundary_policy_name}" : var.apply_permissions_boundary_arn)
+}

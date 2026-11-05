@@ -67,3 +67,23 @@ run "rejects_bad_break_glass_email" {
 
   expect_failures = [var.break_glass_principal_emails]
 }
+
+run "rejects_invalid_cis_metric_key" {
+  command = plan
+  variables {
+    cis_log_metrics = {
+      "Bad Key" = { display_name = "Bad", filter = "protoPayload.methodName=\"X\"" }
+    }
+  }
+  expect_failures = [var.cis_log_metrics]
+}
+
+run "rejects_invalid_cis_metric_severity" {
+  command = plan
+  variables {
+    cis_log_metrics = {
+      ok = { display_name = "Ok", filter = "protoPayload.methodName=\"X\"", severity = "LOUD" }
+    }
+  }
+  expect_failures = [var.cis_log_metrics]
+}

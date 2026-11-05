@@ -26,9 +26,9 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	github_repo = 
-	project_name = 
-	
+	github_repo =
+	project_name =
+
 }
 ```
 
@@ -36,7 +36,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_vercel"></a> [vercel](#requirement\_vercel) | ~> 4.0 |
 
 ## Providers
@@ -60,14 +60,14 @@ The following resources are created:
 - resource.terraform_data.uat_vars_version (modules/vercel/project/main.tf#L172)
 - resource.vercel_custom_environment.uat (modules/vercel/project/main.tf#L154)
 - resource.vercel_project.this (modules/vercel/project/main.tf#L135)
-- resource.vercel_project_domain.prod (modules/vercel/project/main.tf#L304)
-- resource.vercel_project_domain.qa (modules/vercel/project/main.tf#L282)
-- resource.vercel_project_domain.uat (modules/vercel/project/main.tf#L295)
-- resource.vercel_project_environment_variable.prod (modules/vercel/project/main.tf#L225)
+- resource.vercel_project_domain.prod (modules/vercel/project/main.tf#L319)
+- resource.vercel_project_domain.qa (modules/vercel/project/main.tf#L297)
+- resource.vercel_project_domain.uat (modules/vercel/project/main.tf#L310)
+- resource.vercel_project_environment_variable.prod (modules/vercel/project/main.tf#L231)
 - resource.vercel_project_environment_variable.qa (modules/vercel/project/main.tf#L186)
-- resource.vercel_project_environment_variable.shared (modules/vercel/project/main.tf#L249)
-- resource.vercel_project_environment_variable.shared_uat (modules/vercel/project/main.tf#L264)
-- resource.vercel_project_environment_variable.uat (modules/vercel/project/main.tf#L207)
+- resource.vercel_project_environment_variable.shared (modules/vercel/project/main.tf#L258)
+- resource.vercel_project_environment_variable.shared_uat (modules/vercel/project/main.tf#L276)
+- resource.vercel_project_environment_variable.uat (modules/vercel/project/main.tf#L210)
 
 
 ## Inputs

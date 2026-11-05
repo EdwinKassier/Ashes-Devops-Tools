@@ -68,9 +68,15 @@ module "aws_security" {
   enable_incident_response                = var.enable_incident_response
   enable_service_quotas                   = var.enable_service_quotas
 
-  # Audit A3/A4: CloudTrail CloudWatch Logs + CIS control-plane alarms (opt-in).
-  enable_cloudwatch_logs         = var.enable_cloudwatch_logs
-  cloudwatch_logs_retention_days = var.cloudwatch_logs_retention_days
-  cloudwatch_logs_kms_key_arn    = var.cloudwatch_logs_kms_key_arn
-  cloudtrail_alarm_sns_topic_arn = var.cloudtrail_alarm_sns_topic_arn
+  # CloudTrail: CIS section-4 alarms (default on, self-sufficient CMK + SNS)
+  # and S3 object-level data events (CIS 3.8 write by default).
+  enable_cloudwatch_logs                         = var.enable_cloudwatch_logs
+  cloudwatch_logs_retention_days                 = var.cloudwatch_logs_retention_days
+  cloudwatch_logs_kms_key_arn                    = var.cloudwatch_logs_kms_key_arn
+  cloudtrail_alarm_sns_topic_arn                 = var.cloudtrail_alarm_sns_topic_arn
+  cloudtrail_alarm_subscribers                   = var.cloudtrail_alarm_subscribers
+  cloudtrail_cis_alarms_excluded                 = var.cloudtrail_cis_alarms_excluded
+  cloudtrail_s3_data_events                      = var.cloudtrail_s3_data_events
+  cloudtrail_s3_data_events_excluded_bucket_arns = var.cloudtrail_s3_data_events_excluded_bucket_arns
+  cloudtrail_lambda_data_events                  = var.cloudtrail_lambda_data_events
 }

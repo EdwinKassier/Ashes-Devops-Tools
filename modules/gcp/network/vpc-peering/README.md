@@ -63,10 +63,10 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	network = 
-	peer_network = 
-	peering_name = 
-	
+	network =
+	peer_network =
+	peering_name =
+
 }
 ```
 
@@ -74,7 +74,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
 
 ## Providers

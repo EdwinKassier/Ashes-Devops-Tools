@@ -44,6 +44,36 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   `envs/gcp/organization` still grants `terraform-admin` env-folder roles
   (`terraform_admin_folder_roles`) that are now unused.
 
+- **A4 — CloudTrail CloudWatch Logs + CIS section-4 alarms, now default ON**
+  (`enable_cloudwatch_logs = true`, `modules/aws/security/cloudtrail-org`). The
+  full CIS AWS 4.1–4.15 metric-filter set ships with a module-created,
+  logs-granted CMK and a KMS-encrypted SNS topic in the management account.
+  Mock-tested only. **Validate on a real org**: (1) `CreateLogGroup` succeeds
+  with the generated key policy (`logs.<region>` + `kms:EncryptionContext:aws:logs:arn`);
+  (2) CloudWatch alarms can publish to the encrypted topic; (3) org-wide
+  `unauthorized-api-calls` volume is tolerable (drop it with
+  `cloudtrail_cis_alarms_excluded` if not). The security-notifications
+  break-glass metric alarm (`cloudtrail_log_group_name`) still assumes a log
+  group in the security-tooling account; the trail's group is in the management
+  account, so leave that input empty or point it at a copy.
+- **A8 — RESOLVED (2026-11-05): vended-log delivery to the log archive.** The
+  log-archive bucket now grants `delivery.logs.amazonaws.com` AclCheck + Write
+  (`AWSLogs/*`, `bucket-owner-full-control`), both scoped by `aws:SourceOrgID`, and
+  the log CMK's default `log_service_principals` includes it, so cross-account VPC
+  flow / Network Firewall / Resolver query logs can deliver. Still validate one real
+  delivery per log type (mock-tested only).
+- **A9 — Network Firewall baseline and tfc-apply boundary are mock-only.**
+  (1) The default managed rule-group names are documented by AWS
+  (`MalwareDomainsStrictOrder`, `BotNetCommandAndControlDomainsStrictOrder` in the
+  domain-list groups; `AttackInfrastructureStrictOrder`); confirm regional
+  availability with `aws network-firewall list-rule-groups --scope MANAGED` and
+  check the active-threat-defense pricing. (2) The default stateful action is
+  log-but-pass (`aws:alert_established`). Move to `aws:drop_established` +
+  `aws:alert_established` once egress allow rules exist. (3) Run a full
+  security, workload and backup apply under the `tfc-apply-boundary` boundary,
+  including a destroy/replace of Config and GuardDuty resources, which the
+  boundary deliberately blocks. Use break-glass for those.
+
 ## MODERNIZATION — latest-best-practice gaps (2026 review)
 
 From a 2026 gap analysis of both landing zones against the current AWS SRA and
@@ -132,6 +162,27 @@ GCP:
   `dry_run_ingress_policies` / `dry_run_egress_policies`), and the workload and
   network-hub roots warn (check blocks) when a prod-like environment has no
   perimeter or a dry-run one.
+- **G12 — CIS GCP Foundations gaps (2026-11-05)** — ✅ **SHIPPED**, mock-tested
+  only. Validate on a non-prod org before you cite these to an auditor.
+  (a) CIS 2.4–2.11 log-based metrics and alerts (`cis_log_metrics` in
+  `modules/gcp/monitoring/control-plane`, `enable_cis_log_metrics`, default on)
+  live in the audit project. The aggregated org sink feeds them every project's
+  Admin Activity. CIS and SCC Security Health Analytics check each project for
+  its own metric, so per-project findings stay open: record the central design
+  as a compensating control. The 2.5 and 2.6 metrics duplicate the
+  `audit_config_change` and `custom_role_change` log-match watches. Remove one
+  of each pair if the double notification is noise.
+  (b) `compute.requireOsLogin` is enforced at the org node (`enforce_os_login`).
+  Exempt folders with `os_login_exempt_environment_keys`. **Behaviour change:**
+  VMs that rely on metadata SSH keys lose SSH access unless their folder is
+  exempt.
+  (c) Artifact Registry scanning: the Container Scanning API is enabled, and
+  DOCKER repositories are set to `INHERITED`. Scanning is billed per image.
+  (d) VM backup and patching in `envs/gcp/workload`. `enable_vm_backup_policy`
+  (default on) only creates snapshot policies, so attach disks to them.
+  `enable_os_patch_management` (default on) runs a weekly patch job; the
+  workload apply SA holds `roles/osconfig.patchDeploymentAdmin` via the
+  gcp-bootstrap `workload_folder_roles`.
 - **KMS Autokey / HSM-for-sensitive** (LOW, SAFE-CONFIG, future). No Cloud KMS
   Autokey; CMEK defaults to `SOFTWARE` protection (HSM is per-key selectable).
   Autokey (GA 2024, dedicated-project storage GA 2026) and HSM-by-default for
@@ -156,10 +207,6 @@ Enable only after validating in a real/test org. Each defaults to prior behaviou
   identity BEFORE expanding services or an enforced apply is blocked.
 - **A3 — dedicated Identity Center account** (`identity_account_id`,
   `modules/aws/stages/security`). Point at a real dedicated identity account.
-- **A4 — CloudTrail CloudWatch Logs + CIS alarms** (`enable_cloudwatch_logs`,
-  `modules/aws/security/cloudtrail-org`). See A1: supply a `logs.*`-granted CMK
-  via `cloudwatch_logs_kms_key_arn`, and note the break-glass alarm lives in a
-  different account.
 
 ## Capability parity (2026 review)
 

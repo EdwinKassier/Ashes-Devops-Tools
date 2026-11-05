@@ -91,3 +91,13 @@ output "iam_deny_policy_names" {
   description = "Names of the IAM deny policies planned at the org node (containment + iam_deny_policies)"
   value       = module.iam_deny.deny_policy_names
 }
+
+output "os_login_exempt_environment_keys" {
+  description = "Environment folders exempted from the org-wide OS Login requirement (empty when none, or when enforce_os_login = false)"
+  value       = sort(keys(module.os_login_exemptions))
+}
+
+output "control_plane_cis_log_metric_names" {
+  description = "Map of CIS GCP 2.4-2.11 log-metric key to log-based metric name in the alerting project (empty when disabled)"
+  value       = module.control_plane_alerting.cis_log_metric_names
+}

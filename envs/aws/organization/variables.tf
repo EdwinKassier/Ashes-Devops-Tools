@@ -321,7 +321,19 @@ variable "tfc_oidc_allow_workspace_wildcards" {
 }
 
 variable "tfc_apply_role_policy_arns" {
-  description = "Managed policy ARNs attached to every member-account tfc-apply role."
+  description = "Managed policy ARNs attached to every member-account tfc-apply role (capped by the apply permissions boundary, tfc_enable_apply_permissions_boundary)."
   type        = list(string)
   default     = ["arn:aws:iam::aws:policy/AdministratorAccess"]
+}
+
+variable "tfc_enable_apply_permissions_boundary" {
+  description = "Cap every member-account tfc-apply role with a permissions boundary (default true). With tfc_apply_permissions_boundary_arn = null the StackSet embeds tfc-apply-boundary: allow-all except leaving the org, stopping/deleting CloudTrail/GuardDuty/Config, modifying the TFC roles/OIDC provider/boundary, and creating IAM users/access keys."
+  type        = bool
+  default     = true
+}
+
+variable "tfc_apply_permissions_boundary_arn" {
+  description = "Optional existing permissions-boundary policy ARN for the tfc-apply roles (must exist in every bound account). Null (default) = the embedded tfc-apply-boundary."
+  type        = string
+  default     = null
 }

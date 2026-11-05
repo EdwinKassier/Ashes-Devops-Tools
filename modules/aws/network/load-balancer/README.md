@@ -19,9 +19,9 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	name = 
-	subnet_ids = 
-	vpc_id = 
+	name =
+	subnet_ids =
+	vpc_id =
 	
 }
 ```
@@ -30,7 +30,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.46.0, < 7.0.0 |
 
 ## Providers
@@ -68,7 +68,7 @@ The following resources are created:
 | <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | Protect the load balancer from accidental deletion. Defaults to true; set false only for ephemeral/test load balancers. | `bool` | `true` | no |
 | <a name="input_internal"></a> [internal](#input\_internal) | Whether the load balancer is internal (true, no public IPs) or internet-facing (false). | `bool` | `true` | no |
 | <a name="input_listener_rules"></a> [listener\_rules](#input\_listener\_rules) | Host/path routing rules, keyed by a stable local key. Each rule forwards requests matching host\_headers and/or path\_patterns on listener\_key to target\_group\_key. At least one condition is required; priority must be unique per listener (1-50000). | <pre>map(object({<br/>    listener_key     = string<br/>    priority         = number<br/>    target_group_key = string<br/>    host_headers     = optional(list(string), [])<br/>    path_patterns    = optional(list(string), [])<br/>  }))</pre> | `{}` | no |
-| <a name="input_listeners"></a> [listeners](#input\_listeners) | Listeners to create, keyed by a stable local key. default\_action selects the<br/>listener's default: "forward" (to the target group named by target\_group\_key),<br/>"fixed-response" (e.g. a 404 on a shared ALB whose services are routed by<br/>listener\_rules), or "redirect-https" (HTTP -> HTTPS 301). Provide<br/>certificate\_arn (and optionally ssl\_policy) for TLS-terminating listeners. | <pre>map(object({<br/>    port             = number<br/>    protocol         = string<br/>    target_group_key = optional(string)<br/>    certificate_arn  = optional(string)<br/>    ssl_policy       = optional(string, "ELBSecurityPolicy-TLS13-1-2-2021-06")<br/>    # forward (to target_group_key) | fixed-response | redirect-https<br/>    default_action = optional(string, "forward")<br/>    fixed_response = optional(object({<br/>      status_code  = optional(string, "404")<br/>      content_type = optional(string, "text/plain")<br/>      message_body = optional(string, "Not Found")<br/>    }), {})<br/>  }))</pre> | `{}` | no |
+| <a name="input_listeners"></a> [listeners](#input\_listeners) | Listeners to create, keyed by a stable local key. default\_action selects the<br/>listener's default: "forward" (to the target group named by target\_group\_key),<br/>"fixed-response" (e.g. a 404 on a shared ALB whose services are routed by<br/>listener\_rules), or "redirect-https" (HTTP -> HTTPS 301). Provide<br/>certificate\_arn (and optionally ssl\_policy) for TLS-terminating listeners. | <pre>map(object({<br/>    port             = number<br/>    protocol         = string<br/>    target_group_key = optional(string)<br/>    certificate_arn  = optional(string)<br/>    ssl_policy       = optional(string, "ELBSecurityPolicy-TLS13-1-2-2021-06")<br/>    # one of: forward (to target_group_key), fixed-response, redirect-https<br/>    default_action = optional(string, "forward")<br/>    fixed_response = optional(object({<br/>      status_code  = optional(string, "404")<br/>      content_type = optional(string, "text/plain")<br/>      message_body = optional(string, "Not Found")<br/>    }), {})<br/>  }))</pre> | `{}` | no |
 | <a name="input_load_balancer_type"></a> [load\_balancer\_type](#input\_load\_balancer\_type) | Load balancer type: 'application' (L7 ALB) or 'network' (L4 NLB). | `string` | `"application"` | no |
 | <a name="input_security_group_ids"></a> [security\_group\_ids](#input\_security\_group\_ids) | Existing security group IDs to attach to the load balancer. Merged with the module-created group when create\_security\_group = true. | `list(string)` | `[]` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to the load balancer, target groups, listeners, and managed security group. | `map(string)` | `{}` | no |

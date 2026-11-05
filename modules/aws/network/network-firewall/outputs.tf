@@ -21,3 +21,8 @@ output "firewall_endpoint_ids_by_az" {
     ss.availability_zone => ss.attachment[0].endpoint_id
   }, {})
 }
+
+output "stateful_rule_group_references" {
+  description = "Ordered list of { arn, priority } stateful rule group references in the STRICT_ORDER policy (managed threat groups, then custom rules, then the egress allowlist)."
+  value       = var.enable_network_firewall ? local.stateful_references : []
+}

@@ -252,6 +252,24 @@ variable "audit_soft_delete_retention_days" {
   default     = 30
 }
 
+variable "enforce_os_login" {
+  description = "Enforce compute.requireOsLogin at the organization node (CIS GCP 4.4). Default true."
+  type        = bool
+  default     = true
+}
+
+variable "os_login_exempt_environment_keys" {
+  description = "Environment folder keys exempted from the org-wide OS Login requirement (folder-level override). Strict folders cannot be exempted. Default []."
+  type        = list(string)
+  default     = []
+}
+
+variable "enable_cis_log_metrics" {
+  description = "CIS GCP 2.4-2.11 log-based metrics and alerts in the alerting project, fed org-wide by the aggregated org sink (requires enable_control_plane_alerting). Default true."
+  type        = bool
+  default     = true
+}
+
 variable "enable_control_plane_alerting" {
   description = "Log-match alerts on org IAM / org policy / VPC-SC / sink / custom-role / deny-policy / KMS-destroy changes and on break-glass use (audit Security High). Default true."
   type        = bool

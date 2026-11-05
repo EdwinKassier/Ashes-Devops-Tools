@@ -2,8 +2,8 @@
 
 **When to use:** A new application team needs their own GCP service project attached to the Shared VPC, with Workload Identity bindings for their workloads.
 
-**Time:** 20–30 minutes.  
-**Risk:** Low — adds new resources, does not modify existing spoke projects.  
+**Time:** 20–30 minutes.
+**Risk:** Low — adds new resources, does not modify existing spoke projects.
 **Prerequisites:** `envs/gcp/organization` and at least one `envs/gcp/workload` environment have been applied. The team's admin group email and billing account are known.
 
 ---

@@ -76,4 +76,4 @@ resource "google_compute_region_network_endpoint_group" "serverless_neg" {
     platform = "apigateway.googleapis.com"
     resource = google_api_gateway_gateway.gateway.gateway_id
   }
-} 
+}

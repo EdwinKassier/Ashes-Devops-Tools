@@ -1,16 +1,26 @@
 output "projects" {
-  description = "Map of created projects"
-  value       = google_project.projects
+  description = "Map of created projects, keyed \"<env>-<project>\": { id, project_id, number, name, parent, labels, billing_account }."
+  value = {
+    for k, p in module.project : k => {
+      id              = p.id
+      project_id      = p.project_id
+      number          = p.number
+      name            = p.name
+      parent          = p.parent
+      labels          = p.labels
+      billing_account = p.billing_account
+    }
+  }
 }
 
 output "project_ids" {
   description = "Map of Project IDs"
-  value       = { for k, v in google_project.projects : k => v.project_id }
+  value       = { for k, v in module.project : k => v.project_id }
 }
 
 output "project_numbers" {
   description = "Map of Project Numbers"
-  value       = { for k, v in google_project.projects : k => v.number }
+  value       = { for k, v in module.project : k => v.number }
 }
 
 output "automation_folder_grants" {

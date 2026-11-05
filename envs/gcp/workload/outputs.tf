@@ -87,3 +87,13 @@ output "gke_cluster_name" {
   description = "Name of the env GKE Autopilot cluster, or null when enable_gke_autopilot = false."
   value       = module.app_services.gke_cluster_name
 }
+
+output "vm_backup_policy_self_links" {
+  description = "Map of target project key (host, team-<name>) to its snapshot-schedule resource policy self_links. Attach these to persistent disks. Empty when enable_vm_backup_policy = false."
+  value       = { for k, m in module.vm_backup_policy : k => m.resource_policy_self_links }
+}
+
+output "os_patch_deployment_ids" {
+  description = "Map of target project key (host, team-<name>) to its VM Manager patch deployment IDs. Empty when enable_os_patch_management = false."
+  value       = { for k, m in module.os_patch_management : k => m.patch_deployment_ids }
+}

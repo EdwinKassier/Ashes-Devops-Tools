@@ -3,14 +3,18 @@
 
 locals {
   project_labels = {
-    managed-by   = "terraform"
-    owner        = "platform-team"
-    organization = var.organization_name
+    managed-by = "terraform"
+    owner      = "platform-team"
+    # GCP label values allow only lowercase letters, digits, '_' and '-' (max
+    # 63): "My Organization" becomes "my-organization". Already-valid names are
+    # unchanged, so existing labels do not churn.
+    organization = substr(replace(lower(var.organization_name), "/[^a-z0-9_-]/", "-"), 0, 63)
   }
 }
 
-resource "google_project" "projects" {
-  for_each = {
+locals {
+  # Naming scheme lives HERE (the stage), not in the project primitive.
+  projects = {
     for pair in flatten([
       for ou_k, ou in var.environments : [
         for proj_k, proj in ou.projects : {
@@ -21,6 +25,11 @@ resource "google_project" "projects" {
       ]
     ]) : pair.key => pair
   }
+}
+
+module "project" {
+  source   = "../../project"
+  for_each = local.projects
 
   # Display names must be 4-30 chars (provider-validated). The root's built-in
   # shared projects are named "hub"/"dns" (3 chars), which failed every plan, so
@@ -31,7 +40,7 @@ resource "google_project" "projects" {
   # Use the shared suffix to ensure ID stability
   project_id      = "${var.project_prefix}-${each.value.ou}-${each.value.proj.name}-${var.suffix}"
   billing_account = coalesce(each.value.proj.billing_account, var.default_billing_account)
-  folder_id       = var.folders[each.value.ou].id
+  parent          = var.folders[each.value.ou].id
 
   labels = merge(
     local.project_labels,
@@ -41,34 +50,10 @@ resource "google_project" "projects" {
     }
   )
 
-  auto_create_network = false
+  services = var.project_services
 
   # Foundation projects must not be deletable by a routine plan.
   deletion_policy = "PREVENT"
-}
-
-# Enable required services for each project
-locals {
-  project_services = flatten([
-    for proj_key, proj in google_project.projects : [
-      for service in var.project_services : {
-        project_id = proj.project_id
-        service    = service
-      }
-    ]
-  ])
-}
-
-resource "google_project_service" "project_services" {
-  for_each = {
-    for item in local.project_services : "${item.project_id}-${item.service}" => item
-  }
-
-  project = each.value.project_id
-  service = each.value.service
-
-  disable_dependent_services = false
-  disable_on_destroy         = false
 }
 
 # Monitoring for projects (Metrics Scope).
@@ -76,12 +61,11 @@ resource "google_project_service" "project_services" {
 # format "locations/global/metricsScopes/<scope_project_id>/projects/<monitored_project_id>".
 # The GCP provider >= 4.x accepts project IDs (not just project numbers) in this path.
 resource "google_monitoring_monitored_project" "projects" {
-  for_each = google_project.projects
+  for_each = module.project
 
   metrics_scope = "locations/global/metricsScopes/${var.admin_project_id}"
-  name          = "locations/global/metricsScopes/${var.admin_project_id}/projects/${each.value.project_id}"
-
-  depends_on = [google_project_service.project_services]
+  # module.project[*].project_id already waits for the project's APIs.
+  name = "locations/global/metricsScopes/${var.admin_project_id}/projects/${each.value.project_id}"
 }
 
 # ─── Automation identity grants (audit C2) ──────────────────────────────────

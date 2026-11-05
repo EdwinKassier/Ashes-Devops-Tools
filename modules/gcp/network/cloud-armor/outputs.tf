@@ -39,4 +39,4 @@ output "policy_self_link" {
 output "fingerprint" {
   description = "Fingerprint of the security policy"
   value       = google_compute_security_policy.policy.fingerprint
-} 
+}

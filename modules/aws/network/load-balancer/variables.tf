@@ -154,7 +154,7 @@ variable "listeners" {
     target_group_key = optional(string)
     certificate_arn  = optional(string)
     ssl_policy       = optional(string, "ELBSecurityPolicy-TLS13-1-2-2021-06")
-    # forward (to target_group_key) | fixed-response | redirect-https
+    # one of: forward (to target_group_key), fixed-response, redirect-https
     default_action = optional(string, "forward")
     fixed_response = optional(object({
       status_code  = optional(string, "404")

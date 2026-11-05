@@ -60,7 +60,7 @@ apply or a human decision. Enable them per environment, highest-value first.
 | Config conformance packs (AWS) | supply a pack to `config-org` | `modules/aws/security/config-org` | Adds per-evaluation cost and may surface many findings at once. Start with one AWS-managed Operational-Best-Practices pack. |
 | CMEK (AWS/GCP) | pass a key ARN/name at the module boundary | per module (e.g. `ecr`, `network-firewall`, `cloud-storage`) | Without a key, encryption falls back to an AWS-owned key or GMEK. Supplying a CMK is safe; requiring it can break a module that is not given one. |
 | **Audit-log WORM lock (GCP)** | `enable_audit_bucket_lock = true` | `envs/gcp/organization` → `cloud-audit-logs` | **IRREVERSIBLE.** A locked retention policy cannot be shortened or removed. Enable only for a compliance regime that requires tamper-proof retention, and only once the retention period is final. This is why it is **not** default-on. |
-| AWS CloudTrail → CloudWatch Logs + CIS alarms | `enable_cloudwatch_logs = true` | `modules/aws/stages/security` | Supply a `logs.*`-granted CMK via `cloudwatch_logs_kms_key_arn`. See audit A1/A4. |
+| AWS CloudTrail → CloudWatch Logs + CIS 4.x alarms | **on by default** (`enable_cloudwatch_logs`) | `modules/aws/stages/security` | The module creates its own rotated, `logs.*`-granted CMK and a KMS-encrypted SNS topic unless you pass `cloudwatch_logs_kms_key_arn`. Subscribe your on-call address. See audit A1/A4. |
 
 The WORM lock is the one item that must stay opt-in: an irreversible default in a
 template is a footgun, so the best-practice choice is to keep it off and enable it

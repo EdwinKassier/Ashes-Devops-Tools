@@ -26,11 +26,11 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	name = 
-	private_network = 
-	project_id = 
-	region = 
-	
+	name =
+	private_network =
+	project_id =
+	region =
+
 }
 ```
 
@@ -38,7 +38,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
 
 ## Providers
@@ -73,7 +73,7 @@ The following resources are created:
 | <a name="input_database_flags"></a> [database\_flags](#input\_database\_flags) | Additional database flags to set on the instance. The cloudsql.iam\_authentication flag is managed by enable\_iam\_authentication and must not be duplicated here. | <pre>list(object({<br/>    name  = string<br/>    value = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_database_version"></a> [database\_version](#input\_database\_version) | The PostgreSQL engine version (e.g. POSTGRES\_16) | `string` | `"POSTGRES_16"` | no |
 | <a name="input_databases"></a> [databases](#input\_databases) | List of logical database names to create on the instance | `list(string)` | `[]` | no |
-| <a name="input_edition"></a> [edition](#input\_edition) | Cloud SQL edition. ENTERPRISE (default) matches the db-custom-* tiers; ENTERPRISE\_PLUS needs a db-perf-optimized-* tier. Set explicitly because PostgreSQL 16+ otherwise defaults to ENTERPRISE\_PLUS and the default tier fails to create. | `string` | `"ENTERPRISE"` | no |
+| <a name="input_edition"></a> [edition](#input\_edition) | Cloud SQL edition. ENTERPRISE (default) matches the db-custom-*tiers; ENTERPRISE\_PLUS needs a db-perf-optimized-* tier. Set explicitly because PostgreSQL 16+ otherwise defaults to ENTERPRISE\_PLUS and the default tier fails to create. | `string` | `"ENTERPRISE"` | no |
 | <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | Prevent accidental destruction of the instance.<br/><br/>When true, the instance's own deletion\_protection API attribute is set and a<br/>terraform\_data guard resource is created with prevent\_destroy = true, so<br/>Terraform refuses to destroy this module. To intentionally remove a protected<br/>instance, set this to false (which also removes the guard) and apply, or run:<br/>  terraform state rm 'module.<name>.terraform\_data.deletion\_protection\_guard' | `bool` | `true` | no |
 | <a name="input_enable_high_availability"></a> [enable\_high\_availability](#input\_enable\_high\_availability) | When true the instance runs REGIONAL (synchronous standby, automatic failover); otherwise ZONAL. | `bool` | `false` | no |
 | <a name="input_enable_iam_authentication"></a> [enable\_iam\_authentication](#input\_enable\_iam\_authentication) | Enable Cloud SQL IAM database authentication (sets the cloudsql.iam\_authentication flag on). | `bool` | `true` | no |
@@ -86,7 +86,7 @@ The following resources are created:
 | <a name="input_maintenance_window_update_track"></a> [maintenance\_window\_update\_track](#input\_maintenance\_window\_update\_track) | Maintenance release track: 'canary' (earlier) or 'stable' (later) | `string` | `"stable"` | no |
 | <a name="input_tier"></a> [tier](#input\_tier) | The machine type / tier for the instance (e.g. db-custom-1-3840) | `string` | `"db-custom-1-3840"` | no |
 | <a name="input_transaction_log_retention_days"></a> [transaction\_log\_retention\_days](#input\_transaction\_log\_retention\_days) | Number of days of transaction (WAL) logs to retain for point-in-time recovery | `number` | `7` | no |
-| <a name="input_users"></a> [users](#input\_users) | List of database users to create. For built-in (password) users set `password`<br/>(prefer IAM auth instead). For IAM users set `type = "CLOUD_IAM_USER"` (or<br/>"CLOUD\_IAM\_SERVICE\_ACCOUNT") and omit the password. The whole variable is marked<br/>sensitive because it may carry passwords. | <pre>list(object({<br/>    name     = string<br/>    password = optional(string)<br/>    type     = optional(string, "BUILT_IN")<br/>  }))</pre> | `[]` | no |
+| <a name="input_users"></a> [users](#input\_users) | List of database users to create. For built-in (password) users set `password`<br/>(prefer IAM auth instead). For IAM users set `type = "CLOUD_IAM_USER"` (or<br/>"CLOUD\_IAM\_SERVICE\_ACCOUNT") and omit the password. Passwords are written with the<br/>write-only password\_wo argument, so they never land in plan or state; increment<br/>`password_version` to rotate. The variable is still marked sensitive. | <pre>list(object({<br/>    name             = string<br/>    password         = optional(string)<br/>    password_version = optional(number, 1)<br/>    type             = optional(string, "BUILT_IN")<br/>  }))</pre> | `[]` | no |
 
 ## Outputs
 

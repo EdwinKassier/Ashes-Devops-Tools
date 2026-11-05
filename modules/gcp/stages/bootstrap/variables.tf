@@ -208,6 +208,12 @@ variable "workload_folder_roles" {
       "roles/pubsub.admin",
       "roles/run.admin",
       "roles/artifactregistry.admin",
+      # Needed by resources the workload root actually manages:
+      "roles/resourcemanager.projectCreator", # service_teams projects (stages/workload)
+      "roles/iam.workloadIdentityPoolAdmin",  # app deploy WIF pool (stages/app-services)
+      "roles/cloudsql.admin",                 # app-services databases
+      "roles/container.admin",                # optional GKE Autopilot
+      "roles/osconfig.patchDeploymentAdmin",  # VM Manager patch deployments (ops/os-config)
     ]
   }
 
@@ -255,7 +261,7 @@ variable "workload_billing_roles" {
   })
   default = {
     plan  = ["roles/billing.viewer"]
-    apply = ["roles/billing.costsManager"]
+    apply = ["roles/billing.costsManager", "roles/billing.user"] # billing.user: link service_teams projects
   }
 }
 

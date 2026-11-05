@@ -47,6 +47,8 @@ module "organization" {
   default_region                        = var.default_region
   allowed_regions                       = var.allowed_regions
   strict_folder_policy_environment_keys = var.strict_folder_policy_environment_keys
+  enforce_os_login                      = var.enforce_os_login
+  os_login_exempt_environment_keys      = var.os_login_exempt_environment_keys
   security_contact_email                = var.security_contact_email
   billing_contact_email                 = var.billing_contact_email
   monthly_budget_amount                 = var.monthly_budget_amount
@@ -66,6 +68,7 @@ module "organization" {
   alert_notification_emails     = var.alert_notification_emails
   alert_notification_channels   = var.alert_notification_channels
   break_glass_principal_emails  = var.break_glass_principal_emails
+  enable_cis_log_metrics        = var.enable_cis_log_metrics
 
   # G6: opt-in custom org-policy constraints (default [] = none).
   custom_org_constraints = var.custom_org_constraints

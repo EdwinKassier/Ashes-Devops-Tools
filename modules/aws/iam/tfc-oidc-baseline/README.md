@@ -11,7 +11,21 @@ Each targeted member account receives:
 |---|---|
 | `AWS::IAM::OIDCProvider` for `https://<tfc_hostname>` | Audience `aws.workload.identity`. |
 | `tfc-plan` role (bound accounts only) | `ReadOnlyAccess`. Trusts `<host>:sub = organization:<org>:project:<project>:workspace:<ws>:run_phase:plan`. |
-| `tfc-apply` role (bound accounts only) | `AdministratorAccess` by default. Trusts `...:run_phase:apply`. |
+| `tfc-apply` role (bound accounts only) | `AdministratorAccess` by default, **capped by a permissions boundary**. Trusts `...:run_phase:apply`. |
+| `tfc-apply-boundary` managed policy | Embedded permissions boundary (default on, `enable_apply_permissions_boundary`). |
+
+**Apply permissions boundary.** The boundary allows everything except:
+
+- leaving the organization;
+- stopping or deleting CloudTrail, GuardDuty (detector and administrator association) and Config (recorder and delivery channel);
+- changing the `tfc-plan` and `tfc-apply` roles, the OIDC provider or the boundary itself;
+- `iam:CreateUser`, `iam:CreateAccessKey` and `iam:CreateLoginProfile`.
+
+Creating and updating detective controls is still allowed, so the security and
+workload layers can apply normally. To use your own boundary, supply
+`apply_permissions_boundary_arn`. The boundary is a guardrail, not a full
+privilege-escalation barrier. The apply role can still create a new
+unbounded role, so the org deny-tamper SCP remains the primary control.
 
 The organization and project are always matched literally. Workspace names are
 matched exactly (`StringEquals`) unless `allow_workspace_wildcards = true`, which
@@ -48,8 +62,8 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	tfc_organization = 
-	
+	tfc_organization =
+
 }
 ```
 
@@ -57,7 +71,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.46.0, < 7.0.0 |
 
 ## Providers
@@ -73,8 +87,8 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_cloudformation_stack_set.this (modules/aws/iam/tfc-oidc-baseline/main.tf#L135)
-- resource.aws_cloudformation_stack_set_instance.this (modules/aws/iam/tfc-oidc-baseline/main.tf#L175)
+- resource.aws_cloudformation_stack_set.this (modules/aws/iam/tfc-oidc-baseline/main.tf#L255)
+- resource.aws_cloudformation_stack_set_instance.this (modules/aws/iam/tfc-oidc-baseline/main.tf#L295)
 
 
 ## Inputs
@@ -84,9 +98,12 @@ The following resources are created:
 | <a name="input_tfc_organization"></a> [tfc\_organization](#input\_tfc\_organization) | Terraform Cloud organization name. Matched LITERALLY in every trust policy sub condition — wildcards are rejected so no other TFC organization can ever assume the roles. | `string` | n/a | yes |
 | <a name="input_account_bindings"></a> [account\_bindings](#input\_account\_bindings) | Map of account key -> binding. Each binding names the member account (account\_id), the TFC workspaces allowed to assume its tfc-plan/tfc-apply roles, and an optional TFC project override. Workspace names are matched exactly unless allow\_workspace\_wildcards is true. Accounts in a targeted OU without a binding receive only the OIDC provider (no roles). | <pre>map(object({<br/>    account_id = string<br/>    workspaces = list(string)<br/>    project    = optional(string)<br/>  }))</pre> | `{}` | no |
 | <a name="input_allow_workspace_wildcards"></a> [allow\_workspace\_wildcards](#input\_allow\_workspace\_wildcards) | Allow '*' inside workspace names in account\_bindings (e.g. aws-workload-*), switching the sub condition from StringEquals to StringLike. The organization and project are always matched literally. Default false: exact workspace names only. | `bool` | `false` | no |
+| <a name="input_apply_boundary_policy_name"></a> [apply\_boundary\_policy\_name](#input\_apply\_boundary\_policy\_name) | Name of the embedded permissions-boundary managed policy created in each targeted account. | `string` | `"tfc-apply-boundary"` | no |
+| <a name="input_apply_permissions_boundary_arn"></a> [apply\_permissions\_boundary\_arn](#input\_apply\_permissions\_boundary\_arn) | Optional existing permissions-boundary policy ARN to use instead of the embedded one. The policy must already exist in every bound account (an AWS-managed policy, or a same-named customer policy deployed by another StackSet). Null (default) = the embedded boundary. Ignored when enable\_apply\_permissions\_boundary = false. | `string` | `null` | no |
 | <a name="input_apply_role_name"></a> [apply\_role\_name](#input\_apply\_role\_name) | Name of the role TFC assumes during the apply phase (TFC\_AWS\_APPLY\_ROLE\_ARN). | `string` | `"tfc-apply"` | no |
-| <a name="input_apply_role_policy_arns"></a> [apply\_role\_policy\_arns](#input\_apply\_role\_policy\_arns) | Managed policy ARNs attached to the apply role. Defaults to AdministratorAccess (the apply role provisions arbitrary landing-zone resources); narrow it per organization if your layers allow. | `list(string)` | <pre>[<br/>  "arn:aws:iam::aws:policy/AdministratorAccess"<br/>]</pre> | no |
+| <a name="input_apply_role_policy_arns"></a> [apply\_role\_policy\_arns](#input\_apply\_role\_policy\_arns) | Managed policy ARNs attached to the apply role. Defaults to AdministratorAccess (the apply role provisions arbitrary landing-zone resources), capped by the apply permissions boundary (enable\_apply\_permissions\_boundary); narrow it per organization if your layers allow. | `list(string)` | <pre>[<br/>  "arn:aws:iam::aws:policy/AdministratorAccess"<br/>]</pre> | no |
 | <a name="input_call_as"></a> [call\_as](#input\_call\_as) | Whether the StackSet is managed from the management account (SELF) or a CloudFormation delegated-administrator account (DELEGATED\_ADMIN). | `string` | `"SELF"` | no |
+| <a name="input_enable_apply_permissions_boundary"></a> [enable\_apply\_permissions\_boundary](#input\_enable\_apply\_permissions\_boundary) | Cap the apply role with a permissions boundary (default true). With apply\_permissions\_boundary\_arn = null the StackSet embeds a managed boundary that allows everything EXCEPT: leaving the org; stopping/deleting CloudTrail, GuardDuty and Config; modifying the plan/apply roles, the OIDC provider or the boundary itself; and iam:CreateUser/CreateAccessKey/CreateLoginProfile. | `bool` | `true` | no |
 | <a name="input_max_session_duration"></a> [max\_session\_duration](#input\_max\_session\_duration) | Maximum session duration (seconds) for both roles. TFC requests 1 hour by default. | `number` | `3600` | no |
 | <a name="input_oidc_thumbprints"></a> [oidc\_thumbprints](#input\_oidc\_thumbprints) | Optional OIDC provider certificate thumbprints. AWS validates TFC's certificate against its trusted CA library, so the default (empty) omits ThumbprintList. | `list(string)` | `[]` | no |
 | <a name="input_partition"></a> [partition](#input\_partition) | AWS partition used to build the role ARN outputs. | `string` | `"aws"` | no |
@@ -103,6 +120,7 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
+| <a name="output_apply_permissions_boundary"></a> [apply\_permissions\_boundary](#output\_apply\_permissions\_boundary) | Permissions boundary on the apply roles: "embedded:<policy-name>" for the StackSet-managed boundary, the supplied ARN, or null when disabled. |
 | <a name="output_apply_role_arns"></a> [apply\_role\_arns](#output\_apply\_role\_arns) | Map of account key -> apply role ARN (set as TFC\_AWS\_APPLY\_ROLE\_ARN on the bound workspaces). |
 | <a name="output_apply_role_name"></a> [apply\_role\_name](#output\_apply\_role\_name) | Name of the apply-phase role created in every bound account. |
 | <a name="output_oidc_provider_url"></a> [oidc\_provider\_url](#output\_oidc\_provider\_url) | Issuer URL of the IAM OIDC provider created in each targeted member account. |

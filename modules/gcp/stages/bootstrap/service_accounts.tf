@@ -190,7 +190,7 @@ locals {
 resource "google_service_account" "stage" {
   for_each = local.created_identities
 
-  project      = google_project.admin_project.project_id
+  project      = module.admin_project.project_id
   account_id   = each.value.account_id
   display_name = "Terraform ${each.value.kind == "workload" ? "workload ${each.value.env}" : each.value.stage} (${each.value.phase})"
   description  = "TFC ${each.value.phase}-phase identity for workspace ${each.value.workspace}. ${each.value.phase == "plan" ? "Read-only." : "Least-privilege write."} Managed by gcp-bootstrap (audit C2)."
@@ -237,7 +237,7 @@ resource "google_organization_iam_member" "projects_delegated_folder_iam" {
 resource "google_project_iam_member" "stage_admin_project_roles" {
   for_each = local.admin_project_grants
 
-  project = google_project.admin_project.project_id
+  project = module.admin_project.project_id
   role    = each.value.role
   member  = "serviceAccount:${local.stage_sa_email[each.value.sa_key]}"
 }

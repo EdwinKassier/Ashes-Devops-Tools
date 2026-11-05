@@ -2,7 +2,7 @@
  * Copyright 2023 Ashes
  *
  * Packet Mirroring Module - Main Configuration
- * 
+ *
  * Creates packet mirroring policies for network forensics, IDS/IPS,
  * and security analysis by cloning network traffic to collector instances.
  */

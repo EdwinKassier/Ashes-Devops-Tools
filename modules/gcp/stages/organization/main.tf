@@ -162,6 +162,10 @@ module "control_plane_alerting" {
     var.break_glass_user != null ? [var.break_glass_user] : [],
     var.break_glass_principal_emails,
   ))
+
+  # CIS GCP 2.4-2.11 log-based metrics + alerts, fed org-wide by the aggregated
+  # org sink (every project's Admin Activity logs).
+  enable_cis_log_metrics = var.enable_cis_log_metrics
 }
 
 check "control_plane_alerts_have_a_destination" {
@@ -344,7 +348,7 @@ module "org_policies" {
     }
   ], local.cmek_list_policy)
 
-  boolean_policies = [
+  boolean_policies = concat([
     {
       constraint = "compute.skipDefaultNetworkCreation"
       enforce    = true
@@ -396,7 +400,14 @@ module "org_policies" {
       constraint = "compute.requirePrivateGoogleAccess"
       enforce    = true
     }
-  ]
+    ], var.enforce_os_login ? [
+    # CIS GCP 4.4: OS Login org-wide. Folders in os_login_exempt_environment_keys
+    # get a folder-level override (module.os_login_exemptions).
+    {
+      constraint = "compute.requireOsLogin"
+      enforce    = true
+    }
+  ] : [])
 
   # Opt-in custom organization-policy constraints (CEL-defined, resource-shape
   # guardrails the fixed boolean/list constraints can't express). Default [] =
@@ -444,6 +455,28 @@ module "prod_folder_policies" {
       constraint = "compute.disableInternetGatewayUse"
       enforce    = true
     }
+  ]
+}
+
+# CIS GCP 4.4 exemptions: folders that may not use OS Login (e.g. workloads that
+# manage SSH keys in metadata) get compute.requireOsLogin = false, overriding the
+# org-wide default. Strict folders can never be exempted (variable validation).
+module "os_login_exemptions" {
+  source = "../../governance/org-policy"
+  for_each = var.enforce_os_login ? {
+    for env_key in var.os_login_exempt_environment_keys :
+    env_key => module.organization.folders[env_key]
+    if contains(keys(module.organization.folders), env_key)
+  } : {}
+
+  parent        = each.value.name
+  list_policies = []
+
+  boolean_policies = [
+    {
+      constraint = "compute.requireOsLogin"
+      enforce    = false
+    },
   ]
 }
 

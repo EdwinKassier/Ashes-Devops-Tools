@@ -128,13 +128,41 @@ variable "plan_role_policy_arns" {
 }
 
 variable "apply_role_policy_arns" {
-  description = "Managed policy ARNs attached to the apply role. Defaults to AdministratorAccess (the apply role provisions arbitrary landing-zone resources); narrow it per organization if your layers allow."
+  description = "Managed policy ARNs attached to the apply role. Defaults to AdministratorAccess (the apply role provisions arbitrary landing-zone resources), capped by the apply permissions boundary (enable_apply_permissions_boundary); narrow it per organization if your layers allow."
   type        = list(string)
   default     = ["arn:aws:iam::aws:policy/AdministratorAccess"]
 
   validation {
     condition     = length(var.apply_role_policy_arns) > 0 && alltrue([for a in var.apply_role_policy_arns : can(regex("^arn:aws[a-z-]*:iam::(aws|[0-9]{12}):policy/.+$", a))])
     error_message = "apply_role_policy_arns must be a non-empty list of IAM managed policy ARNs."
+  }
+}
+
+variable "enable_apply_permissions_boundary" {
+  description = "Cap the apply role with a permissions boundary (default true). With apply_permissions_boundary_arn = null the StackSet embeds a managed boundary that allows everything EXCEPT: leaving the org; stopping/deleting CloudTrail, GuardDuty and Config; modifying the plan/apply roles, the OIDC provider or the boundary itself; and iam:CreateUser/CreateAccessKey/CreateLoginProfile."
+  type        = bool
+  default     = true
+}
+
+variable "apply_permissions_boundary_arn" {
+  description = "Optional existing permissions-boundary policy ARN to use instead of the embedded one. The policy must already exist in every bound account (an AWS-managed policy, or a same-named customer policy deployed by another StackSet). Null (default) = the embedded boundary. Ignored when enable_apply_permissions_boundary = false."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.apply_permissions_boundary_arn == null || can(regex("^arn:aws[a-z-]*:iam::(aws|[0-9]{12}):policy/.+$", var.apply_permissions_boundary_arn))
+    error_message = "apply_permissions_boundary_arn must be null or an IAM managed policy ARN."
+  }
+}
+
+variable "apply_boundary_policy_name" {
+  description = "Name of the embedded permissions-boundary managed policy created in each targeted account."
+  type        = string
+  default     = "tfc-apply-boundary"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9+=,.@_-]{1,128}$", var.apply_boundary_policy_name))
+    error_message = "apply_boundary_policy_name must be a valid IAM policy name (1-128 chars of [A-Za-z0-9+=,.@_-])."
   }
 }
 

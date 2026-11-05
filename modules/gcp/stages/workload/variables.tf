@@ -5,12 +5,17 @@
  */
 
 variable "project_name" {
-  description = "The name of the project to create"
+  description = "Display name of the project, also the project-ID stem: the project ID is \"<project_name>-<4 hex>\". 4-25 chars, lowercase letters, digits and hyphens, starting with a letter."
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{2,23}[a-z0-9]$", var.project_name))
+    error_message = "project_name must be 4-25 characters of lowercase letters, digits and hyphens, start with a letter and not end with a hyphen (the 5-char \"-<hex>\" suffix keeps the project ID within 30)."
+  }
 }
 
 variable "org_id" {
-  description = "The numeric GCP Organization ID (digits only, without 'organizations/' prefix)"
+  description = "The numeric GCP Organization ID (digits only, without 'organizations/' prefix). Used as the parent only when folder_id is null."
   type        = string
 
   validation {
@@ -20,11 +25,12 @@ variable "org_id" {
 }
 
 variable "folder_id" {
-  description = "The numeric Folder ID to create the project in (digits only, without 'folders/' prefix)"
+  description = "The numeric Folder ID to create the project in (digits only, without 'folders/' prefix). When null the project is created directly under org_id."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^[0-9]+$", var.folder_id))
+    condition     = var.folder_id == null || can(regex("^[0-9]+$", var.folder_id))
     error_message = "folder_id must be a numeric folder ID (digits only, without 'folders/' prefix)."
   }
 }
@@ -40,9 +46,32 @@ variable "billing_account" {
 }
 
 variable "activate_apis" {
-  description = "List of APIs to enable in the project"
+  description = "Additional APIs to enable in the project. compute.googleapis.com and servicenetworking.googleapis.com are always enabled; container.googleapis.com only when enable_gke (or enable_gke_network_user) is true."
   type        = list(string)
   default     = []
+}
+
+variable "enable_gke" {
+  description = "Enable container.googleapis.com (GKE) on the project. Previously force-enabled on every workload project by the upstream project-factory call; now opt-in. Implied by enable_gke_network_user."
+  type        = bool
+  default     = false
+}
+
+variable "create_project_service_account" {
+  description = "Create the dedicated \"project-service-account\" SA in the project (and grant it compute.networkUser on the Shared VPC subnets). Matches the upstream project-factory default (create_project_sa = true)."
+  type        = bool
+  default     = true
+}
+
+variable "default_service_account_action" {
+  description = "What to do with the project's default compute service account: DISABLE (default, matches the upstream project-factory), DEPRIVILEGE, DELETE or KEEP (leave it untouched)."
+  type        = string
+  default     = "DISABLE"
+
+  validation {
+    condition     = contains(["DISABLE", "DEPRIVILEGE", "DELETE", "KEEP"], var.default_service_account_action)
+    error_message = "default_service_account_action must be one of DISABLE, DEPRIVILEGE, DELETE or KEEP."
+  }
 }
 
 variable "labels" {

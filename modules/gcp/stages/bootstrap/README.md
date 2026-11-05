@@ -46,6 +46,14 @@ module "bootstrap" {
 - `workload_service_accounts`, `stage_service_accounts`, `workload_folder_roles`, `network_folder_roles` — consumed by gcp-projects
 - `admin_project_id`, `admin_project_number`, `terraform_admin_email`, `suffix` — unchanged contract
 
+## Admin project
+
+The admin project is created through the shared
+[project primitive](../../project/README.md) (`module.admin_project`); the
+`<prefix>-admin-<8 hex>` naming scheme stays in this stage. `moved.tf` moves the
+former `google_project.admin_project` and `google_project_service.admin_project_services`
+into the module, so upgrading replaces nothing.
+
 <!-- BEGIN_TF_DOCS -->
 
 
@@ -58,11 +66,11 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	admin_email = 
-	billing_account = 
-	org_id = 
-	project_prefix = 
-	
+	admin_email =
+	billing_account =
+	org_id =
+	project_prefix =
+
 }
 ```
 
@@ -70,7 +78,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.6 |
 
@@ -84,6 +92,7 @@ module "example" {
 ## Modules
 
 
+- admin_project - ../../project
 - gh_oidc - ../../iam/workload-identity
 - terraform_admin_sa - ../../iam/service-account
 - tfc_oidc - ../../iam/workload-identity
@@ -99,11 +108,9 @@ The following resources are created:
 - resource.google_organization_iam_member.projects_delegated_folder_iam (modules/gcp/stages/bootstrap/service_accounts.tf#L225)
 - resource.google_organization_iam_member.stage_org_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L201)
 - resource.google_organization_iam_member.stage_org_security_admin (modules/gcp/stages/bootstrap/service_accounts.tf#L213)
-- resource.google_project.admin_project (modules/gcp/stages/bootstrap/main.tf#L2)
 - resource.google_project_iam_member.stage_admin_project_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L237)
-- resource.google_project_service.admin_project_services (modules/gcp/stages/bootstrap/main.tf#L23)
 - resource.google_service_account.stage (modules/gcp/stages/bootstrap/service_accounts.tf#L190)
-- resource.random_id.suffix (modules/gcp/stages/bootstrap/main.tf#L18)
+- resource.random_id.suffix (modules/gcp/stages/bootstrap/main.tf#L6)
 
 
 ## Inputs
@@ -129,9 +136,9 @@ The following resources are created:
 | <a name="input_tfc_workload_workspace_prefix"></a> [tfc\_workload\_workspace\_prefix](#input\_tfc\_workload\_workspace\_prefix) | TFC workspace name prefix for per-environment workload workspaces (workspace = <prefix><env>). | `string` | `"gcp-workload-"` | no |
 | <a name="input_tfc_workspace_ids"></a> [tfc\_workspace\_ids](#input\_tfc\_workspace\_ids) | Optional map of TFC workspace NAME -> immutable workspace ID (ws-xxxxxxxx). When a workspace has an entry, its WIF bindings match the immutable ID (attribute.workspace\_id\_phase) instead of the name, so deleting/recreating or squatting the name gains nothing. | `map(string)` | `{}` | no |
 | <a name="input_vpc_sc_access_policy_id"></a> [vpc\_sc\_access\_policy\_id](#input\_vpc\_sc\_access\_policy\_id) | Optional numeric Access Context Manager policy ID. When set, workload apply SAs get roles/accesscontextmanager.policyEditor (plan: policyReader) on THIS policy only, so gcp-workload-<env> can manage its own perimeter without an org-level role. | `string` | `null` | no |
-| <a name="input_workload_billing_roles"></a> [workload\_billing\_roles](#input\_workload\_billing\_roles) | Billing-account roles for each workload SA (budgets live on the billing account, not a folder). Not org-level. | <pre>object({<br/>    plan  = list(string)<br/>    apply = list(string)<br/>  })</pre> | <pre>{<br/>  "apply": [<br/>    "roles/billing.costsManager"<br/>  ],<br/>  "plan": [<br/>    "roles/billing.viewer"<br/>  ]<br/>}</pre> | no |
+| <a name="input_workload_billing_roles"></a> [workload\_billing\_roles](#input\_workload\_billing\_roles) | Billing-account roles for each workload SA (budgets live on the billing account, not a folder). Not org-level. | <pre>object({<br/>    plan  = list(string)<br/>    apply = list(string)<br/>  })</pre> | <pre>{<br/>  "apply": [<br/>    "roles/billing.costsManager",<br/>    "roles/billing.user"<br/>  ],<br/>  "plan": [<br/>    "roles/billing.viewer"<br/>  ]<br/>}</pre> | no |
 | <a name="input_workload_environments"></a> [workload\_environments](#input\_workload\_environments) | Application environment keys. Each gets a <prefix>-wl-<env>-plan / -apply SA pair, bound to TFC workspace <tfc\_workload\_workspace\_prefix><env>. These SAs get NO org-level role; their folder roles are granted by the gcp-projects stage. | `set(string)` | `[]` | no |
-| <a name="input_workload_folder_roles"></a> [workload\_folder\_roles](#input\_workload\_folder\_roles) | Roles the gcp-projects stage grants each workload plan/apply SA on its OWN environment folder. Also the allow-list (with network\_folder\_roles) for the projects-apply SA's delegated folder-IAM grant. Avoid roles/owner: anything listed here becomes grantable on ANY folder by projects-apply. | <pre>object({<br/>    plan  = list(string)<br/>    apply = list(string)<br/>  })</pre> | <pre>{<br/>  "apply": [<br/>    "roles/resourcemanager.projectIamAdmin",<br/>    "roles/iam.serviceAccountAdmin",<br/>    "roles/iam.serviceAccountUser",<br/>    "roles/serviceusage.serviceUsageAdmin",<br/>    "roles/compute.admin",<br/>    "roles/compute.xpnAdmin",<br/>    "roles/servicenetworking.networksAdmin",<br/>    "roles/dns.admin",<br/>    "roles/secretmanager.admin",<br/>    "roles/storage.admin",<br/>    "roles/cloudkms.admin",<br/>    "roles/bigquery.admin",<br/>    "roles/logging.admin",<br/>    "roles/monitoring.admin",<br/>    "roles/pubsub.admin",<br/>    "roles/run.admin",<br/>    "roles/artifactregistry.admin"<br/>  ],<br/>  "plan": [<br/>    "roles/viewer",<br/>    "roles/iam.securityReviewer",<br/>    "roles/resourcemanager.folderViewer"<br/>  ]<br/>}</pre> | no |
+| <a name="input_workload_folder_roles"></a> [workload\_folder\_roles](#input\_workload\_folder\_roles) | Roles the gcp-projects stage grants each workload plan/apply SA on its OWN environment folder. Also the allow-list (with network\_folder\_roles) for the projects-apply SA's delegated folder-IAM grant. Avoid roles/owner: anything listed here becomes grantable on ANY folder by projects-apply. | <pre>object({<br/>    plan  = list(string)<br/>    apply = list(string)<br/>  })</pre> | <pre>{<br/>  "apply": [<br/>    "roles/resourcemanager.projectIamAdmin",<br/>    "roles/iam.serviceAccountAdmin",<br/>    "roles/iam.serviceAccountUser",<br/>    "roles/serviceusage.serviceUsageAdmin",<br/>    "roles/compute.admin",<br/>    "roles/compute.xpnAdmin",<br/>    "roles/servicenetworking.networksAdmin",<br/>    "roles/dns.admin",<br/>    "roles/secretmanager.admin",<br/>    "roles/storage.admin",<br/>    "roles/cloudkms.admin",<br/>    "roles/bigquery.admin",<br/>    "roles/logging.admin",<br/>    "roles/monitoring.admin",<br/>    "roles/pubsub.admin",<br/>    "roles/run.admin",<br/>    "roles/artifactregistry.admin",<br/>    "roles/resourcemanager.projectCreator",<br/>    "roles/iam.workloadIdentityPoolAdmin",<br/>    "roles/cloudsql.admin",<br/>    "roles/container.admin",<br/>    "roles/osconfig.patchDeploymentAdmin"<br/>  ],<br/>  "plan": [<br/>    "roles/viewer",<br/>    "roles/iam.securityReviewer",<br/>    "roles/resourcemanager.folderViewer"<br/>  ]<br/>}</pre> | no |
 
 ## Outputs
 

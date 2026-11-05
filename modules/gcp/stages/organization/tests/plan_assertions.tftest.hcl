@@ -291,3 +291,60 @@ run "legacy_admin_folder_grants_opt_in" {
     error_message = "enable_legacy_admin_folder_roles = true must restore the legacy folder grants"
   }
 }
+
+# CIS GCP 4.4: OS Login is required org-wide by default, with no exemptions.
+run "os_login_enforced_org_wide_by_default" {
+  command = plan
+
+  assert {
+    condition     = contains(keys(module.org_policies.boolean_policy_names), "compute.requireOsLogin")
+    error_message = "compute.requireOsLogin must be enforced at the org node by default."
+  }
+
+  assert {
+    condition     = length(module.os_login_exemptions) == 0 && length(output.os_login_exempt_environment_keys) == 0
+    error_message = "no OS Login folder exemptions by default."
+  }
+}
+
+run "os_login_folder_exemption" {
+  command = plan
+
+  variables {
+    os_login_exempt_environment_keys = ["dev"]
+  }
+
+  assert {
+    condition     = length(output.os_login_exempt_environment_keys) == 1 && contains(output.os_login_exempt_environment_keys, "dev") && contains(keys(module.os_login_exemptions["dev"].boolean_policy_names), "compute.requireOsLogin")
+    error_message = "an exempt folder must get a folder-level compute.requireOsLogin override."
+  }
+
+  assert {
+    condition     = contains(keys(module.org_policies.boolean_policy_names), "compute.requireOsLogin")
+    error_message = "exempting a folder must not drop the org-wide OS Login default."
+  }
+}
+
+run "os_login_org_enforcement_can_be_disabled" {
+  command = plan
+
+  variables {
+    enforce_os_login                 = false
+    os_login_exempt_environment_keys = ["dev"]
+  }
+
+  assert {
+    condition     = !contains(keys(module.org_policies.boolean_policy_names), "compute.requireOsLogin") && length(module.os_login_exemptions) == 0
+    error_message = "enforce_os_login = false must drop the org-level constraint and the (now pointless) exemptions."
+  }
+}
+
+# CIS GCP 2.4-2.11 log metrics ride on control-plane alerting.
+run "cis_log_metrics_wired_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(output.control_plane_cis_log_metric_names) == 8 && output.control_plane_cis_log_metric_names["vpc_firewall_rule_change"] == "cis-vpc_firewall_rule_change"
+    error_message = "the org stage must create the 8 CIS 2.4-2.11 log metrics in the alerting project by default."
+  }
+}

@@ -143,3 +143,13 @@ run "bad_thumbprint_rejected" {
 
   expect_failures = [var.oidc_thumbprints]
 }
+
+run "invalid_boundary_arn_rejected" {
+  command = plan
+
+  variables {
+    apply_permissions_boundary_arn = "not-an-arn"
+  }
+
+  expect_failures = [var.apply_permissions_boundary_arn]
+}

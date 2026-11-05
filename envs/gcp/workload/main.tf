@@ -240,6 +240,69 @@ module "service_team" {
 }
 
 # =============================================================================
+# VM BACKUP + OS PATCHING (CIS/NIST CP-9, SI-2 — BCK-05, VUL-05)
+#
+# Targets the env host project and every service-team project (Compute resource
+# policies attach only to disks in their own project; patch deployments are
+# project-scoped). Keys are static (host + team keys) so for_each is plan-safe
+# even while the team projects are still being created.
+#
+# - enable_vm_backup_policy (default true): a snapshot-schedule resource policy
+#   per project. It costs nothing until a disk is attached to it: attach it with
+#   google_compute_disk_resource_policy_attachment or the disk's resource_policies.
+# - enable_os_patch_management (default false): a weekly VM Manager patch
+#   deployment per project, plus osconfig.googleapis.com. Off by default because
+#   the workload apply SA needs roles/osconfig.patchDeploymentAdmin, which is not
+#   in the default gcp-bootstrap workload_folder_roles allow-list; add it there
+#   first. VMs need the OS Config agent and enable-osconfig=TRUE metadata.
+# =============================================================================
+
+locals {
+  vm_ops_projects = merge(
+    { host = local.env_config.host_project_id },
+    { for k, _ in var.service_teams : "team-${k}" => module.service_team[k].project_id },
+  )
+
+  effective_vm_backup_schedules = var.vm_backup_schedules != null ? var.vm_backup_schedules : {
+    "vm-daily-snapshots" = {}
+  }
+
+  effective_os_patch_deployments = var.os_patch_deployments != null ? var.os_patch_deployments : {
+    "weekly-os-patch" = {
+      description = "Weekly OS patching for ${var.environment} (Terraform-managed)."
+    }
+  }
+}
+
+module "vm_backup_policy" {
+  source   = "../../../modules/gcp/backup/backup-plan"
+  for_each = var.enable_vm_backup_policy ? local.vm_ops_projects : {}
+
+  project_id = each.value
+  region     = local.env_config.region
+  labels     = local.labels
+  schedules  = local.effective_vm_backup_schedules
+}
+
+resource "google_project_service" "osconfig" {
+  for_each = var.enable_os_patch_management ? local.vm_ops_projects : {}
+
+  project            = each.value
+  service            = "osconfig.googleapis.com"
+  disable_on_destroy = false
+}
+
+module "os_patch_management" {
+  source   = "../../../modules/gcp/ops/os-config"
+  for_each = var.enable_os_patch_management ? local.vm_ops_projects : {}
+
+  project_id        = each.value
+  patch_deployments = local.effective_os_patch_deployments
+
+  depends_on = [google_project_service.osconfig]
+}
+
+# =============================================================================
 # SaaS SECRET BRIDGE (audit H9, hybrid option C — first increment)
 #
 # Opt-in. Reads the Supabase outputs from a saas-<name> workspace and writes them
@@ -315,6 +378,7 @@ module "app_services" {
   services                       = var.app_services
   enable_deletion_protection     = var.enable_deletion_protection
   artifact_registry_kms_key_name = var.artifact_registry_kms_key_name
+  enable_vulnerability_scanning  = var.enable_artifact_registry_vulnerability_scanning
 
   enable_app_deploy_wif      = var.enable_app_deploy_wif
   app_deploy_wif_pool_id     = var.app_deploy_wif_pool_id

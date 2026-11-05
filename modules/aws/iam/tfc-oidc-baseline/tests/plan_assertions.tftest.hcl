@@ -189,3 +189,111 @@ run "no_bindings_deploys_only_the_oidc_provider" {
     error_message = "with no bindings the template must contain only the OIDC provider and no empty Conditions section"
   }
 }
+
+run "apply_role_capped_by_embedded_boundary" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for name, r in jsondecode(output.template_body).Resources :
+      !startswith(name, "TfcApplyRole") || r.Properties.PermissionsBoundary == { Ref = "TfcApplyBoundary" }
+    ])
+    error_message = "every apply role must reference the embedded TfcApplyBoundary by default"
+  }
+
+  assert {
+    condition = alltrue([
+      for name, r in jsondecode(output.template_body).Resources :
+      !startswith(name, "TfcPlanRole") || !contains(keys(r.Properties), "PermissionsBoundary")
+    ])
+    error_message = "the read-only plan role needs no boundary"
+  }
+
+  assert {
+    condition     = jsondecode(output.template_body).Resources.TfcApplyBoundary.Type == "AWS::IAM::ManagedPolicy" && jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.ManagedPolicyName == "tfc-apply-boundary"
+    error_message = "the template must create exactly one tfc-apply-boundary managed policy"
+  }
+
+  # Allow-all base so legitimate Terraform is not blocked; only targeted denies.
+  assert {
+    condition = anytrue([
+      for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+      s.Effect == "Allow" && s.Action == "*" && s.Resource == "*"
+    ])
+    error_message = "the boundary must allow everything not explicitly denied"
+  }
+
+  assert {
+    condition = alltrue([
+      for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+      s.Effect == "Allow" || s.Action != "*"
+    ])
+    error_message = "no boundary deny may be a blanket Action = *"
+  }
+
+  assert {
+    condition = alltrue([for a in [
+      "organizations:LeaveOrganization",
+      "cloudtrail:StopLogging", "cloudtrail:DeleteTrail",
+      "guardduty:DeleteDetector", "guardduty:DisassociateFromAdministratorAccount",
+      "config:StopConfigurationRecorder", "config:DeleteConfigurationRecorder", "config:DeleteDeliveryChannel",
+      "iam:CreateUser", "iam:CreateAccessKey",
+      ] : anytrue([
+        for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+        s.Effect == "Deny" && contains(flatten([s.Action]), a)
+    ])])
+    error_message = "the boundary must deny leaving the org, disabling CloudTrail/GuardDuty/Config, and creating IAM users/access keys"
+  }
+
+  # Self-protection: the roles, the OIDC provider and the boundary itself.
+  assert {
+    condition = anytrue([
+      for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+      s.Sid == "DenyTamperingWithTfcBaseline" &&
+      contains(s.Action, "iam:UpdateAssumeRolePolicy") && contains(s.Action, "iam:DeleteRolePermissionsBoundary") && contains(s.Action, "iam:CreatePolicyVersion") &&
+      toset([for r in s.Resource : r["Fn::Sub"]]) == toset([
+        "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:role/tfc-plan",
+        "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:role/tfc-apply",
+        "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:oidc-provider/app.terraform.io",
+        "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:policy/tfc-apply-boundary",
+      ])
+    ])
+    error_message = "the boundary must stop the apply role tampering with the TFC roles, OIDC provider or the boundary"
+  }
+
+  assert {
+    condition     = output.apply_permissions_boundary == "embedded:tfc-apply-boundary"
+    error_message = "apply_permissions_boundary output must report the embedded boundary"
+  }
+
+  assert {
+    condition     = length(output.template_body) <= 51200
+    error_message = "template with boundary must stay within the inline template limit"
+  }
+}
+
+run "external_boundary_arn_used_when_supplied" {
+  command = plan
+
+  variables {
+    apply_permissions_boundary_arn = "arn:aws:iam::aws:policy/PowerUserAccess"
+  }
+
+  assert {
+    condition     = !contains(keys(jsondecode(output.template_body).Resources), "TfcApplyBoundary") && jsondecode(output.template_body).Resources.TfcApplyRoleNetwork.Properties.PermissionsBoundary == "arn:aws:iam::aws:policy/PowerUserAccess"
+    error_message = "a supplied boundary ARN must replace the embedded boundary"
+  }
+}
+
+run "boundary_can_be_disabled" {
+  command = plan
+
+  variables {
+    enable_apply_permissions_boundary = false
+  }
+
+  assert {
+    condition     = !contains(keys(jsondecode(output.template_body).Resources), "TfcApplyBoundary") && !contains(keys(jsondecode(output.template_body).Resources.TfcApplyRoleNetwork.Properties), "PermissionsBoundary") && output.apply_permissions_boundary == null
+    error_message = "disabling the boundary must remove it from the template and the apply role"
+  }
+}

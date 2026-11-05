@@ -104,7 +104,11 @@ module "tfc_oidc_baseline" {
   tfc_project               = var.tfc_project
   allow_workspace_wildcards = var.tfc_oidc_allow_workspace_wildcards
   apply_role_policy_arns    = var.tfc_apply_role_policy_arns
-  call_as                   = var.tfc_oidc_call_as
+
+  # Permissions boundary on tfc-apply (default: embedded tfc-apply-boundary).
+  enable_apply_permissions_boundary = var.tfc_enable_apply_permissions_boundary
+  apply_permissions_boundary_arn    = var.tfc_apply_permissions_boundary_arn
+  call_as                           = var.tfc_oidc_call_as
 
   account_bindings = {
     for k, b in var.tfc_workspace_bindings : k => {

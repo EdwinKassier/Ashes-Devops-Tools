@@ -233,3 +233,63 @@ run "app_service_golden_path" {
     error_message = "the Cloud Run service must be named after the app_services key"
   }
 }
+
+# BCK-05 / VUL-05: VM snapshot schedules on by default (host project), VM
+# Manager patching also on by default.
+run "vm_backup_and_patching_on_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(module.vm_backup_policy) == 1 && contains(module.vm_backup_policy["host"].schedule_names, "vm-daily-snapshots")
+    error_message = "the host project must get the default daily snapshot-schedule policy."
+  }
+
+  assert {
+    condition     = length(module.os_patch_management) == 1 && length(google_project_service.osconfig) == 1
+    error_message = "OS patch management must be on by default for the host project (the workload apply SA holds roles/osconfig.patchDeploymentAdmin)."
+  }
+}
+
+run "vm_ops_cover_service_teams_when_enabled" {
+  command = plan
+
+  variables {
+    enable_os_patch_management = true
+    service_teams = {
+      payments = {
+        project_admin_group_email = "payments-admins@acme.test"
+        shared_vpc_subnets = {
+          private = { region = "europe-west1", subnet_name = "acme-dev-vpc-private-europe-west1-b" }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = toset(keys(module.vm_backup_policy)) == toset(["host", "team-payments"])
+    error_message = "snapshot schedules must be created in the host project and in every service-team project."
+  }
+
+  assert {
+    condition     = toset(keys(module.os_patch_management)) == toset(["host", "team-payments"]) && google_project_service.osconfig["host"].service == "osconfig.googleapis.com"
+    error_message = "enable_os_patch_management must enable osconfig and create a patch deployment per target project."
+  }
+
+  assert {
+    condition     = contains(keys(module.os_patch_management["host"].patch_deployment_ids), "weekly-os-patch")
+    error_message = "the default patch deployment must be weekly-os-patch."
+  }
+}
+
+run "vm_backup_can_be_disabled" {
+  command = plan
+
+  variables {
+    enable_vm_backup_policy = false
+  }
+
+  assert {
+    condition     = length(module.vm_backup_policy) == 0
+    error_message = "enable_vm_backup_policy = false must create no snapshot policies."
+  }
+}

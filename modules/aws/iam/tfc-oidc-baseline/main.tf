@@ -10,6 +10,10 @@
 #       <host>:sub = organization:<org>:project:<project>:workspace:<ws>:run_phase:plan
 #   - <apply_role_name> (default tfc-apply) — apply policy; trusts ONLY
 #       <host>:sub = organization:<org>:project:<project>:workspace:<ws>:run_phase:apply
+#       capped by a permissions boundary (default: the embedded TfcApplyBoundary
+#       managed policy) so the apply identity cannot leave the org, blind the
+#       detective controls, rewrite its own trust/boundary, or mint long-lived
+#       IAM user credentials, while every other action stays allowed.
 #
 # One template serves every account. Per-account workspace scoping is compiled
 # into the template as CloudFormation Conditions keyed on AWS::AccountId, so a
@@ -70,6 +74,119 @@ locals {
     }
   }
 
+  # --- Apply-role permissions boundary ------------------------------------
+  # Embedded boundary: ONE AWS::IAM::ManagedPolicy per account (unconditional, so
+  # it is created even in unbound accounts of a targeted OU, where it is inert,
+  # and the template does not grow per binding), unless an external boundary
+  # ARN is supplied. Omitted entirely when there are no bindings.
+  create_apply_boundary = var.enable_apply_permissions_boundary && var.apply_permissions_boundary_arn == null && length(var.account_bindings) > 0
+
+  # CloudFormation Fn::Sub strings: $${...} renders a literal ${...} for CFN.
+  baseline_protected_arns = [
+    "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:role/${var.plan_role_name}",
+    "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:role/${var.apply_role_name}",
+    "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:oidc-provider/${var.tfc_hostname}",
+    "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:policy/${var.apply_boundary_policy_name}",
+  ]
+
+  apply_boundary_document = {
+    Version = "2012-10-17"
+    Statement = [
+      {
+        # A boundary is an intersection: everything not denied below remains
+        # grantable by the role's identity policies (apply_role_policy_arns).
+        Sid      = "AllowAllNotExplicitlyDenied"
+        Effect   = "Allow"
+        Action   = "*"
+        Resource = "*"
+      },
+      {
+        Sid      = "DenyLeaveOrganization"
+        Effect   = "Deny"
+        Action   = ["organizations:LeaveOrganization"]
+        Resource = "*"
+      },
+      {
+        # Stop/destroy of the detective controls. Creating and updating them
+        # (detectors, recorders, delivery channels) stays allowed so the
+        # security/workload layers can still manage their own configuration.
+        Sid    = "DenyDisablingDetectiveControls"
+        Effect = "Deny"
+        Action = [
+          "cloudtrail:StopLogging",
+          "cloudtrail:DeleteTrail",
+          "guardduty:DeleteDetector",
+          "guardduty:DisassociateFromAdministratorAccount",
+          "guardduty:DisassociateFromMasterAccount",
+          "guardduty:StopMonitoringMembers",
+          "config:StopConfigurationRecorder",
+          "config:DeleteConfigurationRecorder",
+          "config:DeleteDeliveryChannel",
+        ]
+        Resource = "*"
+      },
+      {
+        # The apply identity must not rewrite its own trust, policies or
+        # boundary, the sibling plan role, or the OIDC provider: those are owned
+        # by this StackSet (CloudFormation's execution role is unaffected).
+        Sid    = "DenyTamperingWithTfcBaseline"
+        Effect = "Deny"
+        Action = [
+          "iam:AttachRolePolicy",
+          "iam:DeleteRole",
+          "iam:DeleteRolePermissionsBoundary",
+          "iam:DeleteRolePolicy",
+          "iam:DetachRolePolicy",
+          "iam:PutRolePermissionsBoundary",
+          "iam:PutRolePolicy",
+          "iam:UpdateAssumeRolePolicy",
+          "iam:UpdateRole",
+          "iam:UpdateRoleDescription",
+          "iam:TagRole",
+          "iam:UntagRole",
+          "iam:CreatePolicyVersion",
+          "iam:DeletePolicy",
+          "iam:DeletePolicyVersion",
+          "iam:SetDefaultPolicyVersion",
+          "iam:DeleteOpenIDConnectProvider",
+          "iam:UpdateOpenIDConnectProviderThumbprint",
+          "iam:AddClientIDToOpenIDConnectProvider",
+          "iam:RemoveClientIDFromOpenIDConnectProvider",
+          "iam:TagOpenIDConnectProvider",
+          "iam:UntagOpenIDConnectProvider",
+        ]
+        Resource = [for a in local.baseline_protected_arns : { "Fn::Sub" = a }]
+      },
+      {
+        # No long-lived static credentials from the pipeline: identities come
+        # from Identity Center and workload identity federation.
+        Sid      = "DenyLongLivedIamUserCredentials"
+        Effect   = "Deny"
+        Action   = ["iam:CreateUser", "iam:CreateAccessKey", "iam:CreateLoginProfile"]
+        Resource = "*"
+      },
+    ]
+  }
+
+  apply_boundary_resource = local.create_apply_boundary ? {
+    TfcApplyBoundary = {
+      Type = "AWS::IAM::ManagedPolicy"
+      Properties = {
+        ManagedPolicyName = var.apply_boundary_policy_name
+        Description       = "Permissions boundary for the Terraform Cloud apply role (managed by Terraform: modules/aws/iam/tfc-oidc-baseline)"
+        PolicyDocument    = local.apply_boundary_document
+      }
+    }
+  } : {}
+
+  # The apply role's PermissionsBoundary property ({} = omitted).
+  # Built with for-expressions (no ternary) so the {Ref} object and the ARN
+  # string need no type unification.
+  apply_boundary_property = merge(
+    { for _ in(local.create_apply_boundary ? [1] : []) : "PermissionsBoundary" => { Ref = "TfcApplyBoundary" } },
+    { for _ in(var.enable_apply_permissions_boundary && var.apply_permissions_boundary_arn != null ? [1] : []) : "PermissionsBoundary" => var.apply_permissions_boundary_arn },
+  )
+
   oidc_provider = {
     TfcOidcProvider = {
       Type = "AWS::IAM::OIDCProvider"
@@ -99,13 +216,16 @@ locals {
       "TfcApplyRole${local.logical_suffix[k]}" = {
         Type      = "AWS::IAM::Role"
         Condition = "Is${local.logical_suffix[k]}"
-        Properties = {
-          RoleName                 = var.apply_role_name
-          Description              = "Terraform Cloud APPLY phase for ${k}"
-          AssumeRolePolicyDocument = local.trust_policies[k]["apply"]
-          ManagedPolicyArns        = var.apply_role_policy_arns
-          MaxSessionDuration       = var.max_session_duration
-        }
+        Properties = merge(
+          {
+            RoleName                 = var.apply_role_name
+            Description              = "Terraform Cloud APPLY phase for ${k}"
+            AssumeRolePolicyDocument = local.trust_policies[k]["apply"]
+            ManagedPolicyArns        = var.apply_role_policy_arns
+            MaxSessionDuration       = var.max_session_duration
+          },
+          local.apply_boundary_property,
+        )
       }
     }
   ]...)
@@ -120,7 +240,7 @@ locals {
     {
       AWSTemplateFormatVersion = "2010-09-09"
       Description              = "Terraform Cloud OIDC workload-identity baseline (managed by Terraform: modules/aws/iam/tfc-oidc-baseline)"
-      Resources                = merge(local.oidc_provider, local.role_resources)
+      Resources                = merge(local.oidc_provider, local.apply_boundary_resource, local.role_resources)
       Outputs = {
         OidcProviderArn = { Value = { Ref = "TfcOidcProvider" } }
       }

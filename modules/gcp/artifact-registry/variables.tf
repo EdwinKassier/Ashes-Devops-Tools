@@ -116,3 +116,15 @@ variable "labels" {
     managed-by = "terraform"
   }
 }
+
+variable "enable_vulnerability_scanning" {
+  description = "Scan DOCKER images automatically on push (Artifact Analysis). Sets each DOCKER repository's vulnerability_scanning_config to INHERITED (DISABLED when false) and, with enable_container_scanning_api, enables containerscanning.googleapis.com. Scanning is billed per image."
+  type        = bool
+  default     = true
+}
+
+variable "enable_container_scanning_api" {
+  description = "Enable containerscanning.googleapis.com on project_id when enable_vulnerability_scanning is true. Set false when the caller already manages project APIs (disable_on_destroy is false either way)."
+  type        = bool
+  default     = true
+}

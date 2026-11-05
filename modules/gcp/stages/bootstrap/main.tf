@@ -1,10 +1,20 @@
-# Admin Project - Foundation of the Automation
-resource "google_project" "admin_project" {
-  name                = "${var.project_prefix}-admin"
-  project_id          = "${var.project_prefix}-admin-${random_id.suffix.hex}"
-  org_id              = var.org_id
-  billing_account     = var.billing_account
-  auto_create_network = false
+# Admin Project - Foundation of the Automation.
+# Created through the shared project primitive (modules/gcp/project), so the
+# admin project gets the same baseline as every other project: no default
+# network, deletion_policy = PREVENT, APIs never disabled on destroy. The naming
+# scheme (<prefix>-admin-<suffix>) stays here in the stage.
+resource "random_id" "suffix" {
+  byte_length = 4
+}
+
+module "admin_project" {
+  source = "../../project"
+
+  name            = "${var.project_prefix}-admin"
+  project_id      = "${var.project_prefix}-admin-${random_id.suffix.hex}"
+  parent          = "organizations/${var.org_id}"
+  billing_account = var.billing_account
+
   labels = {
     environment = "admin"
     purpose     = "administration"
@@ -13,15 +23,9 @@ resource "google_project" "admin_project" {
 
   # The admin/automation project must not be deletable by a routine plan.
   deletion_policy = "PREVENT"
-}
 
-resource "random_id" "suffix" {
-  byte_length = 4
-}
-
-# Enable essential APIs on the admin project
-resource "google_project_service" "admin_project_services" {
-  for_each = toset([
+  # Essential APIs on the admin project.
+  services = [
     "cloudresourcemanager.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
@@ -41,13 +45,7 @@ resource "google_project_service" "admin_project_services" {
     "pubsub.googleapis.com",
     "bigquery.googleapis.com",
     "monitoring.googleapis.com",
-  ])
-
-  project = google_project.admin_project.project_id
-  service = each.key
-
-  disable_dependent_services = false
-  disable_on_destroy         = false
+  ]
 }
 
 # Terraform Admin Service Account (= the gcp-bootstrap APPLY identity).
@@ -59,7 +57,7 @@ resource "google_project_service" "admin_project_services" {
 module "terraform_admin_sa" {
   source = "../../iam/service-account"
 
-  project_id   = google_project.admin_project.project_id
+  project_id   = module.admin_project.project_id
   account_id   = "terraform-admin"
   display_name = "Terraform Admin"
   description  = "Centralised Terraform Admin for managing downstream resources"
@@ -80,7 +78,7 @@ module "gh_oidc" {
   source = "../../iam/workload-identity"
   count  = var.enable_github_wif ? 1 : 0
 
-  project_id   = google_project.admin_project.project_id
+  project_id   = module.admin_project.project_id
   pool_id      = var.github_wif_pool_id
   display_name = "GitHub Actions Pool"
 
@@ -114,7 +112,7 @@ module "tfc_oidc" {
   source = "../../iam/workload-identity"
   count  = var.enable_tfc_oidc && var.tfc_organization != null ? 1 : 0
 
-  project_id   = google_project.admin_project.project_id
+  project_id   = module.admin_project.project_id
   pool_id      = "tfc-pool"
   display_name = "Terraform Cloud Pool"
 

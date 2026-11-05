@@ -158,6 +158,23 @@ variable "strict_folder_policy_environment_keys" {
   type        = list(string)
 }
 
+variable "enforce_os_login" {
+  description = "Enforce compute.requireOsLogin at the organization node (CIS GCP 4.4), so every VM in every folder must use OS Login. Exempt folders via os_login_exempt_environment_keys. Default true."
+  type        = bool
+  default     = true
+}
+
+variable "os_login_exempt_environment_keys" {
+  description = "Environment folder keys exempted from the org-wide OS Login requirement (a folder-level compute.requireOsLogin = false override). Keys in strict_folder_policy_environment_keys cannot be exempted. Default [] = no exemptions."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = length(setintersection(toset(var.os_login_exempt_environment_keys), toset(var.strict_folder_policy_environment_keys))) == 0
+    error_message = "os_login_exempt_environment_keys must not include a strict folder (strict_folder_policy_environment_keys always requires OS Login)."
+  }
+}
+
 variable "security_contact_email" {
   description = "Email address for security notifications via Essential Contacts (SCC alerts, compliance notifications). Optional — if null, no Essential Contact is registered for the SECURITY category."
   type        = string
@@ -272,6 +289,12 @@ variable "audit_soft_delete_retention_days" {
 # --- Control-plane alerting (audit Security High) ---
 variable "enable_control_plane_alerting" {
   description = "Create log-match alerts on control-plane changes (org IAM, org policy, VPC-SC, sinks/exclusions, custom roles, deny policies, KMS key destroy) and on break-glass use, in the audit/logging project. Default true."
+  type        = bool
+  default     = true
+}
+
+variable "enable_cis_log_metrics" {
+  description = "With enable_control_plane_alerting, also create the CIS GCP 2.4-2.11 log-based metrics and alert policies (project ownership, audit config, custom roles, firewall rules, routes, networks, Cloud Storage IAM, Cloud SQL config) in the audit/logging project. The aggregated org sink feeds them every project's Admin Activity logs, so one set covers the org. Default true."
   type        = bool
   default     = true
 }

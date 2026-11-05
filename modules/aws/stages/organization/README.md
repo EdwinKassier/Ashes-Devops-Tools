@@ -36,10 +36,10 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	break_glass_role_arn = 
-	log_archive_bucket_name = 
-	terraform_run_role_arn = 
-	
+	break_glass_role_arn =
+	log_archive_bucket_name =
+	terraform_run_role_arn =
+
 }
 ```
 
@@ -47,7 +47,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.46.0, < 7.0.0 |
 
 
@@ -84,7 +84,9 @@ module "example" {
 | <a name="input_enable_cost_governance"></a> [enable\_cost\_governance](#input\_enable\_cost\_governance) | Gate for the cost-governance module (budgets, Cost Anomaly Detection, cost-allocation tags). When false the module composes as a no-op. | `bool` | `true` | no |
 | <a name="input_enable_tfc_oidc_baseline"></a> [enable\_tfc\_oidc\_baseline](#input\_enable\_tfc\_oidc\_baseline) | Gate for the TFC OIDC baseline StackSet (OIDC provider + tfc-plan/tfc-apply roles in member accounts). Requires tfc\_organization when true. | `bool` | `true` | no |
 | <a name="input_pipeline_role_names"></a> [pipeline\_role\_names](#input\_pipeline\_role\_names) | Member-account Terraform pipeline role names (or name patterns) passed to the deny-tamper SCP. Rendered as arn:aws:iam::*:role/<name>: exempt from the security-service reconfiguration denies and protected from IAM modification. SCPs never apply to the management account, so these must be the roles that run IN member accounts. | `list(string)` | <pre>[<br/>  "tfc-apply",<br/>  "OrganizationAccountAccessRole",<br/>  "stacksets-exec-*"<br/>]</pre> | no |
-| <a name="input_tfc_apply_role_policy_arns"></a> [tfc\_apply\_role\_policy\_arns](#input\_tfc\_apply\_role\_policy\_arns) | Managed policy ARNs attached to every member-account tfc-apply role. | `list(string)` | <pre>[<br/>  "arn:aws:iam::aws:policy/AdministratorAccess"<br/>]</pre> | no |
+| <a name="input_tfc_apply_permissions_boundary_arn"></a> [tfc\_apply\_permissions\_boundary\_arn](#input\_tfc\_apply\_permissions\_boundary\_arn) | Optional existing permissions-boundary policy ARN for the tfc-apply roles (must exist in every bound account). Null (default) = the embedded tfc-apply-boundary. | `string` | `null` | no |
+| <a name="input_tfc_apply_role_policy_arns"></a> [tfc\_apply\_role\_policy\_arns](#input\_tfc\_apply\_role\_policy\_arns) | Managed policy ARNs attached to every member-account tfc-apply role (capped by the apply permissions boundary, tfc\_enable\_apply\_permissions\_boundary). | `list(string)` | <pre>[<br/>  "arn:aws:iam::aws:policy/AdministratorAccess"<br/>]</pre> | no |
+| <a name="input_tfc_enable_apply_permissions_boundary"></a> [tfc\_enable\_apply\_permissions\_boundary](#input\_tfc\_enable\_apply\_permissions\_boundary) | Cap every member-account tfc-apply role with a permissions boundary (default true). With tfc\_apply\_permissions\_boundary\_arn = null the StackSet embeds tfc-apply-boundary: allow-all except leaving the org, stopping/deleting CloudTrail/GuardDuty/Config, modifying the TFC roles/OIDC provider/boundary, and creating IAM users/access keys. | `bool` | `true` | no |
 | <a name="input_tfc_hostname"></a> [tfc\_hostname](#input\_tfc\_hostname) | Terraform Cloud / Enterprise hostname issuing the workload-identity tokens. | `string` | `"app.terraform.io"` | no |
 | <a name="input_tfc_oidc_allow_workspace_wildcards"></a> [tfc\_oidc\_allow\_workspace\_wildcards](#input\_tfc\_oidc\_allow\_workspace\_wildcards) | Allow '*' inside bound workspace names (StringLike sub match). The organization and project are always literal. Default false: exact workspace names. | `bool` | `false` | no |
 | <a name="input_tfc_oidc_call_as"></a> [tfc\_oidc\_call\_as](#input\_tfc\_oidc\_call\_as) | Manage the StackSet as the management account (SELF) or a CloudFormation delegated administrator (DELEGATED\_ADMIN). | `string` | `"SELF"` | no |

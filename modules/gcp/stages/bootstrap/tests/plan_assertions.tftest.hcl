@@ -99,7 +99,7 @@ run "workload_sas_have_no_org_level_iam" {
   }
 
   assert {
-    condition     = sort([for k, b in google_billing_account_iam_member.stage_billing_roles : b.role if startswith(k, "wl-dev-")]) == sort(["roles/billing.costsManager", "roles/billing.viewer"])
+    condition     = sort([for k, b in google_billing_account_iam_member.stage_billing_roles : b.role if startswith(k, "wl-dev-")]) == sort(["roles/billing.costsManager", "roles/billing.user", "roles/billing.viewer"])
     error_message = "Workload SAs get only billing-account scoped budget roles (plan: viewer, apply: costsManager)."
   }
 }
@@ -223,5 +223,31 @@ run "github_wif_pins_immutable_ids_and_readonly_sa" {
   assert {
     condition     = keys(module.gh_oidc[0].github_binding_service_accounts) == ["organization-plan"]
     error_message = "GitHub must be bound ONLY to the read-only organization plan SA, never the admin SA."
+  }
+}
+
+# Audit Modularity-H: the admin project is created through the shared project
+# primitive (modules/gcp/project); the stage owns only the naming scheme.
+run "admin_project_uses_project_primitive" {
+  command = plan
+
+  assert {
+    condition     = module.admin_project.name == "mock-org-admin"
+    error_message = "Admin project display name must be <prefix>-admin."
+  }
+
+  assert {
+    condition     = module.admin_project.parent == "organizations/123456789"
+    error_message = "Admin project must be created directly under the organization."
+  }
+
+  assert {
+    condition     = contains(module.admin_project.services, "iamcredentials.googleapis.com") && contains(module.admin_project.services, "cloudresourcemanager.googleapis.com")
+    error_message = "Admin project must enable the WIF / resource-manager APIs."
+  }
+
+  assert {
+    condition     = module.admin_project.labels["purpose"] == "administration"
+    error_message = "Admin project must carry the administration labels."
   }
 }

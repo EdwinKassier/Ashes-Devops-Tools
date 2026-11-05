@@ -16,3 +16,8 @@ output "repository_urls" {
     if contains(keys(local.ar_hosts), v.format)
   }
 }
+
+output "vulnerability_scanning_enabled" {
+  description = "Whether DOCKER repositories are configured to scan pushed images (enable_vulnerability_scanning)."
+  value       = var.enable_vulnerability_scanning
+}

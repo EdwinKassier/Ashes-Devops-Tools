@@ -92,7 +92,7 @@ assignees: ''
 # Example Terraform configuration
 module "example" {
   source = "./modules/new-feature"
-  
+
   # Configuration
 }
 ```

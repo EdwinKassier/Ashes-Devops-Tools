@@ -32,12 +32,12 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	image = 
-	location = 
-	name = 
-	project_id = 
-	service_account_email = 
-	
+	image =
+	location =
+	name =
+	project_id =
+	service_account_email =
+
 }
 ```
 
@@ -45,7 +45,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
 
 ## Providers

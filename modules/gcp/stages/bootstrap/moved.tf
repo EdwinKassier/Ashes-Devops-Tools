@@ -27,3 +27,16 @@ moved {
   from = module.gh_oidc
   to   = module.gh_oidc[0]
 }
+
+# Audit Modularity-H: the admin project moved from a raw google_project into the
+# shared project primitive (modules/gcp/project). Both the project and its
+# for_each services move wholesale (same keys), so nothing is replaced.
+moved {
+  from = google_project.admin_project
+  to   = module.admin_project.google_project.this
+}
+
+moved {
+  from = google_project_service.admin_project_services
+  to   = module.admin_project.google_project_service.this
+}

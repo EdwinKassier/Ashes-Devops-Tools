@@ -19,11 +19,11 @@ module "compute_dashboard" {
 
   project_id             = "my-project-id"
   dashboard_display_name = "Unified Compute Dashboard"
-  
+
   # Optional: thresholds for scorecard indicators
   latency_threshold_ms         = 1000
   error_rate_threshold_percent = 1.0
-  
+
   # Optional: include Gen1 Cloud Functions metrics
   include_gen1_functions = true
 }
@@ -61,8 +61,8 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	project_id = 
-	
+	project_id =
+
 }
 ```
 
@@ -70,7 +70,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
 
 ## Providers

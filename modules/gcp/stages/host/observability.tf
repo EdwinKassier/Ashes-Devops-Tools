@@ -82,4 +82,3 @@ module "packet_mirroring" {
   priority             = try(each.value.priority, 1000)
   enable               = try(each.value.enable, true)
 }
-

@@ -9,6 +9,10 @@ Artifact Registry Module
 Creates repositories for storing container images and language packages.
 Supports Docker, Python, npm, Maven, Go, and Apt formats.
 
+Vulnerability scanning (enable\_vulnerability\_scanning, default on) enables the
+Container Scanning API and sets DOCKER repositories to scan automatically on push
+(vulnerability\_scanning\_config = INHERITED, following the project setting).
+
 ## Usage
 
 Basic usage of this module is as follows:
@@ -18,8 +22,8 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	project_id = 
-	
+	project_id =
+
 }
 ```
 
@@ -27,7 +31,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
 
 ## Providers
@@ -43,7 +47,8 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_artifact_registry_repository.repo (modules/gcp/artifact-registry/main.tf#L18)
+- resource.google_artifact_registry_repository.repo (modules/gcp/artifact-registry/main.tf#L32)
+- resource.google_project_service.container_scanning (modules/gcp/artifact-registry/main.tf#L24)
 
 
 ## Inputs
@@ -51,6 +56,8 @@ The following resources are created:
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The GCP project ID where the Artifact Registry repositories will be created | `string` | n/a | yes |
+| <a name="input_enable_container_scanning_api"></a> [enable\_container\_scanning\_api](#input\_enable\_container\_scanning\_api) | Enable containerscanning.googleapis.com on project\_id when enable\_vulnerability\_scanning is true. Set false when the caller already manages project APIs (disable\_on\_destroy is false either way). | `bool` | `true` | no |
+| <a name="input_enable_vulnerability_scanning"></a> [enable\_vulnerability\_scanning](#input\_enable\_vulnerability\_scanning) | Scan DOCKER images automatically on push (Artifact Analysis). Sets each DOCKER repository's vulnerability\_scanning\_config to INHERITED (DISABLED when false) and, with enable\_container\_scanning\_api, enables containerscanning.googleapis.com. Scanning is billed per image. | `bool` | `true` | no |
 | <a name="input_kms_key_name"></a> [kms\_key\_name](#input\_kms\_key\_name) | Customer-managed KMS key name used to encrypt repository contents. Omit for Google-managed encryption. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to all repositories | `map(string)` | <pre>{<br/>  "managed-by": "terraform"<br/>}</pre> | no |
 | <a name="input_region"></a> [region](#input\_region) | The region where the Artifact Registry repositories will be created | `string` | `"us-central1"` | no |
@@ -63,4 +70,5 @@ The following resources are created:
 | <a name="output_repository_ids"></a> [repository\_ids](#output\_repository\_ids) | Map of repository names to their IDs |
 | <a name="output_repository_names"></a> [repository\_names](#output\_repository\_names) | Map of repository names to their full resource names |
 | <a name="output_repository_urls"></a> [repository\_urls](#output\_repository\_urls) | Map of repository names to their package-registry URLs, built per format (docker/maven/npm/python). Formats without a registry host (APT/YUM/GOOGET/KFP/GENERIC) are omitted. |
+| <a name="output_vulnerability_scanning_enabled"></a> [vulnerability\_scanning\_enabled](#output\_vulnerability\_scanning\_enabled) | Whether DOCKER repositories are configured to scan pushed images (enable\_vulnerability\_scanning). |
 <!-- END_TF_DOCS -->

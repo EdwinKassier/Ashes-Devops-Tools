@@ -4,7 +4,6 @@
 # (organizationAdmin, folderAdmin, securityAdmin, etc.) at plan time.
 
 mock_provider "google" {}
-mock_provider "google-beta" {}
 mock_provider "random" {}
 
 # Required variables shared across all runs; Shared VPC disabled so no host

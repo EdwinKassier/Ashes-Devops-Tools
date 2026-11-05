@@ -52,7 +52,7 @@ variable "key_admin_arn" {
 variable "log_service_principals" {
   description = "AWS log-delivery service principals granted GenerateDataKey/Decrypt/DescribeKey on the CMK, scoped by aws:SourceOrgID. CloudTrail additionally gets an EncryptionContext condition."
   type        = list(string)
-  default     = ["cloudtrail.amazonaws.com", "config.amazonaws.com", "securitylake.amazonaws.com"]
+  default     = ["cloudtrail.amazonaws.com", "config.amazonaws.com", "securitylake.amazonaws.com", "delivery.logs.amazonaws.com"]
 
   validation {
     condition     = alltrue([for p in var.log_service_principals : can(regex("[.]amazonaws[.]com$", p))])

@@ -454,3 +454,35 @@ variable "gke_services_secondary_range_name" {
   type        = string
   default     = null
 }
+
+variable "enable_artifact_registry_vulnerability_scanning" {
+  description = "Scan app-service container images on push (Container Scanning API + repository vulnerability scanning INHERITED). Billed per scanned image. Default true."
+  type        = bool
+  default     = true
+}
+
+# --- VM backup + OS patching (BCK-05, VUL-05) ---------------------------------
+
+variable "enable_vm_backup_policy" {
+  description = "Create a Compute Engine snapshot-schedule resource policy in the host project and each service-team project (modules/gcp/backup/backup-plan). Free until a disk is attached to it. Default true."
+  type        = bool
+  default     = true
+}
+
+variable "vm_backup_schedules" {
+  description = "Snapshot schedules passed to modules/gcp/backup/backup-plan (see its `schedules` input for the shape). Null = one \"vm-daily-snapshots\" policy: daily at 04:00 UTC, 30-day retention, snapshots kept if the disk is deleted."
+  type        = any
+  default     = null
+}
+
+variable "enable_os_patch_management" {
+  description = "Create a weekly VM Manager patch deployment (and enable osconfig.googleapis.com) in the host project and each service-team project (modules/gcp/ops/os-config). Harmless with no VMs. The workload apply SA receives roles/osconfig.patchDeploymentAdmin via the gcp-bootstrap workload_folder_roles allow-list."
+  type        = bool
+  default     = true
+}
+
+variable "os_patch_deployments" {
+  description = "Patch deployments passed to modules/gcp/ops/os-config (see its `patch_deployments` input for the shape). Null = one \"weekly-os-patch\" deployment: every VM in the project, Sundays 03:00 UTC, default reboot behaviour."
+  type        = any
+  default     = null
+}

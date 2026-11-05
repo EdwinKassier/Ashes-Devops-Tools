@@ -61,7 +61,7 @@ locals {
     }
     scp-region-restriction = {
       type = "SERVICE_CONTROL_POLICY"
-      content = templatefile("${path.module}/policies/scp-region-restriction.json", {
+      content = templatefile("${path.module}/policies/scp-region-restriction.json.tftpl", {
         allowed_regions        = jsonencode(var.allowed_regions)
         terraform_run_role_arn = var.terraform_run_role_arn
         break_glass_role_arn   = var.break_glass_role_arn

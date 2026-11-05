@@ -70,6 +70,8 @@ locals {
   # ---------------------------------------------------------------------------
   required_apis = !var.enable_project_services ? [] : distinct(concat(
     length(var.services) > 0 ? ["run.googleapis.com", "artifactregistry.googleapis.com", "iam.googleapis.com"] : [],
+    length(var.services) > 0 && var.enable_vulnerability_scanning ? ["containerscanning.googleapis.com"] : [],
+    length(var.services) > 0 && var.enable_on_demand_scanning ? ["ondemandscanning.googleapis.com"] : [],
     length(local.secret_grants) > 0 ? ["secretmanager.googleapis.com"] : [],
     length(local.services_with_db) > 0 ? ["sqladmin.googleapis.com", "servicenetworking.googleapis.com"] : [],
     var.enable_app_deploy_wif ? ["iam.googleapis.com", "iamcredentials.googleapis.com", "sts.googleapis.com"] : [],
@@ -97,6 +99,11 @@ module "registry" {
   region       = var.region
   kms_key_name = var.artifact_registry_kms_key_name
   labels       = merge(var.labels, { service = each.key })
+
+  # Scan pushed images; the stage enables containerscanning.googleapis.com
+  # itself (required_apis), so the module does not manage the API.
+  enable_vulnerability_scanning = var.enable_vulnerability_scanning
+  enable_container_scanning_api = false
 
   repositories = {
     (each.key) = {

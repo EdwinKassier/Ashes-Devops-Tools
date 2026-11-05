@@ -104,4 +104,3 @@ module "interconnects" {
   enable_bfd           = try(each.value.enable_bfd, false)
   advertised_ip_ranges = try(each.value.advertised_ip_ranges, [])
 }
-
