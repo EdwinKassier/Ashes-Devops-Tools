@@ -29,7 +29,6 @@ module "example" {
 
 	# Required variables
 	restore_testing_role_arn =
-
 }
 ```
 

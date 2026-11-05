@@ -44,7 +44,6 @@ module "example" {
 	# Required variables
 	managed_zone =
 	project_id =
-
 }
 ```
 

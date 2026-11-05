@@ -44,7 +44,6 @@ module "example" {
 	# Required variables
 	inspection_vpc_id =
 	log_bucket_name =
-
 }
 ```
 

@@ -65,7 +65,6 @@ module "example" {
 	firewall_rule_name =
 	network =
 	project_id =
-
 }
 ```
 

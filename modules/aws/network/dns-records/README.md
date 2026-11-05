@@ -41,7 +41,6 @@ module "example" {
 
 	# Required variables
 	zone_id =
-
 }
 ```
 

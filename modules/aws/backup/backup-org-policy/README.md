@@ -26,7 +26,6 @@ module "example" {
 	# Required variables
 	backup_role_arn =
 	target_ou_id =
-
 }
 ```
 

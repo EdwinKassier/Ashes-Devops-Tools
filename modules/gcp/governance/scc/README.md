@@ -73,7 +73,6 @@ module "example" {
 	# Required variables
 	org_id =
 	project_id =
-
 }
 ```
 

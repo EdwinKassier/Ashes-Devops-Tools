@@ -64,7 +64,6 @@ module "example" {
 	# Required variables
 	project_id =
 	service_account_email =
-
 }
 ```
 

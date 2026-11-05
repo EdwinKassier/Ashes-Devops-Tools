@@ -61,7 +61,6 @@ module "example" {
 	log_archive_bucket_name =
 	org_id =
 	terraform_run_role_arn =
-
 }
 ```
 

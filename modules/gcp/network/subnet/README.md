@@ -69,7 +69,6 @@ module "example" {
 	project_id =
 	region =
 	subnet_name =
-
 }
 ```
 

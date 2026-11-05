@@ -66,7 +66,6 @@ module "example" {
 	# Required variables
 	org_id =
 	tags =
-
 }
 ```
 

@@ -71,7 +71,6 @@ module "example" {
 	project_id =
 	project_name =
 	region =
-
 }
 ```
 

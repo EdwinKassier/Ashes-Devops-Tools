@@ -65,7 +65,6 @@ module "example" {
 	# Required variables
 	lb_name =
 	project_id =
-
 }
 ```
 

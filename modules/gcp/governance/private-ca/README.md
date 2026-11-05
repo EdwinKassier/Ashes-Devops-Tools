@@ -67,7 +67,6 @@ module "example" {
 	ca_pool_name =
 	name =
 	project_id =
-
 }
 ```
 

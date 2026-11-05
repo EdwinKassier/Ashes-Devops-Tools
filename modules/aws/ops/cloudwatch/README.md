@@ -55,7 +55,6 @@ module "example" {
 
 	# Required variables
 	name_prefix =
-
 }
 ```
 

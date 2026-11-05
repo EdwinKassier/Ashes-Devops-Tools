@@ -38,7 +38,6 @@ module "example" {
 	kms_key_arn =
 	log_archive_bucket_name =
 	org_id =
-
 }
 ```
 

@@ -151,7 +151,6 @@ module "example" {
 	display_name =
 	pool_id =
 	project_id =
-
 }
 ```
 

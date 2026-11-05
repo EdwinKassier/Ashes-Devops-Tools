@@ -60,7 +60,6 @@ module "example" {
 	name =
 	network =
 	project_id =
-
 }
 ```
 

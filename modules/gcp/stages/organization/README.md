@@ -72,7 +72,6 @@ module "example" {
 	project_prefix =
 	strict_folder_policy_environment_keys =
 	terraform_admin_email =
-
 }
 ```
 

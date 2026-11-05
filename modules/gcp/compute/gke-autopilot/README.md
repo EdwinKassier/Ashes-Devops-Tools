@@ -29,7 +29,6 @@ module "example" {
 	network =
 	project_id =
 	subnetwork =
-
 }
 ```
 

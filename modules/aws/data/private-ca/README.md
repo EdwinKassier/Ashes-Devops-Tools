@@ -38,7 +38,6 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-
 }
 ```
 

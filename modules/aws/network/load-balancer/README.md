@@ -22,7 +22,6 @@ module "example" {
 	name =
 	subnet_ids =
 	vpc_id =
-	
 }
 ```
 

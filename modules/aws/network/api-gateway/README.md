@@ -18,7 +18,6 @@ module "example" {
 
 	# Required variables
 	name =
-
 }
 ```
 

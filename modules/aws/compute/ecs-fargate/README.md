@@ -37,7 +37,6 @@ module "example" {
 	security_group_ids =
 	subnets =
 	task_role_arn =
-
 }
 ```
 

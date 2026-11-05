@@ -103,7 +103,6 @@ module "example" {
 	# Required variables
 	domain =
 	project_id =
-
 }
 ```
 

@@ -80,7 +80,6 @@ module "example" {
 	project_id =
 	region =
 	shared_secret =
-
 }
 ```
 

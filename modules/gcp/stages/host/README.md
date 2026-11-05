@@ -177,7 +177,6 @@ module "example" {
 	project_id =
 	project_prefix =
 	vpc_cidr_block =
-
 }
 ```
 

@@ -23,7 +23,6 @@ module "example" {
 
 	# Required variables
 	project_id =
-
 }
 ```
 

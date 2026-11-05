@@ -63,7 +63,6 @@ module "example" {
 
 	# Required variables
 	tfc_organization =
-
 }
 ```
 

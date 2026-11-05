@@ -33,7 +33,6 @@ module "example" {
 	org_id =
 	region =
 	vpc_id =
-
 }
 ```
 

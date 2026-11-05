@@ -83,7 +83,6 @@ module "example" {
 	# Required variables
 	parent =
 	policy_name =
-
 }
 ```
 

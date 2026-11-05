@@ -21,7 +21,6 @@ module "example" {
 	project_id =
 	service_id =
 	slo_id =
-
 }
 ```
 

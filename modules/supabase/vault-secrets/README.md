@@ -81,7 +81,6 @@ module "example" {
 	# Required variables
 	postgres_url =
 	secrets =
-
 }
 ```
 

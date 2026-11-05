@@ -70,7 +70,6 @@ module "example" {
 	billing_account =
 	org_id =
 	project_prefix =
-
 }
 ```
 

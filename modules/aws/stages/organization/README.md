@@ -39,7 +39,6 @@ module "example" {
 	break_glass_role_arn =
 	log_archive_bucket_name =
 	terraform_run_role_arn =
-
 }
 ```
 

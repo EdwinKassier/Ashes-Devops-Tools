@@ -46,7 +46,6 @@ module "example" {
 
 	# Required variables
 	kms_key_id =
-
 }
 ```
 

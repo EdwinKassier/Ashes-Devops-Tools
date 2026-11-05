@@ -138,7 +138,6 @@ module "example" {
 	permissions =
 	role_id =
 	title =
-
 }
 ```
 

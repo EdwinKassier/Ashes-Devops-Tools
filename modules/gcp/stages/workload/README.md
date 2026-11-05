@@ -163,7 +163,6 @@ module "example" {
 	org_id =
 	project_admin_group_email =
 	project_name =
-
 }
 ```
 

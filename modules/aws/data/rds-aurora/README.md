@@ -42,7 +42,6 @@ module "example" {
 	name =
 	security_group_ids =
 	subnet_ids =
-
 }
 ```
 

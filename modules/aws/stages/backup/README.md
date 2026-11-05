@@ -48,7 +48,6 @@ module "example" {
 	backup_role_arn =
 	restore_testing_role_arn =
 	workloads_ou_id =
-
 }
 ```
 

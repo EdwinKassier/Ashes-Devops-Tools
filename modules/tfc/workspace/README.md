@@ -25,7 +25,6 @@ module "example" {
 	name =
 	organization =
 	working_directory =
-
 }
 ```
 

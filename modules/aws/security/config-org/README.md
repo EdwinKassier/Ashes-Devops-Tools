@@ -27,7 +27,6 @@ module "example" {
 	# Required variables
 	config_role_arn =
 	log_archive_bucket =
-
 }
 ```
 

@@ -113,7 +113,6 @@ module "example" {
 	project_id =
 	region =
 	router_name =
-
 }
 ```
 

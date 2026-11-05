@@ -72,7 +72,6 @@ module "example" {
 	org_id =
 	project_prefix =
 	spoke_project_numbers =
-
 }
 ```
 

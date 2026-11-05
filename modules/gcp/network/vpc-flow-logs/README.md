@@ -171,7 +171,6 @@ module "example" {
 	destination =
 	project_id =
 	sink_name =
-
 }
 ```
 

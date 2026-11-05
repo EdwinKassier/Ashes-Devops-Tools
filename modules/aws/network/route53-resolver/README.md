@@ -29,7 +29,6 @@ module "example" {
 	# Required variables
 	org_arn =
 	vpc_id =
-
 }
 ```
 

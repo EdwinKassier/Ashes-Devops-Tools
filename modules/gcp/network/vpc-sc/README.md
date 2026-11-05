@@ -102,7 +102,6 @@ module "example" {
 	organization_id =
 	perimeter_name =
 	perimeter_title =
-
 }
 ```
 

@@ -33,7 +33,6 @@ module "example" {
 	# Required variables
 	org_root_id =
 	security_tooling_account_id =
-
 }
 ```
 

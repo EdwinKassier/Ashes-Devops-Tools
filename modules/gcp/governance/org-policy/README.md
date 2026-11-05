@@ -74,7 +74,6 @@ module "example" {
 
 	# Required variables
 	parent =
-
 }
 ```
 

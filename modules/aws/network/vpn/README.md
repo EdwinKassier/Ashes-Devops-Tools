@@ -38,7 +38,6 @@ module "example" {
 	# Required variables
 	customer_gateway_ip =
 	name =
-
 }
 ```
 

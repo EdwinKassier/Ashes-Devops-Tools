@@ -66,7 +66,6 @@ module "example" {
 	network =
 	peer_network =
 	peering_name =
-
 }
 ```
 

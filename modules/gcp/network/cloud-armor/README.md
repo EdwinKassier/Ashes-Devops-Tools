@@ -79,7 +79,6 @@ module "example" {
 	# Required variables
 	policy_name =
 	project_id =
-
 }
 ```
 

@@ -56,7 +56,6 @@ module "example" {
 	# Required variables
 	identity_account_id =
 	security_tooling_account_id =
-
 }
 ```
 

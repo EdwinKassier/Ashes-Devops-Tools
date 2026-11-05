@@ -135,7 +135,6 @@ module "example" {
 	project_id =
 	region =
 	subnet =
-
 }
 ```
 

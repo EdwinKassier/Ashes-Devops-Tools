@@ -27,9 +27,8 @@ content: |-
   	source = "<module-path>"
 
   	# Required variables
-  	{{ range .Module.Inputs }}{{ if .Required -}}
-  	{{ .Name }} =
-  	{{ end }}{{ end }}
+  {{- range .Module.Inputs }}{{ if .Required }}
+  	{{ .Name }} ={{ end }}{{ end }}
   }
   ```
 

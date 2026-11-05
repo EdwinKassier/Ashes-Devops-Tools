@@ -56,7 +56,6 @@ module "example" {
 	flow_log_destination_arn =
 	log_archive_bucket_name =
 	tgw_id =
-
 }
 ```
 

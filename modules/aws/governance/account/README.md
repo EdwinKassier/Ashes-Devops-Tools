@@ -20,7 +20,6 @@ module "example" {
 	account_name =
 	email =
 	parent_ou_id =
-
 }
 ```
 

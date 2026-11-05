@@ -33,7 +33,6 @@ module "example" {
 	key_admin_arn =
 	management_account_id =
 	org_id =
-
 }
 ```
 

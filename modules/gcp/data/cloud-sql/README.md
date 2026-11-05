@@ -30,7 +30,6 @@ module "example" {
 	private_network =
 	project_id =
 	region =
-
 }
 ```
 

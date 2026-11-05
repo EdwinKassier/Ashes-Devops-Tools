@@ -119,7 +119,6 @@ module "example" {
 	organization_name =
 	project_prefix =
 	suffix =
-
 }
 ```
 

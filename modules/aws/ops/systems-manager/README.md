@@ -37,7 +37,6 @@ module "example" {
 	# Required variables
 	kms_key_id =
 	log_bucket_name =
-
 }
 ```
 

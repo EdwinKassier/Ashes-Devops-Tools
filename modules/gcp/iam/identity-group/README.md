@@ -138,7 +138,6 @@ module "example" {
 
 	# Required variables
 	customer_id =
-
 }
 ```
 

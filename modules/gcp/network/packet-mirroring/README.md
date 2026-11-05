@@ -84,7 +84,6 @@ module "example" {
 	network =
 	project_id =
 	region =
-
 }
 ```
 

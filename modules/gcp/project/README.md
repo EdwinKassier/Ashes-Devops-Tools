@@ -64,9 +64,8 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	parent = 
-	project_id = 
-	
+	parent =
+	project_id =
 }
 ```
 

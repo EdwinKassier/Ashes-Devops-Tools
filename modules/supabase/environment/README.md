@@ -19,7 +19,6 @@ module "example" {
 	database_password =
 	organization_id =
 	project_name =
-
 }
 ```
 

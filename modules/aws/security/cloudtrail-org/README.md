@@ -51,7 +51,6 @@ module "example" {
 	# Required variables
 	kms_key_arn =
 	log_archive_bucket =
-
 }
 ```
 

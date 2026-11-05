@@ -28,7 +28,6 @@ module "example" {
 	# Required variables
 	github_repo =
 	project_name =
-
 }
 ```
 

@@ -71,7 +71,6 @@ module "example" {
 	environment =
 	project_id =
 	region =
-
 }
 ```
 

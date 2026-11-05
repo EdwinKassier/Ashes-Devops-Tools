@@ -37,7 +37,6 @@ module "example" {
 	name =
 	project_id =
 	service_account_email =
-
 }
 ```
 

@@ -67,7 +67,6 @@ module "example" {
 	log_bucket_name =
 	org_arn =
 	org_id =
-
 }
 ```
 

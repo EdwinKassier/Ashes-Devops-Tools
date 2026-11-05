@@ -55,7 +55,6 @@ module "example" {
 	# Required variables
 	aws_region =
 	environment =
-
 }
 ```
 

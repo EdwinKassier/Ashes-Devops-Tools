@@ -27,7 +27,6 @@ module "example" {
 
 	# Required variables
 	flow_log_destination_arn =
-
 }
 ```
 

@@ -148,7 +148,6 @@ module "example" {
 	org_root_id =
 	security_tooling_account_id =
 	shared_services_account_id =
-
 }
 ```
 

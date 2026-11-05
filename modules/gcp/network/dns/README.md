@@ -78,7 +78,6 @@ module "example" {
 	dns_name =
 	project_id =
 	zone_name =
-
 }
 ```
 

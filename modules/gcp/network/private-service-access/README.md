@@ -58,7 +58,6 @@ module "example" {
 	# Required variables
 	project_id =
 	vpc_network =
-
 }
 ```
 

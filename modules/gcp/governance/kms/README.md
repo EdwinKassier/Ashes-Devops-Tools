@@ -66,7 +66,6 @@ module "example" {
 	# Required variables
 	keyring_name =
 	project_id =
-
 }
 ```
 

@@ -125,7 +125,6 @@ module "example" {
 	account_id =
 	display_name =
 	project_id =
-
 }
 ```
 
