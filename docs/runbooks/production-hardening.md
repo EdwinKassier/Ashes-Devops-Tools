@@ -68,3 +68,43 @@ Both are in `examples/presets/nonprod-aws-security.tfvars`.
 
 Keep the full posture for production. See the cost model in
 [`docs/audit/2026-11-04-finops-deep-dive.md`](../audit/2026-11-04-finops-deep-dive.md).
+
+## Contain the automation identity (audit C2)
+
+The GCP `terraform-admin` service account holds org-wide roles (orgpolicy,
+accesscontextmanager, logging, iam.securityAdmin). It is impersonable by GitHub
+Actions and Terraform Cloud. A compromise of CI or the WIF trust therefore lets
+an attacker remove the guardrails and erase the audit trail. Unlike AWS (where an
+SCP denies the run role from disabling security services), GCP has no equivalent
+by default. Two controls, applied together:
+
+### 1. Privilege split (the structural fix)
+
+`enable_privilege_split = true` (gcp-bootstrap) routes the high-privilege org
+roles to a separate resman service account, so a compromise of the
+CI-impersonable SA does not hold them. This is the primary containment. It is in
+`examples/presets/prod-gcp-bootstrap.tfvars`. It is PREVIEW: validate on a
+throwaway org before production.
+
+### 2. Deny-policy backstop
+
+`enable_admin_containment = true` (gcp-organization) adds an org-node IAM deny
+policy that denies deletion of audit sinks/buckets and VPC-SC perimeters to every
+principal except `containment_exempt_principals` (your break-glass group). A
+steady-state declarative apply never deletes these resources, so the automation
+SA keeps working; only a destructive action or a rare resource recreate needs
+break-glass. It deliberately does not deny `setIamPolicy` or `orgpolicy.policy.set`,
+which Terraform uses legitimately.
+
+Enable it from `examples/presets/prod-gcp-organization.tfvars` (left commented
+there). VALIDATE ON A NON-PROD ORG FIRST: confirm a normal plan/apply is a no-op
+on the audit and perimeter resources, then promote. Set your break-glass
+principal, or the validation blocks the apply.
+
+### Break-glass (audit M3, both clouds)
+
+The break-glass principal that the GCP containment and every AWS SCP exempt is a
+standing backdoor around the guardrails. Manage it deliberately: a tight trust
+policy, no standing credentials, and a mandatory alarm on its use (a CloudTrail /
+EventBridge rule on AWS `AssumeRole` of the break-glass role, and a Cloud Logging
+alert on the GCP break-glass principal). Review its scope on every access.

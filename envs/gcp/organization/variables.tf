@@ -244,3 +244,15 @@ variable "cmek_required_services" {
     "secretmanager.googleapis.com",
   ]
 }
+
+variable "enable_admin_containment" {
+  description = "C2: deny deletion of audit sinks/buckets and VPC-SC perimeters to all but break-glass, containing a compromised automation identity. Default false. Enable via examples/presets/prod-gcp-organization.tfvars after validating on a non-prod org, and set containment_exempt_principals."
+  type        = bool
+  default     = false
+}
+
+variable "containment_exempt_principals" {
+  description = "Break-glass principals exempt from the C2 containment deny policy. Required (non-empty) when enable_admin_containment is true."
+  type        = list(string)
+  default     = []
+}

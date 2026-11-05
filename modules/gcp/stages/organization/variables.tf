@@ -285,3 +285,20 @@ variable "cmek_required_services" {
     "secretmanager.googleapis.com",
   ]
 }
+
+variable "enable_admin_containment" {
+  description = "C2: deny deletion of audit sinks/buckets and VPC-SC perimeters to all principals except containment_exempt_principals (break-glass), so a compromised automation identity cannot erase the audit trail or remove the data perimeter. Default false. Enable only after validating on a non-prod org; a rare resource recreate then needs break-glass."
+  type        = bool
+  default     = false
+}
+
+variable "containment_exempt_principals" {
+  description = "Break-glass principals exempt from the C2 containment deny policy, e.g. [\"principalSet://goog/group/break-glass@example.com\"]. Required (non-empty) when enable_admin_containment is true."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = !var.enable_admin_containment || length(var.containment_exempt_principals) > 0
+    error_message = "containment_exempt_principals must be non-empty when enable_admin_containment is true, or the deny applies to everyone including break-glass."
+  }
+}

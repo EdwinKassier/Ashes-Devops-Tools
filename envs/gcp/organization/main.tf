@@ -67,6 +67,11 @@ module "organization" {
   # preset turns this on.
   enable_cmek_org_policy = var.enable_cmek_org_policy
   cmek_required_services = var.cmek_required_services
+
+  # C2: opt-in containment of the automation identity (default off). Set
+  # containment_exempt_principals to your break-glass principal when enabling.
+  enable_admin_containment      = var.enable_admin_containment
+  containment_exempt_principals = var.containment_exempt_principals
 }
 
 # The projects stage (gcp-projects) and network-hub stage (gcp-network-hub) were

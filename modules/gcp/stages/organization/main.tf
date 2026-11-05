@@ -155,6 +155,35 @@ locals {
       denied_values  = var.cmek_required_services
     }
   ] : []
+
+  # C2: opt-in containment of the automation (Terraform-admin) identity. A
+  # CI/WIF compromise of that SA otherwise lets it erase the audit trail and
+  # remove the VPC-SC data perimeter. This denies the DELETE permissions for
+  # audit sinks/buckets and perimeters to ALL principals except the break-glass
+  # set. A steady-state declarative apply never deletes these, so the SA keeps
+  # working; only a destructive action (or a rare recreate) needs break-glass.
+  # It deliberately does NOT deny setIamPolicy or orgpolicy.policy.set, which
+  # Terraform uses legitimately; the privilege split addresses that vector.
+  # Default off: enable only after validating on a non-prod org.
+  containment_deny_policy = var.enable_admin_containment ? [
+    {
+      name         = "contain-admin-identity"
+      display_name = "Contain automation identity (audit C2)"
+      rules = [
+        {
+          description       = "Deny deletion of audit sinks/buckets and VPC-SC perimeters to all but break-glass."
+          denied_principals = ["principalSet://goog/public:all"]
+          denied_permissions = [
+            "logging.googleapis.com/sinks.delete",
+            "logging.googleapis.com/buckets.delete",
+            "accesscontextmanager.googleapis.com/servicePerimeters.delete",
+            "accesscontextmanager.googleapis.com/accessPolicies.delete",
+          ]
+          exception_principals = var.containment_exempt_principals
+        }
+      ]
+    }
+  ] : []
 }
 
 module "org_policies" {
@@ -264,7 +293,7 @@ module "iam_deny" {
   source = "../../iam/deny-policy"
 
   parent        = urlencode("cloudresourcemanager.googleapis.com/organizations/${module.organization.organization_id}")
-  deny_policies = var.iam_deny_policies
+  deny_policies = concat(local.containment_deny_policy, var.iam_deny_policies)
 }
 
 # Folder-level Organization Policies for Production
