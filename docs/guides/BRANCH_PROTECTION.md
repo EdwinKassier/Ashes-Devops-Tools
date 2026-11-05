@@ -37,6 +37,14 @@ Two important gotchas this list already accounts for:
 
 Set via **Settings → Branches → main → Require status checks to pass before merging**.
 
+> **The repo checks validate; they do not plan (audit H6).** Every required check
+> above runs `terraform validate -backend=false` and the `mock_provider` tests. None
+> runs a real plan against state, so none shows the blast radius of a change. The
+> actual plan is Terraform Cloud's **speculative plan**, posted as its own check
+> (e.g. `Terraform Cloud/<org>/<workspace>`) by the TFC VCS integration. For roots
+> that gate production, ADD those TFC checks to the required contexts, so "all checks
+> passed" cannot be green while the real plan errored or was never reviewed.
+
 ### Review Requirements
 
 - **Required approvals:** 1 (raise to 2 for teams larger than 4)
@@ -66,7 +74,9 @@ gh api repos/OWNER/REPO/branches/main/protection \
 
 ## Release Tag Protection
 
-Tags that trigger the `terraform-apply.yml` workflow (`gcp-organization/v*`, `gcp-workload/*/v*`) should be protected:
+Tags that trigger the `terraform-apply.yml` workflow should be protected. The
+workflow acts on all of these patterns (keep this list in sync with its `on.push.tags`):
+`gcp-organization/v*`, `gcp-workload/*/v*`, `aws-*/v*`, `aws-workload/*/v*`, `saas/*/v*`.
 
 - Only allow tag creation by the **infra-admins** team or repository admins
 - Require signed tags if your signing policy enforces it
@@ -79,7 +89,7 @@ gh api repos/OWNER/REPO/rulesets \
   --field name="Release tag protection" \
   --field target="tag" \
   --field enforcement="active" \
-  --field conditions='{"ref_name":{"include":["refs/tags/gcp-organization/v*","refs/tags/gcp-workload/*/v*"],"exclude":[]}}' \
+  --field conditions='{"ref_name":{"include":["refs/tags/gcp-organization/v*","refs/tags/gcp-workload/*/v*","refs/tags/aws-*/v*","refs/tags/aws-workload/*/v*","refs/tags/saas/*/v*"],"exclude":[]}}' \
   --field rules='[{"type":"deletion"},{"type":"non_fast_forward"}]'
 ```
 
@@ -90,7 +100,7 @@ gh api repos/OWNER/REPO/rulesets \
 Ensure Dependabot auto-approves and merges **security** PRs only:
 
 1. **Settings → Code security and analysis → Dependabot security updates**: Enable
-2. **Settings → Code security and analysis → Dependabot version updates**: Review `.github/dependabot.yml` (scoped to GitHub Actions only — Terraform provider bumps require manual compatibility work, see `docs/guides/provider-upgrades.md`)
+2. **Settings → Code security and analysis → Dependabot version updates**: Review `.github/dependabot.yml`. It covers GitHub Actions and Terraform providers. Terraform provider bumps are grouped and labeled for REVIEW, never auto-merged; the version pins keep proposals inside the current major (see `docs/guides/provider-upgrades.md`)
 3. Create a branch protection rule that allows Dependabot to bypass review requirements for patch-level security updates
 
 ---

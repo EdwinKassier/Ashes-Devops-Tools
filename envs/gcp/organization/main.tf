@@ -62,6 +62,16 @@ module "organization" {
 
   # G9: opt-in IAM deny policies at the org node (default [] = none).
   iam_deny_policies = var.iam_deny_policies
+
+  # H1/M2: opt-in org-wide CMEK enforcement (default off). The prod-hardening
+  # preset turns this on.
+  enable_cmek_org_policy = var.enable_cmek_org_policy
+  cmek_required_services = var.cmek_required_services
+
+  # C2: opt-in containment of the automation identity (default off). Set
+  # containment_exempt_principals to your break-glass principal when enabling.
+  enable_admin_containment      = var.enable_admin_containment
+  containment_exempt_principals = var.containment_exempt_principals
 }
 
 # The projects stage (gcp-projects) and network-hub stage (gcp-network-hub) were

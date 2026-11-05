@@ -1,15 +1,16 @@
-# Dependabot is scoped to the github-actions ecosystem only. Every action in
-# .github/workflows/ is SHA-pinned (see SECURITY.md), so this is the sole
-# automated freshness signal for those pins — there is no other bump path.
+# Dependabot freshness signals. Every GitHub Action is SHA-pinned and every
+# Terraform provider is version-pinned, so these PRs are the automated bump path.
 #
-# The `terraform` ecosystem is deliberately NOT configured here: provider
-# major bumps (google 6.x -> 7.x) broke `terraform validate` on example roots
-# when previously tried and require manual compatibility work before they can
-# be automated again.
+# Terraform provider bumps are GROUPED and labeled for REVIEW, never auto-merged:
+# a provider major bump can need compatibility work (google 6.x -> 7.x did). The
+# repo pins keep proposed bumps inside the current major (google ~> 7.0,
+# aws >= 6.46.0 < 7.0.0), so a breaking major is never proposed automatically.
+# This closes audit finding L1 (provider CVEs previously had no automated signal).
 #
-# Required one-time repo setup (labels referenced below must exist or
-# Dependabot PR creation will warn): `gh label create dependencies --force`
-# and `gh label create github-actions --force`.
+# Required one-time repo setup (labels must exist or PR creation warns):
+#   gh label create dependencies --force
+#   gh label create github-actions --force
+#   gh label create terraform --force
 version: 2
 updates:
   - package-ecosystem: "github-actions"
@@ -24,3 +25,18 @@ updates:
     labels:
       - "dependencies"
       - "github-actions"
+
+  - package-ecosystem: "terraform"
+    directories:
+      - "/**"
+    schedule:
+      interval: "weekly"
+    groups:
+      terraform-providers:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - "dependencies"
+      - "terraform"
+    open-pull-requests-limit: 5

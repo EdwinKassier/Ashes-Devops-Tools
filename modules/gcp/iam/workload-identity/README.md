@@ -176,13 +176,13 @@ The following resources are created:
 
 
 - resource.google_iam_workload_identity_pool.pool (modules/gcp/iam/workload-identity/main.tf#L5)
-- resource.google_iam_workload_identity_pool_provider.aws (modules/gcp/iam/workload-identity/main.tf#L85)
+- resource.google_iam_workload_identity_pool_provider.aws (modules/gcp/iam/workload-identity/main.tf#L103)
 - resource.google_iam_workload_identity_pool_provider.github (modules/gcp/iam/workload-identity/main.tf#L14)
-- resource.google_iam_workload_identity_pool_provider.gitlab (modules/gcp/iam/workload-identity/main.tf#L60)
-- resource.google_iam_workload_identity_pool_provider.tfc (modules/gcp/iam/workload-identity/main.tf#L126)
-- resource.google_service_account_iam_member.github_workload_identity (modules/gcp/iam/workload-identity/main.tf#L108)
-- resource.google_service_account_iam_member.gitlab_workload_identity (modules/gcp/iam/workload-identity/main.tf#L117)
-- resource.google_service_account_iam_member.tfc_workload_identity (modules/gcp/iam/workload-identity/main.tf#L157)
+- resource.google_iam_workload_identity_pool_provider.gitlab (modules/gcp/iam/workload-identity/main.tf#L70)
+- resource.google_iam_workload_identity_pool_provider.tfc (modules/gcp/iam/workload-identity/main.tf#L152)
+- resource.google_service_account_iam_member.github_workload_identity (modules/gcp/iam/workload-identity/main.tf#L134)
+- resource.google_service_account_iam_member.gitlab_workload_identity (modules/gcp/iam/workload-identity/main.tf#L143)
+- resource.google_service_account_iam_member.tfc_workload_identity (modules/gcp/iam/workload-identity/main.tf#L191)
 
 
 ## Inputs

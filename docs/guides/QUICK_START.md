@@ -128,25 +128,35 @@ cp envs/gcp/organization/terraform.tfvars.example envs/gcp/organization/local.au
 # and project_prefix — the "my-org" default is a deliberate tripwire and fails validation
 ```
 
-**Step 4 — Plan and apply bootstrap only:**
+**Step 4 — Apply the bootstrap root first (two-phase, as the human admin):**
+
+The GCP control plane is four roots applied in order: `gcp-bootstrap` →
+`gcp-organization` → `gcp-projects` → `gcp-network-hub`. Bootstrap is first and is
+special: its providers impersonate a `terraform-admin` service account that the
+bootstrap apply itself creates. On the FIRST apply, leave `terraform_admin_email`
+unset (`null`) so Terraform runs as your own credentials; set it on every later
+apply. The [bootstrap runbook](../runbooks/bootstrap.md) has the full two-phase detail.
 
 ```bash
-terraform -chdir=envs/gcp/organization plan -target=module.bootstrap
-terraform -chdir=envs/gcp/organization apply -target=module.bootstrap
+terraform -chdir=envs/gcp/bootstrap plan
+terraform -chdir=envs/gcp/bootstrap apply
 ```
 
 Terraform will create:
 
 - An admin project (`{prefix}-admin-{suffix}`)
+- The `terraform-admin` service account the other roots impersonate
 - A GitHub Actions WIF pool and provider (trusted to your repo's `main` branch)
 - A Terraform Cloud WIF pool and provider
 
-**Step 5 — Record the outputs:**
+**Step 5 — Record the bootstrap outputs:**
 
 ```bash
-terraform -chdir=envs/gcp/organization output -json | jq '{
-  github_oidc_pool_id: .bootstrap.value.github_oidc_pool_id,
-  tfc_oidc_pool_id:    .bootstrap.value.tfc_oidc_pool_id
+terraform -chdir=envs/gcp/bootstrap output -json | jq '{
+  admin_project_id:      .admin_project_id.value,
+  terraform_admin_email: .terraform_admin_email.value,
+  github_oidc_pool_id:   .github_oidc_pool_id.value,
+  tfc_oidc_pool_id:      .tfc_oidc_pool_id.value
 }'
 ```
 
@@ -156,16 +166,20 @@ In your GitHub repo → Settings → Secrets and variables → Actions:
 
 | Name | Type | Value |
 |------|------|-------|
-| `GOOGLE_PROJECT_ID` | Variable | Admin project ID from bootstrap output |
+| `GOOGLE_PROJECT_ID` | Variable | Admin project ID from the bootstrap output |
 | `TFC_ORGANIZATION` | Variable | Your Terraform Cloud org name |
-| `TFC_TOKEN` | Secret | A TFC team token scoped to "Read runs" on the `gcp-organization` workspace |
+| `TFC_TOKEN` | Secret | A TFC team token scoped to "Read runs" on the GCP workspaces |
 
-**Step 7 — Apply the rest of the organization root:**
+**Step 7 — Set `terraform_admin_email` and apply the remaining roots in order:**
 
-The remaining modules (org policies, KMS, audit logs, network hub) can now be applied via CI by pushing to `main`, or manually:
+Put the `terraform_admin_email` from step 5 on every GCP workspace variable set,
+then apply the remaining control-plane roots in order (each reads the previous via
+remote state), via CI by pushing to `main`, or manually:
 
 ```bash
 terraform -chdir=envs/gcp/organization apply
+terraform -chdir=envs/gcp/projects apply
+terraform -chdir=envs/gcp/network-hub apply
 ```
 
 After this apply, all future changes go through GitHub Actions. Revoke your personal ADC credentials:

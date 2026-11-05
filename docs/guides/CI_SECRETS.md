@@ -15,7 +15,12 @@ Repository secrets and variables referenced by `.github/workflows/`. Configure t
 
 Without both of these, `drift-detection.yml` **skips cleanly** on its scheduled runs (see
 "Drift detection behavior without secrets" below) rather than failing red. `terraform-apply.yml`
-requires them to function since it drives real applies via the TFC API.
+does NOT apply anything: the real apply is driven by Terraform Cloud's own VCS integration.
+That workflow only reads the latest TFC run status with the read-only `TFC_TOKEN` and publishes
+a GitHub Release when the run applied and its commit matches the tag. (The workflow is named
+"Terraform Release Metadata" for this reason; `terraform-plan.yml`, named "Terraform Validation",
+runs `terraform validate` and the mock tests, and likewise never produces a real plan - that is
+the TFC speculative plan.)
 
 ## AWS roots — dynamic credentials
 

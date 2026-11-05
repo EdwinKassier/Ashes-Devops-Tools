@@ -1,0 +1,66 @@
+# Reference application-delivery pipeline (audit C1/C2). COPY this into an
+# application repository's .github/workflows/ and adjust. It is a template, not a
+# workflow for THIS repo (hence the .example.yml suffix), so it never runs here.
+#
+# Flow: build -> scan -> push to Artifact Registry -> deploy to the Cloud Run
+# service created by modules/gcp/compute/cloud-run. Auth is keyless (WIF), using
+# the pool/provider from the gcp-bootstrap root. No service-account keys.
+#
+# Prerequisites (provisioned by the landing zone, not by this pipeline):
+#   - A Cloud Run service from modules/gcp/compute/cloud-run (its name below).
+#   - An Artifact Registry repo from modules/gcp/artifact-registry.
+#   - A deploy service account with roles/run.developer + artifactregistry.writer,
+#     and a WIF binding for this repo (modules/gcp/iam/workload-identity).
+#   - Secrets in modules/gcp/data/secret-manager; the service reads them via
+#     secret_key_ref, so they never pass through this pipeline.
+
+name: Deploy service
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write # required for keyless WIF auth
+
+env:
+  REGION: europe-west1
+  SERVICE: my-api # the modules/gcp/compute/cloud-run service name
+  AR_REPO: europe-west1-docker.pkg.dev/${{ vars.GOOGLE_PROJECT_ID }}/apps
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Authenticate to Google Cloud (keyless)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }} # from gcp-bootstrap output
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - name: Build image
+        run: docker build -t "${AR_REPO}/${SERVICE}:${GITHUB_SHA}" .
+
+      - name: Scan image (block on CRITICAL/HIGH, matching the IaC gate)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.AR_REPO }}/${{ env.SERVICE }}:${{ github.sha }}
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+
+      - name: Push image
+        run: |
+          gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
+          docker push "${AR_REPO}/${SERVICE}:${GITHUB_SHA}"
+
+      # Deploy by updating the image on the Terraform-managed service. In a
+      # GitOps setup, instead bump the image var and let Terraform Cloud apply.
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run services update "${SERVICE}" \
+            --region "${REGION}" \
+            --image "${AR_REPO}/${SERVICE}:${GITHUB_SHA}"

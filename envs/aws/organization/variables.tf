@@ -8,6 +8,16 @@
 # inside a terraform_remote_state data source).
 # -----------------------------------------------------------------------------
 
+variable "management_account_id" {
+  description = "12-digit AWS management (payer) account ID. The default provider sets allowed_account_ids to this, so Terraform fails fast if the resolved credentials are a different account (audit C4). No default: admins must state their own payer account."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[0-9]{12}$", var.management_account_id))
+    error_message = "management_account_id must be a 12-digit AWS account ID."
+  }
+}
+
 variable "aws_region" {
   description = "Primary AWS region for the default (management-account) provider, e.g. eu-west-2."
   type        = string

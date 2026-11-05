@@ -72,6 +72,11 @@ variable "environments" {
     iam_group_role_bindings = map(set(string))
     labels                  = optional(map(string), {})
   }))
+
+  validation {
+    condition     = alltrue([for e in values(var.environments) : can(cidrnetmask(e.cidr_block))])
+    error_message = "Each environment's cidr_block must be valid CIDR notation, e.g. 10.10.0.0/16. Keep the environments map identical across the GCP roots."
+  }
 }
 
 variable "default_region" {
@@ -224,4 +229,35 @@ variable "logging_project_id" {
   description = "Dedicated logging project ID for the org audit sink/bucket (separation of duties). Default null = admin project (unchanged). PREVIEW: opt-in (default off), not yet validated against a real apply.; ensure CMEK cross-project access."
   type        = string
   default     = null
+}
+
+variable "enable_cmek_org_policy" {
+  description = "H1/M2: enforce CMEK on sensitive services org-wide (gcp.restrictNonCmekServices). Default false; set true (or use examples/presets/prod-gcp-organization.tfvars) once CMEK keys are wired for cmek_required_services."
+  type        = bool
+  default     = false
+}
+
+variable "cmek_required_services" {
+  description = "Services that require CMEK when enable_cmek_org_policy is true."
+  type        = list(string)
+  default = [
+    "storage.googleapis.com",
+    "bigquery.googleapis.com",
+    "sqladmin.googleapis.com",
+    "spanner.googleapis.com",
+    "pubsub.googleapis.com",
+    "secretmanager.googleapis.com",
+  ]
+}
+
+variable "enable_admin_containment" {
+  description = "C2: deny deletion of audit sinks/buckets and VPC-SC perimeters to all but break-glass, containing a compromised automation identity. Default false. Enable via examples/presets/prod-gcp-organization.tfvars after validating on a non-prod org, and set containment_exempt_principals."
+  type        = bool
+  default     = false
+}
+
+variable "containment_exempt_principals" {
+  description = "Break-glass principals exempt from the C2 containment deny policy. Required (non-empty) when enable_admin_containment is true."
+  type        = list(string)
+  default     = []
 }

@@ -37,6 +37,16 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
   }
+
+  # H2: a null attribute_condition trusts the ENTIRE GitHub issuer (every repo on
+  # token.actions.githubusercontent.com). When this provider is enabled it must be
+  # scoped. Repository SA bindings are branch-agnostic, so scope the ref here too.
+  lifecycle {
+    precondition {
+      condition     = var.github_attribute_condition_override != null || local.github_computed_condition != null
+      error_message = "enable_github_provider requires a scoped attribute_condition: set github_attribute_condition_override, or github_organization and/or github_sa_bindings. A null condition would trust every GitHub repository."
+    }
+  }
 }
 
 locals {
@@ -79,6 +89,14 @@ resource "google_iam_workload_identity_pool_provider" "gitlab" {
   oidc {
     issuer_uri = var.gitlab_url
   }
+
+  # H2: an enabled provider must be scoped, never a null (trust-all) condition.
+  lifecycle {
+    precondition {
+      condition     = var.gitlab_namespace != null
+      error_message = "enable_gitlab_provider requires gitlab_namespace; a null attribute_condition would trust the entire GitLab issuer."
+    }
+  }
 }
 
 # AWS OIDC Provider (for cross-cloud authentication)
@@ -101,6 +119,14 @@ resource "google_iam_workload_identity_pool_provider" "aws" {
 
   aws {
     account_id = var.aws_account_id
+  }
+
+  # H2: an enabled provider must be scoped, never a null (trust-all) condition.
+  lifecycle {
+    precondition {
+      condition     = var.aws_account_id != null
+      error_message = "enable_aws_provider requires aws_account_id; a null attribute_condition would trust the entire AWS issuer."
+    }
   }
 }
 
@@ -150,6 +176,14 @@ resource "google_iam_workload_identity_pool_provider" "tfc" {
 
   oidc {
     issuer_uri = "https://app.terraform.io"
+  }
+
+  # H2: an enabled provider must be scoped, never a null (trust-all) condition.
+  lifecycle {
+    precondition {
+      condition     = var.tfc_organization != null
+      error_message = "enable_tfc_provider requires tfc_organization; a null attribute_condition would trust the entire Terraform Cloud issuer."
+    }
   }
 }
 
