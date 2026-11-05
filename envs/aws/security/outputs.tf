@@ -36,3 +36,8 @@ output "forensics_account_id" {
   description = "12-digit account ID of the forensics account (echo, part of the cross-root contract)."
   value       = module.aws_security.forensics_account_id
 }
+
+output "break_glass_role_arn" {
+  description = "ARN of the break-glass role the assumption alarm watches (stage-managed when create_break_glass is true, else the external ARN). Use it for the org SCP break-glass exemption."
+  value       = module.aws_security.break_glass_role_arn
+}

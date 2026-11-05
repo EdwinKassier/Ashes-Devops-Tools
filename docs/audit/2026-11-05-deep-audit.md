@@ -237,10 +237,10 @@ so `terraform test`, `checkov`, and `make docs-check` are the gate):
 | M-sec | No GCP app-secret store | `modules/gcp/data/secret-manager`; the golden path reads secrets by reference. |
 | M-ops | No broken-apply recovery runbook | [apply-recovery.md](../runbooks/apply-recovery.md). |
 | M-obs | No observability of the control plane itself | `modules/gcp/monitoring/control-plane` alerts on guardrail mutations (org policy, org/folder IAM, VPC-SC, audit config, log sinks) and audit-sink export errors; `modules/tfc/workspace` adds opt-in run-failure notifications, routed to control-plane workspaces by the `tfc-admin` root. |
+| M3 | Break-glass principal is an unmanaged, unmonitored string | The `aws-security` stage gains opt-in `create_break_glass`: it creates the managed role (MFA-gated trust, deny-all standing policy, AdministratorAccess only while `break_glass_active`) in the management account and feeds its ARN into the existing assumption alarm, so the role is managed and monitored together. Runbook updated. |
 
-Still open: **H9** (SaaS integration needs an architecture decision), **M3**
-(break-glass role management and alarm), AWS and GKE delivery-pipeline parity, and
-CODEOWNERS (a repo-ownership change).
+Still open: **H9** (SaaS integration needs an architecture decision), AWS and GKE
+delivery-pipeline parity, and CODEOWNERS (a repo-ownership change).
 
 ---
 

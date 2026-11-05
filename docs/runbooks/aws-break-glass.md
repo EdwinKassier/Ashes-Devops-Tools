@@ -16,8 +16,10 @@
 
 Understand the design before you rely on it:
 
+- **Managed in-repo (opt-in).** Set `create_break_glass = true` on the `aws-security` stage (or the `envs/aws/security` root) to have Terraform create the role in the **management account** with the design below, via `modules/aws/iam/iam-role`. The stage then feeds the created role's ARN into the assumption alarm automatically and exports it as `break_glass_role_arn`. Set the org SCP exemption to that ARN: `arn:aws:iam::<management-account>:role/OrganizationBreakGlass` (or your `break_glass_role_name`). When `create_break_glass = false` (default), you manage the role elsewhere and pass its ARN in.
 - **Disabled by default.** The break-glass role carries a **deny-all standing policy**. In normal operation it can do nothing — it is inert until activated (Step 2).
-- **MFA-required.** Its trust/permission conditions require MFA, so a leaked credential alone cannot use it.
+- **MFA-required.** Its trust policy requires MFA and bounds the MFA session age, so a leaked credential alone cannot use it. Trust is scoped to `break_glass_trusted_principals` (a small set of senior responders).
+- **Monitored.** Every assumption of the role is alarmed by `modules/aws/security/security-notifications`: an always-on EventBridge rule, plus a CloudWatch metric alarm when the org CloudTrail log group is set. The alarm watches the **effective** ARN (the stage-created role when `create_break_glass` is true), so management and monitoring never drift apart.
 - **Carved out of the guardrails.** Its **account-qualified exact ARN** (`arn:aws:iam::<account>:role/...`) is listed as an exception in the SCP/RCP deny statements rendered by `modules/aws/governance/organization-policy` (`break_glass_role_arn`). That carve-out is why, once activated, it can act where the deny statements would otherwise block everyone. Because the exception is by exact ARN, no other principal inherits the exemption.
 
 ---
@@ -38,9 +40,14 @@ Log the incident, the approver, and a time box before proceeding.
 
 ## Step 2 — Activate the role
 
-Break-glass is off until you deliberately turn it on. Activation means **replacing the deny-all standing policy with the intended emergency permissions** (and confirming MFA is enforced):
+Break-glass is off until you deliberately turn it on. Activation means **replacing the deny-all standing policy with AdministratorAccess** (and confirming MFA is enforced). There are two paths:
 
-1. In the target account, attach the pre-defined emergency permission policy to the break-glass role (removing/overriding the deny-all standing policy). This is a deliberate, logged mutation.
+- **Terraform-managed (preferred when CI still works):** set `break_glass_active = true` on the `aws-security` stage and apply. The `iam-role` module swaps the deny-all standing policy for `AdministratorAccess`. Flip it back to `false` and apply in Step 4. This change is itself logged and alarmed.
+- **Manual (when Terraform/CI is the thing that is broken):** in the management account, attach `AdministratorAccess` to the role directly (overriding the deny-all standing policy). Record it; you will reconcile state in Step 4.
+
+Then:
+
+1. Confirm the standing deny-all policy has been replaced by the emergency permissions.
 2. Assume the role **with MFA**:
 
    ```bash
@@ -82,7 +89,7 @@ If an SCP change has locked out **all** member-account principals (including the
 
 **Before closing the incident:**
 
-1. **Re-disable the break-glass role** — restore the deny-all standing policy so the role is inert again.
+1. **Re-disable the break-glass role** — restore the deny-all standing policy so the role is inert again. For the stage-managed role, set `break_glass_active = false` and apply. If you activated it manually, detach `AdministratorAccess`, then re-apply the `aws-security` stage to reconcile state back to the deny-all standing policy.
 2. **Re-attach any detached SCP** (Step 3) and confirm the guardrail is back via a fresh `aws-organization` apply.
 3. **Pull the audit trail** from the org CloudTrail in the Log Archive account for the break-glass session window; verify only authorized actions were taken.
 4. File the post-incident review within 24 hours. If unauthorized actions are found, escalate as a security incident (see [`aws-incident-response.md`](aws-incident-response.md)).
