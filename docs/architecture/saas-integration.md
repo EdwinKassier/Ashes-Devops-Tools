@@ -1,9 +1,11 @@
 # SaaS Integration: Options and Decision (audit H9)
 
-**Status:** Decided — **Option C (hybrid, opt-in seams)**. Secret bridge delivered
-for both clouds (`enable_saas_secret_bridge` on `envs/gcp/workload` and
-`envs/aws/workload`), and the frontend-URL seam delivered (`cross_cloud_references`
-on `envs/saas`). Remaining increment: DNS unification.
+**Status:** Decided — **Option C (hybrid, opt-in seams)**, all increments
+delivered: the secret bridge on both clouds (`enable_saas_secret_bridge` on
+`envs/gcp/workload` and `envs/aws/workload`), the frontend-URL seam
+(`cross_cloud_references` on `envs/saas`), and DNS unification
+(`modules/gcp/network/dns-records`). Each is opt-in and off by default. The AWS
+Route 53 counterpart of the DNS records module is a symmetric follow-up.
 
 **Audit finding (H9):** the SaaS tier (Supabase and Vercel) is a disconnected
 island. `modules/saas/stages/saas-workload` composes the SaaS modules, but no
@@ -104,8 +106,11 @@ config.
      endpoint) from remote state and injects it as a Vercel shared env var, so the
      frontend learns the backend URL. No cloud credentials, only tfc_organization.
      Default empty: the root stays standalone.
-  3. **DNS (opt-in):** let the managed DNS zone optionally hold the Vercel and
-     Supabase custom-domain records. Not yet built.
+  3. **DNS unification — DELIVERED for Cloud DNS.** `modules/gcp/network/dns-records`
+     writes SaaS custom-domain records (Vercel, Supabase) into an existing Cloud
+     DNS managed zone, so they live in the org's zone instead of a separate
+     registrar. Opt-in (empty records map creates nothing). The AWS Route 53
+     counterpart is a symmetric follow-up.
 - **Pro:** matches the repo's provider-selection philosophy (deploy any
   combination, opt in per feature); keeps the SaaS root credential-free; each
   seam is independently testable and reversible.
