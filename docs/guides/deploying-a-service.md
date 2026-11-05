@@ -82,8 +82,10 @@ outputs.
 ## What is still your responsibility
 
 These modules are the building blocks and the secure defaults. You still own the
-application IAM role contents (least privilege is yours to define), the ingress
-certificate and DNS records, and the service's own SLOs. Ingress composition
-(service + cert + DNS), per-service dashboards and SLOs, and a formal dev to prod
-promotion flow are the next platform additions; until then, use the network and
-monitoring primitive modules directly.
+application IAM role contents (least privilege is yours to define) and the ingress
+certificate and DNS records. For service objectives, attach
+`modules/gcp/monitoring/slo` to the workload's monitored service to track
+availability or latency against a goal and alert on fast error-budget burn.
+Ingress composition (service + cert + DNS) and a formal dev to prod promotion flow
+are the next platform additions; until then, use the network primitive modules
+directly.
