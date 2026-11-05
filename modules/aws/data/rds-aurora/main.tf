@@ -55,7 +55,9 @@ resource "aws_rds_cluster" "this" {
   # Prefer the RDS-managed secret so the password never enters Terraform state.
   manage_master_user_password   = var.manage_master_user_password ? true : null
   master_user_secret_kms_key_id = var.manage_master_user_password && var.master_user_secret_kms_key_id != "" ? var.master_user_secret_kms_key_id : null
-  master_password               = var.manage_master_user_password ? null : var.master_password
+  # Write-only (Terraform >= 1.11): a caller-supplied password never lands in state.
+  master_password_wo         = var.manage_master_user_password ? null : var.master_password
+  master_password_wo_version = var.manage_master_user_password ? null : var.master_password_version
 
   db_subnet_group_name   = aws_db_subnet_group.this.name
   vpc_security_group_ids = var.security_group_ids

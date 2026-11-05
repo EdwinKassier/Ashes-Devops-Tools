@@ -193,13 +193,14 @@ variable "aws_workspace_account_keys" {
 }
 
 variable "workspace_variables" {
-  description = "Per-workspace variables, workspace name => {key => {value, category (terraform|env, default terraform), hcl?, sensitive?, description?}}. Overrides derived values (e.g. environment) and dynamic-credential env vars. Supply real secrets out-of-band."
+  description = "Per-workspace variables, workspace name => {key => {value, category (terraform|env, default terraform), hcl?, sensitive?, description?, version?}}. Overrides derived values (e.g. environment) and dynamic-credential env vars. Sensitive values are written write-only; increment `version` to rotate."
   type = map(map(object({
     value       = string
     category    = optional(string, "terraform")
     hcl         = optional(bool, false)
     sensitive   = optional(bool, false)
     description = optional(string)
+    version     = optional(number, 1)
   })))
   default = {}
 
@@ -275,13 +276,14 @@ variable "vcs_repo" {
 }
 
 variable "common_workspace_variables" {
-  description = "Org-wide variables placed in the shared <prefix>common variable set (alongside tfc_organization) attached to EVERY managed workspace. Keyed by name: {value, category (terraform|env), hcl?, sensitive?, description?}. Per-workspace credentials belong in the dynamic-credential maps, not here. Supply real secrets out-of-band."
+  description = "Org-wide variables placed in the shared <prefix>common variable set (alongside tfc_organization) attached to EVERY managed workspace. Keyed by name: {value, category (terraform|env), hcl?, sensitive?, description?, version?}. Sensitive values are written write-only (never stored in state); increment `version` to rotate. Per-workspace credentials belong in the dynamic-credential maps, not here."
   type = map(object({
     value       = string
     category    = string
     hcl         = optional(bool, false)
     sensitive   = optional(bool, false)
     description = optional(string)
+    version     = optional(number, 1)
   }))
   default = {}
 }

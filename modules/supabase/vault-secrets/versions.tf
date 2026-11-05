@@ -1,5 +1,5 @@
 terraform {
-  required_version = "~> 1.9"
+  required_version = "~> 1.11"
 
   # No providers: the module uses only the built-in terraform_data resource.
   # (Earlier versions used hashicorp/null; the moved blocks in main.tf migrate

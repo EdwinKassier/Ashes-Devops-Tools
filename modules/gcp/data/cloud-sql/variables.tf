@@ -203,13 +203,15 @@ variable "users" {
   description = <<-EOT
     List of database users to create. For built-in (password) users set `password`
     (prefer IAM auth instead). For IAM users set `type = "CLOUD_IAM_USER"` (or
-    "CLOUD_IAM_SERVICE_ACCOUNT") and omit the password. The whole variable is marked
-    sensitive because it may carry passwords.
+    "CLOUD_IAM_SERVICE_ACCOUNT") and omit the password. Passwords are written with the
+    write-only password_wo argument, so they never land in plan or state; increment
+    `password_version` to rotate. The variable is still marked sensitive.
   EOT
   type = list(object({
-    name     = string
-    password = optional(string)
-    type     = optional(string, "BUILT_IN")
+    name             = string
+    password         = optional(string)
+    password_version = optional(number, 1)
+    type             = optional(string, "BUILT_IN")
   }))
   default   = []
   sensitive = true

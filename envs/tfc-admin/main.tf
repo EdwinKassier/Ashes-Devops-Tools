@@ -317,17 +317,20 @@ resource "tfe_variable_set" "common" {
 
 resource "tfe_variable" "common" {
   for_each = merge(
-    { tfc_organization = { value = var.tfc_organization, category = "terraform", hcl = false, sensitive = false, description = "TFC organization (remote-state reads)." } },
+    { tfc_organization = { value = var.tfc_organization, category = "terraform", hcl = false, sensitive = false, description = "TFC organization (remote-state reads).", version = 1 } },
     var.common_workspace_variables,
   )
 
   variable_set_id = tfe_variable_set.common.id
   key             = each.key
-  value           = each.value.value
-  category        = each.value.category
-  hcl             = each.value.hcl
-  sensitive       = each.value.sensitive
-  description     = each.value.description
+  # Sensitive values are written write-only (never stored in tfc-admin state).
+  value            = each.value.sensitive ? null : each.value.value
+  value_wo         = each.value.sensitive ? each.value.value : null
+  value_wo_version = each.value.sensitive ? each.value.version : null
+  category         = each.value.category
+  hcl              = each.value.hcl
+  sensitive        = each.value.sensitive
+  description      = each.value.description
 }
 
 # ── Workspaces ──────────────────────────────────────────────────────────────

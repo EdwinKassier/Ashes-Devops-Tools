@@ -48,9 +48,9 @@ variable "secrets" {
 variable "secret_values" {
   description = <<-EOT
     Optional initial secret VALUES as secret_name => value. A google_secret_manager_secret_version
-    is created ONLY for the names present here. Omit in production and set values out of
-    band (console, CI with a privileged SA, or `gcloud secrets versions add`) to keep
-    plaintext out of Terraform state. Every key must also exist in var.secrets.
+    is created ONLY for the names present here, using the write-only secret_data_wo argument,
+    so the plaintext is never stored in Terraform plan or state (Terraform >= 1.11). Pass an
+    ephemeral value where possible. Every key must also exist in var.secrets.
   EOT
   type        = map(string)
   default     = {}
@@ -94,4 +94,15 @@ variable "enable_deletion_protection" {
   EOT
   type        = bool
   default     = true
+}
+
+variable "secret_value_versions" {
+  description = "Per-secret write-only version counter (secret_name => integer, default 1). Write-only values are not diffed, so increment a secret's counter to push a new value from secret_values."
+  type        = map(number)
+  default     = {}
+
+  validation {
+    condition     = alltrue([for v in values(var.secret_value_versions) : v >= 1 && floor(v) == v])
+    error_message = "secret_value_versions values must be positive integers."
+  }
 }

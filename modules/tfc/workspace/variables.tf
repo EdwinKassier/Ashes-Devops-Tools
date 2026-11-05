@@ -142,13 +142,14 @@ variable "variable_set_ids" {
 }
 
 variable "variables" {
-  description = "Workspace variables keyed by name: {value, category (terraform|env), hcl?, sensitive?, description?}."
+  description = "Workspace variables keyed by name: {value, category (terraform|env), hcl?, sensitive?, description?, version?}. Sensitive values are written write-only (never stored in state); increment `version` to rotate one."
   type = map(object({
     value       = string
     category    = string
     hcl         = optional(bool, false)
     sensitive   = optional(bool, false)
     description = optional(string)
+    version     = optional(number, 1)
   }))
   default = {}
 

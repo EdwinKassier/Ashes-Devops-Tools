@@ -56,18 +56,21 @@ resource "tfe_workspace_settings" "this" {
   remote_state_consumer_ids = var.global_remote_state ? null : var.remote_state_consumer_ids
 }
 
-# Workspace variables (terraform inputs and env vars). Sensitive values are marked
-# sensitive so they are write-only in TFC and never read back.
+# Workspace variables (terraform inputs and env vars). Sensitive values use the
+# write-only value_wo argument (Terraform >= 1.11): they are sent to TFC but never
+# stored in THIS workspace's plan or state. Bump `version` to push a new value.
 resource "tfe_variable" "this" {
   for_each = var.variables
 
-  workspace_id = tfe_workspace.this.id
-  key          = each.key
-  value        = each.value.value
-  category     = each.value.category
-  hcl          = try(each.value.hcl, false)
-  sensitive    = try(each.value.sensitive, false)
-  description  = try(each.value.description, null)
+  workspace_id     = tfe_workspace.this.id
+  key              = each.key
+  value            = try(each.value.sensitive, false) ? null : each.value.value
+  value_wo         = try(each.value.sensitive, false) ? each.value.value : null
+  value_wo_version = try(each.value.sensitive, false) ? each.value.version : null
+  category         = each.value.category
+  hcl              = try(each.value.hcl, false)
+  sensitive        = try(each.value.sensitive, false)
+  description      = try(each.value.description, null)
 }
 
 # Attach shared variable sets (org-wide values live once in a set, not copied

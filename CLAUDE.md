@@ -71,7 +71,7 @@ Full rationale, root inventory, and the any-combination matrix: [`docs/architect
 
 | Tool | Required version |
 |------|-----------------|
-| Terraform | `~> 1.9` (uses `mock_provider`, `override_module`, `terraform_data`) |
+| Terraform | `~> 1.11` (CI pins 1.14.3; uses `mock_provider`, `override_module`, `terraform_data`, and write-only `*_wo` arguments so secrets never enter state) |
 | google / google-beta | `~> 7.0` (6→7 migration complete; locks on 7.x, CI green — audit L4) |
 | hashicorp/aws | `>= 6.46.0, < 7.0.0` (floored pin — deliberate, not `~> 6.0`) |
 | supabase/supabase | `~> 1.0` |
@@ -155,7 +155,7 @@ Do not introduce a third `use_*`/`with_*` variant. Keep variable descriptions fr
 
 ### Sensitive values in `terraform_data` / `null_resource` triggers
 
-Terraform 1.9 rejects raw sensitive values in triggers. Always hash them:
+Terraform rejects raw sensitive values in triggers. Always hash them (and prefer write-only `*_wo` arguments over storing secrets at all):
 
 ```hcl
 triggers = {

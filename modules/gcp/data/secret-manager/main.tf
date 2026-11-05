@@ -84,8 +84,13 @@ resource "google_secret_manager_secret_version" "this" {
   # look the sensitive value up by key so only secret_data stays sensitive.
   for_each = nonsensitive(toset(keys(var.secret_values)))
 
-  secret      = google_secret_manager_secret.this[each.key].id
-  secret_data = var.secret_values[each.key]
+  secret = google_secret_manager_secret.this[each.key].id
+
+  # Write-only (Terraform >= 1.11): the plaintext is sent to the API but NEVER
+  # persisted in plan or state. Bump secret_value_versions[<name>] to push a new
+  # value (write-only attributes cannot be diffed).
+  secret_data_wo         = var.secret_values[each.key]
+  secret_data_wo_version = lookup(var.secret_value_versions, each.key, 1)
 }
 
 # Per-secret accessor bindings (roles/secretmanager.secretAccessor).

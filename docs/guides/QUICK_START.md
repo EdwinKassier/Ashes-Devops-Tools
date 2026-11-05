@@ -33,7 +33,7 @@ gcloud services enable cloudresourcemanager.googleapis.com \
 
 ### Tooling
 
-- [ ] `terraform version` reports `>= 1.9.8` (see `.terraform-version`)
+- [ ] `terraform version` reports `>= 1.11` (CI pins the version in `.terraform-version`)
 - [ ] `gcloud version` reports `>= 450.0.0`
 - [ ] `jq` installed (used by CI scripts)
 - [ ] Node.js >= 18 installed (required only if using `enable_vault_secrets = true` in any `saas-workload` call)
@@ -345,7 +345,7 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
 
 ## Verification Checklist
 
-- [ ] `terraform version` reports `>= 1.9.8`
+- [ ] `terraform version` reports `>= 1.11`
 - [ ] `make help` prints supported commands
 - [ ] `make fmt-check`, `make docs-check`, and `make security` succeed
 - [ ] `make test` reports `X passed, 0 failed`

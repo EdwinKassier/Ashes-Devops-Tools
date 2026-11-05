@@ -189,9 +189,12 @@ resource "vercel_project_environment_variable" "qa" {
   project_id = vercel_project.this.id
   team_id    = var.team_id != "" ? var.team_id : null
   key        = each.key
-  value      = each.value.value # provider marks `value` sensitive in schema — no wrapper needed
-  target     = ["preview"]
-  sensitive  = each.value.sensitive
+  # Sensitive vars use the write-only value_wo (Terraform >= 1.11): never stored in
+  # plan/state. Change detection comes from the fingerprint + replace_triggered_by.
+  value     = each.value.sensitive ? null : each.value.value
+  value_wo  = each.value.sensitive ? each.value.value : null
+  target    = ["preview"]
+  sensitive = each.value.sensitive
 
   lifecycle {
     replace_triggered_by = [terraform_data.qa_vars_version]
@@ -207,10 +210,13 @@ resource "vercel_project_environment_variable" "qa" {
 resource "vercel_project_environment_variable" "uat" {
   for_each = nonsensitive(local.uat_vars_map)
 
-  project_id             = vercel_project.this.id
-  team_id                = var.team_id != "" ? var.team_id : null
-  key                    = each.key
-  value                  = each.value.value # provider marks `value` sensitive in schema — no wrapper needed
+  project_id = vercel_project.this.id
+  team_id    = var.team_id != "" ? var.team_id : null
+  key        = each.key
+  # Sensitive vars use the write-only value_wo (Terraform >= 1.11): never stored in
+  # plan/state. Change detection comes from the fingerprint + replace_triggered_by.
+  value                  = each.value.sensitive ? null : each.value.value
+  value_wo               = each.value.sensitive ? each.value.value : null
   target                 = []
   custom_environment_ids = [vercel_custom_environment.uat.id]
   sensitive              = each.value.sensitive
@@ -228,9 +234,12 @@ resource "vercel_project_environment_variable" "prod" {
   project_id = vercel_project.this.id
   team_id    = var.team_id != "" ? var.team_id : null
   key        = each.key
-  value      = each.value.value # provider marks `value` sensitive in schema — no wrapper needed
-  target     = ["production"]
-  sensitive  = each.value.sensitive
+  # Sensitive vars use the write-only value_wo (Terraform >= 1.11): never stored in
+  # plan/state. Change detection comes from the fingerprint + replace_triggered_by.
+  value     = each.value.sensitive ? null : each.value.value
+  value_wo  = each.value.sensitive ? each.value.value : null
+  target    = ["production"]
+  sensitive = each.value.sensitive
 
   lifecycle {
     replace_triggered_by = [terraform_data.prod_vars_version]
@@ -252,9 +261,12 @@ resource "vercel_project_environment_variable" "shared" {
   project_id = vercel_project.this.id
   team_id    = var.team_id != "" ? var.team_id : null
   key        = each.key
-  value      = each.value.value # provider marks `value` sensitive in schema — no wrapper needed
-  target     = ["preview", "production"]
-  sensitive  = each.value.sensitive
+  # Sensitive vars use the write-only value_wo (Terraform >= 1.11): never stored in
+  # plan/state. Change detection comes from the fingerprint + replace_triggered_by.
+  value     = each.value.sensitive ? null : each.value.value
+  value_wo  = each.value.sensitive ? each.value.value : null
+  target    = ["preview", "production"]
+  sensitive = each.value.sensitive
 
   lifecycle {
     replace_triggered_by = [terraform_data.shared_vars_version]
@@ -264,10 +276,13 @@ resource "vercel_project_environment_variable" "shared" {
 resource "vercel_project_environment_variable" "shared_uat" {
   for_each = nonsensitive(local.shared_vars_map)
 
-  project_id             = vercel_project.this.id
-  team_id                = var.team_id != "" ? var.team_id : null
-  key                    = each.key
-  value                  = each.value.value # provider marks `value` sensitive in schema — no wrapper needed
+  project_id = vercel_project.this.id
+  team_id    = var.team_id != "" ? var.team_id : null
+  key        = each.key
+  # Sensitive vars use the write-only value_wo (Terraform >= 1.11): never stored in
+  # plan/state. Change detection comes from the fingerprint + replace_triggered_by.
+  value                  = each.value.sensitive ? null : each.value.value
+  value_wo               = each.value.sensitive ? each.value.value : null
   target                 = []
   custom_environment_ids = [vercel_custom_environment.uat.id]
   sensitive              = each.value.sensitive

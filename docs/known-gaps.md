@@ -190,11 +190,13 @@ side (all mock-tested, secure defaults):
   does not yet expose `sb_publishable_`/`sb_secret_` on `supabase_apikeys`; the
   module uses the legacy JWT keys, which Supabase deprecates end-2026. Expose the
   new keys as outputs once the provider supports them.
-- **S4 — Vercel write-only secret values (`value_wo`).** Requires vercel provider
-  **5.x** (pinned `~> 4.0`, 4.8.2 rejects `value_wo`) **and Terraform ≥ 1.11**.
-  Once the Vercel major bump lands, move env-var values to `value_wo` and retire
-  the SHA256 drift-hack. (GCP/Supabase secrets can adopt write-only sooner — the
-  Terraform floor was raised off 1.9.8, and the google provider already supports it.)
+- **S4 — RESOLVED (2026-11-05).** The Terraform floor is now `~> 1.11` and secrets use
+  write-only arguments, so they never enter plan or state: GCP Secret Manager
+  (`secret_data_wo`), Cloud SQL users (`password_wo`), Aurora master password
+  (`master_password_wo`), sensitive TFC variables (`value_wo`) and sensitive Vercel env
+  vars (`value_wo`, supported by vercel 4.8.2). Remaining: `supabase_project.database_password`
+  (no write-only argument in the supabase provider yet) and the Vercel change-detection
+  fingerprint, which is an unsalted SHA-256 of the env values.
 
 ## DECISION — needs a human call
 

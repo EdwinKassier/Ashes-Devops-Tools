@@ -71,6 +71,12 @@ run "secrets_plan_with_expected_shape" {
     error_message = "a version must be planned only for secrets present in secret_values."
   }
 
+  # The value is written via the write-only argument: nothing in state.
+  assert {
+    condition     = google_secret_manager_secret_version.this["database-url"].secret_data == null && google_secret_manager_secret_version.this["database-url"].secret_data_wo_version == 1
+    error_message = "secret versions must use secret_data_wo (never secret_data) with version 1 by default."
+  }
+
   # Two accessor members => two bindings, all with the secretAccessor role.
   assert {
     condition     = length(google_secret_manager_secret_iam_member.accessor) == 2
