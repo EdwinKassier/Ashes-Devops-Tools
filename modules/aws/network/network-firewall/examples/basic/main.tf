@@ -6,6 +6,6 @@
 module "network_firewall" {
   source = "../../"
 
-  inspection_vpc_id = "vpc-inspection0000000"
+  inspection_vpc_id = "vpc-0123456789abcdef0"
   log_bucket_name   = "example-firewall-log-bucket"
 }
