@@ -92,6 +92,12 @@ variable "enable_networking" {
   default     = true
 }
 
+variable "enable_cloud_nat" {
+  description = "Create Cloud NAT and its Cloud Router for egress. Default true preserves existing behaviour. Set false for VPCs with no egress need (e.g. a DNS-anchor VPC) to avoid the NAT gateway cost."
+  type        = bool
+  default     = true
+}
+
 variable "vpc_name" {
   description = "Name of the VPC network"
   type        = string

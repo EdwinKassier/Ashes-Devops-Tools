@@ -1,8 +1,14 @@
 name: Drift Detection
 
 # Required repository configuration (see docs/guides/CI_SECRETS.md):
-#   - secrets.TFC_TOKEN        Terraform Cloud API token (Team or Organization token
-#                              with read access to the target workspaces).
+#   - secrets.TFC_TOKEN_DRIFT  Terraform Cloud team token with QUEUE PLANS (write)
+#                              permission on the target workspaces. Drift detection
+#                              creates speculative, plan-only+refresh runs
+#                              (POST /runs), which READ access alone cannot do.
+#                              Keep this separate from the read-only TFC_TOKEN used
+#                              by the release workflow. Falls back to TFC_TOKEN if
+#                              TFC_TOKEN_DRIFT is unset (back-compat; that token
+#                              then also needs queue-plans).
 #   - vars.TFC_ORGANIZATION    Terraform Cloud organization name.
 #   - vars.TFC_DRIFT_WORKSPACES  (optional) JSON array of workspace names to check.
 #                              Defaults to '["gcp-organization","gcp-workload-dev"]' when unset.
@@ -47,7 +53,7 @@ jobs:
         # evaluate it here (where secrets ARE available) and expose a plain
         # job output that downstream `if:` conditions can safely read.
         env:
-          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN_DRIFT || secrets.TFC_TOKEN }}
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
         run: |
           if [ -n "$TFC_TOKEN" ] && [ -n "$TFC_ORGANIZATION" ]; then
@@ -106,7 +112,7 @@ jobs:
     steps:
       - name: Assert Terraform Cloud credentials are configured
         env:
-          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN_DRIFT || secrets.TFC_TOKEN }}
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
         run: |
           test -n "$TFC_TOKEN"
@@ -115,7 +121,7 @@ jobs:
       - name: Fetch latest run status from Terraform Cloud
         id: run_status
         env:
-          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN_DRIFT || secrets.TFC_TOKEN }}
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
           WORKSPACE: ${{ matrix.workspace }}
         run: |
@@ -141,7 +147,7 @@ jobs:
       - name: Trigger speculative plan via Terraform Cloud API
         id: trigger_plan
         env:
-          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN_DRIFT || secrets.TFC_TOKEN }}
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
           WORKSPACE: ${{ matrix.workspace }}
         run: |
@@ -188,7 +194,7 @@ jobs:
       - name: Poll for plan result
         id: poll
         env:
-          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN_DRIFT || secrets.TFC_TOKEN }}
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
           DRIFT_RUN_ID: ${{ steps.trigger_plan.outputs.drift_run_id }}
           # Mapped via env (not inlined into the run script) to avoid interpolating

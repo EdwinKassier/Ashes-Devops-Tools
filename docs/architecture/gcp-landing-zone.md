@@ -4,7 +4,7 @@ This document is the authoritative description of the GCP landing zone deployed 
 
 This is the GCP counterpart to [`aws-landing-zone.md`](aws-landing-zone.md); the two are written to the same section structure so you can compare the clouds control-for-control. For a capability-by-capability module map see the [Cross-Cloud Comparison](cross-cloud-comparison.md) and the [Module Library](../../README.md#module-library). For how to *stand this up* see [`docs/runbooks/add-environment.md`](../runbooks/add-environment.md); for the cross-root wiring contract see [`docs/architecture/adding-a-cloud.md`](adding-a-cloud.md).
 
-> **Structural note.** Where the AWS SRA mandates seven layered roots (organization, security, network, identity, shared-services, backup, workload), GCP folds the same responsibilities into **two roots** — `gcp-organization` (bootstrap → organization → projects → network-hub, one apply) and `gcp-workload-<env>` (host + budget, per environment). Fewer accounts/roots is idiomatic for GCP, where a Shared VPC and org policies do centrally what AWS distributes across dedicated accounts.
+> **Structural note.** Where the AWS SRA mandates seven layered roots (organization, security, network, identity, shared-services, backup, workload), GCP uses **five roots**, applied in order: `gcp-bootstrap` (admin project, Terraform admin SA, WIF pools), `gcp-organization` (folders, org policy, KMS, audit, billing), `gcp-projects` (host/spoke projects + `environment_config`), `gcp-network-hub` (hub VPC, DNS anchor, hub VPC-SC), and `gcp-workload-<env>` (host + budget, per environment). Each reads its upstreams via remote state. The control plane was split into separate states to shrink the blast radius (audit H3); see [gcp-state-decomposition.md](gcp-state-decomposition.md). A Shared VPC and org policies still do centrally what AWS distributes across dedicated accounts.
 
 ---
 
@@ -57,22 +57,25 @@ The environment folder/project keys are the exact keys of the `environment_confi
 
 ## Layer map — which root deploys what
 
-Two roots, each one Terraform Cloud workspace (see [provider-selection](provider-selection.md)). The organization root composes four stage modules in a single apply; ordering **inside** it is by module dependency, and ordering **between** roots is by apply order + remote-state reads, not cross-root `depends_on`.
+Five GCP roots, each one Terraform Cloud workspace (see [provider-selection](provider-selection.md)), applied in order. Ordering **between** roots is by apply order + remote-state reads, not cross-root `depends_on`. The control plane was split into separate states (audit H3) to shrink the blast radius; see [gcp-state-decomposition.md](gcp-state-decomposition.md).
 
-| Order | Root | Workspace | Deploys | Stage modules |
-|---|---|---|---|---|
-| 1 | `envs/gcp/organization` | `gcp-organization` | Bootstrap (admin project, WIF, Terraform SA) → organization (folders, org policy, tags, audit logs, SCC, org CMEK, budgets, essential contacts) → projects (shared + host projects) → network-hub (hub VPC, DNS hub, hub VPC-SC perimeter). Publishes `environment_config`, `hub_network`, `cmek_key_names`, WIF pool IDs. | `bootstrap`, `organization`, `projects`, `network-hub` |
-| 2 | `envs/gcp/workload` | `gcp-workload-<env>` | Per-environment Shared VPC host network (three-tier subnets, NAT, firewall, hub peering, DNS peering, flow-logs export, optional Cloud Armor, per-env VPC-SC perimeter) + budget. One workspace per env via the `gcp-workload-` prefix. | `host`, `governance/billing` |
-| — | `envs/saas` | `saas-<name>` | Supabase and/or Vercel only. **No GCP provider** — reads GCP/AWS remote state for values but configures no GCP credentials. | `modules/saas/stages/saas-workload` |
+| Order | Root | Workspace | Deploys | Stage modules | Reads |
+|---|---|---|---|---|---|
+| 1 | `envs/gcp/bootstrap` | `gcp-bootstrap` | Admin project, Terraform admin SA, GitHub/TFC WIF pools. Publishes `admin_project_id`, `admin_project_number`, `terraform_admin_email`, `suffix`, OIDC pool/provider IDs. | `bootstrap` | — |
+| 2 | `envs/gcp/organization` | `gcp-organization` | Folders, org policy, tags, audit logs, SCC notifications, org CMEK, budgets, essential contacts. Publishes `org_id`, `folders`, `tag_values`/`tag_keys`, `cmek_key_names`, `billing_account`. | `organization` | gcp-bootstrap |
+| 3 | `envs/gcp/projects` | `gcp-projects` | Shared (hub/dns) + per-env host projects. Publishes `project_ids`, `project_numbers`, and the `environment_config` contract. | `projects` | gcp-organization, gcp-bootstrap |
+| 4 | `envs/gcp/network-hub` | `gcp-network-hub` | Hub VPC, DNS hub, hub VPC-SC perimeter. Publishes `hub_network`. | `network-hub` | gcp-projects, gcp-organization |
+| 5 | `envs/gcp/workload` | `gcp-workload-<env>` | Per-environment Shared VPC host network (three-tier subnets, NAT, firewall, hub peering, DNS peering, flow-logs export, optional Cloud Armor, per-env VPC-SC perimeter) + budget. One workspace per env via the `gcp-workload-` prefix. | `host`, `governance/billing` | gcp-projects, gcp-network-hub, gcp-organization |
+| — | `envs/saas` | `saas-<name>` | Supabase and/or Vercel only. **No GCP provider** — reads GCP/AWS remote state for values but configures no GCP credentials. | `modules/saas/stages/saas-workload` | (optional) |
 
-The **minimum governed footprint** is the `gcp-organization` root alone (it already stands up folders, guardrails, audit logging, SCC notifications, and the network hub); `gcp-workload-<env>` is additive, once per environment. The `saas` root is deliberately outside the GCP chain: it is selected purely by whether you apply its workspace, and it needs no GCP credentials.
+Apply the four control-plane roots in order (`gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub`) once; `gcp-workload-<env>` is additive, once per environment. The `saas` root is deliberately outside the GCP chain: it is selected purely by whether you apply its workspace, and it needs no GCP credentials.
 
-**Cross-root outputs published by `gcp-organization`** (`envs/gcp/organization/outputs.tf`) — the contract `gcp-workload` consumes via `terraform_remote_state`:
+**Cross-root outputs** consumed by `gcp-workload` via `terraform_remote_state`, by publishing root:
 
-- `environment_config` — per-env map: `folder_id`, `host_project_id`, `host_project_number`, `region`, `cidr_block`, `labels`, `tag_value_ids.environment`. The primary per-environment contract.
-- `hub_network` — `vpc_self_link`, `vpc_name`, `dns_zone_name`, `dns_domain` (spoke → hub peering + DNS peering).
-- `cmek_key_names` — CMEK key short-name → key ID, for downstream encryption.
-- Foundational: `billing_account`, `admin_project`, `organization`/`org_id`, `folders`, `projects`, `terraform_service_account_email`, the GitHub/TFC OIDC pool + provider IDs, `tag_values`/`tag_keys`, `audit_logs_bucket_name`, `billing_export_dataset_id`, `scc_pubsub_topic_id`.
+- From `gcp-projects` — `environment_config` (per-env map: `folder_id`, `host_project_id`, `host_project_number`, `region`, `cidr_block`, `labels`, `tag_value_ids.environment`), plus `project_ids` / `project_numbers`.
+- From `gcp-network-hub` — `hub_network` (`vpc_self_link`, `vpc_name`, `dns_zone_name`, `dns_domain`).
+- From `gcp-organization` — `cmek_key_names`, `billing_account`, `org_id`, `folders`, `tag_values`/`tag_keys`, `audit_logs_bucket_name`, `billing_export_dataset_id`, `scc_pubsub_topic_id`, and `admin_project_number` (re-exported from bootstrap).
+- From `gcp-bootstrap` — `admin_project_id`, `terraform_admin_email`, `suffix`, GitHub/TFC OIDC pool + provider IDs.
 
 ---
 
@@ -185,7 +188,7 @@ This table maps each Google enterprise-foundations / CIS control to the module a
 
 | Control | Source | Implemented by | Notes |
 |---|---|---|---|
-| Numbered foundation stages (bootstrap → org → projects → network) | Cloud Foundation Fabric **FAST** | `envs/gcp/organization` composing `modules/gcp/stages/{bootstrap,organization,projects,network-hub}` | Single apply; stage order by module dependency. Tracks FAST's **classic numbered-stage model** (`modules/gcp/stages/README.md`); note upstream FAST has since restructured (e.g. a merged `0-org-setup` stage), so this is the classic layout, not the current upstream tree. |
+| Numbered foundation stages (bootstrap → org → projects → network) | Cloud Foundation Fabric **FAST** | `envs/gcp/{bootstrap,organization,projects,network-hub}`, each composing the matching `modules/gcp/stages/*` | One root and state per stage, applied in order (audit H3). Tracks FAST's **classic numbered-stage model** (`modules/gcp/stages/README.md`); note upstream FAST has since restructured (e.g. a merged `0-org-setup` stage), so this is the classic layout, not the current upstream tree. |
 | Folder hierarchy + per-env isolation | Enterprise foundations "resource hierarchy" | `modules/gcp/iam/organization` (`google_folder`, `prevent_destroy`) | Flat: one `Shared Services` folder + one per environment; `environment` tag bound to each folder. |
 | Keyless automation identity (WIF) | Foundations "no service-account keys" | `modules/gcp/stages/bootstrap` + `modules/gcp/iam/workload-identity` | GitHub + TFC OIDC pools; SA key creation **and** upload disabled by org policy. |
 | Org policy guardrails | CIS GCP Foundations Benchmark (latest v5.0.0, 2026-05); Google managed baseline | `modules/gcp/governance/org-policy` | ~15 constraints incl. deny external IP (CIS 4.9), no default-SA auto-grants (CIS 1.4), Shielded VM, UBLA, restrict SQL public IP, domain-restricted sharing. Stricter set on prod folders. Uses **legacy constraint names** (not the `*.managed.*` namespace) and **no custom constraints** yet — see [known-gaps G6](../known-gaps.md#modernization--latest-best-practice-gaps-2026-review). |
@@ -204,7 +207,7 @@ This table maps each Google enterprise-foundations / CIS control to the module a
 
 - **Organization + Cloud Identity / Workspace domain** — the org is looked up by domain (`data.google_organization`); it and the identity domain must pre-exist.
 - **Billing account** — looked up and linked (`data.google_billing_account`); creation/linkage is a console/admin step.
-- **First-apply impersonation bootstrap** — the very first `gcp-organization` apply runs as the human `admin_email` (who can impersonate); it *creates* the `terraform-admin` SA that all later applies impersonate.
+- **First-apply impersonation bootstrap** — the very first `gcp-bootstrap` apply runs as the human `admin_email` (who can impersonate); it *creates* the `terraform-admin` SA that all later applies (including the other control-plane roots) impersonate.
 - **Access Context Manager policy** — VPC-SC perimeters require an existing org-level ACM policy passed as `vpc_sc_access_policy_name`; with the default `null`, no perimeter is created.
 - **SCC tier enablement** — `governance/scc` wires notifications; enabling SCC Standard/Premium/Enterprise tiers is an org-level, out-of-band step.
 - **Cloud Billing → BigQuery export stream** — the dataset + IAM are created by Terraform, but toggling the export in the Billing console is manual.

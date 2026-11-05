@@ -8,31 +8,11 @@
 # no-ops and can be safely deleted. After running `terraform apply` once against
 # an existing deployment to complete the migration, delete this file.
 
-# Bootstrap Module Mappings
-moved {
-  from = google_project.admin_project
-  to   = module.bootstrap.google_project.admin_project
-}
-
-moved {
-  from = random_id.suffix
-  to   = module.bootstrap.random_id.suffix
-}
-
-moved {
-  from = google_project_service.admin_project_services
-  to   = module.bootstrap.google_project_service.admin_project_services
-}
-
-moved {
-  from = module.terraform_admin_sa
-  to   = module.bootstrap.module.terraform_admin_sa
-}
-
-moved {
-  from = module.gh_oidc
-  to   = module.bootstrap.module.gh_oidc
-}
+# NOTE: the former "Bootstrap Module Mappings" were removed when the bootstrap
+# stage was split into its own root and state (envs/gcp/bootstrap, audit H3).
+# Relocating those resources out of this state is a cross-STATE migration
+# (terraform state mv / removed + import), which a `moved` block cannot express.
+# See docs/architecture/gcp-state-decomposition.md.
 
 # Organization Module Mappings
 moved {
@@ -85,34 +65,8 @@ moved {
   to   = module.organization.google_bigquery_dataset.billing_export
 }
 
-# Projects Module Mappings
-moved {
-  from = google_project.projects
-  to   = module.projects.google_project.projects
-}
-
-moved {
-  from = google_project_service.project_services
-  to   = module.projects.google_project_service.project_services
-}
-
-moved {
-  from = google_monitoring_monitored_project.projects
-  to   = module.projects.google_monitoring_monitored_project.projects
-}
-
-# Network Hub Module Mappings
-moved {
-  from = module.hub_network
-  to   = module.network_hub.module.hub_network
-}
-
-moved {
-  from = module.dns_hub_network
-  to   = module.network_hub.module.dns_hub_network
-}
-
-moved {
-  from = module.dns_hub_zone
-  to   = module.network_hub.module.dns_hub_zone
-}
+# NOTE: the former "Projects Module Mappings" and "Network Hub Module Mappings"
+# were removed when the projects and network-hub stages were split into their own
+# roots and states (envs/gcp/projects, envs/gcp/network-hub; audit H3). Relocating
+# those resources is a cross-STATE migration (terraform state mv / import), not a
+# `moved` block. See docs/architecture/gcp-state-decomposition.md.

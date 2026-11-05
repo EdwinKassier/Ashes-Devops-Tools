@@ -147,9 +147,12 @@ variable "budgets" {
     threshold_percent = number
     emails            = optional(list(string), [])
   }))
+  # Default limit sized above the landing-zone idle baseline (the AWS security +
+  # network hub is ~USD 1,500/month before any workload) so the alert is not
+  # already breached on day one (FinOps F1). Set this to your real budget.
   default = {
     org-monthly = {
-      limit_amount      = "1000"
+      limit_amount      = "3000"
       threshold_percent = 80
     }
   }

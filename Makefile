@@ -47,7 +47,11 @@ validate-all: ## Initialize without backends and validate every supported root
 			fi; \
 			[ $$attempt -lt 3 ] || exit 1; \
 		done; \
-		$(TERRAFORM) -chdir=$$dir validate; \
+		if grep -rqE 'configuration_aliases[[:space:]]*=' "$$dir" --include='*.tf'; then \
+			echo "$(YELLOW)Skipping validate for $$dir (declares configuration_aliases; covered by examples/, composing roots and mock tests)$(NC)"; \
+		else \
+			$(TERRAFORM) -chdir=$$dir validate; \
+		fi; \
 	done
 
 lint: ## Run TFLint across the repository
@@ -90,7 +94,7 @@ docs-check: ## Verify Terraform docs are up to date
 
 count: ## Recompute the hand-maintained module/root/test counts in CLAUDE.md and README.md
 	@echo "modules:         $$(find modules -name main.tf -not -path '*/examples/*' -not -path '*/.terraform/*' | wc -l | tr -d ' ')"
-	@echo "deployable roots: $$(find envs -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
+	@echo "deployable roots: $$(find envs -name '*.tf' -not -path '*/.terraform/*' | xargs -n1 dirname | sort -u | wc -l | tr -d ' ')"
 	@echo "test suites:     $$(find modules envs -name '*.tftest.hcl' -not -path '*/.terraform/*' | wc -l | tr -d ' ')"
 
 test: ## Run terraform test suites (searches module roots and their tests/ subdirs)

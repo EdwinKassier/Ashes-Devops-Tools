@@ -9,7 +9,8 @@ Repository secrets and variables referenced by `.github/workflows/`. Configure t
 
 | Name | Kind | Used by | Purpose |
 |------|------|---------|---------|
-| `TFC_TOKEN` | Secret | `drift-detection.yml`, `terraform-apply.yml` | Terraform Cloud API token (Team or Organization token) used to query workspace runs and trigger speculative plans. |
+| `TFC_TOKEN` | Secret | `terraform-apply.yml` | Terraform Cloud team token with **READ** access to workspace runs. Used only to verify run status before publishing a release; it does not trigger or modify runs. |
+| `TFC_TOKEN_DRIFT` | Secret | `drift-detection.yml` | Terraform Cloud team token with **Queue Plans (write)** on the target workspaces. Drift detection creates speculative plan-only runs (`POST /runs`), which read access cannot do. Falls back to `TFC_TOKEN` if unset (that token would then also need Queue Plans). Keep separate so the release token stays read-only. |
 | `TFC_ORGANIZATION` | Variable | `drift-detection.yml`, `terraform-apply.yml` | Terraform Cloud organization name that owns the workspaces. |
 
 Without both of these, `drift-detection.yml` **skips cleanly** on its scheduled runs (see

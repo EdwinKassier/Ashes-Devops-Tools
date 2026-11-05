@@ -51,9 +51,21 @@ variable "tfc_organization" {
 }
 
 variable "organization_workspace_name" {
-  description = "Workspace name that stores the organization root state"
+  description = "Workspace name that stores the organization root state (org_id, billing_account, admin_project_number, CMEK, tags)"
   type        = string
   default     = "gcp-organization"
+}
+
+variable "projects_workspace_name" {
+  description = "Workspace name that stores the gcp-projects root state (environment_config / host project IDs)"
+  type        = string
+  default     = "gcp-projects"
+}
+
+variable "network_hub_workspace_name" {
+  description = "Workspace name that stores the gcp-network-hub root state (hub_network for peering + DNS)"
+  type        = string
+  default     = "gcp-network-hub"
 }
 
 variable "monthly_budget_limit" {

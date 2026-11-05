@@ -15,8 +15,32 @@ data "terraform_remote_state" "organization" {
   }
 }
 
+# The projects and network-hub stages were split into their own roots (audit H3),
+# so this root now reads environment_config from gcp-projects and hub_network from
+# gcp-network-hub. org_id / billing_account / admin_project_number still come from
+# gcp-organization above.
+data "terraform_remote_state" "projects" {
+  backend = "cloud"
+  config = {
+    organization = var.tfc_organization
+    workspaces = {
+      name = var.projects_workspace_name
+    }
+  }
+}
+
+data "terraform_remote_state" "network_hub" {
+  backend = "cloud"
+  config = {
+    organization = var.tfc_organization
+    workspaces = {
+      name = var.network_hub_workspace_name
+    }
+  }
+}
+
 locals {
-  env_config = data.terraform_remote_state.organization.outputs.environment_config[var.environment]
+  env_config = data.terraform_remote_state.projects.outputs.environment_config[var.environment]
 
   labels = merge(
     {
@@ -103,7 +127,7 @@ module "host" {
 
   vpc_peerings = {
     "hub-peering" = {
-      peer_network         = data.terraform_remote_state.organization.outputs.hub_network.vpc_self_link
+      peer_network         = data.terraform_remote_state.network_hub.outputs.hub_network.vpc_self_link
       export_custom_routes = true
       import_custom_routes = true
     }
@@ -111,10 +135,10 @@ module "host" {
 
   dns_zones = {
     "internal-peering" = {
-      dns_name        = data.terraform_remote_state.organization.outputs.hub_network.dns_domain
+      dns_name        = data.terraform_remote_state.network_hub.outputs.hub_network.dns_domain
       visibility      = "private"
       description     = "Peering zone to resolve internal hub DNS"
-      peering_network = data.terraform_remote_state.organization.outputs.hub_network.vpc_self_link
+      peering_network = data.terraform_remote_state.network_hub.outputs.hub_network.vpc_self_link
       dnssec_enabled  = true
     }
   }

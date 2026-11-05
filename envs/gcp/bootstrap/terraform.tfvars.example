@@ -1,0 +1,42 @@
+# gcp-bootstrap root — example variables.
+# Apply this root BEFORE gcp-organization (it produces the admin project,
+# Terraform admin SA, and WIF pools the other GCP roots read via remote state).
+
+# Organization and billing
+domain          = "example.com"
+billing_account = "000000-000000-000000" # OR set billing_account_display_name
+# billing_account_display_name = "My Billing Account"
+
+# Naming
+project_prefix = "verify-org"
+
+# Administrator
+admin_email = "admin@example.com"
+
+# Terraform Cloud (dynamic credentials / WIF trust)
+tfc_organization = "your-tfc-org-name"
+enable_tfc_oidc  = true
+
+# GitHub OIDC (for CI/CD) — required, no defaults
+github_org  = "MyOrg"
+github_repo = "devops-infra"
+
+# PREVIEW / default-off (see docs/known-gaps.md G3)
+# enable_privilege_split = false
+
+# First apply only: leave terraform_admin_email unset (null) so the provider runs
+# as your own credentials while the SA is created. Set it to the SA email after.
+# terraform_admin_email = "terraform-admin@<admin-project-id>.iam.gserviceaccount.com"
+
+# Environments — only the KEYS are used here (to derive the per-environment TFC
+# workspace names that receive WIF trust). Keep this in sync with the same
+# variable on the gcp-organization root.
+environments = {
+  dev = {
+    display_name            = "Development"
+    region                  = "europe-west1"
+    cidr_block              = "10.10.0.0/16"
+    budget_monthly_limit    = 100
+    iam_group_role_bindings = {}
+  }
+}

@@ -1,6 +1,6 @@
 # CLAUDE.md — Agent Onboarding
 
-Terraform GCP + AWS landing zone. 98 modules, 10 deployable roots, remote state via Terraform Cloud.
+Terraform GCP + AWS landing zone. 98 modules, 13 deployable roots, remote state via Terraform Cloud.
 
 ---
 
@@ -9,7 +9,10 @@ Terraform GCP + AWS landing zone. 98 modules, 10 deployable roots, remote state 
 ```text
 envs/                   # deployable roots, nested by cloud (workspace names keep the flat gcp-/aws- form)
   gcp/
-    organization/       # GCP control plane: folders, org policies, KMS, network hub, bootstrap WIF
+    bootstrap/          # GCP phase-0: admin project, Terraform admin SA, WIF pools — TF_WORKSPACE=gcp-bootstrap (apply first)
+    organization/       # GCP control plane: folders, org policies, KMS, audit, billing (reads gcp-bootstrap)
+    projects/           # GCP host/spoke projects + environment_config — TF_WORKSPACE=gcp-projects (reads gcp-organization)
+    network-hub/        # GCP hub VPC, DNS anchor, hub VPC-SC — TF_WORKSPACE=gcp-network-hub (reads gcp-projects)
     workload/           # GCP per-environment app infra — TF_WORKSPACE=gcp-workload-<env>
   aws/
     organization/       # AWS foundational accounts + org structure
@@ -98,7 +101,7 @@ make ci             # fmt-check + docs-check + validate-all + lint + security + 
 ## State & Apply Rules
 
 - State backend: **Terraform Cloud** (remote).
-- **Never run `terraform apply` locally** against `envs/gcp/organization` or `envs/gcp/workload`.
+- **Never run `terraform apply` locally** against `envs/gcp/bootstrap`, `envs/gcp/organization` or `envs/gcp/workload` (except the documented phase-0 `gcp-bootstrap` first apply, which runs as a human admin by design).
 - CI (GitHub Actions) runs `fmt`, `validate`, `lint`, `tfsec`, `checkov` on PR.
 - Terraform Cloud executes the actual apply.
 

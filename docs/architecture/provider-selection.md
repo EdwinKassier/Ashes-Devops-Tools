@@ -33,7 +33,10 @@ One root per cloud + layer, named `envs/<cloud>/<layer>`. Each root declares exa
 
 | Root | Workspace | Cloud | Status |
 |---|---|---|---|
-| `envs/gcp/organization` | `gcp-organization` | GCP (control plane) | existing |
+| `envs/gcp/bootstrap` | `gcp-bootstrap` | GCP (phase-0 automation foundation) | existing |
+| `envs/gcp/organization` | `gcp-organization` | GCP (org policy, KMS, audit, billing) | existing |
+| `envs/gcp/projects` | `gcp-projects` | GCP (host/spoke projects) | existing |
+| `envs/gcp/network-hub` | `gcp-network-hub` | GCP (hub VPC, DNS, VPC-SC) | existing |
 | `envs/gcp/workload` | `gcp-workload-<env>` | GCP (per-env app infra) | existing |
 | `envs/aws/organization` | `aws-organization` | AWS (foundational accounts + org) | AWS |
 | `envs/aws/security` | `aws-security` | AWS (security tooling / log archive) | AWS |
@@ -44,7 +47,7 @@ One root per cloud + layer, named `envs/<cloud>/<layer>`. Each root declares exa
 | `envs/aws/workload` | `aws-workload-<env>` | AWS (per-env workloads) | AWS |
 | `envs/saas` | `saas-<name>` (via `TF_WORKSPACE=saas-<name>`) | Supabase and/or Vercel only | SaaS |
 
-The GCP roots (`gcp-organization`, `gcp-workload`) are the existing landing zone. The AWS roots follow the standard multi-account foundational layout. The `saas` root is the **only** place Supabase and Vercel providers live — they never live inside an AWS or GCP root. It declares **no `aws` or `google` provider at all**, so a Supabase- and/or Vercel-only user needs no cloud credentials to plan or apply it. Its `enable_supabase` / `enable_vercel` flags gate the two SaaS features independently within the single root.
+The GCP roots (`gcp-bootstrap`, `gcp-organization`, `gcp-projects`, `gcp-network-hub`, `gcp-workload`, applied in that order) are the existing landing zone. The AWS roots follow the standard multi-account foundational layout. The `saas` root is the **only** place Supabase and Vercel providers live — they never live inside an AWS or GCP root. It declares **no `aws` or `google` provider at all**, so a Supabase- and/or Vercel-only user needs no cloud credentials to plan or apply it. Its `enable_supabase` / `enable_vercel` flags gate the two SaaS features independently within the single root.
 
 ### Minimum AWS footprint
 
@@ -65,7 +68,7 @@ Pick what you want; apply exactly those workspaces. Credentials come from the ro
 
 | You want… | Apply these workspaces | Credentials required |
 |---|---|---|
-| GCP only | `gcp-organization`, `gcp-workload-<env>` | GCP ADC |
+| GCP only | `gcp-bootstrap`, `gcp-organization`, `gcp-projects`, `gcp-network-hub`, `gcp-workload-<env>` | GCP ADC |
 | AWS only (baseline) | `aws-organization`, `aws-security` (+ `aws-network`/`aws-identity`/`aws-backup`/`aws-workload-<env>` as needed) | AWS (management + assume-role) |
 | Supabase only | `saas-<name>` with `enable_supabase=true, enable_vercel=false` | `SUPABASE_ACCESS_TOKEN` only (no aws/google provider in the root) |
 | Vercel only | `saas-<name>` with `enable_vercel=true, enable_supabase=false` | `VERCEL_API_TOKEN` only (no aws/google provider in the root) |

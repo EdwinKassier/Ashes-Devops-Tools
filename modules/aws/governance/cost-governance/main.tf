@@ -38,6 +38,17 @@ resource "aws_budgets_budget" "this" {
     subscriber_sns_topic_arns  = var.notifications_topic_arn != "" ? [var.notifications_topic_arn] : []
     subscriber_email_addresses = try(each.value.emails, [])
   }
+
+  # FORECASTED alert: warns before the overspend happens, not only after actual
+  # spend has already crossed the threshold (FinOps F7).
+  notification {
+    comparison_operator        = "GREATER_THAN"
+    threshold                  = each.value.threshold_percent
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "FORECASTED"
+    subscriber_sns_topic_arns  = var.notifications_topic_arn != "" ? [var.notifications_topic_arn] : []
+    subscriber_email_addresses = try(each.value.emails, [])
+  }
 }
 
 # DIMENSIONAL/SERVICE monitor: no monitor_specification is required for the

@@ -9,7 +9,6 @@
       "Condition": {
         "ArnNotLike": {
           "aws:PrincipalArn": [
-            "${terraform_run_role_arn}",
             "${break_glass_role_arn}"
           ]
         }
@@ -32,7 +31,6 @@
       "Condition": {
         "ArnNotLike": {
           "aws:PrincipalArn": [
-            "${terraform_run_role_arn}",
             "${break_glass_role_arn}"
           ]
         }

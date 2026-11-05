@@ -50,8 +50,8 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_organizations_policy.policy (modules/aws/governance/organization-policy/main.tf#L68)
-- resource.aws_organizations_policy_attachment.attach (modules/aws/governance/organization-policy/main.tf#L75)
+- resource.aws_organizations_policy.policy (modules/aws/governance/organization-policy/main.tf#L76)
+- resource.aws_organizations_policy_attachment.attach (modules/aws/governance/organization-policy/main.tf#L83)
 
 
 ## Inputs

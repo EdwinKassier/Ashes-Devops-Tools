@@ -109,12 +109,19 @@ module "dns_hub_network" {
   project_prefix = var.project_prefix
   region         = var.default_region
 
-  # Just a simple VPC to anchor the private zone
-  enable_networking          = true
-  enable_shared_vpc_host     = false
-  enable_deletion_protection = var.enable_deletion_protection
-  vpc_name                   = "dns-vpc-core"
-  vpc_cidr_block             = var.dns_hub_vpc_cidr_block
+  # Just a simple VPC to anchor the private zone. It has no workloads, load
+  # balancers or Google-API clients, so it does not need Cloud NAT, Cloud Armor,
+  # Private Service Connect or Private Service Access. Turning them off avoids
+  # duplicating those billable resources onto the DNS-anchor VPC (FinOps F4).
+  enable_networking              = true
+  enable_shared_vpc_host         = false
+  enable_deletion_protection     = var.enable_deletion_protection
+  enable_cloud_nat               = false
+  enable_cloud_armor             = false
+  enable_private_service_connect = false
+  enable_private_service_access  = false
+  vpc_name                       = "dns-vpc-core"
+  vpc_cidr_block                 = var.dns_hub_vpc_cidr_block
 }
 
 module "dns_hub_zone" {

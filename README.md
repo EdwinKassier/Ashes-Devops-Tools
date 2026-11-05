@@ -51,7 +51,7 @@ cd Ashes-Devops-Tools
 make install && make pre-commit-install
 
 # 2. Authenticate (only the clouds whose workspaces you apply)
-gcloud auth application-default login     # GCP roots (gcp-organization, gcp-workload)
+gcloud auth application-default login     # GCP roots (gcp-bootstrap, gcp-organization, gcp-workload)
 export SUPABASE_ACCESS_TOKEN="sbp_..."   # required for supabase modules
 export VERCEL_API_TOKEN="..."            # required for vercel modules
 # AWS roots use TFC dynamic credentials (TFC_AWS_PROVIDER_AUTH + TFC_AWS_RUN_ROLE_ARN)
@@ -72,12 +72,12 @@ flowchart TB
     CI["<b>GitHub Actions</b> — PR gates<br/>fmt · validate · lint · tfsec · checkov · docs"]
     TFC["<b>Terraform Cloud</b> — remote state · plan · apply<br/>one root = one workspace, per cloud"]
     CI -->|"merge to main"| TFC
-    TFC --> GCP["<b>GCP</b><br/>envs/gcp/*<br/>2 roots"]
+    TFC --> GCP["<b>GCP</b><br/>envs/gcp/*<br/>5 roots"]
     TFC --> AWS["<b>AWS</b><br/>envs/aws/*<br/>7 layered roots"]
     TFC --> SAAS["<b>SaaS</b><br/>envs/saas<br/>no cloud provider"]
 ```
 
-Both clouds are full landing zones; the difference is only how the same responsibilities are packaged into roots — GCP folds into **two** what the AWS SRA spreads across **seven**. This table aligns them layer-for-layer:
+Both clouds are full landing zones; the difference is only how the same responsibilities are packaged into roots — GCP uses **five** roots where the AWS SRA spreads across **seven**. This table aligns them layer-for-layer:
 
 | Responsibility band | GCP root | AWS root |
 |:--------------------|:---------|:---------|

@@ -1,0 +1,30 @@
+# gcp-network-hub root — example variables. Apply last of the control-plane
+# roots, after gcp-projects. Reads host project IDs from gcp-projects and
+# folders/org_id from gcp-organization via remote state.
+
+project_prefix   = "verify-org"
+tfc_organization = "your-tfc-org-name"
+
+hub_vpc_cidr_block     = "10.0.0.0/16"
+dns_hub_vpc_cidr_block = "10.1.0.0/16"
+
+# Set after the first gcp-bootstrap apply:
+# terraform_admin_email = "terraform-admin@<admin-project-id>.iam.gserviceaccount.com"
+
+# Hub VPC-SC perimeter (optional). null = no hub perimeter. Promote from dry-run
+# to enforced only after validating violation logs (docs/runbooks/production-hardening.md).
+# vpc_sc_access_policy_name = "1234567890"
+# vpc_sc_enable_dry_run     = true
+
+# Keep `environments` identical across gcp-organization, gcp-projects and
+# gcp-network-hub. Only the keys are used here (to wire each env's host project
+# into the hub).
+environments = {
+  dev = {
+    display_name            = "Development"
+    region                  = "europe-west1"
+    cidr_block              = "10.10.0.0/16"
+    budget_monthly_limit    = 100
+    iam_group_role_bindings = {}
+  }
+}

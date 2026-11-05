@@ -117,7 +117,7 @@ jobs:
       - name: Terraform validate
         working-directory: ${{ matrix.root }}
         run: |
-          if grep -rqE 'configuration_aliases' . --include='*.tf'; then
+          if grep -rqE 'configuration_aliases[[:space:]]*=' . --include='*.tf'; then
             echo "Skipping standalone validate: module declares" \
               "configuration_aliases (cannot be root-validated without a" \
               "passed provider; covered by its examples/, the composing" \
@@ -245,7 +245,7 @@ jobs:
     name: Validation Summary
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [fmt, docs, validate, lint, meta-lint, security, test]
+    needs: [discover, fmt, docs, validate, lint, meta-lint, security, test]
     if: always()
     steps:
       - name: Publish summary
@@ -254,6 +254,7 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Check | Status |" >> "$GITHUB_STEP_SUMMARY"
           echo "|-------|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Discover | ${{ needs.discover.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Format | ${{ needs.fmt.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Docs | ${{ needs.docs.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Validate | ${{ needs.validate.result }} |" >> "$GITHUB_STEP_SUMMARY"
@@ -263,13 +264,17 @@ jobs:
           echo "| Tests | ${{ needs.test.result }} |" >> "$GITHUB_STEP_SUMMARY"
 
       # Fail-closed aggregator: because this job runs with if: always(), it must
-      # explicitly fail when any upstream job failed/was cancelled — otherwise it
-      # would report success even on a failed `validate` leg. This makes
-      # "Validation Summary" a reliable single required status check that covers the
+      # explicitly fail when any required upstream job did not succeed. "skipped"
+      # is treated as failure: none of these jobs is conditional, so a skip means
+      # the check did not run. In particular, if `discover` fails or emits an empty
+      # root set, the `validate` matrix is skipped — without catching "skipped"
+      # here, a PR could merge with zero roots validated. This makes "Validation
+      # Summary" a reliable single required status check that genuinely covers the
       # whole validate matrix (see docs/guides/BRANCH_PROTECTION.md).
       - name: Gate on upstream results
         run: |
           for r in \
+            "discover=${{ needs.discover.result }}" \
             "fmt=${{ needs.fmt.result }}" \
             "docs=${{ needs.docs.result }}" \
             "validate=${{ needs.validate.result }}" \
@@ -278,7 +283,7 @@ jobs:
             "security=${{ needs.security.result }}" \
             "test=${{ needs.test.result }}"; do
             name="${r%%=*}"; result="${r#*=}"
-            if [ "$result" = "failure" ] || [ "$result" = "cancelled" ]; then
+            if [ "$result" != "success" ]; then
               echo "::error::Required job '${name}' result: ${result}"
               fail=1
             fi

@@ -60,9 +60,9 @@ The following resources are created:
 
 
 - resource.aws_budgets_budget.this (modules/aws/governance/cost-governance/main.tf#L24)
-- resource.aws_ce_anomaly_monitor.this (modules/aws/governance/cost-governance/main.tf#L46)
-- resource.aws_ce_anomaly_subscription.this (modules/aws/governance/cost-governance/main.tf#L54)
-- resource.aws_ce_cost_allocation_tag.this (modules/aws/governance/cost-governance/main.tf#L80)
+- resource.aws_ce_anomaly_monitor.this (modules/aws/governance/cost-governance/main.tf#L57)
+- resource.aws_ce_anomaly_subscription.this (modules/aws/governance/cost-governance/main.tf#L65)
+- resource.aws_ce_cost_allocation_tag.this (modules/aws/governance/cost-governance/main.tf#L91)
 
 
 ## Inputs

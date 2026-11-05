@@ -28,7 +28,7 @@ concurrency:
 
 jobs:
   static-analysis:
-    name: TFSec + Checkov
+    name: Trivy + Checkov
     uses: ./.github/workflows/reusable-security.yml
     with:
       sarif_output: true
@@ -99,7 +99,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Scanner | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| TFSec + Checkov | ${{ needs.static-analysis.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Trivy + Checkov | ${{ needs.static-analysis.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Trivy | ${{ needs.trivy.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Secret Scan | ${{ needs.secret-scan.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -113,7 +113,7 @@ jobs:
           needs.secret-scan.result == 'failure'
         run: |
           failed=""
-          [ "${{ needs.static-analysis.result }}" = "failure" ] && failed="${failed} TFSec+Checkov"
+          [ "${{ needs.static-analysis.result }}" = "failure" ] && failed="${failed} Trivy+Checkov"
           [ "${{ needs.trivy.result }}" = "failure" ]           && failed="${failed} Trivy"
           [ "${{ needs.secret-scan.result }}" = "failure" ]     && failed="${failed} GitLeaks"
           echo "::error::Security scan(s) failed:${failed}. Check the Security tab for details."
