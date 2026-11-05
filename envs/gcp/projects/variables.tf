@@ -42,6 +42,11 @@ variable "environments" {
     iam_group_role_bindings = map(set(string))
     labels                  = optional(map(string), {})
   }))
+
+  validation {
+    condition     = alltrue([for e in values(var.environments) : can(cidrnetmask(e.cidr_block))])
+    error_message = "Each environment's cidr_block must be valid CIDR notation, e.g. 10.10.0.0/16. Keep the environments map identical across the GCP roots."
+  }
 }
 
 variable "default_region" {
