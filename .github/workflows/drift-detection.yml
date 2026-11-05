@@ -108,12 +108,13 @@ jobs:
         #     "saas-web"                # SaaS workspaces (saas-<name>)
         #   ]
         # The inline default covers the full GCP control plane (all four roots of
-        # the H3 split — gcp-network-hub holds the hub VPC and is a prime drift
+        # the H3 split; gcp-network-hub holds the hub VPC and is a prime drift
         # target) plus the dev workload. It stays GCP-only so an unset variable
         # never fails against AWS/saas workspaces that may not exist (the
         # any-combination-of-clouds property); set TFC_DRIFT_WORKSPACES to add the
         # AWS guardrail workspaces (aws-organization, aws-security, aws-network) and
         # any other envs you run (L5).
+        # yamllint disable-line rule:line-length
         workspace: ${{ fromJSON(vars.TFC_DRIFT_WORKSPACES || '["gcp-bootstrap","gcp-organization","gcp-projects","gcp-network-hub","gcp-workload-dev"]') }}
     steps:
       - name: Assert Terraform Cloud credentials are configured

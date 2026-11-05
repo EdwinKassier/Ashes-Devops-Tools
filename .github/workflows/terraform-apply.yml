@@ -146,17 +146,18 @@ jobs:
 
           # L7: verify the run's source commit matches THIS tag's commit, so a
           # release never asserts a deploy of a different configuration. A non-VCS
-          # (CLI-driven) run exposes no ingress commit — then we cannot verify, so
+          # (CLI-driven) run exposes no ingress commit; then we cannot verify, so
           # we do not block (commit_match=true) and emit a notice.
-          run_commit=$(echo "$response" | jq -r '([.included[]? | select(.type=="ingress-attributes") | .attributes["commit-sha"]] | .[0]) // ""')
+          run_commit=$(echo "$response" | jq -r \
+            '([.included[]? | select(.type=="ingress-attributes") | .attributes["commit-sha"]] | .[0]) // ""')
           if [ -z "$run_commit" ] || [ "$run_commit" = "null" ]; then
             echo "commit_match=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::Could not read the applied run's source commit (non-VCS run?); skipping the tag-commit provenance check."
+            echo "::notice::No source commit on the run (non-VCS?); skipping provenance check."
           elif [ "$run_commit" = "$TAG_COMMIT" ]; then
             echo "commit_match=true" >> "$GITHUB_OUTPUT"
           else
             echo "commit_match=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Latest applied run for ${WORKSPACE} is commit ${run_commit}, not this tag's commit ${TAG_COMMIT}; the release will be held."
+            echo "::warning::Run commit ${run_commit} != tag commit ${TAG_COMMIT}; release held."
           fi
 
   release:
@@ -199,6 +200,7 @@ jobs:
             echo "## Release held"
             echo ""
             echo "No GitHub Release was published for tag \`${{ github.ref_name }}\`."
-            echo "Terraform Cloud status is \`${{ needs.verify-run.outputs.status }}\`; commit match is \`${{ needs.verify-run.outputs.commit_match }}\` (must be \`applied\` and \`true\`)."
+            echo "Terraform Cloud status is \`${{ needs.verify-run.outputs.status }}\`."
+            echo "Commit match: \`${{ needs.verify-run.outputs.commit_match }}\` (need applied/true)."
             echo "Re-run this workflow (or re-tag) once the matching apply completes to publish the release."
           } >> "$GITHUB_STEP_SUMMARY"
