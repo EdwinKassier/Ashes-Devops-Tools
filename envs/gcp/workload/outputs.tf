@@ -57,3 +57,8 @@ output "vpc_sc_perimeter_names" {
   description = "Map of VPC-SC perimeter key to perimeter name, or null when VPC-SC is disabled. Callers should use try(output.vpc_sc_perimeter_names, null) to handle the null case safely."
   value       = module.host.vpc_service_controls != null ? { for k, v in module.host.vpc_service_controls : k => v.name } : null
 }
+
+output "service_team_project_ids" {
+  description = "Map of service team name to the created GCP service project ID (empty when no service_teams are declared)."
+  value       = { for k, m in module.service_team : k => m.project_id }
+}

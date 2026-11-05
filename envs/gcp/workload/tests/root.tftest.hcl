@@ -94,4 +94,42 @@ run "workload_consumes_cross_root_contract" {
     condition     = output.network_name == "acme-dev-vpc"
     error_message = "workload must re-export the host network name"
   }
+
+  # No service_teams by default: the registry creates nothing (audit H10).
+  assert {
+    condition     = length(module.service_team) == 0
+    error_message = "with no service_teams declared, the registry must create no service projects"
+  }
+}
+
+# Data-driven service-team registry (audit H10): declaring a team is a map entry,
+# which fans out to one workload module instance with normalised folder/billing IDs.
+run "service_team_registry_fans_out" {
+  command = plan
+
+  variables {
+    service_teams = {
+      payments = {
+        project_admin_group_email = "payments-admins@acme.test"
+        activate_apis             = ["run.googleapis.com", "bigquery.googleapis.com"]
+        project_admin_roles       = ["roles/run.developer"]
+        shared_vpc_subnets = {
+          private = { region = "europe-west1", subnet_name = "acme-dev-vpc-private-europe-west1-b" }
+        }
+      }
+    }
+  }
+
+  # One module instance is created for the declared team.
+  assert {
+    condition     = length(module.service_team) == 1
+    error_message = "one service_teams entry must create exactly one workload module instance"
+  }
+
+  # folder_id is normalised from the folders/NNN remote-state value to the bare
+  # numeric ID the workload module requires.
+  assert {
+    condition     = module.service_team["payments"].host_project_id == "acme-dev-host-abcd"
+    error_message = "the service project must attach to the environment host project as its Shared VPC host"
+  }
 }

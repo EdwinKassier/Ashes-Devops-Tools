@@ -46,71 +46,57 @@ terraform -chdir=envs/gcp/workload output subnets
 
 The `subnets` output is a map. Each key is a subnet identifier; each value contains `region` and `self_link`.
 
-### Step 3 — Add a workload module call in `envs/gcp/workload/main.tf`
+### Step 3 — Add the team to the `service_teams` registry (config, not code)
+
+Onboarding is a map entry in the environment's tfvars, not a new module block in `main.tf` (audit H10). The workload root iterates `var.service_teams` with `for_each`, so one entry creates one service project. Add the team to `examples/<env>.tfvars`:
 
 ```hcl
-module "workload_payments" {
-  source = "../../modules/gcp/stages/workload"
+service_teams = {
+  payments = {
+    project_admin_group_email = "payments-admins@company.com"
 
-  project_name    = "payments"
-  org_id          = data.terraform_remote_state.organization.outputs.org_id
-  folder_id       = data.terraform_remote_state.projects.outputs.environment_config[var.environment].folder_id
-  billing_account = data.terraform_remote_state.organization.outputs.billing_account
+    activate_apis = [
+      "bigquery.googleapis.com",
+      "run.googleapis.com",
+      "storage.googleapis.com",
+    ]
 
-  activate_apis = [
-    "bigquery.googleapis.com",
-    "run.googleapis.com",
-    "storage.googleapis.com",
-  ]
+    # Additive per-role bindings for the admin group. Primitive roles
+    # (owner/editor/viewer) and org/folder-level roles are rejected.
+    project_admin_roles = [
+      "roles/bigquery.dataEditor",
+      "roles/storage.objectAdmin",
+      "roles/run.developer",
+    ]
 
-  labels = {
-    team        = "payments"
-    environment = var.environment
-  }
-
-  # Attach to Shared VPC
-  enable_shared_vpc_attachment = true
-  shared_vpc_host_project_id   = module.host.host_project_id
-
-  # Subnet access — provide the region and subnet name for each subnet to grant
-  shared_vpc_subnets = {
-    "private" = {
-      region      = var.region
-      subnet_name = "${var.project_prefix}-private"
+    # Subnets to grant. Names are per-zone:
+    #   <project_prefix>-<environment>-vpc-private-<region>-<zone>
+    shared_vpc_subnets = {
+      private = { region = "europe-west1", subnet_name = "ashes-dev-vpc-private-europe-west1-b" }
     }
-    "database" = {
-      region      = var.region
-      subnet_name = "${var.project_prefix}-database"
-    }
+
+    # enable_gke_network_user = true   # only for GKE projects
   }
-
-  # Google Group that acts as project admin
-  project_admin_group_email = "payments-admins@company.com"
-
-  # Roles granted to the admin group (additive per-role — do NOT include owner/editor/viewer)
-  project_admin_roles = [
-    "roles/bigquery.dataEditor",
-    "roles/storage.objectAdmin",
-    "roles/run.developer",
-  ]
 }
 ```
+
+The root wires `org_id`, `folder_id`, `billing_account`, and the Shared VPC host project from remote state and the host stage, so you set only the team-specific fields. `folder_id` and `billing_account` are normalised with `trimprefix`, so either the bare ID or the full resource name works.
 
 > **IAM binding note:** the workload module grants these roles with additive `google_project_iam_member` (`modules/gcp/stages/workload/main.tf`), not authoritative `google_project_iam_binding`. Each apply only adds the specified group/role pairs — it does not evict any other member already bound to the same role, so pre-existing manual bindings on the project are preserved.
 
 ### Step 4 — Plan and review
 
 ```bash
-make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars 2>&1 | grep -A5 "workload_payments"
+make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars 2>&1 | grep -A5 'service_team\["payments"\]'
 ```
 
-Confirm the plan shows only new resource creation — no modifications to existing workload modules.
+Confirm the plan shows only new resource creation under `module.service_team["payments"]` — no modifications to existing teams.
 
 ### Step 5 — Apply
 
 ```bash
 terraform -chdir=envs/gcp/workload apply \
-  -target=module.workload_payments \
+  -target='module.service_team["payments"]' \
   -var-file=../../../examples/dev.tfvars
 ```
 
@@ -142,14 +128,14 @@ gcloud projects get-iam-policy PAYMENTS_PROJECT_ID \
 
 To remove a team's access:
 
-1. Remove the `module.workload_{team}` block from `envs/gcp/workload/main.tf`
-2. Run `terraform plan` and confirm only the workload module resources are in the destroy list
+1. Delete the team's entry from the `service_teams` map in the environment's tfvars
+2. Run `terraform plan` and confirm only that team's `module.service_team["<team>"]` resources are in the destroy list
 3. Apply the change
 
 Before destroying, list all state resources to confirm scope:
 
 ```bash
-terraform -chdir=envs/gcp/workload state list | grep workload_payments
+terraform -chdir=envs/gcp/workload state list | grep 'service_team\["payments"\]'
 ```
 
 Confirm with the team that no data buckets or databases need to be retained before the destroy.

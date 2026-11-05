@@ -220,6 +220,29 @@ Do not let the above obscure the quality of the foundation.
 
 ---
 
+## Remediation status (updated 2026-11-05)
+
+Resolved since this audit was written, verified locally (CI runners are unfunded,
+so `terraform test`, `checkov`, and `make docs-check` are the gate):
+
+| # | Finding | How it was resolved |
+|---|---------|---------------------|
+| C1 | No application runtime, delivery pipeline, data layer | Runtime modules (Cloud Run, GKE Autopilot, ECS Fargate), data modules (Cloud SQL, RDS Aurora, Secret Manager), an SLO module, the `app-ingress` front door, a reference delivery pipeline, and the `deploying-a-service.md` golden path. All opt-in and secure by default. |
+| C2 | Uncontained GCP `terraform-admin` SA | Opt-in org-node IAM deny policy plus privilege-split guidance. |
+| C3 | Manual Terraform Cloud workspace layer | `tfc-admin` root and `modules/tfc/workspace` codify all workspaces with the `tfe` provider. |
+| C4 | No `allowed_account_ids` guard | `allowed_account_ids` added to the AWS providers; management-account guard on the organization root. |
+| H3 | 756-line host god-module | Split by concern into parallel `*.tf` files (file-level, not a re-parenting), proven behavior-identical by a declaration-inventory diff. |
+| H10 | No promotion model; onboarding is code-surgery | Data-driven `service_teams` registry (a team is a map entry) and [promotion.md](../runbooks/promotion.md). |
+| M-iac | Circular cross-root contract tests | Producer-side shape test binds `environment_config` keys at `gcp-projects`. |
+| M-sec | No GCP app-secret store | `modules/gcp/data/secret-manager`; the golden path reads secrets by reference. |
+| M-ops | No broken-apply recovery runbook | [apply-recovery.md](../runbooks/apply-recovery.md). |
+
+Still open: **H9** (SaaS integration needs an architecture decision), **M3**
+(break-glass role management and alarm), control-plane self-observability, AWS and
+GKE delivery-pipeline parity, and CODEOWNERS (a repo-ownership change).
+
+---
+
 ## Bottom line
 
 This is one of the stronger landing-zone codebases a reviewer will see. The

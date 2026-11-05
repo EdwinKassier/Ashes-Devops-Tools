@@ -50,3 +50,27 @@ vpc_sc_ingress_policies = []
 # Egress policies allow specific identities to reach resources outside the perimeter.
 # Leave empty to deny all outbound cross-perimeter traffic.
 vpc_sc_egress_policies = []
+
+# -----------------------------------------------------------------------------
+# Service team registry (audit H10)
+#
+# Onboard a team by adding an entry here, not by editing main.tf. Default is no
+# teams. Promote a team to the next environment by copying its entry into that
+# environment's tfvars (see docs/runbooks/promotion.md).
+# -----------------------------------------------------------------------------
+service_teams = {}
+
+# Example (uncomment and adapt):
+# service_teams = {
+#   payments = {
+#     project_admin_group_email = "payments-admins@company.com"
+#     activate_apis             = ["run.googleapis.com", "sqladmin.googleapis.com"]
+#     project_admin_roles       = ["roles/run.developer", "roles/cloudsql.client"]
+#     # Grant the subnets this team needs. Subnet names are per-zone:
+#     #   <project_prefix>-<environment>-vpc-private-<region>-<zone>
+#     shared_vpc_subnets = {
+#       private = { region = "europe-west1", subnet_name = "ashes-dev-vpc-private-europe-west1-b" }
+#     }
+#     # enable_gke_network_user = true   # only for GKE projects
+#   }
+# }

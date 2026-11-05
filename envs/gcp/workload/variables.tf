@@ -249,3 +249,64 @@ variable "vpc_sc_egress_policies" {
   }))
   default = []
 }
+
+# -----------------------------------------------------------------------------
+# SERVICE TEAM REGISTRY (audit H10)
+#
+# Data-driven onboarding: a service team is a map entry, not a new module block.
+# Default empty, so no service projects are created unless an admin declares them.
+# -----------------------------------------------------------------------------
+
+variable "service_teams" {
+  description = <<-EOT
+    Registry of application service teams for this environment. Each entry creates
+    a GCP service project in the environment's folder, attaches it to the Shared
+    VPC, and grants the team's admin Google Group least-privilege roles. Adding or
+    removing a team is a change to this map (config), not a code change to main.tf.
+
+    Promote a team from one environment to the next by adding the same entry to the
+    next environment's tfvars. See docs/runbooks/promotion.md.
+
+    Fields per team (keyed by the team/project short name):
+      project_admin_group_email    (required) admin Google Group for the project.
+      activate_apis                APIs to enable (default []).
+      project_admin_roles          least-privilege roles for the admin group
+                                   (default []; primitive and org/folder-level
+                                   roles are rejected by the workload module).
+      enable_shared_vpc_attachment attach to the Shared VPC host (default true).
+      enable_gke_network_user      also grant the GKE robot SA networkUser
+                                   (default false; set only for GKE projects).
+      shared_vpc_subnets           subnets to grant, keyed by a label, each with
+                                   region and subnet_name (default {}; at least one
+                                   is required when attachment is enabled).
+      labels                       extra project labels (default {}).
+  EOT
+  type = map(object({
+    project_admin_group_email    = string
+    activate_apis                = optional(list(string), [])
+    project_admin_roles          = optional(list(string), [])
+    enable_shared_vpc_attachment = optional(bool, true)
+    enable_gke_network_user      = optional(bool, false)
+    shared_vpc_subnets = optional(map(object({
+      region      = string
+      subnet_name = string
+    })), {})
+    labels = optional(map(string), {})
+  }))
+  default = {}
+
+  validation {
+    condition     = alltrue([for k in keys(var.service_teams) : can(regex("^[a-z][a-z0-9-]{0,24}$", k))])
+    error_message = "Each service team key must be a project-name-safe slug: start with a lowercase letter, then lowercase letters, digits, or hyphens, 25 characters or fewer."
+  }
+
+  validation {
+    condition     = alltrue([for t in values(var.service_teams) : can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", t.project_admin_group_email))])
+    error_message = "Each service team must set a valid project_admin_group_email."
+  }
+
+  validation {
+    condition     = alltrue([for t in values(var.service_teams) : !t.enable_shared_vpc_attachment || length(t.shared_vpc_subnets) > 0])
+    error_message = "A service team with enable_shared_vpc_attachment = true (the default) must grant at least one entry in shared_vpc_subnets."
+  }
+}

@@ -197,3 +197,39 @@ module "budget" {
 
   labels = local.labels
 }
+
+# =============================================================================
+# SERVICE TEAM REGISTRY (audit H10)
+#
+# One module instance per entry in var.service_teams. Onboarding or offboarding a
+# team is a change to the service_teams map, not a hand-edited module block. The
+# default empty map creates nothing, so this is backward compatible.
+#
+# folder_id and billing_account are normalised with trimprefix so the wiring is
+# robust whether remote state exposes the bare ID or the full resource name.
+# =============================================================================
+
+module "service_team" {
+  source   = "../../../modules/gcp/stages/workload"
+  for_each = var.service_teams
+
+  project_name    = each.key
+  org_id          = data.terraform_remote_state.organization.outputs.org_id
+  folder_id       = trimprefix(local.env_config.folder_id, "folders/")
+  billing_account = trimprefix(data.terraform_remote_state.organization.outputs.billing_account, "billingAccounts/")
+
+  activate_apis = each.value.activate_apis
+
+  enable_shared_vpc_attachment = each.value.enable_shared_vpc_attachment
+  shared_vpc_host_project_id   = local.env_config.host_project_id
+  shared_vpc_subnets           = each.value.shared_vpc_subnets
+  enable_gke_network_user      = each.value.enable_gke_network_user
+
+  project_admin_group_email = each.value.project_admin_group_email
+  project_admin_roles       = each.value.project_admin_roles
+
+  labels = merge(local.labels, { team = each.key }, each.value.labels)
+
+  # Attach service projects only after the host project is a Shared VPC host.
+  depends_on = [module.host]
+}
