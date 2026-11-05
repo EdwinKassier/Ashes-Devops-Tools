@@ -91,6 +91,9 @@ resource "aws_rds_cluster" "this" {
 # ── Cluster instances ─────────────────────────────────────────────────────────
 
 resource "aws_rds_cluster_instance" "this" {
+  # checkov:skip=CKV_AWS_118:Enhanced monitoring is opt-in via monitoring_interval
+  # (default 0); enabling it requires a caller-supplied monitoring_role_arn, which
+  # this reusable module does not create. Set both to turn it on.
   count = var.instance_count
 
   identifier         = "${var.name}-${count.index}"
@@ -103,6 +106,13 @@ resource "aws_rds_cluster_instance" "this" {
 
   # Never reachable from the public internet.
   publicly_accessible = false
+
+  # Apply minor-version security patches automatically (CKV_AWS_226).
+  auto_minor_version_upgrade = true
+
+  # Enhanced monitoring: opt-in. Needs a monitoring role the caller supplies.
+  monitoring_interval = var.monitoring_interval
+  monitoring_role_arn = var.monitoring_interval > 0 ? var.monitoring_role_arn : null
 
   performance_insights_enabled    = true
   performance_insights_kms_key_id = local.performance_insights_kms_key_id

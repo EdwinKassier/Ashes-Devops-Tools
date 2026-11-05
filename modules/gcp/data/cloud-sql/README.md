@@ -55,10 +55,10 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_sql_database.this (modules/gcp/data/cloud-sql/main.tf#L89)
-- resource.google_sql_database_instance.this (modules/gcp/data/cloud-sql/main.tf#L42)
-- resource.google_sql_user.this (modules/gcp/data/cloud-sql/main.tf#L97)
-- resource.terraform_data.deletion_protection_guard (modules/gcp/data/cloud-sql/main.tf#L32)
+- resource.google_sql_database.this (modules/gcp/data/cloud-sql/main.tf#L134)
+- resource.google_sql_database_instance.this (modules/gcp/data/cloud-sql/main.tf#L60)
+- resource.google_sql_user.this (modules/gcp/data/cloud-sql/main.tf#L142)
+- resource.terraform_data.deletion_protection_guard (modules/gcp/data/cloud-sql/main.tf#L50)
 
 
 ## Inputs
@@ -77,6 +77,7 @@ The following resources are created:
 | <a name="input_enable_high_availability"></a> [enable\_high\_availability](#input\_enable\_high\_availability) | When true the instance runs REGIONAL (synchronous standby, automatic failover); otherwise ZONAL. | `bool` | `false` | no |
 | <a name="input_enable_iam_authentication"></a> [enable\_iam\_authentication](#input\_enable\_iam\_authentication) | Enable Cloud SQL IAM database authentication (sets the cloudsql.iam\_authentication flag on). | `bool` | `true` | no |
 | <a name="input_enable_point_in_time_recovery"></a> [enable\_point\_in\_time\_recovery](#input\_enable\_point\_in\_time\_recovery) | Enable point-in-time recovery (continuous WAL archiving). Requires backups, which this module always enables. | `bool` | `true` | no |
+| <a name="input_enable_secure_log_flags"></a> [enable\_secure\_log\_flags](#input\_enable\_secure\_log\_flags) | Apply a secure-by-default PostgreSQL logging flag set (log\_checkpoints/connections/disconnections/lock\_waits, log\_min\_messages=error, log\_statement=ddl). Default true. Caller flags in database\_flags override these per name. Set false to manage all flags yourself. | `bool` | `true` | no |
 | <a name="input_encryption_key_name"></a> [encryption\_key\_name](#input\_encryption\_key\_name) | Optional CMEK: the self\_link of a Cloud KMS CryptoKey used to encrypt the instance. Leave null to use Google-managed encryption. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | A map of key/value labels to apply to the instance | `map(string)` | `{}` | no |
 | <a name="input_maintenance_window_day"></a> [maintenance\_window\_day](#input\_maintenance\_window\_day) | Day of week (1 = Monday … 7 = Sunday) for the maintenance window | `number` | `7` | no |

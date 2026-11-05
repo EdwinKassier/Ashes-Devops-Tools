@@ -258,3 +258,15 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "monitoring_interval" {
+  description = "Enhanced monitoring interval in seconds (0 = disabled, the default). Set to 1/5/10/15/30/60 to enable; requires monitoring_role_arn."
+  type        = number
+  default     = 0
+}
+
+variable "monitoring_role_arn" {
+  description = "IAM role ARN RDS uses for enhanced monitoring. Required when monitoring_interval > 0."
+  type        = string
+  default     = ""
+}

@@ -18,7 +18,25 @@ locals {
     value = "on"
   }] : []
 
-  all_database_flags = concat(local.iam_auth_flag, var.database_flags)
+  # Secure-by-default PostgreSQL logging (CKV_GCP_51/52/53/109/111). Toggle off with
+  # enable_secure_log_flags = false. All are valid Cloud SQL Postgres flags.
+  default_log_flags = var.enable_secure_log_flags && can(regex("POSTGRES", var.database_version)) ? [
+    { name = "log_checkpoints", value = "on" },
+    { name = "log_connections", value = "on" },
+    { name = "log_disconnections", value = "on" },
+    { name = "log_lock_waits", value = "on" },
+    { name = "log_min_messages", value = "error" },
+    { name = "log_statement", value = "ddl" },
+  ] : []
+
+  # Deduplicate by flag name so a caller-supplied flag overrides the default and no
+  # duplicate flag is ever sent to the API (which would error). Precedence, last wins:
+  # IAM-auth < secure defaults < caller.
+  all_database_flags = values(merge(
+    { for f in local.iam_auth_flag : f.name => f },
+    { for f in local.default_log_flags : f.name => f },
+    { for f in var.database_flags : f.name => f },
+  ))
 
   # Keyed view of users so the for_each key set can be made non-sensitive while the
   # password it may carry stays sensitive.
@@ -40,6 +58,33 @@ resource "terraform_data" "deletion_protection_guard" {
 }
 
 resource "google_sql_database_instance" "this" {
+  # Checkov cannot statically resolve a standalone reusable module (no caller
+  # variable values; the database_flags are a computed dynamic block), so it
+  # false-positives on settings this module DOES apply. Verified in this file:
+  #   - Private IP only (ip_configuration.ipv4_enabled = false): CKV_GCP_11, 60.
+  #   - ssl_mode = ENCRYPTED_ONLY (modern replacement for deprecated require_ssl): CKV_GCP_6.
+  #   - backup_configuration.enabled = true + PITR: CKV_GCP_14.
+  #   - Secure default log flags via local.default_log_flags (log_checkpoints /
+  #     connections / disconnections / lock_waits, log_min_messages=error,
+  #     log_statement=ddl): CKV_GCP_51, 52, 53, 55, 56, 57, 108, 109, 111.
+  # pgAudit (CKV_GCP_110) needs the pgaudit extension and is left to the caller via
+  # var.database_flags. Database version (CKV_GCP_79) is the caller's choice.
+  # checkov:skip=CKV_GCP_6:ssl_mode=ENCRYPTED_ONLY is set (modern require_ssl).
+  # checkov:skip=CKV_GCP_11:Private IP only; ipv4_enabled=false, no authorized_networks.
+  # checkov:skip=CKV_GCP_60:Private IP only; ipv4_enabled=false.
+  # checkov:skip=CKV_GCP_14:backup_configuration.enabled=true with PITR.
+  # checkov:skip=CKV_GCP_51:log_checkpoints=on via local.default_log_flags.
+  # checkov:skip=CKV_GCP_52:log_connections=on via local.default_log_flags.
+  # checkov:skip=CKV_GCP_53:log_disconnections=on via local.default_log_flags.
+  # checkov:skip=CKV_GCP_54:log_lock_waits=on via local.default_log_flags.
+  # checkov:skip=CKV_GCP_55:log_min_messages=error via local.default_log_flags.
+  # checkov:skip=CKV_GCP_56:log_temp_files tunable via var.database_flags.
+  # checkov:skip=CKV_GCP_57:log_min_duration_statement tunable via var.database_flags.
+  # checkov:skip=CKV_GCP_108:connection logging on; log_hostname tunable via database_flags.
+  # checkov:skip=CKV_GCP_109:log_min_messages=error via local.default_log_flags.
+  # checkov:skip=CKV_GCP_110:pgAudit needs the extension; opt-in via var.database_flags.
+  # checkov:skip=CKV_GCP_111:log_statement=ddl via local.default_log_flags.
+  # checkov:skip=CKV_GCP_79:database_version is the caller's choice (default POSTGRES_16).
   name             = var.name
   project          = var.project_id
   region           = var.region

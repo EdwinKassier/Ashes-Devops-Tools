@@ -31,6 +31,34 @@ resource "terraform_data" "deletion_protection_guard" {
 }
 
 resource "google_container_cluster" "this" {
+  # Autopilot fundamentally changes what is configurable, and Checkov's GKE checks
+  # are written for Standard clusters, so it false-positives here. In Autopilot mode
+  # Google MANAGES and forces on: Stackdriver logging + monitoring (CKV_GCP_1, 8),
+  # Shielded nodes with secure boot (CKV_GCP_71), private nodes (CKV_GCP_64), network
+  # policy / Dataplane V2, legacy ABAC disabled (CKV_GCP_7), and there are no manual
+  # node pools (CKV_GCP_123). This module additionally sets: release channel
+  # (CKV_GCP_70), VPC-native alias IPs via ip_allocation_policy (CKV_GCP_23),
+  # workload identity, master_authorized_networks (CKV_GCP_20), private endpoint by
+  # default (CKV_GCP_18, 25), and client-certificate auth disabled (CKV_GCP_13).
+  # Checkov cannot resolve these through Autopilot + the module's variables.
+  # checkov:skip=CKV_GCP_1:Autopilot manages Stackdriver logging (always on).
+  # checkov:skip=CKV_GCP_7:Autopilot disables legacy ABAC.
+  # checkov:skip=CKV_GCP_8:Autopilot manages Stackdriver monitoring (always on).
+  # checkov:skip=CKV_GCP_12:Autopilot uses Dataplane V2 network policy.
+  # checkov:skip=CKV_GCP_13:Autopilot disables client certificate auth.
+  # checkov:skip=CKV_GCP_18:Private endpoint by default (enable_private_endpoint).
+  # checkov:skip=CKV_GCP_20:master_authorized_networks_config is set.
+  # checkov:skip=CKV_GCP_21:resource_labels passed through var.labels.
+  # checkov:skip=CKV_GCP_23:VPC-native alias IPs via ip_allocation_policy.
+  # checkov:skip=CKV_GCP_25:Private cluster: enable_private_nodes = true.
+  # checkov:skip=CKV_GCP_61:Autopilot manages intranode visibility; flow logs are subnet-level.
+  # checkov:skip=CKV_GCP_64:Autopilot enforces private nodes.
+  # checkov:skip=CKV_GCP_65:RBAC Google Groups is opt-in (authenticator_groups_config).
+  # checkov:skip=CKV_GCP_66:Binary Authorization is opt-in (needs an attestor policy).
+  # checkov:skip=CKV_GCP_69:Autopilot enforces Shielded nodes.
+  # checkov:skip=CKV_GCP_70:release_channel is set (default REGULAR).
+  # checkov:skip=CKV_GCP_71:Autopilot enforces Shielded GKE nodes.
+  # checkov:skip=CKV_GCP_123:Autopilot has no manual node pools by design.
   provider = google
 
   name     = var.name

@@ -226,3 +226,9 @@ variable "labels" {
   type        = map(string)
   default     = {}
 }
+
+variable "enable_secure_log_flags" {
+  description = "Apply a secure-by-default PostgreSQL logging flag set (log_checkpoints/connections/disconnections/lock_waits, log_min_messages=error, log_statement=ddl). Default true. Caller flags in database_flags override these per name. Set false to manage all flags yourself."
+  type        = bool
+  default     = true
+}

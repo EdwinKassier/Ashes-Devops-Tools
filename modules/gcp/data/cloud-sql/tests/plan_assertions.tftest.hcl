@@ -61,8 +61,14 @@ run "instance_secure_defaults" {
   }
 
   assert {
-    condition     = length(google_sql_database_instance.this.settings[0].database_flags) == 1
+    condition     = anytrue([for f in google_sql_database_instance.this.settings[0].database_flags : f.name == "cloudsql.iam_authentication" && f.value == "on"])
     error_message = "The cloudsql.iam_authentication flag must be present by default."
+  }
+
+  # Secure-by-default PostgreSQL logging flags are applied alongside IAM auth.
+  assert {
+    condition     = anytrue([for f in google_sql_database_instance.this.settings[0].database_flags : f.name == "log_connections" && f.value == "on"])
+    error_message = "Secure default log flags (log_connections=on) must be applied by default."
   }
 
   assert {

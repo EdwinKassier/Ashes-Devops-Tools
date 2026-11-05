@@ -78,7 +78,21 @@
 # resources (modules/gcp/network/dns) already PASS — DNSSEC is enabled by default in that
 # module — so no skip is needed at all, global or inline.
 
+# Do not scan Terraform test fixtures. *.tftest.hcl files carry mock, non-deployed
+# values (e.g. example secret names/URLs) that trip the secret framework
+# (CKV_SECRET_*) as false positives. Tests are never applied, so excluding them
+# from the scanners is correct, not a suppression of real risk.
+skip-path:
+  - ".*/tests/.*"
+
 skip-check:
+  # CKV_SECRET_6 "Base64 High Entropy String": an entropy heuristic that false-positives
+  # on non-secret config and on mock values in *.tftest.hcl fixtures (e.g. a secret NAME
+  # like "database-url" in a test, not a credential). Real secret detection is covered by
+  # the dedicated gitleaks gate (reusable-security.yml) and by Secret Manager / Secrets
+  # Manager usage in the modules themselves; this specific entropy check is pure noise here.
+  - "CKV_SECRET_6"
+
   # Log4Shell (CVE-2021-44228) canary rule: CKV_GCP_73 ("Ensure Cloud Armor prevents
   # message lookup in Log4j2") only recognizes the literal expression
   # evaluatePreconfiguredExpr('cve-canary') / evaluatePreconfiguredWaf('cve-canary').

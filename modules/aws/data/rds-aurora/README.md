@@ -70,7 +70,7 @@ The following resources are created:
 - resource.aws_db_subnet_group.this (modules/aws/data/rds-aurora/main.tf#L35)
 - resource.aws_rds_cluster.this (modules/aws/data/rds-aurora/main.tf#L44)
 - resource.aws_rds_cluster_instance.this (modules/aws/data/rds-aurora/main.tf#L93)
-- resource.terraform_data.deletion_guard (modules/aws/data/rds-aurora/main.tf#L119)
+- resource.terraform_data.deletion_guard (modules/aws/data/rds-aurora/main.tf#L129)
 
 
 ## Inputs
@@ -96,6 +96,8 @@ The following resources are created:
 | <a name="input_master_password"></a> [master\_password](#input\_master\_password) | Master password. Only used when manage\_master\_user\_password is false. Prefer leaving manage\_master\_user\_password = true so the password never enters Terraform state. | `string` | `null` | no |
 | <a name="input_master_user_secret_kms_key_id"></a> [master\_user\_secret\_kms\_key\_id](#input\_master\_user\_secret\_kms\_key\_id) | KMS key ARN that encrypts the RDS-managed master user secret. Empty uses the default aws/secretsmanager key. Only used when manage\_master\_user\_password is true. | `string` | `""` | no |
 | <a name="input_master_username"></a> [master\_username](#input\_master\_username) | Master (admin) username for the cluster. | `string` | `"dbadmin"` | no |
+| <a name="input_monitoring_interval"></a> [monitoring\_interval](#input\_monitoring\_interval) | Enhanced monitoring interval in seconds (0 = disabled, the default). Set to 1/5/10/15/30/60 to enable; requires monitoring\_role\_arn. | `number` | `0` | no |
+| <a name="input_monitoring_role_arn"></a> [monitoring\_role\_arn](#input\_monitoring\_role\_arn) | IAM role ARN RDS uses for enhanced monitoring. Required when monitoring\_interval > 0. | `string` | `""` | no |
 | <a name="input_performance_insights_kms_key_arn"></a> [performance\_insights\_kms\_key\_arn](#input\_performance\_insights\_kms\_key\_arn) | KMS key ARN encrypting Performance Insights data. Defaults to kms\_key\_id when empty. | `string` | `""` | no |
 | <a name="input_port"></a> [port](#input\_port) | TCP port the database listens on. | `number` | `5432` | no |
 | <a name="input_preferred_backup_window"></a> [preferred\_backup\_window](#input\_preferred\_backup\_window) | Daily time range (UTC) during which automated backups are taken (hh24:mi-hh24:mi). | `string` | `"02:00-03:00"` | no |
