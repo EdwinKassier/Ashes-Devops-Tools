@@ -25,6 +25,38 @@ resource "google_artifact_registry_repository" "repo" {
   format        = each.value.format
   kms_key_name  = var.kms_key_name
 
+  # Cleanup policies bound registry growth (and cost). In dry-run mode Artifact
+  # Registry only logs what it would delete — validate before enforcing.
+  cleanup_policy_dry_run = length(each.value.cleanup_policies) > 0 ? each.value.cleanup_policy_dry_run : null
+
+  dynamic "cleanup_policies" {
+    for_each = each.value.cleanup_policies
+    content {
+      id     = cleanup_policies.key
+      action = cleanup_policies.value.action
+
+      dynamic "condition" {
+        for_each = cleanup_policies.value.condition != null ? [cleanup_policies.value.condition] : []
+        content {
+          tag_state             = condition.value.tag_state
+          tag_prefixes          = condition.value.tag_prefixes
+          version_name_prefixes = condition.value.version_name_prefixes
+          package_name_prefixes = condition.value.package_name_prefixes
+          older_than            = condition.value.older_than
+          newer_than            = condition.value.newer_than
+        }
+      }
+
+      dynamic "most_recent_versions" {
+        for_each = cleanup_policies.value.most_recent_versions != null ? [cleanup_policies.value.most_recent_versions] : []
+        content {
+          package_name_prefixes = most_recent_versions.value.package_name_prefixes
+          keep_count            = most_recent_versions.value.keep_count
+        }
+      }
+    }
+  }
+
   # Docker-specific configuration (only for DOCKER format)
   dynamic "docker_config" {
     for_each = each.value.format == "DOCKER" ? [1] : []

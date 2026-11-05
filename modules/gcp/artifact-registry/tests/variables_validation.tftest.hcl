@@ -122,3 +122,18 @@ run "rejects_kms_key_missing_location" {
     kms_key_name = "projects/mock-project/keyRings/test-ring/cryptoKeys/test-key"
   }
 }
+
+run "cleanup_policy_needs_exactly_one_selector" {
+  command = plan
+
+  variables {
+    repositories = {
+      "docker-repo" = {
+        description      = "Docker repo"
+        cleanup_policies = { "bad" = { action = "DELETE" } }
+      }
+    }
+  }
+
+  expect_failures = [var.repositories]
+}

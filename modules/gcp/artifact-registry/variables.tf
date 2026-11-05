@@ -31,13 +31,37 @@ variable "kms_key_name" {
 }
 
 variable "repositories" {
-  description = "Map of repository configurations to create. Valid format values: DOCKER, MAVEN, NPM, PYTHON, APT, YUM, GOOGET, KFP, GENERIC."
+  description = <<-EOT
+    Map of repository configurations to create. Valid format values: DOCKER, MAVEN,
+    NPM, PYTHON, APT, YUM, GOOGET, KFP, GENERIC.
+    `cleanup_policies` is keyed by policy id; each has `action` (DELETE or KEEP) and
+    either a `condition` (tag_state TAGGED/UNTAGGED/ANY, tag/version/package name
+    prefixes, older_than/newer_than durations such as "2592000s") or
+    `most_recent_versions` (keep_count). `cleanup_policy_dry_run` (default false)
+    only logs what would be deleted.
+  EOT
   type = map(object({
     description               = string
     format                    = optional(string, "DOCKER")
     immutable_tags            = optional(bool, true)
     allow_snapshot_overwrites = optional(bool, false)
     version_policy            = optional(string, "VERSION_POLICY_UNSPECIFIED")
+    cleanup_policy_dry_run    = optional(bool, false)
+    cleanup_policies = optional(map(object({
+      action = string
+      condition = optional(object({
+        tag_state             = optional(string)
+        tag_prefixes          = optional(list(string))
+        version_name_prefixes = optional(list(string))
+        package_name_prefixes = optional(list(string))
+        older_than            = optional(string)
+        newer_than            = optional(string)
+      }))
+      most_recent_versions = optional(object({
+        package_name_prefixes = optional(list(string))
+        keep_count            = optional(number)
+      }))
+    })), {})
   }))
 
   validation {
@@ -54,6 +78,16 @@ variable "repositories" {
       can(regex("^[a-z][a-z0-9-]{0,61}[a-z0-9]$|^[a-z0-9]$", k))
     ])
     error_message = "Repository map keys must be valid Artifact Registry repository IDs: lowercase letters, digits, and hyphens; starts with a letter or digit; 1-63 characters."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for k, v in var.repositories : [
+        for pk, p in v.cleanup_policies :
+        contains(["DELETE", "KEEP"], p.action) && ((p.condition != null) != (p.most_recent_versions != null))
+      ]
+    ]))
+    error_message = "Each cleanup policy needs action DELETE or KEEP and exactly one of condition or most_recent_versions."
   }
 
   default = {

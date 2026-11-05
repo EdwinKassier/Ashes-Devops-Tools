@@ -75,3 +75,20 @@ run "no_lifecycle_or_org_policy_by_default" {
     error_message = "No org repository policy when org_id is null"
   }
 }
+
+# keep_last_tagged_images must cap ALL tagged images (e.g. git-SHA tags pushed by
+# CI), not only a hard-coded set of tag prefixes.
+run "keep_last_tagged_matches_all_tags" {
+  command = plan
+
+  variables {
+    repositories = {
+      app = { keep_last_tagged_images = 50 }
+    }
+  }
+
+  assert {
+    condition     = jsondecode(aws_ecr_lifecycle_policy.this["app"].policy).rules[0].selection.tagPatternList == ["*"]
+    error_message = "the tagged-image cap must match every tag (tagPatternList = [\"*\"])."
+  }
+}

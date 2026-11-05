@@ -94,7 +94,7 @@ variable "dashboard_widgets" {
 }
 
 variable "tags" {
-  description = "Tags applied to taggable resources (SNS topic)."
+  description = "Tags applied to taggable resources (SNS topic, metric alarms)."
   type        = map(string)
   default     = {}
 }

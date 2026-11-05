@@ -118,6 +118,7 @@ The following resources are created:
 | <a name="output_instance_identifiers"></a> [instance\_identifiers](#output\_instance\_identifiers) | Identifiers of the cluster instances (writer + readers). |
 | <a name="output_master_user_secret_arn"></a> [master\_user\_secret\_arn](#output\_master\_user\_secret\_arn) | ARN of the RDS-managed master user secret in Secrets Manager. Null when manage\_master\_user\_password is false. |
 | <a name="output_port"></a> [port](#output\_port) | Port the database listens on. |
+| <a name="output_publicly_accessible"></a> [publicly\_accessible](#output\_publicly\_accessible) | Whether ANY cluster instance is publicly accessible. Always false — instances are hard-wired to publicly\_accessible = false; exported so composing stages can assert it. |
 | <a name="output_reader_endpoint"></a> [reader\_endpoint](#output\_reader\_endpoint) | Reader endpoint of the cluster (load-balances across replicas). |
 <!-- END_TF_DOCS -->
 

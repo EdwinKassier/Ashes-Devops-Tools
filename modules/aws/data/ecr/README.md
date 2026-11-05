@@ -66,7 +66,7 @@ The following resources are created:
 
 - resource.aws_ecr_lifecycle_policy.this (modules/aws/data/ecr/main.tf#L35)
 - resource.aws_ecr_repository.this (modules/aws/data/ecr/main.tf#L15)
-- resource.aws_ecr_repository_policy.org (modules/aws/data/ecr/main.tf#L67)
+- resource.aws_ecr_repository_policy.org (modules/aws/data/ecr/main.tf#L70)
 
 
 ## Inputs

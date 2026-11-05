@@ -168,6 +168,8 @@ module "host" {
       restricted_services = var.vpc_sc_restricted_services
       ingress_policies    = local.effective_vpc_sc_ingress_policies
       egress_policies     = local.effective_vpc_sc_egress_policies
+      # Enforced status + staged dry-run delta (null = no staged spec).
+      dry_run_restricted_services = var.vpc_sc_dry_run_restricted_services
     }
   }
 }
@@ -281,5 +283,59 @@ module "saas_secret_bridge" {
 
   secret_accessors = {
     (var.saas_secret_name) = var.saas_secret_accessor_members
+  }
+}
+
+# =============================================================================
+# APPLICATION GOLDEN PATH (audit: "app golden path is docs-only")
+#
+# One module call. A service team adds an entry to var.app_services and gets, in
+# the env host project: an Artifact Registry repo, a runtime SA, a Cloud Run v2
+# service on the env Shared VPC (Direct VPC egress), optional private Cloud SQL,
+# and an optional GitHub deploy identity on an app-only WIF pool. The default
+# (app_services = {}, every flag off) creates nothing. Guide:
+# docs/guides/deploying-a-service.md.
+# =============================================================================
+
+module "app_services" {
+  source = "../../../modules/gcp/stages/app-services"
+
+  project_id     = local.env_config.host_project_id
+  project_number = local.env_config.host_project_number
+  region         = local.env_config.region
+  environment    = var.environment
+  labels         = local.labels
+
+  # The env VPC (not the hub): the host stage creates Private Service Access on
+  # it by default, which private-IP Cloud SQL requires.
+  network_id = module.host.network_id
+  # Default Cloud Run / GKE subnet: the first private (compute-tier) subnet.
+  subnetwork_id = var.app_subnetwork_id != null ? var.app_subnetwork_id : try(values(module.host.subnets.private)[0].id, null)
+
+  services                       = var.app_services
+  enable_deletion_protection     = var.enable_deletion_protection
+  artifact_registry_kms_key_name = var.artifact_registry_kms_key_name
+
+  enable_app_deploy_wif      = var.enable_app_deploy_wif
+  app_deploy_wif_pool_id     = var.app_deploy_wif_pool_id
+  github_repository_owner_id = var.github_repository_owner_id
+
+  enable_gke_autopilot              = var.enable_gke_autopilot
+  gke_master_ipv4_cidr_block        = var.gke_master_ipv4_cidr_block
+  gke_master_authorized_networks    = var.gke_master_authorized_networks
+  gke_cluster_secondary_range_name  = var.gke_cluster_secondary_range_name
+  gke_services_secondary_range_name = var.gke_services_secondary_range_name
+
+  # PSA (for Cloud SQL), subnets and the bridged SaaS secret must exist first.
+  depends_on = [module.host, module.saas_secret_bridge]
+}
+
+# SOTA M: nothing tied prod to an enforced perimeter. Warn (check blocks never
+# fail the plan) when a production-like environment has no perimeter or only a
+# dry-run one. Perimeter creation stays gated on vpc_sc_access_policy_name.
+check "vpc_sc_enforced_in_prod" {
+  assert {
+    condition     = !can(regex("prod", lower(var.environment))) || (var.vpc_sc_access_policy_name != null && !var.vpc_sc_enable_dry_run)
+    error_message = "Environment '${var.environment}' looks like production but its VPC-SC perimeter is ${var.vpc_sc_access_policy_name == null ? "NOT CREATED (vpc_sc_access_policy_name is null)" : "in DRY-RUN (vpc_sc_enable_dry_run = true)"}. Dry-run gives no exfiltration protection: validate the violation logs, then set vpc_sc_enable_dry_run = false (use vpc_sc_dry_run_restricted_services to keep staging further changes)."
   }
 }

@@ -46,10 +46,11 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_lb.this (modules/aws/network/load-balancer/main.tf#L59)
-- resource.aws_lb_listener.this (modules/aws/network/load-balancer/main.tf#L119)
-- resource.aws_lb_target_group.this (modules/aws/network/load-balancer/main.tf#L88)
-- resource.aws_security_group.this (modules/aws/network/load-balancer/main.tf#L33)
+- resource.aws_lb.this (modules/aws/network/load-balancer/main.tf#L63)
+- resource.aws_lb_listener.this (modules/aws/network/load-balancer/main.tf#L127)
+- resource.aws_lb_listener_rule.this (modules/aws/network/load-balancer/main.tf#L174)
+- resource.aws_lb_target_group.this (modules/aws/network/load-balancer/main.tf#L96)
+- resource.aws_security_group.this (modules/aws/network/load-balancer/main.tf#L36)
 
 
 ## Inputs
@@ -62,9 +63,12 @@ The following resources are created:
 | <a name="input_access_logs"></a> [access\_logs](#input\_access\_logs) | Optional S3 access logging. Provide bucket (and optional prefix); set enabled=false to configure the destination without turning logging on. | <pre>object({<br/>    bucket  = string<br/>    prefix  = optional(string, "")<br/>    enabled = optional(bool, true)<br/>  })</pre> | `null` | no |
 | <a name="input_create_security_group"></a> [create\_security\_group](#input\_create\_security\_group) | Whether this module creates a security group for the load balancer (typically for an ALB). The caller adds ingress rules via the exported security\_group\_id. | `bool` | `false` | no |
 | <a name="input_drop_invalid_header_fields"></a> [drop\_invalid\_header\_fields](#input\_drop\_invalid\_header\_fields) | For application load balancers, drop HTTP headers with invalid fields. Ignored for network load balancers. | `bool` | `true` | no |
+| <a name="input_egress_cidr_blocks"></a> [egress\_cidr\_blocks](#input\_egress\_cidr\_blocks) | CIDRs the module-created security group may send to (the LB's targets). Default 0.0.0.0/0 for backward compatibility; set the VPC CIDR when every target is inside the VPC (e.g. Fargate tasks). | `list(string)` | <pre>[<br/>  "0.0.0.0/0"<br/>]</pre> | no |
+| <a name="input_enable_cross_zone_load_balancing"></a> [enable\_cross\_zone\_load\_balancing](#input\_enable\_cross\_zone\_load\_balancing) | Enable cross-zone load balancing. Always effectively on for ALBs; for NLBs it spreads traffic across healthy targets in every AZ (inter-AZ data charges apply). | `bool` | `true` | no |
 | <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | Protect the load balancer from accidental deletion. Defaults to true; set false only for ephemeral/test load balancers. | `bool` | `true` | no |
 | <a name="input_internal"></a> [internal](#input\_internal) | Whether the load balancer is internal (true, no public IPs) or internet-facing (false). | `bool` | `true` | no |
-| <a name="input_listeners"></a> [listeners](#input\_listeners) | Listeners to create, keyed by a stable local key. Each listener forwards to<br/>the target group named by target\_group\_key. Provide certificate\_arn (and<br/>optionally ssl\_policy) for TLS-terminating listeners (HTTPS/TLS). | <pre>map(object({<br/>    port             = number<br/>    protocol         = string<br/>    target_group_key = string<br/>    certificate_arn  = optional(string)<br/>    ssl_policy       = optional(string, "ELBSecurityPolicy-TLS13-1-2-2021-06")<br/>  }))</pre> | `{}` | no |
+| <a name="input_listener_rules"></a> [listener\_rules](#input\_listener\_rules) | Host/path routing rules, keyed by a stable local key. Each rule forwards requests matching host\_headers and/or path\_patterns on listener\_key to target\_group\_key. At least one condition is required; priority must be unique per listener (1-50000). | <pre>map(object({<br/>    listener_key     = string<br/>    priority         = number<br/>    target_group_key = string<br/>    host_headers     = optional(list(string), [])<br/>    path_patterns    = optional(list(string), [])<br/>  }))</pre> | `{}` | no |
+| <a name="input_listeners"></a> [listeners](#input\_listeners) | Listeners to create, keyed by a stable local key. default\_action selects the<br/>listener's default: "forward" (to the target group named by target\_group\_key),<br/>"fixed-response" (e.g. a 404 on a shared ALB whose services are routed by<br/>listener\_rules), or "redirect-https" (HTTP -> HTTPS 301). Provide<br/>certificate\_arn (and optionally ssl\_policy) for TLS-terminating listeners. | <pre>map(object({<br/>    port             = number<br/>    protocol         = string<br/>    target_group_key = optional(string)<br/>    certificate_arn  = optional(string)<br/>    ssl_policy       = optional(string, "ELBSecurityPolicy-TLS13-1-2-2021-06")<br/>    # forward (to target_group_key) | fixed-response | redirect-https<br/>    default_action = optional(string, "forward")<br/>    fixed_response = optional(object({<br/>      status_code  = optional(string, "404")<br/>      content_type = optional(string, "text/plain")<br/>      message_body = optional(string, "Not Found")<br/>    }), {})<br/>  }))</pre> | `{}` | no |
 | <a name="input_load_balancer_type"></a> [load\_balancer\_type](#input\_load\_balancer\_type) | Load balancer type: 'application' (L7 ALB) or 'network' (L4 NLB). | `string` | `"application"` | no |
 | <a name="input_security_group_ids"></a> [security\_group\_ids](#input\_security\_group\_ids) | Existing security group IDs to attach to the load balancer. Merged with the module-created group when create\_security\_group = true. | `list(string)` | `[]` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to the load balancer, target groups, listeners, and managed security group. | `map(string)` | `{}` | no |
@@ -77,7 +81,11 @@ The following resources are created:
 | <a name="output_arn"></a> [arn](#output\_arn) | ARN of the load balancer. |
 | <a name="output_arn_suffix"></a> [arn\_suffix](#output\_arn\_suffix) | ARN suffix of the load balancer, for use in CloudWatch metric dimensions. |
 | <a name="output_dns_name"></a> [dns\_name](#output\_dns\_name) | DNS name of the load balancer. |
+| <a name="output_internal"></a> [internal](#output\_internal) | Whether the load balancer is internal (no public IPs). |
+| <a name="output_listener_arns"></a> [listener\_arns](#output\_listener\_arns) | Map of listener key to listener ARN. |
+| <a name="output_listener_rule_arns"></a> [listener\_rule\_arns](#output\_listener\_rule\_arns) | Map of listener\_rules key to listener rule ARN. |
 | <a name="output_security_group_id"></a> [security\_group\_id](#output\_security\_group\_id) | ID of the module-created security group, or null when create\_security\_group = false. |
+| <a name="output_target_group_arn_suffixes"></a> [target\_group\_arn\_suffixes](#output\_target\_group\_arn\_suffixes) | Map of target group key to its ARN suffix, for CloudWatch TargetGroup metric dimensions. |
 | <a name="output_target_group_arns"></a> [target\_group\_arns](#output\_target\_group\_arns) | Map of target group key to the created target group ARN. |
 | <a name="output_zone_id"></a> [zone\_id](#output\_zone\_id) | Route 53 hosted zone ID of the load balancer, for alias records. |
 <!-- END_TF_DOCS -->

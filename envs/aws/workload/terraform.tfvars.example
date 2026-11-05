@@ -55,3 +55,41 @@ enable_saas_secret_bridge = false
 # saas_workspace_name       = "saas-web"
 # saas_secret_name          = "supabase-connection"
 # saas_secret_reader_arns   = ["arn:aws:iam::222222222222:role/app-task-role"]
+
+# -----------------------------------------------------------------------------
+# App services — the application golden path (modules/aws/stages/app-services).
+# Default {} creates nothing. Each entry = ECR repo + Fargate service behind the
+# shared INTERNAL ALB + least-privilege task roles + KMS log group, plus an
+# optional GitHub Actions deploy role (github) and Aurora PostgreSQL (database).
+# Requires kms_key_arn (above). Walkthrough: docs/guides/deploying-a-service.md.
+# -----------------------------------------------------------------------------
+services           = {}
+enable_github_oidc = false
+
+# Example (uncomment and adapt):
+# enable_github_oidc = true   # creates the account's GitHub OIDC provider once
+# services = {
+#   orders = {
+#     container_port    = 8080
+#     cpu               = 512
+#     memory            = 1024
+#     desired_count     = 2
+#     health_check_path = "/healthz"
+#     path_patterns     = ["/orders", "/orders/*"]   # default: /<name>, /<name>/*
+#     environment       = { LOG_LEVEL = "info" }
+#     secrets           = { STRIPE_KEY = "arn:aws:secretsmanager:eu-west-2:222222222222:secret:orders/stripe-AbCdEf" }
+#
+#     # Deploy role trusted ONLY by repo:acme/orders:environment:dev (exact match).
+#     github = { repository = "acme/orders" }
+#     # ...or a branch:       github = { repository = "acme/orders", ref = "refs/heads/main" }
+#     # ...or a customised sub claim (immutable ids / job_workflow_ref):
+#     # github = { repository = "acme/orders", subject = "repository_owner_id:123:repository_id:456:environment:dev" }
+#
+#     database = {}   # Aurora PostgreSQL Serverless v2, RDS-managed password
+#   }
+# }
+
+# Optional — shared ALB + alarms.
+# app_alb_certificate_arn = "arn:aws:acm:eu-west-2:222222222222:certificate/abcd"  # HTTPS :443, :80 redirects
+# app_alb_ingress_cidrs   = ["10.0.0.0/8"]   # default [vpc_cidr]; widen for other spokes via the TGW
+# app_alarm_sns_topic_arn = "arn:aws:sns:eu-west-2:222222222222:workload-alarms"

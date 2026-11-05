@@ -88,3 +88,29 @@ enable_saas_secret_bridge = false
 # saas_workspace_name          = "saas-web"
 # saas_secret_name             = "supabase-connection"
 # saas_secret_accessor_members = ["serviceAccount:app@ashes-dev-host-xxxx.iam.gserviceaccount.com"]
+
+# -----------------------------------------------------------------------------
+# Application golden path (modules/gcp/stages/app-services) — default: nothing.
+# A service team adds one entry to app_services. Full walkthrough:
+# docs/guides/deploying-a-service.md; a complete entry:
+# examples/app-services/dev.app-services.tfvars.
+# -----------------------------------------------------------------------------
+app_services          = {}
+enable_app_deploy_wif = false # app-only GitHub WIF pool in the host project
+enable_gke_autopilot  = false # optional env-level GKE Autopilot cluster
+
+# Example (uncomment and adapt):
+# enable_app_deploy_wif      = true
+# github_repository_owner_id = "12345678"   # gh api orgs/<org> --jq .id
+# app_services = {
+#   orders-api = {
+#     secrets  = { STRIPE_KEY = { secret = "orders-api-stripe-key" } } # secret must exist
+#     database = { databases = ["orders"] }                            # private Cloud SQL, IAM auth
+#     github   = {
+#       repository_id = "987654321"          # gh api repos/<org>/<repo> --jq .id (immutable)
+#       repository    = "acme/orders-api"    # informational only
+#       ref           = "refs/heads/main"    # optional: only this ref may deploy
+#       # environment = "dev"                # optional: only this GitHub environment
+#     }
+#   }
+# }

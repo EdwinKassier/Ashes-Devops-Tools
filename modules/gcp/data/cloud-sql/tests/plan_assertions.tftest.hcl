@@ -124,3 +124,14 @@ run "databases_and_users_fan_out" {
     error_message = "One google_sql_user must be planned per users entry."
   }
 }
+
+# PostgreSQL 16+ defaults to ENTERPRISE_PLUS, which rejects db-custom-* tiers; the
+# module pins ENTERPRISE so the default tier is creatable.
+run "edition_defaults_to_enterprise" {
+  command = plan
+
+  assert {
+    condition     = google_sql_database_instance.this.settings[0].edition == "ENTERPRISE"
+    error_message = "edition must default to ENTERPRISE so the default db-custom tier is valid."
+  }
+}

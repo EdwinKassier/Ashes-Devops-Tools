@@ -69,6 +69,30 @@ run "consumes_remote_state_contracts" {
     error_message = "aws_network tgw_id contract key must be readable by the root"
   }
 
+  # Provider default_tags: the canonical cost-allocation keys are written, and the
+  # environment is derived from workload_account_key (workload_dev -> dev).
+  assert {
+    condition = (
+      local.environment == "dev" &&
+      local.aws_default_tags["Environment"] == "dev" &&
+      local.aws_default_tags["Workspace"] == "aws-workload-dev" &&
+      alltrue([for k in ["CostCenter", "Environment", "Owner", "ManagedBy", "LandingZone"] : contains(keys(local.aws_default_tags), k)])
+    )
+    error_message = "aws provider default_tags must carry CostCenter/Environment/Owner/ManagedBy/LandingZone with the derived environment"
+  }
+
+  # The spoke is named workload-<environment>, not a hard-coded "workload".
+  assert {
+    condition     = module.aws_workload.name == "workload-dev"
+    error_message = "the spoke name must be derived as workload-<environment>"
+  }
+
+  # The spoke private tier routes 0.0.0.0/0 to the shared TGW from the network contract.
+  assert {
+    condition     = module.aws_workload.tgw_routes["private"][0].transit_gateway_id == "tgw-000000000000abcd"
+    error_message = "the spoke must route its private tier to the shared TGW"
+  }
+
   # The regional IPAM pool for this root's region is readable from the network contract.
   assert {
     condition     = data.terraform_remote_state.aws_network.outputs.ipam_pool_ids[var.aws_region] == "ipam-pool-eu-west-2-0"
@@ -140,5 +164,79 @@ run "saas_secret_bridge_creates_secret_when_enabled" {
   assert {
     condition     = length(aws_secretsmanager_secret_policy.saas_bridge) == 1
     error_message = "the bridge must attach a resource policy granting the reader roles access."
+  }
+}
+
+# App services golden path: the default (services = {}) creates nothing; one
+# services entry wires an ECR repo, a Fargate service behind an INTERNAL ALB in
+# the spoke's private tier, and a GitHub OIDC deploy role pinned to the exact
+# repo + environment subject. Full IAM-JSON assertions live in
+# modules/aws/stages/app-services/tests.
+run "app_services_default_creates_nothing" {
+  command = plan
+
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = { outputs = { account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_network
+    values = { outputs = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_security
+    values = { outputs = { log_archive_bucket_name = "ashes-org-log-archive" } }
+  }
+
+  assert {
+    condition     = length(output.app_services) == 0 && output.app_alb_dns_name == null && output.github_oidc_provider_arn == null
+    error_message = "services = {} must create no app-services resources (no cluster, ALB, repo or OIDC provider)."
+  }
+}
+
+run "app_services_one_service" {
+  command = plan
+
+  variables {
+    enable_github_oidc = true
+    services = {
+      orders = {
+        github   = { repository = "acme/orders" }
+        database = {}
+      }
+    }
+  }
+
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = { outputs = { account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_network
+    values = { outputs = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_security
+    values = { outputs = { log_archive_bucket_name = "ashes-org-log-archive" } }
+  }
+
+  assert {
+    condition     = keys(output.app_services) == ["orders"] && output.app_services["orders"].ecr_repository_name == "orders" && output.app_services["orders"].ecs_cluster_name == "dev-apps"
+    error_message = "one services entry must yield an ECR repo and a service on the shared dev-apps cluster."
+  }
+
+  assert {
+    condition     = output.github_oidc_subjects["orders"] == "repo:acme/orders:environment:dev"
+    error_message = "the deploy role must trust exactly repo:<org>/<repo>:environment:<environment>."
+  }
+
+  assert {
+    condition     = module.app_services.alb_internal == true
+    error_message = "the shared ALB must be internal by default."
+  }
+
+  assert {
+    condition     = output.app_services["orders"].database_public == false
+    error_message = "the service database must not be publicly accessible."
   }
 }

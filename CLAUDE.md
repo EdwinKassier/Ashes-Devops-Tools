@@ -1,6 +1,6 @@
 # CLAUDE.md — Agent Onboarding
 
-Terraform GCP + AWS landing zone. 111 modules, 14 deployable roots, remote state via Terraform Cloud.
+Terraform GCP + AWS landing zone. 113 modules, 14 deployable roots, remote state via Terraform Cloud.
 
 ---
 
@@ -122,7 +122,8 @@ Only the roots you apply pull in credentials — an unapplied workspace needs no
 | Variable | Purpose |
 |----------|---------|
 | `GOOGLE_CLOUD_PROJECT` / GCP ADC | google provider — GCP roots (`gcp-bootstrap`, `gcp-organization`, `gcp-projects`, `gcp-network-hub`, `gcp-workload-<env>`) only |
-| `TFC_AWS_PROVIDER_AUTH` + `TFC_AWS_RUN_ROLE_ARN` | AWS via TFC dynamic (OIDC) credentials — AWS roots only |
+| `TFC_AWS_PROVIDER_AUTH` + `TFC_AWS_PLAN_ROLE_ARN` / `TFC_AWS_APPLY_ROLE_ARN` | AWS via TFC dynamic (OIDC) credentials, per-account `tfc-plan`/`tfc-apply` roles from `modules/aws/iam/tfc-oidc-baseline` (set per workspace by `envs/tfc-admin`) — AWS roots only |
+| `TFC_GCP_PROVIDER_AUTH` + `TFC_GCP_WORKLOAD_PROVIDER_NAME` + `TFC_GCP_PLAN/APPLY_SERVICE_ACCOUNT_EMAIL` | GCP via TFC dynamic credentials, per-stage plan/apply SAs from `gcp-bootstrap` (set per workspace by `envs/tfc-admin`) — GCP roots only |
 | `AWS_PROFILE` | AWS local/OIDC fallback when not using TFC dynamic credentials — AWS roots only |
 | `SUPABASE_ACCESS_TOKEN` | supabase provider — `saas` root only, when `enable_supabase=true` |
 | `VERCEL_API_TOKEN` | vercel provider — `saas` root only, when `enable_vercel=true` |
@@ -152,7 +153,7 @@ Two intentional toggle prefixes — keep them distinct:
 
 Do not introduce a third `use_*`/`with_*` variant. Keep variable descriptions free of internal provenance codes; open/preview/deferred items live in [`docs/known-gaps.md`](docs/known-gaps.md), not in `description` strings.
 
-### Sensitive values in `null_resource` triggers
+### Sensitive values in `terraform_data` / `null_resource` triggers
 
 Terraform 1.9 rejects raw sensitive values in triggers. Always hash them:
 
@@ -202,7 +203,7 @@ Vercel executes `ignore_command` in `/bin/sh`, not bash. Use POSIX sh syntax:
 
 ### vault-secrets Node.js dependency
 
-`modules/supabase/vault-secrets` installs its Node.js dependencies **automatically** at apply time: a `null_resource.npm_install` runs `npm ci --prefix modules/supabase/vault-secrets/scripts` before the bootstrap/reconcile provisioners (which `import { Pool } from "pg"`). No manual step — the apply runner just needs **Node.js 18+ and npm** on PATH. To prime locally: `npm ci --prefix modules/supabase/vault-secrets/scripts`.
+`modules/supabase/vault-secrets` installs its Node.js dependencies **automatically** at apply time: a `terraform_data.npm_install` runs `npm ci --ignore-scripts --no-audit --no-fund --prefix modules/supabase/vault-secrets/scripts` before the bootstrap/reconcile provisioners (which `import { Pool } from "pg"`). No manual step — the apply runner just needs **Node.js 18+ and npm** on PATH. To prime locally: `npm ci --ignore-scripts --prefix modules/supabase/vault-secrets/scripts`. The vault RPCs live in the unexposed `iac_vault` schema (never in `public`).
 
 ### AWS modules
 

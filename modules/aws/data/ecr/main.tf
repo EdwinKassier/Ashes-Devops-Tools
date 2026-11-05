@@ -52,11 +52,14 @@ resource "aws_ecr_lifecycle_policy" "this" {
       each.value.keep_last_tagged_images != null ? [{
         rulePriority = 2
         description  = "Keep only the last ${each.value.keep_last_tagged_images} tagged images"
+        # Match EVERY tagged image (tagPatternList "*"), not just a fixed set of
+        # prefixes — CI pipelines usually tag by git SHA, which a prefix list of
+        # v/release/prod would never match, so the cap would silently not apply.
         selection = {
-          tagStatus     = "tagged"
-          tagPrefixList = ["v", "release", "prod"]
-          countType     = "imageCountMoreThan"
-          countNumber   = each.value.keep_last_tagged_images
+          tagStatus      = "tagged"
+          tagPatternList = ["*"]
+          countType      = "imageCountMoreThan"
+          countNumber    = each.value.keep_last_tagged_images
         }
         action = { type = "expire" }
       }] : [],

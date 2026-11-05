@@ -37,3 +37,8 @@ output "instance_identifiers" {
   description = "Identifiers of the cluster instances (writer + readers)."
   value       = aws_rds_cluster_instance.this[*].identifier
 }
+
+output "publicly_accessible" {
+  description = "Whether ANY cluster instance is publicly accessible. Always false — instances are hard-wired to publicly_accessible = false; exported so composing stages can assert it."
+  value       = anytrue([for i in aws_rds_cluster_instance.this : i.publicly_accessible])
+}

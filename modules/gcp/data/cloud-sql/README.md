@@ -55,9 +55,9 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_sql_database.this (modules/gcp/data/cloud-sql/main.tf#L135)
+- resource.google_sql_database.this (modules/gcp/data/cloud-sql/main.tf#L138)
 - resource.google_sql_database_instance.this (modules/gcp/data/cloud-sql/main.tf#L60)
-- resource.google_sql_user.this (modules/gcp/data/cloud-sql/main.tf#L143)
+- resource.google_sql_user.this (modules/gcp/data/cloud-sql/main.tf#L146)
 - resource.terraform_data.deletion_protection_guard (modules/gcp/data/cloud-sql/main.tf#L50)
 
 
@@ -73,6 +73,7 @@ The following resources are created:
 | <a name="input_database_flags"></a> [database\_flags](#input\_database\_flags) | Additional database flags to set on the instance. The cloudsql.iam\_authentication flag is managed by enable\_iam\_authentication and must not be duplicated here. | <pre>list(object({<br/>    name  = string<br/>    value = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_database_version"></a> [database\_version](#input\_database\_version) | The PostgreSQL engine version (e.g. POSTGRES\_16) | `string` | `"POSTGRES_16"` | no |
 | <a name="input_databases"></a> [databases](#input\_databases) | List of logical database names to create on the instance | `list(string)` | `[]` | no |
+| <a name="input_edition"></a> [edition](#input\_edition) | Cloud SQL edition. ENTERPRISE (default) matches the db-custom-* tiers; ENTERPRISE\_PLUS needs a db-perf-optimized-* tier. Set explicitly because PostgreSQL 16+ otherwise defaults to ENTERPRISE\_PLUS and the default tier fails to create. | `string` | `"ENTERPRISE"` | no |
 | <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | Prevent accidental destruction of the instance.<br/><br/>When true, the instance's own deletion\_protection API attribute is set and a<br/>terraform\_data guard resource is created with prevent\_destroy = true, so<br/>Terraform refuses to destroy this module. To intentionally remove a protected<br/>instance, set this to false (which also removes the guard) and apply, or run:<br/>  terraform state rm 'module.<name>.terraform\_data.deletion\_protection\_guard' | `bool` | `true` | no |
 | <a name="input_enable_high_availability"></a> [enable\_high\_availability](#input\_enable\_high\_availability) | When true the instance runs REGIONAL (synchronous standby, automatic failover); otherwise ZONAL. | `bool` | `false` | no |
 | <a name="input_enable_iam_authentication"></a> [enable\_iam\_authentication](#input\_enable\_iam\_authentication) | Enable Cloud SQL IAM database authentication (sets the cloudsql.iam\_authentication flag on). | `bool` | `true` | no |
@@ -94,6 +95,8 @@ The following resources are created:
 | <a name="output_connection_name"></a> [connection\_name](#output\_connection\_name) | The connection name of the instance, used by the Cloud SQL Auth Proxy (<project>:<region>:<name>) |
 | <a name="output_name"></a> [name](#output\_name) | The name of the Cloud SQL instance |
 | <a name="output_private_ip_address"></a> [private\_ip\_address](#output\_private\_ip\_address) | The private IPv4 address assigned to the instance |
+| <a name="output_private_network"></a> [private\_network](#output\_private\_network) | The VPC network the instance is peered into via Private Service Access. |
+| <a name="output_public_ip_enabled"></a> [public\_ip\_enabled](#output\_public\_ip\_enabled) | Whether the instance has a public IPv4 address. Always false: the module is private-IP only. |
 | <a name="output_self_link"></a> [self\_link](#output\_self\_link) | The URI of the Cloud SQL instance |
 <!-- END_TF_DOCS -->
 

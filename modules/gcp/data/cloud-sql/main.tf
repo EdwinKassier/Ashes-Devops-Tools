@@ -97,6 +97,9 @@ resource "google_sql_database_instance" "this" {
   encryption_key_name = var.encryption_key_name
 
   settings {
+    # Explicit edition: PostgreSQL 16+ defaults to ENTERPRISE_PLUS, which rejects
+    # the db-custom-* tiers this module defaults to (it needs db-perf-optimized-*).
+    edition           = var.edition
     tier              = var.tier
     availability_type = var.enable_high_availability ? "REGIONAL" : "ZONAL"
     disk_autoresize   = true

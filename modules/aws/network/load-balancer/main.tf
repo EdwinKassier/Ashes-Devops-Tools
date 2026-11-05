@@ -5,8 +5,11 @@
 #   - aws_lb                : the load balancer itself (application OR network,
 #                             internet-facing OR internal)
 #   - aws_lb_target_group   : one per entry in var.target_groups (for_each)
-#   - aws_lb_listener       : one per entry in var.listeners (for_each), each
-#                             default-forwarding to a named target group
+#   - aws_lb_listener       : one per entry in var.listeners (for_each); the
+#                             default action forwards to a named target group,
+#                             returns a fixed response, or redirects to HTTPS
+#   - aws_lb_listener_rule  : one per entry in var.listener_rules — host/path
+#                             routing to a target group (shared ALB pattern)
 #
 # An optional security group (var.create_security_group) is created for ALBs;
 # its id is merged with any caller-supplied var.security_group_ids. Access
@@ -38,15 +41,16 @@ resource "aws_security_group" "this" {
   description = "Managed security group for the ${var.name} load balancer."
   vpc_id      = var.vpc_id
 
-  # Egress is intentionally open so the LB can reach its targets on any port;
+  # Egress lets the LB reach its targets on any port, limited to
+  # var.egress_cidr_blocks (narrow it to the VPC CIDR when targets are in-VPC);
   # ingress is left to the caller (add rules via the exported security_group_id)
   # so this module does not silently expose the LB to the internet.
   egress {
-    description = "Allow all outbound to targets."
+    description = "Allow outbound to targets."
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"] #tfsec:ignore:aws-ec2-no-public-egress-sgr -- LB must reach targets; ingress is caller-controlled
+    cidr_blocks = var.egress_cidr_blocks #tfsec:ignore:aws-ec2-no-public-egress-sgr -- LB must reach targets; ingress is caller-controlled
   }
 
   tags = merge(var.tags, { Name = "${var.name}-lb" })
@@ -68,6 +72,10 @@ resource "aws_lb" "this" {
   drop_invalid_header_fields = local.is_application ? var.drop_invalid_header_fields : null
 
   enable_deletion_protection = var.enable_deletion_protection
+
+  # Always on for ALBs; NLBs default it off, which concentrates traffic on the
+  # targets in the client's AZ and fails badly when one AZ is unhealthy.
+  enable_cross_zone_load_balancing = var.enable_cross_zone_load_balancing
 
   dynamic "access_logs" {
     for_each = var.access_logs != null ? [var.access_logs] : []
@@ -130,9 +138,66 @@ resource "aws_lb_listener" "this" {
   certificate_arn = each.value.certificate_arn
   ssl_policy      = each.value.certificate_arn != null ? each.value.ssl_policy : null
 
+  # Default action: forward to a target group (single-service LB), a fixed
+  # response (shared LB whose services are routed by listener_rules), or an
+  # HTTP -> HTTPS redirect.
   default_action {
+    type             = each.value.default_action == "redirect-https" ? "redirect" : each.value.default_action
+    target_group_arn = each.value.default_action == "forward" ? aws_lb_target_group.this[each.value.target_group_key].arn : null
+
+    dynamic "fixed_response" {
+      for_each = each.value.default_action == "fixed-response" ? [each.value.fixed_response] : []
+      content {
+        content_type = fixed_response.value.content_type
+        message_body = fixed_response.value.message_body
+        status_code  = fixed_response.value.status_code
+      }
+    }
+
+    dynamic "redirect" {
+      for_each = each.value.default_action == "redirect-https" ? [1] : []
+      content {
+        port        = "443"
+        protocol    = "HTTPS"
+        status_code = "HTTP_301"
+      }
+    }
+  }
+
+  tags = var.tags
+}
+
+# -----------------------------------------------------------------------------
+# LISTENER RULES — host/path routing to target groups (shared ALB)
+# -----------------------------------------------------------------------------
+
+resource "aws_lb_listener_rule" "this" {
+  for_each = var.listener_rules
+
+  listener_arn = aws_lb_listener.this[each.value.listener_key].arn
+  priority     = each.value.priority
+
+  action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.this[each.value.target_group_key].arn
+  }
+
+  dynamic "condition" {
+    for_each = length(each.value.host_headers) > 0 ? [each.value.host_headers] : []
+    content {
+      host_header {
+        values = condition.value
+      }
+    }
+  }
+
+  dynamic "condition" {
+    for_each = length(each.value.path_patterns) > 0 ? [each.value.path_patterns] : []
+    content {
+      path_pattern {
+        values = condition.value
+      }
+    }
   }
 
   tags = var.tags

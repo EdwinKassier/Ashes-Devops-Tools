@@ -191,6 +191,12 @@ variable "vpc_sc_enable_dry_run" {
   default     = true
 }
 
+variable "vpc_sc_dry_run_restricted_services" {
+  description = "Optional restricted_services to TRIAL in a staged dry-run spec while the perimeter stays ENFORCED (only meaningful with vpc_sc_enable_dry_run = false). Status keeps enforcing vpc_sc_restricted_services; the dry-run spec logs what this list would block. Default null = no staged spec."
+  type        = list(string)
+  default     = null
+}
+
 variable "vpc_sc_perimeter_title" {
   description = "Optional title override for the VPC-SC perimeter"
   type        = string
@@ -363,4 +369,88 @@ variable "saas_secret_accessor_members" {
     condition     = alltrue([for m in var.saas_secret_accessor_members : can(regex("^(serviceAccount|user|group):", m))])
     error_message = "Each saas_secret_accessor_members entry must be a prefixed IAM member (serviceAccount:, user:, or group:)."
   }
+}
+
+# -----------------------------------------------------------------------------
+# APPLICATION GOLDEN PATH (modules/gcp/stages/app-services)
+#
+# Default empty / off: nothing is created. See docs/guides/deploying-a-service.md.
+# -----------------------------------------------------------------------------
+
+variable "app_services" {
+  description = <<-EOT
+    Application services for this environment, keyed by service name (2-22 chars).
+    Each entry creates an Artifact Registry repo, a runtime SA and an internal
+    Cloud Run v2 service in the host project; `database = {}` adds a private-IP
+    Cloud SQL Postgres with IAM auth, and `github = { repository_id = "<numeric>" }`
+    adds a WIF-bound deploy SA (needs enable_app_deploy_wif = true). The full,
+    typed shape (and every default) is the `services` variable of
+    modules/gcp/stages/app-services, which validates it; see
+    docs/guides/deploying-a-service.md for a worked entry.
+  EOT
+  type        = any
+  default     = {}
+}
+
+variable "app_subnetwork_id" {
+  description = "Subnet ID (projects/<p>/regions/<r>/subnetworks/<s>) for Cloud Run Direct VPC egress and GKE nodes. Null uses the first private subnet of the env VPC."
+  type        = string
+  default     = null
+}
+
+variable "artifact_registry_kms_key_name" {
+  description = "Optional CMEK key for every app Artifact Registry repo. Null uses Google-managed encryption."
+  type        = string
+  default     = null
+}
+
+variable "enable_app_deploy_wif" {
+  description = "Create the app-deploy Workload Identity pool (GitHub OIDC) in the env host project, separate from the infra pool in gcp-bootstrap. Required for any app_services entry that sets `github`."
+  type        = bool
+  default     = false
+}
+
+variable "app_deploy_wif_pool_id" {
+  description = "ID of the app-deploy WIF pool. Null defaults to \"apps-<environment>\"."
+  type        = string
+  default     = null
+}
+
+variable "github_repository_owner_id" {
+  description = "Optional numeric GitHub owner (org) ID; when set the app-deploy WIF provider also requires repository_owner_id to match."
+  type        = string
+  default     = null
+}
+
+variable "enable_gke_autopilot" {
+  description = "Create one private GKE Autopilot cluster for the environment (default off)."
+  type        = bool
+  default     = false
+}
+
+variable "gke_master_ipv4_cidr_block" {
+  description = "The /28 control-plane CIDR for the env GKE Autopilot cluster."
+  type        = string
+  default     = "172.16.0.0/28"
+}
+
+variable "gke_master_authorized_networks" {
+  description = "CIDR blocks allowed to reach the GKE control plane."
+  type = list(object({
+    cidr_block   = string
+    display_name = optional(string)
+  }))
+  default = []
+}
+
+variable "gke_cluster_secondary_range_name" {
+  description = "Subnet secondary range for GKE pod IPs. Null lets GKE allocate one."
+  type        = string
+  default     = null
+}
+
+variable "gke_services_secondary_range_name" {
+  description = "Subnet secondary range for GKE Service IPs. Null lets GKE allocate one."
+  type        = string
+  default     = null
 }

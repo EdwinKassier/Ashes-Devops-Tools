@@ -47,6 +47,11 @@ output "nat_ip" {
   value       = var.enable_networking ? try(module.integrated_nat[0].nat_ips, null) : null
 }
 
+output "private_service_access_range_name" {
+  description = "Name of the Private Service Access range reserved on this VPC (private-IP Cloud SQL / Memorystore peer through it), or null when PSA is disabled."
+  value       = var.enable_networking && var.enable_private_service_access ? module.private_service_access[0].address_resource.name : null
+}
+
 
 # ---------------------------------------------------------------------------
 # CONNECTIVITY

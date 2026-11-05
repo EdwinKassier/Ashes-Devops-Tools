@@ -1,9 +1,10 @@
 # Production hardening overlay for envs/gcp/bootstrap. Apply IN ADDITION to your own tfvars:
 #   terraform -chdir=envs/gcp/bootstrap plan -var-file=your.tfvars -var-file=../../../examples/presets/prod-gcp-bootstrap.tfvars
 #
-# Routes the high-privilege org roles to a separate resman SA so a compromise of the
-# CI-impersonable SA does not hold them (docs/runbooks/production-hardening.md, "Contain
-# the automation identity").
-# PREVIEW: mock-tested only. Validate on a throwaway org first; it also requires the WIF
-# binding and downstream impersonation switch described in the runbook.
-enable_privilege_split = true
+# Per-stage plan/apply service accounts with run-phase-scoped WIF bindings are now
+# the default (audit C2), so the old enable_privilege_split toggle is gone.
+#
+# Keep the GitHub Actions -> GCP federation pool OFF unless a workflow needs it.
+# When enabled it is bound only to the read-only organization-plan SA, pinned to
+# the immutable repository_id / repository_owner_id.
+enable_github_wif = false

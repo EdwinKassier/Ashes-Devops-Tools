@@ -152,3 +152,14 @@ run "rejects_invalid_update_track" {
     maintenance_window_update_track = "nightly"
   }
 }
+
+run "enterprise_plus_requires_perf_optimized_tier" {
+  command = plan
+
+  variables {
+    edition = "ENTERPRISE_PLUS"
+    tier    = "db-custom-1-3840"
+  }
+
+  expect_failures = [var.edition]
+}

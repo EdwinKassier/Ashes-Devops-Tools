@@ -8,7 +8,9 @@
 #
 # Everything is a toggle: the cluster is either created here (create_cluster, with
 # Container Insights on) or passed in; the log group is created here or passed in;
-# ALB registration and Application Auto Scaling are both opt-in.
+# ALB registration and Application Auto Scaling are both opt-in. Set
+# enable_external_deployments when a CI pipeline rolls task definition revisions,
+# so Terraform stops reverting them (see the service variants below).
 #
 # IAM roles (execution + task) are accepted as ARNs — least-privilege scoping is
 # the caller's responsibility, so this module never mints permissive roles.
@@ -103,17 +105,35 @@ resource "aws_ecs_task_definition" "this" {
 }
 
 # ── Service ───────────────────────────────────────────────────────────────────
+#
+# Two mutually exclusive variants, selected by enable_external_deployments
+# (lifecycle.ignore_changes cannot be conditional):
+#   - this                : Terraform owns the running task definition revision.
+#   - externally_deployed : a CI pipeline (e.g. GitHub Actions
+#                           RegisterTaskDefinition + UpdateService) rolls new
+#                           revisions, so Terraform ignores task_definition and
+#                           desired_count instead of reverting every deploy /
+#                           autoscaling decision on the next apply.
 
 resource "aws_ecs_service" "this" {
+  count = var.enable_external_deployments ? 0 : 1
+
   name            = var.name
   cluster         = local.cluster_arn
   task_definition = aws_ecs_task_definition.this.arn
   desired_count   = var.desired_count
   launch_type     = "FARGATE"
+  propagate_tags  = "SERVICE"
 
   enable_execute_command = var.enable_execute_command
 
   health_check_grace_period_seconds = local.attach_lb ? var.health_check_grace_period_seconds : null
+
+  # Roll back automatically when a new revision never becomes healthy.
+  deployment_circuit_breaker {
+    enable   = var.enable_deployment_circuit_breaker
+    rollback = var.enable_deployment_circuit_breaker
+  }
 
   network_configuration {
     subnets          = var.subnets
@@ -133,6 +153,58 @@ resource "aws_ecs_service" "this" {
   tags = var.tags
 }
 
+resource "aws_ecs_service" "externally_deployed" {
+  count = var.enable_external_deployments ? 1 : 0
+
+  name            = var.name
+  cluster         = local.cluster_arn
+  task_definition = aws_ecs_task_definition.this.arn
+  desired_count   = var.desired_count
+  launch_type     = "FARGATE"
+  propagate_tags  = "SERVICE"
+
+  enable_execute_command = var.enable_execute_command
+
+  health_check_grace_period_seconds = local.attach_lb ? var.health_check_grace_period_seconds : null
+
+  deployment_circuit_breaker {
+    enable   = var.enable_deployment_circuit_breaker
+    rollback = var.enable_deployment_circuit_breaker
+  }
+
+  network_configuration {
+    subnets          = var.subnets
+    security_groups  = var.security_group_ids
+    assign_public_ip = var.assign_public_ip
+  }
+
+  dynamic "load_balancer" {
+    for_each = local.attach_lb ? [1] : []
+    content {
+      target_group_arn = var.target_group_arn
+      container_name   = local.container_name
+      container_port   = local.lb_port
+    }
+  }
+
+  tags = var.tags
+
+  lifecycle {
+    # CI owns the running revision and (with autoscaling) the task count.
+    ignore_changes = [task_definition, desired_count]
+  }
+}
+
+# The service moved from a singleton to a count-gated resource.
+moved {
+  from = aws_ecs_service.this
+  to   = aws_ecs_service.this[0]
+}
+
+locals {
+  service = var.enable_external_deployments ? aws_ecs_service.externally_deployed[0] : aws_ecs_service.this[0]
+}
+
 # ── Autoscaling (optional) ────────────────────────────────────────────────────
 
 resource "aws_appautoscaling_target" "this" {
@@ -140,7 +212,7 @@ resource "aws_appautoscaling_target" "this" {
 
   max_capacity       = var.autoscaling_max_capacity
   min_capacity       = var.autoscaling_min_capacity
-  resource_id        = "service/${local.cluster_name}/${aws_ecs_service.this.name}"
+  resource_id        = "service/${local.cluster_name}/${local.service.name}"
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
 }

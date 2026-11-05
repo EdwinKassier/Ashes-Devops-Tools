@@ -49,6 +49,12 @@ module "aws_workload" {
   aws_enabled_regions = var.aws_enabled_regions
   vpc_cidr            = var.vpc_cidr
 
+  # Spoke is named workload-<environment> (local.environment, see providers.tf)
+  # and routes the configured tiers to the shared TGW.
+  environment           = local.environment
+  tgw_route_tiers       = var.tgw_route_tiers
+  tgw_destination_cidrs = var.tgw_destination_cidrs
+
   # Network cross-root contract: attach the spoke to the shared TGW and allocate
   # the VPC CIDR from the region's shared IPAM pool.
   tgw_id       = data.terraform_remote_state.aws_network.outputs.tgw_id
@@ -63,6 +69,49 @@ module "aws_workload" {
 
   enable_edge    = var.enable_edge
   workload_roles = var.workload_roles
+}
+
+# =============================================================================
+# APP SERVICES — the application golden path (audit: Boilerplate H)
+#
+# One entry in var.services = an ECR repo, a Fargate service in the spoke's
+# private subnets behind the shared internal ALB, least-privilege task roles, a
+# KMS-encrypted log group, and optionally a GitHub Actions OIDC deploy role and
+# an Aurora PostgreSQL cluster. Default services = {} creates nothing. See
+# docs/guides/deploying-a-service.md (AWS section).
+# =============================================================================
+
+module "app_services" {
+  source = "../../../modules/aws/stages/app-services"
+
+  environment = local.environment
+  aws_region  = var.aws_region
+
+  # Placement: the spoke VPC this root just built. Tasks + the internal ALB in
+  # the private tier (egress via the TGW to central inspection); Aurora in the
+  # isolated tier (no route off the VPC).
+  vpc_id              = module.aws_workload.vpc_id
+  vpc_cidr            = var.vpc_cidr
+  service_subnet_ids  = lookup(module.aws_workload.subnet_ids_by_tier, var.app_service_subnet_tier, [])
+  alb_subnet_ids      = lookup(module.aws_workload.subnet_ids_by_tier, var.app_alb_subnet_tier, [])
+  database_subnet_ids = lookup(module.aws_workload.subnet_ids_by_tier, var.app_database_subnet_tier, [])
+  kms_key_arn         = var.kms_key_arn
+
+  services = var.services
+
+  enable_github_oidc          = var.enable_github_oidc
+  create_github_oidc_provider = var.create_github_oidc_provider
+  github_oidc_provider_arn    = var.github_oidc_provider_arn
+
+  alb_internal                   = var.app_alb_internal
+  alb_certificate_arn            = var.app_alb_certificate_arn
+  alb_ingress_cidrs              = var.app_alb_ingress_cidrs
+  alb_enable_deletion_protection = var.app_alb_enable_deletion_protection
+  alb_access_logs_bucket         = var.app_alb_access_logs_bucket
+
+  log_retention_days  = var.app_log_retention_days
+  enable_alarms       = var.enable_app_alarms
+  alarm_sns_topic_arn = var.app_alarm_sns_topic_arn
 }
 
 # =============================================================================

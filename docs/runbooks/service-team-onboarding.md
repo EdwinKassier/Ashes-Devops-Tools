@@ -16,7 +16,7 @@ Each service team gets:
 2. Shared VPC attachment (the team's VMs use the existing host network)
 3. IAM bindings for their admin Google Group
 
-> **WIF note:** The bootstrap module's WIF pool is hardcoded to a single GitHub repository (`var.github_org`/`var.github_repo`). To grant a new team's GitHub repository access to GCP, you must either: (a) update `github_org`/`github_repo` if it is a monorepo, or (b) manually create a WIF pool binding for their repo using `gcloud iam workload-identity-pools providers` outside of Terraform.
+> **App deploys (WIF):** to deploy an application from a team's GitHub repository, do not touch the bootstrap (infrastructure) WIF pool. Add an `app_services` entry with `github = { repository_id = "<numeric id>" }` in the `gcp-workload-<env>` workspace. It creates a per-service deploy SA bound to an app-only WIF pool in the env host project. See [`../guides/deploying-a-service.md`](../guides/deploying-a-service.md). The service-project path in this runbook is for teams that need their own project.
 
 ---
 

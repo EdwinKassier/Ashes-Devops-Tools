@@ -56,6 +56,22 @@ variable "tier" {
   }
 }
 
+variable "edition" {
+  description = "Cloud SQL edition. ENTERPRISE (default) matches the db-custom-* tiers; ENTERPRISE_PLUS needs a db-perf-optimized-* tier. Set explicitly because PostgreSQL 16+ otherwise defaults to ENTERPRISE_PLUS and the default tier fails to create."
+  type        = string
+  default     = "ENTERPRISE"
+
+  validation {
+    condition     = contains(["ENTERPRISE", "ENTERPRISE_PLUS"], var.edition)
+    error_message = "edition must be ENTERPRISE or ENTERPRISE_PLUS."
+  }
+
+  validation {
+    condition     = var.edition != "ENTERPRISE_PLUS" || can(regex("^db-perf-optimized-", var.tier))
+    error_message = "edition = ENTERPRISE_PLUS requires a db-perf-optimized-* tier."
+  }
+}
+
 # -----------------------------------------------------------------------------
 # PRIVATE NETWORKING (secure by default — no public IP)
 # -----------------------------------------------------------------------------

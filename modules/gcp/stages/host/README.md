@@ -352,6 +352,7 @@ The following resources are created:
 | <a name="output_packet_mirroring_policies"></a> [packet\_mirroring\_policies](#output\_packet\_mirroring\_policies) | All packet mirroring policy outputs |
 | <a name="output_packet_mirroring_policy_ids"></a> [packet\_mirroring\_policy\_ids](#output\_packet\_mirroring\_policy\_ids) | The IDs of all packet mirroring policies |
 | <a name="output_peering_states"></a> [peering\_states](#output\_peering\_states) | The state of each VPC peering connection |
+| <a name="output_private_service_access_range_name"></a> [private\_service\_access\_range\_name](#output\_private\_service\_access\_range\_name) | Name of the Private Service Access range reserved on this VPC (private-IP Cloud SQL / Memorystore peer through it), or null when PSA is disabled. |
 | <a name="output_security_policy_id"></a> [security\_policy\_id](#output\_security\_policy\_id) | The Cloud Armor security policy ID |
 | <a name="output_security_policy_self_link"></a> [security\_policy\_self\_link](#output\_security\_policy\_self\_link) | The Cloud Armor security policy self link |
 | <a name="output_shared_vpc_service_project_ids"></a> [shared\_vpc\_service\_project\_ids](#output\_shared\_vpc\_service\_project\_ids) | The IDs of all Shared VPC service project attachments |

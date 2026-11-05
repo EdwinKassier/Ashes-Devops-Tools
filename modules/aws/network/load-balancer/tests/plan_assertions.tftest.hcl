@@ -170,3 +170,48 @@ run "network_lb_internet_facing" {
     error_message = "no security group must be created when create_security_group = false"
   }
 }
+
+# Shared-ALB pattern: HTTPS listener defaults to a fixed 404, HTTP redirects to
+# HTTPS, and services are reached through host/path listener rules.
+run "shared_alb_fixed_response_redirect_and_rules" {
+  command = plan
+
+  variables {
+    listeners = {
+      https = {
+        port            = 443
+        protocol        = "HTTPS"
+        certificate_arn = "arn:aws:acm:eu-west-2:111122223333:certificate/abc"
+        default_action  = "fixed-response"
+      }
+      http = {
+        port           = 80
+        protocol       = "HTTP"
+        default_action = "redirect-https"
+      }
+    }
+    listener_rules = {
+      web = {
+        listener_key     = "https"
+        priority         = 100
+        target_group_key = "web"
+        path_patterns    = ["/web", "/web/*"]
+      }
+    }
+  }
+
+  assert {
+    condition     = aws_lb_listener.this["https"].default_action[0].type == "fixed-response" && aws_lb_listener.this["https"].default_action[0].fixed_response[0].status_code == "404"
+    error_message = "a fixed-response listener must default to a 404"
+  }
+
+  assert {
+    condition     = aws_lb_listener.this["http"].default_action[0].type == "redirect" && aws_lb_listener.this["http"].default_action[0].redirect[0].protocol == "HTTPS"
+    error_message = "a redirect-https listener must 301 to HTTPS"
+  }
+
+  assert {
+    condition     = aws_lb_listener_rule.this["web"].priority == 100 && aws_lb_listener_rule.this["web"].action[0].type == "forward"
+    error_message = "listener rules must forward at the configured priority"
+  }
+}

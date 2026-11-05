@@ -95,3 +95,44 @@ run "unauthenticated_binding_created_on_opt_in" {
     error_message = "the unauthenticated binding must grant roles/run.invoker."
   }
 }
+
+run "binary_authorization_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(google_cloud_run_v2_service.this.binary_authorization) == 0
+    error_message = "Binary Authorization must be off unless binary_authorization is set."
+  }
+}
+
+run "binary_authorization_default_policy_on_opt_in" {
+  command = plan
+
+  variables {
+    binary_authorization = {}
+  }
+
+  assert {
+    condition     = google_cloud_run_v2_service.this.binary_authorization[0].use_default == true
+    error_message = "binary_authorization = {} must enforce the project's default policy (use_default = true)."
+  }
+}
+
+run "direct_vpc_egress_wired" {
+  command = plan
+
+  variables {
+    vpc_access = {
+      egress = "PRIVATE_RANGES_ONLY"
+      network_interfaces = {
+        network    = "projects/mock-project-id/global/networks/vpc"
+        subnetwork = "projects/mock-project-id/regions/europe-west1/subnetworks/private"
+      }
+    }
+  }
+
+  assert {
+    condition     = google_cloud_run_v2_service.this.template[0].vpc_access[0].network_interfaces[0].subnetwork == "projects/mock-project-id/regions/europe-west1/subnetworks/private"
+    error_message = "Direct VPC egress must attach the service to the supplied subnetwork."
+  }
+}

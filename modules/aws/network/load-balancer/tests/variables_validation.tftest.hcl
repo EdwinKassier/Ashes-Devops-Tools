@@ -149,3 +149,39 @@ run "valid_listeners_and_target_groups_accepted" {
     }
   }
 }
+
+run "forward_listener_without_target_group_rejected" {
+  command = plan
+
+  expect_failures = [var.listeners]
+
+  variables {
+    listeners = {
+      http = {
+        port     = 80
+        protocol = "HTTP"
+        # default_action = "forward" (default) but no target_group_key
+      }
+    }
+  }
+}
+
+# ── var.listener_rules ───────────────────────────────────────────────────────
+
+run "listener_rule_without_condition_rejected" {
+  command = plan
+
+  expect_failures = [var.listener_rules]
+
+  variables {
+    target_groups = {
+      web = { name = "app-web-tg", port = 80, protocol = "HTTP" }
+    }
+    listeners = {
+      http = { port = 80, protocol = "HTTP", default_action = "fixed-response" }
+    }
+    listener_rules = {
+      web = { listener_key = "http", priority = 10, target_group_key = "web" }
+    }
+  }
+}
