@@ -225,3 +225,22 @@ variable "logging_project_id" {
   type        = string
   default     = null
 }
+
+variable "enable_cmek_org_policy" {
+  description = "H1/M2: enforce CMEK on sensitive services org-wide (gcp.restrictNonCmekServices). Default false; set true (or use examples/presets/prod-gcp-organization.tfvars) once CMEK keys are wired for cmek_required_services."
+  type        = bool
+  default     = false
+}
+
+variable "cmek_required_services" {
+  description = "Services that require CMEK when enable_cmek_org_policy is true."
+  type        = list(string)
+  default = [
+    "storage.googleapis.com",
+    "bigquery.googleapis.com",
+    "sqladmin.googleapis.com",
+    "spanner.googleapis.com",
+    "pubsub.googleapis.com",
+    "secretmanager.googleapis.com",
+  ]
+}

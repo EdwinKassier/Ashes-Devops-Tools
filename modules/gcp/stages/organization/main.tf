@@ -141,12 +141,28 @@ module "tags" {
 }
 
 # Organization Policies (Governance)
+locals {
+  # H1/M2: opt-in CMEK-required org policy (gcp.restrictNonCmekServices). Default
+  # off (empty list), so a default apply is unchanged. Enable with
+  # var.enable_cmek_org_policy; the hardening preset turns it on. Admins choose
+  # which services require CMEK via var.cmek_required_services.
+  cmek_list_policy = var.enable_cmek_org_policy ? [
+    {
+      constraint     = "gcp.restrictNonCmekServices"
+      allow_all      = false
+      deny_all       = false
+      allowed_values = []
+      denied_values  = var.cmek_required_services
+    }
+  ] : []
+}
+
 module "org_policies" {
   source = "../../governance/org-policy"
 
   parent = "organizations/${module.organization.organization_id}"
 
-  list_policies = [
+  list_policies = concat([
     {
       constraint     = "gcp.resourceLocations"
       allowed_values = var.allowed_regions
@@ -180,7 +196,7 @@ module "org_policies" {
       allow_all      = null
       deny_all       = true
     }
-  ]
+  ], local.cmek_list_policy)
 
   boolean_policies = [
     {

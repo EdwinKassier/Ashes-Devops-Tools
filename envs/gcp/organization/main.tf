@@ -62,6 +62,11 @@ module "organization" {
 
   # G9: opt-in IAM deny policies at the org node (default [] = none).
   iam_deny_policies = var.iam_deny_policies
+
+  # H1/M2: opt-in org-wide CMEK enforcement (default off). The prod-hardening
+  # preset turns this on.
+  enable_cmek_org_policy = var.enable_cmek_org_policy
+  cmek_required_services = var.cmek_required_services
 }
 
 # The projects stage (gcp-projects) and network-hub stage (gcp-network-hub) were

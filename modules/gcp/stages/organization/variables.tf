@@ -266,3 +266,22 @@ variable "iam_deny_policies" {
   }))
   default = []
 }
+
+variable "enable_cmek_org_policy" {
+  description = "H1/M2: enforce CMEK on sensitive services org-wide via the gcp.restrictNonCmekServices org policy. Default false, so a default apply is unchanged; the prod-hardening preset turns it on. Enabling denies creating resources in cmek_required_services without a customer-managed key, so wire CMEK keys for those services first."
+  type        = bool
+  default     = false
+}
+
+variable "cmek_required_services" {
+  description = "Services that require CMEK when enable_cmek_org_policy is true. Admins tune this list."
+  type        = list(string)
+  default = [
+    "storage.googleapis.com",
+    "bigquery.googleapis.com",
+    "sqladmin.googleapis.com",
+    "spanner.googleapis.com",
+    "pubsub.googleapis.com",
+    "secretmanager.googleapis.com",
+  ]
+}
