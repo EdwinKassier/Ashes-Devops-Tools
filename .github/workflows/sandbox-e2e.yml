@@ -1,0 +1,230 @@
+name: Sandbox E2E (real apply)
+
+# The real-apply test loop (audit 2026-11-05, Maintainability: "Nothing proves a
+# real apply works"). Every other test in this repo runs under mock_provider;
+# this workflow runs tests/e2e/{gcp,aws} with `terraform test` + `command =
+# apply` against REAL providers in disposable sandbox projects/accounts,
+# asserts on values read back from the live APIs, and tears everything down.
+#
+# Guarantees:
+#   * Keyless auth only: GCP Workload Identity Federation and AWS GitHub OIDC.
+#     No long-lived keys exist anywhere in this workflow.
+#   * Fork PRs never receive cloud credentials: PR runs need the `e2e` label AND
+#     a head repo equal to this repo. `pull_request` (never
+#     `pull_request_target`) is used, so fork code never runs with secrets.
+#   * Guaranteed teardown: `terraform test` destroys what it created, then an
+#     always() step deletes anything still tagged/labelled e2e-run-id=<run_id>.
+#   * Not configured => skipped with a notice, never red.
+#
+# Setup, costs and the trust policies: docs/guides/sandbox-e2e.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      cloud:
+        description: "Which suites to run"
+        type: choice
+        options:
+          - all
+          - gcp
+          - aws
+        default: all
+  schedule:
+    # Nightly, off the hour to avoid the top-of-hour scheduler backlog.
+    - cron: "17 3 * * *"
+  pull_request:
+    branches:
+      - main
+      - develop
+    types:
+      - opened
+      - labeled
+      - synchronize
+      - reopened
+
+# Nothing by default; each job grants only what it needs.
+permissions: {}
+
+env:
+  TERRAFORM_VERSION: "1.14.3"
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_PLUGIN_CACHE_DIR: /home/runner/.terraform.d/plugin-cache
+
+jobs:
+  preflight:
+    name: E2E Preflight
+    # PR runs: only with the `e2e` label, only from branches of THIS repo, and
+    # on `labeled` only when the label just added is `e2e` (adding any other
+    # label must not re-run a real apply).
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       contains(github.event.pull_request.labels.*.name, 'e2e') &&
+       (github.event.action != 'labeled' || github.event.label.name == 'e2e'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    outputs:
+      gcp: ${{ steps.check.outputs.gcp }}
+      aws: ${{ steps.check.outputs.aws }}
+    steps:
+      - name: Check sandbox configuration
+        id: check
+        env:
+          CLOUD: ${{ inputs.cloud || 'all' }}
+          GCP_WIF_PROVIDER: ${{ vars.E2E_GCP_WIF_PROVIDER }}
+          GCP_SA: ${{ vars.E2E_GCP_SA }}
+          GCP_PROJECT: ${{ vars.E2E_GCP_PROJECT }}
+          AWS_ROLE_ARN: ${{ vars.E2E_AWS_ROLE_ARN }}
+          AWS_REGION: ${{ vars.E2E_AWS_REGION }}
+          GCP_HINT: >-
+            Set repository variables E2E_GCP_WIF_PROVIDER, E2E_GCP_SA and E2E_GCP_PROJECT
+            to enable (docs/guides/sandbox-e2e.md).
+          AWS_HINT: >-
+            Set repository variables E2E_AWS_ROLE_ARN and E2E_AWS_REGION
+            to enable (docs/guides/sandbox-e2e.md).
+        run: |
+          gcp=false
+          aws=false
+          if [ "$CLOUD" = "all" ] || [ "$CLOUD" = "gcp" ]; then
+            if [ -n "$GCP_WIF_PROVIDER" ] && [ -n "$GCP_SA" ] && [ -n "$GCP_PROJECT" ]; then
+              gcp=true
+            else
+              echo "::notice title=GCP e2e skipped::${GCP_HINT}"
+            fi
+          fi
+          if [ "$CLOUD" = "all" ] || [ "$CLOUD" = "aws" ]; then
+            if [ -n "$AWS_ROLE_ARN" ] && [ -n "$AWS_REGION" ]; then
+              aws=true
+            else
+              echo "::notice title=AWS e2e skipped::${AWS_HINT}"
+            fi
+          fi
+          {
+            echo "gcp=${gcp}"
+            echo "aws=${aws}"
+          } >> "$GITHUB_OUTPUT"
+          echo "GCP suite: ${gcp} / AWS suite: ${aws}"
+
+  gcp:
+    name: E2E GCP
+    needs: preflight
+    if: needs.preflight.outputs.gcp == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # A stable OIDC subject (repo:<owner>/<repo>:environment:e2e-sandbox) for the
+    # WIF attribute condition, plus optional protection rules.
+    environment: e2e-sandbox
+    # One GCP run at a time per sandbox; never cancel mid-apply (that is how
+    # orphans are made).
+    concurrency:
+      group: sandbox-e2e-gcp
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TF_VAR_project_id: ${{ vars.E2E_GCP_PROJECT }}
+      TF_VAR_region: ${{ vars.E2E_GCP_REGION || 'europe-west2' }}
+      TF_VAR_run_id: ${{ github.run_id }}
+      TF_VAR_run_attempt: ${{ github.run_attempt }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e  # v4.0.1
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Authenticate to GCP (Workload Identity Federation)
+        id: auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.E2E_GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.E2E_GCP_SA }}
+          project_id: ${{ vars.E2E_GCP_PROJECT }}
+
+      - name: Terraform init
+        run: |
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          terraform -chdir=tests/e2e/gcp init -input=false -lockfile=readonly
+
+      - name: Terraform test (real apply + destroy)
+        run: terraform -chdir=tests/e2e/gcp test -junit-xml="${RUNNER_TEMP}/e2e-gcp-junit.xml"
+
+      - name: Safety-net cleanup (label e2e-run-id=${{ github.run_id }})
+        if: always() && steps.auth.outcome == 'success'
+        run: ./tests/e2e/scripts/cleanup-gcp.sh "$TF_VAR_project_id" "$TF_VAR_region" "$TF_VAR_run_id"
+
+      - name: Upload JUnit report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: e2e-gcp-junit
+          path: ${{ runner.temp }}/e2e-gcp-junit.xml
+          if-no-files-found: ignore
+          retention-days: 14
+
+  aws:
+    name: E2E AWS
+    needs: preflight
+    if: needs.preflight.outputs.aws == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: e2e-sandbox
+    concurrency:
+      group: sandbox-e2e-aws
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TF_VAR_region: ${{ vars.E2E_AWS_REGION }}
+      TF_VAR_run_id: ${{ github.run_id }}
+      TF_VAR_run_attempt: ${{ github.run_attempt }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e  # v4.0.1
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Authenticate to AWS (GitHub OIDC)
+        id: auth
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd  # v6.3.0
+        with:
+          role-to-assume: ${{ vars.E2E_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.E2E_AWS_REGION }}
+          role-session-name: sandbox-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+          role-duration-seconds: 3600
+
+      - name: Terraform init
+        run: |
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          terraform -chdir=tests/e2e/aws init -input=false -lockfile=readonly
+
+      - name: Terraform test (real apply + destroy)
+        run: terraform -chdir=tests/e2e/aws test -junit-xml="${RUNNER_TEMP}/e2e-aws-junit.xml"
+
+      - name: Safety-net cleanup (tag e2e-run-id=${{ github.run_id }})
+        if: always() && steps.auth.outcome == 'success'
+        run: ./tests/e2e/scripts/cleanup-aws.sh "$TF_VAR_region" "$TF_VAR_run_id"
+
+      - name: Upload JUnit report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: e2e-aws-junit
+          path: ${{ runner.temp }}/e2e-aws-junit.xml
+          if-no-files-found: ignore
+          retention-days: 14

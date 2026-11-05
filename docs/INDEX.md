@@ -80,6 +80,7 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
 - [Deploying a Service](guides/deploying-a-service.md): the golden path to run an application on the landing zone
 - [SaaS Integration](architecture/saas-integration.md): options and decision for integrating Supabase/Vercel with the clouds
 - [CI Secrets & Variables](guides/CI_SECRETS.md): repository secrets and variables the workflows expect
+- [Sandbox E2E](guides/sandbox-e2e.md): real-apply `terraform test` suites against disposable GCP/AWS sandboxes (keyless auth, guaranteed teardown)
 
 ## GCP Landing Zone
 
@@ -122,6 +123,7 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
 - [Changelog](../CHANGELOG.md): release notes, breaking changes, and migration guides
 - [Branch Protection](guides/BRANCH_PROTECTION.md): recommended GitHub branch protection and tag ruleset settings
 - [Known Gaps](known-gaps.md): open / unvalidated / deferred items
+- [Compliance Control Matrix](compliance/control-matrix.md): implemented controls mapped to SOC 2, ISO 27001:2022, NIST 800-53 r5 and CIS, with gaps and audit-evidence sources
 
 ## Audits
 

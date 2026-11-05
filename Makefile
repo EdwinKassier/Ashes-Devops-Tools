@@ -247,3 +247,33 @@ clean-locks: ## DANGER: Delete all .terraform.lock.hcl files so they can be rege
 	@echo "$(YELLOW)Re-generate with: terraform providers lock -platform=linux_amd64 -platform=darwin_arm64$(NC)"
 	@printf "Type 'yes' to continue: " && read CONFIRM && [ "$$CONFIRM" = "yes" ] || (echo "Cancelled." && exit 1)
 	@find . -type f -name ".terraform.lock.hcl" -delete 2>/dev/null || true
+
+# ---------------------------------------------------------------------------
+# Sandbox E2E: REAL apply + destroy against a disposable sandbox, never a
+# landing-zone project/account. See docs/guides/sandbox-e2e.md.
+# ---------------------------------------------------------------------------
+.PHONY: e2e-gcp e2e-aws
+
+# Simply-expanded (evaluated once) so the test and the cleanup see the same id.
+ifndef E2E_RUN_ID
+E2E_RUN_ID := $(shell date +%s)
+endif
+E2E_GCP_REGION ?= europe-west2
+E2E_AWS_REGION ?= eu-west-2
+
+e2e-gcp: ## REAL apply: run tests/e2e/gcp in a sandbox project, then label-scoped cleanup: make e2e-gcp E2E_GCP_PROJECT=<sandbox>
+	@[ -n "$(E2E_GCP_PROJECT)" ] || (echo "Error: E2E_GCP_PROJECT (a disposable sandbox project) is required" && exit 1)
+	@$(TERRAFORM) -chdir=tests/e2e/gcp init -input=false -lockfile=readonly >/dev/null
+	@rc=0; \
+	TF_VAR_project_id='$(E2E_GCP_PROJECT)' TF_VAR_region='$(E2E_GCP_REGION)' TF_VAR_run_id='$(E2E_RUN_ID)' \
+		$(TERRAFORM) -chdir=tests/e2e/gcp test || rc=$$?; \
+	./tests/e2e/scripts/cleanup-gcp.sh '$(E2E_GCP_PROJECT)' '$(E2E_GCP_REGION)' '$(E2E_RUN_ID)' || [ $$rc -ne 0 ] || rc=1; \
+	exit $$rc
+
+e2e-aws: ## REAL apply: run tests/e2e/aws in the ambient (sandbox!) AWS account, then tag-scoped cleanup: make e2e-aws E2E_AWS_REGION=eu-west-2
+	@$(TERRAFORM) -chdir=tests/e2e/aws init -input=false -lockfile=readonly >/dev/null
+	@rc=0; \
+	TF_VAR_region='$(E2E_AWS_REGION)' TF_VAR_run_id='$(E2E_RUN_ID)' \
+		$(TERRAFORM) -chdir=tests/e2e/aws test || rc=$$?; \
+	./tests/e2e/scripts/cleanup-aws.sh '$(E2E_AWS_REGION)' '$(E2E_RUN_ID)' || [ $$rc -ne 0 ] || rc=1; \
+	exit $$rc

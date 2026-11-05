@@ -1,0 +1,269 @@
+# Compliance Control Matrix
+
+Maps the controls this landing zone **actually implements in code** to SOC 2
+(2017 Trust Services Criteria, 2022 points of focus), ISO/IEC 27001:2022 Annex A,
+NIST SP 800-53 Rev 5 and the CIS GCP / CIS AWS Foundations Benchmarks. Every row
+names the code path, the variable that turns it on, and its default. Reviewed
+against the tree on 2026-11-05.
+
+> **Read this first.**
+>
+> 1. **Design evidence, not operating evidence.** This repo is a boilerplate. Its
+>    controls are verified by `terraform test` with `mock_provider` only; the repo
+>    has not been applied to a real organization as a whole (see
+>    [Production Hardening](../runbooks/production-hardening.md)). A SOC 2 Type II
+>    or ISO 27001 certification audit needs evidence that the control *operated*
+>    in *your* deployed estate over the audit period. Use this matrix to scope
+>    that evidence, not to replace it.
+> 2. **Defaults matter.** Several controls ship off so a first apply cannot lock
+>    state or break traffic. A default apply is **not** fully hardened. Apply the
+>    `prod-*` presets in [`examples/presets/`](../../examples/presets/README.md).
+> 3. **CIS numbering** is given for CIS GCP Foundations v3.0 and CIS AWS
+>    Foundations v3.0 where we are confident of the section number. Numbering
+>    shifts between benchmark versions. Where we were not certain, the
+>    recommendation is cited by name. Re-check against the version your auditor
+>    uses. AWS Security Hub runs the CIS AWS v3.0.0 standard for you (row DET-02).
+
+## Legend
+
+| Column | Meaning |
+|:-------|:--------|
+| **Default** | **On**: active on a default apply of the root. **Off**: opt-in. **Preset**: off by default, turned on by a `prod-*` preset. **Input**: needs a value you supply (a control with no input creates nothing). **Not wired**: the module exists but no root instantiates it; you must call it. |
+| **Status** | **Mock**: covered by mock-provider plan tests (all rows). **PREVIEW**: listed in [Known Gaps](../known-gaps.md) as unvalidated against a real apply; validate on a non-prod org before claiming it to an auditor. |
+| SOC 2 | Trust Services Criteria IDs (CC = Common Criteria, A = Availability, C = Confidentiality). |
+| ISO | ISO/IEC 27001:2022 Annex A control IDs. |
+| NIST | NIST SP 800-53 Rev 5 control IDs (base control unless an enhancement is clearly implemented). |
+
+Paths are relative to the repo root. `org-stage` means
+`modules/gcp/stages/organization`; `sec-stage` means `modules/aws/stages/security`.
+
+## 1. Identity and access management
+
+| ID | Control | Cloud | Implementation (path · flag) | Default | Status | SOC 2 | ISO | NIST | CIS |
+|:---|:--------|:------|:-----------------------------|:--------|:-------|:------|:----|:-----|:----|
+| IAM-01 | Keyless automation: Terraform Cloud authenticates to GCP through Workload Identity Federation. The provider `attribute_condition` pins the TFC org name, and optionally the immutable org ID and an allow-list of TFC project IDs. | GCP | `modules/gcp/stages/bootstrap/main.tf` → `modules/gcp/iam/workload-identity` · `enable_tfc_oidc`, `tfc_organization_id`, `tfc_project_ids` | On | Mock | CC6.1 | A.5.17, A.8.5 | IA-2, IA-5 | GCP 1.4 (with IAM-03) |
+| IAM-02 | Per-stage, per-phase automation identities (FAST pattern). A read-only `-plan` and a least-privilege `-apply` SA for each control-plane stage and each `gcp-workload-<env>`, bound by composite `workspace:run_phase` so a speculative PR plan can only get a read-only identity. Workload SAs hold no org-level roles; their grants are scoped to their own env folder. | GCP | `modules/gcp/stages/bootstrap/service_accounts.tf`; env-folder grants in `modules/gcp/stages/projects/main.tf` (`workload_sa_folder_roles`) | On | **PREVIEW** (known-gaps C2) | CC6.1, CC6.3, CC8.1 | A.5.3, A.5.15, A.8.2 | AC-5, AC-6, AC-2 | GCP 1.5 (partial: apply SAs hold admin-class roles such as `iam.securityAdmin` by design) |
+| IAM-03 | Service-account key creation **and** key upload denied org-wide. | GCP | org-stage `main.tf` · `iam.disableServiceAccountKeyCreation`, `iam.disableServiceAccountKeyUpload` | On | Mock | CC6.1 | A.5.17, A.8.5 | IA-5 | GCP 1.4 |
+| IAM-04 | GitHub Actions → GCP federation is off. When enabled it is pinned to the immutable `repository_id` and `repository_owner_id` on `refs/heads/main`, and bound only to the read-only organization-plan SA. A null attribute condition is rejected. | GCP | `modules/gcp/stages/bootstrap` · `enable_github_wif`; `modules/gcp/iam/workload-identity/main.tf` precondition | Off (kept off by `prod-gcp-bootstrap.tfvars`) | Mock | CC6.1 | A.8.5 | AC-6, IA-5 | — |
+| IAM-05 | Keyless automation on AWS: a member-account OIDC provider plus `tfc-plan` and `tfc-apply` roles. Each trusts the exact `organization:…:workspace:<ws>:run_phase:<phase>` subject. The plan role is `ReadOnlyAccess`; variable validation rejects Admin, PowerUser and IAMFullAccess on it. | AWS | `modules/aws/iam/tfc-oidc-baseline` via `modules/aws/stages/organization` · `enable_tfc_oidc_baseline`, `tfc_workspace_bindings` | On (roles only for bound accounts) | Mock | CC6.1, CC6.3 | A.5.15, A.8.2, A.8.5 | AC-5, AC-6, IA-2, IA-5 | — |
+| IAM-06 | Human access through IAM Identity Center permission sets and account assignments. Session duration is validated to PT1H–PT12H (default PT1H). ABAC access-control attributes are supported. Default sets: `AdministratorAccess`, `ReadOnly`. | AWS | `envs/aws/identity` → `modules/aws/iam/iam-identity-center` · `permission_sets`, `assignments` | On when root applied | Mock | CC6.1, CC6.2, CC6.3 | A.5.16, A.5.18, A.8.2 | AC-2, AC-6, AC-12 | AWS 1.21 |
+| IAM-07 | Root user containment. Centralized root access management (`RootCredentialsManagement`, `RootSessions`), plus SCP `DenyRootUserActions` at the org root (exempts only the TFC run role and break-glass). | AWS | `modules/aws/governance/iam-organizations-features` · `enabled_features`; `modules/aws/governance/organization-policy/policies/scp-baseline.json` | On | Mock | CC6.1, CC6.3 | A.8.2 | AC-2, AC-6(2), AC-6(5) | AWS 1.4, 1.7 (prevents root use in member accounts) |
+| IAM-08 | IAM user password policy: length 14 or more, upper/lower/number/symbol, reuse prevention 24, max age 90. | AWS | `modules/aws/governance/account-baseline` via `modules/aws/stages/workload` · `password_min_length`, `password_reuse_prevention`, `password_max_age` | On (workload accounts) | Mock | CC6.1 | A.5.17 | IA-5(1) | AWS 1.8, 1.9 |
+| IAM-09 | IAM Access Analyzer: external-access **and** unused-access analyzers. | AWS | `modules/aws/security/access-analyzer-org` in sec-stage | On | Mock | CC6.1, CC6.3 | A.5.18, A.8.2 | AC-6(7), CA-7 | AWS 1.20 |
+| IAM-10 | AWS break-glass role. Standing policy is deny-all until `break_glass_active` flips it. It requires MFA no older than `break_glass_mfa_max_age`, with a 1 h maximum session. It is the only principal exempt from destructive-action SCPs. Assumption raises the `break-glass-use` EventBridge rule. | AWS | `modules/aws/iam/iam-role` via sec-stage · `create_break_glass` (or bring `break_glass_role_arn`); alert in `modules/aws/security/security-notifications` | Off (`create_break_glass = false`); alert On | Mock | CC6.1, CC6.3, CC7.2 | A.8.2, A.5.15 | AC-2, AC-6(9), AU-6, IA-2(1) | AWS 1.4 and 1.7 (supports: removes the need for root) |
+| IAM-11 | GCP break-glass monitoring. Any Admin Activity by a listed principal raises a CRITICAL alert. The same principals are the only exemption from admin containment (IAM-12). | GCP | org-stage → `modules/gcp/monitoring/control-plane` · `break_glass_user`, `break_glass_principal_emails`, `containment_exempt_principals` | Input | Mock | CC6.3, CC7.2 | A.8.2, A.8.16 | AC-2, AC-6(9), AU-6 | — |
+| IAM-12 | Admin containment: an org-node IAM **deny** policy. Org-wide it blocks sink update/delete, exclusion changes, log-bucket delete and VPC-SC perimeter changes. On resources tagged `containment/protected` (the audit buckets and audit CMEK) it blocks delete, setIamPolicy and key-version destroy. Plus `iam_deny_policies` for your own deny rules. | GCP | `modules/gcp/stages/organization/containment.tf` → `modules/gcp/iam/deny-policy` · `enable_admin_containment`, `containment_exempt_principals`, `iam_deny_policies` | Preset (`prod-gcp-organization.tfvars`) | **PREVIEW** | CC6.1, CC6.3 | A.5.3, A.8.2 | AC-3, AC-5, AC-6, AU-9 | — |
+| IAM-13 | Legacy single-identity folder grants to the bootstrap SA are off. | GCP | org-stage · `enable_legacy_admin_folder_roles` | Off (good) | Mock | CC6.3 | A.8.2 | AC-6 | — |
+
+## 2. Preventive guardrails
+
+| ID | Control | Cloud | Implementation (path · flag) | Default | Status | SOC 2 | ISO | NIST | CIS |
+|:---|:--------|:------|:-----------------------------|:--------|:-------|:------|:----|:-----|:----|
+| GRD-01 | Org-node organization-policy baseline (see the constraint table below). | GCP | org-stage `main.tf` `module "org_policies"` → `modules/gcp/governance/org-policy` | On | Mock | CC5.2, CC6.1, CC6.6 | A.5.23, A.8.9 | CM-6, CM-7, AC-3, SC-7 | see below |
+| GRD-02 | Stricter subset on chosen env folders: nested virtualization off, guest attributes off, **OS Login required**, internet-gateway use disabled. | GCP | org-stage `module "prod_folder_policies"` · `strict_folder_policy_environment_keys` (required input) | Input | Mock | CC6.1, CC6.6 | A.8.9 | CM-7, AC-17 | GCP 4.4 (only on listed folders) |
+| GRD-03 | Custom (CEL) organization-policy constraints. | GCP | org-stage · `custom_org_constraints` | Off (`[]`) | Mock | CC5.2 | A.8.9 | CM-6 | — |
+| GRD-04 | CMEK required for listed services (`gcp.restrictNonCmekServices`). | GCP | org-stage · `enable_cmek_org_policy`, `cmek_required_services` | Preset (`prod-gcp-organization.tfvars`) | Mock | CC6.1 | A.8.24 | SC-28, SC-12 | GCP 7.2 and 7.3 (BigQuery CMEK, where BigQuery is listed) |
+| GRD-05 | SCP `scp-deny-tamper` at the org root. It denies leaving the org; stopping or deleting CloudTrail, GuardDuty, Security Hub, Access Analyzer, Macie and Inspector; weakening CloudTrail, GuardDuty, Config and flow logs; tampering with pipeline and break-glass roles; Object Lock bypass on the log archive; and destroy, untag or policy change on protected KMS keys. Exemptions are tiered (break-glass vs pipeline roles). | AWS | `modules/aws/governance/organization-policy/policies/scp-deny-tamper.json.tftpl`; attached in `modules/aws/stages/organization/main.tf` | On | Mock | CC6.1, CC7.2, CC8.1 | A.5.3, A.8.2, A.8.15 | AC-6, AU-9, CM-5, SI-4 | — |
+| GRD-06 | SCP region restriction (exempts TFC run role and break-glass). | AWS | `policies/scp-region-restriction.json` · `allowed_regions` | On | Mock | CC6.1 | A.5.23, A.8.9 | AC-3, CM-7 | — |
+| GRD-07 | RCP data perimeter at the org root: `EnforceOrgIdentities`, `ConfusedDeputyProtection`, `RequireSecureTransport`. | AWS | `policies/rcp-data-perimeter.json.tftpl` · `data_perimeter_trusted_account_ids` | On | Mock | CC6.1, CC6.6, CC6.7 | A.8.3, A.8.12, A.8.24 | AC-3, AC-4, SC-7, SC-8 | AWS 2.1.1 (TLS enforced org-wide for RCP-supported services) |
+| GRD-08 | Declarative EC2 policy on the **Workloads OU**: IMDSv2 required (hop limit 2), VPC Block Public Access `block_ingress`, snapshot and AMI public sharing blocked, serial console disabled. | AWS | `policies/declarative-ec2.json` · `allow_vpc_bpa_exclusions` | On (Workloads OU only) | Mock | CC6.1, CC6.6 | A.8.9, A.8.20 | CM-6, CM-7, SC-7 | AWS 5.6 (IMDSv2) |
+| GRD-09 | Tag policy (required cost/ownership keys) at the org root. GCP equivalent: an advisory OPA `require_labels` policy (CHG-04). | AWS | `policies/tag-policy.json` | On | Mock | CC6.1 (asset inventory) | A.5.9 | CM-8 | — |
+
+**GCP organization-policy constraints shipped by GRD-01 (org node):**
+
+| Constraint | Effect | CIS GCP v3.0 |
+|:-----------|:-------|:-------------|
+| `compute.skipDefaultNetworkCreation` | No default VPC in new projects | 3.1 |
+| `compute.vmExternalIpAccess` (deny all) | No external IPs on VMs | 4.9 |
+| `compute.requireShieldedVm` | Shielded VM required | 4.8 |
+| `compute.disableSerialPortAccess` | Serial port off | 4.5 |
+| `compute.restrictVpcPeering` | Peering only inside the org | — |
+| `compute.requirePrivateGoogleAccess` | Private Google Access on subnets | — |
+| `sql.restrictPublicIp` | No public IP on Cloud SQL | 6.6 |
+| `storage.uniformBucketLevelAccess` | UBLA required | 5.2 |
+| `storage.publicAccessPrevention` | No public buckets | 5.1 |
+| `iam.disableServiceAccountKeyCreation` / `iam.disableServiceAccountKeyUpload` | No user-managed SA keys | 1.4 |
+| `iam.automaticIamGrantsForDefaultServiceAccounts` | Default SAs get no Editor role | "Default service account not used with full access" (name) |
+| `iam.allowedPolicyMemberDomains` (`customer_id`) | Domain-restricted sharing | "Use corporate login credentials" (supports) |
+| `gcp.resourceLocations` (`allowed_regions`) | Data-residency restriction | — |
+| `cloudfunctions.requireVPCConnector` | Functions egress via VPC | — |
+
+The AWS SCPs and declarative policies do **not** apply to the management account
+(an AWS Organizations property), so keep workloads out of it.
+
+## 3. Logging, monitoring and detection
+
+| ID | Control | Cloud | Implementation (path · flag) | Default | Status | SOC 2 | ISO | NIST | CIS |
+|:---|:--------|:------|:-----------------------------|:--------|:-------|:------|:----|:-----|:----|
+| LOG-01 | Org-wide Data Access audit logging: `ADMIN_READ`, `DATA_READ` and `DATA_WRITE` on `allServices`. | GCP | `modules/gcp/governance/cloud-audit-logs/main.tf` (`google_organization_iam_audit_config`) via org-stage | On | Mock | CC7.2 | A.8.15 | AU-2, AU-3, AU-12 | GCP 2.1 |
+| LOG-02 | Aggregated org sink (`include_children`) of all `cloudaudit` logs to a CMEK-encrypted GCS bucket. The bucket has UBLA, Object Versioning, 30-day soft delete and lifecycle deletion at `audit_log_retention_days`. A CMEK BigQuery analytics dataset is also created. | GCP | `modules/gcp/governance/cloud-audit-logs` · `audit_log_retention_days` (365), `audit_soft_delete_retention_days` (30) | On | Mock | CC7.2 | A.8.15, A.5.33 | AU-4, AU-6, AU-9, AU-11 | GCP 2.2 |
+| LOG-03 | WORM lock on the audit bucket (a locked retention policy). **Irreversible.** | GCP | org-stage · `enable_audit_bucket_lock` | Off (commented in prod preset) | Mock | CC7.2 | A.5.33, A.8.15 | AU-9, AU-11 | GCP 2.3 (only when enabled) |
+| LOG-04 | Separation of duties for audit storage. A dedicated logging project holds the audit bucket, BigQuery dataset, audit CMEK keyring and alerts. It must not be owned by the automation SA. | GCP | org-stage · `logging_project_id`, `logging_project_number` | Off | **PREVIEW** (G4) | CC6.3 | A.5.3, A.8.15 | AU-9(4), AC-5 | — |
+| LOG-05 | Control-plane alerting. An org sink routes org and folder Admin Activity into the audit project. Log-match alerts watch org-policy, org IAM, VPC-SC, audit-config, sink/exclusion, custom-role and deny-policy changes, and KMS key-version destroy. A further alert covers audit export errors. A plan-time `check` warns if no notification target is set. | GCP | `modules/gcp/monitoring/control-plane` via org-stage · `enable_control_plane_alerting`, `alert_notification_emails`, `alert_notification_channels` | On (needs a notification Input) | Mock | CC7.2, CC7.3 | A.8.16 | SI-4, AU-6, AU-5 | GCP 2.5, 2.6 (2.4 and 2.7–2.11 project-level metric alerts are **not** shipped) |
+| LOG-06 | VPC flow logs on every host-stage subnet. Flow logs are exported to BigQuery per workload env. Firewall-rule logging is on. | GCP | `modules/gcp/stages/host/foundation.tf` (`enable_flow_logs = true`); `envs/gcp/workload/main.tf` (`enable_vpc_flow_logs_export = true`); host `enable_firewall_logging` | On | Mock | CC7.2 | A.8.15, A.8.16 | AU-12, SI-4 | GCP 3.8 |
+| LOG-07 | Organization CloudTrail: org trail, multi-region, global service events, **log file validation**, SSE-KMS with a dedicated log CMK. Delivered to the log archive account. | AWS | `modules/aws/security/cloudtrail-org` in sec-stage | On | Mock (KMS grant condition **unvalidated**, known-gaps A1) | CC7.2 | A.8.15 | AU-2, AU-3, AU-9(3), AU-12, SI-7 | AWS 3.1, 3.2, 3.5 (S3 object-level data events, 3.8 and 3.9, **not** configured) |
+| LOG-08 | Log archive bucket in a dedicated account: S3 Object Lock **COMPLIANCE** for 365 days, versioning, Block Public Access on all four settings, SSE-KMS with bucket key, `DenyInsecureTransport`, server access logging and Glacier lifecycle. SCP `DenyLogArchiveObjectLockTampering` adds protection. | AWS | `modules/aws/data/log-archive-bucket` · `object_lock_mode`, `retention_days` (module defaults; not exposed at `envs/aws/security`) | On | Mock | CC7.2 | A.5.33, A.8.15 | AU-9, AU-11 | AWS 3.4, 2.1.1, 2.1.4 |
+| LOG-09 | CloudTrail to CloudWatch Logs plus CIS metric-filter alarms. Three filters ship: unauthorized API calls, root usage and IAM policy changes. | AWS | `modules/aws/security/cloudtrail-org` · `enable_cloudwatch_logs`, `cloudwatch_logs_kms_key_arn` | Preset (`prod-aws-security.tfvars`) | **PREVIEW** (A4) | CC7.2 | A.8.16 | AU-6, SI-4 | AWS 4.1, 4.3, 4.4 only (the rest of section 4 is not shipped) |
+| LOG-10 | Security notifications: EventBridge to SNS for GuardDuty findings, Security Hub findings, root usage, `OrganizationAccountAccessRole` use, console sign-in without MFA, and break-glass use. | AWS | `modules/aws/security/security-notifications` in sec-stage · `enable_security_notifications` | On | Mock | CC7.2, CC7.3 | A.8.16, A.5.25 | SI-4, AU-6, IR-5 | AWS 4.2 and 4.3 (via EventBridge, not metric filters) |
+| LOG-11 | AWS Config org-wide: recorder (all supported types), aggregator, delivery to the log archive. | AWS | `modules/aws/security/config-org` in sec-stage, and a recorder in `modules/aws/stages/workload` · `config_record_all_supported` | On | Mock | CC7.1 | A.8.9 | CM-2, CM-8, CA-7 | AWS 3.3 |
+| LOG-12 | Amazon Security Lake (OCSF) for central analytics. | AWS | `modules/aws/security/securitylake` · `enable_security_lake` | On | Mock | CC7.2 | A.8.16 | AU-6, SI-4 | — |
+| LOG-13 | VPC flow logs (`traffic_type = ALL`) to the log archive. This is mandatory: the VPC module cannot be called without a destination. | AWS | `modules/aws/network/vpc/main.tf` (`aws_flow_log`) · `flow_log_destination_arn` | On | Mock | CC7.2 | A.8.15, A.8.16 | AU-12, SI-4 | AWS 3.7 |
+| DET-01 | GuardDuty org-wide with a delegated admin. Features: S3 data events, EKS audit logs, RDS login, Lambda network logs, Runtime Monitoring, and optional EBS malware protection. | AWS | `modules/aws/security/guardduty-org` · `guardduty_enable_ebs_malware_protection` | On | Mock | CC6.8, CC7.2 | A.8.7, A.8.16 | SI-3, SI-4 | — (AWS FSBP, not CIS) |
+| DET-02 | Security Hub with CENTRAL configuration, an ALL_REGIONS finding aggregator, and the standards FSBP v1.0.0, **CIS AWS Foundations v3.0.0** and **NIST SP 800-53 r5**. | AWS | `modules/aws/security/securityhub-org` · `enabled_standard_arns` | On | Mock | CC4.1, CC7.1 | A.5.36, A.8.8 | CA-7, CM-6, RA-5 | AWS 4.16 |
+| DET-03 | Security Command Center: a Pub/Sub notification of ACTIVE findings on a CMEK topic. No SCC tier activation or posture management is shipped (G10). | GCP | `modules/gcp/governance/scc` via org-stage | On (notification only) | Mock | CC7.2 | A.8.16 | SI-4 | — |
+| DET-04 | Amazon Macie org configuration (sensitive-data discovery). | AWS | `modules/aws/security/org-security-service` · `enabled_security_services` contains `macie` | On (removed by the nonprod preset) | Mock | C1.1 | A.5.12, A.8.12 | CM-12, SI-4 | AWS 2.1.3 (classification jobs are yours to define) |
+| DET-05 | Automated incident response: GuardDuty high-severity findings trigger an isolation Lambda and a quarantine security group, with a forensics snapshot role and a forensics CMK. | AWS | `modules/aws/security/incident-response` · `enable_incident_response` | On | Mock | CC7.3, CC7.4 | A.5.26 | IR-4, IR-4(1) | — |
+
+## 4. Data protection
+
+| ID | Control | Cloud | Implementation (path · flag) | Default | Status | SOC 2 | ISO | NIST | CIS |
+|:---|:--------|:------|:-----------------------------|:--------|:-------|:------|:----|:-----|:----|
+| DP-01 | Cloud KMS CMEK for audit logs, audit analytics, SCC notifications, billing alerts and billing export. Default rotation is 90 days (validated to 1–365 days). Protection level defaults to `SOFTWARE`; HSM can be set per key. Autokey is not used. | GCP | `modules/gcp/governance/kms` via org-stage (`module "cmek"`, `module "audit_cmek"`) · per-key `rotation_period`, `protection_level` | On | Mock | CC6.1, CC6.7 | A.8.24 | SC-12, SC-13, SC-28 | GCP 1.10 |
+| DP-02 | Key separation on AWS: separate log, forensics and security-tooling CMKs, with rotation always enabled. Protected-key tagging blocks destroy, untag and policy change through SCP (GRD-05). | AWS | sec-stage `log_cmk`, `forensics_cmk`, `sectool_cmk` → `modules/aws/data/kms-key` · `enable_kms_protection_tag` | On | Mock | CC6.1 | A.8.24, A.5.3 | SC-12, AC-5 | AWS 3.6 |
+| DP-03 | Encryption at rest by default for new EBS volumes; S3 account-level Block Public Access. | AWS | `modules/aws/governance/account-baseline` via `modules/aws/stages/workload` | On (workload accounts) | Mock | CC6.1 | A.8.24 | SC-28 | AWS 2.2.1, 2.1.4 |
+| DP-04 | TLS in transit. AWS: RCP `RequireSecureTransport` (GRD-07); log-archive `DenyInsecureTransport`; CloudFront `TLSv1.2_2021` minimum with a custom domain, and TLS 1.2 to the origin. GCP: Cloud SQL `ssl_mode = ENCRYPTED_ONLY`. | Both | `policies/rcp-data-perimeter.json.tftpl`; `modules/aws/data/log-archive-bucket`; `modules/aws/security/edge-security` (`enable_edge`); `modules/gcp/data/cloud-sql/main.tf` | On (CloudFront only when `enable_edge`) | Mock | CC6.7 | A.8.24, A.5.14 | SC-8, SC-8(1) | AWS 2.1.1; GCP "Cloud SQL requires SSL" (name) |
+| DP-05 | Private-only Cloud SQL (`ipv4_enabled = false`) with automated backups. | GCP | `modules/gcp/data/cloud-sql` | On (when the module is used) | Mock | CC6.6 | A.8.20 | SC-7 | GCP 6.6, 6.7 |
+| DP-06 | VPC Service Controls. The hub perimeter restricts storage, bigquery, cloudfunctions and run, plus additions; there is also a per-environment workload perimeter. Dry-run is the default. An enforced `status` can carry a staged dry-run `spec`. Prod-like envs with a missing or dry-run perimeter raise a plan warning. | GCP | `modules/gcp/stages/network-hub/main.tf` and `envs/gcp/workload/main.tf` → `modules/gcp/network/vpc-sc` · `vpc_sc_access_policy_name` (required), `vpc_sc_enable_dry_run`, `vpc_sc_ingress_identities` | Preset (`prod-gcp-network-hub.tfvars`, `prod-gcp-workload.tfvars` enforce); Input | Mock; perimeter expansion **PREVIEW** (G5) | CC6.6, CC6.7 | A.8.12, A.8.20 | AC-4, SC-7, SC-7(10) | — |
+| DP-07 | Secret storage. GCP Secret Manager supports optional CMEK and replication. AWS Secrets Manager supports an optional CMK and 30-day rotation when you supply a rotation Lambda. | Both | `modules/gcp/data/secret-manager` (used by `envs/gcp/workload` · `enable_saas_secret_bridge`); `modules/aws/security/secrets-baseline` via `modules/aws/stages/shared-services` · `enable_secrets_baseline` | Off (both); rotation needs Input | Mock | CC6.1 | A.5.17, A.8.24 | IA-5(7), SC-28 | — |
+| DP-08 | Container image integrity: ECR tags `IMMUTABLE` and scan-on-push by default; Artifact Registry `immutable_tags` default true; optional CMEK on both. | Both | `modules/aws/data/ecr`; `modules/gcp/artifact-registry` · `kms_key_name` | On (when the module is used) | Mock | CC8.1 | A.8.32 | CM-14, SI-7 | — |
+
+## 5. Network security
+
+| ID | Control | Cloud | Implementation (path · flag) | Default | Status | SOC 2 | ISO | NIST | CIS |
+|:---|:--------|:------|:-----------------------------|:--------|:-------|:------|:----|:-----|:----|
+| NET-01 | Hierarchical firewall policy `policy-hub-shared`, owned by the shared folder and associated with **every** folder: deny TCP 22 and 3389 from `0.0.0.0/0` at priority 500. Logging is on. | GCP | `modules/gcp/stages/network-hub/main.tf` → `modules/gcp/stages/host/firewall.tf` → `modules/gcp/network/hierarchical-firewall` | On | Mock | CC6.6 | A.8.20, A.8.22 | SC-7, AC-17 | GCP 3.6, 3.7 |
+| NET-02 | Shared-VPC hub and spoke, VPC peering restricted to the org, no external VM IPs, and Private Google Access required. Tier-to-tier rules use **legacy** VPC firewall rules, not network firewall policies (G7). | GCP | `modules/gcp/stages/host`, GRD-01 constraints | On | Mock | CC6.6 | A.8.22 | SC-7, AC-4 | GCP 4.9 |
+| NET-03 | Cloud Armor WAF with the OWASP managed rules, adaptive protection and Log4j rules. | GCP | `modules/gcp/stages/host/edge.tf` → `modules/gcp/network/cloud-armor` · `enable_cloud_armor`, `enable_owasp_rules`, `enable_adaptive_protection` | Preset (`prod-gcp-workload.tfvars`) | Mock | CC6.6 | A.8.20 | SC-5, SC-7, SI-10 | — |
+| NET-04 | DNSSEC flag set on the workload's private hub-peering zone. The `dns` module supports DNSSEC for any zone you create; public zones are yours to configure. | GCP | `envs/gcp/workload/main.tf` (`dnssec_enabled = true`) → `modules/gcp/network/dns` · `dnssec_enabled` | On (that zone) | Mock | CC6.6 | A.8.20 | SC-20, SC-21 | GCP 3.3 applies to public zones you add |
+| NET-05 | Centralized inspection: AWS Network Firewall in an inspection VPC behind a Transit Gateway, with a stateful Suricata rule group and FLOW logs to the log bucket. **The default rule set is a placeholder** (`drop http …`); supply your own. | AWS | `modules/aws/stages/network-hub` → `modules/aws/network/network-firewall` · `enable_network_firewall`, `suricata_rules` | On (the nonprod preset turns it off) | Mock | CC6.6 | A.8.20, A.8.22 | SC-7, SC-7(5), SI-4 | — |
+| NET-06 | Route 53 Resolver DNS Firewall (blocked-domain list). | AWS | `modules/aws/network/route53-resolver` (`enable_dns_firewall = true` in network-hub stage) | On | Mock | CC6.6 | A.8.23 | SC-7, SI-4 | — |
+| NET-07 | VPC Block Public Access `block_ingress` through a declarative policy (GRD-08). | AWS | `policies/declarative-ec2.json` | On (Workloads OU) | Mock | CC6.6 | A.8.20 | SC-7 | — |
+| NET-08 | Network Access Analyzer segmentation-intent scope. | AWS | `modules/aws/network/network-access-analyzer` · `enable_network_access_analyzer` | Off | Mock | CC6.6 | A.8.22 | CA-7, SC-7 | — |
+| NET-09 | Edge: CloudFront plus WAFv2 (`AWSManagedRulesCommonRuleSet`, `KnownBadInputs`). | AWS | `modules/aws/security/edge-security` via `modules/aws/stages/workload` · `enable_edge` | Off | Mock | CC6.6 | A.8.20 | SC-5, SC-7, SI-10 | — |
+| NET-10 | AWS Firewall Manager (org-wide WAF and security-group policies). | AWS | `modules/aws/security/firewall-manager-org` · `enable_firewall_manager` | Off | Mock | CC6.6 | A.8.20 | SC-7 | — |
+
+## 6. Backup and recovery
+
+| ID | Control | Cloud | Implementation (path · flag) | Default | Status | SOC 2 | ISO | NIST | CIS |
+|:---|:--------|:------|:-----------------------------|:--------|:-------|:------|:----|:-----|:----|
+| BCK-01 | Central backup vault in the delegated backup account with **Compliance-mode Vault Lock**, so recovery points cannot be deleted before `min_retention_days`, even by root. | AWS | `envs/aws/backup` → `modules/aws/backup/backup-vault` · `changeable_for_days` (3), `min_retention_days` (7) | On when root applied | Mock | A1.2 | A.8.13 | CP-9, CP-9(8) | — |
+| BCK-02 | Automated restore testing: a weekly restore-testing plan over tagged recovery points. | AWS | `modules/aws/backup/backup-vault` · `restore_testing_role_arn` (required), `restore_testing_schedule` | On when root applied | Mock | A1.3 | A.8.13, A.5.30 | CP-4, CP-9(1) | — |
+| BCK-03 | Org `BACKUP_POLICY` on the Workloads OU: daily, 365-day retention, selected by tag `backup = true`. | AWS | `modules/aws/stages/backup` → `modules/aws/backup/backup-org-policy` · `backup_role_arn`, `workloads_ou_id` | On when root applied | Mock | A1.2 | A.8.13 | CP-9 | — |
+| BCK-04 | Cloud SQL automated backups (point-in-time recovery is switchable). | GCP | `modules/gcp/data/cloud-sql` · `enable_point_in_time_recovery` | On (when the module is used) | Mock | A1.2 | A.8.13 | CP-9 | GCP 6.7 |
+| BCK-05 | Compute Engine snapshot schedules. | GCP | `modules/gcp/backup/backup-plan` | **Not wired** | Mock | A1.2 | A.8.13 | CP-9 | — |
+| BCK-06 | Deletion protection on networks and data stores; `prevent_destroy` on KMS keys. | GCP | `enable_deletion_protection` (`envs/gcp/workload`, `envs/gcp/network-hub`) | On | Mock | A1.2 | A.8.13 | CP-10 | — |
+
+## 7. Change management and secure delivery
+
+| ID | Control | Cloud | Implementation (path · flag) | Default | Status | SOC 2 | ISO | NIST | CIS |
+|:---|:--------|:------|:-----------------------------|:--------|:-------|:------|:----|:-----|:----|
+| CHG-01 | PR gate: fmt, docs-check, sharded validate, TFLint, meta-lint (yaml, markdown, conventional commits, consistency, link check), **Trivy** config scan (CRITICAL/HIGH, blocking), **Checkov** (`soft_fail: false`), and `terraform test`. | Repo | `.github/workflows/terraform-plan.yml`, `.github/workflows/reusable-security.yml` | On | n/a | CC8.1 | A.8.25, A.8.29, A.8.32 | CM-3, CM-4, SA-11 | — |
+| CHG-02 | Branch protection: required status checks, one or more approvals, dismiss stale reviews, CODEOWNERS review. CODEOWNERS has a two-team scaffold for security-sensitive paths. | Repo | `docs/guides/BRANCH_PROTECTION.md`; `.github/CODEOWNERS` | **Off: manual GitHub setting; CODEOWNERS teams are placeholders and inert until replaced** | n/a | CC8.1 | A.5.3, A.8.4, A.8.32 | CM-3, CM-5, AC-5 | — |
+| CHG-03 | Terraform Cloud plan/apply separation. Read-only plan identities (IAM-02, IAM-05). No speculative plans on control-plane workspaces and `tfc-admin`. UI destroy is disallowed there. `global_remote_state = false` with an explicit consumer graph. Team access per project (write vs read). | TFC | `envs/tfc-admin/main.tf` → `modules/tfc/workspace` · `speculative_disabled_workspaces`, `platform_team_id`, `viewer_team_ids` | On (once `tfc-admin` is applied) | Mock | CC6.1, CC8.1 | A.5.3, A.8.31, A.8.32 | CM-5, AC-5, AC-6 | — |
+| CHG-04 | OPA policy set (`gcs_no_public_buckets`, `require_labels`). Advisory by default. | TFC | `envs/tfc-admin` `tfe_policy_set.opa`; `policies/opa/` · `enable_policy_sets`, `vcs_repo` | Off | Mock | CC8.1 | A.8.9 | CM-3, CM-6 | — |
+| CHG-05 | Drift detection: TFC health assessments, plus a weekday GitHub workflow that runs speculative plans and opens a drift issue. | TFC / Repo | `envs/tfc-admin` · `enable_health_assessments`; `.github/workflows/drift-detection.yml` (needs `TFC_TOKEN_DRIFT`) | On (the workflow skips if the secret is unset) | n/a | CC7.1, CC8.1 | A.8.9 | CM-3, CM-6, CA-7 | — |
+| CHG-06 | Secret scanning (gitleaks) and Trivy SARIF to GitHub code scanning, post-merge and weekly. GitHub Actions pinned by SHA, with Dependabot for Actions. | Repo | `.github/workflows/security-scan.yml`; `.github/dependabot.yml` | On (not a PR gate) | n/a | CC7.1, CC8.1 | A.8.28, A.8.8 | SA-11, RA-5, SR-3 | — |
+
+## 8. Vulnerability and patch management
+
+| ID | Control | Cloud | Implementation (path · flag) | Default | Status | SOC 2 | ISO | NIST | CIS |
+|:---|:--------|:------|:-----------------------------|:--------|:-------|:------|:----|:-----|:----|
+| VUL-01 | Amazon Inspector org-wide with a delegated admin, auto-enabling EC2, ECR and Lambda scanning. | AWS | `modules/aws/security/org-security-service` · `enabled_security_services` contains `inspector` | On (removed by the nonprod preset) | Mock | CC7.1 | A.8.8 | RA-5, SI-2 | — |
+| VUL-02 | Image scanning on push (ECR). Artifact Registry vulnerability scanning (the Container Scanning API) is **not** enabled by the module. | AWS (GCP gap) | `modules/aws/data/ecr` · `scan_on_push` | On (ECR) | Mock | CC7.1 | A.8.8 | RA-5 | — |
+| VUL-03 | IaC misconfiguration scanning in CI: Trivy and Checkov (CHG-01). | Repo | `.github/workflows/reusable-security.yml` | On | n/a | CC7.1, CC8.1 | A.8.8, A.8.29 | RA-5, SA-11 | — |
+| VUL-04 | OS patching: an SSM patch baseline (auto-approves Security and Bugfix, Critical and Important) and Session Manager preferences. | AWS | `modules/aws/ops/systems-manager` in sec-stage and `modules/aws/stages/workload` | On | Mock | CC7.1 | A.8.8 | SI-2 | — |
+| VUL-05 | VM Manager patch deployments. | GCP | `modules/gcp/ops/os-config` | **Not wired** | Mock | CC7.1 | A.8.8 | SI-2 | — |
+| VUL-06 | Continuous posture checks against CIS AWS v3.0.0, FSBP and NIST 800-53 r5 (DET-02). | AWS | `modules/aws/security/securityhub-org` | On | Mock | CC4.1, CC7.1 | A.8.8, A.5.36 | CA-7, RA-5 | AWS 4.16 |
+
+## Gaps and customer responsibility
+
+The boilerplate provides technical controls. The frameworks also require
+organizational, procedural and evidence controls it cannot provide. The rows
+below list what you must supply, and known technical shortfalls found while
+building this matrix.
+
+### Technical gaps in the code (verified)
+
+| Gap | Framework impact | Where |
+|:----|:-----------------|:------|
+| AWS `tfc-apply` role defaults to `AdministratorAccess` in every bound account. | Least privilege (CC6.3, A.8.2, AC-6). Narrow `apply_role_policy_arns` per account. | `modules/aws/iam/tfc-oidc-baseline/variables.tf` |
+| GCP bootstrap-apply and organization-apply SAs hold org `iam.securityAdmin`. Projects-apply's delegated grant can reach any folder. | Separation of duties (AC-5, A.5.3). Inherent to managing org IAM; mitigate with IAM-12 and LOG-04. | known-gaps C2 |
+| No CloudTrail S3 data-event selectors. | CIS AWS 3.8 and 3.9 (object-level logging); AU-2 for data access on S3. | `modules/aws/security/cloudtrail-org` |
+| Only 3 of the CIS AWS section-4 metric-filter alarms ship, and only when the preview `enable_cloudwatch_logs` is on. | CIS AWS 4.x; SI-4. | LOG-09 |
+| GCP project-level CIS log-metric alerts are absent: ownership, firewall, route, network, storage IAM and SQL config changes. | CIS GCP 2.4 and 2.7–2.11. | `modules/gcp/monitoring/control-plane` (org scope only) |
+| CloudTrail KMS key-policy condition (`aws:SourceOrgID`) is unvalidated and may block delivery. | AU-9 and AU-12 effectiveness. | known-gaps A1 |
+| AWS backups are single-region, with no cross-region or air-gapped copy. | A1.2, CP-6, CP-9(8), A.8.14. | known-gaps A5 |
+| AWS Config conformance packs are a hook only, and not exposed at `envs/aws/security`. | Continuous compliance evidence (CA-7). Security Hub standards partially cover this. | known-gaps A7 |
+| SCC is notification-only: no tier activation, posture or Security Health Analytics configuration in code. | CA-7, RA-5 on GCP. | known-gaps G10 |
+| GCP snapshot schedules and VM patching modules are not wired into any root. | CP-9, SI-2 on GCP. | BCK-05, VUL-05 |
+| Artifact Registry vulnerability scanning is not enabled. | RA-5 for GCP images. | `modules/gcp/artifact-registry` |
+| OS Login is enforced only on folders in `strict_folder_policy_environment_keys`, not org-wide. | CIS GCP 4.4 on other folders. | GRD-02 |
+| The declarative EC2 policy (IMDSv2, VPC BPA) is attached to the Workloads OU only. | CIS AWS 5.6 in non-workload OUs. | `modules/aws/stages/organization/main.tf` |
+| Network Firewall ships a placeholder Suricata rule; the shared VPC-endpoint policy is `Action="*"`. | SC-7 effectiveness. | NET-05; known-gaps DECISION |
+| Secret values written by the SaaS bridge persist in Terraform state. | SC-28; protect state (TFC access) as a secret store. | `envs/gcp/workload` (`enable_saas_secret_bridge`) |
+| Branch protection and CODEOWNERS are not codified and ship as placeholders. | CC8.1, CM-5. | CHG-02 |
+
+### Organizational controls the boilerplate does not provide
+
+| Area | You must provide | SOC 2 | ISO 27001:2022 | NIST 800-53 |
+|:-----|:-----------------|:------|:---------------|:------------|
+| Governance, policies, risk | ISMS scope, information-security policy set, risk assessment and treatment, Statement of Applicability, management review | CC1.x, CC2.x, CC3.x, CC5.3 | Clauses 4–10, A.5.1–A.5.4, A.5.31 | PL-1, PM-x, RA-3 |
+| People | Background screening, onboarding/offboarding, security awareness training, confidentiality agreements, disciplinary process | CC1.4, CC1.5, CC2.2 | A.6.1–A.6.8 | PS-x, AT-x |
+| Identity lifecycle | Identity provider (Cloud Identity / Workspace, Identity Center external IdP), **MFA enforcement for humans**, joiner/mover/leaver workflow, group membership | CC6.2, CC6.3 | A.5.16, A.5.18, A.8.5 | AC-2, IA-2(1), IA-2(2) |
+| Access reviews | Periodic user and privileged access reviews (Access Analyzer and the IAM-02 role matrix are inputs, not the review) | CC6.2, CC6.3 | A.5.18, A.8.2 | AC-2(3), AC-6(7) |
+| Break-glass procedure | Credential custody, quarterly test, post-use review and rotation ([GCP](../runbooks/break-glass.md), [AWS](../runbooks/aws-break-glass.md) runbooks exist) | CC6.1, CC7.4 | A.8.2, A.5.26 | AC-2, IR-4 |
+| Incident response | IR plan, on-call, triage SLAs, tabletop exercises, breach notification; route LOG-05 and LOG-10 alerts to a staffed channel | CC7.3–CC7.5 | A.5.24–A.5.28, A.6.8 | IR-1–IR-8 |
+| Business continuity and DR | BIA, RTO/RPO, DR plan, **DR failover tests** (BCK-02 restore testing covers only backup restorability, single region) | A1.2, A1.3, CC9.1 | A.5.29, A.5.30, A.8.14 | CP-2, CP-4, CP-6, CP-7 |
+| Vulnerability remediation | SLAs and tracking for Inspector, Security Hub, SCC and Trivy findings; penetration testing | CC7.1 | A.8.8 | RA-5, SI-2, CA-8 |
+| Vendor management | Third-party risk for GCP, AWS, HashiCorp, GitHub, Supabase and Vercel; review their SOC 2 reports and your shared-responsibility mapping | CC9.2 | A.5.19–A.5.22 | SR-x, SA-9 |
+| Data governance | Classification scheme, retention schedule (set `audit_log_retention_days` and `retention_days` to it), privacy/PII handling, Macie job definitions | C1.1, C1.2, P-series | A.5.12, A.5.13, A.5.34, A.8.10 | RA-2, SI-12, PT-x |
+| Workload security | Application SDLC, code review, application logging, endpoint and workload hardening above the landing zone | CC8.1 | A.8.25–A.8.31 | SA-x, SI-x |
+| Evidence collection | Continuous capture of the items in the next section, retained for the audit period; a GRC tool or scripted exports | all | A.5.33, Clause 9 | CA-2, CA-7 |
+| Change approvals outside Git | Emergency-change and break-glass change records; TFC run approvals for applies that are not auto-apply | CC8.1 | A.8.32 | CM-3 |
+
+## How to produce audit evidence
+
+Capture evidence from the **deployed** estate, at the start of the audit window
+and periodically through it. Name each artifact by control ID from this matrix.
+
+### Configuration evidence (point in time)
+
+| Evidence | Source | Rows |
+|:---------|:-------|:-----|
+| Terraform state and outputs per workspace | `terraform output -json` per root, or TFC State Versions API; TFC run history (plan + apply + approver) | all |
+| Root variable values and presets used | TFC workspace variables and variable sets (export); the `prod-*` preset files in use | Default column |
+| GCP org policies effective on org and folders | `gcloud org-policies list --organization=<ORG_ID>`, and `--folder=<FOLDER_ID>` for each strict folder | GRD-01–GRD-04 |
+| GCP IAM and deny policies | `gcloud organizations get-iam-policy <ORG_ID>`; `gcloud iam policies list --attachment-point=cloudresourcemanager.googleapis.com/organizations/<ORG_ID> --kind=denypolicies` | IAM-02, IAM-12 |
+| GCP WIF provider conditions | `gcloud iam workload-identity-pools providers describe …`; bootstrap output `tfc_attribute_condition` | IAM-01, IAM-04 |
+| GCP audit config and sinks | `gcloud organizations get-iam-policy` (`auditConfigs`); `gcloud logging sinks list --organization=<ORG_ID>`; `gcloud storage buckets describe gs://<audit-bucket>` (retention, versioning, soft delete, CMEK) | LOG-01–LOG-04 |
+| GCP KMS rotation | `gcloud kms keys list --keyring=… --location=…` (`rotationPeriod`, `nextRotationTime`) | DP-01 |
+| GCP VPC-SC mode | `gcloud access-context-manager perimeters describe` (confirm `status`, not only `spec`) | DP-06 |
+| GCP firewall | `gcloud compute firewall-policies list --folder=…` and `describe` | NET-01 |
+| AWS Organizations policies | `aws organizations list-policies --filter SERVICE_CONTROL_POLICY` (and `RESOURCE_CONTROL_POLICY`, `DECLARATIVE_POLICY_EC2`, `TAG_POLICY`, `BACKUP_POLICY`); `aws organizations list-targets-for-policy` | GRD-05–GRD-09, BCK-03 |
+| AWS root access features | `aws iam list-organizations-features` | IAM-07 |
+| AWS Identity Center | `aws sso-admin list-permission-sets`, `list-account-assignments` | IAM-06 |
+| AWS CloudTrail | `aws cloudtrail describe-trails`, `get-trail-status`; `aws cloudtrail validate-logs` (digest integrity) | LOG-07 |
+| AWS log archive | `aws s3api get-object-lock-configuration`, `get-bucket-policy`, `get-public-access-block` | LOG-08 |
+| AWS Backup | `aws backup describe-backup-vault` (lock state); `list-restore-testing-plans`; restore-job results | BCK-01–BCK-03 |
+| CI and change management | GitHub branch-protection or ruleset export (`gh api repos/<owner>/<repo>/rulesets`); merged PRs with approvals and check runs; CODEOWNERS | CHG-01, CHG-02 |
+
+### Operating evidence (over the audit period)
+
+| Evidence | Source | Rows |
+|:---------|:-------|:-----|
+| Compliance posture over time | Security Hub CIS v3.0.0 and NIST 800-53 r5 standard scores and findings export; AWS Config aggregator compliance history | DET-02, LOG-11 |
+| Threat findings and response | GuardDuty findings; SNS deliveries from security-notifications; incident-response Lambda invocations (CloudWatch Logs); tickets showing triage | DET-01, DET-05, LOG-10 |
+| Guardrail-change alerts | Cloud Monitoring incident history for the control-plane alert policies; notification-channel deliveries | LOG-05, IAM-11 |
+| Break-glass usage | GCP `break_glass_use` incidents; AWS `break-glass-use` EventBridge matches; CloudTrail `AssumeRole` events for the break-glass role, each matched to an incident ticket | IAM-10, IAM-11 |
+| Audit-log continuity | GCS audit bucket object counts per day; `logging.googleapis.com/exports/error_count`; CloudTrail `validate-logs` across the period | LOG-02, LOG-07 |
+| Vulnerability management | Inspector coverage and findings export; ECR scan results; Trivy and Checkov SARIF in GitHub code scanning, with remediation tickets | VUL-01–VUL-03 |
+| Backup and restore | AWS Backup job reports (Backup Audit Manager, if you enable it); restore-testing job outcomes | BCK-01–BCK-03 |
+| Drift | TFC health-assessment results; drift issues opened by `drift-detection.yml` and their resolution | CHG-05 |
+| Access reviews | Your review records, using IAM Access Analyzer unused-access findings and Identity Center assignments as inputs | IAM-06, IAM-09 |
+
+## See also
+
+- [Known Gaps](../known-gaps.md): open, preview and deferred items referenced above (A1, A4–A7, C2, G4–G11).
+- [Production Hardening](../runbooks/production-hardening.md): how to turn the Preset and Off controls on.
+- [Landing-Zone Conformance](../architecture/landing-zone-conformance.md): best-practice review against the AWS SRA and Google enterprise foundations.
+- [Presets](../../examples/presets/README.md): the `prod-*` and `nonprod-*` overlays.

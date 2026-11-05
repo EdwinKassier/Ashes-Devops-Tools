@@ -67,6 +67,27 @@ bootstrap role, the downstream member-account roles, and the workspaces that con
 | `DOCS_BOT_PAT` | Secret | `documentation.yml` | Machine-account PAT (repo scope) used to open auto-generated docs PRs so they trigger downstream CI. `GITHUB_TOKEN`-authored PRs do not trigger other workflows. | Falls back to `secrets.GITHUB_TOKEN` (docs PRs will not trigger CI checks). |
 | `DOCS_REVIEWER` | Variable | `documentation.yml` | GitHub username to request as reviewer on auto-generated docs PRs. | No reviewer requested. |
 
+## Sandbox E2E
+
+Used by `sandbox-e2e.yml`, the real-apply suites in `tests/e2e/`. All are **repository
+variables**, not secrets: both clouds authenticate keylessly (GCP Workload Identity
+Federation, AWS GitHub OIDC), so there is nothing secret to store. When a cloud's
+variables are unset, that cloud's job is **skipped with a notice**, not failed. Sandbox
+setup, trust conditions and cost guardrails are in [Sandbox E2E](sandbox-e2e.md).
+
+| Name | Kind | Used by | Purpose | Default when unset |
+|------|------|---------|---------|---------------------|
+| `E2E_GCP_WIF_PROVIDER` | Variable | `sandbox-e2e.yml` | Full WIF provider resource name: `projects/<number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>`. | GCP suite skipped. |
+| `E2E_GCP_SA` | Variable | `sandbox-e2e.yml` | Email of the sandbox runner service account that the WIF principal impersonates. | GCP suite skipped. |
+| `E2E_GCP_PROJECT` | Variable | `sandbox-e2e.yml` | ID of the **dedicated, disposable** GCP sandbox project. Never a landing-zone project. | GCP suite skipped. |
+| `E2E_GCP_REGION` | Variable | `sandbox-e2e.yml` | Region for the GCP suite's regional resources. | `europe-west2` |
+| `E2E_AWS_ROLE_ARN` | Variable | `sandbox-e2e.yml` | ARN of the sandbox runner role assumed via GitHub OIDC. Its trust policy is pinned to `repo:<owner>/<repo>:environment:e2e-sandbox`. | AWS suite skipped. |
+| `E2E_AWS_REGION` | Variable | `sandbox-e2e.yml` | Region of the **dedicated, disposable** AWS sandbox account. | AWS suite skipped. |
+
+The cloud jobs run in the `e2e-sandbox` GitHub environment, which gives them a stable OIDC
+subject. The preflight job has no environment, so it reads repository-level variables
+only. Set the variables above at repository level.
+
 ## Drift detection behavior without secrets
 
 `drift-detection.yml` runs a `check-credentials` job before the matrix job. It evaluates
