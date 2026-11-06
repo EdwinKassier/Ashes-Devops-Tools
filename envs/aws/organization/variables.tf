@@ -435,3 +435,17 @@ variable "org_policy_attachments" {
   default  = {}
   nullable = false
 }
+
+variable "github_federation_owner_ids" {
+  description = "Numeric GitHub owner IDs allowed by the GitHub federation pin (repository_owner_id:<id>:*), for immutable-ID deploy-role subjects."
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
+
+variable "allowed_builtin_web_identity_providers" {
+  description = "Built-in web-identity providers (cognito-identity.amazonaws.com, accounts.google.com, graph.facebook.com, www.amazon.com) roles may trust. Default none (RCP deny)."
+  type        = list(string)
+  default     = []
+  nullable    = false
+}

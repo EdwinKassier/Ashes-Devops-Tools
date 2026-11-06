@@ -106,10 +106,10 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_cloudformation_stack_set.break_glass (modules/aws/iam/tfc-oidc-baseline/main.tf#L610)
-- resource.aws_cloudformation_stack_set.this (modules/aws/iam/tfc-oidc-baseline/main.tf#L493)
-- resource.aws_cloudformation_stack_set_instance.break_glass (modules/aws/iam/tfc-oidc-baseline/main.tf#L646)
-- resource.aws_cloudformation_stack_set_instance.this (modules/aws/iam/tfc-oidc-baseline/main.tf#L533)
+- resource.aws_cloudformation_stack_set.break_glass (modules/aws/iam/tfc-oidc-baseline/main.tf#L618)
+- resource.aws_cloudformation_stack_set.this (modules/aws/iam/tfc-oidc-baseline/main.tf#L501)
+- resource.aws_cloudformation_stack_set_instance.break_glass (modules/aws/iam/tfc-oidc-baseline/main.tf#L654)
+- resource.aws_cloudformation_stack_set_instance.this (modules/aws/iam/tfc-oidc-baseline/main.tf#L541)
 
 
 ## Inputs

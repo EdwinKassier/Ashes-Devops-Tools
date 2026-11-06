@@ -68,3 +68,21 @@ test_service_principal_trust_ignored if {
 	}]}}
 	count(p.deny) == 0 with input as inp
 }
+
+test_partial_wildcard_tenant_fails if {
+	count(p.deny) == 1 with input as role({
+		"StringEquals": {"app.terraform.io:aud": "aws.workload.identity"},
+		"StringLike": {"app.terraform.io:sub": "organization:acme*:project:p:workspace:w:run_phase:apply"},
+	})
+}
+
+test_unknown_trust_is_advisory if {
+	inp := {"plan": {"resource_changes": [{
+		"address": "aws_iam_role.deploy",
+		"mode": "managed",
+		"type": "aws_iam_role",
+		"change": {"actions": ["create"], "after": {}, "after_unknown": {"assume_role_policy": true}},
+	}]}}
+	count(p.deny) == 0 with input as inp
+	count(p.federated_unknown) == 1 with input as inp
+}

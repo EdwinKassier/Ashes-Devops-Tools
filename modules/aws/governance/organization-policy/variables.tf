@@ -153,6 +153,13 @@ variable "federation_tenant_pins" {
     tfc_hostname     = optional(string, "app.terraform.io")
     tfc_organization = optional(string)
     github_owners    = optional(list(string), [])
+    # Immutable owner IDs, for deploy roles that use GitHub's customised
+    # repository_owner_id:<id>:repository_id:<id>:... subject.
+    github_owner_ids = optional(list(string), [])
+    # Built-in web-identity providers (no IAM provider resource needed) that
+    # roles may trust: any of cognito-identity.amazonaws.com,
+    # accounts.google.com, graph.facebook.com, www.amazon.com. Default none.
+    allowed_builtin_providers = optional(list(string), [])
   })
   default  = {}
   nullable = false
@@ -165,6 +172,16 @@ variable "federation_tenant_pins" {
   validation {
     condition     = alltrue([for o in var.federation_tenant_pins.github_owners : can(regex("^[A-Za-z0-9][A-Za-z0-9-]{0,38}$", o))])
     error_message = "federation_tenant_pins.github_owners entries must be literal GitHub user/org names (no wildcards or slashes)."
+  }
+
+  validation {
+    condition     = alltrue([for i in var.federation_tenant_pins.github_owner_ids : can(regex("^[0-9]+$", i))])
+    error_message = "federation_tenant_pins.github_owner_ids entries must be numeric GitHub owner IDs."
+  }
+
+  validation {
+    condition     = alltrue([for p in var.federation_tenant_pins.allowed_builtin_providers : contains(["cognito-identity.amazonaws.com", "accounts.google.com", "graph.facebook.com", "www.amazon.com"], p)])
+    error_message = "federation_tenant_pins.allowed_builtin_providers entries must be cognito-identity.amazonaws.com, accounts.google.com, graph.facebook.com or www.amazon.com."
   }
 
   validation {

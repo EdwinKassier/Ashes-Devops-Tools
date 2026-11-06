@@ -469,6 +469,11 @@ run "federation_tenant_pins_render" {
     condition     = one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == "PinGithubFederationToOwners"]).Condition.StringNotLike["token.actions.githubusercontent.com:sub"] == ["repo:acme/*", "repo:acme-apps/*"]
     error_message = "the GitHub pin must allow only repo:<owner>/* subjects."
   }
+
+  assert {
+    condition     = length(aws_organizations_policy.policy["rcp-data-perimeter"].content) < 5120
+    error_message = "the RCP with every pin and all built-in IdP denies must stay under the 5,120-character quota."
+  }
 }
 
 # Central detection settings: with security accounts named, even the pipeline
@@ -546,4 +551,52 @@ run "overriding_core_guardrail_warns" {
   }
 
   expect_failures = [check.core_guardrails_not_weakened]
+}
+
+# Built-in web-identity providers (no IAM provider resource) are denied unless
+# allow-listed; IdP creation is denied to all but break-glass / StackSet exec;
+# GitHub owner-ID subjects are allowed by the GitHub pin.
+run "federation_completeness" {
+  command = plan
+
+  variables {
+    federation_tenant_pins = {
+      github_owner_ids          = ["123456"]
+      allowed_builtin_providers = ["cognito-identity.amazonaws.com"]
+    }
+  }
+
+  assert {
+    condition = (
+      length([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if startswith(s.Sid, "DenyBuiltinIdp")]) == 3 &&
+      one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == "DenyBuiltinIdpGraph"]).Condition.Null["graph.facebook.com:app_id"] == "false" &&
+      one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == "DenyBuiltinIdpAccounts"]).Condition.Null["accounts.google.com:aud"] == "false" &&
+      contains(one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == "PinGithubFederationToOwners"]).Condition.StringNotLike["token.actions.githubusercontent.com:sub"], "repository_owner_id:123456:*")
+    )
+    error_message = "built-in IdPs must be denied unless allow-listed (with the right claim key), and GitHub owner-ID subjects must be allowed."
+  }
+
+  assert {
+    condition = (
+      contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-baseline"].content).Statement : s if s.Sid == "DenyIdentityProviderChanges"]).Action, "iam:CreateOpenIDConnectProvider") &&
+      contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-baseline"].content).Statement : s if s.Sid == "DenyDataPerimeterTagTampering"]).Action, "ecr:TagResource") &&
+      length(aws_organizations_policy.policy["scp-baseline"].content) < 5120 &&
+      length(aws_organizations_policy.policy["rcp-data-perimeter"].content) < 5120
+    )
+    error_message = "the baseline SCP must deny IdP changes and ECR/Logs dp:* tagging, and both policies must fit the 5,120-character quota."
+  }
+}
+
+# Global STS is never region-denied; ACM/KMS are allowed in us-east-1 for
+# CloudFront certificates, and nowhere else outside the allowed regions.
+run "region_restriction_allows_edge_and_global_sts" {
+  command = plan
+
+  assert {
+    condition = (
+      contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-region-restriction"].content).Statement : s if s.Sid == "DenyOutsideAllowedRegions"]).NotAction, "sts:*") &&
+      contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-region-restriction"].content).Statement : s if s.Sid == "EdgeCertificatesAndKeysOnlyInAllowedRegionsOrUsEast1"]).Condition.StringNotEquals["aws:RequestedRegion"], "us-east-1")
+    )
+    error_message = "sts must be exempt from the region deny, and ACM/KMS must be confined to the allowed regions plus us-east-1."
+  }
 }

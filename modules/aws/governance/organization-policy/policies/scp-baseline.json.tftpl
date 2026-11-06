@@ -37,6 +37,23 @@
       }
     },
     {
+      "Sid": "DenyIdentityProviderChanges",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateOpenIDConnectProvider",
+        "iam:AddClientIDToOpenIDConnectProvider",
+        "iam:UpdateOpenIDConnectProviderThumbprint",
+        "iam:CreateSAMLProvider",
+        "iam:UpdateSAMLProvider"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": ${idp_admin_arns}
+        }
+      }
+    },
+    {
       "Sid": "DenyDataPerimeterTagTampering",
       "Effect": "Deny",
       "Action": [
@@ -55,7 +72,15 @@
         "sqs:UntagQueue",
         "secretsmanager:CreateSecret",
         "secretsmanager:TagResource",
-        "secretsmanager:UntagResource"
+        "secretsmanager:UntagResource",
+        "ecr:CreateRepository",
+        "ecr:TagResource",
+        "ecr:UntagResource",
+        "logs:CreateLogGroup",
+        "logs:TagResource",
+        "logs:TagLogGroup",
+        "logs:UntagResource",
+        "logs:UntagLogGroup"
       ],
       "Resource": "*",
       "Condition": {

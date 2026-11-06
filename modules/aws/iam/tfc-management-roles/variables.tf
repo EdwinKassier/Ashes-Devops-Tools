@@ -72,9 +72,9 @@ variable "member_pivot_role_names" {
 }
 
 variable "protected_role_names" {
-  description = "Management-account role names, beyond <role_name_prefix>* (which already covers the phase-0 tfc-mgmt-plan / tfc-mgmt-apply roles), that no management role may modify. The management break-glass role is NOT protected by default because the aws-security stage owns it (create_break_glass); add its name here if another process manages it."
+  description = "Management-account role names, beyond <role_name_prefix>* (which already covers the phase-0 tfc-mgmt-plan / tfc-mgmt-apply roles), that no management role may modify. The break-glass role names are protected too: the aws-security management role may not create or edit the management break-glass role, which every member break-glass role trusts."
   type        = list(string)
-  default     = ["OrganizationAccountAccessRole"]
+  default     = ["OrganizationAccountAccessRole", "OrganizationBreakGlass", "break-glass"]
   nullable    = false
 }
 
@@ -93,4 +93,15 @@ variable "tags" {
   description = "Tags applied to the roles."
   type        = map(string)
   default     = {}
+}
+
+variable "security_trail_role_pattern" {
+  description = "Name pattern of the ONLY management-account role the aws-security apply role may create or modify: the organization trail's CloudWatch Logs delivery role (<trail_name>-cloudwatch-delivery)."
+  type        = string
+  default     = "*-cloudwatch-delivery"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9+=,.@_*-]{1,64}$", var.security_trail_role_pattern)) && var.security_trail_role_pattern != "*"
+    error_message = "security_trail_role_pattern must be a role-name pattern narrower than \"*\"."
+  }
 }

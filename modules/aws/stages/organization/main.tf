@@ -93,9 +93,7 @@ module "policies" {
   allow_vpc_bpa_exclusions           = var.allow_vpc_bpa_exclusions
 
   # Detection settings are reachable only from the security accounts' pipeline.
-  central_detection_account_ids = [
-    for k in var.central_detection_account_keys : module.account[k].account_id if contains(keys(local.all_accounts), k)
-  ]
+  central_detection_account_ids = [for k in var.central_detection_account_keys : module.account[k].account_id]
 
   # Web-identity tenant pins (RCP): TFC tokens only from this org's TFC
   # organization, GitHub tokens only from the listed owners.
@@ -103,6 +101,10 @@ module "policies" {
     tfc_hostname     = var.tfc_hostname
     tfc_organization = var.pin_tfc_federation_to_org ? var.tfc_organization : null
     github_owners    = var.github_federation_owners
+    github_owner_ids = var.github_federation_owner_ids
+    # Built-in IdPs (Cognito, Google, Facebook, Amazon) need no IAM provider
+    # resource, so only the RCP can stop a role trusting an attacker's pool.
+    allowed_builtin_providers = var.allowed_builtin_web_identity_providers
   }
 }
 
@@ -192,4 +194,13 @@ module "tfc_management_roles" {
   tfc_hostname     = var.tfc_hostname
   tfc_project      = var.tfc_project
   workspaces       = var.tfc_management_workspaces
+}
+
+# The baseline StackSet puts a GitHub OIDC provider in every targeted account.
+# Unpinned, any admin there can make a role trust repo:<anyone>/*.
+check "github_federation_pinned" {
+  assert {
+    condition     = !var.enable_tfc_oidc_baseline || length(var.github_federation_owners) + length(var.github_federation_owner_ids) > 0
+    error_message = "The TFC OIDC baseline deploys a GitHub Actions OIDC provider to member accounts, but github_federation_owners / github_federation_owner_ids is empty, so GitHub federation is unpinned org-wide. Set aws.github_federation_owners in config/landing-zone.yaml."
+  }
 }

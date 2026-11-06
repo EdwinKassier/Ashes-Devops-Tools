@@ -9,10 +9,11 @@
 mock_provider "aws" {}
 
 variables {
-  terraform_run_role_arn  = "arn:aws:iam::111111111111:role/tfc-run-role"
-  break_glass_role_arn    = "arn:aws:iam::111111111111:role/break-glass"
-  log_archive_bucket_name = "sra-log-archive-111111111111"
-  tfc_organization        = "acme"
+  terraform_run_role_arn   = "arn:aws:iam::111111111111:role/tfc-run-role"
+  break_glass_role_arn     = "arn:aws:iam::111111111111:role/break-glass"
+  log_archive_bucket_name  = "sra-log-archive-111111111111"
+  tfc_organization         = "acme"
+  github_federation_owners = ["acme"]
 }
 
 override_module {
@@ -206,6 +207,8 @@ run "rcp_tfc_pin_opt_out" {
 
   variables {
     pin_tfc_federation_to_org = false
+    github_federation_owners  = []
+    enable_tfc_oidc_baseline  = false
   }
 
   assert {
@@ -228,4 +231,28 @@ run "root_baseline_policies_attached" {
     )
     error_message = "the root must get the EC2 baseline and AI opt-out; backup-policy is disabled by default."
   }
+}
+
+# aws-organization deploys the member Backup service role to the Workloads OU.
+run "backup_service_role_stack_set" {
+  command = plan
+
+  assert {
+    condition = (
+      aws_cloudformation_stack_set.backup_service_role[0].permission_model == "SERVICE_MANAGED" &&
+      tolist(aws_cloudformation_stack_set_instance.backup_service_role[0].deployment_targets[0].organizational_unit_ids) == tolist(["ou-abcd-workload0"]) &&
+      jsondecode(aws_cloudformation_stack_set.backup_service_role[0].template_body).Resources.BackupServiceRole.Properties.RoleName == "aws-backup-org-role"
+    )
+    error_message = "the Backup service role must be deployed by a service-managed StackSet to the Workloads OU."
+  }
+}
+
+run "unpinned_github_with_baseline_warns" {
+  command = plan
+
+  variables {
+    github_federation_owners = []
+  }
+
+  expect_failures = [check.github_federation_pinned]
 }

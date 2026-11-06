@@ -202,6 +202,12 @@ variable "central_detection_account_keys" {
   type        = list(string)
   default     = ["security_tooling", "log_archive"]
   nullable    = false
+
+  # A typo would silently drop the SCP statement (and with it the scoping).
+  validation {
+    condition     = alltrue([for k in var.central_detection_account_keys : contains(keys(merge(var.accounts, var.workload_accounts)), k)])
+    error_message = "central_detection_account_keys must name accounts in accounts / workload_accounts."
+  }
 }
 
 variable "pin_tfc_federation_to_org" {
@@ -358,4 +364,42 @@ variable "org_policy_attachments" {
   }))
   default  = {}
   nullable = false
+}
+
+variable "create_backup_service_role" {
+  description = "Deploy the member-account AWS Backup service role (backup_service_role_name) to every Workloads-OU account through a service-managed StackSet. aws-backup's BACKUP_POLICY references it, so aws-backup needs no CloudFormation rights. Default true."
+  type        = bool
+  default     = true
+}
+
+variable "backup_service_role_name" {
+  description = "Name of the member-account AWS Backup service role (must equal aws-backup backup_role_name)."
+  type        = string
+  default     = "aws-backup-org-role"
+}
+
+variable "backup_service_role_stack_set_name" {
+  description = "Name of the StackSet that deploys the Backup service role."
+  type        = string
+  default     = "aws-backup-org-role"
+}
+
+variable "backup_service_role_region" {
+  description = "Region of the Backup service-role stack instances (IAM is global; one region suffices)."
+  type        = string
+  default     = "eu-west-2"
+}
+
+variable "github_federation_owner_ids" {
+  description = "Numeric GitHub owner IDs whose Actions tokens may assume roles (RCP pin repository_owner_id:<id>:*), for deploy roles using the immutable-ID subject template. Complements github_federation_owners."
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
+
+variable "allowed_builtin_web_identity_providers" {
+  description = "Built-in web-identity providers roles may trust (cognito-identity.amazonaws.com, accounts.google.com, graph.facebook.com, www.amazon.com). Default none: the RCP denies sts:AssumeRoleWithWebIdentity with their tokens, since they need no IAM provider resource and so escape every other control."
+  type        = list(string)
+  default     = []
+  nullable    = false
 }

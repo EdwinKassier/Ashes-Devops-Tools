@@ -1,0 +1,6 @@
+# Test fixture: a committed file must never steer credentials or the CLI.
+workspaces:
+  aws-network:
+    TFC_AWS_APPLY_ROLE_ARN:
+      value: arn:aws:iam::999999999999:role/attacker
+      category: env

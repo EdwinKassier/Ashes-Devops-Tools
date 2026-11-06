@@ -108,3 +108,35 @@ run "identity_provider_denies_match_member_boundary" {
     error_message = "the management roles' identity-provider denies must equal the member boundary's DenyNewIdentityProviders set."
   }
 }
+
+# The aws-security role must not hold IAM writes on arbitrary roles in the
+# management account (create role + attach admin + assume = org takeover).
+run "security_iam_writes_scoped_to_trail_role" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for s in jsondecode(output.apply_policies["aws-security"]).Statement :
+      !(s.Effect == "Allow" && anytrue([for a in flatten([s.Action]) : startswith(a, "iam:") && a != "iam:CreateServiceLinkedRole"]) && contains(flatten([s.Resource]), "*"))
+    ])
+    error_message = "aws-security must have no IAM write allowed on Resource *."
+  }
+
+  assert {
+    condition = (
+      one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "TrailDeliveryRoleOnly"]).Resource == ["arn:aws:iam::111111111111:role/*-cloudwatch-delivery"] &&
+      contains(one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "DenyTrailAndKeyDestruction"]).Action, "cloudtrail:StopLogging") &&
+      anytrue([for r in one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "DenyManagementRoleTampering"]).Resource : endswith(r, ":role/OrganizationBreakGlass")])
+    )
+    error_message = "IAM writes must be limited to the trail delivery role, trail/key destruction denied, and the break-glass role protected."
+  }
+}
+
+run "plan_roles_deny_data_plane_reads" {
+  command = plan
+
+  assert {
+    condition     = contains(one([for s in jsondecode(aws_iam_role_policy.plan_guard["aws-backup:plan"].policy).Statement : s if s.Sid == "DenyDataPlaneReads"]).Action, "secretsmanager:GetSecretValue")
+    error_message = "management plan roles must deny data-plane reads like the member tfc-plan roles."
+  }
+}

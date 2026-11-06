@@ -510,3 +510,16 @@ variable "tfc_hostname" {
   type        = string
   default     = "app.terraform.io"
 }
+
+variable "pin_wif_to_tfc_organization" {
+  description = "Enforce (custom org-policy constraint) that every HCP Terraform workload identity provider references tfc_organization in its attribute_condition, so no pipeline can trust another TFC organization. Default true."
+  type        = bool
+  default     = true
+}
+
+variable "wif_github_owner_ids" {
+  description = "Numeric GitHub owner IDs a GitHub Actions workload identity provider must condition on (repository_owner_id). Empty (default) leaves GitHub providers tenant-unpinned (the issuer is still allow-listed)."
+  type        = list(string)
+  default     = []
+  nullable    = false
+}

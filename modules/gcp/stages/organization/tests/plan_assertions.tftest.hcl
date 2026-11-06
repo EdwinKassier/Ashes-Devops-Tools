@@ -709,3 +709,33 @@ run "org_policy_overrides_merge_over_baseline" {
     error_message = "overrides must set enforce, drop disabled constraints, replace list values and add new constraints."
   }
 }
+
+# WIF tenant pins become a custom DENY constraint on provider create/update.
+run "wif_tenant_pin_custom_constraint" {
+  command = plan
+
+  variables {
+    wif_tenant_pins = {
+      tfc_organization = "acme-tfc"
+      github_owner_ids = ["123456"]
+    }
+  }
+
+  assert {
+    condition = (
+      one([for c in local.wif_tenant_constraints : c if c.name == "custom.wifProviderTenantPinned"]).resource_types == ["iam.googleapis.com/WorkloadIdentityPoolProvider"] &&
+      strcontains(one(local.wif_tenant_constraints).condition, "resource.attributeCondition.contains('acme-tfc')") &&
+      strcontains(one(local.wif_tenant_constraints).condition, "resource.attributeCondition.contains('123456')")
+    )
+    error_message = "tenant pins must render a DENY custom constraint referencing the TFC org and GitHub owner IDs."
+  }
+}
+
+run "no_wif_tenant_constraint_without_pins" {
+  command = plan
+
+  assert {
+    condition     = length(local.wif_tenant_constraints) == 0
+    error_message = "without pins no tenant constraint is created."
+  }
+}

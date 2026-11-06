@@ -37,6 +37,10 @@ locals {
     break_glass_role_arn    = try(tostring(local.lz.aws.break_glass_role_arn), null)
     # tfc-admin puts the aws-* workspaces in <project_name_prefix>aws.
     tfc_project = try(tostring(local.lz.org.tfc.aws_project), "${try(tostring(local.lz.org.tfc.project_name_prefix), "landing-zone-")}aws")
+    # With org.tfc.split_workload_projects, tfc-admin puts aws-workload-<env> in
+    # <prefix>aws-workloads; the workload accounts' OIDC trust must name it.
+    split_workload_projects = try(tobool(local.lz.org.tfc.split_workload_projects), false)
+    tfc_workloads_project   = try(tostring(local.lz.org.tfc.aws_workloads_project), "${try(tostring(local.lz.org.tfc.project_name_prefix), "landing-zone-")}aws-workloads")
     # Accounts normalised to the attribute types of var.accounts.
     accounts          = { for k, a in try({ for k, a in local.lz.aws.accounts : k => a }, {}) : k => local.normalise_account[k] }
     workload_accounts = { for k, a in try({ for k, a in local.lz.aws.workload_accounts : k => a }, {}) : k => local.normalise_account[k] }
@@ -122,7 +126,11 @@ locals {
   tfc_workspace_bindings = var.tfc_workspace_bindings != null ? var.tfc_workspace_bindings : {
     for acct in distinct(concat(keys(local.default_workspace_bindings), keys(local.cfg.workload_bindings))) : acct => {
       workspaces = distinct(concat(lookup(local.default_workspace_bindings, acct, []), lookup(local.cfg.workload_bindings, acct, [])))
-      project    = null
+      # Workload-only accounts trust the workloads project when it is split out.
+      project = (
+        local.cfg.split_workload_projects && length(lookup(local.default_workspace_bindings, acct, [])) == 0
+        ? local.cfg.tfc_workloads_project : null
+      )
     }
   }
 }

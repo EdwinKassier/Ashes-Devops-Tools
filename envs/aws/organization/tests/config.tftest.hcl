@@ -152,3 +152,23 @@ run "untouched_placeholders_rejected" {
     var.accounts,
   ]
 }
+
+# split_workload_projects: workload-only accounts trust the workloads project
+# (where tfc-admin puts aws-workload-<env>); foundational accounts keep the
+# default project.
+run "split_workload_projects_trust_the_workloads_project" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-split.yaml"
+  }
+
+  assert {
+    condition = (
+      local.tfc_workspace_bindings["workload_prod"].project == "cfg-aws-workloads" &&
+      local.tfc_workspace_bindings["workload_nonprod"].project == "cfg-aws-workloads" &&
+      local.tfc_workspace_bindings["security_tooling"].project == null
+    )
+    error_message = "with split_workload_projects, workload accounts must trust <prefix>aws-workloads and foundational ones the default project."
+  }
+}

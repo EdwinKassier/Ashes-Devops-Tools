@@ -117,9 +117,12 @@ locals {
     scp-region-restriction = {
       type = "SERVICE_CONTROL_POLICY"
       content = templatefile("${path.module}/policies/scp-region-restriction.json.tftpl", {
-        allowed_regions        = jsonencode(var.allowed_regions)
-        terraform_run_role_arn = var.terraform_run_role_arn
-        break_glass_role_arn   = var.break_glass_role_arn
+        allowed_regions = jsonencode(var.allowed_regions)
+        # CloudFront certificates (ACM) and their keys must live in us-east-1,
+        # so edge deployments (enable_edge) work without allowing the region.
+        allowed_regions_with_us_east_1 = jsonencode(distinct(concat(var.allowed_regions, ["us-east-1"])))
+        terraform_run_role_arn         = var.terraform_run_role_arn
+        break_glass_role_arn           = var.break_glass_role_arn
       })
     }
     # Baseline also carries two org-wide break-glass-only denies (kept here so
@@ -137,6 +140,12 @@ locals {
         terraform_run_role_arn = var.terraform_run_role_arn
         break_glass_role_arn   = var.break_glass_role_arn
         break_glass_arns       = jsonencode(local.break_glass_principal_arns)
+        # New trust anchors (OIDC / SAML providers) are registered only by
+        # break-glass and the StackSet execution role (tfc-oidc-baseline owns the
+        # TFC and GitHub providers). Everyone else, the pipeline and member
+        # admins included, is denied: an attacker-owned issuer plus a role that
+        # trusts it is an MFA-less, rotation-proof door.
+        idp_admin_arns = jsonencode(local.stackset_exempt_arns)
       })))
     }
     rcp-data-perimeter = {
@@ -157,6 +166,8 @@ locals {
         tfc_hostname        = var.federation_tenant_pins.tfc_hostname
         tfc_organization    = var.federation_tenant_pins.tfc_organization
         github_owners       = var.federation_tenant_pins.github_owners
+        github_owner_ids    = var.federation_tenant_pins.github_owner_ids
+        allowed_builtin     = var.federation_tenant_pins.allowed_builtin_providers
       })))
     }
     declarative-ec2 = {

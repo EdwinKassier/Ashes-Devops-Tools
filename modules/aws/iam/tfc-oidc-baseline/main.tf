@@ -250,6 +250,14 @@ locals {
           "secretsmanager:CreateSecret",
           "secretsmanager:TagResource",
           "secretsmanager:UntagResource",
+          "ecr:CreateRepository",
+          "ecr:TagResource",
+          "ecr:UntagResource",
+          "logs:CreateLogGroup",
+          "logs:TagResource",
+          "logs:TagLogGroup",
+          "logs:UntagResource",
+          "logs:UntagLogGroup",
         ]
         Resource  = "*"
         Condition = { "ForAnyValue:StringLike" = { "aws:TagKeys" = "dp:*" } }

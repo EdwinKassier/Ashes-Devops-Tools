@@ -100,6 +100,7 @@ locals {
     Resource = concat(
       ["arn:${local.partition}:iam::${local.account_id}:role/${var.role_name_prefix}*"],
       [for n in var.protected_role_names : "arn:${local.partition}:iam::${local.account_id}:role/${n}"],
+      [for n in var.protected_role_names : "arn:${local.partition}:iam::${local.account_id}:role/*/${n}"],
     )
   }
 
@@ -141,18 +142,42 @@ locals {
       },
       {
         # The organization trail and its CloudWatch Logs / SNS / KMS wiring.
+        # Destructive trail and key actions are denied below (break-glass only).
         Sid      = "OrganizationTrail"
         Effect   = "Allow"
         Action   = ["cloudtrail:*", "logs:*", "sns:*", "cloudwatch:*Alarm*", "cloudwatch:Describe*", "kms:*"]
         Resource = "*"
       },
       {
-        # Roles the security stage owns in the management account (trail
-        # delivery role, management break-glass role). DenyManagementRoleTampering
-        # still protects the management roles and phase-0 roles.
-        Sid      = "SecurityStageRoles"
-        Effect   = "Allow"
-        Action   = ["iam:*Role", "iam:*RolePolicy", "iam:*RolePolicies", "iam:TagRole", "iam:UntagRole", "iam:PassRole", "iam:*InstanceProfile*", "iam:Get*", "iam:List*"]
+        # IAM writes ONLY on the trail's CloudWatch delivery role
+        # (<trail>-cloudwatch-delivery). Any wider IAM write in the management
+        # account (outside every SCP) is an org takeover: create a role, attach
+        # AdministratorAccess, assume it, then OrganizationAccountAccessRole
+        # everywhere. The management break-glass role is therefore NOT managed
+        # through this role (keep create_break_glass = false, or apply it as
+        # the phase-0 role).
+        Sid    = "TrailDeliveryRoleOnly"
+        Effect = "Allow"
+        Action = [
+          "iam:CreateRole", "iam:DeleteRole", "iam:UpdateRole", "iam:UpdateAssumeRolePolicy",
+          "iam:TagRole", "iam:UntagRole", "iam:PutRolePolicy", "iam:DeleteRolePolicy",
+          "iam:GetRole", "iam:GetRolePolicy", "iam:ListRolePolicies", "iam:ListAttachedRolePolicies",
+        ]
+        Resource = ["arn:${local.partition}:iam::${local.account_id}:role/${var.security_trail_role_pattern}"]
+      },
+      {
+        Sid       = "PassTrailDeliveryRoleToCloudTrail"
+        Effect    = "Allow"
+        Action    = "iam:PassRole"
+        Resource  = ["arn:${local.partition}:iam::${local.account_id}:role/${var.security_trail_role_pattern}"]
+        Condition = { StringEquals = { "iam:PassedToService" = "cloudtrail.amazonaws.com" } }
+      },
+      {
+        # Stopping or deleting the org trail, or destroying its keys, blinds the
+        # whole organization: break-glass only.
+        Sid      = "DenyTrailAndKeyDestruction"
+        Effect   = "Deny"
+        Action   = ["cloudtrail:StopLogging", "cloudtrail:DeleteTrail", "kms:ScheduleKeyDeletion", "kms:DisableKey", "kms:DeleteImportedKeyMaterial"]
         Resource = "*"
       },
     ]
@@ -174,11 +199,17 @@ locals {
           "organizations:AttachPolicy",
           "organizations:DetachPolicy",
           "organizations:EnablePolicyType",
-          "organizations:TagResource",
-          "organizations:UntagResource",
         ]
         Resource  = "*"
         Condition = { StringEquals = { "organizations:PolicyType" = "BACKUP_POLICY" } }
+      },
+      {
+        # Tagging takes no PolicyType condition; scope it by the policy ARN,
+        # which embeds the type (policy/o-*/backup_policy/p-*).
+        Sid      = "TagBackupPolicies"
+        Effect   = "Allow"
+        Action   = ["organizations:TagResource", "organizations:UntagResource", "organizations:ListTagsForResource"]
+        Resource = ["arn:${local.partition}:organizations::${local.account_id}:policy/o-*/backup_policy/p-*"]
       },
       {
         Sid      = "BackupServiceAccess"
@@ -202,9 +233,23 @@ locals {
     })
   }
 
+  # Plan roles: ReadOnlyAccess minus data-plane reads, like the member
+  # tfc-plan roles (a speculative plan runs PR code as this role).
+  plan_data_read_deny = {
+    Sid    = "DenyDataPlaneReads"
+    Effect = "Deny"
+    Action = [
+      "s3:GetObject", "s3:GetObjectVersion", "secretsmanager:GetSecretValue", "ssm:GetParameter",
+      "ssm:GetParameters", "ssm:GetParametersByPath", "kms:Decrypt", "logs:GetLogEvents",
+      "logs:FilterLogEvents", "logs:StartQuery", "cloudtrail:LookupEvents", "dynamodb:GetItem",
+      "dynamodb:Query", "dynamodb:Scan", "sqs:ReceiveMessage",
+    ]
+    Resource = "*"
+  }
+
   guard_policy = jsonencode({
     Version   = "2012-10-17"
-    Statement = [local.org_takeover_deny, local.no_member_pivot_deny, local.self_protection_deny]
+    Statement = [local.org_takeover_deny, local.no_member_pivot_deny, local.self_protection_deny, local.plan_data_read_deny]
   })
 }
 

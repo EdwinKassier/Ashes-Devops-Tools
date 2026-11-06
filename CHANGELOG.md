@@ -104,6 +104,48 @@ release metadata for a Terraform Cloud run.
 - **The RCP data perimeter now covers ECR and CloudWatch Logs** (`ecr:*`, `logs:*`).
 - **`organization-policy` gains a `policy_contents` output**, for evidence and tests.
 
+#### Re-audit fixes (independent re-score, 2026-11-06)
+
+- **Critical: the `aws-security` management role could take over the org.** It allowed
+  `iam:*Role` on any role in the management account, which sits outside every SCP. It could create
+  a role, attach admin to it and pivot.
+  - IAM writes are now limited to the trail delivery role (`security_trail_role_pattern`), with
+    `iam:PassRole` only to CloudTrail.
+  - Trail stop/delete and key destruction are denied.
+  - The break-glass role names are protected.
+  - Plan roles now carry the data-plane read deny.
+- **`aws-backup` no longer needs CloudFormation.** The member Backup service-role StackSet moves
+  to aws-organization (`create_backup_service_role`, default on). The aws-backup stage only
+  references the role (`create_backup_role_stack_set` restores the old behaviour). Tagging backup
+  policies is scoped by policy ARN rather than an unsupported condition key.
+- **Federation completeness on AWS:**
+  - The RCP denies the built-in web-identity providers (Cognito, Google, Facebook, Amazon) unless
+    they are allow-listed (`allowed_builtin_web_identity_providers`).
+  - A baseline SCP statement, `DenyIdentityProviderChanges`, denies creating or updating OIDC/SAML
+    providers to everyone except break-glass and the StackSet execution role.
+  - The GitHub pin accepts immutable `repository_owner_id:<id>:*` subjects
+    (`github_federation_owner_ids`).
+  - A check warns when the baseline deploys a GitHub provider that is unpinned.
+  - `dp:*` tag tampering is now also denied on ECR and CloudWatch Logs, in both the SCP and the
+    boundary.
+- **GCP WIF tenant pinning.** A custom constraint, `custom.wifProviderTenantPinned`, requires an
+  HCP Terraform provider to reference this estate's TFC organization, and a GitHub provider to
+  reference an allowed `repository_owner_id` (`pin_wif_to_tfc_organization`,
+  `wif_github_owner_ids`).
+- **The region-restriction SCP exempts `sts:*`.** ACM and KMS are confined to the allowed regions
+  plus us-east-1, so CloudFront edge certificates work.
+- **More suppression actions are scoped to the security accounts:** GuardDuty IP sets, Security
+  Hub automation rules and control updates, Inspector filters, Access Analyzer archive rules.
+  `central_detection_account_keys` is now validated, so a typo can no longer silently drop the
+  statement.
+- **OPA.** `aws_iam_federated_trust_pinned` now catches partial tenant wildcards
+  (`organization:acme*:`). A new advisory policy, `aws_iam_federated_trust_unknown`, reports trusts
+  that cannot be checked at plan time.
+- **tfc-admin** rejects reserved env vars (`TFC_*`, `TF_CLI_ARGS*`, provider auth) in the
+  committed `tfc-workspaces.yaml`.
+- **`split_workload_projects`.** AWS workload accounts now trust the `<prefix>aws-workloads`
+  project.
+
 #### Wave D
 
 - **Phase-0 human impersonation can be time-boxed.** `phase0_admin_impersonation_expires_at`

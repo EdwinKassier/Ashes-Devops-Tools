@@ -328,6 +328,15 @@ locals {
       }
     }
   }
+  # The committed file must not steer credentials or the CLI: dynamic-credential
+  # env vars (TFC_*), CLI argument injection (TF_CLI_ARGS*), provider auth env
+  # vars, or Terraform's own controls. tfc-admin derives the legitimate ones.
+  file_reserved_entries = flatten([
+    for ws, vars in local.file_workspace_variables : [
+      for k, v in vars : "${ws}.${k}"
+      if v.category == "env" && can(regex("^(TFC_|TF_CLI_ARGS|TF_VAR_|TF_WORKSPACE|TF_LOG|AWS_|GOOGLE_|CLOUDSDK_|SUPABASE_|VERCEL_)", k))
+    ]
+  ])
   file_sensitive_entries = flatten([
     for ws, vars in local.file_workspace_variables : [for k, v in vars : "${ws}.${k}" if v.sensitive]
   ])
@@ -465,6 +474,10 @@ resource "terraform_data" "input_contract" {
     precondition {
       condition     = length(local.aws_incomplete_multi_account) == 0
       error_message = "Multi-account AWS workspaces have default credentials but not every alias role (TFC_AWS_*_<alias>): ${join(", ", local.aws_incomplete_multi_account)}. Supply aws_alias_role_arns or aws_organization_outputs_from_tfc, or remove the workspace's explicit aws_plan_role_arns / aws_apply_role_arns."
+    }
+    precondition {
+      condition     = length(local.file_reserved_entries) == 0
+      error_message = "workspace_variables_file sets reserved environment variables: ${join(", ", local.file_reserved_entries)}. Dynamic-credential (TFC_*), CLI (TF_CLI_ARGS*, TF_*) and provider-auth env vars are derived by tfc-admin or set write-only via workspace_variables, never from the committed file."
     }
     precondition {
       condition     = length(local.file_sensitive_entries) == 0
@@ -653,7 +666,7 @@ import {
 # ── Optional OPA policy set (mixed mandatory / advisory) ───────────────────
 # Sourced from policies/opa/ in this repo via VCS. Enforcement level is set per
 # policy in policies/opa/policies.hcl: 10 mandatory (public exposure, identity,
-# encryption) + 3 advisory. The set is NOT overridable by default
+# encryption) + 4 advisory. The set is NOT overridable by default
 # (policy_set_overridable = false), so a mandatory failure is a hard stop that
 # no "Manage Policy Overrides" user can wave through; advisory results never
 # block. Requires a PAID HCP Terraform tier with policy enforcement (not the

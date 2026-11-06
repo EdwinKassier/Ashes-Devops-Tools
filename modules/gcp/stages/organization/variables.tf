@@ -712,3 +712,19 @@ variable "production_containment_waived" {
   type        = bool
   default     = false
 }
+
+variable "wif_tenant_pins" {
+  description = "Tenant pins for workload identity pool providers (custom org-policy constraint custom.wifProviderTenantPinned). With tfc_organization set, a provider for https://<tfc_hostname> must reference that organization in its attribute_condition. With github_owner_ids set, a GitHub Actions provider must condition on one of those repository_owner_id values. Both empty (default) creates no constraint. The gcp-organization root fills tfc_organization from config."
+  type = object({
+    tfc_hostname     = optional(string, "app.terraform.io")
+    tfc_organization = optional(string)
+    github_owner_ids = optional(list(string), [])
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = (var.wif_tenant_pins.tfc_organization == null || can(regex("^[A-Za-z0-9_-]+$", coalesce(var.wif_tenant_pins.tfc_organization, "x")))) && alltrue([for i in var.wif_tenant_pins.github_owner_ids : can(regex("^[0-9]+$", i))])
+    error_message = "wif_tenant_pins.tfc_organization must be a literal TFC organization name and github_owner_ids numeric GitHub owner IDs."
+  }
+}

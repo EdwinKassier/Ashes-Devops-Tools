@@ -74,6 +74,11 @@ policy "aws_s3_bucket_public_access_block_present" {
   enforcement_level = "advisory"
 }
 
+policy "aws_iam_federated_trust_unknown" {
+  query             = "data.terraform.policies.aws_iam_federated_trust_pinned.federated_unknown"
+  enforcement_level = "advisory"
+}
+
 policy "require_labels" {
   query             = "data.terraform.policies.require_labels.deny"
   enforcement_level = "advisory"

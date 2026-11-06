@@ -390,7 +390,29 @@ module "org_policies" {
   # Opt-in custom organization-policy constraints (CEL-defined, resource-shape
   # guardrails the fixed boolean/list constraints can't express). Default [] =
   # none. See docs/known-gaps.md.
-  custom_constraints = var.custom_org_constraints
+  custom_constraints = concat(local.wif_tenant_constraints, var.custom_org_constraints)
+}
+
+# Workload identity federation, tenant level. iam.workloadIdentityPoolProviders
+# limits WHICH issuers a provider may trust; this custom constraint also pins
+# WHO on a shared issuer. A provider for HCP Terraform must condition on this
+# estate's TFC organization, and a GitHub provider must condition on
+# repository_owner_id. Otherwise a pipeline with workloadIdentityPoolAdmin could
+# trust another TFC org or GitHub owner and bind it to a service account: a
+# durable external door that domain-restricted sharing does not see.
+locals {
+  wif_tenant_constraints = var.wif_tenant_pins.tfc_organization == null && length(var.wif_tenant_pins.github_owner_ids) == 0 ? [] : [{
+    name         = "custom.wifProviderTenantPinned"
+    display_name = "Workload identity providers pin the tenant"
+    description  = "HCP Terraform providers must condition on this estate's TFC organization; GitHub Actions providers must condition on an allowed repository_owner_id."
+    action_type  = "DENY"
+    condition = join(" || ", compact([
+      var.wif_tenant_pins.tfc_organization == null ? "" : "(resource.oidc.issuerUri.startsWith('https://${var.wif_tenant_pins.tfc_hostname}') && !resource.attributeCondition.contains('${var.wif_tenant_pins.tfc_organization}'))",
+      length(var.wif_tenant_pins.github_owner_ids) == 0 ? "" : "(resource.oidc.issuerUri.startsWith('https://token.actions.githubusercontent.com') && !(resource.attributeCondition.contains('repository_owner_id') && (${join(" || ", [for id in var.wif_tenant_pins.github_owner_ids : "resource.attributeCondition.contains('${id}')"])})))",
+    ]))
+    method_types   = ["CREATE", "UPDATE"]
+    resource_types = ["iam.googleapis.com/WorkloadIdentityPoolProvider"]
+  }]
 }
 
 locals {

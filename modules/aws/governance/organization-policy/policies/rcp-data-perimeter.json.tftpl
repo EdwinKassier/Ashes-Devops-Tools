@@ -89,7 +89,7 @@
       }
     },
 %{ endif ~}
-%{ if length(github_owners) > 0 ~}
+%{ if length(github_owners) + length(github_owner_ids) > 0 ~}
     {
       "Sid": "PinGithubFederationToOwners",
       "Effect": "Deny",
@@ -101,11 +101,25 @@
           "token.actions.githubusercontent.com:sub": "false"
         },
         "StringNotLike": {
-          "token.actions.githubusercontent.com:sub": ${jsonencode([for o in github_owners : "repo:${o}/*"])}
+          "token.actions.githubusercontent.com:sub": ${jsonencode(concat([for o in github_owners : "repo:${o}/*"], [for i in github_owner_ids : "repository_owner_id:${i}:*"]))}
         }
       }
     },
 %{ endif ~}
+%{ for p in setsubtract(["cognito-identity.amazonaws.com", "accounts.google.com", "graph.facebook.com", "www.amazon.com"], allowed_builtin) ~}
+    {
+      "Sid": "DenyBuiltinIdp${replace(title(replace(split(".", p)[0], "-", " ")), " ", "")}",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Resource": "*",
+      "Condition": {
+        "Null": {
+          "${p}:${contains(["graph.facebook.com", "www.amazon.com"], p) ? "app_id" : "aud"}": "false"
+        }
+      }
+    },
+%{ endfor ~}
     {
       "Sid": "RequireSecureTransport",
       "Effect": "Deny",

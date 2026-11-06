@@ -8,10 +8,11 @@
 mock_provider "aws" {}
 
 variables {
-  terraform_run_role_arn  = "arn:aws:iam::111111111111:role/tfc-run-role"
-  break_glass_role_arn    = "arn:aws:iam::111111111111:role/break-glass"
-  log_archive_bucket_name = "sra-log-archive-111111111111"
-  tfc_organization        = "acme"
+  terraform_run_role_arn   = "arn:aws:iam::111111111111:role/tfc-run-role"
+  break_glass_role_arn     = "arn:aws:iam::111111111111:role/break-glass"
+  log_archive_bucket_name  = "sra-log-archive-111111111111"
+  tfc_organization         = "acme"
+  github_federation_owners = ["acme"]
 }
 
 override_module {

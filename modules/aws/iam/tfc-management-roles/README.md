@@ -58,12 +58,12 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_iam_role.this (modules/aws/iam/tfc-management-roles/main.tf#L215)
-- resource.aws_iam_role_policy.apply (modules/aws/iam/tfc-management-roles/main.tf#L256)
-- resource.aws_iam_role_policy.plan_guard (modules/aws/iam/tfc-management-roles/main.tf#L248)
-- resource.aws_iam_role_policy_attachment.read_only (modules/aws/iam/tfc-management-roles/main.tf#L239)
-- data source.aws_caller_identity.current (modules/aws/iam/tfc-management-roles/main.tf#L213)
-- data source.aws_partition.current (modules/aws/iam/tfc-management-roles/main.tf#L211)
+- resource.aws_iam_role.this (modules/aws/iam/tfc-management-roles/main.tf#L260)
+- resource.aws_iam_role_policy.apply (modules/aws/iam/tfc-management-roles/main.tf#L301)
+- resource.aws_iam_role_policy.plan_guard (modules/aws/iam/tfc-management-roles/main.tf#L293)
+- resource.aws_iam_role_policy_attachment.read_only (modules/aws/iam/tfc-management-roles/main.tf#L284)
+- data source.aws_caller_identity.current (modules/aws/iam/tfc-management-roles/main.tf#L258)
+- data source.aws_partition.current (modules/aws/iam/tfc-management-roles/main.tf#L256)
 
 
 ## Inputs
@@ -74,8 +74,9 @@ The following resources are created:
 | <a name="input_max_session_duration"></a> [max\_session\_duration](#input\_max\_session\_duration) | Maximum session duration in seconds (3600-43200). | `number` | `3600` | no |
 | <a name="input_member_pivot_role_names"></a> [member\_pivot\_role\_names](#input\_member\_pivot\_role\_names) | Member-account role names the management roles must never assume (OrganizationAccountAccessRole and the member tfc-* roles by default). | `list(string)` | <pre>[<br/>  "OrganizationAccountAccessRole",<br/>  "tfc-plan",<br/>  "tfc-apply",<br/>  "break-glass"<br/>]</pre> | no |
 | <a name="input_oidc_provider_arn"></a> [oidc\_provider\_arn](#input\_oidc\_provider\_arn) | ARN of the management account's TFC OIDC provider (created in phase 0). Null derives arn:<partition>:iam::<this account>:oidc-provider/<tfc\_hostname>. | `string` | `null` | no |
-| <a name="input_protected_role_names"></a> [protected\_role\_names](#input\_protected\_role\_names) | Management-account role names, beyond <role\_name\_prefix>* (which already covers the phase-0 tfc-mgmt-plan / tfc-mgmt-apply roles), that no management role may modify. The management break-glass role is NOT protected by default because the aws-security stage owns it (create\_break\_glass); add its name here if another process manages it. | `list(string)` | <pre>[<br/>  "OrganizationAccountAccessRole"<br/>]</pre> | no |
+| <a name="input_protected_role_names"></a> [protected\_role\_names](#input\_protected\_role\_names) | Management-account role names, beyond <role\_name\_prefix>* (which already covers the phase-0 tfc-mgmt-plan / tfc-mgmt-apply roles), that no management role may modify. The break-glass role names are protected too: the aws-security management role may not create or edit the management break-glass role, which every member break-glass role trusts. | `list(string)` | <pre>[<br/>  "OrganizationAccountAccessRole",<br/>  "OrganizationBreakGlass",<br/>  "break-glass"<br/>]</pre> | no |
 | <a name="input_role_name_prefix"></a> [role\_name\_prefix](#input\_role\_name\_prefix) | Prefix of the role names (<prefix><workspace>-<phase>). Every role with this prefix is protected from modification by the roles themselves. | `string` | `"tfc-mgmt-"` | no |
+| <a name="input_security_trail_role_pattern"></a> [security\_trail\_role\_pattern](#input\_security\_trail\_role\_pattern) | Name pattern of the ONLY management-account role the aws-security apply role may create or modify: the organization trail's CloudWatch Logs delivery role (<trail\_name>-cloudwatch-delivery). | `string` | `"*-cloudwatch-delivery"` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to the roles. | `map(string)` | `{}` | no |
 | <a name="input_tfc_hostname"></a> [tfc\_hostname](#input\_tfc\_hostname) | HCP Terraform / TFE hostname issuing the workload-identity tokens. | `string` | `"app.terraform.io"` | no |
 | <a name="input_tfc_project"></a> [tfc\_project](#input\_tfc\_project) | Default TFC project of the trusted workspaces (matched literally in the trust sub). Override per workspace with workspaces[*].project. | `string` | `"Default Project"` | no |

@@ -25,12 +25,37 @@
         "sso:*",
         "sso-directory:*",
         "identitystore:*",
-        "health:*"
+        "health:*",
+        "sts:*",
+        "acm:*",
+        "kms:*",
+        "ec2:DescribeRegions",
+        "pricing:*"
       ],
       "Resource": "*",
       "Condition": {
         "StringNotEquals": {
           "aws:RequestedRegion": ${allowed_regions}
+        },
+        "ArnNotLike": {
+          "aws:PrincipalArn": [
+            "${terraform_run_role_arn}",
+            "${break_glass_role_arn}"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "EdgeCertificatesAndKeysOnlyInAllowedRegionsOrUsEast1",
+      "Effect": "Deny",
+      "Action": [
+        "acm:*",
+        "kms:*"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:RequestedRegion": ${allowed_regions_with_us_east_1}
         },
         "ArnNotLike": {
           "aws:PrincipalArn": [

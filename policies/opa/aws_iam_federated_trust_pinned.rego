@@ -31,9 +31,10 @@ op_matches(op) if op in {"StringEquals", "StringLike", "ForAnyValue:StringEquals
 #   organization:<org>:...   repo:<owner>/<repo>:...   repository_owner_id:<id>:...
 open_subject(v) if v == "*"
 
-open_subject(v) if regex.match(`^[A-Za-z_]+:\*`, v)
+# Any wildcard in the tenant segment ("organization:acme*:", "organization:?cme:").
+open_subject(v) if regex.match(`^[A-Za-z_]+:[^:]*[*?]`, v)
 
-open_subject(v) if regex.match(`^repo:[^/]*\*[^/]*/`, v)
+open_subject(v) if regex.match(`^repo:[^/]*[*?]`, v)
 
 violation(stmt) := "has no audience (:aud) condition" if {
 	count(cond_values(stmt, ":aud")) == 0
@@ -57,4 +58,12 @@ deny contains msg if {
 	federated_web_identity(stmt)
 	reason := violation(stmt)
 	msg := sprintf("%s: federated (web-identity) trust %s", [rc.address, reason])
+}
+
+# Advisory twin: a federated trust whose policy is unknown at plan time (built
+# from a provider ARN created in the same run) cannot be checked here.
+federated_unknown contains msg if {
+	some rc in lib.written_of_type("aws_iam_role")
+	lib.unknown(rc, "assume_role_policy")
+	msg := sprintf("%s: assume_role_policy is unknown at plan time; federated-trust pinning cannot be verified (re-run after the provider exists)", [rc.address])
 }

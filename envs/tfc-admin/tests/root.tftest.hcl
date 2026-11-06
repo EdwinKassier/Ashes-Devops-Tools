@@ -668,6 +668,16 @@ run "workspace_variables_file_rejects_secrets" {
   expect_failures = [terraform_data.input_contract]
 }
 
+run "workspace_variables_file_rejects_reserved_env" {
+  command = plan
+
+  variables {
+    workspace_variables_file = "tests/fixtures/tfc-workspaces-reserved-env.yaml"
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
 # Control-plane run notifications: a configured control-plane
 # notification reaches foundational workspaces but not workload workspaces.
 run "control_plane_notifications_routed_by_tag" {

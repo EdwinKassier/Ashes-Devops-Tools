@@ -122,6 +122,11 @@ module "organization" {
   org_policy_overrides                   = var.org_policy_overrides
   allowed_workload_identity_issuers      = coalesce(var.allowed_workload_identity_issuers, ["https://${var.tfc_hostname}", "https://token.actions.githubusercontent.com"])
   allowed_workload_identity_aws_accounts = var.allowed_workload_identity_aws_accounts
+  wif_tenant_pins = {
+    tfc_hostname     = var.tfc_hostname
+    tfc_organization = var.pin_wif_to_tfc_organization ? local.tfc_organization : null
+    github_owner_ids = var.wif_github_owner_ids
+  }
 
   # Without a break-glass principal the stage is never asked for containment
   # (it would deny everyone); output.admin_containment_enabled fails the plan.
