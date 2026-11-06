@@ -11,8 +11,6 @@
 
 Their headline claims were then re-checked by hand.
 
-**Status.** Wave A code fixes (C1, C3, C4, S5) are on branch `claude/enterprise-boilerplate-audit-81fe4f`. C2 (live branch protection) and M1 (first tag) are GitHub-side operator actions; `make required-checks-live` verifies C2.
-
 **Legend.**
 - ✅ re-verified directly: code read, command run, or GitHub API queried.
 - ◐ reported with file:line evidence but not independently re-run.
@@ -20,7 +18,7 @@ Their headline claims were then re-checked by hand.
 
 Earlier audits' "resolved" markers were **not** taken on trust. Three of them do not hold.
 
-**Status.** The Wave A code fixes (C1, C3, C4, S5) are on branch `claude/enterprise-boilerplate-audit-81fe4f`. C2 (live branch protection) and M1 (the first tag) are GitHub-side operator actions. `make required-checks-live` verifies C2.
+**Status.** Most findings are remediated on branch `claude/enterprise-boilerplate-audit-81fe4f` ([PR #591](https://github.com/EdwinKassier/Ashes-Devops-Tools/pull/591)). See [Part 6](#part-6--remediation-status) for what is fixed, what an independent re-score found, and what is still open.
 
 ---
 
@@ -414,3 +412,60 @@ TFC VCS-driven runs *may* work, because TFC overrides the backend. That is unver
 7. Freeze new audits until Wave A–C land and E2E is green.
 
 **A process note.** Do not run a sixth audit until E2E has applied something real. Every round so far has scored the repo on artefacts that a mock cannot falsify.
+
+---
+
+## Part 6 — Remediation status
+
+The fixes are on PR #591. Each was tested locally before commit, and the CHANGELOG's
+`[Unreleased]` section lists them in detail. After Waves A–D, three fresh independent reviewers
+re-scored the branch without trusting the CHANGELOG. Their findings were then fixed too, including
+one critical regression in the remediation itself.
+
+### Fixed
+
+| Finding | How |
+|---|---|
+| C1 `terraform init` fails | Top-level `cloud {}` blocks. `make backend-check` (CI) runs a real credential-less init of every root and template. |
+| C3 / S5 PR plans see privileged tokens | `tfc-admin` self-managed by default. `disable_speculative_on_saas`. |
+| C4 skipped checks show green | Unconfigured drift detection / E2E fail unless `REAL_CLOUD_CHECKS_OPT_OUT=true`. |
+| S1 AWS federation backdoors | RCP tenant pins (TFC org, GitHub owners or owner IDs). RCP denies built-in IdPs. SCP and boundary deny IdP create/update outside break-glass / StackSet execution. OPA `aws_iam_federated_trust_pinned`. |
+| S2 GCP federation backdoors | `iam.workloadIdentityPoolProviders` / `workloadIdentityPoolAwsAccounts` allow-lists plus the custom constraint `custom.wifProviderTenantPinned`. |
+| S3 detection blinding | `DenyCentralDetectionOutsideSecurityAccounts` (pipeline included), with the suppression actions added. |
+| S4 GCP audit trail | Containment on by default for production, with a break-glass group from config. A plan without it fails closed. |
+| S6 shared management role | `tfc-management-roles`: per-workspace least-privilege roles. The re-score found the first version escalatable. It is now limited to the trail delivery role, and break-glass and the member pivot are denied. |
+| S7 repo-level secrets | Workflows run in GitHub environments, and the runbook covers branch policies. |
+| S8 GitLab prefix match | Exact namespace or sub-group. |
+| A1 AssumeRoot blocked | `BoolIfExists aws:AssumedRoot=false`. |
+| A2 policy-as-code gaps | 10 mandatory + 4 advisory OPA policies covering trusts, basic roles and NotAction. It is still opt-in on paid tiers. |
+| A4 GuardDuty runtime | Agent management for Fargate / EKS / EC2. |
+| B1–B5 first-run failures | Workspace-ID handoff, group prerequisites, plugin cache, brownfield import + Control Tower runbook, alert/break-glass config keys. |
+| B (re-score) Security Lake default fails | Metastore role created in code. |
+| B (re-score) phase-0 artefacts manual | `templates/aws/bootstrap/*.yaml` (cfn-lint clean). |
+| M1 tags / M2 lockfiles | Deployable-root lockfiles must be multi-platform (fatal). A tag still needs the operator. |
+| D1 / D2 baselines not overridable | `org_policy_overrides` on GCP, and `policy_overrides` / `disabled_policies` (guarded) on AWS. |
+| SOTA mediums | Root EC2 declarative baseline, AI-services opt-out, ECR/Logs in the RCP, PSC `vpc-sc` bundle under an enforced perimeter, region value groups, parameterised TFC issuer, run-trigger DAG, `starter` profile, config-driven SaaS stacks. |
+
+### Still open (needs an operator, a real cloud, or a larger refactor)
+
+- **Operator, GitHub-side:**
+  - Apply the documented branch protection: `make required-checks-live` still fails.
+  - Set `RELEASE_PLEASE_TOKEN` and cut `v0.1.0`.
+  - Name real CODEOWNERS teams.
+  - Configure drift detection / E2E, or opt out.
+- **Real-cloud validation:** nothing has been applied for real. The least-privilege management roles, the RCP/SCP condition keys, the brownfield imports and the CloudFormation templates are the likeliest first-apply failures ❓.
+- **Modularity:**
+  - Roots still re-declare most stage inputs.
+  - Cross-root contracts differ per consumer.
+  - AWS↔GCP naming is asymmetric.
+  - The deprecated `host` module is still present.
+  - Many modules lack a `tags` / `labels` input.
+- **Capability:** EKS / Lambda / Functions, cache, NoSQL, cross-region DR, and compliance evidence export.
+
+### Indicative scores
+
+The mid-remediation re-score gave SOTA 7, Boilerplate 6.5, Maintainability 7, Security 5.5 and
+Modularity 6.5. Security was held down by the escalation in the new management role, which is now
+fixed, together with the federation-completeness and default-breaks-apply findings. No re-score has
+been run since. A real sandbox apply is the step that would let any of these scores be stated with
+confidence.
