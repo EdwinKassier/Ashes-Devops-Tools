@@ -131,8 +131,8 @@ run "one_service_golden_path" {
   }
 
   assert {
-    condition     = length(aws_iam_openid_connect_provider.github) == 1 && aws_iam_openid_connect_provider.github[0].url == "https://token.actions.githubusercontent.com" && length(aws_iam_openid_connect_provider.github[0].client_id_list) == 1 && contains(aws_iam_openid_connect_provider.github[0].client_id_list, "sts.amazonaws.com")
-    error_message = "enable_github_oidc must create the GitHub OIDC provider with audience sts.amazonaws.com."
+    condition     = length(aws_iam_openid_connect_provider.github) == 0 && output.github_oidc_provider_arn == "arn:aws:iam::111111111111:oidc-provider/token.actions.githubusercontent.com"
+    error_message = "enable_github_oidc must reuse the baseline-created GitHub OIDC provider (derived ARN), not create one."
   }
 
   # Trust: exact aud AND exact sub, federated to the GitHub provider, nothing else.
@@ -394,7 +394,7 @@ run "boundary_disabled_with_null_name" {
   }
 
   assert {
-    condition     = aws_iam_role.execution["orders"].permissions_boundary == null && aws_iam_role.task["orders"].permissions_boundary == null && length(data.aws_partition.current) == 0
+    condition     = aws_iam_role.execution["orders"].permissions_boundary == null && aws_iam_role.task["orders"].permissions_boundary == null
     error_message = "tfc_apply_boundary_policy_name = null must create the roles without a permissions boundary."
   }
 }
@@ -413,5 +413,23 @@ run "explicit_container_image_wins_over_placeholder" {
   assert {
     condition     = output.services["orders"].initial_image == "111111111111.dkr.ecr.eu-west-2.amazonaws.com/orders:v1"
     error_message = "An explicit container_image must be the first revision's image."
+  }
+}
+
+# An account outside the tfc-oidc-baseline can still have the module create it.
+run "module_creates_provider_outside_baseline" {
+  command = plan
+
+  variables {
+    enable_github_oidc          = true
+    create_github_oidc_provider = true
+    services = {
+      orders = { github = { repository = "acme/orders" } }
+    }
+  }
+
+  assert {
+    condition     = length(aws_iam_openid_connect_provider.github) == 1 && aws_iam_openid_connect_provider.github[0].url == "https://token.actions.githubusercontent.com" && contains(aws_iam_openid_connect_provider.github[0].client_id_list, "sts.amazonaws.com")
+    error_message = "create_github_oidc_provider = true must create the GitHub OIDC provider with audience sts.amazonaws.com."
   }
 }

@@ -417,19 +417,19 @@ variable "services" {
 }
 
 variable "enable_github_oidc" {
-  description = "Create GitHub Actions OIDC deploy roles for services that set github (and the account's GitHub OIDC provider unless create_github_oidc_provider = false)."
+  description = "Create GitHub Actions OIDC deploy roles for services that set github. They trust the account's GitHub OIDC provider, created by the tfc-oidc-baseline StackSet."
   type        = bool
   default     = false
 }
 
 variable "create_github_oidc_provider" {
-  description = "Create the account-wide token.actions.githubusercontent.com OIDC provider. Set false when it already exists in this account and pass github_oidc_provider_arn."
+  description = "Create the account-wide token.actions.githubusercontent.com OIDC provider from this root. Default false: the tfc-oidc-baseline StackSet owns it, and the apply boundary denies the pipeline creating identity providers."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "github_oidc_provider_arn" {
-  description = "ARN of an existing GitHub OIDC provider, used when create_github_oidc_provider = false."
+  description = "ARN of the existing GitHub OIDC provider. Null derives this account's baseline-created provider ARN."
   type        = string
   default     = null
 }

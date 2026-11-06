@@ -249,24 +249,19 @@ variable "bootstrap_image" {
 # -----------------------------------------------------------------------------
 
 variable "enable_github_oidc" {
-  description = "Enable GitHub Actions OIDC deploy roles for services that set github. Also creates the account's token.actions.githubusercontent.com OIDC provider unless create_github_oidc_provider is false."
+  description = "Enable GitHub Actions OIDC deploy roles for services that set github. The roles trust the account's token.actions.githubusercontent.com provider, which the tfc-oidc-baseline StackSet creates (create_github_oidc_provider there); set create_github_oidc_provider here only for accounts outside that baseline."
   type        = bool
   default     = false
 }
 
 variable "create_github_oidc_provider" {
-  description = "Create the account-wide GitHub OIDC provider (one per account per URL). Set false when another root already owns it and pass github_oidc_provider_arn."
+  description = "Create the account-wide GitHub OIDC provider in this module. Default false: in baselined member accounts the tfc-oidc-baseline StackSet owns it and the apply boundary denies iam:CreateOpenIDConnectProvider. Set true only in an account outside that baseline."
   type        = bool
-  default     = true
-
-  validation {
-    condition     = !var.enable_github_oidc || var.create_github_oidc_provider || var.github_oidc_provider_arn != null
-    error_message = "github_oidc_provider_arn is required when enable_github_oidc = true and create_github_oidc_provider = false."
-  }
+  default     = false
 }
 
 variable "github_oidc_provider_arn" {
-  description = "ARN of an existing token.actions.githubusercontent.com OIDC provider, used when create_github_oidc_provider is false."
+  description = "ARN of the existing token.actions.githubusercontent.com OIDC provider. Null (default) derives this account's provider ARN (arn:<partition>:iam::<account>:oidc-provider/token.actions.githubusercontent.com), the one the tfc-oidc-baseline StackSet creates."
   type        = string
   default     = null
 

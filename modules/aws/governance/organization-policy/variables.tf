@@ -135,6 +135,32 @@ variable "data_perimeter_trusted_account_ids" {
   }
 }
 
+variable "federation_tenant_pins" {
+  description = "Pin OIDC web-identity federation to YOUR tenants on shared issuers (RCP, every account). With tfc_organization set, sts:AssumeRoleWithWebIdentity with a <tfc_hostname> token is denied unless sub starts organization:<tfc_organization>:. With github_owners set, a GitHub Actions token is denied unless sub is repo:<owner>/*. This stops a pipeline from creating a role that trusts another TFC org or GitHub owner on the same issuer. Tokens from other issuers are unaffected (Null guard)."
+  type = object({
+    tfc_hostname     = optional(string, "app.terraform.io")
+    tfc_organization = optional(string)
+    github_owners    = optional(list(string), [])
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = var.federation_tenant_pins.tfc_organization == null || can(regex("^[A-Za-z0-9_-]+$", coalesce(var.federation_tenant_pins.tfc_organization, "x")))
+    error_message = "federation_tenant_pins.tfc_organization must be a literal TFC organization name (letters, digits, - and _; no wildcards)."
+  }
+
+  validation {
+    condition     = alltrue([for o in var.federation_tenant_pins.github_owners : can(regex("^[A-Za-z0-9][A-Za-z0-9-]{0,38}$", o))])
+    error_message = "federation_tenant_pins.github_owners entries must be literal GitHub user/org names (no wildcards or slashes)."
+  }
+
+  validation {
+    condition     = can(regex("^[a-z0-9.-]+$", var.federation_tenant_pins.tfc_hostname))
+    error_message = "federation_tenant_pins.tfc_hostname must be a bare hostname such as app.terraform.io."
+  }
+}
+
 variable "allow_vpc_bpa_exclusions" {
   description = "Whether member accounts may create VPC Block Public Access exclusions under the declarative EC2 policy. Default false (exclusions_allowed = disabled) so a member-account admin cannot exempt a VPC from the org-wide internet-gateway ingress block."
   type        = bool

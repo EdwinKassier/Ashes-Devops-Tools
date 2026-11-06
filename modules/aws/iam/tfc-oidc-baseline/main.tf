@@ -287,6 +287,25 @@ locals {
         Resource = [for a in local.baseline_protected_arns : { "Fn::Sub" = a }]
       },
       {
+        # No new trust anchors from the pipeline. A role carrying this
+        # boundary may still be granted AdministratorAccess; if the pipeline
+        # could also register a NEW OIDC/SAML provider (an issuer it controls)
+        # and point that role's trust at it, it would mint itself an
+        # MFA-less, rotation-proof external door. Identity providers are
+        # owned by this StackSet (TFC, and GitHub with create_github_oidc_provider)
+        # and Identity Center; add-ons go through break-glass.
+        Sid    = "DenyNewIdentityProviders"
+        Effect = "Deny"
+        Action = [
+          "iam:CreateOpenIDConnectProvider",
+          "iam:AddClientIDToOpenIDConnectProvider",
+          "iam:UpdateOpenIDConnectProviderThumbprint",
+          "iam:CreateSAMLProvider",
+          "iam:UpdateSAMLProvider",
+        ]
+        Resource = "*"
+      },
+      {
         # No long-lived static credentials from the pipeline: identities come
         # from Identity Center and workload identity federation.
         Sid      = "DenyLongLivedIamUserCredentials"
@@ -400,6 +419,22 @@ locals {
     }
   }
 
+  # The account-wide GitHub Actions OIDC provider (one per account per URL).
+  # Owned here, not by app-services, because the apply boundary forbids the
+  # pipeline from registering identity providers (DenyNewIdentityProviders).
+  github_oidc_provider = var.create_github_oidc_provider ? {
+    GithubOidcProvider = {
+      Type = "AWS::IAM::OIDCProvider"
+      Properties = merge(
+        {
+          Url          = "https://token.actions.githubusercontent.com"
+          ClientIdList = ["sts.amazonaws.com"]
+        },
+        { for _ in(length(var.oidc_thumbprints) > 0 ? [1] : []) : "ThumbprintList" => var.oidc_thumbprints }
+      )
+    }
+  } : {}
+
   role_resources = merge([
     for k, b in var.account_bindings : {
       "TfcPlanRole${local.logical_suffix[k]}" = {
@@ -443,7 +478,7 @@ locals {
     {
       AWSTemplateFormatVersion = "2010-09-09"
       Description              = "Terraform Cloud OIDC workload-identity baseline (managed by Terraform: modules/aws/iam/tfc-oidc-baseline)"
-      Resources                = merge(local.oidc_provider, local.apply_boundary_resource, local.role_resources)
+      Resources                = merge(local.oidc_provider, local.github_oidc_provider, local.apply_boundary_resource, local.role_resources)
       Outputs = {
         OidcProviderArn = { Value = { Ref = "TfcOidcProvider" } }
       }

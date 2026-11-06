@@ -15,6 +15,9 @@
             "${terraform_run_role_arn}",
             "${break_glass_role_arn}"
           ]
+        },
+        "BoolIfExists": {
+          "aws:AssumedRoot": "false"
         }
       }
     },

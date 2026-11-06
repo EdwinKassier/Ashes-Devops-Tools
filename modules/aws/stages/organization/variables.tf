@@ -197,6 +197,19 @@ variable "tfc_hostname" {
   default     = "app.terraform.io"
 }
 
+variable "pin_tfc_federation_to_org" {
+  description = "Deny (RCP, every account) sts:AssumeRoleWithWebIdentity with a <tfc_hostname> token whose sub is not organization:<tfc_organization>:*. Without it, any pipeline that can create a role can make it trust ANOTHER TFC org on the same issuer: a persistence path no permissions boundary sees. Default true; takes effect when tfc_organization is set. Set false only if workspaces in other TFC organizations must assume roles here."
+  type        = bool
+  default     = true
+}
+
+variable "github_federation_owners" {
+  description = "GitHub users/orgs whose Actions OIDC tokens may assume roles anywhere in the organization (RCP pin: sub must be repo:<owner>/*). Empty (default) leaves GitHub federation unpinned. Set it to every owner whose repos deploy here (app-services deploy roles)."
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
+
 variable "tfc_project" {
   description = "Default TFC project of the bound workspaces (matched literally in the trust sub). Override per account with tfc_workspace_bindings[*].project."
   type        = string

@@ -171,3 +171,33 @@ run "tfc_oidc_baseline_can_be_disabled" {
     error_message = "enable_tfc_oidc_baseline = false must compose no baseline and publish empty role maps"
   }
 }
+
+# The RCP pins TFC web-identity federation to this TFC organization by default.
+run "rcp_pins_tfc_federation_by_default" {
+  command = plan
+
+  variables {
+    github_federation_owners = ["acme"]
+  }
+
+  assert {
+    condition = (
+      one([for s in jsondecode(module.policies.policy_contents["rcp-data-perimeter"]).Statement : s if s.Sid == "PinTfcFederationToOrg"]).Condition.StringNotLike["app.terraform.io:sub"] == "organization:acme:*" &&
+      length([for s in jsondecode(module.policies.policy_contents["rcp-data-perimeter"]).Statement : s if s.Sid == "PinGithubFederationToOwners"]) == 1
+    )
+    error_message = "the stage must pin TFC federation to tfc_organization and GitHub federation to github_federation_owners."
+  }
+}
+
+run "rcp_tfc_pin_opt_out" {
+  command = plan
+
+  variables {
+    pin_tfc_federation_to_org = false
+  }
+
+  assert {
+    condition     = length([for s in jsondecode(module.policies.policy_contents["rcp-data-perimeter"]).Statement : s if startswith(s.Sid, "Pin")]) == 0
+    error_message = "pin_tfc_federation_to_org = false (and no GitHub owners) must render no pin statements."
+  }
+}

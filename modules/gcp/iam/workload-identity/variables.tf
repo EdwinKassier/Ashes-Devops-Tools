@@ -109,7 +109,7 @@ variable "gitlab_url" {
 }
 
 variable "gitlab_namespace" {
-  description = "GitLab namespace to restrict access to (optional). Value is interpolated into a CEL startsWith() expression — must not contain single quotes."
+  description = "GitLab namespace (group path) to restrict access to. Matches the namespace itself or any sub-group under it (namespace_path == X || startsWith(X + '/')), never a sibling sharing the prefix. Interpolated into CEL, so it must not contain single quotes."
   type        = string
   default     = null
 

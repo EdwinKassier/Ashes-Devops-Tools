@@ -177,7 +177,7 @@ run "workspace_wildcards_use_string_like_when_enabled" {
   }
 }
 
-run "no_bindings_deploys_only_the_oidc_provider" {
+run "no_bindings_deploys_only_the_oidc_providers" {
   command = plan
 
   variables {
@@ -185,8 +185,8 @@ run "no_bindings_deploys_only_the_oidc_provider" {
   }
 
   assert {
-    condition     = keys(jsondecode(output.template_body).Resources) == ["TfcOidcProvider"] && !contains(keys(jsondecode(output.template_body)), "Conditions")
-    error_message = "with no bindings the template must contain only the OIDC provider and no empty Conditions section"
+    condition     = toset(keys(jsondecode(output.template_body).Resources)) == toset(["TfcOidcProvider", "GithubOidcProvider"]) && !contains(keys(jsondecode(output.template_body)), "Conditions")
+    error_message = "with no bindings the template must contain only the TFC and GitHub OIDC providers and no empty Conditions section"
   }
 }
 
@@ -558,4 +558,42 @@ run "member_break_glass_requires_a_trusted_principal" {
   }
 
   expect_failures = [aws_cloudformation_stack_set.break_glass]
+}
+
+# The pipeline may not register trust anchors: a new OIDC/SAML provider plus a
+# role (carrying the boundary, granted admin) trusting it is a persistence path.
+run "boundary_denies_new_identity_providers" {
+  command = plan
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+      s.Sid == "DenyNewIdentityProviders" && s.Effect == "Deny" && s.Resource == "*" &&
+      contains(s.Action, "iam:CreateOpenIDConnectProvider") && contains(s.Action, "iam:CreateSAMLProvider") &&
+      contains(s.Action, "iam:AddClientIDToOpenIDConnectProvider")
+    ])
+    error_message = "the apply boundary must deny creating OIDC/SAML providers and adding audiences, on every resource."
+  }
+
+  # The GitHub provider app-services relies on is owned by the StackSet instead.
+  assert {
+    condition = (
+      jsondecode(output.template_body).Resources.GithubOidcProvider.Properties.Url == "https://token.actions.githubusercontent.com" &&
+      jsondecode(output.template_body).Resources.GithubOidcProvider.Properties.ClientIdList == ["sts.amazonaws.com"]
+    )
+    error_message = "the StackSet must create the account-wide GitHub OIDC provider (aud sts.amazonaws.com) by default."
+  }
+}
+
+run "github_provider_opt_out" {
+  command = plan
+
+  variables {
+    create_github_oidc_provider = false
+  }
+
+  assert {
+    condition     = !contains(keys(jsondecode(output.template_body).Resources), "GithubOidcProvider")
+    error_message = "create_github_oidc_provider = false must omit the GitHub provider."
+  }
 }

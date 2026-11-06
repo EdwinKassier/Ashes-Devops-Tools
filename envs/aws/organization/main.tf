@@ -25,6 +25,8 @@ module "aws_organization" {
   enable_tfc_oidc_baseline              = var.enable_tfc_oidc_baseline
   tfc_organization                      = local.tfc_organization
   tfc_hostname                          = var.tfc_hostname
+  pin_tfc_federation_to_org             = var.pin_tfc_federation_to_org
+  github_federation_owners              = local.github_federation_owners
   tfc_project                           = local.tfc_project
   tfc_workspace_bindings                = local.tfc_workspace_bindings
   tfc_oidc_allow_workspace_wildcards    = var.tfc_oidc_allow_workspace_wildcards

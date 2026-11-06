@@ -142,9 +142,16 @@ locals {
       # works), a Null aws:SourceAccount guard on the confused-deputy statement
       # (service-principal calls without source context — EC2/Lambda/ECS role
       # assumption — are not denied), and dp:exclude:* resource-tag escape hatches.
+      # Web-identity federation is instead pinned per issuer (federation_tenant_pins):
+      # a token from app.terraform.io / GitHub is accepted only from YOUR TFC org /
+      # GitHub owners, so an apply identity cannot mint a role trusting another
+      # tenant on the same issuer (a persistence backdoor no boundary can see).
       content = jsonencode(jsondecode(templatefile("${path.module}/policies/rcp-data-perimeter.json.tftpl", {
         org_id              = var.org_id
         trusted_account_ids = var.data_perimeter_trusted_account_ids
+        tfc_hostname        = var.federation_tenant_pins.tfc_hostname
+        tfc_organization    = var.federation_tenant_pins.tfc_organization
+        github_owners       = var.federation_tenant_pins.github_owners
       })))
     }
     declarative-ec2 = {

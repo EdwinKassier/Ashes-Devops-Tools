@@ -365,3 +365,15 @@ variable "allow_vpc_bpa_exclusions" {
   type        = bool
   default     = false
 }
+
+variable "pin_tfc_federation_to_org" {
+  description = "RCP: accept app.terraform.io (tfc_hostname) web-identity tokens org-wide only from tfc_organization, so no pipeline can make a role trust another TFC org. Default true."
+  type        = bool
+  default     = true
+}
+
+variable "github_federation_owners" {
+  description = "GitHub users/orgs whose Actions OIDC tokens may assume roles in the organization (RCP pin repo:<owner>/*). Null = aws.github_federation_owners from config/landing-zone.yaml, else empty (GitHub federation unpinned)."
+  type        = list(string)
+  default     = null
+}

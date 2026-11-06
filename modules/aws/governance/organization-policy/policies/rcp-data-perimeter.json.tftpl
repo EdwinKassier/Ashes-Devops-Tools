@@ -17,7 +17,9 @@
         "sts:TagSession",
         "kms:*",
         "sqs:*",
-        "secretsmanager:*"
+        "secretsmanager:*",
+        "ecr:*",
+        "logs:*"
       ],
       "Resource": "*",
       "Condition": {
@@ -49,7 +51,9 @@
         "sts:TagSession",
         "kms:*",
         "sqs:*",
-        "secretsmanager:*"
+        "secretsmanager:*",
+        "ecr:*",
+        "logs:*"
       ],
       "Resource": "*",
       "Condition": {
@@ -68,6 +72,40 @@
         }
       }
     },
+%{ if tfc_organization != null ~}
+    {
+      "Sid": "PinTfcFederationToOrg",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Resource": "*",
+      "Condition": {
+        "Null": {
+          "${tfc_hostname}:sub": "false"
+        },
+        "StringNotLike": {
+          "${tfc_hostname}:sub": "organization:${tfc_organization}:*"
+        }
+      }
+    },
+%{ endif ~}
+%{ if length(github_owners) > 0 ~}
+    {
+      "Sid": "PinGithubFederationToOwners",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Resource": "*",
+      "Condition": {
+        "Null": {
+          "token.actions.githubusercontent.com:sub": "false"
+        },
+        "StringNotLike": {
+          "token.actions.githubusercontent.com:sub": ${jsonencode([for o in github_owners : "repo:${o}/*"])}
+        }
+      }
+    },
+%{ endif ~}
     {
       "Sid": "RequireSecureTransport",
       "Effect": "Deny",

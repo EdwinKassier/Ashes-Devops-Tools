@@ -148,6 +148,11 @@ aws:
     - eu-west-2
   enabled_regions:
     - eu-west-2
+  # GitHub users/orgs whose Actions OIDC tokens may assume roles in any account
+  # (RCP pin: sub must be repo:<owner>/*). List every owner whose repos deploy
+  # here through app-services. Empty or absent leaves GitHub federation unpinned.
+  # github_federation_owners:
+  #   - my-github-org
   # Phase-0 management-account roles (aws-bootstrap runbook Step 2).
   terraform_run_role_arn: arn:aws:iam::REPLACE_WITH_12_DIGIT_ID:role/tfc-mgmt-apply
   break_glass_role_arn: arn:aws:iam::REPLACE_WITH_12_DIGIT_ID:role/break-glass

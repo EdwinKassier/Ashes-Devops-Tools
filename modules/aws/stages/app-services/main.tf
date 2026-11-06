@@ -99,10 +99,15 @@ locals {
 
   database_services = { for k, s in var.services : k => s if s.database != null }
 
+  # Default: the account-wide provider the tfc-oidc-baseline StackSet owns (the
+  # apply boundary forbids the pipeline from registering identity providers).
   github_oidc_provider_arn = (
     var.enable_github_oidc && var.create_github_oidc_provider
     ? try(aws_iam_openid_connect_provider.github[0].arn, null)
-    : var.github_oidc_provider_arn
+    : coalesce(
+      var.github_oidc_provider_arn,
+      "arn:${try(data.aws_partition.current[0].partition, "aws")}:iam::${coalesce(local.account_id, "000000000000")}:oidc-provider/token.actions.githubusercontent.com",
+    )
   )
 
   account_id = try(data.aws_caller_identity.current[0].account_id, null)
@@ -123,7 +128,7 @@ locals {
 }
 
 data "aws_partition" "current" {
-  count = local.enabled && var.tfc_apply_boundary_policy_name != null ? 1 : 0
+  count = local.enabled ? 1 : 0
 }
 
 data "aws_caller_identity" "current" {

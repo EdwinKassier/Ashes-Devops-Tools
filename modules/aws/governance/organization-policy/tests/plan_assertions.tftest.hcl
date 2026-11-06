@@ -412,3 +412,61 @@ run "attachments_key_correctly" {
     error_message = "attachments must key on the caller-provided map key"
   }
 }
+
+# Centralized root access: sts:AssumeRoot sessions (task-scoped, short-lived,
+# issued from the management account / delegated admin) must survive the
+# root-deny. Ordinary root sign-in carries no aws:AssumedRoot key, so the
+# IfExists form keeps denying it.
+run "root_deny_exempts_centralized_root_sessions" {
+  command = plan
+
+  assert {
+    condition     = one([for s in jsondecode(aws_organizations_policy.policy["scp-baseline"].content).Statement : s if s.Sid == "DenyRootUserActions"]).Condition.BoolIfExists["aws:AssumedRoot"] == "false"
+    error_message = "DenyRootUserActions must carry BoolIfExists aws:AssumedRoot=false so sts:AssumeRoot remediation sessions are not denied."
+  }
+}
+
+# RCP web-identity tenant pins: absent by default, one statement per issuer
+# when set, each Null-guarded so other issuers' tokens are unaffected.
+run "federation_tenant_pins_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = length([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if startswith(s.Sid, "Pin")]) == 0
+    error_message = "no federation pin statements without federation_tenant_pins."
+  }
+
+  assert {
+    condition = alltrue([
+      for sid in ["EnforceOrgIdentities", "ConfusedDeputyProtection"] :
+      contains(one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == sid]).Action, "ecr:*") &&
+      contains(one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == sid]).Action, "logs:*")
+    ])
+    error_message = "the RCP identity and confused-deputy statements must cover ECR and CloudWatch Logs."
+  }
+}
+
+run "federation_tenant_pins_render" {
+  command = plan
+
+  variables {
+    federation_tenant_pins = {
+      tfc_organization = "acme"
+      github_owners    = ["acme", "acme-apps"]
+    }
+  }
+
+  assert {
+    condition = (
+      one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == "PinTfcFederationToOrg"]).Action == "sts:AssumeRoleWithWebIdentity" &&
+      one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == "PinTfcFederationToOrg"]).Condition.Null["app.terraform.io:sub"] == "false" &&
+      one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == "PinTfcFederationToOrg"]).Condition.StringNotLike["app.terraform.io:sub"] == "organization:acme:*"
+    )
+    error_message = "the TFC pin must deny web identity whose app.terraform.io:sub is not organization:acme:* (Null-guarded)."
+  }
+
+  assert {
+    condition     = one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == "PinGithubFederationToOwners"]).Condition.StringNotLike["token.actions.githubusercontent.com:sub"] == ["repo:acme/*", "repo:acme-apps/*"]
+    error_message = "the GitHub pin must allow only repo:<owner>/* subjects."
+  }
+}

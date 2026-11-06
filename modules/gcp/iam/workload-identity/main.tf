@@ -93,7 +93,9 @@ resource "google_iam_workload_identity_pool_provider" "gitlab" {
     "attribute.ref"            = "assertion.ref"
   }
 
-  attribute_condition = var.gitlab_namespace != null ? "assertion.namespace_path.startsWith('${var.gitlab_namespace}')" : null
+  # Exact namespace or a sub-group of it. A bare startsWith('acme') would also
+  # trust the unrelated groups 'acme-evil' and 'acmecorp' on the same issuer.
+  attribute_condition = var.gitlab_namespace != null ? "assertion.namespace_path == '${trimsuffix(var.gitlab_namespace, "/")}' || assertion.namespace_path.startsWith('${trimsuffix(var.gitlab_namespace, "/")}/')" : null
 
   oidc {
     issuer_uri = var.gitlab_url

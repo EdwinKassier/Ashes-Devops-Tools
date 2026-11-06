@@ -77,6 +77,14 @@ module "policies" {
   break_glass_role_names             = var.break_glass_role_names
   data_perimeter_trusted_account_ids = var.data_perimeter_trusted_account_ids
   allow_vpc_bpa_exclusions           = var.allow_vpc_bpa_exclusions
+
+  # Web-identity tenant pins (RCP): TFC tokens only from this org's TFC
+  # organization, GitHub tokens only from the listed owners.
+  federation_tenant_pins = {
+    tfc_hostname     = var.tfc_hostname
+    tfc_organization = var.pin_tfc_federation_to_org ? var.tfc_organization : null
+    github_owners    = var.github_federation_owners
+  }
 }
 
 # Centralized root-access management for the organization.

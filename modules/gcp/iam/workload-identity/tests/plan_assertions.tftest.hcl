@@ -28,3 +28,19 @@ run "pool_wired" {
     error_message = "WIF pool must be created in the caller-supplied project."
   }
 }
+
+# The GitLab trust matches the namespace or its sub-groups only, never a
+# sibling group that merely shares the prefix ("acme" must not trust "acme-evil").
+run "gitlab_namespace_is_not_a_prefix_match" {
+  command = plan
+
+  variables {
+    enable_gitlab_provider = true
+    gitlab_namespace       = "acme/"
+  }
+
+  assert {
+    condition     = google_iam_workload_identity_pool_provider.gitlab[0].attribute_condition == "assertion.namespace_path == 'acme' || assertion.namespace_path.startsWith('acme/')"
+    error_message = "GitLab attribute_condition must be namespace_path == X || startsWith(X/), not a bare prefix."
+  }
+}

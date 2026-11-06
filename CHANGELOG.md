@@ -46,6 +46,24 @@ release metadata for a Terraform Cloud run.
   against the branch protection GitHub actually enforces: contexts, `strict` and `enforce_admins`.
   It needs repo-admin `gh` auth, so it is not part of the PR gate.
 
+#### Security (Wave B)
+
+- **S8 — GitLab WIF trust is no longer a prefix match.** The condition is now
+  `namespace_path == X || startsWith(X/)`. Before, `acme` also trusted `acme-evil`.
+- **A1 — Root-deny SCP lets centralized root sessions through.** It now carries
+  `BoolIfExists aws:AssumedRoot=false`, so the `sts:AssumeRoot` remediation path works.
+- **S1 — OIDC persistence backdoors are closed on AWS:**
+  - The RCP pins web-identity federation per issuer. TFC tokens are accepted only from your TFC
+    organization (`pin_tfc_federation_to_org`, default on). GitHub tokens are accepted only from
+    `github_federation_owners` (config `aws.github_federation_owners`).
+  - The `tfc-apply` permissions boundary denies `iam:CreateOpenIDConnectProvider`,
+    `iam:CreateSAMLProvider`, `iam:UpdateSAMLProvider`, `iam:AddClientIDToOpenIDConnectProvider`
+    and `iam:UpdateOpenIDConnectProviderThumbprint`.
+  - The account-wide GitHub OIDC provider is now created by the `tfc-oidc-baseline` StackSet
+    (`create_github_oidc_provider`, default true).
+- **The RCP data perimeter now covers ECR and CloudWatch Logs** (`ecr:*`, `logs:*`).
+- **`organization-policy` gains a `policy_contents` output**, for evidence and tests.
+
 #### Migration
 
 - **Organization.** Set `TF_CLOUD_ORGANIZATION=<org>`, and `TF_CLOUD_HOSTNAME` for HCP EU or TFE,
@@ -55,6 +73,12 @@ release metadata for a Terraform Cloud run.
   workspace by tags (`cloud:<cloud>` + `layer:workload`) and `TF_WORKSPACE=<full workspace name>`,
   instead of a `prefix`. Workspaces created by `envs/tfc-admin` already carry these tags. Tag any
   hand-created workspace to match.
+- **GitHub OIDC provider.** `app-services` / `aws-workload` `create_github_oidc_provider` now
+  defaults to `false`, and the provider ARN is derived for the account. In an account where
+  Terraform already created the provider, either keep `create_github_oidc_provider = true`, or
+  `terraform state rm` it and let the StackSet adopt the URL. Set
+  `create_github_oidc_provider = false` on `tfc-oidc-baseline` for accounts where the StackSet
+  must not create it.
 - **First `tfc-admin` apply after upgrading.** It adopts the existing `tfc-admin` workspace through
   the import block, which now sets its VCS triggers and turns speculative plans off. If the
   workspace is deliberately CLI-only, set `manage_tfc_admin_workspace = false`.

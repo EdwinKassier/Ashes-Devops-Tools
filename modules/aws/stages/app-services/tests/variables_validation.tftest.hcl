@@ -89,12 +89,16 @@ run "database_without_subnets_rejected" {
   }
 }
 
-run "existing_provider_without_arn_rejected" {
-  command         = plan
-  expect_failures = [var.create_github_oidc_provider]
+# The default reuses the baseline-created provider; no ARN input is required.
+run "existing_provider_arn_is_derived" {
+  command = plan
   variables {
-    enable_github_oidc          = true
-    create_github_oidc_provider = false
+    enable_github_oidc = true
+  }
+
+  assert {
+    condition     = length(aws_iam_openid_connect_provider.github) == 0 && endswith(output.github_oidc_provider_arn, ":oidc-provider/token.actions.githubusercontent.com")
+    error_message = "by default app-services must not create the GitHub provider and must derive the account's provider ARN."
   }
 }
 
