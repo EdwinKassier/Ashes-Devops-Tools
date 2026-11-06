@@ -38,7 +38,7 @@ locals {
     environments = {
       for k, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : k => {
         display_name            = tostring(try(e.display_name, k))
-        region                  = tostring(try(e.region, local.lz.org.regions.gcp, "europe-west1"))
+        region                  = tostring(try(e.region, local.lz.org.regions.gcp, "europe-west2"))
         cidr_block              = tostring(try(e.cidr_block, ""))
         budget_monthly_limit    = tonumber(try(e.budget_monthly_limit, 0))
         iam_group_role_bindings = try({ for g, roles in e.iam_group_role_bindings : g => toset([for r in roles : tostring(r)]) }, {})
@@ -56,6 +56,6 @@ locals {
   billing_account  = try(coalesce(var.billing_account, local.cfg.billing_account), null)
   admin_email      = coalesce(var.admin_email, local.cfg.admin_email, "unset@unset.invalid")
   environments     = var.environments != null ? var.environments : local.cfg.environments
-  default_region   = coalesce(var.default_region, local.cfg.default_region, "europe-west1")
+  default_region   = coalesce(var.default_region, local.cfg.default_region, "europe-west2")
   tfc_organization = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
 }

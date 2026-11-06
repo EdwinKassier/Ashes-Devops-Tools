@@ -25,6 +25,34 @@ output "app_services" {
   value       = module.app_services.services
 }
 
+output "app_ingress_mode" {
+  description = "Effective app ingress mode: internal, public_alb or cloudfront_vpc_origin."
+  value       = local.app_ingress_mode
+}
+
+output "app_endpoint" {
+  description = "Base URL of the shared app entry point, or null when services = {}: https://<CloudFront domain> (cloudfront_vpc_origin), https://<ALB DNS> (public_alb), else the internal ALB URL (https when app_alb_certificate_arn is set)."
+  value = !local.apps_enabled ? null : (
+    local.app_vpc_origin ? "https://${coalesce(var.app_edge_domain_name, module.app_edge[0].distribution_domain_name)}" :
+    "${var.app_alb_certificate_arn != null ? "https" : "http"}://${module.app_services.alb_dns_name}"
+  )
+}
+
+output "app_edge_distribution_id" {
+  description = "CloudFront distribution ID in front of the ALB (cloudfront_vpc_origin), or null."
+  value       = try(module.app_edge[0].distribution_id, null)
+}
+
+output "app_regional_web_acl_arn" {
+  description = "Regional WAF Web ACL associated with the internet-facing ALB (public_alb with enable_app_waf), or null."
+  value       = try(module.app_edge[0].regional_web_acl_arn, null)
+}
+
+output "workload_kms_key_arn" {
+  description = "ARN of the CMK this workload uses (created here as alias/workload-<environment> unless kms_key_arn was supplied)."
+  value       = local.kms_key_arn
+}
+
 output "app_alb_dns_name" {
   description = "DNS name of the shared per-environment ALB (internal by default), or null when services = {}."
   value       = module.app_services.alb_dns_name

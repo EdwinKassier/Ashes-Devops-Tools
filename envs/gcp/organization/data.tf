@@ -3,7 +3,17 @@
 # gcp-bootstrap (applied first) produces the admin project, Terraform admin SA,
 # and WIF pools. This root reads them via remote state rather than composing the
 # bootstrap stage in-state (audit H3 — control-plane state decomposition).
+#
+# Stage contract override (FAST-style, as in gcp-projects / gcp-network-hub): a
+# supplied bootstrap_contract (variable or gcp.contracts.bootstrap in
+# config/landing-zone.yaml) replaces the read (count = 0), so this root can be
+# planned without the gcp-bootstrap workspace (bootstrap applied elsewhere).
+locals {
+  bootstrap_contract = var.bootstrap_contract != null ? var.bootstrap_contract : local.cfg.bootstrap_contract
+}
+
 data "terraform_remote_state" "gcp_bootstrap" {
+  count   = local.bootstrap_contract == null ? 1 : 0
   backend = "cloud"
   config = {
     organization = local.tfc_organization

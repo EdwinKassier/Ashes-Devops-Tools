@@ -32,13 +32,29 @@ locals {
     allowed_regions           = try([for r in local.lz.gcp.allowed_regions : tostring(r)], null)
     hub_vpc_cidr_block        = try(tostring(local.lz.gcp.network.hub_cidr_block), null)
     dns_hub_vpc_cidr_block    = try(tostring(local.lz.gcp.network.dns_hub_cidr_block), null)
+    # gcp.contracts.bootstrap: stage contract override (same shape as the
+    # bootstrap_contract variable). Present => the remote-state read is skipped.
+    bootstrap_contract = try(local.lz.gcp.contracts.bootstrap.admin_project_number, null) == null ? null : {
+      admin_project_id      = tostring(local.lz.gcp.contracts.bootstrap.admin_project_id)
+      admin_project_number  = tostring(local.lz.gcp.contracts.bootstrap.admin_project_number)
+      terraform_admin_email = tostring(local.lz.gcp.contracts.bootstrap.terraform_admin_email)
+      workload_service_accounts = {
+        for k, sa in try({ for k, sa in local.lz.gcp.contracts.bootstrap.workload_service_accounts : k => sa }, {}) : k => { plan = tostring(sa.plan), apply = tostring(sa.apply) }
+      }
+      stage_service_accounts = {
+        for k, sa in try({ for k, sa in local.lz.gcp.contracts.bootstrap.stage_service_accounts : k => sa }, {}) : k => { plan = tostring(sa.plan), apply = tostring(sa.apply) }
+      }
+      delegated_workload_folder_roles = [for r in try(local.lz.gcp.contracts.bootstrap.delegated_workload_folder_roles, []) : tostring(r)]
+      delegated_network_folder_roles  = [for r in try(local.lz.gcp.contracts.bootstrap.delegated_network_folder_roles, []) : tostring(r)]
+      guardrail_owner_mode            = tostring(try(local.lz.gcp.contracts.bootstrap.guardrail_owner_mode, "separate"))
+    }
     # Normalised to the attribute types of var.environments (region defaults to
     # org.regions.gcp, display_name to the key). A malformed entry is caught by
     # the var.environments validations, which also read local.cfg.
     environments = {
       for k, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : k => {
         display_name            = tostring(try(e.display_name, k))
-        region                  = tostring(try(e.region, local.lz.org.regions.gcp, "europe-west1"))
+        region                  = tostring(try(e.region, local.lz.org.regions.gcp, "europe-west2"))
         cidr_block              = tostring(try(e.cidr_block, ""))
         budget_monthly_limit    = tonumber(try(e.budget_monthly_limit, 0))
         iam_group_role_bindings = try({ for g, roles in e.iam_group_role_bindings : g => toset([for r in roles : tostring(r)]) }, {})
@@ -57,7 +73,7 @@ locals {
   billing_account           = try(coalesce(var.billing_account, local.cfg.billing_account), null)
   tfc_organization          = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
   environments              = var.environments != null ? var.environments : local.cfg.environments
-  default_region            = coalesce(var.default_region, local.cfg.default_region, "europe-west1")
+  default_region            = coalesce(var.default_region, local.cfg.default_region, "europe-west2")
   allowed_regions           = var.allowed_regions != null ? var.allowed_regions : coalesce(local.cfg.allowed_regions, ["europe-west1", "europe-west2", "us-central1"])
   admin_email               = coalesce(var.admin_email, local.cfg.admin_email, "unset@unset.invalid")
   organization_admin_groups = var.organization_admin_groups != null ? var.organization_admin_groups : coalesce(local.cfg.organization_admin_groups, [])

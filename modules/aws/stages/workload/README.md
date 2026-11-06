@@ -86,9 +86,11 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_ec2_transit_gateway_vpc_attachment.spoke (modules/aws/stages/workload/main.tf#L118)
-- data source.aws_caller_identity.current (modules/aws/stages/workload/main.tf#L48)
-- data source.aws_partition.current (modules/aws/stages/workload/main.tf#L52)
+- resource.aws_ebs_default_kms_key.home (modules/aws/stages/workload/main.tf#L186)
+- resource.aws_ec2_transit_gateway_vpc_attachment.spoke (modules/aws/stages/workload/main.tf#L133)
+- resource.aws_vpc_block_public_access_exclusion.public_ingress (modules/aws/stages/workload/main.tf#L259)
+- data source.aws_caller_identity.current (modules/aws/stages/workload/main.tf#L50)
+- data source.aws_partition.current (modules/aws/stages/workload/main.tf#L54)
 
 
 ## Inputs
@@ -103,10 +105,14 @@ The following resources are created:
 | <a name="input_az_count"></a> [az\_count](#input\_az\_count) | Number of availability zones to spread each subnet tier across. | `number` | `2` | no |
 | <a name="input_config_role_arn"></a> [config\_role\_arn](#input\_config\_role\_arn) | ARN of the IAM role AWS Config assumes to record resource configurations in this account/Region. Null (default) uses the account's AWSServiceRoleForConfig service-linked role (created unless create\_config\_service\_linked\_role = false). | `string` | `null` | no |
 | <a name="input_create_config_service_linked_role"></a> [create\_config\_service\_linked\_role](#input\_create\_config\_service\_linked\_role) | With config\_role\_arn = null, create the AWSServiceRoleForConfig service-linked role in the workload account. Set false if Config was ever enabled in the account (the SLR already exists). | `bool` | `true` | no |
+| <a name="input_create_internet_gateway"></a> [create\_internet\_gateway](#input\_create\_internet\_gateway) | Attach an internet gateway to the spoke VPC even without public subnets (no routes to it are added). CloudFront VPC origins require the origin VPC to have one. Implied by enable\_public\_subnets. | `bool` | `false` | no |
 | <a name="input_edge_name_prefix"></a> [edge\_name\_prefix](#input\_edge\_name\_prefix) | Prefix applied to the edge WAF Web ACL, CloudFront Shield protection, and metric names. Ignored when enable\_edge is false. | `string` | `"workload-edge"` | no |
 | <a name="input_edge_origin_domain_name"></a> [edge\_origin\_domain\_name](#input\_edge\_origin\_domain\_name) | DNS name of the origin the edge CloudFront distribution fetches from. Ignored when enable\_edge is false. | `string` | `"origin.example.com"` | no |
+| <a name="input_enable_ebs_default_kms_key"></a> [enable\_ebs\_default\_kms\_key](#input\_enable\_ebs\_default\_kms\_key) | Set kms\_key\_arn as the account default EBS key in the HOME region (aws\_region) with a plan-safe count. Use true when kms\_key\_arn is created in the same plan (its ARN is unknown until apply). Null (default) keeps the legacy behaviour: the account baseline sets it in every aws\_enabled\_regions entry when kms\_key\_arn is non-empty. False sets no default key. | `bool` | `null` | no |
 | <a name="input_enable_edge"></a> [enable\_edge](#input\_enable\_edge) | Deploy the per-workload edge-security stack (CloudFront + WAF, in us-east-1). Off by default; a workload opts in when it fronts an internet-facing app. | `bool` | `false` | no |
+| <a name="input_enable_public_subnets"></a> [enable\_public\_subnets](#input\_enable\_public\_subnets) | Add a public subnet tier ("public": newbits 8, number\_offset 24, one subnet per AZ) whose route tables default-route to an internet gateway this stage creates. Only for an internet-facing app ALB (aws-workload app\_ingress\_mode = "public\_alb"); tasks and databases stay in the private/isolated tiers. Default false: no public subnets, no IGW. | `bool` | `false` | no |
 | <a name="input_enable_ssm"></a> [enable\_ssm](#input\_enable\_ssm) | Deploy the Systems Manager baseline (Session Manager preferences, patch baseline, inventory). On by default. Requires a non-empty kms\_key\_arn (Session Manager sessions/logs are KMS-encrypted; an empty key would leave the session document's kmsKeyId blank). | `bool` | `true` | no |
+| <a name="input_enable_vpc_bpa_exclusion"></a> [enable\_vpc\_bpa\_exclusion](#input\_enable\_vpc\_bpa\_exclusion) | Create a VPC Block Public Access exclusion (allow-bidirectional) for this spoke VPC so an internet-facing ALB in its public tier can receive traffic. The org declarative EC2 policy blocks internet-gateway ingress for every VPC; an exclusion is only accepted when aws-organization sets allow\_vpc\_bpa\_exclusions = true. Scoped to this one VPC. Default false. | `bool` | `false` | no |
 | <a name="input_environment"></a> [environment](#input\_environment) | Environment this workload account serves (e.g. dev, staging, prod). Used to derive the default resource name workload-<environment>. null keeps the legacy name "workload". | `string` | `null` | no |
 | <a name="input_ipam_pool_id"></a> [ipam\_pool\_id](#input\_ipam\_pool\_id) | IPAM pool ID to allocate the spoke VPC CIDR from (the network account's regional pool, shared over RAM). Empty string uses the literal vpc\_cidr instead. | `string` | `""` | no |
 | <a name="input_kms_key_arn"></a> [kms\_key\_arn](#input\_kms\_key\_arn) | ARN of the CMK used as the account default EBS encryption key and (when enable\_ssm is true) to encrypt Session Manager sessions/logs. Empty string leaves default EBS encryption on the AWS-managed key; must be a non-empty key when enable\_ssm is true. | `string` | `""` | no |
@@ -125,11 +131,14 @@ The following resources are created:
 | Name | Description |
 |------|-------------|
 | <a name="output_config_role_arn"></a> [config\_role\_arn](#output\_config\_role\_arn) | IAM role the workload account's Config recorders use (the AWSServiceRoleForConfig service-linked role unless config\_role\_arn was set). |
+| <a name="output_internet_gateway_id"></a> [internet\_gateway\_id](#output\_internet\_gateway\_id) | ID of the spoke's internet gateway, or null when neither enable\_public\_subnets nor create\_internet\_gateway is set. |
 | <a name="output_name"></a> [name](#output\_name) | The resolved spoke name (var.name, else workload-<environment>). |
 | <a name="output_route_table_ids_by_tier"></a> [route\_table\_ids\_by\_tier](#output\_route\_table\_ids\_by\_tier) | Map of spoke subnet tier to its per-AZ route table IDs (owned by the vpc module). |
 | <a name="output_subnet_ids_by_tier"></a> [subnet\_ids\_by\_tier](#output\_subnet\_ids\_by\_tier) | Map of subnet tier name to the list of subnet IDs created for that tier (one per AZ) in the spoke VPC. |
 | <a name="output_tgw_attachment_id"></a> [tgw\_attachment\_id](#output\_tgw\_attachment\_id) | The ID of the spoke VPC's transit-gateway attachment to the shared hub (null in standalone mode, tgw\_id = null). |
 | <a name="output_tgw_routes"></a> [tgw\_routes](#output\_tgw\_routes) | The spoke routing contract handed to the vpc module: tier -> list of {destination\_cidr\_block, transit\_gateway\_id} routes to the shared transit gateway. |
+| <a name="output_vpc_bpa_exclusion_enabled"></a> [vpc\_bpa\_exclusion\_enabled](#output\_vpc\_bpa\_exclusion\_enabled) | Whether this spoke VPC has a VPC Block Public Access exclusion (true only for public ALB ingress). |
+| <a name="output_vpc_bpa_exclusion_id"></a> [vpc\_bpa\_exclusion\_id](#output\_vpc\_bpa\_exclusion\_id) | ID of the VPC Block Public Access exclusion for this spoke VPC, or null when enable\_vpc\_bpa\_exclusion is false. |
 | <a name="output_vpc_id"></a> [vpc\_id](#output\_vpc\_id) | The ID of the workload spoke VPC. |
 | <a name="output_workload_role_arns"></a> [workload\_role\_arns](#output\_workload\_role\_arns) | Map of workload IAM role name to role ARN. |
 <!-- END_TF_DOCS -->

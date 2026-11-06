@@ -97,3 +97,14 @@ output "os_patch_deployment_ids" {
   description = "Map of target project key (host, team-<name>) to its VM Manager patch deployment IDs. Empty when enable_os_patch_management = false."
   value       = { for k, m in module.os_patch_management : k => m.patch_deployment_ids }
 }
+
+output "public_ingress" {
+  description = "Per exposed app service: the global load balancer IP to point the domains' A records at (unless dns_managed_zone created them), the domains, and the managed certificate ID. Empty when public ingress is off."
+  value = {
+    for k, m in module.app_ingress : k => {
+      ip_address     = m.ip_address
+      domains        = m.managed_domains
+      certificate_id = m.certificate_id
+    }
+  }
+}

@@ -15,7 +15,13 @@ resource "google_cloud_run_v2_service" "this" {
   location = var.location
   name     = var.name
   ingress  = var.ingress
-  labels   = var.labels
+
+  # Public access without an allUsers IAM binding: the Invoker IAM check is turned
+  # off on the service itself, which org domain-restricted sharing
+  # (iam.allowedPolicyMemberDomains) does not block. Exposure is still bounded by
+  # `ingress` (e.g. INTERNAL_LOAD_BALANCER keeps it behind the external ALB).
+  invoker_iam_disabled = var.enable_unauthenticated && var.public_access_mode == "invoker_iam_disabled"
+  labels               = var.labels
 
   # Maps the user-controlled flag directly onto the provider's deletion guard.
   deletion_protection = var.enable_deletion_protection
@@ -107,9 +113,11 @@ resource "google_cloud_run_v2_service" "this" {
   }
 }
 
-# Public (unauthenticated) invoker binding — created only when explicitly enabled.
+# Legacy public invoker binding (allUsers) — only when explicitly requested via
+# public_access_mode = "allusers_binding". Rejected by orgs that enforce
+# domain-restricted sharing, which is why it is not the default.
 resource "google_cloud_run_v2_service_iam_member" "unauthenticated" {
-  count = var.enable_unauthenticated ? 1 : 0
+  count = var.enable_unauthenticated && var.public_access_mode == "allusers_binding" ? 1 : 0
 
   project  = var.project_id
   location = var.location

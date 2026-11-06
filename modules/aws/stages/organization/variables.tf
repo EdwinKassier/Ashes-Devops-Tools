@@ -271,3 +271,26 @@ variable "tfc_oidc_call_as" {
   type        = string
   default     = "SELF"
 }
+
+variable "enable_member_break_glass_role" {
+  description = "Deploy the break-glass role into every member account (sibling StackSet of the TFC OIDC baseline, targeting the org root) so the SCP-exempt break-glass name is occupied and protected there instead of claimable by the first principal to create it. Rides on enable_tfc_oidc_baseline. Default true."
+  type        = bool
+  default     = true
+}
+
+variable "member_break_glass_trusted_principal_arns" {
+  description = "Account-qualified management-account principal ARNs (role or user) the member break-glass role trusts. Empty (default) = [break_glass_role_arn]."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for a in var.member_break_glass_trusted_principal_arns : can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:(role|user)/[A-Za-z0-9+=,.@_/-]+$", a))])
+    error_message = "member_break_glass_trusted_principal_arns entries must be account-qualified IAM role/user ARNs without wildcards."
+  }
+}
+
+variable "member_break_glass_require_mfa" {
+  description = "Require MFA (aws:MultiFactorAuthPresent + aws:MultiFactorAuthAge) on the member break-glass trust. Default true. A role-chained session may not carry MFA context: trust MFA-authenticated IAM users, or set false when the trusted management role is itself MFA-gated — validate end to end before relying on it."
+  type        = bool
+  default     = true
+}

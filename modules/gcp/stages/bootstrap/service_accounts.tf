@@ -58,7 +58,8 @@ locals {
         "roles/iam.denyReviewer",
         "roles/essentialcontacts.viewer",
         ], var.enable_scoped_access_policies ? ["roles/accesscontextmanager.policyReader"] : [],
-      var.enable_pam ? ["roles/privilegedaccessmanager.viewer"] : [])
+        var.enable_pam ? ["roles/privilegedaccessmanager.viewer"] : [],
+      var.enable_principal_access_boundary ? ["roles/iam.principalAccessBoundaryViewer"] : [])
       # Metadata-only viewers (no roles/viewer: no object or table-data reads).
       admin_project = concat([
         "roles/cloudkms.viewer",
@@ -86,11 +87,15 @@ locals {
         "roles/securitycenter.notificationConfigEditor",
         "roles/resourcemanager.tagAdmin",
         "roles/resourcemanager.tagUser",
-        "roles/iam.denyAdmin",
         "roles/essentialcontacts.admin",
         ], var.enable_scoped_access_policies ? ["roles/accesscontextmanager.policyAdmin"] : [],
-      var.enable_pam ? ["roles/privilegedaccessmanager.admin"] : [])
-      admin_project = [
+        var.enable_pam ? ["roles/privilegedaccessmanager.admin"] : [],
+        # roles/iam.denyAdmin only in the legacy single-owner mode. In the default
+        # "separate" mode the deny policies (incl. the containment policy that
+        # constrains THIS identity) are owned by the guardrails identity below.
+        var.guardrail_owner_mode == "organization" ? ["roles/iam.denyAdmin"] : [],
+      var.enable_principal_access_boundary ? ["roles/iam.principalAccessBoundaryAdmin"] : [])
+      admin_project = concat([
         "roles/cloudkms.admin",
         "roles/storage.admin",
         "roles/pubsub.admin",
@@ -98,7 +103,9 @@ locals {
         "roles/monitoring.editor",
         "roles/logging.configWriter",
         "roles/serviceusage.serviceUsageAdmin",
-      ]
+        # Principal access boundary binding on the admin project
+        # (resourcemanager.projects.createPolicyBinding).
+      ], var.enable_principal_access_boundary ? ["roles/resourcemanager.projectIamAdmin"] : [])
       billing = ["roles/billing.costsManager"]
     }
     "projects-plan" = {
@@ -307,9 +314,9 @@ resource "google_access_context_manager_access_policy_iam_member" "workload" {
 # WIF bindings fall back to the (mutable, squattable) workspace NAME when a
 # workspace has no tfc_workspace_ids entry. Tolerable while standing up a
 # non-production org; once any environment is production, every control-plane
-# workspace and every production workload workspace should be bound by its
-# immutable ID. A check warns (never fails the plan) so the first apply — run
-# before the workspaces exist — still works.
+# workspace and every production workload workspace MUST be bound by its
+# immutable ID. This is a hard failure (precondition), not a warning: apply the
+# tfc-admin root first and feed its workspace_ids output into tfc_workspace_ids.
 locals {
   name_bound_production_workspaces = sort([
     for ws in concat(
@@ -319,9 +326,50 @@ locals {
   ])
 }
 
-check "production_workspaces_bound_by_id" {
-  assert {
-    condition     = !var.enable_tfc_oidc || length(var.production_workload_environments) == 0 || length(local.name_bound_production_workspaces) == 0
-    error_message = "Production environments exist (${join(", ", sort(tolist(var.production_workload_environments)))}) but these workspaces are WIF-bound by mutable NAME, not immutable ID: ${join(", ", local.name_bound_production_workspaces)}. Add their ws-... IDs to tfc_workspace_ids (tfc-admin output workspace_ids) and re-apply gcp-bootstrap."
+resource "terraform_data" "production_workspaces_bound_by_id" {
+  input = local.name_bound_production_workspaces
+
+  lifecycle {
+    precondition {
+      condition     = !var.enable_tfc_oidc || length(var.production_workload_environments) == 0 || length(local.name_bound_production_workspaces) == 0
+      error_message = "Production environments exist (${join(", ", sort(tolist(var.production_workload_environments)))}) but these workspaces would be WIF-bound by mutable NAME, not immutable ID: ${join(", ", local.name_bound_production_workspaces)}. Add their ws-... IDs to tfc_workspace_ids (tfc-admin output workspace_ids) and re-plan gcp-bootstrap."
+    }
   }
+}
+
+# ─── Guardrail owner (separation of duties for IAM deny policies) ────────────
+#
+# The gcp-organization apply identity is the identity the admin-containment
+# deny policy constrains. If it also held roles/iam.denyAdmin it could simply
+# delete that policy (iam.denypolicies.* is not deny-supported, so a deny policy
+# cannot protect itself). In the default "separate" mode a dedicated
+# <prefix>-guardrails-apply SA is the ONLY automation identity with denyAdmin.
+# It has no WIF binding: guardrail_owner_members (a PAM-gated group, ideally)
+# impersonate it to apply the deny-policy spec gcp-organization outputs
+# (docs/runbooks/production-hardening.md). Residual: iam.securityAdmin on the
+# organization apply SA could still grant itself denyAdmin; the control-plane
+# watch "guardrail_role_grant" alerts on exactly that grant.
+resource "google_service_account" "guardrails" {
+  count = var.guardrail_owner_mode == "separate" ? 1 : 0
+
+  project      = module.admin_project.project_id
+  account_id   = "${var.project_prefix}-guardrails-apply"
+  display_name = "Terraform guardrail owner (deny policies)"
+  description  = "Sole automation holder of roles/iam.denyAdmin. Applies the gcp-organization deny-policy spec; impersonated only by guardrail_owner_members. Managed by gcp-bootstrap."
+}
+
+resource "google_organization_iam_member" "guardrails" {
+  for_each = var.guardrail_owner_mode == "separate" ? toset(["roles/iam.denyAdmin", "roles/resourcemanager.organizationViewer"]) : toset([])
+
+  org_id = var.org_id
+  role   = each.value
+  member = "serviceAccount:${google_service_account.guardrails[0].email}"
+}
+
+resource "google_service_account_iam_member" "guardrails_impersonation" {
+  for_each = var.guardrail_owner_mode == "separate" ? toset(var.guardrail_owner_members) : toset([])
+
+  service_account_id = google_service_account.guardrails[0].name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = each.value
 }

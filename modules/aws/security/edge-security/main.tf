@@ -5,12 +5,15 @@
 # across every account, this module provisions the edge stack a single workload
 # fronts its app with: a CloudFront distribution, a CloudFront-scoped WAFv2 Web
 # ACL, an optional ACM certificate, optional Shield Advanced enrollment, and
-# optional WAF logging.
+# optional WAF logging. The origin is either a public host (custom origin,
+# HTTPS only) or a PRIVATE load balancer reached through a CloudFront VPC origin
+# (enable_vpc_origin). Separately, enable_regional_waf attaches a REGIONAL Web
+# ACL to an internet-facing ALB that has no CloudFront in front of it.
 #
 # CloudFront is a global service whose WAF and ACM dependencies must live in
 # us-east-1 regardless of where the workload runs, so those resources use the
 # aliased `aws.us_east_1` provider. Everything is count-gated on `enable_edge`
-# so the module is inert until a workload opts in.
+# (or `enable_regional_waf`) so the module is inert until a workload opts in.
 
 # CloudFront-scoped Web ACL. Must be created in us-east-1.
 resource "aws_wafv2_web_acl" "cloudfront" {
@@ -127,20 +130,34 @@ resource "aws_cloudfront_distribution" "this" { #tfsec:ignore:aws-cloudfront-ena
     domain_name = var.origin_domain_name
     origin_id   = "default"
 
-    custom_origin_config {
-      http_port              = 80
-      https_port             = 443
-      origin_protocol_policy = "https-only"
-      origin_ssl_protocols   = ["TLSv1.2"]
+    # Public origin: CloudFront -> origin over the internet, HTTPS only.
+    dynamic "custom_origin_config" {
+      for_each = var.enable_vpc_origin ? [] : [1]
+      content {
+        http_port              = 80
+        https_port             = 443
+        origin_protocol_policy = "https-only"
+        origin_ssl_protocols   = ["TLSv1.2"]
+      }
+    }
+
+    # VPC origin: CloudFront reaches a PRIVATE (internal) ALB/NLB through
+    # AWS-managed ENIs in the origin's VPC; the origin has no public address.
+    dynamic "vpc_origin_config" {
+      for_each = var.enable_vpc_origin ? [1] : []
+      content {
+        vpc_origin_id = aws_cloudfront_vpc_origin.this[0].id
+      }
     }
   }
 
   default_cache_behavior {
-    target_origin_id       = "default"
-    viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD"]
-    cached_methods         = ["GET", "HEAD"]
-    cache_policy_id        = var.cache_policy_id
+    target_origin_id         = "default"
+    viewer_protocol_policy   = "redirect-to-https"
+    allowed_methods          = var.allowed_methods
+    cached_methods           = ["GET", "HEAD"]
+    cache_policy_id          = var.cache_policy_id
+    origin_request_policy_id = var.origin_request_policy_id
   }
 
   restrictions {
@@ -175,5 +192,117 @@ resource "aws_wafv2_web_acl_logging_configuration" "this" {
   count                   = var.enable_edge && var.log_destination_arn != "" ? 1 : 0
   provider                = aws.us_east_1
   resource_arn            = aws_wafv2_web_acl.cloudfront[0].arn
+  log_destination_configs = [var.log_destination_arn]
+}
+
+# =============================================================================
+# CloudFront VPC origin (optional) — a private ALB/NLB as the distribution origin
+#
+# The origin load balancer stays internal (no public subnets, no internet-facing
+# listener). CloudFront creates service-managed ENIs in the origin's subnets; the
+# origin VPC must have an internet gateway attached (an AWS requirement for VPC
+# origins, even though no public route to the load balancer exists).
+# =============================================================================
+
+resource "aws_cloudfront_vpc_origin" "this" {
+  count    = var.enable_edge && var.enable_vpc_origin ? 1 : 0
+  provider = aws.us_east_1
+
+  vpc_origin_endpoint_config {
+    name                   = "${var.name_prefix}-vpc-origin"
+    arn                    = var.vpc_origin_arn
+    http_port              = var.vpc_origin_http_port
+    https_port             = var.vpc_origin_https_port
+    origin_protocol_policy = var.vpc_origin_protocol_policy
+
+    origin_ssl_protocols {
+      items    = ["TLSv1.2"]
+      quantity = 1
+    }
+  }
+}
+
+# =============================================================================
+# Regional WAF (optional) — for an internet-facing ALB / API Gateway / AppSync
+#
+# Independent of enable_edge: a public ALB with no CloudFront in front of it gets
+# its own REGIONAL Web ACL (same managed rule groups as the CloudFront ACL),
+# created with the default (workload-region) provider and associated with
+# var.regional_waf_resource_arn.
+# =============================================================================
+
+resource "aws_wafv2_web_acl" "regional" {
+  # checkov:skip=CKV2_AWS_31:WAF logging is opt-in via var.log_destination_arn
+  #   (aws_wafv2_web_acl_logging_configuration.regional), same rationale as the
+  #   CloudFront ACL above.
+  count = var.enable_regional_waf ? 1 : 0
+  name  = "${var.name_prefix}-regional-acl"
+  scope = "REGIONAL"
+
+  default_action {
+    allow {}
+  }
+
+  rule {
+    name     = "aws-common"
+    priority = 1
+
+    override_action {
+      none {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesCommonRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "common"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  # KnownBadInputs carries the Log4JRCE rule (CVE-2021-44228).
+  rule {
+    name     = "aws-known-bad-inputs"
+    priority = 2
+
+    override_action {
+      none {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesKnownBadInputsRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "known-bad-inputs"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "${var.name_prefix}-regional-acl"
+    sampled_requests_enabled   = true
+  }
+}
+
+resource "aws_wafv2_web_acl_association" "regional" {
+  count        = var.enable_regional_waf ? 1 : 0
+  resource_arn = var.regional_waf_resource_arn
+  web_acl_arn  = aws_wafv2_web_acl.regional[0].arn
+}
+
+resource "aws_wafv2_web_acl_logging_configuration" "regional" {
+  count                   = var.enable_regional_waf && var.log_destination_arn != "" ? 1 : 0
+  resource_arn            = aws_wafv2_web_acl.regional[0].arn
   log_destination_configs = [var.log_destination_arn]
 }

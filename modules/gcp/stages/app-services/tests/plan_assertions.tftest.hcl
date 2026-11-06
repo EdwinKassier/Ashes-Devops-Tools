@@ -240,3 +240,40 @@ run "registry_vulnerability_scanning_can_be_disabled" {
     error_message = "enable_vulnerability_scanning = false must drop the Container Scanning API; enable_on_demand_scanning adds the On-Demand Scanning API."
   }
 }
+
+# First revision image: the public sample by default, overridable per stage
+# (bootstrap_image, e.g. a mirror inside the VPC-SC perimeter) and per service.
+run "bootstrap_image_default_and_override" {
+  command = plan
+
+  variables {
+    bootstrap_image = "europe-west1-docker.pkg.dev/acme-dev-host-abcd/mirror/hello:bootstrap"
+    services = {
+      api    = {}
+      worker = { image = "europe-west1-docker.pkg.dev/acme-dev-host-abcd/worker/worker:v1" }
+    }
+  }
+
+  assert {
+    condition     = output.services["api"].initial_image == "europe-west1-docker.pkg.dev/acme-dev-host-abcd/mirror/hello:bootstrap"
+    error_message = "A service without image must run bootstrap_image first."
+  }
+
+  assert {
+    condition     = output.services["worker"].initial_image == "europe-west1-docker.pkg.dev/acme-dev-host-abcd/worker/worker:v1"
+    error_message = "A service's own image must win over bootstrap_image."
+  }
+}
+
+run "bootstrap_image_defaults_to_public_sample" {
+  command = plan
+
+  variables {
+    services = { api = {} }
+  }
+
+  assert {
+    condition     = output.services["api"].initial_image == "us-docker.pkg.dev/cloudrun/container/hello"
+    error_message = "bootstrap_image must default to the public Cloud Run sample."
+  }
+}

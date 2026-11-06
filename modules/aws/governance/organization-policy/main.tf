@@ -43,6 +43,20 @@ locals {
   #     recorders in workload accounts, GuardDuty/CloudTrail settings in the
   #     security-tooling account, flow-log replacement, log-archive Object Lock).
   #     Local member-account admins are denied.
+  #
+  # Privileged-role IAM tampering (create/update/delete/attach on the protected
+  # role names) uses its OWN two tiers — the pipeline is never exempt, so a
+  # compromised member tfc-apply can neither squat the break-glass name
+  # (CreateRole + inherit every break-glass exemption) nor rewrite the trust of
+  # OrganizationAccountAccessRole and assume it:
+  #   * DenyPrivilegedRoleTampering — OAAR, stacksets-exec-* and any other
+  #     pipeline_role_names that no StackSet manages. Exempt: break-glass only.
+  #   * DenyStackSetRoleTampering — the StackSet-managed roles (tfc-plan /
+  #     tfc-apply from tfc-oidc-baseline, and the member break-glass role the
+  #     sibling StackSet deploys). Exempt: break-glass plus the StackSet
+  #     execution role (stacksets-exec-*), which must create/update exactly
+  #     these roles. stacksets-exec-* is only assumable by the management-account
+  #     StackSets service, and is itself break-glass-only protected above.
   break_glass_role_names = length(var.break_glass_role_names) > 0 ? var.break_glass_role_names : [
     regex("role/(.+)$", var.break_glass_role_arn)[0]
   ]
@@ -52,6 +66,33 @@ locals {
     local.break_glass_principal_arns,
   ))
 
+  stackset_role_arns = distinct(concat(
+    [for n in var.stackset_managed_role_names : "arn:aws:iam::*:role/${n}"],
+    local.break_glass_principal_arns,
+  ))
+  admin_role_arns = [
+    for a in distinct(concat(
+      [for n in var.pipeline_role_names : "arn:aws:iam::*:role/${n}"],
+      [for n in var.stackset_execution_role_names : "arn:aws:iam::*:role/${n}"],
+    )) : a if !contains(local.stackset_role_arns, a)
+  ]
+  stackset_exempt_arns = distinct(concat(
+    local.break_glass_principal_arns,
+    [for n in var.stackset_execution_role_names : "arn:aws:iam::*:role/${n}"],
+  ))
+  role_tamper_actions = [
+    "iam:CreateRole",
+    "iam:DeleteRole",
+    "iam:UpdateRole",
+    "iam:UpdateAssumeRolePolicy",
+    "iam:AttachRolePolicy",
+    "iam:DetachRolePolicy",
+    "iam:PutRolePolicy",
+    "iam:DeleteRolePolicy",
+    "iam:PutRolePermissionsBoundary",
+    "iam:DeleteRolePermissionsBoundary",
+  ]
+
   default_policies = {
     # Minified (jsonencode(jsondecode(...))) so the 5,120-character SCP size
     # quota is spent on content, not indentation.
@@ -60,6 +101,10 @@ locals {
       content = jsonencode(jsondecode(templatefile("${path.module}/policies/scp-deny-tamper.json.tftpl", {
         break_glass_arns        = jsonencode(local.break_glass_principal_arns)
         privileged_arns         = jsonencode(local.privileged_principal_arns)
+        admin_role_arns         = local.admin_role_arns
+        stackset_role_arns      = local.stackset_role_arns
+        stackset_exempt_arns    = local.stackset_exempt_arns
+        role_tamper_actions     = jsonencode(local.role_tamper_actions)
         log_archive_bucket_name = var.log_archive_bucket_name
         kms_protection_tag_key  = var.kms_protection_tag_key
       })))

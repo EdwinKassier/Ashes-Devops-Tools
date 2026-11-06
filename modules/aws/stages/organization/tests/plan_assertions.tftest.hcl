@@ -103,6 +103,61 @@ run "tfc_oidc_baseline_is_composed" {
   }
 }
 
+run "member_break_glass_role_deployed_to_every_member_account" {
+  # N1(b): the SCP-exempt break-glass name is occupied in every member account.
+  command = plan
+
+  assert {
+    condition     = output.member_break_glass_stack_set_name == "member-break-glass"
+    error_message = "the member break-glass StackSet must be composed by default"
+  }
+
+  assert {
+    condition = (
+      jsondecode(module.tfc_oidc_baseline[0].member_break_glass_template_body).Resources.MemberBreakGlassRole.Properties.RoleName == "break-glass" &&
+      jsondecode(module.tfc_oidc_baseline[0].member_break_glass_template_body).Resources.MemberBreakGlassRole.Properties.AssumeRolePolicyDocument.Statement[0].Principal.AWS == [var.break_glass_role_arn] &&
+      jsondecode(module.tfc_oidc_baseline[0].member_break_glass_template_body).Resources.MemberBreakGlassRole.Properties.AssumeRolePolicyDocument.Statement[0].Condition.Bool["aws:MultiFactorAuthPresent"] == "true"
+    )
+    error_message = "the member role must carry the SCP break-glass name and trust the management break-glass role with MFA"
+  }
+
+  assert {
+    condition     = module.tfc_oidc_baseline[0].member_break_glass_stack_set_name != null
+    error_message = "the member break-glass StackSet must exist when the baseline is enabled"
+  }
+}
+
+run "member_break_glass_role_follows_explicit_scp_name" {
+  command = plan
+
+  variables {
+    break_glass_role_names                    = ["emergency/break-glass-admin"]
+    member_break_glass_trusted_principal_arns = ["arn:aws:iam::111111111111:user/bg-responder"]
+  }
+
+  assert {
+    condition = (
+      jsondecode(module.tfc_oidc_baseline[0].member_break_glass_template_body).Resources.MemberBreakGlassRole.Properties.RoleName == "break-glass-admin" &&
+      jsondecode(module.tfc_oidc_baseline[0].member_break_glass_template_body).Resources.MemberBreakGlassRole.Properties.Path == "/emergency/" &&
+      jsondecode(module.tfc_oidc_baseline[0].member_break_glass_template_body).Resources.MemberBreakGlassRole.Properties.AssumeRolePolicyDocument.Statement[0].Principal.AWS == ["arn:aws:iam::111111111111:user/bg-responder"]
+    )
+    error_message = "the member role must use the explicit SCP break-glass name (path split) and the explicit trusted principals"
+  }
+}
+
+run "member_break_glass_role_can_be_disabled" {
+  command = plan
+
+  variables {
+    enable_member_break_glass_role = false
+  }
+
+  assert {
+    condition     = output.member_break_glass_stack_set_name == null
+    error_message = "enable_member_break_glass_role = false must not deploy the member break-glass StackSet"
+  }
+}
+
 run "tfc_oidc_baseline_can_be_disabled" {
   command = plan
 

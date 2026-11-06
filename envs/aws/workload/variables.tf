@@ -165,9 +165,14 @@ variable "create_config_service_linked_role" {
 }
 
 variable "kms_key_arn" {
-  description = "ARN of the CMK used as the account default EBS encryption key and to encrypt Session Manager sessions/logs. Also encrypts the app-services ECR repos, log groups, Aurora clusters and RDS master secrets (required when services is non-empty; its key policy must admit logs.<region>.amazonaws.com). Empty string leaves default EBS encryption on the AWS-managed key."
+  description = "ARN of an existing CMK to use as the account default EBS encryption key, for Session Manager sessions/logs, and for the app-services ECR repos, log groups, Aurora clusters and RDS master secrets (its key policy must admit logs.<region>.amazonaws.com). Empty string (default) creates a rotating workload CMK (alias/workload-<environment>) with exactly that policy, so no hand-made key is needed."
   type        = string
   default     = ""
+
+  validation {
+    condition     = var.kms_key_arn == "" || can(regex("^arn:aws[a-z-]*:kms:[a-z0-9-]+:[0-9]{12}:(key|alias)/.+$", var.kms_key_arn))
+    error_message = "kms_key_arn must be empty (create the workload CMK) or a KMS key/alias ARN."
+  }
 }
 
 variable "enable_edge" {
@@ -345,16 +350,17 @@ variable "assume_role_arn" {
 # One entry in `services` = a deployable service in this workload account: ECR
 # repo, Fargate service behind the shared internal ALB, least-privilege task
 # roles, KMS log group, plus an optional GitHub Actions deploy role (github) and
-# Aurora PostgreSQL cluster (database). Default {} creates nothing. Requires a
-# non-empty kms_key_arn whose key policy admits CloudWatch Logs. See
+# Aurora PostgreSQL cluster (database). Default {} creates nothing. Encrypted with
+# the workload CMK (kms.tf; created unless kms_key_arn is supplied). See
 # docs/guides/deploying-a-service.md (AWS section).
 # -----------------------------------------------------------------------------
 
 variable "services" {
   description = "Services to run in this environment, keyed by service name. Full field reference: modules/aws/stages/app-services (variable services). Empty (default) creates nothing."
   type = map(object({
-    # Image the FIRST task-definition revision runs. null => <ecr-repo>:bootstrap
-    # (push that tag once, or let the first CI deploy replace it).
+    # Image the FIRST task-definition revision runs. null => the public
+    # placeholder bootstrap_image (listens on 8080); the first CI deploy
+    # replaces it with an image from the service's own ECR repo.
     container_image  = optional(string)
     container_port   = optional(number, 8080)
     cpu              = optional(number, 256)
@@ -386,6 +392,11 @@ variable "services" {
       environment = optional(string) # GitHub environment; null => var.environment
       ref         = optional(string) # e.g. refs/heads/main; used instead of environment
       subject     = optional(string) # exact sub for a customised claim template
+
+      # Immutable numeric IDs (set both): switches the sub to the ID-based
+      # customised claim template (see modules/aws/stages/app-services).
+      repository_id       = optional(string)
+      repository_owner_id = optional(string)
     }))
 
     # Aurora PostgreSQL for this service. null => none.
@@ -430,7 +441,7 @@ variable "app_service_subnet_tier" {
 }
 
 variable "app_alb_subnet_tier" {
-  description = "Spoke subnet tier the shared ALB is placed in (private for the default internal ALB; a public tier only for an internet-facing ALB)."
+  description = "Spoke subnet tier the shared ALB is placed in (private for the default internal ALB). Ignored with app_ingress_mode = \"public_alb\", which uses the \"public\" tier."
   type        = string
   default     = "private"
 }
@@ -441,8 +452,47 @@ variable "app_database_subnet_tier" {
   default     = "isolated"
 }
 
+variable "app_ingress_mode" {
+  description = "How the shared app ALB is exposed. \"internal\" (default): no public path. \"public_alb\": internet-facing ALB in a public subnet tier the workload stage creates (+ IGW), HTTPS only (needs app_alb_certificate_arn), regional WAF unless enable_app_waf = false. \"cloudfront_vpc_origin\": the ALB stays internal and CloudFront (with a CloudFront WAF) reaches it through a VPC origin; needs no certificate or domain. Null = aws.workload.app_ingress_mode from config/landing-zone.yaml, else internal."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = contains(["internal", "public_alb", "cloudfront_vpc_origin"], coalesce(var.app_ingress_mode, local.cfg.app_ingress_mode, "internal"))
+    error_message = "app_ingress_mode (or aws.workload.app_ingress_mode in config/landing-zone.yaml) must be internal, public_alb or cloudfront_vpc_origin."
+  }
+
+  validation {
+    condition     = coalesce(var.app_ingress_mode, local.cfg.app_ingress_mode, "internal") != "public_alb" || var.app_alb_certificate_arn != null
+    error_message = "app_ingress_mode = \"public_alb\" requires app_alb_certificate_arn (no plaintext HTTP on the internet). Use cloudfront_vpc_origin for a public endpoint without your own certificate."
+  }
+
+  validation {
+    condition     = coalesce(var.app_ingress_mode, local.cfg.app_ingress_mode, "internal") != "cloudfront_vpc_origin" || var.app_alb_certificate_arn == null
+    error_message = "app_ingress_mode = \"cloudfront_vpc_origin\" terminates TLS at CloudFront and reaches the internal ALB over HTTP inside the VPC: leave app_alb_certificate_arn unset (the ALB's certificate would not match its *.elb.amazonaws.com origin name)."
+  }
+}
+
+variable "enable_app_waf" {
+  description = "With app_ingress_mode = \"public_alb\", associate a REGIONAL WAFv2 Web ACL (AWS Common + KnownBadInputs managed rule groups) with the internet-facing ALB. cloudfront_vpc_origin always has a CloudFront WAF."
+  type        = bool
+  default     = true
+}
+
+variable "app_edge_domain_name" {
+  description = "Custom domain for the CloudFront distribution in app_ingress_mode = \"cloudfront_vpc_origin\" (an ACM certificate is requested in us-east-1; validate it via DNS). Empty (default) serves https://<id>.cloudfront.net."
+  type        = string
+  default     = ""
+}
+
+variable "app_bootstrap_image" {
+  description = "Placeholder image the first task-definition revision of a service runs when its container_image is null. Null = aws.workload.bootstrap_image from config/landing-zone.yaml, else the app-services default (public.ecr.aws/nginx/nginx-unprivileged:stable-alpine, listening on 8080)."
+  type        = string
+  default     = null
+}
+
 variable "app_alb_internal" {
-  description = "Whether the shared ALB is internal (default). Public exposure belongs at the edge (enable_edge); an internet-facing ALB needs a public subnet tier and app_alb_certificate_arn."
+  description = "Whether the shared ALB is internal (default). Prefer app_ingress_mode for public exposure: \"public_alb\" overrides this to false and also creates the public subnet tier and the regional WAF."
   type        = bool
   default     = true
 }
@@ -454,7 +504,7 @@ variable "app_alb_certificate_arn" {
 }
 
 variable "app_alb_ingress_cidrs" {
-  description = "CIDRs allowed to reach the shared ALB. Empty uses [vpc_cidr]; add the org supernet to allow other spokes via the TGW."
+  description = "CIDRs allowed to reach the shared ALB. Empty uses [vpc_cidr] (also where CloudFront VPC-origin ENIs live), or 0.0.0.0/0 with app_ingress_mode = \"public_alb\"; add the org supernet to allow other spokes via the TGW."
   type        = list(string)
   default     = []
 }

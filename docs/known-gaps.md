@@ -82,6 +82,46 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   Not deny-supported, so alert-only: `resourcemanager.tagValueBindings.delete`,
   `tagValues.delete`, `tagKeys.delete`, `cloudkms keyRings.deleteTagBinding`.
 
+- **G14 — GCP guardrail-owner split and 2026 control refresh (2026-11-06),
+  mock-tested only.** Validate on a real org:
+  (1) **guardrail owner** (`guardrail_owner_mode = "separate"`, default): the
+  organization apply SA loses `roles/iam.denyAdmin`; gcp-organization outputs
+  `guardrail_deny_policy_specs` and the `<prefix>-guardrails-apply` SA
+  (impersonated by `guardrail_owner_members`) applies them with gcloud. Confirm
+  the rendered JSON is accepted by `gcloud iam policies create`. An existing
+  deployment must `terraform state rm` the in-root deny policy before switching
+  (production-hardening runbook). Residual: `iam.securityAdmin` on the
+  organization apply SA can still grant itself `denyAdmin`; alert-only
+  (`guardrail_role_grant`, `guardrail_identity_change`);
+  (2) **containment additions** (all on the deny-supported list, re-verified
+  2026-11): `accessLevels.update/delete/replaceAll`,
+  `authorizedOrgsDescs.create/update/delete`, `policies.update/setIamPolicy`
+  org-wide; `storage buckets.update`, `cloudkms keyRings.setIamPolicy`,
+  `logging buckets.update/deleteTagBinding` tag-scoped. Adding an environment
+  (its scoped access-policy IAM) and any audit-bucket config change now need
+  break-glass. Confirm the log-bucket tag binding parent
+  (`//logging.googleapis.com/projects/<id>/locations/<l>/buckets/<b>`) is accepted;
+  (3) **managed constraints** (`prefer_managed_constraints = true`): the
+  `iam.managed.*`, `compute.managed.*` and `sql.managed.restrictPublicIp`
+  successors replace their legacy constraints in one apply (legacy policy
+  deleted, managed created). `iam.allowedPolicyMemberDomains` stays legacy:
+  `iam.managed.allowedPolicyMembers` blocks the automatic Owner / Folder Admin
+  grants at project/folder creation and Google-owned principals outside the
+  org (e.g. `cloud-storage-analytics@google.com`, `billing-export@system.gserviceaccount.com`);
+  migrate deliberately with `managed_policies` and explicit `allowedMemberSubjects`;
+  (4) **Log Analytics** (default on): org sink to an analytics-enabled log bucket
+  plus linked dataset; confirm the bucket-scoped `logging.bucketWriter`
+  condition and Log Analytics availability in the chosen location. The bucket
+  uses Google-managed encryption unless `log_analytics_kms_key_name` is set;
+  (5) **PAB** (`enable_principal_access_boundary`, opt-in) and **org logging
+  settings** (`enable_logging_organization_settings`, opt-in) are unapplied;
+  (6) **production WIF-by-ID** is now a hard plan failure in gcp-bootstrap;
+  (7) **plan-identity residual (N5)**: `roles/run.viewer` and `roles/compute.viewer`
+  stay on the plan SAs (Terraform refresh needs `run.services.get` /
+  `compute.instances.get`), so a plan identity can read Cloud Run env vars and VM
+  metadata. Keep secrets in Secret Manager references, never in env vars or
+  startup scripts.
+
 - **A4 — CloudTrail CloudWatch Logs + CIS section-4 alarms, now default ON**
   (`enable_cloudwatch_logs = true`, `modules/aws/security/cloudtrail-org`). The
   full CIS AWS 4.1–4.15 metric-filter set ships with a module-created,
@@ -140,6 +180,48 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   break-glass. **Validate** that `aws:TagKeys` is populated on
   `s3:PutBucketTagging`/`s3:CreateBucket` and on `kms:CreateKey`/`iam:CreateRole`
   with tags.
+- **A11 — break-glass name squatting and pipeline-exempt role tamper (wave-4
+  re-audit) is closed, but mock-only, with apply-order consequences.** (1)
+  **The SCP role-tamper split has two tiers.** `DenyPrivilegedRoleTampering`
+  (OAAR, `stacksets-exec-*`) exempts break-glass only. `DenyStackSetRoleTampering`
+  (`tfc-plan`, `tfc-apply` and the break-glass name) exempts break-glass and
+  `stacksets-exec-*`. The pipeline is no longer exempt from either. **Validate**
+  that the service-managed StackSet execution role is really named
+  `stacksets-exec-*` in your org (`stackset_execution_role_names`). Otherwise
+  StackSet updates to the tfc and break-glass roles are denied. (2) **Member
+  break-glass role** (`enable_member_break_glass_role`, default on in the org
+  stage). A sibling StackSet deploys it to the org root. It trusts
+  `break_glass_role_arn` and requires MFA by default. **Validate** that MFA
+  context survives assuming it from the management break-glass *role*: a
+  role-chained session may not carry `aws:MultiFactorAuthPresent`. If it does
+  not, trust MFA-authenticated IAM users
+  (`member_break_glass_trusted_principal_arns`) or set
+  `member_break_glass_require_mfa = false`, because the management role is
+  already MFA-gated. A pre-existing role with the same name in a member account
+  makes the stack instance fail. Delete it with break-glass first. (3)
+  **Security-stage CMK `kms:PutKeyPolicy` now belongs to the member break-glass
+  role** (`key_policy_admin_role_name = "break-glass"`). Apply `aws-organization`
+  (StackSet) **before** `aws-security`, because KMS rejects a key policy that
+  names a non-existent principal. For keys that already exist, the
+  key-policy change itself is a `PutKeyPolicy`. The SCP allows that only to
+  break-glass, so apply that run as break-glass, or set the role name to `null`.
+  (4) **kms-key `ServiceUsage` is account-scoped** (`aws:SourceAccount`) by
+  default. Use `service_principal_scope = "organization"` only for keys that
+  receive org-wide service writes. **Validate** that SNS, SSM and CloudWatch
+  send `aws:SourceAccount` on their KMS calls. (5) **Plan-role reads kept for
+  refresh.** `lambda:GetFunction*` (env vars), `ecs:DescribeTaskDefinition`
+  (container environment) and `ec2:DescribeInstanceAttribute` (user data) stay
+  readable by `tfc-plan`, so secrets must not live in those fields.
+- **A12 — standalone AWS workload has no egress (2026-11-06).** With
+  `enable_network_hub = false` the spoke VPC has no NAT or TGW default route, so
+  Fargate tasks cannot pull the public placeholder image or reach ECR / CloudWatch
+  Logs. Add the ECR (`ecr.api`, `ecr.dkr`), `logs`, `secretsmanager` and S3 gateway
+  endpoints (modules/aws/network/vpc-endpoints) or a NAT before running services in
+  standalone mode.
+- **Preset loading from config is GCP-workload only (2026-11-06).** The
+  `presets` config key is honoured by `envs/gcp/workload` alone (YAML twin
+  `examples/presets/prod-gcp-workload.yaml`, consistency-tested). Other roots
+  still need the `-var-file` overlays or TFC variables.
 
 ## MODERNIZATION — latest-best-practice gaps (2026 review)
 

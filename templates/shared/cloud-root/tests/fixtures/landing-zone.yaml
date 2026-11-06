@@ -1,0 +1,9 @@
+---
+# Minimal config/landing-zone.yaml fixture for the template root's config-fallback test.
+org:
+  tfc:
+    organization: fixture-tfc-org
+cloud:
+  contracts:
+    organization:
+      tenant_id: fixture-tenant

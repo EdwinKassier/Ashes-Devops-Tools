@@ -132,3 +132,18 @@ output "org_role_grants" {
     ))
   }
 }
+
+output "guardrail_owner_mode" {
+  description = "Deny-policy ownership mode (\"separate\" or \"organization\"); gcp-organization defaults its own guardrail_owner_mode to this."
+  value       = var.guardrail_owner_mode
+}
+
+output "guardrails_service_account" {
+  description = "Email of the guardrails SA (sole automation holder of roles/iam.denyAdmin), or null when guardrail_owner_mode = \"organization\"."
+  value       = var.guardrail_owner_mode == "separate" ? google_service_account.guardrails[0].email : null
+}
+
+output "phase0_admin_impersonation_members" {
+  description = "Human principals that may impersonate the terraform-admin SA (empty once enable_phase0_admin_impersonation = false)."
+  value       = local.phase0_admin_impersonation_members
+}

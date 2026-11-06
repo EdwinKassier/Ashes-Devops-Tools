@@ -32,6 +32,34 @@ terraform -chdir=envs/gcp/network-hub plan \
 `scripts/check-consistency.sh` (run in CI) fails if a preset sets a variable its root
 does not declare, or if any doc references a preset that does not exist.
 
+### Presets from `config/landing-zone.yaml` (no `-var-file`)
+
+VCS-driven Terraform Cloud runs never see a local `-var-file`. A preset that has a
+YAML twin (`<name>.yaml`) can instead be named in the committed config, and its
+root applies it on every run:
+
+```yaml
+presets: [prod-gcp-workload]        # every workspace of the preset's root
+gcp:
+  workload:
+    presets_by_environment:         # gcp-workload-<env> only
+      prod: [prod-gcp-workload]
+```
+
+Precedence: an explicit variable (tfvars or TFC variable) > preset > config file >
+built-in default. A listed preset applies only in the root its `root:` key names;
+other roots ignore it. A preset name with no `.yaml` twin fails the plan.
+
+| YAML twin | Honoured by |
+|---|---|
+| `prod-gcp-workload.yaml` | `envs/gcp/workload` (top-level `presets` or `gcp.workload.presets_by_environment`) |
+
+The other presets have no YAML twin yet, so `envs/gcp/network-hub`, `envs/aws/security`
+and the rest still take them with `-var-file`. Each `.yaml` mirrors its `.tfvars`
+exactly: `envs/gcp/workload/tests/presets.tftest.hcl` fails when the two disagree.
+Prefer `presets_by_environment` for hardening presets, so dev is not enforced
+along with prod.
+
 Read each preset's comments first: some controls have prerequisites (CMEK keys
 before CMEK enforcement, clean dry-run logs before VPC-SC enforcement, a
 logs-granted KMS key for CloudWatch Logs).

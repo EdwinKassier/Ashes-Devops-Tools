@@ -1,0 +1,15 @@
+---
+# Minimal config/landing-zone.yaml fixture for the template root's config-fallback test.
+org:
+  regions:
+    aws: us-east-1
+  tfc:
+    organization: fixture-tfc-org
+aws:
+  enabled_regions:
+    - us-east-1
+    - us-west-2
+  contracts:
+    organization:
+      account_ids:
+        workload: "333333333333"

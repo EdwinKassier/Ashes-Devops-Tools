@@ -2,7 +2,7 @@
 
 > **Deprecated.** This god-module (74 inputs, 16 `enable_*` toggles) is kept
 > unchanged for one deprecation cycle so existing callers' state is untouched,
-> and will be removed in a later release. No in-repo root uses it any more.
+> and **will be removed in `v1.0.0`**. No in-repo root uses it any more.
 > Migrate to the purpose-built compositions:
 >
 > | Former use | Replacement | Reference migration |

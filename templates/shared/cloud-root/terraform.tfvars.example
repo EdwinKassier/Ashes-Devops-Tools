@@ -1,6 +1,12 @@
-# Copy to terraform.tfvars and fill in. Inputs marked REQUIRED have no default.
+# Optional overrides. Every value below normally comes from config/landing-zone.yaml
+# (config.tf); set one here only to override the config file for this root.
 
-# REQUIRED — Terraform Cloud org that owns the remote-state workspaces this root reads.
-tfc_organization = "REPLACE_ME"
+# Terraform Cloud org that owns the remote-state workspaces this root reads
+# (config key org.tfc.organization). Required unless organization_contract is set.
+# tfc_organization = "REPLACE_ME"
+
+# Skip the <cloud>-organization remote-state read by supplying its contract
+# directly (config key <cloud>.contracts.organization).
+# organization_contract = { tenant_id = "REPLACE_ME" }
 
 # Add your cloud's region / enabled-region inputs here once declared in variables.tf.

@@ -1,0 +1,13 @@
+# Test fixture: app golden-path settings (public_ingress.tftest.hcl).
+version: 1
+org:
+  prefix: acme
+  tfc:
+    organization: acme-tfc
+gcp:
+  workload:
+    bootstrap_image: europe-west2-docker.pkg.dev/acme-dev-host-abcd/mirror/hello:bootstrap
+    public_ingress:
+      dev:
+        api:
+          domains: [api.dev.cfg.example]

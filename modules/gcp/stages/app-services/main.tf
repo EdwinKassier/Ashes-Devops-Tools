@@ -23,6 +23,9 @@ locals {
 
   image_repository = { for k, s in var.services : k => "${var.region}-docker.pkg.dev/${var.project_id}/${k}/${k}" }
 
+  # The image the first revision runs: the service's own, else the placeholder.
+  initial_image = { for k, s in var.services : k => coalesce(s.image, var.bootstrap_image) }
+
   # Flatten secret refs into one IAM grant per (service, secret).
   secret_grants = merge([
     for k, s in var.services : {
@@ -185,7 +188,7 @@ module "service" {
   project_id            = var.project_id
   location              = var.region
   name                  = each.key
-  image                 = each.value.image
+  image                 = local.initial_image[each.key]
   service_account_email = local.runtime_sa_email[each.key]
 
   ingress                = each.value.ingress

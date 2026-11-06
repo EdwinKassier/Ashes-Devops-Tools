@@ -132,7 +132,7 @@ run "audit_sink_and_org_policies" {
 
   assert {
     condition = alltrue([
-      for c in ["gcp.resourceLocations", "iam.allowedPolicyMemberDomains", "compute.vmExternalIpAccess"] :
+      for c in ["gcp.resourceLocations", "iam.allowedPolicyMemberDomains", "compute.managed.vmExternalIpAccess"] :
       contains(module.organization.org_policy_constraints, c)
     ])
     error_message = "the root must plan the org-node list-policy baseline."
@@ -140,7 +140,7 @@ run "audit_sink_and_org_policies" {
 
   assert {
     condition = alltrue([
-      for c in ["iam.disableServiceAccountKeyCreation", "storage.publicAccessPrevention", "storage.uniformBucketLevelAccess"] :
+      for c in ["iam.managed.disableServiceAccountKeyCreation", "storage.publicAccessPrevention", "storage.uniformBucketLevelAccess"] :
       contains(module.organization.org_policy_constraints, c)
     ])
     error_message = "the root must plan the org-node boolean-policy baseline."
@@ -154,7 +154,7 @@ run "audit_sink_and_org_policies" {
 
   # CIS GCP 4.4: OS Login is required at the org node by default.
   assert {
-    condition     = contains(module.organization.org_policy_constraints, "compute.requireOsLogin")
+    condition     = contains(module.organization.org_policy_constraints, "compute.managed.requireOsLogin")
     error_message = "the root must plan compute.requireOsLogin at the org node."
   }
 
@@ -291,5 +291,67 @@ run "production_environment_with_containment" {
   assert {
     condition     = module.organization.production_environment_keys == tolist(["prod"])
     error_message = "is_production must flow into the organization stage."
+  }
+}
+
+# The bootstrap read is skippable (bootstrap_contract), mirroring gcp-projects:
+# no remote-state read, and the contract feeds the stage. Its default
+# guardrail_owner_mode = "separate" moves deny-policy application to the
+# guardrail owner (specs output, nothing applied here).
+run "bootstrap_contract_skips_remote_state" {
+  command = plan
+
+  variables {
+    bootstrap_contract = {
+      admin_project_id      = "acme-admin-ctr1"
+      admin_project_number  = "999988887777"
+      terraform_admin_email = "terraform-admin@acme-admin-ctr1.iam.gserviceaccount.com"
+    }
+    enable_admin_containment      = true
+    containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
+  }
+
+  assert {
+    condition     = length(data.terraform_remote_state.gcp_bootstrap) == 0 && output.admin_project_number == "999988887777"
+    error_message = "A bootstrap_contract must replace the gcp-bootstrap remote-state read."
+  }
+
+  assert {
+    condition     = output.guardrail_owner_mode == "separate" && length(module.organization.iam_deny_policy_names) == 0 && contains(keys(output.guardrail_deny_policy_specs), "contain-admin-identity")
+    error_message = "In separate mode the containment deny policy must be output for the guardrail owner, not applied by gcp-organization."
+  }
+
+  assert {
+    condition     = output.github_oidc_pool_id == null
+    error_message = "WIF outputs absent from a contract must be null, not an error."
+  }
+}
+
+run "bootstrap_contract_from_config_file" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-bootstrap-contract.yaml"
+  }
+
+  assert {
+    condition     = length(data.terraform_remote_state.gcp_bootstrap) == 0 && output.admin_project.project_id == "acme-admin-cfg1"
+    error_message = "gcp.contracts.bootstrap in config/landing-zone.yaml must replace the remote-state read."
+  }
+}
+
+# An older gcp-bootstrap state (no guardrail_owner_mode output) keeps the legacy
+# in-root deny policies: its organization apply SA still holds denyAdmin.
+run "legacy_bootstrap_state_keeps_in_root_deny_policies" {
+  command = plan
+
+  variables {
+    enable_admin_containment      = true
+    containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
+  }
+
+  assert {
+    condition     = output.guardrail_owner_mode == "organization" && contains(module.organization.iam_deny_policy_names, "contain-admin-identity")
+    error_message = "Without a bootstrap guardrail_owner_mode output the root must keep applying the deny policies."
   }
 }

@@ -366,8 +366,27 @@ jobs:
       - name: README / CLAUDE.md counts match the tree
         run: ./scripts/check-docs-counts.sh
 
+      # Also enforces backtick repo paths in docs/compliance/control-matrix.md
+      # (strict mode; docs/known-gaps.md is reported but advisory).
       - name: Markdown relative links resolve (offline)
         run: python3 scripts/check-md-links.py
+
+      # Every context in BRANCH_PROTECTION.md's `gh api` command must be a job
+      # name GitHub actually reports (no bare matrix / reusable-caller names).
+      - name: Required status-check contexts exist
+        run: ./scripts/check-required-checks.sh
+
+      # yamllint for the init-script test, hash-locked like commitizen above.
+      # Regenerate after bumping .github/requirements/yamllint.in:
+      #   uv pip compile --generate-hashes --universal --python-version 3.12 \
+      #     .github/requirements/yamllint.in -o .github/requirements/yamllint.txt
+      - name: Script tests (scripts/tests)
+        run: |
+          python -m pip install --no-deps --require-hashes -r .github/requirements/yamllint.txt
+          make test-scripts
+
+      - name: Library-only modules (informational)
+        run: python3 scripts/check-module-usage.py
 
   security:
     name: Security
@@ -486,7 +505,7 @@ jobs:
 
       # Same severity floor as `make shellcheck` and the pre-commit hook.
       - name: Run shellcheck
-        run: shellcheck --severity=warning scripts/*.sh tests/e2e/scripts/*.sh
+        run: shellcheck --severity=warning scripts/*.sh scripts/tests/*.sh tests/e2e/scripts/*.sh
 
   opa:
     name: OPA Policy Tests

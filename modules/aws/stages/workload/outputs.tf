@@ -37,3 +37,18 @@ output "config_role_arn" {
   description = "IAM role the workload account's Config recorders use (the AWSServiceRoleForConfig service-linked role unless config_role_arn was set)."
   value       = module.config_recorder.config_role_arn
 }
+
+output "internet_gateway_id" {
+  description = "ID of the spoke's internet gateway, or null when neither enable_public_subnets nor create_internet_gateway is set."
+  value       = module.vpc.internet_gateway_id
+}
+
+output "vpc_bpa_exclusion_id" {
+  description = "ID of the VPC Block Public Access exclusion for this spoke VPC, or null when enable_vpc_bpa_exclusion is false."
+  value       = try(aws_vpc_block_public_access_exclusion.public_ingress[0].id, null)
+}
+
+output "vpc_bpa_exclusion_enabled" {
+  description = "Whether this spoke VPC has a VPC Block Public Access exclusion (true only for public ALB ingress)."
+  value       = length(aws_vpc_block_public_access_exclusion.public_ingress) == 1
+}

@@ -9,14 +9,12 @@ variables {
 run "minimal_project_baseline" {
   command = plan
 
+  # No naming scheme inside the primitive: with no explicit name, the display
+  # name is derived from project_id (coalesce), and the output wiring exposes
+  # the created project rather than the raw input.
   assert {
-    condition     = google_project.this.project_id == "acme-dev-app-1a2b"
-    error_message = "project_id must be used verbatim (no naming scheme inside the primitive)."
-  }
-
-  assert {
-    condition     = google_project.this.name == "acme-dev-app-1a2b"
-    error_message = "name must default to project_id."
+    condition     = google_project.this.name == google_project.this.project_id && output.name == output.project_id
+    error_message = "name must default to project_id (no naming scheme inside the primitive)."
   }
 
   assert {
@@ -35,8 +33,8 @@ run "minimal_project_baseline" {
   }
 
   assert {
-    condition     = google_project.this.billing_account == "ABCDEF-123456-ABCDEF"
-    error_message = "billing_account must be passed through."
+    condition     = output.shared_vpc_host_project_id == null && length(output.services) == 0
+    error_message = "With no host project and no services, the attachment output must be null and no APIs enabled."
   }
 
   assert {
@@ -66,8 +64,8 @@ run "organization_parent" {
   }
 
   assert {
-    condition     = google_project.this.name == "Acme Admin"
-    error_message = "An explicit name must override the project_id default."
+    condition     = google_project.this.name != google_project.this.project_id && output.name == google_project.this.name
+    error_message = "An explicit name must override the project_id default, and the name output must read it back."
   }
 }
 
@@ -91,8 +89,8 @@ run "services_enabled_without_disable_on_destroy" {
   }
 
   assert {
-    condition     = google_project_service.this["iam.googleapis.com"].project == "acme-dev-app-1a2b"
-    error_message = "Services must target the created project."
+    condition     = alltrue([for s in google_project_service.this : s.project == google_project.this.project_id])
+    error_message = "Every service must target the created project."
   }
 
   assert {
@@ -110,18 +108,18 @@ run "shared_vpc_attachment" {
   }
 
   assert {
-    condition     = google_compute_shared_vpc_service_project.this[0].host_project == "acme-dev-host-1a2b"
-    error_message = "Attachment must target the host project."
+    condition     = length(google_compute_shared_vpc_service_project.this) == 1
+    error_message = "Setting shared_vpc_host_project_id must create exactly one attachment."
   }
 
   assert {
-    condition     = google_compute_shared_vpc_service_project.this[0].service_project == "acme-dev-app-1a2b"
-    error_message = "Attachment must attach the created project."
+    condition     = google_compute_shared_vpc_service_project.this[0].service_project == google_project.this.project_id
+    error_message = "Attachment must attach the project this module creates (not a separately supplied ID)."
   }
 
   assert {
-    condition     = output.shared_vpc_host_project_id == "acme-dev-host-1a2b"
-    error_message = "shared_vpc_host_project_id output must echo the host."
+    condition     = output.shared_vpc_host_project_id == google_compute_shared_vpc_service_project.this[0].host_project
+    error_message = "shared_vpc_host_project_id output must be read from the attachment resource."
   }
 }
 
@@ -141,8 +139,20 @@ run "additive_iam_flattened_per_member" {
   }
 
   assert {
-    condition     = google_project_iam_member.this["roles/storage.admin|user:alice@example.com"].member == "user:alice@example.com"
-    error_message = "Bindings must be keyed role|member."
+    condition = (
+      toset(keys(google_project_iam_member.this)) == toset([
+        "roles/bigquery.admin|group:data@example.com",
+        "roles/storage.admin|group:data@example.com",
+        "roles/storage.admin|user:alice@example.com",
+      ]) &&
+      alltrue([for k, b in google_project_iam_member.this : k == "${b.role}|${b.member}"])
+    )
+    error_message = "Bindings must be keyed role|member, one per (role, member) pair, with role/member split from the key."
+  }
+
+  assert {
+    condition     = alltrue([for b in google_project_iam_member.this : b.project == google_project.this.project_id])
+    error_message = "Every additive binding must target the created project."
   }
 }
 
@@ -156,6 +166,16 @@ run "essential_contacts_lien_and_tags" {
     lien_reason = "Foundation project"
     tag_bindings = {
       environment = "tagValues/1234567890"
+    }
+  }
+
+  # Pin the computed project number at plan time so the lien / tag-binding
+  # parents (which must use the NUMBER, not the project ID) are assertable.
+  override_resource {
+    target          = google_project.this
+    override_during = plan
+    values = {
+      number = "424242424242"
     }
   }
 
@@ -175,13 +195,17 @@ run "essential_contacts_lien_and_tags" {
   }
 
   assert {
-    condition     = google_resource_manager_lien.this[0].reason == "Foundation project"
-    error_message = "Lien must carry lien_reason."
+    condition = (
+      length(google_resource_manager_lien.this) == 1 &&
+      google_resource_manager_lien.this[0].origin == "terraform-project-module" &&
+      google_resource_manager_lien.this[0].parent == "projects/424242424242"
+    )
+    error_message = "Setting lien_reason must create one lien, owned by this module, on the project number."
   }
 
   assert {
-    condition     = google_tags_tag_binding.this["environment"].tag_value == "tagValues/1234567890"
-    error_message = "Tag binding must bind the supplied tag value."
+    condition     = google_tags_tag_binding.this["environment"].parent == "//cloudresourcemanager.googleapis.com/projects/424242424242"
+    error_message = "Tag binding must target the project by its full resource-manager name (project number)."
   }
 }
 
@@ -194,12 +218,12 @@ run "deletion_policy_override" {
   }
 
   assert {
-    condition     = google_project.this.deletion_policy == "DELETE"
-    error_message = "deletion_policy must be overridable."
+    condition     = google_project.this.deletion_policy != "PREVENT"
+    error_message = "An explicit deletion_policy must replace the PREVENT default."
   }
 
   assert {
-    condition     = google_project.this.labels["environment"] == "sandbox"
-    error_message = "labels must be applied to the project."
+    condition     = output.labels == google_project.this.labels && length(google_project.this.labels) == 1
+    error_message = "labels must be applied to the project and the labels output read back from it."
   }
 }

@@ -1,10 +1,16 @@
-# Copy to terraform.tfvars and fill in. Inputs marked REQUIRED have no default.
+# Optional overrides. Every value below normally comes from config/landing-zone.yaml
+# (config.tf); set one here only to override the config file for this root.
 
-# REQUIRED — Terraform Cloud org that owns the remote-state workspaces this root reads.
-tfc_organization = "REPLACE_ME"
+# Terraform Cloud org that owns the remote-state workspaces this root reads
+# (config key org.tfc.organization). Required unless organization_contract is set.
+# tfc_organization = "REPLACE_ME"
 
-# Optional — primary region for the default aws provider (default: eu-west-2).
-aws_region = "eu-west-2"
+# Primary region for the default aws provider (config key org.regions.aws; default: eu-west-2).
+# aws_region = "eu-west-2"
 
-# Optional — regions this root manages resources in (default: ["eu-west-2"]).
-aws_enabled_regions = ["eu-west-2"]
+# Regions this root manages resources in (config key aws.enabled_regions; default: [aws_region]).
+# aws_enabled_regions = ["eu-west-2"]
+
+# Skip the aws-organization remote-state read by supplying its contract directly
+# (config key aws.contracts.organization).
+# organization_contract = { account_ids = { workload = "111111111111" } }

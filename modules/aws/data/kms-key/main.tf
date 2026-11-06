@@ -26,14 +26,28 @@
 #     var.via_services. This ViaService scoping applies only to generic
 #     application usage, never to the log-service grants above.
 #   * Optional service-principal grant for var.service_principals — one Allow for
-#     the whole list, scoped by aws:SourceOrgID. This lets local AWS services in
-#     the key's own account (e.g. SNS, SSM, CloudWatch) use the key to
-#     encrypt/decrypt, without the CloudTrail EncryptionContext condition the
-#     log-service grants carry. Distinct from log_service_principals so a
+#     the whole list, scoped by default to the key's OWN account
+#     (aws:SourceAccount = key_account_id), so a service acting for another org
+#     account cannot use the key. service_principal_scope = "organization"
+#     widens it to aws:SourceOrgID (opt-in, for keys that genuinely take
+#     org-wide service writes). This lets local AWS services in the key's own
+#     account (e.g. SNS, SSM, CloudWatch) use the key to encrypt/decrypt,
+#     without the CloudTrail EncryptionContext condition the log-service
+#     grants carry. (The log-service grants above stay org-wide by design:
+#     CloudTrail/Config ORGANIZATION delivery writes on behalf of every
+#     member account.) Distinct from log_service_principals so a
 #     non-log-delivery key (e.g. a security-tooling CMK) can grant service usage
 #     without pretending to be a log-delivery target.
 
+# The key's own account, for the account-scoped ServiceUsage condition. Read
+# only when needed and not supplied.
+data "aws_caller_identity" "current" {
+  count = var.key_account_id == null && length(var.service_principals) > 0 && var.service_principal_scope == "account" ? 1 : 0
+}
+
 locals {
+  key_account_id = coalesce(var.key_account_id, try(data.aws_caller_identity.current[0].account_id, null), "unused")
+
   # Log-service grants. CloudTrail gets an extra EncryptionContext condition.
   #
   # ⚠️ AUDIT A1 (unvalidated, real-apply): AWS documents aws:SourceArn (the trail
@@ -89,9 +103,16 @@ locals {
   ] : []
 
   # Optional grant for local AWS service principals (SNS/SSM/CloudWatch/...) that
-  # need to use the key in its own account. Scoped by aws:SourceOrgID so only
-  # calls originating within this org can use it. One statement for the whole
-  # list; no CloudTrail EncryptionContext condition.
+  # need to use the key in its own account. Scoped to the key's own account
+  # (aws:SourceAccount) by default, or the whole org (aws:SourceOrgID) when
+  # service_principal_scope = "organization". One statement for the whole list;
+  # no CloudTrail EncryptionContext condition.
+  service_principal_condition = var.service_principal_scope == "organization" ? {
+    StringEquals = { "aws:SourceOrgID" = var.org_id }
+    } : {
+    StringEquals = { "aws:SourceAccount" = local.key_account_id }
+  }
+
   service_principal_statements = length(var.service_principals) > 0 ? [
     {
       Sid       = "ServiceUsage"
@@ -105,7 +126,7 @@ locals {
         "kms:DescribeKey",
       ]
       Resource  = "*"
-      Condition = { StringEquals = { "aws:SourceOrgID" = var.org_id } }
+      Condition = local.service_principal_condition
     }
   ] : []
 

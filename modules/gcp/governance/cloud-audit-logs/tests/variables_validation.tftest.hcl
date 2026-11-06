@@ -189,3 +189,23 @@ run "rejects_soft_delete_above_maximum" {
     soft_delete_retention_days = 120
   }
 }
+
+run "rejects_invalid_log_analytics_link_id" {
+  command = plan
+
+  variables {
+    log_analytics_link_id = "has-hyphen"
+  }
+
+  expect_failures = [var.log_analytics_link_id]
+}
+
+run "rejects_out_of_range_log_analytics_retention" {
+  command = plan
+
+  variables {
+    log_analytics_retention_days = 4000
+  }
+
+  expect_failures = [var.log_analytics_retention_days]
+}

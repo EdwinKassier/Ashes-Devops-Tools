@@ -151,6 +151,11 @@ module "audit_logs" {
   org_id                     = var.org_id
   kms_key_name               = local.audit_key_names["audit-logs"]
 
+  # Log Analytics: org audit logs in an analytics-enabled log bucket with a
+  # linked BigQuery dataset (Google's current recommendation).
+  enable_log_analytics         = var.enable_log_analytics
+  log_analytics_retention_days = var.log_analytics_retention_days
+
   # Enable BigQuery Analytics for improved security investigation
   enable_bigquery_analytics = true
   bigquery_location         = var.default_region
@@ -277,8 +282,9 @@ locals {
   #     conditions can ONLY match resource tags, so the tag is how the deny is
   #     scoped to the audit bucket rather than every bucket.
   #
-  # Permissions requested but OMITTED because they are not in the IAM deny
-  # supported-permissions list (docs.cloud.google.com/iam/docs/deny-permissions-support):
+  # Every permission below was checked against the IAM deny supported-permissions
+  # list (docs.cloud.google.com/iam/docs/deny-permissions-support, re-verified
+  # 2026-11). Permissions requested but OMITTED because they are not on it:
   #  - iam.denypolicies.update / iam.denypolicies.delete — a deny policy cannot
   #    protect itself; the control-plane watch "deny_policy_change" alerts instead.
   #  - accesscontextmanager.accessPolicies.delete — the supported name is
@@ -300,7 +306,7 @@ locals {
         {
           description       = "Org-wide: deny mutation of logging sinks/exclusions/log buckets and VPC-SC perimeters to all but break-glass."
           denied_principals = ["principalSet://goog/public:all"]
-          denied_permissions = [
+          denied_permissions = concat([
             "logging.googleapis.com/sinks.update",
             "logging.googleapis.com/sinks.delete",
             "logging.googleapis.com/exclusions.create",
@@ -312,26 +318,51 @@ locals {
             "accesscontextmanager.googleapis.com/servicePerimeters.replaceAll",
             "accesscontextmanager.googleapis.com/servicePerimeters.commit",
             "accesscontextmanager.googleapis.com/policies.delete",
-          ]
+            # N3: access levels gate perimeter ingress, and access-policy IAM /
+            # scopes decide who may edit perimeters. Creation stays allowed (a
+            # new level is inert until a perimeter, itself protected, uses it).
+            "accesscontextmanager.googleapis.com/accessLevels.update",
+            "accesscontextmanager.googleapis.com/accessLevels.delete",
+            "accesscontextmanager.googleapis.com/accessLevels.replaceAll",
+            "accesscontextmanager.googleapis.com/authorizedOrgsDescs.create",
+            "accesscontextmanager.googleapis.com/authorizedOrgsDescs.update",
+            "accesscontextmanager.googleapis.com/authorizedOrgsDescs.delete",
+            "accesscontextmanager.googleapis.com/policies.update",
+            "accesscontextmanager.googleapis.com/policies.setIamPolicy",
+            ], var.enable_principal_access_boundary ? [
+            # The automation boundary must not be loosened or unbound by the
+            # identities it bounds (bind/create stay allowed).
+            "iam.googleapis.com/principalaccessboundarypolicies.update",
+            "iam.googleapis.com/principalaccessboundarypolicies.delete",
+            "iam.googleapis.com/principalaccessboundarypolicies.unbind",
+          ] : [])
           exception_principals = var.containment_exempt_principals
           denial_condition     = null
         },
         {
-          description       = "Audit store (tag containment/protected): deny bucket delete/IAM change/untag, object delete, key-version destroy/disable and key IAM change to all but break-glass."
+          description       = "Audit store (tag containment/protected): deny bucket delete/update/IAM change/untag, object delete, key-version destroy/disable, key and keyring IAM change and Log Analytics bucket update/untag to all but break-glass."
           denied_principals = ["principalSet://goog/public:all"]
           denied_permissions = [
             "storage.googleapis.com/buckets.delete",
             "storage.googleapis.com/buckets.setIamPolicy",
             "storage.googleapis.com/buckets.deleteTagBinding",
+            # N3: buckets.update covers retention policy, lifecycle, versioning,
+            # soft delete, CMEK and logging config of the audit buckets.
+            "storage.googleapis.com/buckets.update",
             "storage.googleapis.com/objects.delete",
             "cloudkms.googleapis.com/cryptoKeyVersions.destroy",
             "cloudkms.googleapis.com/cryptoKeyVersions.update",
             "cloudkms.googleapis.com/cryptoKeys.setIamPolicy",
+            "cloudkms.googleapis.com/keyRings.setIamPolicy",
+            # The audit Log Analytics bucket (tagged in containment.tf):
+            # retention / lock / analytics changes and untagging.
+            "logging.googleapis.com/buckets.update",
+            "logging.googleapis.com/buckets.deleteTagBinding",
           ]
           exception_principals = var.containment_exempt_principals
           denial_condition = {
             title       = "audit-store-only"
-            description = "Applies only to resources carrying the containment/protected tag (the audit buckets and audit CMEK keyring)."
+            description = "Applies only to resources carrying the containment/protected tag (the audit buckets, the audit Log Analytics bucket and the audit CMEK keyring)."
             expression  = "resource.matchTagId('${try(module.tags.tag_keys["containment"], "")}', '${try(module.tags.tag_values["containment-protected"], "")}')"
           }
         },
@@ -344,6 +375,14 @@ module "org_policies" {
   source = "../../governance/org-policy"
 
   parent = "organizations/${module.organization.organization_id}"
+
+  # Managed constraints (constraints/*.managed.*) replace their legacy
+  # equivalents where Google offers a like-for-like successor.
+  # iam.allowedPolicyMemberDomains stays legacy: its successor
+  # iam.managed.allowedPolicyMembers blocks the automatic Owner / Folder Admin
+  # grants made at project and folder creation and Google-owned principals
+  # outside the org (see docs/known-gaps.md).
+  prefer_managed_constraints = var.prefer_managed_constraints
 
   list_policies = concat([
     {
@@ -379,7 +418,18 @@ module "org_policies" {
       allow_all      = null
       deny_all       = true
     }
-  ], local.cmek_list_policy)
+    ], local.cmek_list_policy,
+    # Cloud Run ingress: no service may accept traffic from the internet directly
+    # (ingress "all"). Public apps go through the external ALB + Cloud Armor
+    # (internal-and-cloud-load-balancing). Closes the invoker_iam_disabled +
+    # INGRESS_TRAFFIC_ALL bypass of domain-restricted sharing.
+    var.restrict_cloud_run_ingress ? [{
+      constraint     = "run.allowedIngress"
+      allowed_values = ["internal", "internal-and-cloud-load-balancing"]
+      denied_values  = null
+      allow_all      = null
+      deny_all       = null
+  }] : [])
 
   boolean_policies = concat([
     {
@@ -450,11 +500,49 @@ module "org_policies" {
 
 # G9: opt-in IAM deny policies at the org node — a coarse, allow-independent
 # backstop for sensitive permissions (evaluated before allow). Default [] = none.
+#
+# Guardrail ownership (N2/H3): in the default guardrail_owner_mode = "separate"
+# this stage does NOT manage deny policies — its apply identity holds no
+# roles/iam.denyAdmin (gcp-bootstrap), so it could not delete the containment
+# policy that constrains it. It outputs the policies as gcloud-ready specs
+# (output guardrail_deny_policy_specs) for the guardrail owner (the
+# <prefix>-guardrails-apply SA, impersonated by a PAM-gated group) to apply; see
+# docs/runbooks/production-hardening.md. "organization" = legacy in-stage apply.
+locals {
+  managed_deny_policies = concat(local.containment_deny_policy, var.iam_deny_policies)
+
+  guardrail_deny_policy_specs = {
+    for p in local.managed_deny_policies : p.name => jsonencode({
+      displayName = try(coalesce(p.display_name), p.name)
+      rules = [
+        for r in p.rules : {
+          description = try(coalesce(r.description), "")
+          denyRule = merge(
+            {
+              deniedPrincipals     = r.denied_principals
+              deniedPermissions    = r.denied_permissions
+              exceptionPrincipals  = try(r.exception_principals, null) == null ? [] : r.exception_principals
+              exceptionPermissions = try(r.exception_permissions, null) == null ? [] : r.exception_permissions
+            },
+            r.denial_condition == null ? {} : {
+              denialCondition = {
+                title       = try(r.denial_condition.title, null)
+                description = try(r.denial_condition.description, null)
+                expression  = r.denial_condition.expression
+              }
+            },
+          )
+        }
+      ]
+    })
+  }
+}
+
 module "iam_deny" {
   source = "../../iam/deny-policy"
 
   parent        = urlencode("cloudresourcemanager.googleapis.com/organizations/${module.organization.organization_id}")
-  deny_policies = concat(local.containment_deny_policy, var.iam_deny_policies)
+  deny_policies = var.guardrail_owner_mode == "organization" ? local.managed_deny_policies : []
 }
 
 # Folder-level Organization Policies for Production
@@ -467,6 +555,8 @@ module "prod_folder_policies" {
   }
 
   parent = each.value.name
+
+  prefer_managed_constraints = var.prefer_managed_constraints
 
   list_policies = []
 
@@ -505,12 +595,43 @@ module "os_login_exemptions" {
   parent        = each.value.name
   list_policies = []
 
+  # Must match the org-node policy: overriding the managed constraint needs the
+  # managed name, the legacy one needs the legacy name.
+  prefer_managed_constraints = var.prefer_managed_constraints
+
   boolean_policies = [
     {
       constraint = "compute.requireOsLogin"
       enforce    = false
     },
   ]
+}
+
+# Organization logging settings (opt-in): where the _Default/_Required buckets
+# of NEW projects are created (data residency) and the CMEK for them. The org's
+# Cloud Logging service account (output logging_organization_service_account)
+# needs roles/cloudkms.cryptoKeyEncrypterDecrypter on the key BEFORE kms_key_name
+# is set, or the settings update fails.
+resource "google_logging_organization_settings" "this" {
+  count = var.enable_logging_organization_settings ? 1 : 0
+
+  organization         = var.org_id
+  storage_location     = coalesce(var.logging_settings_storage_location, var.default_region)
+  kms_key_name         = var.logging_settings_kms_key_name
+  disable_default_sink = false
+}
+
+# Principal access boundary (opt-in): the automation service accounts in the
+# admin project may only use their permissions on resources in this
+# organization (allowed_resources to widen). Needs the gcp-bootstrap
+# enable_principal_access_boundary input. Validate on a non-production org.
+module "automation_boundary" {
+  source = "../../iam/principal-access-boundary"
+  count  = var.enable_principal_access_boundary ? 1 : 0
+
+  organization_id   = var.org_id
+  allowed_resources = var.principal_access_boundary_allowed_resources
+  project_bindings  = { admin = var.admin_project_id }
 }
 
 # Essential Contacts

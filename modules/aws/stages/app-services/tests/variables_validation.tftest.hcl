@@ -105,3 +105,13 @@ run "public_alb_without_certificate_rejected" {
     alb_internal = false
   }
 }
+
+run "rejects_blank_bootstrap_image" {
+  command = plan
+
+  variables {
+    bootstrap_image = " "
+  }
+
+  expect_failures = [var.bootstrap_image]
+}

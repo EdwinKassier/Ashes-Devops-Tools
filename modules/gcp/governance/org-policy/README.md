@@ -97,9 +97,10 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_org_policy_custom_constraint.custom_constraints (modules/gcp/governance/org-policy/main.tf#L50)
-- resource.google_org_policy_policy.boolean_policies (modules/gcp/governance/org-policy/main.tf#L8)
-- resource.google_org_policy_policy.list_policies (modules/gcp/governance/org-policy/main.tf#L25)
+- resource.google_org_policy_custom_constraint.custom_constraints (modules/gcp/governance/org-policy/main.tf#L130)
+- resource.google_org_policy_policy.boolean_policies (modules/gcp/governance/org-policy/main.tf#L62)
+- resource.google_org_policy_policy.list_policies (modules/gcp/governance/org-policy/main.tf#L79)
+- resource.google_org_policy_policy.managed_policies (modules/gcp/governance/org-policy/main.tf#L106)
 
 
 ## Inputs
@@ -110,6 +111,8 @@ The following resources are created:
 | <a name="input_boolean_policies"></a> [boolean\_policies](#input\_boolean\_policies) | List of boolean organization policies to enforce or disable | <pre>list(object({<br/>    constraint = string # e.g., "sql.restrictPublicIp", "compute.requireShieldedVm"<br/>    enforce    = bool   # true = enforce the constraint, false = disable it<br/>  }))</pre> | `[]` | no |
 | <a name="input_custom_constraints"></a> [custom\_constraints](#input\_custom\_constraints) | List of custom organization policy constraints to create | <pre>list(object({<br/>    name           = string       # Unique name, e.g., "custom.disableGkeAutoUpgrade"<br/>    display_name   = string       # Human readable name<br/>    description    = string       # Description of the constraint<br/>    action_type    = string       # ALLOW or DENY<br/>    condition      = string       # CEL condition, e.g., "resource.management.autoUpgrade == true"<br/>    method_types   = list(string) # Operations to restrict: CREATE, UPDATE, DELETE<br/>    resource_types = list(string) # Resources to restrict: e.g. ["container.googleapis.com/NodePool"]<br/>  }))</pre> | `[]` | no |
 | <a name="input_list_policies"></a> [list\_policies](#input\_list\_policies) | List of list-type organization policies with allowed/denied values | <pre>list(object({<br/>    constraint     = string                     # e.g., "gcp.resourceLocations"<br/>    allow_all      = optional(bool, false)      # Allow all values (mutually exclusive with deny_all)<br/>    deny_all       = optional(bool, false)      # Deny all values (mutually exclusive with allow_all)<br/>    allowed_values = optional(list(string), []) # Specific values to allow (ignored when allow_all = true)<br/>    denied_values  = optional(list(string), []) # Specific values to deny (ignored when deny_all = true)<br/>  }))</pre> | `[]` | no |
+| <a name="input_managed_policies"></a> [managed\_policies](#input\_managed\_policies) | Explicit managed-constraint policies (constraints/<service>.managed.*), e.g. iam.managed.allowedPolicyMembers. parameters is the JSON-encoded constraint parameter object (jsonencode({ allowedMemberSubjects = [...] })), or null. | <pre>list(object({<br/>    constraint = string<br/>    enforce    = optional(bool, true)<br/>    parameters = optional(string)<br/>  }))</pre> | `[]` | no |
+| <a name="input_prefer_managed_constraints"></a> [prefer\_managed\_constraints](#input\_prefer\_managed\_constraints) | Set every legacy boolean constraint (and compute.vmExternalIpAccess deny\_all) that has a like-for-like managed equivalent through its constraints/<service>.managed.* version instead (iam.managed.disableServiceAccountKeyCreation, iam.managed.disableServiceAccountKeyUpload, iam.managed.preventPrivilegedBasicRolesForDefaultServiceAccounts, compute.managed.disableSerialPortAccess / requireOsLogin / disableNestedVirtualization / disableGuestAttributesAccess / vmExternalIpAccess, sql.managed.restrictPublicIp). Constraints without an equivalent stay legacy. Default true. Switching replaces the policy resources (legacy policy removed, managed policy created in the same apply). | `bool` | `true` | no |
 
 ## Outputs
 
@@ -118,8 +121,10 @@ The following resources are created:
 | <a name="output_boolean_policy_names"></a> [boolean\_policy\_names](#output\_boolean\_policy\_names) | Map of boolean policy constraint names to their full resource names |
 | <a name="output_custom_constraints"></a> [custom\_constraints](#output\_custom\_constraints) | Map of created custom constraints |
 | <a name="output_disabled_boolean_policies"></a> [disabled\_boolean\_policies](#output\_disabled\_boolean\_policies) | List of boolean policies that are disabled (enforce = false) |
+| <a name="output_effective_constraints"></a> [effective\_constraints](#output\_effective\_constraints) | Sorted list of every constraint this module sets (legacy boolean, legacy list and managed), after the prefer\_managed\_constraints translation. |
 | <a name="output_enforced_boolean_policies"></a> [enforced\_boolean\_policies](#output\_enforced\_boolean\_policies) | List of boolean policies that are enforced (enforce = true) |
 | <a name="output_list_policy_names"></a> [list\_policy\_names](#output\_list\_policy\_names) | Map of list policy constraint names to their full resource names |
+| <a name="output_managed_policy_names"></a> [managed\_policy\_names](#output\_managed\_policy\_names) | Map of managed constraint names (<service>.managed.*) to their full policy resource names: translated legacy constraints (prefer\_managed\_constraints) plus managed\_policies. |
 | <a name="output_parent"></a> [parent](#output\_parent) | The parent resource where policies are applied |
 | <a name="output_preset_cmek_required"></a> [preset\_cmek\_required](#output\_preset\_cmek\_required) | CMEK-required list policy pack — denies storage/BQ/Spanner/Pub/Sub/Secret Manager resources created without customer-managed encryption keys |
 | <a name="output_preset_compute_security"></a> [preset\_compute\_security](#output\_preset\_compute\_security) | Strict compute security boolean policy pack (Shielded VM, serial port, nested virtualisation, OS Login, guest attributes) |

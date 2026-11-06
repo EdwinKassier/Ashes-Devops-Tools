@@ -98,3 +98,13 @@ run "rejects_malformed_key_admin_arn" {
 
   expect_failures = [var.key_admin_arn]
 }
+
+run "rejects_wildcard_key_policy_admin_role_name" {
+  command = plan
+
+  variables {
+    key_policy_admin_role_name = "break-*"
+  }
+
+  expect_failures = [var.key_policy_admin_role_name]
+}

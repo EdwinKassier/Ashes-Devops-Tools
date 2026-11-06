@@ -238,12 +238,9 @@ run "production_workspaces_must_be_bound_by_id" {
     production_workload_environments = ["prod"]
   }
 
-  expect_failures = [check.production_workspaces_bound_by_id]
-
-  assert {
-    condition     = contains(output.production_workspaces_bound_by_name, "gcp-workload-prod") && contains(output.production_workspaces_bound_by_name, "gcp-bootstrap")
-    error_message = "the production workload and control-plane workspaces bound by name must be reported."
-  }
+  # Hard failure (precondition), not a warning: a production org must not plan
+  # with name-bound WIF trusts.
+  expect_failures = [terraform_data.production_workspaces_bound_by_id]
 }
 
 run "production_workspaces_bound_by_id_pass" {
@@ -366,5 +363,99 @@ run "admin_project_uses_project_primitive" {
   assert {
     condition     = module.admin_project.labels["purpose"] == "administration"
     error_message = "Admin project must carry the administration labels."
+  }
+}
+
+# N2/H3: by default the organization apply SA does NOT hold roles/iam.denyAdmin;
+# a dedicated guardrails SA does, impersonable only by guardrail_owner_members.
+run "guardrail_owner_is_separate_by_default" {
+  command = plan
+
+  variables {
+    guardrail_owner_members = ["group:guardrail-owners@example.com"]
+  }
+
+  assert {
+    condition     = !contains([for k, m in google_organization_iam_member.stage_org_roles : m.role], "roles/iam.denyAdmin")
+    error_message = "No stage identity (in particular organization-apply) may hold roles/iam.denyAdmin in separate mode."
+  }
+
+  assert {
+    condition     = google_service_account.guardrails[0].account_id == "mock-org-guardrails-apply"
+    error_message = "The guardrails SA must be <prefix>-guardrails-apply."
+  }
+
+  assert {
+    condition     = google_organization_iam_member.guardrails["roles/iam.denyAdmin"].role == "roles/iam.denyAdmin"
+    error_message = "The guardrails SA must hold roles/iam.denyAdmin at the org."
+  }
+
+  assert {
+    condition     = keys(google_service_account_iam_member.guardrails_impersonation) == ["group:guardrail-owners@example.com"] && google_service_account_iam_member.guardrails_impersonation["group:guardrail-owners@example.com"].role == "roles/iam.serviceAccountTokenCreator"
+    error_message = "Only guardrail_owner_members may impersonate the guardrails SA."
+  }
+
+  assert {
+    condition     = output.guardrail_owner_mode == "separate"
+    error_message = "guardrail_owner_mode must default to separate."
+  }
+}
+
+run "guardrail_owner_legacy_organization_mode" {
+  command = plan
+
+  variables {
+    guardrail_owner_mode = "organization"
+  }
+
+  assert {
+    condition     = contains(keys(google_organization_iam_member.stage_org_roles), "organization-apply|roles/iam.denyAdmin")
+    error_message = "Legacy organization mode must keep denyAdmin on organization-apply."
+  }
+
+  assert {
+    condition     = length(google_service_account.guardrails) == 0 && length(google_organization_iam_member.guardrails) == 0
+    error_message = "Legacy organization mode must not create the guardrails SA."
+  }
+}
+
+# N6: the phase-0 human impersonation of terraform-admin is switchable.
+run "phase0_admin_impersonation_can_be_revoked" {
+  command = plan
+
+  variables {
+    enable_phase0_admin_impersonation = false
+  }
+
+  assert {
+    condition     = length(output.phase0_admin_impersonation_members) == 0
+    error_message = "enable_phase0_admin_impersonation = false must remove the human impersonation of terraform-admin."
+  }
+}
+
+run "phase0_admin_impersonation_default_on" {
+  command = plan
+
+  assert {
+    condition     = length(output.phase0_admin_impersonation_members) == 1 && contains(output.phase0_admin_impersonation_members, "user:admin@example.com")
+    error_message = "The first (phase-0) apply needs the admin user impersonation by default."
+  }
+}
+
+run "principal_access_boundary_grants_are_opt_in" {
+  command = plan
+
+  variables {
+    enable_principal_access_boundary = true
+  }
+
+  assert {
+    condition     = contains(keys(google_organization_iam_member.stage_org_roles), "organization-apply|roles/iam.principalAccessBoundaryAdmin") && contains(keys(google_project_iam_member.stage_admin_project_roles), "organization-apply|roles/resourcemanager.projectIamAdmin")
+    error_message = "enable_principal_access_boundary must grant organization-apply PAB admin (org) and projectIamAdmin (admin project)."
+  }
+
+  assert {
+    condition     = contains(keys(google_organization_iam_member.stage_org_roles), "organization-plan|roles/iam.principalAccessBoundaryViewer")
+    error_message = "enable_principal_access_boundary must grant organization-plan the PAB viewer role."
   }
 }

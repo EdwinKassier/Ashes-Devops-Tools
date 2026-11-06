@@ -11,6 +11,7 @@ output "services" {
       service_name             = module.service[k].name
       url                      = module.service[k].uri
       image_repository         = local.image_repository[k]
+      initial_image            = local.initial_image[k]
       runtime_service_account  = local.runtime_sa_email[k]
       deploy_service_account   = try(local.deploy_sa_email[k], null)
       database_connection_name = s.database == null ? null : module.database[k].connection_name

@@ -88,3 +88,14 @@ run "binding_to_unknown_account_rejected" {
 
   expect_failures = [var.tfc_workspace_bindings]
 }
+
+run "wildcard_member_break_glass_trusted_principal_rejected" {
+  # The member break-glass trust must be account-qualified (no arn:aws:iam::*:).
+  command = plan
+
+  variables {
+    member_break_glass_trusted_principal_arns = ["arn:aws:iam::*:role/break-glass"]
+  }
+
+  expect_failures = [var.member_break_glass_trusted_principal_arns]
+}

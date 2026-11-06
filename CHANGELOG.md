@@ -31,6 +31,19 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/2026-11-
 - **ShellCheck** — pinned `shellcheck-py` pre-commit hook and `make shellcheck` for `scripts/*.sh`.
 - Commit the `examples/presets/*.tfvars` production/cost presets, with a CI guard that every referenced preset exists.
 - `envs/gcp/workload` `default_plan` test that plans the real host stage with no module override.
+- **Required-check guard** — `scripts/check-required-checks.sh` (`make required-checks`, CI meta-lint)
+  fails if `docs/guides/BRANCH_PROTECTION.md`'s `gh api` command lists a context no workflow job reports
+  (sharded matrix or reusable-workflow caller names).
+- **Backtick-path strict mode** in `scripts/check-md-links.py`: repo paths (`modules/`, `envs/`,
+  `policies/`) named in code spans must exist — fatal for `docs/compliance/control-matrix.md`, advisory
+  for `docs/known-gaps.md`.
+- `scripts/check-module-usage.py` (`make count`, informational) lists modules no root reaches;
+  README labels them *(library-only)*.
+- Script tests: `scripts/tests/test-init-landing-zone.sh` (`make test-scripts`, CI meta-lint) runs the
+  config scaffolder non-interactively and asserts yamllint-clean output and the substituted values.
+- Root templates (`templates/aws/root`, `templates/shared/cloud-root`) now carry the root conventions:
+  `config.tf`, a contract-gated remote-state read and a `tests/` suite. `templates/**` suites run in CI.
+- `scripts/check-consistency.sh` reports (does not fail on) single-platform `.terraform.lock.hcl` files.
 
 ### Changed
 
@@ -47,8 +60,17 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/2026-11-
 - README, CLAUDE.md, docs/INDEX.md, Quick Start and Add Environment updated for the five-root GCP flow
   (`gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>`).
 
+### Deprecated
+
+- `modules/gcp/stages/host` — the network god-module facade (no in-repo callers) is **removed in
+  `v1.0.0`**. Migrate to `stages/net-hub`, `stages/dns-anchor` and `stages/net-spoke`; see the module
+  README for the per-use mapping and reference `moved.tf` files.
+
 ### Fixed
 
+- `docs/guides/BRANCH_PROTECTION.md` listed `Terraform Tests` (a sharded matrix that only reports
+  `Terraform Tests (shard N)`) as a required context, which would block every PR. `Validation Summary` is
+  now the only required context.
 - Restored green CI gates on `main`: `terraform fmt`, TFLint standard module structure (host split
   outputs/variables merged), Checkov 3.3.17 failures (justified skips).
 - `gcp-workload`: VPC-SC gated on an access policy being supplied; flow-logs BigQuery destination derived;

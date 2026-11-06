@@ -38,7 +38,7 @@ locals {
     environments = {
       for k, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : k => {
         display_name            = tostring(try(e.display_name, k))
-        region                  = tostring(try(e.region, local.lz.org.regions.gcp, "europe-west1"))
+        region                  = tostring(try(e.region, local.lz.org.regions.gcp, "europe-west2"))
         cidr_block              = tostring(try(e.cidr_block, ""))
         budget_monthly_limit    = tonumber(try(e.budget_monthly_limit, 0))
         iam_group_role_bindings = try({ for g, roles in e.iam_group_role_bindings : g => toset([for r in roles : tostring(r)]) }, {})
@@ -68,6 +68,19 @@ locals {
         }
       }
     }
+    # gcp.workload: app golden-path settings shared by every gcp-workload-<env>.
+    app_bootstrap_image = try(tostring(local.lz.gcp.workload.bootstrap_image), null)
+    # gcp.workload.public_ingress.<env>.<service> = {domains, dns_managed_zone, enable_cdn}.
+    public_ingress = {
+      for env, svcs in try({ for k, v in local.lz.gcp.workload.public_ingress : k => v }, {}) : env => {
+        for svc, c in try({ for k, v in svcs : k => v }, {}) : svc => {
+          domains          = [for d in try(c.domains, []) : tostring(d)]
+          dns_managed_zone = try(tostring(c.dns_managed_zone), null)
+          enable_cdn       = tobool(try(c.enable_cdn, false))
+        }
+      }
+    }
+
     network_hub_contract = try(local.lz.gcp.contracts.network_hub, null) == null ? null : {
       vpc_self_link = tostring(local.lz.gcp.contracts.network_hub.vpc_self_link)
       dns_domain    = tostring(local.lz.gcp.contracts.network_hub.dns_domain)
@@ -80,6 +93,31 @@ locals {
   project_prefix   = coalesce(var.project_prefix, local.cfg.project_prefix, "unset")
   tfc_organization = coalesce(var.tfc_organization, local.cfg.tfc_organization, "unset")
   # This environment's region: gcp.environments[<env>].region, else
-  # org.regions.gcp, else europe-west1 (the same default gcp-projects applies).
-  region = coalesce(var.region, try(local.cfg.environments[var.environment].region, null), local.cfg.default_region, "europe-west1")
+  # org.regions.gcp, else europe-west2 (the same default gcp-projects applies).
+  region = coalesce(var.region, try(local.cfg.environments[var.environment].region, null), local.cfg.default_region, "europe-west2")
+}
+
+# ── Presets: `presets` in config/landing-zone.yaml ─────────────────────────
+# Named hardening/cost overlays from examples/presets/<name>.yaml (the YAML twin
+# of <name>.tfvars, kept in step by tests/presets.tftest.hcl). A listed preset is
+# applied only by the root its `root:` names; every other root ignores it. This
+# root also applies gcp.workload.presets_by_environment[<environment>] (so a
+# prod-only preset does not harden dev). Precedence: explicit variable > preset
+# > config file > built-in default. Supported keys: local.preset_supported_keys.
+locals {
+  preset_root = "envs/gcp/workload"
+  preset_names = distinct(concat(
+    try([for n in local.lz.presets : tostring(n)], []),
+    try([for n in local.lz.gcp.workload.presets_by_environment[var.environment] : tostring(n)], []),
+  ))
+  preset_documents = [for n in local.preset_names : yamldecode(file("${path.root}/../../../examples/presets/${n}.yaml"))]
+  preset = merge([
+    for d in local.preset_documents : { for k, v in try(d.values, {}) : k => v } if try(d.root, "") == local.preset_root
+  ]...)
+  preset_supported_keys = ["vpc_sc_enable_dry_run", "enable_cloud_armor", "enable_owasp_rules"]
+
+  # Effective preset-backed values.
+  vpc_sc_enable_dry_run = var.vpc_sc_enable_dry_run != null ? var.vpc_sc_enable_dry_run : tobool(lookup(local.preset, "vpc_sc_enable_dry_run", true))
+  enable_cloud_armor    = var.enable_cloud_armor != null ? var.enable_cloud_armor : tobool(lookup(local.preset, "enable_cloud_armor", false))
+  enable_owasp_rules    = var.enable_owasp_rules != null ? var.enable_owasp_rules : tobool(lookup(local.preset, "enable_owasp_rules", false))
 }

@@ -38,7 +38,7 @@ locals {
     environments = {
       for k, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : k => {
         display_name            = tostring(try(e.display_name, k))
-        region                  = tostring(try(e.region, local.lz.org.regions.gcp, "europe-west1"))
+        region                  = tostring(try(e.region, local.lz.org.regions.gcp, "europe-west2"))
         cidr_block              = tostring(try(e.cidr_block, ""))
         budget_monthly_limit    = tonumber(try(e.budget_monthly_limit, 0))
         iam_group_role_bindings = try({ for g, roles in e.iam_group_role_bindings : g => toset([for r in roles : tostring(r)]) }, {})
@@ -63,7 +63,7 @@ locals {
   # static tools (tflint) can evaluate the root; the variable validations reject
   # the unset case first.
   project_prefix         = coalesce(var.project_prefix, local.cfg.project_prefix, "unset")
-  default_region         = coalesce(var.default_region, local.cfg.default_region, "europe-west1")
+  default_region         = coalesce(var.default_region, local.cfg.default_region, "europe-west2")
   environments           = var.environments != null ? var.environments : local.cfg.environments
   hub_vpc_cidr_block     = coalesce(var.hub_vpc_cidr_block, local.cfg.hub_vpc_cidr_block, "0.0.0.0/32")
   dns_hub_vpc_cidr_block = coalesce(var.dns_hub_vpc_cidr_block, local.cfg.dns_hub_vpc_cidr_block, "0.0.0.0/32")

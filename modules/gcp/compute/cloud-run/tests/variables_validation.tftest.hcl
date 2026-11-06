@@ -100,3 +100,26 @@ run "invalid_vpc_egress_rejected" {
     }
   }
 }
+
+# invoker_iam_disabled + INGRESS_TRAFFIC_ALL is an unprotected public run.app URL:
+# rejected unless deliberately acknowledged.
+run "rejects_unacknowledged_public_run_url" {
+  command = plan
+
+  variables {
+    enable_unauthenticated = true
+    ingress                = "INGRESS_TRAFFIC_ALL"
+  }
+
+  expect_failures = [var.public_access_mode]
+}
+
+run "allows_acknowledged_public_run_url" {
+  command = plan
+
+  variables {
+    enable_unauthenticated = true
+    ingress                = "INGRESS_TRAFFIC_ALL"
+    allow_public_run_url   = true
+  }
+}

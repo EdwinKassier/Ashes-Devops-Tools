@@ -117,3 +117,25 @@ run "plan_roles_and_access_policy_defaults" {
     error_message = "projects-apply folder delegation must not be org-wide; organization-apply must be able to create the scoped access policies."
   }
 }
+
+# N2/H3: deny-policy ownership defaults to the separate guardrail owner, which
+# gcp-organization reads to stop applying deny policies itself.
+run "guardrail_owner_defaults_to_separate" {
+  command = plan
+
+  assert {
+    condition     = output.guardrail_owner_mode == "separate" && !contains(module.bootstrap.org_role_grants["organization-apply"], "roles/iam.denyAdmin")
+    error_message = "By default the organization apply SA must not hold roles/iam.denyAdmin; the guardrails SA owns deny policies."
+  }
+}
+
+# The prod preset ships a placeholder guardrail owner; it must fail until replaced.
+run "rejects_placeholder_guardrail_owner" {
+  command = plan
+
+  variables {
+    guardrail_owner_members = ["group:REPLACE-guardrail-owners@your-domain.invalid"]
+  }
+
+  expect_failures = [var.guardrail_owner_members]
+}

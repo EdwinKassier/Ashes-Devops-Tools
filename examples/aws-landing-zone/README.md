@@ -88,8 +88,8 @@ is REQUIRED. Roots not listed have no unconditionally-required inputs.
 - **aws-shared-services** — none (features off by default).
 - **aws-backup** — `backup_role_arn`, `restore_testing_role_arn`.
 - **aws-workload** — `workload_account_key`, `log_archive_bucket_name`,
-  `config_role_arn`. (`kms_key_arn` is effectively required — Session Manager
-  needs a CMK.)
+  `config_role_arn`. (`kms_key_arn` is optional: empty creates the workload
+  CMK that Session Manager, EBS and the app services use.)
 - **saas** — none unconditionally; each enabled feature (`enable_supabase` /
   `enable_vercel`) makes its own inputs required, and the matching API token
   (`SUPABASE_ACCESS_TOKEN` / `VERCEL_API_TOKEN`) must be exported.

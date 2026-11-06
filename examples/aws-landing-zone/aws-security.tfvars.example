@@ -5,7 +5,7 @@
 
 # REQUIRED — central log-archive bucket name. MUST match the value used in the
 # aws-organization root (this root actually creates the bucket).
-log_archive_bucket_name = "ashes-org-log-archive"
+log_archive_bucket_name = "acme-org-log-archive"
 
 # REQUIRED — account-qualified ARN of the KMS key administrator (kms:*) on the
 # log and forensics CMKs. Prevents locking the keys out of management.

@@ -1,7 +1,8 @@
-# A workload root has ONE default provider. The region comes from var.aws_region so
+# A workload root has ONE default provider. The region comes from local.aws_region
+# (variable > config file > eu-west-2, see config.tf) so
 # the same root can be pointed at any region without code edits.
 provider "aws" {
-  region = var.aws_region
+  region = local.aws_region
 }
 
 # Cross-account roots add one aliased provider PER FIXED FOUNDATIONAL ACCOUNT
@@ -9,6 +10,6 @@ provider "aws" {
 # the aws-organization remote state (two-phase bootstrap), known at plan time.
 # provider "aws" {
 #   alias  = "security_tooling"
-#   region = var.aws_region
+#   region = local.aws_region
 #   assume_role { role_arn = data.terraform_remote_state.aws_organization.outputs.account_role_arns["security_tooling"] }
 # }

@@ -62,8 +62,15 @@ module "terraform_admin_sa" {
   display_name = "Terraform Admin"
   description  = "Centralised Terraform Admin for managing downstream resources"
 
-  # Allow the actual admin user to impersonate this SA
-  impersonation_members = ["user:${var.admin_email}"]
+  # Phase-0 only: the human admin impersonates this SA for the first bootstrap
+  # apply. Set enable_phase0_admin_impersonation = false once the gcp-bootstrap
+  # workspace applies through TFC dynamic credentials (pass 2), so no standing
+  # human path to the bootstrap apply identity remains.
+  impersonation_members = local.phase0_admin_impersonation_members
+}
+
+locals {
+  phase0_admin_impersonation_members = var.enable_phase0_admin_impersonation ? ["user:${var.admin_email}"] : []
 }
 
 

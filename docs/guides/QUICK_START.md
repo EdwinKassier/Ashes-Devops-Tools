@@ -11,6 +11,14 @@ This guide covers everything needed to deploy the **GCP** landing zone from scra
 3. **Apply `envs/tfc-admin`.** It creates every workspace from the same file: the enabled clouds, one `gcp-workload-<env>` / `aws-workload-<env>` per environment, and the TFC projects.
 4. **Bootstrap in order:** GCP `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` (below). AWS: the [AWS Bootstrap runbook](../runbooks/aws-bootstrap.md).
 
+**How long it takes.** The applies themselves take minutes to an hour. The elapsed
+time is set by the steps around them: organization and billing access, quota and
+API enablement, group creation, IAM propagation, VPC-SC dry-run review, and
+first-apply fixes. Plan on about **2–3 working days** for the GCP foundation
+(through `gcp-network-hub` plus one `gcp-workload-<env>`), and about **a week**
+for the AWS landing zone (account creation and the manual console gates in the
+[AWS Bootstrap runbook](../runbooks/aws-bootstrap.md)).
+
 ---
 
 ## Pre-flight Checklist
@@ -21,7 +29,7 @@ Before running any Terraform, verify the following:
 
 - [ ] You have a GCP Organization (not just a project). Find your org ID: `gcloud organizations list`
 - [ ] You have a Billing Account linked to the organization. Find it: `gcloud billing accounts list`
-- [ ] You have decided on `github_org` and `github_repo` values — **these variables have no defaults** and must be set explicitly to avoid accidentally trusting the wrong GitHub org/repo when forking
+- [ ] (Only if you will turn on the optional GitHub WIF pool, `enable_github_wif = true`; it is off by default) you have the repository's immutable numeric IDs: `gh api repos/<owner>/<repo> --jq '.id, .owner.id'` gives `github_repository_id` and `github_repository_owner_id`
 - [ ] Your user account has the following roles **at the organization level**:
   - `roles/resourcemanager.organizationAdmin`
   - `roles/billing.admin` (or `roles/billing.user` + project creator rights)
@@ -51,8 +59,8 @@ gcloud services enable cloudresourcemanager.googleapis.com \
 ## 1. Clone the Repository
 
 ```bash
-git clone https://github.com/EdwinKassier/Ashes-Devops-Tools.git
-cd Ashes-Devops-Tools
+git clone https://github.com/<your-org>/<your-repo>.git
+cd <your-repo>
 ```
 
 ## 2. Install Repo Tooling
@@ -94,7 +102,7 @@ gcloud auth application-default login
 gcloud config set project YOUR_SEED_PROJECT
 ```
 
-> **Note:** On a fresh org, you will use personal credentials for the bootstrap run only. After bootstrap creates the Workload Identity Federation (WIF) pool, all subsequent runs go through GitHub Actions using short-lived tokens — your personal credentials are no longer needed.
+> **Note:** On a fresh org, you will use personal credentials for the bootstrap run only. After bootstrap creates the Terraform Cloud Workload Identity Federation (WIF) pool and the per-stage plan/apply service accounts, every later plan and apply runs **in Terraform Cloud** with dynamic (short-lived) credentials. GitHub Actions only runs the PR checks; it holds no GCP credentials. Your personal credentials are no longer needed.
 
 ---
 
@@ -167,8 +175,9 @@ TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload init -backend-c
 
 ```bash
 cp envs/gcp/bootstrap/terraform.tfvars.example envs/gcp/bootstrap/local.auto.tfvars
-# Keep only what config/landing-zone.yaml does not hold (github_org, github_repo,
-# enable_tfc_oidc, ...). Delete the rest: an explicit variable overrides the config.
+# Keep only what config/landing-zone.yaml does not hold (enable_tfc_oidc, the
+# optional enable_github_wif + github_repository_id / github_repository_owner_id,
+# ...). Delete the rest: an explicit variable overrides the config.
 ```
 
 **Step 4 — Apply the bootstrap root first (two-phase, as the human admin):**
@@ -192,7 +201,7 @@ Terraform will create:
 
 - An admin project (`{prefix}-admin-{suffix}`)
 - The `terraform-admin` service account the other roots impersonate
-- A GitHub Actions WIF pool and provider (trusted to your repo's `main` branch)
+- A GitHub Actions WIF pool and provider, only with `enable_github_wif = true` (off by default; it trusts the repository's numeric IDs on `main` and binds only the read-only plan SA)
 - A Terraform Cloud WIF pool and provider
 
 **Step 5 — Record the bootstrap outputs:**
@@ -290,9 +299,7 @@ Any variable below that maps to a `config/landing-zone.yaml` key (shown in brack
 |----------|-------------|---------|
 | `domain` (`org.domain`) | GCP organization domain name — used to look up the org ID | `"example.com"` |
 | `admin_email` (`gcp.admin_email`) | Email of the organization administrator | `"admin@example.com"` |
-| `github_org` | GitHub organization name for WIF OIDC trust (no default, on purpose) | `"my-github-org"` |
-| `github_repo` | GitHub repository name (without org prefix) for WIF OIDC trust | `"my-infra-repo"` |
-| `project_prefix` (`org.prefix`) | Short prefix for all project names, shared by every GCP root | `"ashes"` |
+| `project_prefix` (`org.prefix`) | Short prefix for all project names, shared by every GCP root | `"acme"` |
 | `tfc_organization` (`org.tfc.organization`) | Terraform Cloud org name, for the TFC WIF provider | `"my-tfc-org"` |
 
 ### `envs/gcp/organization` — Required Variables
@@ -320,7 +327,7 @@ Any variable below that maps to a `config/landing-zone.yaml` key (shown in brack
 | `billing_account` | `null` | Billing account ID — required unless `billing_account_display_name` is set |
 | `billing_account_display_name` | `null` | Alternative to `billing_account` — looks up by display name |
 | `project_prefix` | `org.prefix` | Short prefix for all project names (1–10 chars, lowercase, starts with a letter). **Tripwire:** the example config's `"my-org"` is deliberately invalid — a `validation` block rejects it at plan time. You **must** change it to your real organization identifier before your first plan. |
-| `default_region` | `org.regions.gcp`, else `"europe-west1"` | Primary region for KMS, logging, network hub |
+| `default_region` | `org.regions.gcp`, else `"europe-west2"` | Primary region for KMS, logging, network hub |
 | `tfc_organization` | `org.tfc.organization` | Terraform Cloud org name for dynamic provider credentials |
 | `break_glass_user` | `null` | Email granted Organization Admin in emergencies |
 | `monthly_budget_amount` | `1000` | Org-level budget alert threshold (in `budget_currency`) |
@@ -330,7 +337,7 @@ Any variable below that maps to a `config/landing-zone.yaml` key (shown in brack
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `project_prefix` (`org.prefix`) | Matches org root prefix | `"ashes"` |
+| `project_prefix` (`org.prefix`) | Matches org root prefix | `"acme"` |
 | `environment` | Short env name (used in resource naming); must match a key in `gcp.environments`. tfc-admin sets it from the workspace name | `"dev"` |
 | `tfc_organization` (`org.tfc.organization`) | Terraform Cloud org name — used to read organization remote state | `"my-tfc-org"` |
 
@@ -340,10 +347,13 @@ Any variable below that maps to a `config/landing-zone.yaml` key (shown in brack
 
 | Variable | Default (or config key) | Description |
 |----------|---------|-------------|
-| `region` | `gcp.environments[<env>].region`, else `org.regions.gcp`, else `"europe-west1"` | Default GCP region for this environment |
-| `terraform_admin_email` | `null` | SA to impersonate for deliberate local break-glass runs only (from bootstrap output). Leave `null` for the phase-0 apply and on every TFC workspace. Example: `"terraform-admin@ashes-admin-xxxx.iam.gserviceaccount.com"` |
-| `enable_cloud_armor` | `false` | Attach WAF policy to external load balancers |
-| `enable_owasp_rules` | `false` | Enable Cloud Armor OWASP managed rules (requires `enable_cloud_armor`) |
+| `region` | `gcp.environments[<env>].region`, else `org.regions.gcp`, else `"europe-west2"` | Default GCP region for this environment |
+| `terraform_admin_email` | `null` | SA to impersonate for deliberate local break-glass runs only (from bootstrap output). Leave `null` for the phase-0 apply and on every TFC workspace. Example: `"terraform-admin@acme-admin-xxxx.iam.gserviceaccount.com"` |
+| `enable_cloud_armor` | preset, else `false` | Create the environment Cloud Armor policy (implied by public ingress) |
+| `enable_owasp_rules` | preset, else `false` | Enable Cloud Armor OWASP managed rules (requires `enable_cloud_armor`) |
+| `vpc_sc_enable_dry_run` | preset, else `true` | Keep the environment perimeter in dry-run; the `prod-gcp-workload` preset enforces it |
+| `public_ingress_services` | `gcp.workload.public_ingress.<env>` | Services to expose on a global external ALB with a managed certificate ([guide](deploying-a-service.md#exposing-the-service-front-door)) |
+| `app_bootstrap_image` | `gcp.workload.bootstrap_image`, else the public Cloud Run sample | First-revision image; set a mirror inside the VPC-SC perimeter |
 | `owasp_sensitivity` | `2` | Cloud Armor OWASP rule sensitivity (1=strict, 4=permissive) |
 | `enable_deletion_protection` | `true` | Guard against accidental destruction of the VPC/subnets/DNS zones |
 | `vpc_sc_ingress_policies` / `vpc_sc_egress_policies` | `[]` | Optional VPC Service Controls ingress/egress policies for the perimeter |

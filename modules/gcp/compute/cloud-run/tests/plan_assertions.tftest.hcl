@@ -68,31 +68,41 @@ run "service_plans_with_secure_defaults" {
 
   # Private by default: no unauthenticated invoker binding.
   assert {
-    condition     = length(google_cloud_run_v2_service_iam_member.unauthenticated) == 0
-    error_message = "the service must be private by default (no allUsers invoker binding)."
+    condition     = length(google_cloud_run_v2_service_iam_member.unauthenticated) == 0 && google_cloud_run_v2_service.this.invoker_iam_disabled == false
+    error_message = "the service must be private by default (no allUsers binding, Invoker IAM check on)."
   }
 }
 
-run "unauthenticated_binding_created_on_opt_in" {
+run "unauthenticated_uses_invoker_iam_disabled_by_default" {
   command = plan
 
   variables {
     enable_unauthenticated = true
   }
 
+  # Domain-restricted-sharing-safe: no allUsers binding, Invoker IAM check off.
   assert {
-    condition     = length(google_cloud_run_v2_service_iam_member.unauthenticated) == 1
-    error_message = "enabling unauthenticated access must create exactly one invoker binding."
+    condition     = google_cloud_run_v2_service.this.invoker_iam_disabled == true && length(google_cloud_run_v2_service_iam_member.unauthenticated) == 0
+    error_message = "enable_unauthenticated must disable the Invoker IAM check instead of binding allUsers by default."
+  }
+}
+
+run "unauthenticated_allusers_binding_opt_in" {
+  command = plan
+
+  variables {
+    enable_unauthenticated = true
+    public_access_mode     = "allusers_binding"
   }
 
   assert {
-    condition     = google_cloud_run_v2_service_iam_member.unauthenticated[0].member == "allUsers"
-    error_message = "the unauthenticated binding must grant access to allUsers."
+    condition     = length(google_cloud_run_v2_service_iam_member.unauthenticated) == 1 && google_cloud_run_v2_service_iam_member.unauthenticated[0].member == "allUsers" && google_cloud_run_v2_service_iam_member.unauthenticated[0].role == "roles/run.invoker"
+    error_message = "public_access_mode = allusers_binding must create one roles/run.invoker binding for allUsers."
   }
 
   assert {
-    condition     = google_cloud_run_v2_service_iam_member.unauthenticated[0].role == "roles/run.invoker"
-    error_message = "the unauthenticated binding must grant roles/run.invoker."
+    condition     = google_cloud_run_v2_service.this.invoker_iam_disabled == false
+    error_message = "the allUsers mode must leave the Invoker IAM check on."
   }
 }
 

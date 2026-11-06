@@ -18,8 +18,8 @@
 [![Terraform Validation](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml)
 [![Security Scan](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml)
 [![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?style=flat-square&logo=pre-commit)](https://pre-commit.com)
-[![Modules](https://img.shields.io/badge/modules-118-blueviolet?style=flat-square)](modules/)
-[![Tests](https://img.shields.io/badge/test_suites-272-blue?style=flat-square)](modules/)
+[![Modules](https://img.shields.io/badge/modules-119-blueviolet?style=flat-square)](modules/)
+[![Tests](https://img.shields.io/badge/test_suites-279-blue?style=flat-square)](modules/)
 
 <sub>Module/test-suite counts are static badges, enforced in CI: <code>make count</code> prints the live figures and <code>scripts/check-docs-counts.sh</code> (meta-lint) fails when this README or CLAUDE.md disagrees with the tree.</sub>
 
@@ -116,7 +116,7 @@ Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives i
 
 ## Module Library
 
-118 modules — **60 GCP · 51 AWS · 6 SaaS · 1 TFC** — each with auto-generated docs and `mock_provider` tests.
+119 modules — **61 GCP · 51 AWS · 6 SaaS · 1 TFC** — each with auto-generated docs and `mock_provider` tests.
 
 Both clouds are organized into the **same conceptual domains** so you can map a capability across providers at a glance. Each table reads: **capability → Google Cloud module → Amazon Web Services module**. A `—` means the platform has no dedicated module for that capability (often because it is native, or lives in an adjacent domain — noted inline). Link text is the module's path under `modules/<cloud>/`.
 
@@ -145,14 +145,14 @@ Both clouds build a hub-and-spoke private network from the same primitives; the 
 | Hub interconnect / transit | [`network/shared-vpc-service`](modules/gcp/network/shared-vpc-service/), [`network/vpc-peering`](modules/gcp/network/vpc-peering/), [`network/interconnect`](modules/gcp/network/interconnect/) | [`network/transit-gateway`](modules/aws/network/transit-gateway/) |
 | Private service access | [`network/private-service-connect`](modules/gcp/network/private-service-connect/), [`network/private-service-access`](modules/gcp/network/private-service-access/) | [`network/vpc-endpoints`](modules/aws/network/vpc-endpoints/) |
 | DNS | [`network/dns`](modules/gcp/network/dns/) | [`network/route53-resolver`](modules/aws/network/route53-resolver/) |
-| Hybrid VPN | [`network/vpn`](modules/gcp/network/vpn/) (HA-VPN) | [`network/vpn`](modules/aws/network/vpn/) (Site-to-Site) |
+| Hybrid VPN | [`network/vpn`](modules/gcp/network/vpn/) (HA-VPN) | [`network/vpn`](modules/aws/network/vpn/) *(library-only)* (Site-to-Site) |
 | Egress NAT | [`network/nat`](modules/gcp/network/nat/) | *(native, in `network/vpc`)* |
-| Load balancing | [`network/internal-lb`](modules/gcp/network/internal-lb/) | [`network/load-balancer`](modules/aws/network/load-balancer/) (ALB/NLB) |
-| Content delivery / CDN | [`network/cdn`](modules/gcp/network/cdn/) | [`security/edge-security`](modules/aws/security/edge-security/) (CloudFront + WAF/Shield) |
-| API gateway / edge | [`network/api-gateway`](modules/gcp/network/api-gateway/) | [`network/api-gateway`](modules/aws/network/api-gateway/) |
+| Load balancing | [`network/internal-lb`](modules/gcp/network/internal-lb/) *(library-only)* | [`network/load-balancer`](modules/aws/network/load-balancer/) (ALB/NLB) |
+| Content delivery / CDN | [`network/cdn`](modules/gcp/network/cdn/) *(library-only)* | [`security/edge-security`](modules/aws/security/edge-security/) (CloudFront + WAF/Shield) |
+| API gateway / edge | [`network/api-gateway`](modules/gcp/network/api-gateway/) *(library-only)* | [`network/api-gateway`](modules/aws/network/api-gateway/) *(library-only)* |
 | Stateful firewall | [`network/network-firewall`](modules/gcp/network/network-firewall/), [`network/hierarchical-firewall`](modules/gcp/network/hierarchical-firewall/) | [`network/network-firewall`](modules/aws/network/network-firewall/) |
 | Web app firewall / DDoS | [`network/cloud-armor`](modules/gcp/network/cloud-armor/) | *(Security → `edge-security`, `firewall-manager-org`)* |
-| Traffic mirroring / analysis | [`network/packet-mirroring`](modules/gcp/network/packet-mirroring/) | [`network/network-access-analyzer`](modules/aws/network/network-access-analyzer/) |
+| Traffic mirroring / analysis | [`network/packet-mirroring`](modules/gcp/network/packet-mirroring/) *(library-only)* | [`network/network-access-analyzer`](modules/aws/network/network-access-analyzer/) |
 | Flow logging | [`network/vpc-flow-logs`](modules/gcp/network/vpc-flow-logs/) | *(native VPC flow logs)* |
 | Service perimeter | [`network/vpc-sc`](modules/gcp/network/vpc-sc/) | *(Governance → `organization-policy` SCP/RCP)* |
 
@@ -163,9 +163,9 @@ Both clouds build a hub-and-spoke private network from the same primitives; the 
 
 | Capability | Google Cloud | Amazon Web Services |
 |:-----------|:-------------|:--------------------|
-| Workforce identity / SSO | [`iam/identity-group`](modules/gcp/iam/identity-group/), [`iam/identity-group-memberships`](modules/gcp/iam/identity-group-memberships/) | [`iam/iam-identity-center`](modules/aws/iam/iam-identity-center/) |
-| Roles &amp; permissions | [`iam/organization`](modules/gcp/iam/organization/), [`iam/role`](modules/gcp/iam/role/) | [`iam/iam-role`](modules/aws/iam/iam-role/) |
-| Deny-policy guardrails | [`iam/deny-policy`](modules/gcp/iam/deny-policy/) | *(SCP/RCP — see Governance)* |
+| Workforce identity / SSO | [`iam/identity-group`](modules/gcp/iam/identity-group/) *(library-only)*, [`iam/identity-group-memberships`](modules/gcp/iam/identity-group-memberships/) *(library-only)* | [`iam/iam-identity-center`](modules/aws/iam/iam-identity-center/) |
+| Roles &amp; permissions | [`iam/organization`](modules/gcp/iam/organization/), [`iam/role`](modules/gcp/iam/role/) *(library-only)* | [`iam/iam-role`](modules/aws/iam/iam-role/) |
+| Deny-policy guardrails | [`iam/deny-policy`](modules/gcp/iam/deny-policy/), [`iam/principal-access-boundary`](modules/gcp/iam/principal-access-boundary/) | *(SCP/RCP — see Governance)* |
 | Service / machine identity | [`iam/service-account`](modules/gcp/iam/service-account/) | *(IAM roles + instance profiles)* |
 | Federated workload identity | [`iam/workload-identity`](modules/gcp/iam/workload-identity/) | *(OIDC via `iam/iam-role`)* |
 
@@ -212,10 +212,10 @@ GCP consolidates detection into Security Command Center plus audit logs; the AWS
 
 | Capability | Google Cloud | Amazon Web Services |
 |:-----------|:-------------|:--------------------|
-| Object storage / log archive | [`cloud-storage`](modules/gcp/cloud-storage/) | [`data/log-archive-bucket`](modules/aws/data/log-archive-bucket/) |
+| Object storage / log archive | [`cloud-storage`](modules/gcp/cloud-storage/) *(library-only)* | [`data/log-archive-bucket`](modules/aws/data/log-archive-bucket/) |
 | Artifact / image registry | [`artifact-registry`](modules/gcp/artifact-registry/) | [`data/ecr`](modules/aws/data/ecr/) |
 | Encryption keys (CMEK / KMS) | [`governance/kms`](modules/gcp/governance/kms/) | [`data/kms-key`](modules/aws/data/kms-key/) |
-| Private certificate authority | [`governance/private-ca`](modules/gcp/governance/private-ca/) (CAS) | [`data/private-ca`](modules/aws/data/private-ca/) |
+| Private certificate authority | [`governance/private-ca`](modules/gcp/governance/private-ca/) *(library-only)* (CAS) | [`data/private-ca`](modules/aws/data/private-ca/) |
 
 </details>
 
@@ -234,8 +234,8 @@ GCP consolidates detection into Security Command Center plus audit logs; the AWS
 
 | Capability | Google Cloud | Amazon Web Services |
 |:-----------|:-------------|:--------------------|
-| Metrics &amp; alerting | [`monitoring/alert-policy`](modules/gcp/monitoring/alert-policy/) | [`ops/cloudwatch`](modules/aws/ops/cloudwatch/) (metric alarms + SNS) |
-| Dashboards | [`monitoring/compute-dashboard`](modules/gcp/monitoring/compute-dashboard/) | [`ops/cloudwatch`](modules/aws/ops/cloudwatch/) (dashboard) |
+| Metrics &amp; alerting | [`monitoring/alert-policy`](modules/gcp/monitoring/alert-policy/) *(library-only)* | [`ops/cloudwatch`](modules/aws/ops/cloudwatch/) (metric alarms + SNS) |
+| Dashboards | [`monitoring/compute-dashboard`](modules/gcp/monitoring/compute-dashboard/) *(library-only)* | [`ops/cloudwatch`](modules/aws/ops/cloudwatch/) (dashboard) |
 | Fleet / patch management | [`ops/os-config`](modules/gcp/ops/os-config/) (VM Manager) | [`ops/systems-manager`](modules/aws/ops/systems-manager/) |
 
 </details>
@@ -245,7 +245,7 @@ GCP consolidates detection into Security Command Center plus audit logs; the AWS
 
 | Capability | Google Cloud | Amazon Web Services |
 |:-----------|:-------------|:--------------------|
-| App / mobile backend | [`firebase/project`](modules/gcp/firebase/project/) | *(Amplify / App Runner — no module)* |
+| App / mobile backend | [`firebase/project`](modules/gcp/firebase/project/) *(library-only)* | *(Amplify / App Runner — no module)* |
 
 </details>
 
@@ -264,6 +264,29 @@ Composite stages wrap the primitives above into deployable landing-zone layers, 
 | Shared services | *(via `stages/projects`)* | [`stages/shared-services`](modules/aws/stages/shared-services/) |
 | Backup | — | [`stages/backup`](modules/aws/stages/backup/) |
 | Workload (per environment) | [`stages/workload`](modules/gcp/stages/workload/), [`stages/net-spoke`](modules/gcp/stages/net-spoke/) *(replaces the deprecated [`stages/host`](modules/gcp/stages/host/))* | [`stages/workload`](modules/aws/stages/workload/) |
+
+</details>
+
+<details>
+<summary><strong>Library-only modules</strong> — not wired into a root</summary>
+
+These modules are tested and documented but **no `envs/**` root composes them** (`make count` lists them via `scripts/check-module-usage.py`). Marked *(library-only)* in the tables above. Call them from your own root or stage; they are not deployed by applying the landing-zone workspaces.
+
+| Module | Why it is library-only |
+|:-------|:-----------------------|
+| [`gcp/cloud-storage`](modules/gcp/cloud-storage/) | Example-only (`examples/cloud-storage`); buckets are app-specific |
+| [`gcp/firebase/project`](modules/gcp/firebase/project/) | Example-only; Firebase is opt-in per app |
+| [`gcp/iam/identity-group`](modules/gcp/iam/identity-group/), [`gcp/iam/identity-group-memberships`](modules/gcp/iam/identity-group-memberships/) | Example-only; Cloud Identity groups are usually managed in the IdP / Workspace |
+| [`gcp/iam/role`](modules/gcp/iam/role/) | Example-only; custom roles are org-specific |
+| [`gcp/monitoring/alert-policy`](modules/gcp/monitoring/alert-policy/), [`gcp/monitoring/compute-dashboard`](modules/gcp/monitoring/compute-dashboard/) | Example-only; app-level alerting/dashboards (the landing zone's own alerting is `monitoring/control-plane`) |
+| [`gcp/network/api-gateway`](modules/gcp/network/api-gateway/), [`gcp/network/cdn`](modules/gcp/network/cdn/), [`gcp/network/internal-lb`](modules/gcp/network/internal-lb/), [`gcp/network/packet-mirroring`](modules/gcp/network/packet-mirroring/) | Only the deprecated `stages/host` composed them; not carried into `net-hub` / `net-spoke` — compose directly |
+| [`gcp/stages/host`](modules/gcp/stages/host/) | Deprecated facade, removed in `v1.0.0`; replaced by `net-hub` / `dns-anchor` / `net-spoke` |
+| [`gcp/network/app-ingress`](modules/gcp/network/app-ingress/) | Golden-path Cloud Run front door; opt-in per service |
+| [`gcp/monitoring/slo`](modules/gcp/monitoring/slo/) | Per-service SLO + burn-rate alert; opt-in per service |
+| [`gcp/governance/private-ca`](modules/gcp/governance/private-ca/) | Private CA (CAS) is opt-in; no root needs internal certificates by default |
+| [`gcp/network/dns-records`](modules/gcp/network/dns-records/), [`aws/network/dns-records`](modules/aws/network/dns-records/) | Write records into an existing zone (DNS unification); caller-owned records |
+| [`aws/network/api-gateway`](modules/aws/network/api-gateway/) | Opt-in API edge per workload |
+| [`aws/network/vpn`](modules/aws/network/vpn/) | Site-to-Site VPN needs customer-gateway details; opt-in |
 
 </details>
 

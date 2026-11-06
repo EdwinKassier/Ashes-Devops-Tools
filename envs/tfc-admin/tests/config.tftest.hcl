@@ -33,6 +33,22 @@ run "workspaces_derived_from_config" {
   }
 }
 
+# N5: speculative plans follow is_production from gcp.environments /
+# aws.workload_environments (aws staging is flagged production in the fixture).
+run "production_from_config" {
+  command = plan
+
+  assert {
+    condition     = module.workspace["gcp-workload-prod"].speculative_enabled == false && module.workspace["aws-workload-staging"].speculative_enabled == false
+    error_message = "workloads whose environment is_production must not run speculative plans."
+  }
+
+  assert {
+    condition     = module.workspace["gcp-workload-dev"].speculative_enabled == true && module.workspace["aws-workload-dev"].speculative_enabled == true
+    error_message = "non-production workloads keep speculative plans."
+  }
+}
+
 run "workload_account_key_from_config" {
   command = plan
 

@@ -1,0 +1,11 @@
+# YAML twin of prod-gcp-workload.tfvars, loaded by envs/gcp/workload when named
+# in config/landing-zone.yaml:
+#   presets: [prod-gcp-workload]                     # every gcp-workload-<env>
+#   gcp.workload.presets_by_environment.prod: [prod-gcp-workload]   # prod only
+# Keep `values` identical to the .tfvars (envs/gcp/workload/tests/presets.tftest.hcl
+# fails otherwise). Read the .tfvars comments for the prerequisites.
+root: envs/gcp/workload
+values:
+  vpc_sc_enable_dry_run: false
+  enable_cloud_armor: true
+  enable_owasp_rules: true

@@ -2,8 +2,8 @@
 
 > **Status: implemented.** All four control-plane roots now exist and are split
 > into separate states: `gcp-bootstrap`, `gcp-organization`, `gcp-projects`,
-> `gcp-network-hub` (plus `gcp-workload-<env>`). Each has a `root.tftest.hcl`
-> contract test, and all roots `terraform validate`. The design below is retained
+> `gcp-network-hub` (plus `gcp-workload-<env>`). Each has an
+> `envs/gcp/<root>/tests/root.tftest.hcl` contract test, and all roots `terraform validate`. The design below is retained
 > for the rationale and for the cross-STATE migration procedure that an
 > already-deployed organization needs (this repo is never-applied, so no
 > migration was required here).
@@ -41,7 +41,8 @@ root/workspace restructuring, not new module code.
 Ordering is enforced by apply order plus remote-state reads, exactly as on AWS
 (no cross-root `depends_on`). Each new root gets its own `backend.tf`
 (`prefix = "gcp-..."`), `providers.tf`, `variables.tf`, `outputs.tf`, and a
-`root.tftest.hcl` contract test mirroring `envs/aws/*/tests/root.tftest.hcl`.
+`envs/gcp/<root>/tests/root.tftest.hcl` contract test mirroring
+`envs/aws/*/tests/root.tftest.hcl`.
 
 ## Dependency contract
 
@@ -71,7 +72,7 @@ co-locate with per-environment project state.
 1. Create `envs/gcp/bootstrap/` with `backend.tf` (`prefix = "gcp-bootstrap"`),
    `providers.tf`, `main.tf` (instantiating only `stages/bootstrap`),
    `variables.tf`, `outputs.tf` (admin project id, Terraform SA email, WIF pool
-   and provider ids), and `tests/root.tftest.hcl`.
+   and provider ids), and `envs/gcp/bootstrap/tests/root.tftest.hcl`.
 2. Remove the `bootstrap` stage from `envs/gcp/organization/main.tf`; replace its
    in-state references with a `data "terraform_remote_state" "gcp_bootstrap"`
    read.

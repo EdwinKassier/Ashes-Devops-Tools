@@ -17,7 +17,7 @@ aws:
   enabled: true
   workload_environments:
     dev: {account_key: workload_dev}
-    staging: {account_key: workload_staging}
+    staging: {account_key: workload_staging, is_production: true}
 saas:
   enabled: true
   workspaces: [web, admin]

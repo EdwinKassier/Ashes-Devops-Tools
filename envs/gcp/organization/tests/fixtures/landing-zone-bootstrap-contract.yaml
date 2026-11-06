@@ -1,0 +1,8 @@
+# Fixture: gcp.contracts.bootstrap replaces the gcp-bootstrap remote-state read.
+gcp:
+  contracts:
+    bootstrap:
+      admin_project_id: acme-admin-cfg1
+      admin_project_number: "210987654321"
+      terraform_admin_email: terraform-admin@acme-admin-cfg1.iam.gserviceaccount.com
+      guardrail_owner_mode: separate

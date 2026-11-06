@@ -54,6 +54,7 @@ output "services" {
       ecs_service_name       = module.service[k].service_name
       task_definition_family = module.service[k].task_definition_family
       container_name         = module.service[k].container_name
+      initial_image          = local.svc[k].initial_image
       execution_role_arn     = aws_iam_role.execution[k].arn
       task_role_arn          = aws_iam_role.task[k].arn
       log_group_name         = aws_cloudwatch_log_group.service[k].name
@@ -63,4 +64,9 @@ output "services" {
       database_public        = try(module.database[k].publicly_accessible, null)
     }
   }
+}
+
+output "kms_key_arn" {
+  description = "CMK encrypting every service's ECR repository, log group, Aurora cluster and RDS master secret, or null when services is empty."
+  value       = local.enabled ? var.kms_key_arn : null
 }

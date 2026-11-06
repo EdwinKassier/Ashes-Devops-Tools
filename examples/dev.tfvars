@@ -14,13 +14,13 @@
 # gcp.environments[<env>].region and org.tfc.organization in the committed
 # config/landing-zone.yaml; the values below override it.
 
-project_prefix = "ashes"
+project_prefix = "acme"
 environment    = "dev"
-region         = "europe-west1"
+region         = "europe-west2"
 
 # Service account that Terraform impersonates (created by bootstrap).
 # Format: terraform@{admin-project-id}.iam.gserviceaccount.com
-terraform_admin_email = "terraform@ashes-admin-xxxx.iam.gserviceaccount.com"
+terraform_admin_email = "terraform@acme-admin-xxxx.iam.gserviceaccount.com"
 
 # Terraform Cloud configuration
 tfc_organization            = "your-tfc-org-name"

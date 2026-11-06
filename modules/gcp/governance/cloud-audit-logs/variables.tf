@@ -108,3 +108,69 @@ variable "bigquery_retention_days" {
     error_message = "bigquery_retention_days must be at least 1."
   }
 }
+
+# =============================================================================
+# CLOUD LOGGING LOG ANALYTICS
+# =============================================================================
+
+variable "enable_log_analytics" {
+  description = "With org_id set, route every org audit log into a Cloud Logging log bucket with Log Analytics enabled (and, with enable_log_analytics_linked_dataset, a linked read-only BigQuery dataset). Default true."
+  type        = bool
+  default     = true
+}
+
+variable "enable_log_analytics_linked_dataset" {
+  description = "Create the linked BigQuery dataset on the Log Analytics bucket (query audit logs from BigQuery without copying them). Default true."
+  type        = bool
+  default     = true
+}
+
+variable "log_analytics_bucket_id" {
+  description = "ID of the Log Analytics log bucket."
+  type        = string
+  default     = "org-audit-analytics"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_-]{1,100}$", var.log_analytics_bucket_id))
+    error_message = "log_analytics_bucket_id must be 1-100 letters, digits, '_' or '-'."
+  }
+}
+
+variable "log_analytics_link_id" {
+  description = "ID of the linked BigQuery dataset (letters, digits and underscores only; it becomes the BigQuery dataset ID)."
+  type        = string
+  default     = "org_audit_analytics"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_]{1,100}$", var.log_analytics_link_id))
+    error_message = "log_analytics_link_id must be 1-100 letters, digits or underscores."
+  }
+}
+
+variable "log_analytics_location" {
+  description = "Location of the Log Analytics bucket (a region, or global/us/eu). Null = bucket_location (lower-cased)."
+  type        = string
+  default     = null
+}
+
+variable "log_analytics_retention_days" {
+  description = "Retention of the Log Analytics bucket in days (1-3650). Default 400 (CIS GCP 2.x recommends at least a year)."
+  type        = number
+  default     = 400
+
+  validation {
+    condition     = var.log_analytics_retention_days >= 1 && var.log_analytics_retention_days <= 3650
+    error_message = "log_analytics_retention_days must be between 1 and 3650."
+  }
+}
+
+variable "log_analytics_kms_key_name" {
+  description = "Optional CMEK for the Log Analytics bucket. The key must be in the bucket's location and the project's Cloud Logging service account (google_logging_project_settings / gcloud logging settings describe) needs roles/cloudkms.cryptoKeyEncrypterDecrypter on it before apply. Null = Google-managed encryption."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.log_analytics_kms_key_name == null || can(regex("^projects/.+/locations/.+/keyRings/.+/cryptoKeys/.+$", var.log_analytics_kms_key_name))
+    error_message = "log_analytics_kms_key_name must be in format: projects/{project}/locations/{location}/keyRings/{keyring}/cryptoKeys/{key}."
+  }
+}

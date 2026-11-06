@@ -72,6 +72,37 @@ variable "list_policies" {
   # - compute.trustedImageProjects    : Restrict allowed VM image projects
 }
 
+variable "prefer_managed_constraints" {
+  description = "Set every legacy boolean constraint (and compute.vmExternalIpAccess deny_all) that has a like-for-like managed equivalent through its constraints/<service>.managed.* version instead (iam.managed.disableServiceAccountKeyCreation, iam.managed.disableServiceAccountKeyUpload, iam.managed.preventPrivilegedBasicRolesForDefaultServiceAccounts, compute.managed.disableSerialPortAccess / requireOsLogin / disableNestedVirtualization / disableGuestAttributesAccess / vmExternalIpAccess, sql.managed.restrictPublicIp). Constraints without an equivalent stay legacy. Default true. Switching replaces the policy resources (legacy policy removed, managed policy created in the same apply)."
+  type        = bool
+  default     = true
+}
+
+variable "managed_policies" {
+  description = "Explicit managed-constraint policies (constraints/<service>.managed.*), e.g. iam.managed.allowedPolicyMembers. parameters is the JSON-encoded constraint parameter object (jsonencode({ allowedMemberSubjects = [...] })), or null."
+  type = list(object({
+    constraint = string
+    enforce    = optional(bool, true)
+    parameters = optional(string)
+  }))
+  default = []
+
+  validation {
+    condition     = alltrue([for p in var.managed_policies : can(regex("^[a-z]+\\.managed\\.[A-Za-z]+$", p.constraint))])
+    error_message = "managed_policies constraints must be managed constraint names (<service>.managed.<name>, without the constraints/ prefix)."
+  }
+
+  validation {
+    condition     = alltrue([for p in var.managed_policies : p.parameters == null || can(jsondecode(p.parameters))])
+    error_message = "managed_policies parameters must be a JSON-encoded object (use jsonencode())."
+  }
+
+  validation {
+    condition     = length(var.managed_policies) == length(distinct([for p in var.managed_policies : p.constraint]))
+    error_message = "Each constraint must appear at most once in managed_policies."
+  }
+}
+
 variable "custom_constraints" {
   description = "List of custom organization policy constraints to create"
   type = list(object({

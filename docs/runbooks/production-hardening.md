@@ -130,7 +130,10 @@ organization, projects and network-hub, plus `<prefix>-wl-<env>-plan|apply` with
 **no org-level roles** (gcp-projects grants them their env folder only). WIF
 bindings key on `workspace:run_phase` (or the immutable workspace ID), so a PR's
 speculative plan can only ever obtain a read-only identity. The phase-0
-`terraform-admin` SA is used by humans for the first gcp-bootstrap apply only.
+`terraform-admin` SA is used by humans for the first gcp-bootstrap apply only:
+once gcp-bootstrap applies through TFC dynamic credentials (pass 2), set
+`enable_phase0_admin_impersonation = false` (gcp-bootstrap) so `admin_email` no
+longer has a standing token-creator path to it.
 The GitHub Actions pool is off by default (`enable_github_wif = false`, kept off by
 `examples/presets/prod-gcp-bootstrap.tfvars`). See `docs/runbooks/bootstrap.md`.
 
@@ -152,11 +155,20 @@ Three refinements close the remaining paths:
   org-node binding for a migration only. Order: gcp-bootstrap, then
   gcp-organization, then gcp-projects.
 - **Production workspaces bind by ID.** Mark production environments
-  `is_production = true`. gcp-bootstrap then warns (check
-  `production_workspaces_bound_by_id`) while any control-plane workspace or
-  production workload workspace is still WIF-bound by its mutable name. The
-  bootstrap preset ships `ws-REPLACEME` placeholders that validation rejects:
-  set the real IDs from the tfc-admin `workspace_ids` output.
+  `is_production = true`. gcp-bootstrap then **fails the plan** (precondition on
+  `terraform_data.production_workspaces_bound_by_id`) while any control-plane
+  workspace or production workload workspace would still be WIF-bound by its
+  mutable name. Apply tfc-admin first and set `tfc_workspace_ids` from its
+  `workspace_ids` output. The bootstrap preset ships `ws-REPLACEME` placeholders
+  that validation rejects.
+- **Plan identities and runtime config.** `roles/run.viewer` (Cloud Run
+  `services.get` returns plain environment variables) and `roles/compute.viewer`
+  (`instances.get` returns instance metadata, including startup scripts) stay in
+  the workload/network plan role lists: Terraform's refresh of every managed
+  Cloud Run service and VM needs exactly those reads, so no custom role can drop
+  them without breaking the plan. Residual: a plan identity can read env vars
+  and metadata. Keep secrets out of both (Secret Manager references only; the
+  repo's `cloud-run` module mounts secrets by reference).
 
 ### 2. Deny-policy backstop (audit C2/C3)
 
@@ -167,8 +179,17 @@ and exempt only `containment_exempt_principals` (your break-glass group).
 
 | Rule | Scope | Denied permissions |
 |---|---|---|
-| 1 | Whole org (no condition) | `logging` `sinks.update`, `sinks.delete`, `exclusions.create/update/delete`, `buckets.delete`; `accesscontextmanager` `servicePerimeters.update/delete/replaceAll/commit`, `policies.delete` |
-| 2 | Resources tagged `containment/protected`: the audit bucket, its access-log bucket and the audit CMEK keyring (keys and versions inherit the tag) | `storage` `buckets.delete`, `buckets.setIamPolicy`, `buckets.deleteTagBinding`, `objects.delete`; `cloudkms` `cryptoKeyVersions.destroy`, `cryptoKeyVersions.update` (disable), `cryptoKeys.setIamPolicy` |
+| 1 | Whole org (no condition) | `logging` `sinks.update`, `sinks.delete`, `exclusions.create/update/delete`, `buckets.delete`; `accesscontextmanager` `servicePerimeters.update/delete/replaceAll/commit`, `policies.delete/update/setIamPolicy`, `accessLevels.update/delete/replaceAll`, `authorizedOrgsDescs.create/update/delete`; with `enable_principal_access_boundary`, `iam` `principalaccessboundarypolicies.update/delete/unbind` |
+| 2 | Resources tagged `containment/protected`: the audit bucket, its access-log bucket, the audit Log Analytics log bucket and the audit CMEK keyring (keys and versions inherit the tag) | `storage` `buckets.delete`, `buckets.update`, `buckets.setIamPolicy`, `buckets.deleteTagBinding`, `objects.delete`; `cloudkms` `cryptoKeyVersions.destroy`, `cryptoKeyVersions.update` (disable), `cryptoKeys.setIamPolicy`, `keyRings.setIamPolicy`; `logging` `buckets.update`, `buckets.deleteTagBinding` |
+
+Every permission was checked against Google's
+[deny-supported list](https://docs.cloud.google.com/iam/docs/deny-permissions-support)
+(re-verified 2026-11). Access-level and authorized-org creation is denied only
+where it widens trust on its own (`authorizedOrgsDescs.create`); a new access
+level is inert until a perimeter, itself protected, references it. Denying
+`policies.setIamPolicy` means granting a new environment's SAs their scoped
+access policy (gcp-organization, `enable_scoped_access_policies`) runs as
+break-glass once per new environment.
 
 IAM deny conditions can match **only resource tags**, so rule 2 uses a tag to
 reach the audit bucket rather than every bucket in the org. Because the tag is
@@ -202,9 +223,41 @@ sink, exclusion or VPC-SC perimeter in the org fails with a deny for the
 automation SA. That includes workload perimeters and flow-log sinks. Run such
 changes as a break-glass principal, or add a dedicated, tightly held change
 identity to `containment_exempt_principals`. Creating sinks and perimeters is
-still allowed. The deny policy is applied by the automation SA itself, and
-`iam.denypolicies.*` can't be denied. The real fix for both is still the privilege
-split (step 1) plus the `deny_policy_change` alert.
+still allowed.
+
+**Guardrail owner (who applies the deny policy).** `iam.denypolicies.*` can't
+be denied, so whoever holds `roles/iam.denyAdmin` can delete the containment
+policy. By default (`guardrail_owner_mode = "separate"`, gcp-bootstrap and
+gcp-organization) the organization apply SA **does not** hold it. A dedicated
+`<prefix>-guardrails-apply` SA is the only automation identity with
+`denyAdmin`; it has no WIF binding and is impersonable only by
+`guardrail_owner_members` (use one group whose membership is granted just in
+time through PAM, disjoint from the people who can change the gcp-organization
+workspace). gcp-organization no longer applies deny policies itself: it outputs
+`guardrail_deny_policy_specs`, a gcloud policy file per policy (containment plus
+`iam_deny_policies`). After each gcp-organization apply that changes them, the
+guardrail owner applies them:
+
+```sh
+terraform output -json guardrail_deny_policy_specs \
+  | jq -r '.["contain-admin-identity"]' > contain-admin-identity.json
+gcloud iam policies create contain-admin-identity \
+  --attachment-point="cloudresourcemanager.googleapis.com/organizations/${ORG_ID}" \
+  --kind=denypolicies --policy-file=contain-admin-identity.json \
+  --impersonate-service-account="${PREFIX}-guardrails-apply@${ADMIN_PROJECT}.iam.gserviceaccount.com"
+# later changes: gcloud iam policies update ... --etag=<current etag>
+```
+
+Residual: the organization apply SA still holds `iam.securityAdmin` (it manages
+org IAM), so it could grant itself `denyAdmin` or impersonation on the
+guardrails SA. IAM deny can't condition on the role being granted, so the
+CRITICAL `guardrail_role_grant` and `guardrail_identity_change` watches alert
+on both. `guardrail_owner_mode = "organization"` restores the legacy in-stage
+apply (and `denyAdmin` on the organization apply SA). Migrating an existing
+deployment to `separate`: re-apply gcp-bootstrap, then
+`terraform state rm 'module.organization.module.iam_deny.google_iam_deny_policy.this'`
+in gcp-organization before its next apply (the apply SA can no longer delete the
+policy, which is the point), and let the guardrail owner `update` it from then on.
 
 The preset ships the placeholder
 `principalSet://goog/group/break-glass@REPLACE-ME.invalid`. Variable validation
@@ -232,7 +285,29 @@ grant the SA only the narrow roles it needs.
 Decide this before the first apply. KMS keys can't be deleted, so moving the audit
 keys later leaves orphaned keys behind.
 
-### 4. Audit bucket immutability (audit M-4)
+### 4. Log Analytics, logging settings and the automation boundary
+
+- **Log Analytics (default on).** `enable_log_analytics` (gcp-organization)
+  routes every org audit log into the `org-audit-analytics` Cloud Logging bucket
+  (Log Analytics enabled, `log_analytics_retention_days`, default 400) with a
+  linked read-only BigQuery dataset `org_audit_analytics`. The bucket is locked
+  together with the GCS audit bucket when `enable_audit_bucket_lock = true`, and
+  tagged `containment/protected` when containment is on. The older BigQuery
+  export sink is kept so existing datasets are not destroyed.
+- **Org logging settings (opt-in).** `enable_logging_organization_settings` sets
+  the storage location of new projects' `_Default`/`_Required` buckets to
+  `default_region` and, with `logging_settings_kms_key_name`, their CMEK. Grant
+  the org Logging SA (output `logging_organization_service_account`, or
+  `gcloud logging settings describe --organization=<id>`)
+  `roles/cloudkms.cryptoKeyEncrypterDecrypter` on the key first.
+- **Principal access boundary (opt-in).** `enable_principal_access_boundary`
+  (gcp-bootstrap **and** gcp-organization) binds a principal access boundary to
+  every SA in the admin project, so a stolen automation token works only on this
+  organization's resources (`principal_access_boundary_allowed_resources` to
+  widen). The enforcement version is pinned (`1`). Validate on a non-prod org:
+  any call to a resource outside the boundary fails.
+
+### 5. Audit bucket immutability (audit M-4)
 
 On by default:
 
@@ -263,6 +338,11 @@ any project. Log-match alerts fire on:
 - deny policy changes
 - KMS key-version destroy and disable
 - tag binding, tag value and tag key deletion
+- guardrail-owner role grants (`denyAdmin`, PAB admin, `securityAdmin`,
+  `organizationAdmin`) and IAM changes on the guardrails SA (CRITICAL)
+- principal access boundary policy and binding changes
+- log bucket, linked dataset and org logging settings changes
+- PAM entitlement changes
 - audit-config changes
 - any action by `break_glass_user` / `break_glass_principal_emails` (CRITICAL)
 

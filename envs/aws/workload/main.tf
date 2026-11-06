@@ -115,10 +115,39 @@ module "aws_workload" {
   log_archive_bucket_name           = local.log_archive_bucket_name
   config_role_arn                   = var.config_role_arn
   create_config_service_linked_role = var.create_config_service_linked_role
-  kms_key_arn                       = var.kms_key_arn
+  kms_key_arn                       = local.kms_key_arn # kms.tf: created unless supplied
+  # A CMK created in this plan has an unknown ARN: let the stage set the
+  # default EBS key with a plan-safe count (home region, where the key lives).
+  enable_ebs_default_kms_key = local.create_kms_key ? true : null
+
+  # App ingress (local.app_ingress_mode): a public ALB needs a public subnet
+  # tier + IGW; a CloudFront VPC origin needs only an attached IGW. Neither is
+  # built until there is an ALB (services non-empty).
+  enable_public_subnets   = local.app_public_alb && local.apps_enabled
+  create_internet_gateway = local.app_vpc_origin && local.apps_enabled
+  # The org declarative EC2 policy blocks internet-gateway ingress (VPC BPA) on
+  # every VPC, so a public ALB needs this spoke VPC excluded. Requires
+  # aws-organization allow_vpc_bpa_exclusions = true (otherwise AWS rejects it).
+  enable_vpc_bpa_exclusion = local.app_public_alb && local.apps_enabled
 
   enable_edge    = var.enable_edge
   workload_roles = var.workload_roles
+}
+
+# App ingress mode: internal (default) | public_alb | cloudfront_vpc_origin.
+locals {
+  app_ingress_mode = coalesce(var.app_ingress_mode, local.cfg.app_ingress_mode, "internal")
+  app_public_alb   = local.app_ingress_mode == "public_alb"
+  app_vpc_origin   = local.app_ingress_mode == "cloudfront_vpc_origin"
+  apps_enabled     = length(var.services) > 0
+
+  # Internet-facing ALB: public tier, open listeners (WAF in front). Otherwise
+  # the private tier and the spoke CIDR (CloudFront VPC-origin ENIs live there).
+  app_alb_subnet_tier = local.app_public_alb ? "public" : var.app_alb_subnet_tier
+  app_alb_ingress_cidrs = (
+    length(var.app_alb_ingress_cidrs) > 0 ? var.app_alb_ingress_cidrs :
+    local.app_public_alb ? ["0.0.0.0/0"] : []
+  )
 }
 
 # =============================================================================
@@ -143,9 +172,10 @@ module "app_services" {
   vpc_id              = module.aws_workload.vpc_id
   vpc_cidr            = local.vpc_cidr
   service_subnet_ids  = lookup(module.aws_workload.subnet_ids_by_tier, var.app_service_subnet_tier, [])
-  alb_subnet_ids      = lookup(module.aws_workload.subnet_ids_by_tier, var.app_alb_subnet_tier, [])
+  alb_subnet_ids      = lookup(module.aws_workload.subnet_ids_by_tier, local.app_alb_subnet_tier, [])
   database_subnet_ids = lookup(module.aws_workload.subnet_ids_by_tier, var.app_database_subnet_tier, [])
-  kms_key_arn         = var.kms_key_arn
+  kms_key_arn         = local.kms_key_arn
+  bootstrap_image     = local.app_bootstrap_image
 
   services = var.services
 
@@ -153,15 +183,58 @@ module "app_services" {
   create_github_oidc_provider = var.create_github_oidc_provider
   github_oidc_provider_arn    = var.github_oidc_provider_arn
 
-  alb_internal                   = var.app_alb_internal
+  alb_internal                   = local.app_public_alb ? false : var.app_alb_internal
   alb_certificate_arn            = var.app_alb_certificate_arn
-  alb_ingress_cidrs              = var.app_alb_ingress_cidrs
+  alb_ingress_cidrs              = local.app_alb_ingress_cidrs
   alb_enable_deletion_protection = var.app_alb_enable_deletion_protection
   alb_access_logs_bucket         = var.app_alb_access_logs_bucket
 
   log_retention_days  = var.app_log_retention_days
   enable_alarms       = var.enable_app_alarms
   alarm_sns_topic_arn = var.app_alarm_sns_topic_arn
+}
+
+# =============================================================================
+# APP INGRESS — public exposure of the shared ALB (app_ingress_mode)
+#
+#   internal               no public path (default). Reach the ALB from the
+#                          spoke / over the TGW.
+#   public_alb             the ALB is internet-facing in the public tier (HTTPS
+#                          only: app_alb_certificate_arn is required) with a
+#                          REGIONAL WAF (AWS Common + KnownBadInputs) unless
+#                          enable_app_waf = false.
+#   cloudfront_vpc_origin  the ALB stays INTERNAL; CloudFront reaches it through
+#                          a VPC origin and serves https://<id>.cloudfront.net
+#                          (or app_edge_domain_name) behind a CloudFront WAF.
+#                          Zero extra inputs: the zero-touch public path.
+# =============================================================================
+
+module "app_edge" {
+  source = "../../../modules/aws/security/edge-security"
+  count  = local.apps_enabled && (local.app_vpc_origin || (local.app_public_alb && var.enable_app_waf)) ? 1 : 0
+
+  providers = {
+    aws           = aws
+    aws.us_east_1 = aws.us_east_1
+  }
+
+  name_prefix = "${local.environment}-apps"
+
+  # CloudFront -> VPC origin -> internal ALB.
+  enable_edge        = local.app_vpc_origin
+  enable_vpc_origin  = local.app_vpc_origin
+  vpc_origin_arn     = local.app_vpc_origin ? module.app_services.alb_arn : ""
+  origin_domain_name = local.app_vpc_origin ? module.app_services.alb_dns_name : "origin.example.com"
+  domain_name        = var.app_edge_domain_name
+  # An application, not static content: every method, no caching, all viewer
+  # headers/cookies/query strings except Host (the ALB routes on path).
+  allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+  cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # Managed-CachingDisabled
+  origin_request_policy_id = "b689b0a8-53d0-40ab-baf2-68738e2966ac" # Managed-AllViewerExceptHostHeader
+
+  # Internet-facing ALB -> regional WAF.
+  enable_regional_waf       = local.app_public_alb && var.enable_app_waf
+  regional_waf_resource_arn = local.app_public_alb ? module.app_services.alb_arn : ""
 }
 
 # =============================================================================
@@ -183,16 +256,13 @@ data "terraform_remote_state" "saas" {
 }
 
 resource "aws_secretsmanager_secret" "saas_bridge" {
-  # checkov:skip=CKV_AWS_149:Encrypted with the workload CMK (var.kms_key_arn) when
-  # supplied, otherwise the account's default aws/secretsmanager key. Encryption at
-  # rest is always in effect.
   # checkov:skip=CKV2_AWS_57:This secret mirrors Supabase-managed credentials whose
   # lifecycle Supabase owns; rotating a copy here would diverge from the source.
   # Re-apply the bridge to refresh it instead.
   count       = var.enable_saas_secret_bridge ? 1 : 0
   name        = var.saas_secret_name
   description = "Bridged Supabase connection details from ${var.saas_workspace_name} (audit H9)."
-  kms_key_id  = var.kms_key_arn != "" ? var.kms_key_arn : null
+  kms_key_id  = local.kms_key_arn
 }
 
 resource "aws_secretsmanager_secret_version" "saas_bridge" {

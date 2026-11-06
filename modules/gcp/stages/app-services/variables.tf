@@ -150,6 +150,17 @@ variable "github_repository_owner_id" {
 # SERVICES
 # -----------------------------------------------------------------------------
 
+variable "bootstrap_image" {
+  description = "Image the FIRST Cloud Run revision of a service runs when its `image` is null (CI deploys replace it). The default, Google's public sample us-docker.pkg.dev/cloudrun/container/hello, lives OUTSIDE your project: a VPC-SC perimeter that restricts artifactregistry.googleapis.com, or a Binary Authorization policy, blocks it. In that case mirror a placeholder into a repo inside the perimeter (e.g. <region>-docker.pkg.dev/<host-project>/<repo>/hello:bootstrap) and set this (gcp.workload.bootstrap_image in config/landing-zone.yaml)."
+  type        = string
+  default     = "us-docker.pkg.dev/cloudrun/container/hello"
+
+  validation {
+    condition     = length(trimspace(var.bootstrap_image)) > 0 && !can(regex("\\s", var.bootstrap_image))
+    error_message = "bootstrap_image must be a non-empty image reference without whitespace."
+  }
+}
+
 variable "services" {
   description = <<-EOT
     Application services, keyed by service name (2-22 chars: lowercase letters,
@@ -168,7 +179,7 @@ variable "services" {
     The default `{}` creates nothing.
   EOT
   type = map(object({
-    image                       = optional(string, "us-docker.pkg.dev/cloudrun/container/hello")
+    image                       = optional(string) # null => var.bootstrap_image
     ingress                     = optional(string, "INGRESS_TRAFFIC_INTERNAL_ONLY")
     cpu                         = optional(string, "1000m")
     memory                      = optional(string, "512Mi")
@@ -243,8 +254,11 @@ variable "services" {
   }
 
   validation {
-    condition     = alltrue([for k, s in var.services : !s.enable_unauthenticated || s.ingress == "INGRESS_TRAFFIC_ALL" || s.ingress == "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"])
-    error_message = "enable_unauthenticated only makes sense with INGRESS_TRAFFIC_ALL or INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER (front door) ingress."
+    # Public services must sit behind the external ALB + Cloud Armor: with the
+    # Invoker IAM check disabled, INGRESS_TRAFFIC_ALL would publish an unprotected
+    # run.app URL that domain-restricted sharing cannot catch.
+    condition     = alltrue([for k, s in var.services : !s.enable_unauthenticated || s.ingress == "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"])
+    error_message = "enable_unauthenticated requires ingress = INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER (public only through the external ALB + Cloud Armor). INGRESS_TRAFFIC_ALL would expose an unprotected run.app URL."
   }
 
   validation {

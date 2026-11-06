@@ -1,5 +1,5 @@
 variable "landing_zone_config_path" {
-  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values."
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values. Its `presets` list (and gcp.workload.presets_by_environment) loads examples/presets/<name>.yaml overlays."
   type        = string
   default     = null
 }
@@ -30,7 +30,7 @@ variable "environment" {
 }
 
 variable "region" {
-  description = "Default Google Cloud region for this application environment (e.g. \"europe-west1\"). Must match the region used when provisioning spoke projects. Null = gcp.environments[<environment>].region from config/landing-zone.yaml, else org.regions.gcp, else europe-west1."
+  description = "Default Google Cloud region for this application environment (e.g. \"europe-west1\"). Must match the region used when provisioning spoke projects. Null = gcp.environments[<environment>].region from config/landing-zone.yaml, else org.regions.gcp, else europe-west2."
   type        = string
   default     = null
 }
@@ -173,15 +173,15 @@ variable "enable_deletion_protection" {
 }
 
 variable "enable_cloud_armor" {
-  description = "Enable Cloud Armor for internet-facing workloads"
+  description = "Enable the environment Cloud Armor security policy (also implied by public ingress). Null = a configured preset (e.g. prod-gcp-workload), else false."
   type        = bool
-  default     = false
+  default     = null
 }
 
 variable "enable_owasp_rules" {
-  description = "Enable Cloud Armor OWASP managed rules"
+  description = "Enable Cloud Armor OWASP managed rules. Null = a configured preset (e.g. prod-gcp-workload), else false."
   type        = bool
-  default     = false
+  default     = null
 }
 
 variable "enable_adaptive_protection" {
@@ -257,9 +257,17 @@ variable "vpc_sc_enable_dry_run" {
     then PROMOTE to enforcement by setting this false.
     NOTE: dry-run provides NO data-exfiltration protection — do not leave a production perimeter in dry-run.
     See docs/architecture/network-topology.md and docs/known-gaps.md (G11).
+    Null = a configured preset (e.g. prod-gcp-workload sets false), else true.
   EOT
   type        = bool
-  default     = true
+  default     = null
+
+  validation {
+    # Guards the preset loader (config.tf). Hosted here because a validation on
+    # landing_zone_config_path would cycle; the var reference is a no-op.
+    condition     = (var.vpc_sc_enable_dry_run == null || var.vpc_sc_enable_dry_run != null) && length(setsubtract(keys(local.preset), local.preset_supported_keys)) == 0
+    error_message = "A preset for envs/gcp/workload sets a key this root cannot take from a preset (supported: vpc_sc_enable_dry_run, enable_cloud_armor, enable_owasp_rules). Set it as a variable instead."
+  }
 }
 
 variable "vpc_sc_dry_run_restricted_services" {
@@ -556,4 +564,38 @@ variable "os_patch_deployments" {
   description = "Patch deployments passed to modules/gcp/ops/os-config (see its `patch_deployments` input for the shape). Null = one \"weekly-os-patch\" deployment: every VM in the project, Sundays 03:00 UTC, default reboot behaviour."
   type        = any
   default     = null
+}
+
+# -----------------------------------------------------------------------------
+# Public ingress (modules/gcp/network/app-ingress) + first-revision image
+# -----------------------------------------------------------------------------
+
+variable "app_bootstrap_image" {
+  description = "Image the first Cloud Run revision of an app service runs when its `image` is unset. The public sample (us-docker.pkg.dev/cloudrun/container/hello) is blocked by a VPC-SC perimeter restricting artifactregistry.googleapis.com and by Binary Authorization; mirror a placeholder inside the perimeter and point this at it. Null = gcp.workload.bootstrap_image from config/landing-zone.yaml, else the public sample."
+  type        = string
+  default     = null
+}
+
+variable "enable_public_ingress" {
+  description = "Expose the public_ingress_services through a global external Application Load Balancer each (serverless NEG + Cloud Armor policy + Google-managed certificate for their domains). Null = on when public_ingress_services (or gcp.workload.public_ingress.<environment> in config/landing-zone.yaml) is non-empty."
+  type        = bool
+  default     = null
+}
+
+variable "public_ingress_services" {
+  description = "app_services entries to expose publicly, keyed by service name: domains (FQDNs the managed certificate covers; point DNS at the output IP, or set dns_managed_zone to a Cloud DNS zone in the host project to create the A records), enable_cdn. Each exposed service is switched to ingress INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER with unauthenticated invocation unless its app_services entry sets them. Null = gcp.workload.public_ingress.<environment> from config/landing-zone.yaml."
+  type = map(object({
+    domains          = list(string)
+    dns_managed_zone = optional(string)
+    enable_cdn       = optional(bool, false)
+  }))
+  default = null
+
+  validation {
+    condition = alltrue([
+      for k in keys(var.public_ingress_services != null ? var.public_ingress_services : try(local.cfg.public_ingress[var.environment], {})) :
+      contains(keys(var.app_services), k)
+    ])
+    error_message = "Every public_ingress_services (or gcp.workload.public_ingress.<environment>) key must be an app_services entry."
+  }
 }

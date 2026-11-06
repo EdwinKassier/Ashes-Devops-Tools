@@ -45,10 +45,10 @@ log_archive_bucket_name = "acme-org-log-archive"
 # create_config_service_linked_role = false (set false if the account already has it).
 # config_role_arn = "arn:aws:iam::222222222222:role/config-recorder"
 
-# CMK for default EBS encryption + Session Manager. Empty leaves EBS on the
-# AWS-managed key. NOTE: the stage keeps Systems Manager ON, and SSM requires a
-# non-empty CMK (Session Manager sessions must be KMS-encrypted), so in practice
-# you MUST supply a real key ARN here.
+# Optional — bring your own CMK. Empty (default) creates a rotating workload CMK
+# (alias/workload-<env>) for default EBS encryption, Session Manager and every
+# app service (ECR, log groups, Aurora, RDS secret), with a key policy that
+# admits CloudWatch Logs, ECR and the task execution roles.
 # kms_key_arn = "arn:aws:kms:eu-west-2:222222222222:key/abcd-1234"
 
 # Optional — deploy the per-workload edge (CloudFront + WAF in us-east-1).
@@ -76,7 +76,8 @@ enable_saas_secret_bridge = false
 # Default {} creates nothing. Each entry = ECR repo + Fargate service behind the
 # shared INTERNAL ALB + least-privilege task roles + KMS log group, plus an
 # optional GitHub Actions deploy role (github) and Aurora PostgreSQL (database).
-# Requires kms_key_arn (above). Walkthrough: docs/guides/deploying-a-service.md.
+# The first task revision runs a public placeholder (port 8080) until CI deploys.
+# Walkthrough: docs/guides/deploying-a-service.md.
 # -----------------------------------------------------------------------------
 services           = {}
 enable_github_oidc = false
@@ -103,6 +104,11 @@ enable_github_oidc = false
 #     database = {}   # Aurora PostgreSQL Serverless v2, RDS-managed password
 #   }
 # }
+
+# Optional — public exposure (also aws.workload.app_ingress_mode in config):
+# app_ingress_mode = "cloudfront_vpc_origin" # internal ALB behind CloudFront + WAF; no cert needed
+# app_ingress_mode = "public_alb"            # internet-facing ALB + regional WAF; needs app_alb_certificate_arn
+# app_edge_domain_name = "app.example.com"   # cloudfront_vpc_origin custom domain (ACM in us-east-1)
 
 # Optional — shared ALB + alarms.
 # app_alb_certificate_arn = "arn:aws:acm:eu-west-2:222222222222:certificate/abcd"  # HTTPS :443, :80 redirects

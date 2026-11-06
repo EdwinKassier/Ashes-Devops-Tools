@@ -94,11 +94,15 @@ The following resources are created:
 
 - resource.google_bigquery_dataset.audit_logs_analytics (modules/gcp/governance/cloud-audit-logs/main.tf#L216)
 - resource.google_bigquery_dataset_iam_member.bq_sink_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L264)
+- resource.google_logging_linked_dataset.audit_analytics (modules/gcp/governance/cloud-audit-logs/main.tf#L333)
+- resource.google_logging_organization_sink.org_audit_analytics_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L307)
 - resource.google_logging_organization_sink.org_audit_bq_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L242)
 - resource.google_logging_organization_sink.org_audit_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L186)
+- resource.google_logging_project_bucket_config.audit_analytics (modules/gcp/governance/cloud-audit-logs/main.tf#L286)
 - resource.google_logging_project_sink.audit_logs_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L128)
 - resource.google_organization_iam_audit_config.org_audit_config (modules/gcp/governance/cloud-audit-logs/main.tf#L166)
 - resource.google_project_iam_audit_config.project_audit_logs (modules/gcp/governance/cloud-audit-logs/main.tf#L146)
+- resource.google_project_iam_member.audit_analytics_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L319)
 - resource.google_storage_bucket.audit_logs (modules/gcp/governance/cloud-audit-logs/main.tf#L46)
 - resource.google_storage_bucket.audit_logs_access (modules/gcp/governance/cloud-audit-logs/main.tf#L2)
 - resource.google_storage_bucket_iam_member.audit_logs_access_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L39)
@@ -117,8 +121,15 @@ The following resources are created:
 | <a name="input_bucket_location"></a> [bucket\_location](#input\_bucket\_location) | The location of the bucket that will store audit logs | `string` | `"US"` | no |
 | <a name="input_enable_bigquery_analytics"></a> [enable\_bigquery\_analytics](#input\_enable\_bigquery\_analytics) | Enable BigQuery sink for log analytics. Creates a BigQuery dataset and org-level sink for querying audit logs. | `bool` | `false` | no |
 | <a name="input_enable_bucket_lock"></a> [enable\_bucket\_lock](#input\_enable\_bucket\_lock) | Opt-in WORM lock: apply a LOCKED retention policy of log\_retention\_days to the audit-log bucket, making objects undeletable before the window elapses (even by an admin). Default false preserves the current operator-correctable behaviour. A locked retention policy is IRREVERSIBLE — enable only for compliance regimes that require tamper-proof retention. | `bool` | `false` | no |
+| <a name="input_enable_log_analytics"></a> [enable\_log\_analytics](#input\_enable\_log\_analytics) | With org\_id set, route every org audit log into a Cloud Logging log bucket with Log Analytics enabled (and, with enable\_log\_analytics\_linked\_dataset, a linked read-only BigQuery dataset). Default true. | `bool` | `true` | no |
+| <a name="input_enable_log_analytics_linked_dataset"></a> [enable\_log\_analytics\_linked\_dataset](#input\_enable\_log\_analytics\_linked\_dataset) | Create the linked BigQuery dataset on the Log Analytics bucket (query audit logs from BigQuery without copying them). Default true. | `bool` | `true` | no |
 | <a name="input_force_destroy_bucket"></a> [force\_destroy\_bucket](#input\_force\_destroy\_bucket) | When deleting the bucket, automatically delete all objects | `bool` | `false` | no |
 | <a name="input_kms_key_name"></a> [kms\_key\_name](#input\_kms\_key\_name) | The KMS key name to encrypt the audit logs bucket (optional). Format: projects/{project}/locations/{location}/keyRings/{keyring}/cryptoKeys/{key} | `string` | `null` | no |
+| <a name="input_log_analytics_bucket_id"></a> [log\_analytics\_bucket\_id](#input\_log\_analytics\_bucket\_id) | ID of the Log Analytics log bucket. | `string` | `"org-audit-analytics"` | no |
+| <a name="input_log_analytics_kms_key_name"></a> [log\_analytics\_kms\_key\_name](#input\_log\_analytics\_kms\_key\_name) | Optional CMEK for the Log Analytics bucket. The key must be in the bucket's location and the project's Cloud Logging service account (google\_logging\_project\_settings / gcloud logging settings describe) needs roles/cloudkms.cryptoKeyEncrypterDecrypter on it before apply. Null = Google-managed encryption. | `string` | `null` | no |
+| <a name="input_log_analytics_link_id"></a> [log\_analytics\_link\_id](#input\_log\_analytics\_link\_id) | ID of the linked BigQuery dataset (letters, digits and underscores only; it becomes the BigQuery dataset ID). | `string` | `"org_audit_analytics"` | no |
+| <a name="input_log_analytics_location"></a> [log\_analytics\_location](#input\_log\_analytics\_location) | Location of the Log Analytics bucket (a region, or global/us/eu). Null = bucket\_location (lower-cased). | `string` | `null` | no |
+| <a name="input_log_analytics_retention_days"></a> [log\_analytics\_retention\_days](#input\_log\_analytics\_retention\_days) | Retention of the Log Analytics bucket in days (1-3650). Default 400 (CIS GCP 2.x recommends at least a year). | `number` | `400` | no |
 | <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | The number of days to retain audit logs in the storage bucket (minimum 1) | `number` | `365` | no |
 | <a name="input_org_id"></a> [org\_id](#input\_org\_id) | Organization ID for org-level log sink (optional). When provided, creates an org-level sink that captures audit logs from all projects. | `string` | `null` | no |
 | <a name="input_sink_name"></a> [sink\_name](#input\_sink\_name) | Name of the project-level log sink. Override when calling the module more than once in the same project. | `string` | `"audit-logs-sink"` | no |
@@ -135,6 +146,10 @@ The following resources are created:
 | <a name="output_bigquery_sink_name"></a> [bigquery\_sink\_name](#output\_bigquery\_sink\_name) | The name of the BigQuery log sink (if created) |
 | <a name="output_bigquery_sink_writer_identity"></a> [bigquery\_sink\_writer\_identity](#output\_bigquery\_sink\_writer\_identity) | The service account that writes audit logs to BigQuery (if created) |
 | <a name="output_configured_service"></a> [configured\_service](#output\_configured\_service) | The service for which audit logging is configured |
+| <a name="output_log_analytics_bucket_id"></a> [log\_analytics\_bucket\_id](#output\_log\_analytics\_bucket\_id) | Full ID (projects/<p>/locations/<l>/buckets/<b>) of the audit Log Analytics bucket, or null when disabled. |
+| <a name="output_log_analytics_bucket_location"></a> [log\_analytics\_bucket\_location](#output\_log\_analytics\_bucket\_location) | Location of the audit Log Analytics bucket, or null when disabled. |
+| <a name="output_log_analytics_linked_dataset"></a> [log\_analytics\_linked\_dataset](#output\_log\_analytics\_linked\_dataset) | Name of the linked BigQuery dataset on the Log Analytics bucket, or null when disabled. |
+| <a name="output_log_analytics_sink_writer_identity"></a> [log\_analytics\_sink\_writer\_identity](#output\_log\_analytics\_sink\_writer\_identity) | Writer identity of the org sink feeding the Log Analytics bucket, or null when disabled. |
 | <a name="output_log_sink_name"></a> [log\_sink\_name](#output\_log\_sink\_name) | The name of the log sink |
 | <a name="output_log_sink_writer_identity"></a> [log\_sink\_writer\_identity](#output\_log\_sink\_writer\_identity) | The service account that writes audit logs to the storage bucket |
 | <a name="output_org_log_sink_name"></a> [org\_log\_sink\_name](#output\_org\_log\_sink\_name) | The name of the organization-level log sink (if created) |
