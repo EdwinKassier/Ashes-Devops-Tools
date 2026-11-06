@@ -115,10 +115,13 @@ attempt.
 - Create the **`e2e-sandbox`** environment. The OIDC subject above depends on it.
   - Leave its deployment-branch policy unrestricted. Otherwise label-gated PR runs, which
     deploy from `refs/pull/<n>/merge`, are rejected.
-  - Optionally add required reviewers. Note that nightly runs would then wait for approval.
+  - **Require reviewers** (at least one, with "Prevent self-review" on). The runner
+    roles can create real resources, so a human approves each run before the job
+    gets cloud credentials. Nightly runs then wait for approval as well.
 - Set the **repository** variables listed in [CI Secrets & Variables](CI_SECRETS.md#sandbox-e2e).
   The preflight job has no environment and reads repository-level variables only.
-- Create the `e2e` label.
+- Create the `e2e` label. A new push to a labelled PR removes the label and does not run
+  the suites (job `revoke-label`), so re-apply the label to run the new head.
 
 No secrets are needed, because both clouds are keyless.
 

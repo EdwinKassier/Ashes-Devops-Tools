@@ -151,7 +151,7 @@ environment, not at repository level, and restrict the environment's deployment 
 | `release` | `RELEASE_PLEASE_TOKEN` | `main` only | `release.yml` |
 | `docs-bot` | `DOCS_BOT_PAT` (optional) | `main` only | `documentation.yml` |
 | `tfc-readonly` | `TFC_TOKEN` | tags `gcp-*/v*`, `aws-*/v*`, `saas/*/v*`, `tfc-admin/v*` | `terraform-apply.yml` |
-| `e2e-sandbox` | none (OIDC only) | `main`, plus PR branches if you use the `e2e` label | `sandbox-e2e.yml` |
+| `e2e-sandbox` | none (OIDC only) | `main`, plus PR branches if you use the `e2e` label. **Required reviewers: yes** (at least one, prevent self-review) | `sandbox-e2e.yml` |
 
 ```bash
 repo=OWNER/REPO
