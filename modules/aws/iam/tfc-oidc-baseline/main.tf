@@ -90,11 +90,14 @@ locals {
   create_apply_boundary = var.enable_apply_permissions_boundary && var.apply_permissions_boundary_arn == null && length(var.account_bindings) > 0
 
   # CloudFormation Fn::Sub strings: $${...} renders a literal ${...} for CFN.
+  # The boundary that actually caps the apply role is protected: the embedded
+  # one, or the external ARN when one is supplied (the embedded policy does not
+  # exist then).
   baseline_protected_arns = [
     "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:role/${var.plan_role_name}",
     "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:role/${var.apply_role_name}",
     "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:oidc-provider/${var.tfc_hostname}",
-    local.apply_boundary_arn_sub,
+    var.apply_permissions_boundary_arn != null ? var.apply_permissions_boundary_arn : local.apply_boundary_arn_sub,
   ]
 
   # Privileged roles the apply identity must never create, modify, delete or

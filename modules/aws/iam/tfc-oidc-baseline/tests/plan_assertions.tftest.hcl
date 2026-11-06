@@ -285,6 +285,35 @@ run "external_boundary_arn_used_when_supplied" {
   }
 }
 
+# A supplied external boundary is as protected as the embedded one: the
+# apply identity must not be able to rewrite or delete the policy that caps it.
+run "external_boundary_is_protected" {
+  command = plan
+
+  variables {
+    apply_permissions_boundary_arn = "arn:aws:iam::111111111111:policy/org-apply-boundary"
+  }
+
+  assert {
+    condition     = contains(local.baseline_protected_arns, "arn:aws:iam::111111111111:policy/org-apply-boundary")
+    error_message = "an external apply_permissions_boundary_arn must be in baseline_protected_arns."
+  }
+
+  assert {
+    condition     = !contains(local.baseline_protected_arns, local.apply_boundary_arn_sub)
+    error_message = "the unused embedded boundary ARN must not be listed when an external boundary replaces it."
+  }
+}
+
+run "embedded_boundary_is_protected_by_default" {
+  command = plan
+
+  assert {
+    condition     = contains(local.baseline_protected_arns, local.apply_boundary_arn_sub) && length(local.baseline_protected_arns) == 4
+    error_message = "by default the embedded boundary stays the fourth protected ARN."
+  }
+}
+
 run "boundary_can_be_disabled" {
   command = plan
 
