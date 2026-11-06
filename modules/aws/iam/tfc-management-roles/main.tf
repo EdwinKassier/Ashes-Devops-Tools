@@ -114,10 +114,7 @@ locals {
         Action = [
           "organizations:Describe*",
           "organizations:List*",
-          "organizations:RegisterDelegatedAdministrator",
-          "organizations:DeregisterDelegatedAdministrator",
-          "organizations:EnableAWSServiceAccess",
-          "organizations:DisableAWSServiceAccess",
+
           "guardduty:EnableOrganizationAdminAccount",
           "guardduty:DisableOrganizationAdminAccount",
           "guardduty:ListOrganizationAdminAccounts",
@@ -141,29 +138,37 @@ locals {
         Resource = "*"
       },
       {
+        # Delegated administration ONLY for the security services. Registering
+        # an account as delegated admin for e.g. member.org.stacksets or sso
+        # would hand it org-wide role deployment / identity control.
+        Sid    = "SecurityServicesDelegationOnly"
+        Effect = "Allow"
+        Action = [
+          "organizations:RegisterDelegatedAdministrator",
+          "organizations:DeregisterDelegatedAdministrator",
+          "organizations:EnableAWSServiceAccess",
+          "organizations:DisableAWSServiceAccess",
+        ]
+        Resource  = "*"
+        Condition = { StringEquals = { "organizations:ServicePrincipal" = var.security_service_principals } }
+      },
+      {
         # The organization trail and its CloudWatch Logs / SNS / KMS wiring.
         # Destructive trail and key actions are denied below (break-glass only).
+        # No IAM writes at all: the trail delivery role is created by
+        # aws-organization and only PASSED to CloudTrail here.
         Sid      = "OrganizationTrail"
         Effect   = "Allow"
-        Action   = ["cloudtrail:*", "logs:*", "sns:*", "cloudwatch:*Alarm*", "cloudwatch:Describe*", "kms:*"]
+        Action   = ["logs:*", "sns:*", "cloudwatch:*Alarm*", "cloudwatch:Describe*", "cloudwatch:TagResource", "cloudwatch:UntagResource", "cloudwatch:ListTagsForResource", "kms:*"]
         Resource = "*"
       },
       {
-        # IAM writes ONLY on the trail's CloudWatch delivery role
-        # (<trail>-cloudwatch-delivery). Any wider IAM write in the management
-        # account (outside every SCP) is an org takeover: create a role, attach
-        # AdministratorAccess, assume it, then OrganizationAccountAccessRole
-        # everywhere. The management break-glass role is therefore NOT managed
-        # through this role (keep create_break_glass = false, or apply it as
-        # the phase-0 role).
-        Sid    = "TrailDeliveryRoleOnly"
-        Effect = "Allow"
-        Action = [
-          "iam:CreateRole", "iam:DeleteRole", "iam:UpdateRole", "iam:UpdateAssumeRolePolicy",
-          "iam:TagRole", "iam:UntagRole", "iam:PutRolePolicy", "iam:DeleteRolePolicy",
-          "iam:GetRole", "iam:GetRolePolicy", "iam:ListRolePolicies", "iam:ListAttachedRolePolicies",
-        ]
-        Resource = ["arn:${local.partition}:iam::${local.account_id}:role/${var.security_trail_role_pattern}"]
+        # Trail writes only on THE organization trail: no second trail, no
+        # repointing another trail. Reads come from ReadOnlyAccess.
+        Sid      = "OrganizationTrailOnly"
+        Effect   = "Allow"
+        Action   = ["cloudtrail:*"]
+        Resource = ["arn:${local.partition}:cloudtrail:*:${local.account_id}:trail/${var.security_trail_name}"]
       },
       {
         Sid       = "PassTrailDeliveryRoleToCloudTrail"

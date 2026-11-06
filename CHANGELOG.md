@@ -104,6 +104,26 @@ release metadata for a Terraform Cloud run.
 - **The RCP data perimeter now covers ECR and CloudWatch Logs** (`ecr:*`, `logs:*`).
 - **`organization-policy` gains a `policy_contents` output**, for evidence and tests.
 
+#### Final re-score fixes
+
+- **Critical: `aws-security` management role escalation, second pass.** Limiting role writes to
+  one role name did not help, because whoever can write a role can make it anything. The role now
+  has no IAM role writes at all:
+  - aws-organization creates the trail's CloudWatch delivery role
+    (`create_org_trail_delivery_role`), and aws-security only passes it to CloudTrail
+    (`cloudtrail-org` `cloudwatch_logs_role_arn`).
+  - Delegated-admin registration is limited to the security service principals.
+  - IAM Identity Center (`sso`) delegation moves to aws-organization
+    (`identity_center_admin_account_key`).
+  - `cloudtrail:*` is scoped to the organization trail ARN.
+  - `cloudwatch:TagResource` is added for the tagged CIS alarms.
+- **GCP WIF tenant pin is structural, not a substring check.**
+  `custom.wifProviderTenantPinned` now uses anchored RE2 checks. The tenant clause must be the first
+  conjunct, with nothing OR-ed beside it, so `org != 'acme'` and `... || true` are rejected.
+  app-services renders its GitHub condition in that canonical form.
+- **No unpinned GitHub provider.** The baseline creates the account-wide GitHub OIDC provider only
+  once `github_federation_owners` / `_owner_ids` is set.
+
 #### Golden paths and test depth
 
 - **Per-service observability and messaging in both app-services golden paths:**

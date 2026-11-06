@@ -401,14 +401,30 @@ module "org_policies" {
 # trust another TFC org or GitHub owner and bind it to a service account: a
 # durable external door that domain-restricted sharing does not see.
 locals {
+  # Anchored structural checks (RE2 via CEL matches), never a substring test:
+  # the tenant clause must be the FIRST conjunct, and everything after it must
+  # be AND-only or ONE balanced parenthesised group, so no top-level `||` can
+  # sit beside it. ("acme" in a condition proves nothing: `org != 'acme'`
+  # contains it too.) [.] / [(] / [)] avoid backslash escaping through HCL+CEL;
+  # `.` matches either quote style around the GitHub owner ID.
+  # One balanced group, nested up to 4 deep (has(...) inside a clause list).
+  wif_paren_group = "[(]([^()]|[(]([^()]|[(]([^()]|[(][^()]*[)])*[)])*[)])*[)]"
+  wif_tfc_pattern = var.wif_tenant_pins.tfc_organization == null ? null : (
+    "^assertion[.]terraform_organization_name == '${var.wif_tenant_pins.tfc_organization}'( && [^|]*)?$"
+  )
+  wif_github_patterns = [
+    for id in var.wif_tenant_pins.github_owner_ids :
+    "^assertion[.]repository_owner_id == .${id}.( && [^()|]*| && ${local.wif_paren_group})?$"
+  ]
+
   wif_tenant_constraints = var.wif_tenant_pins.tfc_organization == null && length(var.wif_tenant_pins.github_owner_ids) == 0 ? [] : [{
     name         = "custom.wifProviderTenantPinned"
     display_name = "Workload identity providers pin the tenant"
-    description  = "HCP Terraform providers must condition on this estate's TFC organization; GitHub Actions providers must condition on an allowed repository_owner_id."
+    description  = "HCP Terraform providers must start their attribute condition with this estate's TFC organization clause; GitHub Actions providers with an allowed repository_owner_id clause; with nothing OR-ed beside it."
     action_type  = "DENY"
     condition = join(" || ", compact([
-      var.wif_tenant_pins.tfc_organization == null ? "" : "(resource.oidc.issuerUri.startsWith('https://${var.wif_tenant_pins.tfc_hostname}') && !resource.attributeCondition.contains('${var.wif_tenant_pins.tfc_organization}'))",
-      length(var.wif_tenant_pins.github_owner_ids) == 0 ? "" : "(resource.oidc.issuerUri.startsWith('https://token.actions.githubusercontent.com') && !(resource.attributeCondition.contains('repository_owner_id') && (${join(" || ", [for id in var.wif_tenant_pins.github_owner_ids : "resource.attributeCondition.contains('${id}')"])})))",
+      local.wif_tfc_pattern == null ? "" : "(resource.oidc.issuerUri.startsWith('https://${var.wif_tenant_pins.tfc_hostname}') && !resource.attributeCondition.matches(\"${local.wif_tfc_pattern}\"))",
+      length(local.wif_github_patterns) == 0 ? "" : "(resource.oidc.issuerUri.startsWith('https://token.actions.githubusercontent.com') && !(${join(" || ", [for pat in local.wif_github_patterns : "resource.attributeCondition.matches(\"${pat}\")"])}))",
     ]))
     method_types   = ["CREATE", "UPDATE"]
     resource_types = ["iam.googleapis.com/WorkloadIdentityPoolProvider"]

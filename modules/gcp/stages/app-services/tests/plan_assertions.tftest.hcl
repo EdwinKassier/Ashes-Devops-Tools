@@ -89,7 +89,7 @@ run "one_service_full_golden_path" {
   }
 
   assert {
-    condition     = google_iam_workload_identity_pool_provider.github[0].attribute_condition == "(assertion.repository_id == \"123456789\")"
+    condition     = google_iam_workload_identity_pool_provider.github[0].attribute_condition == "((assertion.repository_id == \"123456789\"))"
     error_message = "the provider must fail closed on the declared repository_id."
   }
 
@@ -146,7 +146,7 @@ run "github_ref_and_environment_constrain_condition" {
   }
 
   assert {
-    condition     = google_iam_workload_identity_pool_provider.github[0].attribute_condition == "assertion.repository_owner_id == \"42\" && (assertion.repository_id == \"123\" && assertion.ref == \"refs/heads/main\" && (has(assertion.environment) && assertion.environment == \"dev\"))"
+    condition     = google_iam_workload_identity_pool_provider.github[0].attribute_condition == "assertion.repository_owner_id == \"42\" && ((assertion.repository_id == \"123\" && assertion.ref == \"refs/heads/main\" && (has(assertion.environment) && assertion.environment == \"dev\")))"
     error_message = "owner, ref and environment constraints must all be ANDed into the provider condition."
   }
 }

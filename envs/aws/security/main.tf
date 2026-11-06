@@ -83,6 +83,10 @@ module "aws_security" {
   enabled_security_services = local.enabled_security_services
   enable_security_lake      = local.enable_security_lake
   create_organization_trail = var.create_organization_trail
+  # aws-organization creates the trail's CloudWatch delivery role
+  # (create_org_trail_delivery_role), so this root needs no IAM writes in the
+  # management account.
+  cloudtrail_cloudwatch_role_arn = coalesce(var.cloudtrail_cloudwatch_role_arn, "arn:aws:iam::${local.management_account_id}:role/org-trail-cloudwatch-delivery")
 
   # FinOps F5: cost toggles for the two most expensive always-on security
   # services. Default true (full coverage); set false for non-prod.

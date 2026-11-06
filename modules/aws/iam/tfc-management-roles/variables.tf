@@ -96,12 +96,31 @@ variable "tags" {
 }
 
 variable "security_trail_role_pattern" {
-  description = "Name pattern of the ONLY management-account role the aws-security apply role may create or modify: the organization trail's CloudWatch Logs delivery role (<trail_name>-cloudwatch-delivery)."
+  description = "Exact name of the organization trail's CloudWatch Logs delivery role (created by aws-organization). The aws-security apply role may only PASS it to cloudtrail.amazonaws.com; it has no IAM write permissions."
   type        = string
-  default     = "*-cloudwatch-delivery"
+  default     = "org-trail-cloudwatch-delivery"
 
   validation {
-    condition     = can(regex("^[A-Za-z0-9+=,.@_*-]{1,64}$", var.security_trail_role_pattern)) && var.security_trail_role_pattern != "*"
-    error_message = "security_trail_role_pattern must be a role-name pattern narrower than \"*\"."
+    condition     = can(regex("^[A-Za-z0-9+=,.@_-]{1,64}$", var.security_trail_role_pattern))
+    error_message = "security_trail_role_pattern must be an exact IAM role name (no wildcards)."
   }
+}
+
+variable "security_service_principals" {
+  description = "Service principals the aws-security role may register delegated admins / enable trusted access for. Anything else (member.org.stacksets.cloudformation.amazonaws.com, sso.amazonaws.com, ...) stays with aws-organization."
+  type        = list(string)
+  default = [
+    "guardduty.amazonaws.com", "malware-protection.guardduty.amazonaws.com", "securityhub.amazonaws.com",
+    "macie.amazonaws.com", "inspector2.amazonaws.com", "detective.amazonaws.com", "fms.amazonaws.com",
+    "access-analyzer.amazonaws.com", "config.amazonaws.com", "config-multiaccountsetup.amazonaws.com",
+    "securitylake.amazonaws.com", "cloudtrail.amazonaws.com", "account.amazonaws.com",
+    "backup.amazonaws.com", "ssm.amazonaws.com", "resource-explorer-2.amazonaws.com",
+  ]
+  nullable = false
+}
+
+variable "security_trail_name" {
+  description = "Name of the organization CloudTrail trail the aws-security role manages (cloudtrail-org trail_name). Its cloudtrail:* permissions are scoped to this trail ARN."
+  type        = string
+  default     = "org-trail"
 }

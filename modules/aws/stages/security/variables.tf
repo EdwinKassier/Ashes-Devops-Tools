@@ -460,3 +460,9 @@ variable "create_organization_trail" {
   type        = bool
   default     = true
 }
+
+variable "cloudtrail_cloudwatch_role_arn" {
+  description = "Existing CloudTrail -> CloudWatch Logs delivery role (created by aws-organization, create_org_trail_delivery_role). Null = the cloudtrail-org module creates it, which needs IAM write in the management account."
+  type        = string
+  default     = null
+}

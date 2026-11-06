@@ -409,3 +409,26 @@ variable "allowed_builtin_web_identity_providers" {
   default     = []
   nullable    = false
 }
+
+variable "create_org_trail_delivery_role" {
+  description = "Create the organization trail's CloudTrail -> CloudWatch Logs delivery role (<org_trail_name>-cloudwatch-delivery) here, so aws-security needs no IAM write in the management account. Default true."
+  type        = bool
+  default     = true
+}
+
+variable "org_trail_name" {
+  description = "Name of the organization CloudTrail trail aws-security creates (cloudtrail-org trail_name)."
+  type        = string
+  default     = "org-trail"
+}
+
+variable "identity_center_admin_account_key" {
+  description = "Account key (accounts / workload_accounts) to register as the IAM Identity Center delegated administrator. Default shared_services, the aws-identity account in the SRA layout. Null = do not register here."
+  type        = string
+  default     = "shared_services"
+
+  validation {
+    condition     = var.identity_center_admin_account_key == null || contains(keys(merge(var.accounts, var.workload_accounts)), coalesce(var.identity_center_admin_account_key, "x"))
+    error_message = "identity_center_admin_account_key must name an account in accounts / workload_accounts."
+  }
+}

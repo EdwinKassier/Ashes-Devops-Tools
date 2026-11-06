@@ -724,8 +724,9 @@ run "wif_tenant_pin_custom_constraint" {
   assert {
     condition = (
       one([for c in local.wif_tenant_constraints : c if c.name == "custom.wifProviderTenantPinned"]).resource_types == ["iam.googleapis.com/WorkloadIdentityPoolProvider"] &&
-      strcontains(one(local.wif_tenant_constraints).condition, "resource.attributeCondition.contains('acme-tfc')") &&
-      strcontains(one(local.wif_tenant_constraints).condition, "resource.attributeCondition.contains('123456')")
+      strcontains(one(local.wif_tenant_constraints).condition, "matches(\"^assertion[.]terraform_organization_name == 'acme-tfc'( && [^|]*)?$\")") &&
+      strcontains(one(local.wif_tenant_constraints).condition, "matches(\"^assertion[.]repository_owner_id == .123456.") &&
+      !strcontains(one(local.wif_tenant_constraints).condition, ".contains(")
     )
     error_message = "tenant pins must render a DENY custom constraint referencing the TFC org and GitHub owner IDs."
   }

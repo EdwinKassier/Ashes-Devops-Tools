@@ -75,8 +75,11 @@ locals {
   ])
   # Fail closed: a token is accepted only if it matches a declared service's
   # (repository_id [, ref] [, environment]) tuple — never on mutable names.
-  wif_provider_cel_any    = join(" || ", [for c in local.wif_provider_cel_clause : "(${c})"])
-  wif_attribute_condition = "${local.wif_provider_cel_owner}${length(local.wif_provider_cel_clause) > 1 ? "(${local.wif_provider_cel_any})" : local.wif_provider_cel_any}"
+  wif_provider_cel_any = join(" || ", [for c in local.wif_provider_cel_clause : "(${c})"])
+  # Always one parenthesised group after the owner pin, so the org policy's
+  # structural tenant check (custom.wifProviderTenantPinned) can prove nothing
+  # is OR-ed beside the owner clause.
+  wif_attribute_condition = "${local.wif_provider_cel_owner}(${local.wif_provider_cel_any})"
 
   # ---------------------------------------------------------------------------
   # APIs

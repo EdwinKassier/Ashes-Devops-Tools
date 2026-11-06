@@ -256,3 +256,31 @@ run "unpinned_github_with_baseline_warns" {
 
   expect_failures = [check.github_federation_pinned]
 }
+
+# aws-organization owns the trail delivery role and Identity Center delegation,
+# so the least-privilege aws-security role needs neither IAM writes nor sso.
+run "organization_owns_trail_role_and_identity_center_delegation" {
+  command = plan
+
+  assert {
+    condition = (
+      aws_iam_role.org_trail_cloudwatch[0].name == "org-trail-cloudwatch-delivery" &&
+      jsondecode(aws_iam_role.org_trail_cloudwatch[0].assume_role_policy).Statement[0].Principal.Service == "cloudtrail.amazonaws.com" &&
+      aws_organizations_delegated_administrator.identity_center[0].service_principal == "sso.amazonaws.com"
+    )
+    error_message = "aws-organization must create the trail delivery role and register the Identity Center delegated admin."
+  }
+}
+
+run "github_provider_only_when_pinned" {
+  command = plan
+
+  variables {
+    github_federation_owners = []
+  }
+
+  # The baseline's own suite (github_provider_opt_out) proves that
+  # create_github_oidc_provider = false omits the provider; the template body
+  # is unknown at plan here (it embeds computed account IDs).
+  expect_failures = [check.github_federation_pinned]
+}

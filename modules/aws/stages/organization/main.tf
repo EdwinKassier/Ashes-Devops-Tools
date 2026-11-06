@@ -138,11 +138,14 @@ module "tfc_oidc_baseline" {
   source = "../../iam/tfc-oidc-baseline"
   count  = var.enable_tfc_oidc_baseline ? 1 : 0
 
-  tfc_hostname              = var.tfc_hostname
-  tfc_organization          = var.tfc_organization
-  tfc_project               = var.tfc_project
-  allow_workspace_wildcards = var.tfc_oidc_allow_workspace_wildcards
-  apply_role_policy_arns    = var.tfc_apply_role_policy_arns
+  tfc_hostname     = var.tfc_hostname
+  tfc_organization = var.tfc_organization
+  # The account-wide GitHub OIDC provider exists only once GitHub federation
+  # is pinned to owners: no provider means no unpinned door for repo:<anyone>/*.
+  create_github_oidc_provider = length(var.github_federation_owners) + length(var.github_federation_owner_ids) > 0
+  tfc_project                 = var.tfc_project
+  allow_workspace_wildcards   = var.tfc_oidc_allow_workspace_wildcards
+  apply_role_policy_arns      = var.tfc_apply_role_policy_arns
 
   # Permissions boundary on tfc-apply (default: embedded tfc-apply-boundary).
   enable_apply_permissions_boundary = var.tfc_enable_apply_permissions_boundary
@@ -196,11 +199,11 @@ module "tfc_management_roles" {
   workspaces       = var.tfc_management_workspaces
 }
 
-# The baseline StackSet puts a GitHub OIDC provider in every targeted account.
-# Unpinned, any admin there can make a role trust repo:<anyone>/*.
+# GitHub deploy roles need a pinned owner: without github_federation_owners the
+# baseline creates no GitHub OIDC provider (see tfc_oidc_baseline above).
 check "github_federation_pinned" {
   assert {
     condition     = !var.enable_tfc_oidc_baseline || length(var.github_federation_owners) + length(var.github_federation_owner_ids) > 0
-    error_message = "The TFC OIDC baseline deploys a GitHub Actions OIDC provider to member accounts, but github_federation_owners / github_federation_owner_ids is empty, so GitHub federation is unpinned org-wide. Set aws.github_federation_owners in config/landing-zone.yaml."
+    error_message = "No GitHub owners are pinned (aws.github_federation_owners), so the TFC OIDC baseline creates NO GitHub Actions OIDC provider and app-services GitHub deploy roles cannot be assumed. Set aws.github_federation_owners (or ignore this if no service deploys from GitHub)."
   }
 }

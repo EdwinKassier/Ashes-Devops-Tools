@@ -33,3 +33,9 @@ variable "identity_account_id" {
     error_message = "identity_account_id must be a 12-digit AWS account ID."
   }
 }
+
+variable "register_identity_center_admin" {
+  description = "Also register identity_account_id as the IAM Identity Center (sso.amazonaws.com) delegated administrator. Default false: aws-organization owns that registration, so the aws-security pipeline cannot hand identity control to an arbitrary account."
+  type        = bool
+  default     = false
+}

@@ -21,10 +21,10 @@ run "default_set_registers_no_dedicated_resource_services" {
     error_message = "access-analyzer.amazonaws.com must be registered in the default set"
   }
 
-  # sso is delegated to the Identity account, not Security Tooling.
+  # sso is NOT registered here by default (aws-organization owns it).
   assert {
-    condition     = aws_organizations_delegated_administrator.this["sso.amazonaws.com"].account_id == "222222222222"
-    error_message = "sso.amazonaws.com must be delegated to the identity account"
+    condition     = !contains(keys(aws_organizations_delegated_administrator.this), "sso.amazonaws.com")
+    error_message = "sso.amazonaws.com must not be registered by default (aws-organization owns Identity Center delegation)"
   }
 
   # A no-dedicated-resource service delegated to Security Tooling.
@@ -63,5 +63,18 @@ run "explicit_registrations_override_default" {
   assert {
     condition     = aws_organizations_delegated_administrator.this["ssm.amazonaws.com"].account_id == "333333333333"
     error_message = "Explicit registration account ID must be honoured"
+  }
+}
+
+run "identity_center_delegation_opt_in" {
+  command = plan
+
+  variables {
+    register_identity_center_admin = true
+  }
+
+  assert {
+    condition     = aws_organizations_delegated_administrator.this["sso.amazonaws.com"].account_id == "222222222222"
+    error_message = "with register_identity_center_admin, sso.amazonaws.com must be delegated to the identity account"
   }
 }

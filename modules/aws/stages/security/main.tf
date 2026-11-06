@@ -214,6 +214,7 @@ module "cloudtrail" {
   # module creates its own logs-granted CMK and KMS-encrypted SNS topic in the
   # management account unless existing ones are supplied.
   enable_cloudwatch_logs         = var.enable_cloudwatch_logs
+  cloudwatch_logs_role_arn       = var.cloudtrail_cloudwatch_role_arn
   cloudwatch_logs_retention_days = var.cloudwatch_logs_retention_days
   cloudwatch_logs_kms_key_arn    = var.cloudwatch_logs_kms_key_arn
   alarm_sns_topic_arn            = var.cloudtrail_alarm_sns_topic_arn

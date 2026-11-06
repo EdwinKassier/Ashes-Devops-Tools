@@ -124,11 +124,14 @@ run "security_iam_writes_scoped_to_trail_role" {
 
   assert {
     condition = (
-      one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "TrailDeliveryRoleOnly"]).Resource == ["arn:aws:iam::111111111111:role/*-cloudwatch-delivery"] &&
+      one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "PassTrailDeliveryRoleToCloudTrail"]).Resource == ["arn:aws:iam::111111111111:role/org-trail-cloudwatch-delivery"] &&
+      length([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Effect == "Allow" && anytrue([for a in flatten([s.Action]) : contains(["iam:CreateRole", "iam:PutRolePolicy", "iam:AttachRolePolicy", "iam:UpdateAssumeRolePolicy"], a)])]) == 0 &&
+      !contains(one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "SecurityServicesDelegationOnly"]).Condition.StringEquals["organizations:ServicePrincipal"], "sso.amazonaws.com") &&
+      !contains(one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "SecurityServicesDelegationOnly"]).Condition.StringEquals["organizations:ServicePrincipal"], "member.org.stacksets.cloudformation.amazonaws.com") &&
       contains(one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "DenyTrailAndKeyDestruction"]).Action, "cloudtrail:StopLogging") &&
       anytrue([for r in one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "DenyManagementRoleTampering"]).Resource : endswith(r, ":role/OrganizationBreakGlass")])
     )
-    error_message = "IAM writes must be limited to the trail delivery role, trail/key destruction denied, and the break-glass role protected."
+    error_message = "aws-security must have no IAM role writes (only PassRole of the trail delivery role), delegation only for security services, trail/key destruction denied and break-glass protected."
   }
 }
 
@@ -138,5 +141,14 @@ run "plan_roles_deny_data_plane_reads" {
   assert {
     condition     = contains(one([for s in jsondecode(aws_iam_role_policy.plan_guard["aws-backup:plan"].policy).Statement : s if s.Sid == "DenyDataPlaneReads"]).Action, "secretsmanager:GetSecretValue")
     error_message = "management plan roles must deny data-plane reads like the member tfc-plan roles."
+  }
+}
+
+run "security_trail_permissions_scoped_to_org_trail" {
+  command = plan
+
+  assert {
+    condition     = one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "OrganizationTrailOnly"]).Resource == ["arn:aws:cloudtrail:*:111111111111:trail/org-trail"]
+    error_message = "cloudtrail:* must be scoped to the organization trail ARN."
   }
 }
