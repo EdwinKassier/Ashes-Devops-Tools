@@ -10,6 +10,8 @@ variables {
   environment    = "dev"
   network_id     = "projects/acme-dev-host-abcd/global/networks/acme-dev-vpc"
   subnetwork_id  = "projects/acme-dev-host-abcd/regions/europe-west1/subnetworks/acme-dev-vpc-private-europe-west1-b"
+
+  github_repository_owner_id = "42"
 }
 
 # The default (services = {}, every flag off) must create nothing at all.
@@ -89,8 +91,8 @@ run "one_service_full_golden_path" {
   }
 
   assert {
-    condition     = google_iam_workload_identity_pool_provider.github[0].attribute_condition == "((assertion.repository_id == \"123456789\"))"
-    error_message = "the provider must fail closed on the declared repository_id."
+    condition     = google_iam_workload_identity_pool_provider.github[0].attribute_condition == "assertion.repository_owner_id == \"42\""
+    error_message = "the provider condition must be exactly the canonical owner pin; repo/ref/env pins live in the bindings."
   }
 
   assert {
@@ -131,23 +133,100 @@ run "one_service_full_golden_path" {
   }
 }
 
-# Ref / environment constraints narrow the provider condition.
-run "github_ref_and_environment_constrain_condition" {
+# The provider condition is the owner pin only, whatever the services declare;
+# each service's ref / environment pin is enforced by the attribute its deploy
+# SA is bound to. The composite attributes are mapped for every service.
+run "condition_is_owner_only_with_mixed_services" {
   command = plan
 
   variables {
-    enable_app_deploy_wif      = true
-    github_repository_owner_id = "42"
+    enable_app_deploy_wif = true
     services = {
-      api = {
-        github = { repository_id = "123", ref = "refs/heads/main", environment = "dev" }
-      }
+      api = { github = { repository_id = "123", ref = "refs/heads/main", environment = "dev" } }
+      web = { github = { repository_id = "456" } }
     }
   }
 
   assert {
-    condition     = google_iam_workload_identity_pool_provider.github[0].attribute_condition == "assertion.repository_owner_id == \"42\" && ((assertion.repository_id == \"123\" && assertion.ref == \"refs/heads/main\" && (has(assertion.environment) && assertion.environment == \"dev\")))"
-    error_message = "owner, ref and environment constraints must all be ANDed into the provider condition."
+    condition     = google_iam_workload_identity_pool_provider.github[0].attribute_condition == "assertion.repository_owner_id == \"42\""
+    error_message = "the provider condition must be exactly assertion.repository_owner_id == \"<id>\"."
+  }
+
+  assert {
+    condition = (
+      google_iam_workload_identity_pool_provider.github[0].attribute_mapping["attribute.repo_ref"] == "assertion.repository_id + '/' + assertion.ref" &&
+      google_iam_workload_identity_pool_provider.github[0].attribute_mapping["attribute.repo_env"] == "assertion.repository_id + '/' + (has(assertion.environment) ? assertion.environment : '-')" &&
+      google_iam_workload_identity_pool_provider.github[0].attribute_mapping["attribute.repo_ref_env"] == "assertion.repository_id + '/' + assertion.ref + '/' + (has(assertion.environment) ? assertion.environment : '-')"
+    )
+    error_message = "the provider must map the repo_ref, repo_env and repo_ref_env composite attributes."
+  }
+}
+
+# Declares ref + environment -> bound on attribute.repo_ref_env.
+run "ref_and_env_service_binds_repo_ref_env" {
+  command = plan
+
+  variables {
+    enable_app_deploy_wif = true
+    services = {
+      api = { github = { repository_id = "123", ref = "refs/heads/main", environment = "prod" } }
+    }
+  }
+
+  assert {
+    condition     = google_service_account_iam_member.deploy_wif["api"].member == "principalSet://iam.googleapis.com/projects/222222222222/locations/global/workloadIdentityPools/apps-dev/attribute.repo_ref_env/123/refs/heads/main/prod"
+    error_message = "a service declaring ref and environment must bind attribute.repo_ref_env/<repo>/<ref>/<env>."
+  }
+}
+
+# Declares ref only -> bound on attribute.repo_ref.
+run "ref_only_service_binds_repo_ref" {
+  command = plan
+
+  variables {
+    enable_app_deploy_wif = true
+    services = {
+      api = { github = { repository_id = "123", ref = "refs/tags/v1.2.3" } }
+    }
+  }
+
+  assert {
+    condition     = google_service_account_iam_member.deploy_wif["api"].member == "principalSet://iam.googleapis.com/projects/222222222222/locations/global/workloadIdentityPools/apps-dev/attribute.repo_ref/123/refs/tags/v1.2.3"
+    error_message = "a service declaring only ref must bind attribute.repo_ref/<repo>/<ref>."
+  }
+}
+
+# Declares environment only -> bound on attribute.repo_env.
+run "env_only_service_binds_repo_env" {
+  command = plan
+
+  variables {
+    enable_app_deploy_wif = true
+    services = {
+      api = { github = { repository_id = "123", environment = "prod" } }
+    }
+  }
+
+  assert {
+    condition     = google_service_account_iam_member.deploy_wif["api"].member == "principalSet://iam.googleapis.com/projects/222222222222/locations/global/workloadIdentityPools/apps-dev/attribute.repo_env/123/prod"
+    error_message = "a service declaring only environment must bind attribute.repo_env/<repo>/<env>."
+  }
+}
+
+# Declares neither -> bound on attribute.repository_id (any ref, any env).
+run "bare_service_binds_repository_id" {
+  command = plan
+
+  variables {
+    enable_app_deploy_wif = true
+    services = {
+      api = { github = { repository_id = "123" } }
+    }
+  }
+
+  assert {
+    condition     = google_service_account_iam_member.deploy_wif["api"].member == "principalSet://iam.googleapis.com/projects/222222222222/locations/global/workloadIdentityPools/apps-dev/attribute.repository_id/123"
+    error_message = "a service declaring neither ref nor environment must bind attribute.repository_id/<repo>."
   }
 }
 

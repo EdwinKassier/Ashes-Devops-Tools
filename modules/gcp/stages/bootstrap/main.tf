@@ -88,10 +88,11 @@ locals {
 # ─── Workload Identity Federation ────────────────────────────────────────────
 
 # GitHub Actions WIF: OFF by default — no workflow in this repo requests
-# `id-token: write`, so a standing trust was unused privilege. When enabled it
-# trusts ONE repository by its immutable numeric IDs (repository_id +
-# repository_owner_id, never the renameable names), only from refs/heads/main,
-# and binds it to the READ-ONLY organization PLAN SA — never an apply/admin SA.
+# `id-token: write`, so a standing trust was unused privilege. When enabled the
+# provider condition is the canonical owner pin (repository_owner_id, the form
+# custom.wifProviderTenantPinned accepts), and ONE repository is bound by its
+# immutable repository_id on refs/heads/main only (attribute.repo_ref), to the
+# READ-ONLY organization PLAN SA — never an apply/admin SA.
 module "gh_oidc" {
   source = "../../iam/workload-identity"
   count  = var.enable_github_wif ? 1 : 0
@@ -101,15 +102,8 @@ module "gh_oidc" {
   display_name = "GitHub Actions Pool"
 
   enable_github_provider     = true
-  github_organization        = var.github_org
   github_repository_owner_id = var.github_repository_owner_id
-
-  github_allowed_refs = ["refs/heads/main"]
-  github_attribute_condition_override = join(" && ", [
-    "assertion.repository_owner_id == '${coalesce(var.github_repository_owner_id, "unset")}'",
-    "assertion.repository_id == '${coalesce(var.github_repository_id, "unset")}'",
-    "assertion.ref == 'refs/heads/main'",
-  ])
+  github_allowed_refs        = ["refs/heads/main"]
 
   github_sa_bindings = [
     {

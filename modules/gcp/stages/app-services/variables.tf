@@ -143,13 +143,18 @@ variable "app_deploy_wif_pool_id" {
 }
 
 variable "github_repository_owner_id" {
-  description = "Optional IMMUTABLE numeric GitHub organization/user ID. When set, the provider additionally rejects any token whose repository_owner_id differs (defence in depth on top of the per-repository_id condition)."
+  description = "IMMUTABLE numeric GitHub organization/user ID (gh api orgs/<org> --jq .id). Required once a service declares `github`: the provider attribute_condition is exactly assertion.repository_owner_id == \"<id>\", the form the org-policy constraint custom.wifProviderTenantPinned accepts."
   type        = string
   default     = null
 
   validation {
     condition     = var.github_repository_owner_id == null || can(regex("^[0-9]+$", var.github_repository_owner_id))
     error_message = "github_repository_owner_id must be the numeric GitHub owner ID (not the org name)."
+  }
+
+  validation {
+    condition     = var.github_repository_owner_id != null || !var.enable_app_deploy_wif || alltrue([for k, s in var.services : s.github == null])
+    error_message = "a service sets `github` but github_repository_owner_id is null. The GitHub provider condition is the owner pin; set the numeric owner ID (gh api orgs/<org> --jq .id)."
   }
 }
 
@@ -278,6 +283,15 @@ variable "services" {
   validation {
     condition     = alltrue([for k, s in var.services : s.github == null || try(s.github.ref, null) == null || can(regex("^refs/(heads|tags)/", s.github.ref))])
     error_message = "services[*].github.ref must be a full git ref (refs/heads/<branch> or refs/tags/<tag>)."
+  }
+
+  validation {
+    # ref / environment become exact principalSet attribute values.
+    condition = alltrue([for k, s in var.services : s.github == null || (
+      (try(s.github.ref, null) == null || can(regex("^[A-Za-z0-9_./-]+$", s.github.ref))) &&
+      (try(s.github.environment, null) == null || (can(regex("^[A-Za-z0-9_./-]+$", s.github.environment)) && try(s.github.environment, null) != "-"))
+    )])
+    error_message = "services[*].github.ref and .environment may contain only letters, digits, '_', '.', '/' and '-' (no wildcards, quotes or spaces), and environment may not be \"-\" (the value a token without an environment claim maps to)."
   }
 
   validation {

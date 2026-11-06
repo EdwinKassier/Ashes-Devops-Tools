@@ -36,7 +36,7 @@ creates. Turn it on with `enable_app_deploy_wif = true`. Optionally set
 
    ```bash
    gh api repos/acme/orders-api --jq .id   # repository_id, e.g. 987654321
-   gh api orgs/acme --jq .id               # optional github_repository_owner_id
+   gh api orgs/acme --jq .id               # github_repository_owner_id (required)
    ```
 
 3. Create any runtime secrets the service reads in the host project, and set the
@@ -55,7 +55,7 @@ In the `gcp-workload-<env>` workspace variables (or your tfvars):
 
 ```hcl
 enable_app_deploy_wif      = true
-github_repository_owner_id = "12345678" # optional, numeric org ID
+github_repository_owner_id = "12345678" # required, numeric org ID
 
 app_services = {
   orders-api = {
@@ -214,10 +214,13 @@ These items are verified by mocked plan tests only:
   `app_bootstrap_image`) once for every service, or `image` per service.
 - **Binary Authorization.** The first-revision image must satisfy the policy, or
   the first apply fails. Use an attested image as `bootstrap_image`.
-- **Shared repos.** If two services share one GitHub repository with *different*
-  `ref`/`environment` constraints, the provider condition is the union of both. A
-  token that satisfies either constraint can impersonate both deploy SAs. Give each
-  constraint its own repository, or use the same constraint for both.
+- **Shared repos.** Two services may share one GitHub repository with *different*
+  `ref`/`environment` constraints. The provider condition only pins the owner
+  (`assertion.repository_owner_id == "<id>"`); each deploy SA is bound to the
+  principalSet of its own `(repository_id, ref, environment)` tuple
+  (`attribute.repo_ref_env`, `repo_ref`, `repo_env` or `repository_id`), so a
+  token reaches only the deploy SA whose constraint it satisfies. A service that
+  declares neither `ref` nor `environment` accepts any ref of the repository.
 - **Pool IDs.** A WIF pool ID stays reserved for 30 days after deletion. Set
   `app_deploy_wif_pool_id` if you need to re-create a pool sooner.
 

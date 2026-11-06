@@ -496,7 +496,7 @@ variable "app_deploy_wif_pool_id" {
 }
 
 variable "github_repository_owner_id" {
-  description = "Optional numeric GitHub owner (org) ID; when set the app-deploy WIF provider also requires repository_owner_id to match."
+  description = "Numeric GitHub owner (org) ID (gh api orgs/<org> --jq .id). Required once an app_services entry sets `github`: the app-deploy WIF provider condition is exactly assertion.repository_owner_id == \"<id>\"."
   type        = string
   default     = null
 }

@@ -323,6 +323,14 @@ run "github_wif_disabled_by_default" {
 run "github_wif_pins_immutable_ids_and_readonly_sa" {
   command = plan
 
+  override_resource {
+    target          = module.gh_oidc[0].google_iam_workload_identity_pool.pool
+    override_during = plan
+    values = {
+      name = "projects/1/locations/global/workloadIdentityPools/github-pool"
+    }
+  }
+
   variables {
     enable_github_wif          = true
     github_org                 = "my-org"
@@ -332,8 +340,13 @@ run "github_wif_pins_immutable_ids_and_readonly_sa" {
   }
 
   assert {
-    condition     = strcontains(module.gh_oidc[0].github_attribute_condition, "assertion.repository_id == '424242'") && strcontains(module.gh_oidc[0].github_attribute_condition, "assertion.repository_owner_id == '777'") && strcontains(module.gh_oidc[0].github_attribute_condition, "refs/heads/main")
-    error_message = "GitHub trust must be pinned to the immutable repository_id + repository_owner_id on main."
+    condition     = module.gh_oidc[0].github_attribute_condition == "assertion.repository_owner_id == \"777\""
+    error_message = "the GitHub provider condition must be exactly the canonical owner pin (what custom.wifProviderTenantPinned accepts)."
+  }
+
+  assert {
+    condition     = keys(module.gh_oidc[0].github_binding_members) == ["organization-plan"] && endswith(module.gh_oidc[0].github_binding_members["organization-plan"], "/attribute.repo_ref/424242/refs/heads/main")
+    error_message = "the plan SA must be bound to the immutable repository_id on refs/heads/main only (attribute.repo_ref)."
   }
 
   assert {

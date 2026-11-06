@@ -73,6 +73,24 @@ for pf in envs/gcp/*/providers.tf; do
   fi
 done
 
+echo "==> GitHub WIF tenant condition is the one canonical string wherever it is rendered or checked"
+# Canonical: assertion.repository_owner_id == "<id>" (double quotes, nothing
+# appended). custom.wifProviderTenantPinned (stages/organization) compares a
+# provider's stored condition to this exact string, so app-services and the
+# workload-identity primitive (which gcp-bootstrap calls) must render the same.
+wif_canon='"assertion.repository_owner_id == \"<id>\""'
+for f in modules/gcp/stages/app-services/main.tf modules/gcp/iam/workload-identity/main.tf modules/gcp/stages/organization/main.tf; do
+  forms=$(grep -oE '"assertion\.repository_owner_id == [^$]*\$\{[^}]*\}[^ ,)]*' "$f" 2>/dev/null | sed -E 's/\$\{[^}]*\}/<id>/' | sort -u)
+  [ -n "$forms" ] || { note "$f: renders no GitHub owner-pin condition"; continue; }
+  echo "$forms" | while read -r form; do
+    [ "$form" = "$wif_canon" ] || note "$f: GitHub owner-pin condition $form is not $wif_canon"
+  done
+  [ "$(echo "$forms" | grep -vcxF "$wif_canon")" -eq 0 ] || fail=1
+done
+sq=$(git grep -nE "repository_owner_id == '" -- 'modules/*.tf' 'envs/*.tf' 2>/dev/null || true)
+[ -z "$sq" ] || { echo "$sq" | while read -r l; do note "single-quoted GitHub owner pin (use the canonical double-quoted form): $l"; done; fail=1; }
+git grep -q 'repository_owner_id ==' -- modules/gcp/stages/bootstrap/main.tf && note "modules/gcp/stages/bootstrap/main.tf renders its own GitHub condition (it must come from modules/gcp/iam/workload-identity)"
+
 echo "==> No audit provenance codes in Terraform code (CLAUDE.md: they belong in docs/known-gaps.md)"
 # Comments and descriptions read as a remediation log when they carry finding
 # IDs ("audit C2", "(audit H9, option C)"). Point at docs instead.

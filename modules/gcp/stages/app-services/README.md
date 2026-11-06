@@ -103,29 +103,29 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_artifact_registry_repository_iam_member.deploy (modules/gcp/stages/app-services/main.tf#L404)
-- resource.google_cloud_run_v2_service_iam_member.deploy (modules/gcp/stages/app-services/main.tf#L392)
-- resource.google_cloud_run_v2_service_iam_member.invoker (modules/gcp/stages/app-services/main.tf#L255)
-- resource.google_iam_workload_identity_pool.apps (modules/gcp/stages/app-services/main.tf#L331)
-- resource.google_iam_workload_identity_pool_provider.github (modules/gcp/stages/app-services/main.tf#L342)
-- resource.google_monitoring_alert_policy.error_ratio (modules/gcp/stages/app-services/main.tf#L436)
-- resource.google_monitoring_alert_policy.latency_p99 (modules/gcp/stages/app-services/main.tf#L488)
-- resource.google_project_iam_member.runtime_extra (modules/gcp/stages/app-services/main.tf#L185)
-- resource.google_project_iam_member.runtime_sql (modules/gcp/stages/app-services/main.tf#L306)
-- resource.google_project_service.this (modules/gcp/stages/app-services/main.tf#L100)
-- resource.google_pubsub_subscription.dead_letter (modules/gcp/stages/app-services/main.tf#L587)
-- resource.google_pubsub_subscription.service (modules/gcp/stages/app-services/main.tf#L559)
-- resource.google_pubsub_subscription_iam_member.agent_source_subscriber (modules/gcp/stages/app-services/main.tf#L637)
-- resource.google_pubsub_subscription_iam_member.runtime_subscriber (modules/gcp/stages/app-services/main.tf#L615)
-- resource.google_pubsub_topic.dead_letter (modules/gcp/stages/app-services/main.tf#L548)
-- resource.google_pubsub_topic.service (modules/gcp/stages/app-services/main.tf#L537)
-- resource.google_pubsub_topic_iam_member.agent_dead_letter_publisher (modules/gcp/stages/app-services/main.tf#L628)
-- resource.google_pubsub_topic_iam_member.runtime_publisher (modules/gcp/stages/app-services/main.tf#L604)
-- resource.google_secret_manager_secret_iam_member.runtime (modules/gcp/stages/app-services/main.tf#L174)
-- resource.google_service_account.deploy (modules/gcp/stages/app-services/main.tf#L370)
-- resource.google_service_account.runtime (modules/gcp/stages/app-services/main.tf#L163)
-- resource.google_service_account_iam_member.deploy_act_as_runtime (modules/gcp/stages/app-services/main.tf#L417)
-- resource.google_service_account_iam_member.deploy_wif (modules/gcp/stages/app-services/main.tf#L382)
+- resource.google_artifact_registry_repository_iam_member.deploy (modules/gcp/stages/app-services/main.tf#L414)
+- resource.google_cloud_run_v2_service_iam_member.deploy (modules/gcp/stages/app-services/main.tf#L402)
+- resource.google_cloud_run_v2_service_iam_member.invoker (modules/gcp/stages/app-services/main.tf#L257)
+- resource.google_iam_workload_identity_pool.apps (modules/gcp/stages/app-services/main.tf#L333)
+- resource.google_iam_workload_identity_pool_provider.github (modules/gcp/stages/app-services/main.tf#L344)
+- resource.google_monitoring_alert_policy.error_ratio (modules/gcp/stages/app-services/main.tf#L446)
+- resource.google_monitoring_alert_policy.latency_p99 (modules/gcp/stages/app-services/main.tf#L498)
+- resource.google_project_iam_member.runtime_extra (modules/gcp/stages/app-services/main.tf#L187)
+- resource.google_project_iam_member.runtime_sql (modules/gcp/stages/app-services/main.tf#L308)
+- resource.google_project_service.this (modules/gcp/stages/app-services/main.tf#L102)
+- resource.google_pubsub_subscription.dead_letter (modules/gcp/stages/app-services/main.tf#L597)
+- resource.google_pubsub_subscription.service (modules/gcp/stages/app-services/main.tf#L569)
+- resource.google_pubsub_subscription_iam_member.agent_source_subscriber (modules/gcp/stages/app-services/main.tf#L647)
+- resource.google_pubsub_subscription_iam_member.runtime_subscriber (modules/gcp/stages/app-services/main.tf#L625)
+- resource.google_pubsub_topic.dead_letter (modules/gcp/stages/app-services/main.tf#L558)
+- resource.google_pubsub_topic.service (modules/gcp/stages/app-services/main.tf#L547)
+- resource.google_pubsub_topic_iam_member.agent_dead_letter_publisher (modules/gcp/stages/app-services/main.tf#L638)
+- resource.google_pubsub_topic_iam_member.runtime_publisher (modules/gcp/stages/app-services/main.tf#L614)
+- resource.google_secret_manager_secret_iam_member.runtime (modules/gcp/stages/app-services/main.tf#L176)
+- resource.google_service_account.deploy (modules/gcp/stages/app-services/main.tf#L379)
+- resource.google_service_account.runtime (modules/gcp/stages/app-services/main.tf#L165)
+- resource.google_service_account_iam_member.deploy_act_as_runtime (modules/gcp/stages/app-services/main.tf#L427)
+- resource.google_service_account_iam_member.deploy_wif (modules/gcp/stages/app-services/main.tf#L392)
 
 
 ## Inputs
@@ -146,7 +146,7 @@ The following resources are created:
 | <a name="input_enable_on_demand_scanning"></a> [enable\_on\_demand\_scanning](#input\_enable\_on\_demand\_scanning) | Also enable ondemandscanning.googleapis.com so CI can scan images before pushing (`gcloud artifacts docker images scan`). Default false. | `bool` | `false` | no |
 | <a name="input_enable_project_services"></a> [enable\_project\_services](#input\_enable\_project\_services) | Enable the Google APIs the declared resources need (run, artifactregistry, sqladmin, secretmanager, iamcredentials, sts, container) on the host project. Only APIs for features actually in use are enabled; disable\_on\_destroy is false. | `bool` | `true` | no |
 | <a name="input_enable_vulnerability_scanning"></a> [enable\_vulnerability\_scanning](#input\_enable\_vulnerability\_scanning) | Scan every service's container images automatically on push (Artifact Analysis): enables containerscanning.googleapis.com (with enable\_project\_services) and sets each repository's vulnerability scanning to INHERITED. Billed per scanned image. Default true. | `bool` | `true` | no |
-| <a name="input_github_repository_owner_id"></a> [github\_repository\_owner\_id](#input\_github\_repository\_owner\_id) | Optional IMMUTABLE numeric GitHub organization/user ID. When set, the provider additionally rejects any token whose repository\_owner\_id differs (defence in depth on top of the per-repository\_id condition). | `string` | `null` | no |
+| <a name="input_github_repository_owner_id"></a> [github\_repository\_owner\_id](#input\_github\_repository\_owner\_id) | IMMUTABLE numeric GitHub organization/user ID (gh api orgs/<org> --jq .id). Required once a service declares `github`: the provider attribute\_condition is exactly assertion.repository\_owner\_id == "<id>", the form the org-policy constraint custom.wifProviderTenantPinned accepts. | `string` | `null` | no |
 | <a name="input_gke_cluster_name"></a> [gke\_cluster\_name](#input\_gke\_cluster\_name) | Name of the GKE Autopilot cluster. Null defaults to "<environment>-apps". | `string` | `null` | no |
 | <a name="input_gke_cluster_secondary_range_name"></a> [gke\_cluster\_secondary\_range\_name](#input\_gke\_cluster\_secondary\_range\_name) | Subnet secondary range name for pod IPs. Null lets GKE allocate one. | `string` | `null` | no |
 | <a name="input_gke_master_authorized_networks"></a> [gke\_master\_authorized\_networks](#input\_gke\_master\_authorized\_networks) | CIDR blocks allowed to reach the GKE control plane. | <pre>list(object({<br/>    cidr_block   = string<br/>    display_name = optional(string)<br/>  }))</pre> | `[]` | no |

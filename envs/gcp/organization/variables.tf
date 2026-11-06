@@ -519,7 +519,7 @@ variable "pin_wif_to_tfc_organization" {
 }
 
 variable "wif_github_owner_ids" {
-  description = "Numeric GitHub owner IDs a GitHub Actions workload identity provider must condition on (repository_owner_id). Empty (default) leaves GitHub providers tenant-unpinned (the issuer is still allow-listed)."
+  description = "Numeric GitHub owner IDs a GitHub Actions workload identity provider may pin: its attribute_condition must be exactly assertion.repository_owner_id == \"<id>\" for one of them. Empty (default) leaves GitHub providers tenant-unpinned (the issuer is still allow-listed)."
   type        = list(string)
   default     = []
   nullable    = false

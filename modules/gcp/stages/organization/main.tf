@@ -396,47 +396,38 @@ module "org_policies" {
 # Workload identity federation, tenant level. iam.workloadIdentityPoolProviders
 # limits WHICH issuers a provider may trust; this custom constraint also pins
 # WHO on a shared issuer. A provider for HCP Terraform must condition on this
-# estate's TFC organization, and a GitHub provider must condition on
-# repository_owner_id. Otherwise a pipeline with workloadIdentityPoolAdmin could
+# estate's TFC organization, and a GitHub provider's condition must be exactly
+# assertion.repository_owner_id == "<allowed id>". Otherwise a pipeline with workloadIdentityPoolAdmin could
 # trust another TFC org or GitHub owner and bind it to a service account: a
 # durable external door that domain-restricted sharing does not see.
 locals {
-  # Anchored structural checks (RE2 via CEL matches), never a substring test:
-  # the tenant clause must be the FIRST conjunct, and everything after it must
-  # be AND-only or ONE balanced parenthesised group, so no top-level `||` can
-  # sit beside it. ("acme" in a condition proves nothing: `org != 'acme'`
-  # contains it too.) [.] / [(] / [)] avoid backslash escaping through HCL+CEL;
-  # `.` matches either quote style around the GitHub owner ID.
-  # CEL operators that bind more loosely than && are `||` and the ternary
-  # `? :`, so neither may appear after the tenant clause at top level: the
-  # AND-only tail excludes `|` and `?`, and a parenthesised tail must end the
-  # string (whatever is INSIDE the group is ANDed with the tenant clause).
-  # tests/plan_assertions.tftest.hcl runs a bypass corpus through RE2.
-  # One balanced group, nested up to 4 deep (has(...) inside a clause list).
-  wif_paren_group = "[(]([^()]|[(]([^()]|[(]([^()]|[(][^()]*[)])*[)])*[)])*[)]"
+  # TFC: an anchored structural check (RE2 via CEL matches), never a substring
+  # test. ("acme" in a condition proves nothing: `org != 'acme'` contains it
+  # too.) The tenant clause must be the FIRST conjunct and everything after it
+  # AND-only: CEL operators that bind more loosely than && are `||` and the
+  # ternary `? :`, so the tail excludes `|` and `?`. [.] avoids backslash
+  # escaping through HCL+CEL. tests/plan_assertions.tftest.hcl runs a bypass
+  # corpus through RE2.
   wif_tfc_pattern = var.wif_tenant_pins.tfc_organization == null ? null : (
     "^assertion[.]terraform_organization_name == '${var.wif_tenant_pins.tfc_organization}'( && [^|?]*)?$"
   )
-  # The owner ID must sit in MATCHING quotes ('123' or "123"; \x22 is the
-  # double quote, which also reads correctly after CEL unescapes the string).
-  # A wildcard quote would let `== "123' && x" == false` through: a mismatched
-  # quote swallows the conjunction into the string literal, and the trailing
-  # relation makes the whole condition true for every owner.
-  wif_github_patterns = flatten([
-    for id in var.wif_tenant_pins.github_owner_ids : [
-      for q in ["'", "\\x22"] :
-      "^assertion[.]repository_owner_id == ${q}${id}${q}( && [^()|?]*| && ${local.wif_paren_group})?$"
-    ]
-  ])
+  # GitHub: an EXACT match on the canonical condition, no structural regex.
+  # app-services, gcp-bootstrap and the workload-identity primitive render
+  # exactly this string and pin repository / ref / environment in their
+  # principalSet bindings, so nothing may follow the owner clause: a regex
+  # that admits a tail can be fooled by a parenthesis inside a string literal.
+  wif_github_conditions = [
+    for id in var.wif_tenant_pins.github_owner_ids : "assertion.repository_owner_id == \"${id}\""
+  ]
 
   wif_tenant_constraints = var.wif_tenant_pins.tfc_organization == null && length(var.wif_tenant_pins.github_owner_ids) == 0 ? [] : [{
     name         = "custom.wifProviderTenantPinned"
     display_name = "Workload identity providers pin the tenant"
-    description  = "HCP Terraform providers must start their attribute condition with this estate's TFC organization clause; GitHub Actions providers with an allowed repository_owner_id clause; with nothing OR-ed beside it."
+    description  = "HCP Terraform providers must start their attribute condition with this estate's TFC organization clause, with nothing OR-ed beside it; a GitHub Actions provider's condition must be exactly an allowed repository_owner_id clause."
     action_type  = "DENY"
     condition = join(" || ", compact([
       local.wif_tfc_pattern == null ? "" : "(resource.oidc.issuerUri.startsWith('https://${var.wif_tenant_pins.tfc_hostname}') && !resource.attributeCondition.matches(\"${local.wif_tfc_pattern}\"))",
-      length(local.wif_github_patterns) == 0 ? "" : "(resource.oidc.issuerUri.startsWith('https://token.actions.githubusercontent.com') && !(${join(" || ", [for pat in local.wif_github_patterns : "resource.attributeCondition.matches(\"${pat}\")"])}))",
+      length(local.wif_github_conditions) == 0 ? "" : "(resource.oidc.issuerUri.startsWith('https://token.actions.githubusercontent.com') && !(${join(" || ", [for c in local.wif_github_conditions : "resource.attributeCondition == \"${replace(c, "\"", "\\\"")}\""])}))",
     ]))
     method_types   = ["CREATE", "UPDATE"]
     resource_types = ["iam.googleapis.com/WorkloadIdentityPoolProvider"]

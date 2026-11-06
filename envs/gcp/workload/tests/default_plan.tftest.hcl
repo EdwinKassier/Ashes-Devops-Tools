@@ -160,7 +160,8 @@ run "app_service_on_real_host_stage" {
   command = plan
 
   variables {
-    enable_app_deploy_wif = true
+    enable_app_deploy_wif      = true
+    github_repository_owner_id = "42"
     app_services = {
       api = {
         database = {}

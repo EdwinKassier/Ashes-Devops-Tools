@@ -15,20 +15,24 @@ module "github_wif" {
   description  = "Allows GitHub Actions to authenticate to GCP via OIDC"
 
   enable_github_provider = true
-  github_organization    = "my-github-org"
+  # Immutable numeric owner ID (gh api orgs/my-github-org --jq .id). The provider
+  # condition is exactly assertion.repository_owner_id == "<id>".
+  github_repository_owner_id = "12345678"
 
-  # Bind the 'my-github-org/infra' repo to the deploy service account.
-  # Only workflows in this repo can impersonate the SA.
+  # Bind the 'my-github-org/infra' repo (by its immutable numeric ID) to the
+  # deploy service account. Only workflows in this repo can impersonate the SA.
   github_sa_bindings = [
     {
       repository            = "my-github-org/infra"
+      repository_id         = "987654321" # gh api repos/my-github-org/infra --jq .id
       service_account_email = local.sa_email
     }
   ]
 
-  # Restrict to main branch and release branches.
+  # Only these exact refs may impersonate the SA (one attribute.repo_ref
+  # binding per ref; wildcards are not supported).
   github_allowed_refs = [
     "refs/heads/main",
-    "refs/heads/release/*",
+    "refs/heads/release",
   ]
 }

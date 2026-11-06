@@ -18,6 +18,20 @@ release metadata for a Terraform Cloud run.
 
 ## [Unreleased]
 
+### Score-8 remediation ([2026-11-06 five-dimension audit](docs/audit/2026-11-06-five-dimension-audit.md))
+
+#### Security
+
+- **GitHub WIF tenant pin is an exact match (S-H2).** `custom.wifProviderTenantPinned` no longer
+  runs a structural regex over a GitHub provider's condition (a `)` inside a string literal could
+  close the "one parenthesised group" early and OR a `true` beside the owner pin). The condition
+  must now equal `assertion.repository_owner_id == "<id>"` for an allowed owner ID. app-services,
+  gcp-bootstrap and `modules/gcp/iam/workload-identity` render exactly that string
+  (`make consistency` asserts it), and pin repository, ref and environment in the principalSet
+  bindings through the new mapped attributes `repo_ref`, `repo_env` and `repo_ref_env`. This also
+  fixes app-services services that share a repository with different ref/environment pins: each
+  deploy SA is now reachable only by its own tuple. **Breaking:** see [UPGRADING.md](UPGRADING.md).
+
 ### Wave A of the [2026-11-06 enterprise boilerplate audit](docs/audit/2026-11-06-enterprise-boilerplate-audit.md)
 
 #### Fixed

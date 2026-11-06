@@ -65,21 +65,23 @@ locals {
   create_wif_provider    = var.enable_app_deploy_wif && length(local.services_with_github) > 0
   wif_provider_name      = local.create_wif_provider ? "${local.wif_pool_name}/providers/github" : null
   github_oidc_issuer_uri = "https://token.actions.githubusercontent.com"
-  wif_provider_cel_owner = var.github_repository_owner_id == null ? "" : "assertion.repository_owner_id == \"${var.github_repository_owner_id}\" && "
-  wif_provider_cel_clause = distinct([
-    for k, s in local.services_with_github : join(" && ", compact([
-      "assertion.repository_id == \"${s.github.repository_id}\"",
-      s.github.ref == null ? "" : "assertion.ref == \"${s.github.ref}\"",
-      s.github.environment == null ? "" : "(has(assertion.environment) && assertion.environment == \"${s.github.environment}\")",
-    ]))
-  ])
-  # Fail closed: a token is accepted only if it matches a declared service's
-  # (repository_id [, ref] [, environment]) tuple — never on mutable names.
-  wif_provider_cel_any = join(" || ", [for c in local.wif_provider_cel_clause : "(${c})"])
-  # Always one parenthesised group after the owner pin, so the org policy's
-  # structural tenant check (custom.wifProviderTenantPinned) can prove nothing
-  # is OR-ed beside the owner clause.
-  wif_attribute_condition = "${local.wif_provider_cel_owner}(${local.wif_provider_cel_any})"
+  # The provider condition is ONLY the canonical tenant pin, the exact string
+  # the org-policy constraint custom.wifProviderTenantPinned accepts. Each
+  # service's (repository_id [, ref] [, environment]) pin is the principalSet
+  # its deploy SA is bound to (local.deploy_wif_member), so a token from
+  # another repo, branch or environment of the same owner reaches no SA.
+  wif_attribute_condition = "assertion.repository_owner_id == \"${coalesce(var.github_repository_owner_id, "unset")}\""
+  deploy_wif_member = {
+    for k, s in local.services_with_github : k => (
+      s.github.ref != null && s.github.environment != null
+      ? "principalSet://iam.googleapis.com/${local.wif_pool_name}/attribute.repo_ref_env/${s.github.repository_id}/${s.github.ref}/${s.github.environment}"
+      : s.github.ref != null
+      ? "principalSet://iam.googleapis.com/${local.wif_pool_name}/attribute.repo_ref/${s.github.repository_id}/${s.github.ref}"
+      : s.github.environment != null
+      ? "principalSet://iam.googleapis.com/${local.wif_pool_name}/attribute.repo_env/${s.github.repository_id}/${s.github.environment}"
+      : "principalSet://iam.googleapis.com/${local.wif_pool_name}/attribute.repository_id/${s.github.repository_id}"
+    )
+  }
 
   # ---------------------------------------------------------------------------
   # APIs
@@ -341,10 +343,11 @@ resource "google_iam_workload_identity_pool" "apps" {
 
 resource "google_iam_workload_identity_pool_provider" "github" {
   # CKV_GCP_125 only accepts an `assertion.sub == "repo:owner/name:..."` condition,
-  # i.e. a MUTABLE repo name. This provider deliberately keys on the immutable
-  # numeric repository_id (plus optional ref/environment/owner_id), fail-closed to
-  # the declared services, and bindings are per-repository_id principalSets.
-  # checkov:skip=CKV_GCP_125:Condition pins immutable assertion.repository_id per declared service (stronger than a name-based sub match).
+  # i.e. a MUTABLE repo name. This provider deliberately pins the immutable
+  # numeric repository_owner_id in the condition, and each deploy SA is bound to
+  # a principalSet on the immutable repository_id (joined with the declared
+  # ref and/or environment), so only the declared tuple reaches a deploy SA.
+  # checkov:skip=CKV_GCP_125:Condition pins immutable assertion.repository_owner_id; per-service repository_id/ref/environment pins are the principalSet bindings (stronger than a name-based sub match).
   count = local.create_wif_provider ? 1 : 0
 
   project                            = var.project_id
@@ -358,6 +361,12 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "attribute.repository_owner_id" = "assertion.repository_owner_id"
     "attribute.repository"          = "assertion.repository"
     "attribute.ref"                 = "assertion.ref"
+    # Composite attributes: a principalSet can test only ONE attribute, so the
+    # repository is joined with the ref and/or environment. A token without
+    # an environment claim maps to "-".
+    "attribute.repo_ref"     = "assertion.repository_id + '/' + assertion.ref"
+    "attribute.repo_env"     = "assertion.repository_id + '/' + (has(assertion.environment) ? assertion.environment : '-')"
+    "attribute.repo_ref_env" = "assertion.repository_id + '/' + assertion.ref + '/' + (has(assertion.environment) ? assertion.environment : '-')"
   }
 
   attribute_condition = local.wif_attribute_condition
@@ -378,13 +387,14 @@ resource "google_service_account" "deploy" {
   depends_on = [google_project_service.this]
 }
 
-# Only tokens from this repository (by immutable numeric ID) may impersonate.
+# Only tokens from the declared repository (by immutable numeric ID), and from
+# the declared ref and/or environment when set, may impersonate.
 resource "google_service_account_iam_member" "deploy_wif" {
   for_each = local.services_with_github
 
   service_account_id = google_service_account.deploy[each.key].name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${local.wif_pool_name}/attribute.repository_id/${each.value.github.repository_id}"
+  member             = local.deploy_wif_member[each.key]
 
   depends_on = [google_iam_workload_identity_pool_provider.github]
 }

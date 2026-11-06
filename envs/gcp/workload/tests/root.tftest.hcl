@@ -187,7 +187,8 @@ run "app_service_golden_path" {
   command = plan
 
   variables {
-    enable_app_deploy_wif = true
+    enable_app_deploy_wif      = true
+    github_repository_owner_id = "42"
     app_services = {
       api = {
         github = { repository_id = "123456789", ref = "refs/heads/main" }

@@ -168,3 +168,13 @@ run "rejects_malformed_guardrail_owner_member" {
 
   expect_failures = [var.guardrail_owner_members]
 }
+
+run "rejects_non_numeric_github_repository_owner_id" {
+  command = plan
+
+  expect_failures = [var.github_repository_owner_id]
+
+  variables {
+    github_repository_owner_id = "my-org"
+  }
+}

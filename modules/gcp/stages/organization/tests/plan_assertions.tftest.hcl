@@ -725,8 +725,8 @@ run "wif_tenant_pin_custom_constraint" {
     condition = (
       one([for c in local.wif_tenant_constraints : c if c.name == "custom.wifProviderTenantPinned"]).resource_types == ["iam.googleapis.com/WorkloadIdentityPoolProvider"] &&
       strcontains(one(local.wif_tenant_constraints).condition, "matches(\"^assertion[.]terraform_organization_name == 'acme-tfc'( && [^|?]*)?$\")") &&
-      strcontains(one(local.wif_tenant_constraints).condition, "matches(\"^assertion[.]repository_owner_id == '123456'") &&
-      strcontains(one(local.wif_tenant_constraints).condition, "matches(\"^assertion[.]repository_owner_id == \\x22123456\\x22") &&
+      strcontains(one(local.wif_tenant_constraints).condition, "(resource.oidc.issuerUri.startsWith('https://token.actions.githubusercontent.com') && !(resource.attributeCondition == \"assertion.repository_owner_id == \\\"123456\\\"\"))") &&
+      !strcontains(one(local.wif_tenant_constraints).condition, "repository_owner_id == '") &&
       !strcontains(one(local.wif_tenant_constraints).condition, ".contains(")
     )
     error_message = "tenant pins must render a DENY custom constraint referencing the TFC org and GitHub owner IDs."
@@ -781,34 +781,70 @@ run "wif_tenant_pin_bypass_corpus" {
     error_message = "no OR / ternary / reorder / prefix trick may satisfy the TFC tenant pin."
   }
 
+  # GitHub: an exact match on the canonical condition. Only the string the
+  # modules render is accepted; every tail, quote style or operator is not.
   assert {
-    condition = alltrue([
-      for c in [
-        "assertion.repository_owner_id == \"123\" && ((assertion.repository_id == \"9\"))",
-        "assertion.repository_owner_id == \"123\" && ((assertion.repository_id == \"9\" && assertion.ref == \"refs/heads/main\" && (has(assertion.environment) && assertion.environment == \"prod\")) || (assertion.repository_id == \"8\"))",
-        "assertion.repository_owner_id == '123' && assertion.repository_id == '9' && assertion.ref == 'refs/heads/main'",
-      ] : anytrue([for p in local.wif_github_patterns : can(regex(p, c))])
-    ])
-    error_message = "the conditions app-services and the bootstrap GitHub pool render must satisfy the pin."
+    condition     = local.wif_github_conditions == ["assertion.repository_owner_id == \"123\""]
+    error_message = "the GitHub tenant pin must be the single canonical condition per owner ID."
+  }
+
+  assert {
+    condition     = contains(local.wif_github_conditions, "assertion.repository_owner_id == \"123\"")
+    error_message = "the canonical condition app-services, bootstrap and the workload-identity primitive render must satisfy the pin."
   }
 
   assert {
     condition = !anytrue([
       for c in [
+        # The paren-in-literal bypass the old structural regex admitted.
+        "assertion.repository_owner_id == \"123\" && (assertion.ref == \"x)\" || true || (\"\" == \"\")",
+        "assertion.repository_owner_id == \"123\" && true",
+        "assertion.repository_owner_id == \"123\" && ((assertion.repository_id == \"9\"))",
+        "assertion.repository_owner_id == '123'",
+        "assertion.repository_owner_id == '123' && assertion.repository_id == '9' && assertion.ref == 'refs/heads/main'",
         "assertion.repository_owner_id == \"123\" || true",
         "assertion.repository_owner_id == \"123\" && (true) || (true)",
         "assertion.repository_owner_id == \"123\" && (true) ? true : true",
         "assertion.repository_owner_id == \"123\" && true ? true : true",
         "assertion.repository_owner_id == \"1234\"",
+        "assertion.repository_owner_id == \"12\"",
         "assertion.repository_owner_id != \"123\"",
         "assertion.repository_owner_id == \"123' && x\" == false",
         "assertion.repository_owner_id == '123\" && x' == false",
         "assertion.repository_owner_id == \"123' && x\" != true",
         "assertion.repository_owner_id == \"123' && x\" in [false]",
         "assertion.repository_owner_id == '123' == false",
-      ] : anytrue([for p in local.wif_github_patterns : can(regex(p, c))])
+        " assertion.repository_owner_id == \"123\"",
+        "assertion.repository_owner_id == \"123\" ",
+        "assertion.repository_owner_id==\"123\"",
+        "\"123\" == assertion.repository_owner_id",
+      ] : contains(local.wif_github_conditions, c)
     ])
-    error_message = "no OR / ternary / prefix trick may satisfy the GitHub owner pin."
+    error_message = "no tail, OR, ternary, quote or reorder trick may satisfy the GitHub owner pin."
+  }
+}
+
+# The constraint condition must fit GCP's 1000-character custom-constraint
+# limit with three GitHub owner IDs plus the TFC clause.
+run "wif_tenant_constraint_fits_condition_limit" {
+  command = plan
+
+  variables {
+    wif_tenant_pins = {
+      tfc_hostname     = "app.eu.terraform.io"
+      tfc_organization = "acme-platform-engineering-production-org"
+      github_owner_ids = ["12345678901", "23456789012", "34567890123"]
+    }
+  }
+
+  assert {
+    condition     = alltrue([for c in local.wif_tenant_constraints : length(c.condition) <= 1000]) && length(local.wif_tenant_constraints) >= 1
+    error_message = "every custom.wifProviderTenantPinned condition must be at most 1000 characters."
+  }
+
+  assert {
+    condition     = alltrue([for id in ["12345678901", "23456789012", "34567890123"] : strcontains(join(" ", [for c in local.wif_tenant_constraints : c.condition]), "assertion.repository_owner_id == \\\"${id}\\\"")])
+    error_message = "every GitHub owner ID must appear in the tenant constraint."
   }
 }
 

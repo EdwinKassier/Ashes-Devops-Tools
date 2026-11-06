@@ -715,7 +715,7 @@ variable "production_containment_waived" {
 }
 
 variable "wif_tenant_pins" {
-  description = "Tenant pins for workload identity pool providers (custom org-policy constraint custom.wifProviderTenantPinned). With tfc_organization set, a provider for https://<tfc_hostname> must reference that organization in its attribute_condition. With github_owner_ids set, a GitHub Actions provider must condition on one of those repository_owner_id values. Both empty (default) creates no constraint. The gcp-organization root fills tfc_organization from config."
+  description = "Tenant pins for workload identity pool providers (custom org-policy constraint custom.wifProviderTenantPinned). With tfc_organization set, a provider for https://<tfc_hostname> must reference that organization in its attribute_condition. With github_owner_ids set, a GitHub Actions provider's attribute_condition must be exactly assertion.repository_owner_id == \"<id>\" for one of those IDs (repository, ref and environment pins belong in the principalSet bindings). Both empty (default) creates no constraint. The gcp-organization root fills tfc_organization from config."
   type = object({
     tfc_hostname     = optional(string, "app.terraform.io")
     tfc_organization = optional(string)

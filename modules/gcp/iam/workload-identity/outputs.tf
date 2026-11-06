@@ -52,7 +52,12 @@ output "tfc_binding_members" {
 
 output "github_attribute_condition" {
   description = "The CEL attribute_condition applied to the GitHub provider (null when the GitHub provider is disabled)."
-  value       = var.enable_github_provider ? (var.github_attribute_condition_override != null ? var.github_attribute_condition_override : local.github_computed_condition) : null
+  value       = var.enable_github_provider ? local.github_attribute_condition : null
+}
+
+output "github_binding_members" {
+  description = "Map of GitHub binding key (\"<key>:<ref>\" when more than one github_allowed_refs entry is set) to the principalSet member bound to roles/iam.workloadIdentityUser."
+  value       = { for k, b in google_service_account_iam_member.github_workload_identity : k => b.member }
 }
 
 output "github_binding_service_accounts" {

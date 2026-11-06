@@ -21,7 +21,8 @@
 # the infrastructure pool in gcp-bootstrap.
 enable_app_deploy_wif = true
 
-# Optional defence in depth: the numeric GitHub org ID (gh api orgs/<org> --jq .id).
+# Required with a deploy identity: the numeric GitHub org ID (gh api orgs/<org> --jq .id).
+# The WIF provider condition is exactly assertion.repository_owner_id == "<id>".
 github_repository_owner_id = "12345678"
 
 app_services = {
