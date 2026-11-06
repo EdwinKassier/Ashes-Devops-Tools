@@ -466,3 +466,9 @@ variable "cloudtrail_cloudwatch_role_arn" {
   type        = string
   default     = null
 }
+
+variable "partition" {
+  description = "AWS partition (aws, aws-us-gov, aws-cn) for the ARNs this stage builds when the security-tooling partition is not read."
+  type        = string
+  default     = "aws"
+}

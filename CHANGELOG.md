@@ -104,6 +104,36 @@ release metadata for a Terraform Cloud run.
 - **The RCP data perimeter now covers ECR and CloudWatch Logs** (`ecr:*`, `logs:*`).
 - **`organization-policy` gains a `policy_contents` output**, for evidence and tests.
 
+#### Post-re-score fixes (independent re-score at a6e4edb)
+
+- **The GCP WIF tenant pin rejects the CEL ternary.** `... == 'acme' && true ? true : true` matched
+  the previous pattern. The AND-only tail now excludes `?` as well as `|`, and a bypass corpus runs
+  through Terraform's RE2 in the stage tests. The earlier "tested against bypass strings" claim
+  covered only `||` strings.
+- **aws-security management role, third pass:**
+  - `logs:*`, `sns:*` and `kms:*` are scoped to the org trail's log group, its `<trail>-*`
+    topics, and keys tagged `Workspace = aws-security`. CreateKey requires the tag, so it cannot be
+    planted on another key.
+  - Delegated-admin registration is pinned to the security-tooling account's ARN.
+  - `account.amazonaws.com` is dropped from the service-principal list.
+  - The plan-role data-read deny is extended.
+- **Partition support is real for the AWS control plane.**
+  - Every `^arn:aws:` validation now accepts `aws-us-gov` / `aws-cn`.
+  - ARNs built in log-archive-bucket, kms-key, account, iam-role, incident-response,
+    route53-resolver, securityhub-org, the security and organization stages and the
+    security/network/shared-services/workload roots use the provider's partition.
+  - Still to override by hand on GovCloud or China: the AWS-managed policy ARN **defaults**
+    (`arn:aws:iam::aws:policy/...` in identity permission sets, tfc-oidc-baseline and the
+    organization stage). Variables cannot compute defaults.
+- **Break-glass.**
+  - The phase-0 stack's `OrganizationBreakGlass` role is now inert by default
+    (`BreakGlassActive=false` adds a deny-all inline policy) and is activated with a stack update.
+  - The runbook is rewritten for that path, because the dedicated aws-security role can no longer
+    manage the role.
+  - A check warns on `create_break_glass = true`.
+- **The deny-tamper SCP also blocks `s3:PutBucketPolicy` / `DeleteBucketPolicy`** on the log
+  archive for non-privileged principals.
+
 #### Final re-score fixes
 
 - **Critical: `aws-security` management role escalation, second pass.** Limiting role writes to

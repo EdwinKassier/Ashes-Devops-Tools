@@ -61,7 +61,7 @@ variable "org_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:organizations::", var.org_arn))
+    condition     = can(regex("^arn:aws(-us-gov|-cn)?:organizations::", var.org_arn))
     error_message = "org_arn must be an AWS Organizations ARN beginning with arn:aws:organizations::."
   }
 }

@@ -84,7 +84,7 @@ resource "aws_route53profiles_profile" "this" {
 resource "aws_route53profiles_resource_association" "vpc" {
   name         = "${var.name_prefix}-profile-vpc"
   profile_id   = aws_route53profiles_profile.this.id
-  resource_arn = "arn:aws:ec2:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:vpc/${var.vpc_id}"
+  resource_arn = "arn:${local.partition}:ec2:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:vpc/${var.vpc_id}"
 }
 
 data "aws_region" "current" {}

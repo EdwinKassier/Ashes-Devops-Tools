@@ -117,7 +117,9 @@
       "Effect": "Deny",
       "Action": [
         "s3:BypassGovernanceRetention",
-        "s3:PutBucketObjectLockConfiguration"
+        "s3:PutBucketObjectLockConfiguration",
+        "s3:PutBucketPolicy",
+        "s3:DeleteBucketPolicy"
       ],
       "Resource": [
         "arn:${partition}:s3:::${log_archive_bucket_name}",

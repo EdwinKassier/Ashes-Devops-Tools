@@ -111,7 +111,7 @@ module "aws_workload" {
 
   # Flow logs + Config snapshots + Session Manager logs all land in the central
   # log-archive bucket (cross-root naming contract).
-  flow_log_destination_arn          = "arn:aws:s3:::${local.log_archive_bucket_name}"
+  flow_log_destination_arn          = "arn:${local.partition}:s3:::${local.log_archive_bucket_name}"
   log_archive_bucket_name           = local.log_archive_bucket_name
   config_role_arn                   = var.config_role_arn
   create_config_service_linked_role = var.create_config_service_linked_role

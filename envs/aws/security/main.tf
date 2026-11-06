@@ -83,10 +83,11 @@ module "aws_security" {
   enabled_security_services = local.enabled_security_services
   enable_security_lake      = local.enable_security_lake
   create_organization_trail = var.create_organization_trail
+  partition                 = local.partition
   # aws-organization creates the trail's CloudWatch delivery role
   # (create_org_trail_delivery_role), so this root needs no IAM writes in the
   # management account.
-  cloudtrail_cloudwatch_role_arn = coalesce(var.cloudtrail_cloudwatch_role_arn, "arn:aws:iam::${local.management_account_id}:role/org-trail-cloudwatch-delivery")
+  cloudtrail_cloudwatch_role_arn = coalesce(var.cloudtrail_cloudwatch_role_arn, "arn:${local.partition}:iam::${local.management_account_id}:role/org-trail-cloudwatch-delivery")
 
   # FinOps F5: cost toggles for the two most expensive always-on security
   # services. Default true (full coverage); set false for non-prod.
@@ -106,4 +107,14 @@ module "aws_security" {
   cloudtrail_s3_data_events                      = var.cloudtrail_s3_data_events
   cloudtrail_s3_data_events_excluded_bucket_arns = var.cloudtrail_s3_data_events_excluded_bucket_arns
   cloudtrail_lambda_data_events                  = var.cloudtrail_lambda_data_events
+}
+
+# The dedicated least-privilege aws-security management role (tfc-management-
+# roles) has no IAM write and is denied the break-glass role: creating it here
+# only works when this workspace applies as the phase-0 management role.
+check "break_glass_created_by_phase0_stack" {
+  assert {
+    condition     = !var.create_break_glass
+    error_message = "create_break_glass = true: the dedicated tfc-mgmt-aws-security role cannot create or edit the management break-glass role (AccessDenied). Use the OrganizationBreakGlass role from templates/aws/bootstrap/phase0-management.yaml and keep create_break_glass = false, or apply this workspace as the phase-0 role."
+  }
 }

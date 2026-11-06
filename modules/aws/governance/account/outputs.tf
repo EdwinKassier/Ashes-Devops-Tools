@@ -10,5 +10,5 @@ output "account_arn" {
 
 output "cross_account_role_arn" {
   description = "ARN of the cross-account access role created in the member account."
-  value       = "arn:aws:iam::${aws_organizations_account.this.id}:role/${var.cross_account_role_name}"
+  value       = "arn:${local.partition}:iam::${aws_organizations_account.this.id}:role/${var.cross_account_role_name}"
 }

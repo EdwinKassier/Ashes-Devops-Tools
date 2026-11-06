@@ -69,6 +69,7 @@ The following resources are created:
 - resource.aws_s3_bucket_public_access_block.this (modules/aws/data/log-archive-bucket/main.tf#L120)
 - resource.aws_s3_bucket_server_side_encryption_configuration.this (modules/aws/data/log-archive-bucket/main.tf#L146)
 - resource.aws_s3_bucket_versioning.this (modules/aws/data/log-archive-bucket/main.tf#L129)
+- data source.aws_partition.current (modules/aws/data/log-archive-bucket/partition.tf#L4)
 
 
 ## Inputs

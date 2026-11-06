@@ -31,7 +31,7 @@ resource "aws_iam_role_policy" "org_trail_cloudwatch" {
     Statement = [{
       Effect   = "Allow"
       Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
-      Resource = "arn:aws:logs:*:${module.organization.management_account_id}:log-group:/aws/cloudtrail/${var.org_trail_name}:*"
+      Resource = "arn:${var.partition}:logs:*:${module.organization.management_account_id}:log-group:/aws/cloudtrail/${var.org_trail_name}:*"
     }]
   })
 }

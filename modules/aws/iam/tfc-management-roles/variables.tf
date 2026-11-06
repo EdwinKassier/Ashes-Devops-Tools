@@ -113,7 +113,7 @@ variable "security_service_principals" {
     "guardduty.amazonaws.com", "malware-protection.guardduty.amazonaws.com", "securityhub.amazonaws.com",
     "macie.amazonaws.com", "inspector2.amazonaws.com", "detective.amazonaws.com", "fms.amazonaws.com",
     "access-analyzer.amazonaws.com", "config.amazonaws.com", "config-multiaccountsetup.amazonaws.com",
-    "securitylake.amazonaws.com", "cloudtrail.amazonaws.com", "account.amazonaws.com",
+    "securitylake.amazonaws.com", "cloudtrail.amazonaws.com",
     "backup.amazonaws.com", "ssm.amazonaws.com", "resource-explorer-2.amazonaws.com",
   ]
   nullable = false
@@ -123,4 +123,28 @@ variable "security_trail_name" {
   description = "Name of the organization CloudTrail trail the aws-security role manages (cloudtrail-org trail_name). Its cloudtrail:* permissions are scoped to this trail ARN."
   type        = string
   default     = "org-trail"
+}
+
+variable "delegated_admin_account_ids" {
+  description = "Accounts the aws-security role may register as delegated administrators (organizations account-ARN resources): the security-tooling account in the SRA layout. Empty = any account (service principal still restricted); set it."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for a in var.delegated_admin_account_ids : can(regex("^[0-9]{12}$", a))])
+    error_message = "delegated_admin_account_ids entries must be 12-digit account IDs."
+  }
+}
+
+variable "security_owner_tag" {
+  description = "Tag that marks the management-account KMS keys the aws-security role owns. Its provider default_tags set Workspace = aws-security on everything it creates."
+  type = object({
+    key   = string
+    value = string
+  })
+  default = {
+    key   = "Workspace"
+    value = "aws-security"
+  }
 }

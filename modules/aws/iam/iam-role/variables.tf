@@ -49,7 +49,7 @@ variable "break_glass_trusted_principals" {
 
   validation {
     # Only enforce ARN shape on entries that are present; an empty list is valid.
-    condition     = alltrue([for p in var.break_glass_trusted_principals : can(regex("^arn:aws:iam::[0-9]{12}:", p))])
+    condition     = alltrue([for p in var.break_glass_trusted_principals : can(regex("^arn:aws(-us-gov|-cn)?:iam::[0-9]{12}:", p))])
     error_message = "Each break_glass_trusted_principals entry must be an account-qualified IAM ARN (arn:aws:iam::<12-digit-account>:...)."
   }
 }

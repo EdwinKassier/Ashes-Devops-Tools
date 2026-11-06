@@ -125,6 +125,7 @@ The following resources are created:
 - resource.aws_lambda_permission.eventbridge (modules/aws/security/incident-response/main.tf#L102)
 - resource.aws_security_group.quarantine (modules/aws/security/incident-response/main.tf#L115)
 - data source.archive_file.isolate (modules/aws/security/incident-response/main.tf#L14)
+- data source.aws_partition.current (modules/aws/security/incident-response/partition.tf#L4)
 
 
 ## Inputs

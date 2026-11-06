@@ -68,6 +68,7 @@ The following resources are created:
 - resource.aws_kms_alias.this (modules/aws/data/kms-key/main.tf#L221)
 - resource.aws_kms_key.this (modules/aws/data/kms-key/main.tf#L201)
 - data source.aws_caller_identity.current (modules/aws/data/kms-key/main.tf#L44)
+- data source.aws_partition.current (modules/aws/data/kms-key/partition.tf#L4)
 
 
 ## Inputs

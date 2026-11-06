@@ -99,5 +99,5 @@ resource "aws_iam_role_policy_attachment" "break_glass_active" {
   # incident. The standing state is deny-all (see break_glass_standing).
   count      = var.enable_break_glass && var.break_glass_active ? 1 : 0
   role       = aws_iam_role.break_glass[0].name
-  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
+  policy_arn = "arn:${local.partition}:iam::aws:policy/AdministratorAccess"
 }

@@ -41,7 +41,10 @@ locals {
   # validator rejects, so a malformed identity yields no boundary rather than
   # failing every mocked plan downstream (tests override the data sources).
   boundary_partition = try(data.aws_partition.security_tooling[0].partition, null)
-  boundary_account   = try(data.aws_caller_identity.security_tooling[0].account_id, null)
+  # ARN partition for the key-admin principals: the security-tooling
+  # provider's partition when it is read, else var.partition.
+  partition        = can(regex("^aws(-[a-z]+)*$", local.boundary_partition)) ? local.boundary_partition : var.partition
+  boundary_account = try(data.aws_caller_identity.security_tooling[0].account_id, null)
   security_tooling_boundary_arn = (
     var.tfc_apply_boundary_policy_name != null && can(regex("^aws(-[a-z]+)*$", local.boundary_partition)) && can(regex("^[0-9]{12}$", local.boundary_account))
     ? "arn:${local.boundary_partition}:iam::${local.boundary_account}:policy/${var.tfc_apply_boundary_policy_name}"
@@ -57,9 +60,9 @@ locals {
   # account role key_admin_role_name (tfc-apply by default — the principal that
   # applies the key, so the key can never be created un-administrable).
   key_admin_arns = {
-    log_archive      = coalesce(var.key_admin_arn, "arn:aws:iam::${var.log_archive_account_id}:role/${var.key_admin_role_name}")
-    forensics        = coalesce(var.key_admin_arn, "arn:aws:iam::${var.forensics_account_id}:role/${var.key_admin_role_name}")
-    security_tooling = coalesce(var.key_admin_arn, "arn:aws:iam::${var.security_tooling_account_id}:role/${var.key_admin_role_name}")
+    log_archive      = coalesce(var.key_admin_arn, "arn:${local.partition}:iam::${var.log_archive_account_id}:role/${var.key_admin_role_name}")
+    forensics        = coalesce(var.key_admin_arn, "arn:${local.partition}:iam::${var.forensics_account_id}:role/${var.key_admin_role_name}")
+    security_tooling = coalesce(var.key_admin_arn, "arn:${local.partition}:iam::${var.security_tooling_account_id}:role/${var.key_admin_role_name}")
   }
 
   # kms:PutKeyPolicy holder per CMK: the member-account break-glass role in the
@@ -76,7 +79,7 @@ locals {
   }
   key_policy_admin_arns = {
     for k, acct in local.key_account_ids : k => (
-      var.key_policy_admin_role_name == null ? [] : ["arn:aws:iam::${acct}:role/${var.key_policy_admin_role_name}"]
+      var.key_policy_admin_role_name == null ? [] : ["arn:${local.partition}:iam::${acct}:role/${var.key_policy_admin_role_name}"]
     )
   }
 }

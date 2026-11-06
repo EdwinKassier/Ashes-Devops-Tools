@@ -407,14 +407,19 @@ locals {
   # sit beside it. ("acme" in a condition proves nothing: `org != 'acme'`
   # contains it too.) [.] / [(] / [)] avoid backslash escaping through HCL+CEL;
   # `.` matches either quote style around the GitHub owner ID.
+  # CEL operators that bind more loosely than && are `||` and the ternary
+  # `? :`, so neither may appear after the tenant clause at top level: the
+  # AND-only tail excludes `|` and `?`, and a parenthesised tail must end the
+  # string (whatever is INSIDE the group is ANDed with the tenant clause).
+  # tests/plan_assertions.tftest.hcl runs a bypass corpus through RE2.
   # One balanced group, nested up to 4 deep (has(...) inside a clause list).
   wif_paren_group = "[(]([^()]|[(]([^()]|[(]([^()]|[(][^()]*[)])*[)])*[)])*[)]"
   wif_tfc_pattern = var.wif_tenant_pins.tfc_organization == null ? null : (
-    "^assertion[.]terraform_organization_name == '${var.wif_tenant_pins.tfc_organization}'( && [^|]*)?$"
+    "^assertion[.]terraform_organization_name == '${var.wif_tenant_pins.tfc_organization}'( && [^|?]*)?$"
   )
   wif_github_patterns = [
     for id in var.wif_tenant_pins.github_owner_ids :
-    "^assertion[.]repository_owner_id == .${id}.( && [^()|]*| && ${local.wif_paren_group})?$"
+    "^assertion[.]repository_owner_id == .${id}.( && [^()|?]*| && ${local.wif_paren_group})?$"
   ]
 
   wif_tenant_constraints = var.wif_tenant_pins.tfc_organization == null && length(var.wif_tenant_pins.github_owner_ids) == 0 ? [] : [{

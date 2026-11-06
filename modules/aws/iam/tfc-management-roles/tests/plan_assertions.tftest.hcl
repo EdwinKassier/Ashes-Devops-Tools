@@ -152,3 +152,23 @@ run "security_trail_permissions_scoped_to_org_trail" {
     error_message = "cloudtrail:* must be scoped to the organization trail ARN."
   }
 }
+
+# The aws-security role reaches only the org trail's own log group, topics and
+# owner-tagged keys, and delegates only to the listed security accounts.
+run "security_wiring_scoped_to_trail_resources" {
+  command = plan
+
+  variables {
+    delegated_admin_account_ids = ["222222222222"]
+  }
+
+  assert {
+    condition = (
+      !anytrue([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s.Effect == "Allow" && contains(flatten([s.Resource]), "*") && anytrue([for a in flatten([s.Action]) : contains(["kms:*", "logs:*", "sns:*", "cloudtrail:*"], a)]) && !can(s.Condition)]) &&
+      one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "OwnedKeysOnly"]).Condition.StringEquals["aws:ResourceTag/Workspace"] == "aws-security" &&
+      one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "DelegateOnlyToSecurityAccounts"]).Resource == ["arn:aws:organizations::111111111111:account/o-*/222222222222"] &&
+      !contains(one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "SecurityServicesDelegationOnly"]).Condition.StringEquals["organizations:ServicePrincipal"], "account.amazonaws.com")
+    )
+    error_message = "kms/logs/sns/cloudtrail wildcards must be scoped (resource or tag condition), and delegation pinned to the security accounts."
+  }
+}

@@ -45,6 +45,7 @@ The following resources are created:
 
 - resource.aws_account_alternate_contact.this (modules/aws/governance/account/main.tf#L22)
 - resource.aws_organizations_account.this (modules/aws/governance/account/main.tf#L9)
+- data source.aws_partition.current (modules/aws/governance/account/partition.tf#L4)
 
 
 ## Inputs

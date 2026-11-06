@@ -15,7 +15,7 @@
 # mock_provider and its content is assertable in tests.
 
 locals {
-  bucket_arn = "arn:aws:s3:::${var.log_archive_bucket_name}"
+  bucket_arn = "arn:${local.partition}:s3:::${var.log_archive_bucket_name}"
 
   # Transition to GLACIER at 90 days, but never after objects expire (guards the
   # case where retention_days < 90, which S3 would otherwise reject).

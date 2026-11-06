@@ -70,6 +70,7 @@ The following resources are created:
 - resource.aws_route53profiles_profile.this (modules/aws/network/route53-resolver/main.tf#L79)
 - resource.aws_route53profiles_resource_association.vpc (modules/aws/network/route53-resolver/main.tf#L84)
 - data source.aws_caller_identity.current (modules/aws/network/route53-resolver/main.tf#L92)
+- data source.aws_partition.current (modules/aws/network/route53-resolver/partition.tf#L4)
 - data source.aws_region.current (modules/aws/network/route53-resolver/main.tf#L90)
 
 

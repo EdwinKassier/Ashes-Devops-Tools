@@ -16,7 +16,8 @@
 
 Understand the design before you rely on it:
 
-- **Managed in-repo (opt-in).** Set `create_break_glass = true` on the `aws-security` stage (or the `envs/aws/security` root) to have Terraform create the role in the **management account** with the design below, via `modules/aws/iam/iam-role`. The stage then feeds the created role's ARN into the assumption alarm automatically and exports it as `break_glass_role_arn`. Set the org SCP exemption to that ARN: `arn:aws:iam::<management-account>:role/OrganizationBreakGlass` (or your `break_glass_role_name`). When `create_break_glass = false` (default), you manage the role elsewhere and pass its ARN in.
+- **Created by the phase-0 stack (default).** [`templates/aws/bootstrap/phase0-management.yaml`](../../templates/aws/bootstrap/phase0-management.yaml) creates `OrganizationBreakGlass` in the **management account**. Pass its ARN in as `aws.break_glass_role_arn` / `break_glass_role_arn`, and keep `create_break_glass = false` on `aws-security`. The least-privilege `aws-security` management role is deliberately **denied** any access to the break-glass role, which every member break-glass role trusts. A pipeline that could edit it could promote itself to break-glass.
+- **In-repo alternative (`create_break_glass = true`).** This works only when `aws-security` applies as the phase-0 management role. The dedicated `tfc-mgmt-aws-security-*` role has no IAM write permissions, so the apply fails with AccessDenied.
 - **Disabled by default.** The break-glass role carries a **deny-all standing policy**. In normal operation it can do nothing — it is inert until activated (Step 2).
 - **MFA-required.** Its trust policy requires MFA and bounds the MFA session age, so a leaked credential alone cannot use it. Trust is scoped to `break_glass_trusted_principals` (a small set of senior responders).
 - **Monitored.** Every assumption of the role is alarmed by `modules/aws/security/security-notifications`: an always-on EventBridge rule, plus a CloudWatch metric alarm when the org CloudTrail log group is set. The alarm watches the **effective** ARN (the stage-created role when `create_break_glass` is true), so management and monitoring never drift apart.
@@ -42,8 +43,19 @@ Log the incident, the approver, and a time box before proceeding.
 
 Break-glass is off until you deliberately turn it on. Activation means **replacing the deny-all standing policy with AdministratorAccess** (and confirming MFA is enforced). There are two paths:
 
-- **Terraform-managed (preferred when CI still works):** set `break_glass_active = true` on the `aws-security` stage and apply. The `iam-role` module swaps the deny-all standing policy for `AdministratorAccess`. Flip it back to `false` and apply in Step 4. This change is itself logged and alarmed.
-- **Manual (when Terraform/CI is the thing that is broken):** in the management account, attach `AdministratorAccess` to the role directly (overriding the deny-all standing policy). Record it; you will reconcile state in Step 4.
+- **Phase-0 stack role (default):** as a management-account administrator, or root in a true emergency, update the stack with `BreakGlassActive=true`. That removes the `standby-deny-all` inline policy and leaves `AdministratorAccess` effective. This works even when Terraform, TFC and CI are all down:
+
+  ```bash
+  aws cloudformation update-stack --stack-name ashes-phase0 --use-previous-template \
+    --capabilities CAPABILITY_NAMED_IAM \
+    --parameters ParameterKey=BreakGlassActive,ParameterValue=true \
+      ParameterKey=TfcOrganization,UsePreviousValue=true ParameterKey=TfcProject,UsePreviousValue=true \
+      ParameterKey=TfcHostname,UsePreviousValue=true ParameterKey=TrustSecurityAndBackup,UsePreviousValue=true \
+      ParameterKey=BreakGlassTrustedPrincipalArn,UsePreviousValue=true ParameterKey=BreakGlassMfaMaxAgeSeconds,UsePreviousValue=true
+  ```
+
+  If CloudFormation itself is unavailable, delete the `standby-deny-all` inline policy by hand and record it. Step 4 restores it.
+- **In-repo role (`create_break_glass = true`, applied as the phase-0 role):** set `break_glass_active = true` on the `aws-security` stage and apply as the phase-0 role. Flip it back in Step 4. The dedicated aws-security pipeline role cannot do this.
 
 Then:
 
@@ -89,7 +101,9 @@ If an SCP change has locked out **all** member-account principals (including the
 
 **Before closing the incident:**
 
-1. **Re-disable the break-glass role** — restore the deny-all standing policy so the role is inert again. For the stage-managed role, set `break_glass_active = false` and apply. If you activated it manually, detach `AdministratorAccess`, then re-apply the `aws-security` stage to reconcile state back to the deny-all standing policy.
+1. **Re-disable the break-glass role**, so the role is inert again:
+   - **Phase-0 stack role:** update the stack with `BreakGlassActive=false`. If you deleted the inline policy by hand, the same update restores it.
+   - **In-repo role:** set `break_glass_active = false` and apply as the phase-0 role.
 2. **Re-attach any detached SCP** (Step 3) and confirm the guardrail is back via a fresh `aws-organization` apply.
 3. **Pull the audit trail** from the org CloudTrail in the Log Archive account for the break-glass session window; verify only authorized actions were taken.
 4. File the post-incident review within 24 hours. If unauthorized actions are found, escalate as a security incident (see [`aws-incident-response.md`](aws-incident-response.md)).

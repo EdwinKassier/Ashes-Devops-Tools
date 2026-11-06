@@ -724,7 +724,7 @@ run "wif_tenant_pin_custom_constraint" {
   assert {
     condition = (
       one([for c in local.wif_tenant_constraints : c if c.name == "custom.wifProviderTenantPinned"]).resource_types == ["iam.googleapis.com/WorkloadIdentityPoolProvider"] &&
-      strcontains(one(local.wif_tenant_constraints).condition, "matches(\"^assertion[.]terraform_organization_name == 'acme-tfc'( && [^|]*)?$\")") &&
+      strcontains(one(local.wif_tenant_constraints).condition, "matches(\"^assertion[.]terraform_organization_name == 'acme-tfc'( && [^|?]*)?$\")") &&
       strcontains(one(local.wif_tenant_constraints).condition, "matches(\"^assertion[.]repository_owner_id == .123456.") &&
       !strcontains(one(local.wif_tenant_constraints).condition, ".contains(")
     )
@@ -738,5 +738,70 @@ run "no_wif_tenant_constraint_without_pins" {
   assert {
     condition     = length(local.wif_tenant_constraints) == 0
     error_message = "without pins no tenant constraint is created."
+  }
+}
+
+# The tenant pin is checked against a bypass corpus with Terraform's own RE2
+# (the engine CEL matches() uses): real conditions this repo renders must
+# pass, and every OR / ternary / negation / reorder trick must fail.
+run "wif_tenant_pin_bypass_corpus" {
+  command = plan
+
+  variables {
+    wif_tenant_pins = {
+      tfc_organization = "acme"
+      github_owner_ids = ["123"]
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      for c in [
+        "assertion.terraform_organization_name == 'acme' && assertion.terraform_organization_id == 'org-x' && assertion.terraform_run_phase in ['plan', 'apply']",
+        "assertion.terraform_organization_name == 'acme' && assertion.terraform_run_phase in ['plan', 'apply']",
+      ] : can(regex(local.wif_tfc_pattern, c))
+    ])
+    error_message = "the conditions the bootstrap TFC pool renders must satisfy the pin."
+  }
+
+  assert {
+    condition = !anytrue([
+      for c in [
+        "assertion.terraform_organization_name != 'acme'",
+        "assertion.terraform_organization_name == 'acme' || true",
+        "assertion.terraform_organization_name == 'acme' && true || true",
+        "assertion.terraform_organization_name == 'acme' && true ? true : true",
+        "assertion.terraform_organization_name == 'acme' && (true) ? true : true",
+        "true && assertion.terraform_organization_name == 'acme'",
+        "assertion.terraform_organization_name == 'acmeevil'",
+        "assertion.terraform_organization_name == 'acme'\n|| true",
+      ] : can(regex(local.wif_tfc_pattern, c))
+    ])
+    error_message = "no OR / ternary / reorder / prefix trick may satisfy the TFC tenant pin."
+  }
+
+  assert {
+    condition = alltrue([
+      for c in [
+        "assertion.repository_owner_id == \"123\" && ((assertion.repository_id == \"9\"))",
+        "assertion.repository_owner_id == \"123\" && ((assertion.repository_id == \"9\" && assertion.ref == \"refs/heads/main\" && (has(assertion.environment) && assertion.environment == \"prod\")) || (assertion.repository_id == \"8\"))",
+        "assertion.repository_owner_id == '123' && assertion.repository_id == '9' && assertion.ref == 'refs/heads/main'",
+      ] : can(regex(local.wif_github_patterns[0], c))
+    ])
+    error_message = "the conditions app-services and the bootstrap GitHub pool render must satisfy the pin."
+  }
+
+  assert {
+    condition = !anytrue([
+      for c in [
+        "assertion.repository_owner_id == \"123\" || true",
+        "assertion.repository_owner_id == \"123\" && (true) || (true)",
+        "assertion.repository_owner_id == \"123\" && (true) ? true : true",
+        "assertion.repository_owner_id == \"123\" && true ? true : true",
+        "assertion.repository_owner_id == \"1234\"",
+        "assertion.repository_owner_id != \"123\"",
+      ] : can(regex(local.wif_github_patterns[0], c))
+    ])
+    error_message = "no OR / ternary / prefix trick may satisfy the GitHub owner pin."
   }
 }

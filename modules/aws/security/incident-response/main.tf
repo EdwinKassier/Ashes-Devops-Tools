@@ -146,7 +146,7 @@ resource "aws_iam_role" "forensics_snapshot" {
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
-      Principal = { AWS = "arn:aws:iam::${var.forensics_account_id}:root" }
+      Principal = { AWS = "arn:${local.partition}:iam::${var.forensics_account_id}:root" }
       Action    = "sts:AssumeRole"
       Condition = {
         StringEquals = {

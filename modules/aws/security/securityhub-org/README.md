@@ -63,6 +63,7 @@ The following resources are created:
 - resource.aws_securityhub_finding_aggregator.this (modules/aws/security/securityhub-org/main.tf#L54)
 - resource.aws_securityhub_organization_admin_account.this (modules/aws/security/securityhub-org/main.tf#L45)
 - resource.aws_securityhub_organization_configuration.this (modules/aws/security/securityhub-org/main.tf#L63)
+- data source.aws_partition.current (modules/aws/security/securityhub-org/partition.tf#L4)
 
 
 ## Inputs

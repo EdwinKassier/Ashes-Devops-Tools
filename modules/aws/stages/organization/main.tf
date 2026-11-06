@@ -198,6 +198,9 @@ module "tfc_management_roles" {
   tfc_hostname     = var.tfc_hostname
   tfc_project      = var.tfc_project
   workspaces       = var.tfc_management_workspaces
+
+  # aws-security may delegate the security services only to security tooling.
+  delegated_admin_account_ids = [for k in ["security_tooling"] : module.account[k].account_id if contains(keys(local.all_accounts), k)]
 }
 
 # GitHub deploy roles need a pinned owner: without github_federation_owners the

@@ -410,7 +410,7 @@ variable "cmek_required_services" {
 }
 
 variable "enable_admin_containment" {
-  description = "IAM deny policy at the org node that blocks, for all principals except containment_exempt_principals (break-glass): org-wide update/delete of logging sinks, exclusion changes, log-bucket delete, VPC-SC perimeter update/delete/replaceAll/commit and access-policy delete; and, scoped by the containment/protected tag to the audit buckets + audit CMEK keyring, bucket delete/setIamPolicy/deleteTagBinding, object delete, key-version destroy/update (disable) and key setIamPolicy. Once on, Terraform changes to ANY sink, exclusion or perimeter must run as break-glass. Default false (a check warns when a production environment exists without it); the prod preset turns it on."
+  description = "IAM deny policy at the org node that blocks, for all principals except containment_exempt_principals (break-glass): org-wide update/delete of logging sinks, exclusion changes, log-bucket delete, VPC-SC perimeter update/delete/replaceAll/commit and access-policy delete; and, scoped by the containment/protected tag to the audit buckets + audit CMEK keyring, bucket delete/setIamPolicy/deleteTagBinding, object delete, key-version destroy/update (disable) and key setIamPolicy. Once on, Terraform changes to ANY sink, exclusion or perimeter must run as break-glass. Default false at this stage; the gcp-organization root derives it ON whenever an environment is_production (and fails the plan without a break-glass principal)."
   type        = bool
   default     = false
 }

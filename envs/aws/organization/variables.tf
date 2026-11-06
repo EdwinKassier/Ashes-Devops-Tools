@@ -130,7 +130,7 @@ variable "terraform_run_role_arn" {
   default     = null
 
   validation {
-    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/.+$", coalesce(var.terraform_run_role_arn, local.cfg.terraform_run_role_arn, "!unset")))
+    condition     = can(regex("^arn:aws(-us-gov|-cn)?:iam::[0-9]{12}:role/.+$", coalesce(var.terraform_run_role_arn, local.cfg.terraform_run_role_arn, "!unset")))
     error_message = "terraform_run_role_arn is unset or invalid: set var.terraform_run_role_arn or aws.terraform_run_role_arn in config/landing-zone.yaml to an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/...)."
   }
 }
@@ -141,7 +141,7 @@ variable "break_glass_role_arn" {
   default     = null
 
   validation {
-    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/.+$", coalesce(var.break_glass_role_arn, local.cfg.break_glass_role_arn, "!unset")))
+    condition     = can(regex("^arn:aws(-us-gov|-cn)?:iam::[0-9]{12}:role/.+$", coalesce(var.break_glass_role_arn, local.cfg.break_glass_role_arn, "!unset")))
     error_message = "break_glass_role_arn is unset or invalid: set var.break_glass_role_arn or aws.break_glass_role_arn in config/landing-zone.yaml to an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/...)."
   }
 }

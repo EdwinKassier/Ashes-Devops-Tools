@@ -48,7 +48,7 @@ variable "kms_key_id" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:kms:", var.kms_key_id))
+    condition     = can(regex("^arn:aws(-us-gov|-cn)?:kms:", var.kms_key_id))
     error_message = "kms_key_id must be a customer-managed KMS key ARN beginning with arn:aws:kms:."
   }
 }
@@ -59,7 +59,7 @@ variable "performance_insights_kms_key_arn" {
   default     = ""
 
   validation {
-    condition     = var.performance_insights_kms_key_arn == "" || can(regex("^arn:aws:kms:", var.performance_insights_kms_key_arn))
+    condition     = var.performance_insights_kms_key_arn == "" || can(regex("^arn:aws(-us-gov|-cn)?:kms:", var.performance_insights_kms_key_arn))
     error_message = "performance_insights_kms_key_arn must be empty or a KMS key ARN beginning with arn:aws:kms:."
   }
 }
@@ -148,7 +148,7 @@ variable "master_user_secret_kms_key_id" {
   default     = ""
 
   validation {
-    condition     = var.master_user_secret_kms_key_id == "" || can(regex("^arn:aws:kms:", var.master_user_secret_kms_key_id))
+    condition     = var.master_user_secret_kms_key_id == "" || can(regex("^arn:aws(-us-gov|-cn)?:kms:", var.master_user_secret_kms_key_id))
     error_message = "master_user_secret_kms_key_id must be empty or a KMS key ARN beginning with arn:aws:kms:."
   }
 }

@@ -144,8 +144,6 @@ locals {
         Sid    = "SecurityServicesDelegationOnly"
         Effect = "Allow"
         Action = [
-          "organizations:RegisterDelegatedAdministrator",
-          "organizations:DeregisterDelegatedAdministrator",
           "organizations:EnableAWSServiceAccess",
           "organizations:DisableAWSServiceAccess",
         ]
@@ -153,14 +151,76 @@ locals {
         Condition = { StringEquals = { "organizations:ServicePrincipal" = var.security_service_principals } }
       },
       {
-        # The organization trail and its CloudWatch Logs / SNS / KMS wiring.
-        # Destructive trail and key actions are denied below (break-glass only).
-        # No IAM writes at all: the trail delivery role is created by
-        # aws-organization and only PASSED to CloudTrail here.
-        Sid      = "OrganizationTrail"
-        Effect   = "Allow"
-        Action   = ["logs:*", "sns:*", "cloudwatch:*Alarm*", "cloudwatch:Describe*", "cloudwatch:TagResource", "cloudwatch:UntagResource", "cloudwatch:ListTagsForResource", "kms:*"]
+        # Registration is pinned to the TARGET account too (the account ARN is
+        # the resource): the pipeline can make only the security-tooling
+        # account a delegated admin, never an arbitrary member.
+        Sid    = "DelegateOnlyToSecurityAccounts"
+        Effect = "Allow"
+        Action = [
+          "organizations:RegisterDelegatedAdministrator",
+          "organizations:DeregisterDelegatedAdministrator",
+        ]
+        Resource = length(var.delegated_admin_account_ids) == 0 ? ["*"] : [
+          for id in var.delegated_admin_account_ids : "arn:${local.partition}:organizations::${local.account_id}:account/o-*/${id}"
+        ]
+        Condition = { StringEquals = { "organizations:ServicePrincipal" = var.security_service_principals } }
+      },
+      {
+        # The organization trail's own wiring only. No IAM writes at all (the
+        # trail delivery role is created by aws-organization and only PASSED
+        # to CloudTrail here); destructive trail and key actions are denied
+        # below (break-glass only). Everything else in the management account
+        # (other log groups, topics, keys) is out of reach.
+        Sid    = "TrailWiringCreate"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup", "logs:Describe*", "logs:List*",
+          "sns:CreateTopic", "sns:List*",
+          "cloudwatch:PutMetricAlarm", "cloudwatch:DeleteAlarms", "cloudwatch:Describe*",
+          "cloudwatch:TagResource", "cloudwatch:UntagResource", "cloudwatch:ListTagsForResource",
+          "kms:List*", "kms:Describe*",
+        ]
         Resource = "*"
+      },
+      {
+        Sid    = "TrailLogGroupOnly"
+        Effect = "Allow"
+        Action = ["logs:*"]
+        Resource = [
+          "arn:${local.partition}:logs:*:${local.account_id}:log-group:/aws/cloudtrail/${var.security_trail_name}",
+          "arn:${local.partition}:logs:*:${local.account_id}:log-group:/aws/cloudtrail/${var.security_trail_name}:*",
+        ]
+      },
+      {
+        Sid      = "TrailTopicsOnly"
+        Effect   = "Allow"
+        Action   = ["sns:*"]
+        Resource = ["arn:${local.partition}:sns:*:${local.account_id}:${var.security_trail_name}-*"]
+      },
+      {
+        # New keys only with the owner tag; every other key operation only on
+        # keys carrying it. TagResource on someone else's key is itself a key
+        # operation on an untagged key, so the tag cannot be planted.
+        Sid       = "CreateOwnedKeysOnly"
+        Effect    = "Allow"
+        Action    = ["kms:CreateKey"]
+        Resource  = "*"
+        Condition = { StringEquals = { "aws:RequestTag/${var.security_owner_tag.key}" = var.security_owner_tag.value } }
+      },
+      {
+        Sid       = "OwnedKeysOnly"
+        Effect    = "Allow"
+        Action    = ["kms:*"]
+        Resource  = "*"
+        Condition = { StringEquals = { "aws:ResourceTag/${var.security_owner_tag.key}" = var.security_owner_tag.value } }
+      },
+      {
+        Sid    = "TrailKeyAliasesOnly"
+        Effect = "Allow"
+        Action = ["kms:CreateAlias", "kms:DeleteAlias", "kms:UpdateAlias"]
+        Resource = [
+          "arn:${local.partition}:kms:*:${local.account_id}:alias/${var.security_trail_name}-*",
+        ]
       },
       {
         # Trail writes only on THE organization trail: no second trail, no
@@ -247,7 +307,8 @@ locals {
       "s3:GetObject", "s3:GetObjectVersion", "secretsmanager:GetSecretValue", "ssm:GetParameter",
       "ssm:GetParameters", "ssm:GetParametersByPath", "kms:Decrypt", "logs:GetLogEvents",
       "logs:FilterLogEvents", "logs:StartQuery", "cloudtrail:LookupEvents", "dynamodb:GetItem",
-      "dynamodb:Query", "dynamodb:Scan", "sqs:ReceiveMessage",
+      "dynamodb:Query", "dynamodb:Scan", "dynamodb:BatchGetItem", "dynamodb:PartiQLSelect",
+      "ssm:GetParameterHistory", "sqs:ReceiveMessage",
     ]
     Resource = "*"
   }

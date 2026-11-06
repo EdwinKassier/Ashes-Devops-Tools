@@ -13,7 +13,7 @@ variable "org_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:organizations::", var.org_arn))
+    condition     = can(regex("^arn:aws(-us-gov|-cn)?:organizations::", var.org_arn))
     error_message = "org_arn must be an AWS Organizations ARN beginning with arn:aws:organizations::."
   }
 }
@@ -116,7 +116,7 @@ variable "flow_log_destination_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:s3:::", var.flow_log_destination_arn))
+    condition     = can(regex("^arn:aws(-us-gov|-cn)?:s3:::", var.flow_log_destination_arn))
     error_message = "flow_log_destination_arn must be an S3 bucket ARN beginning with arn:aws:s3:::."
   }
 }

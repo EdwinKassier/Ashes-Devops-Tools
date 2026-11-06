@@ -67,6 +67,7 @@ The following resources are created:
 - resource.aws_iam_role_policy.inline (modules/aws/iam/iam-role/main.tf#L48)
 - resource.aws_iam_role_policy_attachment.break_glass_active (modules/aws/iam/iam-role/main.tf#L96)
 - resource.aws_iam_role_policy_attachment.this (modules/aws/iam/iam-role/main.tf#L42)
+- data source.aws_partition.current (modules/aws/iam/iam-role/partition.tf#L4)
 
 
 ## Inputs
