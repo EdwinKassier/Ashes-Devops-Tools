@@ -396,6 +396,13 @@ locals {
     "athena:GetQueryResults",
     "ecr:GetDownloadUrlForLayer",
     "ecr:BatchGetImage",
+    "ssm:GetCommandInvocation",
+    "logs:GetLogRecord",
+    "rds:DownloadDBLogFilePortion",
+    "es:ESHttpGet",
+    "cassandra:Select",
+    "codecommit:GitPull",
+    "codecommit:GetFile",
   ]
 
   # The plan role's Policies property ({} = omitted).

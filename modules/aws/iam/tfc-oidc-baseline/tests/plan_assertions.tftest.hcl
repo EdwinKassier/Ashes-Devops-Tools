@@ -416,6 +416,24 @@ run "plan_role_data_read_exemptions_render_as_not_resource" {
   }
 }
 
+run "plan_role_data_plane_deny_covers_log_and_secret_read_paths" {
+  command = plan
+
+  assert {
+    condition = (
+      alltrue([for a in [
+        "ssm:GetCommandInvocation", "logs:GetLogRecord", "logs:GetLogEvents", "logs:FilterLogEvents", "logs:StartQuery",
+        "rds:DownloadDBLogFilePortion", "es:ESHttpGet", "cassandra:Select", "codecommit:GitPull", "codecommit:GetFile",
+        "s3:GetObject*", "secretsmanager:BatchGetSecretValue", "kms:GenerateDataKey*",
+        ] : contains(jsondecode(output.template_body).Resources.TfcPlanRoleNetwork.Properties.Policies[0].PolicyDocument.Statement[0].Action, a)
+      ]) &&
+      !anytrue([for a in ["lambda:GetFunction", "ec2:GetLaunchTemplateData", "apigateway:GET"] : contains(jsondecode(output.template_body).Resources.TfcPlanRoleNetwork.Properties.Policies[0].PolicyDocument.Statement[0].Action, a)]) &&
+      length(jsonencode(jsondecode(output.template_body).Resources.TfcPlanRoleNetwork.Properties.Policies[0].PolicyDocument)) < 10240
+    )
+    error_message = "member plan roles must deny the full data-plane read set (never refresh-needed reads) within the inline size limit."
+  }
+}
+
 run "plan_role_data_read_deny_can_be_disabled" {
   command = plan
 

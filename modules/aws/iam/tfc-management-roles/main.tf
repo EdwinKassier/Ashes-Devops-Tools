@@ -376,7 +376,9 @@ locals {
       "ssm:GetParameters", "ssm:GetParametersByPath", "kms:Decrypt", "logs:GetLogEvents",
       "logs:FilterLogEvents", "logs:StartQuery", "cloudtrail:LookupEvents", "dynamodb:GetItem",
       "dynamodb:Query", "dynamodb:Scan", "dynamodb:BatchGetItem", "dynamodb:PartiQLSelect",
-      "ssm:GetParameterHistory", "sqs:ReceiveMessage",
+      "ssm:GetParameterHistory", "sqs:ReceiveMessage", "s3:GetObject*", "secretsmanager:BatchGetSecretValue",
+      "kms:GenerateDataKey*", "ssm:GetCommandInvocation", "logs:GetLogRecord", "rds:DownloadDBLogFilePortion",
+      "es:ESHttpGet", "cassandra:Select", "codecommit:GitPull", "codecommit:GetFile",
     ]
     Resource = "*"
   }

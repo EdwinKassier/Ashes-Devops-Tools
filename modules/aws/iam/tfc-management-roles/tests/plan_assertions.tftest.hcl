@@ -144,6 +144,24 @@ run "plan_roles_deny_data_plane_reads" {
   }
 }
 
+run "plan_role_denies_data_plane_reads" {
+  command = plan
+
+  assert {
+    condition = (
+      alltrue([for a in [
+        "s3:GetObject*", "secretsmanager:BatchGetSecretValue", "kms:GenerateDataKey*", "ssm:GetCommandInvocation",
+        "logs:GetLogRecord", "logs:GetLogEvents", "logs:FilterLogEvents", "logs:StartQuery",
+        "rds:DownloadDBLogFilePortion", "es:ESHttpGet", "cassandra:Select", "codecommit:GitPull", "codecommit:GetFile",
+        ] : contains(one([for s in jsondecode(aws_iam_role_policy.plan_guard["aws-backup:plan"].policy).Statement : s if s.Sid == "DenyDataPlaneReads"]).Action, a)
+      ]) &&
+      !anytrue([for a in ["lambda:GetFunction", "ec2:GetLaunchTemplateData", "apigateway:GET"] : contains(one([for s in jsondecode(aws_iam_role_policy.plan_guard["aws-backup:plan"].policy).Statement : s if s.Sid == "DenyDataPlaneReads"]).Action, a)]) &&
+      length(aws_iam_role_policy.plan_guard["aws-backup:plan"].policy) < 6144
+    )
+    error_message = "management plan roles must deny the full data-plane read set (never refresh-needed reads) within the managed-policy size budget."
+  }
+}
+
 run "security_trail_permissions_scoped_to_org_trail" {
   command = plan
 
