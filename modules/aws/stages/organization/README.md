@@ -74,20 +74,20 @@ The following resources are created:
 
 - resource.aws_cloudformation_stack_set.backup_service_role (modules/aws/stages/organization/backup_role.tf#L35)
 - resource.aws_cloudformation_stack_set_instance.backup_service_role (modules/aws/stages/organization/backup_role.tf#L64)
-- resource.aws_cloudwatch_event_rule.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L156)
-- resource.aws_cloudwatch_event_rule.guard_alerts_forward (modules/aws/stages/organization/guard_alerts.tf#L199)
-- resource.aws_cloudwatch_event_target.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L164)
-- resource.aws_cloudwatch_event_target.guard_alerts_forward (modules/aws/stages/organization/guard_alerts.tf#L209)
-- resource.aws_iam_role.guard_alerts_forwarder (modules/aws/stages/organization/guard_alerts.tf#L173)
+- resource.aws_cloudwatch_event_rule.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L208)
+- resource.aws_cloudwatch_event_rule.guard_alerts_forward (modules/aws/stages/organization/guard_alerts.tf#L251)
+- resource.aws_cloudwatch_event_target.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L216)
+- resource.aws_cloudwatch_event_target.guard_alerts_forward (modules/aws/stages/organization/guard_alerts.tf#L261)
+- resource.aws_iam_role.guard_alerts_forwarder (modules/aws/stages/organization/guard_alerts.tf#L225)
 - resource.aws_iam_role.org_trail_cloudwatch (modules/aws/stages/organization/trail_delivery_role.tf#L7)
-- resource.aws_iam_role_policy.guard_alerts_forwarder (modules/aws/stages/organization/guard_alerts.tf#L186)
+- resource.aws_iam_role_policy.guard_alerts_forwarder (modules/aws/stages/organization/guard_alerts.tf#L238)
 - resource.aws_iam_role_policy.org_trail_cloudwatch (modules/aws/stages/organization/trail_delivery_role.tf#L24)
-- resource.aws_kms_alias.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L94)
-- resource.aws_kms_key.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L65)
+- resource.aws_kms_alias.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L146)
+- resource.aws_kms_key.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L117)
 - resource.aws_organizations_delegated_administrator.identity_center (modules/aws/stages/organization/identity_center_delegation.tf#L5)
-- resource.aws_sns_topic.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L101)
-- resource.aws_sns_topic_policy.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L117)
-- resource.aws_sns_topic_subscription.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L146)
+- resource.aws_sns_topic.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L153)
+- resource.aws_sns_topic_policy.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L169)
+- resource.aws_sns_topic_subscription.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L198)
 
 
 ## Inputs
@@ -128,6 +128,7 @@ The following resources are created:
 | <a name="input_member_break_glass_trusted_principal_arns"></a> [member\_break\_glass\_trusted\_principal\_arns](#input\_member\_break\_glass\_trusted\_principal\_arns) | Account-qualified management-account principal ARNs (role or user) the member break-glass role trusts. Empty (default) = [break\_glass\_role\_arn]. | `list(string)` | `[]` | no |
 | <a name="input_org_policy_attachments"></a> [org\_policy\_attachments](#input\_org\_policy\_attachments) | Extra policy attachments (key => {policy\_key, target\_id}), e.g. for policies added through org\_policy\_overrides. Keys must not collide with the built-in attachment keys. | <pre>map(object({<br/>    policy_key = string<br/>    target_id  = string<br/>  }))</pre> | `{}` | no |
 | <a name="input_org_policy_overrides"></a> [org\_policy\_overrides](#input\_org\_policy\_overrides) | Organization policies merged over the built-in guardrail set (organization-policy policy\_overrides): an existing key replaces that policy's content, a new key adds one (attach it with org\_policy\_attachments). Use this instead of forking the stage. | <pre>map(object({<br/>    type    = string<br/>    content = string<br/>  }))</pre> | `{}` | no |
+| <a name="input_org_trail_home_region"></a> [org\_trail\_home\_region](#input\_org\_trail\_home\_region) | Home region of the organization trail (the aws-security root's aws\_region): its log group, CIS alarms and alarm topic live there, so it always gets a guard-alert forwarding rule even if absent from aws\_enabled\_regions. | `string` | `"eu-west-2"` | no |
 | <a name="input_org_trail_name"></a> [org\_trail\_name](#input\_org\_trail\_name) | Name of the organization CloudTrail trail aws-security creates (cloudtrail-org trail\_name). | `string` | `"org-trail"` | no |
 | <a name="input_partition"></a> [partition](#input\_partition) | AWS partition the organization policies are rendered for (aws, aws-us-gov, aws-cn). | `string` | `"aws"` | no |
 | <a name="input_pin_tfc_federation_to_org"></a> [pin\_tfc\_federation\_to\_org](#input\_pin\_tfc\_federation\_to\_org) | Deny (RCP, every account) sts:AssumeRoleWithWebIdentity with a <tfc\_hostname> token whose sub is not organization:<tfc\_organization>:*. Without it, any pipeline that can create a role can make it trust ANOTHER TFC org on the same issuer: a persistence path no permissions boundary sees. Default true; takes effect when tfc\_organization is set. Set false only if workspaces in other TFC organizations must assume roles here. | `bool` | `true` | no |

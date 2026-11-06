@@ -36,6 +36,20 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   GuardDuty admin call made from a non-us-east-1 region must both email the
   topic.
 
+- **CIS-alarm silencing is detected, not prevented.** The aws-security role
+  needs `cloudwatch:PutMetricAlarm`, `logs:PutMetricFilter` and `sns:*` on
+  `<trail>-*` topics for routine applies. A call through one of them can
+  silence the CIS alerting:
+  - an alarm rewritten with `ActionsEnabled=false` or no alarm actions;
+  - a CIS metric filter overwritten;
+  - the `<trail>-cis-alarms` topic deleted, re-attributed or unsubscribed.
+
+  Each of these is matched by the `org-guard-alerts` rule, but none is
+  denied. Deleting or disabling alarms, and deleting log streams, metric
+  filters or the log group, are denied. Matching "no alarm actions" uses
+  `alarmActions: [{exists: false}]`, which may miss an explicitly empty list.
+  **Validate in the sandbox.**
+
 - **A1 — CloudTrail KMS grant condition.** `modules/aws/security/cloudtrail-org`
   scopes the log-service KMS grant with `aws:SourceOrgID`, but AWS documents
   `aws:SourceArn` (the trail ARN) as the CloudTrail KMS-key-policy condition

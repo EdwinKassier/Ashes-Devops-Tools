@@ -14,6 +14,7 @@ variables {
   log_archive_bucket_name  = "sra-log-archive-111111111111"
   tfc_organization         = "acme"
   github_federation_owners = ["acme"]
+  guard_alert_emails       = ["secops@example.com"]
 }
 
 override_module {
@@ -356,11 +357,16 @@ run "guard_topic_in_us_east_1_with_events_kms_grant" {
       toset(flatten([for b in jsondecode(aws_cloudwatch_event_rule.guard_alerts.event_pattern).detail["$or"] : b.eventName])) == toset([
         "DisableAWSServiceAccess", "DeregisterDelegatedAdministrator",
         "PutEventSelectors", "PutInsightSelectors", "RemoveTags",
-        "DisableOrganizationAdminAccount", "DisableDelegatedAdminAccount",
+        "DisableOrganizationAdminAccount", "DisableDelegatedAdminAccount", "DisassociateAdminAccount",
+        "PutMetricAlarm", "DeleteAlarms", "DisableAlarmActions",
+        "DeleteTopic", "SetTopicAttributes", "Unsubscribe",
+        "PutMetricFilter", "DeleteMetricFilter", "DeleteLogStream",
       ]) &&
       toset(flatten([for b in jsondecode(aws_cloudwatch_event_rule.guard_alerts.event_pattern).detail["$or"] : b.eventSource])) == toset([
         "organizations.amazonaws.com", "cloudtrail.amazonaws.com", "guardduty.amazonaws.com",
         "securityhub.amazonaws.com", "macie2.amazonaws.com", "inspector2.amazonaws.com",
+        "detective.amazonaws.com", "fms.amazonaws.com",
+        "monitoring.amazonaws.com", "sns.amazonaws.com", "logs.amazonaws.com",
       ])
     )
     error_message = "The us-east-1 org-guard-alerts rule must match the detection-teardown and trail-tampering CloudTrail calls and target the topic."
@@ -373,6 +379,27 @@ run "guard_topic_in_us_east_1_with_events_kms_grant" {
       contains(b.eventName, "PutEventSelectors") && contains(b.requestParameters.trailName, "org-trail")
     ])
     error_message = "Selector calls must be matched on the org trail."
+  }
+
+  # Silencing the CIS alerting (detect-only paths left open on the role).
+  assert {
+    condition = (
+      anytrue([for b in jsondecode(aws_cloudwatch_event_rule.guard_alerts.event_pattern).detail["$or"] :
+      contains(b.eventName, "PutMetricAlarm") && try(b.requestParameters.actionsEnabled == [false], false) && try(b.requestParameters.alarmName[0].wildcard == "org-trail-*", false)]) &&
+      anytrue([for b in jsondecode(aws_cloudwatch_event_rule.guard_alerts.event_pattern).detail["$or"] :
+      contains(b.eventName, "PutMetricAlarm") && try(b.requestParameters.alarmActions[0].exists == false, false)]) &&
+      anytrue([for b in jsondecode(aws_cloudwatch_event_rule.guard_alerts.event_pattern).detail["$or"] :
+      contains(b.eventName, "DeleteTopic") && try(b.requestParameters.topicArn[0].wildcard == "*:org-trail-cis-alarms", false)]) &&
+      anytrue([for b in jsondecode(aws_cloudwatch_event_rule.guard_alerts.event_pattern).detail["$or"] :
+      contains(b.eventName, "PutMetricFilter") && try(b.requestParameters.logGroupName == ["/aws/cloudtrail/org-trail"], false)])
+    )
+    error_message = "The guard rule must match CIS-alarm silencing, CIS topic tampering and trail metric-filter overwrites."
+  }
+
+  # EventBridge caps an event pattern at 4,096 characters... keep a margin.
+  assert {
+    condition     = length(aws_cloudwatch_event_rule.guard_alerts.event_pattern) <= 4096
+    error_message = "The guard event pattern must stay within the EventBridge event-pattern size."
   }
 }
 
@@ -415,13 +442,71 @@ run "guard_alerts_us_east_1_only_minimum_config" {
   command = plan
 
   variables {
-    aws_enabled_regions = ["us-east-1"]
+    aws_enabled_regions   = ["us-east-1"]
+    org_trail_home_region = "us-east-1"
+    guard_alert_emails    = []
   }
+
+  # No emails: only the warning check fires.
+  expect_failures = [check.guard_alert_emails_set]
 
   assert {
     condition     = length(aws_cloudwatch_event_rule.guard_alerts_forward) == 0 && length(aws_sns_topic_subscription.guard_alerts) == 0
     error_message = "us-east-1 alone needs no forwarding rule, and no emails means no subscriptions."
   }
+}
+
+# The trail's home region always forwards, even when not an enabled region.
+run "trail_home_region_always_forwards" {
+  command = plan
+
+  variables {
+    aws_enabled_regions   = ["eu-west-1"]
+    org_trail_home_region = "eu-central-1"
+  }
+
+  assert {
+    condition     = toset(keys(aws_cloudwatch_event_rule.guard_alerts_forward)) == toset(["eu-west-1", "eu-central-1"])
+    error_message = "The org trail home region must get a forwarding rule."
+  }
+}
+
+# The tfc-management-roles trail scope follows org_trail_name.
+run "trail_name_reaches_management_roles" {
+  command = plan
+
+  variables {
+    org_trail_name = "acme-trail"
+  }
+
+  # Plan-known account IDs so the management-role policy is plan-known.
+  override_module {
+    target = module.account
+    outputs = {
+      account_id             = "222222222222"
+      account_arn            = "arn:aws:organizations::111111111111:account/o-abc1234567/222222222222"
+      cross_account_role_arn = "arn:aws:iam::222222222222:role/OrganizationAccountAccessRole"
+    }
+  }
+
+  assert {
+    condition = (
+      one([for s in jsondecode(module.tfc_management_roles[0].apply_policies["aws-security"]).Statement : s if s.Sid == "OrganizationTrailOnly"]).Resource == ["arn:aws:cloudtrail:*:111111111111:trail/acme-trail"] &&
+      one([for s in jsondecode(module.tfc_management_roles[0].apply_policies["aws-security"]).Statement : s if s.Sid == "PassTrailDeliveryRoleToCloudTrail"]).Resource == ["arn:aws:iam::111111111111:role/acme-trail-cloudwatch-delivery"] &&
+      strcontains(aws_cloudwatch_event_rule.guard_alerts.event_pattern, "acme-trail-cis-alarms")
+    )
+    error_message = "org_trail_name must drive the management role's trail scope, the delivery-role PassRole and the guard pattern."
+  }
+}
+
+run "no_guard_alert_emails_warns" {
+  command = plan
+
+  variables {
+    guard_alert_emails = []
+  }
+
+  expect_failures = [check.guard_alert_emails_set]
 }
 
 run "teardown_gate_passes_through" {

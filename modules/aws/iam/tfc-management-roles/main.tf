@@ -268,10 +268,11 @@ locals {
       },
       {
         # The trail log group, its metric filters (the CIS alarms' inputs) and
-        # its retention survive the pipeline. PutRetentionPolicy stays allowed.
+        # its retention and log streams survive the pipeline. PutRetentionPolicy
+        # stays allowed; PutMetricFilter overwrites are detected, not denied.
         Sid      = "DenyTrailAndKeyDestructionLogs"
         Effect   = "Deny"
-        Action   = ["logs:DeleteLogGroup", "logs:DeleteRetentionPolicy", "logs:DeleteSubscriptionFilter", "logs:DeleteMetricFilter"]
+        Action   = ["logs:DeleteLogGroup", "logs:DeleteLogStream", "logs:DeleteRetentionPolicy", "logs:DeleteSubscriptionFilter", "logs:DeleteMetricFilter"]
         Resource = local.trail_log_group_arns
       },
     ]

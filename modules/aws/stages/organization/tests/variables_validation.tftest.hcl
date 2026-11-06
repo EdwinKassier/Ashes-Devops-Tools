@@ -13,6 +13,7 @@ variables {
   log_archive_bucket_name  = "sra-log-archive-111111111111"
   tfc_organization         = "acme"
   github_federation_owners = ["acme"]
+  guard_alert_emails       = ["secops@example.com"]
 }
 
 override_module {

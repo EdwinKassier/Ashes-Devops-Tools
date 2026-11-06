@@ -260,8 +260,8 @@ run "aws_security_cannot_disable_org_detection" {
       length(setintersection(toset(flatten([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s.Action if s.Effect == "Deny" && startswith(s.Sid, "DenyTrailAndKeyDestruction")])), toset([
         "cloudtrail:RemoveTags", "cloudtrail:PutResourcePolicy", "cloudtrail:DeleteResourcePolicy",
         "cloudwatch:DeleteAlarms", "cloudwatch:DisableAlarmActions",
-        "logs:DeleteLogGroup", "logs:DeleteRetentionPolicy", "logs:DeleteSubscriptionFilter", "logs:DeleteMetricFilter",
-      ]))) == 9 &&
+        "logs:DeleteLogGroup", "logs:DeleteLogStream", "logs:DeleteRetentionPolicy", "logs:DeleteSubscriptionFilter", "logs:DeleteMetricFilter",
+      ]))) == 10 &&
       !contains(flatten([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s.Action if s.Effect == "Deny"]), "logs:PutRetentionPolicy") &&
       one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "DenyTrailAndKeyDestructionAlarms"]).Resource == ["arn:aws:cloudwatch:*:111111111111:alarm:org-trail-*"] &&
       toset(one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "DenyTrailAndKeyDestructionLogs"]).Resource) == toset([
@@ -273,9 +273,11 @@ run "aws_security_cannot_disable_org_detection" {
     error_message = "DenyTrailAndKeyDestruction* must deny trail tag/resource-policy edits, alarm deletion/disable on the trail alarms and log-group destruction (not PutRetentionPolicy); TrailAlarmsOnly must not allow DeleteAlarms."
   }
 
+  # Internal budget for the main inline policy at the default trail name and
+  # partition (the hard AWS limit is 10,240 aggregate per role, asserted below).
   assert {
     condition     = length(output.apply_policies["aws-security"]) <= 6144
-    error_message = "The aws-security apply policy must stay within the 6,144-character managed-policy size."
+    error_message = "The aws-security apply policy must stay within its 6,144-character internal budget."
   }
 }
 
@@ -319,9 +321,37 @@ run "teardown_gate_adds_disable_actions" {
     error_message = "Teardown deregistration must be pinned to the security accounts and service-access disables to the security service principals."
   }
 
+  # Inline role policies: AWS caps the aggregate of a role's inline policies at 10,240 characters.
   assert {
-    condition     = length(output.apply_policies["aws-security"]) <= 6144 && length(output.security_teardown_policy) <= 6144
-    error_message = "The aws-security apply and teardown policies must each stay within 6,144 characters."
+    condition     = length(output.apply_policies["aws-security"]) + length(output.security_teardown_policy) <= 10240
+    error_message = "The aws-security apply + teardown inline policies must stay within the 10,240-character per-role aggregate."
+  }
+}
+
+# Worst case: longest partition, a 20-character trail name, three delegated
+# accounts, teardown gate on.
+run "inline_policy_size_worst_case" {
+  command = plan
+
+  override_data {
+    target = data.aws_partition.current
+    values = { partition = "aws-us-gov" }
+  }
+
+  variables {
+    security_trail_name              = "org-trail-abcdefghij"
+    delegated_admin_account_ids      = ["222222222222", "333333333333", "444444444444"]
+    enable_security_service_teardown = true
+  }
+
+  assert {
+    condition     = length(output.apply_policies["aws-security"]) + length(output.security_teardown_policy) <= 10240
+    error_message = "Worst case: the aws-security apply + teardown inline policies must stay within the 10,240-character per-role aggregate."
+  }
+
+  assert {
+    condition     = strcontains(output.apply_policies["aws-security"], "arn:aws-us-gov:cloudtrail:*:111111111111:trail/org-trail-abcdefghij")
+    error_message = "The worst-case run must actually render the us-gov partition and long trail name."
   }
 }
 

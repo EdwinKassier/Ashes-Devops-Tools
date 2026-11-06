@@ -81,6 +81,7 @@ Because closure is slow and hard to reverse, prefer removing accounts from the o
   - Close the gate straight after: set it back to `false` and apply `aws-organization`.
   - Every disable/deregister call emails the `org-guard-alerts` topic (`aws.guard_alert_emails`), in every enabled region. Expect those alerts during teardown.
   - The `org-guard-alerts` topic, rules and forwarder role belong to `aws-organization`, so they outlive `aws-security`.
+  - Removing a tag key from the org trail (`cloudtrail:RemoveTags`) is denied too. It needs break-glass even outside teardown.
   - The gate does **not** cover the org trail itself. The aws-security role is still denied deleting or stopping the trail, deleting or silencing its CIS alarms, and deleting its log group, metric filters or retention. Those deletes need break-glass or the phase-0 management role.
 - **Org last:** `aws-organization` can only be destroyed once every member account has been removed/closed and no OU still contains accounts.
 

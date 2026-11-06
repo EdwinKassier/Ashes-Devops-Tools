@@ -22,10 +22,17 @@ locals {
   guard_rule_arn     = "arn:${var.partition}:events:${local.guard_home_region}:${local.guard_account_id}:rule/${local.guard_name}"
   guard_trail_arn    = "arn:${var.partition}:cloudtrail:*:${local.guard_account_id}:trail/${var.org_trail_name}"
 
-  guard_forward_regions = setsubtract(toset(var.aws_enabled_regions), [local.guard_home_region])
+  guard_trail_log_group = "/aws/cloudtrail/${var.org_trail_name}"
+  guard_cis_topic       = "${var.org_trail_name}-cis-alarms"
 
-  # CloudTrail management events delivered to EventBridge (the org trail logs
-  # management events; EventBridge receives them regardless of selectors).
+  # Every enabled region plus the org trail's home region (its log group, CIS
+  # alarms and topic live there), minus us-east-1, which has the main rule.
+  guard_forward_regions = setsubtract(setunion(toset(var.aws_enabled_regions), [var.org_trail_home_region]), [local.guard_home_region])
+
+  # "AWS API Call via CloudTrail" events. EventBridge receives these only for
+  # management events that CloudTrail records, so the alerts depend on the
+  # org trail logging management (write) events: a selector change that drops
+  # them is itself the first thing matched below.
   guard_event_pattern = jsonencode({
     "detail-type" = ["AWS API Call via CloudTrail"]
     detail = {
@@ -50,12 +57,57 @@ locals {
           }
         },
         {
-          eventSource = ["guardduty.amazonaws.com", "securityhub.amazonaws.com", "macie2.amazonaws.com"]
+          eventSource = ["guardduty.amazonaws.com", "securityhub.amazonaws.com", "macie2.amazonaws.com", "detective.amazonaws.com"]
           eventName   = ["DisableOrganizationAdminAccount"]
         },
         {
           eventSource = ["inspector2.amazonaws.com"]
           eventName   = ["DisableDelegatedAdminAccount"]
+        },
+        {
+          eventSource = ["fms.amazonaws.com"]
+          eventName   = ["DisassociateAdminAccount"]
+        },
+        # Detect-only: the aws-security role may still PutMetricAlarm on the
+        # CIS alarms. Silencing one (actions disabled, or no alarm actions) is
+        # matched here; deleting or disabling one is also denied on the role.
+        {
+          eventSource = ["monitoring.amazonaws.com"]
+          eventName   = ["PutMetricAlarm"]
+          requestParameters = {
+            alarmName      = [{ wildcard = "${var.org_trail_name}-*" }]
+            actionsEnabled = [false]
+          }
+        },
+        {
+          eventSource = ["monitoring.amazonaws.com"]
+          eventName   = ["PutMetricAlarm"]
+          requestParameters = {
+            alarmName    = [{ wildcard = "${var.org_trail_name}-*" }]
+            alarmActions = [{ exists = false }]
+          }
+        },
+        {
+          eventSource       = ["monitoring.amazonaws.com"]
+          eventName         = ["DeleteAlarms", "DisableAlarmActions"]
+          requestParameters = { alarmNames = [{ wildcard = "${var.org_trail_name}-*" }] }
+        },
+        # The CIS alarm topic (the role holds sns:* on <trail>-* topics).
+        {
+          eventSource       = ["sns.amazonaws.com"]
+          eventName         = ["DeleteTopic", "SetTopicAttributes"]
+          requestParameters = { topicArn = [{ wildcard = "*:${local.guard_cis_topic}" }] }
+        },
+        {
+          eventSource       = ["sns.amazonaws.com"]
+          eventName         = ["Unsubscribe"]
+          requestParameters = { subscriptionArn = [{ wildcard = "*:${local.guard_cis_topic}:*" }] }
+        },
+        # Overwriting a CIS metric filter, or deleting trail log streams.
+        {
+          eventSource       = ["logs.amazonaws.com"]
+          eventName         = ["PutMetricFilter", "DeleteMetricFilter", "DeleteLogStream"]
+          requestParameters = { logGroupName = [local.guard_trail_log_group] }
         },
       ]
     }
@@ -215,4 +267,12 @@ resource "aws_cloudwatch_event_target" "guard_alerts_forward" {
   target_id = "us-east-1-default-bus"
   arn       = local.guard_home_bus_arn
   role_arn  = aws_iam_role.guard_alerts_forwarder.arn
+}
+
+# Without subscribers the topic still records alerts, but nobody is told.
+check "guard_alert_emails_set" {
+  assert {
+    condition     = length(var.guard_alert_emails) > 0
+    error_message = "No guard_alert_emails (aws.guard_alert_emails) are set: org-guard-alerts fires when org-wide detection is disabled or the org trail / CIS alarms are tampered with, but nobody is emailed. Set at least one address (or subscribe the topic another way)."
+  }
 }

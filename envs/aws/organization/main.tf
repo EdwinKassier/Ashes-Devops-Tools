@@ -7,10 +7,12 @@
 module "aws_organization" {
   source = "../../../modules/aws/stages/organization"
 
-  accounts                = local.accounts
-  workload_accounts       = local.workload_accounts
-  allowed_regions         = local.allowed_regions
-  aws_enabled_regions     = local.aws_enabled_regions
+  accounts            = local.accounts
+  workload_accounts   = local.workload_accounts
+  allowed_regions     = local.allowed_regions
+  aws_enabled_regions = local.aws_enabled_regions
+  # The org trail lives in the aws-security root's home region (org.regions.aws).
+  org_trail_home_region   = local.aws_region
   terraform_run_role_arn  = local.terraform_run_role_arn
   break_glass_role_arn    = local.break_glass_role_arn
   log_archive_bucket_name = local.log_archive_bucket_name

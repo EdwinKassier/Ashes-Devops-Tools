@@ -202,6 +202,10 @@ module "tfc_management_roles" {
   # aws-security may delegate the security services only to security tooling.
   delegated_admin_account_ids = [for k in ["security_tooling", "backup"] : module.account[k].account_id if contains(keys(local.all_accounts), k)]
 
+  # The role's trail scope, the guard rule and the trail delivery role agree.
+  security_trail_name         = var.org_trail_name
+  security_trail_role_pattern = "${var.org_trail_name}-cloudwatch-delivery"
+
   # Turning org-wide detection off is a gated, reviewed teardown step.
   enable_security_service_teardown = var.enable_security_service_teardown
 }

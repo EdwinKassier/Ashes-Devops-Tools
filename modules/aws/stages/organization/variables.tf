@@ -451,6 +451,13 @@ variable "aws_enabled_regions" {
   }
 }
 
+variable "org_trail_home_region" {
+  description = "Home region of the organization trail (the aws-security root's aws_region): its log group, CIS alarms and alarm topic live there, so it always gets a guard-alert forwarding rule even if absent from aws_enabled_regions."
+  type        = string
+  default     = "eu-west-2"
+  nullable    = false
+}
+
 variable "guard_alert_emails" {
   description = "Email addresses subscribed to the org-guard-alerts SNS topic (us-east-1, management account): alerts when org-wide detection is disabled or the organization trail's selectors / tags change. Each address must confirm its subscription. Empty = topic and rules only."
   type        = list(string)

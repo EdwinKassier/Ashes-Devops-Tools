@@ -199,7 +199,7 @@ changes to the key policy. Fresh estates need nothing.
 `organizations:DisableAWSServiceAccess`,
 `DeregisterDelegatedAdministrator` and `cloudwatch:DeleteAlarms`. It now
 denies trail untagging and resource-policy edits, CIS-alarm deletion and
-disabling, and trail log-group, metric-filter and retention deletion.
+disabling, and trail log-group, log-stream, metric-filter and retention deletion.
 `aws-organization` creates `org-guard-alerts` in us-east-1 of the management
 account: a CMK, an SNS topic and an EventBridge rule. It also creates one
 forwarding rule per other `aws.enabled_regions` region, plus the
@@ -211,6 +211,10 @@ forwarding rule per other `aws.enabled_regions` region, plus the
 - **A plan that now replaces a CIS alarm or metric filter fails** with
   AccessDenied on the delete. Run that apply as break-glass or the phase-0
   role.
+- **Removing a tag key from the org trail needs break-glass.**
+  `cloudtrail:RemoveTags` is denied, so a plan that drops a tag from the trail
+  (for example, a removed `default_tags` key) fails with AccessDenied. Changing
+  a tag's value still works.
 - **Destroying aws-security** (or removing a delegated admin) needs
   `enable_security_service_teardown = true` on `aws-organization`. See
   `docs/runbooks/aws-teardown.md`.

@@ -19,6 +19,7 @@ variables {
   # Isolate the suite from any committed config/landing-zone.yaml.
   landing_zone_config_path = ""
   landing_zone_name        = "acme"
+  guard_alert_emails       = ["secops@acme.test"]
   management_account_id    = "111111111111" # C4 account guard
   accounts = {                              # L2: non-placeholder emails
     log_archive      = { email = "aws+log-archive@acme.test", ou = "Security" }
