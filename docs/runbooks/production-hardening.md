@@ -212,9 +212,9 @@ include them. Each one has an alert instead:
   deleted anyway, and the bucket bindings are denied above).
 
 **Production default.** Containment stays opt-in (it changes how every sink and
-perimeter change is applied), but gcp-organization warns (check
+perimeter change is applied), but gcp-organization fails the plan (precondition
 `production_requires_admin_containment`) when any environment is
-`is_production = true` and `enable_admin_containment = false`. The WORM lock
+`is_production = true` and `enable_admin_containment = false` (the explicit waiver). The WORM lock
 (`enable_audit_bucket_lock`) stays a separate opt-in because it is irreversible.
 
 **Operational consequence.** Terraform legitimately calls `sinks.update` and
