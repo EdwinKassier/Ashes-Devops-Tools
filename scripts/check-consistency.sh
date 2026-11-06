@@ -73,19 +73,27 @@ for pf in envs/gcp/*/providers.tf; do
   fi
 done
 
-echo "==> Multi-platform lockfiles (INFORMATIONAL — reported, never fails yet)"
+echo "==> Multi-platform lockfiles (FATAL for deployable roots, informational for library modules)"
 # A lockfile written by a plain local `terraform init` carries one h1: hash per
 # provider (the host platform). The canonical command writes one per platform:
 #   terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64
 # A provider block with fewer than 3 h1: hashes marks the file single-platform.
-# TODO: make this fatal once the repo-wide lock sweep lands.
 nlocks=0
 nsingle=0
 while IFS= read -r lf; do
   nlocks=$((nlocks + 1))
   if awk '/^provider /{ if (inblk && h < 3) bad=1; inblk=1; h=0 } /"h1:/{ h++ } END { if (inblk && h < 3) bad=1; exit bad ? 0 : 1 }' "$lf"; then
     nsingle=$((nsingle + 1))
-    [ -z "${LOCK_VERBOSE:-}" ] || echo "  single-platform: $lf"
+    case "$lf" in
+      # A deployable root's lockfile is what CI (linux) and operators (macOS)
+      # actually install from: a single-platform one fails `init -lockfile=readonly`
+      # on the other platform. Library-module lockfiles are ignored by consumers.
+      envs/* | tests/e2e/*)
+        echo "  ERROR single-platform root lockfile: $lf (terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64)" >&2
+        fail=1
+        ;;
+      *) [ -z "${LOCK_VERBOSE:-}" ] || echo "  single-platform: $lf" ;;
+    esac
   fi
 done < <(git ls-files '*.terraform.lock.hcl' 2>/dev/null)
 echo "  ${nsingle}/${nlocks} committed lockfiles lack the linux_amd64/darwin_arm64/darwin_amd64 h1: hashes (LOCK_VERBOSE=1 lists them)"
