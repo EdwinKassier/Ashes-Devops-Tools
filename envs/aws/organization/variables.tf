@@ -408,3 +408,30 @@ variable "adopt_existing" {
     error_message = "adopt_existing.account_ids values must be 12-digit account IDs."
   }
 }
+
+variable "org_policy_overrides" {
+  description = "Organization policies merged over the built-in guardrail set: an existing key (e.g. scp-region-restriction) replaces its content, a new key adds a policy (attach it with org_policy_attachments)."
+  type = map(object({
+    type    = string
+    content = string
+  }))
+  default  = {}
+  nullable = false
+}
+
+variable "disabled_org_policies" {
+  description = "Built-in policy keys not to create (their default attachments are dropped). Default backup-policy: aws-backup owns the attached BACKUP_POLICY."
+  type        = list(string)
+  default     = ["backup-policy"]
+  nullable    = false
+}
+
+variable "org_policy_attachments" {
+  description = "Extra policy attachments (key => {policy_key, target_id}) for policies added through org_policy_overrides."
+  type = map(object({
+    policy_key = string
+    target_id  = string
+  }))
+  default  = {}
+  nullable = false
+}

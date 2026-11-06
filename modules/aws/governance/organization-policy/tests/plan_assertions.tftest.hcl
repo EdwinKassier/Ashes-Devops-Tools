@@ -104,8 +104,8 @@ run "guardrail_policies_render_correctly" {
   }
 
   assert {
-    condition     = length(keys(aws_organizations_policy.policy)) == 7
-    error_message = "the built-in guardrail set must produce all seven policies"
+    condition     = length(keys(aws_organizations_policy.policy)) == 9
+    error_message = "the built-in guardrail set must produce all nine policies"
   }
 }
 
@@ -492,5 +492,45 @@ run "central_detection_scoped_to_security_accounts" {
   assert {
     condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 5120
     error_message = "deny-tamper SCP must stay under the 5,120-character SCP size quota with the central-detection statement."
+  }
+}
+
+# The org-wide EC2 baseline carries no VPC BPA (that stays OU-scoped), and AI
+# services are opted out everywhere.
+run "baseline_declarative_and_ai_opt_out" {
+  command = plan
+
+  assert {
+    condition = (
+      !contains(keys(jsondecode(aws_organizations_policy.policy["declarative-ec2-baseline"].content).ec2_attributes), "vpc_block_public_access") &&
+      jsondecode(aws_organizations_policy.policy["declarative-ec2-baseline"].content).ec2_attributes.instance_metadata_defaults.http_tokens["@@assign"] == "required" &&
+      jsondecode(aws_organizations_policy.policy["aiservices-opt-out"].content).services.default.opt_out_policy["@@assign"] == "optOut" &&
+      aws_organizations_policy.policy["aiservices-opt-out"].type == "AISERVICES_OPT_OUT_POLICY"
+    )
+    error_message = "declarative-ec2-baseline must enforce IMDSv2 without VPC BPA, and aiservices-opt-out must opt out by default."
+  }
+}
+
+# policy_overrides replace or add; disabled_policies drop built-ins.
+run "policy_overrides_and_disabled_policies" {
+  command = plan
+
+  variables {
+    disabled_policies = ["backup-policy", "aiservices-opt-out"]
+    policy_overrides = {
+      "scp-region-restriction" = { type = "SERVICE_CONTROL_POLICY", content = "{\"Version\":\"2012-10-17\",\"Statement\":[]}" }
+      "scp-custom"             = { type = "SERVICE_CONTROL_POLICY", content = "{\"Version\":\"2012-10-17\",\"Statement\":[]}" }
+    }
+  }
+
+  assert {
+    condition = (
+      !contains(keys(aws_organizations_policy.policy), "backup-policy") &&
+      !contains(keys(aws_organizations_policy.policy), "aiservices-opt-out") &&
+      contains(keys(aws_organizations_policy.policy), "scp-custom") &&
+      aws_organizations_policy.policy["scp-region-restriction"].content == "{\"Version\":\"2012-10-17\",\"Statement\":[]}" &&
+      contains(keys(aws_organizations_policy.policy), "scp-deny-tamper")
+    )
+    error_message = "overrides must replace/add policies, disabled_policies must drop built-ins, and the rest must stay."
   }
 }

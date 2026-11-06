@@ -165,6 +165,21 @@ locals {
         vpc_bpa_exclusions_allowed = var.allow_vpc_bpa_exclusions ? "enabled" : "disabled"
       })
     }
+    # Org-wide EC2 baseline WITHOUT VPC Block Public Access: IMDSv2, no public
+    # snapshot / AMI sharing, no serial console. Attached at the root so the
+    # Security and Infrastructure accounts get it too; declarative-ec2 (with
+    # VPC BPA) stays on the Workloads OU, where public ingress goes through
+    # the edge layer only.
+    declarative-ec2-baseline = {
+      type    = "DECLARATIVE_POLICY_EC2"
+      content = file("${path.module}/policies/declarative-ec2-baseline.json")
+    }
+    # Opt every account out of AWS AI services using its content to improve
+    # those services (data-residency / IP hygiene default).
+    aiservices-opt-out = {
+      type    = "AISERVICES_OPT_OUT_POLICY"
+      content = file("${path.module}/policies/aiservices-opt-out.json")
+    }
     tag-policy = {
       type    = "TAG_POLICY"
       content = templatefile("${path.module}/policies/tag-policy.json", {})
@@ -177,7 +192,13 @@ locals {
     }
   }
 
-  effective_policies = length(var.policies) > 0 ? var.policies : local.default_policies
+  # policies (non-empty) replaces the whole set (legacy). Otherwise the built-in
+  # set minus disabled_policies, with policy_overrides merged over it: replace a
+  # built-in policy's content, or add your own, without forking the module.
+  effective_policies = length(var.policies) > 0 ? var.policies : merge(
+    { for k, p in local.default_policies : k => p if !contains(var.disabled_policies, k) },
+    var.policy_overrides,
+  )
 }
 
 resource "aws_organizations_policy" "policy" {

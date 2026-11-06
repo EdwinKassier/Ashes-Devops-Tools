@@ -118,6 +118,19 @@ release metadata for a Terraform Cloud run.
   - New `gcp_no_basic_roles_high_scope`: no Owner/Editor at organization or folder scope.
   - `aws_iam_no_admin_wildcard` now also flags `NotAction` on `Resource "*"`.
 
+- **D2 — AWS organization-policy escape hatches**, mirroring GCP's `org_policy_overrides`:
+  - `policy_overrides` merges over the built-in set, replacing or adding policies.
+  - `disabled_policies` drops built-ins.
+  - Both are passed through the stage and root as `org_policy_overrides` /
+    `disabled_org_policies` / `org_policy_attachments`.
+  - The unattached duplicate `backup-policy` is disabled by default.
+- **The org-wide EC2 declarative baseline is attached at the root** (`declarative-ec2-baseline`:
+  IMDSv2, no public snapshot/AMI sharing, no serial console). VPC Block Public Access stays
+  Workloads-scoped.
+- **New `aiservices-opt-out` policy** (`AISERVICES_OPT_OUT_POLICY`, enabled by default). Policy
+  types are shape-validated instead of fixed-listed, so new AWS policy types are accepted.
+- **Audit provenance codes are stripped** from 117 code comments and descriptions.
+
 #### Boilerplate (Wave C)
 
 - **`make` sets a shared `TF_PLUGIN_CACHE_DIR`**, so `make ci` on a fresh clone no longer

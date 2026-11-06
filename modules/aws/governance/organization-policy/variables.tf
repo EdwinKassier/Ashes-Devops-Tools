@@ -199,13 +199,32 @@ variable "policies" {
 
   validation {
     condition = alltrue([
-      for p in values(var.policies) : contains(
-        ["SERVICE_CONTROL_POLICY", "RESOURCE_CONTROL_POLICY", "DECLARATIVE_POLICY_EC2", "TAG_POLICY", "BACKUP_POLICY", "AISERVICES_OPT_OUT_POLICY", "CHATBOT_POLICY", "SECURITYHUB_POLICY"],
-        p.type
-      )
+      for p in values(var.policies) : can(regex("^[A-Z][A-Z0-9_]*_POLICY(_[A-Z0-9]+)?$", p.type))
     ])
     error_message = "Each policy type must be a valid AWS Organizations policy type."
   }
+}
+
+variable "policy_overrides" {
+  description = "Policies merged OVER the built-in set, keyed by policy name: an existing key (e.g. scp-region-restriction) replaces that policy's content, a new key adds a policy. Attach additions through attachments. Content is raw Organizations policy JSON."
+  type = map(object({
+    type    = string
+    content = string
+  }))
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = alltrue([for p in values(var.policy_overrides) : can(regex("^[A-Z][A-Z0-9_]*_POLICY(_[A-Z0-9]+)?$", p.type))])
+    error_message = "policy_overrides types must be AWS Organizations policy types such as SERVICE_CONTROL_POLICY."
+  }
+}
+
+variable "disabled_policies" {
+  description = "Built-in policy keys NOT to create (e.g. backup-policy when the backup stage owns it, or aiservices-opt-out). Their attachments must be removed too."
+  type        = list(string)
+  default     = []
+  nullable    = false
 }
 
 variable "attachments" {

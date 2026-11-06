@@ -49,6 +49,18 @@ locals {
     "declarative@workloads"   = { policy_key = "declarative-ec2", target_id = module.organization.ou_ids["Workloads"] }
     "tag-policy@root"         = { policy_key = "tag-policy", target_id = module.organization.roots_id }
   }
+  default_attachments = merge(
+    local.attachments,
+    {
+      "declarative-baseline@root" = { policy_key = "declarative-ec2-baseline", target_id = module.organization.roots_id }
+      "aiservices-opt-out@root"   = { policy_key = "aiservices-opt-out", target_id = module.organization.roots_id }
+    },
+  )
+  # Attachments of disabled built-in policies are dropped with them.
+  effective_attachments = merge(
+    { for k, a in local.default_attachments : k => a if !contains(var.disabled_org_policies, a.policy_key) },
+    var.org_policy_attachments,
+  )
 }
 
 locals {
@@ -70,7 +82,9 @@ module "policies" {
   terraform_run_role_arn  = var.terraform_run_role_arn
   break_glass_role_arn    = var.break_glass_role_arn
   log_archive_bucket_name = var.log_archive_bucket_name
-  attachments             = local.attachments
+  attachments             = local.effective_attachments
+  policy_overrides        = var.org_policy_overrides
+  disabled_policies       = var.disabled_org_policies
 
   # Member-account carve-outs + perimeter tuning (validated in the policy module).
   pipeline_role_names                = var.pipeline_role_names

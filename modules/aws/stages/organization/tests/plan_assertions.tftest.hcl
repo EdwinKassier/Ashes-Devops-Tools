@@ -201,3 +201,19 @@ run "rcp_tfc_pin_opt_out" {
     error_message = "pin_tfc_federation_to_org = false (and no GitHub owners) must render no pin statements."
   }
 }
+
+# The stage attaches the EC2 baseline and AI opt-out at the root, and does not
+# create the unattached duplicate backup policy (the backup stage owns it).
+run "root_baseline_policies_attached" {
+  command = plan
+
+  assert {
+    condition = (
+      module.policies.attachment_ids != null &&
+      contains(keys(local.effective_attachments), "declarative-baseline@root") &&
+      contains(keys(local.effective_attachments), "aiservices-opt-out@root") &&
+      !contains(keys(module.policies.policy_contents), "backup-policy")
+    )
+    error_message = "the root must get the EC2 baseline and AI opt-out; backup-policy is disabled by default."
+  }
+}

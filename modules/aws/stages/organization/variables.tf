@@ -332,3 +332,30 @@ variable "tfc_management_workspaces" {
     "aws-backup"   = {}
   }
 }
+
+variable "org_policy_overrides" {
+  description = "Organization policies merged over the built-in guardrail set (organization-policy policy_overrides): an existing key replaces that policy's content, a new key adds one (attach it with org_policy_attachments). Use this instead of forking the stage."
+  type = map(object({
+    type    = string
+    content = string
+  }))
+  default  = {}
+  nullable = false
+}
+
+variable "disabled_org_policies" {
+  description = "Built-in policy keys not to create; their default attachments are dropped too. Default: backup-policy (the aws-backup stage owns the attached BACKUP_POLICY, so the built-in copy would sit unattached)."
+  type        = list(string)
+  default     = ["backup-policy"]
+  nullable    = false
+}
+
+variable "org_policy_attachments" {
+  description = "Extra policy attachments (key => {policy_key, target_id}), e.g. for policies added through org_policy_overrides. Keys must not collide with the built-in attachment keys."
+  type = map(object({
+    policy_key = string
+    target_id  = string
+  }))
+  default  = {}
+  nullable = false
+}

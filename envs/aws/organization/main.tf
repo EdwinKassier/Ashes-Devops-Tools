@@ -27,6 +27,9 @@ module "aws_organization" {
   tfc_hostname                          = var.tfc_hostname
   pin_tfc_federation_to_org             = var.pin_tfc_federation_to_org
   enable_tfc_management_roles           = var.enable_tfc_management_roles
+  org_policy_overrides                  = var.org_policy_overrides
+  disabled_org_policies                 = var.disabled_org_policies
+  org_policy_attachments                = var.org_policy_attachments
   github_federation_owners              = local.github_federation_owners
   tfc_project                           = local.tfc_project
   tfc_workspace_bindings                = local.tfc_workspace_bindings
