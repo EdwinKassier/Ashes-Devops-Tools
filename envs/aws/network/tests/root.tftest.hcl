@@ -164,3 +164,46 @@ run "production_profile_is_the_default" {
     error_message = "with no profile set the production stack (Network Firewall on) must be the default."
   }
 }
+
+# Production egress fails closed. The alert-only failure is proven in the
+# stage's production_egress tests (expect_failures cannot name a child-module
+# object); the root runs below prove the gate wiring and that it plans when
+# satisfied.
+run "production_profile_with_seeded_allowlist_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-production-allowlist.yaml"
+  }
+
+  assert {
+    condition     = local.enforce_egress_allowlist == true && length(local.network_firewall_egress_domain_allowlist) == 4
+    error_message = "production must enforce the allowlist and read it from config."
+  }
+}
+
+run "starter_profile_unaffected" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-starter-prod-env.yaml"
+  }
+
+  assert {
+    condition     = local.enforce_egress_allowlist == false
+    error_message = "the starter profile must not enforce the egress gate."
+  }
+}
+
+run "waiver_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-production-waived.yaml"
+  }
+
+  assert {
+    condition     = local.enforce_egress_allowlist == true && local.egress_alert_only_waived == true
+    error_message = "the waiver must plan with the gate still on."
+  }
+}

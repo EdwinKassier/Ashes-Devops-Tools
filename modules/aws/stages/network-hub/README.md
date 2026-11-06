@@ -82,6 +82,7 @@ module "example" {
 | Name | Version |
 |------|---------|
 | <a name="provider_aws"></a> [aws](#provider\_aws) | 6.54.0 |
+| <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
 
@@ -107,6 +108,7 @@ The following resources are created:
 - resource.aws_route.egress_tgw_default (modules/aws/stages/network-hub/main.tf#L195)
 - resource.aws_route.hub_to_tgw (modules/aws/stages/network-hub/main.tf#L217)
 - resource.aws_route.inspection_tgw_to_firewall (modules/aws/stages/network-hub/main.tf#L209)
+- resource.terraform_data.production_egress_enforced (modules/aws/stages/network-hub/main.tf#L325)
 
 
 ## Inputs
@@ -121,9 +123,11 @@ The following resources are created:
 | <a name="input_aws_enabled_regions"></a> [aws\_enabled\_regions](#input\_aws\_enabled\_regions) | Regions IPAM operates in. Each becomes an operating region on the IPAM and gets its own regional pool. | `list(string)` | <pre>[<br/>  "eu-west-2"<br/>]</pre> | no |
 | <a name="input_aws_region"></a> [aws\_region](#input\_aws\_region) | AWS region the network hub is deployed in. Used for the inspection/egress VPCs, gateway/interface endpoint service names, and NAT placement. | `string` | `"eu-west-2"` | no |
 | <a name="input_az_count"></a> [az\_count](#input\_az\_count) | Number of availability zones to spread each subnet tier across. | `number` | `2` | no |
+| <a name="input_egress_alert_only_waived"></a> [egress\_alert\_only\_waived](#input\_egress\_alert\_only\_waived) | Explicit, reviewable waiver of the production egress gate: accept alert-only (log-but-pass) egress inspection while allow rules are being built. Only meaningful when enforce\_egress\_allowlist is true. | `bool` | `false` | no |
 | <a name="input_egress_cidr"></a> [egress\_cidr](#input\_egress\_cidr) | IPv4 CIDR of the centralized egress VPC that hosts the NAT gateways, interface endpoints, and Route 53 resolver endpoints. | `string` | `"10.1.0.0/16"` | no |
 | <a name="input_enable_network_access_analyzer"></a> [enable\_network\_access\_analyzer](#input\_enable\_network\_access\_analyzer) | Whether to create the Network Access Analyzer scope that flags segmentation-intent violations. Off by default. | `bool` | `false` | no |
 | <a name="input_enable_network_firewall"></a> [enable\_network\_firewall](#input\_enable\_network\_firewall) | Whether to deploy the Network Firewall in the inspection VPC. COST TOGGLE: bills per endpoint-hour plus per-GB processed. | `bool` | `true` | no |
+| <a name="input_enforce_egress_allowlist"></a> [enforce\_egress\_allowlist](#input\_enforce\_egress\_allowlist) | Production egress gate. When true (and egress\_alert\_only\_waived is false) the plan fails unless network\_firewall\_stateful\_default\_actions contains aws:drop\_established and network\_firewall\_egress\_domain\_allowlist is non-empty, so production never runs alert-only. The aws-network root sets it when org.profile is production and an AWS workload environment is\_production. | `bool` | `false` | no |
 | <a name="input_inspection_cidr"></a> [inspection\_cidr](#input\_inspection\_cidr) | IPv4 CIDR of the inspection VPC that hosts the Network Firewall endpoints and its transit-gateway attachment. | `string` | `"10.0.0.0/16"` | no |
 | <a name="input_network_firewall_egress_domain_allowlist"></a> [network\_firewall\_egress\_domain\_allowlist](#input\_network\_firewall\_egress\_domain\_allowlist) | Optional HTTP\_HOST/TLS\_SNI egress domain allowlist. Non-empty DROPS all other HTTP/TLS egress from the org supernet (top\_cidr). Empty (default) = no domain filtering. | `list(string)` | `[]` | no |
 | <a name="input_network_firewall_managed_rule_groups"></a> [network\_firewall\_managed\_rule\_groups](#input\_network\_firewall\_managed\_rule\_groups) | AWS-managed StrictOrder stateful rule group names attached to the inspection firewall policy (see modules/aws/network/network-firewall managed\_rule\_groups). | `list(string)` | <pre>[<br/>  "AttackInfrastructureStrictOrder",<br/>  "MalwareDomainsStrictOrder",<br/>  "BotNetCommandAndControlDomainsStrictOrder"<br/>]</pre> | no |

@@ -60,4 +60,9 @@ module "aws_network_hub" {
   private_hosted_zone_name       = var.private_hosted_zone_name
   enable_network_firewall        = local.enable_network_firewall
   enable_network_access_analyzer = var.enable_network_access_analyzer
+
+  enforce_egress_allowlist                  = local.enforce_egress_allowlist
+  egress_alert_only_waived                  = local.egress_alert_only_waived
+  network_firewall_egress_domain_allowlist  = local.network_firewall_egress_domain_allowlist
+  network_firewall_stateful_default_actions = local.network_firewall_stateful_default_actions
 }

@@ -1,0 +1,19 @@
+# Test fixture: production profile with a production workload environment.
+version: 1
+org:
+  name: cfgco
+  profile: starter
+  owner: cfg-platform
+  cost_center: cc-1234
+  tfc:
+    organization: cfg-tfc
+aws:
+  log_archive_bucket_name: cfgco-org-log-archive
+  workload_environments:
+    prod: {account_key: workload_prod}
+  contracts:
+    organization:
+      organization_id: o-cfgcfgcfg0
+      management_account_id: "012345678901"
+      account_ids:
+        network: "066666666666"

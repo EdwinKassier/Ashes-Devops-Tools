@@ -191,3 +191,22 @@ aws kms put-key-policy --key-id "$KEY_ID" --policy-name default --policy file://
 
 Then upgrade `tfc-management-roles`, and confirm aws-security plans with no
 changes to the key policy. Fresh estates need nothing.
+
+## Production egress fails closed (aws-network)
+
+`aws-network` now fails the plan when the profile is `production` and an AWS
+workload environment `is_production` (unset = keys `prod` / `production`) unless
+unmatched egress is dropped and a domain allowlist is set. Before upgrading,
+set in `config/landing-zone.yaml` (seed in `config/landing-zone.example.yaml`):
+
+```yaml
+aws:
+  network:
+    egress_domain_allowlist: [.amazonaws.com, .github.com, .githubusercontent.com, .terraform.io]
+    stateful_default_actions: [aws:drop_established, aws:alert_established]
+```
+
+Extend the allowlist with every domain your workloads reach first: all other
+HTTP/TLS egress is dropped once applied. To keep alert-only inspection while
+you build the list, set `aws.network.egress_alert_only_waived: true` (an
+explicit, reviewable waiver). Starter-profile estates are unaffected.

@@ -254,3 +254,27 @@ variable "profile" {
     error_message = "profile must be production or starter."
   }
 }
+
+variable "enforce_egress_allowlist" {
+  description = "Fail the plan unless the firewall drops unmatched egress and carries a domain allowlist (or the waiver is set). Null = on when the profile is production and an aws.workload_environments entry is_production (unset = keys prod / production)."
+  type        = bool
+  default     = null
+}
+
+variable "network_firewall_egress_domain_allowlist" {
+  description = "Egress domain allowlist matched on HTTP Host / TLS SNI; a leading dot matches subdomains. Null = aws.network.egress_domain_allowlist from config, else empty (no domain filtering)."
+  type        = list(string)
+  default     = null
+}
+
+variable "network_firewall_stateful_default_actions" {
+  description = "STRICT_ORDER default actions for unmatched traffic. Null = aws.network.stateful_default_actions from config, else [\"aws:alert_established\"] (log-but-pass). Production needs aws:drop_established."
+  type        = list(string)
+  default     = null
+}
+
+variable "egress_alert_only_waived" {
+  description = "Explicitly waive the production fail-closed egress gate (alert-only inspection). Null = aws.network.egress_alert_only_waived from config, else false."
+  type        = bool
+  default     = null
+}

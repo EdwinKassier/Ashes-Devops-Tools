@@ -218,6 +218,25 @@ aws:
       account_key: workload_dev
       vpc_cidr: 10.20.0.0/16
 
+  # Network Firewall egress posture (aws-network). A production estate (profile
+  # production AND a workload environment with is_production, or keyed
+  # prod/production) fails the plan unless unmatched traffic is dropped AND the
+  # allowlist is non-empty. A leading dot matches subdomains. Extend the list
+  # with every domain your workloads call (package mirrors, SaaS APIs); matching
+  # is on HTTP Host / TLS SNI, and everything else is dropped.
+  network:
+    egress_domain_allowlist:
+      - .amazonaws.com
+      - .github.com
+      - .githubusercontent.com
+      - .terraform.io
+    stateful_default_actions:
+      - aws:drop_established
+      - aws:alert_established
+    # Explicit waiver to run production alert-only (log-but-pass) while allow
+    # rules are being built. Reviewable; remove once the allowlist is complete.
+    # egress_alert_only_waived: true
+
   # Application golden path (aws-workload-<env>). All optional.
   # internal (default) | public_alb (internet-facing ALB + regional WAF; needs
   # app_alb_certificate_arn) | cloudfront_vpc_origin (internal ALB behind

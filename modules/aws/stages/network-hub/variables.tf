@@ -165,6 +165,18 @@ variable "network_firewall_egress_domain_allowlist" {
   default     = []
 }
 
+variable "enforce_egress_allowlist" {
+  description = "Production egress gate. When true (and egress_alert_only_waived is false) the plan fails unless network_firewall_stateful_default_actions contains aws:drop_established and network_firewall_egress_domain_allowlist is non-empty, so production never runs alert-only. The aws-network root sets it when org.profile is production and an AWS workload environment is_production."
+  type        = bool
+  default     = false
+}
+
+variable "egress_alert_only_waived" {
+  description = "Explicit, reviewable waiver of the production egress gate: accept alert-only (log-but-pass) egress inspection while allow rules are being built. Only meaningful when enforce_egress_allowlist is true."
+  type        = bool
+  default     = false
+}
+
 variable "network_firewall_suricata_rules" {
   description = "Optional custom Suricata rules (STRICT_ORDER semantics) evaluated after the managed threat groups. Empty (default) = none."
   type        = string

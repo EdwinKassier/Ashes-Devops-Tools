@@ -320,6 +320,23 @@ module "network_firewall" {
   tags = var.tags
 }
 
+# Production egress fails closed: an enforced estate must drop unmatched
+# established traffic and carry a domain allowlist, or carry the waiver.
+resource "terraform_data" "production_egress_enforced" {
+  input = var.enforce_egress_allowlist
+
+  lifecycle {
+    precondition {
+      condition = (
+        !var.enforce_egress_allowlist || var.egress_alert_only_waived ||
+        (contains(var.network_firewall_stateful_default_actions, "aws:drop_established") &&
+        length(var.network_firewall_egress_domain_allowlist) > 0)
+      )
+      error_message = "Production egress must fail closed: set network_firewall_stateful_default_actions to include aws:drop_established AND a non-empty network_firewall_egress_domain_allowlist (config aws.network.stateful_default_actions / aws.network.egress_domain_allowlist), or explicitly waive with egress_alert_only_waived (config aws.network.egress_alert_only_waived: true)."
+    }
+  }
+}
+
 # ---------------------------------------------------------------------------
 # Centralized VPC endpoints — interface endpoints in the egress VPC
 # ---------------------------------------------------------------------------
