@@ -218,7 +218,7 @@ resource "google_iam_workload_identity_pool_provider" "tfc" {
   attribute_condition = local.tfc_attribute_condition
 
   oidc {
-    issuer_uri = "https://app.terraform.io"
+    issuer_uri = "https://${var.tfc_hostname}"
   }
 
   # H2: an enabled provider must be scoped, never a null (trust-all) condition.

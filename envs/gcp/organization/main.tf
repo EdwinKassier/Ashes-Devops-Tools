@@ -97,7 +97,7 @@ module "organization" {
 
   # Control-plane alerting (on by default).
   enable_control_plane_alerting = var.enable_control_plane_alerting
-  alert_notification_emails     = var.alert_notification_emails
+  alert_notification_emails     = local.alert_notification_emails
   alert_notification_channels   = var.alert_notification_channels
   break_glass_principal_emails  = var.break_glass_principal_emails
   enable_cis_log_metrics        = var.enable_cis_log_metrics
@@ -119,8 +119,16 @@ module "organization" {
   # Opt-in containment of the automation identity (default off; the prod preset
   # turns it on, and a check warns when an is_production environment lacks it). Set containment_exempt_principals to your break-glass
   # principal when enabling — placeholders are rejected.
-  enable_admin_containment      = var.enable_admin_containment
-  containment_exempt_principals = var.containment_exempt_principals
+  org_policy_overrides                   = var.org_policy_overrides
+  allowed_workload_identity_issuers      = coalesce(var.allowed_workload_identity_issuers, ["https://${var.tfc_hostname}", "https://token.actions.githubusercontent.com"])
+  allowed_workload_identity_aws_accounts = var.allowed_workload_identity_aws_accounts
+
+  # Without a break-glass principal the stage is never asked for containment
+  # (it would deny everyone); output.admin_containment_enabled fails the plan.
+  enable_admin_containment      = local.enable_admin_containment && length(local.containment_exempt_principals) > 0
+  containment_exempt_principals = local.containment_exempt_principals
+  # Explicit opt-out, or the root's own precondition already fails the plan.
+  production_containment_waived = var.enable_admin_containment == false || (local.enable_admin_containment && length(local.containment_exempt_principals) == 0)
 
   # Deny policies are applied by the guardrail owner (separate) or here (legacy).
   guardrail_owner_mode = local.guardrail_owner_mode

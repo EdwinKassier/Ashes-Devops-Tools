@@ -463,3 +463,9 @@ variable "enable_principal_access_boundary" {
   type        = bool
   default     = false
 }
+
+variable "tfc_hostname" {
+  description = "HCP Terraform / Terraform Enterprise hostname issuing the dynamic-credential tokens the TFC WIF pool trusts (app.terraform.io, app.eu.terraform.io or a TFE host)."
+  type        = string
+  default     = "app.terraform.io"
+}

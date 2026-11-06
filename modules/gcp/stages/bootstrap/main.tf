@@ -124,6 +124,7 @@ module "tfc_oidc" {
   display_name = "Terraform Cloud Pool"
 
   enable_tfc_provider = true
+  tfc_hostname        = var.tfc_hostname
   tfc_organization    = var.tfc_organization
   tfc_organization_id = var.tfc_organization_id
   tfc_project_ids     = var.tfc_project_ids

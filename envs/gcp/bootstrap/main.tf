@@ -20,6 +20,7 @@ module "bootstrap" {
   # Terraform Cloud dynamic credentials
   enable_tfc_oidc       = var.enable_tfc_oidc
   tfc_organization      = local.tfc_organization
+  tfc_hostname          = var.tfc_hostname
   tfc_organization_id   = var.tfc_organization_id
   tfc_project_ids       = var.tfc_project_ids
   tfc_workspace_ids     = var.tfc_workspace_ids

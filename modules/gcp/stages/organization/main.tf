@@ -192,7 +192,7 @@ module "control_plane_alerting" {
 # a perimeter. Warn (never fail) so a non-prod bootstrap still applies.
 check "production_requires_admin_containment" {
   assert {
-    condition     = length(local.production_environment_keys) == 0 || var.enable_admin_containment
+    condition     = length(local.production_environment_keys) == 0 || var.enable_admin_containment || var.production_containment_waived
     error_message = "Production environments (${join(", ", local.production_environment_keys)}) exist but enable_admin_containment = false: the audit store and VPC-SC perimeters are not protected from the automation identity. Enable it with a real break-glass group (examples/presets/prod-gcp-organization.tfvars). The WORM lock (enable_audit_bucket_lock) stays a separate, irreversible opt-in."
   }
 }
@@ -384,10 +384,33 @@ module "org_policies" {
   # outside the org (see docs/known-gaps.md).
   prefer_managed_constraints = var.prefer_managed_constraints
 
-  list_policies = concat([
+  list_policies    = local.effective_list_policies
+  boolean_policies = local.effective_boolean_policies
+
+  # Opt-in custom organization-policy constraints (CEL-defined, resource-shape
+  # guardrails the fixed boolean/list constraints can't express). Default [] =
+  # none. See docs/known-gaps.md (G6).
+  custom_constraints = var.custom_org_constraints
+}
+
+locals {
+  # A bare region ("europe-west2") in gcp.resourceLocations matches the region
+  # only, not its zones, so zonal resources (VMs, GKE nodes, Cloud SQL zones)
+  # would be denied. Bare regions become the in:<region>-locations value group;
+  # anything already a value group or a zone/multi-region is passed through.
+  resource_location_values = [
+    for r in var.allowed_regions : can(regex("^[a-z]+-[a-z]+[0-9]+$", r)) ? "in:${r}-locations" : r
+  ]
+
+  # Workload identity federation is limited to the issuers this estate trusts
+  # (TFC dynamic credentials, GitHub Actions for app deploys). Without it any
+  # project owner can register a provider for an issuer they control and bind
+  # it to a service account: a durable external door that domain-restricted
+  # sharing does not see (principalSet:// members are not domain-checked).
+  default_list_policies = concat([
     {
       constraint     = "gcp.resourceLocations"
-      allowed_values = var.allowed_regions
+      allowed_values = local.resource_location_values
       denied_values  = null
       allow_all      = null
       deny_all       = null
@@ -417,6 +440,30 @@ module "org_policies" {
       denied_values  = null
       allow_all      = null
       deny_all       = true
+    },
+    {
+      constraint     = "iam.workloadIdentityPoolProviders"
+      allowed_values = var.allowed_workload_identity_issuers
+      denied_values  = null
+      allow_all      = null
+      deny_all       = length(var.allowed_workload_identity_issuers) == 0 ? true : null
+    },
+    # No AWS-account federation unless listed.
+    {
+      constraint     = "iam.workloadIdentityPoolAwsAccounts"
+      allowed_values = var.allowed_workload_identity_aws_accounts
+      denied_values  = null
+      allow_all      = null
+      deny_all       = length(var.allowed_workload_identity_aws_accounts) == 0 ? true : null
+    },
+    # Only internal protocol forwarding: no external forwarding rules that
+    # bypass the load-balancer + Cloud Armor edge.
+    {
+      constraint     = "compute.restrictProtocolForwardingCreationForTypes"
+      allowed_values = ["INTERNAL"]
+      denied_values  = null
+      allow_all      = null
+      deny_all       = null
     }
     ], local.cmek_list_policy,
     # Cloud Run ingress: no service may accept traffic from the internet directly
@@ -431,7 +478,7 @@ module "org_policies" {
       deny_all       = null
   }] : [])
 
-  boolean_policies = concat([
+  default_boolean_policies = concat([
     {
       constraint = "compute.skipDefaultNetworkCreation"
       enforce    = true
@@ -482,6 +529,16 @@ module "org_policies" {
     {
       constraint = "compute.requirePrivateGoogleAccess"
       enforce    = true
+    },
+    # No external IPv6 on VPC subnets (the IPv6 twin of vmExternalIpAccess).
+    {
+      constraint = "compute.disableVpcExternalIpv6"
+      enforce    = true
+    },
+    # Zonal DNS for new projects: a zone outage cannot take out instance DNS.
+    {
+      constraint = "compute.setNewProjectDefaultToZonalDNSOnly"
+      enforce    = true
     }
     ], var.enforce_os_login ? [
     # CIS GCP 4.4: OS Login org-wide. Folders in os_login_exempt_environment_keys
@@ -492,10 +549,54 @@ module "org_policies" {
     }
   ] : [])
 
-  # Opt-in custom organization-policy constraints (CEL-defined, resource-shape
-  # guardrails the fixed boolean/list constraints can't express). Default [] =
-  # none. See docs/known-gaps.md (G6).
-  custom_constraints = var.custom_org_constraints
+  # org_policy_overrides: change or drop a baseline constraint without forking
+  # the stage. A boolean override sets enforce; a list override replaces the
+  # value fields; disabled = true removes the constraint from the baseline.
+  # Constraints not in the baseline are added (list if it sets list fields).
+  default_list_constraints    = [for p in local.default_list_policies : p.constraint]
+  default_boolean_constraints = [for p in local.default_boolean_policies : p.constraint]
+  override_is_list = {
+    for c, o in var.org_policy_overrides : c => (
+      contains(local.default_list_constraints, c) ||
+      (!contains(local.default_boolean_constraints, c) && (o.allowed_values != null || o.denied_values != null || o.allow_all != null || o.deny_all != null))
+    )
+  }
+
+  effective_list_policies = concat(
+    [
+      for p in local.default_list_policies : (
+        contains(keys(var.org_policy_overrides), p.constraint) ? {
+          constraint     = p.constraint
+          allowed_values = var.org_policy_overrides[p.constraint].allowed_values
+          denied_values  = var.org_policy_overrides[p.constraint].denied_values
+          allow_all      = var.org_policy_overrides[p.constraint].allow_all
+          deny_all       = var.org_policy_overrides[p.constraint].deny_all
+        } : p
+      ) if !try(var.org_policy_overrides[p.constraint].disabled, false)
+    ],
+    [
+      for c, o in var.org_policy_overrides : {
+        constraint     = c
+        allowed_values = o.allowed_values
+        denied_values  = o.denied_values
+        allow_all      = o.allow_all
+        deny_all       = o.deny_all
+      } if local.override_is_list[c] && !contains(local.default_list_constraints, c) && !o.disabled
+    ],
+  )
+
+  effective_boolean_policies = concat(
+    [
+      for p in local.default_boolean_policies : {
+        constraint = p.constraint
+        enforce    = try(coalesce(var.org_policy_overrides[p.constraint].enforce, p.enforce), p.enforce)
+      } if !try(var.org_policy_overrides[p.constraint].disabled, false)
+    ],
+    [
+      for c, o in var.org_policy_overrides : { constraint = c, enforce = coalesce(o.enforce, true) }
+      if !local.override_is_list[c] && !contains(local.default_boolean_constraints, c) && !o.disabled
+    ],
+  )
 }
 
 # G9: opt-in IAM deny policies at the org node — a coarse, allow-independent

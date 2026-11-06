@@ -69,6 +69,24 @@ release metadata for a Terraform Cloud run.
   logs stay pipeline-managed, because workload baselines own them.
 - **A4 — GuardDuty Runtime Monitoring now manages its agents** (Fargate, EKS, EC2;
   `runtime_monitoring_agent_management`). Before, it was billed but produced no findings.
+- **S2 — Workload identity federation is restricted on GCP.** The org baseline now enforces
+  `iam.workloadIdentityPoolProviders`, which allows only the TFC and GitHub issuers
+  (`allowed_workload_identity_issuers`). It also enforces `iam.workloadIdentityPoolAwsAccounts`
+  (deny unless listed), `compute.restrictProtocolForwardingCreationForTypes` (INTERNAL),
+  `compute.disableVpcExternalIpv6` and `compute.setNewProjectDefaultToZonalDNSOnly`.
+- **S4 — GCP admin containment is on by default for production estates.**
+  `enable_admin_containment` now defaults to `null`, which means on whenever an environment is
+  `is_production`. The break-glass principal comes from the new config key
+  `gcp.break_glass_group`. A production estate without one fails the plan
+  (`output.admin_containment_enabled` precondition) instead of only warning.
+- **D1 — `org_policy_overrides` (stage and root).** Change, drop or add any baseline GCP org
+  policy without forking the stage.
+- **`gcp.resourceLocations` uses region value groups.** A bare region is now
+  `in:<region>-locations`, so zonal resources in that region are allowed.
+- **The TFC WIF issuer is parameterised** (`tfc_hostname`, in `workload-identity`, the bootstrap
+  stage and both roots). HCP EU and TFE now work on GCP.
+- **New config keys:** `gcp.break_glass_group`, `gcp.alert_emails` and `gcp.admin_containment`.
+  The bootstrap runbook now lists the Cloud Identity groups as prerequisites.
 - **The RCP data perimeter now covers ECR and CloudWatch Logs** (`ecr:*`, `logs:*`).
 - **`organization-policy` gains a `policy_contents` output**, for evidence and tests.
 

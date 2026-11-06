@@ -87,6 +87,16 @@ gcp:
     - gcp-organization-admins@my-org.example.com
   billing_admin_groups:
     - gcp-billing-admins@my-org.example.com
+  # Break-glass Cloud Identity group (gcp-organization). It is exempt from the
+  # admin-containment deny policy, which turns on automatically once any
+  # environment is_production. Create the group, with 2+ members, before the
+  # first org apply.
+  break_glass_group: gcp-break-glass@my-org.example.com
+  # Who receives the control-plane guardrail-change alerts (gcp-organization).
+  alert_emails:
+    - secops@my-org.example.com
+  # Optional explicit override of the derived containment default.
+  # admin_containment: true
   # Regions allowed by the resource-location org policy (gcp-organization).
   allowed_regions:
     - europe-west2

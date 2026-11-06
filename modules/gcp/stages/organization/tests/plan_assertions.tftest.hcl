@@ -655,3 +655,57 @@ run "guardrail_spec_is_gcloud_policy_document" {
     error_message = "in separate mode user deny policies are also applied by the guardrail owner, not this stage."
   }
 }
+
+# Bare regions become in:<region>-locations so zonal resources are allowed;
+# value groups pass through unchanged.
+run "resource_locations_use_region_value_groups" {
+  command = plan
+
+  variables {
+    allowed_regions = ["europe-west2", "in:eu-locations"]
+  }
+
+  assert {
+    condition     = jsonencode(one([for p in local.effective_list_policies : p if p.constraint == "gcp.resourceLocations"]).allowed_values) == jsonencode(["in:europe-west2-locations", "in:eu-locations"])
+    error_message = "bare regions must render as in:<region>-locations value groups."
+  }
+}
+
+# WIF provider creation is limited to the trusted issuers; AWS-account
+# federation is denied unless listed.
+run "workload_identity_federation_restricted" {
+  command = plan
+
+  assert {
+    condition = (
+      one([for p in local.effective_list_policies : p if p.constraint == "iam.workloadIdentityPoolProviders"]).allowed_values == tolist(["https://app.terraform.io", "https://token.actions.githubusercontent.com"]) &&
+      one([for p in local.effective_list_policies : p if p.constraint == "iam.workloadIdentityPoolAwsAccounts"]).deny_all == true &&
+      contains(local.default_boolean_constraints, "compute.disableVpcExternalIpv6")
+    )
+    error_message = "the baseline must allow-list WIF issuers, deny AWS-account federation and disable external IPv6."
+  }
+}
+
+# org_policy_overrides: change, drop and add constraints without forking.
+run "org_policy_overrides_merge_over_baseline" {
+  command = plan
+
+  variables {
+    org_policy_overrides = {
+      "compute.requireShieldedVm"                    = { enforce = false }
+      "cloudfunctions.requireVPCConnector"           = { disabled = true }
+      "compute.restrictVpcPeering"                   = { allow_all = true }
+      "compute.restrictLoadBalancerCreationForTypes" = { allowed_values = ["INTERNAL_HTTP_HTTPS"] }
+    }
+  }
+
+  assert {
+    condition = (
+      one([for p in local.effective_boolean_policies : p if p.constraint == "compute.requireShieldedVm"]).enforce == false &&
+      length([for p in local.effective_boolean_policies : p if p.constraint == "cloudfunctions.requireVPCConnector"]) == 0 &&
+      one([for p in local.effective_list_policies : p if p.constraint == "compute.restrictVpcPeering"]).allow_all == true &&
+      one([for p in local.effective_list_policies : p if p.constraint == "compute.restrictLoadBalancerCreationForTypes"]).allowed_values == tolist(["INTERNAL_HTTP_HTTPS"])
+    )
+    error_message = "overrides must set enforce, drop disabled constraints, replace list values and add new constraints."
+  }
+}

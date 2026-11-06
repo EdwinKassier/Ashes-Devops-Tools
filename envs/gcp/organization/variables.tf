@@ -324,7 +324,7 @@ variable "enable_control_plane_alerting" {
 }
 
 variable "alert_notification_emails" {
-  description = "Email addresses notified by the control-plane alerts. Default [] (a check warns when no destination is set)."
+  description = "Email addresses notified by the control-plane alerts. Empty (default) = gcp.alert_emails from config/landing-zone.yaml; a check warns when no destination is set."
   type        = list(string)
   default     = []
 }
@@ -361,13 +361,13 @@ variable "cmek_required_services" {
 }
 
 variable "enable_admin_containment" {
-  description = "IAM deny policy blocking (for all but containment_exempt_principals) org-wide sink update/delete, exclusion changes, log-bucket delete and VPC-SC perimeter update/delete, plus — tag-scoped to the audit store — bucket delete/IAM change/untag, object delete, key-version destroy/disable and key IAM change. Once on, any sink/exclusion/perimeter change must be applied by break-glass. Default false; examples/presets/prod-gcp-organization.tfvars turns it on."
+  description = "IAM deny policy blocking (for all but containment_exempt_principals) org-wide sink update/delete, exclusion changes, log-bucket delete and VPC-SC perimeter update/delete, plus — tag-scoped to the audit store — bucket delete/IAM change/untag, object delete, key-version destroy/disable and key IAM change. Once on, any sink/exclusion/perimeter change must be applied by break-glass. Null (default) = gcp.admin_containment from config, else ON whenever an environment is_production. Needs a break-glass principal (gcp.break_glass_group or containment_exempt_principals)."
   type        = bool
-  default     = false
+  default     = null
 }
 
 variable "containment_exempt_principals" {
-  description = "Break-glass principals exempt from the admin-containment deny policy, as IAM v2 principal identifiers (e.g. principalSet://goog/group/break-glass@acme.com). Required (non-empty) when enable_admin_containment is true. Placeholder values (REPLACE-ME, your-domain, example.com, .invalid) are rejected so a copied preset fails loudly."
+  description = "Break-glass principals exempt from the admin-containment deny policy, as IAM v2 principal identifiers (e.g. principalSet://goog/group/break-glass@acme.com). Empty (default) = principalSet://goog/group/<gcp.break_glass_group> from config. Required (non-empty) when containment is on. Placeholder values (REPLACE-ME, your-domain, example.com, .invalid) are rejected so a copied preset fails loudly."
   type        = list(string)
   default     = []
 
@@ -476,4 +476,37 @@ variable "restrict_cloud_run_ingress" {
   description = "Enforce run.allowedIngress org-wide so Cloud Run services accept only internal or Cloud Load Balancing traffic (never ingress \"all\"). Public apps are served through the external ALB + Cloud Armor. Default true."
   type        = bool
   default     = true
+}
+
+variable "org_policy_overrides" {
+  description = "Per-constraint overrides of the organization-policy baseline (stage org_policy_overrides): set enforce, replace list values, disabled = true to drop, or add a constraint. Use it instead of forking the stage."
+  type = map(object({
+    enforce        = optional(bool)
+    allowed_values = optional(list(string))
+    denied_values  = optional(list(string))
+    allow_all      = optional(bool)
+    deny_all       = optional(bool)
+    disabled       = optional(bool, false)
+  }))
+  default  = {}
+  nullable = false
+}
+
+variable "allowed_workload_identity_issuers" {
+  description = "OIDC issuers workload identity pool providers may trust (org policy iam.workloadIdentityPoolProviders). Null = https://<tfc_hostname> plus GitHub Actions. Add GitLab / TFE hosts when used."
+  type        = list(string)
+  default     = null
+}
+
+variable "allowed_workload_identity_aws_accounts" {
+  description = "AWS account IDs workload identity pools may federate (iam.workloadIdentityPoolAwsAccounts). Empty (default) denies AWS-account federation."
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
+
+variable "tfc_hostname" {
+  description = "HCP Terraform / Terraform Enterprise hostname whose dynamic-credential tokens the WIF pools trust (app.terraform.io, app.eu.terraform.io or your TFE host)."
+  type        = string
+  default     = "app.terraform.io"
 }

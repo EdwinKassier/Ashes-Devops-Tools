@@ -663,3 +663,52 @@ variable "restrict_cloud_run_ingress" {
   type        = bool
   default     = true
 }
+
+variable "allowed_workload_identity_issuers" {
+  description = "OIDC issuer URIs a workload identity pool provider may be created for (org policy iam.workloadIdentityPoolProviders). Default: HCP Terraform dynamic credentials and GitHub Actions (app-services deploy identities). Add https://gitlab.com (or your TFE / GitLab host) when used. Empty denies every new provider."
+  type        = list(string)
+  default     = ["https://app.terraform.io", "https://token.actions.githubusercontent.com"]
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for u in var.allowed_workload_identity_issuers : can(regex("^https://[a-z0-9.-]+(/.*)?$", u))])
+    error_message = "allowed_workload_identity_issuers entries must be https:// issuer URIs."
+  }
+}
+
+variable "allowed_workload_identity_aws_accounts" {
+  description = "AWS account IDs a workload identity pool may federate (org policy iam.workloadIdentityPoolAwsAccounts). Empty (default) denies AWS-account federation."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for a in var.allowed_workload_identity_aws_accounts : can(regex("^[0-9]{12}$", a))])
+    error_message = "allowed_workload_identity_aws_accounts entries must be 12-digit AWS account IDs."
+  }
+}
+
+variable "org_policy_overrides" {
+  description = "Per-constraint overrides of the organization-policy baseline, keyed by constraint name (e.g. compute.requireOsLogin). For a boolean constraint set enforce. For a list constraint set allowed_values / denied_values / allow_all / deny_all, which replace the baseline values. disabled = true drops the constraint from the baseline. A constraint not in the baseline is added. Use this instead of forking the stage when a single guardrail does not fit."
+  type = map(object({
+    enforce        = optional(bool)
+    allowed_values = optional(list(string))
+    denied_values  = optional(list(string))
+    allow_all      = optional(bool)
+    deny_all       = optional(bool)
+    disabled       = optional(bool, false)
+  }))
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = alltrue([for c in keys(var.org_policy_overrides) : can(regex("^[a-zA-Z0-9]+\\.[a-zA-Z0-9.]+$", c))])
+    error_message = "org_policy_overrides keys must be constraint names such as compute.requireOsLogin (no constraints/ prefix)."
+  }
+}
+
+variable "production_containment_waived" {
+  description = "The caller has deliberately decided to run production environments without admin containment, or reports the missing break-glass principal itself. This silences the production_requires_admin_containment warning. The gcp-organization root sets it only for an explicit enable_admin_containment = false. Default false."
+  type        = bool
+  default     = false
+}

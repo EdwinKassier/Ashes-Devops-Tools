@@ -30,6 +30,9 @@ locals {
     organization_admin_groups = try([for g in local.lz.gcp.organization_admin_groups : tostring(g)], null)
     billing_admin_groups      = try([for g in local.lz.gcp.billing_admin_groups : tostring(g)], null)
     allowed_regions           = try([for r in local.lz.gcp.allowed_regions : tostring(r)], null)
+    break_glass_group         = try(tostring(local.lz.gcp.break_glass_group), null)
+    alert_emails              = try([for e in local.lz.gcp.alert_emails : tostring(e)], null)
+    admin_containment         = try(tobool(local.lz.gcp.admin_containment), null)
     hub_vpc_cidr_block        = try(tostring(local.lz.gcp.network.hub_cidr_block), null)
     dns_hub_vpc_cidr_block    = try(tostring(local.lz.gcp.network.dns_hub_cidr_block), null)
     # gcp.contracts.bootstrap: stage contract override (same shape as the
@@ -78,4 +81,13 @@ locals {
   admin_email               = coalesce(var.admin_email, local.cfg.admin_email, "unset@unset.invalid")
   organization_admin_groups = var.organization_admin_groups != null ? var.organization_admin_groups : coalesce(local.cfg.organization_admin_groups, [])
   billing_admin_groups      = var.billing_admin_groups != null ? var.billing_admin_groups : coalesce(local.cfg.billing_admin_groups, [])
+
+  # Admin containment follows the estate: on whenever a production environment
+  # exists, unless explicitly set (variable > gcp.admin_containment > derived).
+  production_environment_keys = sort([for k, e in coalesce(local.environments, {}) : k if e.is_production])
+  enable_admin_containment    = coalesce(var.enable_admin_containment, local.cfg.admin_containment, length(local.production_environment_keys) > 0)
+  containment_exempt_principals = length(var.containment_exempt_principals) > 0 ? var.containment_exempt_principals : (
+    local.cfg.break_glass_group != null ? ["principalSet://goog/group/${local.cfg.break_glass_group}"] : []
+  )
+  alert_notification_emails = length(var.alert_notification_emails) > 0 ? var.alert_notification_emails : coalesce(local.cfg.alert_emails, [])
 }

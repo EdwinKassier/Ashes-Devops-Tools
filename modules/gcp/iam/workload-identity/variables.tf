@@ -222,3 +222,14 @@ variable "tfc_sa_bindings" {
     error_message = "Each (workspace_name, run_phase) pair may be bound to only one service account."
   }
 }
+
+variable "tfc_hostname" {
+  description = "HCP Terraform / Terraform Enterprise hostname that issues the dynamic-credential tokens (app.terraform.io, app.eu.terraform.io, or a TFE host)."
+  type        = string
+  default     = "app.terraform.io"
+
+  validation {
+    condition     = can(regex("^[a-z0-9.-]+(:[0-9]+)?$", var.tfc_hostname))
+    error_message = "tfc_hostname must be a bare hostname (optionally :port), without scheme or path."
+  }
+}

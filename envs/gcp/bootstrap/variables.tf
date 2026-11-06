@@ -245,3 +245,9 @@ variable "terraform_admin_email" {
     error_message = "terraform_admin_email must be a GCP service account email (ends in .iam.gserviceaccount.com) or null."
   }
 }
+
+variable "tfc_hostname" {
+  description = "HCP Terraform / Terraform Enterprise hostname issuing the dynamic-credential tokens the TFC WIF pool trusts (app.terraform.io, app.eu.terraform.io or a TFE host)."
+  type        = string
+  default     = "app.terraform.io"
+}
