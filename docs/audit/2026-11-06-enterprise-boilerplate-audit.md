@@ -462,10 +462,34 @@ one critical regression in the remediation itself.
   - Many modules lack a `tags` / `labels` input.
 - **Capability:** EKS / Lambda / Functions, cache, NoSQL, cross-region DR, and compliance evidence export.
 
+### Final re-score and its fixes
+
+A last independent five-expert re-score of the branch gave SOTA 7, Boilerplate 6, Maintainability
+6.5, Security 5 and Modularity 7. It found three things the mock tests could not see. All three
+are now fixed:
+
+- **The aws-security management role could still escalate through the one role it was allowed
+  to write.** It now has no IAM role writes at all:
+  - aws-organization creates the trail delivery role, and aws-security only passes it to
+    CloudTrail.
+  - Delegated-admin registration is limited to the security service principals.
+  - IAM Identity Center delegation moved to aws-organization.
+  - `cloudtrail:*` is scoped to the org trail ARN.
+- **The GCP WIF tenant pin was a substring check** (`org != 'acme'` passed). It is now an
+  anchored structural RE2 check, proven against bypass strings.
+- **The GitHub provider was deployed unpinned.** The baseline now creates it only once owners are
+  pinned.
+
+Also fixed: partition-aware policy ARNs (GovCloud / China) and CloudWatch tagging for the CIS
+alarms. Two findings were assessed rather than changed. The aws-backup "StackSet without
+CloudFormation" finding was a false positive: that StackSet moved to aws-organization and is off
+by default in aws-backup. Flow-log deletion stays a pipeline-owned action, a documented trade-off.
+
 ### Indicative scores
 
-The mid-remediation re-score gave SOTA 7, Boilerplate 6.5, Maintainability 7, Security 5.5 and
-Modularity 6.5. Security was held down by the escalation in the new management role, which is now
-fixed, together with the federation-completeness and default-breaks-apply findings. No re-score has
-been run since. A real sandbox apply is the step that would let any of these scores be stated with
-confidence.
+Both re-scores found their biggest Security deduction in the new management role. After the fixes
+above, the remaining Security gaps are the opt-in or operator items: OPA on a paid tier,
+Terraform-owned GCP deny guardrails, and branch protection. The next biggest gains for every
+dimension are a real sandbox apply per cloud, which would turn mock-verified policies into proven
+ones, and an IAM policy-simulation test harness. They are also what would let these scores be
+stated with confidence.
