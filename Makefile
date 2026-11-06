@@ -322,6 +322,7 @@ config-check: ## Validate config/*.example.yaml and every test fixture against c
 	@command -v check-jsonschema >/dev/null || { echo "check-jsonschema not found: pipx install check-jsonschema (see .tool-versions)"; exit 1; }
 	@{ echo config/landing-zone.example.yaml; find envs modules -name 'landing-zone*.yaml' -path '*/tests/fixtures/*'; } | sort | \
 		xargs check-jsonschema --schemafile config/landing-zone.schema.json
+	@./scripts/check-config-schema-coverage.sh
 	@for f in config/tests/*.yaml; do \
 		if check-jsonschema --schemafile config/landing-zone.schema.json "$$f" >/dev/null 2>&1; then \
 			echo "config-check: $$f should FAIL schema validation but passed"; exit 1; fi; \

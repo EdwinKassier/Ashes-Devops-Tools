@@ -663,6 +663,36 @@
             }
           },
           "additionalProperties": false
+        },
+        "adopt": {
+          "type": "object",
+          "properties": {
+            "organization_id": {
+              "type": [
+                "string",
+                "integer"
+              ]
+            },
+            "ou_ids": {
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "integer"
+                ]
+              }
+            },
+            "account_ids": {
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "integer"
+                ]
+              }
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
@@ -805,7 +835,8 @@
         "required": [
           "org"
         ]
-      }
+      },
+      "description": "Per-cloud conditionals only require org: fixtures and roots are intentionally partial, and each root's Terraform validations name the missing essential keys."
     },
     {
       "if": {

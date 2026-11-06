@@ -1,0 +1,11 @@
+# Test fixture: brownfield adoption keys (aws.adopt) for the aws-organization root.
+version: 1
+org:
+  name: cfgco
+aws:
+  adopt:
+    organization_id: o-abcdef1234
+    ou_ids:
+      Security: ou-ab12-12345678
+    account_ids:
+      log_archive: "123456789012"
