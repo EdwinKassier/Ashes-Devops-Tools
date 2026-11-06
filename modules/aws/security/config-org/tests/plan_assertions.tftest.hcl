@@ -121,3 +121,19 @@ run "explicit_roles_create_nothing" {
     error_message = "Explicit role ARNs must be used as-is and no role created."
   }
 }
+
+# Boundary propagation (tfc-oidc-baseline): the module-created org aggregator
+# role carries permissions_boundary_arn.
+run "aggregator_role_permissions_boundary" {
+  command = plan
+
+  variables {
+    aggregator_role_arn      = null
+    permissions_boundary_arn = "arn:aws:iam::123456789012:policy/tfc-apply-boundary"
+  }
+
+  assert {
+    condition     = aws_iam_role.aggregator[0].permissions_boundary == "arn:aws:iam::123456789012:policy/tfc-apply-boundary"
+    error_message = "The org aggregator role must carry permissions_boundary_arn."
+  }
+}

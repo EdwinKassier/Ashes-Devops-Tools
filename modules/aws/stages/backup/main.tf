@@ -19,6 +19,19 @@
 # Backup vault + Vault Lock + restore testing (BACKUP account)
 # ---------------------------------------------------------------------------
 
+# Boundary propagation (tfc-oidc-baseline): the backup-account tfc-apply role may
+# only create roles that carry its own permissions boundary. Derived from the
+# aws.backup provider; only needed when the restore-testing role is created.
+data "aws_caller_identity" "backup" {
+  count    = local.derive_backup_boundary ? 1 : 0
+  provider = aws.backup
+}
+
+data "aws_partition" "backup" {
+  count    = local.derive_backup_boundary ? 1 : 0
+  provider = aws.backup
+}
+
 module "backup_vault" {
   source = "../../backup/backup-vault"
   providers = {
@@ -31,6 +44,8 @@ module "backup_vault" {
   max_retention_days       = var.max_retention_days
   changeable_for_days      = var.changeable_for_days
   restore_testing_role_arn = var.restore_testing_role_arn
+  # The restore-testing role is created in the backup account.
+  permissions_boundary_arn = local.backup_boundary_arn
 }
 
 # ---------------------------------------------------------------------------
@@ -44,6 +59,19 @@ module "backup_vault" {
 # ---------------------------------------------------------------------------
 
 locals {
+  derive_backup_boundary = var.tfc_apply_boundary_policy_name != null && var.restore_testing_role_arn == null
+  # Real AWS always returns a 12-digit account and an aws* partition; under
+  # mock_provider these data sources return random strings the provider's ARN
+  # validator rejects, so a malformed identity yields no boundary rather than
+  # failing every mocked plan downstream (tests override the data sources).
+  boundary_partition = try(data.aws_partition.backup[0].partition, null)
+  boundary_account   = try(data.aws_caller_identity.backup[0].account_id, null)
+  backup_boundary_arn = (
+    local.derive_backup_boundary && can(regex("^aws(-[a-z]+)*$", local.boundary_partition)) && can(regex("^[0-9]{12}$", local.boundary_account))
+    ? "arn:${local.boundary_partition}:iam::${local.boundary_account}:policy/${var.tfc_apply_boundary_policy_name}"
+    : null
+  )
+
   create_backup_role = var.backup_role_arn == null
   backup_role_arn    = local.create_backup_role ? "arn:aws:iam::$account:role/${var.backup_role_name}" : var.backup_role_arn
 

@@ -43,7 +43,29 @@
 # Spoke VPC — private/isolated/tgw tiers; CIDR literal or from shared IPAM
 # ---------------------------------------------------------------------------
 
+# Boundary propagation (tfc-oidc-baseline): the workload-account tfc-apply role
+# may only create roles that carry its own permissions boundary.
+data "aws_caller_identity" "current" {
+  count = var.tfc_apply_boundary_policy_name != null ? 1 : 0
+}
+
+data "aws_partition" "current" {
+  count = var.tfc_apply_boundary_policy_name != null ? 1 : 0
+}
+
 locals {
+  # Real AWS always returns a 12-digit account and an aws* partition; under
+  # mock_provider these data sources return random strings the provider's ARN
+  # validator rejects, so a malformed identity yields no boundary rather than
+  # failing every mocked plan downstream (tests override the data sources).
+  boundary_partition = try(data.aws_partition.current[0].partition, null)
+  boundary_account   = try(data.aws_caller_identity.current[0].account_id, null)
+  permissions_boundary_arn = (
+    var.tfc_apply_boundary_policy_name != null && can(regex("^aws(-[a-z]+)*$", local.boundary_partition)) && can(regex("^[0-9]{12}$", local.boundary_account))
+    ? "arn:${local.boundary_partition}:iam::${local.boundary_account}:policy/${var.tfc_apply_boundary_policy_name}"
+    : null
+  )
+
   # VPC / attachment name: explicit var.name, else workload-<environment>, else
   # the legacy "workload".
   name = coalesce(var.name, var.environment != null ? "workload-${var.environment}" : "workload")
@@ -110,6 +132,8 @@ module "iam_role" {
   source = "../../iam/iam-role"
 
   roles = var.workload_roles
+  # Default boundary for roles that do not set their own permissions_boundary.
+  permissions_boundary_arn = local.permissions_boundary_arn
 
   # Break-glass is an org-level emergency-access construct owned by the
   # security/management layer, not replicated into every workload account.

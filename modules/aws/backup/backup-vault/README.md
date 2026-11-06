@@ -51,12 +51,12 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_backup_restore_testing_plan.this (modules/aws/backup/backup-vault/main.tf#L56)
-- resource.aws_backup_restore_testing_selection.this (modules/aws/backup/backup-vault/main.tf#L69)
-- resource.aws_backup_vault.this (modules/aws/backup/backup-vault/main.tf#L41)
-- resource.aws_backup_vault_lock_configuration.this (modules/aws/backup/backup-vault/main.tf#L46)
+- resource.aws_backup_restore_testing_plan.this (modules/aws/backup/backup-vault/main.tf#L58)
+- resource.aws_backup_restore_testing_selection.this (modules/aws/backup/backup-vault/main.tf#L71)
+- resource.aws_backup_vault.this (modules/aws/backup/backup-vault/main.tf#L43)
+- resource.aws_backup_vault_lock_configuration.this (modules/aws/backup/backup-vault/main.tf#L48)
 - resource.aws_iam_role.restore_testing (modules/aws/backup/backup-vault/main.tf#L22)
-- resource.aws_iam_role_policy_attachment.restore_testing (modules/aws/backup/backup-vault/main.tf#L35)
+- resource.aws_iam_role_policy_attachment.restore_testing (modules/aws/backup/backup-vault/main.tf#L37)
 
 
 ## Inputs
@@ -68,6 +68,7 @@ The following resources are created:
 | <a name="input_max_retention_days"></a> [max\_retention\_days](#input\_max\_retention\_days) | Maximum retention (days) allowed for recovery points stored in the vault. | `number` | `3650` | no |
 | <a name="input_min_retention_days"></a> [min\_retention\_days](#input\_min\_retention\_days) | Minimum retention (days) enforced on every recovery point stored in the vault. Recovery points cannot be deleted before this age. | `number` | `7` | no |
 | <a name="input_partition"></a> [partition](#input\_partition) | AWS partition for the managed-policy ARNs attached to the created restore-testing role (aws, aws-us-gov, aws-cn). | `string` | `"aws"` | no |
+| <a name="input_permissions_boundary_arn"></a> [permissions\_boundary\_arn](#input\_permissions\_boundary\_arn) | Permissions-boundary managed policy ARN set on every IAM role this module creates. Required when the roles are created by a member-account tfc-apply role with boundary propagation on (tfc-oidc-baseline enable\_apply\_boundary\_propagation): pass arn:PARTITION:iam::ACCOUNT\_ID:policy/tfc-apply-boundary. Null (default) = no boundary. | `string` | `null` | no |
 | <a name="input_restore_testing_plan_name"></a> [restore\_testing\_plan\_name](#input\_restore\_testing\_plan\_name) | Name of the AWS Backup restore testing plan. AWS restricts this to alphanumeric characters and underscores. | `string` | `"org_restore_test"` | no |
 | <a name="input_restore_testing_role_arn"></a> [restore\_testing\_role\_arn](#input\_restore\_testing\_role\_arn) | ARN of an existing IAM role AWS Backup assumes to perform restore testing jobs. Null (default) creates restore\_testing\_role\_name here (trusting backup.amazonaws.com, with the AWS managed AWSBackupServiceRolePolicyForRestores policy). | `string` | `null` | no |
 | <a name="input_restore_testing_role_name"></a> [restore\_testing\_role\_name](#input\_restore\_testing\_role\_name) | Name of the restore-testing IAM role created when restore\_testing\_role\_arn is null. | `string` | `"aws-backup-restore-testing"` | no |

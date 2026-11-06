@@ -54,7 +54,9 @@ make install && make pre-commit-install
 gcloud auth application-default login     # GCP roots (gcp-bootstrap, gcp-organization, gcp-projects, gcp-network-hub, gcp-workload-<env>)
 export SUPABASE_ACCESS_TOKEN="sbp_..."   # required for supabase modules
 export VERCEL_API_TOKEN="..."            # required for vercel modules
-# AWS roots use TFC dynamic credentials (TFC_AWS_PROVIDER_AUTH + TFC_AWS_RUN_ROLE_ARN)
+# AWS roots use TFC dynamic credentials: TFC_AWS_PROVIDER_AUTH + per-workspace
+# TFC_AWS_PLAN_ROLE_ARN (read-only tfc-plan) / TFC_AWS_APPLY_ROLE_ARN (tfc-apply);
+# multi-account roots add TFC_AWS_*_<alias> per provider alias (set by envs/tfc-admin),
 # or AWS_PROFILE for local runs — see the AWS Bootstrap runbook for the full flow.
 
 # 3. Run the local validation suite (no cloud credentials needed for tests)

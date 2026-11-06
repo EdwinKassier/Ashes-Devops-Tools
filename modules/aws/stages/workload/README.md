@@ -87,7 +87,9 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_ec2_transit_gateway_vpc_attachment.spoke (modules/aws/stages/workload/main.tf#L92)
+- resource.aws_ec2_transit_gateway_vpc_attachment.spoke (modules/aws/stages/workload/main.tf#L114)
+- data source.aws_caller_identity.current (modules/aws/stages/workload/main.tf#L48)
+- data source.aws_partition.current (modules/aws/stages/workload/main.tf#L52)
 
 
 ## Inputs
@@ -113,6 +115,7 @@ The following resources are created:
 | <a name="input_name"></a> [name](#input\_name) | Name of the spoke VPC (and prefix for its subnets, route tables and TGW attachment). null derives workload-<environment> (or "workload" when environment is null). | `string` | `null` | no |
 | <a name="input_subnets"></a> [subnets](#input\_subnets) | Spoke subnet tiers, keyed by tier name. newbits/number\_offset drive cidrsubnet(vpc\_cidr, newbits, number\_offset + az\_index); the tgw tier holds the transit-gateway attachment ENIs. Offsets are multiples of 8 (> az\_count) so per-AZ subnets never collide. | <pre>map(object({<br/>    newbits       = number<br/>    number_offset = number<br/>    public        = optional(bool, false)<br/>  }))</pre> | <pre>{<br/>  "isolated": {<br/>    "newbits": 8,<br/>    "number_offset": 8<br/>  },<br/>  "private": {<br/>    "newbits": 8,<br/>    "number_offset": 0<br/>  },<br/>  "tgw": {<br/>    "newbits": 8,<br/>    "number_offset": 16<br/>  }<br/>}</pre> | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to the stage's own taggable resources (spoke VPC and its children, TGW attachment). Org-wide tags (CostCenter, Environment, Owner, ...) normally come from the provider default\_tags; use this for stage-specific additions. | `map(string)` | `{}` | no |
+| <a name="input_tfc_apply_boundary_policy_name"></a> [tfc\_apply\_boundary\_policy\_name](#input\_tfc\_apply\_boundary\_policy\_name) | Name of the tfc-apply permissions-boundary managed policy (tfc-oidc-baseline apply\_boundary\_policy\_name). Every IAM role this stage creates in the workload account (workload\_roles without their own permissions\_boundary) gets permissions\_boundary = arn:PARTITION:iam::ACCOUNT\_ID:policy/NAME, derived from that account's provider, which the member-account tfc-apply role requires when boundary propagation is on. Null = create roles without a boundary. | `string` | `"tfc-apply-boundary"` | no |
 | <a name="input_tgw_destination_cidrs"></a> [tgw\_destination\_cidrs](#input\_tgw\_destination\_cidrs) | Destination CIDRs routed from tgw\_route\_tiers to the shared transit gateway. Default 0.0.0.0/0 sends all non-local traffic to the hub (centralized egress + inspection); use the org supernet (e.g. ["10.0.0.0/8"]) for east-west only. | `list(string)` | <pre>[<br/>  "0.0.0.0/0"<br/>]</pre> | no |
 | <a name="input_tgw_route_tiers"></a> [tgw\_route\_tiers](#input\_tgw\_route\_tiers) | Spoke subnet tiers whose route tables send tgw\_destination\_cidrs to the shared transit gateway. Defaults to the private tier; the isolated tier stays local-only by design. | `list(string)` | <pre>[<br/>  "private"<br/>]</pre> | no |
 | <a name="input_vpc_cidr"></a> [vpc\_cidr](#input\_vpc\_cidr) | IPv4 CIDR of the workload spoke VPC. Used for subnet math; also the literal VPC CIDR when ipam\_pool\_id is empty. | `string` | `"10.20.0.0/16"` | no |

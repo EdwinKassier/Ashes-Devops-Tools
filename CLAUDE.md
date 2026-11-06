@@ -123,7 +123,7 @@ Only the roots you apply pull in credentials — an unapplied workspace needs no
 | Variable | Purpose |
 |----------|---------|
 | `GOOGLE_CLOUD_PROJECT` / GCP ADC | google provider — GCP roots (`gcp-bootstrap`, `gcp-organization`, `gcp-projects`, `gcp-network-hub`, `gcp-workload-<env>`) only |
-| `TFC_AWS_PROVIDER_AUTH` + `TFC_AWS_PLAN_ROLE_ARN` / `TFC_AWS_APPLY_ROLE_ARN` | AWS via TFC dynamic (OIDC) credentials, per-account `tfc-plan`/`tfc-apply` roles from `modules/aws/iam/tfc-oidc-baseline` (set per workspace by `envs/tfc-admin`) — AWS roots only |
+| `TFC_AWS_PROVIDER_AUTH` + `TFC_AWS_PLAN_ROLE_ARN` / `TFC_AWS_APPLY_ROLE_ARN` | AWS via TFC dynamic (OIDC) credentials, per-account `tfc-plan`/`tfc-apply` roles from `modules/aws/iam/tfc-oidc-baseline` (set per workspace by `envs/tfc-admin`; multi-account roots `aws-security`/`aws-backup` also get `TFC_AWS_*_<alias>` per member account) — AWS roots only |
 | `TFC_GCP_PROVIDER_AUTH` + `TFC_GCP_WORKLOAD_PROVIDER_NAME` + `TFC_GCP_PLAN/APPLY_SERVICE_ACCOUNT_EMAIL` | GCP via TFC dynamic credentials, per-stage plan/apply SAs from `gcp-bootstrap` (set per workspace by `envs/tfc-admin`) — GCP roots only |
 | `AWS_PROFILE` | AWS local/OIDC fallback when not using TFC dynamic credentials — AWS roots only |
 | `SUPABASE_ACCESS_TOKEN` | supabase provider — `saas` root only, when `enable_supabase=true` |

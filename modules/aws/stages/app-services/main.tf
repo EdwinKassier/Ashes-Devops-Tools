@@ -103,6 +103,24 @@ locals {
   )
 
   account_id = try(data.aws_caller_identity.current[0].account_id, null)
+
+  # Boundary propagation: the member-account tfc-apply role may only create
+  # roles that carry its own permissions boundary (tfc-oidc-baseline).
+  # Real AWS always returns a 12-digit account and an aws* partition; under
+  # mock_provider these data sources return random strings the provider's ARN
+  # validator rejects, so a malformed identity yields no boundary rather than
+  # failing every mocked plan downstream (tests override the data sources).
+  boundary_partition = try(data.aws_partition.current[0].partition, null)
+  boundary_account   = local.account_id
+  permissions_boundary_arn = (
+    local.enabled && var.tfc_apply_boundary_policy_name != null && can(regex("^aws(-[a-z]+)*$", local.boundary_partition)) && can(regex("^[0-9]{12}$", local.boundary_account))
+    ? "arn:${local.boundary_partition}:iam::${local.boundary_account}:policy/${var.tfc_apply_boundary_policy_name}"
+    : null
+  )
+}
+
+data "aws_partition" "current" {
+  count = local.enabled && var.tfc_apply_boundary_policy_name != null ? 1 : 0
 }
 
 data "aws_caller_identity" "current" {
@@ -198,9 +216,10 @@ locals {
 resource "aws_iam_role" "execution" {
   for_each = var.services
 
-  name               = "${var.environment}-${each.key}-exec"
-  description        = "ECS task execution role for ${each.key} (image pull, logs, secrets)."
-  assume_role_policy = local.ecs_tasks_trust
+  name                 = "${var.environment}-${each.key}-exec"
+  description          = "ECS task execution role for ${each.key} (image pull, logs, secrets)."
+  assume_role_policy   = local.ecs_tasks_trust
+  permissions_boundary = local.permissions_boundary_arn
 
   tags = merge(var.tags, { Service = each.key })
 }
@@ -267,9 +286,10 @@ resource "aws_iam_role_policy" "execution" {
 resource "aws_iam_role" "task" {
   for_each = var.services
 
-  name               = "${var.environment}-${each.key}-task"
-  description        = "ECS task role for ${each.key} (application permissions only)."
-  assume_role_policy = local.ecs_tasks_trust
+  name                 = "${var.environment}-${each.key}-task"
+  description          = "ECS task role for ${each.key} (application permissions only)."
+  assume_role_policy   = local.ecs_tasks_trust
+  permissions_boundary = local.permissions_boundary_arn
 
   tags = merge(var.tags, { Service = each.key })
 }
@@ -324,6 +344,7 @@ resource "aws_iam_role" "deploy" {
   name                 = "${var.environment}-${each.key}-deploy"
   description          = "GitHub Actions deploy role for ${each.key} (${each.value.github.repository})."
   max_session_duration = 3600
+  permissions_boundary = local.permissions_boundary_arn
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

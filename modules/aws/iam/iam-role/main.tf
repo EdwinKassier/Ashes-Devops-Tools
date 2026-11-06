@@ -34,7 +34,8 @@ resource "aws_iam_role" "this" {
   name                 = each.key
   assume_role_policy   = each.value.trust_policy
   max_session_duration = try(each.value.max_session_duration, 3600)
-  permissions_boundary = try(each.value.permissions_boundary, null)
+  # Per-role boundary wins; otherwise the module-wide permissions_boundary_arn.
+  permissions_boundary = each.value.permissions_boundary != null ? each.value.permissions_boundary : var.permissions_boundary_arn
 }
 
 resource "aws_iam_role_policy_attachment" "this" {
@@ -58,6 +59,7 @@ resource "aws_iam_role" "break_glass" {
   count                = var.enable_break_glass ? 1 : 0
   name                 = var.break_glass_role_name
   max_session_duration = 3600
+  permissions_boundary = var.permissions_boundary_arn
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{

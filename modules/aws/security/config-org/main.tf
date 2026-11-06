@@ -47,6 +47,8 @@ resource "aws_iam_service_linked_role" "config" {
 resource "aws_iam_role" "aggregator" {
   count = local.create_aggregator_role ? 1 : 0
   name  = var.aggregator_role_name
+
+  permissions_boundary = var.permissions_boundary_arn
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{

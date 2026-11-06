@@ -61,6 +61,7 @@ module "example" {
 | Name | Version |
 |------|---------|
 | <a name="provider_aws"></a> [aws](#provider\_aws) | 6.54.0 |
+| <a name="provider_aws.backup"></a> [aws.backup](#provider\_aws.backup) | 6.54.0 |
 
 ## Modules
 
@@ -74,8 +75,10 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_cloudformation_stack_set.backup_role (modules/aws/stages/backup/main.tf#L76)
-- resource.aws_cloudformation_stack_set_instance.backup_role (modules/aws/stages/backup/main.tf#L108)
+- resource.aws_cloudformation_stack_set.backup_role (modules/aws/stages/backup/main.tf#L104)
+- resource.aws_cloudformation_stack_set_instance.backup_role (modules/aws/stages/backup/main.tf#L136)
+- data source.aws_caller_identity.backup (modules/aws/stages/backup/main.tf#L25)
+- data source.aws_partition.backup (modules/aws/stages/backup/main.tf#L30)
 
 
 ## Inputs
@@ -92,6 +95,7 @@ The following resources are created:
 | <a name="input_max_retention_days"></a> [max\_retention\_days](#input\_max\_retention\_days) | Maximum retention (days) allowed for recovery points stored in the vault. | `number` | `3650` | no |
 | <a name="input_min_retention_days"></a> [min\_retention\_days](#input\_min\_retention\_days) | Minimum retention (days) enforced on every recovery point stored in the vault. Recovery points cannot be deleted before this age. | `number` | `7` | no |
 | <a name="input_restore_testing_role_arn"></a> [restore\_testing\_role\_arn](#input\_restore\_testing\_role\_arn) | ARN of an existing IAM role (in the backup account) AWS Backup assumes to perform restore testing jobs. Null (default) creates aws-backup-restore-testing in the backup account. | `string` | `null` | no |
+| <a name="input_tfc_apply_boundary_policy_name"></a> [tfc\_apply\_boundary\_policy\_name](#input\_tfc\_apply\_boundary\_policy\_name) | Name of the tfc-apply permissions-boundary managed policy (tfc-oidc-baseline apply\_boundary\_policy\_name). Every IAM role this stage creates in the backup account (the restore-testing role) gets permissions\_boundary = arn:PARTITION:iam::ACCOUNT\_ID:policy/NAME, derived from that account's provider, which the member-account tfc-apply role requires when boundary propagation is on. Null = create roles without a boundary. | `string` | `"tfc-apply-boundary"` | no |
 | <a name="input_vault_name"></a> [vault\_name](#input\_vault\_name) | Name of the AWS Backup vault created in the backup account. This is the cross-account naming contract: the management account's org BACKUP\_POLICY targets the vault by this name. | `string` | `"org-backup-vault"` | no |
 
 ## Outputs

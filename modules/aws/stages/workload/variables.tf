@@ -263,3 +263,14 @@ variable "edge_origin_domain_name" {
   type        = string
   default     = "origin.example.com"
 }
+
+variable "tfc_apply_boundary_policy_name" {
+  description = "Name of the tfc-apply permissions-boundary managed policy (tfc-oidc-baseline apply_boundary_policy_name). Every IAM role this stage creates in the workload account (workload_roles without their own permissions_boundary) gets permissions_boundary = arn:PARTITION:iam::ACCOUNT_ID:policy/NAME, derived from that account's provider, which the member-account tfc-apply role requires when boundary propagation is on. Null = create roles without a boundary."
+  type        = string
+  default     = "tfc-apply-boundary"
+
+  validation {
+    condition     = var.tfc_apply_boundary_policy_name == null || can(regex("^[A-Za-z0-9+=,.@_-]{1,128}$", var.tfc_apply_boundary_policy_name))
+    error_message = "tfc_apply_boundary_policy_name must be null or a valid IAM policy name (1-128 chars of [A-Za-z0-9+=,.@_-])."
+  }
+}

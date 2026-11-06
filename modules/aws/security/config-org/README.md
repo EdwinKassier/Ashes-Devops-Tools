@@ -49,13 +49,13 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_config_configuration_aggregator.org (modules/aws/security/config-org/main.tf#L112)
-- resource.aws_config_configuration_recorder.this (modules/aws/security/config-org/main.tf#L66)
-- resource.aws_config_configuration_recorder_status.this (modules/aws/security/config-org/main.tf#L101)
-- resource.aws_config_delivery_channel.this (modules/aws/security/config-org/main.tf#L92)
-- resource.aws_config_organization_conformance_pack.this (modules/aws/security/config-org/main.tf#L126)
+- resource.aws_config_configuration_aggregator.org (modules/aws/security/config-org/main.tf#L114)
+- resource.aws_config_configuration_recorder.this (modules/aws/security/config-org/main.tf#L68)
+- resource.aws_config_configuration_recorder_status.this (modules/aws/security/config-org/main.tf#L103)
+- resource.aws_config_delivery_channel.this (modules/aws/security/config-org/main.tf#L94)
+- resource.aws_config_organization_conformance_pack.this (modules/aws/security/config-org/main.tf#L128)
 - resource.aws_iam_role.aggregator (modules/aws/security/config-org/main.tf#L47)
-- resource.aws_iam_role_policy_attachment.aggregator (modules/aws/security/config-org/main.tf#L60)
+- resource.aws_iam_role_policy_attachment.aggregator (modules/aws/security/config-org/main.tf#L62)
 - resource.aws_iam_service_linked_role.config (modules/aws/security/config-org/main.tf#L40)
 - data source.aws_caller_identity.current (modules/aws/security/config-org/main.tf#L33)
 
@@ -76,6 +76,7 @@ The following resources are created:
 | <a name="input_delivery_channel_name"></a> [delivery\_channel\_name](#input\_delivery\_channel\_name) | Name applied to every per-Region delivery channel. | `string` | `"org-delivery"` | no |
 | <a name="input_home_region"></a> [home\_region](#input\_home\_region) | Home (aggregation) Region. Global resource types (IAM, etc.) are recorded ONLY by the recorder in this Region to avoid duplicating global configuration items in every Region. Must be one of aws\_enabled\_regions for global types to be recorded at all. | `string` | `"eu-west-2"` | no |
 | <a name="input_partition"></a> [partition](#input\_partition) | AWS partition used to build the managed-policy and pre-existing service-linked-role ARNs (aws, aws-us-gov, aws-cn). | `string` | `"aws"` | no |
+| <a name="input_permissions_boundary_arn"></a> [permissions\_boundary\_arn](#input\_permissions\_boundary\_arn) | Permissions-boundary managed policy ARN set on every IAM role this module creates. Required when the roles are created by a member-account tfc-apply role with boundary propagation on (tfc-oidc-baseline enable\_apply\_boundary\_propagation): pass arn:PARTITION:iam::ACCOUNT\_ID:policy/tfc-apply-boundary. Null (default) = no boundary. | `string` | `null` | no |
 | <a name="input_record_all_supported"></a> [record\_all\_supported](#input\_record\_all\_supported) | COST TOGGLE. When true (default), each recorder records ALL supported resource types (and, being all\_supported, global resource types too). Recording every resource type in every Region is the most expensive Config mode; set false to pair with a narrower recording\_group managed out-of-band when cost matters. | `bool` | `true` | no |
 | <a name="input_recorder_name"></a> [recorder\_name](#input\_recorder\_name) | Name applied to every per-Region configuration recorder. | `string` | `"org-recorder"` | no |
 | <a name="input_recorder_only"></a> [recorder\_only](#input\_recorder\_only) | When true, deploy only the per-Region recorder/delivery-channel/status and skip the org aggregator and conformance packs. The aws-workload stage sets this true to deploy a single workload account's recorder; the home-account aws-config stage leaves it false. | `bool` | `false` | no |

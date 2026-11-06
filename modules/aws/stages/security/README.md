@@ -155,7 +155,11 @@ module "example" {
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.46.0, < 7.0.0 |
 
+## Providers
 
+| Name | Version |
+|------|---------|
+| <a name="provider_aws.security_tooling"></a> [aws.security\_tooling](#provider\_aws.security\_tooling) | 6.54.0 |
 
 ## Modules
 
@@ -180,6 +184,13 @@ module "example" {
 - systems_manager - ../../ops/systems-manager
 
 
+## Resources
+
+The following resources are created:
+
+
+- data source.aws_caller_identity.security_tooling (modules/aws/stages/security/main.tf#L28)
+- data source.aws_partition.security_tooling (modules/aws/stages/security/main.tf#L33)
 
 
 ## Inputs
@@ -230,6 +241,7 @@ module "example" {
 | <a name="input_meta_store_manager_role_arn"></a> [meta\_store\_manager\_role\_arn](#input\_meta\_store\_manager\_role\_arn) | ARN of the AmazonSecurityLakeMetaStoreManager IAM role Security Lake uses to manage the Lake Formation metastore. Required when enable\_security\_lake is true. | `string` | `""` | no |
 | <a name="input_notification_subscribers"></a> [notification\_subscribers](#input\_notification\_subscribers) | Subscribers attached to the security-notifications SNS topic, keyed by an arbitrary name. At least one is required (findings would otherwise fire into a void). Defaults to a placeholder SecOps email the root is expected to override. | <pre>map(object({<br/>    protocol = string # one of: email, https, sms, sqs, lambda, etc.<br/>    endpoint = string # e.g. an email address or HTTPS URL<br/>  }))</pre> | <pre>{<br/>  "secops": {<br/>    "endpoint": "secops@example.com",<br/>    "protocol": "email"<br/>  }<br/>}</pre> | no |
 | <a name="input_quarantine_vpc_id"></a> [quarantine\_vpc\_id](#input\_quarantine\_vpc\_id) | VPC ID in which the incident-response deny-all quarantine security group is created. Empty (default) skips the SG. Supply the VPC holding the workloads the isolation Lambda may need to quarantine. | `string` | `""` | no |
+| <a name="input_tfc_apply_boundary_policy_name"></a> [tfc\_apply\_boundary\_policy\_name](#input\_tfc\_apply\_boundary\_policy\_name) | Name of the tfc-apply permissions-boundary managed policy (tfc-oidc-baseline apply\_boundary\_policy\_name). Every IAM role this stage creates in the security-tooling account (Config aggregator, incident-response roles; management-account roles are unaffected) gets permissions\_boundary = arn:PARTITION:iam::ACCOUNT\_ID:policy/NAME, derived from that account's provider, which the member-account tfc-apply role requires when boundary propagation is on. Null = create roles without a boundary. | `string` | `"tfc-apply-boundary"` | no |
 
 ## Outputs
 

@@ -154,3 +154,37 @@ run "config_recorder_defaults_to_service_linked_role" {
     error_message = "With config_role_arn = null the recorder must resolve to the service-linked role."
   }
 }
+
+# Boundary propagation (tfc-oidc-baseline): workload_roles default to the
+# workload account's tfc-apply-boundary, derived from the default provider.
+run "workload_roles_carry_tfc_apply_boundary" {
+  command = plan
+
+  override_data {
+    target = data.aws_caller_identity.current[0]
+    values = { account_id = "222222222222" }
+  }
+
+  override_data {
+    target = data.aws_partition.current[0]
+    values = { partition = "aws" }
+  }
+
+  assert {
+    condition     = local.permissions_boundary_arn == "arn:aws:iam::222222222222:policy/tfc-apply-boundary"
+    error_message = "The workload boundary ARN (passed to iam_role) must be derived from the workload-account provider."
+  }
+}
+
+run "workload_boundary_disabled_with_null_name" {
+  command = plan
+
+  variables {
+    tfc_apply_boundary_policy_name = null
+  }
+
+  assert {
+    condition     = local.permissions_boundary_arn == null && length(data.aws_caller_identity.current) == 0
+    error_message = "tfc_apply_boundary_policy_name = null must disable the boundary."
+  }
+}

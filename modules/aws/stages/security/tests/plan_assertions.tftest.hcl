@@ -248,3 +248,42 @@ run "explicit_key_admin_wins" {
     error_message = "An explicit key_admin_arn must be used for every CMK."
   }
 }
+
+# Boundary propagation (tfc-oidc-baseline): roles the stage creates in the
+# security-tooling account (Config aggregator, IR roles) carry that account's
+# tfc-apply-boundary, derived from the security_tooling provider.
+run "security_tooling_roles_carry_tfc_apply_boundary" {
+  command = plan
+
+  variables {
+    aggregator_role_arn = null
+  }
+
+  override_data {
+    target = data.aws_caller_identity.security_tooling[0]
+    values = { account_id = "222222222222" }
+  }
+
+  override_data {
+    target = data.aws_partition.security_tooling[0]
+    values = { partition = "aws" }
+  }
+
+  assert {
+    condition     = local.security_tooling_boundary_arn == "arn:aws:iam::222222222222:policy/tfc-apply-boundary"
+    error_message = "The security-tooling boundary ARN (passed to config + incident_response) must be derived from the security_tooling provider."
+  }
+}
+
+run "security_tooling_boundary_disabled_with_null_name" {
+  command = plan
+
+  variables {
+    tfc_apply_boundary_policy_name = null
+  }
+
+  assert {
+    condition     = local.security_tooling_boundary_arn == null && length(data.aws_caller_identity.security_tooling) == 0
+    error_message = "tfc_apply_boundary_policy_name = null must disable the boundary and skip the identity lookup."
+  }
+}

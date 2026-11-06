@@ -86,25 +86,26 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_cloudwatch_log_group.service (modules/aws/stages/app-services/main.tf#L169)
-- resource.aws_ecs_cluster.this (modules/aws/stages/app-services/main.tf#L131)
-- resource.aws_iam_openid_connect_provider.github (modules/aws/stages/app-services/main.tf#L116)
-- resource.aws_iam_role.deploy (modules/aws/stages/app-services/main.tf#L321)
-- resource.aws_iam_role.execution (modules/aws/stages/app-services/main.tf#L198)
-- resource.aws_iam_role.task (modules/aws/stages/app-services/main.tf#L267)
-- resource.aws_iam_role_policy.deploy (modules/aws/stages/app-services/main.tf#L349)
-- resource.aws_iam_role_policy.execution (modules/aws/stages/app-services/main.tf#L208)
-- resource.aws_iam_role_policy.task (modules/aws/stages/app-services/main.tf#L277)
-- resource.aws_iam_role_policy.task_exec (modules/aws/stages/app-services/main.tf#L285)
-- resource.aws_iam_role_policy_attachment.task (modules/aws/stages/app-services/main.tf#L308)
-- resource.aws_security_group.database (modules/aws/stages/app-services/main.tf#L477)
-- resource.aws_security_group.service (modules/aws/stages/app-services/main.tf#L425)
-- resource.aws_vpc_security_group_egress_rule.service_https (modules/aws/stages/app-services/main.tf#L449)
-- resource.aws_vpc_security_group_egress_rule.service_to_db (modules/aws/stages/app-services/main.tf#L464)
-- resource.aws_vpc_security_group_ingress_rule.alb (modules/aws/stages/app-services/main.tf#L410)
-- resource.aws_vpc_security_group_ingress_rule.database_from_service (modules/aws/stages/app-services/main.tf#L489)
-- resource.aws_vpc_security_group_ingress_rule.service_from_alb (modules/aws/stages/app-services/main.tf#L436)
-- data source.aws_caller_identity.current (modules/aws/stages/app-services/main.tf#L108)
+- resource.aws_cloudwatch_log_group.service (modules/aws/stages/app-services/main.tf#L187)
+- resource.aws_ecs_cluster.this (modules/aws/stages/app-services/main.tf#L149)
+- resource.aws_iam_openid_connect_provider.github (modules/aws/stages/app-services/main.tf#L134)
+- resource.aws_iam_role.deploy (modules/aws/stages/app-services/main.tf#L341)
+- resource.aws_iam_role.execution (modules/aws/stages/app-services/main.tf#L216)
+- resource.aws_iam_role.task (modules/aws/stages/app-services/main.tf#L286)
+- resource.aws_iam_role_policy.deploy (modules/aws/stages/app-services/main.tf#L370)
+- resource.aws_iam_role_policy.execution (modules/aws/stages/app-services/main.tf#L227)
+- resource.aws_iam_role_policy.task (modules/aws/stages/app-services/main.tf#L297)
+- resource.aws_iam_role_policy.task_exec (modules/aws/stages/app-services/main.tf#L305)
+- resource.aws_iam_role_policy_attachment.task (modules/aws/stages/app-services/main.tf#L328)
+- resource.aws_security_group.database (modules/aws/stages/app-services/main.tf#L498)
+- resource.aws_security_group.service (modules/aws/stages/app-services/main.tf#L446)
+- resource.aws_vpc_security_group_egress_rule.service_https (modules/aws/stages/app-services/main.tf#L470)
+- resource.aws_vpc_security_group_egress_rule.service_to_db (modules/aws/stages/app-services/main.tf#L485)
+- resource.aws_vpc_security_group_ingress_rule.alb (modules/aws/stages/app-services/main.tf#L431)
+- resource.aws_vpc_security_group_ingress_rule.database_from_service (modules/aws/stages/app-services/main.tf#L510)
+- resource.aws_vpc_security_group_ingress_rule.service_from_alb (modules/aws/stages/app-services/main.tf#L457)
+- data source.aws_caller_identity.current (modules/aws/stages/app-services/main.tf#L126)
+- data source.aws_partition.current (modules/aws/stages/app-services/main.tf#L122)
 
 
 ## Inputs
@@ -130,6 +131,7 @@ The following resources are created:
 | <a name="input_service_subnet_ids"></a> [service\_subnet\_ids](#input\_service\_subnet\_ids) | PRIVATE subnet IDs the Fargate tasks run in (aws-workload stage subnet\_ids\_by\_tier["private"]). At least two (distinct AZs) when services is non-empty. | `list(string)` | `[]` | no |
 | <a name="input_services"></a> [services](#input\_services) | Services to run, keyed by service name (lowercase, starts with a letter,<br/>letters/digits/hyphens). Each entry gets: an ECR repository (immutable tags,<br/>scan on push, KMS), a KMS-encrypted CloudWatch log group, least-privilege<br/>task execution + task roles, a Fargate service in the private subnets behind<br/>the shared ALB, and optionally a GitHub Actions deploy role (github) and an<br/>Aurora PostgreSQL cluster (database). Empty (default) creates nothing.<br/><br/>github OIDC subject precedence:<br/>  1. github.subject — an exact sub for any other customised claim template.<br/>  2. github.repository\_id + github.repository\_owner\_id (RECOMMENDED default<br/>     when set) — immutable numeric IDs, so renaming/transferring a repo or<br/>     re-creating a deleted name cannot inherit the trust:<br/>       repository\_owner\_id:<owner\_id>:repository\_id:<repo\_id>:environment:<env><br/>     (or :ref:<ref> when ref is set). Requires a ONE-TIME customisation of<br/>     the repo's sub claim template:<br/>       gh api -X PUT repos/<org>/<repo>/actions/oidc/customization/sub \<br/>         -F use\_default=false \<br/>         -f 'include\_claim\_keys[]=repository\_owner\_id' \<br/>         -f 'include\_claim\_keys[]=repository\_id' \<br/>         -f 'include\_claim\_keys[]=context'<br/>     IDs: gh api repos/<org>/<repo> --jq '.owner.id, .id'.<br/>  3. Fallback: repo:<repository>:environment:<environment> (or :ref:<ref>) —<br/>     the default GitHub template; name-based, so mutable. | <pre>map(object({<br/>    # Image the FIRST task-definition revision runs. null => <ecr-repo>:bootstrap<br/>    # (push that tag once, or let the first CI deploy replace it).<br/>    container_image  = optional(string)<br/>    container_port   = optional(number, 8080)<br/>    cpu              = optional(number, 256)<br/>    memory           = optional(number, 512)<br/>    cpu_architecture = optional(string, "X86_64")<br/>    desired_count    = optional(number, 2)<br/><br/>    # ALB routing on the shared listener. Both empty => path /<name> and /<name>/*.<br/>    host_headers      = optional(list(string), [])<br/>    path_patterns     = optional(list(string), [])<br/>    priority          = optional(number) # null => 1000 + index; explicit must be 1-999<br/>    health_check_path = optional(string, "/")<br/><br/>    environment = optional(map(string), {}) # plaintext, non-secret only<br/>    secrets     = optional(map(string), {}) # env var name => Secrets Manager / SSM ARN<br/><br/>    # Extra permissions for the application (task role). Never the deploy role.<br/>    task_role_policy_json         = optional(string)<br/>    task_role_managed_policy_arns = optional(list(string), [])<br/><br/>    enable_execute_command   = optional(bool, false)<br/>    enable_autoscaling       = optional(bool, false)<br/>    autoscaling_min_capacity = optional(number, 2)<br/>    autoscaling_max_capacity = optional(number, 10)<br/><br/>    # GitHub Actions deploy role (requires enable_github_oidc). null => none.<br/>    github = optional(object({<br/>      repository  = string           # "<org>/<repo>"<br/>      environment = optional(string) # GitHub environment; null => var.environment<br/>      ref         = optional(string) # e.g. refs/heads/main; used instead of environment<br/>      subject     = optional(string) # exact sub for a customised claim template<br/><br/>      # Immutable numeric IDs (set both): switches the sub to the ID-based<br/>      # customised template. See the description for the one-time gh setup.<br/>      repository_id       = optional(string)<br/>      repository_owner_id = optional(string)<br/>    }))<br/><br/>    # Aurora PostgreSQL for this service. null => none.<br/>    database = optional(object({<br/>      engine_version          = optional(string, "16.6")<br/>      instance_class          = optional(string, "db.r6g.large")<br/>      instance_count          = optional(number, 2)<br/>      enable_serverless_v2    = optional(bool, true)<br/>      serverless_min_capacity = optional(number, 0.5)<br/>      serverless_max_capacity = optional(number, 4)<br/>      database_name           = optional(string) # null => service name, hyphens replaced by underscores<br/>      backup_retention_period = optional(number, 7)<br/>      deletion_protection     = optional(bool, true)<br/>      skip_final_snapshot     = optional(bool, false)<br/>    }))<br/>  }))</pre> | `{}` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags merged onto every resource (in addition to the provider default\_tags). | `map(string)` | `{}` | no |
+| <a name="input_tfc_apply_boundary_policy_name"></a> [tfc\_apply\_boundary\_policy\_name](#input\_tfc\_apply\_boundary\_policy\_name) | Name of the tfc-apply permissions-boundary managed policy (tfc-oidc-baseline apply\_boundary\_policy\_name). Every IAM role this stage creates gets permissions\_boundary = arn:PARTITION:iam::ACCOUNT\_ID:policy/NAME, derived from the workload-account provider, which the member-account tfc-apply role requires when boundary propagation is on. Null = create roles without a boundary. | `string` | `"tfc-apply-boundary"` | no |
 | <a name="input_vpc_cidr"></a> [vpc\_cidr](#input\_vpc\_cidr) | IPv4 CIDR of the spoke VPC. The default source of alb\_ingress\_cidrs (an internal ALB reachable from inside the spoke). | `string` | `"10.0.0.0/8"` | no |
 | <a name="input_vpc_id"></a> [vpc\_id](#input\_vpc\_id) | ID of the workload spoke VPC (aws-workload stage output vpc\_id). Required when services is non-empty. | `string` | `null` | no |
 

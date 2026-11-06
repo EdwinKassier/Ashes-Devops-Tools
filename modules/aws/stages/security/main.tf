@@ -22,7 +22,32 @@
 # policy, so the default plan creates no FMS resources; a deployment opts in and
 # overrides the policies deliberately. See README.
 
+# Boundary propagation (tfc-oidc-baseline): the security-tooling tfc-apply role
+# may only create roles that carry its own permissions boundary, so every role
+# this stage creates there gets it. Derived from the security_tooling provider.
+data "aws_caller_identity" "security_tooling" {
+  count    = var.tfc_apply_boundary_policy_name != null ? 1 : 0
+  provider = aws.security_tooling
+}
+
+data "aws_partition" "security_tooling" {
+  count    = var.tfc_apply_boundary_policy_name != null ? 1 : 0
+  provider = aws.security_tooling
+}
+
 locals {
+  # Real AWS always returns a 12-digit account and an aws* partition; under
+  # mock_provider these data sources return random strings the provider's ARN
+  # validator rejects, so a malformed identity yields no boundary rather than
+  # failing every mocked plan downstream (tests override the data sources).
+  boundary_partition = try(data.aws_partition.security_tooling[0].partition, null)
+  boundary_account   = try(data.aws_caller_identity.security_tooling[0].account_id, null)
+  security_tooling_boundary_arn = (
+    var.tfc_apply_boundary_policy_name != null && can(regex("^aws(-[a-z]+)*$", local.boundary_partition)) && can(regex("^[0-9]{12}$", local.boundary_account))
+    ? "arn:${local.boundary_partition}:iam::${local.boundary_account}:policy/${var.tfc_apply_boundary_policy_name}"
+    : null
+  )
+
   # The ARN the assumption alarm watches: the role this stage creates when
   # create_break_glass is true, otherwise the externally-managed ARN the caller
   # passes. So "managed here" and "monitored here" stay in lockstep (audit M3).
@@ -195,6 +220,8 @@ module "config" {
   # F5: record ALL supported resource types (default true, the full-coverage but
   # most expensive Config mode). Set false for cost-sensitive non-prod.
   record_all_supported = var.config_record_all_supported
+  # The org aggregator role is created in the security-tooling account.
+  permissions_boundary_arn = local.security_tooling_boundary_arn
 }
 
 # ---------------------------------------------------------------------------
@@ -324,6 +351,8 @@ module "incident_response" {
   # Let the forensics role decrypt snapshots encrypted with the forensics CMK.
   forensics_kms_key_arn = module.forensics_cmk.key_arn
   quarantine_vpc_id     = var.quarantine_vpc_id
+  # Both IR roles are created in the security-tooling account.
+  permissions_boundary_arn = local.security_tooling_boundary_arn
 }
 
 # ---------------------------------------------------------------------------

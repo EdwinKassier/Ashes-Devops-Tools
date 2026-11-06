@@ -61,3 +61,18 @@ run "explicit_restore_testing_role_creates_nothing" {
     error_message = "An explicit restore_testing_role_arn must be used as-is and no role created."
   }
 }
+
+# Boundary propagation (tfc-oidc-baseline): the restore-testing role carries
+# permissions_boundary_arn so a member-account tfc-apply role may create it.
+run "restore_testing_role_permissions_boundary" {
+  command = plan
+
+  variables {
+    permissions_boundary_arn = "arn:aws:iam::123456789012:policy/tfc-apply-boundary"
+  }
+
+  assert {
+    condition     = aws_iam_role.restore_testing[0].permissions_boundary == "arn:aws:iam::123456789012:policy/tfc-apply-boundary"
+    error_message = "The restore-testing role must carry permissions_boundary_arn."
+  }
+}

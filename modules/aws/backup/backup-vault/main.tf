@@ -22,6 +22,8 @@ locals {
 resource "aws_iam_role" "restore_testing" {
   count = local.create_restore_testing_role ? 1 : 0
   name  = var.restore_testing_role_name
+
+  permissions_boundary = var.permissions_boundary_arn
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{

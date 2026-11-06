@@ -9,6 +9,9 @@ mock_provider "aws" {
   mock_data "aws_caller_identity" {
     defaults = { account_id = "111111111111" }
   }
+  mock_data "aws_partition" {
+    defaults = { partition = "aws" }
+  }
   mock_resource "aws_iam_openid_connect_provider" {
     defaults = { arn = "arn:aws:iam::111111111111:oidc-provider/token.actions.githubusercontent.com" }
   }
@@ -344,5 +347,47 @@ run "https_listener_with_redirect" {
   assert {
     condition     = toset(keys(module.alb[0].listener_arns)) == toset(["http", "https"]) && length(aws_vpc_security_group_ingress_rule.alb) == 2
     error_message = "a certificate must add an HTTPS listener (HTTP redirects) and open both ports to the ingress CIDRs."
+  }
+}
+
+# ── Boundary propagation (tfc-oidc-baseline) ─────────────────────────────────
+# Every role carries arn:<partition>:iam::<this account>:policy/tfc-apply-boundary,
+# derived from the workload-account provider, so tfc-apply may create it.
+
+run "roles_carry_tfc_apply_boundary" {
+  command = plan
+
+  variables {
+    enable_github_oidc = true
+    services = {
+      orders = {
+        github = { repository = "acme/orders" }
+      }
+    }
+  }
+
+  assert {
+    condition = (
+      aws_iam_role.execution["orders"].permissions_boundary == "arn:aws:iam::111111111111:policy/tfc-apply-boundary" &&
+      aws_iam_role.task["orders"].permissions_boundary == "arn:aws:iam::111111111111:policy/tfc-apply-boundary" &&
+      aws_iam_role.deploy["orders"].permissions_boundary == "arn:aws:iam::111111111111:policy/tfc-apply-boundary"
+    )
+    error_message = "execution, task and deploy roles must carry the tfc-apply-boundary of the workload account."
+  }
+}
+
+run "boundary_disabled_with_null_name" {
+  command = plan
+
+  variables {
+    tfc_apply_boundary_policy_name = null
+    services = {
+      orders = {}
+    }
+  }
+
+  assert {
+    condition     = aws_iam_role.execution["orders"].permissions_boundary == null && aws_iam_role.task["orders"].permissions_boundary == null && length(data.aws_partition.current) == 0
+    error_message = "tfc_apply_boundary_policy_name = null must create the roles without a permissions boundary."
   }
 }

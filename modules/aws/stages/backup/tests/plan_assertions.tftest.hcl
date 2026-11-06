@@ -95,3 +95,38 @@ run "explicit_backup_role_creates_no_stack_set" {
     error_message = "An explicit backup_role_arn must be used as-is with no StackSet."
   }
 }
+
+# Boundary propagation (tfc-oidc-baseline): when the stage creates the
+# restore-testing role in the backup account it derives that account's
+# tfc-apply-boundary from the aws.backup provider; an existing role ARN skips it.
+run "restore_testing_role_carries_tfc_apply_boundary" {
+  command = plan
+
+  variables {
+    restore_testing_role_arn = null
+  }
+
+  override_data {
+    target = data.aws_caller_identity.backup[0]
+    values = { account_id = "444444444444" }
+  }
+
+  override_data {
+    target = data.aws_partition.backup[0]
+    values = { partition = "aws" }
+  }
+
+  assert {
+    condition     = local.backup_boundary_arn == "arn:aws:iam::444444444444:policy/tfc-apply-boundary"
+    error_message = "The backup boundary ARN (passed to backup_vault) must be derived from the aws.backup provider."
+  }
+}
+
+run "existing_restore_role_needs_no_boundary" {
+  command = plan
+
+  assert {
+    condition     = local.backup_boundary_arn == null && length(data.aws_caller_identity.backup) == 0
+    error_message = "With an existing restore_testing_role_arn no boundary lookup is needed."
+  }
+}
