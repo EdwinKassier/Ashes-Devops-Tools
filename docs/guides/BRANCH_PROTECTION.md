@@ -49,6 +49,21 @@ Set via **Settings → Branches → main → Require status checks to pass befor
 > external checks, so `scripts/check-required-checks.sh` ignores contexts that start
 > with `Terraform Cloud/`.
 
+### TFC organization owners
+
+AWS OIDC trust can condition only on the token claims `aud`, `sub`, `amr`,
+`email` and `oaud`, so every `tfc-plan`/`tfc-apply` role trusts a **workspace
+name**. Whoever can create or rename a workspace can assume those roles. So:
+
+- Keep **at least 2** TFC organization owners (a lone owner is a lockout risk).
+- Owners are **never used day to day**. Work runs as the `platform` team, whose
+  custom access (`envs/tfc-admin/main.tf`) already forbids creating or renaming
+  workspaces.
+- Only owners may rename or create workspaces.
+- Control-plane workspaces, including `aws-network`, are in
+  `speculative_disabled_workspaces`, so a PR never gets a plan with their
+  credentials.
+
 ### Review Requirements
 
 - **Required approvals:** 1 (raise to 2 for teams larger than 4)

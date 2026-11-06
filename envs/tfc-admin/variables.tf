@@ -144,7 +144,7 @@ variable "speculative_disabled_workspaces" {
   type        = list(string)
   default = [
     "gcp-bootstrap", "gcp-organization", "gcp-projects", "gcp-network-hub",
-    "aws-organization", "aws-security", "aws-backup", "aws-identity",
+    "aws-organization", "aws-security", "aws-network", "aws-backup", "aws-identity",
     "tfc-admin",
   ]
 }

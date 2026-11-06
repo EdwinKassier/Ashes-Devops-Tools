@@ -11,6 +11,18 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
 
 ## OPEN — validate before relying on
 
+- **TFC organization owners are the root of AWS trust.** AWS OIDC trust can
+  condition only on the claims `aud`, `sub`, `amr`, `email` and `oaud`, so
+  trust is bound by **workspace name**. Anyone who can create or rename a
+  workspace in the TFC organization can mint a token that matches a trust
+  policy. Keep at least 2 organization owners, never use them day to day, and
+  let only owners rename or create workspaces. The `platform` team's custom
+  access already forbids both. `aws-network` is now in
+  `speculative_disabled_workspaces` with the other control-plane roots, so a
+  PR's code never runs with its plan identity. Not enforceable in code:
+  membership of the owners team is an operator control
+  ([`BRANCH_PROTECTION.md`](guides/BRANCH_PROTECTION.md#tfc-organization-owners)).
+
 - **Org-trail selector changes are detected, not prevented.** The
   aws-security management apply role keeps `cloudtrail:PutEventSelectors` /
   `PutInsightSelectors`, because `aws_cloudtrail` calls them on create. A

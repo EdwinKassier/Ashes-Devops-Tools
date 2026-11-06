@@ -129,7 +129,7 @@ run "speculative_plans_off_for_control_plane" {
 
   assert {
     condition = alltrue([
-      for k in ["gcp-bootstrap", "gcp-organization", "gcp-projects", "gcp-network-hub", "aws-organization", "aws-security", "aws-backup", "aws-identity"] :
+      for k in ["gcp-bootstrap", "gcp-organization", "gcp-projects", "gcp-network-hub", "aws-organization", "aws-security", "aws-network", "aws-backup", "aws-identity"] :
       module.workspace[k].speculative_enabled == false
     ])
     error_message = "control-plane workspaces must have speculative_enabled = false."
