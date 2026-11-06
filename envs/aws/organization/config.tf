@@ -25,11 +25,16 @@ locals {
     aws_region               = try(tostring(local.lz.org.regions.aws), null)
     tfc_organization         = try(tostring(local.lz.org.tfc.organization), null)
     github_federation_owners = try([for o in local.lz.aws.github_federation_owners : tostring(o)], null)
-    management_account_id    = try(tostring(local.lz.aws.management_account_id), null)
-    log_archive_bucket_name  = try(tostring(local.lz.aws.log_archive_bucket_name), null)
-    allowed_regions          = try([for r in local.lz.aws.allowed_regions : tostring(r)], null)
-    terraform_run_role_arn   = try(tostring(local.lz.aws.terraform_run_role_arn), null)
-    break_glass_role_arn     = try(tostring(local.lz.aws.break_glass_role_arn), null)
+    adopt = try(local.lz.aws.adopt, null) == null ? null : {
+      organization_id = try(tostring(local.lz.aws.adopt.organization_id), null)
+      ou_ids          = { for k, v in try(local.lz.aws.adopt.ou_ids, {}) : k => tostring(v) }
+      account_ids     = { for k, v in try(local.lz.aws.adopt.account_ids, {}) : k => tostring(v) }
+    }
+    management_account_id   = try(tostring(local.lz.aws.management_account_id), null)
+    log_archive_bucket_name = try(tostring(local.lz.aws.log_archive_bucket_name), null)
+    allowed_regions         = try([for r in local.lz.aws.allowed_regions : tostring(r)], null)
+    terraform_run_role_arn  = try(tostring(local.lz.aws.terraform_run_role_arn), null)
+    break_glass_role_arn    = try(tostring(local.lz.aws.break_glass_role_arn), null)
     # tfc-admin puts the aws-* workspaces in <project_name_prefix>aws.
     tfc_project = try(tostring(local.lz.org.tfc.aws_project), "${try(tostring(local.lz.org.tfc.project_name_prefix), "landing-zone-")}aws")
     # Accounts normalised to the attribute types of var.accounts.
@@ -98,8 +103,13 @@ locals {
   aws_region               = coalesce(var.aws_region, local.cfg.aws_region, "eu-west-2")
   tfc_organization         = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
   github_federation_owners = coalesce(var.github_federation_owners, local.cfg.github_federation_owners, [])
-  management_account_id    = coalesce(var.management_account_id, local.cfg.management_account_id, "000000000000")
-  log_archive_bucket_name  = coalesce(var.log_archive_bucket_name, local.cfg.log_archive_bucket_name, "unset")
+  adopt_existing = (
+    var.adopt_existing != null ? var.adopt_existing :
+    local.cfg.adopt != null ? local.cfg.adopt :
+    { organization_id = null, ou_ids = {}, account_ids = {} }
+  )
+  management_account_id   = coalesce(var.management_account_id, local.cfg.management_account_id, "000000000000")
+  log_archive_bucket_name = coalesce(var.log_archive_bucket_name, local.cfg.log_archive_bucket_name, "unset")
 
   accounts               = var.accounts != null ? var.accounts : local.cfg_or_default_accounts
   workload_accounts      = var.workload_accounts != null ? var.workload_accounts : local.cfg.workload_accounts

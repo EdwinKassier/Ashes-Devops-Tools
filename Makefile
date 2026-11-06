@@ -18,6 +18,14 @@ TERRAFORM_DOCS := terraform-docs
 PRE_COMMIT := pre-commit
 ROOT_DISCOVERY := ./scripts/terraform-roots.sh
 
+# One shared provider cache for every `init` this Makefile runs. Without it each
+# of the ~240 roots/modules/examples downloads its own copy of hashicorp/aws
+# (~700 MB) and google, and `make ci` on a fresh clone can exhaust the disk.
+# Override with your own TF_PLUGIN_CACHE_DIR; set it to "" to disable.
+TF_PLUGIN_CACHE_DIR ?= $(HOME)/.terraform.d/plugin-cache
+export TF_PLUGIN_CACHE_DIR
+$(if $(TF_PLUGIN_CACHE_DIR),$(shell mkdir -p "$(TF_PLUGIN_CACHE_DIR)"))
+
 APP_ENV ?= dev
 APP_WORKSPACE ?= gcp-workload-$(APP_ENV)
 APP_VARS ?= examples/dev.tfvars

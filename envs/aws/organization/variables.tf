@@ -383,3 +383,28 @@ variable "enable_tfc_management_roles" {
   type        = bool
   default     = true
 }
+
+variable "adopt_existing" {
+  description = "Brownfield adoption: existing AWS Organizations resources to IMPORT instead of create. organization_id (o-...), ou_ids keyed by OU name or \"<parent>/<child>\" path (ou-...), account_ids keyed by the account key in accounts / workload_accounts (12-digit IDs). Null = aws.adopt from config/landing-zone.yaml, else nothing is imported (greenfield). See docs/runbooks/aws-brownfield-adoption.md."
+  type = object({
+    organization_id = optional(string)
+    ou_ids          = optional(map(string), {})
+    account_ids     = optional(map(string), {})
+  })
+  default = null
+
+  validation {
+    condition     = var.adopt_existing == null || try(var.adopt_existing.organization_id, null) == null || can(regex("^o-[a-z0-9]{10,32}$", coalesce(try(var.adopt_existing.organization_id, null), "o-0000000000")))
+    error_message = "adopt_existing.organization_id must be an organization ID like o-abcd123456."
+  }
+
+  validation {
+    condition     = var.adopt_existing == null || alltrue([for id in values(try(var.adopt_existing.ou_ids, {})) : can(regex("^ou-[a-z0-9]{4,32}-[a-z0-9]{8,32}$", id))])
+    error_message = "adopt_existing.ou_ids values must be OU IDs like ou-abcd-12345678."
+  }
+
+  validation {
+    condition     = var.adopt_existing == null || alltrue([for id in values(try(var.adopt_existing.account_ids, {})) : can(regex("^[0-9]{12}$", id))])
+    error_message = "adopt_existing.account_ids values must be 12-digit account IDs."
+  }
+}

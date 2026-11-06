@@ -454,3 +454,9 @@ variable "tfc_apply_boundary_policy_name" {
     error_message = "tfc_apply_boundary_policy_name must be null or a valid IAM policy name (1-128 chars of [A-Za-z0-9+=,.@_-])."
   }
 }
+
+variable "create_organization_trail" {
+  description = "Create the organization CloudTrail (management account) with its CloudWatch Logs, CIS alarms and KMS wiring. Set false when another owner already runs the org trail, e.g. AWS Control Tower (docs/runbooks/aws-brownfield-adoption.md); two org trails double the cost and the noise. Default true."
+  type        = bool
+  default     = true
+}

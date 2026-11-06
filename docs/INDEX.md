@@ -109,9 +109,11 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
 - [AWS Break Glass](runbooks/aws-break-glass.md): emergency access via the break-glass role
 - [AWS Incident Response](runbooks/aws-incident-response.md): quarantine and forensics flow
 - [AWS Teardown](runbooks/aws-teardown.md): reverse-order destroy, WORM/Vault Lock caveats
+- [AWS Brownfield Adoption](runbooks/aws-brownfield-adoption.md): import an existing organization, OUs and accounts; Control Tower coexistence
 
 ## SaaS Modules
 
+- [SaaS Bootstrap](runbooks/saas-bootstrap.md): config-driven Supabase / Vercel stacks, secrets via tfc-admin, single-provider shapes
 - [Quick Start → Section 3a](guides/QUICK_START.md#3a-configure-supabase-and-vercel-provider-credentials): Supabase + Vercel token setup, Node.js requirement
 - [Architecture → SaaS Modules](architecture/ARCHITECTURE.md#saas-modules): module descriptions and design decisions
 - [Troubleshooting → Supabase errors](guides/TROUBLESHOOTING.md#supabase-module-errors): token errors, provisioner failures, vault safety guard

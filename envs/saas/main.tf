@@ -15,10 +15,10 @@ module "saas_workload" {
   enable_vault_secrets = var.enable_vault_secrets
 
   # ── Supabase pass-through (used only when enable_supabase = true) ──────────
-  supabase_organization_id      = var.supabase_organization_id
-  supabase_project_name         = var.supabase_project_name
+  supabase_organization_id      = local.supabase_organization_id
+  supabase_project_name         = local.supabase_project_name
   supabase_database_password    = var.supabase_database_password
-  supabase_region               = var.supabase_region
+  supabase_region               = local.supabase_region
   supabase_disable_signup       = var.supabase_disable_signup
   supabase_mailer_autoconfirm   = var.supabase_mailer_autoconfirm
   supabase_password_min_length  = var.supabase_password_min_length
@@ -33,10 +33,10 @@ module "saas_workload" {
   vault_secrets     = var.vault_secrets
 
   # ── Vercel pass-through (used only when enable_vercel = true) ──────────────
-  vercel_project_name      = var.vercel_project_name
-  vercel_team_id           = var.vercel_team_id
-  vercel_github_repo       = var.vercel_github_repo
-  vercel_production_branch = var.vercel_production_branch
+  vercel_project_name      = local.vercel_project_name
+  vercel_team_id           = local.vercel_team_id
+  vercel_github_repo       = local.vercel_github_repo
+  vercel_production_branch = local.vercel_production_branch
   vercel_root_directory    = var.vercel_root_directory
   vercel_framework         = var.vercel_framework
   vercel_serverless_region = var.vercel_serverless_region

@@ -80,13 +80,14 @@ module "aws_security" {
   break_glass_active             = var.break_glass_active
 
   notification_subscribers  = var.notification_subscribers
-  enabled_security_services = var.enabled_security_services
-  enable_security_lake      = var.enable_security_lake
+  enabled_security_services = local.enabled_security_services
+  enable_security_lake      = local.enable_security_lake
+  create_organization_trail = var.create_organization_trail
 
   # FinOps F5: cost toggles for the two most expensive always-on security
   # services. Default true (full coverage); set false for non-prod.
-  config_record_all_supported             = var.config_record_all_supported
-  guardduty_enable_ebs_malware_protection = var.guardduty_enable_ebs_malware_protection
+  config_record_all_supported             = local.config_record_all_supported
+  guardduty_enable_ebs_malware_protection = local.guardduty_enable_ebs_malware_protection
   enable_incident_response                = var.enable_incident_response
   enable_service_quotas                   = var.enable_service_quotas
 

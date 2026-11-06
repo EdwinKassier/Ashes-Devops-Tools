@@ -87,6 +87,14 @@ The shared inputs live once in the committed `config/landing-zone.yaml`. Generat
 cp envs/gcp/organization/terraform.tfvars.example envs/gcp/organization/local.auto.tfvars   # optional
 ```
 
+**Required for a production estate: the workspace IDs.** gcp-bootstrap binds each workspace's service accounts by immutable workspace ID. When any environment `is_production`, it refuses to bind by (squattable) name. tfc-admin pass 1 has already created the workspaces and knows their IDs. The local phase-0 run ignores workspace variables, so write the IDs into a gitignored tfvars file:
+
+```bash
+terraform -chdir=envs/tfc-admin output -raw gcp_bootstrap_tfvars > envs/gcp/bootstrap/tfc-workspaces.auto.tfvars
+```
+
+Later remote gcp-bootstrap runs get the same map as a workspace variable, set by tfc-admin.
+
 Set at minimum (config key in brackets):
 
 - `domain` (`org.domain`) — the org's Cloud Identity / Workspace domain (used to look up the org ID; `org_id` and `billing_account_id` are **not** input variables).
@@ -280,7 +288,7 @@ Existing estates bound every workspace to `terraform-admin`. Re-applying gcp-boo
 2. **Apply `tfc-admin`** (pass 2) so every workspace gets `TFC_GCP_PLAN_SERVICE_ACCOUNT_EMAIL` / `TFC_GCP_APPLY_SERVICE_ACCOUNT_EMAIL`, and **remove** any `terraform_admin_email` Terraform variable from the TFC workspaces.
 3. **Apply `gcp-projects`** — grants the workload / network SAs their folder roles. Projects created earlier by `terraform-admin` are owned by it, not by `projects-apply`; label/billing edits to those pre-existing projects may need a one-off `roles/owner` grant to `<prefix>-projects-apply` on them (validate on your org).
 4. **Apply `gcp-organization`, `gcp-network-hub`, `gcp-workload-<env>`** as usual. If an enforced VPC-SC perimeter lists `terraform-admin` in `vpc_sc_ingress_identities`, add the new `<prefix>-network-hub-apply` / `<prefix>-wl-<env>-apply` SAs (`stage_service_accounts` / `workload_service_accounts` outputs) **before** step 1.
-5. Optional hardening once the workspaces exist: set `tfc_workspace_ids` (name → `ws-…`), `tfc_project_ids` and `tfc_organization_id` on gcp-bootstrap and re-apply.
+5. `tfc_workspace_ids` is set automatically. `tfc-admin` writes it onto the gcp-bootstrap workspace (`set_gcp_bootstrap_workspace_ids`), so remote runs bind WIF by immutable ID. Optionally also set `tfc_project_ids` and `tfc_organization_id`.
 
 The unused GitHub pool is **destroyed** by default (`enable_github_wif = false`). GCP soft-deletes pools for 30 days; to re-enable within that window set a new `github_wif_pool_id`.
 

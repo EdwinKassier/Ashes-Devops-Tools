@@ -58,6 +58,6 @@ module "aws_network_hub" {
   log_bucket_name          = local.log_archive_bucket_name
 
   private_hosted_zone_name       = var.private_hosted_zone_name
-  enable_network_firewall        = var.enable_network_firewall
+  enable_network_firewall        = local.enable_network_firewall
   enable_network_access_analyzer = var.enable_network_access_analyzer
 }

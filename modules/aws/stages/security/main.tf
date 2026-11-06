@@ -195,6 +195,8 @@ module "log_archive_bucket" {
 
 module "cloudtrail" {
   source = "../../security/cloudtrail-org"
+  # false when another owner (e.g. AWS Control Tower) already runs the org trail.
+  count = var.create_organization_trail ? 1 : 0
   providers = {
     aws = aws.management
   }

@@ -163,7 +163,7 @@ variable "meta_store_manager_role_arn" {
   default     = ""
 
   validation {
-    condition     = !var.enable_security_lake || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", var.meta_store_manager_role_arn))
+    condition     = !local.enable_security_lake || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", var.meta_store_manager_role_arn))
     error_message = "meta_store_manager_role_arn must be a valid IAM role ARN when enable_security_lake is true."
   }
 }
@@ -200,34 +200,34 @@ variable "notification_subscribers" {
 }
 
 variable "enabled_security_services" {
-  description = "Set of org-security services to enable: any of macie, inspector, detective, resource-explorer. Detective defaults OFF per SRA."
+  description = "Set of org-security services to enable: any of macie, inspector, detective, resource-explorer. Detective defaults OFF per SRA. Null (default) follows profile: [macie, inspector] for production, [inspector] for starter."
   type        = set(string)
-  default     = ["macie", "inspector"]
+  default     = null
 
   validation {
     condition = alltrue([
-      for s in var.enabled_security_services : contains(["macie", "inspector", "detective", "resource-explorer"], s)
+      for s in coalesce(var.enabled_security_services, toset([])) : contains(["macie", "inspector", "detective", "resource-explorer"], s)
     ])
     error_message = "enabled_security_services entries must be one of: macie, inspector, detective, resource-explorer."
   }
 }
 
 variable "config_record_all_supported" {
-  description = "AWS Config records ALL supported resource types (default true — the full-coverage but most expensive Config mode). Set false for cost-sensitive non-prod (FinOps F5). See examples/presets/nonprod-aws-security.tfvars."
+  description = "AWS Config records ALL supported resource types (the full-coverage but most expensive Config mode). Null (default) follows profile: true for production, false for starter. See examples/presets/nonprod-aws-security.tfvars."
   type        = bool
-  default     = true
+  default     = null
 }
 
 variable "guardduty_enable_ebs_malware_protection" {
-  description = "GuardDuty agentless EBS malware scanning (default true; billed per GB scanned). Set false for non-prod where it is not required (FinOps F5)."
+  description = "GuardDuty agentless EBS malware scanning (billed per GB scanned). Null (default) follows profile: true for production, false for starter."
   type        = bool
-  default     = true
+  default     = null
 }
 
 variable "enable_security_lake" {
-  description = "Master COST toggle for Amazon Security Lake. Security Lake incurs ingestion, storage, and normalization charges."
+  description = "Master COST toggle for Amazon Security Lake (ingestion, storage and normalization charges). Null (default) follows profile: on for production, off for starter."
   type        = bool
-  default     = true
+  default     = null
 }
 
 variable "enable_incident_response" {
@@ -417,4 +417,21 @@ variable "tfc_aws_dynamic_credentials" {
     aliases = map(object({ shared_config_file = string }))
   })
   default = null
+}
+
+variable "profile" {
+  description = "Cost/assurance profile: production (default; full inspection and detection stack) or starter (cheapest safe non-prod baseline). It only changes the defaults of the profile-driven toggles; any explicit toggle still wins. Null = org.profile from config/landing-zone.yaml, else production."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.profile == null || contains(["production", "starter"], coalesce(var.profile, "production"))
+    error_message = "profile must be production or starter."
+  }
+}
+
+variable "create_organization_trail" {
+  description = "Create the organization CloudTrail. Set false when AWS Control Tower (or another owner) already runs it. Default true."
+  type        = bool
+  default     = true
 }

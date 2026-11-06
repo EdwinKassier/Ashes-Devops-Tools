@@ -196,3 +196,28 @@ run "rejects_placeholder_landing_zone_name" {
 
   expect_failures = [var.landing_zone_name]
 }
+
+# Brownfield adoption inputs are validated before any import is attempted (the
+# import itself needs a real provider: mock providers cannot import).
+run "adopt_existing_rejects_bad_ids" {
+  command = plan
+
+  variables {
+    adopt_existing = {
+      organization_id = "org-123"
+      ou_ids          = { Security = "Security" }
+      account_ids     = { log_archive = "12345" }
+    }
+  }
+
+  expect_failures = [var.adopt_existing]
+}
+
+run "greenfield_imports_nothing" {
+  command = plan
+
+  assert {
+    condition     = local.adopt_existing.organization_id == null && length(local.adopt_existing.ou_ids) == 0 && length(local.adopt_existing.account_ids) == 0
+    error_message = "with no adopt_existing / aws.adopt, nothing is imported."
+  }
+}

@@ -39,6 +39,13 @@ org:
   domain: my-org.example.com
   # Display name of the GCP organization (gcp-organization, gcp-projects).
   display_name: My Organization
+  # Cost/assurance profile (aws-network, aws-security). "production" (default)
+  # is the full inspection and detection stack, about $1.4-1.9k/month idle on
+  # AWS. "starter" drops the Network Firewall, Security Lake, Macie, record-all
+  # Config and EBS malware scanning. It keeps every preventive control and
+  # CloudTrail / Config / GuardDuty / Security Hub / Inspector. Use starter for
+  # sandboxes and early non-prod only. An explicit toggle always wins.
+  profile: production
   # Owner / CostCenter tags (aws-* roots).
   owner: platform-team
   cost_center: platform
@@ -207,6 +214,24 @@ saas:
   # Provider toggles for the saas root (enable_supabase / enable_vercel).
   supabase: true
   vercel: true
+  # Per-stack settings for saas-<name> workspaces (stack = <name>): saas.stacks
+  # wins over saas.defaults, and an explicit TFC variable wins over both. IDs and
+  # names only. The Supabase database password stays a sensitive TFC variable
+  # (supabase_database_password). See docs/runbooks/saas-bootstrap.md.
+  # defaults:
+  #   supabase:
+  #     organization_id: REPLACE_WITH_SUPABASE_ORG_ID
+  #     region: eu-west-2
+  #   vercel:
+  #     team_id: REPLACE_WITH_VERCEL_TEAM_ID
+  # stacks:
+  #   web:
+  #     supabase:
+  #       project_name: my-org-web
+  #     vercel:
+  #       project_name: my-org-web
+  #       github_repo: my-org/web
+  #       production_branch: main
 
 # Presets: named overlays from examples/presets/<name>.yaml, applied by the
 # root the preset targets (precedence: explicit variable > preset > this file).

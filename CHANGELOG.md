@@ -104,6 +104,27 @@ release metadata for a Terraform Cloud run.
 - **The RCP data perimeter now covers ECR and CloudWatch Logs** (`ecr:*`, `logs:*`).
 - **`organization-policy` gains a `policy_contents` output**, for evidence and tests.
 
+#### Boilerplate (Wave C)
+
+- **`make` sets a shared `TF_PLUGIN_CACHE_DIR`**, so `make ci` on a fresh clone no longer
+  downloads a provider copy per directory.
+- **gcp-bootstrap gets the immutable workspace IDs automatically.** tfc-admin writes
+  `tfc_workspace_ids` onto the workspace (`set_gcp_bootstrap_workspace_ids`). For the local
+  phase-0 run, `output.gcp_bootstrap_tfvars` produces the tfvars line. A production estate requires
+  these IDs, and the runbook now says so.
+- **`org.profile: starter | production`** for `aws-network` and `aws-security`. Starter drops the
+  Network Firewall, Security Lake, Macie, record-all Config and EBS malware scanning. Explicit
+  toggles still win.
+- **Brownfield AWS adoption.** `adopt_existing` (config `aws.adopt`) imports an existing
+  organization, OUs and accounts. A new runbook,
+  [`aws-brownfield-adoption.md`](docs/runbooks/aws-brownfield-adoption.md), covers Control Tower
+  coexistence. `aws-security` gains `create_organization_trail`, so it does not run a second org
+  trail next to Control Tower's.
+- **The SaaS path is config-driven.** `saas.stacks.<name>` over `saas.defaults` supplies the
+  Supabase org/project/region and the Vercel team/project/repo/branch. tfc-admin sets `stack` on
+  each `saas-<name>` workspace. A new runbook covers it:
+  [`saas-bootstrap.md`](docs/runbooks/saas-bootstrap.md).
+
 #### Migration
 
 - **Organization.** Set `TF_CLOUD_ORGANIZATION=<org>`, and `TF_CLOUD_HOSTNAME` for HCP EU or TFE,

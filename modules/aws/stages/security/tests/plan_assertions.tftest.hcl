@@ -325,3 +325,17 @@ run "security_tooling_boundary_disabled_with_null_name" {
     error_message = "tfc_apply_boundary_policy_name = null must disable the boundary and skip the identity lookup."
   }
 }
+
+# Control Tower (or another owner) runs the org trail: no second trail here.
+run "organization_trail_can_be_owned_elsewhere" {
+  command = plan
+
+  variables {
+    create_organization_trail = false
+  }
+
+  assert {
+    condition     = length(module.cloudtrail) == 0 && output.cloudtrail_log_group_name == null
+    error_message = "create_organization_trail = false must not create the org trail."
+  }
+}

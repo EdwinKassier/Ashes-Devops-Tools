@@ -499,3 +499,9 @@ variable "workload_notifications" {
   }))
   default = {}
 }
+
+variable "set_gcp_bootstrap_workspace_ids" {
+  description = "Write the tfc_workspace_ids map (every gcp-* workspace's immutable ID) as a Terraform variable on gcp-bootstrap, so its WIF bindings use IDs. A production estate requires this. Skipped when workspace_variables already sets tfc_workspace_ids for gcp-bootstrap. Default true."
+  type        = bool
+  default     = true
+}

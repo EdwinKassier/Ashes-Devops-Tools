@@ -874,3 +874,31 @@ run "self_management_adopts_tfc_admin" {
     error_message = "self-managed tfc-admin lands in the platform project."
   }
 }
+
+# gcp-bootstrap receives every gcp-* workspace ID so its WIF bindings are by ID.
+run "gcp_bootstrap_gets_workspace_ids" {
+  command = plan
+
+  assert {
+    condition = (
+      length(tfe_variable.gcp_bootstrap_workspace_ids) == 1 &&
+      tfe_variable.gcp_bootstrap_workspace_ids[0].key == "tfc_workspace_ids" &&
+      tfe_variable.gcp_bootstrap_workspace_ids[0].hcl == true &&
+      startswith(output.gcp_bootstrap_tfvars, "tfc_workspace_ids = ")
+    )
+    error_message = "tfc-admin must set tfc_workspace_ids (HCL) on gcp-bootstrap and output the phase-0 tfvars line."
+  }
+}
+
+run "gcp_bootstrap_workspace_ids_opt_out" {
+  command = plan
+
+  variables {
+    set_gcp_bootstrap_workspace_ids = false
+  }
+
+  assert {
+    condition     = length(tfe_variable.gcp_bootstrap_workspace_ids) == 0
+    error_message = "set_gcp_bootstrap_workspace_ids = false must not write the variable."
+  }
+}

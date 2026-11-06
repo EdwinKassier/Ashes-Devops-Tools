@@ -287,6 +287,11 @@ locals {
   # workspace_variables (or the committed workspace_variables_file).
   derived_terraform_vars = merge(
     {
+      for ws in keys(local.saas) : ws => {
+        stack = { value = trimprefix(ws, "saas-"), category = "terraform", hcl = false, sensitive = false, description = "SaaS stack key in saas.stacks (derived from the workspace name)." }
+      }
+    },
+    {
       for ws in local.gcp_workload_names : ws => {
         environment = { value = trimprefix(ws, "gcp-workload-"), category = "terraform", hcl = false, sensitive = false, description = "Environment key (derived from the workspace name)." }
       }
@@ -681,4 +686,33 @@ resource "tfe_policy_set" "opa" {
       error_message = "enable_policy_sets = true requires vcs_repo (or org.tfc.vcs_repo in config/landing-zone.yaml): the policy set is sourced from policies/opa in the repo."
     }
   }
+}
+
+# ── gcp-bootstrap: immutable workspace IDs for the WIF bindings ─────────────
+# gcp-bootstrap binds each gcp-* workspace's plan/apply SA by workspace ID when
+# it knows the ID (by name otherwise, which a production estate rejects). The
+# IDs only exist once this root has created the workspaces, so it writes them
+# onto gcp-bootstrap here (a separate resource, so the workspace module does not
+# depend on its own IDs). The local phase-0 apply runs in local execution mode,
+# which ignores workspace variables: use output.gcp_bootstrap_tfvars there.
+locals {
+  gcp_bootstrap_workspace_ids = {
+    for ws, m in module.workspace : ws => m.id if startswith(ws, "gcp-")
+  }
+  set_gcp_bootstrap_workspace_ids = (
+    var.set_gcp_bootstrap_workspace_ids &&
+    contains(keys(local.workspaces), "gcp-bootstrap") &&
+    !contains(keys(lookup(local.workspace_vars, "gcp-bootstrap", {})), "tfc_workspace_ids")
+  )
+}
+
+resource "tfe_variable" "gcp_bootstrap_workspace_ids" {
+  count = local.set_gcp_bootstrap_workspace_ids ? 1 : 0
+
+  workspace_id = module.workspace["gcp-bootstrap"].id
+  key          = "tfc_workspace_ids"
+  value        = jsonencode(local.gcp_bootstrap_workspace_ids)
+  category     = "terraform"
+  hcl          = true
+  description  = "TFC workspace name -> immutable ID for every gcp-* workspace (set by tfc-admin), so gcp-bootstrap binds WIF by ID, never by squattable name."
 }

@@ -45,3 +45,8 @@ output "workspace_variables_file_loaded" {
   description = "Whether the committed workspace_variables_file existed and was merged into the workspace variables."
   value       = local.workspace_variables_file_present
 }
+
+output "gcp_bootstrap_tfvars" {
+  description = "tfvars line for the LOCAL phase-0 gcp-bootstrap apply (local execution mode ignores workspace variables): terraform -chdir=envs/tfc-admin output -raw gcp_bootstrap_tfvars > envs/gcp/bootstrap/tfc-workspaces.auto.tfvars"
+  value       = "tfc_workspace_ids = ${jsonencode(local.gcp_bootstrap_workspace_ids)}\n"
+}
