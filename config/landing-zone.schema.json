@@ -34,6 +34,10 @@
         "cost_center": {
           "type": "string"
         },
+        "monthly_budget_usd": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
         "regions": {
           "type": "object",
           "properties": {

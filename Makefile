@@ -318,9 +318,9 @@ init: ## Scaffold config/landing-zone.yaml: make init ARGS="--org-name acme --cl
 bootstrap-ids: ## Write the tfc-admin workspace IDs for the local phase-0 gcp-bootstrap apply (gitignored)
 	terraform -chdir=envs/tfc-admin output -raw gcp_bootstrap_tfvars > envs/gcp/bootstrap/tfc-workspaces.auto.tfvars
 
-config-check: ## Validate config/*.example.yaml and every test fixture against config/landing-zone.schema.json (needs check-jsonschema)
+config-check: ## Validate config/*.example.yaml, config/sandbox/ and every test fixture against config/landing-zone.schema.json (needs check-jsonschema)
 	@command -v check-jsonschema >/dev/null || { echo "check-jsonschema not found: pipx install check-jsonschema (see .tool-versions)"; exit 1; }
-	@{ echo config/landing-zone.example.yaml; find envs modules -name 'landing-zone*.yaml' -path '*/tests/fixtures/*'; } | sort | \
+	@{ echo config/landing-zone.example.yaml; find config/sandbox -name 'landing-zone*.yaml' 2>/dev/null; find envs modules -name 'landing-zone*.yaml' -path '*/tests/fixtures/*'; } | sort | \
 		xargs check-jsonschema --schemafile config/landing-zone.schema.json
 	@./scripts/check-config-schema-coverage.sh
 	@for f in config/tests/*.yaml; do \

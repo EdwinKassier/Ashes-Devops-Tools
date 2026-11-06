@@ -1,0 +1,52 @@
+# Sandbox estate: per-workspace variables for the SECOND tfc-admin instance.
+#
+# The sandbox tfc-admin workspace sets
+#   workspace_variables_file = "../../config/sandbox/tfc-workspaces.yaml"
+#   landing_zone_config_path = "../../config/sandbox/landing-zone.yaml"
+# so it reads this file, not config/tfc-workspaces.yaml, and every sandbox
+# workspace below reads config/sandbox/landing-zone.yaml instead of the
+# production config/landing-zone.yaml. See docs/guides/sandbox-estate.md.
+#
+# Path depth: envs/<cloud>/<root> sits three levels below the repo root
+# (../../../config/...); envs/saas sits two (../../config/...).
+#
+# Same format and rules as config/tfc-workspaces.example.yaml: every workspace
+# named here must be managed by the sandbox tfc-admin, and NO SECRETS.
+#
+# gcp-bootstrap runs with local execution in phase 0, and a local run ignores
+# workspace variables: pass -var landing_zone_config_path=../../../config/sandbox/landing-zone.yaml
+# to that first apply yourself.
+
+workspaces:
+  gcp-bootstrap:
+    landing_zone_config_path: ../../../config/sandbox/landing-zone.yaml
+  gcp-organization:
+    landing_zone_config_path: ../../../config/sandbox/landing-zone.yaml
+  gcp-projects:
+    landing_zone_config_path: ../../../config/sandbox/landing-zone.yaml
+  gcp-network-hub:
+    landing_zone_config_path: ../../../config/sandbox/landing-zone.yaml
+  gcp-guardrails:
+    landing_zone_config_path: ../../../config/sandbox/landing-zone.yaml
+  gcp-workload-dev:
+    landing_zone_config_path: ../../../config/sandbox/landing-zone.yaml
+
+  aws-organization:
+    landing_zone_config_path: ../../../config/sandbox/landing-zone.yaml
+  aws-security:
+    landing_zone_config_path: ../../../config/sandbox/landing-zone.yaml
+  aws-network:
+    landing_zone_config_path: ../../../config/sandbox/landing-zone.yaml
+  aws-identity:
+    landing_zone_config_path: ../../../config/sandbox/landing-zone.yaml
+  aws-shared-services:
+    landing_zone_config_path: ../../../config/sandbox/landing-zone.yaml
+  aws-backup:
+    landing_zone_config_path: ../../../config/sandbox/landing-zone.yaml
+  aws-workload-dev:
+    landing_zone_config_path: ../../../config/sandbox/landing-zone.yaml
+
+  # Uncomment together with saas.enabled / saas.workspaces in
+  # config/sandbox/landing-zone.yaml (a workspace named here must exist).
+  # saas-web:
+  #   landing_zone_config_path: ../../config/sandbox/landing-zone.yaml

@@ -60,3 +60,8 @@ output "never_auto_apply_workspaces" {
   description = "Workspaces that always need a human apply confirmation, whatever any auto-apply setting does for the others (gcp-guardrails when GCP is enabled, and tfc-admin)."
   value       = sort([for ws in local.never_auto_apply_workspaces : ws if contains(keys(local.workspaces), ws) || ws == var.tfc_admin_workspace_name])
 }
+
+output "estate_config_trigger_patterns" {
+  description = "Trigger patterns every workspace gets for this estate's own config: config/landing-zone.yaml + config/tfc-workspaces.yaml for production, <dir>/** for any other estate (e.g. config/sandbox/**)."
+  value       = local.estate_config_trigger_patterns
+}

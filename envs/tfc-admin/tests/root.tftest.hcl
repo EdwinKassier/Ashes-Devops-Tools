@@ -102,23 +102,24 @@ run "saas_only" {
   }
 }
 
-# Module-only PRs must trigger plans: each workspace watches its own dir plus
-# the module domains its root consumes.
+# Module-only PRs must trigger plans: each workspace watches its own dir, the
+# module domains its root consumes, and its estate's config files
+# (sandbox.tftest.hcl covers the per-estate split).
 run "trigger_patterns_cover_module_domains" {
   command = plan
 
   assert {
-    condition     = module.workspace["gcp-organization"].trigger_patterns == tolist(["envs/gcp/organization/**", "modules/gcp/**"])
-    error_message = "GCP roots must trigger on their dir and modules/gcp/**."
+    condition     = toset(module.workspace["gcp-organization"].trigger_patterns) == toset(["envs/gcp/organization/**", "modules/gcp/**", "config/landing-zone.yaml", "config/tfc-workspaces.yaml"])
+    error_message = "GCP roots must trigger on their dir, modules/gcp/** and the estate config."
   }
 
   assert {
-    condition     = module.workspace["aws-workload-dev"].trigger_patterns == tolist(["envs/aws/workload/**", "modules/aws/**"])
-    error_message = "AWS roots must trigger on their dir and modules/aws/**."
+    condition     = toset(module.workspace["aws-workload-dev"].trigger_patterns) == toset(["envs/aws/workload/**", "modules/aws/**", "config/landing-zone.yaml", "config/tfc-workspaces.yaml"])
+    error_message = "AWS roots must trigger on their dir, modules/aws/** and the estate config."
   }
 
   assert {
-    condition     = toset(module.workspace["saas-web"].trigger_patterns) == toset(["envs/saas/**", "modules/saas/**", "modules/supabase/**", "modules/vercel/**"])
+    condition     = toset(module.workspace["saas-web"].trigger_patterns) == toset(["envs/saas/**", "modules/saas/**", "modules/supabase/**", "modules/vercel/**", "config/landing-zone.yaml", "config/tfc-workspaces.yaml"])
     error_message = "the saas root must trigger on envs/saas and the saas/supabase/vercel module domains."
   }
 }
@@ -966,8 +967,8 @@ run "self_management_adopts_tfc_admin" {
   }
 
   assert {
-    condition     = module.workspace["tfc-admin"].speculative_enabled == false && module.workspace["tfc-admin"].trigger_patterns == tolist(["envs/tfc-admin/**", "modules/tfc/**"])
-    error_message = "a self-managed tfc-admin workspace is control plane: no speculative plans, triggers on its dir + modules/tfc."
+    condition     = module.workspace["tfc-admin"].speculative_enabled == false && toset(module.workspace["tfc-admin"].trigger_patterns) == toset(["envs/tfc-admin/**", "modules/tfc/**", "config/landing-zone.yaml", "config/tfc-workspaces.yaml"])
+    error_message = "a self-managed tfc-admin workspace is control plane: no speculative plans, triggers on its dir + modules/tfc + the estate config."
   }
 
   assert {

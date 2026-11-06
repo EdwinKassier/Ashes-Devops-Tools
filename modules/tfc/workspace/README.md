@@ -48,11 +48,11 @@ module "example" {
 The following resources are created:
 
 
-- resource.tfe_notification_configuration.this (modules/tfc/workspace/main.tf#L87)
-- resource.tfe_variable.this (modules/tfc/workspace/main.tf#L62)
+- resource.tfe_notification_configuration.this (modules/tfc/workspace/main.tf#L90)
+- resource.tfe_variable.this (modules/tfc/workspace/main.tf#L65)
 - resource.tfe_workspace.this (modules/tfc/workspace/main.tf#L7)
-- resource.tfe_workspace_settings.this (modules/tfc/workspace/main.tf#L49)
-- resource.tfe_workspace_variable_set.this (modules/tfc/workspace/main.tf#L78)
+- resource.tfe_workspace_settings.this (modules/tfc/workspace/main.tf#L52)
+- resource.tfe_workspace_variable_set.this (modules/tfc/workspace/main.tf#L81)
 
 
 ## Inputs
@@ -66,6 +66,7 @@ The following resources are created:
 | <a name="input_allow_destroy_plan"></a> [allow\_destroy\_plan](#input\_allow\_destroy\_plan) | Allow destroy plans to be queued from the UI/API. Set false for control-plane workspaces. | `bool` | `true` | no |
 | <a name="input_assessments_enabled"></a> [assessments\_enabled](#input\_assessments\_enabled) | Enable health assessments (native drift detection and continuous validation). Requires an HCP Terraform tier that includes health assessments. | `bool` | `true` | no |
 | <a name="input_auto_apply"></a> [auto\_apply](#input\_auto\_apply) | Apply automatically after a successful plan. Default false: foundational workspaces require manual apply approval. | `bool` | `false` | no |
+| <a name="input_auto_apply_run_trigger"></a> [auto\_apply\_run\_trigger](#input\_auto\_apply\_run\_trigger) | Apply automatically after a successful plan that a run trigger (an upstream workspace's apply) queued. Independent of auto\_apply. Default false. | `bool` | `false` | no |
 | <a name="input_description"></a> [description](#input\_description) | Human-readable description of what the workspace deploys. | `string` | `null` | no |
 | <a name="input_execution_mode"></a> [execution\_mode](#input\_execution\_mode) | TFC execution mode. 'remote' (default) runs plans/applies in TFC; 'agent'/'local' for special cases. | `string` | `"remote"` | no |
 | <a name="input_file_triggers_enabled"></a> [file\_triggers\_enabled](#input\_file\_triggers\_enabled) | Trigger runs only when files under working\_directory (or trigger\_patterns) change. | `bool` | `true` | no |
@@ -89,6 +90,7 @@ The following resources are created:
 |------|-------------|
 | <a name="output_allow_destroy_plan"></a> [allow\_destroy\_plan](#output\_allow\_destroy\_plan) | Whether destroy plans may be queued from the UI/API. |
 | <a name="output_auto_apply"></a> [auto\_apply](#output\_auto\_apply) | Whether a successful plan applies without confirmation. |
+| <a name="output_auto_apply_run_trigger"></a> [auto\_apply\_run\_trigger](#output\_auto\_apply\_run\_trigger) | Whether a successful plan queued by a run trigger applies without confirmation. |
 | <a name="output_id"></a> [id](#output\_id) | The workspace ID (ws-...). |
 | <a name="output_name"></a> [name](#output\_name) | The workspace name. |
 | <a name="output_notification_ids"></a> [notification\_ids](#output\_notification\_ids) | Map of notification name to its configuration ID. |

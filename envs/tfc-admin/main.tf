@@ -654,16 +654,18 @@ module "workspace" {
 
   vcs_repo              = local.vcs_repo
   file_triggers_enabled = true
-  trigger_patterns      = concat(["${each.value.dir}/**"], local.module_paths[each.value.cloud])
+  # Own dir + consumed module domains + this estate's config files only.
+  trigger_patterns = concat(["${each.value.dir}/**"], local.module_paths[each.value.cloud], local.estate_config_trigger_patterns)
 
   # Control plane and production workloads: no automatic speculative PR plans
   # (a PR's code would run as the plan identity); no UI destroy plans on the
-  # control plane. auto_apply stays false everywhere today; the
-  # never_auto_apply_workspaces (gcp-guardrails, tfc-admin) must stay false
-  # under any future auto-apply setting.
-  speculative_enabled = !contains(local.speculative_disabled, each.key)
-  allow_destroy_plan  = !local.is_control_plane[each.key]
-  auto_apply          = false
+  # control plane. auto_apply is false unless auto_apply_on_merge (the sandbox
+  # estate); the never_auto_apply_workspaces (gcp-guardrails, tfc-admin) stay
+  # false under it too.
+  speculative_enabled    = !contains(local.speculative_disabled, each.key)
+  allow_destroy_plan     = !local.is_control_plane[each.key]
+  auto_apply             = var.auto_apply_on_merge && !contains(local.never_auto_apply_workspaces, each.key)
+  auto_apply_run_trigger = var.auto_apply_on_merge && !contains(local.never_auto_apply_workspaces, each.key)
 
   assessments_enabled = var.enable_health_assessments
 
@@ -792,8 +794,10 @@ resource "tfe_variable" "gcp_bootstrap_workspace_ids" {
 # ── Run triggers along the dependency DAG ───────────────────────────────────
 # A successful apply upstream queues a run downstream, so a change to
 # gcp-projects (say) is followed by a plan of gcp-network-hub and every
-# gcp-workload-<env> instead of waiting for someone to remember. Downstream
-# auto_apply stays false: the triggered run is a plan awaiting confirmation.
+# gcp-workload-<env> instead of waiting for someone to remember. Without
+# auto_apply_on_merge the triggered run is a plan awaiting confirmation; with
+# it, the run applies (auto_apply_run_trigger), except on the
+# never_auto_apply_workspaces.
 # Only the direct edges (the DAG's transitive reduction), so a workload is
 # queued once per upstream change, not once per ancestor.
 locals {

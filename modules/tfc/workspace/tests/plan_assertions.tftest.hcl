@@ -171,3 +171,27 @@ run "speculative_plans_default_on" {
     error_message = "a plain workspace keeps speculative plans and the working-directory trigger default."
   }
 }
+
+# auto_apply_run_trigger is independent of auto_apply: off by default, and the
+# caller's value reaches the workspace unchanged.
+run "auto_apply_run_trigger_passed_through" {
+  command = plan
+
+  assert {
+    condition     = tfe_workspace.this.auto_apply_run_trigger == false && output.auto_apply_run_trigger == false
+    error_message = "auto_apply_run_trigger must default to false."
+  }
+}
+
+run "auto_apply_run_trigger_enabled" {
+  command = plan
+
+  variables {
+    auto_apply_run_trigger = true
+  }
+
+  assert {
+    condition     = tfe_workspace.this.auto_apply_run_trigger == true && output.auto_apply_run_trigger == true && tfe_workspace.this.auto_apply == false
+    error_message = "auto_apply_run_trigger = true must reach tfe_workspace without turning on auto_apply."
+  }
+}

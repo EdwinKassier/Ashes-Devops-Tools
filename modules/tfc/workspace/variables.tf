@@ -41,6 +41,12 @@ variable "auto_apply" {
   default     = false
 }
 
+variable "auto_apply_run_trigger" {
+  description = "Apply automatically after a successful plan that a run trigger (an upstream workspace's apply) queued. Independent of auto_apply. Default false."
+  type        = bool
+  default     = false
+}
+
 variable "terraform_version" {
   description = "Terraform version constraint for the workspace, e.g. ~> 1.9. Null uses the TFC default."
   type        = string

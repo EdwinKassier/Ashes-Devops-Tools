@@ -1,0 +1,116 @@
+# Sandbox estate: the landing-zone config for the SECOND tfc-admin instance.
+#
+# The sandbox runs the previous `main` in its own HCP Terraform organization,
+# GCP folder and AWS organization, so every merge is applied there as an
+# N-1 -> N upgrade before a release. See docs/guides/sandbox-estate.md.
+#
+# Same schema as config/landing-zone.yaml (config/landing-zone.schema.json;
+# `make config-check` validates this file too). Every value below is a
+# placeholder (my-sandbox-org, REPLACE_WITH_*, example.com): the operator
+# replaces them before the first sandbox apply, and the roots' validations
+# reject the REPLACE_WITH_* / example.com ones until then.
+#
+# Workspaces in the sandbox HCP org read THIS file because
+# config/sandbox/tfc-workspaces.yaml sets their landing_zone_config_path.
+# Editing it queues sandbox runs only (tfc-admin trigger pattern
+# config/sandbox/**); production runs never trigger on it.
+#
+# NO SECRETS. This file is committed.
+
+version: 1
+
+org:
+  name: my-sandbox-org
+  prefix: sbx
+  domain: sandbox.example.com
+  display_name: Landing Zone Sandbox
+  # starter drops the costly detection/inspection extras (Network Firewall,
+  # Security Lake, Macie, record-all Config) and keeps every preventive control.
+  profile: starter
+  # Monthly spend ceiling for the whole sandbox estate, in USD (budget alerts).
+  # The platform team owns this bill.
+  monthly_budget_usd: 300
+  owner: platform-team
+  cost_center: platform-sandbox
+  regions:
+    gcp: europe-west2
+    aws: eu-west-2
+  tfc:
+    # The sandbox HCP Terraform organization (a second org, never production's).
+    organization: my-sandbox-org
+    project_name_prefix: sandbox-
+    # vcs_repo:
+    #   identifier: my-org/landing-zone
+    #   branch: main
+    #   github_app_installation_id: ghain-REPLACE_ME
+
+gcp:
+  enabled: true
+  billing_account: "REPLACE_WITH_BILLING_ACCOUNT_ID"
+  admin_email: REPLACE_WITH_ADMIN_EMAIL
+  organization_admin_groups:
+    - gcp-organization-admins@sandbox.example.com
+  billing_admin_groups:
+    - gcp-billing-admins@sandbox.example.com
+  break_glass_group: gcp-break-glass@sandbox.example.com
+  alert_emails:
+    - secops@sandbox.example.com
+  allowed_regions:
+    - europe-west2
+  network:
+    hub_cidr_block: 10.100.0.0/16
+    dns_hub_cidr_block: 10.101.0.0/16
+  # One environment only: the sandbox proves the upgrade path, not scale.
+  environments:
+    dev:
+      display_name: Sandbox Development
+      cidr_block: 10.110.0.0/16
+      budget_monthly_limit: 100
+      is_production: false
+      labels:
+        tier: sandbox
+      iam_group_role_bindings: {}
+  workload: {}
+
+aws:
+  enabled: true
+  management_account_id: "REPLACE_WITH_12_DIGIT_ID"
+  allowed_regions:
+    - eu-west-2
+  enabled_regions:
+    - eu-west-2
+  terraform_run_role_arn: arn:aws:iam::REPLACE_WITH_12_DIGIT_ID:role/tfc-mgmt-apply
+  break_glass_role_arn: arn:aws:iam::REPLACE_WITH_12_DIGIT_ID:role/break-glass
+  log_archive_bucket_name: my-sandbox-org-log-archive
+  accounts:
+    log_archive: {email: aws+sbx-log-archive@example.com, ou: Security}
+    security_tooling: {email: aws+sbx-security-tooling@example.com, ou: Security}
+    network: {email: aws+sbx-network@example.com, ou: Infrastructure}
+    shared_services: {email: aws+sbx-shared-services@example.com, ou: Infrastructure}
+    backup: {email: aws+sbx-backup@example.com, ou: Infrastructure}
+    forensics: {email: aws+sbx-forensics@example.com, ou: Security}
+  # One workload account only.
+  workload_accounts:
+    workload_dev: {email: aws+sbx-workload-dev@example.com, ou: Workloads}
+  workload_environments:
+    dev:
+      account_key: workload_dev
+      vpc_cidr: 10.120.0.0/16
+  network:
+    egress_domain_allowlist:
+      - .amazonaws.com
+      - .github.com
+      - .githubusercontent.com
+      - .terraform.io
+    stateful_default_actions:
+      - aws:drop_established
+      - aws:alert_established
+  workload: {}
+
+saas:
+  # No SaaS stack in the sandbox by default. To add one, enable it here and
+  # uncomment the saas-<name> entry in config/sandbox/tfc-workspaces.yaml.
+  enabled: false
+  workspaces: []
+
+presets: []

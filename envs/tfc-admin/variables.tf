@@ -518,7 +518,13 @@ variable "set_gcp_bootstrap_workspace_ids" {
 }
 
 variable "enable_run_triggers" {
-  description = "Create TFC run triggers along the root dependency DAG (bootstrap -> organization -> projects -> network-hub -> workloads; aws-organization -> security/network/identity/shared-services/backup -> workloads), so an upstream apply queues a downstream plan. auto_apply stays off. Default true."
+  description = "Create TFC run triggers along the root dependency DAG (bootstrap -> organization -> projects -> network-hub -> workloads; aws-organization -> security/network/identity/shared-services/backup -> workloads), so an upstream apply queues a downstream plan. The plan waits for confirmation unless auto_apply_on_merge. Default true."
   type        = bool
   default     = true
+}
+
+variable "auto_apply_on_merge" {
+  description = "Apply every merge without confirmation: auto_apply and auto_apply_run_trigger on every workspace except tfc-admin and gcp-guardrails, so a merge applies the changed roots and the run triggers carry it down the DAG. Path-filtered VCS triggers stay on. Meant for the sandbox estate (docs/guides/sandbox-estate.md); default false keeps manual apply everywhere."
+  type        = bool
+  default     = false
 }

@@ -24,6 +24,25 @@ locals {
   ]
   lz = try(local.lz_documents[0], {})
 
+  # The estate's config directory relative to the repo root (this root sits at
+  # envs/tfc-admin, so "<path.root>/../../" is the repo root). Every workspace
+  # triggers on its own estate's config only: the production estate
+  # (config/landing-zone.yaml) on the two committed production files, any other
+  # estate (config/sandbox/landing-zone.yaml) on its whole directory. So editing
+  # one estate's YAML never queues the other's runs. A disabled lookup ("") and
+  # an absolute path (no known relation to the repo) keep the production layout.
+  landing_zone_config_dir = dirname(coalesce(
+    var.landing_zone_config_path == "" ? null : local.landing_zone_config_file,
+    "${path.root}/../../config/landing-zone.yaml",
+  ))
+  # dirname() cleans the path ("./../../config/sandbox" -> "../../config/sandbox").
+  estate_config_dir = startswith(local.landing_zone_config_dir, "/") ? "config" : (
+    local.landing_zone_config_dir == "../.." ? "." : (
+      startswith(local.landing_zone_config_dir, "../../") ? trimprefix(local.landing_zone_config_dir, "../../") : "envs/tfc-admin/${local.landing_zone_config_dir}"
+    )
+  )
+  estate_config_trigger_patterns = local.estate_config_dir == "config" ? ["config/landing-zone.yaml", "config/tfc-workspaces.yaml"] : ["${local.estate_config_dir}/**"]
+
   cfg = {
     tfc_organization    = try(tostring(local.lz.org.tfc.organization), null)
     project_name_prefix = try(tostring(local.lz.org.tfc.project_name_prefix), null)

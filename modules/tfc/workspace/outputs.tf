@@ -53,6 +53,11 @@ output "auto_apply" {
   value       = tfe_workspace.this.auto_apply
 }
 
+output "auto_apply_run_trigger" {
+  description = "Whether a successful plan queued by a run trigger applies without confirmation."
+  value       = tfe_workspace.this.auto_apply_run_trigger
+}
+
 output "allow_destroy_plan" {
   description = "Whether destroy plans may be queued from the UI/API."
   value       = tfe_workspace.this.allow_destroy_plan
