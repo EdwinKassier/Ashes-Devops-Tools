@@ -1,0 +1,23 @@
+# Test fixture: services and service teams in the config file (config.tftest.hcl).
+version: 1
+org:
+  prefix: cfgco
+  regions:
+    gcp: europe-west1
+  tfc:
+    organization: cfg-tfc
+gcp:
+  environments:
+    dev:
+      cidr_block: 10.10.0.0/16
+      services:
+        api:
+          min_instances: 1
+          env_vars: {LOG_LEVEL: info}
+        worker: {}
+      service_teams:
+        payments:
+          project_admin_group_email: payments-admins@cfg.example
+          activate_apis: [run.googleapis.com]
+          shared_vpc_subnets:
+            primary: {region: europe-west1, subnet_name: cfgco-dev-private}

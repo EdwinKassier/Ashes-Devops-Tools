@@ -139,7 +139,7 @@ locals {
   app_ingress_mode = coalesce(var.app_ingress_mode, local.cfg.app_ingress_mode, "internal")
   app_public_alb   = local.app_ingress_mode == "public_alb"
   app_vpc_origin   = local.app_ingress_mode == "cloudfront_vpc_origin"
-  apps_enabled     = length(var.services) > 0
+  apps_enabled     = length(local.services) > 0
 
   # Internet-facing ALB: public tier, open listeners (WAF in front). Otherwise
   # the private tier and the spoke CIDR (CloudFront VPC-origin ENIs live there).
@@ -153,7 +153,7 @@ locals {
 # =============================================================================
 # APP SERVICES — the application golden path 
 #
-# One entry in var.services = an ECR repo, a Fargate service in the spoke's
+# One entry in local.services (var.services, else aws.workload_environments.<env>.services) = an ECR repo, a Fargate service in the spoke's
 # private subnets behind the shared internal ALB, least-privilege task roles, a
 # KMS-encrypted log group, and optionally a GitHub Actions OIDC deploy role and
 # an Aurora PostgreSQL cluster. Default services = {} creates nothing. See
@@ -177,7 +177,7 @@ module "app_services" {
   kms_key_arn         = local.kms_key_arn
   bootstrap_image     = local.app_bootstrap_image
 
-  services = var.services
+  services = local.services
 
   enable_github_oidc          = var.enable_github_oidc
   create_github_oidc_provider = var.create_github_oidc_provider

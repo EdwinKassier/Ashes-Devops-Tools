@@ -28,6 +28,12 @@ locals {
     # aws.workload_environments: env => {account_key, vpc_cidr}.
     workload_account_keys = { for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => tostring(e.account_key) if try(e.account_key, null) != null }
     vpc_cidrs             = { for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => tostring(e.vpc_cidr) if try(e.vpc_cidr, null) != null }
+    # aws.workload_environments.<env>.services: same shape as var.services (the
+    # app-services stage validates and types them).
+    services = {
+      for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => { for k, v in e.services : k => v }
+      if try(e.services, null) != null
+    }
     # aws.contracts.<layer>: stage contract overrides (same shape as the
     # <layer>_contract variables). Present => that remote-state read is skipped.
     organization_contract = try(local.lz.aws.contracts.organization, null) == null ? null : {
@@ -56,4 +62,12 @@ locals {
   workload_account_key = coalesce(var.workload_account_key, try(local.cfg.workload_account_keys[var.environment], null), "unset")
   vpc_cidr             = coalesce(var.vpc_cidr, try(local.cfg.vpc_cidrs[local.environment], null), "10.20.0.0/16")
   app_bootstrap_image  = coalesce(var.app_bootstrap_image, local.cfg.app_bootstrap_image, "public.ecr.aws/nginx/nginx-unprivileged:stable-alpine")
+
+  # Services: explicit variable > aws.workload_environments.<env>.services >
+  # none. For-expressions (not a conditional) so the differently-typed sources
+  # need no type unification.
+  services = merge(
+    { for k, v in coalesce(var.services, {}) : k => v },
+    { for k, v in try(local.cfg.services[local.environment], {}) : k => v if var.services == null },
+  )
 }

@@ -149,6 +149,23 @@ gcp:
       iam_group_role_bindings:
         gcp-developers@my-org.example.com:
           - roles/viewer
+      # Application services run in this environment's host project (Cloud Run,
+      # optional Cloud SQL, GitHub deploy identity). Same fields as the
+      # modules/gcp/stages/app-services `services` variable; the key is the
+      # service name. Promote by adding the same entry under the next environment.
+      # services:
+      #   api:
+      #     min_instances: 1
+      #     github: {repository_id: "123456789"}
+      # Service teams: a team = a GCP project in this environment's folder,
+      # attached to the Shared VPC, with its admin group granted least-privilege
+      # roles. Fields: envs/gcp/workload (variable service_teams).
+      # service_teams:
+      #   payments:
+      #     project_admin_group_email: payments-admins@my-org.example.com
+      #     activate_apis: [run.googleapis.com]
+      #     shared_vpc_subnets:
+      #       primary: {region: europe-west2, subnet_name: acme-dev-private}
     prod:
       display_name: Production
       region: europe-west2
@@ -222,6 +239,13 @@ aws:
     dev:
       account_key: workload_dev
       vpc_cidr: 10.20.0.0/16
+      # Services deployed to this environment (ECS Fargate behind the shared
+      # ALB, optional Aurora and GitHub deploy role). Fields:
+      # envs/aws/workload (variable services).
+      # services:
+      #   api:
+      #     desired_count: 2
+      #     health_check_path: /healthz
 
   # Network Firewall egress posture (aws-network). A production estate (profile
   # production AND a workload environment with is_production, or keyed

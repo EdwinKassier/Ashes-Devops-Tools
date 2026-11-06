@@ -226,6 +226,268 @@
                   "string",
                   "integer"
                 ]
+              },
+              "services": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "image": {
+                      "type": "string"
+                    },
+                    "ingress": {
+                      "type": "string"
+                    },
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
+                    },
+                    "min_instances": {
+                      "type": "number"
+                    },
+                    "max_instances": {
+                      "type": "number"
+                    },
+                    "concurrency": {
+                      "type": "number"
+                    },
+                    "timeout": {
+                      "type": "string"
+                    },
+                    "env_vars": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "secrets": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "secret": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                          "secret"
+                        ]
+                      }
+                    },
+                    "subnetwork_id": {
+                      "type": "string"
+                    },
+                    "vpc_egress": {
+                      "type": "string"
+                    },
+                    "enable_binary_authorization": {
+                      "type": "boolean"
+                    },
+                    "binary_authorization_policy": {
+                      "type": "string"
+                    },
+                    "enable_unauthenticated": {
+                      "type": "boolean"
+                    },
+                    "invoker_members": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "runtime_project_roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "enable_deletion_protection": {
+                      "type": "boolean"
+                    },
+                    "labels": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "artifact_registry": {
+                      "type": "object",
+                      "properties": {
+                        "immutable_tags": {
+                          "type": "boolean"
+                        },
+                        "keep_count": {
+                          "type": "number"
+                        },
+                        "delete_untagged_older_than": {
+                          "type": "string"
+                        },
+                        "cleanup_policy_dry_run": {
+                          "type": "boolean"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "database": {
+                      "type": "object",
+                      "properties": {
+                        "database_version": {
+                          "type": "string"
+                        },
+                        "edition": {
+                          "type": "string"
+                        },
+                        "tier": {
+                          "type": "string"
+                        },
+                        "databases": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "enable_high_availability": {
+                          "type": "boolean"
+                        },
+                        "enable_point_in_time_recovery": {
+                          "type": "boolean"
+                        },
+                        "encryption_key_name": {
+                          "type": "string"
+                        },
+                        "enable_deletion_protection": {
+                          "type": "boolean"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "github": {
+                      "type": "object",
+                      "properties": {
+                        "repository_id": {
+                          "type": [
+                            "string",
+                            "integer"
+                          ]
+                        },
+                        "repository": {
+                          "type": "string"
+                        },
+                        "ref": {
+                          "type": "string"
+                        },
+                        "environment": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "repository_id"
+                      ]
+                    },
+                    "alerts": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "error_ratio_threshold": {
+                          "type": "number"
+                        },
+                        "p99_latency_ms": {
+                          "type": "number"
+                        },
+                        "duration": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "pubsub": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "ack_deadline_seconds": {
+                          "type": "number"
+                        },
+                        "max_delivery_attempts": {
+                          "type": "number"
+                        },
+                        "message_retention_duration": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "service_teams": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "project_admin_group_email": {
+                      "type": "string"
+                    },
+                    "activate_apis": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "project_admin_roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "enable_shared_vpc_attachment": {
+                      "type": "boolean"
+                    },
+                    "enable_gke_network_user": {
+                      "type": "boolean"
+                    },
+                    "shared_vpc_subnets": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "region": {
+                            "type": "string"
+                          },
+                          "subnet_name": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                          "region",
+                          "subnet_name"
+                        ]
+                      }
+                    },
+                    "labels": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "project_admin_group_email"
+                  ]
+                }
               }
             },
             "additionalProperties": false
@@ -563,6 +825,186 @@
               },
               "is_production": {
                 "type": "boolean"
+              },
+              "services": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "container_image": {
+                      "type": "string"
+                    },
+                    "container_port": {
+                      "type": "number"
+                    },
+                    "cpu": {
+                      "type": "number"
+                    },
+                    "memory": {
+                      "type": "number"
+                    },
+                    "cpu_architecture": {
+                      "type": "string"
+                    },
+                    "desired_count": {
+                      "type": "number"
+                    },
+                    "host_headers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "path_patterns": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "priority": {
+                      "type": "number"
+                    },
+                    "health_check_path": {
+                      "type": "string"
+                    },
+                    "environment": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "secrets": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "task_role_policy_json": {
+                      "type": "string"
+                    },
+                    "task_role_managed_policy_arns": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "enable_execute_command": {
+                      "type": "boolean"
+                    },
+                    "enable_autoscaling": {
+                      "type": "boolean"
+                    },
+                    "autoscaling_min_capacity": {
+                      "type": "number"
+                    },
+                    "autoscaling_max_capacity": {
+                      "type": "number"
+                    },
+                    "github": {
+                      "type": "object",
+                      "properties": {
+                        "repository": {
+                          "type": "string"
+                        },
+                        "environment": {
+                          "type": "string"
+                        },
+                        "ref": {
+                          "type": "string"
+                        },
+                        "subject": {
+                          "type": "string"
+                        },
+                        "repository_id": {
+                          "type": "string"
+                        },
+                        "repository_owner_id": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "repository"
+                      ]
+                    },
+                    "database": {
+                      "type": "object",
+                      "properties": {
+                        "engine_version": {
+                          "type": "string"
+                        },
+                        "instance_class": {
+                          "type": "string"
+                        },
+                        "instance_count": {
+                          "type": "number"
+                        },
+                        "enable_serverless_v2": {
+                          "type": "boolean"
+                        },
+                        "serverless_min_capacity": {
+                          "type": "number"
+                        },
+                        "serverless_max_capacity": {
+                          "type": "number"
+                        },
+                        "database_name": {
+                          "type": "string"
+                        },
+                        "backup_retention_period": {
+                          "type": "number"
+                        },
+                        "deletion_protection": {
+                          "type": "boolean"
+                        },
+                        "skip_final_snapshot": {
+                          "type": "boolean"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "alarms": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "cpu_threshold": {
+                          "type": "number"
+                        },
+                        "memory_threshold": {
+                          "type": "number"
+                        },
+                        "error_5xx_threshold": {
+                          "type": "number"
+                        },
+                        "p99_latency_seconds": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "queue": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "visibility_timeout_seconds": {
+                          "type": "number"
+                        },
+                        "max_receive_count": {
+                          "type": "number"
+                        },
+                        "message_retention_seconds": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
               }
             },
             "additionalProperties": false

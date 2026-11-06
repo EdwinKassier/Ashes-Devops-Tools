@@ -249,7 +249,7 @@ terraform -chdir=envs/gcp/organization plan
 
 ```bash
 TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload init
-TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=../../../examples/dev.tfvars
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=../../../examples/dev.tfvars.example
 ```
 
 ### Workload Projects

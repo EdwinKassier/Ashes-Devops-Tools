@@ -19,7 +19,7 @@
 [![Security Scan](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml)
 [![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?style=flat-square&logo=pre-commit)](https://pre-commit.com)
 [![Modules](https://img.shields.io/badge/modules-121-blueviolet?style=flat-square)](modules/)
-[![Tests](https://img.shields.io/badge/test_suites-298-blue?style=flat-square)](modules/)
+[![Tests](https://img.shields.io/badge/test_suites-299-blue?style=flat-square)](modules/)
 
 <sub>Module/test-suite counts are static badges, enforced in CI: <code>make count</code> prints the live figures and <code>scripts/check-docs-counts.sh</code> (meta-lint) fails when this README or CLAUDE.md disagrees with the tree.</sub>
 
@@ -305,7 +305,7 @@ make count                 # Live module / root / test-suite counts
 make docs                  # Regenerate all module READMEs via terraform-docs
 make docs-check            # Verify no README is stale
 make plan-gcp-organization     # Plan control-plane changes
-make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
+make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
 ```
 
 ---

@@ -57,7 +57,7 @@ make lint
 
 ```bash
 make plan-gcp-organization
-make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
+make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
 ```
 
 ## Runbooks

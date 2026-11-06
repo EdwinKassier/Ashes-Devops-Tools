@@ -8,7 +8,7 @@ We utilize a **Hub-and-Spoke** network topology with centralized governance.
 
 ### Roots
 * **`gcp-organization`**: The control-plane root. Creates the admin project, org policy, shared services projects, folders, and per-environment host projects.
-* **`gcp-workload`**: The single application-environment root. Select the environment with `TF_WORKSPACE=gcp-workload-<env>` and the matching tfvars file under `examples/` (e.g. `examples/dev.tfvars`).
+* **`gcp-workload`**: The single application-environment root. Select the environment with `TF_WORKSPACE=gcp-workload-<env>` ; per-environment services and service teams live in `config/landing-zone.yaml` (`gcp.environments.<env>`). `examples/dev.tfvars.example` is for local read-only plans only.
 
 ### Infrastructure Pattern
 Each application environment uses the `modules/gcp/stages/net-spoke` network composition (successor to the deprecated `modules/gcp/stages/host`) to stamp out:

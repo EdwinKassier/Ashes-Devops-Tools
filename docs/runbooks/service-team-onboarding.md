@@ -16,7 +16,7 @@ Each service team gets:
 2. Shared VPC attachment (the team's VMs use the existing host network)
 3. IAM bindings for their admin Google Group
 
-> **App deploys (WIF):** to deploy an application from a team's GitHub repository, do not touch the bootstrap (infrastructure) WIF pool. Add an `app_services` entry with `github = { repository_id = "<numeric id>" }` in the `gcp-workload-<env>` workspace. It creates a per-service deploy SA bound to an app-only WIF pool in the env host project. See [`../guides/deploying-a-service.md`](../guides/deploying-a-service.md). The service-project path in this runbook is for teams that need their own project.
+> **App deploys (WIF):** to deploy an application from a team's GitHub repository, do not touch the bootstrap (infrastructure) WIF pool. Add a `services` entry under `gcp.environments.<env>` in `config/landing-zone.yaml` (the `app_services` input) with `github = { repository_id = "<numeric id>" }` in the `gcp-workload-<env>` workspace. It creates a per-service deploy SA bound to an app-only WIF pool in the env host project. See [`../guides/deploying-a-service.md`](../guides/deploying-a-service.md). The service-project path in this runbook is for teams that need their own project.
 
 ---
 
@@ -46,59 +46,51 @@ terraform -chdir=envs/gcp/workload output subnets
 
 The `subnets` output is a map. Each key is a subnet identifier; each value contains `region` and `self_link`.
 
-### Step 3 — Add the team to the `service_teams` registry (config, not code)
+### Step 3 — Add the team to `config/landing-zone.yaml` (config, not code)
 
-Onboarding is a map entry in the environment's tfvars, not a new module block in `main.tf` (audit H10). The workload root iterates `var.service_teams` with `for_each`, so one entry creates one service project. Add the team to `examples/<env>.tfvars`:
+Onboarding is a map entry in the environment's block of the config file, not a new module block in `main.tf`. The workload root reads `gcp.environments.<env>.service_teams` and creates one service project per entry. Add the team under the environment it belongs to:
 
-```hcl
-service_teams = {
-  payments = {
-    project_admin_group_email = "payments-admins@company.com"
-
-    activate_apis = [
-      "bigquery.googleapis.com",
-      "run.googleapis.com",
-      "storage.googleapis.com",
-    ]
-
-    # Additive per-role bindings for the admin group. Primitive roles
-    # (owner/editor/viewer) and org/folder-level roles are rejected.
-    project_admin_roles = [
-      "roles/bigquery.dataEditor",
-      "roles/storage.objectAdmin",
-      "roles/run.developer",
-    ]
-
-    # Subnets to grant. Names are per-zone:
-    #   <project_prefix>-<environment>-vpc-private-<region>-<zone>
-    shared_vpc_subnets = {
-      private = { region = "europe-west1", subnet_name = "ashes-dev-vpc-private-europe-west1-b" }
-    }
-
-    # enable_gke_network_user = true   # only for GKE projects
-  }
-}
+```yaml
+gcp:
+  environments:
+    dev:
+      service_teams:
+        payments:
+          project_admin_group_email: payments-admins@company.com
+          activate_apis:
+            - bigquery.googleapis.com
+            - run.googleapis.com
+            - storage.googleapis.com
+          # Additive per-role bindings for the admin group. Primitive roles
+          # (owner/editor/viewer) and org/folder-level roles are rejected.
+          project_admin_roles:
+            - roles/bigquery.dataEditor
+            - roles/storage.objectAdmin
+            - roles/run.developer
+          # Subnets to grant. Names are per-zone:
+          #   <project_prefix>-<environment>-vpc-private-<region>-<zone>
+          shared_vpc_subnets:
+            private: {region: europe-west1, subnet_name: ashes-dev-vpc-private-europe-west1-b}
+          # enable_gke_network_user: true   # only for GKE projects
 ```
 
-The root wires `org_id`, `folder_id`, `billing_account`, and the Shared VPC host project from remote state and the host stage, so you set only the team-specific fields. `folder_id` and `billing_account` are normalised with `trimprefix`, so either the bare ID or the full resource name works.
+The schema (`config/landing-zone.schema.json`) validates the entry in your editor and in CI. The root wires `org_id`, `folder_id`, `billing_account`, and the Shared VPC host project from remote state and the host stage, so you set only the team-specific fields. `folder_id` and `billing_account` are normalised with `trimprefix`, so either the bare ID or the full resource name works. An explicit `service_teams` workspace variable replaces the config entry for that workspace.
 
 > **IAM binding note:** the workload module grants these roles with additive `google_project_iam_member` (`modules/gcp/stages/workload/main.tf`), not authoritative `google_project_iam_binding`. Each apply only adds the specified group/role pairs — it does not evict any other member already bound to the same role, so pre-existing manual bindings on the project are preserved.
 
-### Step 4 — Plan and review
+### Step 4 — Open a PR and review the plan
+
+Commit the YAML change on a branch and open a pull request. CI runs the format, schema and policy checks, and Terraform Cloud posts a speculative plan for `gcp-workload-<env>` on the PR (the workspaces trigger on `config/**`). To preview the same plan locally (read-only):
 
 ```bash
-make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars 2>&1 | grep -A5 'service_team\["payments"\]'
+make plan-gcp-workload APP_ENV=dev 2>&1 | grep -A5 'service_team\["payments"\]'
 ```
 
 Confirm the plan shows only new resource creation under `module.service_team["payments"]` — no modifications to existing teams.
 
-### Step 5 — Apply
+### Step 5 — Merge and apply in Terraform Cloud
 
-```bash
-terraform -chdir=envs/gcp/workload apply \
-  -target='module.service_team["payments"]' \
-  -var-file=../../../examples/dev.tfvars
-```
+Merge the PR. The merge queues a run on `gcp-workload-<env>`; review the plan in Terraform Cloud and approve the apply. Never run `terraform apply` locally; if the run needs recovery, see [apply-recovery.md](apply-recovery.md).
 
 ### Step 6 — Verify subnet access
 
@@ -128,14 +120,14 @@ gcloud projects get-iam-policy PAYMENTS_PROJECT_ID \
 
 To remove a team's access:
 
-1. Delete the team's entry from the `service_teams` map in the environment's tfvars
-2. Run `terraform plan` and confirm only that team's `module.service_team["<team>"]` resources are in the destroy list
-3. Apply the change
+1. Delete the team's entry from `gcp.environments.<env>.service_teams` in `config/landing-zone.yaml` and open a PR
+2. Read the speculative plan on the PR and confirm only that team's `module.service_team["<team>"]` resources are in the destroy list
+3. Merge, then approve the apply in Terraform Cloud
 
 Before destroying, list all state resources to confirm scope:
 
 ```bash
-terraform -chdir=envs/gcp/workload state list | grep 'service_team\["payments"\]'
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload state list | grep 'service_team\["payments"\]'
 ```
 
 Confirm with the team that no data buckets or databases need to be retained before the destroy.

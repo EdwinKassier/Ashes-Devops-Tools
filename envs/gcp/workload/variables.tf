@@ -349,8 +349,10 @@ variable "service_teams" {
     VPC, and grants the team's admin Google Group least-privilege roles. Adding or
     removing a team is a change to this map (config), not a code change to main.tf.
 
-    Promote a team from one environment to the next by adding the same entry to the
-    next environment's tfvars. See docs/runbooks/promotion.md.
+    Null (default) = gcp.environments.<environment>.service_teams from
+    config/landing-zone.yaml, else none. An explicit value replaces the config.
+    Promote a team by adding the same entry under the next environment in the
+    config file. See docs/runbooks/promotion.md.
 
     Fields per team (keyed by the team/project short name):
       project_admin_group_email    (required) admin Google Group for the project.
@@ -378,20 +380,22 @@ variable "service_teams" {
     })), {})
     labels = optional(map(string), {})
   }))
-  default = {}
+  default = null
 
+  # Validations cover the variable and the config-file entries for this
+  # environment (they cannot read local.service_teams: it depends on this variable).
   validation {
-    condition     = alltrue([for k in keys(var.service_teams) : can(regex("^[a-z][a-z0-9-]{0,24}$", k))])
+    condition     = alltrue([for k in keys(merge(coalesce(var.service_teams, {}), try(local.cfg.service_teams[var.environment], {}))) : can(regex("^[a-z][a-z0-9-]{0,24}$", k))])
     error_message = "Each service team key must be a project-name-safe slug: start with a lowercase letter, then lowercase letters, digits, or hyphens, 25 characters or fewer."
   }
 
   validation {
-    condition     = alltrue([for t in values(var.service_teams) : can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", t.project_admin_group_email))])
+    condition     = alltrue([for t in values(merge(coalesce(var.service_teams, {}), try(local.cfg.service_teams[var.environment], {}))) : can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", t.project_admin_group_email))])
     error_message = "Each service team must set a valid project_admin_group_email."
   }
 
   validation {
-    condition     = alltrue([for t in values(var.service_teams) : !t.enable_shared_vpc_attachment || length(t.shared_vpc_subnets) > 0])
+    condition     = alltrue([for t in values(merge(coalesce(var.service_teams, {}), try(local.cfg.service_teams[var.environment], {}))) : !t.enable_shared_vpc_attachment || length(t.shared_vpc_subnets) > 0])
     error_message = "A service team with enable_shared_vpc_attachment = true (the default) must grant at least one entry in shared_vpc_subnets."
   }
 }
@@ -465,10 +469,12 @@ variable "app_services" {
     adds a WIF-bound deploy SA (needs enable_app_deploy_wif = true). The full,
     typed shape (and every default) is the `services` variable of
     modules/gcp/stages/app-services, which validates it; see
-    docs/guides/deploying-a-service.md for a worked entry.
+    docs/guides/deploying-a-service.md for a worked entry. Null (default) =
+    gcp.environments.<environment>.services from config/landing-zone.yaml, else
+    none; an explicit value replaces the config.
   EOT
   type        = any
-  default     = {}
+  default     = null
 }
 
 variable "app_subnetwork_id" {
@@ -594,7 +600,7 @@ variable "public_ingress_services" {
   validation {
     condition = alltrue([
       for k in keys(var.public_ingress_services != null ? var.public_ingress_services : try(local.cfg.public_ingress[var.environment], {})) :
-      contains(keys(var.app_services), k)
+      contains(keys(merge(coalesce(var.app_services, {}), try(local.cfg.app_services[var.environment], {}))), k)
     ])
     error_message = "Every public_ingress_services (or gcp.workload.public_ingress.<environment>) key must be an app_services entry."
   }

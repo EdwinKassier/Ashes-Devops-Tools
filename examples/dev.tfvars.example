@@ -1,12 +1,15 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# envs/gcp/workload — development environment tfvars
+# envs/gcp/workload — LOCAL-ONLY plan inputs (development environment)
 #
-# Usage:
-#   terraform -chdir=envs/gcp/workload plan -var-file=examples/dev.tfvars
-#   make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
+# This file is NOT read by Terraform Cloud and is never needed for a VCS-driven
+# run: those take their inputs from config/landing-zone.yaml (services and
+# service teams live under gcp.environments.<env>) and the workspace variables
+# that envs/tfc-admin sets. Use this file only for a read-only local plan:
 #
-# Copy this file and adjust values for staging/production environments.
-# Never commit secrets or real billing account IDs to version control.
+#   make plan-gcp-workload APP_ENV=dev   # APP_VARS defaults to this file
+#
+# Never apply from here (CLAUDE.md "State & Apply Rules"). Never commit secrets
+# or real billing account IDs. All values below are placeholders.
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── Project & identity ─────────────────────────────────────────────────────────
@@ -18,12 +21,13 @@ project_prefix = "acme"
 environment    = "dev"
 region         = "europe-west2"
 
-# Service account that Terraform impersonates (created by bootstrap).
-# Format: terraform@{admin-project-id}.iam.gserviceaccount.com
-terraform_admin_email = "terraform@acme-admin-xxxx.iam.gserviceaccount.com"
+# Service account that a local plan impersonates (the gcp-bootstrap output
+# `terraform_admin_email`). Format:
+# terraform-admin@<prefix>-admin-<suffix>.iam.gserviceaccount.com
+terraform_admin_email = "terraform-admin@acme-admin-0000.iam.gserviceaccount.com"
 
-# Terraform Cloud configuration
-tfc_organization            = "your-tfc-org-name"
+# Terraform Cloud organization (org.tfc.organization in config/landing-zone.yaml).
+tfc_organization            = "acme-tfc"
 organization_workspace_name = "gcp-organization"
 
 # ── Networking ─────────────────────────────────────────────────────────────────

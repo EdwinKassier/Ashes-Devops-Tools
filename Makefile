@@ -28,7 +28,7 @@ $(if $(TF_PLUGIN_CACHE_DIR),$(shell mkdir -p "$(TF_PLUGIN_CACHE_DIR)"))
 
 APP_ENV ?= dev
 APP_WORKSPACE ?= gcp-workload-$(APP_ENV)
-APP_VARS ?= examples/dev.tfvars
+APP_VARS ?= examples/dev.tfvars.example
 
 BLUE := \033[0;34m
 GREEN := \033[0;32m

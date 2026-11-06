@@ -47,6 +47,34 @@ locals {
       }
     }
 
+    # gcp.environments.<env>.services: app golden-path services per environment
+    # (same shape as var.app_services; the app-services stage validates and
+    # types them).
+    app_services = {
+      for env, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : env => { for k, v in e.services : k => v }
+      if try(e.services, null) != null
+    }
+    # gcp.environments.<env>.service_teams: normalised to the attribute types of
+    # var.service_teams.
+    service_teams = {
+      for env, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : env => {
+        for team, t in e.service_teams : team => {
+          project_admin_group_email    = tostring(t.project_admin_group_email)
+          activate_apis                = [for a in try(t.activate_apis, []) : tostring(a)]
+          project_admin_roles          = [for r in try(t.project_admin_roles, []) : tostring(r)]
+          enable_shared_vpc_attachment = tobool(try(t.enable_shared_vpc_attachment, true))
+          enable_gke_network_user      = tobool(try(t.enable_gke_network_user, false))
+          shared_vpc_subnets = {
+            for k, sn in try(t.shared_vpc_subnets, {}) : k => {
+              region      = tostring(sn.region)
+              subnet_name = tostring(sn.subnet_name)
+            }
+          }
+          labels = { for lk, lv in try(t.labels, {}) : lk => tostring(lv) }
+        }
+      } if try(e.service_teams, null) != null
+    }
+
     # gcp.contracts.<layer>: stage contract overrides (same shape as the
     # <layer>_contract variables). Present => that remote-state read is skipped.
     organization_contract = try(local.lz.gcp.contracts.organization, null) == null ? null : {
@@ -95,6 +123,18 @@ locals {
   # This environment's region: gcp.environments[<env>].region, else
   # org.regions.gcp, else europe-west2 (the same default gcp-projects applies).
   region = coalesce(var.region, try(local.cfg.environments[var.environment].region, null), local.cfg.default_region, "europe-west2")
+
+  # Service teams / app services: explicit variable > gcp.environments.<env> in
+  # the config file > none. Built with for-expressions (not a conditional) so
+  # the differently-typed sources need no type unification.
+  service_teams = merge(
+    { for k, t in coalesce(var.service_teams, {}) : k => t },
+    { for k, t in try(local.cfg.service_teams[var.environment], {}) : k => t if var.service_teams == null },
+  )
+  app_services_input = merge(
+    { for k, s in coalesce(var.app_services, {}) : k => s },
+    { for k, s in try(local.cfg.app_services[var.environment], {}) : k => s if var.app_services == null },
+  )
 }
 
 # ── Presets: `presets` in config/landing-zone.yaml ─────────────────────────

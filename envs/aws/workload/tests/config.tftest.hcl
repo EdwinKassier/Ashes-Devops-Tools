@@ -77,3 +77,44 @@ run "unknown_environment_fails" {
 
   expect_failures = [var.workload_account_key]
 }
+
+run "services_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.services.yaml"
+  }
+
+  assert {
+    condition     = join(",", sort(keys(local.services))) == "api,worker" && local.services["api"].cpu == 512 && local.apps_enabled
+    error_message = "aws.workload_environments.dev.services must populate the services."
+  }
+}
+
+run "empty_services_section_is_noop" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.services.yaml"
+    environment              = "prod"
+  }
+
+  assert {
+    condition     = length(local.services) == 0 && !local.apps_enabled
+    error_message = "an empty services section must create nothing."
+  }
+}
+
+run "variable_overrides_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.services.yaml"
+    services                 = { only = {} }
+  }
+
+  assert {
+    condition     = join(",", keys(local.services)) == "only"
+    error_message = "an explicit services variable must win over the config file."
+  }
+}

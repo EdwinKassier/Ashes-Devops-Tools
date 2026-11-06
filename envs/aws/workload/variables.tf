@@ -356,7 +356,7 @@ variable "assume_role_arn" {
 # -----------------------------------------------------------------------------
 
 variable "services" {
-  description = "Services to run in this environment, keyed by service name. Full field reference: modules/aws/stages/app-services (variable services). Empty (default) creates nothing."
+  description = "Services to run in this environment, keyed by service name. Full field reference: modules/aws/stages/app-services (variable services). Null (default) = aws.workload_environments.<environment>.services from config/landing-zone.yaml, else nothing; an explicit value replaces the config."
   type = map(object({
     # Image the FIRST task-definition revision runs. null => the public
     # placeholder bootstrap_image (listens on 8080); the first CI deploy
@@ -431,7 +431,7 @@ variable "services" {
       message_retention_seconds  = optional(number, 345600)
     }), {})
   }))
-  default = {}
+  default = null
 }
 
 variable "enable_github_oidc" {

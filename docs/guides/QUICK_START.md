@@ -288,7 +288,7 @@ To plan a change to the gcp-workload environment:
 ```bash
 # Set TF_WORKSPACE to the full TFC workspace name (TF_CLOUD_ORGANIZATION exported as above)
 TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload init
-TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=../../../examples/dev.tfvars
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=../../../examples/dev.tfvars.example
 ```
 
 ---
@@ -395,7 +395,7 @@ make plan-gcp-organization
 ### App Environment
 
 ```bash
-make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
+make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
 ```
 
 ---
@@ -422,7 +422,7 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
 | `make lint` | Run TFLint across all roots |
 | `make test` | Run all .tftest.hcl suites |
 | `make plan-gcp-organization` | Plan control-plane changes |
-| `make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars` | Plan an app environment |
+| `make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example` | Plan an app environment |
 | `make ci` | Full local pipeline (fmt-check + consistency + count-check + links + shellcheck + docs-check + validate-all + lint + test + security) |
 
 ---

@@ -84,7 +84,7 @@ environment and no changes to existing ones.
 app services, ...):
 
 ```bash
-cp examples/dev.tfvars examples/staging.tfvars
+cp examples/dev.tfvars.example examples/staging.tfvars
 ```
 
 Do **not** set a CIDR here — `envs/gcp/workload` reads it from the `gcp-projects` remote state (`environment_config`) automatically.

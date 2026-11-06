@@ -19,35 +19,43 @@ gcp-workload-dev  ->  gcp-workload-staging  ->  gcp-workload-prod
 The code in `envs/gcp/workload` is identical across environments. What differs is:
 
 - The workspace variable `environment` (`dev`, `staging`, `prod`).
-- The per-environment tfvars file (`examples/<env>.tfvars`).
+- The per-environment block in `config/landing-zone.yaml`
+  (`gcp.environments.<env>`: region, CIDR, `services`, `service_teams`).
 - The per-environment config in `environment_config` (region, CIDR, folder, host
   project), read from the `gcp-projects` remote state.
 
 Promotion is therefore not a code merge between branches. It is applying the same
 code to the next environment's workspace, after the change is proven in the
 previous one. One commit on `main` is the single source of truth; the environments
-differ only by their inputs.
+differ only by their inputs, and those inputs are one file.
+
+The flow is always the same: **edit `config/landing-zone.yaml`, open a PR, merge,
+Terraform Cloud runs.** The workspaces trigger on `config/**`, so merging a YAML
+change queues a plan on the affected workspaces; a person approves the apply.
 
 ## What gets promoted
 
 | Change | How it promotes |
 |--------|-----------------|
-| A service team | Add the team's entry to the next environment's `service_teams` map (see [service-team-onboarding.md](service-team-onboarding.md)). |
-| An infrastructure setting (a flag, a CIDR, a policy) | Set it in the next environment's tfvars, or in `environment_config` for per-environment values. |
+| A service | Add the same entry under the next environment's `services` (`gcp.environments.<env>.services`, or `aws.workload_environments.<env>.services`). See [../guides/deploying-a-service.md](../guides/deploying-a-service.md). |
+| A service team | Add the team under the next environment's `service_teams` in `config/landing-zone.yaml` (see [service-team-onboarding.md](service-team-onboarding.md)). |
+| An infrastructure setting (a flag, a CIDR, a policy) | Set it under the next environment in `config/landing-zone.yaml` (CIDR, region, budget) or, for a workspace-only flag, as a workspace variable on that environment's workspace. |
 | A new environment | Follow [add-environment.md](add-environment.md) to create the workspace and `environments` entry first. |
 | A workload container image | The delivery pipeline deploys per environment; see [../guides/deploying-a-service.md](../guides/deploying-a-service.md). |
 
 ## The ordered flow
 
-1. **Change `dev`.** Edit `examples/dev.tfvars` (or the shared code). Open a pull
-   request. CI runs `fmt`, `validate`, `lint`, `tfsec`, `checkov`, and
-   `terraform test`.
-2. **Merge and apply `dev`.** After merge, the `gcp-workload-dev` workspace plans.
-   Review the plan and apply it in Terraform Cloud.
+1. **Change `dev`.** Edit `config/landing-zone.yaml` under `gcp.environments.dev`
+   (or the shared code). Open a pull request. CI runs `fmt`, `validate`, `lint`,
+   Trivy, `checkov`, and `terraform test`; Terraform Cloud posts a speculative
+   plan on the PR.
+2. **Merge and apply `dev`.** After merge, the `gcp-workload-dev` workspace plans
+   (the `config/**` trigger). Review the plan and apply it in Terraform Cloud.
 3. **Verify in `dev`.** Confirm the change is healthy (resources created, the
    service reachable, no alerts firing) before promoting.
-4. **Promote to `staging`.** Make the same tfvars change for `staging`, open a PR,
-   merge, then apply the `gcp-workload-staging` workspace.
+4. **Promote to `staging`.** Make the same YAML change under
+   `gcp.environments.staging`, open a PR, merge, then apply the
+   `gcp-workload-staging` workspace.
 5. **Verify in `staging`.**
 6. **Promote to `prod`.** Repeat for `prod`. The `prod` workspace apply is the
    final gate.
@@ -73,7 +81,7 @@ repository, because they are organization policy, not Terraform state.
 
 ## Rollback
 
-Promotion is roll-forward: to undo a change in an environment, revert the tfvars
+Promotion is roll-forward: to undo a change in an environment, revert the YAML
 change for that environment and apply again. For a half-applied run, see
 [apply-recovery.md](apply-recovery.md). Because environments are applied
 independently, a rollback in `prod` does not touch `dev` or `staging`.

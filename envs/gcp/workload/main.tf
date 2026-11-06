@@ -283,7 +283,8 @@ module "budget" {
 # =============================================================================
 # SERVICE TEAM REGISTRY
 #
-# One module instance per entry in var.service_teams. Onboarding or offboarding a
+# One module instance per entry in local.service_teams (var.service_teams, else
+# gcp.environments.<env>.service_teams in config/landing-zone.yaml). Onboarding or offboarding a
 # team is a change to the service_teams map, not a hand-edited module block. The
 # default empty map creates nothing, so this is backward compatible.
 #
@@ -293,7 +294,7 @@ module "budget" {
 
 module "service_team" {
   source   = "../../../modules/gcp/stages/workload"
-  for_each = var.service_teams
+  for_each = local.service_teams
 
   project_name    = each.key
   org_id          = local.org_id
@@ -337,7 +338,7 @@ module "service_team" {
 locals {
   vm_ops_projects = merge(
     { host = local.env_config.host_project_id },
-    { for k, _ in var.service_teams : "team-${k}" => module.service_team[k].project_id },
+    { for k, _ in local.service_teams : "team-${k}" => module.service_team[k].project_id },
   )
 
   effective_vm_backup_schedules = var.vm_backup_schedules != null ? var.vm_backup_schedules : {
@@ -429,7 +430,7 @@ module "saas_secret_bridge" {
 # =============================================================================
 # APPLICATION GOLDEN PATH 
 #
-# One module call. A service team adds an entry to var.app_services and gets, in
+# One module call. A service team adds an entry to app_services (or gcp.environments.<env>.services) and gets, in
 # the env host project: an Artifact Registry repo, a runtime SA, a Cloud Run v2
 # service on the env Shared VPC (Direct VPC egress), optional private Cloud SQL,
 # and an optional GitHub deploy identity on an app-only WIF pool. The default
@@ -497,7 +498,7 @@ locals {
   # keep the stage defaults (internal only, authenticated). An explicit value in
   # the app_services entry always wins.
   app_services = {
-    for k, s in var.app_services : k => merge({
+    for k, s in local.app_services_input : k => merge({
       ingress                = contains(keys(local.public_ingress), k) ? "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER" : "INGRESS_TRAFFIC_INTERNAL_ONLY"
       enable_unauthenticated = contains(keys(local.public_ingress), k)
     }, s)

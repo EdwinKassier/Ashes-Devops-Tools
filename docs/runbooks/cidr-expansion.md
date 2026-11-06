@@ -59,7 +59,7 @@ secondary_ranges = {
 ### Step 3 — Plan and verify no primary CIDR change
 
 ```bash
-make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
+make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
 ```
 
 The plan must show `~ update in-place` for the subnet, not `- destroy` + `+ create`. If it shows destroy, stop and re-examine the change.
@@ -67,7 +67,7 @@ The plan must show `~ update in-place` for the subnet, not `- destroy` + `+ crea
 ### Step 4 — Apply
 
 ```bash
-terraform -chdir=envs/gcp/workload apply -target=module.host.module.private_subnets -var-file=../../../examples/dev.tfvars
+terraform -chdir=envs/gcp/workload apply -target=module.host.module.private_subnets -var-file=../../../examples/dev.tfvars.example
 ```
 
 ---
@@ -107,7 +107,7 @@ After the CIDR change is applied, re-enable deletion protection by setting `enab
 
 ### Step 4 — Update the CIDR in Terraform
 
-The `envs/gcp/workload` root reads its VPC CIDR from `envs/gcp/organization` remote state — it is **not** set in `examples/dev.tfvars`. To change it:
+The `envs/gcp/workload` root reads its VPC CIDR from `envs/gcp/organization` remote state — it is **not** set in `examples/dev.tfvars.example`. To change it:
 
 1. Update the `environments` map in `envs/gcp/organization` (your `local.auto.tfvars` or equivalent):
 
@@ -136,7 +136,7 @@ terraform -chdir=envs/gcp/organization apply
 ### Step 5 — Plan with destroy preview
 
 ```bash
-make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars 2>&1 | grep -E "will be (destroyed|created|updated)"
+make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example 2>&1 | grep -E "will be (destroyed|created|updated)"
 ```
 
 Confirm the plan destroys only the subnet resources, not the project or VPC.
@@ -144,7 +144,7 @@ Confirm the plan destroys only the subnet resources, not the project or VPC.
 ### Step 6 — Apply
 
 ```bash
-terraform -chdir=envs/gcp/workload apply -var-file=../../../examples/dev.tfvars
+terraform -chdir=envs/gcp/workload apply -var-file=../../../examples/dev.tfvars.example
 ```
 
 ### Step 7 — Restore workloads
@@ -170,5 +170,5 @@ enable_deletion_protection = true
 ```
 
 ```bash
-terraform -chdir=envs/gcp/workload apply -target=module.host.terraform_data.deletion_protection_guard -var-file=../../../examples/dev.tfvars
+terraform -chdir=envs/gcp/workload apply -target=module.host.terraform_data.deletion_protection_guard -var-file=../../../examples/dev.tfvars.example
 ```
