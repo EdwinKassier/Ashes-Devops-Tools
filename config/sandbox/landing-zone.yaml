@@ -39,6 +39,9 @@ org:
     # The sandbox HCP Terraform organization (a second org, never production's).
     organization: my-sandbox-org
     project_name_prefix: sandbox-
+    # The sandbox proves destroy_guard on every upgrade: with vcs_repo set,
+    # standard or premium turns the policy sets on (tfc-admin enable_policy_sets).
+    # plan: standard
     # vcs_repo:
     #   identifier: my-org/landing-zone
     #   branch: main

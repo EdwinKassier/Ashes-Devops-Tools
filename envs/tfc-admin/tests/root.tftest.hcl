@@ -27,6 +27,9 @@ variables {
   # gcp-guardrails is security-team only; without a team a check warns
   # (guardrails_project_without_security_team_warns).
   security_team_id = "team-security1"
+  # Policy sets are off in most runs; the policy_sets_* runs turn the
+  # unguarded-destroy warning back on and expect it.
+  enable_unguarded_destroy_warning = false
 }
 
 run "declares_every_workspace" {
@@ -935,13 +938,71 @@ run "speculative_on_saas_opt_out" {
   }
 }
 
-run "policy_set_off_by_default" {
+# enable_policy_sets = null with no vcs_repo (and no org.tfc.plan): both sets
+# stay off and a check warns that destructive changes are unguarded.
+run "policy_sets_off_without_vcs_repo_warns" {
   command = plan
 
-  assert {
-    condition     = length(tfe_policy_set.opa) == 0
-    error_message = "enable_policy_sets defaults to false."
+  variables {
+    enable_unguarded_destroy_warning = true
   }
+
+  assert {
+    condition     = length(tfe_policy_set.opa) == 0 && length(tfe_policy_set.destructive) == 0
+    error_message = "without vcs_repo and a plan that supports VCS policy sets, no policy set is created."
+  }
+
+  expect_failures = [check.destructive_changes_guarded]
+}
+
+# The guardrails set stays a hard gate; the destroy guard is mandatory but
+# overridable (by the security team holding Manage Policy Overrides).
+run "destructive_set_overridable_main_set_not" {
+  command = plan
+
+  variables {
+    enable_policy_sets         = true
+    vcs_repo                   = { identifier = "acme/landing-zone", oauth_token_id = "ot-abc123" }
+    manage_tfc_admin_workspace = true
+    import_tfc_admin_workspace = false
+  }
+
+  assert {
+    condition     = tfe_policy_set.opa[0].overridable == false
+    error_message = "the guardrails set must not be overridable."
+  }
+
+  assert {
+    condition     = tfe_policy_set.destructive[0].overridable == true && tfe_policy_set.destructive[0].kind == "opa" && tfe_policy_set.destructive[0].policies_path == "policies/opa-destructive"
+    error_message = "the destructive-change guard must be an overridable OPA set sourced from policies/opa-destructive."
+  }
+
+  assert {
+    condition     = tfe_policy_set.destructive[0].name == "landing-zone-destructive-change-guard" && tfe_policy_set.destructive[0].vcs_repo[0].identifier == "acme/landing-zone" && tfe_policy_set.destructive[0].policy_tool_version == tfe_policy_set.opa[0].policy_tool_version
+    error_message = "the destructive set is <prefix>destructive-change-guard, from the same repo and OPA version as the guardrails set."
+  }
+
+  assert {
+    condition     = length(local.policy_set_workspace_ids) == length(module.workspace)
+    error_message = "both sets attach to every managed workspace (local.policy_set_workspace_ids; the IDs are unknown at plan)."
+  }
+}
+
+# Policy-set overrides are org-wide and granted by an owner in the HCP UI to
+# the hand-created security team; without security_team_id a check warns.
+run "destructive_set_without_security_team_warns" {
+  command = plan
+
+  variables {
+    enable_policy_sets         = true
+    vcs_repo                   = { identifier = "acme/landing-zone", oauth_token_id = "ot-abc123" }
+    manage_tfc_admin_workspace = true
+    import_tfc_admin_workspace = false
+    security_team_id           = null
+  }
+
+  # gcp-guardrails also loses its team, so that check warns too.
+  expect_failures = [check.destructive_override_team, check.guardrails_project_has_security_team]
 }
 
 # An unmanaged tfc-admin with a VCS connection keeps speculative plans on, so

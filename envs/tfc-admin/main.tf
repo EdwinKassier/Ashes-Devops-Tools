@@ -724,25 +724,53 @@ import {
   id       = "${local.tfc_organization}/${each.key}"
 }
 
-# ── Optional OPA policy set (mixed mandatory / advisory) ───────────────────
-# Sourced from policies/opa/ in this repo via VCS. Enforcement level is set per
-# policy in policies/opa/policies.hcl: 10 mandatory (public exposure, identity,
-# encryption) + 4 advisory. The set is NOT overridable by default
-# (policy_set_overridable = false), so a mandatory failure is a hard stop that
-# no "Manage Policy Overrides" user can wave through; advisory results never
-# block. Requires a PAID HCP Terraform tier with policy enforcement (not the
-# free tier) and a vcs_repo.
+# ── OPA policy sets (both sourced from this repo via VCS) ──────────────────
+# Two sets, attached to every managed workspace:
+#   - <prefix>opa-guardrails (policies/opa): enforcement per policy in its
+#     policies.hcl, 10 mandatory (public exposure, identity, encryption) + 3
+#     advisory. NOT overridable by default (policy_set_overridable = false), so
+#     a mandatory failure is a hard stop no "Manage Policy Overrides" user can
+#     wave through.
+#   - <prefix>destructive-change-guard (policies/opa-destructive): the
+#     mandatory destroy_guard, which stops any delete or replace of a stateful
+#     resource. Always overridable: an intended destroy is overridden on the
+#     run by the security team. An owner creates that team by hand (its ID is
+#     security_team_id) and grants it Manage Policy Overrides in the HCP UI;
+#     this root creates no teams and sets no organization access, so it keeps
+#     running on a non-owner token.
+# A VCS policy set reads the policies.hcl in its own policies_path, hence the
+# separate directory (with its own copy of lib_helpers.rego).
+# enable_policy_sets = null turns both on when vcs_repo is set and the plan
+# (tfc_plan / org.tfc.plan) is standard or premium.
+locals {
+  policy_sets = {
+    opa = {
+      name        = "${local.project_name_prefix}opa-guardrails"
+      description = "Landing-zone OPA guardrails from policies/opa (mixed mandatory/advisory; see policies.hcl)."
+      path        = "policies/opa"
+      overridable = var.policy_set_overridable
+    }
+    destructive = {
+      name        = "${local.project_name_prefix}destructive-change-guard"
+      description = "Mandatory destroy guard from policies/opa-destructive: stops deletes and replaces of stateful resources unless the security team overrides."
+      path        = "policies/opa-destructive"
+      overridable = true
+    }
+  }
+  policy_set_workspace_ids = [for k in sort(keys(module.workspace)) : module.workspace[k].id]
+}
+
 resource "tfe_policy_set" "opa" {
-  count = var.enable_policy_sets ? 1 : 0
+  count = local.enable_policy_sets ? 1 : 0
 
   organization        = local.tfc_organization
-  name                = "${local.project_name_prefix}opa-guardrails"
-  description         = "Landing-zone OPA guardrails from policies/opa (mixed mandatory/advisory; see policies.hcl)."
+  name                = local.policy_sets.opa.name
+  description         = local.policy_sets.opa.description
   kind                = "opa"
-  overridable         = var.policy_set_overridable
+  overridable         = local.policy_sets.opa.overridable
   policy_tool_version = var.opa_version
-  policies_path       = "policies/opa"
-  workspace_ids       = [for k in sort(keys(module.workspace)) : module.workspace[k].id]
+  policies_path       = local.policy_sets.opa.path
+  workspace_ids       = local.policy_set_workspace_ids
 
   dynamic "vcs_repo" {
     for_each = local.vcs_repo == null ? [] : [local.vcs_repo]
@@ -757,8 +785,57 @@ resource "tfe_policy_set" "opa" {
   lifecycle {
     precondition {
       condition     = local.vcs_repo != null
-      error_message = "enable_policy_sets = true requires vcs_repo (or org.tfc.vcs_repo in config/landing-zone.yaml): the policy set is sourced from policies/opa in the repo."
+      error_message = "enable_policy_sets = true requires vcs_repo (or org.tfc.vcs_repo in config/landing-zone.yaml): the policy sets are sourced from policies/opa and policies/opa-destructive in the repo."
     }
+  }
+}
+
+resource "tfe_policy_set" "destructive" {
+  count = local.enable_policy_sets ? 1 : 0
+
+  organization        = local.tfc_organization
+  name                = local.policy_sets.destructive.name
+  description         = local.policy_sets.destructive.description
+  kind                = "opa"
+  overridable         = local.policy_sets.destructive.overridable
+  policy_tool_version = var.opa_version
+  policies_path       = local.policy_sets.destructive.path
+  workspace_ids       = local.policy_set_workspace_ids
+
+  dynamic "vcs_repo" {
+    for_each = local.vcs_repo == null ? [] : [local.vcs_repo]
+    content {
+      identifier                 = vcs_repo.value.identifier
+      branch                     = vcs_repo.value.branch
+      oauth_token_id             = vcs_repo.value.oauth_token_id
+      github_app_installation_id = vcs_repo.value.github_app_installation_id
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = local.vcs_repo != null
+      error_message = "enable_policy_sets = true requires vcs_repo (or org.tfc.vcs_repo in config/landing-zone.yaml): the policy sets are sourced from policies/opa and policies/opa-destructive in the repo."
+    }
+  }
+}
+
+# Without the policy sets nothing stops a plan that deletes or replaces a
+# stateful resource (KMS keys, databases, buckets, accounts, projects). On a
+# plan without VCS policy sets, drift-detection.yml is the remaining backstop.
+check "destructive_changes_guarded" {
+  assert {
+    condition     = local.enable_policy_sets || !var.enable_unguarded_destroy_warning
+    error_message = "Policy sets are off (${local.vcs_repo == null ? "no vcs_repo / org.tfc.vcs_repo" : "org.tfc.plan / tfc_plan is ${coalesce(local.tfc_plan, "unset")}, not standard or premium"}): destructive changes are unguarded, no destroy_guard stops a delete or replace of a stateful resource. Set vcs_repo and org.tfc.plan, or enable_policy_sets = true on a plan that supports VCS policy sets."
+  }
+}
+
+# Overrides of the destructive-change guard need a team holding Manage Policy
+# Overrides (org-wide; granted by an owner in the HCP UI, never by this root).
+check "destructive_override_team" {
+  assert {
+    condition     = !local.enable_policy_sets || var.security_team_id != null
+    error_message = "The destructive-change guard is on but security_team_id is null: only organization owners can override an intended destroy. Create a security team, grant it Manage Policy Overrides in the HCP UI and set security_team_id."
   }
 }
 

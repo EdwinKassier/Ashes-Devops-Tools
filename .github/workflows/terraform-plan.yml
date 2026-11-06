@@ -538,7 +538,7 @@ jobs:
 
       # Pinned static release binary, sha256-verified (digest from the GitHub
       # release asset) before it is made executable. No conftest: the rego unit
-      # tests in policies/opa are the contract.
+      # tests in policies/opa and policies/opa-destructive are the contract.
       - name: Install OPA
         env:
           OPA_VERSION: "1.22.2"
@@ -552,10 +552,10 @@ jobs:
           opa version
 
       - name: Check policies (strict)
-        run: opa check --strict policies/opa
+        run: opa check --strict policies/opa policies/opa-destructive
 
       - name: Run policy unit tests
-        run: opa test policies/opa -v
+        run: opa test policies/opa policies/opa-destructive -v
 
   codeowners:
     name: CODEOWNERS placeholders

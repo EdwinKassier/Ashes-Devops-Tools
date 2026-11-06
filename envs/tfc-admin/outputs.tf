@@ -32,8 +32,13 @@ output "dynamic_credential_workspaces" {
 }
 
 output "policy_set_id" {
-  description = "ID of the OPA policy set, or null when enable_policy_sets = false."
+  description = "ID of the <prefix>opa-guardrails policy set (policies/opa), or null when the policy sets are off."
   value       = try(tfe_policy_set.opa[0].id, null)
+}
+
+output "destructive_policy_set_id" {
+  description = "ID of the overridable <prefix>destructive-change-guard policy set (policies/opa-destructive), or null when the policy sets are off."
+  value       = try(tfe_policy_set.destructive[0].id, null)
 }
 
 output "workspace_execution_modes" {

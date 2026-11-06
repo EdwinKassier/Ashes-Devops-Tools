@@ -77,6 +77,15 @@
             "split_workload_projects": {
               "type": "boolean"
             },
+            "plan": {
+              "type": "string",
+              "enum": [
+                "free",
+                "essentials",
+                "standard",
+                "premium"
+              ]
+            },
             "gcp_workloads_project": {
               "type": "string"
             },

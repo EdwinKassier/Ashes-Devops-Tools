@@ -22,6 +22,15 @@ release metadata for a Terraform Cloud run.
 
 #### Security
 
+- **Mandatory destroy guard in its own overridable set (T-H4).** `destroy_guard` moves to
+  `policies/opa-destructive/` as a mandatory policy that denies every delete or replace of a
+  stateful type (GCP, AWS and `supabase_project`). tfc-admin attaches it as
+  `<prefix>destructive-change-guard` with `overridable = true`, so the hand-created security team
+  (`security_team_id`, granted Manage Policy Overrides by an owner) overrides an intended destroy;
+  the guardrails set stays non-overridable. `enable_policy_sets` defaults to on when `vcs_repo` is
+  set and the new `org.tfc.plan` is `standard` or `premium`, else a check warns that destructive
+  changes are unguarded. `drift-detection.yml` fails a leg whose workspace does not exist instead
+  of skipping it, unless `REAL_CLOUD_CHECKS_OPT_OUT=true`. Upgrade steps: `UPGRADING.md`.
 - **GitHub WIF tenant pin is an exact match (S-H2).** `custom.wifProviderTenantPinned` no longer
   runs a structural regex over a GitHub provider's condition (a `)` inside a string literal could
   close the "one parenthesised group" early and OR a `true` beside the owner pin). The condition

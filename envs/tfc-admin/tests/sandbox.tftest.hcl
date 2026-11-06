@@ -23,6 +23,9 @@ variables {
   manage_tfc_admin_workspace = true
   import_tfc_admin_workspace = false
   security_team_id           = "team-security1"
+  # Policy sets are off in most runs; the policy_sets_* runs turn the
+  # unguarded-destroy warning back on and expect it.
+  enable_unguarded_destroy_warning = false
 }
 
 run "production_patterns_exclude_sandbox_config" {

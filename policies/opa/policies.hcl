@@ -14,7 +14,8 @@
 #
 # Mandatory policies encode controls every module in this repo already
 # satisfies by default (verified by the module tests); advisory policies are
-# heuristics or hygiene. Full guide: docs/architecture/policy-as-code.md.
+# heuristics or hygiene. The destroy guard is a separate, overridable set in
+# policies/opa-destructive. Full guide: docs/architecture/policy-as-code.md.
 
 # ── Mandatory: public exposure ──────────────────────────────────────────────
 policy "gcs_no_public_buckets" {
@@ -81,10 +82,5 @@ policy "aws_iam_federated_trust_unknown" {
 
 policy "require_labels" {
   query             = "data.terraform.policies.require_labels.deny"
-  enforcement_level = "advisory"
-}
-
-policy "destroy_guard" {
-  query             = "data.terraform.policies.destroy_guard.deny"
   enforcement_level = "advisory"
 }

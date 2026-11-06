@@ -448,13 +448,30 @@ variable "viewer_team_ids" {
 }
 
 variable "enable_policy_sets" {
-  description = "Create an OPA policy set sourced from policies/opa in the VCS repo, attached to every managed workspace. Enforcement is mixed: 10 mandatory + 4 advisory policies (policies/opa/policies.hcl); mandatory failures are not overridable unless policy_set_overridable = true. Requires vcs_repo and a PAID HCP Terraform tier with policy enforcement. Default false."
+  description = "Create the two OPA policy sets, both sourced from the VCS repo and attached to every managed workspace: <prefix>opa-guardrails from policies/opa (mixed mandatory/advisory, not overridable unless policy_set_overridable = true) and <prefix>destructive-change-guard from policies/opa-destructive (the mandatory destroy_guard, overridable by a user with Manage Policy Overrides). Null = on when vcs_repo is set and tfc_plan (org.tfc.plan) is standard or premium, else off (a check then warns that destructive changes are unguarded)."
   type        = bool
-  default     = false
+  default     = null
+}
+
+variable "enable_unguarded_destroy_warning" {
+  description = "Warn on every plan (check destructive_changes_guarded) while the policy sets are off, because no destroy_guard then stops a delete or replace of a stateful resource. Set false only to acknowledge running without policy sets (for example on the free plan)."
+  type        = bool
+  default     = true
+}
+
+variable "tfc_plan" {
+  description = "HCP Terraform plan of the organization: free, essentials, standard or premium. Decides the enable_policy_sets default (VCS-sourced policy sets on standard and premium). Null = org.tfc.plan from config/landing-zone.yaml, else unknown (policy sets off unless enable_policy_sets = true)."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = contains(["free", "essentials", "standard", "premium"], coalesce(var.tfc_plan, local.cfg.tfc_plan, "free"))
+    error_message = "tfc_plan (or org.tfc.plan in config/landing-zone.yaml) must be free, essentials, standard or premium."
+  }
 }
 
 variable "policy_set_overridable" {
-  description = "Whether a failed MANDATORY policy in the OPA set can be overridden by a user with Manage Policy Overrides. Default false: mandatory policies are hard gates (advisory policies never block anyway). Set true only as a documented, time-boxed break-glass."
+  description = "Whether a failed MANDATORY policy in the <prefix>opa-guardrails set can be overridden by a user with Manage Policy Overrides. Default false: mandatory policies are hard gates (advisory policies never block anyway). Set true only as a documented, time-boxed break-glass. The <prefix>destructive-change-guard set is always overridable."
   type        = bool
   default     = false
 }

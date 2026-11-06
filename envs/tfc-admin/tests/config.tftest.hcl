@@ -13,6 +13,9 @@ variables {
   import_tfc_admin_workspace = false
   # gcp-guardrails is security-team only; without a team a check warns.
   security_team_id = "team-security1"
+  # Policy sets are off in most runs; the policy_sets_* runs turn the
+  # unguarded-destroy warning back on and expect it.
+  enable_unguarded_destroy_warning = false
 }
 
 run "workspaces_derived_from_config" {
@@ -153,4 +156,52 @@ run "shipped_example_is_rejected" {
 
   # Placeholder TFC org, and every cloud disabled until the adopter opts in.
   expect_failures = [var.tfc_organization, var.enable_gcp]
+}
+
+# enable_policy_sets = null: the fixture sets org.tfc.vcs_repo and
+# org.tfc.plan = standard, so both policy sets turn on by themselves.
+run "policy_sets_on_with_vcs_and_paid_plan" {
+  command = plan
+
+  assert {
+    condition     = length(tfe_policy_set.opa) == 1 && length(tfe_policy_set.destructive) == 1
+    error_message = "a vcs_repo plus a plan with VCS policy sets must turn both policy sets on."
+  }
+
+  assert {
+    condition     = tfe_policy_set.destructive[0].overridable == true && tfe_policy_set.opa[0].overridable == false
+    error_message = "only the destructive-change guard is overridable."
+  }
+}
+
+run "policy_sets_off_on_free_plan" {
+  command = plan
+
+  variables {
+    tfc_plan                         = "free"
+    enable_unguarded_destroy_warning = true
+  }
+
+  assert {
+    condition     = length(tfe_policy_set.opa) == 0 && length(tfe_policy_set.destructive) == 0
+    error_message = "the free plan does not get the policy sets by default."
+  }
+
+  expect_failures = [check.destructive_changes_guarded]
+}
+
+run "explicit_enable_policy_sets_false_wins" {
+  command = plan
+
+  variables {
+    enable_policy_sets               = false
+    enable_unguarded_destroy_warning = true
+  }
+
+  assert {
+    condition     = length(tfe_policy_set.opa) == 0 && length(tfe_policy_set.destructive) == 0
+    error_message = "an explicit enable_policy_sets = false must override the derived default."
+  }
+
+  expect_failures = [check.destructive_changes_guarded]
 }

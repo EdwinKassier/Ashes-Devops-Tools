@@ -5,6 +5,34 @@ fork. Newest first.
 
 ## Unreleased
 
+### The destroy guard is mandatory, in its own overridable policy set
+
+`destroy_guard` moves from `policies/opa/` (advisory) to
+`policies/opa-destructive/` (mandatory), and tfc-admin attaches it as a second
+set, `<project_name_prefix>destructive-change-guard`, with `overridable = true`.
+It now denies every delete or replace of a stateful type (databases, buckets,
+KMS keys, projects/folders/accounts, networks, secrets, log sinks/buckets,
+CloudTrail, StackSet instances, `supabase_project`), not only log-named
+buckets. The `<prefix>opa-guardrails` set stays non-overridable.
+
+**Manual steps (estates with policy sets on):**
+
+1. An organization owner creates a `security` team in HCP Terraform (if it does
+   not exist), grants it **Manage Policy Overrides** in the organization
+   settings, and sets its ID as tfc-admin `security_team_id`. Without it only
+   owners can override an intended destroy (a check warns).
+2. Set `org.tfc.plan` in `config/landing-zone.yaml` (`free | essentials |
+   standard | premium`). `enable_policy_sets` now defaults to null: on with
+   `vcs_repo` and a `standard` or `premium` plan. An explicit
+   `enable_policy_sets` still wins. Without `org.tfc.plan` the sets stay off,
+   as before, and a `destructive_changes_guarded` check warns.
+3. Expect plans that delete or replace a stateful resource to stop on
+   `destroy_guard` until the security team overrides the run.
+
+`drift-detection.yml` now fails a leg whose workspace does not exist instead of
+skipping it. A single-cloud estate sets the `TFC_DRIFT_WORKSPACES` repository
+variable to its own workspaces (or `REAL_CLOUD_CHECKS_OPT_OUT=true`).
+
 ### GCP deny policies move to the security-team `gcp-guardrails` workspace
 
 In the default `guardrail_owner_mode = "separate"` the org IAM deny policies

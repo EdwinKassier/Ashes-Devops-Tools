@@ -79,6 +79,12 @@ org:
     # Production workloads (gcp.environments[*].is_production,
     # aws.workload_environments[*].is_production; unset = keys prod/production)
     # get no speculative PR plans (tfc-admin disable_speculative_on_production).
+    # HCP Terraform plan: free | essentials | standard | premium. With vcs_repo
+    # set, standard and premium turn on the OPA policy sets by default
+    # (policies/opa guardrails + the mandatory destroy_guard in
+    # policies/opa-destructive); otherwise a tfc-admin check warns that
+    # destructive changes are unguarded. Override: tfc-admin enable_policy_sets.
+    # plan: standard
     # Optional VCS connection for every tfc-admin workspace (IDs, not secrets).
     # vcs_repo:
     #   identifier: my-org/landing-zone

@@ -76,6 +76,7 @@ locals {
       for c in local.project_name_keys : c => try(tostring(local.lz.org.tfc["${replace(c, "-", "_")}_project"]), null)
     }
     split_workload_projects = try(tobool(local.lz.org.tfc.split_workload_projects), null)
+    tfc_plan                = try(tostring(local.lz.org.tfc.plan), null)
     vcs_repo = try({
       identifier                 = tostring(local.lz.org.tfc.vcs_repo.identifier)
       branch                     = tostring(try(local.lz.org.tfc.vcs_repo.branch, "main"))
@@ -111,6 +112,12 @@ locals {
   saas_workspaces     = var.saas_workspaces != null ? var.saas_workspaces : coalesce(local.cfg.saas_workspaces, [])
   project_name_prefix = var.project_name_prefix != null ? var.project_name_prefix : coalesce(local.cfg.project_name_prefix, "landing-zone-")
   vcs_repo            = var.vcs_repo != null ? var.vcs_repo : local.cfg.vcs_repo
+  tfc_plan            = var.tfc_plan != null ? var.tfc_plan : local.cfg.tfc_plan
+  # VCS-sourced policy sets on by default only where the plan enforces them
+  # (free and essentials are left to an explicit enable_policy_sets = true).
+  enable_policy_sets = var.enable_policy_sets != null ? var.enable_policy_sets : (
+    local.vcs_repo != null && contains(["standard", "premium"], coalesce(local.tfc_plan, "unknown"))
+  )
 
   # TFC project per cloud: an explicit org.tfc.<cloud>_project wins over
   # <project_name_prefix><cloud>. aws-organization derives its OIDC-trust

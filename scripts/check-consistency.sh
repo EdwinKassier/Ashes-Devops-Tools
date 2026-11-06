@@ -24,6 +24,12 @@ badgcp=$(grep -rl 'hashicorp/google' --include='versions.tf' --exclude-dir='.ter
   | while read -r f; do grep -q '"~> 7.0"' "$f" || echo "$f"; done)
 [ -z "$badgcp" ] || { echo "$badgcp" | while read -r f; do note "google pin not '~> 7.0': $f"; done; fail=1; }
 
+echo "==> OPA lib_helpers.rego copies are byte-identical"
+# A VCS policy set loads only its own policies_path, so policies/opa-destructive
+# carries a copy of the shared terraform.lib helpers.
+cmp -s policies/opa/lib_helpers.rego policies/opa-destructive/lib_helpers.rego \
+  || note "policies/opa-destructive/lib_helpers.rego differs from policies/opa/lib_helpers.rego (copy it)"
+
 echo "==> Every examples/presets/*.tfvars key is a variable of its target root"
 # Naming: <prod|nonprod>-<cloud>-<root>.tfvars  ->  envs/<cloud>/<root>/variables.tf
 for preset in examples/presets/*.tfvars; do
