@@ -296,8 +296,8 @@ run "production_environment_with_containment" {
 
 # The bootstrap read is skippable (bootstrap_contract), mirroring gcp-projects:
 # no remote-state read, and the contract feeds the stage. Its default
-# guardrail_owner_mode = "separate" moves deny-policy application to the
-# guardrail owner (specs output, nothing applied here).
+# guardrail_owner_mode = "separate" moves the deny policies to the gcp-guardrails
+# root (nothing built or applied here).
 run "bootstrap_contract_skips_remote_state" {
   command = plan
 
@@ -317,8 +317,8 @@ run "bootstrap_contract_skips_remote_state" {
   }
 
   assert {
-    condition     = output.guardrail_owner_mode == "separate" && length(module.organization.iam_deny_policy_names) == 0 && contains(keys(output.guardrail_deny_policy_specs), "contain-admin-identity")
-    error_message = "In separate mode the containment deny policy must be output for the guardrail owner, not applied by gcp-organization."
+    condition     = output.guardrail_owner_mode == "separate" && length(module.organization.iam_deny_policy_names) == 0 && length(output.guardrail_deny_policy_specs) == 0 && length(module.organization.admin_containment_rules) == 0
+    error_message = "In separate mode gcp-organization must neither build nor apply the containment deny policy: the gcp-guardrails root owns it."
   }
 
   assert {

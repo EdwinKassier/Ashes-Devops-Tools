@@ -23,6 +23,8 @@
 | Terraform SA deleted accidentally | Yes |
 | Normal PR/CI workflow slow | No — use `make plan-*` locally |
 | Reviewing logs | No — use `gcloud logging read` with personal ADC |
+| Routine change to an org IAM deny policy (containment, `iam_deny_policies`) | No — a security-team apply of `gcp-guardrails` ([production hardening](production-hardening.md)) |
+| Deny-policy change needed while `gcp-guardrails` cannot run | Yes — [Guardrails deny-policy emergency change](#guardrails-deny-policy-emergency-change) |
 
 ---
 
@@ -138,6 +140,38 @@ gcloud iam workload-identity-pools create github-pool \
   --display-name="GitHub Actions Pool" \
   --project=ADMIN_PROJECT_ID
 ```
+
+### Guardrails deny-policy emergency change
+
+The org IAM deny policies (admin containment plus `iam_deny_policies`) are
+changed by a **security-team apply of the `gcp-guardrails` workspace**. That
+is the approval: only the security team has access to its HCP project, and only
+its apply identity (`<prefix>-guardrails-apply`) holds `roles/iam.denyAdmin`.
+
+Use this path only when that workspace cannot run (HCP outage, broken WIF
+binding) and a deny-policy change cannot wait:
+
+1. Request just-in-time membership of the `guardrail_owner_members` group
+   through PAM. A second person approves the grant; it expires on its own.
+2. Start from the policy as it is: the `deny_policy_specs` output of the last
+   `gcp-guardrails` apply, or the live policy
+   (`gcloud iam policies get contain-admin-identity --attachment-point=... --kind=denypolicies --format=json`,
+   which also gives the etag). Make the smallest change that resolves the
+   incident. Never run a local `terraform apply` of the root.
+3. Apply it as the guardrails SA:
+
+```bash
+gcloud iam policies update contain-admin-identity \
+  --attachment-point="cloudresourcemanager.googleapis.com/organizations/${ORG_ID}" \
+  --kind=denypolicies --policy-file=contain-admin-identity.json --etag="${ETAG}" \
+  --impersonate-service-account="${PREFIX}-guardrails-apply@${ADMIN_PROJECT}.iam.gserviceaccount.com"
+```
+
+4. Once the workspace runs again, the security team queues a run on
+   `gcp-guardrails` and confirms it. That reconciles state with what you
+   applied; commit the matching config change first, or the run reverts it.
+5. The CRITICAL `deny_policy_change` and `guardrail_identity_change` watches
+   fire on this path. Record the alert IDs in the post-incident review (Step 7).
 
 ---
 

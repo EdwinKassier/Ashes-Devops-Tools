@@ -148,12 +148,12 @@ output "pam_entitlement_name" {
 }
 
 output "guardrail_owner_mode" {
-  description = "Deny-policy ownership: \"separate\" (apply guardrail_deny_policy_specs as the guardrail owner) or \"organization\" (applied by this root)."
+  description = "Deny-policy ownership: \"separate\" (authored and applied by the gcp-guardrails root) or \"organization\" (legacy: applied by this root)."
   value       = module.organization.guardrail_owner_mode
 }
 
 output "guardrail_deny_policy_specs" {
-  description = "Map of org deny-policy ID => gcloud policy-file JSON (containment + iam_deny_policies). In separate mode, apply each as the guardrails SA: see docs/runbooks/production-hardening.md."
+  description = "DEPRECATED (removed in v1.0). gcloud policy-file JSON of the deny policies this root applies in the legacy organization mode; empty in separate mode, where gcp-guardrails owns them (its deny_policy_specs output serves the break-glass path)."
   value       = module.organization.guardrail_deny_policy_specs
 }
 

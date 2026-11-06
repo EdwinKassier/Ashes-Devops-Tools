@@ -411,7 +411,7 @@ variable "cmek_required_services" {
 }
 
 variable "enable_admin_containment" {
-  description = "IAM deny policy at the org node that blocks, for all principals except containment_exempt_principals (break-glass): org-wide update/delete of logging sinks, exclusion changes, log-bucket delete, VPC-SC perimeter update/delete/replaceAll/commit and access-policy delete; and, scoped by the containment/protected tag to the audit buckets + audit CMEK keyring, bucket delete/setIamPolicy/deleteTagBinding, object delete, key-version destroy/update (disable) and key setIamPolicy. Once on, Terraform changes to ANY sink, exclusion or perimeter must run as break-glass. Default false at this stage; the gcp-organization root derives it ON whenever an environment is_production (and fails the plan without a break-glass principal)."
+  description = "IAM deny policy at the org node that blocks, for all principals except containment_exempt_principals (break-glass): org-wide update/delete of logging sinks, exclusion changes, log-bucket delete, VPC-SC perimeter update/delete/replaceAll/commit and access-policy delete; and, scoped by the containment/protected tag to the audit buckets + audit CMEK keyring, bucket delete/setIamPolicy/deleteTagBinding, object delete, key-version destroy/update (disable) and key setIamPolicy. Once on, Terraform changes to ANY sink, exclusion or perimeter must run as break-glass. Default false at this stage; the gcp-organization root derives it ON whenever an environment is_production (and fails the plan without a break-glass principal). In guardrail_owner_mode = \"separate\" this stage only creates and binds the containment/protected tag; the gcp-guardrails root applies the policy itself."
   type        = bool
   default     = false
 }
@@ -591,7 +591,7 @@ variable "pam_notification_emails" {
 }
 
 variable "guardrail_owner_mode" {
-  description = "Who applies the org IAM deny policies (admin containment + iam_deny_policies). \"separate\" (default): this stage does NOT manage them — its apply identity has no roles/iam.denyAdmin, so it cannot delete the containment policy that constrains it — and outputs them as gcloud-ready specs (guardrail_deny_policy_specs) for the guardrail owner (gcp-bootstrap <prefix>-guardrails-apply SA, impersonated by a PAM-gated group). \"organization\": legacy, this stage applies them (needs gcp-bootstrap guardrail_owner_mode = \"organization\"). Migrating an existing deployment from organization to separate: terraform state rm the module.iam_deny resources first (the apply SA can no longer delete them, which is the point)."
+  description = "Who applies the org IAM deny policies (admin containment + iam_deny_policies). \"separate\" (default): this stage neither builds nor applies them (its apply identity has no roles/iam.denyAdmin, so it cannot delete the containment policy that constrains it); the gcp-guardrails root authors them from config and applies them as the gcp-bootstrap <prefix>-guardrails-apply SA. This stage still creates and binds the containment tag. \"organization\": legacy, this stage applies them (needs gcp-bootstrap guardrail_owner_mode = \"organization\"). Migrating from organization to separate: terraform state rm the module.iam_deny resources here and import them into gcp-guardrails (UPGRADING.md)."
   type        = string
   default     = "separate"
 

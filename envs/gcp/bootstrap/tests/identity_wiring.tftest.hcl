@@ -82,6 +82,7 @@ run "production_environment_bound_by_workspace_ids" {
       "gcp-projects"      = "ws-Proj1"
       "gcp-network-hub"   = "ws-Hub1"
       "gcp-workload-prod" = "ws-Prod1"
+      "gcp-guardrails"    = "ws-Guard1"
     }
     environments = {
       prod = {
@@ -96,8 +97,8 @@ run "production_environment_bound_by_workspace_ids" {
   }
 
   assert {
-    condition     = length(output.production_workspaces_bound_by_name) == 0 && contains(keys(module.bootstrap.tfc_apply_service_accounts), "gcp-workload-prod")
-    error_message = "with IDs for every production / control-plane workspace nothing may be reported as name-bound."
+    condition     = length(output.production_workspaces_bound_by_name) == 0 && contains(keys(module.bootstrap.tfc_apply_service_accounts), "gcp-workload-prod") && contains(keys(output.tfc_apply_service_accounts), "gcp-guardrails")
+    error_message = "with IDs for every production / control-plane workspace (gcp-guardrails included) nothing may be reported as name-bound."
   }
 }
 

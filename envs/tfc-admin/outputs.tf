@@ -55,3 +55,8 @@ output "run_triggers" {
   description = "Run-trigger edges created (\"<source>-><downstream>\")."
   value       = sort(keys(tfe_run_trigger.dag))
 }
+
+output "never_auto_apply_workspaces" {
+  description = "Workspaces that always need a human apply confirmation, whatever any auto-apply setting does for the others (gcp-guardrails when GCP is enabled, and tfc-admin)."
+  value       = sort([for ws in local.never_auto_apply_workspaces : ws if contains(keys(local.workspaces), ws) || ws == var.tfc_admin_workspace_name])
+}

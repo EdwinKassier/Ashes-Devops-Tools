@@ -42,3 +42,18 @@ output "variable_set_labels" {
   description = "Labels of the variable sets attached to this workspace."
   value       = sort(keys(var.variable_set_ids))
 }
+
+output "working_directory" {
+  description = "Working directory (root) the workspace runs in."
+  value       = tfe_workspace.this.working_directory
+}
+
+output "auto_apply" {
+  description = "Whether a successful plan applies without confirmation."
+  value       = tfe_workspace.this.auto_apply
+}
+
+output "allow_destroy_plan" {
+  description = "Whether destroy plans may be queued from the UI/API."
+  value       = tfe_workspace.this.allow_destroy_plan
+}

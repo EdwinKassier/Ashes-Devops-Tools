@@ -243,7 +243,7 @@ variable "enable_audit_bucket_lock" {
 }
 
 variable "iam_deny_policies" {
-  description = "Opt-in IAM deny policies applied at the org node — a coarse, allow-independent backstop blocking specific permissions for specific principals regardless of roles (deny before allow). Default [] = none. See docs/known-gaps.md."
+  description = "Opt-in IAM deny policies applied at the org node — a coarse, allow-independent backstop blocking specific permissions for specific principals regardless of roles (deny before allow). Used only in the legacy guardrail_owner_mode = \"organization\"; in separate mode set them on the gcp-guardrails root instead. Default [] = none. See docs/known-gaps.md."
   type = list(object({
     name         = string
     display_name = optional(string)
@@ -421,7 +421,7 @@ variable "enable_scoped_access_policies" {
 }
 
 variable "guardrail_owner_mode" {
-  description = "Who applies the org IAM deny policies: \"separate\" (the gcp-bootstrap guardrails SA, from the guardrail_deny_policy_specs output) or \"organization\" (this root; legacy). Null = the gcp-bootstrap guardrail_owner_mode output (\"organization\" for an older bootstrap state without it). Must match gcp-bootstrap: in separate mode this root's apply SA has no roles/iam.denyAdmin."
+  description = "Who applies the org IAM deny policies: \"separate\" (the gcp-guardrails root, as the gcp-bootstrap guardrails SA; this root only creates and binds the containment tag) or \"organization\" (this root; legacy). Null = the gcp-bootstrap guardrail_owner_mode output (\"organization\" for an older bootstrap state without it). Must match gcp-bootstrap: in separate mode this root's apply SA has no roles/iam.denyAdmin."
   type        = string
   default     = null
 

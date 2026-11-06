@@ -388,6 +388,17 @@ variable "control_plane_approvers_team_id" {
   }
 }
 
+variable "security_team_id" {
+  description = "TFC team ID (team-...) of the security team: custom access on the guardrails project holding gcp-guardrails (the org IAM deny policies) with runs = apply (queue plans, confirm and discard applies), locking, and variables/state read-only. No other team gets any access there. Must differ from platform_team_id and control_plane_approvers_team_id. Null = no grant (only organization owners can run gcp-guardrails; a check warns)."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.security_team_id == null || can(regex("^team-[A-Za-z0-9]+$", var.security_team_id))
+    error_message = "security_team_id must be a TFC team ID (team-...)."
+  }
+}
+
 variable "platform_team_control_plane_runs" {
   description = "Runs permission of platform_team_id on projects holding control-plane workspaces (custom access; variables read-only, no locking, workspace create/delete/move, run tasks or policy overrides). plan (default) = queue plans only, applies are confirmed by control_plane_approvers_team_id; read = view runs only; apply = may also confirm applies (variables stay read-only). Workload workspaces keep fixed write access."
   type        = string

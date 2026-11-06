@@ -137,12 +137,14 @@ module "tfc_oidc" {
   tfc_organization_id = var.tfc_organization_id
   tfc_project_ids     = var.tfc_project_ids
 
-  tfc_sa_bindings = [
+  # gcp-guardrails is appended only when its workspace ID is known (by ID only,
+  # never by name; service_accounts.tf).
+  tfc_sa_bindings = concat([
     for key, sa in local.tfc_identities : {
       workspace_name        = sa.workspace
       workspace_id          = lookup(var.tfc_workspace_ids, sa.workspace, null)
       run_phase             = sa.phase
       service_account_email = local.stage_sa_email[key]
     }
-  ]
+  ], local.guardrails_tfc_bindings)
 }

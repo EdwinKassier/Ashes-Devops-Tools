@@ -30,6 +30,8 @@ locals {
     "gcp-organization" = { dir = "envs/gcp/organization", cloud = "gcp", desc = "GCP org: folders, org policy, KMS, audit, billing", tags = ["cloud:gcp", "layer:control-plane"] }
     "gcp-projects"     = { dir = "envs/gcp/projects", cloud = "gcp", desc = "GCP host/spoke projects", tags = ["cloud:gcp", "layer:control-plane"] }
     "gcp-network-hub"  = { dir = "envs/gcp/network-hub", cloud = "gcp", desc = "GCP hub VPC, DNS anchor, hub VPC-SC", tags = ["cloud:gcp", "layer:control-plane"] }
+    # Security-team workspace: org IAM deny policies (admin containment).
+    "gcp-guardrails" = { dir = "envs/gcp/guardrails", cloud = "gcp", desc = "GCP org IAM deny policies (security team)", tags = ["cloud:gcp", "layer:control-plane", "owner:security"] }
   } : {}
 
   gcp_workloads = local.enable_gcp ? {
@@ -362,15 +364,22 @@ locals {
   # ── Projects ──────────────────────────────────────────────────────────────
   # One project per cloud; with split_workload_projects the gcp/aws workload
   # workspaces move to <prefix><cloud>-workloads so access is granted per project.
+  # gcp-guardrails always gets its own project (security team only).
   workspace_project_key = {
     for k, w in local.workspaces : k => (
-      local.split_workload_projects && contains(["gcp", "aws"], w.cloud) && !local.is_control_plane[k] ? "${w.cloud}-workloads" : w.cloud
+      contains(local.guardrails_workspaces, k) ? "guardrails" : (
+        local.split_workload_projects && contains(["gcp", "aws"], w.cloud) && !local.is_control_plane[k] ? "${w.cloud}-workloads" : w.cloud
+      )
     )
   }
   project_keys = var.enable_projects ? toset(distinct(values(local.workspace_project_key))) : toset([])
 
-  # Projects that hold at least one control-plane / bootstrap workspace.
-  control_plane_projects = toset([for k, p in local.workspace_project_key : p if local.is_control_plane[k] && contains(local.project_keys, p)])
+  # Projects that hold at least one control-plane / bootstrap workspace. The
+  # guardrails project is not among them: its access model is its own.
+  control_plane_projects = toset([for k, p in local.workspace_project_key : p if local.is_control_plane[k] && contains(local.project_keys, p) && p != "guardrails"])
+
+  # Every project except the security-only guardrails project.
+  shared_access_projects = setsubtract(local.project_keys, ["guardrails"])
 
   # ── Team access ────────────────────────────────────────────────
   # The broad platform team never gets fixed write on a control-plane project:
@@ -387,6 +396,17 @@ locals {
     sentinel_mocks = "none"
     locking        = false
   }
+  # Security team on the guardrails project: queue plans and confirm applies
+  # (runs = apply) and lock the workspace; variables stay read-only, like every
+  # control-plane grant here ("Variables belong in code", README), so the deny
+  # policies change only through a reviewed config/landing-zone.yaml.
+  security_custom_access = {
+    runs           = "apply"
+    variables      = "read"
+    state_versions = "read"
+    sentinel_mocks = "none"
+    locking        = true
+  }
   approvers_custom_access = {
     runs           = "apply"
     variables      = "read"
@@ -395,9 +415,23 @@ locals {
     locking        = true
   }
 
+  # ── Guardrails (security team only) ──────────────────────────
+  # gcp-guardrails applies the org IAM deny policies that contain the platform's
+  # own automation identity. It sits in its own project where ONLY the security
+  # team has access (queue, confirm and discard runs): no platform,
+  # approvers or viewer grant. Organization owners keep their implicit access,
+  # and tfc-admin itself can still repoint the workspace, so separation of
+  # duties also rests on CODEOWNERS for envs/tfc-admin/** (docs/known-gaps.md).
+  guardrails_workspaces = local.enable_gcp ? ["gcp-guardrails"] : []
+  guardrails_project    = contains(local.project_keys, "guardrails")
+
+  # Workspaces that must never apply without a human confirmation, whatever a
+  # future auto-apply setting does for the others.
+  never_auto_apply_workspaces = concat(local.guardrails_workspaces, [var.tfc_admin_workspace_name])
+
   team_project_access = merge(
     var.platform_team_id == null ? {} : {
-      for p in local.project_keys : "${p}/platform" => {
+      for p in local.shared_access_projects : "${p}/platform" => {
         project = p
         team_id = var.platform_team_id
         access  = contains(local.control_plane_projects, p) ? "custom" : "write"
@@ -413,8 +447,11 @@ locals {
       }
     },
     {
-      for pair in setproduct(tolist(local.project_keys), var.viewer_team_ids) :
+      for pair in setproduct(tolist(local.shared_access_projects), var.viewer_team_ids) :
       "${pair[0]}/${pair[1]}" => { project = pair[0], team_id = pair[1], access = "read", custom = null }
+    },
+    var.security_team_id == null || !local.guardrails_project ? {} : {
+      "guardrails/security" = { project = "guardrails", team_id = var.security_team_id, access = "custom", custom = local.security_custom_access }
     },
   )
 
@@ -426,6 +463,7 @@ locals {
   # ── Speculative plans ──────────────────────────────────────────
   speculative_disabled = setunion(
     toset(var.speculative_disabled_workspaces),
+    toset(local.guardrails_workspaces),
     var.disable_speculative_on_production ? local.production_workloads : toset([]),
     var.disable_speculative_on_saas ? toset(keys(local.saas)) : toset([]),
   )
@@ -486,6 +524,10 @@ resource "terraform_data" "input_contract" {
     precondition {
       condition     = var.control_plane_approvers_team_id == null || var.control_plane_approvers_team_id != var.platform_team_id
       error_message = "control_plane_approvers_team_id must differ from platform_team_id: the approvers team exists so the people who change the control plane are not the ones who approve its apply."
+    }
+    precondition {
+      condition     = var.security_team_id == null || (var.security_team_id != var.platform_team_id && var.security_team_id != var.control_plane_approvers_team_id)
+      error_message = "security_team_id must differ from platform_team_id and control_plane_approvers_team_id: the security team alone applies gcp-guardrails, which contains the platform's own automation identity."
     }
     precondition {
       condition     = length(local.file_bad_categories) == 0
@@ -616,9 +658,12 @@ module "workspace" {
 
   # Control plane and production workloads: no automatic speculative PR plans
   # (a PR's code would run as the plan identity); no UI destroy plans on the
-  # control plane. auto_apply stays false (module default).
+  # control plane. auto_apply stays false everywhere today; the
+  # never_auto_apply_workspaces (gcp-guardrails, tfc-admin) must stay false
+  # under any future auto-apply setting.
   speculative_enabled = !contains(local.speculative_disabled, each.key)
   allow_destroy_plan  = !local.is_control_plane[each.key]
+  auto_apply          = false
 
   assessments_enabled = var.enable_health_assessments
 
@@ -644,6 +689,16 @@ resource "tfe_workspace_settings" "this" {
   agent_pool_id             = local.execution_modes[each.key] == "agent" ? var.agent_pool_id : null
   global_remote_state       = false
   remote_state_consumer_ids = local.consumer_ids[each.key]
+}
+
+# Without a security team the guardrails project has no team grant (only
+# organization owners can run gcp-guardrails); without projects there is no
+# separate project at all.
+check "guardrails_project_has_security_team" {
+  assert {
+    condition     = length(local.guardrails_workspaces) == 0 || (local.guardrails_project && var.security_team_id != null)
+    error_message = "gcp-guardrails is managed but ${local.guardrails_project ? "security_team_id is null: no team can run it (organization owners only). Create a security team and set security_team_id." : "enable_projects = false: it shares the default project instead of a security-only one. Set enable_projects = true and security_team_id."}"
+  }
 }
 
 # Adopt the hand-created tfc-admin workspace instead of creating a duplicate.

@@ -1,6 +1,6 @@
 # CLAUDE.md — Agent Onboarding
 
-Terraform GCP + AWS landing zone. 120 modules, 14 deployable roots, remote state via Terraform Cloud.
+Terraform GCP + AWS landing zone. 121 modules, 15 deployable roots, remote state via Terraform Cloud.
 
 ---
 
@@ -11,6 +11,7 @@ envs/                   # deployable roots, nested by cloud (workspace names kee
   gcp/
     bootstrap/          # GCP phase-0: admin project, Terraform admin SA, WIF pools — TF_WORKSPACE=gcp-bootstrap (apply first)
     organization/       # GCP control plane: folders, org policies, KMS, audit, billing (reads gcp-bootstrap)
+    guardrails/         # GCP org IAM deny policies (admin containment), security team only — TF_WORKSPACE=gcp-guardrails (reads no state)
     projects/           # GCP host/spoke projects + environment_config — TF_WORKSPACE=gcp-projects (reads gcp-organization)
     network-hub/        # GCP hub VPC, DNS anchor, hub VPC-SC — TF_WORKSPACE=gcp-network-hub (reads gcp-projects)
     workload/           # GCP per-environment app infra — TF_WORKSPACE=gcp-workload-<env>
@@ -27,7 +28,7 @@ envs/                   # deployable roots, nested by cloud (workspace names kee
 
 modules/               # grouped by owning cloud (domain)
   gcp/                  # GCP-native modules
-    stages/             # Orchestration wrappers: bootstrap, organization, projects, network-hub, workload, app-services (Cloud Run/SQL/GKE golden path); network compositions net-hub, net-spoke, dns-anchor; host (DEPRECATED facade, no in-repo callers)
+    stages/             # Orchestration wrappers: bootstrap, organization, guardrails (org IAM deny policies), projects, network-hub, workload, app-services (Cloud Run/SQL/GKE golden path); network compositions net-hub, net-spoke, dns-anchor; host (DEPRECATED facade, no in-repo callers)
     project/            # THE project primitive — every stage creates GCP projects through it (no naming scheme inside)
     network/            # ~24 primitives: tiered-vpc (shared VPC + 3-tier subnets + baseline firewall core), vpc, subnet, dns, dns-records, vpn, vpc-sc, cloud-armor, internal-lb, api-gateway, cdn, app-ingress, …
     governance/         # billing, kms, org-policy, scc, tags, cloud-audit-logs, private-ca
@@ -123,7 +124,7 @@ make ci             # fmt-check + consistency + count-check + links + shellcheck
 ## State & Apply Rules
 
 - State backend: **Terraform Cloud** (remote).
-- **Never run `terraform apply` locally** against any GCP root — `envs/gcp/bootstrap`, `envs/gcp/organization`, `envs/gcp/projects`, `envs/gcp/network-hub` or `envs/gcp/workload` (except the documented phase-0 `gcp-bootstrap` first apply, which runs as a human admin by design). The Makefile `apply-gcp-*` targets deliberately refuse.
+- **Never run `terraform apply` locally** against any GCP root — `envs/gcp/bootstrap`, `envs/gcp/organization`, `envs/gcp/guardrails`, `envs/gcp/projects`, `envs/gcp/network-hub` or `envs/gcp/workload` (except the documented phase-0 `gcp-bootstrap` first apply, which runs as a human admin by design). The Makefile `apply-gcp-*` targets deliberately refuse.
 - CI (GitHub Actions) runs `fmt`, `docs-check`, `validate` (10 shards), `lint`, Trivy, `checkov`, `test` and meta-lint (yaml/markdown/commits, counts, links) on PR; `Validation Summary` is the single required check.
 - Terraform Cloud executes the actual apply.
 
@@ -135,7 +136,7 @@ Only the roots you apply pull in credentials — an unapplied workspace needs no
 
 | Variable | Purpose |
 |----------|---------|
-| `GOOGLE_CLOUD_PROJECT` / GCP ADC | google provider — GCP roots (`gcp-bootstrap`, `gcp-organization`, `gcp-projects`, `gcp-network-hub`, `gcp-workload-<env>`) only |
+| `GOOGLE_CLOUD_PROJECT` / GCP ADC | google provider — GCP roots (`gcp-bootstrap`, `gcp-organization`, `gcp-guardrails`, `gcp-projects`, `gcp-network-hub`, `gcp-workload-<env>`) only |
 | `TFC_AWS_PROVIDER_AUTH` + `TFC_AWS_PLAN_ROLE_ARN` / `TFC_AWS_APPLY_ROLE_ARN` | AWS via TFC dynamic (OIDC) credentials, per-account `tfc-plan`/`tfc-apply` roles from `modules/aws/iam/tfc-oidc-baseline` (set per workspace by `envs/tfc-admin`; multi-account roots `aws-security`/`aws-backup` also get `TFC_AWS_*_<alias>` per member account) — AWS roots only |
 | `TFC_GCP_PROVIDER_AUTH` + `TFC_GCP_WORKLOAD_PROVIDER_NAME` + `TFC_GCP_PLAN/APPLY_SERVICE_ACCOUNT_EMAIL` | GCP via TFC dynamic credentials, per-stage plan/apply SAs from `gcp-bootstrap` (set per workspace by `envs/tfc-admin`) — GCP roots only |
 | `AWS_PROFILE` | AWS local/OIDC fallback when not using TFC dynamic credentials — AWS roots only |
@@ -237,6 +238,7 @@ Gotchas the AWS landing-zone build surfaced — each one bit us in CI:
 | Goal | Where to look |
 |------|--------------|
 | Org-level GCP resources | `envs/gcp/organization/` |
+| Org IAM deny policies (admin containment) | `envs/gcp/guardrails/` + `modules/gcp/stages/guardrails/` (security-team workspace) |
 | Per-env app infra | `envs/gcp/workload/` (set `TF_WORKSPACE=gcp-workload-<env>`) |
 | Full end-to-end workload | `modules/gcp/stages/workload/` or `modules/saas/stages/saas-workload/` |
 | VPC / networking | `modules/gcp/network/` |

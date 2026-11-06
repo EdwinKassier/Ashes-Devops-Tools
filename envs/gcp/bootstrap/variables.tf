@@ -125,7 +125,7 @@ variable "tfc_project_ids" {
 }
 
 variable "tfc_workspace_ids" {
-  description = "Optional map of TFC workspace name -> immutable workspace ID (ws-xxxxxxxx). Workspaces listed here are WIF-bound by ID instead of by (mutable, squattable) name. Populate from the tfc-admin root once the workspaces exist; a check warns when an is_production environment or a control-plane workspace has no entry."
+  description = "Optional map of TFC workspace name -> immutable workspace ID (ws-xxxxxxxx). Workspaces listed here are WIF-bound by ID instead of by (mutable, squattable) name. Populate from the tfc-admin root once the workspaces exist; a production estate fails the plan when a control-plane or production workspace has no entry. gcp-guardrails is bound by ID only: without its entry it gets no binding at all."
   type        = map(string)
   default     = {}
 }

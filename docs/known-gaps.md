@@ -85,14 +85,23 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
 - **G14 — GCP guardrail-owner split and 2026 control refresh (2026-11-06),
   mock-tested only.** Validate on a real org:
   (1) **guardrail owner** (`guardrail_owner_mode = "separate"`, default): the
-  organization apply SA loses `roles/iam.denyAdmin`; gcp-organization outputs
-  `guardrail_deny_policy_specs` and the `<prefix>-guardrails-apply` SA
-  (impersonated by `guardrail_owner_members`) applies them with gcloud. Confirm
-  the rendered JSON is accepted by `gcloud iam policies create`. An existing
-  deployment must `terraform state rm` the in-root deny policy before switching
-  (production-hardening runbook). Residual: `iam.securityAdmin` on the
-  organization apply SA can still grant itself `denyAdmin`; alert-only
-  (`guardrail_role_grant`, `guardrail_identity_change`);
+  organization apply SA loses `roles/iam.denyAdmin`. The security-team
+  `gcp-guardrails` root (`envs/gcp/guardrails`) authors the deny policies from
+  config and applies them as the `<prefix>-guardrails-apply` SA, WIF-bound to
+  that workspace by ID only. Confirm a real plan/apply as the guardrails SA, the
+  containment tag lookup (`google_tags_tag_key` / `_value`), and that IAM
+  accepts the `resource.matchTagId('tagKeys/<n>', 'tagValues/<n>')` condition.
+  The PAM-gated `guardrail_owner_members` path (gcloud with
+  `deny_policy_specs`) stays for emergencies. Moving an existing policy into the
+  new root needs a `terraform import` (UPGRADING.md). Residuals:
+  `iam.securityAdmin` on the organization apply SA can still grant itself
+  `denyAdmin`; alert-only (`guardrail_role_grant`,
+  `guardrail_identity_change`). And **tfc-admin can still repoint
+  `gcp-guardrails`** (working directory, VCS branch, team access, variables):
+  whoever can apply tfc-admin can undo the security-team-only boundary, so the
+  separation of duties also rests on CODEOWNERS for `envs/tfc-admin/**`
+  (plan Task 3.5) and on keeping tfc-admin's own approvers apart from the
+  platform team;
   (2) **containment additions** (all on the deny-supported list, re-verified
   2026-11): `accessLevels.update/delete/replaceAll`,
   `authorizedOrgsDescs.create/update/delete`, `policies.update/setIamPolicy`

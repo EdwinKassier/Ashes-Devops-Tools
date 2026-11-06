@@ -240,8 +240,8 @@ run "production_workspaces_must_be_bound_by_id" {
   }
 
   # Hard failure (precondition), not a warning: a production org must not plan
-  # with name-bound WIF trusts.
-  expect_failures = [terraform_data.production_workspaces_bound_by_id]
+  # with name-bound WIF trusts (nor with an unbound gcp-guardrails workspace).
+  expect_failures = [terraform_data.production_workspaces_bound_by_id, terraform_data.guardrails_workspace_bound_by_id]
 }
 
 run "production_workspaces_bound_by_id_pass" {
@@ -256,6 +256,7 @@ run "production_workspaces_bound_by_id_pass" {
       "gcp-projects"      = "ws-Proj1"
       "gcp-network-hub"   = "ws-Hub1"
       "gcp-workload-prod" = "ws-Prod1"
+      "gcp-guardrails"    = "ws-Guard1"
     }
   }
 
@@ -416,6 +417,90 @@ run "guardrail_owner_is_separate_by_default" {
   }
 }
 
+# The security-team gcp-guardrails workspace authenticates as the guardrails
+# SAs, bound by its immutable workspace ID only: plan to the read-only
+# guardrails-plan SA, apply to the denyAdmin guardrails-apply SA.
+run "guardrails_wif_bound_by_workspace_id" {
+  command = plan
+
+  variables {
+    tfc_workspace_ids = { "gcp-guardrails" = "ws-Guard1" }
+  }
+
+  override_resource {
+    target          = module.tfc_oidc[0].google_iam_workload_identity_pool.pool
+    override_during = plan
+    values = {
+      name = "projects/1/locations/global/workloadIdentityPools/tfc-pool"
+    }
+  }
+
+  assert {
+    condition     = module.tfc_oidc[0].tfc_binding_members["gcp-guardrails:apply"] == "principalSet://iam.googleapis.com/projects/1/locations/global/workloadIdentityPools/tfc-pool/attribute.workspace_id_phase/ws-Guard1:apply" && module.tfc_oidc[0].tfc_binding_members["gcp-guardrails:plan"] == "principalSet://iam.googleapis.com/projects/1/locations/global/workloadIdentityPools/tfc-pool/attribute.workspace_id_phase/ws-Guard1:plan"
+    error_message = "gcp-guardrails must be WIF-bound by its workspace ID, per run phase."
+  }
+
+  assert {
+    condition     = google_service_account.guardrails_plan[0].account_id == "mock-org-guardrails-plan" && contains(keys(google_organization_iam_member.guardrails_plan), "roles/iam.denyReviewer") && !contains(keys(google_organization_iam_member.guardrails_plan), "roles/iam.denyAdmin")
+    error_message = "the guardrails plan SA must be read-only (denyReviewer, no denyAdmin)."
+  }
+
+  assert {
+    condition     = output.guardrails_workspace_bound_by_id && contains(keys(output.tfc_apply_service_accounts), "gcp-guardrails") && contains(keys(output.tfc_plan_service_accounts), "gcp-guardrails")
+    error_message = "tfc-admin needs the gcp-guardrails plan/apply SA emails for its dynamic credentials."
+  }
+
+  # The PAM-gated break-glass path is kept.
+  assert {
+    condition     = length(google_service_account_iam_member.guardrails_impersonation) == 0 && contains(keys(google_organization_iam_member.guardrails), "roles/iam.denyAdmin")
+    error_message = "the guardrails SA keeps denyAdmin; impersonation stays limited to guardrail_owner_members."
+  }
+}
+
+# Never by name: without the ID there is no binding at all, and a production
+# estate fails the plan.
+run "guardrails_wif_never_bound_by_name" {
+  command = plan
+
+  assert {
+    condition     = !contains(keys(module.tfc_oidc[0].tfc_binding_members), "gcp-guardrails:apply") && !contains(keys(module.tfc_oidc[0].tfc_binding_members), "gcp-guardrails:plan")
+    error_message = "gcp-guardrails must never be WIF-bound by its (squattable) name."
+  }
+
+  assert {
+    condition     = output.guardrails_workspace_bound_by_id == false && !contains(keys(output.tfc_apply_service_accounts), "gcp-guardrails")
+    error_message = "an unbound gcp-guardrails workspace must be reported and get no dynamic credentials."
+  }
+}
+
+run "guardrails_workspace_id_required_in_production" {
+  command = plan
+
+  variables {
+    production_workload_environments      = ["prod"]
+    phase0_admin_impersonation_expires_at = "2026-12-31T00:00:00Z"
+    tfc_workspace_ids                     = { "gcp-bootstrap" = "ws-Boot1", "gcp-organization" = "ws-Org1", "gcp-projects" = "ws-Proj1", "gcp-network-hub" = "ws-Hub1", "gcp-workload-prod" = "ws-Prod1" }
+  }
+
+  expect_failures = [terraform_data.guardrails_workspace_bound_by_id]
+}
+
+run "guardrails_workspace_wif_can_be_disabled" {
+  command = plan
+
+  variables {
+    guardrails_workspace                  = null
+    production_workload_environments      = ["prod"]
+    phase0_admin_impersonation_expires_at = "2026-12-31T00:00:00Z"
+    tfc_workspace_ids                     = { "gcp-bootstrap" = "ws-Boot1", "gcp-organization" = "ws-Org1", "gcp-projects" = "ws-Proj1", "gcp-network-hub" = "ws-Hub1", "gcp-workload-prod" = "ws-Prod1" }
+  }
+
+  assert {
+    condition     = length(google_service_account.guardrails_plan) == 0 && !contains(keys(output.tfc_apply_service_accounts), "gcp-guardrails")
+    error_message = "guardrails_workspace = null must keep the PAM-only path (no workspace identity)."
+  }
+}
+
 run "guardrail_owner_legacy_organization_mode" {
   command = plan
 
@@ -429,8 +514,8 @@ run "guardrail_owner_legacy_organization_mode" {
   }
 
   assert {
-    condition     = length(google_service_account.guardrails) == 0 && length(google_organization_iam_member.guardrails) == 0
-    error_message = "Legacy organization mode must not create the guardrails SA."
+    condition     = length(google_service_account.guardrails) == 0 && length(google_organization_iam_member.guardrails) == 0 && length(google_service_account.guardrails_plan) == 0 && !contains(keys(output.tfc_apply_service_accounts), "gcp-guardrails")
+    error_message = "Legacy organization mode must not create the guardrails SAs or bind gcp-guardrails."
   }
 }
 
@@ -482,7 +567,7 @@ run "production_without_expiry_fails" {
 
   variables {
     production_workload_environments = ["prod"]
-    tfc_workspace_ids                = { "gcp-bootstrap" = "ws-Boot1", "gcp-organization" = "ws-Org1", "gcp-projects" = "ws-Proj1", "gcp-network-hub" = "ws-Hub1", "gcp-workload-prod" = "ws-Prod1" }
+    tfc_workspace_ids                = { "gcp-bootstrap" = "ws-Boot1", "gcp-organization" = "ws-Org1", "gcp-projects" = "ws-Proj1", "gcp-network-hub" = "ws-Hub1", "gcp-workload-prod" = "ws-Prod1", "gcp-guardrails" = "ws-Guard1" }
   }
 
   expect_failures = [terraform_data.phase0_impersonation_is_time_boxed]
@@ -494,7 +579,7 @@ run "production_with_expiry_plans" {
   variables {
     production_workload_environments      = ["prod"]
     phase0_admin_impersonation_expires_at = "2026-12-31T00:00:00Z"
-    tfc_workspace_ids                     = { "gcp-bootstrap" = "ws-Boot1", "gcp-organization" = "ws-Org1", "gcp-projects" = "ws-Proj1", "gcp-network-hub" = "ws-Hub1", "gcp-workload-prod" = "ws-Prod1" }
+    tfc_workspace_ids                     = { "gcp-bootstrap" = "ws-Boot1", "gcp-organization" = "ws-Org1", "gcp-projects" = "ws-Proj1", "gcp-network-hub" = "ws-Hub1", "gcp-workload-prod" = "ws-Prod1", "gcp-guardrails" = "ws-Guard1" }
   }
 
   assert {

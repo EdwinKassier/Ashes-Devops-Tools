@@ -108,7 +108,8 @@ module "organization" {
   # Opt-in WORM lock on the audit-log bucket (default false; irreversible).
   enable_audit_bucket_lock = local.enable_audit_bucket_lock
 
-  # Opt-in IAM deny policies at the org node (default [] = none).
+  # Opt-in IAM deny policies at the org node (default [] = none). Legacy
+  # organization mode only; in separate mode gcp-guardrails owns them.
   iam_deny_policies = var.iam_deny_policies
 
   # Opt-in org-wide CMEK enforcement (default off). The prod-hardening
@@ -136,7 +137,8 @@ module "organization" {
   # Explicit opt-out (variable or gcp.admin_containment: false in config; unset is not a waiver), or the root's own precondition already fails the plan.
   production_containment_waived = var.enable_admin_containment == false || local.cfg.admin_containment == false || (local.enable_admin_containment && length(local.containment_exempt_principals) == 0)
 
-  # Deny policies are applied by the guardrail owner (separate) or here (legacy).
+  # Deny policies are authored and applied by gcp-guardrails (separate) or here
+  # (legacy organization mode).
   guardrail_owner_mode = local.guardrail_owner_mode
 
   # Managed org-policy constraints where Google offers a successor.

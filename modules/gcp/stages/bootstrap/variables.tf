@@ -447,8 +447,19 @@ variable "guardrail_owner_mode" {
   }
 }
 
+variable "guardrails_workspace" {
+  description = "TFC workspace (envs/gcp/guardrails) that applies the org deny policies as the guardrails SA when guardrail_owner_mode = \"separate\". Its plan phase is bound to <prefix>-guardrails-plan and its apply phase to <prefix>-guardrails-apply, by the immutable ID in tfc_workspace_ids only (never by name); a production estate fails the plan without that ID. Null = no workspace identity, only the guardrail_owner_members break-glass path."
+  type        = string
+  default     = "gcp-guardrails"
+
+  validation {
+    condition     = var.guardrails_workspace == null || can(regex("^[A-Za-z0-9_-]+$", coalesce(var.guardrails_workspace, "x")))
+    error_message = "guardrails_workspace must be a TFC workspace name (letters, digits, - and _) or null."
+  }
+}
+
 variable "guardrail_owner_members" {
-  description = "Principals allowed to impersonate the guardrails SA (roles/iam.serviceAccountTokenCreator) when guardrail_owner_mode = \"separate\". Use a group whose membership is granted just in time (PAM) and is disjoint from the people who can change the gcp-organization workspace. Empty = nobody can use the SA until set."
+  description = "Break-glass principals allowed to impersonate the guardrails SA (roles/iam.serviceAccountTokenCreator) when guardrail_owner_mode = \"separate\"; routine changes go through the guardrails_workspace. Use a group whose membership is granted just in time (PAM) and is disjoint from the people who can change the gcp-organization workspace. Empty = nobody can use the SA until set."
   type        = list(string)
   default     = []
 

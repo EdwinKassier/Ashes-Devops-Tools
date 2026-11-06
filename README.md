@@ -18,8 +18,8 @@
 [![Terraform Validation](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml)
 [![Security Scan](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml)
 [![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?style=flat-square&logo=pre-commit)](https://pre-commit.com)
-[![Modules](https://img.shields.io/badge/modules-120-blueviolet?style=flat-square)](modules/)
-[![Tests](https://img.shields.io/badge/test_suites-293-blue?style=flat-square)](modules/)
+[![Modules](https://img.shields.io/badge/modules-121-blueviolet?style=flat-square)](modules/)
+[![Tests](https://img.shields.io/badge/test_suites-296-blue?style=flat-square)](modules/)
 
 <sub>Module/test-suite counts are static badges, enforced in CI: <code>make count</code> prints the live figures and <code>scripts/check-docs-counts.sh</code> (meta-lint) fails when this README or CLAUDE.md disagrees with the tree.</sub>
 
@@ -33,7 +33,7 @@
 
 | Cloud | Roots | What it manages |
 |:--------|:--------|:----------------|
-| **GCP** | `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` (5 layered roots) | Landing zone (admin project + WIF, org hierarchy, IAM, org policies, KMS, audit logs, shared projects, networking hub, VPC-SC) plus per-env application environments (host projects, Shared VPC, Cloud Armor, VPN, Interconnect) |
+| **GCP** | `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` (5 layered roots), plus the security-team `gcp-guardrails` (org IAM deny policies) | Landing zone (admin project + WIF, org hierarchy, IAM, org policies, KMS, audit logs, shared projects, networking hub, VPC-SC) plus per-env application environments (host projects, Shared VPC, Cloud Armor, VPN, Interconnect) |
 | **AWS** | `aws-*` (7 layered roots) | Multi-account SRA org + guardrails (SCP/RCP/declarative), security baseline (GuardDuty/Security Hub/Config/CloudTrail/Access Analyzer/Security Lake), Transit Gateway network, IAM Identity Center, org backup, cost governance |
 | **Supabase** | `saas` (`enable_supabase`) | Projects + vault secrets, three-tier environments |
 | **Vercel** | `saas` (`enable_vercel`) | Projects, three-tier environments |
@@ -56,7 +56,7 @@ scripts/init-landing-zone.sh            # interactive; or pass --org-name ... --
 git add config/landing-zone.yaml && git commit -m "config: landing zone"
 
 # 3. Authenticate (only the clouds whose workspaces you apply)
-gcloud auth application-default login     # GCP roots (gcp-bootstrap, gcp-organization, gcp-projects, gcp-network-hub, gcp-workload-<env>)
+gcloud auth application-default login     # GCP roots (gcp-bootstrap, gcp-organization, gcp-guardrails, gcp-projects, gcp-network-hub, gcp-workload-<env>)
 export SUPABASE_ACCESS_TOKEN="sbp_..."   # required for supabase modules
 export VERCEL_API_TOKEN="..."            # required for vercel modules
 # AWS roots use TFC dynamic credentials: TFC_AWS_PROVIDER_AUTH + per-workspace
@@ -116,7 +116,7 @@ Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives i
 
 ## Module Library
 
-120 modules — **61 GCP · 52 AWS · 6 SaaS · 1 TFC** — each with auto-generated docs and `mock_provider` tests.
+121 modules — **62 GCP · 52 AWS · 6 SaaS · 1 TFC** — each with auto-generated docs and `mock_provider` tests.
 
 Both clouds are organized into the **same conceptual domains** so you can map a capability across providers at a glance. Each table reads: **capability → Google Cloud module → Amazon Web Services module**. A `—` means the platform has no dedicated module for that capability (often because it is native, or lives in an adjacent domain — noted inline). Link text is the module's path under `modules/<cloud>/`.
 
@@ -250,14 +250,14 @@ GCP consolidates detection into Security Command Center plus audit logs; the AWS
 </details>
 
 <details>
-<summary><strong>Orchestration Stages</strong> — GCP 6 · AWS 6</summary>
+<summary><strong>Orchestration Stages</strong> — GCP 7 · AWS 6</summary>
 
 Composite stages wrap the primitives above into deployable landing-zone layers, one per root/workspace. Layers line up across clouds even where a cloud folds two responsibilities into one stage.
 
 | Layer | Google Cloud | Amazon Web Services |
 |:------|:-------------|:--------------------|
 | Bootstrap / foundation | [`stages/bootstrap`](modules/gcp/stages/bootstrap/) | *(phase-0, out-of-band — see aws-bootstrap runbook)* |
-| Organization &amp; guardrails | [`stages/organization`](modules/gcp/stages/organization/) | [`stages/organization`](modules/aws/stages/organization/) |
+| Organization &amp; guardrails | [`stages/organization`](modules/gcp/stages/organization/), [`stages/guardrails`](modules/gcp/stages/guardrails/) *(org IAM deny policies, security-team `gcp-guardrails` workspace)* | [`stages/organization`](modules/aws/stages/organization/) |
 | Security baseline | *(folded into `stages/organization`)* | [`stages/security`](modules/aws/stages/security/) |
 | Projects / accounts | [`stages/projects`](modules/gcp/stages/projects/) | *(accounts via `stages/organization`)* |
 | Network hub | [`stages/network-hub`](modules/gcp/stages/network-hub/) (composes [`stages/net-hub`](modules/gcp/stages/net-hub/) + [`stages/dns-anchor`](modules/gcp/stages/dns-anchor/)) | [`stages/network-hub`](modules/aws/stages/network-hub/) |

@@ -156,68 +156,17 @@ run "containment_denies_mutation_and_tag_scopes_audit_store" {
     containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
   }
 
-  # Default guardrail_owner_mode = "separate": this stage does not apply the
-  # deny policy (its apply SA has no denyAdmin); it outputs the spec instead.
+  # Default guardrail_owner_mode = "separate": this stage neither applies nor
+  # renders the deny policies (the gcp-guardrails workspace owns them), but it
+  # still creates and binds the containment tag they are scoped by.
   assert {
-    condition     = length(module.iam_deny.deny_policy_names) == 0 && contains(keys(output.guardrail_deny_policy_specs), "contain-admin-identity")
-    error_message = "in separate mode the containment policy must be output as a spec, not applied by this stage."
-  }
-
-
-  assert {
-    condition = length(output.admin_containment_rules) == 2 && alltrue([
-      for p in [
-        "logging.googleapis.com/sinks.update",
-        "logging.googleapis.com/sinks.delete",
-        "logging.googleapis.com/exclusions.create",
-        "logging.googleapis.com/exclusions.update",
-        "logging.googleapis.com/exclusions.delete",
-        "accesscontextmanager.googleapis.com/servicePerimeters.update",
-        "accesscontextmanager.googleapis.com/servicePerimeters.delete",
-        "accesscontextmanager.googleapis.com/policies.delete",
-        "accesscontextmanager.googleapis.com/accessLevels.update",
-        "accesscontextmanager.googleapis.com/accessLevels.delete",
-        "accesscontextmanager.googleapis.com/accessLevels.replaceAll",
-        "accesscontextmanager.googleapis.com/policies.setIamPolicy",
-      ] : contains(output.admin_containment_rules[0].denied_permissions, p)
-    ]) && !output.admin_containment_rules[0].tag_scoped
-    error_message = "rule 1 must deny sink/exclusion/perimeter mutation org-wide (unconditioned)."
+    condition     = length(module.iam_deny.deny_policy_names) == 0 && length(output.guardrail_deny_policy_specs) == 0 && length(output.admin_containment_rules) == 0 && length(module.guardrails) == 0
+    error_message = "in separate mode this stage must not build the containment policy or its spec."
   }
 
   assert {
-    condition = alltrue([
-      for p in [
-        "storage.googleapis.com/buckets.delete",
-        "storage.googleapis.com/buckets.setIamPolicy",
-        "storage.googleapis.com/buckets.deleteTagBinding",
-        "storage.googleapis.com/objects.delete",
-        "cloudkms.googleapis.com/cryptoKeyVersions.destroy",
-        "cloudkms.googleapis.com/cryptoKeyVersions.update",
-        "cloudkms.googleapis.com/cryptoKeys.setIamPolicy",
-        "storage.googleapis.com/buckets.update",
-        "cloudkms.googleapis.com/keyRings.setIamPolicy",
-        "logging.googleapis.com/buckets.update",
-      ] : contains(output.admin_containment_rules[1].denied_permissions, p)
-    ]) && output.admin_containment_rules[1].tag_scoped
-    error_message = "rule 2 must deny audit-store bucket/object/key destruction, scoped by the containment tag."
-  }
-
-  assert {
-    condition = alltrue([
-      for r in output.admin_containment_rules :
-      length(r.exception_principals) == 1 && contains(r.exception_principals, "principalSet://goog/group/break-glass@acme.io")
-    ])
-    error_message = "every containment rule must exempt the break-glass principal."
-  }
-
-  # Unsupported in IAM deny — must never appear (they would fail the API call).
-  assert {
-    condition = !anytrue([
-      for r in output.admin_containment_rules : anytrue([
-        for p in r.denied_permissions : can(regex("denypolicies|accessPolicies", p))
-      ])
-    ])
-    error_message = "iam.denypolicies.* and accessPolicies.delete are not deny-supported and must not be listed."
+    condition     = output.containment_tag.key_short_name == "containment" && output.containment_tag.value_short_name == "protected"
+    error_message = "the containment tag the gcp-guardrails root looks up must be exposed."
   }
 
   assert {
@@ -583,6 +532,62 @@ run "containment_applied_in_stage_in_organization_mode" {
     condition     = contains(module.iam_deny.deny_policy_names, "contain-admin-identity")
     error_message = "guardrail_owner_mode = organization must apply the contain-admin-identity deny policy in this stage."
   }
+
+  assert {
+    condition = length(output.admin_containment_rules) == 2 && alltrue([
+      for p in [
+        "logging.googleapis.com/sinks.update",
+        "logging.googleapis.com/sinks.delete",
+        "logging.googleapis.com/exclusions.create",
+        "logging.googleapis.com/exclusions.update",
+        "logging.googleapis.com/exclusions.delete",
+        "accesscontextmanager.googleapis.com/servicePerimeters.update",
+        "accesscontextmanager.googleapis.com/servicePerimeters.delete",
+        "accesscontextmanager.googleapis.com/policies.delete",
+        "accesscontextmanager.googleapis.com/accessLevels.update",
+        "accesscontextmanager.googleapis.com/accessLevels.delete",
+        "accesscontextmanager.googleapis.com/accessLevels.replaceAll",
+        "accesscontextmanager.googleapis.com/policies.setIamPolicy",
+      ] : contains(output.admin_containment_rules[0].denied_permissions, p)
+    ]) && !output.admin_containment_rules[0].tag_scoped
+    error_message = "rule 1 must deny sink/exclusion/perimeter mutation org-wide (unconditioned)."
+  }
+
+  assert {
+    condition = alltrue([
+      for p in [
+        "storage.googleapis.com/buckets.delete",
+        "storage.googleapis.com/buckets.setIamPolicy",
+        "storage.googleapis.com/buckets.deleteTagBinding",
+        "storage.googleapis.com/objects.delete",
+        "cloudkms.googleapis.com/cryptoKeyVersions.destroy",
+        "cloudkms.googleapis.com/cryptoKeyVersions.update",
+        "cloudkms.googleapis.com/cryptoKeys.setIamPolicy",
+        "storage.googleapis.com/buckets.update",
+        "cloudkms.googleapis.com/keyRings.setIamPolicy",
+        "logging.googleapis.com/buckets.update",
+      ] : contains(output.admin_containment_rules[1].denied_permissions, p)
+    ]) && output.admin_containment_rules[1].tag_scoped
+    error_message = "rule 2 must deny audit-store bucket/object/key destruction, scoped by the containment tag."
+  }
+
+  assert {
+    condition = alltrue([
+      for r in output.admin_containment_rules :
+      length(r.exception_principals) == 1 && contains(r.exception_principals, "principalSet://goog/group/break-glass@acme.io")
+    ])
+    error_message = "every containment rule must exempt the break-glass principal."
+  }
+
+  # Unsupported in IAM deny — must never appear (they would fail the API call).
+  assert {
+    condition = !anytrue([
+      for r in output.admin_containment_rules : anytrue([
+        for p in r.denied_permissions : can(regex("denypolicies|accessPolicies", p))
+      ])
+    ])
+    error_message = "iam.denypolicies.* and accessPolicies.delete are not deny-supported and must not be listed."
+  }
 }
 
 run "containment_tags_the_log_analytics_bucket" {
@@ -634,6 +639,7 @@ run "logging_org_settings_and_boundary_opt_in" {
     enable_principal_access_boundary     = true
     enable_admin_containment             = true
     containment_exempt_principals        = ["principalSet://goog/group/break-glass@acme.io"]
+    guardrail_owner_mode                 = "organization"
   }
 
   assert {
@@ -652,12 +658,40 @@ run "logging_org_settings_and_boundary_opt_in" {
   }
 }
 
-# The spec is a gcloud deny-policy document (checked with a static user policy:
-# the containment spec embeds tag IDs that are unknown at plan time).
-run "guardrail_spec_is_gcloud_policy_document" {
+# The gcloud spec now comes from the gcp-guardrails root (stage guardrails).
+# In separate mode this stage renders nothing; in the legacy organization mode
+# the spec output still mirrors what this stage applies.
+run "guardrail_spec_empty_in_separate_mode" {
   command = plan
 
   variables {
+    iam_deny_policies = [
+      {
+        name = "deny-sa-keys"
+        rules = [
+          {
+            denied_principals  = ["principalSet://goog/public:all"]
+            denied_permissions = ["iam.googleapis.com/serviceAccountKeys.create"]
+          },
+        ]
+      },
+    ]
+  }
+
+  # The ignored input is flagged, not silently dropped.
+  expect_failures = [check.iam_deny_policies_belong_to_guardrails]
+
+  assert {
+    condition     = length(output.guardrail_deny_policy_specs) == 0 && length(module.iam_deny.deny_policy_names) == 0
+    error_message = "in separate mode user deny policies belong to gcp-guardrails: no spec and nothing applied here."
+  }
+}
+
+run "guardrail_spec_and_apply_in_organization_mode" {
+  command = plan
+
+  variables {
+    guardrail_owner_mode = "organization"
     iam_deny_policies = [
       {
         name = "deny-sa-keys"
@@ -673,13 +707,8 @@ run "guardrail_spec_is_gcloud_policy_document" {
   }
 
   assert {
-    condition     = jsondecode(output.guardrail_deny_policy_specs["deny-sa-keys"]).displayName == "deny-sa-keys" && jsondecode(output.guardrail_deny_policy_specs["deny-sa-keys"]).rules[0].denyRule.deniedPermissions[0] == "iam.googleapis.com/serviceAccountKeys.create" && jsondecode(output.guardrail_deny_policy_specs["deny-sa-keys"]).rules[0].denyRule.denialCondition.title == "t"
-    error_message = "guardrail_deny_policy_specs must render the gcloud deny-policy JSON (displayName, rules[].denyRule.deniedPermissions, denialCondition)."
-  }
-
-  assert {
-    condition     = length(module.iam_deny.deny_policy_names) == 0
-    error_message = "in separate mode user deny policies are also applied by the guardrail owner, not this stage."
+    condition     = jsondecode(output.guardrail_deny_policy_specs["deny-sa-keys"]).rules[0].denyRule.denialCondition.title == "t" && contains(module.iam_deny.deny_policy_names, "deny-sa-keys")
+    error_message = "organization mode must apply user deny policies in this stage and still render their spec."
   }
 }
 

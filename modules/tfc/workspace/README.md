@@ -87,6 +87,8 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
+| <a name="output_allow_destroy_plan"></a> [allow\_destroy\_plan](#output\_allow\_destroy\_plan) | Whether destroy plans may be queued from the UI/API. |
+| <a name="output_auto_apply"></a> [auto\_apply](#output\_auto\_apply) | Whether a successful plan applies without confirmation. |
 | <a name="output_id"></a> [id](#output\_id) | The workspace ID (ws-...). |
 | <a name="output_name"></a> [name](#output\_name) | The workspace name. |
 | <a name="output_notification_ids"></a> [notification\_ids](#output\_notification\_ids) | Map of notification name to its configuration ID. |
@@ -96,4 +98,5 @@ The following resources are created:
 | <a name="output_variable_keys"></a> [variable\_keys](#output\_variable\_keys) | Sorted keys of the variables set directly on the workspace (values omitted; some are sensitive). |
 | <a name="output_variable_set_labels"></a> [variable\_set\_labels](#output\_variable\_set\_labels) | Labels of the variable sets attached to this workspace. |
 | <a name="output_variable_values"></a> [variable\_values](#output\_variable\_values) | Values of the NON-sensitive variables set directly on the workspace, keyed by name (sensitive ones are omitted). |
+| <a name="output_working_directory"></a> [working\_directory](#output\_working\_directory) | Working directory (root) the workspace runs in. |
 <!-- END_TF_DOCS -->

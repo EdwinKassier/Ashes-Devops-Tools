@@ -57,7 +57,7 @@ locals {
     })
   }
 
-  project_name_keys = ["gcp", "aws", "saas", "platform", "gcp-workloads", "aws-workloads"]
+  project_name_keys = ["gcp", "aws", "saas", "platform", "gcp-workloads", "aws-workloads", "guardrails"]
 
   # Effective values. Required ones fall back to an inert sentinel only so
   # static tools (tflint) can evaluate the root; the variable validations reject

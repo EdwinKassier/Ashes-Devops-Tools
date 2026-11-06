@@ -65,6 +65,9 @@ org:
     # aws_project: landing-zone-aws
     # saas_project: landing-zone-saas
     # platform_project: landing-zone-platform
+    # gcp-guardrails (org IAM deny policies) always gets its own project, where
+    # only the tfc-admin security_team_id has access. Default <prefix>guardrails.
+    # guardrails_project: landing-zone-guardrails
     # Optional: put gcp-workload-<env> / aws-workload-<env> in their own
     # projects (<prefix>gcp-workloads / <prefix>aws-workloads), so the platform
     # team's write grant never touches a control-plane project. With AWS, set
@@ -94,15 +97,16 @@ gcp:
     - gcp-organization-admins@my-org.example.com
   billing_admin_groups:
     - gcp-billing-admins@my-org.example.com
-  # Break-glass Cloud Identity group (gcp-organization). It is exempt from the
-  # admin-containment deny policy, which turns on automatically once any
+  # Break-glass Cloud Identity group (gcp-organization, gcp-guardrails). It is
+  # exempt from the admin-containment deny policy, which turns on automatically once any
   # environment is_production. Create the group, with 2+ members, before the
   # first org apply.
   break_glass_group: gcp-break-glass@my-org.example.com
   # Who receives the control-plane guardrail-change alerts (gcp-organization).
   alert_emails:
     - secops@my-org.example.com
-  # Optional explicit override of the derived containment default.
+  # Optional explicit override of the derived containment default
+  # (gcp-organization tags the audit store, gcp-guardrails applies the policy).
   # admin_containment: true
   # RFC 3339 UTC end of the phase-0 window in which admin_email may impersonate
   # terraform-admin (gcp-bootstrap). Required, or the plan fails, while the grant

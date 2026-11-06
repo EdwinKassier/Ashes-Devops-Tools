@@ -15,6 +15,10 @@ enable_cmek_org_policy = true
 # perimeter must be applied as break-glass (docs/runbooks/production-hardening.md).
 # The placeholder below is REJECTED by variable validation on purpose: replace it with
 # your real break-glass group or the plan fails. Validate on a non-prod org first.
+# In guardrail_owner_mode = "separate" (the default) this root only creates and
+# binds the containment tag; the security-team gcp-guardrails root applies the
+# policy and needs the same break-glass principal. Prefer gcp.break_glass_group
+# in config/landing-zone.yaml, which both roots read.
 enable_admin_containment      = true
 containment_exempt_principals = ["principalSet://goog/group/break-glass@REPLACE-ME.invalid"]
 

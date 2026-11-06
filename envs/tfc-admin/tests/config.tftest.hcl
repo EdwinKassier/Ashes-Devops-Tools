@@ -11,15 +11,18 @@ variables {
   # The fixture sets vcs_repo, so tfc-admin is self-managed (the default).
   # Mock providers cannot import; the import block runs in the adopting apply.
   import_tfc_admin_workspace = false
+  # gcp-guardrails is security-team only; without a team a check warns.
+  security_team_id = "team-security1"
 }
 
 run "workspaces_derived_from_config" {
   command = plan
 
-  # 4 GCP control plane + gcp-workload-{dev,prod} + 6 AWS control plane +
-  # aws-workload-{dev,staging} + saas-{web,admin} + tfc-admin (self-managed) = 17.
+  # 5 GCP control plane (incl. gcp-guardrails) + gcp-workload-{dev,prod} + 6 AWS
+  # control plane + aws-workload-{dev,staging} + saas-{web,admin} + tfc-admin
+  # (self-managed) = 18.
   assert {
-    condition     = length(output.workspace_names) == 17
+    condition     = length(output.workspace_names) == 18
     error_message = "the workspace set must come from gcp/aws/saas .enabled, gcp.environments, aws.workload_environments and saas.workspaces."
   }
 
@@ -109,7 +112,7 @@ run "explicit_variables_win_over_config" {
   }
 
   assert {
-    condition     = toset(output.workspace_names) == toset(["gcp-bootstrap", "gcp-organization", "gcp-projects", "gcp-network-hub", "gcp-workload-qa", "tfc-admin"]) && local.tfc_organization == "acme"
+    condition     = toset(output.workspace_names) == toset(["gcp-bootstrap", "gcp-organization", "gcp-projects", "gcp-network-hub", "gcp-guardrails", "gcp-workload-qa", "tfc-admin"]) && local.tfc_organization == "acme"
     error_message = "explicit enable_* / environments / tfc_organization must override the config file."
   }
 

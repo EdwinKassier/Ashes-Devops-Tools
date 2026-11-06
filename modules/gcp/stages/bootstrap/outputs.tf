@@ -60,12 +60,18 @@ output "tfc_attribute_condition" {
 
 output "tfc_plan_service_accounts" {
   description = "Map of TFC workspace name -> PLAN-phase SA email (set as TFC_GCP_PLAN_SERVICE_ACCOUNT_EMAIL on that workspace)."
-  value       = { for k, sa in local.tfc_identities : sa.workspace => local.stage_sa_email[k] if sa.phase == "plan" }
+  value = merge(
+    { for k, sa in local.tfc_identities : sa.workspace => local.stage_sa_email[k] if sa.phase == "plan" },
+    local.guardrails_wif_bound ? { (var.guardrails_workspace) = google_service_account.guardrails_plan[0].email } : {},
+  )
 }
 
 output "tfc_apply_service_accounts" {
   description = "Map of TFC workspace name -> APPLY-phase SA email (set as TFC_GCP_APPLY_SERVICE_ACCOUNT_EMAIL on that workspace)."
-  value       = { for k, sa in local.tfc_identities : sa.workspace => local.stage_sa_email[k] if sa.phase == "apply" }
+  value = merge(
+    { for k, sa in local.tfc_identities : sa.workspace => local.stage_sa_email[k] if sa.phase == "apply" },
+    local.guardrails_wif_bound ? { (var.guardrails_workspace) = google_service_account.guardrails[0].email } : {},
+  )
 }
 
 output "stage_service_accounts" {
@@ -141,6 +147,16 @@ output "guardrail_owner_mode" {
 output "guardrails_service_account" {
   description = "Email of the guardrails SA (sole automation holder of roles/iam.denyAdmin), or null when guardrail_owner_mode = \"organization\"."
   value       = var.guardrail_owner_mode == "separate" ? google_service_account.guardrails[0].email : null
+}
+
+output "guardrails_plan_service_account" {
+  description = "Email of the read-only plan SA of the gcp-guardrails workspace, or null when guardrail_owner_mode = \"organization\" or guardrails_workspace = null."
+  value       = local.guardrails_workspace_identity ? google_service_account.guardrails_plan[0].email : null
+}
+
+output "guardrails_workspace_bound_by_id" {
+  description = "Whether the gcp-guardrails workspace is WIF-bound (by immutable workspace ID; it is never bound by name)."
+  value       = local.guardrails_wif_bound
 }
 
 output "phase0_admin_impersonation_members" {

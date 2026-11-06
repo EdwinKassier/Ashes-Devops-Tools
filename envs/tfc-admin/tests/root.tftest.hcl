@@ -24,30 +24,34 @@ variables {
   # Mock providers cannot import, so the suite runs with an unmanaged
   # tfc-admin workspace; self_management_* runs cover the managed default.
   manage_tfc_admin_workspace = false
+  # gcp-guardrails is security-team only; without a team a check warns
+  # (guardrails_project_without_security_team_warns).
+  security_team_id = "team-security1"
 }
 
 run "declares_every_workspace" {
   command = plan
 
-  # 4 GCP control plane + 2 gcp-workload + 6 AWS control plane + 2 aws-workload +
-  # 1 saas = 15.
+  # 5 GCP control plane (incl. gcp-guardrails) + 2 gcp-workload + 6 AWS control
+  # plane + 2 aws-workload + 1 saas = 16.
   assert {
-    condition     = length(output.workspace_names) == 15
+    condition     = length(output.workspace_names) == 16
     error_message = "tfc-admin must declare a workspace for each root, each per-env workload, and each saas entry."
   }
 
   assert {
     condition = alltrue([
-      for k in ["gcp-bootstrap", "gcp-organization", "gcp-projects", "gcp-network-hub",
+      for k in ["gcp-bootstrap", "gcp-organization", "gcp-projects", "gcp-network-hub", "gcp-guardrails",
       "gcp-workload-dev", "gcp-workload-prod", "aws-security", "aws-workload-prod", "saas-web"] :
       contains(output.workspace_names, k)
     ])
     error_message = "control-plane, per-env workload, and saas workspaces must all be declared."
   }
 
-  # One project per cloud in use; no platform project unless tfc-admin is self-managed.
+  # One project per cloud in use, plus the security-only guardrails project; no
+  # platform project unless tfc-admin is self-managed.
   assert {
-    condition     = toset(keys(tfe_project.this)) == toset(["gcp", "aws", "saas"])
+    condition     = toset(keys(tfe_project.this)) == toset(["gcp", "aws", "saas", "guardrails"])
     error_message = "one TFC project per enabled cloud must be created."
   }
 }
@@ -61,9 +65,10 @@ run "gcp_only" {
     saas_workspaces = []
   }
 
-  # 4 GCP control plane + 2 gcp-workload = 6; no AWS workspaces.
+  # 5 GCP control plane (incl. gcp-guardrails) + 2 gcp-workload = 7; no AWS
+  # workspaces.
   assert {
-    condition     = length(output.workspace_names) == 6 && !contains(output.workspace_names, "aws-organization")
+    condition     = length(output.workspace_names) == 7 && !contains(output.workspace_names, "aws-organization")
     error_message = "with enable_aws=false and no saas, only the GCP workspaces are declared."
   }
 }
@@ -743,10 +748,11 @@ run "team_access_least_privilege" {
     error_message = "workload-only projects keep platform write; viewer teams get read on every project."
   }
 
-  # 3 projects x (platform + viewer) + 2 control-plane projects x approvers = 8.
+  # 3 projects x (platform + viewer) + 2 control-plane projects x approvers +
+  # the security team on the guardrails project = 9.
   assert {
-    condition     = length(tfe_team_project_access.this) == 8
-    error_message = "3 x (platform + viewer) + 2 approvers = 8 project grants."
+    condition     = length(tfe_team_project_access.this) == 9
+    error_message = "3 x (platform + viewer) + 2 approvers + 1 security = 9 project grants."
   }
 
   # Workload workspaces sharing a project with the control plane get write
@@ -755,6 +761,84 @@ run "team_access_least_privilege" {
     condition     = toset(keys(tfe_team_access.platform_workload)) == toset(["gcp-workload-dev", "gcp-workload-prod", "aws-workload-dev", "aws-workload-prod"]) && alltrue([for g in values(tfe_team_access.platform_workload) : g.access == "write" && g.team_id == "team-platform1"])
     error_message = "only the gcp/aws workload workspaces get a workspace-level platform write grant."
   }
+}
+
+# gcp-guardrails (the org IAM deny policies) lives in its own project where
+# only the security team has access: no platform, approvers or viewer grant,
+# no speculative plans, no auto-apply, no UI destroy plans.
+run "guardrails_project_security_team_only" {
+  command = plan
+
+  variables {
+    platform_team_id                = "team-platform1"
+    control_plane_approvers_team_id = "team-approvers1"
+    viewer_team_ids                 = ["team-viewers1"]
+    security_team_id                = "team-security1"
+  }
+
+  assert {
+    condition     = contains(keys(tfe_project.this), "guardrails") && tfe_project.this["guardrails"].name == "landing-zone-guardrails" && module.workspace["gcp-guardrails"].working_directory == "envs/gcp/guardrails"
+    error_message = "gcp-guardrails must live in its own <prefix>guardrails project."
+  }
+
+  assert {
+    condition     = jsonencode([for k, g in tfe_team_project_access.this : g.team_id if startswith(k, "guardrails/")]) == jsonencode(["team-security1"])
+    error_message = "the security team must be the only team with access to the guardrails project."
+  }
+
+  assert {
+    condition     = tfe_team_project_access.this["guardrails/security"].access == "custom" && tfe_team_project_access.this["guardrails/security"].workspace_access[0].runs == "apply" && tfe_team_project_access.this["guardrails/security"].workspace_access[0].variables == "read" && tfe_team_project_access.this["guardrails/security"].project_access[0].teams == "none"
+    error_message = "the security team must be able to queue and confirm applies on gcp-guardrails (runs = apply), with variables read-only and no team management."
+  }
+
+  assert {
+    condition     = length([for k, g in tfe_team_project_access.this : k if g.team_id == "team-security1"]) == 1
+    error_message = "the security team gets no grant on the other projects through this root."
+  }
+
+  assert {
+    condition     = module.workspace["gcp-guardrails"].speculative_enabled == false && module.workspace["gcp-guardrails"].auto_apply == false && module.workspace["gcp-guardrails"].allow_destroy_plan == false
+    error_message = "gcp-guardrails must run without speculative plans, auto-apply or UI destroy plans."
+  }
+
+  assert {
+    condition     = contains(output.never_auto_apply_workspaces, "gcp-guardrails") && !contains(keys(tfe_team_access.platform_workload), "gcp-guardrails")
+    error_message = "gcp-guardrails must be excluded from any auto-apply and from workspace-level platform grants."
+  }
+
+  assert {
+    condition     = length(lookup(output.remote_state_consumers, "gcp-guardrails", [])) == 0 && !contains(flatten(values(output.remote_state_consumers)), "gcp-guardrails")
+    error_message = "gcp-guardrails reads no other state and shares none."
+  }
+}
+
+# Without a security team the guardrails project has no team grant at all
+# (organization owners only), and the plan warns.
+run "guardrails_project_without_security_team_warns" {
+  command = plan
+
+  variables {
+    platform_team_id = "team-platform1"
+    security_team_id = null
+  }
+
+  assert {
+    condition     = length([for k, g in tfe_team_project_access.this : k if startswith(k, "guardrails/")]) == 0
+    error_message = "without security_team_id no team may get access to the guardrails project."
+  }
+
+  expect_failures = [check.guardrails_project_has_security_team]
+}
+
+run "security_team_must_differ_from_platform" {
+  command = plan
+
+  variables {
+    platform_team_id = "team-same1"
+    security_team_id = "team-same1"
+  }
+
+  expect_failures = [terraform_data.input_contract]
 }
 
 run "platform_team_runs_override" {
@@ -794,7 +878,7 @@ run "split_workload_projects" {
   }
 
   assert {
-    condition     = toset(keys(tfe_project.this)) == toset(["gcp", "aws", "saas", "gcp-workloads", "aws-workloads"]) && tfe_project.this["gcp-workloads"].name == "landing-zone-gcp-workloads" && tfe_project.this["aws"].name == "landing-zone-aws"
+    condition     = toset(keys(tfe_project.this)) == toset(["gcp", "aws", "saas", "gcp-workloads", "aws-workloads", "guardrails"]) && tfe_project.this["gcp-workloads"].name == "landing-zone-gcp-workloads" && tfe_project.this["aws"].name == "landing-zone-aws"
     error_message = "split mode adds <prefix>gcp-workloads / <prefix>aws-workloads and keeps the control-plane project names."
   }
 

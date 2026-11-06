@@ -1,0 +1,9 @@
+# Fixture: a production estate that waives containment explicitly.
+org:
+  prefix: acme
+  domain: acme.io
+gcp:
+  admin_containment: false
+  environments:
+    prod:
+      is_production: true

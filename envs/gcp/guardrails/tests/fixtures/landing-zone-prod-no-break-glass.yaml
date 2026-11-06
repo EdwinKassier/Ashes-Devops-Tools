@@ -1,0 +1,8 @@
+# Fixture: a production estate without a break-glass group (must fail).
+org:
+  prefix: acme
+  domain: acme.io
+gcp:
+  environments:
+    prod:
+      is_production: true

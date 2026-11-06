@@ -228,36 +228,51 @@ still allowed.
 **Guardrail owner (who applies the deny policy).** `iam.denypolicies.*` can't
 be denied, so whoever holds `roles/iam.denyAdmin` can delete the containment
 policy. By default (`guardrail_owner_mode = "separate"`, gcp-bootstrap and
-gcp-organization) the organization apply SA **does not** hold it. A dedicated
-`<prefix>-guardrails-apply` SA is the only automation identity with
-`denyAdmin`; it has no WIF binding and is impersonable only by
-`guardrail_owner_members` (use one group whose membership is granted just in
-time through PAM, disjoint from the people who can change the gcp-organization
-workspace). gcp-organization no longer applies deny policies itself: it outputs
-`guardrail_deny_policy_specs`, a gcloud policy file per policy (containment plus
-`iam_deny_policies`). After each gcp-organization apply that changes them, the
-guardrail owner applies them:
+gcp-organization) the organization apply SA **does not** hold it. The
+containment policy and every `iam_deny_policies` entry are owned by the
+**`gcp-guardrails`** root (`envs/gcp/guardrails`). The approval for a change is
+a security-team apply of that workspace:
 
-```sh
-terraform output -json guardrail_deny_policy_specs \
-  | jq -r '.["contain-admin-identity"]' > contain-admin-identity.json
-gcloud iam policies create contain-admin-identity \
-  --attachment-point="cloudresourcemanager.googleapis.com/organizations/${ORG_ID}" \
-  --kind=denypolicies --policy-file=contain-admin-identity.json \
-  --impersonate-service-account="${PREFIX}-guardrails-apply@${ADMIN_PROJECT}.iam.gserviceaccount.com"
-# later changes: gcloud iam policies update ... --etag=<current etag>
-```
+- **Who.** tfc-admin puts `gcp-guardrails` in its own HCP project
+  (`<prefix>guardrails`). The security team (`security_team_id`) has write access
+  there and no other team has any: no platform, approvers or viewer grant.
+  Speculative plans, auto-apply and UI destroy plans are off.
+- **As what.** The workspace plans as `<prefix>-guardrails-plan` (read-only:
+  `iam.denyReviewer`, `tagViewer`) and applies as `<prefix>-guardrails-apply`,
+  the only automation identity with `denyAdmin`. gcp-bootstrap binds both to the
+  workspace by its immutable ID only, never by name. A production estate fails
+  the gcp-bootstrap plan until `tfc_workspace_ids` holds the `gcp-guardrails`
+  ID (tfc-admin writes it).
+- **From what.** The root authors the policies from `config/landing-zone.yaml`
+  (`gcp.environments[*].is_production`, `gcp.admin_containment`,
+  `gcp.break_glass_group`), the same keys gcp-organization reads to create and
+  bind the `containment/protected` tag. It never reads gcp-organization state;
+  it looks up the org and the tag directly.
+- **Order.** Apply gcp-organization first, since it creates the tag, then
+  queue a run on `gcp-guardrails` and have the security team confirm it.
+
+gcp-organization neither builds nor applies deny policies in this mode. Its
+`guardrail_deny_policy_specs` output is empty (deprecated, removed in v1.0),
+and a check warns if `iam_deny_policies` is still set there.
+
+**Emergencies (PAM).** `guardrail_owner_members` (one group whose membership is
+granted just in time through PAM, disjoint from the people who can change the
+gcp-organization workspace) can still impersonate the guardrails apply SA.
+That is the break-glass path, for when the workspace itself is unavailable. It
+applies the `deny_policy_specs` output of gcp-guardrails with gcloud
+([break-glass runbook](break-glass.md#guardrails-deny-policy-emergency-change)),
+and the next security-team apply reconciles the state.
 
 Residual: the organization apply SA still holds `iam.securityAdmin` (it manages
 org IAM), so it could grant itself `denyAdmin` or impersonation on the
 guardrails SA. IAM deny can't condition on the role being granted, so the
 CRITICAL `guardrail_role_grant` and `guardrail_identity_change` watches alert
-on both. `guardrail_owner_mode = "organization"` restores the legacy in-stage
-apply (and `denyAdmin` on the organization apply SA). Migrating an existing
-deployment to `separate`: re-apply gcp-bootstrap, then
-`terraform state rm 'module.organization.module.iam_deny.google_iam_deny_policy.this'`
-in gcp-organization before its next apply (the apply SA can no longer delete the
-policy, which is the point), and let the guardrail owner `update` it from then on.
+on both. tfc-admin can also repoint `gcp-guardrails` (working directory, VCS
+branch, team access), so separation of duties also rests on CODEOWNERS for
+`envs/tfc-admin/**` ([known gaps](../known-gaps.md)).
+`guardrail_owner_mode = "organization"` restores the legacy in-stage apply
+(and `denyAdmin` on the organization apply SA); do not apply `gcp-guardrails`
+then. Migrating an existing deployment: see [UPGRADING.md](../../UPGRADING.md).
 
 The preset ships the placeholder
 `principalSet://goog/group/break-glass@REPLACE-ME.invalid`. Variable validation

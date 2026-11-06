@@ -1,0 +1,14 @@
+# Fixture: a production estate. Containment derives ON from is_production and
+# the break-glass group comes from the config file.
+org:
+  prefix: acme
+  display_name: Acme
+  domain: acme.io
+gcp:
+  break_glass_group: gcp-break-glass@acme.io
+  environments:
+    dev:
+      display_name: Development
+    prod:
+      display_name: Production
+      is_production: true

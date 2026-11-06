@@ -126,3 +126,13 @@ output "guardrails_service_account" {
   description = "Guardrails SA email (sole automation holder of roles/iam.denyAdmin), or null in organization mode."
   value       = module.bootstrap.guardrails_service_account
 }
+
+output "guardrails_plan_service_account" {
+  description = "Read-only plan SA of the gcp-guardrails workspace, or null in organization mode."
+  value       = module.bootstrap.guardrails_plan_service_account
+}
+
+output "guardrails_workspace_bound_by_id" {
+  description = "Whether the gcp-guardrails workspace is WIF-bound by its immutable ID (it is never bound by name; add its ID to tfc_workspace_ids)."
+  value       = module.bootstrap.guardrails_workspace_bound_by_id
+}
