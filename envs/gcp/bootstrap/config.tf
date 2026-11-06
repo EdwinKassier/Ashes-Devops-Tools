@@ -33,6 +33,7 @@ locals {
     phase0_admin_impersonation_expires_at = try(tostring(local.lz.gcp.phase0_admin_impersonation_expires_at), null)
     hub_vpc_cidr_block                    = try(tostring(local.lz.gcp.network.hub_cidr_block), null)
     dns_hub_vpc_cidr_block                = try(tostring(local.lz.gcp.network.dns_hub_cidr_block), null)
+    principal_access_boundary             = try(tobool(local.lz.gcp.principal_access_boundary), null)
     # Normalised to the attribute types of var.environments (region defaults to
     # org.regions.gcp, display_name to the key). A malformed entry is caught by
     # the var.environments validations, which also read local.cfg.
@@ -52,7 +53,9 @@ locals {
   # Effective values. Required ones fall back to an inert sentinel only so
   # static tools (tflint) can evaluate the root; the variable validations reject
   # the unset case first.
-  project_prefix                        = coalesce(var.project_prefix, local.cfg.project_prefix, "unset")
+  project_prefix = coalesce(var.project_prefix, local.cfg.project_prefix, "unset")
+  # gcp.principal_access_boundary is shared with gcp-organization and gcp-guardrails.
+  enable_principal_access_boundary      = coalesce(var.enable_principal_access_boundary, local.cfg.principal_access_boundary, false)
   domain                                = coalesce(var.domain, local.cfg.domain, "unset.invalid")
   billing_account                       = try(coalesce(var.billing_account, local.cfg.billing_account), null)
   admin_email                           = coalesce(var.admin_email, local.cfg.admin_email, "unset@unset.invalid")

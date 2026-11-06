@@ -7,7 +7,7 @@
 #
 # gcp-guardrails authors the deny policies from this file alone (org.domain,
 # gcp.environments[*].is_production, gcp.admin_containment,
-# gcp.break_glass_group), the same keys gcp-organization reads to create and
+# gcp.break_glass_group, gcp.principal_access_boundary), the same keys gcp-organization reads to create and
 # bind the containment tag, so the two roots agree without reading each other.
 locals {
   # "" disables the lookup; a relative path is resolved against this root.
@@ -29,6 +29,8 @@ locals {
     domain            = try(tostring(local.lz.org.domain), null)
     break_glass_group = try(tostring(local.lz.gcp.break_glass_group), null)
     admin_containment = try(tobool(local.lz.gcp.admin_containment), null)
+    # Shared with gcp-bootstrap and gcp-organization.
+    principal_access_boundary = try(tobool(local.lz.gcp.principal_access_boundary), null)
     # Only is_production matters here (normalised like the other GCP roots).
     environments = {
       for k, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : k => {
@@ -43,6 +45,10 @@ locals {
   domain         = coalesce(var.domain, local.cfg.domain, "unset.invalid")
   project_prefix = coalesce(var.project_prefix, local.cfg.project_prefix, "unset")
   environments   = var.environments != null ? var.environments : local.cfg.environments
+
+  # Same key and precedence as gcp-organization, so the boundary it binds is
+  # always covered by the containment deny rules here.
+  enable_principal_access_boundary = coalesce(var.enable_principal_access_boundary, local.cfg.principal_access_boundary, false)
 
   # Admin containment follows the estate exactly as in gcp-organization: on
   # whenever a production environment exists, unless explicitly set

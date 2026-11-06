@@ -104,6 +104,6 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
-| <a name="output_tag_keys"></a> [tag\_keys](#output\_tag\_keys) | Map of Tag Key Short Names to their Resource Names (IDs) |
-| <a name="output_tag_values"></a> [tag\_values](#output\_tag\_values) | Map of Tag Value Short Names to their Resource Names (IDs) |
+| <a name="output_tag_keys"></a> [tag\_keys](#output\_tag\_keys) | Map of tag key short name to its namespaced ID (tagKeys/<n>), the form tag-value parents, tag bindings and IAM deny matchTagId take. |
+| <a name="output_tag_values"></a> [tag\_values](#output\_tag\_values) | Map of "<key>-<value>" to the tag value's namespaced ID (tagValues/<n>), the form tag bindings and IAM deny matchTagId take. |
 <!-- END_TF_DOCS -->

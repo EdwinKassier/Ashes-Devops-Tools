@@ -22,7 +22,14 @@ resource "google_tags_tag_value" "values" {
     ]) : "${pair.key}-${pair.value}" => pair
   }
 
-  parent      = google_tags_tag_key.keys[each.value.key].name
+  # .name is the bare numeric ID; the API wants tagKeys/<n>. parent is
+  # immutable and fixed by the for_each key, so a state written with the bare
+  # form is not replaced over the notation alone.
+  parent      = "tagKeys/${trimprefix(google_tags_tag_key.keys[each.value.key].name, "tagKeys/")}"
   short_name  = each.value.value
   description = each.value.description
+
+  lifecycle {
+    ignore_changes = [parent]
+  }
 }

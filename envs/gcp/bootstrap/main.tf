@@ -52,7 +52,7 @@ module "bootstrap" {
   guardrail_owner_members = var.guardrail_owner_members
 
   # Principal access boundary for the automation SAs (gcp-organization).
-  enable_principal_access_boundary = var.enable_principal_access_boundary
+  enable_principal_access_boundary = local.enable_principal_access_boundary
 
   # GitHub WIF — off by default (unused); see variables.tf.
   enable_github_wif          = var.enable_github_wif

@@ -153,7 +153,7 @@ module "organization" {
   logging_settings_kms_key_name        = var.logging_settings_kms_key_name
 
   # Principal access boundary for the automation SAs, opt-in.
-  enable_principal_access_boundary            = var.enable_principal_access_boundary
+  enable_principal_access_boundary            = local.enable_principal_access_boundary
   principal_access_boundary_allowed_resources = var.principal_access_boundary_allowed_resources
 }
 

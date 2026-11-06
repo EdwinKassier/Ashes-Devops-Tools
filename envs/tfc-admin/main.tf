@@ -613,7 +613,7 @@ resource "tfe_team_access" "platform_workload" {
 
 # ── Shared variable set ─────────────────────────────────────────────────────
 # Org-wide values live once in a variable set attached to every managed
-# workspace, instead of being copied onto each one. Workspace variables still
+# workspace except gcp-guardrails, instead of being copied onto each one. Workspace variables still
 # override set values (priority = false).
 resource "tfe_variable_set" "common" {
   organization = local.tfc_organization
@@ -671,8 +671,12 @@ module "workspace" {
   # workspace can list its sibling workspaces as consumers without a cycle.
   manage_settings = false
 
-  variables        = local.workspace_vars[each.key]
-  variable_set_ids = { common = tfe_variable_set.common.id }
+  variables = local.workspace_vars[each.key]
+  # gcp-guardrails gets no shared variable set: the platform-controlled common
+  # set could otherwise inject inputs (e.g. containment_exempt_principals) into
+  # the security team's workspace. The root needs none of its values
+  # (tfc_organization is unused there: it reads no remote state).
+  variable_set_ids = contains(local.guardrails_workspaces, each.key) ? {} : { common = tfe_variable_set.common.id }
 
   # Control-plane and bootstrap workspaces alert on failed runs;
   # workload workspaces use the separate workload channel (both default empty).

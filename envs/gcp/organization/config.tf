@@ -33,6 +33,7 @@ locals {
     break_glass_group         = try(tostring(local.lz.gcp.break_glass_group), null)
     alert_emails              = try([for e in local.lz.gcp.alert_emails : tostring(e)], null)
     admin_containment         = try(tobool(local.lz.gcp.admin_containment), null)
+    principal_access_boundary = try(tobool(local.lz.gcp.principal_access_boundary), null)
     enable_audit_bucket_lock  = try(tobool(local.lz.gcp.enable_audit_bucket_lock), null)
     hub_vpc_cidr_block        = try(tostring(local.lz.gcp.network.hub_cidr_block), null)
     dns_hub_vpc_cidr_block    = try(tostring(local.lz.gcp.network.dns_hub_cidr_block), null)
@@ -87,7 +88,10 @@ locals {
   # exists, unless explicitly set (variable > gcp.admin_containment > derived).
   production_environment_keys = sort([for k, e in coalesce(local.environments, {}) : k if e.is_production])
   enable_audit_bucket_lock    = coalesce(var.enable_audit_bucket_lock, local.cfg.enable_audit_bucket_lock, false)
-  enable_admin_containment    = coalesce(var.enable_admin_containment, local.cfg.admin_containment, length(local.production_environment_keys) > 0)
+  # gcp.principal_access_boundary is shared with gcp-bootstrap and gcp-guardrails,
+  # so the boundary and its containment deny rules cannot drift apart.
+  enable_principal_access_boundary = coalesce(var.enable_principal_access_boundary, local.cfg.principal_access_boundary, false)
+  enable_admin_containment         = coalesce(var.enable_admin_containment, local.cfg.admin_containment, length(local.production_environment_keys) > 0)
   containment_exempt_principals = length(var.containment_exempt_principals) > 0 ? var.containment_exempt_principals : (
     local.cfg.break_glass_group != null ? ["principalSet://goog/group/${local.cfg.break_glass_group}"] : []
   )

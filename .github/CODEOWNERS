@@ -66,6 +66,9 @@ CHANGELOG.md   @your-org/platform-team
 # identity plane needs a second, security-team approval.
 /envs/gcp/bootstrap/      @your-org/platform-team @your-org/security-team
 /envs/gcp/organization/   @your-org/platform-team @your-org/security-team
+# gcp-guardrails: the org IAM deny policies, including the committed
+# guardrails.auto.tfvars that holds iam_deny_policies.
+/envs/gcp/guardrails/     @your-org/platform-team @your-org/security-team
 /envs/aws/organization/   @your-org/platform-team @your-org/security-team
 /envs/aws/security/       @your-org/platform-team @your-org/security-team
 /envs/aws/identity/       @your-org/platform-team @your-org/security-team
@@ -77,6 +80,7 @@ CHANGELOG.md   @your-org/platform-team
 # security baseline. Listed after the general /modules/ lines so they win.
 /modules/gcp/governance/  @your-org/platform-team @your-org/security-team
 /modules/gcp/iam/         @your-org/platform-team @your-org/security-team
+/modules/gcp/stages/guardrails/  @your-org/platform-team @your-org/security-team
 /modules/aws/governance/  @your-org/platform-team @your-org/security-team
 /modules/aws/iam/         @your-org/platform-team @your-org/security-team
 /modules/aws/security/    @your-org/platform-team @your-org/security-team

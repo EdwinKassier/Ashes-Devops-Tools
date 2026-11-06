@@ -16,10 +16,16 @@ step that `guardrail_owner_mode = "separate"` used to need.
   (`<prefix>guardrails`). The security team (`security_team_id`) has write
   access there and no other team has any. Speculative plans and auto-apply are
   off.
-- **Inputs**: the policies are authored from `config/landing-zone.yaml`
+- **Inputs**: containment is authored from `config/landing-zone.yaml`
   (`org.domain`, `gcp.environments[*].is_production`, `gcp.admin_containment`,
-  `gcp.break_glass_group`). The root never reads gcp-organization outputs; it
-  looks up the org and the `containment/protected` tag directly.
+  `gcp.break_glass_group`, `gcp.principal_access_boundary`). Extra deny
+  policies (`iam_deny_policies`) live in a committed
+  `envs/gcp/guardrails/guardrails.auto.tfvars`, which CODEOWNERS assigns to
+  the platform and security teams (and `.gitignore` exempts). Do not set them
+  as workspace variables: the security team's grant is variables read-only,
+  and tfc-admin attaches no shared variable set here, so platform-controlled
+  values cannot reach this workspace. The root never reads gcp-organization
+  outputs; it looks up the org and the `containment/protected` tag directly.
 
 ## Order
 
@@ -88,7 +94,7 @@ The following resources are created:
 | <a name="input_containment_exempt_principals"></a> [containment\_exempt\_principals](#input\_containment\_exempt\_principals) | Break-glass principals exempt from the admin-containment deny policy, as IAM v2 principal identifiers (e.g. principalSet://goog/group/break-glass@acme.com). Empty (default) = principalSet://goog/group/<gcp.break\_glass\_group> from config. Placeholder values (REPLACE-ME, your-domain, example.com, .invalid) are rejected. | `list(string)` | `[]` | no |
 | <a name="input_domain"></a> [domain](#input\_domain) | The domain name of the organization (e.g. acme.com); the org node the deny policies attach to is resolved from it. Null = org.domain from config/landing-zone.yaml. | `string` | `null` | no |
 | <a name="input_enable_admin_containment"></a> [enable\_admin\_containment](#input\_enable\_admin\_containment) | Create the admin-containment deny policy. Org-wide, it blocks sink update/delete, exclusion changes, log-bucket delete and VPC-SC perimeter mutation. Scoped by the containment/protected tag to the audit store, it blocks bucket delete/IAM change/untag, object delete, key-version destroy/disable and key IAM change. containment\_exempt\_principals (break-glass) are exempt. Null (default) = gcp.admin\_containment from config, else ON whenever an environment is\_production, as in gcp-organization (which creates and binds the tag). Needs a break-glass principal. | `bool` | `null` | no |
-| <a name="input_enable_principal_access_boundary"></a> [enable\_principal\_access\_boundary](#input\_enable\_principal\_access\_boundary) | Also deny update, delete and unbind of the automation principal access boundary to all but break-glass. Set it to match the gcp-organization enable\_principal\_access\_boundary input. Default false. | `bool` | `false` | no |
+| <a name="input_enable_principal_access_boundary"></a> [enable\_principal\_access\_boundary](#input\_enable\_principal\_access\_boundary) | Also deny update, delete and unbind of the automation principal access boundary to all but break-glass. Null (default) = gcp.principal\_access\_boundary from config/landing-zone.yaml, the key gcp-organization reads for the boundary itself, else false. Set the config key rather than this variable so the two cannot drift. | `bool` | `null` | no |
 | <a name="input_environments"></a> [environments](#input\_environments) | Environment keys with is\_production (default false). A production environment turns admin containment on. Null = gcp.environments from config/landing-zone.yaml (the single source shared by every GCP root and tfc-admin); other attributes are ignored here. | <pre>map(object({<br/>    is_production = optional(bool, false)<br/>  }))</pre> | `null` | no |
 | <a name="input_iam_deny_policies"></a> [iam\_deny\_policies](#input\_iam\_deny\_policies) | Extra IAM deny policies at the org node, applied next to the containment policy: a coarse, allow-independent backstop blocking specific permissions for specific principals regardless of roles (deny before allow). Default [] = none. | <pre>list(object({<br/>    name         = string<br/>    display_name = optional(string)<br/>    rules = list(object({<br/>      description           = optional(string)<br/>      denied_principals     = list(string)<br/>      denied_permissions    = list(string)<br/>      exception_principals  = optional(list(string), [])<br/>      exception_permissions = optional(list(string), [])<br/>      denial_condition = optional(object({<br/>        expression  = string<br/>        title       = optional(string)<br/>        description = optional(string)<br/>      }))<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_landing_zone_config_path"></a> [landing\_zone\_config\_path](#input\_landing\_zone\_config\_path) | Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../../config/landing-zone.yaml; "" disables the lookup. Read only if the file exists; explicit variables win over its values. | `string` | `null` | no |

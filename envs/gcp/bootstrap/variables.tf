@@ -184,9 +184,9 @@ variable "guardrail_owner_members" {
 }
 
 variable "enable_principal_access_boundary" {
-  description = "Grant the organization stage SAs the rights the gcp-organization principal access boundary policy needs (gcp-organization enable_principal_access_boundary). Default false."
+  description = "Grant the organization stage SAs the rights the gcp-organization principal access boundary policy needs. Null (default) = gcp.principal_access_boundary from config/landing-zone.yaml (shared with gcp-organization and gcp-guardrails), else false."
   type        = bool
-  default     = false
+  default     = null
 }
 
 variable "environments" {

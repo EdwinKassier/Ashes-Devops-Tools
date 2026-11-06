@@ -806,6 +806,13 @@ run "guardrails_project_security_team_only" {
     error_message = "gcp-guardrails must be excluded from any auto-apply and from workspace-level platform grants."
   }
 
+  # The platform-controlled common variable set must not reach the security
+  # team's workspace (it could inject containment_exempt_principals).
+  assert {
+    condition     = length(module.workspace["gcp-guardrails"].variable_set_labels) == 0 && module.workspace["gcp-organization"].variable_set_labels == tolist(["common"])
+    error_message = "gcp-guardrails must not have the common variable set attached."
+  }
+
   assert {
     condition     = length(lookup(output.remote_state_consumers, "gcp-guardrails", [])) == 0 && !contains(flatten(values(output.remote_state_consumers)), "gcp-guardrails")
     error_message = "gcp-guardrails reads no other state and shares none."

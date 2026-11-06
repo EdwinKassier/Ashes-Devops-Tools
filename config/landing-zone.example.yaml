@@ -108,6 +108,11 @@ gcp:
   # Optional explicit override of the derived containment default
   # (gcp-organization tags the audit store, gcp-guardrails applies the policy).
   # admin_containment: true
+  # Principal access boundary on the automation SAs (default false). One key for
+  # the three roots that must agree: gcp-bootstrap grants the roles,
+  # gcp-organization binds the boundary, gcp-guardrails denies its
+  # update/delete/unbind to all but break-glass. Validate on a non-prod org first.
+  # principal_access_boundary: false
   # RFC 3339 UTC end of the phase-0 window in which admin_email may impersonate
   # terraform-admin (gcp-bootstrap). Required, or the plan fails, while the grant
   # is enabled and any environment is_production. The scaffolder writes now + 7

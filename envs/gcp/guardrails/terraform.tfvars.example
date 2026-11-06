@@ -9,10 +9,13 @@
 # Break-glass principals exempt from the containment deny policy.
 # containment_exempt_principals = ["principalSet://goog/group/gcp-break-glass@acme.com"]
 
-# Keep in step with gcp-organization enable_principal_access_boundary.
+# Prefer gcp.principal_access_boundary in config/landing-zone.yaml, which
+# gcp-organization reads for the boundary itself.
 # enable_principal_access_boundary = false
 
-# Extra org-node deny policies (applied next to the containment policy).
+# Extra org-node deny policies (applied next to the containment policy). Author
+# them in the committed envs/gcp/guardrails/guardrails.auto.tfvars (CODEOWNERS:
+# platform + security), not as workspace variables.
 # iam_deny_policies = [
 #   {
 #     name = "deny-sa-key-creation"

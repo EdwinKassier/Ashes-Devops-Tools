@@ -447,3 +447,51 @@ run "production_containment_explicit_opt_out" {
     error_message = "an explicit enable_admin_containment = false must win over the production default."
   }
 }
+
+# gcp.principal_access_boundary is shared with gcp-bootstrap and gcp-guardrails:
+# the boundary is bound here and (legacy organization mode) the containment
+# policy denies its update/delete/unbind.
+run "principal_access_boundary_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path  = "tests/fixtures/landing-zone-prod-pab.yaml"
+    domain                    = null
+    project_prefix            = null
+    admin_email               = null
+    billing_account           = null
+    tfc_organization          = null
+    alert_notification_emails = []
+    organization_admin_groups = null
+    billing_admin_groups      = null
+    environments              = null
+  }
+
+  assert {
+    condition     = local.enable_principal_access_boundary && contains(flatten([for r in module.organization.admin_containment_rules : r.denied_permissions]), "iam.googleapis.com/principalaccessboundarypolicies.unbind")
+    error_message = "gcp.principal_access_boundary: true must turn the boundary (and its containment deny rules) on."
+  }
+}
+
+run "principal_access_boundary_variable_wins_over_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path         = "tests/fixtures/landing-zone-prod-pab.yaml"
+    domain                           = null
+    project_prefix                   = null
+    admin_email                      = null
+    billing_account                  = null
+    tfc_organization                 = null
+    alert_notification_emails        = []
+    organization_admin_groups        = null
+    billing_admin_groups             = null
+    environments                     = null
+    enable_principal_access_boundary = false
+  }
+
+  assert {
+    condition     = !local.enable_principal_access_boundary && output.principal_access_boundary_policy == null
+    error_message = "an explicit enable_principal_access_boundary = false must override the config key."
+  }
+}

@@ -50,14 +50,47 @@ applied by hand from `guardrail_deny_policy_specs`):
 1. Create a `security` team in HCP Terraform (owners) and set
    `security_team_id`. Apply `tfc-admin`.
 2. Apply `gcp-bootstrap` (it picks up the `gcp-guardrails` ID).
-3. Move any `iam_deny_policies` from the gcp-organization variables to the
-   gcp-guardrails variables.
+3. Move any `iam_deny_policies` from the gcp-organization variables to a
+   committed `envs/gcp/guardrails/guardrails.auto.tfvars` (CODEOWNERS: platform +
+   security; `.gitignore` exempts it). Do not set them as `gcp-guardrails`
+   workspace variables: the security team's grant is variables read-only, and
+   the workspace gets no shared variable set.
+   - If gcp-organization runs with `enable_principal_access_boundary = true`,
+     set `gcp.principal_access_boundary: true` in `config/landing-zone.yaml`
+     instead (gcp-bootstrap, gcp-organization and gcp-guardrails all read it;
+     variable > config > false). Otherwise gcp-guardrails plans the containment
+     policy WITHOUT the boundary update/delete/unbind rules and drops them on
+     its first apply. Then remove the per-root variable.
+   - If gcp-bootstrap sets `tfc_project_ids` (the WIF provider's TFC project
+     allow-list), add the new guardrails HCP project's `prj-...` ID (tfc-admin
+     output `project_ids["guardrails"]`) and re-apply gcp-bootstrap, or the
+     gcp-guardrails token is rejected by the provider condition.
 4. In `gcp-guardrails`, adopt each existing policy instead of creating it. The
    create would fail with 409. Run the import as the security team with an
    `import` block in a reviewed PR, or once from the workspace:
    `terraform import 'module.guardrails.module.iam_deny.google_iam_deny_policy.this["contain-admin-identity"]' 'cloudresourcemanager.googleapis.com%2Forganizations%2F<ORG_ID>/contain-admin-identity'`.
 5. Queue a run on `gcp-guardrails`; the security team confirms it. Expect an
    in-place update of the tag condition (namespaced IDs, see above).
+
+**Tag IDs are namespaced (all estates).** `google_tags_tag_key` /
+`google_tags_tag_value` `.name` is the bare numeric ID, but tag-value
+parents, tag bindings and `matchTagId` take `tagKeys/<n>` / `tagValues/<n>`.
+`modules/gcp/governance/tags` now outputs the namespaced form (and builds the
+tag-value parent from it). Consumers that took the bare form were wrong:
+gcp-projects' `tag_bindings` validation (`^tagValues/[0-9]+$`) rejected it,
+and the containment bindings and deny condition passed bare numbers. Expect on
+the next gcp-organization plan:
+- `google_tags_tag_value.values`: no change. `parent` is ignored after create
+  because it is immutable and fixed by the key.
+- `google_tags_tag_binding.environment` and
+  `google_tags_location_tag_binding.containment_*`: if your state holds a bare
+  `tag_value`, they are **replaced** (`tag_value` is immutable). Each binding is
+  briefly absent; with containment on, apply outside change windows that touch
+  the audit store.
+- `contain-admin-identity` (organization mode): the condition updates in place.
+- The `tag_keys` / `tag_values` outputs of gcp-organization change form. A
+  `gcp.contracts.organization.tag_values` override in config must use
+  `tagValues/<n>`, as the validation already required.
 
 **Migrating from `guardrail_owner_mode = "organization"` to `"separate"`:**
 switch gcp-bootstrap first. Then run

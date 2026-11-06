@@ -174,3 +174,55 @@ run "rejects_unset_domain" {
 
   expect_failures = [var.domain]
 }
+
+# The boundary is bound by gcp-organization from the same config key; the
+# containment policy here must deny its update/delete/unbind, or a migration
+# from gcp-organization would silently drop those rules.
+run "principal_access_boundary_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-prod-pab.yaml"
+    domain                   = null
+    project_prefix           = null
+  }
+
+  assert {
+    condition = alltrue([
+      for p in ["update", "delete", "unbind"] :
+      contains(module.guardrails.admin_containment_rules[0].denied_permissions, "iam.googleapis.com/principalaccessboundarypolicies.${p}")
+    ])
+    error_message = "gcp.principal_access_boundary: true must add the boundary deny rules."
+  }
+}
+
+run "principal_access_boundary_off_by_default" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-prod.yaml"
+    domain                   = null
+    project_prefix           = null
+  }
+
+  assert {
+    condition     = !contains(module.guardrails.admin_containment_rules[0].denied_permissions, "iam.googleapis.com/principalaccessboundarypolicies.unbind")
+    error_message = "without the config key (or variable) the boundary rules stay off."
+  }
+}
+
+run "principal_access_boundary_variable_wins_over_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path         = "tests/fixtures/landing-zone-prod-pab.yaml"
+    domain                           = null
+    project_prefix                   = null
+    enable_principal_access_boundary = false
+  }
+
+  assert {
+    condition     = !contains(module.guardrails.admin_containment_rules[0].denied_permissions, "iam.googleapis.com/principalaccessboundarypolicies.unbind")
+    error_message = "an explicit enable_principal_access_boundary = false must override the config key."
+  }
+}

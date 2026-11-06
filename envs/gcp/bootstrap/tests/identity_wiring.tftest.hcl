@@ -141,3 +141,18 @@ run "rejects_placeholder_guardrail_owner" {
 
   expect_failures = [var.guardrail_owner_members]
 }
+
+# gcp.principal_access_boundary is shared with gcp-organization (which binds the
+# boundary) and gcp-guardrails (which denies its update/delete/unbind).
+run "principal_access_boundary_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-pab.yaml"
+  }
+
+  assert {
+    condition     = local.enable_principal_access_boundary && contains(module.bootstrap.org_role_grants["organization-plan"], "roles/iam.principalAccessBoundaryViewer")
+    error_message = "gcp.principal_access_boundary: true must grant the organization SAs the boundary roles."
+  }
+}

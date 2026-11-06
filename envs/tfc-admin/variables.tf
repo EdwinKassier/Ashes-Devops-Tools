@@ -468,7 +468,7 @@ variable "vcs_repo" {
 }
 
 variable "common_workspace_variables" {
-  description = "Org-wide variables placed in the shared <prefix>common variable set (alongside tfc_organization) attached to EVERY managed workspace. Keyed by name: {value, category (terraform|env), hcl?, sensitive?, description?, version?}. Sensitive values are written write-only (never stored in state); increment `version` to rotate. Per-workspace credentials belong in the dynamic-credential maps, not here."
+  description = "Org-wide variables placed in the shared <prefix>common variable set (alongside tfc_organization) attached to every managed workspace except gcp-guardrails (the security team's workspace takes no platform-controlled inputs). Keyed by name: {value, category (terraform|env), hcl?, sensitive?, description?, version?}. Sensitive values are written write-only (never stored in state); increment `version` to rotate. Per-workspace credentials belong in the dynamic-credential maps, not here."
   type = map(object({
     value       = string
     category    = string

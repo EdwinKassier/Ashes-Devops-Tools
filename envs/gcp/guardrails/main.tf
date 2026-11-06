@@ -20,6 +20,6 @@ module "guardrails" {
   containment_exempt_principals    = local.containment_exempt_principals
   containment_tag_key_id           = try(data.google_tags_tag_key.containment[0].name, null)
   containment_tag_value_id         = try(data.google_tags_tag_value.containment_protected[0].name, null)
-  enable_principal_access_boundary = var.enable_principal_access_boundary
+  enable_principal_access_boundary = local.enable_principal_access_boundary
   iam_deny_policies                = var.iam_deny_policies
 }

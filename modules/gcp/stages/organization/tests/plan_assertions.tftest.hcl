@@ -917,3 +917,33 @@ run "wif_tenant_pin_is_enforced" {
     error_message = "custom.wifProviderTenantPinned must be enforced by default."
   }
 }
+
+# The tags module exposes namespaced IDs (tagKeys/<n>, tagValues/<n>); the
+# containment bindings and the legacy in-stage deny condition use them as is.
+run "containment_uses_namespaced_tag_ids" {
+  command = plan
+
+  variables {
+    guardrail_owner_mode          = "organization"
+    enable_admin_containment      = true
+    containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
+  }
+
+  override_module {
+    target = module.tags
+    outputs = {
+      tag_keys   = { "environment" = "tagKeys/111", "containment" = "tagKeys/444" }
+      tag_values = { "environment-dev" = "tagValues/999", "containment-protected" = "tagValues/555" }
+    }
+  }
+
+  assert {
+    condition     = alltrue([for b in google_tags_location_tag_binding.containment_buckets : b.tag_value == "tagValues/555"]) && google_tags_location_tag_binding.containment_audit_keyring[0].tag_value == "tagValues/555"
+    error_message = "containment tag bindings must reference tagValues/<n>."
+  }
+
+  assert {
+    condition     = module.guardrails[0].deny_policies[0].rules[1].denial_condition.expression == "resource.matchTagId('tagKeys/444', 'tagValues/555')"
+    error_message = "the audit-store deny condition must match the namespaced tag IDs."
+  }
+}

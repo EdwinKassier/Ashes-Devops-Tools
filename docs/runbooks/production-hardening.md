@@ -243,11 +243,18 @@ a security-team apply of that workspace:
   workspace by its immutable ID only, never by name. A production estate fails
   the gcp-bootstrap plan until `tfc_workspace_ids` holds the `gcp-guardrails`
   ID (tfc-admin writes it).
-- **From what.** The root authors the policies from `config/landing-zone.yaml`
+- **From what.** The root authors containment from `config/landing-zone.yaml`
   (`gcp.environments[*].is_production`, `gcp.admin_containment`,
-  `gcp.break_glass_group`), the same keys gcp-organization reads to create and
-  bind the `containment/protected` tag. It never reads gcp-organization state;
-  it looks up the org and the tag directly.
+  `gcp.break_glass_group`, `gcp.principal_access_boundary`). These are the same
+  keys gcp-organization reads to create and bind the `containment/protected`
+  tag and the principal access boundary. Extra deny policies
+  (`iam_deny_policies`) are authored in the committed
+  `envs/gcp/guardrails/guardrails.auto.tfvars`, which CODEOWNERS assigns to the
+  platform and security teams, so a change is a PR the security team approves
+  and then applies. They are never workspace variables: the security team's
+  grant has variables read-only, and tfc-admin attaches no shared variable set
+  to `gcp-guardrails`. The root never reads gcp-organization state; it looks
+  up the org and the tag directly.
 - **Order.** Apply gcp-organization first, since it creates the tag, then
   queue a run on `gcp-guardrails` and have the security team confirm it.
 

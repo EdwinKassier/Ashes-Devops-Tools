@@ -462,9 +462,9 @@ variable "logging_settings_kms_key_name" {
 }
 
 variable "enable_principal_access_boundary" {
-  description = "Principal access boundary on every SA in the admin project (this org's resources only). Needs gcp-bootstrap enable_principal_access_boundary. Default false."
+  description = "Principal access boundary on every SA in the admin project (this org's resources only). Needs gcp-bootstrap enable_principal_access_boundary. Null (default) = gcp.principal_access_boundary from config/landing-zone.yaml (shared with gcp-bootstrap and gcp-guardrails), else false."
   type        = bool
-  default     = false
+  default     = null
 }
 
 variable "principal_access_boundary_allowed_resources" {

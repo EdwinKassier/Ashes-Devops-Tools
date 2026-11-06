@@ -52,9 +52,9 @@ variable "containment_exempt_principals" {
 }
 
 variable "enable_principal_access_boundary" {
-  description = "Also deny update, delete and unbind of the automation principal access boundary to all but break-glass. Set it to match the gcp-organization enable_principal_access_boundary input. Default false."
+  description = "Also deny update, delete and unbind of the automation principal access boundary to all but break-glass. Null (default) = gcp.principal_access_boundary from config/landing-zone.yaml, the key gcp-organization reads for the boundary itself, else false. Set the config key rather than this variable so the two cannot drift."
   type        = bool
-  default     = false
+  default     = null
 }
 
 variable "iam_deny_policies" {

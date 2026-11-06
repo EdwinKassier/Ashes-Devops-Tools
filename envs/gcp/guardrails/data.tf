@@ -19,6 +19,7 @@ data "google_tags_tag_key" "containment" {
 data "google_tags_tag_value" "containment_protected" {
   count = local.containment_on ? 1 : 0
 
-  parent     = data.google_tags_tag_key.containment[0].id
+  # .name is the bare numeric ID; the parent must be tagKeys/<n>.
+  parent     = "tagKeys/${trimprefix(data.google_tags_tag_key.containment[0].name, "tagKeys/")}"
   short_name = "protected"
 }
