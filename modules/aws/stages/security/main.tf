@@ -220,9 +220,12 @@ module "cloudtrail" {
   cloudwatch_logs_role_arn       = var.cloudtrail_cloudwatch_role_arn
   cloudwatch_logs_retention_days = var.cloudwatch_logs_retention_days
   cloudwatch_logs_kms_key_arn    = var.cloudwatch_logs_kms_key_arn
-  alarm_sns_topic_arn            = var.cloudtrail_alarm_sns_topic_arn
-  alarm_subscriptions            = coalesce(var.cloudtrail_alarm_subscribers, var.notification_subscribers)
-  cis_alarms_excluded            = var.cloudtrail_cis_alarms_excluded
+  # The management-account aws-security apply role manages the CMK by key
+  # policy (its own IAM policy grants no tag-based kms:*).
+  cloudwatch_logs_kms_key_manager_arns = coalesce(var.cloudwatch_logs_kms_key_manager_arns, ["arn:${var.partition}:iam::${var.management_account_id}:role/${var.management_role_name_prefix}aws-security-apply"])
+  alarm_sns_topic_arn                  = var.cloudtrail_alarm_sns_topic_arn
+  alarm_subscriptions                  = coalesce(var.cloudtrail_alarm_subscribers, var.notification_subscribers)
+  cis_alarms_excluded                  = var.cloudtrail_cis_alarms_excluded
 
   depends_on = [module.log_archive_bucket]
 }

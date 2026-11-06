@@ -165,7 +165,7 @@ run "security_wiring_scoped_to_trail_resources" {
   assert {
     condition = (
       !anytrue([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s.Effect == "Allow" && contains(flatten([s.Resource]), "*") && anytrue([for a in flatten([s.Action]) : contains(["kms:*", "logs:*", "sns:*", "cloudtrail:*"], a)]) && !can(s.Condition)]) &&
-      one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "OwnedKeysOnly"]).Condition.StringEquals["aws:ResourceTag/Workspace"] == "aws-security" &&
+      one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "CreateOwnedKeysOnly"]).Condition.StringEquals["aws:RequestTag/Workspace"] == "aws-security" &&
       one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "DelegateOnlyToSecurityAccounts"]).Resource == ["arn:aws:organizations::111111111111:account/o-*/222222222222"] &&
       !contains(one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "SecurityServicesDelegationOnly"]).Condition.StringEquals["organizations:ServicePrincipal"], "account.amazonaws.com")
     )
@@ -186,5 +186,36 @@ run "security_role_cannot_quietly_defeat_audit" {
       one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "DelegateOnlyToSecurityAccounts"]).Resource == ["arn:aws:organizations::111111111111:account/o-*/none"]
     )
     error_message = "UpdateTrail / PutKeyPolicy / CreateGrant / DisableKeyRotation must be denied, alarms scoped to the trail, create-time tagging allowed, and delegation fail closed."
+  }
+}
+
+run "no_tag_based_kms_access" {
+  command = plan
+
+  variables {
+    tags = { Team = "platform" }
+  }
+
+  assert {
+    condition     = !anytrue([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s.Sid == "OwnedKeysOnly"])
+    error_message = "No statement may grant kms:* on keys by resource tag; tags must grant nothing."
+  }
+
+  assert {
+    condition = !anytrue([
+      for s in jsondecode(output.apply_policies["aws-security"]).Statement :
+      s.Effect == "Allow" && try(contains(flatten([s.Action]), "kms:*"), false)
+    ])
+    error_message = "The aws-security apply role must hold no Allow kms:*."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(output.apply_policies["aws-security"]).Statement :
+      s.Sid == "CreateOwnedKeysOnly" &&
+      toset(keys(s.Condition)) == toset(["StringEquals", "ForAllValues:StringEquals"]) &&
+      toset(s.Condition["ForAllValues:StringEquals"]["aws:TagKeys"]) == toset(["Workspace", "Team"])
+    ])
+    error_message = "CreateOwnedKeysOnly must limit aws:TagKeys to the owner tag key plus var.tags keys."
   }
 }

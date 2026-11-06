@@ -146,7 +146,7 @@ locals {
 
   cw_kms_key_policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Sid       = "KeyAdministration"
         Effect    = "Allow"
@@ -182,7 +182,25 @@ locals {
           StringEquals = { "aws:SourceAccount" = local.account_id }
         }
       },
-    ]
+      ],
+      # The pipeline's day-2 access is by key policy, never by tag: refresh,
+      # rotation, description, tags and aliases only. No PutKeyPolicy, grants,
+      # disable or deletion; the root KeyAdministration statement above stays
+      # the break-glass path.
+      length(var.cloudwatch_logs_kms_key_manager_arns) == 0 ? [] : [
+        {
+          Sid       = "PipelineKeyManagement"
+          Effect    = "Allow"
+          Principal = { AWS = var.cloudwatch_logs_kms_key_manager_arns }
+          Action = [
+            "kms:Describe*", "kms:Get*", "kms:List*",
+            "kms:EnableKeyRotation", "kms:UpdateKeyDescription",
+            "kms:TagResource", "kms:UntagResource",
+            "kms:CreateAlias", "kms:UpdateAlias", "kms:DeleteAlias",
+          ]
+          Resource = "*"
+        },
+    ])
   })
 }
 

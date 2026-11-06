@@ -62,3 +62,15 @@ run "invalid_retention_rejected" {
 
   expect_failures = [var.cloudwatch_logs_retention_days]
 }
+
+run "non_role_key_manager_rejected" {
+  command = plan
+
+  variables {
+    log_archive_bucket                   = "sra-log-archive-bucket"
+    kms_key_arn                          = "arn:aws:kms:us-east-1:111111111111:key/00000000-0000-0000-0000-000000000000"
+    cloudwatch_logs_kms_key_manager_arns = ["arn:aws:iam::111111111111:user/alice"]
+  }
+
+  expect_failures = [var.cloudwatch_logs_kms_key_manager_arns]
+}

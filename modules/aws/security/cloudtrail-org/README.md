@@ -75,16 +75,16 @@ The following resources are created:
 
 
 - resource.aws_cloudtrail.org (modules/aws/security/cloudtrail-org/main.tf#L57)
-- resource.aws_cloudwatch_log_group.trail (modules/aws/security/cloudtrail-org/main.tf#L204)
-- resource.aws_cloudwatch_log_metric_filter.cis (modules/aws/security/cloudtrail-org/main.tf#L368)
-- resource.aws_cloudwatch_metric_alarm.cis (modules/aws/security/cloudtrail-org/main.tf#L380)
-- resource.aws_iam_role.cloudtrail_cw (modules/aws/security/cloudtrail-org/main.tf#L221)
-- resource.aws_iam_role_policy.cloudtrail_cw (modules/aws/security/cloudtrail-org/main.tf#L238)
-- resource.aws_kms_alias.cloudwatch (modules/aws/security/cloudtrail-org/main.tf#L198)
-- resource.aws_kms_key.cloudwatch (modules/aws/security/cloudtrail-org/main.tf#L189)
-- resource.aws_sns_topic.cis_alarms (modules/aws/security/cloudtrail-org/main.tf#L259)
-- resource.aws_sns_topic_policy.cis_alarms (modules/aws/security/cloudtrail-org/main.tf#L266)
-- resource.aws_sns_topic_subscription.cis_alarms (modules/aws/security/cloudtrail-org/main.tf#L284)
+- resource.aws_cloudwatch_log_group.trail (modules/aws/security/cloudtrail-org/main.tf#L222)
+- resource.aws_cloudwatch_log_metric_filter.cis (modules/aws/security/cloudtrail-org/main.tf#L386)
+- resource.aws_cloudwatch_metric_alarm.cis (modules/aws/security/cloudtrail-org/main.tf#L398)
+- resource.aws_iam_role.cloudtrail_cw (modules/aws/security/cloudtrail-org/main.tf#L239)
+- resource.aws_iam_role_policy.cloudtrail_cw (modules/aws/security/cloudtrail-org/main.tf#L256)
+- resource.aws_kms_alias.cloudwatch (modules/aws/security/cloudtrail-org/main.tf#L216)
+- resource.aws_kms_key.cloudwatch (modules/aws/security/cloudtrail-org/main.tf#L207)
+- resource.aws_sns_topic.cis_alarms (modules/aws/security/cloudtrail-org/main.tf#L277)
+- resource.aws_sns_topic_policy.cis_alarms (modules/aws/security/cloudtrail-org/main.tf#L284)
+- resource.aws_sns_topic_subscription.cis_alarms (modules/aws/security/cloudtrail-org/main.tf#L302)
 - data source.aws_caller_identity.current (modules/aws/security/cloudtrail-org/main.tf#L27)
 - data source.aws_partition.current (modules/aws/security/cloudtrail-org/main.tf#L29)
 - data source.aws_region.current (modules/aws/security/cloudtrail-org/main.tf#L28)
@@ -103,6 +103,7 @@ The following resources are created:
 | <a name="input_cloudtrail_s3_data_events"></a> [cloudtrail\_s3\_data\_events](#input\_cloudtrail\_s3\_data\_events) | S3 object-level data events recorded by the org trail via advanced event selectors: none, write (CIS AWS 3.8, default), read (CIS 3.9) or all (3.8 + 3.9). COST: data events are billed per event across EVERY org account; read/all on busy buckets can be expensive. | `string` | `"write"` | no |
 | <a name="input_cloudwatch_logs_kms_key_admin_arn"></a> [cloudwatch\_logs\_kms\_key\_admin\_arn](#input\_cloudwatch\_logs\_kms\_key\_admin\_arn) | Principal granted administration of the module-created CloudWatch Logs CMK. Null (default) = the trail account's root (delegates to IAM policies, the AWS default key policy) so the key cannot be orphaned. | `string` | `null` | no |
 | <a name="input_cloudwatch_logs_kms_key_arn"></a> [cloudwatch\_logs\_kms\_key\_arn](#input\_cloudwatch\_logs\_kms\_key\_arn) | Optional existing CMK ARN for the CloudWatch Logs group AND the CIS alarm SNS topic. Its key policy MUST grant logs.<region>.amazonaws.com (encryption context arn:aws:logs:<region>:<account>:log-group:*) and cloudwatch.amazonaws.com (kms:Decrypt, kms:GenerateDataKey*). Null (default) = the module creates a dedicated, rotated CMK with exactly those grants. | `string` | `null` | no |
+| <a name="input_cloudwatch_logs_kms_key_manager_arns"></a> [cloudwatch\_logs\_kms\_key\_manager\_arns](#input\_cloudwatch\_logs\_kms\_key\_manager\_arns) | IAM role ARNs (the pipeline role that applies this module) granted day-2 management of the module-created CloudWatch Logs CMK by key policy: describe/get/list, rotation, description, tags and aliases. No PutKeyPolicy, grants, disable or deletion. The account-root administration statement is always kept. Empty (default) = no pipeline statement. | `list(string)` | `[]` | no |
 | <a name="input_cloudwatch_logs_retention_days"></a> [cloudwatch\_logs\_retention\_days](#input\_cloudwatch\_logs\_retention\_days) | Retention (days) for the CloudWatch Logs group when enable\_cloudwatch\_logs = true. The S3 log archive remains the long-term record. | `number` | `365` | no |
 | <a name="input_cloudwatch_logs_role_arn"></a> [cloudwatch\_logs\_role\_arn](#input\_cloudwatch\_logs\_role\_arn) | ARN of an existing role CloudTrail assumes to deliver to the CloudWatch Logs group (/aws/cloudtrail/<trail\_name>). Null = this module creates <trail\_name>-cloudwatch-delivery. The landing zone passes the role aws-organization creates, so the aws-security pipeline role needs no IAM write permissions. | `string` | `null` | no |
 | <a name="input_enable_cloudwatch_logs"></a> [enable\_cloudwatch\_logs](#input\_enable\_cloudwatch\_logs) | Attach a CloudWatch Logs group to the org trail and create the CIS AWS section-4 metric-filter alarms (4.1-4.15) with a KMS-encrypted SNS topic. Self-sufficient by default: a logs-granted CMK is created when cloudwatch\_logs\_kms\_key\_arn is null. Set false for S3-only delivery. | `bool` | `true` | no |

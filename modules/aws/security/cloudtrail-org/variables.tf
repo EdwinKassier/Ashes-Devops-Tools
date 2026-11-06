@@ -99,6 +99,17 @@ variable "cloudwatch_logs_kms_key_admin_arn" {
   default     = null
 }
 
+variable "cloudwatch_logs_kms_key_manager_arns" {
+  description = "IAM role ARNs (the pipeline role that applies this module) granted day-2 management of the module-created CloudWatch Logs CMK by key policy: describe/get/list, rotation, description, tags and aliases. No PutKeyPolicy, grants, disable or deletion. The account-root administration statement is always kept. Empty (default) = no pipeline statement."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for a in var.cloudwatch_logs_kms_key_manager_arns : can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", a))])
+    error_message = "cloudwatch_logs_kms_key_manager_arns entries must be IAM role ARNs (arn:<partition>:iam::<account>:role/<name>)."
+  }
+}
+
 variable "alarm_sns_topic_arn" {
   description = "Optional existing SNS topic ARN for CIS alarm notifications. Null (default) = the module creates a KMS-encrypted topic (<trail_name>-cis-alarms) and subscribes alarm_subscriptions to it."
   type        = string

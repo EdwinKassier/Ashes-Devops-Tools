@@ -339,6 +339,18 @@ variable "cloudwatch_logs_kms_key_arn" {
   default     = null
 }
 
+variable "cloudwatch_logs_kms_key_manager_arns" {
+  description = "IAM role ARNs granted day-2 management (refresh, rotation, tags, aliases) of the module-created CloudWatch Logs CMK by its key policy. Null (default) = the aws-security management apply role (<management_role_name_prefix>aws-security-apply) in the management account. [] = none."
+  type        = list(string)
+  default     = null
+}
+
+variable "management_role_name_prefix" {
+  description = "Prefix of the management-account tfc-management-roles role names, used to derive the aws-security apply role ARN when cloudwatch_logs_kms_key_manager_arns is null. Must match the aws-organization tfc_management_roles role_name_prefix."
+  type        = string
+  default     = "tfc-mgmt-"
+}
+
 variable "cloudtrail_alarm_sns_topic_arn" {
   description = "Optional existing SNS topic ARN for the CIS alarms. Null (default) = a KMS-encrypted topic is created and subscribed with cloudtrail_alarm_subscribers."
   type        = string

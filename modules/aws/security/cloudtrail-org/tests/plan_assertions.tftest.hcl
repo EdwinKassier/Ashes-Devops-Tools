@@ -317,3 +317,54 @@ run "cloudwatch_disabled_is_s3_only" {
     error_message = "Disabling CloudWatch Logs must remove the log group, CMK, topic and alarms"
   }
 }
+
+run "root_key_administration_kept" {
+  command = plan
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_kms_key.cloudwatch[0].policy).Statement :
+      s.Sid == "KeyAdministration" && s.Action == "kms:*" && endswith(s.Principal.AWS, ":root")
+    ])
+    error_message = "The account-root kms:* KeyAdministration statement must stay (break-glass path, no orphaned key)."
+  }
+
+  assert {
+    condition     = !anytrue([for s in jsondecode(aws_kms_key.cloudwatch[0].policy).Statement : s.Sid == "PipelineKeyManagement"])
+    error_message = "With no managers supplied there must be no PipelineKeyManagement statement."
+  }
+}
+
+run "pipeline_manager_statement_grants_refresh_and_rotation" {
+  command = plan
+
+  variables {
+    cloudwatch_logs_kms_key_manager_arns = ["arn:aws:iam::111111111111:role/tfc-mgmt-aws-security-apply"]
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_kms_key.cloudwatch[0].policy).Statement :
+      s.Sid == "PipelineKeyManagement" && s.Effect == "Allow" &&
+      toset(flatten([s.Principal.AWS])) == toset(["arn:aws:iam::111111111111:role/tfc-mgmt-aws-security-apply"]) &&
+      toset(s.Action) == toset([
+        "kms:Describe*", "kms:Get*", "kms:List*", "kms:EnableKeyRotation", "kms:UpdateKeyDescription",
+        "kms:TagResource", "kms:UntagResource", "kms:CreateAlias", "kms:UpdateAlias", "kms:DeleteAlias",
+      ])
+    ])
+    error_message = "PipelineKeyManagement must grant exactly the refresh/rotation/tag/alias actions to the supplied roles."
+  }
+
+  assert {
+    condition = !anytrue([
+      for s in jsondecode(aws_kms_key.cloudwatch[0].policy).Statement :
+      s.Sid == "PipelineKeyManagement" && (contains(s.Action, "kms:*") || contains(s.Action, "kms:PutKeyPolicy") || contains(s.Action, "kms:ScheduleKeyDeletion"))
+    ])
+    error_message = "PipelineKeyManagement must not grant kms:*, PutKeyPolicy or ScheduleKeyDeletion."
+  }
+
+  assert {
+    condition     = anytrue([for s in jsondecode(aws_kms_key.cloudwatch[0].policy).Statement : s.Sid == "KeyAdministration"])
+    error_message = "KeyAdministration must remain alongside the pipeline statement."
+  }
+}
