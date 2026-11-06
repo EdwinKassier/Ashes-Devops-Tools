@@ -21,9 +21,10 @@ variable "tfc_organization" {
 }
 
 variable "environments" {
-  description = "Application environments to create per-env workload workspaces for (gcp-workload-<env> when enable_gcp, aws-workload-<env> when enable_aws). Null (default) derives them from config/landing-zone.yaml instead: gcp.environments keys for gcp-workload-<env> and aws.workload_environments (with account_key) for aws-workload-<env>, so the environment list is written once. Optional aws_account_key names the aws-organization account key (accounts / workload_accounts, e.g. workload_dev) the aws-workload-<env> workspace deploys into: it is set as that workspace's workload_account_key variable and selects the tfc-plan/tfc-apply roles read via aws_organization_outputs_from_tfc."
+  description = "Application environments to create per-env workload workspaces for (gcp-workload-<env> when enable_gcp, aws-workload-<env> when enable_aws). Null (default) derives them from config/landing-zone.yaml instead: gcp.environments keys for gcp-workload-<env> and aws.workload_environments (with account_key) for aws-workload-<env>, so the environment list is written once. Optional aws_account_key names the aws-organization account key (accounts / workload_accounts, e.g. workload_dev) the aws-workload-<env> workspace deploys into: it is set as that workspace's workload_account_key variable and selects the tfc-plan/tfc-apply roles read via aws_organization_outputs_from_tfc. Optional is_production (else gcp.environments[*].is_production / aws.workload_environments[*].is_production; unset = true only for the keys prod / production) marks a production workload: see disable_speculative_on_production."
   type = map(object({
     aws_account_key = optional(string)
+    is_production   = optional(bool)
   }))
   default = null
 
@@ -146,6 +147,12 @@ variable "speculative_disabled_workspaces" {
     "aws-organization", "aws-security", "aws-backup", "aws-identity",
     "tfc-admin",
   ]
+}
+
+variable "disable_speculative_on_production" {
+  description = "Disable automatic speculative PR plans on production workload workspaces (gcp-workload-<env> / aws-workload-<env> whose environment is_production, or whose key is prod / production when is_production is unset). A speculative plan runs the PR's code with the workspace's plan identity, so on a production workspace any PR author could read production through it. Default true; non-production workloads keep speculative plans."
+  type        = bool
+  default     = true
 }
 
 variable "enable_health_assessments" {
@@ -342,7 +349,7 @@ variable "workspace_variables_file" {
 # ── Projects, teams, policy ──────────────────────────────────────────────────
 
 variable "enable_projects" {
-  description = "Group workspaces into one TFC project per cloud (<prefix>gcp, <prefix>aws, <prefix>saas, <prefix>platform). Default true. Required for team access."
+  description = "Group workspaces into one TFC project per cloud (<prefix>gcp, <prefix>aws, <prefix>saas, <prefix>platform; plus <prefix>gcp-workloads / <prefix>aws-workloads when split_workload_projects). Default true. Required for team access."
   type        = bool
   default     = true
 }
@@ -354,7 +361,7 @@ variable "project_name_prefix" {
 }
 
 variable "platform_team_id" {
-  description = "TFC team ID (team-...) granted WRITE on every landing-zone project. Null = no grant."
+  description = "TFC team ID (team-...) of the broad platform team: fixed WRITE on workload workspaces (saas, gcp/aws workloads), and only custom plan-level access on control-plane workspaces (see platform_team_control_plane_runs and control_plane_approvers_team_id). Null = no grant."
   type        = string
   default     = null
 
@@ -362,6 +369,34 @@ variable "platform_team_id" {
     condition     = var.platform_team_id == null || can(regex("^team-[A-Za-z0-9]+$", var.platform_team_id))
     error_message = "platform_team_id must be a TFC team ID (team-...)."
   }
+}
+
+variable "control_plane_approvers_team_id" {
+  description = "TFC team ID (team-...) of the small control-plane approvers team: custom access on every project holding control-plane workspaces with runs = apply (confirm/discard applies) and variables/state read-only. It is the only team this root lets apply the control plane, so a platform-team member who edits code cannot also approve the apply. Must differ from platform_team_id. Null = no approvers grant (only organization owners can apply the control plane)."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.control_plane_approvers_team_id == null || can(regex("^team-[A-Za-z0-9]+$", var.control_plane_approvers_team_id))
+    error_message = "control_plane_approvers_team_id must be a TFC team ID (team-...)."
+  }
+}
+
+variable "platform_team_control_plane_runs" {
+  description = "Runs permission of platform_team_id on projects holding control-plane workspaces (custom access; variables read-only, no locking, workspace create/delete/move, run tasks or policy overrides). plan (default) = queue plans only, applies are confirmed by control_plane_approvers_team_id; read = view runs only; apply = may also confirm applies (variables stay read-only). Workload workspaces keep fixed write access."
+  type        = string
+  default     = "plan"
+
+  validation {
+    condition     = contains(["read", "plan", "apply"], var.platform_team_control_plane_runs)
+    error_message = "platform_team_control_plane_runs must be read, plan or apply."
+  }
+}
+
+variable "split_workload_projects" {
+  description = "Place gcp-workload-<env> / aws-workload-<env> workspaces in separate <prefix>gcp-workloads / <prefix>aws-workloads TFC projects (names overridable via org.tfc.gcp_workloads_project / org.tfc.aws_workloads_project), so control-plane and workload access are granted per project. Null = org.tfc.split_workload_projects from config/landing-zone.yaml, else false (one project per cloud; control-plane hardening then uses workspace-level grants). With AWS, the workload accounts' OIDC trust must name the workloads project (aws-organization tfc_workspace_bindings[*].project) before enabling this."
+  type        = bool
+  default     = null
 }
 
 variable "viewer_team_ids" {
@@ -376,7 +411,13 @@ variable "viewer_team_ids" {
 }
 
 variable "enable_policy_sets" {
-  description = "Create an OPA policy set sourced from policies/opa in the VCS repo, attached to every managed workspace. Enforcement is mixed: 7 mandatory + 3 advisory policies (policies/opa/policies.hcl); the set is overridable. Requires vcs_repo and a PAID HCP Terraform tier with policy enforcement. Default false."
+  description = "Create an OPA policy set sourced from policies/opa in the VCS repo, attached to every managed workspace. Enforcement is mixed: 7 mandatory + 3 advisory policies (policies/opa/policies.hcl); mandatory failures are not overridable unless policy_set_overridable = true. Requires vcs_repo and a PAID HCP Terraform tier with policy enforcement. Default false."
+  type        = bool
+  default     = false
+}
+
+variable "policy_set_overridable" {
+  description = "Whether a failed MANDATORY policy in the OPA set can be overridden by a user with Manage Policy Overrides. Default false: mandatory policies are hard gates (advisory policies never block anyway). Set true only as a documented, time-boxed break-glass."
   type        = bool
   default     = false
 }

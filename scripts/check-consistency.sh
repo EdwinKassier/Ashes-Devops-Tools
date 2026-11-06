@@ -73,6 +73,23 @@ for pf in envs/gcp/*/providers.tf; do
   fi
 done
 
+echo "==> Multi-platform lockfiles (INFORMATIONAL — reported, never fails yet)"
+# A lockfile written by a plain local `terraform init` carries one h1: hash per
+# provider (the host platform). The canonical command writes one per platform:
+#   terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64
+# A provider block with fewer than 3 h1: hashes marks the file single-platform.
+# TODO: make this fatal once the repo-wide lock sweep lands.
+nlocks=0
+nsingle=0
+while IFS= read -r lf; do
+  nlocks=$((nlocks + 1))
+  if awk '/^provider /{ if (inblk && h < 3) bad=1; inblk=1; h=0 } /"h1:/{ h++ } END { if (inblk && h < 3) bad=1; exit bad ? 0 : 1 }' "$lf"; then
+    nsingle=$((nsingle + 1))
+    [ -z "${LOCK_VERBOSE:-}" ] || echo "  single-platform: $lf"
+  fi
+done < <(git ls-files '*.terraform.lock.hcl' 2>/dev/null)
+echo "  ${nsingle}/${nlocks} committed lockfiles lack the linux_amd64/darwin_arm64/darwin_amd64 h1: hashes (LOCK_VERBOSE=1 lists them)"
+
 if [ "$fail" -eq 0 ]; then
   echo "OK: all consistency invariants hold."
 else

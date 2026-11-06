@@ -8,43 +8,46 @@ Recommended GitHub branch protection settings for this repository. Apply these b
 
 ### Status Checks (required before merge)
 
-Required status-check **contexts** are the job **display names** (`name:`), not the job
-IDs — and for the reusable security workflow they are prefixed by the calling job's
-name. Use exactly these strings from `terraform-plan.yml`:
+Require **exactly one** status-check context: **`Validation Summary`** (the `summary`
+job in `terraform-plan.yml`).
 
 | Required context | Source job |
 |------------------|-----------|
-| `Terraform Format` | `fmt` |
-| `Terraform Docs Check` | `docs` |
-| `TFLint` | `lint` |
-| `Meta Lint (yaml/markdown/commits)` | `meta-lint` |
-| `Terraform Tests` | `test` |
-| `Security / Trivy` | `security` → reusable `trivy` |
-| `Security / Checkov` | `security` → reusable `checkov` |
 | `Validation Summary` | `summary` (fail-closed aggregator) |
 
-Two important gotchas this list already accounts for:
+`Validation Summary` `needs:` every other PR job — `discover`, `fmt`, `docs`, `validate`,
+`lint`, `meta-lint`, `security`, `test`, `shellcheck`, `opa`, `codeowners` — runs with
+`if: always()`, and fails closed if any of them failed **or was skipped**. One stable
+context therefore gates every check, and adding or renaming a job never needs a
+branch-protection change.
 
-- **The `validate` job is a sharded matrix** (`name: Validate (shard ${{ matrix.shard }})`)
-  that emits one context *per shard* (10 today, each validating every Nth root), never a
-  single `validate` context. Do **not** list `validate` (or per-shard names) as required —
-  the shard count can change. Instead require **`Validation Summary`**, which `needs:` the
-  whole matrix and fails closed if any shard fails, so it gates every root through one
-  stable context.
+Do **not** add the individual job contexts. Several emit a different context per run
+shape and would block every PR forever if listed verbatim:
+
+- **Sharded matrix jobs** emit one context *per shard*, never a bare name:
+  `Validate (shard N)` (10 shards) and `Terraform Tests (shard N)` (6 shards). A
+  required `Terraform Tests` or `validate` context is never reported, so GitHub waits
+  on it indefinitely. The shard count can also change.
 - **The `security` job calls a reusable workflow**, so its contexts are
   `Security / Trivy` and `Security / Checkov` — never a bare `security`.
+
+`scripts/check-required-checks.sh` (run in the `Meta Lint` job) parses the `gh api`
+command below and fails if any listed context is not a non-matrix job `name:` in
+`.github/workflows/`, so this doc cannot drift into an unsatisfiable list again.
 
 `security-scan.yml` (`static-analysis`, `trivy`, `secret-scan`, `summary`) runs on **push to `main`/`develop` and weekly on schedule** — it never runs on `pull_request`, so its jobs **cannot** be configured as required status checks; doing so would make `main` permanently unmergeable. Treat it as a non-blocking, post-merge/scheduled signal instead (monitor its `summary` job for regressions).
 
 Set via **Settings → Branches → main → Require status checks to pass before merging**.
 
-> **The repo checks validate; they do not plan (audit H6).** Every required check
-> above runs `terraform validate -backend=false` and the `mock_provider` tests. None
+> **The repo checks validate; they do not plan (audit H6).** `Validation Summary`
+> and every job it gates run `terraform validate -backend=false` and the `mock_provider` tests. None
 > runs a real plan against state, so none shows the blast radius of a change. The
 > actual plan is Terraform Cloud's **speculative plan**, posted as its own check
 > (e.g. `Terraform Cloud/<org>/<workspace>`) by the TFC VCS integration. For roots
 > that gate production, ADD those TFC checks to the required contexts, so "all checks
-> passed" cannot be green while the real plan errored or was never reviewed.
+> passed" cannot be green while the real plan errored or was never reviewed. They are
+> external checks, so `scripts/check-required-checks.sh` ignores contexts that start
+> with `Terraform Cloud/`.
 
 ### Review Requirements
 
@@ -64,7 +67,7 @@ Set via **Settings → Branches → main → Require status checks to pass befor
 ```bash
 gh api repos/OWNER/REPO/branches/main/protection \
   --method PUT \
-  --field required_status_checks='{"strict":true,"contexts":["Terraform Format","Terraform Docs Check","TFLint","Meta Lint (yaml/markdown/commits)","Terraform Tests","Security / Trivy","Security / Checkov","Validation Summary"]}' \
+  --field required_status_checks='{"strict":true,"contexts":["Validation Summary"]}' \
   --field enforce_admins=true \
   --field required_pull_request_reviews='{"required_approving_review_count":1,"dismiss_stale_reviews":true,"require_code_owner_reviews":true}' \
   --field restrictions=null \

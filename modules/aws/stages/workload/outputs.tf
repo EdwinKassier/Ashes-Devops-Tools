@@ -37,3 +37,8 @@ output "config_role_arn" {
   description = "IAM role the workload account's Config recorders use (the AWSServiceRoleForConfig service-linked role unless config_role_arn was set)."
   value       = module.config_recorder.config_role_arn
 }
+
+output "internet_gateway_id" {
+  description = "ID of the spoke's internet gateway, or null when neither enable_public_subnets nor create_internet_gateway is set."
+  value       = module.vpc.internet_gateway_id
+}

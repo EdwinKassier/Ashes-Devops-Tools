@@ -399,3 +399,163 @@ run "plan_role_data_read_deny_can_be_disabled" {
     error_message = "enable_plan_role_data_read_deny = false must omit the inline deny"
   }
 }
+
+run "apply_boundary_blocks_privileged_role_squatting_and_security_teardown" {
+  # N1(c): even with boundary-carrying CreateRole allowed by propagation, the
+  # apply identity must not create/modify/pass the break-glass, OAAR or
+  # StackSet-execution roles, tamper with protected KMS keys, touch dp:* tags,
+  # or disable Security Hub / Macie / Inspector / Access Analyzer.
+  command = plan
+
+  assert {
+    condition = (
+      length(setsubtract(
+        ["iam:CreateRole", "iam:UpdateAssumeRolePolicy", "iam:AttachRolePolicy", "iam:PutRolePolicy", "iam:DeleteRole", "iam:PassRole"],
+        one([for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement : s if s.Sid == "DenyPrivilegedRoleTampering"]).Action
+      )) == 0 &&
+      toset([for r in one([for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement : s if s.Sid == "DenyPrivilegedRoleTampering"]).Resource : r["Fn::Sub"]]) == toset([
+        "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:role/break-glass",
+        "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:role/OrganizationAccountAccessRole",
+        "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:role/stacksets-exec-*",
+      ])
+    )
+    error_message = "the boundary must deny create/trust/attach/delete/pass on the break-glass, OAAR and stacksets-exec-* roles"
+  }
+
+  assert {
+    condition = (
+      length(setsubtract(
+        ["kms:ScheduleKeyDeletion", "kms:DisableKey", "kms:PutKeyPolicy"],
+        one([for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement : s if s.Sid == "DenyProtectedKeyTampering"]).Action
+      )) == 0 &&
+      one([for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement : s if s.Sid == "DenyProtectedKeyTampering"]).Condition.StringEquals["aws:ResourceTag/protected"] == "true" &&
+      one([for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement : s if s.Sid == "DenyProtectedKeyUntag"]).Condition["ForAnyValue:StringEquals"]["aws:TagKeys"] == "protected"
+    )
+    error_message = "the boundary must deny destruction / policy rewrite / untag of keys tagged protected=true"
+  }
+
+  assert {
+    condition = (
+      one([for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement : s if s.Sid == "DenyDataPerimeterTagTampering"]).Condition["ForAnyValue:StringLike"]["aws:TagKeys"] == "dp:*" &&
+      length(setsubtract(
+        ["iam:CreateRole", "iam:TagRole", "s3:PutBucketTagging", "kms:TagResource", "sqs:TagQueue", "secretsmanager:TagResource"],
+        one([for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement : s if s.Sid == "DenyDataPerimeterTagTampering"]).Action
+      )) == 0
+    )
+    error_message = "the boundary must deny setting or removing dp:* data-perimeter tags"
+  }
+
+  assert {
+    condition = length(setsubtract(
+      ["securityhub:Disable*", "securityhub:BatchDisableStandards", "macie2:DisableMacie", "inspector2:Disable", "access-analyzer:DeleteAnalyzer", "guardduty:DeleteMembers"],
+      one([for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement : s if s.Sid == "DenyDisablingDetectiveControls"]).Action
+    )) == 0
+    error_message = "the boundary must deny disabling Security Hub / Macie / Inspector / Access Analyzer"
+  }
+
+  # IAM managed-policy size quota (6,144 characters, whitespace excluded).
+  assert {
+    condition     = length(jsonencode(jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument)) < 6144
+    error_message = "the embedded boundary must stay under the 6,144-character managed-policy quota"
+  }
+}
+
+run "plan_role_denies_secret_bearing_reads_not_needed_for_refresh" {
+  # N5: actions that leak secrets and are never used by Terraform refresh.
+  command = plan
+
+  assert {
+    condition = length(setsubtract(
+      ["ec2:GetPasswordData", "kms:GenerateDataKey*", "secretsmanager:BatchGetSecretValue", "glue:GetConnection", "glue:GetConnections"],
+      jsondecode(output.template_body).Resources.TfcPlanRoleNetwork.Properties.Policies[0].PolicyDocument.Statement[0].Action
+    )) == 0
+    error_message = "the plan-role deny must cover GetPasswordData, GenerateDataKey*, BatchGetSecretValue and Glue connection reads"
+  }
+
+  # ssm:GetParameter* covers GetParameterHistory.
+  assert {
+    condition     = contains(jsondecode(output.template_body).Resources.TfcPlanRoleNetwork.Properties.Policies[0].PolicyDocument.Statement[0].Action, "ssm:GetParameter*")
+    error_message = "ssm:GetParameter* (incl. GetParameterHistory) must be denied"
+  }
+
+  # Refresh-critical reads stay allowed so plans keep working.
+  assert {
+    condition = alltrue([
+      for a in ["lambda:GetFunction", "lambda:GetFunctionConfiguration", "ecs:DescribeTaskDefinition", "ec2:DescribeInstanceAttribute"] :
+      !contains(jsondecode(output.template_body).Resources.TfcPlanRoleNetwork.Properties.Policies[0].PolicyDocument.Statement[0].Action, a)
+    ])
+    error_message = "refresh-critical reads (lambda:GetFunction*, ecs:DescribeTaskDefinition, ec2:DescribeInstanceAttribute) must not be denied"
+  }
+}
+
+run "member_break_glass_stack_set_disabled_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(aws_cloudformation_stack_set.break_glass) == 0 && length(aws_cloudformation_stack_set_instance.break_glass) == 0 && output.member_break_glass_stack_set_name == null
+    error_message = "the member break-glass StackSet is opt-in at module level"
+  }
+}
+
+run "member_break_glass_role_occupies_the_name_with_mfa_trust" {
+  # N1(b): the SCP-exempt break-glass name is occupied in every member account
+  # by a role that only the management-account break-glass principal can
+  # assume, with MFA.
+  command = plan
+
+  variables {
+    enable_member_break_glass_role            = true
+    break_glass_role_name                     = "emergency/break-glass"
+    member_break_glass_trusted_principal_arns = ["arn:aws:iam::111111111111:role/break-glass"]
+    member_break_glass_target_ou_ids          = { root = "r-abcd" }
+  }
+
+  assert {
+    condition     = aws_cloudformation_stack_set.break_glass[0].permission_model == "SERVICE_MANAGED" && aws_cloudformation_stack_set.break_glass[0].auto_deployment[0].enabled == true
+    error_message = "the member break-glass StackSet must be service-managed with auto-deployment"
+  }
+
+  assert {
+    condition     = aws_cloudformation_stack_set_instance.break_glass["root"].deployment_targets[0].organizational_unit_ids == toset(["r-abcd"])
+    error_message = "the member break-glass StackSet must target the configured root/OUs"
+  }
+
+  assert {
+    condition = (
+      jsondecode(output.member_break_glass_template_body).Resources.MemberBreakGlassRole.Properties.RoleName == "break-glass" &&
+      jsondecode(output.member_break_glass_template_body).Resources.MemberBreakGlassRole.Properties.Path == "/emergency/"
+    )
+    error_message = "a path-prefixed break-glass name must split into Path + RoleName"
+  }
+
+  assert {
+    condition = (
+      jsondecode(output.member_break_glass_template_body).Resources.MemberBreakGlassRole.Properties.AssumeRolePolicyDocument.Statement[0].Principal.AWS == ["arn:aws:iam::111111111111:role/break-glass"] &&
+      jsondecode(output.member_break_glass_template_body).Resources.MemberBreakGlassRole.Properties.AssumeRolePolicyDocument.Statement[0].Condition.Bool["aws:MultiFactorAuthPresent"] == "true" &&
+      jsondecode(output.member_break_glass_template_body).Resources.MemberBreakGlassRole.Properties.AssumeRolePolicyDocument.Statement[0].Condition.NumericLessThan["aws:MultiFactorAuthAge"] == "3600"
+    )
+    error_message = "the member break-glass role must trust only the management break-glass principal, with MFA"
+  }
+
+  assert {
+    condition     = !contains(keys(jsondecode(output.member_break_glass_template_body).Resources.MemberBreakGlassRole.Properties), "PermissionsBoundary")
+    error_message = "the member break-glass role must not carry the tfc-apply boundary"
+  }
+
+  # The boundary protects the path-prefixed name too.
+  assert {
+    condition     = contains([for r in one([for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement : s if s.Sid == "DenyPrivilegedRoleTampering"]).Resource : r["Fn::Sub"]], "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:role/emergency/break-glass")
+    error_message = "the boundary must protect the configured (path-prefixed) break-glass name"
+  }
+}
+
+run "member_break_glass_requires_a_trusted_principal" {
+  command = plan
+
+  variables {
+    enable_member_break_glass_role   = true
+    member_break_glass_target_ou_ids = { root = "r-abcd" }
+  }
+
+  expect_failures = [aws_cloudformation_stack_set.break_glass]
+}

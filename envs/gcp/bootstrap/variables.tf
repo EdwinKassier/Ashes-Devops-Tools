@@ -160,6 +160,35 @@ variable "enable_pam" {
   default     = false
 }
 
+variable "enable_phase0_admin_impersonation" {
+  description = "Let user:<admin_email> impersonate the terraform-admin SA for the phase-0 first apply. Set false on pass 2 (once gcp-bootstrap runs through TFC dynamic credentials) so no standing human path to the bootstrap apply identity remains."
+  type        = bool
+  default     = true
+}
+
+variable "guardrail_owner_mode" {
+  description = "IAM deny-policy ownership. \"separate\" (default): a dedicated <prefix>-guardrails-apply SA is the only automation identity with roles/iam.denyAdmin, so the organization apply SA cannot delete the containment policy that constrains it. \"organization\": legacy, the organization apply SA holds denyAdmin."
+  type        = string
+  default     = "separate"
+}
+
+variable "guardrail_owner_members" {
+  description = "Principals (ideally one PAM-gated group) allowed to impersonate the guardrails SA in separate mode. Empty = nobody until set."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for m in var.guardrail_owner_members : can(regex("^(group|user|serviceAccount|principal|principalSet):", m)) && !can(regex("(?i)(replace|example\\.(com|org|net)|your-domain|\\.invalid$)", m))])
+    error_message = "guardrail_owner_members must be IAM principals (group:/user:/serviceAccount:/principal:/principalSet:) and must not be placeholders (REPLACE, example.com, your-domain, .invalid)."
+  }
+}
+
+variable "enable_principal_access_boundary" {
+  description = "Grant the organization stage SAs the rights the gcp-organization principal access boundary policy needs (gcp-organization enable_principal_access_boundary). Default false."
+  type        = bool
+  default     = false
+}
+
 variable "environments" {
   description = "Map of application environment definitions. Here each key gets a <prefix>-wl-<env>-plan/-apply SA pair bound to TFC workspace gcp-workload-<env>, and is_production (default false) marks the environments whose workspaces must be WIF-bound by immutable ID (tfc_workspace_ids). Null = gcp.environments from config/landing-zone.yaml (the single source shared by every GCP root and tfc-admin)."
   type = map(object({
@@ -194,7 +223,7 @@ variable "environments" {
 }
 
 variable "default_region" {
-  description = "Default region for resources. Null = org.regions.gcp from config/landing-zone.yaml, else europe-west1."
+  description = "Default region for resources. Null = org.regions.gcp from config/landing-zone.yaml, else europe-west2."
   type        = string
   default     = null
 }

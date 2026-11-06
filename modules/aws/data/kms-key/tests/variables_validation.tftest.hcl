@@ -46,3 +46,23 @@ run "wildcard_key_policy_admin_rejected" {
 
   expect_failures = [var.key_policy_admin_arns]
 }
+
+run "invalid_service_principal_scope_rejected" {
+  command = plan
+
+  variables {
+    service_principal_scope = "global"
+  }
+
+  expect_failures = [var.service_principal_scope]
+}
+
+run "invalid_key_account_id_rejected" {
+  command = plan
+
+  variables {
+    key_account_id = "12345"
+  }
+
+  expect_failures = [var.key_account_id]
+}

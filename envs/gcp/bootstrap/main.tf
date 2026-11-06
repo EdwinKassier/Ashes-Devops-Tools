@@ -42,6 +42,16 @@ module "bootstrap" {
   # Just-in-time org admin (PAM) managed by gcp-organization.
   enable_pam = var.enable_pam
 
+  # Phase-0 human impersonation of terraform-admin (turn off on pass 2).
+  enable_phase0_admin_impersonation = var.enable_phase0_admin_impersonation
+
+  # Deny-policy ownership: a separate guardrails SA holds roles/iam.denyAdmin.
+  guardrail_owner_mode    = var.guardrail_owner_mode
+  guardrail_owner_members = var.guardrail_owner_members
+
+  # Principal access boundary for the automation SAs (gcp-organization).
+  enable_principal_access_boundary = var.enable_principal_access_boundary
+
   # GitHub WIF — off by default (unused); see variables.tf.
   enable_github_wif          = var.enable_github_wif
   github_org                 = var.github_org

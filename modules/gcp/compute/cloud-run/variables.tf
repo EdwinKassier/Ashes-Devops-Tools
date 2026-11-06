@@ -201,12 +201,28 @@ variable "labels" {
 
 variable "enable_unauthenticated" {
   description = <<-EOT
-    When true, grants roles/run.invoker to allUsers, making the service publicly
-    invokable without authentication. Defaults to false — the service is private and
-    only callable by principals with an explicit invoker binding.
+    When true, the service is invokable without authentication (how is set by
+    public_access_mode). Defaults to false: the service is private and only callable
+    by principals with an explicit invoker binding.
   EOT
   type        = bool
   default     = false
+}
+
+variable "public_access_mode" {
+  description = <<-EOT
+    How enable_unauthenticated makes the service public. "invoker_iam_disabled"
+    (default) turns off the Cloud Run Invoker IAM check on the service, which works
+    under org domain-restricted sharing. "allusers_binding" grants roles/run.invoker
+    to allUsers (the older pattern; blocked by iam.allowedPolicyMemberDomains).
+  EOT
+  type        = string
+  default     = "invoker_iam_disabled"
+
+  validation {
+    condition     = contains(["invoker_iam_disabled", "allusers_binding"], var.public_access_mode)
+    error_message = "public_access_mode must be invoker_iam_disabled or allusers_binding."
+  }
 }
 
 # -----------------------------------------------------------------------------

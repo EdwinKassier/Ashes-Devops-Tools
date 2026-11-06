@@ -95,3 +95,13 @@ run "requires_project_number_for_wif" {
 
   expect_failures = [var.project_number]
 }
+
+run "rejects_blank_bootstrap_image" {
+  command = plan
+
+  variables {
+    bootstrap_image = ""
+  }
+
+  expect_failures = [var.bootstrap_image]
+}

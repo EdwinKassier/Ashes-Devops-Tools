@@ -28,13 +28,13 @@ variable "api_id" {
 variable "display_name" {
   description = "Display name for the API"
   type        = string
-  default     = "Ashes API Gateway"
+  default     = "API Gateway"
 }
 
 variable "gateway_id" {
   description = "Identifier to use for this gateway instance"
   type        = string
-  default     = "ashes-gateway"
+  default     = "api-gateway"
 
   validation {
     condition     = can(regex("^[a-z][a-z0-9-]{3,62}$", var.gateway_id))
@@ -45,7 +45,7 @@ variable "gateway_id" {
 variable "gateway_display_name" {
   description = "Display name for the gateway instance"
   type        = string
-  default     = "Ashes API Gateway Instance"
+  default     = "API Gateway Instance"
 }
 
 variable "labels" {
@@ -63,7 +63,7 @@ variable "openapi_spec" {
   default     = <<EOF
 openapi: '3.0.0'
 info:
-  title: 'Ashes API Gateway'
+  title: 'API Gateway'
   version: '1.0.0'
 paths:
   /health:

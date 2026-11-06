@@ -1,0 +1,11 @@
+# Test fixture: a per-environment preset (presets.tftest.hcl).
+version: 1
+org:
+  prefix: acme
+  tfc:
+    organization: acme-tfc
+gcp:
+  workload:
+    presets_by_environment:
+      prod:
+        - prod-gcp-workload

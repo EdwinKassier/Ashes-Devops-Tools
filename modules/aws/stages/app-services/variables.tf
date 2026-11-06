@@ -114,8 +114,9 @@ variable "services" {
          the default GitHub template; name-based, so mutable.
   EOT
   type = map(object({
-    # Image the FIRST task-definition revision runs. null => <ecr-repo>:bootstrap
-    # (push that tag once, or let the first CI deploy replace it).
+    # Image the FIRST task-definition revision runs. null => the public
+    # placeholder bootstrap_image (listens on 8080); the first CI deploy
+    # replaces it with an image from the service's own ECR repo.
     container_image  = optional(string)
     container_port   = optional(number, 8080)
     cpu              = optional(number, 256)
@@ -229,6 +230,17 @@ variable "services" {
       for s in values(var.services) : [for arn in values(s.secrets) : can(regex("^arn:aws[a-z-]*:(secretsmanager|ssm):", arn))]
     ]))
     error_message = "services[*].secrets values must be Secrets Manager or SSM Parameter Store ARNs — never plaintext."
+  }
+}
+
+variable "bootstrap_image" {
+  description = "Placeholder image the FIRST task-definition revision of a service runs when its container_image is null, so a first apply never references an image tag that does not exist yet. The default (NGINX unprivileged, ECR Public) listens on 8080 = the default container_port and answers 200 on /, so the service turns healthy before the first CI deploy. Pulling it needs egress to ECR Public (the spoke's TGW default route to central egress); in a standalone spoke with no egress, set container_image to an image in reach instead."
+  type        = string
+  default     = "public.ecr.aws/nginx/nginx-unprivileged:stable-alpine"
+
+  validation {
+    condition     = length(trimspace(var.bootstrap_image)) > 0 && !can(regex("\\s", var.bootstrap_image))
+    error_message = "bootstrap_image must be a non-empty image reference without whitespace."
   }
 }
 

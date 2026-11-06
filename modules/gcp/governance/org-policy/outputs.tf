@@ -12,6 +12,20 @@ output "list_policy_names" {
   value       = { for k, v in google_org_policy_policy.list_policies : k => v.name }
 }
 
+output "managed_policy_names" {
+  description = "Map of managed constraint names (<service>.managed.*) to their full policy resource names: translated legacy constraints (prefer_managed_constraints) plus managed_policies."
+  value       = { for k, v in google_org_policy_policy.managed_policies : k => v.name }
+}
+
+output "effective_constraints" {
+  description = "Sorted list of every constraint this module sets (legacy boolean, legacy list and managed), after the prefer_managed_constraints translation."
+  value = sort(concat(
+    [for p in local.effective_boolean_policies : p.constraint],
+    [for p in local.effective_list_policies : p.constraint],
+    [for p in local.effective_managed_policies : p.constraint],
+  ))
+}
+
 output "enforced_boolean_policies" {
   description = "List of boolean policies that are enforced (enforce = true)"
   value       = [for p in var.boolean_policies : p.constraint if p.enforce]

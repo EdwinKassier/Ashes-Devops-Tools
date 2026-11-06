@@ -8,16 +8,16 @@ variables {
 run "default_watches_cover_the_control_plane" {
   command = plan
 
-  # One alert policy per default watch (10 guardrail watches).
+  # One alert policy per default watch (15 guardrail watches).
   assert {
-    condition     = length(google_monitoring_alert_policy.watch) == 10
+    condition     = length(google_monitoring_alert_policy.watch) == 15
     error_message = "the default watch set must create one alert policy per guardrail (10)."
   }
 
   # Each default guardrail is present.
   assert {
     condition = alltrue([
-      for k in ["org_policy_change", "org_iam_change", "vpc_sc_change", "audit_config_change", "log_sink_change", "custom_role_change", "deny_policy_change", "kms_key_destroy", "kms_key_version_disable", "tag_binding_change"] :
+      for k in ["org_policy_change", "org_iam_change", "vpc_sc_change", "audit_config_change", "log_sink_change", "custom_role_change", "deny_policy_change", "kms_key_destroy", "kms_key_version_disable", "tag_binding_change", "guardrail_role_grant", "guardrail_identity_change", "principal_access_boundary_change", "log_bucket_or_settings_change", "pam_entitlement_change"] :
       contains(keys(google_monitoring_alert_policy.watch), k)
     ])
     error_message = "the default watches must include org policy, org/folder IAM, VPC-SC, audit config, and log sink changes."
@@ -226,7 +226,28 @@ run "cis_log_metrics_can_be_disabled" {
   }
 
   assert {
-    condition     = length(google_logging_metric.cis) == 0 && length(google_monitoring_alert_policy.cis) == 0 && length(google_monitoring_alert_policy.watch) == 10
+    condition     = length(google_logging_metric.cis) == 0 && length(google_monitoring_alert_policy.cis) == 0 && length(google_monitoring_alert_policy.watch) == 15
     error_message = "enable_cis_log_metrics = false must drop only the CIS metrics and alerts."
+  }
+}
+
+# N2/H3: the self-grant of a guardrail-owner role (denyAdmin) by the org apply SA
+# cannot be denied, so it must page.
+run "guardrail_owner_grant_is_watched" {
+  command = plan
+
+  assert {
+    condition     = strcontains(google_monitoring_alert_policy.watch["guardrail_role_grant"].conditions[0].condition_matched_log[0].filter, "roles/iam.denyAdmin") && google_monitoring_alert_policy.watch["guardrail_role_grant"].severity == "CRITICAL"
+    error_message = "A CRITICAL watch must fire on org/folder grants of roles/iam.denyAdmin."
+  }
+
+  assert {
+    condition     = strcontains(google_monitoring_alert_policy.watch["guardrail_identity_change"].conditions[0].condition_matched_log[0].filter, "-guardrails-apply@")
+    error_message = "IAM changes on the guardrails SA must be watched."
+  }
+
+  assert {
+    condition     = strcontains(google_monitoring_alert_policy.watch["log_bucket_or_settings_change"].conditions[0].condition_matched_log[0].filter, "UpdateSettings") && strcontains(google_monitoring_alert_policy.watch["principal_access_boundary_change"].conditions[0].condition_matched_log[0].filter, "PolicyBindings.Delete")
+    error_message = "Log bucket/settings and principal access boundary changes must be watched."
   }
 }

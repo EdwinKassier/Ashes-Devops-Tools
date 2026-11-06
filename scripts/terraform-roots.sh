@@ -49,11 +49,14 @@ collect_e2e() {
 }
 
 # Directories holding mock_provider `terraform test` suites (the `make test`
-# set): every dir under envs/ or modules/ that contains *.tftest.{hcl,json},
-# normalised to the module root (a trailing /tests is stripped). tests/e2e is
-# deliberately excluded: those suites do REAL applies (sandbox-e2e.yml).
+# set): every dir under envs/, modules/ or templates/ that contains
+# *.tftest.{hcl,json}, normalised to the module root (a trailing /tests is
+# stripped). templates/ is included so the cloneable scaffolds stay green —
+# their suites need no credentials, like every other mock_provider suite.
+# tests/e2e is deliberately excluded: those suites do REAL applies
+# (sandbox-e2e.yml).
 collect_test_dirs() {
-  find envs modules -type f \( -name '*.tftest.hcl' -o -name '*.tftest.json' \) \
+  find envs modules templates -type f \( -name '*.tftest.hcl' -o -name '*.tftest.json' \) \
     ! -path '*/.terraform/*' -exec dirname {} \; | sed 's#/tests$##' | sort -u
 }
 

@@ -119,6 +119,18 @@ variable "subnets" {
   }
 }
 
+variable "enable_public_subnets" {
+  description = "Add a public subnet tier (\"public\": newbits 8, number_offset 24, one subnet per AZ) whose route tables default-route to an internet gateway this stage creates. Only for an internet-facing app ALB (aws-workload app_ingress_mode = \"public_alb\"); tasks and databases stay in the private/isolated tiers. Default false: no public subnets, no IGW."
+  type        = bool
+  default     = false
+}
+
+variable "create_internet_gateway" {
+  description = "Attach an internet gateway to the spoke VPC even without public subnets (no routes to it are added). CloudFront VPC origins require the origin VPC to have one. Implied by enable_public_subnets."
+  type        = bool
+  default     = false
+}
+
 # -----------------------------------------------------------------------------
 # Shared-network wiring (from the aws-network root's cross-root contract)
 # -----------------------------------------------------------------------------
@@ -206,6 +218,12 @@ variable "kms_key_arn" {
   description = "ARN of the CMK used as the account default EBS encryption key and (when enable_ssm is true) to encrypt Session Manager sessions/logs. Empty string leaves default EBS encryption on the AWS-managed key; must be a non-empty key when enable_ssm is true."
   type        = string
   default     = ""
+}
+
+variable "enable_ebs_default_kms_key" {
+  description = "Set kms_key_arn as the account default EBS key in the HOME region (aws_region) with a plan-safe count. Use true when kms_key_arn is created in the same plan (its ARN is unknown until apply). Null (default) keeps the legacy behaviour: the account baseline sets it in every aws_enabled_regions entry when kms_key_arn is non-empty. False sets no default key."
+  type        = bool
+  default     = null
 }
 
 # -----------------------------------------------------------------------------

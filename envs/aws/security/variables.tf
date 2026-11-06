@@ -106,6 +106,12 @@ variable "key_admin_role_name" {
   default     = "tfc-apply"
 }
 
+variable "key_policy_admin_role_name" {
+  description = "Role name, in each CMK's own account, granted kms:PutKeyPolicy (and nothing else) on the log-archive, forensics and security-tooling CMKs. Default break-glass: the member break-glass role aws-organization deploys to every member account, so the pipeline key admin cannot rewrite a key policy. It must exist before the keys are created; later key-policy changes must be applied as it. Null = legacy (key admin also holds PutKeyPolicy)."
+  type        = string
+  default     = "break-glass"
+}
+
 variable "kms_key_user_arns" {
   description = "Principals granted key USAGE (Encrypt/Decrypt/ReEncrypt/GenerateDataKey/DescribeKey) per CMK, keyed by log_archive / forensics / security_tooling. Separate from key_admin_arn (administration only). Missing keys mean no general-usage grant beyond the built-in service-principal grants."
   type        = map(list(string))

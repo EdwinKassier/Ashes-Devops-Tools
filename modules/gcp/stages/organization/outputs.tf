@@ -68,8 +68,8 @@ output "audit_org_sink_name" {
 }
 
 output "org_policy_constraints" {
-  description = "Org-node policy constraints this stage manages (boolean + list), for downstream verification"
-  value       = sort(concat(keys(module.org_policies.boolean_policy_names), keys(module.org_policies.list_policy_names)))
+  description = "Org-node policy constraints this stage manages (legacy boolean + list and managed), for downstream verification"
+  value       = module.org_policies.effective_constraints
 }
 
 output "strict_folder_policy_environment_keys" {
@@ -135,4 +135,39 @@ output "pam_entitlement_name" {
 output "production_environment_keys" {
   description = "Environment keys marked is_production = true."
   value       = local.production_environment_keys
+}
+
+output "guardrail_owner_mode" {
+  description = "Deny-policy ownership mode: \"separate\" (deny policies applied by the guardrail owner from guardrail_deny_policy_specs) or \"organization\" (applied by this stage)."
+  value       = var.guardrail_owner_mode
+}
+
+output "guardrail_deny_policy_specs" {
+  description = "Map of deny-policy ID => gcloud policy-file JSON for every org deny policy (containment + iam_deny_policies). In separate mode the guardrail owner applies them: gcloud iam policies create|update <id> --attachment-point=cloudresourcemanager.googleapis.com/organizations/<org> --kind=denypolicies --policy-file=<file>."
+  value       = local.guardrail_deny_policy_specs
+}
+
+output "managed_org_policy_constraints" {
+  description = "Managed constraints (constraints/*.managed.*) set at the org node."
+  value       = sort(keys(module.org_policies.managed_policy_names))
+}
+
+output "log_analytics_bucket_id" {
+  description = "Full ID of the audit Log Analytics bucket (null when disabled)."
+  value       = module.audit_logs.log_analytics_bucket_id
+}
+
+output "log_analytics_linked_dataset" {
+  description = "Linked BigQuery dataset on the audit Log Analytics bucket (null when disabled)."
+  value       = module.audit_logs.log_analytics_linked_dataset
+}
+
+output "logging_organization_service_account" {
+  description = "The org's Cloud Logging service account (grant it the CMEK key before setting logging_settings_kms_key_name); null when enable_logging_organization_settings = false."
+  value       = var.enable_logging_organization_settings ? google_logging_organization_settings.this[0].kms_service_account_id : null
+}
+
+output "principal_access_boundary_policy" {
+  description = "Name of the automation principal access boundary policy (null when disabled)."
+  value       = var.enable_principal_access_boundary ? module.automation_boundary[0].policy_name : null
 }

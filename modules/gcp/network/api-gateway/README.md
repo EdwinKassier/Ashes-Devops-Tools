@@ -103,12 +103,12 @@ The following resources are created:
 | <a name="input_region"></a> [region](#input\_region) | The region where the API Gateway will be deployed | `string` | n/a | yes |
 | <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | The service account email to use for the API Gateway backend | `string` | n/a | yes |
 | <a name="input_api_id"></a> [api\_id](#input\_api\_id) | Identifier to use for the API | `string` | `"ashes-api"` | no |
-| <a name="input_display_name"></a> [display\_name](#input\_display\_name) | Display name for the API | `string` | `"Ashes API Gateway"` | no |
-| <a name="input_gateway_display_name"></a> [gateway\_display\_name](#input\_gateway\_display\_name) | Display name for the gateway instance | `string` | `"Ashes API Gateway Instance"` | no |
-| <a name="input_gateway_id"></a> [gateway\_id](#input\_gateway\_id) | Identifier to use for this gateway instance | `string` | `"ashes-gateway"` | no |
+| <a name="input_display_name"></a> [display\_name](#input\_display\_name) | Display name for the API | `string` | `"API Gateway"` | no |
+| <a name="input_gateway_display_name"></a> [gateway\_display\_name](#input\_gateway\_display\_name) | Display name for the gateway instance | `string` | `"API Gateway Instance"` | no |
+| <a name="input_gateway_id"></a> [gateway\_id](#input\_gateway\_id) | Identifier to use for this gateway instance | `string` | `"api-gateway"` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to the API and gateway. A legacy `managed_by` key is accepted and rewritten to the canonical `managed-by`. | `map(string)` | <pre>{<br/>  "environment": "production",<br/>  "managed-by": "terraform"<br/>}</pre> | no |
 | <a name="input_managed_service_ids"></a> [managed\_service\_ids](#input\_managed\_service\_ids) | A map of Service IDs to inject into the OpenAPI spec, replacing the need for external script discovery. | `map(string)` | `{}` | no |
-| <a name="input_openapi_spec"></a> [openapi\_spec](#input\_openapi\_spec) | OpenAPI specification that will be used to configure the API | `string` | `"openapi: '3.0.0'\ninfo:\n  title: 'Ashes API Gateway'\n  version: '1.0.0'\npaths:\n  /health:\n    get:\n      summary: Health check endpoint\n      operationId: health\n      responses:\n        '200':\n          description: OK\n          content:\n            application/json:\n              schema:\n                type: object\n                properties:\n                  status:\n                    type: string\n"` | no |
+| <a name="input_openapi_spec"></a> [openapi\_spec](#input\_openapi\_spec) | OpenAPI specification that will be used to configure the API | `string` | `"openapi: '3.0.0'\ninfo:\n  title: 'API Gateway'\n  version: '1.0.0'\npaths:\n  /health:\n    get:\n      summary: Health check endpoint\n      operationId: health\n      responses:\n        '200':\n          description: OK\n          content:\n            application/json:\n              schema:\n                type: object\n                properties:\n                  status:\n                    type: string\n"` | no |
 
 ## Outputs
 

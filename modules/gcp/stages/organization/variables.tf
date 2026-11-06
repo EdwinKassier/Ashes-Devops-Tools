@@ -588,3 +588,72 @@ variable "pam_notification_emails" {
   type        = list(string)
   default     = []
 }
+
+variable "guardrail_owner_mode" {
+  description = "Who applies the org IAM deny policies (admin containment + iam_deny_policies). \"separate\" (default): this stage does NOT manage them — its apply identity has no roles/iam.denyAdmin, so it cannot delete the containment policy that constrains it — and outputs them as gcloud-ready specs (guardrail_deny_policy_specs) for the guardrail owner (gcp-bootstrap <prefix>-guardrails-apply SA, impersonated by a PAM-gated group). \"organization\": legacy, this stage applies them (needs gcp-bootstrap guardrail_owner_mode = \"organization\"). Migrating an existing deployment from organization to separate: terraform state rm the module.iam_deny resources first (the apply SA can no longer delete them, which is the point)."
+  type        = string
+  default     = "separate"
+
+  validation {
+    condition     = contains(["separate", "organization"], var.guardrail_owner_mode)
+    error_message = "guardrail_owner_mode must be \"separate\" or \"organization\"."
+  }
+}
+
+variable "prefer_managed_constraints" {
+  description = "Set every baseline org-policy constraint that has a like-for-like managed successor (constraints/*.managed.*: service-account key creation/upload, default-SA basic roles, serial port, OS Login, nested virtualization, guest attributes, VM external IPs, Cloud SQL public IP) through the managed version. Default true. Constraints without a managed equivalent (and iam.allowedPolicyMemberDomains, see docs/known-gaps.md) stay legacy."
+  type        = bool
+  default     = true
+}
+
+variable "enable_log_analytics" {
+  description = "Route every org audit log into a Log Analytics-enabled Cloud Logging bucket in the audit project, with a linked read-only BigQuery dataset. Default true."
+  type        = bool
+  default     = true
+}
+
+variable "log_analytics_retention_days" {
+  description = "Retention (days) of the audit Log Analytics bucket. Locked (irreversibly) together with the GCS audit bucket when enable_audit_bucket_lock = true."
+  type        = number
+  default     = 400
+
+  validation {
+    condition     = var.log_analytics_retention_days >= 365 && var.log_analytics_retention_days <= 3650
+    error_message = "log_analytics_retention_days must be between 365 and 3650 (audit logs are kept at least a year)."
+  }
+}
+
+variable "enable_logging_organization_settings" {
+  description = "Manage the organization's Cloud Logging settings (google_logging_organization_settings): the storage location of the _Default/_Required buckets of new projects (logging_settings_storage_location, default default_region) and optionally their CMEK (logging_settings_kms_key_name). Default false."
+  type        = bool
+  default     = false
+}
+
+variable "logging_settings_storage_location" {
+  description = "Default storage location for new projects' log buckets. Null = default_region."
+  type        = string
+  default     = null
+}
+
+variable "logging_settings_kms_key_name" {
+  description = "Optional CMEK for the _Default/_Required buckets of new projects. Grant the org Cloud Logging service account (gcloud logging settings describe --organization=<id>) roles/cloudkms.cryptoKeyEncrypterDecrypter on the key first. Null = Google-managed encryption."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.logging_settings_kms_key_name == null || can(regex("^projects/.+/locations/.+/keyRings/.+/cryptoKeys/.+$", var.logging_settings_kms_key_name))
+    error_message = "logging_settings_kms_key_name must be in format: projects/{project}/locations/{location}/keyRings/{keyring}/cryptoKeys/{key}."
+  }
+}
+
+variable "enable_principal_access_boundary" {
+  description = "Bind a principal access boundary policy to every service account in the admin (automation) project, so their permissions only work on resources in this organization (plus principal_access_boundary_allowed_resources). Needs the gcp-bootstrap enable_principal_access_boundary input. With enable_admin_containment the boundary's update/delete/unbind is also denied to all but break-glass. Default false: validate on a non-production org first."
+  type        = bool
+  default     = false
+}
+
+variable "principal_access_boundary_allowed_resources" {
+  description = "Resources the bounded automation SAs may act on (//cloudresourcemanager.googleapis.com/organizations|folders|projects/<id>). Empty = this organization only."
+  type        = list(string)
+  default     = []
+}

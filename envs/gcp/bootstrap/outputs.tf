@@ -116,3 +116,13 @@ output "production_workspaces_bound_by_name" {
   description = "Control-plane and production workload workspaces still WIF-bound by mutable name; add their IDs to tfc_workspace_ids."
   value       = module.bootstrap.production_workspaces_bound_by_name
 }
+
+output "guardrail_owner_mode" {
+  description = "Deny-policy ownership mode; gcp-organization defaults its guardrail_owner_mode to this."
+  value       = module.bootstrap.guardrail_owner_mode
+}
+
+output "guardrails_service_account" {
+  description = "Guardrails SA email (sole automation holder of roles/iam.denyAdmin), or null in organization mode."
+  value       = module.bootstrap.guardrails_service_account
+}

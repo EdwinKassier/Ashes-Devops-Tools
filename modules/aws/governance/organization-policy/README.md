@@ -31,19 +31,28 @@ role-name patterns (`arn:aws:iam::*:role/<name>`), not account-qualified ARNs:
 - **Break-glass only** (`break_glass_role_names`, default derived from
   `break_glass_role_arn`): leave org, stop/delete CloudTrail, delete GuardDuty
   detector/members, disable Security Hub / Macie / Inspector, delete Access
-  Analyzer, delete/disable/untag KMS keys tagged `protected = "true"`.
+  Analyzer, delete/disable/untag KMS keys tagged `protected = "true"`, and
+  change a protected key's policy.
 - **Pipeline roles + break-glass** (`pipeline_role_names`, default
-  `["tfc-apply", "OrganizationAccountAccessRole"]`): CloudTrail selectors/trail
-  updates, GuardDuty filters/detector updates, Security Hub standards disablement,
-  Config recorder/delivery-channel changes (workload Config recorders are
-  Terraform-managed in member accounts), flow-log deletion, Object Lock changes
-  on the log archive, and protected KMS key-policy changes.
-- The pipeline roles, OAAR and break-glass are protected from IAM modification
-  by anyone else.
+  `["tfc-apply", "OrganizationAccountAccessRole", "stacksets-exec-*"]`):
+  CloudTrail selectors/trail updates, GuardDuty filters/detector updates,
+  Security Hub standards disablement, Config recorder/delivery-channel changes
+  (workload Config recorders are Terraform-managed in member accounts),
+  flow-log deletion and Object Lock changes on the log archive.
+- **Privileged-role tampering** (create/update/delete/attach) never exempts the
+  pipeline, so a compromised member `tfc-apply` cannot squat the break-glass
+  name or rewrite OrganizationAccountAccessRole's trust:
+  - `DenyPrivilegedRoleTampering` protects OAAR and `stacksets-exec-*`;
+    exempt: break-glass only.
+  - `DenyStackSetRoleTampering` protects the StackSet-managed roles
+    (`stackset_managed_role_names`, default `tfc-plan` / `tfc-apply`, plus the
+    break-glass name); exempt: break-glass and the StackSet execution role
+    (`stackset_execution_role_names`), which creates and updates them.
 
 The rendered SCP is minified and tested to stay under the 5,120-character quota.
 A role with the break-glass name must exist in member accounts for break-glass
-to work there.
+to work there: the aws-organization stage deploys it to every member account
+(`modules/aws/iam/tfc-oidc-baseline`, `enable_member_break_glass_role`).
 
 <!-- BEGIN_TF_DOCS -->
 
@@ -84,8 +93,8 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_organizations_policy.policy (modules/aws/governance/organization-policy/main.tf#L126)
-- resource.aws_organizations_policy_attachment.attach (modules/aws/governance/organization-policy/main.tf#L133)
+- resource.aws_organizations_policy.policy (modules/aws/governance/organization-policy/main.tf#L171)
+- resource.aws_organizations_policy_attachment.attach (modules/aws/governance/organization-policy/main.tf#L178)
 
 
 ## Inputs
@@ -103,8 +112,10 @@ The following resources are created:
 | <a name="input_data_perimeter_trusted_account_ids"></a> [data\_perimeter\_trusted\_account\_ids](#input\_data\_perimeter\_trusted\_account\_ids) | Optional 12-digit account IDs OUTSIDE the organization that are trusted by the RCP data perimeter: their principals (aws:PrincipalAccount) may access org resources, and AWS service calls on their behalf (aws:SourceAccount) pass the confused-deputy check. Empty (default) trusts only the organization. Individual resources can also opt out with the dp:exclude:identity / dp:exclude:source = "true" resource tags; the baseline SCP lets only break-glass set or remove dp:* tags. | `list(string)` | `[]` | no |
 | <a name="input_default_region"></a> [default\_region](#input\_default\_region) | Region used by the backup policy's default plan. | `string` | `"eu-west-2"` | no |
 | <a name="input_kms_protection_tag_key"></a> [kms\_protection\_tag\_key](#input\_kms\_protection\_tag\_key) | Resource-tag key marking KMS keys protected by the deny-tamper SCP. Keys tagged <key> = "true" cannot be scheduled for deletion, disabled, have rotation disabled or the tag removed except by break-glass; their key policy can only be changed by break-glass (so Terraform key-policy changes to protected keys need a break-glass apply). Must match the tag the aws/data/kms-key module applies (protection\_tag\_key). | `string` | `"protected"` | no |
-| <a name="input_pipeline_role_names"></a> [pipeline\_role\_names](#input\_pipeline\_role\_names) | Names or name patterns (optionally path-prefixed, e.g. "automation/tfc-apply" or "stacksets-exec-*") of the member-account Terraform pipeline roles. Rendered as arn:aws:iam::*:role/<name> and exempted from the deny-tamper reconfiguration statements (Config recorders, GuardDuty/CloudTrail settings, flow logs, log-archive Object Lock). These roles are also protected from IAM modification by anyone other than themselves or break-glass. NOT exempt from the destructive statements (break-glass only). | `list(string)` | <pre>[<br/>  "tfc-apply",<br/>  "OrganizationAccountAccessRole",<br/>  "stacksets-exec-*"<br/>]</pre> | no |
+| <a name="input_pipeline_role_names"></a> [pipeline\_role\_names](#input\_pipeline\_role\_names) | Names or name patterns (optionally path-prefixed, e.g. "automation/tfc-apply" or "stacksets-exec-*") of the member-account Terraform pipeline roles. Rendered as arn:aws:iam::*:role/<name> and exempted from the deny-tamper reconfiguration statements (Config recorders, GuardDuty/CloudTrail settings, flow logs, log-archive Object Lock). These roles are also protected from IAM modification, and are NEVER exempt from that protection (see stackset\_managed\_role\_names). NOT exempt from the destructive statements (break-glass only). | `list(string)` | <pre>[<br/>  "tfc-apply",<br/>  "OrganizationAccountAccessRole",<br/>  "stacksets-exec-*"<br/>]</pre> | no |
 | <a name="input_policies"></a> [policies](#input\_policies) | Override map of policies to create, keyed by policy name. When empty (default), the module computes the built-in guardrail set from the templated JSON files. Content is a raw Organizations policy JSON string. | <pre>map(object({<br/>    type    = string<br/>    content = string<br/>  }))</pre> | `{}` | no |
+| <a name="input_stackset_execution_role_names"></a> [stackset\_execution\_role\_names](#input\_stackset\_execution\_role\_names) | Name patterns of the service-managed StackSet execution role in member accounts (AWS creates stacksets-exec-<hash>). Exempt from DenyStackSetRoleTampering ONLY (so the StackSets can create/update the tfc-* and member break-glass roles); themselves protected break-glass-only by DenyPrivilegedRoleTampering. | `list(string)` | <pre>[<br/>  "stacksets-exec-*"<br/>]</pre> | no |
+| <a name="input_stackset_managed_role_names"></a> [stackset\_managed\_role\_names](#input\_stackset\_managed\_role\_names) | Member-account role names (optionally path-prefixed) that a service-managed StackSet owns — by default the tfc-oidc-baseline tfc-plan / tfc-apply roles. Together with the break-glass role name they are protected by DenyStackSetRoleTampering, whose only exemptions are break-glass and stackset\_execution\_role\_names. Every other pipeline\_role\_names entry (OrganizationAccountAccessRole, stacksets-exec-*) is protected break-glass-only. The pipeline roles are never exempt from either statement. | `list(string)` | <pre>[<br/>  "tfc-plan",<br/>  "tfc-apply"<br/>]</pre> | no |
 
 ## Outputs
 

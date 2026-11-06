@@ -58,6 +58,17 @@ org:
     # aws_project: landing-zone-aws
     # saas_project: landing-zone-saas
     # platform_project: landing-zone-platform
+    # Optional: put gcp-workload-<env> / aws-workload-<env> in their own
+    # projects (<prefix>gcp-workloads / <prefix>aws-workloads), so the platform
+    # team's write grant never touches a control-plane project. With AWS, set
+    # the workload accounts' OIDC trust project first (aws-organization
+    # tfc_workspace_bindings[*].project). Default false.
+    # split_workload_projects: false
+    # gcp_workloads_project: landing-zone-gcp-workloads
+    # aws_workloads_project: landing-zone-aws-workloads
+    # Production workloads (gcp.environments[*].is_production,
+    # aws.workload_environments[*].is_production; unset = keys prod/production)
+    # get no speculative PR plans (tfc-admin disable_speculative_on_production).
     # Optional VCS connection for every tfc-admin workspace (IDs, not secrets).
     # vcs_repo:
     #   identifier: my-org/landing-zone
@@ -107,6 +118,24 @@ gcp:
       is_production: true
       iam_group_role_bindings: {}
 
+  # Application golden path (gcp-workload-<env>). All optional.
+  # Image the first Cloud Run revision runs before CI deploys. The default,
+  # us-docker.pkg.dev/cloudrun/container/hello, is blocked by a VPC-SC
+  # perimeter restricting Artifact Registry and by Binary Authorization:
+  # mirror a placeholder inside the perimeter and point at it.
+  # bootstrap_image: europe-west2-docker.pkg.dev/my-org-prod-host/mirror/hello:bootstrap
+  # Public ingress per environment: app service => domains. Each listed
+  # service gets a global external ALB + serverless NEG + Cloud Armor +
+  # Google-managed certificate (point the domains at the output IP).
+  # public_ingress:
+  #   prod:
+  #     orders:
+  #       domains: [orders.my-org.example.com]
+  # Presets applied to ONE environment only (see `presets` below).
+  # presets_by_environment:
+  #   prod: [prod-gcp-workload]
+  workload: {}
+
 aws:
   # tfc-admin declares the aws-* workspaces only when true.
   enabled: false
@@ -145,6 +174,16 @@ aws:
       account_key: workload_dev
       vpc_cidr: 10.20.0.0/16
 
+  # Application golden path (aws-workload-<env>). All optional.
+  # internal (default) | public_alb (internet-facing ALB + regional WAF; needs
+  # app_alb_certificate_arn) | cloudfront_vpc_origin (internal ALB behind
+  # CloudFront + WAF; no certificate or domain needed).
+  # app_ingress_mode: cloudfront_vpc_origin
+  # Image the first task revision runs before CI deploys (default
+  # public.ecr.aws/nginx/nginx-unprivileged:stable-alpine, port 8080).
+  # bootstrap_image: public.ecr.aws/nginx/nginx-unprivileged:stable-alpine
+  workload: {}
+
 saas:
   # tfc-admin declares one saas-<name> workspace per entry when enabled.
   enabled: false
@@ -153,3 +192,11 @@ saas:
   # Provider toggles for the saas root (enable_supabase / enable_vercel).
   supabase: true
   vercel: true
+
+# Presets: named overlays from examples/presets/<name>.yaml, applied by the
+# root the preset targets (precedence: explicit variable > preset > this file).
+# Honoured today by envs/gcp/workload (prod-gcp-workload). A preset listed here
+# applies to EVERY workspace of its root: for a prod-only workload preset use
+# gcp.workload.presets_by_environment instead. The other presets
+# (examples/presets/*.tfvars) are still applied with -var-file.
+presets: []

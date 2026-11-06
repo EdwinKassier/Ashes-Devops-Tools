@@ -198,8 +198,9 @@ module "host" {
 
   edge = {
     cloud_armor = {
-      enabled             = var.enable_cloud_armor
-      owasp_rules         = var.enable_owasp_rules
+      # Public ingress always gets the environment security policy.
+      enabled             = local.enable_cloud_armor || local.enable_public_ingress
+      owasp_rules         = local.enable_owasp_rules
       adaptive_protection = var.enable_adaptive_protection
       owasp_sensitivity   = var.owasp_sensitivity
     }
@@ -227,7 +228,7 @@ module "host" {
       access_policy_name = local.vpc_sc_access_policy
       perimeter_title    = coalesce(var.vpc_sc_perimeter_title, "${upper(var.environment)} Perimeter")
       perimeter_type     = "PERIMETER_TYPE_REGULAR"
-      enable_dry_run     = var.vpc_sc_enable_dry_run
+      enable_dry_run     = local.vpc_sc_enable_dry_run
       # VPC-SC requires numeric project numbers, not project IDs.
       # data.google_project.host_project is declared above and resolves the number at plan time.
       protected_projects = [
@@ -443,7 +444,8 @@ module "app_services" {
   # Default Cloud Run / GKE subnet: the first private (compute-tier) subnet.
   subnetwork_id = var.app_subnetwork_id != null ? var.app_subnetwork_id : try(values(module.host.subnets.private)[0].id, null)
 
-  services                       = var.app_services
+  services                       = local.app_services
+  bootstrap_image                = local.app_bootstrap_image
   enable_deletion_protection     = var.enable_deletion_protection
   artifact_registry_kms_key_name = var.artifact_registry_kms_key_name
   enable_vulnerability_scanning  = var.enable_artifact_registry_vulnerability_scanning
@@ -462,12 +464,56 @@ module "app_services" {
   depends_on = [module.host, module.saas_secret_bridge]
 }
 
+# =============================================================================
+# PUBLIC INGRESS (opt-in) — one global external Application Load Balancer per
+# exposed app service: reserved anycast IP, serverless NEG -> Cloud Run, backend
+# with the environment Cloud Armor policy, Google-managed certificate for the
+# service's domains, HTTPS proxy and an HTTP->HTTPS redirect. The Cloud Run
+# service is switched to INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER so the run.app
+# URL is not a bypass. Unauthenticated invocation is an allUsers run.invoker
+# binding: the gcp-organization domain-restricted-sharing policy
+# (iam.allowedPolicyMemberDomains) rejects it unless the host project has an
+# exception — see docs/guides/deploying-a-service.md.
+# =============================================================================
+
+locals {
+  public_ingress_services = var.public_ingress_services != null ? var.public_ingress_services : try(local.cfg.public_ingress[var.environment], {})
+  enable_public_ingress   = var.enable_public_ingress != null ? var.enable_public_ingress : length(local.public_ingress_services) > 0
+  public_ingress          = local.enable_public_ingress ? local.public_ingress_services : {}
+
+  # Exposed services default to LB-only ingress + public invocation; the rest
+  # keep the stage defaults (internal only, authenticated). An explicit value in
+  # the app_services entry always wins.
+  app_services = {
+    for k, s in var.app_services : k => merge({
+      ingress                = contains(keys(local.public_ingress), k) ? "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER" : "INGRESS_TRAFFIC_INTERNAL_ONLY"
+      enable_unauthenticated = contains(keys(local.public_ingress), k)
+    }, s)
+  }
+
+  app_bootstrap_image = coalesce(var.app_bootstrap_image, local.cfg.app_bootstrap_image, "us-docker.pkg.dev/cloudrun/container/hello")
+}
+
+module "app_ingress" {
+  source   = "../../../modules/gcp/network/app-ingress"
+  for_each = local.public_ingress
+
+  project_id             = local.env_config.host_project_id
+  region                 = local.env_config.region
+  name                   = "${var.environment}-${each.key}"
+  domains                = each.value.domains
+  cloud_run_service_name = module.app_services.services[each.key].service_name
+  security_policy_id     = module.host.security_policy_self_link
+  enable_cdn             = each.value.enable_cdn
+  dns_managed_zone       = each.value.dns_managed_zone
+}
+
 # Nothing else ties production to an enforced perimeter. Warn (check blocks never
 # fail the plan) when a production environment (environment_config is_production)
 # has no perimeter or only a dry-run one.
 check "vpc_sc_enforced_in_prod" {
   assert {
-    condition     = !local.is_production || (local.vpc_sc_access_policy != null && !var.vpc_sc_enable_dry_run)
+    condition     = !local.is_production || (local.vpc_sc_access_policy != null && !local.vpc_sc_enable_dry_run)
     error_message = "Environment '${var.environment}' is production but its VPC-SC perimeter is ${local.vpc_sc_access_policy == null ? "NOT CREATED (no scoped access policy in environment_config and vpc_sc_access_policy_name is null)" : "in DRY-RUN (vpc_sc_enable_dry_run = true)"}. Dry-run gives no exfiltration protection: validate the violation logs, then set vpc_sc_enable_dry_run = false (use vpc_sc_dry_run_restricted_services to keep staging further changes)."
   }
 }

@@ -113,7 +113,7 @@ variable "environments" {
 }
 
 variable "default_region" {
-  description = "Default region for resources. Null = org.regions.gcp from config/landing-zone.yaml, else europe-west1."
+  description = "Default region for resources. Null = org.regions.gcp from config/landing-zone.yaml, else europe-west2."
   type        = string
   default     = null
 }
@@ -162,6 +162,28 @@ variable "billing_admin_groups" {
   description = "Bare group emails granted Billing Admin. At least one is required unless allow_user_principals_for_break_glass = true. Null = gcp.billing_admin_groups from config/landing-zone.yaml, else []."
   type        = list(string)
   default     = null
+}
+
+# Stage contract override (FAST-style): when set (here or as gcp.contracts.bootstrap
+# in config/landing-zone.yaml) the gcp-bootstrap remote-state read is skipped.
+variable "bootstrap_contract" {
+  description = "gcp-bootstrap stage contract: admin_project_id, admin_project_number and terraform_admin_email, plus the optional automation identities (workload_service_accounts, stage_service_accounts, delegated_workload/network_folder_roles; omitted = no grants) and guardrail_owner_mode. Null = gcp.contracts.bootstrap from config/landing-zone.yaml, else read from the gcp-bootstrap workspace's remote state."
+  type = object({
+    admin_project_id                = string
+    admin_project_number            = string
+    terraform_admin_email           = string
+    workload_service_accounts       = optional(map(object({ plan = string, apply = string })), {})
+    stage_service_accounts          = optional(map(object({ plan = string, apply = string })), {})
+    delegated_workload_folder_roles = optional(list(string), [])
+    delegated_network_folder_roles  = optional(list(string), [])
+    guardrail_owner_mode            = optional(string, "separate")
+  })
+  default = null
+
+  validation {
+    condition     = var.bootstrap_contract == null || can(regex("^[0-9]+$", var.bootstrap_contract.admin_project_number))
+    error_message = "bootstrap_contract.admin_project_number must be numeric."
+  }
 }
 
 variable "bootstrap_workspace_name" {
@@ -395,4 +417,57 @@ variable "enable_scoped_access_policies" {
   description = "Create one folder-scoped VPC-SC access policy per environment and grant that environment's workload SAs rights on it only (gcp-workload builds its perimeter there). Requires gcp-bootstrap enable_scoped_access_policies = true. Default true."
   type        = bool
   default     = true
+}
+
+variable "guardrail_owner_mode" {
+  description = "Who applies the org IAM deny policies: \"separate\" (the gcp-bootstrap guardrails SA, from the guardrail_deny_policy_specs output) or \"organization\" (this root; legacy). Null = the gcp-bootstrap guardrail_owner_mode output (\"organization\" for an older bootstrap state without it). Must match gcp-bootstrap: in separate mode this root's apply SA has no roles/iam.denyAdmin."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.guardrail_owner_mode == null || contains(["separate", "organization"], coalesce(var.guardrail_owner_mode, "separate"))
+    error_message = "guardrail_owner_mode must be \"separate\", \"organization\" or null."
+  }
+}
+
+variable "prefer_managed_constraints" {
+  description = "Use the managed (constraints/*.managed.*) successor of each baseline org-policy constraint where Google offers one. Default true."
+  type        = bool
+  default     = true
+}
+
+variable "enable_log_analytics" {
+  description = "Org audit logs into a Log Analytics-enabled log bucket with a linked BigQuery dataset. Default true."
+  type        = bool
+  default     = true
+}
+
+variable "log_analytics_retention_days" {
+  description = "Retention (days, 365-3650) of the audit Log Analytics bucket."
+  type        = number
+  default     = 400
+}
+
+variable "enable_logging_organization_settings" {
+  description = "Manage org Cloud Logging settings (default log-bucket location = default_region, optional CMEK). Default false."
+  type        = bool
+  default     = false
+}
+
+variable "logging_settings_kms_key_name" {
+  description = "Optional CMEK for new projects' _Default/_Required log buckets (grant the org Logging SA on it first). Null = Google-managed."
+  type        = string
+  default     = null
+}
+
+variable "enable_principal_access_boundary" {
+  description = "Principal access boundary on every SA in the admin project (this org's resources only). Needs gcp-bootstrap enable_principal_access_boundary. Default false."
+  type        = bool
+  default     = false
+}
+
+variable "principal_access_boundary_allowed_resources" {
+  description = "Extra/explicit resources the bounded automation SAs may act on. Empty = this organization only."
+  type        = list(string)
+  default     = []
 }

@@ -9,7 +9,8 @@
  *
  * Usage:
  *   module "alerts" {
- *     source     = "../../modules/gcp/monitoring/alert-policy"
+ *     # from a root under envs/<cloud>/<root>/:
+ *     source     = "../../../modules/gcp/monitoring/alert-policy"
  *     project_id = "my-project"
  *     notification_email_addresses = ["ops@example.com"]
  *     notification_webhook_urls = {

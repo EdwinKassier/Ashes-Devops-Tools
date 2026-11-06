@@ -13,10 +13,15 @@
 #       <host>:sub = organization:<org>:project:<project>:workspace:<ws>:run_phase:apply
 #       capped by a permissions boundary (default: the embedded TfcApplyBoundary
 #       managed policy) so the apply identity cannot leave the org, blind the
-#       detective controls, rewrite its own trust/boundary, mint long-lived
-#       IAM user credentials, or create/grant to a role that does not carry
-#       the same boundary (boundary propagation); every other action stays
-#       allowed.
+#       detective controls, rewrite its own trust/boundary, squat or modify the
+#       break-glass / OrganizationAccountAccessRole / stacksets-exec-* roles,
+#       destroy or re-policy protected KMS keys, touch dp:* perimeter tags,
+#       mint long-lived IAM user credentials, or create/grant to a role that
+#       does not carry the same boundary (boundary propagation); every other
+#       action stays allowed.
+#
+# Optionally (enable_member_break_glass_role) a sibling StackSet deploys the
+# member-account break-glass role (see the end of this file).
 #
 # One template serves every account. Per-account workspace scoping is compiled
 # into the template as CloudFormation Conditions keyed on AWS::AccountId, so a
@@ -92,6 +97,17 @@ locals {
     local.apply_boundary_arn_sub,
   ]
 
+  # Privileged roles the apply identity must never create, modify, delete or
+  # pass: the member break-glass role (squatting its NAME would inherit every
+  # break-glass SCP exemption), OrganizationAccountAccessRole (rewriting its
+  # trust = management-account-level access) and the StackSet execution role.
+  # Defence in depth under the org deny-tamper SCP (which already never exempts
+  # tfc-apply from these), so the guarantee also holds where the SCP is absent.
+  privileged_role_arns_sub = [
+    for n in distinct(concat([var.break_glass_role_name], var.protected_role_names)) :
+    "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:role/${n}"
+  ]
+
   # The embedded boundary's own ARN (CloudFormation Fn::Sub string).
   apply_boundary_arn_sub = "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:policy/${var.apply_boundary_policy_name}"
 
@@ -148,14 +164,95 @@ locals {
           "cloudtrail:StopLogging",
           "cloudtrail:DeleteTrail",
           "guardduty:DeleteDetector",
+          "guardduty:DeleteMembers",
           "guardduty:DisassociateFromAdministratorAccount",
           "guardduty:DisassociateFromMasterAccount",
           "guardduty:StopMonitoringMembers",
           "config:StopConfigurationRecorder",
           "config:DeleteConfigurationRecorder",
           "config:DeleteDeliveryChannel",
+          "securityhub:Disable*",
+          "securityhub:BatchDisableStandards",
+          "macie2:DisableMacie",
+          "inspector2:Disable",
+          "access-analyzer:DeleteAnalyzer",
         ]
         Resource = "*"
+      },
+      {
+        Sid    = "DenyPrivilegedRoleTampering"
+        Effect = "Deny"
+        Action = [
+          "iam:CreateRole",
+          "iam:DeleteRole",
+          "iam:UpdateRole",
+          "iam:UpdateAssumeRolePolicy",
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy",
+          "iam:PutRolePolicy",
+          "iam:DeleteRolePolicy",
+          "iam:PutRolePermissionsBoundary",
+          "iam:DeleteRolePermissionsBoundary",
+          "iam:TagRole",
+          "iam:UntagRole",
+          "iam:PassRole",
+        ]
+        Resource = [for a in local.privileged_role_arns_sub : { "Fn::Sub" = a }]
+      },
+      {
+        # Protected KMS keys (the security-stage log/forensics/tooling CMKs):
+        # no destruction and no key-policy rewrite (which would let the
+        # pipeline grant itself kms:Decrypt). Mirrors the SCP; CreateKey with a
+        # policy is unaffected (no resource tag exists yet).
+        Sid    = "DenyProtectedKeyTampering"
+        Effect = "Deny"
+        Action = [
+          "kms:ScheduleKeyDeletion",
+          "kms:DisableKey",
+          "kms:DisableKeyRotation",
+          "kms:DeleteImportedKeyMaterial",
+          "kms:PutKeyPolicy",
+        ]
+        Resource  = "*"
+        Condition = { StringEquals = { "aws:ResourceTag/${var.kms_protection_tag_key}" = "true" } }
+      },
+      {
+        # Removing / rewriting the protection tag would lift both this
+        # boundary statement and the SCP.
+        Sid      = "DenyProtectedKeyUntag"
+        Effect   = "Deny"
+        Action   = ["kms:TagResource", "kms:UntagResource"]
+        Resource = "*"
+        Condition = {
+          StringEquals               = { "aws:ResourceTag/${var.kms_protection_tag_key}" = "true" }
+          "ForAnyValue:StringEquals" = { "aws:TagKeys" = var.kms_protection_tag_key }
+        }
+      },
+      {
+        # The RCP data-perimeter escape hatches (dp:exclude:*) must not be set or
+        # removed by the pipeline on any tag-capable path. Mirrors the SCP.
+        Sid    = "DenyDataPerimeterTagTampering"
+        Effect = "Deny"
+        Action = [
+          "iam:CreateRole",
+          "iam:TagRole",
+          "iam:UntagRole",
+          "s3:CreateBucket",
+          "s3:PutBucketTagging",
+          "s3:TagResource",
+          "s3:UntagResource",
+          "kms:CreateKey",
+          "kms:TagResource",
+          "kms:UntagResource",
+          "sqs:CreateQueue",
+          "sqs:TagQueue",
+          "sqs:UntagQueue",
+          "secretsmanager:CreateSecret",
+          "secretsmanager:TagResource",
+          "secretsmanager:UntagResource",
+        ]
+        Resource  = "*"
+        Condition = { "ForAnyValue:StringLike" = { "aws:TagKeys" = "dp:*" } }
       },
       {
         # The apply identity must not rewrite its own trust, policies or
@@ -227,12 +324,30 @@ locals {
   # keeps the plan identity to control-plane metadata. Trade-off: planning a
   # resource whose refresh reads data (aws_s3_object, aws_secretsmanager_secret_version,
   # aws_ssm_parameter, ...) fails unless its ARN is in plan_role_data_read_exempt_arns.
+  #
+  # Deliberately NOT denied (Terraform plan must refresh these resources, so a
+  # deny would break every plan that manages them): lambda:GetFunction /
+  # GetFunctionConfiguration (returns environment variables),
+  # ecs:DescribeTaskDefinition (returns container environment + secret ARNs —
+  # the values stay in Secrets Manager / SSM, which ARE denied) and
+  # ec2:DescribeInstanceAttribute (returns userData). Keep secrets out of Lambda
+  # env vars, task-definition environment and user data; reference
+  # Secrets Manager / SSM instead. Everything below is unused by refresh.
+  # ssm:GetParameter* also covers GetParameters, GetParametersByPath and
+  # GetParameterHistory. glue:GetConnection(s) returns connection passwords and
+  # no module in this repo manages Glue.
   plan_role_data_read_deny_actions = [
     "s3:GetObject*",
     "secretsmanager:GetSecretValue",
     "secretsmanager:BatchGetSecretValue",
     "ssm:GetParameter*",
     "kms:Decrypt",
+    "kms:GenerateDataKey*",
+    "ec2:GetPasswordData",
+    "ec2:GetConsoleOutput",
+    "ec2:GetConsoleScreenshot",
+    "glue:GetConnection",
+    "glue:GetConnections",
     "dynamodb:GetItem",
     "dynamodb:BatchGetItem",
     "dynamodb:Query",
@@ -384,6 +499,119 @@ resource "aws_cloudformation_stack_set_instance" "this" {
   for_each = var.target_ou_ids
 
   stack_set_name            = aws_cloudformation_stack_set.this.name
+  call_as                   = var.call_as
+  stack_set_instance_region = var.stack_set_instance_region
+  retain_stack              = false
+
+  deployment_targets {
+    organizational_unit_ids = [each.value]
+  }
+
+  operation_preferences {
+    failure_tolerance_count = 0
+    max_concurrent_count    = 10
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Member-account break-glass role (sibling SERVICE_MANAGED StackSet)
+#
+# The org deny-tamper SCP exempts break-glass by role NAME
+# (arn:aws:iam::*:role/<name>). If no role with that name exists in a member
+# account, whoever creates one there first inherits every break-glass
+# exemption. This StackSet occupies the name in every account of the targeted
+# OUs (default: the org root via the organization stage) with a role that
+# trusts ONLY the management-account break-glass principal(s), MFA required.
+# The SCP (DenyStackSetRoleTampering) and the tfc-apply boundary
+# (DenyPrivilegedRoleTampering) stop the pipeline creating, modifying or
+# deleting it; only break-glass and the StackSet execution role may.
+# ---------------------------------------------------------------------------
+
+locals {
+  break_glass_name_parts = split("/", var.break_glass_role_name)
+  break_glass_role_short = element(local.break_glass_name_parts, length(local.break_glass_name_parts) - 1)
+  break_glass_role_path  = length(local.break_glass_name_parts) > 1 ? "/${join("/", slice(local.break_glass_name_parts, 0, length(local.break_glass_name_parts) - 1))}/" : "/"
+
+  member_break_glass_trust = {
+    Version = "2012-10-17"
+    Statement = [merge(
+      {
+        Sid       = "BreakGlassFromManagementAccount"
+        Effect    = "Allow"
+        Principal = { AWS = var.member_break_glass_trusted_principal_arns }
+        Action    = "sts:AssumeRole"
+      },
+      { for _ in(var.member_break_glass_require_mfa ? [1] : []) : "Condition" => {
+        Bool            = { "aws:MultiFactorAuthPresent" = "true" }
+        NumericLessThan = { "aws:MultiFactorAuthAge" = tostring(var.member_break_glass_mfa_max_age) }
+      } },
+    )]
+  }
+
+  member_break_glass_template = {
+    AWSTemplateFormatVersion = "2010-09-09"
+    Description              = "Member-account break-glass role (managed by Terraform: modules/aws/iam/tfc-oidc-baseline)"
+    Resources = {
+      MemberBreakGlassRole = {
+        Type = "AWS::IAM::Role"
+        Properties = {
+          RoleName                 = local.break_glass_role_short
+          Path                     = local.break_glass_role_path
+          Description              = "Emergency break-glass access; assumable only from the management-account break-glass principal with MFA"
+          AssumeRolePolicyDocument = local.member_break_glass_trust
+          ManagedPolicyArns        = var.member_break_glass_policy_arns
+          MaxSessionDuration       = 3600
+        }
+      }
+    }
+    Outputs = {
+      BreakGlassRoleArn = { Value = { "Fn::GetAtt" = ["MemberBreakGlassRole", "Arn"] } }
+    }
+  }
+
+  member_break_glass_template_body = jsonencode(local.member_break_glass_template)
+}
+
+resource "aws_cloudformation_stack_set" "break_glass" {
+  count = var.enable_member_break_glass_role ? 1 : 0
+
+  name             = var.member_break_glass_stack_set_name
+  description      = "Member-account break-glass role (occupies the SCP-exempt break-glass name; trusts the management-account break-glass principal with MFA)."
+  permission_model = "SERVICE_MANAGED"
+  call_as          = var.call_as
+  capabilities     = ["CAPABILITY_NAMED_IAM"]
+  template_body    = local.member_break_glass_template_body
+  tags             = var.tags
+
+  auto_deployment {
+    enabled                          = true
+    retain_stacks_on_account_removal = false
+  }
+
+  managed_execution {
+    active = true
+  }
+
+  operation_preferences {
+    failure_tolerance_count = 0
+    max_concurrent_count    = 10
+    region_concurrency_type = "SEQUENTIAL"
+  }
+
+  lifecycle {
+    ignore_changes = [administration_role_arn]
+
+    precondition {
+      condition     = length(var.member_break_glass_trusted_principal_arns) > 0
+      error_message = "enable_member_break_glass_role = true requires at least one member_break_glass_trusted_principal_arns entry."
+    }
+  }
+}
+
+resource "aws_cloudformation_stack_set_instance" "break_glass" {
+  for_each = var.enable_member_break_glass_role ? var.member_break_glass_target_ou_ids : {}
+
+  stack_set_name            = aws_cloudformation_stack_set.break_glass[0].name
   call_as                   = var.call_as
   stack_set_instance_region = var.stack_set_instance_region
   retain_stack              = false

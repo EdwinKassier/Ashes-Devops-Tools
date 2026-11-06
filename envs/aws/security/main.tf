@@ -61,6 +61,7 @@ module "aws_security" {
   log_archive_bucket_name           = local.log_archive_bucket_name
   key_admin_arn                     = var.key_admin_arn
   key_admin_role_name               = var.key_admin_role_name
+  key_policy_admin_role_name        = var.key_policy_admin_role_name
   kms_key_user_arns                 = var.kms_key_user_arns
   enable_kms_protection_tag         = var.enable_kms_protection_tag
   config_role_arn                   = var.config_role_arn

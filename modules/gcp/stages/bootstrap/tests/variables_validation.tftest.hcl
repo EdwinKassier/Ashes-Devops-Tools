@@ -148,3 +148,23 @@ run "rejects_legacy_access_policy_grants_without_policy" {
   }
   expect_failures = [var.enable_legacy_org_access_policy_grants]
 }
+
+run "rejects_unknown_guardrail_owner_mode" {
+  command = plan
+
+  variables {
+    guardrail_owner_mode = "nobody"
+  }
+
+  expect_failures = [var.guardrail_owner_mode]
+}
+
+run "rejects_malformed_guardrail_owner_member" {
+  command = plan
+
+  variables {
+    guardrail_owner_members = ["guardrail-owners@example.com"]
+  }
+
+  expect_failures = [var.guardrail_owner_members]
+}

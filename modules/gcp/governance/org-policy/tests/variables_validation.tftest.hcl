@@ -6,7 +6,7 @@ run "valid_org_parent" {
     parent = "organizations/123456789"
     boolean_policies = [
       {
-        constraint = "sql.restrictPublicIp"
+        constraint = "compute.requireShieldedVm"
         enforce    = true
       }
     ]
@@ -136,4 +136,26 @@ run "list_policy_deny_all" {
     condition     = length(google_org_policy_policy.list_policies) == 1
     error_message = "Expected one list policy to be planned"
   }
+}
+
+run "rejects_legacy_name_in_managed_policies" {
+  command = plan
+
+  variables {
+    parent           = "organizations/123456789"
+    managed_policies = [{ constraint = "iam.disableServiceAccountKeyCreation" }]
+  }
+
+  expect_failures = [var.managed_policies]
+}
+
+run "rejects_non_json_managed_parameters" {
+  command = plan
+
+  variables {
+    parent           = "organizations/123456789"
+    managed_policies = [{ constraint = "iam.managed.allowedPolicyMembers", parameters = "not-json" }]
+  }
+
+  expect_failures = [var.managed_policies]
 }

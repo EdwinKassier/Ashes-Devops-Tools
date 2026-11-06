@@ -269,3 +269,71 @@ resource "google_bigquery_dataset_iam_member" "bq_sink_writer" {
   role       = "roles/bigquery.dataEditor"
   member     = google_logging_organization_sink.org_audit_bq_sink[0].writer_identity
 }
+
+# =============================================================================
+# CLOUD LOGGING LOG ANALYTICS (default on with org_id)
+# =============================================================================
+# The current Google-recommended way to query audit logs: an org sink routes the
+# audit logs into a Cloud Logging log bucket with Log Analytics enabled, and a
+# linked BigQuery dataset exposes it read-only to BigQuery (no copy, no second
+# retention to manage). Complements the BigQuery-export sink above, which is kept
+# so existing datasets are not destroyed on upgrade.
+locals {
+  enable_log_analytics   = var.org_id != null && var.enable_log_analytics
+  log_analytics_location = lower(coalesce(var.log_analytics_location, var.bucket_location))
+}
+
+resource "google_logging_project_bucket_config" "audit_analytics" {
+  count = local.enable_log_analytics ? 1 : 0
+
+  project          = var.project_id
+  location         = local.log_analytics_location
+  bucket_id        = var.log_analytics_bucket_id
+  description      = "Organization audit logs with Log Analytics (linked BigQuery dataset). Managed by Terraform."
+  retention_days   = var.log_analytics_retention_days
+  enable_analytics = true
+  # Same irreversible opt-in as the GCS WORM lock: a locked log bucket's
+  # retention cannot be reduced and the bucket cannot be deleted early.
+  locked = var.enable_bucket_lock
+
+  dynamic "cmek_settings" {
+    for_each = var.log_analytics_kms_key_name != null ? [1] : []
+    content {
+      kms_key_name = var.log_analytics_kms_key_name
+    }
+  }
+}
+
+resource "google_logging_organization_sink" "org_audit_analytics_sink" {
+  count = local.enable_log_analytics ? 1 : 0
+
+  name             = "org-audit-log-analytics"
+  org_id           = var.org_id
+  destination      = "logging.googleapis.com/${google_logging_project_bucket_config.audit_analytics[0].id}"
+  include_children = true
+  filter           = "logName:\"cloudaudit.googleapis.com\""
+  description      = "Routes every org audit log into the Log Analytics bucket."
+}
+
+# The sink writer may write log entries into this bucket only.
+resource "google_project_iam_member" "audit_analytics_writer" {
+  count = local.enable_log_analytics ? 1 : 0
+
+  project = var.project_id
+  role    = "roles/logging.bucketWriter"
+  member  = google_logging_organization_sink.org_audit_analytics_sink[0].writer_identity
+
+  condition {
+    title       = "audit_analytics_bucket_only"
+    description = "Write only to the audit Log Analytics bucket"
+    expression  = "resource.name.endsWith(\"locations/${local.log_analytics_location}/buckets/${var.log_analytics_bucket_id}\")"
+  }
+}
+
+resource "google_logging_linked_dataset" "audit_analytics" {
+  count = local.enable_log_analytics && var.enable_log_analytics_linked_dataset ? 1 : 0
+
+  link_id     = var.log_analytics_link_id
+  bucket      = google_logging_project_bucket_config.audit_analytics[0].id
+  description = "Read-only BigQuery view of the org audit Log Analytics bucket."
+}

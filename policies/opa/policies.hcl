@@ -7,8 +7,9 @@
 # for `opa test`; they define no policy and are never queried.
 #
 # enforcement_level:
-#   mandatory - a violation stops the run (users with "Manage Policy
-#               Overrides" can override, because the set is overridable)
+#   mandatory - a violation stops the run. tfc-admin creates the set with
+#               overridable = false (policy_set_overridable), so not even a
+#               user with "Manage Policy Overrides" can wave it through
 #   advisory  - a violation is reported on the run but never blocks it
 #
 # Mandatory policies encode controls every module in this repo already

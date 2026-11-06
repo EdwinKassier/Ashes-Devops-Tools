@@ -240,6 +240,44 @@ run "default_operator_roles" {
   }
 }
 
+# N7: the pipeline key admin must not hold kms:PutKeyPolicy — each CMK's policy
+# admin defaults to the member break-glass role in the key's OWN account
+# (PutKeyPolicy is not cross-account), and is never the key admin.
+run "key_policy_admin_defaults_to_member_break_glass" {
+  command = plan
+
+  variables {
+    key_admin_arn = null
+  }
+
+  assert {
+    condition = (
+      local.key_policy_admin_arns["log_archive"] == tolist(["arn:aws:iam::333333333333:role/break-glass"]) &&
+      local.key_policy_admin_arns["forensics"] == tolist(["arn:aws:iam::444444444444:role/break-glass"]) &&
+      local.key_policy_admin_arns["security_tooling"] == tolist(["arn:aws:iam::222222222222:role/break-glass"])
+    )
+    error_message = "each CMK's PutKeyPolicy holder must default to the break-glass role in the key's own account"
+  }
+
+  assert {
+    condition     = alltrue([for k, a in local.key_policy_admin_arns : !contains(a, local.key_admin_arns[k])])
+    error_message = "the pipeline key admin must never be the key-policy admin"
+  }
+}
+
+run "key_policy_admin_legacy_opt_out" {
+  command = plan
+
+  variables {
+    key_policy_admin_role_name = null
+  }
+
+  assert {
+    condition     = alltrue([for a in values(local.key_policy_admin_arns) : length(a) == 0])
+    error_message = "key_policy_admin_role_name = null must fall back to the legacy (key admin) behaviour"
+  }
+}
+
 run "explicit_key_admin_wins" {
   command = plan
 

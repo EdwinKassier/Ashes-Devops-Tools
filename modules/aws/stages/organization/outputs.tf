@@ -57,3 +57,8 @@ output "tfc_oidc_stack_set_name" {
   description = "Name of the StackSet deploying the TFC OIDC baseline, or null when disabled."
   value       = var.enable_tfc_oidc_baseline ? module.tfc_oidc_baseline[0].stack_set_name : null
 }
+
+output "member_break_glass_stack_set_name" {
+  description = "Name of the StackSet deploying the break-glass role into member accounts, or null when disabled."
+  value       = var.enable_tfc_oidc_baseline ? module.tfc_oidc_baseline[0].member_break_glass_stack_set_name : null
+}

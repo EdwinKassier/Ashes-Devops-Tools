@@ -123,6 +123,13 @@ run "one_service_golden_path" {
     error_message = "each service must get a Fargate service."
   }
 
+  # First deploy never references a missing tag: with container_image unset the
+  # first revision runs the public placeholder, which listens on the default 8080.
+  assert {
+    condition     = output.services["orders"].initial_image == "public.ecr.aws/nginx/nginx-unprivileged:stable-alpine"
+    error_message = "container_image = null must default the first revision to the public placeholder image."
+  }
+
   assert {
     condition     = length(aws_iam_openid_connect_provider.github) == 1 && aws_iam_openid_connect_provider.github[0].url == "https://token.actions.githubusercontent.com" && length(aws_iam_openid_connect_provider.github[0].client_id_list) == 1 && contains(aws_iam_openid_connect_provider.github[0].client_id_list, "sts.amazonaws.com")
     error_message = "enable_github_oidc must create the GitHub OIDC provider with audience sts.amazonaws.com."
@@ -389,5 +396,22 @@ run "boundary_disabled_with_null_name" {
   assert {
     condition     = aws_iam_role.execution["orders"].permissions_boundary == null && aws_iam_role.task["orders"].permissions_boundary == null && length(data.aws_partition.current) == 0
     error_message = "tfc_apply_boundary_policy_name = null must create the roles without a permissions boundary."
+  }
+}
+
+run "explicit_container_image_wins_over_placeholder" {
+  command = plan
+
+  variables {
+    services = {
+      orders = {
+        container_image = "111111111111.dkr.ecr.eu-west-2.amazonaws.com/orders:v1"
+      }
+    }
+  }
+
+  assert {
+    condition     = output.services["orders"].initial_image == "111111111111.dkr.ecr.eu-west-2.amazonaws.com/orders:v1"
+    error_message = "An explicit container_image must be the first revision's image."
   }
 }

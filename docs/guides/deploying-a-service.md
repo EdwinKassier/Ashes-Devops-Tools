@@ -76,7 +76,8 @@ A fully commented version is in
 [`examples/app-services/dev.app-services.tfvars`](../../examples/app-services/dev.app-services.tfvars).
 The typed shape, with every default, is the `services` variable of
 [`modules/gcp/stages/app-services`](../../modules/gcp/stages/app-services/README.md).
-Common optional fields include `image` (bootstrap image, default
+Common optional fields include `image` (first-revision image; default the
+root's `app_bootstrap_image` / `gcp.workload.bootstrap_image`, else
 `us-docker.pkg.dev/cloudrun/container/hello`), `ingress`, `cpu`, `memory`,
 `min_instances`, `max_instances`, `subnetwork_id`, `invoker_members`,
 `enable_unauthenticated`, `enable_binary_authorization` / `binary_authorization_policy`,
@@ -142,26 +143,38 @@ Terraform would revert those flags on its next apply.
 ## Exposing the service (front door)
 
 The default ingress is internal only, so callers inside the VPC (and peered
-networks) can reach it. To publish the service on your own domain behind a global
-HTTPS load balancer with a managed certificate, set
-`ingress = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"` on the entry and add
-`modules/gcp/network/app-ingress`:
+networks) can reach it. To publish a service on your own domain, list it in
+`gcp.workload.public_ingress.<env>` in `config/landing-zone.yaml` (or the
+`public_ingress_services` variable):
 
-```hcl
-module "ingress" {
-  source                 = "../../../modules/gcp/network/app-ingress"
-  project_id             = local.env_config.host_project_id
-  region                 = local.env_config.region
-  name                   = "orders-api"
-  domains                = ["api.example.com"]
-  cloud_run_service_name = module.app_services.services["orders-api"].service_name
-  dns_managed_zone       = "app-zone"  # optional: creates the A record for you
-  # security_policy_id   = module.host.security_policy_id  # optional Cloud Armor WAF
-}
+```yaml
+gcp:
+  workload:
+    public_ingress:
+      prod:
+        orders-api:
+          domains: [api.example.com]
+          # dns_managed_zone: app-zone   # optional: creates the A record for you
 ```
 
-For a deliberately public, unauthenticated endpoint, also set
-`enable_unauthenticated = true`. To grant specific callers, use
+`gcp-workload-<env>` then builds, per listed service, a global external
+Application Load Balancer (`modules/gcp/network/app-ingress`): a reserved IP, a
+serverless NEG to the Cloud Run service, a backend with the environment Cloud
+Armor policy (turned on automatically), a Google-managed certificate for the
+domains, and an HTTP to HTTPS redirect. The service is switched to
+`INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER` with `enable_unauthenticated = true`,
+unless its entry sets them. `enable_public_ingress = false` turns it off. Point
+the domains at `public_ingress["<svc>"].ip_address`. The certificate is issued
+only once DNS resolves to that IP.
+
+Unauthenticated invocation turns off the Cloud Run Invoker IAM check on the
+service (`invoker_iam_disabled`) instead of binding `allUsers`, so it works under
+the gcp-organization domain-restricted-sharing policy
+(`iam.allowedPolicyMemberDomains`) with no exception. Exposure stays bounded by
+ingress: with `INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER` the service is reachable only
+through the external ALB and its Cloud Armor policy. The older `allUsers` binding is
+still available per service via the cloud-run module's
+`public_access_mode = "allusers_binding"`. To grant specific callers instead, use
 `invoker_members = ["serviceAccount:caller@..."]`.
 
 ## GKE Autopilot
@@ -195,11 +208,12 @@ These items are verified by mocked plan tests only:
 - **VPC-SC.** If the env perimeter is enforced and restricts `run`,
   `artifactregistry` or `sqladmin`, add an ingress rule for the app-deploy WIF
   pool (`principalSet://iam.googleapis.com/projects/<host-number>/locations/global/workloadIdentityPools/apps-<env>/*`).
-  The bootstrap image `us-docker.pkg.dev/cloudrun/container/hello` lives outside
-  the perimeter, so pre-push a bootstrap image into the service's own repo and set
-  `image` if pulls are blocked.
-- **Binary Authorization.** The bootstrap image must satisfy the policy, or the
-  first apply fails.
+  The default first-revision image `us-docker.pkg.dev/cloudrun/container/hello`
+  lives outside the perimeter. Mirror a placeholder into a repo inside it and set
+  `gcp.workload.bootstrap_image` in `config/landing-zone.yaml` (or
+  `app_bootstrap_image`) once for every service, or `image` per service.
+- **Binary Authorization.** The first-revision image must satisfy the policy, or
+  the first apply fails. Use an attested image as `bootstrap_image`.
 - **Shared repos.** If two services share one GitHub repository with *different*
   `ref`/`environment` constraints, the provider condition is the union of both. A
   token that satisfies either constraint can impersonate both deploy SAs. Give each
@@ -228,10 +242,15 @@ creates everything below in that environment's workload account. The default
 | Aurora PostgreSQL `<env>-<service>` (when `database` is set) | Serverless v2 by default; RDS-managed master password in Secrets Manager (never in state); CMK; isolated subnets; SG allows 5432 from the service SG only. The task gets `DB_HOST`, `DB_PORT`, `DB_NAME` and the `DB_USERNAME` / `DB_PASSWORD` secrets |
 | CloudWatch alarms | CPU, memory, unhealthy targets, target 5xx (`enable_app_alarms`, `app_alarm_sns_topic_arn`) |
 
+The root also creates a rotating workload CMK `alias/workload-<env>` (always,
+unless `kms_key_arn` is supplied). It encrypts ECR, the log groups, Aurora, the
+RDS secret, EBS by default and Session Manager.
+
 Shared per environment, created only when `services` is non-empty:
 
 - ECS cluster `<env>-apps` (Container Insights).
-- One **internal** ALB `<env>-apps` in the private tier. Its default action is a
+- One **internal** ALB `<env>-apps` in the private tier (see
+  [Exposing an AWS service](#exposing-an-aws-service) for public modes). Its default action is a
   404, and each service gets a listener rule (default path `/<service>` and
   `/<service>/*`; set `path_patterns` / `host_headers` / `priority` to override).
   Without `app_alb_certificate_arn` it listens on HTTP :80 inside the private
@@ -247,9 +266,12 @@ Shared per environment, created only when `services` is non-empty:
 
 - The `aws-workload-<env>` workspace is applied: spoke VPC with `private` and
   `isolated` tiers, TGW default route to central egress.
-- `kms_key_arn` is set to a CMK whose key policy admits
-  `logs.<region>.amazonaws.com` (log groups) and lets the account's IAM
-  principals use it (execution roles decrypt secrets, ECR, RDS).
+- Nothing to create for encryption. With `kms_key_arn = ""` (the default) the
+  root creates the workload CMK. Its key policy admits the account root (IAM
+  delegation), `logs.<region>.amazonaws.com` (scoped by the `aws:logs:arn`
+  encryption context to this account's log groups), ECR via the service, and the
+  `<env>-*-exec` task execution roles. To bring your own key, set `kms_key_arn`
+  to one with an equivalent policy.
 - In the service's GitHub repository, create a GitHub **environment** named after
   the AWS environment (for example `dev`). Protection rules on it, such as
   required reviewers for `prod`, become part of the trust: the deploy role only
@@ -308,10 +330,14 @@ pipeline needs: `ecr_repository_url`, `deploy_role_arn`, `ecs_cluster_name`,
 `container_name`. Copy these into the GitHub environment's **variables**. None
 of them are secrets.
 
-The first task-definition revision runs `<ecr-repo>:bootstrap` (or
-`container_image` if set). Until the first pipeline run pushes an image, tasks
-fail to start and the circuit breaker keeps retrying, so expect the service to
-be unhealthy until then. Once a service has a deploy role, the ECS service
+The first task-definition revision runs `container_image` if set, else the
+public placeholder `public.ecr.aws/nginx/nginx-unprivileged:stable-alpine`. It
+listens on 8080 (the default `container_port`) and answers 200 on `/`, so the
+first apply goes healthy before any pipeline run. Override it for every service
+with `aws.workload.bootstrap_image` (or `app_bootstrap_image`), for example a
+mirror in reach of a spoke without internet egress. With a different
+`container_port`, set `container_image`, or the targets stay unhealthy until
+the first deploy (the plan warns). Once a service has a deploy role, the ECS service
 **ignores** `task_definition` and `desired_count` drift, so Terraform never
 reverts what CI deployed.
 
@@ -403,31 +429,38 @@ its own GitHub environment.
 
 ### Exposing an AWS service
 
-The ALB is internal. It is reachable from the spoke and, through
-`app_alb_ingress_cidrs`, from other spokes over the TGW. Internet exposure
-belongs at the edge (`enable_edge`: CloudFront + WAF in us-east-1). An
-internet-facing ALB (`app_alb_internal = false`) needs a public subnet tier
-(`app_alb_subnet_tier`) and `app_alb_certificate_arn`. The default spoke has no
-public tier.
+`app_ingress_mode` (or `aws.workload.app_ingress_mode` in
+`config/landing-zone.yaml`) selects the exposure:
+
+| Mode | What you get | Inputs |
+|---|---|---|
+| `internal` (default) | Internal ALB, reachable from the spoke and, through `app_alb_ingress_cidrs`, from other spokes over the TGW | none |
+| `cloudfront_vpc_origin` | The ALB stays internal. CloudFront reaches it through a **VPC origin** (the workload stage attaches an internet gateway with no routes, which VPC origins require) and serves `https://<id>.cloudfront.net` behind a CloudFront WAF (AWS Common + KnownBadInputs). All methods, no caching. | none. Optional `app_edge_domain_name` (ACM certificate in us-east-1, validate via DNS). Leave `app_alb_certificate_arn` unset. |
+| `public_alb` | The workload stage adds a `public` subnet tier and an internet gateway. The ALB is internet-facing there on HTTPS (ingress `0.0.0.0/0` unless `app_alb_ingress_cidrs` is set), with a regional WAF (`enable_app_waf`, default on). | `app_alb_certificate_arn` (required) |
+
+`app_endpoint` outputs the resulting base URL. Tasks always stay in the private
+tier with no public IP.
 
 ### Caveats to validate on real AWS
 
 These items are verified by mocked plan tests only:
 
-- **CloudFront to internal ALB.** The edge module's origin is a public HTTPS
-  hostname. Fronting the internal ALB needs a CloudFront **VPC origin**, which
-  `edge-security` does not yet wire.
-- **KMS key policy.** CloudWatch Logs must be allowed in the CMK policy, or log
-  group creation fails. The execution roles need `kms:Decrypt` through the key
-  policy too, if the policy does not delegate to IAM.
+- **CloudFront VPC origin.** The first VPC origin in an account creates the
+  `CloudFront-VPCOrigins-Service-SG` security group. The ALB admits the spoke
+  CIDR, which covers the VPC-origin ENIs. Tighten it to that security group if
+  you need to.
+- **KMS key policy.** The created CMK's policy is asserted in mocked tests only.
+  A brought-your-own key must admit CloudWatch Logs, or log group creation
+  fails.
 - **Egress.** Tasks reach ECR, Logs and Secrets Manager over HTTPS through the
   TGW default route to central egress. If the hub does not provide internet
   egress, add interface endpoints (`ecr.api`, `ecr.dkr`, `logs`,
   `secretsmanager`) to the spoke. S3 (for ECR layers) already has a gateway
   endpoint.
-- **Bootstrap image.** The first revision references `:bootstrap`, which does
-  not exist until you push it. Push a placeholder, set `container_image`, or
-  accept failing tasks until the first pipeline run.
+- **Placeholder image.** The default first-revision image is pulled from ECR
+  Public, so the spoke needs internet egress (the hub's central egress). A
+  standalone spoke (`enable_network_hub = false`) has none, and its private ECR
+  pulls also need the interface endpoints above.
 - **Database credentials.** The app receives the RDS **master** credentials.
   Create a least-privilege application role (or use IAM database auth, which is
   enabled) and switch `secrets` to it before production.

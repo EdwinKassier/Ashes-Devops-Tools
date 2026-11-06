@@ -73,7 +73,7 @@ variable "environments" {
 }
 
 variable "default_region" {
-  description = "Default region for resources. Null = org.regions.gcp from config/landing-zone.yaml, else europe-west1."
+  description = "Default region for resources. Null = org.regions.gcp from config/landing-zone.yaml, else europe-west2."
   type        = string
   default     = null
 }

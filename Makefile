@@ -1,4 +1,4 @@
-.PHONY: help install fmt fmt-check validate validate-all lint consistency security security-low security-report docs docs-check count count-check links shellcheck test ci clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
+.PHONY: help install fmt fmt-check validate validate-all lint consistency security security-low security-report docs docs-check count count-check links required-checks shellcheck test test-scripts ci clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
 
 TERRAFORM := terraform
 TFLINT := tflint
@@ -115,8 +115,9 @@ docs: ## Generate Terraform docs from repo root
 docs-check: ## Verify Terraform docs are up to date
 	@bash scripts/module-docs.sh check
 
-count: ## Print the live module/root/test-suite counts (the figures README.md and CLAUDE.md must quote)
+count: ## Print the live module/root/test-suite counts (the figures README.md and CLAUDE.md must quote) + library-only modules
 	@./scripts/check-docs-counts.sh --print
+	@python3 scripts/check-module-usage.py
 
 count-check: ## Fail if README.md / CLAUDE.md counts drifted from the tree (CI: meta-lint)
 	@./scripts/check-docs-counts.sh
@@ -124,11 +125,17 @@ count-check: ## Fail if README.md / CLAUDE.md counts drifted from the tree (CI: 
 links: ## Fail on broken repo-relative links in any Markdown file (offline; CI: meta-lint)
 	@python3 scripts/check-md-links.py
 
-shellcheck: ## Run shellcheck (pinned shellcheck-py, same as pre-commit) on scripts/*.sh and tests/e2e/scripts/*.sh
+required-checks: ## Fail if BRANCH_PROTECTION.md requires a status-check context no workflow job reports (CI: meta-lint)
+	@./scripts/check-required-checks.sh
+
+test-scripts: ## Run the shell-script tests in scripts/tests/ (CI: meta-lint)
+	@set -e; for t in scripts/tests/test-*.sh; do echo "$(YELLOW)$$t$(NC)"; bash "$$t"; done
+
+shellcheck: ## Run shellcheck (pinned shellcheck-py, same as pre-commit) on scripts/*.sh, scripts/tests/*.sh and tests/e2e/scripts/*.sh
 	@if command -v uvx >/dev/null 2>&1; then \
-		uvx --from shellcheck-py==$(SHELLCHECK_VERSION).1 shellcheck --severity=warning scripts/*.sh tests/e2e/scripts/*.sh; \
+		uvx --from shellcheck-py==$(SHELLCHECK_VERSION).1 shellcheck --severity=warning scripts/*.sh scripts/tests/*.sh tests/e2e/scripts/*.sh; \
 	else \
-		shellcheck --severity=warning scripts/*.sh tests/e2e/scripts/*.sh; \
+		shellcheck --severity=warning scripts/*.sh scripts/tests/*.sh tests/e2e/scripts/*.sh; \
 	fi
 
 # TEST_DIRS overrides the discovered set (the CI test shards pass their slice):
@@ -172,7 +179,9 @@ ci: ## Run the local CI pipeline (fmt → consistency → counts → links → s
 	@$(MAKE) consistency
 	@$(MAKE) count-check
 	@$(MAKE) links
+	@$(MAKE) required-checks
 	@$(MAKE) shellcheck
+	@$(MAKE) test-scripts
 	@$(MAKE) docs-check
 	@$(MAKE) validate-all
 	@$(MAKE) lint
@@ -245,7 +254,7 @@ clean: ## Remove local Terraform caches (.terraform dirs, plan files, reports). 
 
 clean-locks: ## DANGER: Delete all .terraform.lock.hcl files so they can be regenerated. Only run this when intentionally refreshing provider lock files.
 	@echo "$(YELLOW)WARNING: This deletes all committed .terraform.lock.hcl files from working tree.$(NC)"
-	@echo "$(YELLOW)Re-generate with: terraform providers lock -platform=linux_amd64 -platform=darwin_arm64$(NC)"
+	@echo "$(YELLOW)Re-generate with: terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64$(NC)"
 	@printf "Type 'yes' to continue: " && read CONFIRM && [ "$$CONFIRM" = "yes" ] || (echo "Cancelled." && exit 1)
 	@find . -type f -name ".terraform.lock.hcl" -delete 2>/dev/null || true
 

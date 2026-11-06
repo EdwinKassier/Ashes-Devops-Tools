@@ -24,6 +24,16 @@ resource "google_tags_location_tag_binding" "containment_buckets" {
   tag_value = local.containment_tag_value
 }
 
+# The audit Log Analytics log bucket (its update/untag is denied by the
+# tag-scoped containment rule).
+resource "google_tags_location_tag_binding" "containment_log_analytics_bucket" {
+  count = var.enable_admin_containment && var.enable_log_analytics ? 1 : 0
+
+  parent    = "//logging.googleapis.com/${module.audit_logs.log_analytics_bucket_id}"
+  location  = module.audit_logs.log_analytics_bucket_location
+  tag_value = local.containment_tag_value
+}
+
 resource "google_tags_location_tag_binding" "containment_audit_keyring" {
   count = var.enable_admin_containment ? 1 : 0
 

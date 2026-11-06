@@ -84,6 +84,27 @@ enabled on that workspace (`enable_supabase` / `enable_vercel`).
 See [`docs/runbooks/aws-bootstrap.md`](../runbooks/aws-bootstrap.md) for phase-0 creation of the
 bootstrap role, the downstream member-account roles, and the workspaces that consume them.
 
+### TFC team permissions and committed variables
+
+tfc-admin grants TFC access least-privilege, so no single person both changes a control-plane
+input and approves its apply:
+
+- `platform_team_id`: **custom** access on projects holding control-plane workspaces
+  (`runs = plan` by default, variables and state read-only, no policy overrides); fixed
+  **write** on workload workspaces.
+- `control_plane_approvers_team_id`: a separate, small team with `runs = apply` (variables
+  read-only) on the control-plane projects. It must differ from the platform team.
+- The OPA policy set is created with `overridable = false`: a mandatory policy failure cannot
+  be overridden from the UI.
+- Production workload workspaces (`is_production`) get no speculative PR plans, so PR code never
+  runs with a production plan identity.
+
+Workspace variables are code: they come from `config/landing-zone.yaml`,
+`config/tfc-workspaces.yaml` (no secrets) or tfc-admin `workspace_variables`. TFC cannot stop an
+organization owner from setting a UI variable, so keep the owners team tiny, give no other team
+`variables = write` on the control plane, and treat a UI-set variable as drift (tfc-admin reverts
+the ones it manages at its next apply).
+
 ## Optional
 
 | Name | Kind | Used by | Purpose | Default when unset |

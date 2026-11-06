@@ -144,13 +144,14 @@ run "deny_tamper_scp_hardened" {
     error_message = "pipeline roles and break-glass must be exempt from DenyWeakenSecurityServices"
   }
 
-  # Pipeline roles, OAAR and break-glass are protected from IAM modification.
+  # Pipeline roles, OAAR and break-glass are protected from IAM modification
+  # (across the two role-tamper tiers).
   assert {
     condition = alltrue([
-      for p in ["arn:aws:iam::*:role/tfc-apply", "arn:aws:iam::*:role/OrganizationAccountAccessRole", "arn:aws:iam::*:role/break-glass"] :
-      contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyPrivilegedRoleTampering"]).Resource, p)
-    ]) && contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyPrivilegedRoleTampering"]).Action, "iam:UpdateAssumeRolePolicy")
-    error_message = "DenyPrivilegedRoleTampering must protect pipeline roles, OAAR and break-glass from trust-policy changes"
+      for p in ["arn:aws:iam::*:role/tfc-apply", "arn:aws:iam::*:role/tfc-plan", "arn:aws:iam::*:role/OrganizationAccountAccessRole", "arn:aws:iam::*:role/stacksets-exec-*", "arn:aws:iam::*:role/break-glass"] :
+      contains(flatten([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s.Resource if contains(["DenyPrivilegedRoleTampering", "DenyStackSetRoleTampering"], s.Sid)]), p)
+    ]) && alltrue([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : contains(s.Action, "iam:UpdateAssumeRolePolicy") && contains(s.Action, "iam:CreateRole") if contains(["DenyPrivilegedRoleTampering", "DenyStackSetRoleTampering"], s.Sid)])
+    error_message = "the role-tamper statements must protect tfc-plan/tfc-apply, OAAR, stacksets-exec-* and break-glass from create and trust-policy changes"
   }
 
   # Protected KMS keys: destruction is keyed on the protection resource tag.
@@ -163,6 +164,68 @@ run "deny_tamper_scp_hardened" {
   assert {
     condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 5120
     error_message = "deny-tamper SCP must stay under the 5,120-character SCP size quota"
+  }
+}
+
+run "privileged_role_tamper_never_exempts_the_pipeline" {
+  # N1: a compromised member tfc-apply must not be able to CreateRole with the
+  # break-glass name (inheriting every break-glass SCP exemption) nor rewrite
+  # OrganizationAccountAccessRole's trust and assume it.
+  command = plan
+
+  # OAAR + the StackSet execution role: break-glass is the SOLE exemption.
+  assert {
+    condition = (
+      toset(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyPrivilegedRoleTampering"]).Resource) == toset(["arn:aws:iam::*:role/OrganizationAccountAccessRole", "arn:aws:iam::*:role/stacksets-exec-*"]) &&
+      one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyPrivilegedRoleTampering"]).Condition.ArnNotLike["aws:PrincipalArn"] == ["arn:aws:iam::*:role/break-glass"]
+    )
+    error_message = "DenyPrivilegedRoleTampering must protect OAAR + stacksets-exec-* and exempt break-glass only"
+  }
+
+  # StackSet-managed roles (tfc-plan, tfc-apply, member break-glass): exempt
+  # break-glass and the StackSet execution role only.
+  assert {
+    condition = (
+      toset(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyStackSetRoleTampering"]).Resource) == toset(["arn:aws:iam::*:role/tfc-plan", "arn:aws:iam::*:role/tfc-apply", "arn:aws:iam::*:role/break-glass"]) &&
+      toset(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyStackSetRoleTampering"]).Condition.ArnNotLike["aws:PrincipalArn"]) == toset(["arn:aws:iam::*:role/break-glass", "arn:aws:iam::*:role/stacksets-exec-*"])
+    )
+    error_message = "DenyStackSetRoleTampering must protect tfc-plan/tfc-apply/break-glass and exempt only break-glass + stacksets-exec-*"
+  }
+
+  # No role-tamper statement exempts tfc-apply or OAAR.
+  assert {
+    condition = alltrue([
+      for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement :
+      !contains(s.Condition.ArnNotLike["aws:PrincipalArn"], "arn:aws:iam::*:role/tfc-apply") && !contains(s.Condition.ArnNotLike["aws:PrincipalArn"], "arn:aws:iam::*:role/OrganizationAccountAccessRole")
+      if contains(["DenyPrivilegedRoleTampering", "DenyStackSetRoleTampering"], s.Sid)
+    ])
+    error_message = "the pipeline roles must never be exempt from the privileged-role tamper denies"
+  }
+
+  # The OAAR tier never covers the StackSet-managed names (so stacksets-exec-*
+  # can still maintain them) and the StackSet tier never covers OAAR.
+  assert {
+    condition     = !contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyStackSetRoleTampering"]).Resource, "arn:aws:iam::*:role/OrganizationAccountAccessRole")
+    error_message = "the StackSet execution-role exemption must not extend to OrganizationAccountAccessRole"
+  }
+
+  assert {
+    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 5120
+    error_message = "deny-tamper SCP must stay under the 5,120-character SCP size quota"
+  }
+}
+
+run "privileged_role_tier_omitted_when_every_pipeline_role_is_stackset_managed" {
+  command = plan
+
+  variables {
+    pipeline_role_names           = ["tfc-apply"]
+    stackset_execution_role_names = ["tfc-apply"]
+  }
+
+  assert {
+    condition     = length([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyPrivilegedRoleTampering"]) == 0
+    error_message = "an empty admin-role tier must be omitted (an empty Resource list is invalid policy)"
   }
 }
 

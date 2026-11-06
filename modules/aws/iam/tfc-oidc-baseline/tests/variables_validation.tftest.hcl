@@ -163,3 +163,24 @@ run "service_wide_data_read_exemption_rejected" {
 
   expect_failures = [var.plan_role_data_read_exempt_arns]
 }
+
+run "wildcard_break_glass_trusted_principal_rejected" {
+  # The break-glass trust must be account-qualified (no arn:aws:iam::*:).
+  command = plan
+
+  variables {
+    member_break_glass_trusted_principal_arns = ["arn:aws:iam::*:role/break-glass"]
+  }
+
+  expect_failures = [var.member_break_glass_trusted_principal_arns]
+}
+
+run "wildcard_break_glass_role_name_rejected" {
+  command = plan
+
+  variables {
+    break_glass_role_name = "break-*"
+  }
+
+  expect_failures = [var.break_glass_role_name]
+}

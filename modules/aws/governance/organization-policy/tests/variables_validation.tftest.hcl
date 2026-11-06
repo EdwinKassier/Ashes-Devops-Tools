@@ -93,3 +93,36 @@ run "wildcard_break_glass_name_rejected" {
 
   expect_failures = [var.break_glass_role_names]
 }
+
+run "unqualified_break_glass_role_arn_rejected" {
+  # Reject case: break-glass must be account-qualified (no arn:aws:iam::*:).
+  command = plan
+
+  variables {
+    break_glass_role_arn = "arn:aws:iam::*:role/break-glass"
+  }
+
+  expect_failures = [var.break_glass_role_arn]
+}
+
+run "bare_star_stackset_execution_role_rejected" {
+  # Reject case: a bare "*" execution-role name would exempt every principal
+  # from DenyStackSetRoleTampering.
+  command = plan
+
+  variables {
+    stackset_execution_role_names = ["*"]
+  }
+
+  expect_failures = [var.stackset_execution_role_names]
+}
+
+run "wildcard_stackset_managed_role_rejected" {
+  command = plan
+
+  variables {
+    stackset_managed_role_names = ["tfc-*"]
+  }
+
+  expect_failures = [var.stackset_managed_role_names]
+}

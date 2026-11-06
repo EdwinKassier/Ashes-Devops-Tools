@@ -37,6 +37,9 @@ locals {
       tgw_id        = try(tostring(local.lz.aws.contracts.network.tgw_id), null)
       ipam_pool_ids = { for k, v in try(local.lz.aws.contracts.network.ipam_pool_ids, {}) : k => tostring(v) }
     }
+    # aws.workload: app golden-path settings shared by every aws-workload-<env>.
+    app_ingress_mode    = try(tostring(local.lz.aws.workload.app_ingress_mode), null)
+    app_bootstrap_image = try(tostring(local.lz.aws.workload.bootstrap_image), null)
     security_contract = try(local.lz.aws.contracts.security.log_archive_bucket_name, null) == null ? null : {
       log_archive_bucket_name = tostring(local.lz.aws.contracts.security.log_archive_bucket_name)
     }
@@ -52,4 +55,5 @@ locals {
   aws_enabled_regions  = var.aws_enabled_regions != null ? var.aws_enabled_regions : coalesce(local.cfg.aws_enabled_regions, ["eu-west-2"])
   workload_account_key = coalesce(var.workload_account_key, try(local.cfg.workload_account_keys[var.environment], null), "unset")
   vpc_cidr             = coalesce(var.vpc_cidr, try(local.cfg.vpc_cidrs[local.environment], null), "10.20.0.0/16")
+  app_bootstrap_image  = coalesce(var.app_bootstrap_image, local.cfg.app_bootstrap_image, "public.ecr.aws/nginx/nginx-unprivileged:stable-alpine")
 }

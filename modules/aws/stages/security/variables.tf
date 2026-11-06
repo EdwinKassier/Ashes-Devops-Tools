@@ -149,6 +149,17 @@ variable "key_admin_role_name" {
   }
 }
 
+variable "key_policy_admin_role_name" {
+  description = "Role name (optionally path-prefixed), in each CMK's OWN account, granted kms:PutKeyPolicy — and nothing else — on the log-archive, forensics and security-tooling CMKs. Default break-glass: the member break-glass role the aws-organization stage deploys to every member account (enable_member_break_glass_role), so the pipeline key admin cannot rewrite a key policy to grant itself kms:Decrypt. The role must exist before this stage creates the keys (KMS rejects unknown principals), and later key-policy changes must be applied as it. Null = legacy: key admin also holds PutKeyPolicy."
+  type        = string
+  default     = "break-glass"
+
+  validation {
+    condition     = var.key_policy_admin_role_name == null || can(regex("^([A-Za-z0-9+=,.@_-]+/)*[A-Za-z0-9+=,.@_-]{1,64}$", coalesce(var.key_policy_admin_role_name, "x")))
+    error_message = "key_policy_admin_role_name must be null or an IAM role name without wildcards (optionally path-prefixed)."
+  }
+}
+
 variable "kms_key_user_arns" {
   description = "Principals granted key USAGE (Encrypt/Decrypt/ReEncrypt/GenerateDataKey/DescribeKey) per CMK, keyed by log_archive / forensics / security_tooling. Separate from key_admin_arn (administration only). Missing keys mean no general-usage grant beyond the built-in service-principal grants."
   type        = map(list(string))

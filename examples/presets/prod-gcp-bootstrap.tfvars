@@ -36,3 +36,12 @@ enable_org_level_folder_iam_delegation = false
 # Just-in-time org admin via Privileged Access Manager (pair with enable_pam in
 # prod-gcp-organization.tfvars).
 enable_pam = true
+
+# Pass 2 onwards: no standing human impersonation of the bootstrap apply SA.
+enable_phase0_admin_impersonation = false
+
+# Guardrail owner (separate mode is the default): only this PAM-gated group may
+# impersonate the guardrails SA that owns the IAM deny policies. The placeholder
+# is rejected by validation until you replace it.
+guardrail_owner_mode    = "separate"
+guardrail_owner_members = ["group:REPLACE-guardrail-owners@your-domain.invalid"]

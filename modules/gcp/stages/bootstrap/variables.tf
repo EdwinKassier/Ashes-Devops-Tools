@@ -429,3 +429,37 @@ variable "enable_pam" {
   type        = bool
   default     = false
 }
+
+variable "enable_phase0_admin_impersonation" {
+  description = "Let user:<admin_email> impersonate the terraform-admin (gcp-bootstrap apply) SA. Needed for the documented phase-0 first apply, which runs as a human admin. Set false on pass 2, once gcp-bootstrap applies through TFC dynamic credentials, so no standing human path to the bootstrap apply identity remains."
+  type        = bool
+  default     = true
+}
+
+variable "guardrail_owner_mode" {
+  description = "Who owns IAM deny policies. \"separate\" (default): a dedicated <prefix>-guardrails-apply SA is the only automation identity with roles/iam.denyAdmin; the organization apply SA no longer holds it, so it cannot delete the containment deny policy that constrains it. \"organization\": legacy, the organization apply SA holds denyAdmin and gcp-organization manages the deny policies itself. Keep it in step with the gcp-organization guardrail_owner_mode input (it defaults to this stage's output)."
+  type        = string
+  default     = "separate"
+
+  validation {
+    condition     = contains(["separate", "organization"], var.guardrail_owner_mode)
+    error_message = "guardrail_owner_mode must be \"separate\" or \"organization\"."
+  }
+}
+
+variable "guardrail_owner_members" {
+  description = "Principals allowed to impersonate the guardrails SA (roles/iam.serviceAccountTokenCreator) when guardrail_owner_mode = \"separate\". Use a group whose membership is granted just in time (PAM) and is disjoint from the people who can change the gcp-organization workspace. Empty = nobody can use the SA until set."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for m in var.guardrail_owner_members : can(regex("^(group|user|serviceAccount):[^@]+@[^@]+$", m))])
+    error_message = "guardrail_owner_members entries must be group:<email>, user:<email> or serviceAccount:<email>."
+  }
+}
+
+variable "enable_principal_access_boundary" {
+  description = "Grant the organization stage SAs what the gcp-organization principal access boundary policy needs (apply: roles/iam.principalAccessBoundaryAdmin at the org and roles/resourcemanager.projectIamAdmin on the admin project for the policy binding; plan: roles/iam.principalAccessBoundaryViewer). Keep it in step with the gcp-organization enable_principal_access_boundary input. Default false."
+  type        = bool
+  default     = false
+}

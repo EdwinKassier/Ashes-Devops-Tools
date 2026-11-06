@@ -69,22 +69,22 @@ output "terraform_service_account_email" {
 # Workload Identity Federation — needed by GitHub Actions and Terraform Cloud after bootstrap
 output "github_oidc_pool_id" {
   description = "Workload Identity Pool ID for GitHub Actions OIDC"
-  value       = local.bootstrap.github_oidc_pool_id
+  value       = try(local.bootstrap.github_oidc_pool_id, null)
 }
 
 output "github_oidc_provider_name" {
   description = "Fully-qualified WIF provider name for use in GitHub Actions (google-github-actions/auth)"
-  value       = local.bootstrap.github_oidc_provider_name
+  value       = try(local.bootstrap.github_oidc_provider_name, null)
 }
 
 output "tfc_oidc_pool_id" {
   description = "Workload Identity Pool ID for Terraform Cloud OIDC (null if TFC OIDC not configured)"
-  value       = local.bootstrap.tfc_oidc_pool_id
+  value       = try(local.bootstrap.tfc_oidc_pool_id, null)
 }
 
 output "tfc_oidc_provider_name" {
   description = "Fully-qualified WIF provider name for Terraform Cloud OIDC (null if TFC OIDC not configured)"
-  value       = local.bootstrap.tfc_oidc_provider_name
+  value       = try(local.bootstrap.tfc_oidc_provider_name, null)
 }
 
 # Tag Values (for downstream usage)
@@ -145,4 +145,24 @@ output "delegated_folder_iam_targets" {
 output "pam_entitlement_name" {
   description = "Resource name of the just-in-time org-admin PAM entitlement (null when enable_pam = false)."
   value       = module.organization.pam_entitlement_name
+}
+
+output "guardrail_owner_mode" {
+  description = "Deny-policy ownership: \"separate\" (apply guardrail_deny_policy_specs as the guardrail owner) or \"organization\" (applied by this root)."
+  value       = module.organization.guardrail_owner_mode
+}
+
+output "guardrail_deny_policy_specs" {
+  description = "Map of org deny-policy ID => gcloud policy-file JSON (containment + iam_deny_policies). In separate mode, apply each as the guardrails SA: see docs/runbooks/production-hardening.md."
+  value       = module.organization.guardrail_deny_policy_specs
+}
+
+output "log_analytics_bucket_id" {
+  description = "Audit Log Analytics bucket (null when disabled)."
+  value       = module.organization.log_analytics_bucket_id
+}
+
+output "principal_access_boundary_policy" {
+  description = "Automation principal access boundary policy name (null when disabled)."
+  value       = module.organization.principal_access_boundary_policy
 }

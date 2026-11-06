@@ -23,7 +23,12 @@ locals {
   # Outputs from the gcp-bootstrap root (admin project, Terraform admin SA, WIF
   # pools). gcp-bootstrap is applied first; this root reads it via remote state
   # (audit H3 — control-plane state decomposition).
-  bootstrap = data.terraform_remote_state.gcp_bootstrap.outputs
+  # Remote state when read (count = 1), else the supplied contract.
+  bootstrap = try(data.terraform_remote_state.gcp_bootstrap[0].outputs, local.bootstrap_contract)
+
+  # Deny-policy ownership follows gcp-bootstrap unless set explicitly; an older
+  # bootstrap state without the output means the legacy single-owner model.
+  guardrail_owner_mode = coalesce(var.guardrail_owner_mode, try(local.bootstrap.guardrail_owner_mode, null), "organization")
 }
 
 # 1. Organization: Hierarchy & Governance
@@ -115,6 +120,24 @@ module "organization" {
   # principal when enabling — placeholders are rejected.
   enable_admin_containment      = var.enable_admin_containment
   containment_exempt_principals = var.containment_exempt_principals
+
+  # Deny policies are applied by the guardrail owner (separate) or here (legacy).
+  guardrail_owner_mode = local.guardrail_owner_mode
+
+  # Managed org-policy constraints where Google offers a successor.
+  prefer_managed_constraints = var.prefer_managed_constraints
+
+  # Log Analytics bucket + linked BigQuery dataset for the org audit logs.
+  enable_log_analytics         = var.enable_log_analytics
+  log_analytics_retention_days = var.log_analytics_retention_days
+
+  # Org logging settings (default log-bucket location / CMEK), opt-in.
+  enable_logging_organization_settings = var.enable_logging_organization_settings
+  logging_settings_kms_key_name        = var.logging_settings_kms_key_name
+
+  # Principal access boundary for the automation SAs, opt-in.
+  enable_principal_access_boundary            = var.enable_principal_access_boundary
+  principal_access_boundary_allowed_resources = var.principal_access_boundary_allowed_resources
 }
 
 # The projects stage (gcp-projects) and network-hub stage (gcp-network-hub) were

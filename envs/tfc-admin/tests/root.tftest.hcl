@@ -128,8 +128,43 @@ run "speculative_plans_off_for_control_plane" {
   }
 
   assert {
-    condition     = module.workspace["gcp-workload-dev"].speculative_enabled == true && module.workspace["saas-web"].speculative_enabled == true
-    error_message = "workload workspaces keep speculative PR plans."
+    condition     = module.workspace["gcp-workload-dev"].speculative_enabled == true && module.workspace["aws-workload-dev"].speculative_enabled == true && module.workspace["saas-web"].speculative_enabled == true
+    error_message = "non-production workload workspaces keep speculative PR plans."
+  }
+
+  # N5: a PR must not get a plan with the production plan identity.
+  assert {
+    condition     = module.workspace["gcp-workload-prod"].speculative_enabled == false && module.workspace["aws-workload-prod"].speculative_enabled == false
+    error_message = "production workload workspaces must have speculative_enabled = false."
+  }
+}
+
+run "production_flag_overrides_name" {
+  command = plan
+
+  variables {
+    environments = {
+      dev  = { is_production = true }
+      prod = { is_production = false }
+    }
+  }
+
+  assert {
+    condition     = module.workspace["gcp-workload-dev"].speculative_enabled == false && module.workspace["aws-workload-prod"].speculative_enabled == true
+    error_message = "an explicit is_production wins over the prod/production name heuristic."
+  }
+}
+
+run "speculative_on_production_opt_out" {
+  command = plan
+
+  variables {
+    disable_speculative_on_production = false
+  }
+
+  assert {
+    condition     = module.workspace["gcp-workload-prod"].speculative_enabled == true && module.workspace["gcp-organization"].speculative_enabled == false
+    error_message = "disable_speculative_on_production = false re-enables production speculative plans only."
   }
 }
 
@@ -601,22 +636,110 @@ run "control_plane_notifications_routed_by_tag" {
   }
 }
 
-run "team_access_per_project" {
+# N4: the broad platform team gets only custom plan-level access on projects
+# holding the control plane (no variable edits, no apply); a separate approvers
+# team confirms control-plane applies; workload projects keep fixed write.
+run "team_access_least_privilege" {
   command = plan
 
   variables {
-    platform_team_id = "team-platform1"
-    viewer_team_ids  = ["team-viewers1"]
+    platform_team_id                = "team-platform1"
+    control_plane_approvers_team_id = "team-approvers1"
+    viewer_team_ids                 = ["team-viewers1"]
   }
 
   assert {
-    condition     = tfe_team_project_access.this["gcp/platform"].access == "write" && tfe_team_project_access.this["aws/team-viewers1"].access == "read"
-    error_message = "platform team gets write and viewer teams get read on every project."
+    condition = alltrue([
+      for p in ["gcp", "aws"] :
+      tfe_team_project_access.this["${p}/platform"].access == "custom" &&
+      tfe_team_project_access.this["${p}/platform"].workspace_access[0].runs == "plan" &&
+      tfe_team_project_access.this["${p}/platform"].workspace_access[0].variables == "read" &&
+      tfe_team_project_access.this["${p}/platform"].workspace_access[0].policy_overrides == false &&
+      tfe_team_project_access.this["${p}/platform"].workspace_access[0].delete == false &&
+      tfe_team_project_access.this["${p}/platform"].project_access[0].teams == "none"
+    ])
+    error_message = "on control-plane projects the platform team must get custom access: runs = plan, variables = read, no overrides/delete/team management."
   }
 
   assert {
-    condition     = length(tfe_team_project_access.this) == 6
-    error_message = "3 projects x (platform + 1 viewer) = 6 grants."
+    condition = alltrue([
+      for p in ["gcp", "aws"] :
+      tfe_team_project_access.this["${p}/approvers"].access == "custom" &&
+      tfe_team_project_access.this["${p}/approvers"].workspace_access[0].runs == "apply" &&
+      tfe_team_project_access.this["${p}/approvers"].workspace_access[0].variables == "read" &&
+      tfe_team_project_access.this["${p}/approvers"].team_id == "team-approvers1"
+    ]) && !contains(keys(tfe_team_project_access.this), "saas/approvers")
+    error_message = "the approvers team must get runs = apply (variables read-only) on every control-plane project and nowhere else."
+  }
+
+  assert {
+    condition     = tfe_team_project_access.this["saas/platform"].access == "write" && tfe_team_project_access.this["aws/team-viewers1"].access == "read"
+    error_message = "workload-only projects keep platform write; viewer teams get read on every project."
+  }
+
+  # 3 projects x (platform + viewer) + 2 control-plane projects x approvers = 8.
+  assert {
+    condition     = length(tfe_team_project_access.this) == 8
+    error_message = "3 x (platform + viewer) + 2 approvers = 8 project grants."
+  }
+
+  # Workload workspaces sharing a project with the control plane get write
+  # through a workspace-level grant; control-plane workspaces never do.
+  assert {
+    condition     = toset(keys(tfe_team_access.platform_workload)) == toset(["gcp-workload-dev", "gcp-workload-prod", "aws-workload-dev", "aws-workload-prod"]) && alltrue([for g in values(tfe_team_access.platform_workload) : g.access == "write" && g.team_id == "team-platform1"])
+    error_message = "only the gcp/aws workload workspaces get a workspace-level platform write grant."
+  }
+}
+
+run "platform_team_runs_override" {
+  command = plan
+
+  variables {
+    platform_team_id                 = "team-platform1"
+    platform_team_control_plane_runs = "read"
+  }
+
+  assert {
+    condition     = tfe_team_project_access.this["gcp/platform"].workspace_access[0].runs == "read" && length([for k in keys(tfe_team_project_access.this) : k if endswith(k, "/approvers")]) == 0
+    error_message = "platform_team_control_plane_runs sets the platform runs level; no approvers grant without control_plane_approvers_team_id."
+  }
+}
+
+run "approvers_must_differ_from_platform" {
+  command = plan
+
+  variables {
+    platform_team_id                = "team-same1"
+    control_plane_approvers_team_id = "team-same1"
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+# Opt-in split: workload workspaces move to <prefix><cloud>-workloads projects,
+# which get fixed platform write; control-plane projects stay custom.
+run "split_workload_projects" {
+  command = plan
+
+  variables {
+    split_workload_projects         = true
+    platform_team_id                = "team-platform1"
+    control_plane_approvers_team_id = "team-approvers1"
+  }
+
+  assert {
+    condition     = toset(keys(tfe_project.this)) == toset(["gcp", "aws", "saas", "gcp-workloads", "aws-workloads"]) && tfe_project.this["gcp-workloads"].name == "landing-zone-gcp-workloads" && tfe_project.this["aws"].name == "landing-zone-aws"
+    error_message = "split mode adds <prefix>gcp-workloads / <prefix>aws-workloads and keeps the control-plane project names."
+  }
+
+  assert {
+    condition     = tfe_team_project_access.this["gcp-workloads/platform"].access == "write" && tfe_team_project_access.this["gcp/platform"].access == "custom" && !contains(keys(tfe_team_project_access.this), "aws-workloads/approvers")
+    error_message = "workload projects get fixed platform write; only control-plane projects get custom + approvers."
+  }
+
+  assert {
+    condition     = length(tfe_team_access.platform_workload) == 0
+    error_message = "no workspace-level grants are needed once workloads have their own project."
   }
 }
 
@@ -631,6 +754,11 @@ run "policy_set_optional_and_advisory_source" {
   assert {
     condition     = tfe_policy_set.opa[0].kind == "opa" && tfe_policy_set.opa[0].policies_path == "policies/opa"
     error_message = "the policy set must be an OPA set sourced from policies/opa."
+  }
+
+  assert {
+    condition     = tfe_policy_set.opa[0].overridable == false
+    error_message = "mandatory policies must not be overridable by default."
   }
 }
 

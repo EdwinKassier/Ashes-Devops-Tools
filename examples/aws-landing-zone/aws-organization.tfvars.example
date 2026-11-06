@@ -16,7 +16,7 @@ break_glass_role_arn = "arn:aws:iam::111111111111:role/break-glass"
 # REQUIRED — central log-archive S3 bucket name, protected by the deny-tamper
 # SCP. This exact string is the cross-root naming contract: aws-security (which
 # creates the bucket), aws-network, and aws-workload must all use the same value.
-log_archive_bucket_name = "ashes-org-log-archive"
+log_archive_bucket_name = "acme-org-log-archive"
 
 # Near-required in practice — the six foundational SRA accounts ship with
 # PLACEHOLDER emails that AWS will reject (duplicate/undeliverable). Override

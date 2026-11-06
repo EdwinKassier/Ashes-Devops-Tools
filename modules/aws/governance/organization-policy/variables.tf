@@ -66,13 +66,35 @@ variable "log_archive_bucket_name" {
 # -----------------------------------------------------------------------------
 
 variable "pipeline_role_names" {
-  description = "Names or name patterns (optionally path-prefixed, e.g. \"automation/tfc-apply\" or \"stacksets-exec-*\") of the member-account Terraform pipeline roles. Rendered as arn:aws:iam::*:role/<name> and exempted from the deny-tamper reconfiguration statements (Config recorders, GuardDuty/CloudTrail settings, flow logs, log-archive Object Lock). These roles are also protected from IAM modification by anyone other than themselves or break-glass. NOT exempt from the destructive statements (break-glass only)."
+  description = "Names or name patterns (optionally path-prefixed, e.g. \"automation/tfc-apply\" or \"stacksets-exec-*\") of the member-account Terraform pipeline roles. Rendered as arn:aws:iam::*:role/<name> and exempted from the deny-tamper reconfiguration statements (Config recorders, GuardDuty/CloudTrail settings, flow logs, log-archive Object Lock). These roles are also protected from IAM modification, and are NEVER exempt from that protection (see stackset_managed_role_names). NOT exempt from the destructive statements (break-glass only)."
   type        = list(string)
   default     = ["tfc-apply", "OrganizationAccountAccessRole", "stacksets-exec-*"]
 
   validation {
     condition     = length(var.pipeline_role_names) > 0 && alltrue([for n in var.pipeline_role_names : can(regex("^[A-Za-z0-9+=,.@_/*-]{1,512}$", n)) && !can(regex("^[*/]*$", n))])
     error_message = "pipeline_role_names must be a non-empty list of IAM role names or name patterns (optionally path-prefixed, e.g. stacksets-exec-*); a bare \"*\" is not allowed."
+  }
+}
+
+variable "stackset_managed_role_names" {
+  description = "Member-account role names (optionally path-prefixed) that a service-managed StackSet owns — by default the tfc-oidc-baseline tfc-plan / tfc-apply roles. Together with the break-glass role name they are protected by DenyStackSetRoleTampering, whose only exemptions are break-glass and stackset_execution_role_names. Every other pipeline_role_names entry (OrganizationAccountAccessRole, stacksets-exec-*) is protected break-glass-only. The pipeline roles are never exempt from either statement."
+  type        = list(string)
+  default     = ["tfc-plan", "tfc-apply"]
+
+  validation {
+    condition     = alltrue([for n in var.stackset_managed_role_names : can(regex("^[A-Za-z0-9+=,.@_/-]{1,512}$", n))])
+    error_message = "stackset_managed_role_names entries must be IAM role names without wildcards (optionally path-prefixed)."
+  }
+}
+
+variable "stackset_execution_role_names" {
+  description = "Name patterns of the service-managed StackSet execution role in member accounts (AWS creates stacksets-exec-<hash>). Exempt from DenyStackSetRoleTampering ONLY (so the StackSets can create/update the tfc-* and member break-glass roles); themselves protected break-glass-only by DenyPrivilegedRoleTampering."
+  type        = list(string)
+  default     = ["stacksets-exec-*"]
+
+  validation {
+    condition     = length(var.stackset_execution_role_names) > 0 && alltrue([for n in var.stackset_execution_role_names : can(regex("^[A-Za-z0-9+=,.@_/*-]{1,512}$", n)) && !can(regex("^[*/]*$", n))])
+    error_message = "stackset_execution_role_names must be a non-empty list of IAM role names or name patterns; a bare \"*\" is not allowed."
   }
 }
 

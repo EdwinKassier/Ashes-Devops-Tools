@@ -26,12 +26,16 @@ github_repository_owner_id = "12345678"
 
 app_services = {
   orders-api = {
-    # Bootstrap image used only for the first revision; the pipeline owns the
-    # image afterwards (Terraform ignores later image changes).
-    # image = "us-docker.pkg.dev/cloudrun/container/hello"
+    # Image used only for the first revision; the pipeline owns the image
+    # afterwards (Terraform ignores later image changes). Unset = the root's
+    # app_bootstrap_image (gcp.workload.bootstrap_image), else the public
+    # us-docker.pkg.dev/cloudrun/container/hello sample.
+    # image = "europe-west2-docker.pkg.dev/<host>/mirror/hello:bootstrap"
 
     # ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY"        # default
-    # ingress = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER" # behind modules/gcp/network/app-ingress
+    # Public: list the service in public_ingress_services (or
+    # gcp.workload.public_ingress.<env>) — ingress then defaults to
+    # INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER behind a global external ALB.
     min_instances = 0
     max_instances = 5
 

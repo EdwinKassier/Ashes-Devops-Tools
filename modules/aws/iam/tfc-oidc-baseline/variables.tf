@@ -139,7 +139,7 @@ variable "apply_role_policy_arns" {
 }
 
 variable "enable_apply_permissions_boundary" {
-  description = "Cap the apply role with a permissions boundary (default true). With apply_permissions_boundary_arn = null the StackSet embeds a managed boundary that allows everything EXCEPT: leaving the org; stopping/deleting CloudTrail, GuardDuty and Config; modifying the plan/apply roles, the OIDC provider or the boundary itself; and iam:CreateUser/CreateAccessKey/CreateLoginProfile."
+  description = "Cap the apply role with a permissions boundary (default true). With apply_permissions_boundary_arn = null the StackSet embeds a managed boundary that allows everything EXCEPT: leaving the org; stopping/deleting CloudTrail, GuardDuty and Config; disabling Security Hub, Macie, Inspector or Access Analyzer; modifying the plan/apply roles, the OIDC provider or the boundary itself; creating/modifying/passing the break-glass, OrganizationAccountAccessRole or StackSet execution roles; destroying or re-policying protected KMS keys; dp:* tag changes; and iam:CreateUser/CreateAccessKey/CreateLoginProfile."
   type        = bool
   default     = true
 }
@@ -259,7 +259,7 @@ variable "enable_apply_boundary_propagation" {
 }
 
 variable "enable_plan_role_data_read_deny" {
-  description = "Attach an inline deny to the plan role for data-plane reads that ReadOnlyAccess otherwise grants (s3:GetObject*, secretsmanager:GetSecretValue, ssm:GetParameter*, kms:Decrypt, DynamoDB item reads, sqs:ReceiveMessage, kinesis:GetRecords, CloudWatch Logs event reads/queries, rds-data, Athena/Redshift Data results, ECR image pulls). Default true: speculative PR plans run as this role, so it reads configuration, not data."
+  description = "Attach an inline deny to the plan role for data-plane reads that ReadOnlyAccess otherwise grants (s3:GetObject*, secretsmanager:GetSecretValue / BatchGetSecretValue, ssm:GetParameter*, kms:Decrypt / GenerateDataKey*, ec2:GetPasswordData / console output, glue:GetConnection(s), DynamoDB item reads, sqs:ReceiveMessage, kinesis:GetRecords, CloudWatch Logs event reads/queries, rds-data, Athena/Redshift Data results, ECR image pulls). Default true: speculative PR plans run as this role, so it reads configuration, not data."
   type        = bool
   default     = true
 }
@@ -272,5 +272,109 @@ variable "plan_role_data_read_exempt_arns" {
   validation {
     condition     = alltrue([for a in var.plan_role_data_read_exempt_arns : can(regex("^arn:aws[a-z-]*:[a-z0-9-]+:[^:]*:[^:]*:.*[A-Za-z0-9]", a))])
     error_message = "plan_role_data_read_exempt_arns entries must be resource ARNs naming a resource (not a bare service-wide wildcard such as arn:aws:s3:::*)."
+  }
+}
+
+# -----------------------------------------------------------------------------
+# Privileged-role protection + member-account break-glass
+# -----------------------------------------------------------------------------
+
+variable "break_glass_role_name" {
+  description = "Name (optionally path-prefixed, e.g. emergency/break-glass) of the break-glass role in MEMBER accounts — must match the org deny-tamper SCP's break-glass exemption. The tfc-apply boundary denies creating, modifying, deleting, tagging or passing it, and enable_member_break_glass_role deploys it."
+  type        = string
+  default     = "break-glass"
+
+  validation {
+    condition     = can(regex("^([A-Za-z0-9+=,.@_-]+/)*[A-Za-z0-9+=,.@_-]{1,64}$", var.break_glass_role_name)) && length(var.break_glass_role_name) <= 512
+    error_message = "break_glass_role_name must be an IAM role name without wildcards, optionally path-prefixed (path/name)."
+  }
+}
+
+variable "protected_role_names" {
+  description = "Further member-account role names or patterns the tfc-apply boundary forbids the apply identity to create, modify, delete, tag or pass (in addition to break_glass_role_name and its own tfc-plan/tfc-apply roles)."
+  type        = list(string)
+  default     = ["OrganizationAccountAccessRole", "stacksets-exec-*"]
+
+  validation {
+    condition     = alltrue([for n in var.protected_role_names : can(regex("^[A-Za-z0-9+=,.@_/*-]{1,512}$", n)) && !can(regex("^[*/]*$", n))])
+    error_message = "protected_role_names entries must be IAM role names or name patterns; a bare \"*\" is not allowed."
+  }
+}
+
+variable "kms_protection_tag_key" {
+  description = "Resource-tag key marking protected KMS keys (value \"true\"). The tfc-apply boundary denies ScheduleKeyDeletion / DisableKey / DisableKeyRotation / DeleteImportedKeyMaterial / PutKeyPolicy on such keys and removing or rewriting the tag. Must match the organization-policy kms_protection_tag_key and the kms-key protection_tag_key."
+  type        = string
+  default     = "protected"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9 _.:/=+@-]{1,128}$", var.kms_protection_tag_key)) && !startswith(var.kms_protection_tag_key, "aws:")
+    error_message = "kms_protection_tag_key must be a valid AWS tag key (1-128 chars, not starting with aws:)."
+  }
+}
+
+variable "enable_member_break_glass_role" {
+  description = "Deploy the break-glass role (break_glass_role_name) into every account of member_break_glass_target_ou_ids via a sibling SERVICE_MANAGED StackSet, so the SCP-exempt break-glass name is occupied (and protected) in each member account instead of being claimable by the first principal to create it. Default false at module level; the organization stage enables it for the org root."
+  type        = bool
+  default     = false
+}
+
+variable "member_break_glass_trusted_principal_arns" {
+  description = "Account-qualified management-account principal ARNs (role or user) allowed to assume the member break-glass role. Required when enable_member_break_glass_role is true."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for a in var.member_break_glass_trusted_principal_arns : can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:(role|user)/[A-Za-z0-9+=,.@_/-]+$", a))])
+    error_message = "member_break_glass_trusted_principal_arns entries must be account-qualified IAM role/user ARNs without wildcards (arn:aws:iam::<12-digit>:role/<name>)."
+  }
+}
+
+variable "member_break_glass_require_mfa" {
+  description = "Require aws:MultiFactorAuthPresent (and aws:MultiFactorAuthAge < member_break_glass_mfa_max_age) on the member break-glass trust. Default true. MFA context is carried by an IAM user's MFA-authenticated session; a role session obtained by role chaining may not carry it — validate the break-glass path end to end before relying on it."
+  type        = bool
+  default     = true
+}
+
+variable "member_break_glass_mfa_max_age" {
+  description = "Maximum MFA age (seconds) accepted by the member break-glass trust when member_break_glass_require_mfa is true."
+  type        = number
+  default     = 3600
+
+  validation {
+    condition     = var.member_break_glass_mfa_max_age >= 300 && var.member_break_glass_mfa_max_age <= 43200
+    error_message = "member_break_glass_mfa_max_age must be between 300 and 43200 seconds."
+  }
+}
+
+variable "member_break_glass_policy_arns" {
+  description = "Managed policy ARNs attached to the member break-glass role."
+  type        = list(string)
+  default     = ["arn:aws:iam::aws:policy/AdministratorAccess"]
+
+  validation {
+    condition     = length(var.member_break_glass_policy_arns) > 0 && alltrue([for a in var.member_break_glass_policy_arns : can(regex("^arn:aws[a-z-]*:iam::(aws|[0-9]{12}):policy/.+$", a))])
+    error_message = "member_break_glass_policy_arns must be a non-empty list of IAM managed policy ARNs."
+  }
+}
+
+variable "member_break_glass_target_ou_ids" {
+  description = "Map of stable name -> OU or root ID the member break-glass StackSet deploys to (one stack instance each). Use the organization root to cover every member account (service-managed StackSets never deploy to the management account)."
+  type        = map(string)
+  default     = {}
+
+  validation {
+    condition     = alltrue([for id in values(var.member_break_glass_target_ou_ids) : can(regex("^(ou-[a-z0-9]{4,32}-[a-z0-9]{8,32}|r-[a-z0-9]{4,32})$", id))])
+    error_message = "member_break_glass_target_ou_ids values must be OU IDs (ou-xxxx-xxxxxxxx) or an organization root ID (r-xxxx)."
+  }
+}
+
+variable "member_break_glass_stack_set_name" {
+  description = "Name of the SERVICE_MANAGED StackSet that deploys the member break-glass role."
+  type        = string
+  default     = "member-break-glass"
+
+  validation {
+    condition     = can(regex("^[A-Za-z][A-Za-z0-9-]{0,127}$", var.member_break_glass_stack_set_name))
+    error_message = "member_break_glass_stack_set_name must start with a letter and contain only letters, digits and '-' (max 128)."
   }
 }

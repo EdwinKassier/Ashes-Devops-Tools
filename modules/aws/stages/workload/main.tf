@@ -9,7 +9,9 @@
 # this stage is AWS-native infrastructure only.
 #
 # Composition:
-#   - vpc (spoke)          — a private/isolated/tgw spoke VPC. CIDR is either the
+#   - vpc (spoke)          — a private/isolated/tgw spoke VPC (+ an optional
+#                            public tier and internet gateway for an
+#                            internet-facing app ALB). CIDR is either the
 #                            literal vpc_cidr or allocated from the shared IPAM
 #                            pool (ipam_pool_id). Gateway endpoints for s3 +
 #                            dynamodb keep that traffic off the TGW (associated
@@ -66,6 +68,18 @@ locals {
     : null
   )
 
+  # Optional public ingress tier (enable_public_subnets): an internet-facing
+  # ALB's subnets. Its route tables default-route to the internet gateway; the
+  # private/isolated/tgw tiers are unchanged (still egress via the TGW, or none).
+  # A caller-supplied "public" tier in var.subnets wins over the built-in one.
+  subnets = merge(
+    var.enable_public_subnets ? { public = { newbits = 8, number_offset = 24, public = true } } : {},
+    var.subnets,
+  )
+  # An IGW is needed by the public tier, and attached (with no routes) for a
+  # CloudFront VPC origin, which AWS requires the origin VPC to have.
+  create_internet_gateway = var.enable_public_subnets || var.create_internet_gateway
+
   # VPC / attachment name: explicit var.name, else workload-<environment>, else
   # the legacy "workload".
   name = coalesce(var.name, var.environment != null ? "workload-${var.environment}" : "workload")
@@ -94,7 +108,8 @@ module "vpc" {
   region                   = var.aws_region
   availability_zones       = var.availability_zones
   az_count                 = var.az_count
-  subnets                  = var.subnets
+  subnets                  = local.subnets
+  create_internet_gateway  = local.create_internet_gateway
   flow_log_destination_arn = var.flow_log_destination_arn
   ipam_pool_id             = var.ipam_pool_id
   gateway_endpoints        = ["s3", "dynamodb"]
@@ -159,7 +174,18 @@ module "account_baseline" {
   source = "../../governance/account-baseline"
 
   aws_enabled_regions = var.aws_enabled_regions
-  kms_key_arn         = var.kms_key_arn
+  # enable_ebs_default_kms_key set => the stage owns the default-key setting
+  # (below); null => legacy: the baseline sets it in every enabled region when
+  # kms_key_arn is non-empty (a for_each that needs a plan-known literal ARN).
+  kms_key_arn = var.enable_ebs_default_kms_key != null ? "" : var.kms_key_arn
+}
+
+# Default EBS key in the HOME region when the caller says so explicitly — the
+# for_each-free path for a CMK created in the same plan (unknown ARN). A
+# regional CMK can only be the default key of its own region.
+resource "aws_ebs_default_kms_key" "home" {
+  count   = var.enable_ebs_default_kms_key == true ? 1 : 0
+  key_arn = var.kms_key_arn
 }
 
 # ---------------------------------------------------------------------------

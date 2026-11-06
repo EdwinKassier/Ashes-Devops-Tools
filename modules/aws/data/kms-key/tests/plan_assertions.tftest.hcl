@@ -109,14 +109,15 @@ run "key_and_policy_configured" {
 run "service_principals_grant_present" {
   # A security-tooling CMK grants local AWS services (SNS/SSM/CloudWatch) usage,
   # with no log-service grants at all. The ServiceUsage statement must appear,
-  # scoped by aws:SourceOrgID, and must NOT carry the CloudTrail
-  # EncryptionContext condition.
+  # scoped (N7) to the key's OWN account via aws:SourceAccount — not the whole
+  # org — and must NOT carry the CloudTrail EncryptionContext condition.
   command = plan
 
   variables {
     alias                  = "security-tooling"
     log_service_principals = []
     service_principals     = ["sns.amazonaws.com", "ssm.amazonaws.com", "cloudwatch.amazonaws.com"]
+    key_account_id         = "333333333333"
   }
 
   assert {
@@ -129,24 +130,68 @@ run "service_principals_grant_present" {
     error_message = "The SNS service principal must appear in the ServiceUsage grant"
   }
 
-  assert {
-    condition     = can(regex("aws:SourceOrgID", aws_kms_key.this.policy))
-    error_message = "The ServiceUsage grant must be scoped by aws:SourceOrgID"
-  }
-
-  # Structural (M6): the SourceOrgID scope is on the ServiceUsage statement itself.
+  # Structural: the account scope is on the ServiceUsage statement itself, and
+  # the org-wide SourceOrgID scope is gone by default.
   assert {
     condition = anytrue([
       for s in jsondecode(aws_kms_key.this.policy).Statement :
-      s.Sid == "ServiceUsage" && try(s.Condition.StringEquals["aws:SourceOrgID"], null) == var.org_id
+      s.Sid == "ServiceUsage" && s.Condition == { StringEquals = { "aws:SourceAccount" = "333333333333" } }
     ])
-    error_message = "the ServiceUsage statement must carry aws:SourceOrgID = org_id"
+    error_message = "the ServiceUsage statement must carry exactly aws:SourceAccount = the key's own account"
+  }
+
+  assert {
+    condition     = !can(regex("aws:SourceOrgID", aws_kms_key.this.policy))
+    error_message = "the default ServiceUsage grant must not be org-wide (aws:SourceOrgID)"
   }
 
   # No CloudTrail log-service grant means no EncryptionContext condition.
   assert {
     condition     = !can(regex("kms:EncryptionContext:aws:cloudtrail:arn", aws_kms_key.this.policy))
     error_message = "A service-tooling CMK with no log grants must not carry the CloudTrail EncryptionContext condition"
+  }
+}
+
+run "service_principals_default_to_provider_account" {
+  command = plan
+
+  override_data {
+    target = data.aws_caller_identity.current[0]
+    values = { account_id = "444444444444" }
+  }
+
+  variables {
+    log_service_principals = []
+    service_principals     = ["sns.amazonaws.com"]
+  }
+
+  assert {
+    condition = one([
+      for s in jsondecode(aws_kms_key.this.policy).Statement : s if s.Sid == "ServiceUsage"
+    ]).Condition.StringEquals["aws:SourceAccount"] == "444444444444"
+    error_message = "with key_account_id unset the ServiceUsage scope must be the provider's account"
+  }
+}
+
+run "service_principals_org_scope_is_opt_in" {
+  command = plan
+
+  variables {
+    log_service_principals  = []
+    service_principals      = ["sns.amazonaws.com"]
+    service_principal_scope = "organization"
+  }
+
+  assert {
+    condition = one([
+      for s in jsondecode(aws_kms_key.this.policy).Statement : s if s.Sid == "ServiceUsage"
+    ]).Condition == { StringEquals = { "aws:SourceOrgID" = var.org_id } }
+    error_message = "service_principal_scope = organization must scope ServiceUsage by aws:SourceOrgID"
+  }
+
+  assert {
+    condition     = length(data.aws_caller_identity.current) == 0
+    error_message = "the caller-identity lookup is only needed for the account scope"
   }
 }
 

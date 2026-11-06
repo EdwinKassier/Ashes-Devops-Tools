@@ -89,3 +89,73 @@ run "bucket_lock_disables_versioning" {
     error_message = "Soft delete must stay on alongside the retention lock."
   }
 }
+
+# Log Analytics: on by default with org_id — an analytics-enabled log bucket, an
+# org sink into it, a bucket-scoped writer grant and a linked BigQuery dataset.
+run "log_analytics_on_by_default_with_org" {
+  command = plan
+
+  variables {
+    org_id          = "123456789"
+    bucket_location = "europe-west1"
+  }
+
+  assert {
+    condition     = google_logging_project_bucket_config.audit_analytics[0].enable_analytics == true && google_logging_project_bucket_config.audit_analytics[0].location == "europe-west1"
+    error_message = "The audit Log Analytics bucket must have analytics enabled in the bucket location."
+  }
+
+  assert {
+    condition     = google_logging_project_bucket_config.audit_analytics[0].locked == false
+    error_message = "The Log Analytics bucket must stay unlocked unless enable_bucket_lock is set."
+  }
+
+  assert {
+    condition     = google_logging_organization_sink.org_audit_analytics_sink[0].include_children == true && strcontains(google_logging_organization_sink.org_audit_analytics_sink[0].filter, "cloudaudit.googleapis.com")
+    error_message = "An org sink must route every child's audit logs into the analytics bucket."
+  }
+
+  assert {
+    condition     = google_project_iam_member.audit_analytics_writer[0].role == "roles/logging.bucketWriter" && strcontains(google_project_iam_member.audit_analytics_writer[0].condition[0].expression, "buckets/org-audit-analytics")
+    error_message = "The sink writer must get bucketWriter scoped to the analytics bucket only."
+  }
+
+  assert {
+    condition     = google_logging_linked_dataset.audit_analytics[0].link_id == "org_audit_analytics"
+    error_message = "A linked BigQuery dataset must be created on the analytics bucket."
+  }
+}
+
+run "log_analytics_needs_org_and_can_be_disabled" {
+  command = plan
+
+  variables {
+    org_id               = "123456789"
+    enable_log_analytics = false
+  }
+
+  assert {
+    condition     = length(google_logging_project_bucket_config.audit_analytics) == 0 && length(google_logging_linked_dataset.audit_analytics) == 0 && output.log_analytics_bucket_id == null
+    error_message = "enable_log_analytics = false must create no Log Analytics resources."
+  }
+}
+
+run "log_analytics_locked_with_bucket_lock_and_cmek" {
+  command = plan
+
+  variables {
+    org_id                     = "123456789"
+    enable_bucket_lock         = true
+    log_analytics_kms_key_name = "projects/p/locations/us/keyRings/r/cryptoKeys/k"
+  }
+
+  assert {
+    condition     = google_logging_project_bucket_config.audit_analytics[0].locked == true && google_logging_project_bucket_config.audit_analytics[0].location == "us"
+    error_message = "enable_bucket_lock must also lock the Log Analytics bucket; the location defaults to the lower-cased bucket_location."
+  }
+
+  assert {
+    condition     = google_logging_project_bucket_config.audit_analytics[0].cmek_settings[0].kms_key_name == "projects/p/locations/us/keyRings/r/cryptoKeys/k"
+    error_message = "log_analytics_kms_key_name must set the bucket CMEK."
+  }
+}

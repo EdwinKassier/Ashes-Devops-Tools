@@ -51,6 +51,16 @@ locals {
   }
 }
 
+locals {
+  # Member-account break-glass name: the first explicit break_glass_role_names
+  # entry, else the name part of break_glass_role_arn — exactly what the
+  # deny-tamper SCP renders as arn:aws:iam::*:role/<name>.
+  member_break_glass_role_name = length(var.break_glass_role_names) > 0 ? var.break_glass_role_names[0] : regex("role/(.+)$", var.break_glass_role_arn)[0]
+
+  # Default trust: the management-account break-glass role itself.
+  member_break_glass_trusted_principal_arns = length(var.member_break_glass_trusted_principal_arns) > 0 ? var.member_break_glass_trusted_principal_arns : [var.break_glass_role_arn]
+}
+
 # Guardrail policy set (SCPs, RCP, declarative EC2, tag policy) and attachments.
 module "policies" {
   source = "../../governance/organization-policy"
@@ -114,6 +124,16 @@ module "tfc_oidc_baseline" {
   # Plan-role data-plane read deny (ReadOnlyAccess minus GetObject/GetSecretValue/...).
   enable_plan_role_data_read_deny = var.tfc_enable_plan_role_data_read_deny
   plan_role_data_read_exempt_arns = var.tfc_plan_role_data_read_exempt_arns
+
+  # Privileged-role protection in the tfc-apply boundary + the member-account
+  # break-glass role (sibling StackSet, every member account via the org root).
+  # The name is the SAME one the deny-tamper SCP exempts, so it is occupied —
+  # and only break-glass / the StackSet execution role can modify it.
+  break_glass_role_name                     = local.member_break_glass_role_name
+  enable_member_break_glass_role            = var.enable_member_break_glass_role
+  member_break_glass_trusted_principal_arns = local.member_break_glass_trusted_principal_arns
+  member_break_glass_require_mfa            = var.member_break_glass_require_mfa
+  member_break_glass_target_ou_ids          = { root = module.organization.roots_id }
 
   account_bindings = {
     for k, b in var.tfc_workspace_bindings : k => {

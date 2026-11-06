@@ -31,4 +31,10 @@ module "aws_organization" {
   tfc_apply_role_policy_arns            = var.tfc_apply_role_policy_arns
   tfc_enable_apply_permissions_boundary = var.tfc_enable_apply_permissions_boundary
   tfc_apply_permissions_boundary_arn    = var.tfc_apply_permissions_boundary_arn
+
+  # Member-account break-glass role (occupies the SCP-exempt break-glass name in
+  # every member account; trusts the management break-glass principal + MFA).
+  enable_member_break_glass_role            = var.enable_member_break_glass_role
+  member_break_glass_trusted_principal_arns = var.member_break_glass_trusted_principal_arns
+  member_break_glass_require_mfa            = var.member_break_glass_require_mfa
 }

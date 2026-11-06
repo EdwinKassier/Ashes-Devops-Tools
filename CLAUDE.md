@@ -1,6 +1,6 @@
 # CLAUDE.md — Agent Onboarding
 
-Terraform GCP + AWS landing zone. 118 modules, 14 deployable roots, remote state via Terraform Cloud.
+Terraform GCP + AWS landing zone. 119 modules, 14 deployable roots, remote state via Terraform Cloud.
 
 ---
 
@@ -31,7 +31,7 @@ modules/               # grouped by owning cloud (domain)
     project/            # THE project primitive — every stage creates GCP projects through it (no naming scheme inside)
     network/            # ~24 primitives: tiered-vpc (shared VPC + 3-tier subnets + baseline firewall core), vpc, subnet, dns, dns-records, vpn, vpc-sc, cloud-armor, internal-lb, api-gateway, cdn, app-ingress, …
     governance/         # billing, kms, org-policy, scc, tags, cloud-audit-logs, private-ca
-    iam/                # organization, role, service-account, workload-identity, identity-group*, deny-policy
+    iam/                # organization, role, service-account, workload-identity, identity-group*, deny-policy, principal-access-boundary
     monitoring/         # alert-policy, compute-dashboard, slo, control-plane (landing-zone self-observability)
     ops/                # os-config (VM Manager patch deployments)
     backup/             # backup-plan (snapshot schedules)
@@ -228,7 +228,7 @@ Gotchas the AWS landing-zone build surfaced — each one bit us in CI:
 3. **Build policy JSON with `jsonencode()` / `templatefile()`**, NOT `data "aws_iam_policy_document"`. `mock_provider` mocks data sources, which breaks content assertions in tests.
 4. **`regex()` interval repeats cap at 1000** (RE2 engine) — a larger `{n,m}` repeat count is a plan-time error.
 5. **Log-service KMS grants must use per-service-principal statements**, NOT `kms:ViaService` — `kms:ViaService` would deny CloudTrail. (The CloudTrail grant's `aws:SourceOrgID`-vs-`aws:SourceArn` condition is an open, unvalidated item — tracked in [`docs/known-gaps.md`](docs/known-gaps.md#open--validate-before-relying-on), not here.)
-6. **Commit multi-platform `.terraform.lock.hcl`** so CI (Linux) and local macOS resolve the same provider hashes: `terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64`. Note: many committed lockfiles currently hold only the `darwin_arm64` `h1:` hash (written by a local `terraform init`); regenerate with the command above when you touch one.
+6. **Commit multi-platform `.terraform.lock.hcl`** so CI (Linux) and local macOS resolve the same provider hashes: `terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64`. Note: many committed lockfiles currently hold only the `darwin_arm64` `h1:` hash (written by a local `terraform init`); `scripts/check-consistency.sh` reports how many (informational, `LOCK_VERBOSE=1` lists them). Regenerate with the command above when you touch one.
 
 ---
 

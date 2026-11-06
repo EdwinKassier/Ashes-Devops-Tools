@@ -2,7 +2,7 @@
 #
 # Workspaces, projects, VCS wiring + trigger patterns, explicit remote-state
 # sharing, health assessments, dynamic-credential env vars, shared variable sets,
-# team access and an optional OPA policy set are derived from the same
+# least-privilege team access and an optional OPA policy set are derived from the same
 # config/landing-zone.yaml the cloud roots read (config.tf), so a new
 # environment or cloud is a reviewed one-file change, not console clicking. Apply it FIRST (the tfc-admin workspace
 # itself is created by hand once, then it manages all the others; optionally it
@@ -339,16 +339,73 @@ locals {
   }
 
   # ── Projects ──────────────────────────────────────────────────────────────
-  project_keys = var.enable_projects ? toset(distinct([for w in values(local.workspaces) : w.cloud])) : toset([])
+  # One project per cloud; with split_workload_projects the gcp/aws workload
+  # workspaces move to <prefix><cloud>-workloads so access is granted per project.
+  workspace_project_key = {
+    for k, w in local.workspaces : k => (
+      local.split_workload_projects && contains(["gcp", "aws"], w.cloud) && !local.is_control_plane[k] ? "${w.cloud}-workloads" : w.cloud
+    )
+  }
+  project_keys = var.enable_projects ? toset(distinct(values(local.workspace_project_key))) : toset([])
+
+  # Projects that hold at least one control-plane / bootstrap workspace.
+  control_plane_projects = toset([for k, p in local.workspace_project_key : p if local.is_control_plane[k] && contains(local.project_keys, p)])
+
+  # ── Team access (audit N4) ────────────────────────────────────────────────
+  # The broad platform team never gets fixed write on a control-plane project:
+  # write would let one member edit a control-plane variable (containment /
+  # break-glass inputs) and confirm the apply alone. There it gets custom access
+  # (runs = platform_team_control_plane_runs, variables read-only), and only the
+  # separate approvers team may confirm applies. Workload-only projects keep
+  # fixed write; workload workspaces sharing a project with the control plane
+  # get write through a workspace-level grant (TFC permissions are additive).
+  platform_custom_access = {
+    runs           = var.platform_team_control_plane_runs
+    variables      = "read"
+    state_versions = "read-outputs"
+    sentinel_mocks = "none"
+    locking        = false
+  }
+  approvers_custom_access = {
+    runs           = "apply"
+    variables      = "read"
+    state_versions = "read"
+    sentinel_mocks = "none"
+    locking        = true
+  }
 
   team_project_access = merge(
     var.platform_team_id == null ? {} : {
-      for p in local.project_keys : "${p}/platform" => { project = p, team_id = var.platform_team_id, access = "write" }
+      for p in local.project_keys : "${p}/platform" => {
+        project = p
+        team_id = var.platform_team_id
+        access  = contains(local.control_plane_projects, p) ? "custom" : "write"
+        custom  = contains(local.control_plane_projects, p) ? local.platform_custom_access : null
+      }
+    },
+    var.control_plane_approvers_team_id == null ? {} : {
+      for p in local.control_plane_projects : "${p}/approvers" => {
+        project = p
+        team_id = var.control_plane_approvers_team_id
+        access  = "custom"
+        custom  = local.approvers_custom_access
+      }
     },
     {
       for pair in setproduct(tolist(local.project_keys), var.viewer_team_ids) :
-      "${pair[0]}/${pair[1]}" => { project = pair[0], team_id = pair[1], access = "read" }
+      "${pair[0]}/${pair[1]}" => { project = pair[0], team_id = pair[1], access = "read", custom = null }
     },
+  )
+
+  # Workload workspaces that share a project with the control plane.
+  platform_workspace_write = var.platform_team_id == null ? toset([]) : toset([
+    for k, p in local.workspace_project_key : k if !local.is_control_plane[k] && contains(local.control_plane_projects, p)
+  ])
+
+  # ── Speculative plans (audit N5) ──────────────────────────────────────────
+  speculative_disabled = setunion(
+    toset(var.speculative_disabled_workspaces),
+    var.disable_speculative_on_production ? local.production_workloads : toset([]),
   )
 
   # Every input keyed by workspace name must name a managed workspace of the
@@ -401,6 +458,10 @@ resource "terraform_data" "input_contract" {
       error_message = "workspace_variables_file must not hold sensitive values (it is committed): ${join(", ", local.file_sensitive_entries)}. Set secrets via workspace_variables (write-only) instead."
     }
     precondition {
+      condition     = var.control_plane_approvers_team_id == null || var.control_plane_approvers_team_id != var.platform_team_id
+      error_message = "control_plane_approvers_team_id must differ from platform_team_id: the approvers team exists so the people who change the control plane are not the ones who approve its apply."
+    }
+    precondition {
       condition     = length(local.file_bad_categories) == 0
       error_message = "workspace_variables_file categories must be terraform or env: ${join(", ", local.file_bad_categories)}."
     }
@@ -443,6 +504,43 @@ resource "tfe_team_project_access" "this" {
   project_id = tfe_project.this[each.value.project].id
   team_id    = each.value.team_id
   access     = each.value.access
+
+  # Custom grants: no project-settings, team or variable-set management, and no
+  # workspace create/delete/move, run tasks or policy overrides.
+  dynamic "project_access" {
+    for_each = each.value.custom == null ? [] : [each.value.custom]
+    content {
+      settings      = "read"
+      teams         = "none"
+      variable_sets = "read"
+    }
+  }
+
+  dynamic "workspace_access" {
+    for_each = each.value.custom == null ? [] : [each.value.custom]
+    content {
+      runs             = workspace_access.value.runs
+      variables        = workspace_access.value.variables
+      state_versions   = workspace_access.value.state_versions
+      sentinel_mocks   = workspace_access.value.sentinel_mocks
+      locking          = workspace_access.value.locking
+      create           = false
+      delete           = false
+      move             = false
+      run_tasks        = false
+      policy_overrides = false
+    }
+  }
+}
+
+# Platform-team write on workload workspaces that live in a control-plane
+# project (single project per cloud); additive to the custom project grant.
+resource "tfe_team_access" "platform_workload" {
+  for_each = local.platform_workspace_write
+
+  team_id      = var.platform_team_id
+  workspace_id = module.workspace[each.key].id
+  access       = "write"
 }
 
 # ── Shared variable set ─────────────────────────────────────────────────────
@@ -484,14 +582,16 @@ module "workspace" {
   working_directory = each.value.dir
   tag_names         = each.value.tags
   terraform_version = var.terraform_version
-  project_id        = var.enable_projects ? tfe_project.this[each.value.cloud].id : null
+  project_id        = var.enable_projects ? tfe_project.this[local.workspace_project_key[each.key]].id : null
 
   vcs_repo              = local.vcs_repo
   file_triggers_enabled = true
   trigger_patterns      = concat(["${each.value.dir}/**"], local.module_paths[each.value.cloud])
 
-  # Control plane: no automatic speculative PR plans, no UI destroy plans.
-  speculative_enabled = !contains(var.speculative_disabled_workspaces, each.key)
+  # Control plane and production workloads: no automatic speculative PR plans
+  # (a PR's code would run as the plan identity); no UI destroy plans on the
+  # control plane. auto_apply stays false (module default).
+  speculative_enabled = !contains(local.speculative_disabled, each.key)
   allow_destroy_plan  = !local.is_control_plane[each.key]
 
   assessments_enabled = var.enable_health_assessments
@@ -530,9 +630,11 @@ import {
 # ── Optional OPA policy set (mixed mandatory / advisory) ───────────────────
 # Sourced from policies/opa/ in this repo via VCS. Enforcement level is set per
 # policy in policies/opa/policies.hcl: 7 mandatory (public exposure, identity,
-# encryption) + 3 advisory. The set is overridable, so a mandatory failure can
-# be overridden by a user with "Manage Policy Overrides". Requires a PAID HCP
-# Terraform tier with policy enforcement (not the free tier) and a vcs_repo.
+# encryption) + 3 advisory. The set is NOT overridable by default
+# (policy_set_overridable = false), so a mandatory failure is a hard stop that
+# no "Manage Policy Overrides" user can wave through; advisory results never
+# block. Requires a PAID HCP Terraform tier with policy enforcement (not the
+# free tier) and a vcs_repo.
 resource "tfe_policy_set" "opa" {
   count = var.enable_policy_sets ? 1 : 0
 
@@ -540,7 +642,7 @@ resource "tfe_policy_set" "opa" {
   name                = "${local.project_name_prefix}opa-guardrails"
   description         = "Landing-zone OPA guardrails from policies/opa (mixed mandatory/advisory; see policies.hcl)."
   kind                = "opa"
-  overridable         = true
+  overridable         = var.policy_set_overridable
   policy_tool_version = var.opa_version
   policies_path       = "policies/opa"
   workspace_ids       = [for k in sort(keys(module.workspace)) : module.workspace[k].id]

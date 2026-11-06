@@ -57,3 +57,13 @@ output "apply_permissions_boundary" {
   description = "Permissions boundary on the apply roles: \"embedded:<policy-name>\" for the StackSet-managed boundary, the supplied ARN, or null when disabled."
   value       = !var.enable_apply_permissions_boundary ? null : (local.create_apply_boundary ? "embedded:${var.apply_boundary_policy_name}" : var.apply_permissions_boundary_arn)
 }
+
+output "member_break_glass_template_body" {
+  description = "The rendered CloudFormation template (JSON) of the member break-glass StackSet (rendered even when enable_member_break_glass_role is false)."
+  value       = local.member_break_glass_template_body
+}
+
+output "member_break_glass_stack_set_name" {
+  description = "Name of the member break-glass StackSet, or null when enable_member_break_glass_role is false."
+  value       = try(aws_cloudformation_stack_set.break_glass[0].name, null)
+}

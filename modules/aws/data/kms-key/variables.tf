@@ -112,12 +112,34 @@ variable "via_services" {
 }
 
 variable "service_principals" {
-  description = "Optional list of AWS service principals (e.g. sns.amazonaws.com, ssm.amazonaws.com, cloudwatch.amazonaws.com) granted general-usage (Encrypt/Decrypt/GenerateDataKey/etc.) on the CMK, scoped by aws:SourceOrgID so only calls originating within this org can use the key. Unlike log_service_principals these carry no CloudTrail EncryptionContext condition. Empty by default (no service-principal statement)."
+  description = "Optional list of AWS service principals (e.g. sns.amazonaws.com, ssm.amazonaws.com, cloudwatch.amazonaws.com) granted general-usage (Encrypt/Decrypt/GenerateDataKey/etc.) on the CMK, scoped per service_principal_scope (default: the key's own account via aws:SourceAccount). Unlike log_service_principals these carry no CloudTrail EncryptionContext condition. Empty by default (no service-principal statement)."
   type        = list(string)
   default     = []
 
   validation {
     condition     = alltrue([for p in var.service_principals : can(regex("[.]amazonaws[.]com$", p))])
     error_message = "Each service_principals entry must be an AWS service principal ending in .amazonaws.com."
+  }
+}
+
+variable "service_principal_scope" {
+  description = "Scope of the service_principals (ServiceUsage) grant. \"account\" (default): aws:SourceAccount = key_account_id, so only service calls on behalf of the key's own account can use it. \"organization\": aws:SourceOrgID = org_id — opt-in for keys that genuinely receive org-wide service writes; any org account could then use the key through those services."
+  type        = string
+  default     = "account"
+
+  validation {
+    condition     = contains(["account", "organization"], var.service_principal_scope)
+    error_message = "service_principal_scope must be \"account\" or \"organization\"."
+  }
+}
+
+variable "key_account_id" {
+  description = "12-digit ID of the account the key lives in, used for the account-scoped ServiceUsage condition. Null (default) = the provider's account (aws_caller_identity)."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.key_account_id == null || can(regex("^[0-9]{12}$", coalesce(var.key_account_id, "x")))
+    error_message = "key_account_id must be null or a 12-digit AWS account ID."
   }
 }

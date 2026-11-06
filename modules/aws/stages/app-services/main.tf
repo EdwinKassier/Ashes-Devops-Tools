@@ -54,7 +54,10 @@ locals {
       family         = "${var.environment}-${k}"
       log_group_name = "/ecs/${var.environment}/${k}"
       target_group   = "${var.environment}-${k}"
-      priority       = coalesce(s.priority, 1000 + index(local.service_keys, k))
+      # The image the FIRST revision runs: the service's own, else the public
+      # placeholder (CI replaces it on the first deploy).
+      initial_image = coalesce(s.container_image, var.bootstrap_image)
+      priority      = coalesce(s.priority, 1000 + index(local.service_keys, k))
       path_patterns = (
         length(s.host_headers) + length(s.path_patterns) == 0
         ? ["/${k}", "/${k}/*"]
@@ -639,7 +642,7 @@ module "service" {
   region           = var.aws_region
   family           = local.svc[each.key].family
   cluster_arn      = aws_ecs_cluster.this[0].arn
-  container_image  = coalesce(each.value.container_image, "${module.ecr[0].repository_urls[each.key]}:bootstrap")
+  container_image  = local.svc[each.key].initial_image
   container_port   = each.value.container_port
   cpu              = each.value.cpu
   memory           = each.value.memory
@@ -690,6 +693,18 @@ module "service" {
 
   # The execution role must be able to pull + log before the first task starts.
   depends_on = [aws_iam_role_policy.execution]
+}
+
+# The placeholder only passes the ALB health check on its own port (8080 for
+# the default image). Warn (never fail) when a service relies on it but routes
+# a different container_port.
+check "bootstrap_image_port" {
+  assert {
+    condition = var.bootstrap_image != "public.ecr.aws/nginx/nginx-unprivileged:stable-alpine" || alltrue([
+      for s in values(var.services) : s.container_image != null || s.container_port == 8080
+    ])
+    error_message = "A service has container_image = null (placeholder bootstrap_image, listening on 8080) but a container_port other than 8080: its targets stay unhealthy until the first CI deploy. Set container_image (or bootstrap_image) to an image that listens on that port."
+  }
 }
 
 # =============================================================================

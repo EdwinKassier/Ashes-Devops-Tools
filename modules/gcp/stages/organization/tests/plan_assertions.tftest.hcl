@@ -82,17 +82,17 @@ run "default_audit_store_and_org_policies" {
 
   assert {
     condition = alltrue([
-      for c in ["iam.disableServiceAccountKeyCreation", "iam.disableServiceAccountKeyUpload", "storage.publicAccessPrevention", "iam.automaticIamGrantsForDefaultServiceAccounts", "compute.skipDefaultNetworkCreation"] :
-      contains(keys(module.org_policies.boolean_policy_names), c)
+      for c in ["iam.managed.disableServiceAccountKeyCreation", "iam.managed.disableServiceAccountKeyUpload", "storage.publicAccessPrevention", "iam.managed.preventPrivilegedBasicRolesForDefaultServiceAccounts", "compute.skipDefaultNetworkCreation"] :
+      contains(output.org_policy_constraints, c)
     ])
-    error_message = "the org-policy baseline must enforce SA-key, public-access, default-SA-grant and default-network constraints at the org node."
+    error_message = "the org-policy baseline must enforce SA-key, public-access, default-SA-grant and default-network constraints at the org node (managed versions where Google offers them)."
   }
 
   assert {
     condition = alltrue([
-      for c in ["gcp.resourceLocations", "iam.allowedPolicyMemberDomains", "compute.vmExternalIpAccess", "compute.restrictVpcPeering"] :
+      for c in ["gcp.resourceLocations", "iam.allowedPolicyMemberDomains", "compute.restrictVpcPeering"] :
       contains(keys(module.org_policies.list_policy_names), c)
-    ])
+    ]) && contains(keys(module.org_policies.managed_policy_names), "compute.managed.vmExternalIpAccess")
     error_message = "the org-policy baseline must set resource locations, domain-restricted sharing, external-IP and peering list constraints."
   }
 
@@ -156,10 +156,13 @@ run "containment_denies_mutation_and_tag_scopes_audit_store" {
     containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
   }
 
+  # Default guardrail_owner_mode = "separate": this stage does not apply the
+  # deny policy (its apply SA has no denyAdmin); it outputs the spec instead.
   assert {
-    condition     = contains(module.iam_deny.deny_policy_names, "contain-admin-identity")
-    error_message = "enabling containment must create the contain-admin-identity deny policy."
+    condition     = length(module.iam_deny.deny_policy_names) == 0 && contains(keys(output.guardrail_deny_policy_specs), "contain-admin-identity")
+    error_message = "in separate mode the containment policy must be output as a spec, not applied by this stage."
   }
+
 
   assert {
     condition = length(output.admin_containment_rules) == 2 && alltrue([
@@ -172,6 +175,10 @@ run "containment_denies_mutation_and_tag_scopes_audit_store" {
         "accesscontextmanager.googleapis.com/servicePerimeters.update",
         "accesscontextmanager.googleapis.com/servicePerimeters.delete",
         "accesscontextmanager.googleapis.com/policies.delete",
+        "accesscontextmanager.googleapis.com/accessLevels.update",
+        "accesscontextmanager.googleapis.com/accessLevels.delete",
+        "accesscontextmanager.googleapis.com/accessLevels.replaceAll",
+        "accesscontextmanager.googleapis.com/policies.setIamPolicy",
       ] : contains(output.admin_containment_rules[0].denied_permissions, p)
     ]) && !output.admin_containment_rules[0].tag_scoped
     error_message = "rule 1 must deny sink/exclusion/perimeter mutation org-wide (unconditioned)."
@@ -187,6 +194,9 @@ run "containment_denies_mutation_and_tag_scopes_audit_store" {
         "cloudkms.googleapis.com/cryptoKeyVersions.destroy",
         "cloudkms.googleapis.com/cryptoKeyVersions.update",
         "cloudkms.googleapis.com/cryptoKeys.setIamPolicy",
+        "storage.googleapis.com/buckets.update",
+        "cloudkms.googleapis.com/keyRings.setIamPolicy",
+        "logging.googleapis.com/buckets.update",
       ] : contains(output.admin_containment_rules[1].denied_permissions, p)
     ]) && output.admin_containment_rules[1].tag_scoped
     error_message = "rule 2 must deny audit-store bucket/object/key destruction, scoped by the containment tag."
@@ -299,8 +309,8 @@ run "os_login_enforced_org_wide_by_default" {
   command = plan
 
   assert {
-    condition     = contains(keys(module.org_policies.boolean_policy_names), "compute.requireOsLogin")
-    error_message = "compute.requireOsLogin must be enforced at the org node by default."
+    condition     = contains(keys(module.org_policies.managed_policy_names), "compute.managed.requireOsLogin")
+    error_message = "OS Login must be enforced at the org node by default (managed constraint)."
   }
 
   assert {
@@ -317,12 +327,12 @@ run "os_login_folder_exemption" {
   }
 
   assert {
-    condition     = length(output.os_login_exempt_environment_keys) == 1 && contains(output.os_login_exempt_environment_keys, "dev") && contains(keys(module.os_login_exemptions["dev"].boolean_policy_names), "compute.requireOsLogin")
+    condition     = length(output.os_login_exempt_environment_keys) == 1 && contains(output.os_login_exempt_environment_keys, "dev") && contains(keys(module.os_login_exemptions["dev"].managed_policy_names), "compute.managed.requireOsLogin")
     error_message = "an exempt folder must get a folder-level compute.requireOsLogin override."
   }
 
   assert {
-    condition     = contains(keys(module.org_policies.boolean_policy_names), "compute.requireOsLogin")
+    condition     = contains(keys(module.org_policies.managed_policy_names), "compute.managed.requireOsLogin")
     error_message = "exempting a folder must not drop the org-wide OS Login default."
   }
 }
@@ -336,7 +346,7 @@ run "os_login_org_enforcement_can_be_disabled" {
   }
 
   assert {
-    condition     = !contains(keys(module.org_policies.boolean_policy_names), "compute.requireOsLogin") && length(module.os_login_exemptions) == 0
+    condition     = !contains(output.org_policy_constraints, "compute.requireOsLogin") && !contains(output.org_policy_constraints, "compute.managed.requireOsLogin") && length(module.os_login_exemptions) == 0
     error_message = "enforce_os_login = false must drop the org-level constraint and the (now pointless) exemptions."
   }
 }
@@ -529,5 +539,119 @@ run "pam_entitlement_requires_approval" {
   assert {
     condition     = google_privileged_access_manager_entitlement.org_admin[0].privileged_access[0].gcp_iam_access[0].role_bindings[0].role == "roles/resourcemanager.organizationAdmin"
     error_message = "the entitlement must grant organizationAdmin just in time."
+  }
+}
+
+# Legacy single-owner mode: this stage applies the deny policy itself.
+run "containment_applied_in_stage_in_organization_mode" {
+  command = plan
+
+  variables {
+    guardrail_owner_mode          = "organization"
+    enable_admin_containment      = true
+    containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
+  }
+
+  assert {
+    condition     = contains(module.iam_deny.deny_policy_names, "contain-admin-identity")
+    error_message = "guardrail_owner_mode = organization must apply the contain-admin-identity deny policy in this stage."
+  }
+}
+
+run "containment_tags_the_log_analytics_bucket" {
+  command = plan
+
+  variables {
+    enable_admin_containment      = true
+    containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
+  }
+
+  assert {
+    condition     = length(google_tags_location_tag_binding.containment_log_analytics_bucket) == 1
+    error_message = "the audit Log Analytics bucket must carry the containment tag."
+  }
+}
+
+run "legacy_constraints_when_managed_not_preferred" {
+  command = plan
+
+  variables {
+    prefer_managed_constraints = false
+  }
+
+  assert {
+    condition     = contains(keys(module.org_policies.boolean_policy_names), "iam.disableServiceAccountKeyCreation") && length(module.org_policies.managed_policy_names) == 0
+    error_message = "prefer_managed_constraints = false must keep the legacy baseline."
+  }
+}
+
+run "log_analytics_on_by_default" {
+  command = plan
+
+  assert {
+    condition     = module.audit_logs.log_analytics_bucket_location == "europe-west1"
+    error_message = "the audit Log Analytics bucket must be created by default."
+  }
+
+  assert {
+    condition     = length(google_logging_organization_settings.this) == 0 && length(module.automation_boundary) == 0
+    error_message = "logging org settings and the principal access boundary must be opt-in."
+  }
+}
+
+run "logging_org_settings_and_boundary_opt_in" {
+  command = plan
+
+  variables {
+    enable_logging_organization_settings = true
+    enable_principal_access_boundary     = true
+    enable_admin_containment             = true
+    containment_exempt_principals        = ["principalSet://goog/group/break-glass@acme.io"]
+  }
+
+  assert {
+    condition     = google_logging_organization_settings.this[0].storage_location == "europe-west1" && google_logging_organization_settings.this[0].disable_default_sink == false
+    error_message = "logging org settings must default the storage location to default_region and keep the default sink."
+  }
+
+  assert {
+    condition     = module.automation_boundary[0].bound_principal_sets["admin"] == "//cloudresourcemanager.googleapis.com/projects/acme-admin-project"
+    error_message = "the principal access boundary must bind every SA in the admin project."
+  }
+
+  assert {
+    condition     = contains(output.admin_containment_rules[0].denied_permissions, "iam.googleapis.com/principalaccessboundarypolicies.unbind")
+    error_message = "with containment on, the automation boundary must not be unbindable by the automation identity."
+  }
+}
+
+# The spec is a gcloud deny-policy document (checked with a static user policy:
+# the containment spec embeds tag IDs that are unknown at plan time).
+run "guardrail_spec_is_gcloud_policy_document" {
+  command = plan
+
+  variables {
+    iam_deny_policies = [
+      {
+        name = "deny-sa-keys"
+        rules = [
+          {
+            denied_principals  = ["principalSet://goog/public:all"]
+            denied_permissions = ["iam.googleapis.com/serviceAccountKeys.create"]
+            denial_condition   = { title = "t", expression = "resource.matchTag('123/env', 'prod')" }
+          },
+        ]
+      },
+    ]
+  }
+
+  assert {
+    condition     = jsondecode(output.guardrail_deny_policy_specs["deny-sa-keys"]).displayName == "deny-sa-keys" && jsondecode(output.guardrail_deny_policy_specs["deny-sa-keys"]).rules[0].denyRule.deniedPermissions[0] == "iam.googleapis.com/serviceAccountKeys.create" && jsondecode(output.guardrail_deny_policy_specs["deny-sa-keys"]).rules[0].denyRule.denialCondition.title == "t"
+    error_message = "guardrail_deny_policy_specs must render the gcloud deny-policy JSON (displayName, rules[].denyRule.deniedPermissions, denialCondition)."
+  }
+
+  assert {
+    condition     = length(module.iam_deny.deny_policy_names) == 0
+    error_message = "in separate mode user deny policies are also applied by the guardrail owner, not this stage."
   }
 }

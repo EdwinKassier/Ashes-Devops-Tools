@@ -1,0 +1,8 @@
+# Test fixture: a top-level preset applies to every environment (presets.tftest.hcl).
+version: 1
+org:
+  prefix: acme
+  tfc:
+    organization: acme-tfc
+presets:
+  - prod-gcp-workload

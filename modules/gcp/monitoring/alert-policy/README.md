@@ -136,7 +136,8 @@ Supports email, Slack/webhook notifications, and common GCP metric alerts
 
 Usage:
   module "alerts" {
-    source     = "../../modules/gcp/monitoring/alert-policy"
+    # from a root under envs/<cloud>/<root>/:
+    source     = "../../../modules/gcp/monitoring/alert-policy"
     project\_id = "my-project"
     notification\_email\_addresses = ["ops@example.com"]
     notification\_webhook\_urls = {
@@ -177,14 +178,14 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_monitoring_alert_policy.error_rate (modules/gcp/monitoring/alert-policy/main.tf#L144)
-- resource.google_monitoring_alert_policy.high_cpu (modules/gcp/monitoring/alert-policy/main.tf#L69)
-- resource.google_monitoring_alert_policy.high_latency (modules/gcp/monitoring/alert-policy/main.tf#L186)
-- resource.google_monitoring_alert_policy.high_memory (modules/gcp/monitoring/alert-policy/main.tf#L106)
-- resource.google_monitoring_alert_policy.log_based (modules/gcp/monitoring/alert-policy/main.tf#L273)
-- resource.google_monitoring_alert_policy.uptime (modules/gcp/monitoring/alert-policy/main.tf#L227)
-- resource.google_monitoring_notification_channel.email (modules/gcp/monitoring/alert-policy/main.tf#L36)
-- resource.google_monitoring_notification_channel.webhook (modules/gcp/monitoring/alert-policy/main.tf#L50)
+- resource.google_monitoring_alert_policy.error_rate (modules/gcp/monitoring/alert-policy/main.tf#L145)
+- resource.google_monitoring_alert_policy.high_cpu (modules/gcp/monitoring/alert-policy/main.tf#L70)
+- resource.google_monitoring_alert_policy.high_latency (modules/gcp/monitoring/alert-policy/main.tf#L187)
+- resource.google_monitoring_alert_policy.high_memory (modules/gcp/monitoring/alert-policy/main.tf#L107)
+- resource.google_monitoring_alert_policy.log_based (modules/gcp/monitoring/alert-policy/main.tf#L274)
+- resource.google_monitoring_alert_policy.uptime (modules/gcp/monitoring/alert-policy/main.tf#L228)
+- resource.google_monitoring_notification_channel.email (modules/gcp/monitoring/alert-policy/main.tf#L37)
+- resource.google_monitoring_notification_channel.webhook (modules/gcp/monitoring/alert-policy/main.tf#L51)
 
 
 ## Inputs

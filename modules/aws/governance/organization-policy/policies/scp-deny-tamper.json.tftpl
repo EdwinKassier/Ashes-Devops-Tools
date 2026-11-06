@@ -58,25 +58,27 @@
         }
       }
     },
+%{ if length(admin_role_arns) > 0 ~}
     {
       "Sid": "DenyPrivilegedRoleTampering",
       "Effect": "Deny",
-      "Action": [
-        "iam:CreateRole",
-        "iam:DeleteRole",
-        "iam:UpdateRole",
-        "iam:UpdateAssumeRolePolicy",
-        "iam:AttachRolePolicy",
-        "iam:DetachRolePolicy",
-        "iam:PutRolePolicy",
-        "iam:DeleteRolePolicy",
-        "iam:PutRolePermissionsBoundary",
-        "iam:DeleteRolePermissionsBoundary"
-      ],
-      "Resource": ${privileged_arns},
+      "Action": ${role_tamper_actions},
+      "Resource": ${jsonencode(admin_role_arns)},
       "Condition": {
         "ArnNotLike": {
-          "aws:PrincipalArn": ${privileged_arns}
+          "aws:PrincipalArn": ${break_glass_arns}
+        }
+      }
+    },
+%{ endif ~}
+    {
+      "Sid": "DenyStackSetRoleTampering",
+      "Effect": "Deny",
+      "Action": ${role_tamper_actions},
+      "Resource": ${jsonencode(stackset_role_arns)},
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": ${jsonencode(stackset_exempt_arns)}
         }
       }
     },

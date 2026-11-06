@@ -61,6 +61,24 @@ locals {
     forensics        = coalesce(var.key_admin_arn, "arn:aws:iam::${var.forensics_account_id}:role/${var.key_admin_role_name}")
     security_tooling = coalesce(var.key_admin_arn, "arn:aws:iam::${var.security_tooling_account_id}:role/${var.key_admin_role_name}")
   }
+
+  # kms:PutKeyPolicy holder per CMK: the member-account break-glass role in the
+  # key's OWN account (deployed to every member account by the aws-organization
+  # member break-glass StackSet), so the pipeline (key admin) cannot rewrite the
+  # key policy and grant itself kms:Decrypt — at the key-policy level as well as
+  # via the deny-tamper SCP. PutKeyPolicy is not a cross-account operation, so
+  # the management-account break-glass role cannot be used here. Null role name
+  # = legacy (key admin also holds PutKeyPolicy).
+  key_account_ids = {
+    log_archive      = var.log_archive_account_id
+    forensics        = var.forensics_account_id
+    security_tooling = var.security_tooling_account_id
+  }
+  key_policy_admin_arns = {
+    for k, acct in local.key_account_ids : k => (
+      var.key_policy_admin_role_name == null ? [] : ["arn:aws:iam::${acct}:role/${var.key_policy_admin_role_name}"]
+    )
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -107,6 +125,7 @@ module "log_cmk" {
   org_id                = var.org_id
   management_account_id = var.management_account_id
   key_admin_arn         = local.key_admin_arns["log_archive"]
+  key_policy_admin_arns = local.key_policy_admin_arns["log_archive"]
   key_user_arns         = try(var.kms_key_user_arns["log_archive"], [])
   enable_protection_tag = var.enable_kms_protection_tag
   # log_service_principals uses the module SRA default
@@ -123,6 +142,7 @@ module "forensics_cmk" {
   org_id                = var.org_id
   management_account_id = var.management_account_id
   key_admin_arn         = local.key_admin_arns["forensics"]
+  key_policy_admin_arns = local.key_policy_admin_arns["forensics"]
   key_user_arns         = try(var.kms_key_user_arns["forensics"], [])
   enable_protection_tag = var.enable_kms_protection_tag
 }
@@ -131,8 +151,8 @@ module "forensics_cmk" {
 # policy grants only log-delivery service principals + the key admin, so an SNS
 # topic or SSM session in the security-tooling account cannot use it (it would
 # get KMSAccessDenied). This key lives IN the security-tooling account and grants
-# the local detective/session services (SNS, SSM, CloudWatch) usage, scoped by
-# aws:SourceOrgID. It carries no log-delivery grants.
+# the local detective/session services (SNS, SSM, CloudWatch) usage, scoped to
+# this account (aws:SourceAccount). It carries no log-delivery grants.
 module "sectool_cmk" {
   source = "../../data/kms-key"
   providers = {
@@ -143,10 +163,15 @@ module "sectool_cmk" {
   org_id                 = var.org_id
   management_account_id  = var.management_account_id
   key_admin_arn          = local.key_admin_arns["security_tooling"]
+  key_policy_admin_arns  = local.key_policy_admin_arns["security_tooling"]
   key_user_arns          = try(var.kms_key_user_arns["security_tooling"], [])
   enable_protection_tag  = var.enable_kms_protection_tag
   log_service_principals = []
   service_principals     = ["sns.amazonaws.com", "ssm.amazonaws.com", "cloudwatch.amazonaws.com"]
+  # Local services only: scope the grant to this account (aws:SourceAccount),
+  # not the whole org.
+  service_principal_scope = "account"
+  key_account_id          = var.security_tooling_account_id
 }
 
 # ---------------------------------------------------------------------------

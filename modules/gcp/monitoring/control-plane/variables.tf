@@ -112,6 +112,39 @@ variable "watches" {
       filter       = "protoPayload.serviceName=\"cloudresourcemanager.googleapis.com\" AND protoPayload.methodName:(\"DeleteTagBinding\" OR \"DeleteTagValue\" OR \"DeleteTagKey\")"
       severity     = "ERROR"
     }
+    guardrail_role_grant = {
+      # The organization apply SA holds iam.securityAdmin, so it could grant
+      # itself roles/iam.denyAdmin (or PAB admin) and then remove the deny policy
+      # that contains it. Deny cannot condition on the role granted, so detect.
+      display_name  = "Guardrail-owner role granted at the organization or a folder"
+      filter        = "protoPayload.methodName=\"SetIamPolicy\" AND (resource.type=\"organization\" OR resource.type=\"folder\") AND protoPayload.serviceData.policyDelta.bindingDeltas.role=(\"roles/iam.denyAdmin\" OR \"roles/iam.principalAccessBoundaryAdmin\" OR \"roles/iam.securityAdmin\" OR \"roles/resourcemanager.organizationAdmin\")"
+      severity      = "CRITICAL"
+      documentation = "A role that can remove landing-zone guardrails (deny policies, principal access boundaries, org IAM) was granted or revoked. Outside an approved change or PAM grant, treat it as privilege escalation."
+    }
+    guardrail_identity_change = {
+      # Impersonation rights on the guardrails SA (sole denyAdmin holder) are the
+      # other way to reach the deny policies.
+      display_name = "Guardrails service account IAM changed"
+      filter       = "protoPayload.serviceName=\"iam.googleapis.com\" AND protoPayload.methodName:\"SetIAMPolicy\" AND protoPayload.resourceName:\"-guardrails-apply@\""
+      severity     = "CRITICAL"
+    }
+    principal_access_boundary_change = {
+      display_name = "Principal access boundary policy or binding changed"
+      filter       = "protoPayload.serviceName=\"iam.googleapis.com\" AND protoPayload.methodName:(\"PrincipalAccessBoundaryPolicies.Create\" OR \"PrincipalAccessBoundaryPolicies.Update\" OR \"PrincipalAccessBoundaryPolicies.Delete\" OR \"PolicyBindings.Create\" OR \"PolicyBindings.Update\" OR \"PolicyBindings.Delete\")"
+      severity     = "ERROR"
+    }
+    log_bucket_or_settings_change = {
+      # Log bucket retention/lock/analytics, linked datasets and the org default
+      # sink / CMEK settings.
+      display_name = "Log bucket, linked dataset or logging settings changed"
+      filter       = "protoPayload.serviceName=\"logging.googleapis.com\" AND protoPayload.methodName:(\"UpdateBucket\" OR \"DeleteBucket\" OR \"UndeleteBucket\" OR \"DeleteLink\" OR \"UpdateSettings\" OR \"UpdateCmekSettings\")"
+      severity     = "ERROR"
+    }
+    pam_entitlement_change = {
+      display_name = "Privileged Access Manager entitlement changed"
+      filter       = "protoPayload.serviceName=\"privilegedaccessmanager.googleapis.com\" AND protoPayload.methodName:(\"CreateEntitlement\" OR \"UpdateEntitlement\" OR \"DeleteEntitlement\")"
+      severity     = "ERROR"
+    }
   }
 
   validation {
