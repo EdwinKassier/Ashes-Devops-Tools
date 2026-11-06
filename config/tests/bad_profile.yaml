@@ -1,0 +1,4 @@
+# Expected to FAIL schema validation: org.profile must be production | starter.
+version: 1
+org:
+  profile: enterprise

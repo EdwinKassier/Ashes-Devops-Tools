@@ -318,6 +318,15 @@ mv "${tmp}" "${OUTPUT}"
 trap - EXIT
 printf 'Wrote %s\n' "${OUTPUT}"
 
+# Validate against the schema when the tool is available (optional dev tool).
+if command -v check-jsonschema >/dev/null 2>&1; then
+  check-jsonschema --schemafile "${REPO_ROOT}/config/landing-zone.schema.json" "${OUTPUT}" ||
+    {
+      printf 'ERROR: %s does not match config/landing-zone.schema.json\n' "${OUTPUT}" >&2
+      exit 1
+    }
+fi
+
 if [[ "${REBRAND}" == true ]]; then
   readme="${REPO_ROOT}/README.md"
   if grep -q '^# Ashes DevOps Tools$' "${readme}"; then

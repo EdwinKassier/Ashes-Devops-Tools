@@ -9,6 +9,8 @@
 #
 # trivy replaces tfsec (EOL, folded into Trivy): keep it equal to the
 # trivy-action `version:` in .github/workflows/reusable-security.yml.
+# check-jsonschema 0.39.0 (pip/pipx, not asdf): `make config-check`; CI pins the same
+# version in terraform-plan.yml meta-lint.
 # shellcheck: the pre-commit hook pins shellcheck-py v<this>.1.
 terraform 1.14.3
 tflint 0.62.0

@@ -194,6 +194,7 @@ consistency: ## Assert canonical strings (region regex, provider pins) haven't d
 ci: ## Run the local CI pipeline (fmt → consistency → counts → links → shellcheck → docs → validate → lint → test → security)
 	@$(MAKE) fmt-check
 	@$(MAKE) consistency
+	@$(MAKE) config-check
 	@$(MAKE) count-check
 	@$(MAKE) links
 	@$(MAKE) required-checks
@@ -309,10 +310,19 @@ e2e-aws: ## REAL apply: run tests/e2e/aws in the ambient (sandbox!) AWS account,
 # ---------------------------------------------------------------------------
 # Single-source configuration (config/landing-zone.yaml)
 # ---------------------------------------------------------------------------
-.PHONY: init bootstrap-ids
+.PHONY: init bootstrap-ids config-check
 
 init: ## Scaffold config/landing-zone.yaml: make init ARGS="--org-name acme --clouds gcp,aws ..."
 	@./scripts/init-landing-zone.sh $(ARGS)
 
 bootstrap-ids: ## Write the tfc-admin workspace IDs for the local phase-0 gcp-bootstrap apply (gitignored)
 	terraform -chdir=envs/tfc-admin output -raw gcp_bootstrap_tfvars > envs/gcp/bootstrap/tfc-workspaces.auto.tfvars
+
+config-check: ## Validate config/*.example.yaml and every test fixture against config/landing-zone.schema.json (needs check-jsonschema)
+	@command -v check-jsonschema >/dev/null || { echo "check-jsonschema not found: pipx install check-jsonschema (see .tool-versions)"; exit 1; }
+	@{ echo config/landing-zone.example.yaml; find envs modules -name 'landing-zone*.yaml' -path '*/tests/fixtures/*'; } | sort | \
+		xargs check-jsonschema --schemafile config/landing-zone.schema.json
+	@for f in config/tests/*.yaml; do \
+		if check-jsonschema --schemafile config/landing-zone.schema.json "$$f" >/dev/null 2>&1; then \
+			echo "config-check: $$f should FAIL schema validation but passed"; exit 1; fi; \
+	done; echo "config-check: negative fixtures rejected as expected"

@@ -371,6 +371,11 @@ jobs:
       - name: Consistency guards (canonical region regex + provider pins)
         run: ./scripts/check-consistency.sh
 
+      - name: Config schema (landing-zone.yaml examples and fixtures)
+        run: |
+          python -m pip install check-jsonschema==0.39.0
+          make config-check
+
       - name: README / CLAUDE.md counts match the tree
         run: ./scripts/check-docs-counts.sh
 
