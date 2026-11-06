@@ -24,24 +24,47 @@ locals {
   ]
   lz = try(local.lz_documents[0], {})
 
-  # The estate's config directory relative to the repo root (this root sits at
-  # envs/tfc-admin, so "<path.root>/../../" is the repo root). Every workspace
-  # triggers on its own estate's config only: the production estate
-  # (config/landing-zone.yaml) on the two committed production files, any other
-  # estate (config/sandbox/landing-zone.yaml) on its whole directory. So editing
-  # one estate's YAML never queues the other's runs. A disabled lookup ("") and
-  # an absolute path (no known relation to the repo) keep the production layout.
-  landing_zone_config_dir = dirname(coalesce(
-    var.landing_zone_config_path == "" ? null : local.landing_zone_config_file,
-    "${path.root}/../../config/landing-zone.yaml",
+  # ── Per-estate trigger patterns ─────────────────────────────────────────
+  # Every workspace triggers on its own estate's config only, so editing one
+  # estate's YAML never queues the other's runs. Both config paths are
+  # converted to repo-relative paths (this root sits at envs/tfc-admin, so
+  # "../../" is the repo root; dirname() cleans "./../../x" to "../.."):
+  #   - production (the landing-zone file sits in config/): the landing-zone
+  #     file and the workspace_variables_file, exactly (never config/sandbox/**);
+  #   - any other estate (config/sandbox/landing-zone.yaml): its whole
+  #     directory, plus the workspace_variables_file if it lies outside it.
+  # A disabled lookup ("") and an absolute landing-zone path keep the
+  # production layout; an absolute workspace_variables_file has no known
+  # relation to the repo and adds no pattern. A relative
+  # path that leaves the repo is rejected by the variable validations.
+  # One local per path (a shared one would make the two variable validations
+  # depend on each other).
+  estate_landing_zone_path = [for p in [var.landing_zone_config_path == "" || var.landing_zone_config_path == null ? "../../config/landing-zone.yaml" : var.landing_zone_config_path] :
+    (p == null ? null : (startswith(p, "/") ? null : (
+      dirname("./${p}") == "../.." ? basename(p) : (
+        startswith(dirname("./${p}"), "../../") ? "${trimprefix(dirname("./${p}"), "../../")}/${basename(p)}" : (
+          dirname("./${p}") == "." ? "envs/tfc-admin/${basename(p)}" : "envs/tfc-admin/${dirname("./${p}")}/${basename(p)}"
+        )
+      )
+    )))
+  ][0]
+  estate_workspace_vars_path = [for p in [var.workspace_variables_file] :
+    (p == null ? null : (startswith(p, "/") ? null : (
+      dirname("./${p}") == "../.." ? basename(p) : (
+        startswith(dirname("./${p}"), "../../") ? "${trimprefix(dirname("./${p}"), "../../")}/${basename(p)}" : (
+          dirname("./${p}") == "." ? "envs/tfc-admin/${basename(p)}" : "envs/tfc-admin/${dirname("./${p}")}/${basename(p)}"
+        )
+      )
+    )))
+  ][0]
+  estate_config_dir = local.estate_landing_zone_path == null ? "config" : dirname(local.estate_landing_zone_path)
+  estate_config_trigger_patterns = tolist(local.estate_config_dir == "config" ? concat(
+    [coalesce(local.estate_landing_zone_path, "config/landing-zone.yaml")],
+    local.estate_workspace_vars_path == null ? [] : [local.estate_workspace_vars_path],
+    ) : concat(
+    ["${local.estate_config_dir}/**"],
+    local.estate_workspace_vars_path == null || startswith(coalesce(local.estate_workspace_vars_path, "/"), "${local.estate_config_dir}/") ? [] : [local.estate_workspace_vars_path],
   ))
-  # dirname() cleans the path ("./../../config/sandbox" -> "../../config/sandbox").
-  estate_config_dir = startswith(local.landing_zone_config_dir, "/") ? "config" : (
-    local.landing_zone_config_dir == "../.." ? "." : (
-      startswith(local.landing_zone_config_dir, "../../") ? trimprefix(local.landing_zone_config_dir, "../../") : "envs/tfc-admin/${local.landing_zone_config_dir}"
-    )
-  )
-  estate_config_trigger_patterns = local.estate_config_dir == "config" ? ["config/landing-zone.yaml", "config/tfc-workspaces.yaml"] : ["${local.estate_config_dir}/**"]
 
   cfg = {
     tfc_organization    = try(tostring(local.lz.org.tfc.organization), null)

@@ -28,26 +28,32 @@ variables {
 run "production_patterns_exclude_sandbox_config" {
   command = plan
 
+  variables {
+    # Not the committed default (a fork's real config/tfc-workspaces.yaml would
+    # load into this suite); it does not exist, so only its path is used.
+    workspace_variables_file = "../../config/tfc-workspaces.sandbox-test-missing.yaml"
+  }
+
   assert {
     condition = alltrue([
       for ws in output.workspace_names : (
         contains(module.workspace[ws].trigger_patterns, "config/landing-zone.yaml") &&
-        contains(module.workspace[ws].trigger_patterns, "config/tfc-workspaces.yaml") &&
+        contains(module.workspace[ws].trigger_patterns, "config/tfc-workspaces.sandbox-test-missing.yaml") &&
         !anytrue([for p in module.workspace[ws].trigger_patterns : startswith(p, "config/sandbox") || p == "config/**"])
       )
     ])
-    error_message = "every production workspace must trigger on config/landing-zone.yaml and config/tfc-workspaces.yaml, and never on config/sandbox/**."
+    error_message = "every production workspace must trigger on its landing-zone config and workspace_variables_file, and never on config/sandbox/**."
   }
 
   # Existing patterns stay: the root's own dir and its module domains.
   assert {
-    condition     = toset(module.workspace["gcp-organization"].trigger_patterns) == toset(["envs/gcp/organization/**", "modules/gcp/**", "config/landing-zone.yaml", "config/tfc-workspaces.yaml"])
+    condition     = toset(module.workspace["gcp-organization"].trigger_patterns) == toset(["envs/gcp/organization/**", "modules/gcp/**", "config/landing-zone.yaml", "config/tfc-workspaces.sandbox-test-missing.yaml"])
     error_message = "the estate config patterns are added to the working-directory and module-domain patterns."
   }
 
   assert {
-    condition     = output.estate_config_trigger_patterns == tolist(["config/landing-zone.yaml", "config/tfc-workspaces.yaml"])
-    error_message = "the production estate's config patterns are the two committed production files."
+    condition     = output.estate_config_trigger_patterns == tolist(["config/landing-zone.yaml", "config/tfc-workspaces.sandbox-test-missing.yaml"])
+    error_message = "the production estate's config patterns are its landing-zone file and its workspace_variables_file."
   }
 }
 
@@ -62,8 +68,8 @@ run "default_path_is_production_estate" {
   }
 
   assert {
-    condition     = output.estate_config_trigger_patterns == tolist(["config/landing-zone.yaml", "config/tfc-workspaces.yaml"])
-    error_message = "landing_zone_config_path = null is the production estate."
+    condition     = output.estate_config_trigger_patterns == tolist(["config/landing-zone.yaml"])
+    error_message = "landing_zone_config_path = null is the production estate (workspace_variables_file = null adds no pattern)."
   }
 }
 
@@ -187,4 +193,54 @@ run "default_is_manual_apply" {
     ])
     error_message = "auto_apply_on_merge defaults to false: every workspace keeps manual apply."
   }
+}
+
+# A sandbox workspace_variables_file outside the estate directory is still
+# watched, as its own pattern.
+run "sandbox_workspace_variables_file_outside_dir" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../config/sandbox/landing-zone.yaml"
+    workspace_variables_file = "../../config/sandbox-vars.missing.yaml"
+    enable_saas              = false
+    saas_workspaces          = []
+  }
+
+  assert {
+    condition     = output.estate_config_trigger_patterns == tolist(["config/sandbox/**", "config/sandbox-vars.missing.yaml"])
+    error_message = "a workspace_variables_file outside the estate dir gets its own trigger pattern."
+  }
+}
+
+# A relative config path that leaves the repository cannot become a trigger
+# glob: the plan fails instead.
+run "config_path_outside_repo_rejected" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../../outside/landing-zone.yaml"
+  }
+
+  expect_failures = [var.landing_zone_config_path]
+}
+
+run "config_path_above_root_rejected" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../landing-zone.yaml"
+  }
+
+  expect_failures = [var.landing_zone_config_path]
+}
+
+run "workspace_variables_file_outside_repo_rejected" {
+  command = plan
+
+  variables {
+    workspace_variables_file = "../../../tfc-workspaces.yaml"
+  }
+
+  expect_failures = [var.workspace_variables_file]
 }

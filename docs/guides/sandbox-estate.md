@@ -23,11 +23,16 @@ against the same schema as production.
 - **Separate HCP organizations.** Workspace names are the same in both estates
   (`gcp-organization`, `aws-workload-dev`, and so on). They never collide, because each
   estate lives in its own HCP organization.
-- **Per-estate trigger patterns.** tfc-admin derives the estate's config directory from its
-  own `landing_zone_config_path` (output `estate_config_trigger_patterns`):
+- **Per-estate trigger patterns.** tfc-admin derives the estate's config paths from its
+  own `landing_zone_config_path` and `workspace_variables_file` (output
+  `estate_config_trigger_patterns`):
   - Production (`config/landing-zone.yaml`, the default) adds `config/landing-zone.yaml`
-    and `config/tfc-workspaces.yaml` to every workspace's trigger patterns.
-  - The sandbox (`config/sandbox/landing-zone.yaml`) adds `config/sandbox/**`.
+    and its `workspace_variables_file` (default `config/tfc-workspaces.yaml`) to every
+    workspace's trigger patterns, as exact paths.
+  - The sandbox (`config/sandbox/landing-zone.yaml`) adds `config/sandbox/**`. A
+    `workspace_variables_file` outside that directory is added as its own pattern.
+  - A relative path that leaves the repository fails the plan, because it cannot become
+    a trigger pattern.
 
   The existing `<working_dir>/**` and module-domain patterns stay. Editing one estate's
   YAML therefore never queues the other estate's runs. A module or root change queues both.
@@ -104,14 +109,25 @@ Phase 0 is the same as production:
 sandbox workspace **except `tfc-admin` and `gcp-guardrails`** (output
 `never_auto_apply_workspaces`). Those two always wait for a human confirmation.
 
-- A merge queues a run on every workspace whose path-filtered VCS triggers match, and
-  those runs apply on their own.
-- Each successful apply fires the run triggers along the root DAG, so downstream
-  workspaces re-plan and apply in order.
+- A merge queues a VCS run on every workspace whose path-filtered triggers match. Those
+  runs start **concurrently** and apply in **no fixed order**: a downstream workspace can
+  apply before its upstream does.
+- Each successful apply then fires the run triggers along the root DAG, so every
+  downstream workspace runs again after its upstream has applied. The estate converges
+  through these triggered reruns, not through the first wave of VCS runs.
+- A downstream failure is therefore **expected** on a merge that changes an upstream
+  contract (a new output, or a renamed one), and the upstream's run trigger retries it.
+  Only a failure that persists after the triggered rerun is a real upgrade failure. To
+  avoid the noise, sequence a contract-changing merge by hand: apply the upstream
+  workspace first, then let the triggers carry it down.
 - A no-change upstream apply fires no run trigger, and a local-execution apply fires none
   either.
 
-Production leaves `auto_apply_on_merge` at its default, `false`.
+**Never enable `auto_apply_on_merge` in production.** It auto-applies the
+root-of-trust workspaces: `aws-organization`, and `gcp-bootstrap` once it has been
+flipped to remote execution. A bad merge would then change the organization, the SCPs and
+the automation identities with no human confirmation. Only `tfc-admin` and
+`gcp-guardrails` are excluded. Production leaves the variable at its default, `false`.
 
 ## Budget and who owns the bill
 

@@ -1,7 +1,16 @@
 variable "landing_zone_config_path" {
-  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values."
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values. Its directory also sets the estate's trigger patterns (config/ = production, any other dir = <dir>/**), so a relative path must stay inside the repository."
   type        = string
   default     = null
+
+  validation {
+    # Relative paths are cleaned first (dirname("./p/_") == clean(p)).
+    condition = startswith(coalesce(var.landing_zone_config_path, "/"), "/") || !(
+      dirname("./${coalesce(var.landing_zone_config_path, "x")}/_") == ".." || dirname("./${coalesce(var.landing_zone_config_path, "x")}/_") == "../../.." || startswith(dirname("./${coalesce(var.landing_zone_config_path, "x")}/_"), "../../../") ||
+      (startswith(dirname("./${coalesce(var.landing_zone_config_path, "x")}/_"), "../") && !startswith(dirname("./${coalesce(var.landing_zone_config_path, "x")}/_"), "../../"))
+    )
+    error_message = "landing_zone_config_path is relative but leaves the repository (e.g. ../../../x). Use ../../<dir>/<file> (repo-relative from envs/tfc-admin), a path below envs/tfc-admin, or an absolute path."
+  }
 }
 
 variable "tfc_organization" {
@@ -347,9 +356,20 @@ variable "workspace_variables_file" {
           <key>: {value: ..., category: env, hcl: true, description: ...}
     Entries are merged under workspace_variables (which wins). sensitive = true is
     rejected: secrets never belong in a committed file. Null disables the lookup.
+    The file is also a trigger pattern on every workspace (see
+    landing_zone_config_path), so editing it queues plans.
   EOT
   type        = string
   default     = "../../config/tfc-workspaces.yaml"
+
+  validation {
+    # Relative paths are cleaned first (dirname("./p/_") == clean(p)).
+    condition = startswith(coalesce(var.workspace_variables_file, "/"), "/") || !(
+      dirname("./${coalesce(var.workspace_variables_file, "x")}/_") == ".." || dirname("./${coalesce(var.workspace_variables_file, "x")}/_") == "../../.." || startswith(dirname("./${coalesce(var.workspace_variables_file, "x")}/_"), "../../../") ||
+      (startswith(dirname("./${coalesce(var.workspace_variables_file, "x")}/_"), "../") && !startswith(dirname("./${coalesce(var.workspace_variables_file, "x")}/_"), "../../"))
+    )
+    error_message = "workspace_variables_file is relative but leaves the repository (e.g. ../../../x): it must stay inside the repo so it can be a trigger pattern. Use ../../<dir>/<file>, a path below envs/tfc-admin, or an absolute path."
+  }
 }
 
 # ── Projects, teams, policy ──────────────────────────────────────────────────

@@ -62,6 +62,6 @@ output "never_auto_apply_workspaces" {
 }
 
 output "estate_config_trigger_patterns" {
-  description = "Trigger patterns every workspace gets for this estate's own config: config/landing-zone.yaml + config/tfc-workspaces.yaml for production, <dir>/** for any other estate (e.g. config/sandbox/**)."
+  description = "Trigger patterns every workspace gets for this estate's own config: the landing-zone file + workspace_variables_file for production (config/landing-zone.yaml + config/tfc-workspaces.yaml by default), <dir>/** (plus an outside workspace_variables_file) for any other estate (e.g. config/sandbox/**)."
   value       = local.estate_config_trigger_patterns
 }
