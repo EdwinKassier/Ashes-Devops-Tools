@@ -142,31 +142,22 @@ The `modules/gcp/stages/bootstrap` module creates the WIF pool that GitHub Actio
 
 **Step 1 — Point every GCP root at your Terraform Cloud organization:**
 
-Each root's `backend.tf` hard-codes its workspace name (`gcp-bootstrap`, `gcp-organization`,
-`gcp-projects`, `gcp-network-hub`, or the `gcp-workload-` prefix) and takes only the TFC
-**organization** out-of-band. Either export it once for every `init`:
+Each root's `backend.tf` is an HCP Terraform `cloud {}` block. It hard-codes the workspace name (`gcp-bootstrap`, `gcp-organization`, `gcp-projects`, `gcp-network-hub`). The per-environment `gcp-workload` root instead selects by the tags `cloud:gcp` + `layer:workload` plus `TF_WORKSPACE`. The block takes only the TFC **organization**, from the environment. Export it once for every `init`:
 
 ```bash
-export TF_CLI_ARGS_init="-backend-config=organization=YOUR_TFC_ORG_NAME"
+export TF_CLOUD_ORGANIZATION=YOUR_TFC_ORG_NAME
+# export TF_CLOUD_HOSTNAME=app.eu.terraform.io   # only for HCP EU / Terraform Enterprise
 ```
 
-or write a gitignored `backend.hcl` (never committed) into each root:
-
-```bash
-for r in bootstrap organization projects network-hub workload; do
-  printf 'organization = "YOUR_TFC_ORG_NAME"\n' > "envs/gcp/$r/backend.hcl"
-done
-```
-
-Do not pass a `workspaces` block via `-backend-config`; it conflicts with the one baked into `backend.tf`.
+A `cloud` block accepts no `-backend-config` and no `backend.hcl`; Terraform rejects both. `make backend-check` runs a credential-less `init` of every root to prove the blocks are valid.
 
 **Step 2 — Initialize the roots, in apply order:**
 
 ```bash
 for r in bootstrap organization projects network-hub; do
-  terraform -chdir=envs/gcp/$r init -backend-config=backend.hcl   # omit -backend-config if using TF_CLI_ARGS_init
+  terraform -chdir=envs/gcp/$r init
 done
-TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload init -backend-config=backend.hcl
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload init
 ```
 
 **Step 3 — Bootstrap-only inputs** (see [Variable Reference](#6-variable-reference) below):
@@ -282,8 +273,8 @@ The AWS landing zone does **not** share the GCP bootstrap above. It has its own 
 To plan a change to the gcp-workload environment:
 
 ```bash
-# Set TF_WORKSPACE to match the TFC workspace name suffix
-TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload init -backend-config=backend.hcl
+# Set TF_WORKSPACE to the full TFC workspace name (TF_CLOUD_ORGANIZATION exported as above)
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload init
 TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=../../../examples/dev.tfvars
 ```
 

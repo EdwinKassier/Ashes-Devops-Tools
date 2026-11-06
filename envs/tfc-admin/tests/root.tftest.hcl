@@ -21,6 +21,9 @@ variables {
   # and config/landing-zone.yaml.
   landing_zone_config_path = ""
   workspace_variables_file = null
+  # Mock providers cannot import, so the suite runs with an unmanaged
+  # tfc-admin workspace; self_management_* runs cover the managed default.
+  manage_tfc_admin_workspace = false
 }
 
 run "declares_every_workspace" {
@@ -128,8 +131,14 @@ run "speculative_plans_off_for_control_plane" {
   }
 
   assert {
-    condition     = module.workspace["gcp-workload-dev"].speculative_enabled == true && module.workspace["aws-workload-dev"].speculative_enabled == true && module.workspace["saas-web"].speculative_enabled == true
-    error_message = "non-production workload workspaces keep speculative PR plans."
+    condition     = module.workspace["gcp-workload-dev"].speculative_enabled == true && module.workspace["aws-workload-dev"].speculative_enabled == true
+    error_message = "non-production GCP/AWS workload workspaces keep speculative PR plans."
+  }
+
+  # SaaS providers use static account-wide tokens with no plan identity.
+  assert {
+    condition     = module.workspace["saas-web"].speculative_enabled == false
+    error_message = "saas-<name> workspaces must not run speculative PR plans (account-wide static tokens)."
   }
 
   # N5: a PR must not get a plan with the production plan identity.
@@ -747,8 +756,10 @@ run "policy_set_optional_and_advisory_source" {
   command = plan
 
   variables {
-    enable_policy_sets = true
-    vcs_repo           = { identifier = "acme/landing-zone", oauth_token_id = "ot-abc123" }
+    enable_policy_sets         = true
+    vcs_repo                   = { identifier = "acme/landing-zone", oauth_token_id = "ot-abc123" }
+    manage_tfc_admin_workspace = true
+    import_tfc_admin_workspace = false
   }
 
   assert {
@@ -762,6 +773,19 @@ run "policy_set_optional_and_advisory_source" {
   }
 }
 
+run "speculative_on_saas_opt_out" {
+  command = plan
+
+  variables {
+    disable_speculative_on_saas = false
+  }
+
+  assert {
+    condition     = module.workspace["saas-web"].speculative_enabled == true
+    error_message = "disable_speculative_on_saas = false re-enables SaaS speculative plans."
+  }
+}
+
 run "policy_set_off_by_default" {
   command = plan
 
@@ -769,6 +793,18 @@ run "policy_set_off_by_default" {
     condition     = length(tfe_policy_set.opa) == 0
     error_message = "enable_policy_sets defaults to false."
   }
+}
+
+# An unmanaged tfc-admin with a VCS connection keeps speculative plans on, so
+# a PR plan could read its org-admin TFE_TOKEN: the check must warn.
+run "unmanaged_vcs_tfc_admin_warns" {
+  command = plan
+
+  variables {
+    vcs_repo = { identifier = "acme/landing-zone", oauth_token_id = "ot-abc123" }
+  }
+
+  expect_failures = [check.tfc_admin_workspace_hardened]
 }
 
 run "self_management_adopts_tfc_admin" {

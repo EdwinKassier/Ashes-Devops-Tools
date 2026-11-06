@@ -18,6 +18,47 @@ release metadata for a Terraform Cloud run.
 
 ## [Unreleased]
 
+### Wave A of the [2026-11-06 enterprise boilerplate audit](docs/audit/2026-11-06-enterprise-boilerplate-audit.md)
+
+#### Fixed
+
+- **Every root's backend now initialises (C1).** All 14 `envs/**/backend.tf`, plus both clone-me
+  templates, declared `backend "cloud" {}`. That is not a valid backend type: Terraform rejects
+  it, so `terraform init` failed on every root. They are now top-level `cloud {}` blocks.
+- **`tfc-admin` is self-managed by default (C3).** `manage_tfc_admin_workspace` now defaults to
+  `true`. An unmanaged `tfc-admin` workspace kept TFC's default of speculative plans on, so a PR
+  plan could read its org-admin `TFE_TOKEN`. A `check` warns when the workspace is unmanaged and
+  VCS-connected.
+- **SaaS workspaces no longer run speculative PR plans (S5).** This is the new
+  `disable_speculative_on_saas` variable, default `true`. The Supabase and Vercel tokens are
+  static and account-wide.
+- **Drift detection and E2E no longer show green when they did not run (C4).** An unconfigured
+  run now fails. Scheduled runs may skip only with the repository variable
+  `REAL_CLOUD_CHECKS_OPT_OUT=true`, and the drift summary never says "no drift" for a run that
+  never happened.
+
+#### Added
+
+- `scripts/check-backends.sh` (`make backend-check`, in `make ci`, and in the CI `Terraform Format`
+  job). It runs a real, credential-less `terraform init` of every root and template. It passes only
+  if init stops at HCP Terraform auth, so an invalid backend fails the PR, not the first apply.
+- `make required-checks-live` (`check-required-checks.sh --live`) diffs `BRANCH_PROTECTION.md`
+  against the branch protection GitHub actually enforces: contexts, `strict` and `enforce_admins`.
+  It needs repo-admin `gh` auth, so it is not part of the PR gate.
+
+#### Migration
+
+- **Organization.** Set `TF_CLOUD_ORGANIZATION=<org>`, and `TF_CLOUD_HOSTNAME` for HCP EU or TFE,
+  instead of `-backend-config` / `backend.hcl` / `TF_CLI_ARGS_init`. A `cloud` block rejects
+  `-backend-config`.
+- **Per-environment workspaces.** `gcp-workload`, `aws-workload` and `saas` now select their
+  workspace by tags (`cloud:<cloud>` + `layer:workload`) and `TF_WORKSPACE=<full workspace name>`,
+  instead of a `prefix`. Workspaces created by `envs/tfc-admin` already carry these tags. Tag any
+  hand-created workspace to match.
+- **First `tfc-admin` apply after upgrading.** It adopts the existing `tfc-admin` workspace through
+  the import block, which now sets its VCS triggers and turns speculative plans off. If the
+  workspace is deliberately CLI-only, set `manage_tfc_admin_workspace = false`.
+
 Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/2026-11-05-enterprise-boilerplate-audit.md).
 
 ### Added

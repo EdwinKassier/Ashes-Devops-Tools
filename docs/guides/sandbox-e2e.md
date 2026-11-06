@@ -39,8 +39,11 @@ Workflow permissions are `{}`. Only the two cloud jobs get `id-token: write` and
 one job at a time per sandbox with `cancel-in-progress: false`, because cancelling an apply
 part-way is how orphans get made.
 
-When a cloud's variables are unset, the preflight job emits a notice and that cloud's job
-is **skipped**, not failed.
+When a cloud's variables are unset, the preflight job **fails**, because a real-apply check
+that never ran must not show green. The only quiet skip is a scheduled run with the repository
+variable `REAL_CLOUD_CHECKS_OPT_OUT=true`, which you set only to acknowledge running without
+E2E. A suite you asked for, through the dispatch input or the `e2e` label, always fails when
+it is unconfigured.
 
 ### Teardown is guaranteed twice
 

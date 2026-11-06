@@ -211,7 +211,7 @@ This table maps each Google enterprise-foundations / CIS control to the module a
 - **Access Context Manager policy** — VPC-SC perimeters require an existing org-level ACM policy passed as `vpc_sc_access_policy_name`; with the default `null`, no perimeter is created.
 - **SCC tier enablement** — `governance/scc` wires notifications; enabling SCC Standard/Premium/Enterprise tiers is an org-level, out-of-band step.
 - **Cloud Billing → BigQuery export stream** — the dataset + IAM are created by Terraform, but toggling the export in the Billing console is manual.
-- **TFC backend organization** — supplied out-of-band via `backend.hcl` / `TF_CLI_ARGS_init`.
+- **TFC backend organization** — supplied through the `TF_CLOUD_ORGANIZATION` environment variable (the `cloud` block takes no `-backend-config`).
 
 **Gated / opt-in** (present but default-off, enable per environment): Cloud Armor at the workload root (`enable_cloud_armor`), HA-VPN (`enable_vpn`), Interconnect (`interconnects`), packet mirroring, CDN (`enable_cdn`), API Gateway (`enable_api_gateway`), the dedicated logging project (`logging_project_id`). The dedicated logging project, plus VPC-SC service expansion, are PREVIEW separation-of-duties items — see [`known-gaps.md`](../known-gaps.md).
 

@@ -109,9 +109,17 @@ jobs:
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e  # v4.0.1
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
 
       - name: Check formatting
         run: terraform fmt -recursive -check .
+
+      # Every other job inits with -backend=false, which never parses the
+      # backend block. This runs a REAL credential-less init per deployable
+      # root and passes only when it stops at HCP Terraform auth — so an
+      # invalid backend/cloud block fails the PR instead of the first apply.
+      - name: Backend blocks initialise (real init, no credentials)
+        run: ./scripts/check-backends.sh
 
   docs:
     name: Terraform Docs Check

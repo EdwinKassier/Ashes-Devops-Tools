@@ -132,7 +132,7 @@ Pass 1 sets `TFC_AWS_PROVIDER_AUTH` / `TFC_AWS_PLAN_ROLE_ARN` / `TFC_AWS_APPLY_R
 
 **Run #1 state note (the chicken-and-egg).** With Option B the first `aws-organization` run executes remotely in TFC. With Option A (or no TFC credentials yet) set tfc-admin `workspace_execution_modes = { "aws-organization" = "local" }`: the run then executes on your machine with the credentials in your shell while state still lands in the TFC workspace. Switch it back (remove the entry, re-apply tfc-admin) once the Option B roles exist. The `-backend=false` local-state-then-migrate route also works, but is rarely needed now that tfc-admin creates the workspace up front.
 
-Supply the TFC org to the backend the same way every root does — via a gitignored `backend.hcl` or `TF_CLI_ARGS_init` (see `envs/aws/organization/backend.tf` for the two forms).
+Supply the TFC org the same way every root does: `export TF_CLOUD_ORGANIZATION=<your-tfc-org>` before `terraform init` (see `envs/aws/organization/backend.tf`). The `cloud` block accepts no `-backend-config`.
 
 ---
 

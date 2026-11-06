@@ -1,4 +1,4 @@
-.PHONY: help install fmt fmt-check validate validate-all lint consistency security security-low security-report docs docs-check count count-check links required-checks shellcheck test test-scripts ci clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
+.PHONY: help install fmt fmt-check validate validate-all lint consistency security security-low security-report docs docs-check count count-check links required-checks required-checks-live backend-check shellcheck test test-scripts ci clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
 
 TERRAFORM := terraform
 TFLINT := tflint
@@ -125,6 +125,12 @@ count-check: ## Fail if README.md / CLAUDE.md counts drifted from the tree (CI: 
 links: ## Fail on broken repo-relative links in any Markdown file (offline; CI: meta-lint)
 	@python3 scripts/check-md-links.py
 
+required-checks-live: ## Diff BRANCH_PROTECTION.md against the LIVE branch protection (needs gh auth with repo admin)
+	@./scripts/check-required-checks.sh --live
+
+backend-check: ## Real (credential-less) terraform init of every envs/** root — catches invalid backend/cloud blocks (CI: Terraform Format)
+	@./scripts/check-backends.sh
+
 required-checks: ## Fail if BRANCH_PROTECTION.md requires a status-check context no workflow job reports (CI: meta-lint)
 	@./scripts/check-required-checks.sh
 
@@ -180,6 +186,7 @@ ci: ## Run the local CI pipeline (fmt → consistency → counts → links → s
 	@$(MAKE) count-check
 	@$(MAKE) links
 	@$(MAKE) required-checks
+	@$(MAKE) backend-check
 	@$(MAKE) shellcheck
 	@$(MAKE) test-scripts
 	@$(MAKE) docs-check

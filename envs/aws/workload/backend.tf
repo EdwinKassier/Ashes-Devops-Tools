@@ -1,14 +1,13 @@
 terraform {
-  backend "cloud" {
-    # Supply organization via TF_CLI_ARGS_init or a gitignored backend.hcl:
-    #   export TF_CLI_ARGS_init="-backend-config=organization=<your-tfc-org>"
-    # or create backend.hcl with: organization = "<your-tfc-org>"
-    # and run: terraform init -backend-config=backend.hcl
-    #
-    # One workspace per workload environment, selected via TF_WORKSPACE:
-    #   export TF_WORKSPACE=aws-workload-dev   (or -staging, -prod, ...)
+  # HCP Terraform (Terraform Cloud). The `cloud` block takes no -backend-config,
+  # so supply the organization through the environment:
+  #   export TF_CLOUD_ORGANIZATION=<your-tfc-org>
+  #   export TF_CLOUD_HOSTNAME=app.terraform.io   # optional; set for HCP EU / TFE
+  # One workspace per environment, selected by name: TF_WORKSPACE=aws-workload-<env>
+  # (envs/tfc-admin tags every aws-workload-<env> workspace with these tags).
+  cloud {
     workspaces {
-      prefix = "aws-workload-"
+      tags = ["cloud:aws", "layer:workload"]
     }
   }
 }

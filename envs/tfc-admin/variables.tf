@@ -80,9 +80,9 @@ variable "saas_workspaces" {
 }
 
 variable "manage_tfc_admin_workspace" {
-  description = "Adopt the hand-created tfc-admin workspace (import block) so its triggers, speculative-plan and remote-state settings are codified too. Default false."
+  description = "Adopt the hand-created tfc-admin workspace (import block) so its triggers, speculative-plan and remote-state settings are codified too. Default true: tfc-admin holds an org-admin TFE_TOKEN, and only a managed workspace gets speculative_enabled = false (an unmanaged one keeps TFC's default, so any PR's plan could read the token). Set false only if the workspace is CLI-driven with no VCS connection."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "import_tfc_admin_workspace" {
@@ -147,6 +147,12 @@ variable "speculative_disabled_workspaces" {
     "aws-organization", "aws-security", "aws-backup", "aws-identity",
     "tfc-admin",
   ]
+}
+
+variable "disable_speculative_on_saas" {
+  description = "Disable automatic speculative PR plans on every saas-<name> workspace. The Supabase and Vercel providers authenticate with static, account-wide tokens and have no separate plan identity, so a PR's speculative plan runs with apply-grade credentials for every project in the account. Default true."
+  type        = bool
+  default     = true
 }
 
 variable "disable_speculative_on_production" {

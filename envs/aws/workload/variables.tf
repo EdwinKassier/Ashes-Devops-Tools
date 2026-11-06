@@ -9,7 +9,7 @@ variable "landing_zone_config_path" {
 }
 
 variable "tfc_organization" {
-  description = "Terraform Cloud organization that owns this root's workspace and the aws-organization + aws-network workspaces it reads. Supplied to the backend via backend.hcl / TF_CLI_ARGS_init (kept out of the code so the same root works across orgs and CI). Null = org.tfc.organization from config/landing-zone.yaml."
+  description = "Terraform Cloud organization that owns this root's workspace and the aws-organization + aws-network workspaces it reads. Supplied to the backend via the TF_CLOUD_ORGANIZATION environment variable (kept out of the code so the same root works across orgs and CI). Null = org.tfc.organization from config/landing-zone.yaml."
   type        = string
   default     = null
 }

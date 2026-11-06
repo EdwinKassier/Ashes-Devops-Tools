@@ -8,15 +8,18 @@ mock_provider "tfe" {}
 variables {
   landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
   workspace_variables_file = null
+  # The fixture sets vcs_repo, so tfc-admin is self-managed (the default).
+  # Mock providers cannot import; the import block runs in the adopting apply.
+  import_tfc_admin_workspace = false
 }
 
 run "workspaces_derived_from_config" {
   command = plan
 
   # 4 GCP control plane + gcp-workload-{dev,prod} + 6 AWS control plane +
-  # aws-workload-{dev,staging} + saas-{web,admin} = 16.
+  # aws-workload-{dev,staging} + saas-{web,admin} + tfc-admin (self-managed) = 17.
   assert {
-    condition     = length(output.workspace_names) == 16
+    condition     = length(output.workspace_names) == 17
     error_message = "the workspace set must come from gcp/aws/saas .enabled, gcp.environments, aws.workload_environments and saas.workspaces."
   }
 
@@ -106,7 +109,7 @@ run "explicit_variables_win_over_config" {
   }
 
   assert {
-    condition     = toset(output.workspace_names) == toset(["gcp-bootstrap", "gcp-organization", "gcp-projects", "gcp-network-hub", "gcp-workload-qa"]) && local.tfc_organization == "acme"
+    condition     = toset(output.workspace_names) == toset(["gcp-bootstrap", "gcp-organization", "gcp-projects", "gcp-network-hub", "gcp-workload-qa", "tfc-admin"]) && local.tfc_organization == "acme"
     error_message = "explicit enable_* / environments / tfc_organization must override the config file."
   }
 

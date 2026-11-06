@@ -1,10 +1,9 @@
 terraform {
-  backend "cloud" {
-    # Supply organization via TF_CLI_ARGS_init or a gitignored backend.hcl:
-    #   export TF_CLI_ARGS_init="-backend-config=organization=<your-tfc-org>"
-    # or create backend.hcl with: organization = "<your-tfc-org>"
-    # and run: terraform init -backend-config=backend.hcl
-
+  # HCP Terraform (Terraform Cloud). The `cloud` block takes no -backend-config,
+  # so supply the organization through the environment:
+  #   export TF_CLOUD_ORGANIZATION=<your-tfc-org>
+  #   export TF_CLOUD_HOSTNAME=app.terraform.io   # optional; set for HCP EU / TFE
+  cloud {
     workspaces {
       name = "aws-identity"
     }

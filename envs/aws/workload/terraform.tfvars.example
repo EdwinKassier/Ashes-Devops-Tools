@@ -15,7 +15,7 @@ landing_zone_name = "acme"
 
 # REQUIRED — Terraform Cloud org that owns this root's workspace and the
 # aws-organization + aws-network workspaces it reads. Usually passed to
-# `terraform init` via backend.hcl / TF_CLI_ARGS_init rather than here.
+# `terraform init` via the TF_CLOUD_ORGANIZATION environment variable rather than here.
 # tfc_organization = "your-tfc-org-name"
 
 # Optional — upstream workspaces this root reads remote state from.

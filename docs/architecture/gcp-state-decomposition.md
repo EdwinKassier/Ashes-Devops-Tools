@@ -40,7 +40,7 @@ root/workspace restructuring, not new module code.
 
 Ordering is enforced by apply order plus remote-state reads, exactly as on AWS
 (no cross-root `depends_on`). Each new root gets its own `backend.tf`
-(`prefix = "gcp-..."`), `providers.tf`, `variables.tf`, `outputs.tf`, and a
+(a `cloud {}` block with `name = "gcp-..."`), `providers.tf`, `variables.tf`, `outputs.tf`, and a
 `envs/gcp/<root>/tests/root.tftest.hcl` contract test mirroring
 `envs/aws/*/tests/root.tftest.hcl`.
 
@@ -69,7 +69,7 @@ Do bootstrap first. It holds the WIF and Terraform SA that everything else
 depends on, it is phase-0 in the runbook, and it is the most dangerous to
 co-locate with per-environment project state.
 
-1. Create `envs/gcp/bootstrap/` with `backend.tf` (`prefix = "gcp-bootstrap"`),
+1. Create `envs/gcp/bootstrap/` with `backend.tf` (`cloud { workspaces { name = "gcp-bootstrap" } }`),
    `providers.tf`, `main.tf` (instantiating only `stages/bootstrap`),
    `variables.tf`, `outputs.tf` (admin project id, Terraform SA email, WIF pool
    and provider ids), and `envs/gcp/bootstrap/tests/root.tftest.hcl`.

@@ -406,6 +406,7 @@ locals {
   speculative_disabled = setunion(
     toset(var.speculative_disabled_workspaces),
     var.disable_speculative_on_production ? local.production_workloads : toset([]),
+    var.disable_speculative_on_saas ? toset(keys(local.saas)) : toset([]),
   )
 
   # Every input keyed by workspace name must name a managed workspace of the
@@ -621,6 +622,16 @@ resource "tfe_workspace_settings" "this" {
 }
 
 # Adopt the hand-created tfc-admin workspace instead of creating a duplicate.
+# An unmanaged tfc-admin workspace keeps TFC's default speculative_enabled =
+# true. With a VCS connection that hands every PR a plan that can read the
+# org-admin TFE_TOKEN, so warn on every plan until it is adopted.
+check "tfc_admin_workspace_hardened" {
+  assert {
+    condition     = var.manage_tfc_admin_workspace || local.vcs_repo == null
+    error_message = "manage_tfc_admin_workspace = false while vcs_repo is set: the hand-created tfc-admin workspace keeps speculative PR plans ON, so a pull request's plan can read its org-admin TFE_TOKEN. Set manage_tfc_admin_workspace = true, or disable speculative plans on it by hand."
+  }
+}
+
 import {
   for_each = var.manage_tfc_admin_workspace && var.import_tfc_admin_workspace ? toset([var.tfc_admin_workspace_name]) : toset([])
   to       = module.workspace[each.key].tfe_workspace.this

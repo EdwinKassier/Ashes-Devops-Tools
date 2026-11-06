@@ -2,7 +2,7 @@
 # Provider region (management account)
 #
 # NB: the Terraform Cloud organization for this phase-1 producer root's backend
-# is supplied to `terraform init` via backend.hcl / TF_CLI_ARGS_init (see
+# is supplied to `terraform init` via the TF_CLOUD_ORGANIZATION environment variable (see
 # backend.tf) — a backend block cannot reference variables, so there is no
 # tfc_organization variable here (unlike the consumer roots, which reference it
 # inside a terraform_remote_state data source).
@@ -282,7 +282,7 @@ variable "enable_tfc_oidc_baseline" {
 }
 
 variable "tfc_organization" {
-  description = "Terraform Cloud organization whose workspaces the member-account roles trust. Matched literally (no wildcards). Required when enable_tfc_oidc_baseline is true. Not the same mechanism as the backend organization (backend.hcl), but normally the same value. Null = org.tfc.organization from config/landing-zone.yaml."
+  description = "Terraform Cloud organization whose workspaces the member-account roles trust. Matched literally (no wildcards). Required when enable_tfc_oidc_baseline is true. Not the same mechanism as the cloud-block organization (TF_CLOUD_ORGANIZATION), but normally the same value. Null = org.tfc.organization from config/landing-zone.yaml."
   type        = string
   default     = null
 
