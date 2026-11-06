@@ -3,10 +3,17 @@
 # The saas root's defining property (provider-selection thesis) is that it plans
 # standalone with NO aws/google provider and no cloud credentials, with each SaaS
 # feature independently gated. This test exercises both the no-op path and a
-# single-feature path under mocked Supabase/Vercel providers.
+# single-feature path under mocked Supabase/Vercel providers. The real-provider
+# single-provider-mode regression tests (credential-free, one provider left
+# unmocked) live in single_provider_*.tftest.hcl.
 
 mock_provider "supabase" {}
 mock_provider "vercel" {}
+
+# Isolate the suite from any committed config/landing-zone.yaml.
+variables {
+  landing_zone_config_path = ""
+}
 
 # No-op: both features off. Must plan credential-free; disabled outputs are null.
 run "saas_noop_plans_credential_free" {
@@ -42,6 +49,36 @@ run "saas_supabase_only" {
   }
 }
 
+# Vercel enabled, Supabase off: the mirror of the case above.
+run "saas_vercel_only" {
+  command = plan
+
+  variables {
+    enable_supabase     = false
+    enable_vercel       = true
+    vercel_project_name = "acme-web"
+    vercel_team_id      = "team_abc"
+    vercel_github_repo  = "acme/web"
+  }
+
+  assert {
+    condition     = output.supabase_project_id == null
+    error_message = "with enable_supabase=false, supabase_project_id must be null"
+  }
+}
+
+# Never expose the vault schemas through PostgREST.
+run "exposing_iac_vault_schema_rejected" {
+  command         = plan
+  expect_failures = [var.supabase_db_schema]
+
+  variables {
+    enable_supabase    = false
+    enable_vercel      = false
+    supabase_db_schema = "public,iac_vault"
+  }
+}
+
 # Frontend-URL seam (audit H9, option C): by default no cross-cloud references,
 # so the root stays standalone with no injected env vars.
 run "cross_cloud_seam_off_by_default" {
@@ -64,9 +101,9 @@ run "cross_cloud_seam_injects_env_var" {
   command = plan
 
   variables {
-    enable_supabase  = false
-    enable_vercel    = true
-    tfc_organization = "acme-tfc"
+    enable_supabase     = false
+    enable_vercel       = true
+    tfc_organization    = "acme-tfc"
     vercel_project_name = "acme-web"
     vercel_team_id      = "team_abc"
     vercel_github_repo  = "acme/web"

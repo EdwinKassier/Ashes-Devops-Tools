@@ -125,41 +125,41 @@ variable "domains" {
 }
 
 variable "qa_environment_variables" {
-  description = "Environment variables for the QA (preview) environment. key and value are required; sensitive defaults to false."
+  description = "Environment variables for the QA (preview) environment. key and value are required; sensitive defaults to true (secure by default: the value cannot be read back via the Vercel API or dashboard). Set sensitive = false only for non-secret values you need to read in the dashboard."
   type = list(object({
     key       = string
     value     = string
-    sensitive = optional(bool, false)
+    sensitive = optional(bool, true)
   }))
   default = []
 }
 
 variable "uat_environment_variables" {
-  description = "Environment variables for the UAT custom environment. key and value are required; sensitive defaults to false."
+  description = "Environment variables for the UAT custom environment. key and value are required; sensitive defaults to true (secure by default: the value cannot be read back via the Vercel API or dashboard). Set sensitive = false only for non-secret values you need to read in the dashboard."
   type = list(object({
     key       = string
     value     = string
-    sensitive = optional(bool, false)
+    sensitive = optional(bool, true)
   }))
   default = []
 }
 
 variable "prod_environment_variables" {
-  description = "Environment variables for the production environment. key and value are required; sensitive defaults to false."
+  description = "Environment variables for the production environment. key and value are required; sensitive defaults to true (secure by default: the value cannot be read back via the Vercel API or dashboard). Set sensitive = false only for non-secret values you need to read in the dashboard."
   type = list(object({
     key       = string
     value     = string
-    sensitive = optional(bool, false)
+    sensitive = optional(bool, true)
   }))
   default = []
 }
 
 variable "shared_environment_variables" {
-  description = "Environment variables applied to all three environments (QA, UAT, production). Useful for SSL certs and global feature flags."
+  description = "Environment variables applied to all three environments (QA, UAT, production). Useful for SSL certs and global feature flags. sensitive defaults to true (secure by default)."
   type = list(object({
     key       = string
     value     = string
-    sensitive = optional(bool, false)
+    sensitive = optional(bool, true)
   }))
   default = []
 }

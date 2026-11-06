@@ -1,0 +1,12 @@
+# Test fixture: the untouched placeholders of config/landing-zone.example.yaml.
+org:
+  name: my-org
+  tfc:
+    organization: my-org
+aws:
+  management_account_id: "REPLACE_WITH_12_DIGIT_ID"
+  terraform_run_role_arn: arn:aws:iam::REPLACE_WITH_12_DIGIT_ID:role/tfc-mgmt-apply
+  break_glass_role_arn: arn:aws:iam::REPLACE_WITH_12_DIGIT_ID:role/break-glass
+  log_archive_bucket_name: my-org-org-log-archive
+  accounts:
+    log_archive: {email: aws+log-archive@example.com, ou: Security}

@@ -12,14 +12,27 @@
 #   of all env var values. Any value change forces replacement of the entire
 #   env var set for that environment — ensuring drift never goes silent.
 #
-# AUDIT S4 (write-only secrets — deferred, provider-blocked):
-#   Ideally env var values would use Terraform write-only arguments (`value_wo`
-#   + `value_wo_version`) so secrets never land in state. That requires the
-#   vercel provider 5.x AND Terraform >= 1.11 — the `value_wo` argument does NOT
-#   exist in the pinned 4.x line (verified: 4.8.2 rejects it). Adopting it is a
-#   separate provider-major upgrade (vercel ~> 4.0 -> ~> 5.0) + toolchain bump,
-#   tracked as future work. Until then, values remain in TFC state (encrypted at
-#   rest) and the SHA256 drift mechanism above is how changes are detected.
+# SENSITIVE BY DEFAULT:
+#   Every env var input defaults to sensitive = true (the value can never be
+#   read back via the Vercel API or dashboard). Set sensitive = false only for
+#   non-secret values you need to read in the dashboard. Vercel forbids
+#   sensitive = true only on variables that target `development` alone; this
+#   module never targets `development` (only preview, production and the UAT
+#   custom environment), so the secure default is always valid. A team-wide
+#   "sensitive env var policy" may additionally REQUIRE sensitive = true.
+#   Upgrade note: flipping an existing variable's sensitive flag makes the
+#   provider replace that env var (destroy + create).
+#
+# WRITE-ONLY SECRETS:
+#   Sensitive env var values use the write-only `value_wo` argument (vercel
+#   provider >= 4.8.2, Terraform >= 1.11), so they never land in plan or state;
+#   non-sensitive values keep `value`. The *_environment_variables inputs are
+#   deliberately NOT `ephemeral = true`: the same lists drive the env-var
+#   for_each keys and the sha256 fingerprints below (stored in state as
+#   replace_triggered_by drift detection), and an ephemeral value may only feed
+#   write-only arguments. To keep a secret out of the calling configuration
+#   entirely, set it out-of-band (Vercel UI/CLI) or via an ephemeral root
+#   variable in a dedicated resource outside this module.
 #
 # POSIX SH:
 #   ignore_command is executed in /bin/sh by Vercel (not bash). All
@@ -178,9 +191,12 @@ resource "vercel_project_environment_variable" "qa" {
   project_id = vercel_project.this.id
   team_id    = var.team_id != "" ? var.team_id : null
   key        = each.key
-  value      = each.value.value # provider marks `value` sensitive in schema — no wrapper needed
-  target     = ["preview"]
-  sensitive  = each.value.sensitive
+  # Sensitive vars use the write-only value_wo (Terraform >= 1.11): never stored in
+  # plan/state. Change detection comes from the fingerprint + replace_triggered_by.
+  value     = each.value.sensitive ? null : each.value.value
+  value_wo  = each.value.sensitive ? each.value.value : null
+  target    = ["preview"]
+  sensitive = each.value.sensitive
 
   lifecycle {
     replace_triggered_by = [terraform_data.qa_vars_version]
@@ -196,10 +212,13 @@ resource "vercel_project_environment_variable" "qa" {
 resource "vercel_project_environment_variable" "uat" {
   for_each = nonsensitive(local.uat_vars_map)
 
-  project_id             = vercel_project.this.id
-  team_id                = var.team_id != "" ? var.team_id : null
-  key                    = each.key
-  value                  = each.value.value # provider marks `value` sensitive in schema — no wrapper needed
+  project_id = vercel_project.this.id
+  team_id    = var.team_id != "" ? var.team_id : null
+  key        = each.key
+  # Sensitive vars use the write-only value_wo (Terraform >= 1.11): never stored in
+  # plan/state. Change detection comes from the fingerprint + replace_triggered_by.
+  value                  = each.value.sensitive ? null : each.value.value
+  value_wo               = each.value.sensitive ? each.value.value : null
   target                 = []
   custom_environment_ids = [vercel_custom_environment.uat.id]
   sensitive              = each.value.sensitive
@@ -217,9 +236,12 @@ resource "vercel_project_environment_variable" "prod" {
   project_id = vercel_project.this.id
   team_id    = var.team_id != "" ? var.team_id : null
   key        = each.key
-  value      = each.value.value # provider marks `value` sensitive in schema — no wrapper needed
-  target     = ["production"]
-  sensitive  = each.value.sensitive
+  # Sensitive vars use the write-only value_wo (Terraform >= 1.11): never stored in
+  # plan/state. Change detection comes from the fingerprint + replace_triggered_by.
+  value     = each.value.sensitive ? null : each.value.value
+  value_wo  = each.value.sensitive ? each.value.value : null
+  target    = ["production"]
+  sensitive = each.value.sensitive
 
   lifecycle {
     replace_triggered_by = [terraform_data.prod_vars_version]
@@ -241,9 +263,12 @@ resource "vercel_project_environment_variable" "shared" {
   project_id = vercel_project.this.id
   team_id    = var.team_id != "" ? var.team_id : null
   key        = each.key
-  value      = each.value.value # provider marks `value` sensitive in schema — no wrapper needed
-  target     = ["preview", "production"]
-  sensitive  = each.value.sensitive
+  # Sensitive vars use the write-only value_wo (Terraform >= 1.11): never stored in
+  # plan/state. Change detection comes from the fingerprint + replace_triggered_by.
+  value     = each.value.sensitive ? null : each.value.value
+  value_wo  = each.value.sensitive ? each.value.value : null
+  target    = ["preview", "production"]
+  sensitive = each.value.sensitive
 
   lifecycle {
     replace_triggered_by = [terraform_data.shared_vars_version]
@@ -253,10 +278,13 @@ resource "vercel_project_environment_variable" "shared" {
 resource "vercel_project_environment_variable" "shared_uat" {
   for_each = nonsensitive(local.shared_vars_map)
 
-  project_id             = vercel_project.this.id
-  team_id                = var.team_id != "" ? var.team_id : null
-  key                    = each.key
-  value                  = each.value.value # provider marks `value` sensitive in schema — no wrapper needed
+  project_id = vercel_project.this.id
+  team_id    = var.team_id != "" ? var.team_id : null
+  key        = each.key
+  # Sensitive vars use the write-only value_wo (Terraform >= 1.11): never stored in
+  # plan/state. Change detection comes from the fingerprint + replace_triggered_by.
+  value                  = each.value.sensitive ? null : each.value.value
+  value_wo               = each.value.sensitive ? each.value.value : null
   target                 = []
   custom_environment_ids = [vercel_custom_environment.uat.id]
   sensitive              = each.value.sensitive

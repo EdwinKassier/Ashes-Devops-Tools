@@ -23,6 +23,8 @@ resource "aws_iam_role" "isolation_lambda" {
   count = var.enable_incident_response ? 1 : 0
   name  = "ir-isolation-lambda"
 
+  permissions_boundary = var.permissions_boundary_arn
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -129,6 +131,8 @@ resource "aws_security_group" "quarantine" {
 resource "aws_iam_role" "forensics_snapshot" {
   count = var.enable_incident_response ? 1 : 0
   name  = "ir-forensics-snapshot-share"
+
+  permissions_boundary = var.permissions_boundary_arn
 
   # checkov:skip=CKV_AWS_61:The trust policy grants sts:AssumeRole to a single, specific account principal (the forensics account root) and is additionally scoped by aws:PrincipalOrgID and aws:SourceAccount, so no principal outside this AWS Organization can assume it. Checkov flags the bare sts:AssumeRole action but does not resolve that the Principal is not a wildcard/service-wide grant.
 

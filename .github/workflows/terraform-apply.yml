@@ -3,11 +3,15 @@ name: Terraform Release Metadata
 on:
   push:
     tags:
+      - "gcp-bootstrap/v*"
       - "gcp-organization/v*"
+      - "gcp-projects/v*"
+      - "gcp-network-hub/v*"
       - "gcp-workload/*/v*"
       - "aws-*/v*"
       - "aws-workload/*/v*"
       - "saas/*/v*"
+      - "tfc-admin/v*"
 
 permissions: {}
 
@@ -29,6 +33,12 @@ jobs:
       status: ${{ steps.run_status.outputs.status }}
       commit_match: ${{ steps.run_status.outputs.commit_match }}
     steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
       - name: Parse tag
         id: parse
         env:
@@ -60,7 +70,9 @@ jobs:
             echo "workspace=saas-${NAME}" >> "$GITHUB_OUTPUT"
             echo "release_name=SaaS ${NAME} ${VERSION}" >> "$GITHUB_OUTPUT"
             echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          elif [[ "$TAG_NAME" == aws-organization/* || "$TAG_NAME" == aws-security/* \
+          elif [[ "$TAG_NAME" == gcp-bootstrap/* || "$TAG_NAME" == gcp-projects/* \
+                || "$TAG_NAME" == gcp-network-hub/* || "$TAG_NAME" == tfc-admin/* \
+                || "$TAG_NAME" == aws-organization/* || "$TAG_NAME" == aws-security/* \
                 || "$TAG_NAME" == aws-network/* || "$TAG_NAME" == aws-identity/* \
                 || "$TAG_NAME" == aws-shared-services/* || "$TAG_NAME" == aws-backup/* ]]; then
             # Tag shape: <root>/v1.2.3 -> single-account root workspace == first path segment
@@ -71,8 +83,9 @@ jobs:
             echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           else
             echo "::error::Unrecognized release tag '$TAG_NAME'." >&2
-            echo "Expected: gcp-organization/v*, gcp-workload/<env>/v*," >&2
-            echo "aws-*/v*, aws-workload/<env>/v*, saas/<name>/v*." >&2
+            echo "Expected: gcp-{bootstrap,organization,projects,network-hub}/v*," >&2
+            echo "gcp-workload/<env>/v*, aws-*/v*, aws-workload/<env>/v*," >&2
+            echo "saas/<name>/v*, tfc-admin/v*." >&2
             exit 1
           fi
 
@@ -168,6 +181,12 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
       - name: Create release summary
         run: |
           echo "## Release Summary" >> "$GITHUB_STEP_SUMMARY"

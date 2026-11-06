@@ -3,7 +3,7 @@
 # many files (and have drifted before, e.g. the AWS region regex). Cheap grep
 # checks that fail CI when a copy diverges. Add new invariants here.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 fail=0
 note() { echo "  - $1"; fail=1; }
@@ -23,6 +23,55 @@ echo "==> GCP google provider pin is the canonical range in every GCP versions.t
 badgcp=$(grep -rl 'hashicorp/google' --include='versions.tf' --exclude-dir='.terraform' modules/gcp envs/gcp 2>/dev/null \
   | while read -r f; do grep -q '"~> 7.0"' "$f" || echo "$f"; done)
 [ -z "$badgcp" ] || { echo "$badgcp" | while read -r f; do note "google pin not '~> 7.0': $f"; done; fail=1; }
+
+echo "==> Every examples/presets/*.tfvars key is a variable of its target root"
+# Naming: <prod|nonprod>-<cloud>-<root>.tfvars  ->  envs/<cloud>/<root>/variables.tf
+for preset in examples/presets/*.tfvars; do
+  [ -e "$preset" ] || continue
+  base=$(basename "$preset" .tfvars)
+  rest=${base#*-}            # drop prod-/nonprod-
+  cloud=${rest%%-*}
+  root=${rest#*-}
+  vars="envs/$cloud/$root/variables.tf"
+  if [ ! -f "$vars" ]; then
+    note "preset $preset targets missing root envs/$cloud/$root"
+    continue
+  fi
+  # Active (uncommented) and commented-out assignments must both name real variables.
+  for key in $(sed -nE 's/^#?[[:space:]]*([a-z][a-z0-9_]*)[[:space:]]+=.*/\1/p' "$preset"); do
+    grep -q "variable \"$key\"" "$vars" || note "preset $preset sets unknown variable '$key' (not in $vars)"
+  done
+done
+
+echo "==> Every preset referenced in the docs exists"
+for ref in $(grep -rhoE 'presets/[a-z0-9-]+\.tfvars' --include='*.md' --include='*.tf' --exclude-dir='.terraform' --exclude-dir='audit' . 2>/dev/null | sort -u); do
+  [ -f "examples/$ref" ] || note "docs reference missing preset examples/$ref"
+done
+
+echo "==> Every aws provider block in envs/aws/*/providers.tf sets default_tags"
+# FinOps/governance: the canonical tag set (CostCenter/Environment/Owner/...) is
+# written via provider default_tags, so every aws provider block (default AND
+# aliased) must carry one. Counts provider "aws" blocks vs default_tags blocks.
+for pf in envs/aws/*/providers.tf; do
+  [ -e "$pf" ] || continue
+  nprov=$(grep -cE '^provider "aws"' "$pf" || true)
+  ntags=$(grep -cE '^[[:space:]]*default_tags[[:space:]]*\{' "$pf" || true)
+  if [ "$nprov" -eq 0 ] || [ "$ntags" -lt "$nprov" ]; then
+    note "$pf: $nprov aws provider block(s) but $ntags default_tags block(s)"
+  fi
+done
+
+echo "==> Every google/google-beta provider block in envs/gcp/*/providers.tf sets default_labels"
+# The GCP twin of the default_tags check: the canonical label set (managed-by,
+# landing-zone, workspace, environment) is written via provider default_labels.
+for pf in envs/gcp/*/providers.tf; do
+  [ -e "$pf" ] || continue
+  nprov=$(grep -cE '^provider "google(-beta)?"' "$pf" || true)
+  nlabels=$(grep -cE '^[[:space:]]*default_labels[[:space:]]*=' "$pf" || true)
+  if [ "$nprov" -eq 0 ] || [ "$nlabels" -lt "$nprov" ]; then
+    note "$pf: $nprov google provider block(s) but $nlabels default_labels attribute(s)"
+  fi
+done
 
 if [ "$fail" -eq 0 ]; then
   echo "OK: all consistency invariants hold."

@@ -49,16 +49,37 @@ variable "github_organization" {
 }
 
 variable "github_sa_bindings" {
-  description = "List of GitHub repository to service account bindings. repository must be 'owner/repo' format — value is interpolated into a CEL expression."
+  description = "List of GitHub repository to service account bindings. repository must be 'owner/repo' format — value is interpolated into a CEL expression. Set repository_id (the immutable numeric GitHub repository ID) to bind on attribute.repository_id instead of the mutable repository name. Set key when service_account_email is unknown until apply."
   type = list(object({
     repository            = string # Format: owner/repo
+    repository_id         = optional(string)
     service_account_email = string
+    # Optional static for_each key. Set it when service_account_email is only
+    # known after apply (e.g. an SA created in the same plan); otherwise the key
+    # defaults to "<repository>-<service_account_email>".
+    key = optional(string)
   }))
   default = []
 
   validation {
     condition     = alltrue([for b in var.github_sa_bindings : can(regex("^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$", b.repository))])
     error_message = "Each repository must be in 'owner/repo' format using only alphanumeric characters, hyphens, underscores, and dots (no single quotes — this value is embedded in a CEL condition)."
+  }
+
+  validation {
+    condition     = alltrue([for b in var.github_sa_bindings : b.repository_id == null || can(regex("^[0-9]+$", b.repository_id))])
+    error_message = "repository_id must be the numeric GitHub repository ID (digits only)."
+  }
+}
+
+variable "github_repository_owner_id" {
+  description = "Immutable numeric GitHub owner (org/user) ID. When set, the GitHub provider attribute_condition also requires assertion.repository_owner_id to match, so an org rename / name squat cannot satisfy the trust."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.github_repository_owner_id == null || can(regex("^[0-9]+$", var.github_repository_owner_id))
+    error_message = "github_repository_owner_id must be the numeric GitHub owner ID (digits only)."
   }
 }
 
@@ -143,11 +164,61 @@ variable "tfc_organization" {
   }
 }
 
+variable "tfc_organization_id" {
+  description = "Optional immutable Terraform Cloud organization ID (org-xxxxxxxx). When set, the provider attribute_condition also pins assertion.terraform_organization_id, so a renamed/re-registered organization name cannot satisfy the trust."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.tfc_organization_id == null || can(regex("^org-[A-Za-z0-9]+$", var.tfc_organization_id))
+    error_message = "tfc_organization_id must look like org-XXXXXXXX (alphanumeric after the 'org-' prefix)."
+  }
+}
+
+variable "tfc_project_ids" {
+  description = "Optional allow-list of Terraform Cloud project IDs (prj-xxxxxxxx). When non-empty, the provider attribute_condition also requires assertion.terraform_project_id to be one of these, so a workspace created in any other TFC project cannot authenticate."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for p in var.tfc_project_ids : can(regex("^prj-[A-Za-z0-9]+$", p))])
+    error_message = "Each tfc_project_ids entry must look like prj-XXXXXXXX (alphanumeric after the 'prj-' prefix)."
+  }
+}
+
 variable "tfc_sa_bindings" {
-  description = "List of TFC workspace to service account bindings"
+  description = <<-EOT
+    TFC workspace + run phase to service account bindings. Each entry binds ONE
+    run phase ("plan" or "apply") of ONE workspace to a service account, via the
+    composite attribute.workspace_phase ("<name>:<phase>") or, when workspace_id
+    (ws-xxxxxxxx) is supplied, attribute.workspace_id_phase ("<id>:<phase>").
+    (workspace_name, run_phase) pairs must be unique.
+  EOT
   type = list(object({
     workspace_name        = string
+    workspace_id          = optional(string)
+    run_phase             = string
     service_account_email = string
   }))
   default = []
+
+  validation {
+    condition     = alltrue([for b in var.tfc_sa_bindings : contains(["plan", "apply"], b.run_phase)])
+    error_message = "Each tfc_sa_bindings entry's run_phase must be \"plan\" or \"apply\"."
+  }
+
+  validation {
+    condition     = alltrue([for b in var.tfc_sa_bindings : can(regex("^[A-Za-z0-9_-]+$", b.workspace_name))])
+    error_message = "workspace_name must contain only letters, digits, hyphens and underscores (it is embedded in a principalSet URI)."
+  }
+
+  validation {
+    condition     = alltrue([for b in var.tfc_sa_bindings : b.workspace_id == null || can(regex("^ws-[A-Za-z0-9]+$", b.workspace_id))])
+    error_message = "workspace_id must look like ws-XXXXXXXX (alphanumeric after the 'ws-' prefix)."
+  }
+
+  validation {
+    condition     = length(distinct([for b in var.tfc_sa_bindings : "${b.workspace_name}:${b.run_phase}"])) == length(var.tfc_sa_bindings)
+    error_message = "Each (workspace_name, run_phase) pair may be bound to only one service account."
+  }
 }

@@ -65,7 +65,7 @@ variable "notification_configs" {
   description = <<-EOF
     Map of notification configurations for severity-based routing.
     When provided, this takes precedence over the legacy single config variables.
-    
+
     Example:
     notification_configs = {
       "critical-high" = {

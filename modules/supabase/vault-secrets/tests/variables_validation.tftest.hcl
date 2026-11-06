@@ -1,7 +1,5 @@
 # Variable validation tests for modules/supabase/vault-secrets.
-# The null provider mock prevents provisioners from running.
-
-mock_provider "null" {}
+# command = plan only: provisioners never run, so no database is required.
 
 variables {
   postgres_url = "postgresql://postgres.abcdefghijklmnopqrst:password@aws-0-eu-west-2.pooler.supabase.com:5432/postgres"

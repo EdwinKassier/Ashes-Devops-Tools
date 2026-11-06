@@ -68,3 +68,13 @@ output "protected_project_numbers" {
   description = "List of project numbers protected by this perimeter"
   value       = var.protected_projects
 }
+
+output "enforced" {
+  description = "True when the perimeter has an enforced status (enable_dry_run = false)."
+  value       = !var.enable_dry_run
+}
+
+output "dry_run_spec_staged" {
+  description = "True when an enforced perimeter also carries a staged dry-run spec (any dry_run_* override set)."
+  value       = local.stage_dry_run_spec
+}

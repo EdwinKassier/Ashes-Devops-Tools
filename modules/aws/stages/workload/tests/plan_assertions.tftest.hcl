@@ -29,6 +29,11 @@ override_module {
       isolated = ["subnet-wl-iso-a", "subnet-wl-iso-b"]
       tgw      = ["subnet-wl-tgw-a", "subnet-wl-tgw-b"]
     }
+    route_table_ids_by_tier = {
+      private  = ["rtb-wl-prv-a", "rtb-wl-prv-b"]
+      isolated = ["rtb-wl-iso-a", "rtb-wl-iso-b"]
+      tgw      = ["rtb-wl-tgw-a", "rtb-wl-tgw-b"]
+    }
   }
 }
 
@@ -52,7 +57,7 @@ run "composes_workload_edge_disabled" {
 
   # The spoke attaches to the SHARED transit gateway passed in (routing contract).
   assert {
-    condition     = aws_ec2_transit_gateway_vpc_attachment.spoke.transit_gateway_id == var.tgw_id
+    condition     = aws_ec2_transit_gateway_vpc_attachment.spoke[0].transit_gateway_id == var.tgw_id
     error_message = "spoke attachment must target the shared transit gateway var.tgw_id"
   }
 
@@ -60,15 +65,15 @@ run "composes_workload_edge_disabled" {
   # association/propagation are both disabled (the network account manages them).
   assert {
     condition = (
-      aws_ec2_transit_gateway_vpc_attachment.spoke.transit_gateway_default_route_table_association == false &&
-      aws_ec2_transit_gateway_vpc_attachment.spoke.transit_gateway_default_route_table_propagation == false
+      aws_ec2_transit_gateway_vpc_attachment.spoke[0].transit_gateway_default_route_table_association == false &&
+      aws_ec2_transit_gateway_vpc_attachment.spoke[0].transit_gateway_default_route_table_propagation == false
     )
     error_message = "spoke attachment must not use the TGW default route tables"
   }
 
   # The attachment is placed in the spoke's tgw-tier subnets.
   assert {
-    condition     = length(aws_ec2_transit_gateway_vpc_attachment.spoke.subnet_ids) == 2
+    condition     = length(aws_ec2_transit_gateway_vpc_attachment.spoke[0].subnet_ids) == 2
     error_message = "spoke attachment must span the tgw-tier subnets (one per AZ)"
   }
 
@@ -77,6 +82,23 @@ run "composes_workload_edge_disabled" {
   assert {
     condition     = contains(module.account_baseline.ebs_encryption_regions, "eu-west-2")
     error_message = "account_baseline must enforce EBS encryption in the enabled region"
+  }
+
+  # Spoke routing: the private tier default-routes (0.0.0.0/0) to the shared
+  # TGW; the isolated tier gets no TGW route.
+  assert {
+    condition = (
+      keys(output.tgw_routes) == ["private"] &&
+      output.tgw_routes["private"][0].destination_cidr_block == "0.0.0.0/0" &&
+      output.tgw_routes["private"][0].transit_gateway_id == var.tgw_id
+    )
+    error_message = "spoke private tier must route 0.0.0.0/0 to the shared transit gateway"
+  }
+
+  # Name is derived, not hard-coded (legacy "workload" when environment is unset).
+  assert {
+    condition     = output.name == "workload" && aws_ec2_transit_gateway_vpc_attachment.spoke[0].tags["Name"] == "workload-spoke"
+    error_message = "with no environment/name the legacy workload name must be kept"
   }
 
   # spoke vpc id surfaces through the stage output (wiring proof).
@@ -110,5 +132,59 @@ run "composes_workload_edge_enabled" {
   assert {
     condition     = length(module.edge_security) == 1
     error_message = "edge-security module must be present when enable_edge is true"
+  }
+}
+
+# config_role_arn = null: the recorder uses the account's Config service-linked
+# role, created by config-org (no hand-made recorder role needed).
+run "config_recorder_defaults_to_service_linked_role" {
+  command = apply
+
+  variables {
+    config_role_arn = null
+  }
+
+  override_data {
+    target = module.config_recorder.data.aws_caller_identity.current[0]
+    values = { account_id = "222222222222" }
+  }
+
+  assert {
+    condition     = output.config_role_arn == "arn:aws:iam::222222222222:role/aws-service-role/config.amazonaws.com/AWSServiceRoleForConfig"
+    error_message = "With config_role_arn = null the recorder must resolve to the service-linked role."
+  }
+}
+
+# Boundary propagation (tfc-oidc-baseline): workload_roles default to the
+# workload account's tfc-apply-boundary, derived from the default provider.
+run "workload_roles_carry_tfc_apply_boundary" {
+  command = plan
+
+  override_data {
+    target = data.aws_caller_identity.current[0]
+    values = { account_id = "222222222222" }
+  }
+
+  override_data {
+    target = data.aws_partition.current[0]
+    values = { partition = "aws" }
+  }
+
+  assert {
+    condition     = local.permissions_boundary_arn == "arn:aws:iam::222222222222:policy/tfc-apply-boundary"
+    error_message = "The workload boundary ARN (passed to iam_role) must be derived from the workload-account provider."
+  }
+}
+
+run "workload_boundary_disabled_with_null_name" {
+  command = plan
+
+  variables {
+    tfc_apply_boundary_policy_name = null
+  }
+
+  assert {
+    condition     = local.permissions_boundary_arn == null && length(data.aws_caller_identity.current) == 0
+    error_message = "tfc_apply_boundary_policy_name = null must disable the boundary."
   }
 }

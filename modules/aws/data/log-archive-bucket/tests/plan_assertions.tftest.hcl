@@ -74,3 +74,17 @@ run "bucket_hardening_configured" {
     error_message = "policy must include a Deny statement conditioned on aws:SecureTransport = false"
   }
 }
+
+# Known-gaps A8: vended CloudWatch Logs delivery (flow / firewall / resolver
+# logs) needs delivery.logs.amazonaws.com on the bucket, scoped to the org.
+run "grants_vended_log_delivery" {
+  command = plan
+
+  assert {
+    condition = length([
+      for s in jsondecode(aws_s3_bucket_policy.this.policy).Statement : s
+      if try(s.Principal.Service, "") == "delivery.logs.amazonaws.com" && try(s.Condition.StringEquals["aws:SourceOrgID"], "") == var.org_id
+    ]) == 2
+    error_message = "the log archive must grant delivery.logs.amazonaws.com AclCheck + Write, both scoped by aws:SourceOrgID."
+  }
+}

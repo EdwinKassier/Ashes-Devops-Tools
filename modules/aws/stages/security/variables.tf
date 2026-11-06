@@ -128,32 +128,69 @@ variable "log_archive_bucket_name" {
 }
 
 variable "key_admin_arn" {
-  description = "Account-qualified ARN of the principal granted key administration (kms:*) on both the log and forensics CMKs. REQUIRED to avoid locking the keys out of management."
+  description = "Account-qualified ARN of the principal granted key ADMINISTRATION (management actions only: no Encrypt/Decrypt/GenerateDataKey/ReEncrypt, no CreateGrant) on the log-archive, forensics and security-tooling CMKs. Null (default) grants each key's OWN account role key_admin_role_name (the TFC OIDC baseline tfc-apply role that applies this stage), e.g. arn:aws:iam::<log-archive id>:role/tfc-apply, so the keys can never be locked out of management. Grant key usage separately via kms_key_user_arns."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:(role|user)/.+$", var.key_admin_arn))
-    error_message = "key_admin_arn must be an account-qualified IAM role/user ARN."
+    condition     = var.key_admin_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:(role|user)/.+$", coalesce(var.key_admin_arn, "x")))
+    error_message = "key_admin_arn must be null or an account-qualified IAM role/user ARN."
   }
+}
+
+variable "key_admin_role_name" {
+  description = "With key_admin_arn = null, the role name (in each CMK's own account) granted key administration. Default tfc-apply: the role the TFC OIDC baseline creates and this stage applies as, so it must already exist. Set to your own per-account admin role if you run with OrganizationAccountAccessRole instead."
+  type        = string
+  default     = "tfc-apply"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9+=,.@_/-]{1,64}$", var.key_admin_role_name))
+    error_message = "key_admin_role_name must be a valid IAM role name."
+  }
+}
+
+variable "kms_key_user_arns" {
+  description = "Principals granted key USAGE (Encrypt/Decrypt/ReEncrypt/GenerateDataKey/DescribeKey) per CMK, keyed by log_archive / forensics / security_tooling. Separate from key_admin_arn (administration only). Missing keys mean no general-usage grant beyond the built-in service-principal grants."
+  type        = map(list(string))
+  default     = {}
+
+  validation {
+    condition     = alltrue([for k in keys(var.kms_key_user_arns) : contains(["log_archive", "forensics", "security_tooling"], k)])
+    error_message = "kms_key_user_arns keys must be one of log_archive, forensics, security_tooling."
+  }
+}
+
+variable "enable_kms_protection_tag" {
+  description = "Tag the log-archive, forensics and security-tooling CMKs protected = \"true\" so the organization deny-tamper SCP blocks key deletion/disablement and protection-tag removal except via break-glass. Default true."
+  type        = bool
+  default     = true
 }
 
 variable "config_role_arn" {
-  description = "ARN of the IAM role AWS Config assumes to record resource configurations in each account/Region."
+  description = "ARN of the IAM role AWS Config assumes to record resource configurations in the security-tooling account. Null (default) uses the AWSServiceRoleForConfig service-linked role (created unless create_config_service_linked_role = false)."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", var.config_role_arn))
-    error_message = "config_role_arn must be an account-qualified IAM role ARN."
+    condition     = var.config_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", coalesce(var.config_role_arn, "x")))
+    error_message = "config_role_arn must be null or an account-qualified IAM role ARN."
   }
 }
 
+variable "create_config_service_linked_role" {
+  description = "With config_role_arn = null, create the AWSServiceRoleForConfig service-linked role in the security-tooling account. Set false if Config was ever enabled there (the SLR already exists)."
+  type        = bool
+  default     = true
+}
+
 variable "aggregator_role_arn" {
-  description = "ARN of the IAM role the Config organization aggregator assumes to collect Config data across the organization."
+  description = "ARN of an existing IAM role the Config organization aggregator assumes. Null (default) creates aws-config-org-aggregator in the security-tooling account with the AWSConfigRoleForOrganizations managed policy."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", var.aggregator_role_arn))
-    error_message = "aggregator_role_arn must be an account-qualified IAM role ARN."
+    condition     = var.aggregator_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", coalesce(var.aggregator_role_arn, "x")))
+    error_message = "aggregator_role_arn must be null or an account-qualified IAM role ARN."
   }
 }
 
@@ -272,11 +309,11 @@ variable "identity_account_id" {
   default     = null
 }
 
-# --- Audit A3/A4: CloudTrail CloudWatch Logs + CIS alarms (opt-in, default off) ---
+# --- CloudTrail: CloudWatch Logs + CIS section-4 alarms, data events (CIS 3.8/3.9) ---
 variable "enable_cloudwatch_logs" {
-  description = "Attach a CloudWatch Logs group to the org trail + create CIS control-plane metric-filter alarms. Default false = S3-only (unchanged). PREVIEW: opt-in (default off), not yet validated against a real apply."
+  description = "Attach a CloudWatch Logs group to the org trail and create the full CIS AWS section-4 metric-filter alarm set (4.1-4.15) with a KMS-encrypted SNS topic, all in the management account. Self-sufficient: a logs-granted CMK is created when cloudwatch_logs_kms_key_arn is null. Default true; set false for S3-only delivery."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "cloudwatch_logs_retention_days" {
@@ -286,15 +323,53 @@ variable "cloudwatch_logs_retention_days" {
 }
 
 variable "cloudwatch_logs_kms_key_arn" {
-  description = "Optional CMK ARN for the CloudTrail CloudWatch Logs group; its policy must grant logs.<region>.amazonaws.com. Null = AWS-managed encryption."
+  description = "Optional existing CMK ARN (management account) for the CloudTrail CloudWatch Logs group and CIS alarm topic; its policy must grant logs.<region>.amazonaws.com and cloudwatch.amazonaws.com. Null (default) = a dedicated CMK is created."
   type        = string
   default     = null
 }
 
 variable "cloudtrail_alarm_sns_topic_arn" {
-  description = "Optional SNS topic ARN for the CIS control-plane alarms (enable_cloudwatch_logs). Null = alarms without a notification action."
+  description = "Optional existing SNS topic ARN for the CIS alarms. Null (default) = a KMS-encrypted topic is created and subscribed with cloudtrail_alarm_subscribers."
   type        = string
   default     = null
+}
+
+variable "cloudtrail_alarm_subscribers" {
+  description = "Subscribers of the CIS alarm topic. Null (default) = reuse notification_subscribers."
+  type = map(object({
+    protocol = string
+    endpoint = string
+  }))
+  default = null
+}
+
+variable "cloudtrail_cis_alarms_excluded" {
+  description = "CIS alarm keys to skip (see modules/aws/security/cloudtrail-org cis_alarms_excluded), e.g. [\"unauthorized-api-calls\"] if too noisy org-wide."
+  type        = list(string)
+  default     = []
+}
+
+variable "cloudtrail_s3_data_events" {
+  description = "S3 object-level data events on the org trail: none, write (CIS 3.8, default), read (CIS 3.9) or all. COST: billed per event across every org account."
+  type        = string
+  default     = "write"
+
+  validation {
+    condition     = contains(["none", "write", "read", "all"], var.cloudtrail_s3_data_events)
+    error_message = "cloudtrail_s3_data_events must be one of: none, write, read, all."
+  }
+}
+
+variable "cloudtrail_s3_data_events_excluded_bucket_arns" {
+  description = "Extra S3 bucket ARNs excluded from data events (the log-archive bucket is always excluded)."
+  type        = list(string)
+  default     = []
+}
+
+variable "cloudtrail_lambda_data_events" {
+  description = "Record Lambda Invoke data events on the org trail (default false; per-invocation cost)."
+  type        = bool
+  default     = false
 }
 
 # -----------------------------------------------------------------------------
@@ -356,4 +431,15 @@ variable "break_glass_active" {
   description = "Set true ONLY during a declared incident to attach AdministratorAccess to the managed break-glass role. False (default) keeps the deny-all standing policy. Flipping this to true should itself be a reviewed, alarmed change."
   type        = bool
   default     = false
+}
+
+variable "tfc_apply_boundary_policy_name" {
+  description = "Name of the tfc-apply permissions-boundary managed policy (tfc-oidc-baseline apply_boundary_policy_name). Every IAM role this stage creates in the security-tooling account (Config aggregator, incident-response roles; management-account roles are unaffected) gets permissions_boundary = arn:PARTITION:iam::ACCOUNT_ID:policy/NAME, derived from that account's provider, which the member-account tfc-apply role requires when boundary propagation is on. Null = create roles without a boundary."
+  type        = string
+  default     = "tfc-apply-boundary"
+
+  validation {
+    condition     = var.tfc_apply_boundary_policy_name == null || can(regex("^[A-Za-z0-9+=,.@_-]{1,128}$", var.tfc_apply_boundary_policy_name))
+    error_message = "tfc_apply_boundary_policy_name must be null or a valid IAM policy name (1-128 chars of [A-Za-z0-9+=,.@_-])."
+  }
 }

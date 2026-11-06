@@ -1,13 +1,5 @@
 terraform {
-  required_version = "~> 1.9"
-
-  required_providers {
-    null = {
-      source  = "hashicorp/null"
-      version = "~> 3.0"
-    }
-  }
+  required_version = "~> 1.11"
 }
 
-# The null provider requires no credentials.
-provider "null" {}
+# The module uses only built-in terraform_data — no provider configuration.

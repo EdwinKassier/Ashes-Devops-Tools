@@ -2,7 +2,7 @@
  * Copyright 2023 Ashes
  *
  * Hierarchical Firewall Policy Module - Main Configuration
- * 
+ *
  * Creates organizational or folder-level firewall policies that apply
  * across multiple projects in a hierarchical manner.
  */

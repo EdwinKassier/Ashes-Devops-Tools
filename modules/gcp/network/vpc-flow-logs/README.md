@@ -23,7 +23,7 @@ module "flow_logs_export" {
   create_bigquery_dataset = true
   bigquery_dataset_id     = "vpc_flow_logs"
   bigquery_location       = "US"
-  
+
   destination = "bigquery.googleapis.com/projects/my-project/datasets/vpc_flow_logs"
 
   # Retention
@@ -42,7 +42,7 @@ module "flow_logs_export" {
   create_storage_bucket = true
   storage_bucket_name   = "my-project-vpc-flow-logs"
   storage_location      = "US"
-  
+
   destination = "storage.googleapis.com/my-project-vpc-flow-logs"
 
   # Lifecycle
@@ -60,7 +60,7 @@ module "flow_logs_export" {
   project_id          = "my-project"
   sink_name           = "vpc-flow-logs-sink"
   bigquery_dataset_id = "existing_dataset"
-  
+
   destination = "bigquery.googleapis.com/projects/my-project/datasets/existing_dataset"
 }
 ```
@@ -75,7 +75,7 @@ module "flow_logs_export" {
   sink_name               = "production-flow-logs"
   create_bigquery_dataset = true
   bigquery_dataset_id     = "prod_flow_logs"
-  
+
   destination = "bigquery.googleapis.com/projects/my-project/datasets/prod_flow_logs"
 
   # Only capture flow logs from production subnets
@@ -168,10 +168,9 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	destination = 
-	project_id = 
-	sink_name = 
-	
+	destination =
+	project_id =
+	sink_name =
 }
 ```
 
@@ -179,7 +178,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
 
 ## Providers

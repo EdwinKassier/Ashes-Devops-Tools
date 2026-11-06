@@ -18,7 +18,7 @@ module "network_hub" {
   dns_hub_vpc_cidr_block = "10.1.0.0/16"
   default_region         = "us-central1"
   org_id                 = local.org_id
-  internal_domain        = "internal.example.com."
+  internal_domain        = "internal.example.com"
 
   # Map of spoke project names to NUMERIC project numbers (not project ID strings).
   # The Access Context Manager API requires numeric numbers; project ID strings are

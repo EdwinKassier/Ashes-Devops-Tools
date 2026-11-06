@@ -20,6 +20,17 @@ resource "google_cloud_run_v2_service" "this" {
   # Maps the user-controlled flag directly onto the provider's deletion guard.
   deletion_protection = var.enable_deletion_protection
 
+  # Optional Binary Authorization: only attested images (or the project default
+  # policy) may be deployed. Null (default) leaves Binary Authorization off.
+  dynamic "binary_authorization" {
+    for_each = var.binary_authorization != null ? [var.binary_authorization] : []
+    content {
+      use_default              = binary_authorization.value.policy == null ? true : null
+      policy                   = binary_authorization.value.policy
+      breakglass_justification = binary_authorization.value.breakglass_justification
+    }
+  }
+
   template {
     service_account                  = var.service_account_email
     timeout                          = var.timeout
@@ -80,6 +91,19 @@ resource "google_cloud_run_v2_service" "this" {
         }
       }
     }
+  }
+
+  # Terraform owns the service CONFIGURATION; the delivery pipeline owns the IMAGE.
+  # `gcloud run deploy` / deploy-cloudrun replace the image and stamp client /
+  # client_version, so ignoring them stops every Terraform run from rolling the
+  # service back to the bootstrap image. var.image is therefore the INITIAL image
+  # only. To have Terraform redeploy an image (GitOps), taint/replace the service.
+  lifecycle {
+    ignore_changes = [
+      client,
+      client_version,
+      template[0].containers[0].image,
+    ]
   }
 }
 

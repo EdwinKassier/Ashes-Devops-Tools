@@ -108,12 +108,11 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	attachment_name = 
-	network = 
-	project_id = 
-	region = 
-	router_name = 
-	
+	attachment_name =
+	network =
+	project_id =
+	region =
+	router_name =
 }
 ```
 
@@ -121,7 +120,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
 
 ## Providers

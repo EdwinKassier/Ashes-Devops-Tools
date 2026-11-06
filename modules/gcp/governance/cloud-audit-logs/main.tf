@@ -12,6 +12,13 @@ resource "google_storage_bucket" "audit_logs_access" {
     enabled = true
   }
 
+  # M-4: soft delete keeps deleted/overwritten objects recoverable for
+  # soft_delete_retention_days, so a deletion by a compromised identity can be
+  # undone within the window (0 disables).
+  soft_delete_policy {
+    retention_duration_seconds = var.soft_delete_retention_days * 86400
+  }
+
   dynamic "encryption" {
     for_each = var.kms_key_name != null ? [1] : []
     content {
@@ -37,6 +44,7 @@ resource "google_storage_bucket_iam_member" "audit_logs_access_writer" {
 
 # Cloud Storage bucket for audit logs
 resource "google_storage_bucket" "audit_logs" {
+  # checkov:skip=CKV_GCP_78:Versioning IS enabled by default (enabled = !var.enable_bucket_lock). It is turned off only when the opt-in WORM retention lock is on, because GCS rejects Object Versioning on a bucket with a retention policy; the locked retention policy plus soft delete is the stronger control in that mode. Checkov cannot evaluate the expression.
   name                        = "${var.project_id}-audit-logs"
   project                     = var.project_id
   location                    = var.bucket_location
@@ -44,8 +52,19 @@ resource "google_storage_bucket" "audit_logs" {
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
 
+  # M-4: Object Versioning keeps overwritten/deleted generations as noncurrent
+  # versions. GCS does not allow Object Versioning on a bucket that has a
+  # retention policy, so versioning is turned off when the WORM lock below is
+  # enabled (the locked retention policy is the stronger control).
   versioning {
-    enabled = true
+    enabled = !var.enable_bucket_lock
+  }
+
+  # M-4: soft delete (on by default, 30 days) — deleted objects remain
+  # restorable for soft_delete_retention_days even after a delete call. Works
+  # with and without the retention lock.
+  soft_delete_policy {
+    retention_duration_seconds = var.soft_delete_retention_days * 86400
   }
 
   # Opt-in WORM lock (G8): when enable_bucket_lock = true, a LOCKED retention
@@ -231,7 +250,7 @@ resource "google_logging_organization_sink" "org_audit_bq_sink" {
   # Filter for Admin Activity and Policy logs (most useful for analytics)
   # Data Access logs can be very high volume; add them if needed
   filter = <<-EOF
-    logName:("cloudaudit.googleapis.com/activity" OR 
+    logName:("cloudaudit.googleapis.com/activity" OR
              "cloudaudit.googleapis.com/policy")
   EOF
 

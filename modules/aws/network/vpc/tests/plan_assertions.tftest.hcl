@@ -6,6 +6,11 @@
 
 mock_provider "aws" {}
 
+# region is required (no hard-coded default); runs may override it.
+variables {
+  region = "eu-west-2"
+}
+
 run "vpc_and_subnets_configured" {
   command = plan
 
@@ -43,5 +48,100 @@ run "vpc_and_subnets_configured" {
   assert {
     condition     = length(aws_vpc_endpoint.gateway) == 2
     error_message = "Default gateway endpoints (s3, dynamodb) must both be created."
+  }
+}
+
+run "routing_owned_by_module" {
+  command = plan
+
+  variables {
+    flow_log_destination_arn = "arn:aws:s3:::example-log-archive-bucket"
+    name                     = "spoke-dev"
+    create_internet_gateway  = true
+    tags                     = { CostCenter = "platform" }
+    routes = {
+      private = [
+        { destination_cidr_block = "0.0.0.0/0", transit_gateway_id = "tgw-000000000000abcd" },
+        { destination_cidr_block = "10.0.0.0/8", transit_gateway_id = "tgw-000000000000abcd" },
+      ]
+    }
+  }
+
+  # One route table + association per tier per AZ (3 tiers x 2 AZs).
+  assert {
+    condition     = length(aws_route_table.this) == 6 && length(aws_route_table_association.this) == 6
+    error_message = "The module must own one route table and association per tier per AZ."
+  }
+
+  assert {
+    condition = alltrue([
+      for k in ["public-0", "public-1", "private-0", "private-1", "isolated-0", "isolated-1"] : contains(keys(aws_route_table.this), k)
+    ])
+    error_message = "Route tables must be keyed <tier>-<az_index>."
+  }
+
+  # Gateway endpoints (2) attach to every NON-public tier route table (2 tiers x 2 AZs).
+  assert {
+    condition     = length(aws_vpc_endpoint_route_table_association.gateway) == 8
+    error_message = "Gateway endpoints must be associated with the private and isolated route tables (2 services x 4 tables)."
+  }
+
+  assert {
+    condition     = !anytrue([for k in keys(aws_vpc_endpoint_route_table_association.gateway) : strcontains(k, "|public-")])
+    error_message = "Gateway endpoints must not be associated with public route tables by default."
+  }
+
+  # Caller routes are applied to every AZ table of the tier: 2 routes x 2 AZs.
+  assert {
+    condition     = length(aws_route.this) == 4
+    error_message = "Each private-tier route must be created in every private AZ route table."
+  }
+
+  assert {
+    condition = alltrue([
+      for r in values(aws_route.this) : r.transit_gateway_id == "tgw-000000000000abcd"
+    ])
+    error_message = "Private-tier routes must target the transit gateway."
+  }
+
+  assert {
+    condition     = aws_route.this["private-0|0.0.0.0/0"].destination_cidr_block == "0.0.0.0/0"
+    error_message = "The private-0 table must carry the 0.0.0.0/0 TGW default route."
+  }
+
+  # IGW + public default route on each public AZ table.
+  assert {
+    condition     = length(aws_internet_gateway.this) == 1 && length(aws_route.public_internet) == 2
+    error_message = "create_internet_gateway must create one IGW and a default route per public AZ table."
+  }
+
+  # Name is a variable and caller tags propagate.
+  assert {
+    condition     = aws_vpc.this.tags["Name"] == "spoke-dev" && aws_vpc.this.tags["CostCenter"] == "platform"
+    error_message = "VPC Name must come from var.name and var.tags must be merged in."
+  }
+
+  assert {
+    condition     = aws_route_table.this["private-0"].tags["Tier"] == "private" && aws_route_table.this["private-0"].tags["CostCenter"] == "platform"
+    error_message = "Route tables must carry the Tier tag and caller tags."
+  }
+}
+
+run "no_igw_by_default" {
+  command = plan
+
+  variables {
+    flow_log_destination_arn = "arn:aws:s3:::example-log-archive-bucket"
+    gateway_endpoint_tiers   = ["private"]
+  }
+
+  assert {
+    condition     = length(aws_internet_gateway.this) == 0 && length(aws_route.public_internet) == 0 && length(aws_route.this) == 0
+    error_message = "No IGW or routes must be created unless requested."
+  }
+
+  assert {
+    condition     = length(aws_vpc_endpoint_route_table_association.gateway) == 4
+    error_message = "gateway_endpoint_tiers must restrict endpoint associations to the chosen tiers."
   }
 }

@@ -14,4 +14,3 @@ module "supabase_project" {
   database_password = local.database_password
   region            = "eu-west-2"
 }
-

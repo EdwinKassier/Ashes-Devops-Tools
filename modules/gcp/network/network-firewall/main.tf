@@ -38,4 +38,4 @@ resource "google_compute_firewall" "firewall_rule" {
       metadata = var.log_metadata
     }
   }
-} 
+}

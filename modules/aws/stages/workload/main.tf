@@ -12,7 +12,12 @@
 #   - vpc (spoke)          — a private/isolated/tgw spoke VPC. CIDR is either the
 #                            literal vpc_cidr or allocated from the shared IPAM
 #                            pool (ipam_pool_id). Gateway endpoints for s3 +
-#                            dynamodb keep that traffic off the TGW.
+#                            dynamodb keep that traffic off the TGW (associated
+#                            with the module-owned non-public route tables).
+#   - spoke routes         — the configured tiers (var.tgw_route_tiers, default
+#                            private) route var.tgw_destination_cidrs (default
+#                            0.0.0.0/0 -> centralized egress/inspection) to the
+#                            shared TGW via the vpc module's `routes` input.
 #   - spoke TGW attachment — attaches the spoke VPC to the SHARED transit gateway
 #                            (tgw_id, shared with this account via RAM by the
 #                            network account). Route-table association/propagation
@@ -38,10 +43,53 @@
 # Spoke VPC — private/isolated/tgw tiers; CIDR literal or from shared IPAM
 # ---------------------------------------------------------------------------
 
+# Boundary propagation (tfc-oidc-baseline): the workload-account tfc-apply role
+# may only create roles that carry its own permissions boundary.
+data "aws_caller_identity" "current" {
+  count = var.tfc_apply_boundary_policy_name != null ? 1 : 0
+}
+
+data "aws_partition" "current" {
+  count = var.tfc_apply_boundary_policy_name != null ? 1 : 0
+}
+
+locals {
+  # Real AWS always returns a 12-digit account and an aws* partition; under
+  # mock_provider these data sources return random strings the provider's ARN
+  # validator rejects, so a malformed identity yields no boundary rather than
+  # failing every mocked plan downstream (tests override the data sources).
+  boundary_partition = try(data.aws_partition.current[0].partition, null)
+  boundary_account   = try(data.aws_caller_identity.current[0].account_id, null)
+  permissions_boundary_arn = (
+    var.tfc_apply_boundary_policy_name != null && can(regex("^aws(-[a-z]+)*$", local.boundary_partition)) && can(regex("^[0-9]{12}$", local.boundary_account))
+    ? "arn:${local.boundary_partition}:iam::${local.boundary_account}:policy/${var.tfc_apply_boundary_policy_name}"
+    : null
+  )
+
+  # VPC / attachment name: explicit var.name, else workload-<environment>, else
+  # the legacy "workload".
+  name = coalesce(var.name, var.environment != null ? "workload-${var.environment}" : "workload")
+
+  # Spoke routing contract: every tier in tgw_route_tiers sends each
+  # tgw_destination_cidrs entry to the shared TGW. The target is read from the
+  # attachment resource so the routes are only created once the VPC is attached
+  # (a VPC route to a TGW is rejected before the attachment exists).
+  # Standalone mode (tgw_id = null): no attachment, so no TGW routes at all.
+  routed_tiers = var.tgw_id == null ? [] : var.tgw_route_tiers
+  spoke_routes = {
+    for tier in local.routed_tiers : tier => [
+      for cidr in var.tgw_destination_cidrs : {
+        destination_cidr_block = cidr
+        transit_gateway_id     = aws_ec2_transit_gateway_vpc_attachment.spoke[0].transit_gateway_id
+      }
+    ]
+  }
+}
+
 module "vpc" {
   source = "../../network/vpc"
 
-  name                     = "workload"
+  name                     = local.name
   cidr_block               = var.vpc_cidr
   region                   = var.aws_region
   availability_zones       = var.availability_zones
@@ -50,6 +98,8 @@ module "vpc" {
   flow_log_destination_arn = var.flow_log_destination_arn
   ipam_pool_id             = var.ipam_pool_id
   gateway_endpoints        = ["s3", "dynamodb"]
+  routes                   = local.spoke_routes
+  tags                     = var.tags
 }
 
 # ---------------------------------------------------------------------------
@@ -61,9 +111,13 @@ module "vpc" {
 # live); the network account owns the TGW and manages its route-table
 # association/propagation. So both default-route-table flags are false here —
 # the workload never touches the hub's segment routing.
+#
+# Skipped entirely when tgw_id = null (standalone spoke, no aws-network layer).
 # ---------------------------------------------------------------------------
 
 resource "aws_ec2_transit_gateway_vpc_attachment" "spoke" {
+  count = var.tgw_id == null ? 0 : 1
+
   transit_gateway_id = var.tgw_id
   vpc_id             = module.vpc.vpc_id
   subnet_ids         = module.vpc.subnet_ids_by_tier["tgw"]
@@ -73,7 +127,12 @@ resource "aws_ec2_transit_gateway_vpc_attachment" "spoke" {
   transit_gateway_default_route_table_association = false
   transit_gateway_default_route_table_propagation = false
 
-  tags = { Name = "workload-spoke" }
+  tags = merge(var.tags, { Name = "${local.name}-spoke" })
+}
+
+moved {
+  from = aws_ec2_transit_gateway_vpc_attachment.spoke
+  to   = aws_ec2_transit_gateway_vpc_attachment.spoke[0]
 }
 
 # ---------------------------------------------------------------------------
@@ -84,6 +143,8 @@ module "iam_role" {
   source = "../../iam/iam-role"
 
   roles = var.workload_roles
+  # Default boundary for roles that do not set their own permissions_boundary.
+  permissions_boundary_arn = local.permissions_boundary_arn
 
   # Break-glass is an org-level emergency-access construct owned by the
   # security/management layer, not replicated into every workload account.
@@ -115,10 +176,11 @@ module "config_recorder" {
 
   recorder_only = true
 
-  aws_enabled_regions = var.aws_enabled_regions
-  config_role_arn     = var.config_role_arn
-  aggregator_role_arn = "" # unused in recorder_only mode
-  log_archive_bucket  = var.log_archive_bucket_name
+  aws_enabled_regions        = var.aws_enabled_regions
+  config_role_arn            = var.config_role_arn
+  create_service_linked_role = var.create_config_service_linked_role
+  aggregator_role_arn        = "" # unused in recorder_only mode
+  log_archive_bucket         = var.log_archive_bucket_name
 }
 
 # ---------------------------------------------------------------------------

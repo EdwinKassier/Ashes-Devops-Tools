@@ -2,7 +2,7 @@
  * Copyright 2023 Ashes
  *
  * VPC Service Controls Module - Main Configuration
- * 
+ *
  * Creates service perimeters to protect GCP resources from data exfiltration
  * and unauthorized access, even from within Google Cloud.
  */
@@ -40,6 +40,23 @@ resource "google_access_context_manager_access_policy" "policy" {
 
 locals {
   access_policy_name = var.create_access_policy ? google_access_context_manager_access_policy.policy[0].name : var.access_policy_name
+
+  # SOTA M (dry-run XOR enforced): an ENFORCED perimeter can also carry a staged
+  # dry-run `spec` that differs from `status`, so a delta (e.g. extra restricted
+  # services) is trialled in dry-run while the current config keeps enforcing.
+  # Staging is triggered by any dry_run_* override while enable_dry_run = false.
+  stage_dry_run_spec = !var.enable_dry_run && (
+    var.dry_run_restricted_services != null ||
+    var.dry_run_ingress_policies != null ||
+    var.dry_run_egress_policies != null
+  )
+
+  # The spec block exists in pure dry-run mode (enable_dry_run) and when staging.
+  render_spec = var.enable_dry_run || local.stage_dry_run_spec
+
+  spec_restricted_services = var.dry_run_restricted_services != null ? var.dry_run_restricted_services : var.restricted_services
+  spec_ingress_policies    = var.dry_run_ingress_policies != null ? var.dry_run_ingress_policies : var.ingress_policies
+  spec_egress_policies     = var.dry_run_egress_policies != null ? var.dry_run_egress_policies : var.egress_policies
 }
 
 # -----------------------------------------------------------------------------
@@ -53,35 +70,35 @@ resource "google_access_context_manager_access_level" "levels" {
   name   = "accessPolicies/${local.access_policy_name}/accessLevels/${each.key}"
   title  = each.value.title
 
-  description = try(each.value.description, null)
+  description = each.value.description
 
   basic {
-    combining_function = try(each.value.combining_function, "AND")
+    combining_function = each.value.combining_function
 
     dynamic "conditions" {
       for_each = each.value.conditions
       content {
-        ip_subnetworks         = try(conditions.value.ip_subnetworks, null)
-        required_access_levels = try(conditions.value.required_access_levels, null)
-        members                = try(conditions.value.members, null)
-        negate                 = try(conditions.value.negate, false)
-        regions                = try(conditions.value.regions, null)
+        ip_subnetworks         = conditions.value.ip_subnetworks
+        required_access_levels = conditions.value.required_access_levels
+        members                = conditions.value.members
+        negate                 = conditions.value.negate
+        regions                = conditions.value.regions
 
         dynamic "device_policy" {
-          for_each = try(conditions.value.device_policy, null) != null ? [conditions.value.device_policy] : []
+          for_each = conditions.value.device_policy != null ? [conditions.value.device_policy] : []
           content {
-            require_screen_lock              = try(device_policy.value.require_screen_lock, null)
-            require_admin_approval           = try(device_policy.value.require_admin_approval, null)
-            require_corp_owned               = try(device_policy.value.require_corp_owned, null)
-            allowed_encryption_statuses      = try(device_policy.value.allowed_encryption_statuses, null)
-            allowed_device_management_levels = try(device_policy.value.allowed_device_management_levels, null)
+            require_screen_lock              = device_policy.value.require_screen_lock
+            require_admin_approval           = device_policy.value.require_admin_approval
+            require_corp_owned               = device_policy.value.require_corp_owned
+            allowed_encryption_statuses      = device_policy.value.allowed_encryption_statuses
+            allowed_device_management_levels = device_policy.value.allowed_device_management_levels
 
             dynamic "os_constraints" {
-              for_each = try(device_policy.value.os_constraints, [])
+              for_each = coalesce(device_policy.value.os_constraints, [])
               content {
                 os_type                    = os_constraints.value.os_type
-                minimum_version            = try(os_constraints.value.minimum_version, null)
-                require_verified_chrome_os = try(os_constraints.value.require_verified_chrome_os, null)
+                minimum_version            = os_constraints.value.minimum_version
+                require_verified_chrome_os = os_constraints.value.require_verified_chrome_os
               }
             }
           }
@@ -104,8 +121,9 @@ resource "google_access_context_manager_service_perimeter" "perimeter" {
   description    = var.description
   perimeter_type = "PERIMETER_TYPE_REGULAR"
 
-  # Use explicit dry run spec when dry run is enabled
-  use_explicit_dry_run_spec = var.enable_dry_run
+  # Explicit dry-run spec when in pure dry-run mode OR when an enforced
+  # perimeter stages a dry-run delta (dry_run_* overrides).
+  use_explicit_dry_run_spec = local.render_spec
 
   # ENFORCED configuration (always defined for active perimeters)
   dynamic "status" {
@@ -132,31 +150,31 @@ resource "google_access_context_manager_service_perimeter" "perimeter" {
         for_each = var.ingress_policies
         content {
           ingress_from {
-            identity_type = try(ingress_policies.value.identity_type, null)
-            identities    = try(ingress_policies.value.identities, null)
+            identity_type = ingress_policies.value.identity_type
+            identities    = ingress_policies.value.identities
 
             dynamic "sources" {
-              for_each = try(ingress_policies.value.sources, [])
+              for_each = coalesce(ingress_policies.value.sources, [])
               content {
-                access_level = try(sources.value.access_level, null)
-                resource     = try(sources.value.resource, null)
+                access_level = sources.value.access_level
+                resource     = sources.value.resource
               }
             }
           }
 
           ingress_to {
-            resources = try(ingress_policies.value.resources, ["*"])
+            resources = ingress_policies.value.resources
 
             dynamic "operations" {
-              for_each = try(ingress_policies.value.operations, [])
+              for_each = coalesce(ingress_policies.value.operations, [])
               content {
                 service_name = operations.value.service_name
 
                 dynamic "method_selectors" {
-                  for_each = try(operations.value.method_selectors, [])
+                  for_each = coalesce(operations.value.method_selectors, [])
                   content {
-                    method     = try(method_selectors.value.method, null)
-                    permission = try(method_selectors.value.permission, null)
+                    method     = method_selectors.value.method
+                    permission = method_selectors.value.permission
                   }
                 }
               }
@@ -170,23 +188,23 @@ resource "google_access_context_manager_service_perimeter" "perimeter" {
         for_each = var.egress_policies
         content {
           egress_from {
-            identity_type = try(egress_policies.value.identity_type, null)
-            identities    = try(egress_policies.value.identities, null)
+            identity_type = egress_policies.value.identity_type
+            identities    = egress_policies.value.identities
           }
 
           egress_to {
-            resources = try(egress_policies.value.resources, null)
+            resources = egress_policies.value.resources
 
             dynamic "operations" {
-              for_each = try(egress_policies.value.operations, [])
+              for_each = coalesce(egress_policies.value.operations, [])
               content {
                 service_name = operations.value.service_name
 
                 dynamic "method_selectors" {
-                  for_each = try(operations.value.method_selectors, [])
+                  for_each = coalesce(operations.value.method_selectors, [])
                   content {
-                    method     = try(method_selectors.value.method, null)
-                    permission = try(method_selectors.value.permission, null)
+                    method     = method_selectors.value.method
+                    permission = method_selectors.value.permission
                   }
                 }
               }
@@ -197,12 +215,14 @@ resource "google_access_context_manager_service_perimeter" "perimeter" {
     }
   }
 
-  # DRY RUN configuration (spec block - used when dry run is enabled)
+  # DRY RUN configuration (spec block). Rendered when dry run is enabled (spec
+  # only, nothing enforced) or when an enforced perimeter stages a delta via the
+  # dry_run_* overrides (status enforced + spec evaluated in dry-run).
   dynamic "spec" {
-    for_each = var.enable_dry_run ? [1] : []
+    for_each = local.render_spec ? [1] : []
     content {
       resources           = [for p in var.protected_projects : "projects/${p}"]
-      restricted_services = var.restricted_services
+      restricted_services = local.spec_restricted_services
       access_levels = [
         for level in var.access_levels :
         "accessPolicies/${local.access_policy_name}/accessLevels/${level.name}"
@@ -219,34 +239,34 @@ resource "google_access_context_manager_service_perimeter" "perimeter" {
 
       # Ingress policies
       dynamic "ingress_policies" {
-        for_each = var.ingress_policies
+        for_each = local.spec_ingress_policies
         content {
           ingress_from {
-            identity_type = try(ingress_policies.value.identity_type, null)
-            identities    = try(ingress_policies.value.identities, null)
+            identity_type = ingress_policies.value.identity_type
+            identities    = ingress_policies.value.identities
 
             dynamic "sources" {
-              for_each = try(ingress_policies.value.sources, [])
+              for_each = coalesce(ingress_policies.value.sources, [])
               content {
-                access_level = try(sources.value.access_level, null)
-                resource     = try(sources.value.resource, null)
+                access_level = sources.value.access_level
+                resource     = sources.value.resource
               }
             }
           }
 
           ingress_to {
-            resources = try(ingress_policies.value.resources, ["*"])
+            resources = ingress_policies.value.resources
 
             dynamic "operations" {
-              for_each = try(ingress_policies.value.operations, [])
+              for_each = coalesce(ingress_policies.value.operations, [])
               content {
                 service_name = operations.value.service_name
 
                 dynamic "method_selectors" {
-                  for_each = try(operations.value.method_selectors, [])
+                  for_each = coalesce(operations.value.method_selectors, [])
                   content {
-                    method     = try(method_selectors.value.method, null)
-                    permission = try(method_selectors.value.permission, null)
+                    method     = method_selectors.value.method
+                    permission = method_selectors.value.permission
                   }
                 }
               }
@@ -257,26 +277,26 @@ resource "google_access_context_manager_service_perimeter" "perimeter" {
 
       # Egress policies
       dynamic "egress_policies" {
-        for_each = var.egress_policies
+        for_each = local.spec_egress_policies
         content {
           egress_from {
-            identity_type = try(egress_policies.value.identity_type, null)
-            identities    = try(egress_policies.value.identities, null)
+            identity_type = egress_policies.value.identity_type
+            identities    = egress_policies.value.identities
           }
 
           egress_to {
-            resources = try(egress_policies.value.resources, null)
+            resources = egress_policies.value.resources
 
             dynamic "operations" {
-              for_each = try(egress_policies.value.operations, [])
+              for_each = coalesce(egress_policies.value.operations, [])
               content {
                 service_name = operations.value.service_name
 
                 dynamic "method_selectors" {
-                  for_each = try(operations.value.method_selectors, [])
+                  for_each = coalesce(operations.value.method_selectors, [])
                   content {
-                    method     = try(method_selectors.value.method, null)
-                    permission = try(method_selectors.value.permission, null)
+                    method     = method_selectors.value.method
+                    permission = method_selectors.value.permission
                   }
                 }
               }

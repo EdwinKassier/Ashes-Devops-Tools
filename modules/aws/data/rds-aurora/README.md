@@ -38,11 +38,10 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	kms_key_id = 
-	name = 
-	security_group_ids = 
-	subnet_ids = 
-	
+	kms_key_id =
+	name =
+	security_group_ids =
+	subnet_ids =
 }
 ```
 
@@ -50,7 +49,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.46.0, < 7.0.0 |
 
 ## Providers
@@ -69,8 +68,8 @@ The following resources are created:
 
 - resource.aws_db_subnet_group.this (modules/aws/data/rds-aurora/main.tf#L35)
 - resource.aws_rds_cluster.this (modules/aws/data/rds-aurora/main.tf#L44)
-- resource.aws_rds_cluster_instance.this (modules/aws/data/rds-aurora/main.tf#L93)
-- resource.terraform_data.deletion_guard (modules/aws/data/rds-aurora/main.tf#L129)
+- resource.aws_rds_cluster_instance.this (modules/aws/data/rds-aurora/main.tf#L97)
+- resource.terraform_data.deletion_guard (modules/aws/data/rds-aurora/main.tf#L133)
 
 
 ## Inputs
@@ -93,7 +92,8 @@ The following resources are created:
 | <a name="input_instance_class"></a> [instance\_class](#input\_instance\_class) | Instance class for the cluster instances. Ignored when enable\_serverless\_v2 is true (db.serverless is used instead). | `string` | `"db.r6g.large"` | no |
 | <a name="input_instance_count"></a> [instance\_count](#input\_instance\_count) | Number of cluster instances (writer + readers). Defaults to 2 for HA (one writer, one reader). | `number` | `2` | no |
 | <a name="input_manage_master_user_password"></a> [manage\_master\_user\_password](#input\_manage\_master\_user\_password) | When true (default), RDS generates and manages the master password in Secrets Manager so it is never written to Terraform state. When false, master\_password must be supplied. | `bool` | `true` | no |
-| <a name="input_master_password"></a> [master\_password](#input\_master\_password) | Master password. Only used when manage\_master\_user\_password is false. Prefer leaving manage\_master\_user\_password = true so the password never enters Terraform state. | `string` | `null` | no |
+| <a name="input_master_password"></a> [master\_password](#input\_master\_password) | Master password. Only used when manage\_master\_user\_password is false. Ephemeral and written with the write-only master\_password\_wo argument, so it never enters plan or state; it may be fed from an ephemeral resource (e.g. aws\_secretsmanager\_secret\_version). Prefer manage\_master\_user\_password = true (RDS-managed secret). | `string` | `null` | no |
+| <a name="input_master_password_version"></a> [master\_password\_version](#input\_master\_password\_version) | Write-only version counter for master\_password (only used when manage\_master\_user\_password is false). Increment to rotate the password. | `number` | `1` | no |
 | <a name="input_master_user_secret_kms_key_id"></a> [master\_user\_secret\_kms\_key\_id](#input\_master\_user\_secret\_kms\_key\_id) | KMS key ARN that encrypts the RDS-managed master user secret. Empty uses the default aws/secretsmanager key. Only used when manage\_master\_user\_password is true. | `string` | `""` | no |
 | <a name="input_master_username"></a> [master\_username](#input\_master\_username) | Master (admin) username for the cluster. | `string` | `"dbadmin"` | no |
 | <a name="input_monitoring_interval"></a> [monitoring\_interval](#input\_monitoring\_interval) | Enhanced monitoring interval in seconds (0 = disabled, the default). Set to 1/5/10/15/30/60 to enable; requires monitoring\_role\_arn. | `number` | `0` | no |
@@ -118,6 +118,7 @@ The following resources are created:
 | <a name="output_instance_identifiers"></a> [instance\_identifiers](#output\_instance\_identifiers) | Identifiers of the cluster instances (writer + readers). |
 | <a name="output_master_user_secret_arn"></a> [master\_user\_secret\_arn](#output\_master\_user\_secret\_arn) | ARN of the RDS-managed master user secret in Secrets Manager. Null when manage\_master\_user\_password is false. |
 | <a name="output_port"></a> [port](#output\_port) | Port the database listens on. |
+| <a name="output_publicly_accessible"></a> [publicly\_accessible](#output\_publicly\_accessible) | Whether ANY cluster instance is publicly accessible. Always false — instances are hard-wired to publicly\_accessible = false; exported so composing stages can assert it. |
 | <a name="output_reader_endpoint"></a> [reader\_endpoint](#output\_reader\_endpoint) | Reader endpoint of the cluster (load-balances across replicas). |
 <!-- END_TF_DOCS -->
 

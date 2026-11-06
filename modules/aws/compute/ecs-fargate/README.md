@@ -29,15 +29,14 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	container_image = 
-	execution_role_arn = 
-	family = 
-	name = 
-	region = 
-	security_group_ids = 
-	subnets = 
-	task_role_arn = 
-	
+	container_image =
+	execution_role_arn =
+	family =
+	name =
+	region =
+	security_group_ids =
+	subnets =
+	task_role_arn =
 }
 ```
 
@@ -45,7 +44,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.46.0, < 7.0.0 |
 
 ## Providers
@@ -61,12 +60,13 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_appautoscaling_policy.cpu (modules/aws/compute/ecs-fargate/main.tf#L148)
-- resource.aws_appautoscaling_target.this (modules/aws/compute/ecs-fargate/main.tf#L138)
-- resource.aws_cloudwatch_log_group.this (modules/aws/compute/ecs-fargate/main.tf#L74)
-- resource.aws_ecs_cluster.this (modules/aws/compute/ecs-fargate/main.tf#L59)
-- resource.aws_ecs_service.this (modules/aws/compute/ecs-fargate/main.tf#L107)
-- resource.aws_ecs_task_definition.this (modules/aws/compute/ecs-fargate/main.tf#L86)
+- resource.aws_appautoscaling_policy.cpu (modules/aws/compute/ecs-fargate/main.tf#L220)
+- resource.aws_appautoscaling_target.this (modules/aws/compute/ecs-fargate/main.tf#L210)
+- resource.aws_cloudwatch_log_group.this (modules/aws/compute/ecs-fargate/main.tf#L76)
+- resource.aws_ecs_cluster.this (modules/aws/compute/ecs-fargate/main.tf#L61)
+- resource.aws_ecs_service.externally_deployed (modules/aws/compute/ecs-fargate/main.tf#L156)
+- resource.aws_ecs_service.this (modules/aws/compute/ecs-fargate/main.tf#L118)
+- resource.aws_ecs_task_definition.this (modules/aws/compute/ecs-fargate/main.tf#L88)
 
 
 ## Inputs
@@ -96,7 +96,9 @@ The following resources are created:
 | <a name="input_create_log_group"></a> [create\_log\_group](#input\_create\_log\_group) | Whether this module creates the CloudWatch log group for container logs. When false, log\_group\_name must reference an existing group. | `bool` | `true` | no |
 | <a name="input_desired_count"></a> [desired\_count](#input\_desired\_count) | Number of task copies the service keeps running. | `number` | `2` | no |
 | <a name="input_enable_autoscaling"></a> [enable\_autoscaling](#input\_enable\_autoscaling) | Whether to create Application Auto Scaling target + target-tracking policy for the service. | `bool` | `false` | no |
+| <a name="input_enable_deployment_circuit_breaker"></a> [enable\_deployment\_circuit\_breaker](#input\_enable\_deployment\_circuit\_breaker) | Enable the ECS deployment circuit breaker with automatic rollback, so a revision whose tasks never become healthy is rolled back instead of looping. | `bool` | `true` | no |
 | <a name="input_enable_execute_command"></a> [enable\_execute\_command](#input\_enable\_execute\_command) | Whether to enable ECS Exec (interactive shell into running tasks). Secure default is false. | `bool` | `false` | no |
+| <a name="input_enable_external_deployments"></a> [enable\_external\_deployments](#input\_enable\_external\_deployments) | Hand task-definition rollouts to an external pipeline (e.g. GitHub Actions RegisterTaskDefinition + UpdateService): Terraform still creates the initial revision and the service, but ignores later task\_definition and desired\_count drift instead of reverting each deploy. | `bool` | `false` | no |
 | <a name="input_health_check_grace_period_seconds"></a> [health\_check\_grace\_period\_seconds](#input\_health\_check\_grace\_period\_seconds) | Grace period before the service starts health-checking newly started tasks. Only applied when a target group is attached. | `number` | `60` | no |
 | <a name="input_load_balancer_container_port"></a> [load\_balancer\_container\_port](#input\_load\_balancer\_container\_port) | Container port registered with the target group. Defaults to container\_port when null. | `number` | `null` | no |
 | <a name="input_log_group_name"></a> [log\_group\_name](#input\_log\_group\_name) | CloudWatch log group name for container logs. Defaults to /ecs/<family> when empty. | `string` | `""` | no |
@@ -111,10 +113,12 @@ The following resources are created:
 | Name | Description |
 |------|-------------|
 | <a name="output_cluster_arn"></a> [cluster\_arn](#output\_cluster\_arn) | ARN of the cluster the service runs in (created here or passed in). |
+| <a name="output_container_name"></a> [container\_name](#output\_container\_name) | Name of the primary container (the container CI rewrites the image of). |
 | <a name="output_log_group_name"></a> [log\_group\_name](#output\_log\_group\_name) | Name of the CloudWatch log group container logs are shipped to. |
 | <a name="output_service_arn"></a> [service\_arn](#output\_service\_arn) | ARN of the ECS service. |
 | <a name="output_service_name"></a> [service\_name](#output\_service\_name) | Name of the ECS service. |
 | <a name="output_task_definition_arn"></a> [task\_definition\_arn](#output\_task\_definition\_arn) | ARN of the task definition revision the service runs. |
+| <a name="output_task_definition_family"></a> [task\_definition\_family](#output\_task\_definition\_family) | Family of the task definition (CI registers new revisions in this family). |
 <!-- END_TF_DOCS -->
 
 ## Usage

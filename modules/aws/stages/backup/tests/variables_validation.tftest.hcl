@@ -31,3 +31,21 @@ run "invalid_changeable_for_days_rejected" {
 
   expect_failures = [var.changeable_for_days]
 }
+
+run "backup_role_arn_accepts_account_variable" {
+  command = plan
+
+  variables {
+    backup_role_arn = "arn:aws:iam::$account:role/my-backup-role"
+  }
+}
+
+run "malformed_backup_role_arn_rejected" {
+  command = plan
+
+  variables {
+    backup_role_arn = "my-backup-role"
+  }
+
+  expect_failures = [var.backup_role_arn]
+}

@@ -2,8 +2,8 @@
 
 **When to use:** Rotating a CMEK key version on schedule, after a suspected key compromise, or as part of a compliance audit.
 
-**Time:** 15–45 minutes depending on the number of encrypted resources.  
-**Risk:** Medium — a failed rotation can render encrypted data temporarily inaccessible.  
+**Time:** 15–45 minutes depending on the number of encrypted resources.
+**Risk:** Medium — a failed rotation can render encrypted data temporarily inaccessible.
 **Prerequisites:** You have `roles/cloudkms.admin` on the key's project.
 
 ---

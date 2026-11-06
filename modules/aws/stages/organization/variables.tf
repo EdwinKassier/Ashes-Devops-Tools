@@ -73,8 +73,8 @@ variable "terraform_run_role_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/.+$", var.terraform_run_role_arn))
-    error_message = "terraform_run_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/...)."
+    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.terraform_run_role_arn))
+    error_message = "terraform_run_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/<name>) with no wildcards (* or ?)."
   }
 }
 
@@ -83,9 +83,33 @@ variable "break_glass_role_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/.+$", var.break_glass_role_arn))
-    error_message = "break_glass_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/...)."
+    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.break_glass_role_arn))
+    error_message = "break_glass_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/<name>) with no wildcards (* or ?)."
   }
+}
+
+variable "pipeline_role_names" {
+  description = "Member-account Terraform pipeline role names (or name patterns) passed to the deny-tamper SCP. Rendered as arn:aws:iam::*:role/<name>: exempt from the security-service reconfiguration denies and protected from IAM modification. SCPs never apply to the management account, so these must be the roles that run IN member accounts."
+  type        = list(string)
+  default     = ["tfc-apply", "OrganizationAccountAccessRole", "stacksets-exec-*"]
+}
+
+variable "break_glass_role_names" {
+  description = "Member-account break-glass role names for the deny-tamper SCP (sole exemption from the destructive statements). Empty (default) derives the name from break_glass_role_arn."
+  type        = list(string)
+  default     = []
+}
+
+variable "data_perimeter_trusted_account_ids" {
+  description = "Optional 12-digit account IDs outside the organization trusted by the RCP data perimeter (aws:PrincipalAccount / aws:SourceAccount). Empty (default) trusts only the organization."
+  type        = list(string)
+  default     = []
+}
+
+variable "allow_vpc_bpa_exclusions" {
+  description = "Whether member accounts may create VPC Block Public Access exclusions under the declarative EC2 policy. Default false."
+  type        = bool
+  default     = false
 }
 
 variable "log_archive_bucket_name" {
@@ -139,4 +163,111 @@ variable "cost_anomaly_email" {
   description = "Email address that receives Cost Anomaly Detection alerts."
   type        = string
   default     = "finops@example.com"
+}
+
+# -----------------------------------------------------------------------------
+# Terraform Cloud OIDC baseline (member-account workload identity)
+#
+# A SERVICE_MANAGED StackSet deploys an app.terraform.io OIDC provider plus
+# per-workspace tfc-plan (read-only) / tfc-apply roles into every bound member
+# account, so downstream workspaces authenticate DIRECTLY into their own account
+# instead of running with management-account credentials + OrganizationAccountAccessRole.
+# -----------------------------------------------------------------------------
+
+variable "enable_tfc_oidc_baseline" {
+  description = "Gate for the TFC OIDC baseline StackSet (OIDC provider + tfc-plan/tfc-apply roles in member accounts). Requires tfc_organization when true."
+  type        = bool
+  default     = true
+}
+
+variable "tfc_organization" {
+  description = "Terraform Cloud organization whose workspaces the member-account roles trust (matched literally, never wildcarded). Required when enable_tfc_oidc_baseline is true."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.enable_tfc_oidc_baseline ? var.tfc_organization != null : true
+    error_message = "tfc_organization is required when enable_tfc_oidc_baseline is true."
+  }
+}
+
+variable "tfc_hostname" {
+  description = "Terraform Cloud / Enterprise hostname issuing the workload-identity tokens."
+  type        = string
+  default     = "app.terraform.io"
+}
+
+variable "tfc_project" {
+  description = "Default TFC project of the bound workspaces (matched literally in the trust sub). Override per account with tfc_workspace_bindings[*].project."
+  type        = string
+  default     = "Default Project"
+}
+
+variable "tfc_workspace_bindings" {
+  description = "Map of account key (from accounts / workload_accounts) -> TFC workspaces allowed to assume that account's tfc-plan / tfc-apply roles, with an optional project override. Add one entry per workload account, e.g. workload_dev = { workspaces = [\"aws-workload-dev\"] }. The multi-account aws-security root is bound into security_tooling, log_archive and forensics; aws-backup into backup."
+  type = map(object({
+    workspaces = list(string)
+    project    = optional(string)
+  }))
+  default = {
+    security_tooling = { workspaces = ["aws-security"] }
+    log_archive      = { workspaces = ["aws-security"] }
+    forensics        = { workspaces = ["aws-security"] }
+    network          = { workspaces = ["aws-network"] }
+    shared_services  = { workspaces = ["aws-identity", "aws-shared-services"] }
+    backup           = { workspaces = ["aws-backup"] }
+  }
+
+  validation {
+    condition     = alltrue([for k in keys(var.tfc_workspace_bindings) : contains(concat(keys(var.accounts), keys(var.workload_accounts)), k)])
+    error_message = "Every tfc_workspace_bindings key must be an account key defined in accounts or workload_accounts."
+  }
+}
+
+variable "tfc_oidc_allow_workspace_wildcards" {
+  description = "Allow '*' inside bound workspace names (StringLike sub match). The organization and project are always literal. Default false: exact workspace names."
+  type        = bool
+  default     = false
+}
+
+variable "tfc_apply_role_policy_arns" {
+  description = "Managed policy ARNs attached to every member-account tfc-apply role (capped by the apply permissions boundary, tfc_enable_apply_permissions_boundary)."
+  type        = list(string)
+  default     = ["arn:aws:iam::aws:policy/AdministratorAccess"]
+}
+
+variable "tfc_enable_apply_permissions_boundary" {
+  description = "Cap every member-account tfc-apply role with a permissions boundary (default true). With tfc_apply_permissions_boundary_arn = null the StackSet embeds tfc-apply-boundary: allow-all except leaving the org, stopping/deleting CloudTrail/GuardDuty/Config, modifying the TFC roles/OIDC provider/boundary, creating IAM users/access keys, and (tfc_enable_apply_boundary_propagation) creating or granting to roles without the same boundary."
+  type        = bool
+  default     = true
+}
+
+variable "tfc_apply_permissions_boundary_arn" {
+  description = "Optional existing permissions-boundary policy ARN for the tfc-apply roles (must exist in every bound account). Null (default) = the embedded tfc-apply-boundary."
+  type        = string
+  default     = null
+}
+
+variable "tfc_enable_apply_boundary_propagation" {
+  description = "Make the embedded tfc-apply boundary self-propagating (default true): tfc-apply can only create / grant to roles carrying the same boundary and can never remove a boundary, closing the create-unbounded-role escape. Every aws_iam_role created by tfc-apply in a member account must then set permissions_boundary to the tfc-apply-boundary ARN."
+  type        = bool
+  default     = true
+}
+
+variable "tfc_enable_plan_role_data_read_deny" {
+  description = "Attach an inline deny on data-plane reads (s3:GetObject*, secretsmanager:GetSecretValue, ssm:GetParameter*, kms:Decrypt, DynamoDB/SQS/Kinesis/Logs reads, ...) to every member-account tfc-plan role (default true)."
+  type        = bool
+  default     = true
+}
+
+variable "tfc_plan_role_data_read_exempt_arns" {
+  description = "Resource ARNs excluded from the tfc-plan data-plane deny (NotResource), for Terraform-managed resources whose refresh reads data (e.g. the aws-workload SaaS bridge secret). Empty (default) = deny everywhere."
+  type        = list(string)
+  default     = []
+}
+
+variable "tfc_oidc_call_as" {
+  description = "Manage the StackSet as the management account (SELF) or a CloudFormation delegated administrator (DELEGATED_ADMIN)."
+  type        = string
+  default     = "SELF"
 }

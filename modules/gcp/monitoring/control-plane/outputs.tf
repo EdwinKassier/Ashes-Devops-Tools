@@ -18,5 +18,20 @@ output "notification_channel_ids" {
 
 output "watched_names" {
   description = "Names of the guardrail watches that are active."
-  value       = keys(var.enable ? var.watches : {})
+  value       = keys(local.active_watches)
+}
+
+output "org_log_route_sink_name" {
+  description = "Name of the aggregated org sink routing audit logs into project_id, or null when org_id is unset."
+  value       = local.route_org_logs ? google_logging_organization_sink.control_plane[0].name : null
+}
+
+output "cis_log_metric_names" {
+  description = "Map of CIS log-metric key to the created log-based metric name (empty when disabled)."
+  value       = { for k, m in google_logging_metric.cis : k => m.name }
+}
+
+output "cis_alert_policy_ids" {
+  description = "Map of CIS log-metric key to the alert policy ID watching it (empty when disabled)."
+  value       = { for k, p in google_monitoring_alert_policy.cis : k => p.id }
 }

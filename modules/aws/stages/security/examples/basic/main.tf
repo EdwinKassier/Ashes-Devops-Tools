@@ -47,10 +47,10 @@ module "aws_security" {
   shared_services_account_id  = "555555555555"
   forensics_account_id        = "444444444444"
 
+  # key_admin_arn / config_role_arn / aggregator_role_arn omitted: each CMK is
+  # administered by its own account's tfc-apply role, and the Config SLR + org
+  # aggregator role are created by the stage.
   log_archive_bucket_name     = "ashes-org-log-archive"
-  key_admin_arn               = "arn:aws:iam::333333333333:role/kms-admin"
-  config_role_arn             = "arn:aws:iam::222222222222:role/aws-config-role"
-  aggregator_role_arn         = "arn:aws:iam::222222222222:role/aws-config-aggregator"
   meta_store_manager_role_arn = "arn:aws:iam::222222222222:role/AmazonSecurityLakeMetaStoreManager"
   break_glass_role_arn        = "arn:aws:iam::111111111111:role/break-glass"
 

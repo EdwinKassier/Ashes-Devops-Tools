@@ -1,6 +1,6 @@
 # Vercel Modules
 
-Terraform modules for provisioning and managing Vercel projects. These modules are consumed by [`modules/saas/stages/saas-workload`](../stages/saas-workload/) and can also be called directly.
+Terraform modules for provisioning and managing Vercel projects. These modules are consumed by [`modules/saas/stages/saas-workload`](../saas/stages/saas-workload/) and can also be called directly.
 
 ## Modules
 

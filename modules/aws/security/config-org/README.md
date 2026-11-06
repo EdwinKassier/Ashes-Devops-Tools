@@ -25,9 +25,7 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	config_role_arn = 
-	log_archive_bucket = 
-	
+	log_archive_bucket =
 }
 ```
 
@@ -35,7 +33,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.46.0, < 7.0.0 |
 
 ## Providers
@@ -51,25 +49,34 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_config_configuration_aggregator.org (modules/aws/security/config-org/main.tf#L63)
-- resource.aws_config_configuration_recorder.this (modules/aws/security/config-org/main.tf#L20)
-- resource.aws_config_configuration_recorder_status.this (modules/aws/security/config-org/main.tf#L52)
-- resource.aws_config_delivery_channel.this (modules/aws/security/config-org/main.tf#L43)
-- resource.aws_config_organization_conformance_pack.this (modules/aws/security/config-org/main.tf#L73)
+- resource.aws_config_configuration_aggregator.org (modules/aws/security/config-org/main.tf#L114)
+- resource.aws_config_configuration_recorder.this (modules/aws/security/config-org/main.tf#L68)
+- resource.aws_config_configuration_recorder_status.this (modules/aws/security/config-org/main.tf#L103)
+- resource.aws_config_delivery_channel.this (modules/aws/security/config-org/main.tf#L94)
+- resource.aws_config_organization_conformance_pack.this (modules/aws/security/config-org/main.tf#L128)
+- resource.aws_iam_role.aggregator (modules/aws/security/config-org/main.tf#L47)
+- resource.aws_iam_role_policy_attachment.aggregator (modules/aws/security/config-org/main.tf#L62)
+- resource.aws_iam_service_linked_role.config (modules/aws/security/config-org/main.tf#L40)
+- data source.aws_caller_identity.current (modules/aws/security/config-org/main.tf#L33)
 
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_config_role_arn"></a> [config\_role\_arn](#input\_config\_role\_arn) | ARN of the IAM role Config assumes to record resource configurations in each account/Region. | `string` | n/a | yes |
 | <a name="input_log_archive_bucket"></a> [log\_archive\_bucket](#input\_log\_archive\_bucket) | Name of the central log-archive S3 bucket that receives Config configuration snapshots and history. | `string` | n/a | yes |
+| <a name="input_account_id"></a> [account\_id](#input\_account\_id) | 12-digit ID of the account the recorders run in, used to build the service-linked-role ARN when config\_role\_arn = null. Null = read from aws\_caller\_identity. | `string` | `null` | no |
 | <a name="input_aggregator_name"></a> [aggregator\_name](#input\_aggregator\_name) | Name of the organization configuration aggregator. Ignored when recorder\_only = true. | `string` | `"org-aggregator"` | no |
-| <a name="input_aggregator_role_arn"></a> [aggregator\_role\_arn](#input\_aggregator\_role\_arn) | ARN of the IAM role the aggregator assumes to collect Config data across the organization. Required unless recorder\_only = true; defaults to an empty string because the aggregator is not created in recorder\_only mode. | `string` | `""` | no |
+| <a name="input_aggregator_role_arn"></a> [aggregator\_role\_arn](#input\_aggregator\_role\_arn) | ARN of an existing IAM role the organization aggregator assumes to collect Config data across the organization. Null or "" (default) creates one here (aggregator\_role\_name, trusting config.amazonaws.com, with the AWS managed policy AWSConfigRoleForOrganizations) unless recorder\_only = true, where no aggregator exists. | `string` | `null` | no |
+| <a name="input_aggregator_role_name"></a> [aggregator\_role\_name](#input\_aggregator\_role\_name) | Name of the aggregator IAM role created when aggregator\_role\_arn is null/empty and recorder\_only = false. | `string` | `"aws-config-org-aggregator"` | no |
 | <a name="input_aws_enabled_regions"></a> [aws\_enabled\_regions](#input\_aws\_enabled\_regions) | Regions in which to deploy a Config recorder, delivery channel, and recorder status. One set of per-Region resources is created for each entry. | `list(string)` | <pre>[<br/>  "eu-west-2"<br/>]</pre> | no |
+| <a name="input_config_role_arn"></a> [config\_role\_arn](#input\_config\_role\_arn) | ARN of the IAM role Config assumes to record resource configurations in each account/Region. Null (default) uses the account's AWS Config service-linked role AWSServiceRoleForConfig (AWS-recommended), created here when create\_service\_linked\_role = true. | `string` | `null` | no |
 | <a name="input_conformance_packs"></a> [conformance\_packs](#input\_conformance\_packs) | Opt-in bring-your-own-pack hook: map of organization conformance packs to deploy (e.g. a NIST 800-53 sample YAML), keyed by pack name. Provide exactly one of template\_body or template\_s3\_uri per pack. No packs are bundled with this module. Ignored when recorder\_only = true. | <pre>map(object({<br/>    template_body   = optional(string)<br/>    template_s3_uri = optional(string)<br/>  }))</pre> | `{}` | no |
+| <a name="input_create_service_linked_role"></a> [create\_service\_linked\_role](#input\_create\_service\_linked\_role) | With config\_role\_arn = null, create the AWSServiceRoleForConfig service-linked role (aws\_iam\_service\_linked\_role). Default true for freshly vended accounts; set false when the account already has it (Config was enabled before, e.g. by Control Tower or the console) — the recorder then references the existing role by its well-known ARN. Ignored when config\_role\_arn is set. | `bool` | `true` | no |
 | <a name="input_delivery_channel_name"></a> [delivery\_channel\_name](#input\_delivery\_channel\_name) | Name applied to every per-Region delivery channel. | `string` | `"org-delivery"` | no |
 | <a name="input_home_region"></a> [home\_region](#input\_home\_region) | Home (aggregation) Region. Global resource types (IAM, etc.) are recorded ONLY by the recorder in this Region to avoid duplicating global configuration items in every Region. Must be one of aws\_enabled\_regions for global types to be recorded at all. | `string` | `"eu-west-2"` | no |
+| <a name="input_partition"></a> [partition](#input\_partition) | AWS partition used to build the managed-policy and pre-existing service-linked-role ARNs (aws, aws-us-gov, aws-cn). | `string` | `"aws"` | no |
+| <a name="input_permissions_boundary_arn"></a> [permissions\_boundary\_arn](#input\_permissions\_boundary\_arn) | Permissions-boundary managed policy ARN set on every IAM role this module creates. Required when the roles are created by a member-account tfc-apply role with boundary propagation on (tfc-oidc-baseline enable\_apply\_boundary\_propagation): pass arn:PARTITION:iam::ACCOUNT\_ID:policy/tfc-apply-boundary. Null (default) = no boundary. | `string` | `null` | no |
 | <a name="input_record_all_supported"></a> [record\_all\_supported](#input\_record\_all\_supported) | COST TOGGLE. When true (default), each recorder records ALL supported resource types (and, being all\_supported, global resource types too). Recording every resource type in every Region is the most expensive Config mode; set false to pair with a narrower recording\_group managed out-of-band when cost matters. | `bool` | `true` | no |
 | <a name="input_recorder_name"></a> [recorder\_name](#input\_recorder\_name) | Name applied to every per-Region configuration recorder. | `string` | `"org-recorder"` | no |
 | <a name="input_recorder_only"></a> [recorder\_only](#input\_recorder\_only) | When true, deploy only the per-Region recorder/delivery-channel/status and skip the org aggregator and conformance packs. The aws-workload stage sets this true to deploy a single workload account's recorder; the home-account aws-config stage leaves it false. | `bool` | `false` | no |
@@ -79,6 +86,8 @@ The following resources are created:
 | Name | Description |
 |------|-------------|
 | <a name="output_aggregator_arn"></a> [aggregator\_arn](#output\_aggregator\_arn) | ARN of the organization configuration aggregator, or null when recorder\_only = true. |
+| <a name="output_aggregator_role_arn"></a> [aggregator\_role\_arn](#output\_aggregator\_role\_arn) | ARN of the role the organization aggregator assumes (created here when aggregator\_role\_arn was null/empty), or null when recorder\_only = true. |
+| <a name="output_config_role_arn"></a> [config\_role\_arn](#output\_config\_role\_arn) | ARN of the IAM role the recorders use: the explicit config\_role\_arn or the AWSServiceRoleForConfig service-linked role. |
 | <a name="output_recorder_names"></a> [recorder\_names](#output\_recorder\_names) | Map of Region to the configuration recorder name deployed in that Region. |
 <!-- END_TF_DOCS -->
 

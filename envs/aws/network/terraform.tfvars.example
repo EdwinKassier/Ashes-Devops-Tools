@@ -1,6 +1,17 @@
+# Optional overrides. Shared values (landing_zone_name, tfc_organization,
+# aws_region, owner/cost_center, account IDs, role ARNs, accounts, workload
+# environments) are read from config/landing-zone.yaml when it exists, so a
+# VCS-driven TFC run needs no tfvars; any variable set here (or in TFC) wins
+# over the config file.
+#
 # Copy to terraform.tfvars and fill in. Inputs marked REQUIRED have no usable
 # default — you MUST supply them (the TFC org and the log-archive bucket name).
 # The rest have working defaults you can override.
+
+# REQUIRED unless org.name is set in config/landing-zone.yaml — landing-zone
+# identifier written to the LandingZone tag. The upstream placeholders
+# "ashes" / "my-org" are rejected.
+landing_zone_name = "acme"
 
 # REQUIRED — Terraform Cloud org that owns this root's workspace and the
 # aws-organization workspace it reads. Usually passed to `terraform init` via

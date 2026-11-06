@@ -24,3 +24,13 @@ output "self_link" {
   description = "The URI of the Cloud SQL instance"
   value       = google_sql_database_instance.this.self_link
 }
+
+output "public_ip_enabled" {
+  description = "Whether the instance has a public IPv4 address. Always false: the module is private-IP only."
+  value       = google_sql_database_instance.this.settings[0].ip_configuration[0].ipv4_enabled
+}
+
+output "private_network" {
+  description = "The VPC network the instance is peered into via Private Service Access."
+  value       = google_sql_database_instance.this.settings[0].ip_configuration[0].private_network
+}

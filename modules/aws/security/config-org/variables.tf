@@ -35,13 +35,20 @@ variable "delivery_channel_name" {
 }
 
 variable "config_role_arn" {
-  description = "ARN of the IAM role Config assumes to record resource configurations in each account/Region."
+  description = "ARN of the IAM role Config assumes to record resource configurations in each account/Region. Null (default) uses the account's AWS Config service-linked role AWSServiceRoleForConfig (AWS-recommended), created here when create_service_linked_role = true."
   type        = string
+  default     = null
 
   validation {
-    condition     = length(trimspace(var.config_role_arn)) > 0
-    error_message = "config_role_arn must be a non-empty IAM role ARN."
+    condition     = var.config_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", coalesce(var.config_role_arn, "x")))
+    error_message = "config_role_arn must be null or an account-qualified IAM role ARN."
   }
+}
+
+variable "create_service_linked_role" {
+  description = "With config_role_arn = null, create the AWSServiceRoleForConfig service-linked role (aws_iam_service_linked_role). Default true for freshly vended accounts; set false when the account already has it (Config was enabled before, e.g. by Control Tower or the console) — the recorder then references the existing role by its well-known ARN. Ignored when config_role_arn is set."
+  type        = bool
+  default     = true
 }
 
 variable "log_archive_bucket" {
@@ -88,9 +95,47 @@ variable "aggregator_name" {
 }
 
 variable "aggregator_role_arn" {
-  description = "ARN of the IAM role the aggregator assumes to collect Config data across the organization. Required unless recorder_only = true; defaults to an empty string because the aggregator is not created in recorder_only mode."
+  description = "ARN of an existing IAM role the organization aggregator assumes to collect Config data across the organization. Null or \"\" (default) creates one here (aggregator_role_name, trusting config.amazonaws.com, with the AWS managed policy AWSConfigRoleForOrganizations) unless recorder_only = true, where no aggregator exists."
   type        = string
-  default     = ""
+  default     = null
+
+  validation {
+    condition     = var.aggregator_role_arn == null || var.aggregator_role_arn == "" || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", coalesce(var.aggregator_role_arn, "x")))
+    error_message = "aggregator_role_arn must be null, empty, or an account-qualified IAM role ARN."
+  }
+}
+
+variable "account_id" {
+  description = "12-digit ID of the account the recorders run in, used to build the service-linked-role ARN when config_role_arn = null. Null = read from aws_caller_identity."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.account_id == null || can(regex("^[0-9]{12}$", coalesce(var.account_id, "x")))
+    error_message = "account_id must be null or a 12-digit AWS account ID."
+  }
+}
+
+variable "partition" {
+  description = "AWS partition used to build the managed-policy and pre-existing service-linked-role ARNs (aws, aws-us-gov, aws-cn)."
+  type        = string
+  default     = "aws"
+
+  validation {
+    condition     = can(regex("^aws(-[a-z]+)*$", var.partition))
+    error_message = "partition must be aws, aws-us-gov, aws-cn, ..."
+  }
+}
+
+variable "aggregator_role_name" {
+  description = "Name of the aggregator IAM role created when aggregator_role_arn is null/empty and recorder_only = false."
+  type        = string
+  default     = "aws-config-org-aggregator"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9+=,.@_-]{1,64}$", var.aggregator_role_name))
+    error_message = "aggregator_role_name must be a valid IAM role name (1-64 chars of [A-Za-z0-9+=,.@_-])."
+  }
 }
 
 variable "conformance_packs" {
@@ -100,4 +145,15 @@ variable "conformance_packs" {
     template_s3_uri = optional(string)
   }))
   default = {}
+}
+
+variable "permissions_boundary_arn" {
+  description = "Permissions-boundary managed policy ARN set on every IAM role this module creates. Required when the roles are created by a member-account tfc-apply role with boundary propagation on (tfc-oidc-baseline enable_apply_boundary_propagation): pass arn:PARTITION:iam::ACCOUNT_ID:policy/tfc-apply-boundary. Null (default) = no boundary."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.permissions_boundary_arn == null || can(regex("^arn:[^:]+:iam::[^:]*:policy/.+$", var.permissions_boundary_arn))
+    error_message = "permissions_boundary_arn must be null or an IAM managed policy ARN (arn:PARTITION:iam::ACCOUNT_ID:policy/NAME)."
+  }
 }

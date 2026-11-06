@@ -2,7 +2,7 @@
  * Copyright 2023 Ashes
  *
  * Shared VPC Service Project Module - Main Configuration
- * 
+ *
  * Attaches a service project to a Shared VPC host project and optionally
  * grants subnet-level IAM permissions to service accounts.
  */

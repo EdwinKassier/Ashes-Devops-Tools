@@ -90,6 +90,9 @@ variable "aws_service_access_principals" {
     "fms.amazonaws.com",
     "backup.amazonaws.com",
     "securitylake.amazonaws.com",
+    # CloudFormation StackSets (SERVICE_MANAGED) — deploys the TFC OIDC baseline
+    # (modules/aws/iam/tfc-oidc-baseline) into member accounts.
+    "member.org.stacksets.cloudformation.amazonaws.com",
   ]
 
   validation {

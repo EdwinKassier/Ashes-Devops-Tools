@@ -1,0 +1,6 @@
+# Test fixture: an untouched config/landing-zone.example.yaml must fail fast.
+org:
+  tfc:
+    organization: my-org
+gcp:
+  enabled: true

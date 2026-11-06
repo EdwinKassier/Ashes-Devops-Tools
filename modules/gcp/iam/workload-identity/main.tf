@@ -27,6 +27,10 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "attribute.repository"       = "assertion.repository"
     "attribute.repository_owner" = "assertion.repository_owner"
     "attribute.ref"              = "assertion.ref"
+    # Immutable numeric IDs (C2): repository / owner NAMES can be renamed and then
+    # re-registered by someone else, so bindings should key on these instead.
+    "attribute.repository_id"       = "assertion.repository_id"
+    "attribute.repository_owner_id" = "assertion.repository_owner_id"
   }
 
   # Build attribute condition based on configuration:
@@ -60,10 +64,15 @@ locals {
     for subject in local.github_subjects : "assertion.sub == '${subject}'"
   ]) : null
   github_org_condition = var.github_organization != null ? "assertion.repository_owner == '${var.github_organization}'" : null
+  # Immutable owner pin (C2): survives an org rename / name squat.
+  github_owner_id_condition = var.github_repository_owner_id != null ? "assertion.repository_owner_id == '${var.github_repository_owner_id}'" : null
 
-  github_computed_condition = local.github_sub_condition != null && local.github_org_condition != null ? (
-    "(${local.github_sub_condition}) && ${local.github_org_condition}"
-  ) : local.github_sub_condition != null ? local.github_sub_condition : local.github_org_condition
+  github_condition_parts = compact([
+    local.github_sub_condition != null ? "(${local.github_sub_condition})" : "",
+    local.github_org_condition != null ? local.github_org_condition : "",
+    local.github_owner_id_condition != null ? local.github_owner_id_condition : "",
+  ])
+  github_computed_condition = length(local.github_condition_parts) > 0 ? join(" && ", local.github_condition_parts) : null
 }
 
 # GitLab CI OIDC Provider
@@ -132,11 +141,17 @@ resource "google_iam_workload_identity_pool_provider" "aws" {
 
 # Service Account IAM bindings for GitHub repos
 resource "google_service_account_iam_member" "github_workload_identity" {
-  for_each = { for binding in var.github_sa_bindings : "${binding.repository}-${binding.service_account_email}" => binding }
+  for_each = { for binding in var.github_sa_bindings : (binding.key != null ? binding.key : "${binding.repository}-${binding.service_account_email}") => binding }
 
   service_account_id = "projects/${var.project_id}/serviceAccounts/${each.value.service_account_email}"
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.pool.name}/attribute.repository/${each.value.repository}"
+  # Prefer the immutable numeric repository_id when supplied (C2); the name-based
+  # principalSet is kept only as a fallback for callers that have not set it.
+  member = (
+    each.value.repository_id != null
+    ? "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.pool.name}/attribute.repository_id/${each.value.repository_id}"
+    : "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.pool.name}/attribute.repository/${each.value.repository}"
+  )
 }
 
 # Service Account IAM bindings for GitLab projects
@@ -149,6 +164,29 @@ resource "google_service_account_iam_member" "gitlab_workload_identity" {
 }
 
 # Terraform Cloud OIDC Provider (for Dynamic Credentials)
+#
+# C2 hardening (Cloud Foundation Fabric FAST pattern):
+#   * attribute_condition pins the TFC organization NAME and, when supplied, the
+#     immutable organization ID and an allow-list of TFC project IDs, and only
+#     admits the two real run phases.
+#   * Two composite attributes join the workspace and the run phase so a single
+#     principalSet can match BOTH (a principalSet can only test one attribute):
+#       attribute.workspace_phase    = "<workspace_name>:<plan|apply>"
+#       attribute.workspace_id_phase = "<workspace_id>:<plan|apply>"
+#     Every SA binding below targets one of these, so a speculative/PR plan can
+#     only ever obtain the read-only plan SA, never the apply SA.
+locals {
+  tfc_condition_parts = compact([
+    var.tfc_organization != null ? "assertion.terraform_organization_name == '${var.tfc_organization}'" : "",
+    var.tfc_organization_id != null ? "assertion.terraform_organization_id == '${var.tfc_organization_id}'" : "",
+    length(var.tfc_project_ids) > 0 ? "assertion.terraform_project_id in [${join(", ", [for p in var.tfc_project_ids : "'${p}'"])}]" : "",
+    "assertion.terraform_run_phase in ['plan', 'apply']",
+  ])
+  tfc_attribute_condition = var.tfc_organization != null ? join(" && ", local.tfc_condition_parts) : null
+
+  tfc_principal_set_prefix = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.pool.name}"
+}
+
 resource "google_iam_workload_identity_pool_provider" "tfc" {
   count = var.enable_tfc_provider ? 1 : 0
 
@@ -170,9 +208,12 @@ resource "google_iam_workload_identity_pool_provider" "tfc" {
     "attribute.terraform_organization_name" = "assertion.terraform_organization_name"
     "attribute.terraform_run_id"            = "assertion.terraform_run_id"
     "attribute.terraform_full_workspace"    = "assertion.terraform_full_workspace"
+    # Composite workspace+phase attributes (see header comment).
+    "attribute.workspace_phase"    = "assertion.terraform_workspace_name + ':' + assertion.terraform_run_phase"
+    "attribute.workspace_id_phase" = "assertion.terraform_workspace_id + ':' + assertion.terraform_run_phase"
   }
 
-  attribute_condition = var.tfc_organization != null ? "assertion.terraform_organization_name == '${var.tfc_organization}'" : null
+  attribute_condition = local.tfc_attribute_condition
 
   oidc {
     issuer_uri = "https://app.terraform.io"
@@ -187,11 +228,20 @@ resource "google_iam_workload_identity_pool_provider" "tfc" {
   }
 }
 
-# Service Account IAM bindings for Terraform Cloud workspaces
+# Service Account IAM bindings for Terraform Cloud workspaces, one per
+# (workspace, run phase). Keyed statically on "<workspace_name>:<run_phase>" so
+# the for_each keys never depend on apply-time SA emails. When workspace_id is
+# supplied the binding matches the immutable workspace ID (a deleted-and-recreated
+# or squatted workspace NAME then gains nothing); otherwise it falls back to the
+# workspace name.
 resource "google_service_account_iam_member" "tfc_workload_identity" {
-  for_each = { for binding in var.tfc_sa_bindings : "${binding.workspace_name}-${binding.service_account_email}" => binding }
+  for_each = { for binding in var.tfc_sa_bindings : "${binding.workspace_name}:${binding.run_phase}" => binding }
 
   service_account_id = "projects/${var.project_id}/serviceAccounts/${each.value.service_account_email}"
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.pool.name}/attribute.terraform_workspace_name/${each.value.workspace_name}"
+  member = (
+    each.value.workspace_id != null
+    ? "${local.tfc_principal_set_prefix}/attribute.workspace_id_phase/${each.value.workspace_id}:${each.value.run_phase}"
+    : "${local.tfc_principal_set_prefix}/attribute.workspace_phase/${each.value.workspace_name}:${each.value.run_phase}"
+  )
 }

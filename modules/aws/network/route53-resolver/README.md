@@ -27,9 +27,8 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	org_arn = 
-	vpc_id = 
-	
+	org_arn =
+	vpc_id =
 }
 ```
 
@@ -37,7 +36,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.46.0, < 7.0.0 |
 
 ## Providers
@@ -86,7 +85,7 @@ The following resources are created:
 | <a name="input_enable_query_logging"></a> [enable\_query\_logging](#input\_enable\_query\_logging) | Whether to create the resolver query log config and associate it with the VPC, shipping DNS queries to the central Log Archive. | `bool` | `true` | no |
 | <a name="input_forward_rules"></a> [forward\_rules](#input\_forward\_rules) | FORWARD resolver rules keyed by rule name. Each rule forwards domain\_name to target\_ips via the outbound endpoint and is associated with the VPC. | <pre>map(object({<br/>    domain_name = string<br/>    target_ips  = list(string)<br/>  }))</pre> | `{}` | no |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Prefix applied to the names of all resolver, profile, RAM, and DNS firewall resources. | `string` | `"org"` | no |
-| <a name="input_query_log_destination_arn"></a> [query\_log\_destination\_arn](#input\_query\_log\_destination\_arn) | ARN of the destination (S3 bucket, CloudWatch log group, or Kinesis stream) that receives resolver query logs. Required when enable\_query\_logging is true. | `string` | `""` | no |
+| <a name="input_query_log_destination_arn"></a> [query\_log\_destination\_arn](#input\_query\_log\_destination\_arn) | ARN of the destination (S3 bucket, CloudWatch log group, or Kinesis stream) that receives resolver query logs. Required when enable\_query\_logging is true. | `string` | `null` | no |
 | <a name="input_security_group_ids"></a> [security\_group\_ids](#input\_security\_group\_ids) | Security group IDs attached to the inbound and outbound resolver endpoints. At least one is required by the resolver endpoint resource. | `list(string)` | <pre>[<br/>  "sg-aaaaaaaaaaaaaaaaa"<br/>]</pre> | no |
 | <a name="input_subnet_ids"></a> [subnet\_ids](#input\_subnet\_ids) | Subnet IDs the inbound and outbound resolver endpoints place IPs in. At least two are required (one per AZ) because the endpoint ip\_address block enforces a minimum of two entries. | `list(string)` | <pre>[<br/>  "subnet-aaaa",<br/>  "subnet-bbbb"<br/>]</pre> | no |
 

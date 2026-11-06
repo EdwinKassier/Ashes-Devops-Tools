@@ -143,8 +143,42 @@ variable "enable_network_firewall" {
   default     = true
 }
 
+variable "network_firewall_managed_rule_groups" {
+  description = "AWS-managed StrictOrder stateful rule group names attached to the inspection firewall policy (see modules/aws/network/network-firewall managed_rule_groups)."
+  type        = list(string)
+  default = [
+    "AttackInfrastructureStrictOrder",
+    "MalwareDomainsStrictOrder",
+    "BotNetCommandAndControlDomainsStrictOrder",
+  ]
+}
+
+variable "network_firewall_stateful_default_actions" {
+  description = "STRICT_ORDER default actions for unmatched traffic. Default [\"aws:alert_established\"] = log-but-pass (no day-one blackhole); move to [\"aws:drop_established\", \"aws:alert_established\"] once allow rules cover legitimate egress."
+  type        = list(string)
+  default     = ["aws:alert_established"]
+}
+
+variable "network_firewall_egress_domain_allowlist" {
+  description = "Optional HTTP_HOST/TLS_SNI egress domain allowlist. Non-empty DROPS all other HTTP/TLS egress from the org supernet (top_cidr). Empty (default) = no domain filtering."
+  type        = list(string)
+  default     = []
+}
+
+variable "network_firewall_suricata_rules" {
+  description = "Optional custom Suricata rules (STRICT_ORDER semantics) evaluated after the managed threat groups. Empty (default) = none."
+  type        = string
+  default     = ""
+}
+
 variable "enable_network_access_analyzer" {
   description = "Whether to create the Network Access Analyzer scope that flags segmentation-intent violations. Off by default."
   type        = bool
   default     = false
+}
+
+variable "tags" {
+  description = "Tags applied to the stage's own taggable resources (NAT gateways, EIPs) and passed to the hub VPCs. Org-wide tags normally come from the provider default_tags; use this for stage-specific additions."
+  type        = map(string)
+  default     = {}
 }

@@ -11,6 +11,15 @@ locals {
     services     = var.managed_service_ids
     display_name = var.display_name
   }) : var.openapi_spec
+
+  # Canonical label key is `managed-by` (hyphen), matching every other module and
+  # the roots' provider default_labels. A legacy `managed_by` key from an older
+  # caller is still accepted and rewritten to `managed-by`; an explicit
+  # `managed-by` wins if both are passed.
+  labels = merge(
+    lookup(var.labels, "managed_by", null) == null ? {} : { "managed-by" = var.labels["managed_by"] },
+    { for k, v in var.labels : k => v if k != "managed_by" },
+  )
 }
 
 # API Gateway API resource
@@ -19,7 +28,7 @@ resource "google_api_gateway_api" "api" {
   project      = var.project_id
   api_id       = var.api_id
   display_name = var.display_name
-  labels       = var.labels
+  labels       = local.labels
 }
 
 # API Config resource
@@ -61,7 +70,7 @@ resource "google_api_gateway_gateway" "gateway" {
   gateway_id   = var.gateway_id
   display_name = var.gateway_display_name
 
-  labels = var.labels
+  labels = local.labels
 }
 
 # Serverless NEG for Load Balancer integration
@@ -76,4 +85,4 @@ resource "google_compute_region_network_endpoint_group" "serverless_neg" {
     platform = "apigateway.googleapis.com"
     resource = google_api_gateway_gateway.gateway.gateway_id
   }
-} 
+}

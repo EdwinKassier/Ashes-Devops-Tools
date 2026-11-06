@@ -1,15 +1,69 @@
 # tfc-admin
 
-Declares the whole Terraform Cloud workspace layer as code (audit C3): every
-deployable root's workspace, its working directory, VCS wiring, tags, and shared
-variables, driven by the same `environments` map the cloud roots consume.
+Declares the whole Terraform Cloud / HCP Terraform layer as code (audit C3): every
+deployable root's workspace plus the native TFC controls around it. It declares NO
+cloud provider, so it needs no cloud credentials, only a TFC token (`TFE_TOKEN`).
+Create its own `tfc-admin` workspace by hand once, then it manages all the others
+(and, with `manage_tfc_admin_workspace = true`, adopts itself via an import block).
 
-Previously these workspaces were hand-created in the TFC UI, which left them
-unversioned, unreviewable, and invisible to drift detection. This root fixes that.
+## Configuration: `config/landing-zone.yaml`
 
-It declares NO cloud provider, so it needs no cloud credentials, only a TFC token
-(`TFE_TOKEN`). Apply it after creating its own `tfc-admin` workspace by hand once
-(the one bootstrap step), then it manages all the others.
+tfc-admin reads the committed single-source config (`landing_zone_config_path`, default
+`../../config/landing-zone.yaml`; `""` disables it). Precedence: explicit variable > config file >
+built-in default.
+
+| Input | Config key |
+|-------|------------|
+| `tfc_organization` | `org.tfc.organization` |
+| `enable_gcp` / `enable_aws` / `enable_saas` | `gcp.enabled` / `aws.enabled` / `saas.enabled` |
+| `gcp-workload-<env>` workspaces | keys of `gcp.environments` |
+| `aws-workload-<env>` workspaces + their `workload_account_key` | `aws.workload_environments[<env>].account_key` |
+| `saas_workspaces` | `saas.workspaces` |
+| Project names | `org.tfc.project_name_prefix` (`<prefix><cloud>`), or `org.tfc.gcp_project` / `aws_project` / `saas_project` / `platform_project` |
+| `vcs_repo` | `org.tfc.vcs_repo` (IDs only, no secrets) |
+
+An explicit `environments` variable replaces both derived environment lists, as before. Per-workspace
+values from `config/tfc-workspaces.yaml` and `workspace_variables` still override the derived ones.
+`org.tfc.aws_project` is also read by `aws-organization` (`tfc_project`), so the member-account OIDC
+trust and the workspace project cannot drift apart.
+
+**Provider and tier.** The `tfe` provider is pinned `>= 0.83.0, < 1.0.0`. Health assessments
+(`enable_health_assessments`, default on) and policy sets (`enable_policy_sets`) need a **paid HCP
+Terraform tier**; on the free tier, set `enable_health_assessments = false` and leave policy sets off.
+
+## What it manages
+
+| Control | How |
+|---------|-----|
+| Cloud selection | `enable_gcp`, `enable_aws`, `enable_saas` + `saas_workspaces` (or `<cloud>.enabled` / `saas.workspaces` in `config/landing-zone.yaml`), all default **false**; at least one must be true (validation). Each estate gets only the workspaces of the clouds it enables. |
+| Execution mode | `execution_mode` (remote/agent) for every workspace, overridden per workspace by `workspace_execution_modes`. Default `{ gcp-bootstrap = "local" }`: the GCP phase-0 apply runs on the operator's machine with ADC while TFC stores state. Set `{}` after the second bootstrap pass. `local` is accepted only for `gcp-bootstrap` / `aws-organization`. |
+| Projects + team access | One `tfe_project` per cloud in use (`<prefix>gcp/aws/saas/platform`); `platform_team_id` gets **write**, `viewer_team_ids` get **read** on every project. |
+| Trigger patterns | Each VCS workspace triggers on `<working_dir>/**` plus the module domains its root consumes (`modules/gcp/**`, `modules/aws/**`, `modules/{saas,supabase,vercel}/**`, `modules/tfc/**`), so a module-only PR triggers plans. |
+| Speculative plans | Off (`speculative_enabled = false`) for `speculative_disabled_workspaces` (the control plane + `tfc-admin`), so a PR cannot obtain a plan with privileged credentials. Control-plane workspaces also disallow UI destroy plans. |
+| Remote state | `global_remote_state = false` everywhere; `remote_state_consumer_ids` encode the real read graph from `envs/**` `terraform_remote_state` blocks. Opt-in cross-cloud edges (saas secret bridge, cross-cloud references) via `extra_remote_state_consumers`. |
+| Health assessments | `enable_health_assessments` (default true): native drift detection + continuous validation. |
+| Dynamic credentials | Per-workspace `TFC_GCP_*` / `TFC_AWS_*` env vars, set only when their inputs are supplied (see below). The multi-account roots `aws-security` / `aws-backup` get the management role (`aws_management_plan_role_arn` / `aws_management_apply_role_arn`) as their default configuration plus a `TFC_AWS_PROVIDER_AUTH_<alias>` / `TFC_AWS_PLAN_ROLE_ARN_<alias>` / `TFC_AWS_APPLY_ROLE_ARN_<alias>` set per member-account alias (`security_tooling`, `log_archive`, `forensics`; `backup`), derived from aws-organization `tfc_*_role_arns` or `aws_alias_role_arns`. They get nothing until every alias has roles. `aws-organization` gets the management role. |
+| Variables | Org-wide values in the `<prefix>common` variable set (attached to every workspace). Per-workspace values come from a committed `config/tfc-workspaces.yaml` (`workspace_variables_file`, read only if present; no secrets; see `config/tfc-workspaces.example.yaml`) and `workspace_variables` (wins). `gcp-workload-<env>` / `aws-workload-<env>` get `environment` derived from the name; `aws-workload-<env>` also gets `workload_account_key` from `aws.workload_environments[<env>].account_key` (or `environments[<env>].aws_account_key`). |
+| Policy | Optional OPA policy set from `policies/opa/` (`enable_policy_sets`, default false). The policies are **mixed mandatory/advisory**: 7 mandatory and 3 advisory, per `policies/opa/policies.hcl`. The set is overridable, and `opa_version` is pinned so that an OPA release cannot change results unreviewed. Paid tier only. |
+
+## Two-pass bootstrap (dynamic credentials)
+
+The plan/apply identities are created by roots whose workspaces this root creates:
+
+1. Apply tfc-admin: workspaces exist, no credential env vars yet.
+2. Apply `gcp-bootstrap` (phase-0) and/or `aws-organization`.
+3. Feed their outputs back, either by copying them into
+   `gcp_workload_provider_name`, `gcp_plan_service_accounts`, `gcp_apply_service_accounts`,
+   `aws_plan_role_arns`, `aws_apply_role_arns` (maps keyed by workspace name), or by
+   setting `gcp_bootstrap_outputs_from_tfc` / `aws_organization_outputs_from_tfc = true`
+   (read via `tfe_outputs`; AWS maps each single-account workspace => account key from
+   aws-organization `tfc_workspace_bindings`, `environments[<env>].aws_account_key` or
+   `aws_workspace_account_keys`). tfc-admin is then added as a remote-state consumer of those producers.
+4. Re-apply tfc-admin, with `workspace_execution_modes = {}` so `gcp-bootstrap` moves to
+   remote execution.
+
+See [docs/runbooks/bootstrap.md](../../docs/runbooks/bootstrap.md) and
+[docs/guides/CI_SECRETS.md](../../docs/guides/CI_SECRETS.md).
 
 <!-- BEGIN_TF_DOCS -->
 <!-- END_TF_DOCS -->

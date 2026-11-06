@@ -39,6 +39,24 @@ collect_examples() {
   } | sort -u
 }
 
+# Opt-in real-apply e2e roots (tests/e2e/<cloud>). Their *.tftest.hcl suites
+# need real credentials and run only in sandbox-e2e.yml, but the roots
+# themselves must still `terraform init -backend=false && terraform validate`
+# cleanly without credentials, so they join the validate discovery set.
+collect_e2e() {
+  find tests/e2e -mindepth 2 -maxdepth 2 -type f -name versions.tf \
+    ! -path '*/.terraform/*' 2>/dev/null | sed 's#/versions.tf##' | sort -u
+}
+
+# Directories holding mock_provider `terraform test` suites (the `make test`
+# set): every dir under envs/ or modules/ that contains *.tftest.{hcl,json},
+# normalised to the module root (a trailing /tests is stripped). tests/e2e is
+# deliberately excluded: those suites do REAL applies (sandbox-e2e.yml).
+collect_test_dirs() {
+  find envs modules -type f \( -name '*.tftest.hcl' -o -name '*.tftest.json' \) \
+    ! -path '*/.terraform/*' -exec dirname {} \; | sed 's#/tests$##' | sort -u
+}
+
 emit_json() {
   local roots=("$@")
   printf '['
@@ -64,11 +82,23 @@ case "$mode" in
   examples)
     collect_examples
     ;;
+  e2e)
+    collect_e2e
+    ;;
+  tests)
+    collect_test_dirs
+    ;;
+  tests-json)
+    dirs=()
+    while IFS= read -r line; do dirs+=("$line"); done < <(collect_test_dirs)
+    emit_json ${dirs[@]+"${dirs[@]}"}
+    ;;
   all)
     {
       collect_modules
       collect_envs
       collect_examples
+      collect_e2e
     } | sort -u
     ;;
   all-json)
@@ -78,12 +108,13 @@ case "$mode" in
         collect_modules
         collect_envs
         collect_examples
+        collect_e2e
       } | sort -u
     )
     emit_json ${roots[@]+"${roots[@]}"}
     ;;
   *)
-    echo "Usage: $0 [modules|envs|examples|all|all-json]" >&2
+    echo "Usage: $0 [modules|envs|examples|e2e|all|all-json|tests|tests-json]" >&2
     exit 1
     ;;
 esac

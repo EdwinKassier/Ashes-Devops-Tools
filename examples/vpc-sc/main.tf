@@ -56,4 +56,3 @@ module "vpc_sc" {
   # Start in dry-run: violations are logged but not blocked.
   enable_dry_run = true
 }
-

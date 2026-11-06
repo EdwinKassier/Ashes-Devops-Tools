@@ -19,6 +19,7 @@ mock_provider "aws" {}
 variables {
   name  = "example-param"
   value = "hello"
+  tags  = { Component = "example" }
   # Add other required variables here
 }
 
@@ -33,6 +34,12 @@ run "example_parameter_plans_with_expected_name" {
   assert {
     condition     = aws_ssm_parameter.example.value == "hello"
     error_message = "example parameter must be planned with the supplied value"
+  }
+
+  # Every module must wire var.tags onto its taggable resources.
+  assert {
+    condition     = aws_ssm_parameter.example.tags["Component"] == "example"
+    error_message = "var.tags must be applied to the example parameter"
   }
 
   assert {

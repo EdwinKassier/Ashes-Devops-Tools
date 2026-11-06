@@ -64,4 +64,3 @@ module "qa_saas_workload" {
     { key = "NEXT_PUBLIC_APP_URL", value = "https://qa.my-app.com" },
   ]
 }
-

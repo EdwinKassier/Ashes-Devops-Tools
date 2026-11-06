@@ -1,0 +1,77 @@
+name: Release
+
+# Repository-level SemVer releases (vX.Y.Z) driven by Conventional Commits.
+# On every push to main, release-please opens or updates a single release PR
+# that bumps .release-please-manifest.json and prepends CHANGELOG.md. Merging
+# that PR creates the vX.Y.Z tag and GitHub Release.
+#
+# These repo tags (vX.Y.Z) intentionally do NOT match the per-workspace
+# deployment tag patterns in terraform-apply.yml (gcp-organization/v*, ...),
+# so cutting a repo release never triggers release-metadata runs.
+#
+# Config: release-please-config.json (+ .release-please-manifest.json).
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: Release Please
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write       # create the vX.Y.Z tag and GitHub Release
+      pull-requests: write  # open/update the release PR
+      issues: write         # create the autorelease labels on first run
+    steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
+      # Fail fast and loudly instead of falling back to GITHUB_TOKEN. A release
+      # PR opened with GITHUB_TOKEN does not trigger pull_request workflows, so
+      # it never receives the required "Validation Summary" check and can never
+      # merge under branch protection: a silent fallback just produces a stuck
+      # PR. Setup: docs/guides/CI_SECRETS.md#release_please_token.
+      - name: Require RELEASE_PLEASE_TOKEN
+        env:
+          RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+        run: |
+          if [ -z "${RELEASE_PLEASE_TOKEN}" ]; then
+            {
+              echo "Repository secret RELEASE_PLEASE_TOKEN is not set. release-please needs a"
+              echo "fine-grained PAT or GitHub App token (contents, pull requests, issues: read/write)"
+              echo "so its release PR triggers the required checks."
+              echo "See docs/guides/CI_SECRETS.md#release_please_token. Forks that do not cut"
+              echo "releases can disable this workflow (Actions > Release > Disable workflow)."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=RELEASE_PLEASE_TOKEN missing::Secret RELEASE_PLEASE_TOKEN is not set (see job summary)."
+            exit 1
+          fi
+
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7  # v5.0.0
+        with:
+          # Machine-account token (asserted present by the step above). Never
+          # GITHUB_TOKEN: see the rationale on "Require RELEASE_PLEASE_TOKEN".
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      - name: Summarize
+        if: steps.release.outputs.release_created == 'true'
+        env:
+          TAG_NAME: ${{ steps.release.outputs.tag_name }}
+        run: echo "Released ${TAG_NAME}" >> "$GITHUB_STEP_SUMMARY"

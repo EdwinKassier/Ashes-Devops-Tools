@@ -39,7 +39,7 @@ variable "name" {
 }
 
 variable "image" {
-  description = "Fully qualified container image to deploy (e.g. europe-west1-docker.pkg.dev/project/repo/app:tag)."
+  description = "Fully qualified container image to deploy at creation (e.g. europe-west1-docker.pkg.dev/project/repo/app:tag). Later image changes are owned by the delivery pipeline and ignored by Terraform."
   type        = string
 
   validation {
@@ -221,4 +221,23 @@ variable "enable_deletion_protection" {
   EOT
   type        = bool
   default     = true
+}
+
+# -----------------------------------------------------------------------------
+# SUPPLY CHAIN
+# -----------------------------------------------------------------------------
+
+variable "binary_authorization" {
+  description = <<-EOT
+    Optional Binary Authorization enforcement. Null (default) disables it. Set
+    `{}` to enforce the project's default Binary Authorization policy, or set
+    `policy` to the full name of a platform policy
+    (projects/<p>/platforms/cloudRun/policies/<name>). `breakglass_justification`
+    deploys an image that violates the policy (audited) — leave null normally.
+  EOT
+  type = object({
+    policy                   = optional(string)
+    breakglass_justification = optional(string)
+  })
+  default = null
 }

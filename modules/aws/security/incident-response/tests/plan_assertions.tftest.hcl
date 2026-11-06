@@ -143,3 +143,18 @@ run "disabled_creates_nothing" {
     error_message = "No Lambda permission must be created when incident response is disabled"
   }
 }
+
+# Boundary propagation (tfc-oidc-baseline): both IR roles carry
+# permissions_boundary_arn so the security-tooling tfc-apply role may create them.
+run "ir_roles_permissions_boundary" {
+  command = plan
+
+  variables {
+    permissions_boundary_arn = "arn:aws:iam::123456789012:policy/tfc-apply-boundary"
+  }
+
+  assert {
+    condition     = aws_iam_role.isolation_lambda[0].permissions_boundary == "arn:aws:iam::123456789012:policy/tfc-apply-boundary" && aws_iam_role.forensics_snapshot[0].permissions_boundary == "arn:aws:iam::123456789012:policy/tfc-apply-boundary"
+    error_message = "The isolation Lambda and forensics snapshot-share roles must carry permissions_boundary_arn."
+  }
+}

@@ -4,6 +4,7 @@
 mock_provider "google" {}
 
 variables {
+  region       = "us-central1"
   project_id   = "mock-project"
   kms_key_name = "projects/mock-project/locations/us-central1/keyRings/test-ring/cryptoKeys/test-key"
   repositories = {}
@@ -121,4 +122,19 @@ run "rejects_kms_key_missing_location" {
   variables {
     kms_key_name = "projects/mock-project/keyRings/test-ring/cryptoKeys/test-key"
   }
+}
+
+run "cleanup_policy_needs_exactly_one_selector" {
+  command = plan
+
+  variables {
+    repositories = {
+      "docker-repo" = {
+        description      = "Docker repo"
+        cleanup_policies = { "bad" = { action = "DELETE" } }
+      }
+    }
+  }
+
+  expect_failures = [var.repositories]
 }

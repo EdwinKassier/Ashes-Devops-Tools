@@ -156,7 +156,35 @@ aws-organization → aws-security → aws-network → aws-identity
                  → aws-shared-services → aws-backup → aws-workload
 ```
 
-The **minimum governed footprint** is `aws-organization` + `aws-security`; everything from `aws-network` down is additive. `envs/saas` sits deliberately outside the AWS chain — it configures no AWS credentials and is selected purely by whether you apply its workspace.
+That line is one valid apply order. The real constraint is the **dependency DAG** formed by each root's `terraform_remote_state` reads (an edge means "must be applied first" *unless the root is given that layer's stage contract directly*; dotted edges are optional layers):
+
+```mermaid
+graph LR
+    subgraph GCP
+      gb[gcp-bootstrap] --> go[gcp-organization]
+      gb --> gp[gcp-projects]
+      go --> gp
+      go --> gn[gcp-network-hub]
+      gp --> gn
+      go --> gw[gcp-workload-env]
+      gp --> gw
+      gn -. optional .-> gw
+    end
+    subgraph AWS
+      ao[aws-organization] --> as[aws-security]
+      ao --> an[aws-network]
+      ao --> ai[aws-identity]
+      ao --> ass[aws-shared-services]
+      ao --> ab[aws-backup]
+      ao --> aw[aws-workload-env]
+      an -. optional .-> aw
+      as --> aw
+    end
+    s[saas-name] -. optional secret bridge .-> gw
+    s -. optional secret bridge .-> aw
+```
+
+The **minimum governed footprint** is `aws-organization` + `aws-security`. `aws-identity`, `aws-shared-services` and `aws-backup` are optional leaves. `aws-network` and `gcp-network-hub` are optional for their workload roots (`enable_network_hub = false`: a standalone VPC on AWS, no hub peering / DNS peering zone on GCP). Every remaining upstream read can be replaced by a typed `<layer>_contract` (variable or `<cloud>.contracts.<layer>` in `config/landing-zone.yaml`), in which case that remote state is not read at all — the FAST "stage contract override" pattern; see [provider selection](provider-selection.md#within-a-cloud-the-layers-are-a-dependency-dag-not-independent-add-ons) for the per-root table. `envs/saas` sits deliberately outside both chains — it configures no AWS or Google credentials and is selected purely by whether you apply its workspace; the workload roots read it only when `enable_saas_secret_bridge = true`.
 
 ### Two-phase bootstrap
 

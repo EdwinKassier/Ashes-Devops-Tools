@@ -22,11 +22,45 @@
 # policy, so the default plan creates no FMS resources; a deployment opts in and
 # overrides the policies deliberately. See README.
 
+# Boundary propagation (tfc-oidc-baseline): the security-tooling tfc-apply role
+# may only create roles that carry its own permissions boundary, so every role
+# this stage creates there gets it. Derived from the security_tooling provider.
+data "aws_caller_identity" "security_tooling" {
+  count    = var.tfc_apply_boundary_policy_name != null ? 1 : 0
+  provider = aws.security_tooling
+}
+
+data "aws_partition" "security_tooling" {
+  count    = var.tfc_apply_boundary_policy_name != null ? 1 : 0
+  provider = aws.security_tooling
+}
+
 locals {
+  # Real AWS always returns a 12-digit account and an aws* partition; under
+  # mock_provider these data sources return random strings the provider's ARN
+  # validator rejects, so a malformed identity yields no boundary rather than
+  # failing every mocked plan downstream (tests override the data sources).
+  boundary_partition = try(data.aws_partition.security_tooling[0].partition, null)
+  boundary_account   = try(data.aws_caller_identity.security_tooling[0].account_id, null)
+  security_tooling_boundary_arn = (
+    var.tfc_apply_boundary_policy_name != null && can(regex("^aws(-[a-z]+)*$", local.boundary_partition)) && can(regex("^[0-9]{12}$", local.boundary_account))
+    ? "arn:${local.boundary_partition}:iam::${local.boundary_account}:policy/${var.tfc_apply_boundary_policy_name}"
+    : null
+  )
+
   # The ARN the assumption alarm watches: the role this stage creates when
   # create_break_glass is true, otherwise the externally-managed ARN the caller
   # passes. So "managed here" and "monitored here" stay in lockstep (audit M3).
   effective_break_glass_role_arn = var.create_break_glass ? module.break_glass[0].break_glass_role_arn : var.break_glass_role_arn
+
+  # Key administrator per CMK: the explicit key_admin_arn, else the key's own
+  # account role key_admin_role_name (tfc-apply by default — the principal that
+  # applies the key, so the key can never be created un-administrable).
+  key_admin_arns = {
+    log_archive      = coalesce(var.key_admin_arn, "arn:aws:iam::${var.log_archive_account_id}:role/${var.key_admin_role_name}")
+    forensics        = coalesce(var.key_admin_arn, "arn:aws:iam::${var.forensics_account_id}:role/${var.key_admin_role_name}")
+    security_tooling = coalesce(var.key_admin_arn, "arn:aws:iam::${var.security_tooling_account_id}:role/${var.key_admin_role_name}")
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -54,6 +88,13 @@ module "break_glass" {
 
 # ---------------------------------------------------------------------------
 # KMS customer-managed keys (log-archive account + forensics account)
+#
+# key_admin_arn gets management actions only; usage is granted separately via
+# kms_key_user_arns (separation of duties — the key admin cannot decrypt logs).
+# The keys are tagged protected = "true" (enable_kms_protection_tag) so the
+# org deny-tamper SCP blocks ScheduleKeyDeletion/DisableKey except via
+# break-glass: the log archive cannot be crypto-shredded by a pipeline or
+# member-account admin compromise.
 # ---------------------------------------------------------------------------
 
 module "log_cmk" {
@@ -65,9 +106,11 @@ module "log_cmk" {
   alias                 = "log-archive"
   org_id                = var.org_id
   management_account_id = var.management_account_id
-  key_admin_arn         = var.key_admin_arn
+  key_admin_arn         = local.key_admin_arns["log_archive"]
+  key_user_arns         = try(var.kms_key_user_arns["log_archive"], [])
+  enable_protection_tag = var.enable_kms_protection_tag
   # log_service_principals uses the module SRA default
-  # (cloudtrail / config / securitylake).
+  # (cloudtrail / config / securitylake / delivery.logs for vended logs).
 }
 
 module "forensics_cmk" {
@@ -79,7 +122,9 @@ module "forensics_cmk" {
   alias                 = "forensics"
   org_id                = var.org_id
   management_account_id = var.management_account_id
-  key_admin_arn         = var.key_admin_arn
+  key_admin_arn         = local.key_admin_arns["forensics"]
+  key_user_arns         = try(var.kms_key_user_arns["forensics"], [])
+  enable_protection_tag = var.enable_kms_protection_tag
 }
 
 # Security-tooling CMK. The log CMK lives in the log-archive account and its key
@@ -97,7 +142,9 @@ module "sectool_cmk" {
   alias                  = "security-tooling"
   org_id                 = var.org_id
   management_account_id  = var.management_account_id
-  key_admin_arn          = var.key_admin_arn
+  key_admin_arn          = local.key_admin_arns["security_tooling"]
+  key_user_arns          = try(var.kms_key_user_arns["security_tooling"], [])
+  enable_protection_tag  = var.enable_kms_protection_tag
   log_service_principals = []
   service_principals     = ["sns.amazonaws.com", "ssm.amazonaws.com", "cloudwatch.amazonaws.com"]
 }
@@ -130,11 +177,21 @@ module "cloudtrail" {
   log_archive_bucket = module.log_archive_bucket.bucket_name
   kms_key_arn        = module.log_cmk.key_arn
 
-  # Audit A3/A4: CloudTrail CloudWatch Logs + CIS alarms opt-in (default off).
+  # CIS AWS 3.8/3.9: S3 object-level data events (WriteOnly by default; the
+  # log-archive bucket is excluded inside the module to avoid recursion).
+  cloudtrail_s3_data_events           = var.cloudtrail_s3_data_events
+  s3_data_events_excluded_bucket_arns = var.cloudtrail_s3_data_events_excluded_bucket_arns
+  enable_lambda_data_events           = var.cloudtrail_lambda_data_events
+
+  # CIS AWS section 4: CloudWatch Logs + metric-filter alarms (default ON). The
+  # module creates its own logs-granted CMK and KMS-encrypted SNS topic in the
+  # management account unless existing ones are supplied.
   enable_cloudwatch_logs         = var.enable_cloudwatch_logs
   cloudwatch_logs_retention_days = var.cloudwatch_logs_retention_days
   cloudwatch_logs_kms_key_arn    = var.cloudwatch_logs_kms_key_arn
   alarm_sns_topic_arn            = var.cloudtrail_alarm_sns_topic_arn
+  alarm_subscriptions            = coalesce(var.cloudtrail_alarm_subscribers, var.notification_subscribers)
+  cis_alarms_excluded            = var.cloudtrail_cis_alarms_excluded
 
   depends_on = [module.log_archive_bucket]
 }
@@ -150,15 +207,21 @@ module "config" {
   }
 
   aws_enabled_regions = var.aws_enabled_regions
-  config_role_arn     = var.config_role_arn
-  aggregator_role_arn = var.aggregator_role_arn
-  log_archive_bucket  = module.log_archive_bucket.bucket_name
-  recorder_only       = false
+  # Null role ARNs -> the module creates the AWSServiceRoleForConfig SLR and
+  # the org aggregator role in the security-tooling account.
+  config_role_arn            = var.config_role_arn
+  create_service_linked_role = var.create_config_service_linked_role
+  account_id                 = var.security_tooling_account_id
+  aggregator_role_arn        = var.aggregator_role_arn
+  log_archive_bucket         = module.log_archive_bucket.bucket_name
+  recorder_only              = false
   # Record global resource types in the home Region only, not once per Region.
   home_region = var.aws_region
   # F5: record ALL supported resource types (default true, the full-coverage but
   # most expensive Config mode). Set false for cost-sensitive non-prod.
   record_all_supported = var.config_record_all_supported
+  # The org aggregator role is created in the security-tooling account.
+  permissions_boundary_arn = local.security_tooling_boundary_arn
 }
 
 # ---------------------------------------------------------------------------
@@ -288,6 +351,8 @@ module "incident_response" {
   # Let the forensics role decrypt snapshots encrypted with the forensics CMK.
   forensics_kms_key_arn = module.forensics_cmk.key_arn
   quarantine_vpc_id     = var.quarantine_vpc_id
+  # Both IR roles are created in the security-tooling account.
+  permissions_boundary_arn = local.security_tooling_boundary_arn
 }
 
 # ---------------------------------------------------------------------------

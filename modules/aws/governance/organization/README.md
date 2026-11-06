@@ -17,7 +17,6 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	
 }
 ```
 
@@ -25,7 +24,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.46.0, < 7.0.0 |
 
 ## Providers
@@ -50,7 +49,7 @@ The following resources are created:
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_aws_service_access_principals"></a> [aws\_service\_access\_principals](#input\_aws\_service\_access\_principals) | AWS service principals granted trusted access to the organization (enables delegated administration for SRA security services). | `list(string)` | <pre>[<br/>  "cloudtrail.amazonaws.com",<br/>  "config.amazonaws.com",<br/>  "config-multiaccountsetup.amazonaws.com",<br/>  "guardduty.amazonaws.com",<br/>  "securityhub.amazonaws.com",<br/>  "access-analyzer.amazonaws.com",<br/>  "malware-protection.guardduty.amazonaws.com",<br/>  "macie.amazonaws.com",<br/>  "inspector2.amazonaws.com",<br/>  "detective.amazonaws.com",<br/>  "ram.amazonaws.com",<br/>  "sso.amazonaws.com",<br/>  "ipam.amazonaws.com",<br/>  "iam.amazonaws.com",<br/>  "ssm.amazonaws.com",<br/>  "resource-explorer-2.amazonaws.com",<br/>  "fms.amazonaws.com",<br/>  "backup.amazonaws.com",<br/>  "securitylake.amazonaws.com"<br/>]</pre> | no |
+| <a name="input_aws_service_access_principals"></a> [aws\_service\_access\_principals](#input\_aws\_service\_access\_principals) | AWS service principals granted trusted access to the organization (enables delegated administration for SRA security services). | `list(string)` | <pre>[<br/>  "cloudtrail.amazonaws.com",<br/>  "config.amazonaws.com",<br/>  "config-multiaccountsetup.amazonaws.com",<br/>  "guardduty.amazonaws.com",<br/>  "securityhub.amazonaws.com",<br/>  "access-analyzer.amazonaws.com",<br/>  "malware-protection.guardduty.amazonaws.com",<br/>  "macie.amazonaws.com",<br/>  "inspector2.amazonaws.com",<br/>  "detective.amazonaws.com",<br/>  "ram.amazonaws.com",<br/>  "sso.amazonaws.com",<br/>  "ipam.amazonaws.com",<br/>  "iam.amazonaws.com",<br/>  "ssm.amazonaws.com",<br/>  "resource-explorer-2.amazonaws.com",<br/>  "fms.amazonaws.com",<br/>  "backup.amazonaws.com",<br/>  "securitylake.amazonaws.com",<br/>  "member.org.stacksets.cloudformation.amazonaws.com"<br/>]</pre> | no |
 | <a name="input_child_ous"></a> [child\_ous](#input\_child\_ous) | Child organizational units nested under a top-level OU. Each parent must appear in top\_level\_ous. | <pre>list(object({<br/>    parent = string # Name of the top-level OU this child is nested under (must be in top_level_ous)<br/>    name   = string # Name of the child OU<br/>  }))</pre> | <pre>[<br/>  {<br/>    "name": "Prod",<br/>    "parent": "Workloads"<br/>  },<br/>  {<br/>    "name": "NonProd",<br/>    "parent": "Workloads"<br/>  }<br/>]</pre> | no |
 | <a name="input_enabled_policy_types"></a> [enabled\_policy\_types](#input\_enabled\_policy\_types) | Organization policy types to enable at the root. Requires feature\_set = ALL. | `list(string)` | <pre>[<br/>  "SERVICE_CONTROL_POLICY",<br/>  "RESOURCE_CONTROL_POLICY",<br/>  "DECLARATIVE_POLICY_EC2",<br/>  "TAG_POLICY",<br/>  "BACKUP_POLICY"<br/>]</pre> | no |
 | <a name="input_top_level_ous"></a> [top\_level\_ous](#input\_top\_level\_ous) | Names of the top-level organizational units created directly under the org root. Defaults to the AWS SRA foundational OU set. | `list(string)` | <pre>[<br/>  "Security",<br/>  "Infrastructure",<br/>  "Workloads",<br/>  "Sandbox",<br/>  "Suspended",<br/>  "PolicyStaging",<br/>  "Exceptions",<br/>  "Transitional"<br/>]</pre> | no |

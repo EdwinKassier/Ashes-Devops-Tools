@@ -67,3 +67,33 @@ output "saas_secret_id" {
   description = "Resource ID of the bridged Supabase connection secret in Secret Manager, or null when enable_saas_secret_bridge is false."
   value       = var.enable_saas_secret_bridge ? module.saas_secret_bridge[0].secret_ids[var.saas_secret_name] : null
 }
+
+output "app_services" {
+  description = "Per app service: Cloud Run url and name, image_repository, runtime/deploy SA emails, Cloud SQL connection name and IAM DB user (empty when app_services = {})."
+  value       = module.app_services.services
+}
+
+output "app_deploy_workload_identity_provider" {
+  description = "Full resource name of the app-deploy GitHub WIF provider (google-github-actions/auth `workload_identity_provider`), or null when no service declares `github`."
+  value       = module.app_services.workload_identity_provider
+}
+
+output "app_github_actions" {
+  description = "Per service, the GitHub variables the delivery workflow needs: GCP_WIF_PROVIDER, GCP_DEPLOY_SA, GCP_PROJECT_ID, GCP_REGION, CLOUD_RUN_SERVICE, IMAGE_REPOSITORY."
+  value       = module.app_services.github_actions
+}
+
+output "gke_cluster_name" {
+  description = "Name of the env GKE Autopilot cluster, or null when enable_gke_autopilot = false."
+  value       = module.app_services.gke_cluster_name
+}
+
+output "vm_backup_policy_self_links" {
+  description = "Map of target project key (host, team-<name>) to its snapshot-schedule resource policy self_links. Attach these to persistent disks. Empty when enable_vm_backup_policy = false."
+  value       = { for k, m in module.vm_backup_policy : k => m.resource_policy_self_links }
+}
+
+output "os_patch_deployment_ids" {
+  description = "Map of target project key (host, team-<name>) to its VM Manager patch deployment IDs. Empty when enable_os_patch_management = false."
+  value       = { for k, m in module.os_patch_management : k => m.patch_deployment_ids }
+}

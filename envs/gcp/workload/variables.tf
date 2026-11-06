@@ -1,10 +1,17 @@
-variable "project_prefix" {
-  description = "Short name prefix used by the organization root. Must match the organization root's project_prefix exactly — used for resource naming consistency."
+variable "landing_zone_config_path" {
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values."
   type        = string
+  default     = null
+}
+
+variable "project_prefix" {
+  description = "Short name prefix used by the organization root (resource naming). Null = org.prefix from config/landing-zone.yaml, the same source as every other GCP root."
+  type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^[a-z][a-z0-9-]*$", var.project_prefix))
-    error_message = "project_prefix must start with a lowercase letter and contain only lowercase letters, digits, and hyphens."
+    condition     = can(regex("^[a-z][a-z0-9-]*$", coalesce(var.project_prefix, local.cfg.project_prefix, "!unset")))
+    error_message = "project_prefix is unset or invalid: set var.project_prefix or org.prefix in config/landing-zone.yaml. It must start with a lowercase letter and contain only lowercase letters, digits, and hyphens."
   }
 }
 
@@ -23,9 +30,9 @@ variable "environment" {
 }
 
 variable "region" {
-  description = "Default Google Cloud region for this application environment (e.g. \"europe-west1\"). Must match the region used when provisioning spoke projects in the organization root."
+  description = "Default Google Cloud region for this application environment (e.g. \"europe-west1\"). Must match the region used when provisioning spoke projects. Null = gcp.environments[<environment>].region from config/landing-zone.yaml, else org.regions.gcp, else europe-west1."
   type        = string
-  default     = "europe-west1"
+  default     = null
 }
 
 variable "terraform_admin_email" {
@@ -46,8 +53,14 @@ variable "terraform_admin_email" {
 }
 
 variable "tfc_organization" {
-  description = "Terraform Cloud organization used to read organization remote state"
+  description = "Terraform Cloud organization used to read organization remote state. Null = org.tfc.organization from config/landing-zone.yaml."
   type        = string
+  default     = null
+
+  validation {
+    condition     = coalesce(var.tfc_organization, local.cfg.tfc_organization, "!unset") != "!unset"
+    error_message = "tfc_organization is unset: set var.tfc_organization or org.tfc.organization in config/landing-zone.yaml."
+  }
 }
 
 variable "organization_workspace_name" {
@@ -66,6 +79,64 @@ variable "network_hub_workspace_name" {
   description = "Workspace name that stores the gcp-network-hub root state (hub_network for peering + DNS)"
   type        = string
   default     = "gcp-network-hub"
+}
+
+# -----------------------------------------------------------------------------
+# Stage contract overrides (FAST-style). Each one, when set (here or as
+# gcp.contracts.<layer> in config/landing-zone.yaml), replaces the matching
+# terraform_remote_state read entirely — the upstream workspace is not read.
+# -----------------------------------------------------------------------------
+
+variable "organization_contract" {
+  description = "gcp-organization stage contract: org_id (numeric), billing_account (billingAccounts/XXXXXX-XXXXXX-XXXXXX or bare ID) and admin_project_number. Null = gcp.contracts.organization from config/landing-zone.yaml, else read from the gcp-organization workspace's remote state."
+  type = object({
+    org_id               = string
+    billing_account      = string
+    admin_project_number = string
+  })
+  default = null
+
+  validation {
+    condition     = var.organization_contract == null || (can(regex("^[0-9]+$", try(var.organization_contract.org_id, ""))) && can(regex("^[0-9]+$", try(var.organization_contract.admin_project_number, ""))))
+    error_message = "organization_contract.org_id and admin_project_number must be numeric."
+  }
+}
+
+variable "projects_contract" {
+  description = "gcp-projects stage contract: environment_config (environment => folder_id, host_project_id, host_project_number, region, cidr_block, labels, is_production, vpc_sc_access_policy_id); must contain var.environment. Null = gcp.contracts.projects from config/landing-zone.yaml, else read from the gcp-projects workspace's remote state."
+  type = object({
+    environment_config = map(object({
+      folder_id               = string
+      host_project_id         = string
+      host_project_number     = string
+      region                  = string
+      cidr_block              = string
+      labels                  = optional(map(string), {})
+      is_production           = optional(bool)
+      vpc_sc_access_policy_id = optional(string)
+    }))
+  })
+  default = null
+}
+
+variable "network_hub_contract" {
+  description = "gcp-network-hub stage contract: hub_network {vpc_self_link, dns_domain} the env VPC peers with and forwards DNS to. Null = gcp.contracts.network_hub from config/landing-zone.yaml, else read from the gcp-network-hub workspace's remote state. Ignored when enable_network_hub = false."
+  type = object({
+    vpc_self_link = string
+    dns_domain    = string
+  })
+  default = null
+
+  validation {
+    condition     = var.network_hub_contract == null || endswith(try(var.network_hub_contract.dns_domain, ""), ".")
+    error_message = "network_hub_contract.dns_domain must be a fully-qualified DNS name ending in a dot (e.g. hub.internal.)."
+  }
+}
+
+variable "enable_network_hub" {
+  description = "Connect the environment VPC to the gcp-network-hub (VPC peering + DNS peering zone, from network_hub_contract or the gcp-network-hub remote state). False = standalone: no gcp-network-hub read, no hub peering, no DNS peering zone."
+  type        = bool
+  default     = true
 }
 
 variable "monthly_budget_limit" {
@@ -165,7 +236,7 @@ variable "vpc_sc_access_policy_name" {
     that governs all VPC Service Controls perimeters in this org (e.g. '1234567890').
     Do NOT include the 'accessPolicies/' prefix.
     Find your policy ID: gcloud access-context-manager policies list --organization=ORG_ID
-    This value is required when enable_vpc_sc = true.
+    When null (the default) no environment perimeter is created; set it to create one.
   EOT
   type        = string
   default     = null
@@ -189,6 +260,12 @@ variable "vpc_sc_enable_dry_run" {
   EOT
   type        = bool
   default     = true
+}
+
+variable "vpc_sc_dry_run_restricted_services" {
+  description = "Optional restricted_services to TRIAL in a staged dry-run spec while the perimeter stays ENFORCED (only meaningful with vpc_sc_enable_dry_run = false). Status keeps enforcing vpc_sc_restricted_services; the dry-run spec logs what this list would block. Default null = no staged spec."
+  type        = list(string)
+  default     = null
 }
 
 variable "vpc_sc_perimeter_title" {
@@ -363,4 +440,120 @@ variable "saas_secret_accessor_members" {
     condition     = alltrue([for m in var.saas_secret_accessor_members : can(regex("^(serviceAccount|user|group):", m))])
     error_message = "Each saas_secret_accessor_members entry must be a prefixed IAM member (serviceAccount:, user:, or group:)."
   }
+}
+
+# -----------------------------------------------------------------------------
+# APPLICATION GOLDEN PATH (modules/gcp/stages/app-services)
+#
+# Default empty / off: nothing is created. See docs/guides/deploying-a-service.md.
+# -----------------------------------------------------------------------------
+
+variable "app_services" {
+  description = <<-EOT
+    Application services for this environment, keyed by service name (2-22 chars).
+    Each entry creates an Artifact Registry repo, a runtime SA and an internal
+    Cloud Run v2 service in the host project; `database = {}` adds a private-IP
+    Cloud SQL Postgres with IAM auth, and `github = { repository_id = "<numeric>" }`
+    adds a WIF-bound deploy SA (needs enable_app_deploy_wif = true). The full,
+    typed shape (and every default) is the `services` variable of
+    modules/gcp/stages/app-services, which validates it; see
+    docs/guides/deploying-a-service.md for a worked entry.
+  EOT
+  type        = any
+  default     = {}
+}
+
+variable "app_subnetwork_id" {
+  description = "Subnet ID (projects/<p>/regions/<r>/subnetworks/<s>) for Cloud Run Direct VPC egress and GKE nodes. Null uses the first private subnet of the env VPC."
+  type        = string
+  default     = null
+}
+
+variable "artifact_registry_kms_key_name" {
+  description = "Optional CMEK key for every app Artifact Registry repo. Null uses Google-managed encryption."
+  type        = string
+  default     = null
+}
+
+variable "enable_app_deploy_wif" {
+  description = "Create the app-deploy Workload Identity pool (GitHub OIDC) in the env host project, separate from the infra pool in gcp-bootstrap. Required for any app_services entry that sets `github`."
+  type        = bool
+  default     = false
+}
+
+variable "app_deploy_wif_pool_id" {
+  description = "ID of the app-deploy WIF pool. Null defaults to \"apps-<environment>\"."
+  type        = string
+  default     = null
+}
+
+variable "github_repository_owner_id" {
+  description = "Optional numeric GitHub owner (org) ID; when set the app-deploy WIF provider also requires repository_owner_id to match."
+  type        = string
+  default     = null
+}
+
+variable "enable_gke_autopilot" {
+  description = "Create one private GKE Autopilot cluster for the environment (default off)."
+  type        = bool
+  default     = false
+}
+
+variable "gke_master_ipv4_cidr_block" {
+  description = "The /28 control-plane CIDR for the env GKE Autopilot cluster."
+  type        = string
+  default     = "172.16.0.0/28"
+}
+
+variable "gke_master_authorized_networks" {
+  description = "CIDR blocks allowed to reach the GKE control plane."
+  type = list(object({
+    cidr_block   = string
+    display_name = optional(string)
+  }))
+  default = []
+}
+
+variable "gke_cluster_secondary_range_name" {
+  description = "Subnet secondary range for GKE pod IPs. Null lets GKE allocate one."
+  type        = string
+  default     = null
+}
+
+variable "gke_services_secondary_range_name" {
+  description = "Subnet secondary range for GKE Service IPs. Null lets GKE allocate one."
+  type        = string
+  default     = null
+}
+
+variable "enable_artifact_registry_vulnerability_scanning" {
+  description = "Scan app-service container images on push (Container Scanning API + repository vulnerability scanning INHERITED). Billed per scanned image. Default true."
+  type        = bool
+  default     = true
+}
+
+# --- VM backup + OS patching (BCK-05, VUL-05) ---------------------------------
+
+variable "enable_vm_backup_policy" {
+  description = "Create a Compute Engine snapshot-schedule resource policy in the host project and each service-team project (modules/gcp/backup/backup-plan). Free until a disk is attached to it. Default true."
+  type        = bool
+  default     = true
+}
+
+variable "vm_backup_schedules" {
+  description = "Snapshot schedules passed to modules/gcp/backup/backup-plan (see its `schedules` input for the shape). Null = one \"vm-daily-snapshots\" policy: daily at 04:00 UTC, 30-day retention, snapshots kept if the disk is deleted."
+  type        = any
+  default     = null
+}
+
+variable "enable_os_patch_management" {
+  description = "Create a weekly VM Manager patch deployment (and enable osconfig.googleapis.com) in the host project and each service-team project (modules/gcp/ops/os-config). Harmless with no VMs. The workload apply SA receives roles/osconfig.patchDeploymentAdmin via the gcp-bootstrap workload_folder_roles allow-list."
+  type        = bool
+  default     = true
+}
+
+variable "os_patch_deployments" {
+  description = "Patch deployments passed to modules/gcp/ops/os-config (see its `patch_deployments` input for the shape). Null = one \"weekly-os-patch\" deployment: every VM in the project, Sundays 03:00 UTC, default reboot behaviour."
+  type        = any
+  default     = null
 }

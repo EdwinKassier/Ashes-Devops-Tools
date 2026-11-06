@@ -1,0 +1,155 @@
+# Landing-zone configuration: the ONE file an adopter edits.
+#
+# Copy to config/landing-zone.yaml (or run scripts/init-landing-zone.sh), replace
+# every placeholder, and COMMIT it. Every deployable root under envs/** reads
+# config/landing-zone.yaml when it exists, so VCS-driven Terraform Cloud runs
+# (which never see a local terraform.tfvars) get their values from the repo.
+#
+# Precedence, highest first:
+#   1. an explicit Terraform variable (terraform.tfvars, TF_VAR_*, a TFC
+#      workspace or variable-set variable)
+#   2. this file
+#   3. the root's built-in default (if it has one)
+# A value that is still unset after all three fails the plan with a message
+# naming both the variable and the config key below.
+#
+# The file is optional: with no config/landing-zone.yaml the roots behave
+# exactly as before (all inputs from tfvars / TFC variables).
+#
+# NO SECRETS. This file is committed. Tokens, passwords and keys belong in TFC
+# sensitive variables (tfc-admin workspace_variables / common_workspace_variables).
+#
+# Quote numeric-looking strings (AWS account IDs, billing accounts): unquoted
+# YAML numbers lose leading zeros.
+#
+# The placeholders below (my-org, REPLACE_WITH_*, example.com root emails) are
+# rejected by the roots' validations, so an untouched copy fails fast.
+
+version: 1
+
+org:
+  # Landing-zone identifier: AWS landing_zone_name (LandingZone tag) in every
+  # aws-* root. 2-31 chars, lowercase letter first. "my-org" is rejected.
+  name: my-org
+  # Short prefix for GCP project IDs (project_prefix in every gcp-* root).
+  # <= 10 chars (keep it <= 6: project IDs are capped at 30). "my-org" is rejected.
+  prefix: my-org
+  # Cloud Identity / Workspace domain of the GCP organization (gcp-bootstrap,
+  # gcp-organization). The GCP org ID is resolved from it.
+  domain: my-org.example.com
+  # Display name of the GCP organization (gcp-organization, gcp-projects).
+  display_name: My Organization
+  # Owner / CostCenter tags (aws-* roots).
+  owner: platform-team
+  cost_center: platform
+  # Default region per cloud, used wherever a root has no explicit region.
+  regions:
+    gcp: europe-west2
+    aws: eu-west-2
+  tfc:
+    # Terraform Cloud / HCP Terraform organization (tfc_organization everywhere).
+    organization: my-org
+    # tfc-admin names its projects <project_name_prefix><cloud>.
+    project_name_prefix: landing-zone-
+    # Optional explicit project names. aws_project MUST equal the project the
+    # aws-* workspaces live in: aws-organization matches it literally in the
+    # member-account OIDC trust (tfc_project). Default <project_name_prefix>aws.
+    # gcp_project: landing-zone-gcp
+    # aws_project: landing-zone-aws
+    # saas_project: landing-zone-saas
+    # platform_project: landing-zone-platform
+    # Optional VCS connection for every tfc-admin workspace (IDs, not secrets).
+    # vcs_repo:
+    #   identifier: my-org/landing-zone
+    #   branch: main
+    #   github_app_installation_id: ghain-REPLACE_ME
+
+gcp:
+  # tfc-admin declares the gcp-* workspaces only when true.
+  enabled: false
+  # Billing account ID (gcp-bootstrap, gcp-organization).
+  billing_account: "REPLACE_WITH_BILLING_ACCOUNT_ID"
+  # Organization administrator (gcp-bootstrap, gcp-organization).
+  admin_email: REPLACE_WITH_ADMIN_EMAIL
+  # Standing org / billing admin groups (gcp-organization; group-only admin).
+  organization_admin_groups:
+    - gcp-organization-admins@my-org.example.com
+  billing_admin_groups:
+    - gcp-billing-admins@my-org.example.com
+  # Regions allowed by the resource-location org policy (gcp-organization).
+  allowed_regions:
+    - europe-west2
+  # Hub networking (gcp-network-hub).
+  network:
+    hub_cidr_block: 10.0.0.0/16
+    dns_hub_cidr_block: 10.1.0.0/16
+  # Application environments, consumed by gcp-bootstrap, gcp-organization,
+  # gcp-projects, gcp-network-hub, gcp-workload-<env> and tfc-admin (one
+  # gcp-workload-<env> workspace per key). Keys: ^[a-z][a-z0-9-]{0,14}$, not
+  # "shared". region defaults to org.regions.gcp; display_name to the key.
+  environments:
+    dev:
+      display_name: Development
+      cidr_block: 10.10.0.0/16
+      budget_monthly_limit: 500
+      is_production: false
+      labels:
+        tier: non-production
+      # Group email => roles granted on the environment folder.
+      iam_group_role_bindings:
+        gcp-developers@my-org.example.com:
+          - roles/viewer
+    prod:
+      display_name: Production
+      region: europe-west2
+      cidr_block: 10.30.0.0/16
+      budget_monthly_limit: 2000
+      is_production: true
+      iam_group_role_bindings: {}
+
+aws:
+  # tfc-admin declares the aws-* workspaces only when true.
+  enabled: false
+  # 12-digit management (payer) account ID, QUOTED (aws-organization,
+  # aws-security, aws-backup).
+  management_account_id: "REPLACE_WITH_12_DIGIT_ID"
+  # Regions permitted by the region-restriction SCP (aws-organization) and the
+  # Regions baselined by aws-security / aws-network / aws-workload.
+  allowed_regions:
+    - eu-west-2
+  enabled_regions:
+    - eu-west-2
+  # Phase-0 management-account roles (aws-bootstrap runbook Step 2).
+  terraform_run_role_arn: arn:aws:iam::REPLACE_WITH_12_DIGIT_ID:role/tfc-mgmt-apply
+  break_glass_role_arn: arn:aws:iam::REPLACE_WITH_12_DIGIT_ID:role/break-glass
+  # Central log-archive bucket (aws-organization, aws-security, aws-network).
+  log_archive_bucket_name: my-org-org-log-archive
+  # Foundational SRA accounts: key => {email, ou}. Root emails must be real,
+  # unique and deliverable (example.com addresses are rejected).
+  accounts:
+    log_archive: {email: aws+log-archive@example.com, ou: Security}
+    security_tooling: {email: aws+security-tooling@example.com, ou: Security}
+    network: {email: aws+network@example.com, ou: Infrastructure}
+    shared_services: {email: aws+shared-services@example.com, ou: Infrastructure}
+    backup: {email: aws+backup@example.com, ou: Infrastructure}
+    forensics: {email: aws+forensics@example.com, ou: Security}
+  # Workload accounts, same shape (merged with accounts).
+  workload_accounts:
+    workload_dev: {email: aws+workload-dev@example.com, ou: Workloads}
+  # Workload environments => the account key they deploy into. tfc-admin
+  # declares one aws-workload-<env> workspace per key and sets its
+  # workload_account_key; aws-organization adds the matching OIDC trust binding
+  # (account key => aws-workload-<env>). vpc_cidr is optional.
+  workload_environments:
+    dev:
+      account_key: workload_dev
+      vpc_cidr: 10.20.0.0/16
+
+saas:
+  # tfc-admin declares one saas-<name> workspace per entry when enabled.
+  enabled: false
+  workspaces:
+    - web
+  # Provider toggles for the saas root (enable_supabase / enable_vercel).
+  supabase: true
+  vercel: true

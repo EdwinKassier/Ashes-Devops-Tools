@@ -38,8 +38,14 @@ variable "changeable_for_days" {
 }
 
 variable "restore_testing_role_arn" {
-  description = "ARN of the IAM role (in the backup account) AWS Backup assumes to perform restore testing jobs."
+  description = "ARN of an existing IAM role (in the backup account) AWS Backup assumes to perform restore testing jobs. Null (default) creates aws-backup-restore-testing in the backup account."
   type        = string
+  default     = null
+
+  validation {
+    condition     = var.restore_testing_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", coalesce(var.restore_testing_role_arn, "x")))
+    error_message = "restore_testing_role_arn must be null or an account-qualified IAM role ARN."
+  }
 }
 
 # -----------------------------------------------------------------------------
@@ -47,8 +53,36 @@ variable "restore_testing_role_arn" {
 # -----------------------------------------------------------------------------
 
 variable "backup_role_arn" {
-  description = "ARN of the IAM role AWS Backup assumes to run backup jobs for the resources selected by the org backup plan. Rendered into the org BACKUP_POLICY."
+  description = "ARN of the IAM role AWS Backup assumes IN EACH MEMBER ACCOUNT to run the org backup plan's jobs, rendered into the org BACKUP_POLICY. May use the policy variable $account (arn:aws:iam::$account:role/<name>). Null (default): the stage deploys backup_role_name to every account under workloads_ou_id via a service-managed CloudFormation StackSet (auto-deploying to new accounts) and renders arn:aws:iam::$account:role/<backup_role_name>."
   type        = string
+  default     = null
+
+  validation {
+    condition     = var.backup_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::([0-9]{12}|[$]account):role/.+$", coalesce(var.backup_role_arn, "x")))
+    error_message = "backup_role_arn must be null or an IAM role ARN whose account is a 12-digit ID or $account."
+  }
+}
+
+variable "backup_role_name" {
+  description = "Name of the member-account AWS Backup service role the StackSet deploys when backup_role_arn is null. Trusted by backup.amazonaws.com, with the AWS managed AWSBackupServiceRolePolicyForBackup and AWSBackupServiceRolePolicyForRestores policies."
+  type        = string
+  default     = "aws-backup-org-role"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9+=,.@_-]{1,64}$", var.backup_role_name))
+    error_message = "backup_role_name must be a valid IAM role name (1-64 chars of [A-Za-z0-9+=,.@_-])."
+  }
+}
+
+variable "backup_role_stack_set_call_as" {
+  description = "Whether the backup-role StackSet is managed as the management account (SELF) or a CloudFormation delegated administrator (DELEGATED_ADMIN). This stage's default provider is the management account, so SELF."
+  type        = string
+  default     = "SELF"
+
+  validation {
+    condition     = contains(["SELF", "DELEGATED_ADMIN"], var.backup_role_stack_set_call_as)
+    error_message = "backup_role_stack_set_call_as must be SELF or DELEGATED_ADMIN."
+  }
 }
 
 variable "workloads_ou_id" {
@@ -60,4 +94,15 @@ variable "aws_region" {
   description = "AWS region the org backup plan copies recovery points into. Rendered into the templated BACKUP_POLICY's regions @@assign."
   type        = string
   default     = "eu-west-2"
+}
+
+variable "tfc_apply_boundary_policy_name" {
+  description = "Name of the tfc-apply permissions-boundary managed policy (tfc-oidc-baseline apply_boundary_policy_name). Every IAM role this stage creates in the backup account (the restore-testing role) gets permissions_boundary = arn:PARTITION:iam::ACCOUNT_ID:policy/NAME, derived from that account's provider, which the member-account tfc-apply role requires when boundary propagation is on. Null = create roles without a boundary."
+  type        = string
+  default     = "tfc-apply-boundary"
+
+  validation {
+    condition     = var.tfc_apply_boundary_policy_name == null || can(regex("^[A-Za-z0-9+=,.@_-]{1,128}$", var.tfc_apply_boundary_policy_name))
+    error_message = "tfc_apply_boundary_policy_name must be null or a valid IAM policy name (1-128 chars of [A-Za-z0-9+=,.@_-])."
+  }
 }

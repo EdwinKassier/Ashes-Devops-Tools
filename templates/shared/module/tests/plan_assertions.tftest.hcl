@@ -15,10 +15,10 @@
 #   4. Run: cd modules/your-module && terraform test
 
 mock_provider "google" {}
-mock_provider "google-beta" {}
 
 variables {
   project_id = "mock-project-id"
+  labels     = { "cost-center" = "platform" }
   # Add other required variables here
 }
 
@@ -33,6 +33,15 @@ run "example_service_plans_with_expected_attributes" {
   assert {
     condition     = google_project_service.example.service == "compute.googleapis.com"
     error_message = "example service must request the compute.googleapis.com API"
+  }
+
+  # Every module must apply the canonical + caller labels to labelable resources.
+  assert {
+    condition = (
+      google_compute_global_address.example.labels["managed-by"] == "terraform" &&
+      google_compute_global_address.example.labels["cost-center"] == "platform"
+    )
+    error_message = "local.labels (managed-by + var.labels) must be applied to labelable resources"
   }
 
   assert {

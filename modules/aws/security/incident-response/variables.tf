@@ -49,3 +49,14 @@ variable "forensics_kms_key_arn" {
     error_message = "forensics_kms_key_arn must be empty or a valid KMS key ARN."
   }
 }
+
+variable "permissions_boundary_arn" {
+  description = "Permissions-boundary managed policy ARN set on every IAM role this module creates. Required when the roles are created by a member-account tfc-apply role with boundary propagation on (tfc-oidc-baseline enable_apply_boundary_propagation): pass arn:PARTITION:iam::ACCOUNT_ID:policy/tfc-apply-boundary. Null (default) = no boundary."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.permissions_boundary_arn == null || can(regex("^arn:[^:]+:iam::[^:]*:policy/.+$", var.permissions_boundary_arn))
+    error_message = "permissions_boundary_arn must be null or an IAM managed policy ARN (arn:PARTITION:iam::ACCOUNT_ID:policy/NAME)."
+  }
+}

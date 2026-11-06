@@ -10,9 +10,12 @@ staged-deployment diagram is in the [top-level modules README](../../README.md).
 | [bootstrap](./bootstrap/) | 0 | Admin project, Terraform SA, Workload Identity Federation | `envs/gcp/organization` |
 | [organization](./organization/) | 1 | Folders, IAM, org policies, tags, audit logs, SCC | `envs/gcp/organization` |
 | [projects](./projects/) | 2 | Platform projects (host/spoke/DNS/hub) | `envs/gcp/organization` |
-| [network-hub](./network-hub/) | 3 | Hub VPC, DNS hub, VPC-SC, hierarchical firewall | `envs/gcp/organization` |
+| [network-hub](./network-hub/) | 3 | Hub VPC, DNS hub, VPC-SC, hierarchical firewall (composes `net-hub` + `dns-anchor`) | `envs/gcp/network-hub` |
+| [net-hub](./net-hub/) | — | Hub network composition: Shared VPC, NAT, PSA, PSC, hierarchical firewall, hub VPC-SC, HA VPN, Interconnect | `stages/network-hub` |
+| [dns-anchor](./dns-anchor/) | — | Workload-free DNS-anchor VPC and the private zones spokes peer to | `stages/network-hub` |
+| [net-spoke](./net-spoke/) | — | Per-env spoke network composition: Shared VPC host, NAT, PSA, PSC, hub peering, DNS, Cloud Armor, flow-log export, VPC-SC | `envs/gcp/workload` |
 | [workload](./workload/) | — | Per-env application projects (workload factory) | `envs/gcp/workload` / `examples/workloads` |
-| [host](./host/) | — | Per-env Shared VPC host-project network — composes ~30 `network/` + `governance/` primitives (VPC, subnets, firewalls, NAT, DNS, VPN, interconnect, VPC-SC, Cloud Armor, …) | `envs/gcp/workload` |
+| [host](./host/) | — | **Deprecated** god-module facade kept for one cycle for external callers; replaced by `net-hub`, `net-spoke` and `dns-anchor` | none in-repo |
 
 The AWS landing zone uses the same primitive/stage split under
 [`modules/aws/stages/`](../../aws/stages/).

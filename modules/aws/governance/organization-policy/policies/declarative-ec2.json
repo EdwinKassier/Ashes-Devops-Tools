@@ -17,7 +17,7 @@
           "@@assign": "block_ingress"
         },
         "exclusions_allowed": {
-          "@@assign": "enabled"
+          "@@assign": "${vpc_bpa_exclusions_allowed}"
         }
       }
     },

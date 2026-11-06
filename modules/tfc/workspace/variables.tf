@@ -66,29 +66,90 @@ variable "file_triggers_enabled" {
 }
 
 variable "trigger_patterns" {
-  description = "Glob patterns that trigger a run (in addition to working_directory). Empty = working_directory only."
+  description = "Glob patterns that trigger a run. When non-empty they REPLACE the working_directory default, so include \"<working_directory>/**\" plus every module path the root consumes (e.g. modules/gcp/**). Empty = working_directory only."
   type        = list(string)
   default     = []
 }
 
 variable "vcs_repo" {
-  description = "Optional VCS connection: {identifier = \"org/repo\", branch = \"main\", oauth_token_id = \"ot-...\"}. Null = API/CLI-driven workspace."
+  description = "Optional VCS connection: {identifier = \"org/repo\", branch = \"main\", oauth_token_id = \"ot-...\"} or github_app_installation_id instead of oauth_token_id. Null = API/CLI-driven workspace."
   type = object({
-    identifier     = string
-    branch         = optional(string, "main")
-    oauth_token_id = string
+    identifier                 = string
+    branch                     = optional(string, "main")
+    oauth_token_id             = optional(string)
+    github_app_installation_id = optional(string)
   })
   default = null
+
+  validation {
+    condition     = var.vcs_repo == null || ((try(var.vcs_repo.oauth_token_id, null) != null) != (try(var.vcs_repo.github_app_installation_id, null) != null))
+    error_message = "vcs_repo must set exactly one of oauth_token_id or github_app_installation_id."
+  }
+}
+
+variable "project_id" {
+  description = "TFC project (prj-...) to place the workspace in. Null = the organization's default project."
+  type        = string
+  default     = null
+}
+
+variable "agent_pool_id" {
+  description = "Agent pool ID (apool-...) used when execution_mode = agent. Ignored otherwise."
+  type        = string
+  default     = null
+}
+
+variable "speculative_enabled" {
+  description = "Allow automatic speculative plans on pull requests. Set false for control-plane workspaces so an untrusted PR cannot obtain a plan run with privileged credentials."
+  type        = bool
+  default     = true
+}
+
+variable "allow_destroy_plan" {
+  description = "Allow destroy plans to be queued from the UI/API. Set false for control-plane workspaces."
+  type        = bool
+  default     = true
+}
+
+variable "assessments_enabled" {
+  description = "Enable health assessments (native drift detection and continuous validation). Requires an HCP Terraform tier that includes health assessments."
+  type        = bool
+  default     = true
+}
+
+variable "manage_settings" {
+  description = "Create the tfe_workspace_settings resource (execution mode, agent pool, remote-state sharing). Set false when the caller manages settings itself (e.g. to wire remote-state consumers between sibling workspaces)."
+  type        = bool
+  default     = true
+}
+
+variable "global_remote_state" {
+  description = "Share this workspace's state with EVERY workspace in the organization. Default false: share only with remote_state_consumer_ids."
+  type        = bool
+  default     = false
+}
+
+variable "remote_state_consumer_ids" {
+  description = "Workspace IDs (ws-...) allowed to read this workspace's state via terraform_remote_state / tfe_outputs. Only used when global_remote_state = false."
+  type        = set(string)
+  default     = []
+}
+
+variable "variable_set_ids" {
+  description = "Variable sets to attach to this workspace, keyed by a stable label (the label keeps for_each plan-known while the set ID is unknown): {label = \"varset-...\"}."
+  type        = map(string)
+  default     = {}
 }
 
 variable "variables" {
-  description = "Workspace variables keyed by name: {value, category (terraform|env), hcl?, sensitive?, description?}."
+  description = "Workspace variables keyed by name: {value, category (terraform|env), hcl?, sensitive?, description?, version?}. Sensitive values are written write-only (never stored in state); increment `version` to rotate one."
   type = map(object({
     value       = string
     category    = string
     hcl         = optional(bool, false)
     sensitive   = optional(bool, false)
     description = optional(string)
+    version     = optional(number, 1)
   }))
   default = {}
 

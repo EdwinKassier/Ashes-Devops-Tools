@@ -53,4 +53,3 @@ module "vercel_project" {
     { key = "NEXT_PUBLIC_APP_URL", value = "https://my-app.com", sensitive = false },
   ]
 }
-

@@ -6,14 +6,15 @@ name: Drift Detection
 #                              creates speculative, plan-only+refresh runs
 #                              (POST /runs), which READ access alone cannot do.
 #                              Keep this separate from the read-only TFC_TOKEN used
-#                              by the release workflow. Falls back to TFC_TOKEN if
-#                              TFC_TOKEN_DRIFT is unset (back-compat; that token
-#                              then also needs queue-plans).
+#                              by the release workflow. There is NO fallback to
+#                              TFC_TOKEN: the read-only release token must never
+#                              be granted queue-plans, so a missing
+#                              TFC_TOKEN_DRIFT fails (dispatch) or skips (schedule).
 #   - vars.TFC_ORGANIZATION    Terraform Cloud organization name.
 #   - vars.TFC_DRIFT_WORKSPACES  (optional) JSON array of workspace names to check.
 #                              Defaults to the full GCP control plane + dev workload
 #                              when unset; set it to add the AWS guardrail workspaces.
-# When TFC_TOKEN/TFC_ORGANIZATION are not configured, the scheduled run SKIPS
+# When TFC_TOKEN_DRIFT/TFC_ORGANIZATION are not configured, the scheduled run SKIPS
 # cleanly (via the check-credentials gate below) instead of failing red — a
 # missing-secret condition is a configuration gap, not a CI failure.
 # workflow_dispatch always runs the credential assertion step so a manual
@@ -48,13 +49,19 @@ jobs:
     outputs:
       configured: ${{ steps.check.outputs.configured }}
     steps:
-      - name: Check whether TFC_TOKEN / TFC_ORGANIZATION are configured
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Check whether TFC_TOKEN_DRIFT / TFC_ORGANIZATION are configured
         id: check
         # `secrets.*` cannot be referenced directly in a job-level `if:`, so we
         # evaluate it here (where secrets ARE available) and expose a plain
         # job output that downstream `if:` conditions can safely read.
         env:
-          TFC_TOKEN: ${{ secrets.TFC_TOKEN_DRIFT || secrets.TFC_TOKEN }}
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN_DRIFT }}
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
         run: |
           if [ -n "$TFC_TOKEN" ] && [ -n "$TFC_ORGANIZATION" ]; then
@@ -62,11 +69,11 @@ jobs:
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
             if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-              echo "::error::TFC_TOKEN (secret) and/or TFC_ORGANIZATION (variable)" \
+              echo "::error::TFC_TOKEN_DRIFT (secret) and/or TFC_ORGANIZATION (variable)" \
                 "are not configured. Manual runs require both — see docs/guides/CI_SECRETS.md."
               exit 1
             fi
-            echo "::warning::TFC_TOKEN (secret) and/or TFC_ORGANIZATION (variable)" \
+            echo "::warning::TFC_TOKEN_DRIFT (secret) and/or TFC_ORGANIZATION (variable)" \
               "are not configured. Skipping scheduled drift detection cleanly." \
               "See docs/guides/CI_SECRETS.md for setup."
           fi
@@ -118,18 +125,27 @@ jobs:
         # yamllint disable-line rule:line-length
         workspace: ${{ fromJSON(vars.TFC_DRIFT_WORKSPACES || '["gcp-bootstrap","gcp-organization","gcp-projects","gcp-network-hub","gcp-workload-dev","aws-organization","aws-security","aws-network"]') }}
     steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
       - name: Assert Terraform Cloud credentials are configured
         env:
-          TFC_TOKEN: ${{ secrets.TFC_TOKEN_DRIFT || secrets.TFC_TOKEN }}
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN_DRIFT }}
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
         run: |
-          test -n "$TFC_TOKEN"
-          test -n "$TFC_ORGANIZATION"
+          if [ -z "$TFC_TOKEN" ]; then
+            echo "::error::secrets.TFC_TOKEN_DRIFT is not set (no fallback to TFC_TOKEN)."
+            exit 1
+          fi
+          test -n "$TFC_ORGANIZATION" || { echo "::error::vars.TFC_ORGANIZATION is not set."; exit 1; }
 
       - name: Fetch latest run status from Terraform Cloud
         id: run_status
         env:
-          TFC_TOKEN: ${{ secrets.TFC_TOKEN_DRIFT || secrets.TFC_TOKEN }}
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN_DRIFT }}
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
           WORKSPACE: ${{ matrix.workspace }}
         run: |
@@ -140,7 +156,7 @@ jobs:
             --header "Content-Type: application/vnd.api+json" \
             "${RUNS_URL}") \
             || { echo "::error::TFC API request failed for workspace '${WORKSPACE}'." \
-              "Check TFC_TOKEN and TFC_ORGANIZATION. Response: ${response}" >&2; exit 1; }
+              "Check TFC_TOKEN_DRIFT and TFC_ORGANIZATION. Response: ${response}" >&2; exit 1; }
 
           if ! echo "$response" | jq -e '.data | type == "array"' >/dev/null 2>&1; then
             echo "::error::Unexpected TFC API response format for workspace '${WORKSPACE}': ${response}" >&2
@@ -155,7 +171,7 @@ jobs:
       - name: Trigger speculative plan via Terraform Cloud API
         id: trigger_plan
         env:
-          TFC_TOKEN: ${{ secrets.TFC_TOKEN_DRIFT || secrets.TFC_TOKEN }}
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN_DRIFT }}
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
           WORKSPACE: ${{ matrix.workspace }}
         run: |
@@ -215,7 +231,7 @@ jobs:
       - name: Poll for plan result
         id: poll
         env:
-          TFC_TOKEN: ${{ secrets.TFC_TOKEN_DRIFT || secrets.TFC_TOKEN }}
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN_DRIFT }}
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
           DRIFT_RUN_ID: ${{ steps.trigger_plan.outputs.drift_run_id }}
           # Mapped via env (not inlined into the run script) to avoid interpolating
@@ -311,11 +327,17 @@ jobs:
     needs: [check-credentials, detect-drift]
     if: always()
     steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
       - name: Publish summary
         # needs.detect-drift.result is the aggregated matrix result:
         #   success  = ALL workspace jobs passed (no drift detected in any workspace)
         #   failure  = ONE or more workspace jobs failed (drift or API error)
-        #   skipped  = check-credentials reported TFC_TOKEN/TFC_ORGANIZATION are not configured
+        #   skipped  = check-credentials reported TFC_TOKEN_DRIFT/TFC_ORGANIZATION are not configured
         # Individual per-workspace results appear as annotations on each matrix job.
         env:
           CONFIGURED: ${{ needs.check-credentials.outputs.configured }}
@@ -328,7 +350,7 @@ jobs:
             if [ "$CONFIGURED" != "true" ]; then
               echo "⏭️ **Skipped — Terraform Cloud credentials are not configured.**"
               echo ""
-              echo "Set the \`TFC_TOKEN\` repository secret and \`TFC_ORGANIZATION\` repository"
+              echo "Set the \`TFC_TOKEN_DRIFT\` repository secret and \`TFC_ORGANIZATION\` repository"
               echo "variable to enable scheduled drift detection. See docs/guides/CI_SECRETS.md."
             elif [ "$RESULT" = "success" ]; then
               echo "✅ **All workspace plans completed — no drift detected.**"

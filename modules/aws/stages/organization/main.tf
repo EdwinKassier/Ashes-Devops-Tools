@@ -61,6 +61,12 @@ module "policies" {
   break_glass_role_arn    = var.break_glass_role_arn
   log_archive_bucket_name = var.log_archive_bucket_name
   attachments             = local.attachments
+
+  # Member-account carve-outs + perimeter tuning (validated in the policy module).
+  pipeline_role_names                = var.pipeline_role_names
+  break_glass_role_names             = var.break_glass_role_names
+  data_perimeter_trusted_account_ids = var.data_perimeter_trusted_account_ids
+  allow_vpc_bpa_exclusions           = var.allow_vpc_bpa_exclusions
 }
 
 # Centralized root-access management for the organization.
@@ -80,4 +86,49 @@ module "cost_governance" {
   cost_allocation_tags    = var.cost_allocation_tags
   notifications_topic_arn = var.cost_notifications_topic_arn
   anomaly_email           = var.cost_anomaly_email
+}
+
+# Member-account TFC workload identity (OIDC provider + tfc-plan / tfc-apply),
+# deployed by a SERVICE_MANAGED StackSet from this management-account stage to
+# the OUs of the bound accounts. Auto-deployment gives accounts that join those
+# OUs the OIDC provider; their roles appear once they are added to
+# tfc_workspace_bindings. Requires CloudFormation StackSets trusted access
+# (member.org.stacksets.cloudformation.amazonaws.com — in the organization
+# module's default aws_service_access_principals).
+module "tfc_oidc_baseline" {
+  source = "../../iam/tfc-oidc-baseline"
+  count  = var.enable_tfc_oidc_baseline ? 1 : 0
+
+  tfc_hostname              = var.tfc_hostname
+  tfc_organization          = var.tfc_organization
+  tfc_project               = var.tfc_project
+  allow_workspace_wildcards = var.tfc_oidc_allow_workspace_wildcards
+  apply_role_policy_arns    = var.tfc_apply_role_policy_arns
+
+  # Permissions boundary on tfc-apply (default: embedded tfc-apply-boundary).
+  enable_apply_permissions_boundary = var.tfc_enable_apply_permissions_boundary
+  apply_permissions_boundary_arn    = var.tfc_apply_permissions_boundary_arn
+  enable_apply_boundary_propagation = var.tfc_enable_apply_boundary_propagation
+  call_as                           = var.tfc_oidc_call_as
+
+  # Plan-role data-plane read deny (ReadOnlyAccess minus GetObject/GetSecretValue/...).
+  enable_plan_role_data_read_deny = var.tfc_enable_plan_role_data_read_deny
+  plan_role_data_read_exempt_arns = var.tfc_plan_role_data_read_exempt_arns
+
+  account_bindings = {
+    for k, b in var.tfc_workspace_bindings : k => {
+      account_id = module.account[k].account_id
+      workspaces = b.workspaces
+      project    = b.project
+    }
+  }
+
+  # Keyed by OU name (plan-known) so the per-OU stack instances are stable.
+  target_ou_ids = {
+    for ou in distinct([for k in keys(var.tfc_workspace_bindings) : local.all_accounts[k].ou]) :
+    ou => module.organization.ou_ids[ou]
+  }
+
+  # Trusted access for StackSets is enabled by module.organization.
+  depends_on = [module.organization]
 }

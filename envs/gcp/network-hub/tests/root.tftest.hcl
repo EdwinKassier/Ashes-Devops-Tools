@@ -9,9 +9,11 @@ mock_provider "google-beta" {}
 mock_provider "random" {}
 
 variables {
-  project_prefix         = "acme"
-  hub_vpc_cidr_block     = "10.0.0.0/16"
-  dns_hub_vpc_cidr_block = "10.1.0.0/16"
+  # Isolate the suite from any committed config/landing-zone.yaml.
+  landing_zone_config_path = ""
+  project_prefix           = "acme"
+  hub_vpc_cidr_block       = "10.0.0.0/16"
+  dns_hub_vpc_cidr_block   = "10.1.0.0/16"
   environments = {
     dev = {
       display_name            = "Development"
@@ -69,5 +71,97 @@ run "network_hub_output_contract" {
   assert {
     condition     = output.hub_network.vpc_self_link == "https://www.googleapis.com/compute/v1/projects/acme-hub-abcd/global/networks/acme-hub-vpc" && output.hub_network.vpc_name == "acme-hub-vpc" && output.hub_network.dns_zone_name == "hub-dns" && output.hub_network.dns_domain == "hub.internal."
     error_message = "hub_network must re-export vpc_self_link, vpc_name, dns_zone_name and dns_domain (consumed by gcp-workload)."
+  }
+}
+
+# Estates with no is_production environment do not trip the prod-enforcement check.
+run "no_prod_env_no_vpc_sc_warning" {
+  command = plan
+}
+
+# An is_production environment with the hub perimeter missing / in dry-run warns.
+run "prod_env_with_dry_run_hub_perimeter_warns" {
+  command = plan
+
+  variables {
+    environments = {
+      prod = {
+        display_name            = "Production"
+        region                  = "europe-west1"
+        cidr_block              = "10.30.0.0/16"
+        budget_monthly_limit    = 100
+        iam_group_role_bindings = {}
+        is_production           = true
+      }
+    }
+    vpc_sc_access_policy_name = "1234567890"
+    vpc_sc_enable_dry_run     = true
+  }
+
+  override_data {
+    target = data.terraform_remote_state.gcp_projects
+    values = {
+      outputs = {
+        project_ids     = { "shared-hub" = "acme-hub-abcd", "shared-dns" = "acme-dns-abcd", "prod-host" = "acme-prod-host-abcd" }
+        project_numbers = { "shared-hub" = "111111111111", "shared-dns" = "222222222222", "prod-host" = "333333333333" }
+      }
+    }
+  }
+
+  expect_failures = [check.hub_vpc_sc_enforced_when_prod_present]
+}
+
+# Production is the explicit is_production attribute, not a name match: an
+# environment merely NAMED "prod" without the flag does not warn.
+run "prod_named_env_without_flag_does_not_warn" {
+  command = plan
+
+  variables {
+    environments = {
+      prod = {
+        display_name            = "Production"
+        region                  = "europe-west1"
+        cidr_block              = "10.30.0.0/16"
+        budget_monthly_limit    = 100
+        iam_group_role_bindings = {}
+      }
+    }
+  }
+
+  override_data {
+    target = data.terraform_remote_state.gcp_projects
+    values = {
+      outputs = {
+        project_ids     = { "shared-hub" = "acme-hub-abcd", "shared-dns" = "acme-dns-abcd", "prod-host" = "acme-prod-host-abcd" }
+        project_numbers = { "shared-hub" = "111111111111", "shared-dns" = "222222222222", "prod-host" = "333333333333" }
+      }
+    }
+  }
+}
+
+# Stage contract override (FAST-style): organization_contract / projects_contract
+# replace the upstream remote-state reads entirely (count = 0).
+run "contracts_skip_remote_state" {
+  command = plan
+
+  variables {
+    organization_contract = {
+      org_id  = "123456789012"
+      folders = { dev = { id = "folders/111", name = "folders/111", display_name = "Development" } }
+    }
+    projects_contract = {
+      project_ids     = { "shared-hub" = "acme-hub-abcd", "shared-dns" = "acme-dns-abcd", "dev-host" = "acme-dev-host-abcd" }
+      project_numbers = { "shared-hub" = "111111111111", "shared-dns" = "222222222222", "dev-host" = "333333333333" }
+    }
+  }
+
+  assert {
+    condition = (
+      length(data.terraform_remote_state.gcp_organization) == 0 &&
+      length(data.terraform_remote_state.gcp_projects) == 0 &&
+      local.org.org_id == "123456789012" &&
+      local.projects.project_ids["shared-hub"] == "acme-hub-abcd"
+    )
+    error_message = "supplied contracts must skip the gcp-organization / gcp-projects reads and feed the root"
   }
 }

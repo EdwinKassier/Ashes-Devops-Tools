@@ -48,3 +48,39 @@ run "workload_role_and_break_glass_defaults" {
     error_message = "Break-glass standing policy must deny all actions (Effect=Deny, Action=*)."
   }
 }
+
+# Boundary propagation (tfc-oidc-baseline): the module-wide
+# permissions_boundary_arn lands on every role that does not set its own, a
+# per-role boundary wins, and the break-glass role carries the module default.
+run "permissions_boundary_propagated" {
+  command = plan
+
+  variables {
+    roles = {
+      inherits = {
+        trust_policy = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":\"arn:aws:iam::111111111111:root\"},\"Action\":\"sts:AssumeRole\"}]}"
+      }
+      own = {
+        trust_policy         = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":\"arn:aws:iam::111111111111:root\"},\"Action\":\"sts:AssumeRole\"}]}"
+        permissions_boundary = "arn:aws:iam::123456789012:policy/custom-boundary"
+      }
+    }
+    break_glass_trusted_principals = ["arn:aws:iam::222222222222:role/admin"]
+    permissions_boundary_arn       = "arn:aws:iam::123456789012:policy/tfc-apply-boundary"
+  }
+
+  assert {
+    condition     = aws_iam_role.this["inherits"].permissions_boundary == "arn:aws:iam::123456789012:policy/tfc-apply-boundary"
+    error_message = "A role without its own boundary must inherit permissions_boundary_arn."
+  }
+
+  assert {
+    condition     = aws_iam_role.this["own"].permissions_boundary == "arn:aws:iam::123456789012:policy/custom-boundary"
+    error_message = "A role's own permissions_boundary must take precedence over the module default."
+  }
+
+  assert {
+    condition     = aws_iam_role.break_glass[0].permissions_boundary == "arn:aws:iam::123456789012:policy/tfc-apply-boundary"
+    error_message = "The break-glass role must carry permissions_boundary_arn."
+  }
+}

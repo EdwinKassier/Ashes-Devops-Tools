@@ -1,40 +1,88 @@
-# Phase-3 per-env workload root. Reads TWO upstream roots' remote state:
-#   - aws_organization → account_role_arns (the per-env workload account role the
-#     providers assume, keyed by var.workload_account_key).
-#   - aws_network      → the network cross-root contract (tgw_id + ipam_pool_ids)
-#     the spoke VPC attaches to / allocates its CIDR from.
+# Phase-3 per-env workload root. Consumes THREE upstream stage contracts:
+#   - organization → account_ids (the wrong-account guard on both providers,
+#     keyed by local.workload_account_key).
+#   - network      → tgw_id + ipam_pool_ids (the spoke attaches to the shared TGW
+#     and allocates its CIDR from the region's IPAM pool). OPTIONAL: with
+#     enable_network_hub = false the spoke is a standalone VPC (no TGW
+#     attachment/routes, literal vpc_cidr, NAT-less private tiers).
+#   - security     → log_archive_bucket_name (flow logs, Config, SSM logs).
+#
+# FAST-style stage contract override: each contract comes from, in order,
+#   1. the <layer>_contract variable (tfvars / TFC variable),
+#   2. aws.contracts.<layer> in config/landing-zone.yaml,
+#   3. the upstream workspace's terraform_remote_state.
+# A remote-state read happens ONLY when no contract was supplied (count = 0
+# otherwise), so this root can run without the upstream workspace existing.
 # It composes the aws-workload stage in a SINGLE workload account. It declares
 # ONLY the aws provider — no supabase/vercel (SaaS lives in envs/saas).
+locals {
+  organization_contract = var.organization_contract != null ? var.organization_contract : local.cfg.organization_contract
+  network_contract      = var.network_contract != null ? var.network_contract : local.cfg.network_contract
+  # var.log_archive_bucket_name is the legacy single-field form of security_contract.
+  security_contract = (
+    var.log_archive_bucket_name != null ? { log_archive_bucket_name = var.log_archive_bucket_name } :
+    var.security_contract != null ? var.security_contract : local.cfg.security_contract
+  )
+
+  read_organization = local.organization_contract == null
+  read_network      = var.enable_network_hub && local.network_contract == null
+  read_security     = local.security_contract == null
+}
+
 data "terraform_remote_state" "aws_organization" {
+  count   = local.read_organization ? 1 : 0
   backend = "cloud"
   config = {
-    organization = var.tfc_organization
+    organization = local.tfc_organization
     workspaces   = { name = var.organization_workspace_name }
   }
 }
 
 data "terraform_remote_state" "aws_network" {
+  count   = local.read_network ? 1 : 0
   backend = "cloud"
   config = {
-    organization = var.tfc_organization
+    organization = local.tfc_organization
     workspaces   = { name = var.network_workspace_name }
   }
 }
 
 data "terraform_remote_state" "aws_security" {
+  count   = local.read_security ? 1 : 0
   backend = "cloud"
   config = {
-    organization = var.tfc_organization
+    organization = local.tfc_organization
     workspaces   = { name = var.security_workspace_name }
   }
 }
 
 locals {
-  # Source the central log-archive bucket name from aws-security (its owner), so a
-  # rename/rotation there cannot silently leave this workload writing flow logs,
-  # Config snapshots and Session Manager logs to a stale bucket (audit M7).
-  # var.log_archive_bucket_name, if set, overrides for out-of-band setups.
-  log_archive_bucket_name = coalesce(var.log_archive_bucket_name, data.terraform_remote_state.aws_security.outputs.log_archive_bucket_name)
+  # Wrong-account guard for both providers. No try(): a missing account_ids key
+  # fails the plan loudly instead of silently dropping the guard.
+  workload_account_id = (
+    local.read_organization
+    ? data.terraform_remote_state.aws_organization[0].outputs.account_ids[local.workload_account_key]
+    : local.organization_contract.account_ids[local.workload_account_key]
+  )
+
+  # Network contract; null / "" in standalone mode (enable_network_hub = false).
+  tgw_id = (
+    !var.enable_network_hub ? null :
+    local.read_network ? data.terraform_remote_state.aws_network[0].outputs.tgw_id : local.network_contract.tgw_id
+  )
+  ipam_pool_id = (
+    !var.enable_network_hub ? "" :
+    local.read_network ? data.terraform_remote_state.aws_network[0].outputs.ipam_pool_ids[local.aws_region] : lookup(local.network_contract.ipam_pool_ids, local.aws_region, "")
+  )
+
+  # The central log-archive bucket name comes from aws-security (its owner) unless
+  # a contract supplies it, so a rename there cannot silently leave this
+  # workload writing to a stale bucket (audit M7).
+  log_archive_bucket_name = (
+    local.read_security
+    ? data.terraform_remote_state.aws_security[0].outputs.log_archive_bucket_name
+    : local.security_contract.log_archive_bucket_name
+  )
 }
 
 module "aws_workload" {
@@ -45,24 +93,75 @@ module "aws_workload" {
     aws.us_east_1 = aws.us_east_1
   }
 
-  aws_region          = var.aws_region
-  aws_enabled_regions = var.aws_enabled_regions
-  vpc_cidr            = var.vpc_cidr
+  aws_region          = local.aws_region
+  aws_enabled_regions = local.aws_enabled_regions
+  vpc_cidr            = local.vpc_cidr
 
-  # Network cross-root contract: attach the spoke to the shared TGW and allocate
-  # the VPC CIDR from the region's shared IPAM pool.
-  tgw_id       = data.terraform_remote_state.aws_network.outputs.tgw_id
-  ipam_pool_id = data.terraform_remote_state.aws_network.outputs.ipam_pool_ids[var.aws_region]
+  # Spoke is named workload-<environment> (local.environment, see providers.tf)
+  # and routes the configured tiers to the shared TGW.
+  environment           = local.environment
+  tgw_route_tiers       = var.tgw_route_tiers
+  tgw_destination_cidrs = var.tgw_destination_cidrs
+
+  # Network contract: attach the spoke to the shared TGW and allocate the VPC
+  # CIDR from the region's shared IPAM pool. Standalone (no network hub):
+  # tgw_id = null -> no attachment/routes; ipam_pool_id = "" -> literal vpc_cidr.
+  tgw_id       = local.tgw_id
+  ipam_pool_id = local.ipam_pool_id
 
   # Flow logs + Config snapshots + Session Manager logs all land in the central
   # log-archive bucket (cross-root naming contract).
-  flow_log_destination_arn = "arn:aws:s3:::${local.log_archive_bucket_name}"
-  log_archive_bucket_name  = local.log_archive_bucket_name
-  config_role_arn          = var.config_role_arn
-  kms_key_arn              = var.kms_key_arn
+  flow_log_destination_arn          = "arn:aws:s3:::${local.log_archive_bucket_name}"
+  log_archive_bucket_name           = local.log_archive_bucket_name
+  config_role_arn                   = var.config_role_arn
+  create_config_service_linked_role = var.create_config_service_linked_role
+  kms_key_arn                       = var.kms_key_arn
 
   enable_edge    = var.enable_edge
   workload_roles = var.workload_roles
+}
+
+# =============================================================================
+# APP SERVICES — the application golden path (audit: Boilerplate H)
+#
+# One entry in var.services = an ECR repo, a Fargate service in the spoke's
+# private subnets behind the shared internal ALB, least-privilege task roles, a
+# KMS-encrypted log group, and optionally a GitHub Actions OIDC deploy role and
+# an Aurora PostgreSQL cluster. Default services = {} creates nothing. See
+# docs/guides/deploying-a-service.md (AWS section).
+# =============================================================================
+
+module "app_services" {
+  source = "../../../modules/aws/stages/app-services"
+
+  environment = local.environment
+  aws_region  = local.aws_region
+
+  # Placement: the spoke VPC this root just built. Tasks + the internal ALB in
+  # the private tier (egress via the TGW to central inspection); Aurora in the
+  # isolated tier (no route off the VPC).
+  vpc_id              = module.aws_workload.vpc_id
+  vpc_cidr            = local.vpc_cidr
+  service_subnet_ids  = lookup(module.aws_workload.subnet_ids_by_tier, var.app_service_subnet_tier, [])
+  alb_subnet_ids      = lookup(module.aws_workload.subnet_ids_by_tier, var.app_alb_subnet_tier, [])
+  database_subnet_ids = lookup(module.aws_workload.subnet_ids_by_tier, var.app_database_subnet_tier, [])
+  kms_key_arn         = var.kms_key_arn
+
+  services = var.services
+
+  enable_github_oidc          = var.enable_github_oidc
+  create_github_oidc_provider = var.create_github_oidc_provider
+  github_oidc_provider_arn    = var.github_oidc_provider_arn
+
+  alb_internal                   = var.app_alb_internal
+  alb_certificate_arn            = var.app_alb_certificate_arn
+  alb_ingress_cidrs              = var.app_alb_ingress_cidrs
+  alb_enable_deletion_protection = var.app_alb_enable_deletion_protection
+  alb_access_logs_bucket         = var.app_alb_access_logs_bucket
+
+  log_retention_days  = var.app_log_retention_days
+  enable_alarms       = var.enable_app_alarms
+  alarm_sns_topic_arn = var.app_alarm_sns_topic_arn
 }
 
 # =============================================================================
@@ -78,7 +177,7 @@ data "terraform_remote_state" "saas" {
   count   = var.enable_saas_secret_bridge ? 1 : 0
   backend = "cloud"
   config = {
-    organization = var.tfc_organization
+    organization = local.tfc_organization
     workspaces   = { name = var.saas_workspace_name }
   }
 }

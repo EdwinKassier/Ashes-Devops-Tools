@@ -1,10 +1,12 @@
 /**
  * Copyright 2023 Ashes
  *
- * Host Module - Unified Infrastructure Orchestration
+ * Host Module - DEPRECATED unified network stack
  *
- * Compatibility wrapper used by envs/gcp/workload to compose network,
- * security, and governance modules into one environment stack.
+ * Deprecated: kept unchanged for one deprecation cycle so external callers'
+ * state is untouched. In-repo callers now use the purpose-built compositions
+ * stages/net-hub, stages/net-spoke and stages/dns-anchor (over the shared
+ * network/tiered-vpc core); see README.md for the migration guide.
  */
 
 # =============================================================================
@@ -83,4 +85,3 @@ resource "terraform_data" "subnet_cidr_count_guard" {
     }
   }
 }
-

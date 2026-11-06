@@ -180,6 +180,18 @@ variable "enable_execute_command" {
   default     = false
 }
 
+variable "enable_external_deployments" {
+  description = "Hand task-definition rollouts to an external pipeline (e.g. GitHub Actions RegisterTaskDefinition + UpdateService): Terraform still creates the initial revision and the service, but ignores later task_definition and desired_count drift instead of reverting each deploy."
+  type        = bool
+  default     = false
+}
+
+variable "enable_deployment_circuit_breaker" {
+  description = "Enable the ECS deployment circuit breaker with automatic rollback, so a revision whose tasks never become healthy is rolled back instead of looping."
+  type        = bool
+  default     = true
+}
+
 # ── IAM (caller-owned, least-privilege) ───────────────────────────────────────
 
 variable "execution_role_arn" {

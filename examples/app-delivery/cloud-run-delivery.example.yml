@@ -1,66 +1,93 @@
-# Reference application-delivery pipeline (audit C1/C2). COPY this into an
-# application repository's .github/workflows/ and adjust. It is a template, not a
-# workflow for THIS repo (hence the .example.yml suffix), so it never runs here.
+# Reference application-delivery pipeline for Cloud Run (audit C1/C2). COPY this
+# into the APPLICATION repository's .github/workflows/ and adjust. It is a
+# template, not a workflow for THIS repo (hence the .example.yml suffix), so it
+# never runs here.
 #
-# Flow: build -> scan -> push to Artifact Registry -> deploy to the Cloud Run
-# service created by modules/gcp/compute/cloud-run. Auth is keyless (WIF), using
-# the pool/provider from the gcp-bootstrap root. No service-account keys.
+# Flow: build -> scan -> push to Artifact Registry -> deploy a new revision of the
+# Cloud Run service. Auth is keyless: GitHub OIDC -> the app-deploy Workload
+# Identity pool in the env host project -> the per-service deploy SA. No keys.
 #
-# Prerequisites (provisioned by the landing zone, not by this pipeline):
-#   - A Cloud Run service from modules/gcp/compute/cloud-run (its name below).
-#   - An Artifact Registry repo from modules/gcp/artifact-registry.
-#   - A deploy service account with roles/run.developer + artifactregistry.writer,
-#     and a WIF binding for this repo (modules/gcp/iam/workload-identity).
-#   - Secrets in modules/gcp/data/secret-manager; the service reads them via
-#     secret_key_ref, so they never pass through this pipeline.
+# Everything this pipeline needs is created by ONE app_services entry in the
+# gcp-workload-<env> workspace (modules/gcp/stages/app-services):
+#   - Artifact Registry repo  <region>-docker.pkg.dev/<host>/<service>
+#   - Cloud Run service       <service> (runtime SA <service>-run@...)
+#   - deploy SA               <service>-deploy@... with run.developer on the
+#     service, artifactregistry.writer on the repo, serviceAccountUser on the
+#     runtime SA only; impersonable only from this repo's numeric repository_id
+#     (and the ref / GitHub environment you declared).
+#
+# Set these GitHub repository (or environment) VARIABLES from
+#   terraform -chdir=envs/gcp/workload output -json app_github_actions
+# (one object per service; the keys match the variable names):
+#   GCP_WIF_PROVIDER   projects/<host-number>/locations/global/workloadIdentityPools/apps-<env>/providers/github
+#   GCP_DEPLOY_SA      <service>-deploy@<host>.iam.gserviceaccount.com
+#   GCP_PROJECT_ID     <host project id>
+#   GCP_REGION         e.g. europe-west1
+#   CLOUD_RUN_SERVICE  <service>
+#   IMAGE_REPOSITORY   <region>-docker.pkg.dev/<host>/<service>/<service>
+#
+# If the app_services entry sets github.environment, add `environment: <name>`
+# to the job; if it sets github.ref, trigger only from that ref (as below).
+#
+# Action pinning: actions/checkout and trivy-action are SHA-pinned (same SHAs as
+# this repo's workflows). google-github-actions/auth is on a VERSION TAG here
+# because no SHA for it is vetted in this repo yet — pin it to a full commit SHA
+# in your app repo before use.
 
-name: Deploy service
+name: Deploy service (Cloud Run)
 
 on:
   push:
-    branches: [main]
+    branches: [main] # must match app_services.<svc>.github.ref when set
 
 permissions:
   contents: read
   id-token: write # required for keyless WIF auth
 
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
-  REGION: europe-west1
-  SERVICE: my-api # the modules/gcp/compute/cloud-run service name
-  AR_REPO: europe-west1-docker.pkg.dev/${{ vars.GOOGLE_PROJECT_ID }}/apps
+  IMAGE: ${{ vars.IMAGE_REPOSITORY }}:${{ github.sha }}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # environment: dev # set when app_services.<svc>.github.environment is set
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Authenticate to Google Cloud (keyless)
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }} # from gcp-bootstrap output
-          service_account: ${{ vars.GCP_DEPLOY_SA }}
-
       - name: Build image
-        run: docker build -t "${AR_REPO}/${SERVICE}:${GITHUB_SHA}" .
+        run: docker build -t "${IMAGE}" .
 
       - name: Scan image (block on CRITICAL/HIGH, matching the IaC gate)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ${{ env.AR_REPO }}/${{ env.SERVICE }}:${{ github.sha }}
+          image-ref: ${{ env.IMAGE }}
           severity: "CRITICAL,HIGH"
           exit-code: "1"
 
+      - name: Authenticate to Google Cloud (keyless WIF)
+        uses: google-github-actions/auth@v2 # UNPINNED TAG: pin to a SHA in your app repo
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
       - name: Push image
         run: |
-          gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
-          docker push "${AR_REPO}/${SERVICE}:${GITHUB_SHA}"
+          gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
+          docker push "${IMAGE}"
 
-      # Deploy by updating the image on the Terraform-managed service. In a
-      # GitOps setup, instead bump the image var and let Terraform Cloud apply.
+      # Terraform owns the service configuration (ingress, VPC egress, secrets,
+      # runtime SA, scaling) and ignores image changes; this step only rolls a
+      # new revision with the new image. The repo has immutable tags, so each
+      # commit SHA is a unique, non-overwritable image.
       - name: Deploy to Cloud Run
         run: |
-          gcloud run services update "${SERVICE}" \
-            --region "${REGION}" \
-            --image "${AR_REPO}/${SERVICE}:${GITHUB_SHA}"
+          gcloud run deploy "${{ vars.CLOUD_RUN_SERVICE }}" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ vars.GCP_REGION }}" \
+            --image "${IMAGE}" \
+            --quiet

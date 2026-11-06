@@ -39,3 +39,23 @@ output "github_principal_set_prefix" {
   description = "Prefix for GitHub principal set (append /attribute.repository/owner/repo)"
   value       = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.pool.name}"
 }
+
+output "tfc_attribute_condition" {
+  description = "The CEL attribute_condition applied to the Terraform Cloud provider (null when the TFC provider is disabled)."
+  value       = var.enable_tfc_provider ? local.tfc_attribute_condition : null
+}
+
+output "tfc_binding_members" {
+  description = "Map of \"<workspace_name>:<run_phase>\" to the principalSet member bound to roles/iam.workloadIdentityUser on the target SA."
+  value       = { for k, b in google_service_account_iam_member.tfc_workload_identity : k => b.member }
+}
+
+output "github_attribute_condition" {
+  description = "The CEL attribute_condition applied to the GitHub provider (null when the GitHub provider is disabled)."
+  value       = var.enable_github_provider ? (var.github_attribute_condition_override != null ? var.github_attribute_condition_override : local.github_computed_condition) : null
+}
+
+output "github_binding_service_accounts" {
+  description = "Map of GitHub binding key to the service account email granted roles/iam.workloadIdentityUser."
+  value       = { for k, b in var.github_sa_bindings : (b.key != null ? b.key : "${b.repository}-${b.service_account_email}") => b.service_account_email }
+}

@@ -7,6 +7,7 @@ This directory contains a suite of Terraform modules for building enterprise-gra
 ### Core Networking
 | Module | Description | Key Features |
 |---|---|---|
+| [`tiered-vpc`](./tiered-vpc) | Shared network core of the hub, spoke and DNS-anchor compositions | VPC, three-tier zonal subnets, baseline tier firewall, deletion guard |
 | [`vpc`](./vpc) | Creates a VPC network | Global/Regional routing, Shared VPC Host support |
 | [`subnet`](./subnet) | Creates subnets | Flow logs, Private Google Access, Secondary Ranges |
 | [`nat`](./nat) | Cloud NAT Gateway | Manual/Auto IP allocation, Logging |
@@ -34,7 +35,7 @@ This directory contains a suite of Terraform modules for building enterprise-gra
 |---|---|---|
 | [`cdn`](./cdn) | Cloud CDN & Load Balancer | Global External LB, SSL management, Backend buckets |
 | [`dns`](./dns) | Cloud DNS | Public/Private zones, DNSSEC, Forwarding |
-| [`api_gateway`](./api_gateway) | API Gateway | OpenAPI spec management, Service Account integration |
+| [`api_gateway`](./api-gateway) | API Gateway | OpenAPI spec management, Service Account integration |
 | [`internal-lb`](./internal-lb) | Internal Load Balancer | L4/L7 Internal Load Balancing |
 
 ### Monitoring & Utilities
@@ -46,7 +47,7 @@ This directory contains a suite of Terraform modules for building enterprise-gra
 ## Usage Guidelines
 
 ### 1. Orchestration
-New environment provisioning should start from [envs/gcp/organization](../../envs/gcp/organization/) and [envs/gcp/workload](../../envs/gcp/workload/). The `modules/gcp/stages/host` wrapper is used by the app root and remains available for compatibility. The default network shape is a 3-tier architecture:
+New environment provisioning should start from [envs/gcp/organization](../../../envs/gcp/organization/) and [envs/gcp/workload](../../../envs/gcp/workload/). Networks are built by the [`stages/net-hub`](../stages/net-hub/), [`stages/net-spoke`](../stages/net-spoke/) and [`stages/dns-anchor`](../stages/dns-anchor/) compositions over [`tiered-vpc`](./tiered-vpc); the `modules/gcp/stages/host` god-module is deprecated. The default network shape is a 3-tier architecture:
 - **Public**: Exposed to internet via LB/Gateway.
 - **Compute**: Application logic, private IPs only, access to Internet via NAT.
 - **Database**: Strictly internal, no direct egress.

@@ -26,7 +26,7 @@ run "secure_fargate_defaults" {
   command = plan
 
   assert {
-    condition     = aws_ecs_service.this.launch_type == "FARGATE"
+    condition     = aws_ecs_service.this[0].launch_type == "FARGATE"
     error_message = "service must use the FARGATE launch type."
   }
 
@@ -42,13 +42,13 @@ run "secure_fargate_defaults" {
 
   # Secure default: no public IP.
   assert {
-    condition     = aws_ecs_service.this.network_configuration[0].assign_public_ip == false
+    condition     = aws_ecs_service.this[0].network_configuration[0].assign_public_ip == false
     error_message = "assign_public_ip must default to false (tasks run in private subnets)."
   }
 
   # Secure default: ECS Exec off.
   assert {
-    condition     = aws_ecs_service.this.enable_execute_command == false
+    condition     = aws_ecs_service.this[0].enable_execute_command == false
     error_message = "enable_execute_command must default to false."
   }
 
@@ -71,7 +71,7 @@ run "secure_fargate_defaults" {
 
   # No load balancer and no autoscaling by default.
   assert {
-    condition     = length(aws_ecs_service.this.load_balancer) == 0
+    condition     = length(aws_ecs_service.this[0].load_balancer) == 0
     error_message = "no load_balancer block must be present when target_group_arn is empty."
   }
 
@@ -101,12 +101,12 @@ run "load_balancer_and_autoscaling_enabled" {
   }
 
   assert {
-    condition     = length(aws_ecs_service.this.load_balancer) == 1
+    condition     = length(aws_ecs_service.this[0].load_balancer) == 1
     error_message = "a load_balancer block must be present when target_group_arn is set."
   }
 
   assert {
-    condition     = one(aws_ecs_service.this.load_balancer).container_port == var.container_port
+    condition     = one(aws_ecs_service.this[0].load_balancer).container_port == var.container_port
     error_message = "load balancer container port must default to container_port."
   }
 
@@ -154,5 +154,36 @@ run "cluster_and_log_group_created" {
   assert {
     condition     = aws_cloudwatch_log_group.this[0].retention_in_days == 90
     error_message = "the log group must use the supplied retention."
+  }
+}
+
+# Secure rollout default: the deployment circuit breaker rolls back a revision
+# that never becomes healthy.
+run "deployment_circuit_breaker_on_by_default" {
+  command = plan
+
+  assert {
+    condition     = aws_ecs_service.this[0].deployment_circuit_breaker[0].enable && aws_ecs_service.this[0].deployment_circuit_breaker[0].rollback
+    error_message = "the deployment circuit breaker (with rollback) must be on by default."
+  }
+}
+
+# CI-driven deployments: exactly one service variant exists, and it is the one
+# whose lifecycle ignores task_definition / desired_count.
+run "external_deployments_select_ci_managed_service" {
+  command = plan
+
+  variables {
+    enable_external_deployments = true
+  }
+
+  assert {
+    condition     = length(aws_ecs_service.this) == 0 && length(aws_ecs_service.externally_deployed) == 1
+    error_message = "enable_external_deployments must select the externally_deployed service variant only."
+  }
+
+  assert {
+    condition     = output.service_name == "orders-api" && output.task_definition_family == "orders-api"
+    error_message = "outputs must resolve against the selected service variant."
   }
 }

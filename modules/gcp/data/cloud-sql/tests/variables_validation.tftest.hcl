@@ -152,3 +152,68 @@ run "rejects_invalid_update_track" {
     maintenance_window_update_track = "nightly"
   }
 }
+
+run "enterprise_plus_requires_perf_optimized_tier" {
+  command = plan
+
+  variables {
+    edition = "ENTERPRISE_PLUS"
+    tier    = "db-custom-1-3840"
+  }
+
+  expect_failures = [var.edition]
+}
+
+# ── users / user_passwords (ephemeral passwords) ──────────────────────────────
+
+run "accepts_ephemeral_password_user" {
+  command = plan
+
+  variables {
+    users          = [{ name = "app", ephemeral_password = true }]
+    user_passwords = { app = "s3cret-value" }
+  }
+}
+
+run "rejects_ephemeral_password_user_with_inline_password" {
+  command = plan
+
+  expect_failures = [var.users]
+
+  variables {
+    users          = [{ name = "app", password = "inline", ephemeral_password = true }]
+    user_passwords = { app = "s3cret-value" }
+  }
+}
+
+run "rejects_ephemeral_password_on_iam_user" {
+  command = plan
+
+  expect_failures = [var.users]
+
+  variables {
+    users          = [{ name = "svc@mock-project.iam", type = "CLOUD_IAM_SERVICE_ACCOUNT", ephemeral_password = true }]
+    user_passwords = { "svc@mock-project.iam" = "x" }
+  }
+}
+
+run "rejects_user_password_for_undeclared_user" {
+  command = plan
+
+  expect_failures = [var.user_passwords]
+
+  variables {
+    users          = [{ name = "app", password = "inline" }]
+    user_passwords = { app = "s3cret-value" }
+  }
+}
+
+run "rejects_ephemeral_password_user_without_entry" {
+  command = plan
+
+  expect_failures = [var.user_passwords]
+
+  variables {
+    users = [{ name = "app", ephemeral_password = true }]
+  }
+}

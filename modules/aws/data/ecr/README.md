@@ -40,7 +40,6 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	
 }
 ```
 
@@ -48,7 +47,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.46.0, < 7.0.0 |
 
 ## Providers
@@ -66,7 +65,7 @@ The following resources are created:
 
 - resource.aws_ecr_lifecycle_policy.this (modules/aws/data/ecr/main.tf#L35)
 - resource.aws_ecr_repository.this (modules/aws/data/ecr/main.tf#L15)
-- resource.aws_ecr_repository_policy.org (modules/aws/data/ecr/main.tf#L67)
+- resource.aws_ecr_repository_policy.org (modules/aws/data/ecr/main.tf#L70)
 
 
 ## Inputs

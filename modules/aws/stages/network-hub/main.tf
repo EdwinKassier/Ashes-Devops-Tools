@@ -11,9 +11,10 @@
 #   - egress_vpc (vpc)     — centralized egress: NAT (public tier), interface
 #                            endpoints + resolver endpoints (private tier), and
 #                            its transit-gateway attachment (tgw tier).
-#   - stage-level NAT      — the vpc module intentionally omits NAT; the stage
-#                            adds one EIP + NAT gateway per egress public subnet
-#                            and a private route table default route to it.
+#   - stage-level NAT      — the vpc module owns route tables + the egress IGW;
+#                            the stage adds one EIP + NAT gateway per egress
+#                            public subnet and the per-AZ NAT / TGW routes into
+#                            the module-owned route tables.
 #   - transit_gateway      — segmented TGW; prod/nonprod default routes point at
 #                            the inspection attachment so traffic is inspected.
 #   - network_firewall     — stateful inspection in the inspection VPC.
@@ -86,6 +87,7 @@ module "inspection_vpc" {
   subnets                  = local.inspection_subnets
   flow_log_destination_arn = var.flow_log_destination_arn
   gateway_endpoints        = []
+  tags                     = var.tags
 }
 
 # ---------------------------------------------------------------------------
@@ -103,16 +105,22 @@ module "egress_vpc" {
   subnets                  = local.egress_subnets
   flow_log_destination_arn = var.flow_log_destination_arn
   gateway_endpoints        = []
+  tags                     = var.tags
+
+  # The NAT gateways live in the public tier and need an IGW; the module adds
+  # the public tier's 0.0.0.0/0 -> IGW route.
+  create_internet_gateway = true
 }
 
 # ---------------------------------------------------------------------------
-# Stage-level NAT for the egress VPC
+# Stage-level NAT + routes for the hub VPCs
 #
-# The vpc leaf module intentionally omits NAT, so the stage layers it on: one
-# Elastic IP + NAT gateway per egress public subnet, plus a single private route
-# table whose default route egresses through the first NAT gateway. Wiring uses
-# the egress VPC's `public` tier subnet ids (a plan-known-length list under real
-# apply; the tests override_module the vpc children where the ids are unknown).
+# The vpc module OWNS every route table (one per tier per AZ), its subnet
+# associations, the egress IGW and the public-tier default route to it. The
+# stage only layers on routes whose targets it owns and that differ per AZ: one
+# Elastic IP + NAT gateway per egress public subnet, and the per-AZ routes to
+# NAT / the transit gateway. Route tables are looked up from the vpc module's
+# route_table_ids_by_tier output (index i == AZ i), so no table is duplicated.
 # ---------------------------------------------------------------------------
 
 locals {
@@ -120,55 +128,132 @@ locals {
   # computed subnet ids: the ids are unknown at plan under mock, and a for_each
   # over an unknown-valued set is rejected. The subnet id is looked up as the
   # value, so only the value (not the key set) is apply-time.
-  nat_az_indexes            = range(var.az_count)
-  egress_public_subnet_ids  = module.egress_vpc.subnet_ids_by_tier["public"]
-  egress_private_subnet_ids = module.egress_vpc.subnet_ids_by_tier["private"]
+  nat_az_indexes                 = range(var.az_count)
+  nat_az_keys                    = toset([for i in local.nat_az_indexes : tostring(i)])
+  egress_public_subnet_ids       = module.egress_vpc.subnet_ids_by_tier["public"]
+  egress_private_route_table_ids = module.egress_vpc.route_table_ids_by_tier["private"]
+  egress_tgw_route_table_ids     = module.egress_vpc.route_table_ids_by_tier["tgw"]
+
+  # Return / hand-off routes into the transit gateway, keyed "<vpc>-<tier>-<i>":
+  #   - egress public + private tiers -> top_cidr via TGW (return path to spokes
+  #     for NAT'd flows, interface endpoints and resolver endpoints).
+  #   - inspection firewall tier -> 0.0.0.0/0 via TGW (inspected traffic goes back
+  #     to the TGW, whose inspection route table forwards it on).
+  hub_tgw_routes = merge(
+    {
+      for pair in setproduct(["public", "private"], local.nat_az_indexes) :
+      "egress-${pair[0]}-${pair[1]}" => {
+        route_table_id = module.egress_vpc.route_table_ids_by_tier[pair[0]][pair[1]]
+        destination    = var.top_cidr
+      }
+    },
+    {
+      for i in local.nat_az_indexes :
+      "inspection-firewall-${i}" => {
+        route_table_id = module.inspection_vpc.route_table_ids_by_tier["firewall"][i]
+        destination    = "0.0.0.0/0"
+      }
+    },
+  )
 }
 
 resource "aws_eip" "nat" {
-  for_each = toset([for i in local.nat_az_indexes : tostring(i)])
+  for_each = local.nat_az_keys
 
   domain = "vpc"
 
-  tags = { Name = "egress-nat-${each.key}" }
+  tags = merge(var.tags, { Name = "egress-nat-${each.key}" })
 }
 
 resource "aws_nat_gateway" "this" {
-  for_each = toset([for i in local.nat_az_indexes : tostring(i)])
+  for_each = local.nat_az_keys
 
   allocation_id = aws_eip.nat[each.key].id
   subnet_id     = local.egress_public_subnet_ids[tonumber(each.key)]
 
-  tags = { Name = "egress-nat-${each.key}" }
+  tags = merge(var.tags, { Name = "egress-nat-${each.key}" })
 
   depends_on = [module.egress_vpc]
 }
 
-# One private route table PER AZ; each AZ's default route egresses through the
-# NAT gateway in the SAME AZ. This gives true per-AZ high availability (a NAT or
-# AZ failure is contained to that AZ) and avoids cross-AZ NAT data charges. With
-# az_count = 1 this collapses to a single route table and NAT (FinOps F3).
-resource "aws_route_table" "egress_private" {
-  for_each = toset([for i in local.nat_az_indexes : tostring(i)])
-
-  vpc_id = module.egress_vpc.vpc_id
-
-  tags = { Name = "egress-private-${each.key}" }
-}
-
+# Each AZ's private default route egresses through the NAT gateway in the SAME
+# AZ. This gives true per-AZ high availability (a NAT or AZ failure is contained
+# to that AZ) and avoids cross-AZ NAT data charges. With az_count = 1 this
+# collapses to a single route table and NAT (FinOps F3).
 resource "aws_route" "egress_default" {
-  for_each = toset([for i in local.nat_az_indexes : tostring(i)])
+  for_each = local.nat_az_keys
 
-  route_table_id         = aws_route_table.egress_private[each.key].id
+  route_table_id         = local.egress_private_route_table_ids[tonumber(each.key)]
   destination_cidr_block = "0.0.0.0/0"
   nat_gateway_id         = aws_nat_gateway.this[each.key].id
 }
 
-resource "aws_route_table_association" "egress_private" {
-  for_each = toset([for i in local.nat_az_indexes : tostring(i)])
+# Spoke internet-bound traffic arrives from the TGW into the egress tgw tier and
+# must leave via the SAME-AZ NAT gateway.
+resource "aws_route" "egress_tgw_default" {
+  for_each = local.nat_az_keys
 
-  subnet_id      = local.egress_private_subnet_ids[tonumber(each.key)]
-  route_table_id = aws_route_table.egress_private[each.key].id
+  route_table_id         = local.egress_tgw_route_table_ids[tonumber(each.key)]
+  destination_cidr_block = "0.0.0.0/0"
+  nat_gateway_id         = aws_nat_gateway.this[each.key].id
+}
+
+# Centralized inspection: traffic the TGW hands to the inspection VPC lands in the
+# tgw tier and must be sent to the Network Firewall endpoint in the SAME AZ (the
+# inspection attachment runs in appliance mode, so flows stay symmetric). The
+# firewall tier then returns inspected traffic to the TGW (hub_to_tgw above).
+# Without these routes the tgw tier has no default route and inspected traffic
+# is black-holed / never reaches the firewall.
+resource "aws_route" "inspection_tgw_to_firewall" {
+  for_each = var.enable_network_firewall ? local.nat_az_keys : toset([])
+
+  route_table_id         = module.inspection_vpc.route_table_ids_by_tier["tgw"][tonumber(each.key)]
+  destination_cidr_block = "0.0.0.0/0"
+  vpc_endpoint_id        = module.network_firewall.firewall_endpoint_ids_by_az[var.availability_zones[tonumber(each.key)]]
+}
+
+resource "aws_route" "hub_to_tgw" {
+  for_each = local.hub_tgw_routes
+
+  route_table_id         = each.value.route_table_id
+  destination_cidr_block = each.value.destination
+  transit_gateway_id     = module.transit_gateway.tgw_id
+
+  # A VPC route to a TGW is only accepted once the VPC is attached to it.
+  depends_on = [module.transit_gateway]
+}
+
+# The per-AZ egress private route tables + associations used to be stage-owned;
+# they now live in the vpc module (keyed "<tier>-<az_index>"). These moved blocks
+# carry existing state across without destroying the tables (az_count <= 3).
+moved {
+  from = aws_route_table.egress_private["0"]
+  to   = module.egress_vpc.aws_route_table.this["private-0"]
+}
+
+moved {
+  from = aws_route_table.egress_private["1"]
+  to   = module.egress_vpc.aws_route_table.this["private-1"]
+}
+
+moved {
+  from = aws_route_table.egress_private["2"]
+  to   = module.egress_vpc.aws_route_table.this["private-2"]
+}
+
+moved {
+  from = aws_route_table_association.egress_private["0"]
+  to   = module.egress_vpc.aws_route_table_association.this["private-0"]
+}
+
+moved {
+  from = aws_route_table_association.egress_private["1"]
+  to   = module.egress_vpc.aws_route_table_association.this["private-1"]
+}
+
+moved {
+  from = aws_route_table_association.egress_private["2"]
+  to   = module.egress_vpc.aws_route_table_association.this["private-2"]
 }
 
 # ---------------------------------------------------------------------------
@@ -216,6 +301,17 @@ module "network_firewall" {
   inspection_vpc_id       = module.inspection_vpc.vpc_id
   firewall_subnet_ids     = module.inspection_vpc.subnet_ids_by_tier["firewall"]
   log_bucket_name         = var.log_bucket_name
+  region                  = var.aws_region
+
+  # STRICT_ORDER baseline: AWS-managed threat groups, optional custom rules and
+  # egress allowlist, log-but-pass default until allow rules are in place.
+  # HOME_NET = the org supernet so rules match spoke traffic, not just the
+  # inspection VPC's own CIDR.
+  managed_rule_groups      = var.network_firewall_managed_rule_groups
+  stateful_default_actions = var.network_firewall_stateful_default_actions
+  egress_domain_allowlist  = var.network_firewall_egress_domain_allowlist
+  suricata_rules           = var.network_firewall_suricata_rules
+  home_net_cidrs           = [var.top_cidr]
 }
 
 # ---------------------------------------------------------------------------

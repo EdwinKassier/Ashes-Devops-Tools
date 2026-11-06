@@ -21,9 +21,9 @@ make pre-commit-install
 
 ### Scanner versions: `.tool-versions` must be active before running pre-commit
 
-`.pre-commit-config.yaml`'s `terraform_tflint`, `terraform_tfsec`, `terraform_checkov`, and
+`.pre-commit-config.yaml`'s `terraform_tflint`, `terraform_trivy`, `terraform_checkov`, and
 `terraform_docs` hooks (from `antonbabenko/pre-commit-terraform`) are implemented as
-`language: script` hooks — thin wrapper scripts that shell out to whatever `tflint`/`tfsec`/
+`language: script` hooks — thin wrapper scripts that shell out to whatever `tflint`/`trivy`/
 `checkov`/`terraform-docs` binary is first on your `PATH`. Unlike pre-commit's Python/Node/Go
 hook backends, `language: script` hooks have no `additional_dependencies` mechanism, so
 pre-commit itself **cannot** pin or sandbox these tool versions.
@@ -34,11 +34,15 @@ ones CI uses. Those versions are recorded in `.tool-versions` and mirrored in
 
 | Tool | Required version |
 |------|-------------------|
-| terraform | 1.9.8 |
+| terraform | 1.14.3 |
 | tflint | 0.62.0 |
-| tfsec | 1.28.6 |
+| trivy | 0.70.0 |
+| shellcheck | 0.11.0 |
 | terraform-docs | 0.19.0 |
-| checkov | 3.2.0 |
+| checkov | 3.3.17 |
+
+`.tool-versions` is the source of truth; `make security` refuses to run when the local
+checkov/trivy version differs from it (a skewed scanner gives a false green).
 
 Run `make install` before your first `pre-commit run` (and after pulling changes that bump
 these versions) — it checks each tool's installed version against the table above and warns

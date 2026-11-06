@@ -5,8 +5,11 @@
 # state. Apply after gcp-organization and before gcp-network-hub.
 
 locals {
-  org       = data.terraform_remote_state.gcp_organization.outputs
-  bootstrap = data.terraform_remote_state.gcp_bootstrap.outputs
+  # Remote state when read (count = 1), else the supplied contract. try() only
+  # selects the source — it does not unify the two object types — and a failed
+  # read still errors at plan time.
+  org       = try(data.terraform_remote_state.gcp_organization[0].outputs, local.organization_contract)
+  bootstrap = try(data.terraform_remote_state.gcp_bootstrap[0].outputs, local.bootstrap_contract)
 
   project_environments = merge(
     {
@@ -34,7 +37,7 @@ locals {
       }
     },
     {
-      for env_key, env in var.environments : env_key => {
+      for env_key, env in local.environments : env_key => {
         display_name = env.display_name
         description  = "${env.display_name} environment"
         projects = {
@@ -58,8 +61,8 @@ locals {
 module "projects" {
   source = "../../../modules/gcp/stages/projects"
 
-  project_prefix          = var.project_prefix
-  organization_name       = var.organization_name
+  project_prefix          = local.project_prefix
+  organization_name       = local.organization_name
   default_billing_account = local.org.billing_account
   admin_project_id        = local.bootstrap.admin_project_id
   folders                 = local.org.folders
@@ -68,4 +71,17 @@ module "projects" {
 
   # Suffix comes from the gcp-bootstrap root for project-ID consistency.
   suffix = local.bootstrap.suffix
+
+  # Per-environment workload SAs (no org-level roles) get their rights on their
+  # OWN env folder here; the network-hub SAs on the shared folder. All come from
+  # gcp-bootstrap; try() keeps an older bootstrap state planning (no grants)
+  # until gcp-bootstrap is re-applied. The grants are made through the
+  # per-folder delegated folderIamAdmin that gcp-organization binds.
+  workload_service_accounts = {
+    for env, sas in try(local.bootstrap.workload_service_accounts, {}) : env => sas
+    if contains(keys(local.environments), env)
+  }
+  workload_folder_roles    = try(local.bootstrap.workload_folder_roles, { plan = [], apply = [] })
+  network_service_accounts = try(local.bootstrap.stage_service_accounts["network-hub"], null)
+  network_folder_roles     = try(local.bootstrap.network_folder_roles, { plan = [], apply = [] })
 }

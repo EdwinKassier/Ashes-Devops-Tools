@@ -54,8 +54,7 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	name_prefix = 
-	
+	name_prefix =
 }
 ```
 
@@ -63,7 +62,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.46.0, < 7.0.0 |
 
 ## Providers
@@ -79,7 +78,7 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_cloudwatch_dashboard.this (modules/aws/ops/cloudwatch/main.tf#L54)
+- resource.aws_cloudwatch_dashboard.this (modules/aws/ops/cloudwatch/main.tf#L56)
 - resource.aws_cloudwatch_metric_alarm.this (modules/aws/ops/cloudwatch/main.tf#L33)
 - resource.aws_sns_topic.this (modules/aws/ops/cloudwatch/main.tf#L26)
 
@@ -96,7 +95,7 @@ The following resources are created:
 | <a name="input_enable_dashboard"></a> [enable\_dashboard](#input\_enable\_dashboard) | Create a CloudWatch dashboard from dashboard\_widgets. The parity counterpart to GCP's monitoring/compute-dashboard. | `bool` | `false` | no |
 | <a name="input_sns_kms_master_key_id"></a> [sns\_kms\_master\_key\_id](#input\_sns\_kms\_master\_key\_id) | KMS key id/alias for encrypting the created SNS topic (only used when create\_sns\_topic = true). Null = AWS-managed key. | `string` | `null` | no |
 | <a name="input_sns_topic_arn"></a> [sns\_topic\_arn](#input\_sns\_topic\_arn) | Existing SNS topic ARN to use for alarm/OK actions when create\_sns\_topic = false. Null = no notification actions. | `string` | `null` | no |
-| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to taggable resources (SNS topic). | `map(string)` | `{}` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to taggable resources (SNS topic, metric alarms). | `map(string)` | `{}` | no |
 
 ## Outputs
 

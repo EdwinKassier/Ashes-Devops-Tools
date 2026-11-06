@@ -13,6 +13,11 @@ output "storage_bucket_name" {
   value       = google_storage_bucket.audit_logs.name
 }
 
+output "access_log_bucket_name" {
+  description = "The name of the storage bucket receiving access logs for the audit-log bucket"
+  value       = google_storage_bucket.audit_logs_access.name
+}
+
 output "storage_bucket_url" {
   description = "The URL of the storage bucket where audit logs are exported"
   value       = google_storage_bucket.audit_logs.url

@@ -13,6 +13,13 @@ on:
     branches:
       - main
       - develop
+  # Post-merge run on main: the same gates re-run against the merged tree, so a
+  # semantic merge conflict (two green PRs that are broken together) or a
+  # change merged while a required check was being reconfigured is caught on
+  # main itself rather than by the next unrelated PR.
+  push:
+    branches:
+      - main
 
 # Least privilege: the workflow default is read-only. Only the `security` job,
 # which calls reusable-security.yml with sarif_output: true, is granted
@@ -24,10 +31,19 @@ permissions:
 
 concurrency:
   group: terraform-plan-${{ github.ref_name }}
-  cancel-in-progress: true
+  # Superseded PR pushes are cancelled; post-merge main runs are NOT, so every
+  # merge commit on main gets a complete result.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   TERRAFORM_VERSION: "1.14.3"
+  # Shared provider plugin cache: each provider version is downloaded once per
+  # cache key and reused by every `terraform init` in the job (validate shards,
+  # lint, test), instead of re-fetching the ~500MB AWS provider per root. The
+  # directory is persisted across runs by actions/cache, keyed on every
+  # committed lockfile, so it only rebuilds when a provider pin moves.
+  # (Absolute path: the runner/HOME contexts are not available at workflow level.)
+  TF_PLUGIN_CACHE_DIR: /home/runner/.terraform.d/plugin-cache
 
 jobs:
   discover:
@@ -36,19 +52,56 @@ jobs:
     timeout-minutes: 10
     outputs:
       roots: ${{ steps.roots.outputs.roots }}
+      test_dirs: ${{ steps.tests.outputs.test_dirs }}
     steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Discover roots
         id: roots
-        run: echo "roots=$(./scripts/terraform-roots.sh all-json)" >> "$GITHUB_OUTPUT"
+        # Fail closed: an empty root set would leave every validate shard with
+        # nothing to do and a green result.
+        run: |
+          roots="$(./scripts/terraform-roots.sh all-json)"
+          count="$(jq 'length' <<<"$roots")"
+          echo "Discovered ${count} Terraform roots"
+          if [ "$count" -lt 1 ]; then
+            echo "::error::Root discovery returned no roots"
+            exit 1
+          fi
+          echo "roots=${roots}" >> "$GITHUB_OUTPUT"
+
+      - name: Discover test suites
+        id: tests
+        # Same fail-closed rule as roots: zero suites would make every test
+        # shard trivially green.
+        run: |
+          dirs="$(./scripts/terraform-roots.sh tests-json)"
+          count="$(jq 'length' <<<"$dirs")"
+          echo "Discovered ${count} directories with terraform test suites"
+          if [ "$count" -lt 1 ]; then
+            echo "::error::Test discovery returned no suites"
+            exit 1
+          fi
+          echo "test_dirs=${dirs}" >> "$GITHUB_OUTPUT"
 
   fmt:
     name: Terraform Format
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
@@ -65,6 +118,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
@@ -92,16 +151,31 @@ jobs:
       - name: Assert docs are committed
         run: make docs-check
 
+  # Roots are validated in a FIXED number of shards rather than one matrix leg
+  # per root: one leg per root (218 and growing) was close to GitHub's 256-leg
+  # matrix cap and paid a cold provider download on every leg. Each shard takes
+  # every Nth root (round-robin, so AWS and GCP roots spread evenly), shares the
+  # restored plugin cache, validates every root in its slice even after a
+  # failure, and exits non-zero if any root failed. The `validate` result seen
+  # by the Validation Summary gate is therefore failure if ANY shard failed.
+  # To add capacity, extend the shard list; job-index/job-total keep the slicing
+  # self-consistent.
   validate:
-    name: Validate ${{ matrix.root }}
+    name: Validate (shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     needs: discover
     strategy:
-      fail-fast: false  # Show ALL root failures in one run rather than cancelling siblings
+      fail-fast: false  # Show ALL shard failures in one run rather than cancelling siblings
       matrix:
-        root: ${{ fromJson(needs.discover.outputs.roots) }}
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
@@ -109,21 +183,65 @@ jobs:
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e  # v4.0.1
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
+          # The wrapper re-emits stdout as step outputs; unnecessary for a loop
+          # of inits and noticeably slower across ~20 roots.
+          terraform_wrapper: false
 
-      - name: Terraform init
-        working-directory: ${{ matrix.root }}
-        run: terraform init -backend=false -input=false
+      - name: Restore provider plugin cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: tf-plugins-${{ runner.os }}-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: |
+            tf-plugins-${{ runner.os }}-
 
-      - name: Terraform validate
-        working-directory: ${{ matrix.root }}
+      - name: Validate roots in this shard
+        env:
+          ROOTS_JSON: ${{ needs.discover.outputs.roots }}
+          SHARD_INDEX: ${{ strategy.job-index }}
+          SHARD_TOTAL: ${{ strategy.job-total }}
         run: |
-          if grep -rqE 'configuration_aliases[[:space:]]*=' . --include='*.tf'; then
-            echo "Skipping standalone validate: module declares" \
-              "configuration_aliases (cannot be root-validated without a" \
-              "passed provider; covered by its examples/, the composing" \
-              "stage/root, and mock_provider tests)."
-          else
-            terraform validate
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          mapfile -t roots < <(jq -r --argjson i "$SHARD_INDEX" --argjson n "$SHARD_TOTAL" \
+            'to_entries[] | select(.key % $n == $i) | .value' <<<"$ROOTS_JSON")
+          echo "Shard $((SHARD_INDEX + 1))/${SHARD_TOTAL}: ${#roots[@]} roots"
+          if [ "${#roots[@]}" -eq 0 ]; then
+            echo "::notice::No roots assigned to this shard (fewer roots than shards)."
+            exit 0
+          fi
+
+          failed=()
+          for root in "${roots[@]}"; do
+            echo "::group::${root}"
+            ok=0
+            for attempt in 1 2 3; do
+              if terraform -chdir="$root" init -backend=false -input=false >/dev/null; then
+                ok=1; break
+              fi
+              echo "init attempt ${attempt} failed for ${root}"
+              sleep $((attempt * 5))
+            done
+            if [ "$ok" -ne 1 ]; then
+              echo "::error::terraform init failed: ${root}"
+              failed+=("$root")
+            elif grep -rqE 'configuration_aliases[[:space:]]*=' "$root" --include='*.tf'; then
+              # Cannot be root-validated without a passed provider; covered by
+              # its examples/, the composing stage/root, and mock_provider tests.
+              echo "Skipping standalone validate (declares configuration_aliases)"
+            elif ! terraform -chdir="$root" validate -no-color; then
+              echo "::error::terraform validate failed: ${root}"
+              failed+=("$root")
+            fi
+            echo "::endgroup::"
+          done
+
+          if [ "${#failed[@]}" -gt 0 ]; then
+            {
+              echo "### Validate shard $((SHARD_INDEX + 1)) failures"
+              printf -- '- %s\n' "${failed[@]}"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::${#failed[@]} root(s) failed in this shard: ${failed[*]}"
+            exit 1
           fi
 
   lint:
@@ -134,6 +252,12 @@ jobs:
     # push a cold run past 15m. The plugin cache below keeps it well under 30m.
     timeout-minutes: 30
     steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
@@ -147,16 +271,28 @@ jobs:
         with:
           tflint_version: "v0.62.0"
 
-      # Download each provider once and reuse it across all roots' inits,
-      # instead of re-fetching the ~500MB AWS provider per root. Set via
-      # $GITHUB_ENV (not job-level env, where the runner context is unavailable).
-      - name: Prepare provider plugin cache
-        run: |
-          echo "TF_PLUGIN_CACHE_DIR=${RUNNER_TEMP}/tf-plugin-cache" >> "$GITHUB_ENV"
-          mkdir -p "${RUNNER_TEMP}/tf-plugin-cache"
+      # Provider plugin cache (TF_PLUGIN_CACHE_DIR is set at workflow level).
+      - name: Restore provider plugin cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: tf-plugins-${{ runner.os }}-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: |
+            tf-plugins-${{ runner.os }}-
+
+      # TFLint ruleset plugins (google + aws), keyed on the pinned versions in
+      # .tflint.hcl, so `tflint --init` skips the GitHub API download.
+      - name: Restore TFLint plugin cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ~/.tflint.d/plugins
+          key: tflint-plugins-${{ runner.os }}-${{ hashFiles('.tflint.hcl') }}
+
+      - name: Prepare cache directory
+        run: mkdir -p "$TF_PLUGIN_CACHE_DIR"
 
       - name: Run TFLint
-        # tflint --init (inside `make lint`) downloads the google ruleset plugin
+        # tflint --init (inside `make lint`) downloads the google + aws ruleset plugins
         # from the GitHub API; without a token the unauthenticated request hits
         # the 403 rate limit on shared CI egress. GITHUB_TOKEN authenticates it.
         # (Step-level env — the secrets context is not available at job level.)
@@ -169,6 +305,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -197,8 +339,14 @@ jobs:
         # validates a single message, so it cannot run via `pre-commit run
         # commitizen --all-files`. `cz check --rev-range` is commitizen's own
         # CI entry point for validating every commit introduced by a PR.
+        # commitizen and its whole dependency closure are installed from a
+        # hash-locked requirements file (--require-hashes): a re-published or
+        # typosquatted wheel fails the install instead of running in CI.
+        # Regenerate after bumping .github/requirements/commitizen.in:
+        #   uv pip compile --generate-hashes --universal --python-version 3.12 \
+        #     .github/requirements/commitizen.in -o .github/requirements/commitizen.txt
         run: |
-          python -m pip install commitizen==4.10.1
+          python -m pip install --no-deps --require-hashes -r .github/requirements/commitizen.txt
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             # Full fetch (not --depth=1) so the merge-base is resolvable, then
             # anchor the range on it. A plain origin/<base>..HEAD range includes
@@ -215,6 +363,12 @@ jobs:
       - name: Consistency guards (canonical region regex + provider pins)
         run: ./scripts/check-consistency.sh
 
+      - name: README / CLAUDE.md counts match the tree
+        run: ./scripts/check-docs-counts.sh
+
+      - name: Markdown relative links resolve (offline)
+        run: python3 scripts/check-md-links.py
+
   security:
     name: Security
     # Only this job needs SARIF upload rights; every other job stays read-only.
@@ -225,11 +379,29 @@ jobs:
     with:
       sarif_output: true
 
+  # Terraform test suites are sharded exactly like validate: a fixed shard
+  # list, round-robin slicing of the discovered suite dirs, the shared plugin
+  # cache, and every dir in a slice run even after a failure. `make test` is
+  # the single implementation (TEST_DIRS restricts it to the slice); each dir
+  # is invoked separately so one failing suite does not hide the rest. The
+  # `test` result seen by the Validation Summary gate is failure if ANY shard
+  # failed, and skipped (e.g. discovery failed) is also treated as failure.
   test:
-    name: Terraform Tests
+    name: Terraform Tests (shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    needs: discover
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
@@ -237,40 +409,196 @@ jobs:
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e  # v4.0.1
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
 
-      - name: Run terraform test suites
-        run: make test
+      - name: Restore provider plugin cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: tf-plugins-${{ runner.os }}-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: |
+            tf-plugins-${{ runner.os }}-
+
+      - name: Run terraform test suites in this shard
+        env:
+          TEST_DIRS_JSON: ${{ needs.discover.outputs.test_dirs }}
+          SHARD_INDEX: ${{ strategy.job-index }}
+          SHARD_TOTAL: ${{ strategy.job-total }}
+        run: |
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          mapfile -t dirs < <(jq -r --argjson i "$SHARD_INDEX" --argjson n "$SHARD_TOTAL" \
+            'to_entries[] | select(.key % $n == $i) | .value' <<<"$TEST_DIRS_JSON")
+          echo "Shard $((SHARD_INDEX + 1))/${SHARD_TOTAL}: ${#dirs[@]} suite dirs"
+          if [ "${#dirs[@]}" -eq 0 ]; then
+            echo "::notice::No suite dirs assigned to this shard (fewer dirs than shards)."
+            exit 0
+          fi
+
+          failed=()
+          for dir in "${dirs[@]}"; do
+            echo "::group::${dir}"
+            if ! make test TEST_DIRS="$dir"; then
+              echo "::error::terraform test failed: ${dir}"
+              failed+=("$dir")
+            fi
+            echo "::endgroup::"
+          done
+
+          if [ "${#failed[@]}" -gt 0 ]; then
+            {
+              echo "### Test shard $((SHARD_INDEX + 1)) failures"
+              printf -- '- %s\n' "${failed[@]}"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::${#failed[@]} suite dir(s) failed in this shard: ${failed[*]}"
+            exit 1
+          fi
+
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      # Pinned release binary, sha256-verified before extraction. Keep the
+      # version equal to .tool-versions (`make shellcheck` / pre-commit use the
+      # same release through shellcheck-py). The runner image's preinstalled
+      # shellcheck is deliberately NOT used: its version floats with the image.
+      - name: Install shellcheck
+        env:
+          SC_VERSION: "0.11.0"
+          SC_SHA256: "8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198"
+        run: |
+          tarball="shellcheck-v${SC_VERSION}.linux.x86_64.tar.xz"
+          curl -sSfLO "https://github.com/koalaman/shellcheck/releases/download/v${SC_VERSION}/${tarball}"
+          echo "${SC_SHA256}  ${tarball}" | sha256sum --check --strict
+          tar -xJf "${tarball}"
+          sudo install -m 0755 "shellcheck-v${SC_VERSION}/shellcheck" /usr/local/bin/shellcheck
+          rm -rf "${tarball}" "shellcheck-v${SC_VERSION}"
+          shellcheck --version
+
+      # Same severity floor as `make shellcheck` and the pre-commit hook.
+      - name: Run shellcheck
+        run: shellcheck --severity=warning scripts/*.sh tests/e2e/scripts/*.sh
+
+  opa:
+    name: OPA Policy Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      # Pinned static release binary, sha256-verified (digest from the GitHub
+      # release asset) before it is made executable. No conftest: the rego unit
+      # tests in policies/opa are the contract.
+      - name: Install OPA
+        env:
+          OPA_VERSION: "1.22.2"
+          OPA_SHA256: "24e344d1fc394cd93dc75666f584cfb97c6981f7255af25f8d2979834317317b"
+        run: |
+          base="https://github.com/open-policy-agent/opa/releases/download/v${OPA_VERSION}"
+          curl -sSfL -o opa "${base}/opa_linux_amd64_static"
+          echo "${OPA_SHA256}  opa" | sha256sum --check --strict
+          sudo install -m 0755 opa /usr/local/bin/opa
+          rm -f opa
+          opa version
+
+      - name: Check policies (strict)
+        run: opa check --strict policies/opa
+
+      - name: Run policy unit tests
+        run: opa test policies/opa -v
+
+  codeowners:
+    name: CODEOWNERS placeholders
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      # .github/CODEOWNERS ships with @your-org/* placeholder teams. Opt in by
+      # setting the repository variable CODEOWNERS_ENFORCE=true once real teams
+      # exist; from then on a placeholder (re)appearing fails the build. Off by
+      # default so forks and fresh clones of the boilerplate stay green.
+      - name: Fail on placeholder owners (when enforced)
+        env:
+          CODEOWNERS_ENFORCE: ${{ vars.CODEOWNERS_ENFORCE }}
+        run: |
+          if grep -nE '@your-org/' .github/CODEOWNERS; then
+            if [ "${CODEOWNERS_ENFORCE}" = "true" ]; then
+              msg="CODEOWNERS still contains @your-org/ placeholder teams (CODEOWNERS_ENFORCE=true)."
+              echo "::error file=.github/CODEOWNERS::${msg} Replace them with real teams."
+              exit 1
+            fi
+            msg="CODEOWNERS still contains @your-org/ placeholder teams; code-owner review is inert."
+            echo "::warning file=.github/CODEOWNERS::${msg} Set CODEOWNERS_ENFORCE=true to make this fatal."
+          else
+            echo "No placeholder owners found."
+          fi
 
   summary:
     name: Validation Summary
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [discover, fmt, docs, validate, lint, meta-lint, security, test]
+    needs: [discover, fmt, docs, validate, lint, meta-lint, security, test, shellcheck, opa, codeowners]
     if: always()
     steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
       - name: Publish summary
         run: |
-          echo "## Terraform Validation Summary" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Check | Status |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|-------|--------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Discover | ${{ needs.discover.result }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Format | ${{ needs.fmt.result }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Docs | ${{ needs.docs.result }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Validate | ${{ needs.validate.result }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| TFLint | ${{ needs.lint.result }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Meta Lint | ${{ needs.meta-lint.result }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Security | ${{ needs.security.result }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Tests | ${{ needs.test.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## Terraform Validation Summary"
+            echo ""
+            echo "| Check | Status |"
+            echo "|-------|--------|"
+            echo "| Discover | ${{ needs.discover.result }} |"
+            echo "| Format | ${{ needs.fmt.result }} |"
+            echo "| Docs | ${{ needs.docs.result }} |"
+            echo "| Validate | ${{ needs.validate.result }} |"
+            echo "| TFLint | ${{ needs.lint.result }} |"
+            echo "| Meta Lint | ${{ needs.meta-lint.result }} |"
+            echo "| Security | ${{ needs.security.result }} |"
+            echo "| Tests | ${{ needs.test.result }} |"
+            echo "| ShellCheck | ${{ needs.shellcheck.result }} |"
+            echo "| OPA | ${{ needs.opa.result }} |"
+            echo "| CODEOWNERS | ${{ needs.codeowners.result }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # Fail-closed aggregator: because this job runs with if: always(), it must
       # explicitly fail when any required upstream job did not succeed. "skipped"
       # is treated as failure: none of these jobs is conditional, so a skip means
-      # the check did not run. In particular, if `discover` fails or emits an empty
-      # root set, the `validate` matrix is skipped — without catching "skipped"
-      # here, a PR could merge with zero roots validated. This makes "Validation
-      # Summary" a reliable single required status check that genuinely covers the
-      # whole validate matrix (see docs/guides/BRANCH_PROTECTION.md).
+      # the check did not run. In particular, if `discover` fails (including on an
+      # empty root set), the `validate` shards are skipped — without catching
+      # "skipped" here, a PR could merge with zero roots validated. `validate` is
+      # failure if any shard failed. This makes "Validation Summary" a reliable
+      # single required status check that genuinely covers every root
+      # (see docs/guides/BRANCH_PROTECTION.md).
       - name: Gate on upstream results
         run: |
           for r in \
@@ -281,7 +609,10 @@ jobs:
             "lint=${{ needs.lint.result }}" \
             "meta-lint=${{ needs.meta-lint.result }}" \
             "security=${{ needs.security.result }}" \
-            "test=${{ needs.test.result }}"; do
+            "test=${{ needs.test.result }}" \
+            "shellcheck=${{ needs.shellcheck.result }}" \
+            "opa=${{ needs.opa.result }}" \
+            "codeowners=${{ needs.codeowners.result }}"; do
             name="${r%%=*}"; result="${r#*=}"
             if [ "$result" != "success" ]; then
               echo "::error::Required job '${name}' result: ${result}"

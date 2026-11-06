@@ -85,6 +85,7 @@ resource "google_sql_database_instance" "this" {
   # checkov:skip=CKV_GCP_110:pgAudit needs the extension; opt-in via var.database_flags.
   # checkov:skip=CKV_GCP_111:log_statement=ddl via local.default_log_flags.
   # checkov:skip=CKV_GCP_79:database_version is the caller's choice (default POSTGRES_16).
+  # checkov:skip=CKV2_GCP_13:log_duration logs every statement (high volume/cost); opt-in via var.database_flags.
   name             = var.name
   project          = var.project_id
   region           = var.region
@@ -96,6 +97,9 @@ resource "google_sql_database_instance" "this" {
   encryption_key_name = var.encryption_key_name
 
   settings {
+    # Explicit edition: PostgreSQL 16+ defaults to ENTERPRISE_PLUS, which rejects
+    # the db-custom-* tiers this module defaults to (it needs db-perf-optimized-*).
+    edition           = var.edition
     tier              = var.tier
     availability_type = var.enable_high_availability ? "REGIONAL" : "ZONAL"
     disk_autoresize   = true
@@ -150,5 +154,11 @@ resource "google_sql_user" "this" {
   type     = local.users_by_name[each.value].type
 
   # Built-in users authenticate with a password; IAM users must not carry one.
-  password = local.users_by_name[each.value].type == "BUILT_IN" ? local.users_by_name[each.value].password : null
+  # Write-only (Terraform >= 1.11): the password is sent to the API but never
+  # stored in plan or state. Bump the user's password_version to rotate it.
+  # ephemeral_password users read it from the ephemeral var.user_passwords.
+  password_wo = local.users_by_name[each.value].type != "BUILT_IN" ? null : (
+    local.users_by_name[each.value].ephemeral_password ? var.user_passwords[each.value] : local.users_by_name[each.value].password
+  )
+  password_wo_version = local.users_by_name[each.value].type == "BUILT_IN" && (local.users_by_name[each.value].password != null || local.users_by_name[each.value].ephemeral_password) ? local.users_by_name[each.value].password_version : null
 }

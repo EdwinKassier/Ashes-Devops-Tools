@@ -1,7 +1,7 @@
 # Hardened central log-archive S3 bucket for the SRA landing zone.
 #
-# This is the org-wide sink for CloudTrail, Config, and Security Lake log
-# delivery. It is created with S3 Object Lock enabled (immutable after
+# This is the org-wide sink for CloudTrail, Config, Security Lake and
+# CloudWatch Logs vended-log (flow / firewall / resolver) delivery. It is created with S3 Object Lock enabled (immutable after
 # creation), Block Public Access on all four dimensions, versioning, SSE-KMS
 # with a bucket key, a default Object Lock retention (COMPLIANCE by default),
 # and a lifecycle that transitions to GLACIER and expires per retention_days.
@@ -59,6 +59,31 @@ locals {
         Action    = ["s3:GetBucketAcl", "s3:PutObject"]
         Resource  = [local.bucket_arn, "${local.bucket_arn}/*"]
         Condition = { StringEquals = { "aws:SourceOrgID" = var.org_id } }
+      },
+      # CloudWatch Logs vended-log delivery (VPC flow logs, Network Firewall
+      # ALERT/FLOW logs, Route 53 Resolver query logs) from any account in the
+      # org. Without these two statements cross-account delivery fails silently
+      # (audit / known-gaps A8). Pattern: AWS "Logs sent to Amazon S3" docs.
+      {
+        Sid       = "AWSLogDeliveryAclCheck"
+        Effect    = "Allow"
+        Principal = { Service = "delivery.logs.amazonaws.com" }
+        Action    = ["s3:GetBucketAcl", "s3:ListBucket"]
+        Resource  = local.bucket_arn
+        Condition = { StringEquals = { "aws:SourceOrgID" = var.org_id } }
+      },
+      {
+        Sid       = "AWSLogDeliveryWrite"
+        Effect    = "Allow"
+        Principal = { Service = "delivery.logs.amazonaws.com" }
+        Action    = "s3:PutObject"
+        Resource  = "${local.bucket_arn}/AWSLogs/*"
+        Condition = {
+          StringEquals = {
+            "aws:SourceOrgID" = var.org_id
+            "s3:x-amz-acl"    = "bucket-owner-full-control"
+          }
+        }
       },
       # Deny any non-TLS access to the bucket or its objects.
       {

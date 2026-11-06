@@ -10,6 +10,9 @@
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── Project & identity ─────────────────────────────────────────────────────────
+# project_prefix, region and tfc_organization default to org.prefix,
+# gcp.environments[<env>].region and org.tfc.organization in the committed
+# config/landing-zone.yaml; the values below override it.
 
 project_prefix = "ashes"
 environment    = "dev"
@@ -21,13 +24,13 @@ terraform_admin_email = "terraform@ashes-admin-xxxx.iam.gserviceaccount.com"
 
 # Terraform Cloud configuration
 tfc_organization            = "your-tfc-org-name"
-organization_workspace_name = "organization"
+organization_workspace_name = "gcp-organization"
 
 # ── Networking ─────────────────────────────────────────────────────────────────
 #
-# NOTE: vpc_cidr_block is NOT a variable here — it is read from the organization
-# workspace remote state via local.env_config.cidr_block (set in the environments
-# map in terraform.tfvars.example for envs/organization).
+# NOTE: vpc_cidr_block is NOT a variable here — it is read from the gcp-projects
+# workspace remote state via local.env_config.cidr_block, which comes from
+# gcp.environments[<env>].cidr_block in config/landing-zone.yaml.
 # Set the CIDR there, not here.
 
 # VPC Flow Logs

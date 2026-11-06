@@ -33,25 +33,54 @@ run "key_and_policy_configured" {
 
   # CloudTrail service principal is present in a log-service grant.
   assert {
-    condition     = can(regex("cloudtrail.amazonaws.com", aws_kms_key_policy.this.policy))
+    condition     = can(regex("cloudtrail.amazonaws.com", aws_kms_key.this.policy))
     error_message = "CloudTrail service principal must appear in the key policy"
   }
 
-  # Key-admin statement uses kms:* (asserted as the literal "kms:\\*").
+  # Separation of duties: the key-admin statement grants management actions
+  # only — never kms:*, cryptographic operations or CreateGrant.
   assert {
-    condition     = can(regex("kms:\\*", aws_kms_key_policy.this.policy))
-    error_message = "Key-admin statement granting kms:* must be present"
+    condition = alltrue([
+      for a in ["kms:*", "kms:Encrypt", "kms:Decrypt", "kms:ReEncrypt*", "kms:GenerateDataKey*", "kms:CreateGrant", "kms:Create*", "kms:Put*", "kms:PutKeyPolicy"] :
+      !contains(one([for s in jsondecode(aws_kms_key.this.policy).Statement : s if s.Sid == "KeyAdministration"]).Action, a)
+    ])
+    error_message = "KeyAdministration must not grant kms:*, cryptographic operations, CreateGrant or PutKeyPolicy"
+  }
+
+  assert {
+    condition = alltrue([
+      for a in ["kms:ScheduleKeyDeletion", "kms:CancelKeyDeletion", "kms:Enable*", "kms:Disable*", "kms:RotateKeyOnDemand", "kms:TagResource"] :
+      contains(one([for s in jsondecode(aws_kms_key.this.policy).Statement : s if s.Sid == "KeyAdministration"]).Action, a)
+    ])
+    error_message = "KeyAdministration must retain the management actions needed to avoid key lockout"
+  }
+
+  assert {
+    condition     = one([for s in jsondecode(aws_kms_key.this.policy).Statement : s if s.Sid == "KeyAdministration"]).Principal.AWS == var.key_admin_arn
+    error_message = "KeyAdministration must be granted to key_admin_arn"
+  }
+
+  # No usage statement unless key_user_arns is set.
+  assert {
+    condition     = length([for s in jsondecode(aws_kms_key.this.policy).Statement : s if s.Sid == "KeyUsage"]) == 0
+    error_message = "No KeyUsage statement must be rendered when key_user_arns is empty"
+  }
+
+  # Protection tag is opt-in.
+  assert {
+    condition     = !contains(keys(coalesce(aws_kms_key.this.tags, {})), "protected")
+    error_message = "the protection tag must be off by default"
   }
 
   # aws:SourceOrgID scoping is present on the log-service grants.
   assert {
-    condition     = can(regex("aws:SourceOrgID", aws_kms_key_policy.this.policy))
+    condition     = can(regex("aws:SourceOrgID", aws_kms_key.this.policy))
     error_message = "Log-service grants must be scoped by aws:SourceOrgID"
   }
 
   # CloudTrail's EncryptionContext condition is present.
   assert {
-    condition     = can(regex("kms:EncryptionContext:aws:cloudtrail:arn", aws_kms_key_policy.this.policy))
+    condition     = can(regex("kms:EncryptionContext:aws:cloudtrail:arn", aws_kms_key.this.policy))
     error_message = "CloudTrail grant must include the EncryptionContext condition"
   }
 
@@ -61,7 +90,7 @@ run "key_and_policy_configured" {
   # either condition onto the wrong statement.
   assert {
     condition = anytrue([
-      for s in jsondecode(aws_kms_key_policy.this.policy).Statement :
+      for s in jsondecode(aws_kms_key.this.policy).Statement :
       can(regex("cloudtrail", s.Sid))
       && try(s.Condition.StringEquals["aws:SourceOrgID"], null) == var.org_id
       && can(regex("kms:EncryptionContext:aws:cloudtrail:arn", jsonencode(s.Condition)))
@@ -72,7 +101,7 @@ run "key_and_policy_configured" {
   # ViaService must be ABSENT — it is never applied to the default (log-service
   # only) configuration, and would deny CloudTrail delivery if present.
   assert {
-    condition     = !can(regex("kms:ViaService", aws_kms_key_policy.this.policy))
+    condition     = !can(regex("kms:ViaService", aws_kms_key.this.policy))
     error_message = "kms:ViaService must not appear on log-service grants"
   }
 }
@@ -91,24 +120,24 @@ run "service_principals_grant_present" {
   }
 
   assert {
-    condition     = can(regex("ServiceUsage", aws_kms_key_policy.this.policy))
+    condition     = can(regex("ServiceUsage", aws_kms_key.this.policy))
     error_message = "ServiceUsage statement must be present when service_principals is set"
   }
 
   assert {
-    condition     = can(regex("sns.amazonaws.com", aws_kms_key_policy.this.policy))
+    condition     = can(regex("sns.amazonaws.com", aws_kms_key.this.policy))
     error_message = "The SNS service principal must appear in the ServiceUsage grant"
   }
 
   assert {
-    condition     = can(regex("aws:SourceOrgID", aws_kms_key_policy.this.policy))
+    condition     = can(regex("aws:SourceOrgID", aws_kms_key.this.policy))
     error_message = "The ServiceUsage grant must be scoped by aws:SourceOrgID"
   }
 
   # Structural (M6): the SourceOrgID scope is on the ServiceUsage statement itself.
   assert {
     condition = anytrue([
-      for s in jsondecode(aws_kms_key_policy.this.policy).Statement :
+      for s in jsondecode(aws_kms_key.this.policy).Statement :
       s.Sid == "ServiceUsage" && try(s.Condition.StringEquals["aws:SourceOrgID"], null) == var.org_id
     ])
     error_message = "the ServiceUsage statement must carry aws:SourceOrgID = org_id"
@@ -116,7 +145,73 @@ run "service_principals_grant_present" {
 
   # No CloudTrail log-service grant means no EncryptionContext condition.
   assert {
-    condition     = !can(regex("kms:EncryptionContext:aws:cloudtrail:arn", aws_kms_key_policy.this.policy))
+    condition     = !can(regex("kms:EncryptionContext:aws:cloudtrail:arn", aws_kms_key.this.policy))
     error_message = "A service-tooling CMK with no log grants must not carry the CloudTrail EncryptionContext condition"
+  }
+}
+
+run "key_users_separate_from_admin" {
+  command = plan
+
+  variables {
+    key_user_arns         = ["arn:aws:iam::111122223333:role/LogReader"]
+    enable_protection_tag = true
+  }
+
+  assert {
+    condition     = one([for s in jsondecode(aws_kms_key.this.policy).Statement : s if s.Sid == "KeyUsage"]).Principal.AWS == ["arn:aws:iam::111122223333:role/LogReader"]
+    error_message = "KeyUsage must be granted to key_user_arns"
+  }
+
+  assert {
+    condition     = contains(one([for s in jsondecode(aws_kms_key.this.policy).Statement : s if s.Sid == "KeyUsage"]).Action, "kms:Decrypt")
+    error_message = "KeyUsage must grant kms:Decrypt"
+  }
+
+  assert {
+    condition     = !contains(one([for s in jsondecode(aws_kms_key.this.policy).Statement : s if s.Sid == "KeyUsage"]).Principal.AWS, var.key_admin_arn)
+    error_message = "the key admin must not be a key user"
+  }
+
+  assert {
+    condition     = aws_kms_key.this.tags["protected"] == "true"
+    error_message = "enable_protection_tag must tag the key protected = true for the deny-tamper SCP"
+  }
+}
+
+run "key_policy_admin_is_separate_from_key_admin" {
+  # M3: PutKeyPolicy (=> self-grant of Decrypt) is held only by the key-policy
+  # admins (break-glass), and the policy is set at CreateKey.
+  command = plan
+
+  variables {
+    key_policy_admin_arns = ["arn:aws:iam::111122223333:role/break-glass"]
+  }
+
+  assert {
+    condition = (
+      one([for s in jsondecode(aws_kms_key.this.policy).Statement : s if s.Sid == "KeyPolicyAdministration"]).Action == ["kms:PutKeyPolicy"] &&
+      one([for s in jsondecode(aws_kms_key.this.policy).Statement : s if s.Sid == "KeyPolicyAdministration"]).Principal.AWS == ["arn:aws:iam::111122223333:role/break-glass"]
+    )
+    error_message = "KeyPolicyAdministration must grant only kms:PutKeyPolicy, only to key_policy_admin_arns"
+  }
+
+  assert {
+    condition     = alltrue([for s in jsondecode(aws_kms_key.this.policy).Statement : s.Sid == "KeyPolicyAdministration" || !contains(flatten([s.Action]), "kms:PutKeyPolicy")])
+    error_message = "no statement other than KeyPolicyAdministration may grant kms:PutKeyPolicy"
+  }
+
+  assert {
+    condition     = aws_kms_key.this.bypass_policy_lockout_safety_check == true
+    error_message = "with dedicated key-policy admins the CreateKey lockout check must be bypassed (the caller is not a policy admin)"
+  }
+}
+
+run "key_policy_admin_defaults_to_key_admin" {
+  command = plan
+
+  assert {
+    condition     = one([for s in jsondecode(aws_kms_key.this.policy).Statement : s if s.Sid == "KeyPolicyAdministration"]).Principal.AWS == [var.key_admin_arn] && aws_kms_key.this.bypass_policy_lockout_safety_check == false
+    error_message = "empty key_policy_admin_arns must fall back to key_admin_arn without bypassing the lockout check"
   }
 }

@@ -12,6 +12,7 @@ into deployable layers. Each stage is invoked from the matching root under
 | [shared-services](./shared-services/) | shared platform services (SSM, private CA, secrets) | `envs/aws/shared-services` | 4 |
 | [backup](./backup/) | `backup-vault`, `backup-org-policy` | `envs/aws/backup` | 5 |
 | [workload](./workload/) | per-env workload account infrastructure | `envs/aws/workload` (`TF_WORKSPACE=aws-workload-<env>`) | 6 |
+| [app-services](./app-services/) | application golden path: `ecr`, `ecs-fargate`, `load-balancer`, `rds-aurora`, `cloudwatch` + GitHub OIDC deploy roles (`services` map; `{}` creates nothing) | `envs/aws/workload` (same root, one module call) | 6 |
 
 Ordering is enforced by apply order + remote-state reads, not cross-root
 `depends_on`. See the [AWS bootstrap runbook](../../../docs/runbooks/aws-bootstrap.md).

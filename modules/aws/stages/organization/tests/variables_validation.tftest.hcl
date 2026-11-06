@@ -11,6 +11,7 @@ variables {
   terraform_run_role_arn  = "arn:aws:iam::111111111111:role/tfc-run-role"
   break_glass_role_arn    = "arn:aws:iam::111111111111:role/break-glass"
   log_archive_bucket_name = "sra-log-archive-111111111111"
+  tfc_organization        = "acme"
 }
 
 override_module {
@@ -41,6 +42,17 @@ run "defaults_accepted" {
   command = plan
 }
 
+run "wildcard_break_glass_role_arn_rejected" {
+  # Reject case: role/* would turn the break-glass carve-out into "any role".
+  command = plan
+
+  variables {
+    break_glass_role_arn = "arn:aws:iam::111111111111:role/*"
+  }
+
+  expect_failures = [var.break_glass_role_arn]
+}
+
 run "invalid_account_email_rejected" {
   # Reject case: an account with a malformed root email must fail the account
   # module's email validation.
@@ -53,4 +65,26 @@ run "invalid_account_email_rejected" {
   }
 
   expect_failures = [var.workload_accounts]
+}
+
+run "tfc_organization_required_when_baseline_enabled" {
+  command = plan
+
+  variables {
+    tfc_organization = null
+  }
+
+  expect_failures = [var.tfc_organization]
+}
+
+run "binding_to_unknown_account_rejected" {
+  command = plan
+
+  variables {
+    tfc_workspace_bindings = {
+      does_not_exist = { workspaces = ["aws-workload-dev"] }
+    }
+  }
+
+  expect_failures = [var.tfc_workspace_bindings]
 }

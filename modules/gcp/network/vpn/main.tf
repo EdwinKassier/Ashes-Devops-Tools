@@ -2,7 +2,7 @@
  * Copyright 2023 Ashes
  *
  * Cloud VPN Module - Main Configuration
- * 
+ *
  * Creates an HA VPN gateway with BGP routing for hybrid connectivity.
  */
 

@@ -12,6 +12,19 @@ variable "project_id" {
 
 # Optional variables — document sensible defaults and constraints.
 
+variable "labels" {
+  description = "Labels applied to every labelable resource this module creates, merged over the canonical managed-by=terraform label. Keys and values must be lowercase GCP label syntax."
+  type        = map(string)
+  default     = {}
+
+  validation {
+    condition = alltrue([
+      for k, v in var.labels : can(regex("^[a-z][a-z0-9_-]{0,62}$", k)) && can(regex("^[a-z0-9_-]{0,63}$", v))
+    ])
+    error_message = "labels keys must start with a lowercase letter and keys/values may contain only lowercase letters, digits, _ and - (max 63 chars)."
+  }
+}
+
 # variable "region" {
 #   description = "The GCP region for resources (e.g. europe-west1)"
 #   type        = string

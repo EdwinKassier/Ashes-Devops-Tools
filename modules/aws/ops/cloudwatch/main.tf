@@ -49,6 +49,8 @@ resource "aws_cloudwatch_metric_alarm" "this" {
 
   alarm_actions = local.alarm_actions
   ok_actions    = local.alarm_actions
+
+  tags = var.tags
 }
 
 resource "aws_cloudwatch_dashboard" "this" {

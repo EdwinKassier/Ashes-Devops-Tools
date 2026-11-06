@@ -25,11 +25,12 @@ name. Use exactly these strings from `terraform-plan.yml`:
 
 Two important gotchas this list already accounts for:
 
-- **The `validate` job is a matrix** (`name: Validate ${{ matrix.root }}`) that emits one
-  context *per root* (~180 of them), never a single `validate` context. Do **not** list
-  `validate` (or per-leg names) as required — they change as roots are added/removed.
-  Instead require **`Validation Summary`**, which `needs:` the whole matrix and fails
-  closed if any leg fails, so it gates the matrix through one stable context.
+- **The `validate` job is a sharded matrix** (`name: Validate (shard ${{ matrix.shard }})`)
+  that emits one context *per shard* (10 today, each validating every Nth root), never a
+  single `validate` context. Do **not** list `validate` (or per-shard names) as required —
+  the shard count can change. Instead require **`Validation Summary`**, which `needs:` the
+  whole matrix and fails closed if any shard fails, so it gates every root through one
+  stable context.
 - **The `security` job calls a reusable workflow**, so its contexts are
   `Security / Trivy` and `Security / Checkov` — never a bare `security`.
 

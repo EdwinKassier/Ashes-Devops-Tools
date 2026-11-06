@@ -38,6 +38,17 @@ variable "enable_bucket_lock" {
   default     = false
 }
 
+variable "soft_delete_retention_days" {
+  description = "Soft-delete retention (days) on the audit-log buckets: deleted or overwritten objects stay restorable for this window. GCS accepts 7-90 days, or 0 to disable. Default 30."
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.soft_delete_retention_days == 0 || (var.soft_delete_retention_days >= 7 && var.soft_delete_retention_days <= 90)
+    error_message = "soft_delete_retention_days must be 0 (disabled) or between 7 and 90."
+  }
+}
+
 variable "kms_key_name" {
   description = "The KMS key name to encrypt the audit logs bucket (optional). Format: projects/{project}/locations/{location}/keyRings/{keyring}/cryptoKeys/{key}"
   type        = string

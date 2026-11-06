@@ -63,8 +63,25 @@ variable "create_security_group" {
   default     = false
 }
 
+variable "egress_cidr_blocks" {
+  description = "CIDRs the module-created security group may send to (the LB's targets). Default 0.0.0.0/0 for backward compatibility; set the VPC CIDR when every target is inside the VPC (e.g. Fargate tasks)."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+
+  validation {
+    condition     = length(var.egress_cidr_blocks) > 0 && alltrue([for c in var.egress_cidr_blocks : can(cidrnetmask(c))])
+    error_message = "egress_cidr_blocks must be a non-empty list of valid IPv4 CIDR blocks."
+  }
+}
+
 variable "drop_invalid_header_fields" {
   description = "For application load balancers, drop HTTP headers with invalid fields. Ignored for network load balancers."
+  type        = bool
+  default     = true
+}
+
+variable "enable_cross_zone_load_balancing" {
+  description = "Enable cross-zone load balancing. Always effectively on for ALBs; for NLBs it spreads traffic across healthy targets in every AZ (inter-AZ data charges apply)."
   type        = bool
   default     = true
 }
@@ -125,18 +142,43 @@ variable "target_groups" {
 
 variable "listeners" {
   description = <<-EOT
-    Listeners to create, keyed by a stable local key. Each listener forwards to
-    the target group named by target_group_key. Provide certificate_arn (and
-    optionally ssl_policy) for TLS-terminating listeners (HTTPS/TLS).
+    Listeners to create, keyed by a stable local key. default_action selects the
+    listener's default: "forward" (to the target group named by target_group_key),
+    "fixed-response" (e.g. a 404 on a shared ALB whose services are routed by
+    listener_rules), or "redirect-https" (HTTP -> HTTPS 301). Provide
+    certificate_arn (and optionally ssl_policy) for TLS-terminating listeners.
   EOT
   type = map(object({
     port             = number
     protocol         = string
-    target_group_key = string
+    target_group_key = optional(string)
     certificate_arn  = optional(string)
     ssl_policy       = optional(string, "ELBSecurityPolicy-TLS13-1-2-2021-06")
+    # one of: forward (to target_group_key), fixed-response, redirect-https
+    default_action = optional(string, "forward")
+    fixed_response = optional(object({
+      status_code  = optional(string, "404")
+      content_type = optional(string, "text/plain")
+      message_body = optional(string, "Not Found")
+    }), {})
   }))
   default = {}
+
+  validation {
+    condition = alltrue([
+      for l in values(var.listeners) : contains(["forward", "fixed-response", "redirect-https"], l.default_action)
+    ])
+    error_message = "Each listeners default_action must be one of: forward, fixed-response, redirect-https."
+  }
+
+  validation {
+    # A forwarding listener must name a target group this module creates.
+    condition = alltrue([
+      for l in values(var.listeners) :
+      l.default_action != "forward" || (l.target_group_key != null && contains(keys(var.target_groups), coalesce(l.target_group_key, "-")))
+    ])
+    error_message = "Listeners with default_action = forward must set target_group_key to a key of target_groups."
+  }
 
   validation {
     condition = alltrue([
@@ -160,6 +202,40 @@ variable "listeners" {
       for l in values(var.listeners) : l.port >= 1 && l.port <= 65535
     ])
     error_message = "Each listeners port must be between 1 and 65535."
+  }
+}
+
+variable "listener_rules" {
+  description = "Host/path routing rules, keyed by a stable local key. Each rule forwards requests matching host_headers and/or path_patterns on listener_key to target_group_key. At least one condition is required; priority must be unique per listener (1-50000)."
+  type = map(object({
+    listener_key     = string
+    priority         = number
+    target_group_key = string
+    host_headers     = optional(list(string), [])
+    path_patterns    = optional(list(string), [])
+  }))
+  default = {}
+
+  validation {
+    condition = alltrue([
+      for r in values(var.listener_rules) : length(r.host_headers) + length(r.path_patterns) > 0
+    ])
+    error_message = "Each listener_rules entry must set at least one host_headers or path_patterns condition."
+  }
+
+  validation {
+    condition = alltrue([
+      for r in values(var.listener_rules) : r.priority >= 1 && r.priority <= 50000
+    ])
+    error_message = "Each listener_rules priority must be between 1 and 50000."
+  }
+
+  validation {
+    condition = alltrue([
+      for r in values(var.listener_rules) :
+      contains(keys(var.listeners), r.listener_key) && contains(keys(var.target_groups), r.target_group_key)
+    ])
+    error_message = "Each listener_rules entry must reference a key of listeners (listener_key) and of target_groups (target_group_key)."
   }
 }
 

@@ -27,10 +27,10 @@ module "aws_backup" {
     aws.backup = aws.backup
   }
 
-  vault_name               = "org-backup-vault"
-  kms_key_arn              = "arn:aws:kms:eu-west-2:444444444444:key/backup-cmk-0000"
-  restore_testing_role_arn = "arn:aws:iam::444444444444:role/backup-restore-test"
-  backup_role_arn          = "arn:aws:iam::111111111111:role/aws-backup-role"
-  workloads_ou_id          = "ou-abcd-11111111"
-  aws_region               = "eu-west-2"
+  vault_name  = "org-backup-vault"
+  kms_key_arn = "arn:aws:kms:eu-west-2:444444444444:key/backup-cmk-0000"
+  # restore_testing_role_arn / backup_role_arn omitted: the stage creates the
+  # restore-testing role and deploys the member-account backup role (StackSet).
+  workloads_ou_id = "ou-abcd-11111111"
+  aws_region      = "eu-west-2"
 }

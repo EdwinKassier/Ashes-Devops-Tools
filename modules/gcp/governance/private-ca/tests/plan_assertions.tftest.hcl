@@ -5,6 +5,7 @@
 mock_provider "google" {}
 
 variables {
+  location     = "europe-west1"
   project_id   = "mock-project"
   ca_pool_name = "test-pool"
   name         = "test-ca"

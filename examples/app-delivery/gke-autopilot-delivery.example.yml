@@ -10,7 +10,11 @@
 # pool/provider from the gcp-bootstrap root. No service-account keys.
 #
 # Prerequisites (provisioned by the landing zone, not by this pipeline):
-#   - A GKE Autopilot cluster from modules/gcp/compute/gke-autopilot (name below).
+#   - A GKE Autopilot cluster: set enable_gke_autopilot = true in the
+#     gcp-workload-<env> workspace (modules/gcp/stages/app-services creates
+#     <env>-apps via modules/gcp/compute/gke-autopilot). The GKE deploy SA below
+#     is NOT generated yet (only Cloud Run app_services get one); create it and
+#     its WIF binding yourself, ideally on the app-deploy pool (apps-<env>).
 #   - An Artifact Registry repo from modules/gcp/artifact-registry.
 #   - A deploy service account with roles/container.developer +
 #     artifactregistry.writer, and a WIF binding for this repo

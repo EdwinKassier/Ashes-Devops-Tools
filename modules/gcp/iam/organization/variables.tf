@@ -45,4 +45,3 @@ variable "organizational_units" {
   }))
   default = {}
 }
-

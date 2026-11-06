@@ -19,6 +19,128 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   **Validate on a real org and switch CloudTrail to `aws:SourceArn` before
   relying on it.** Ref: <https://docs.aws.amazon.com/awscloudtrail/latest/userguide/create-kms-key-policy-for-cloudtrail.html>
 
+- **G13 — stage contract overrides are hand-maintained and mock-tested only.**
+  Every root's `<layer>_contract` (or `<cloud>.contracts.<layer>` in
+  `config/landing-zone.yaml`) replaces the upstream `terraform_remote_state`
+  read; a supplied contract does **not** follow an upstream rename/rotation
+  (e.g. the log archive bucket, audit M7) — keep it in sync or prefer the
+  read. Standalone `aws-workload` (`enable_network_hub = false`) has no egress
+  and still plans the (unused) `tgw` subnet tier; attaching later replaces the
+  VPC if it then moves to an IPAM pool. `gcp-workload`'s `module "host"` must
+  consume `local.hub_vpc_peerings` / `local.hub_dns_zones` / `local.org_id`.
+  **Validate** a contract-only plan against a real estate before relying on it.
+
+- **C2 — per-stage GCP automation identities (supersedes G3).** Shipped
+  default-ON in `modules/gcp/stages/bootstrap` (`service_accounts.tf`): a
+  read-only plan SA and a least-privilege apply SA per control-plane stage and
+  per `gcp-workload-<env>`, WIF-bound per (workspace, run phase) via composite
+  `attribute.workspace_phase` / `workspace_id_phase`; workload SAs hold no
+  org-level role (env-folder grants in `modules/gcp/stages/projects`); GitHub
+  WIF off by default and ID-pinned. The old opt-in `enable_privilege_split` /
+  resman SA is **removed**. Mock-tested only — **validate on a real org**:
+  (1) the composite `<name>:<phase>` principalSet values authenticate as
+  expected; (2) the role matrix is sufficient for each stage's first apply
+  (notably `logging.configWriter` vs `logging.admin`,
+  `securitycenter.notificationConfigEditor`, `monitoring.metricsScopesAdmin`,
+  that the metadata-only plan role set (predefined viewers + the
+  `landingZonePlanViewer` custom role) is enough for every stage's plan, and that
+  bootstrap-apply's org `iam.securityAdmin` covers billing-account IAM);
+  (3) the projects-apply `modifiedGrantsByRole` delegated-grant condition is
+  accepted for the full role list on each folder binding; (4) brownfield
+  projects created by `terraform-admin` may need a one-off owner grant to
+  projects-apply. Residual: bootstrap-apply and organization-apply still hold org
+  `iam.securityAdmin` (inherent to managing org IAM); network-hub-apply's org
+  `accesscontextmanager.policyAdmin` inherits onto the per-environment scoped
+  policies; `envs/gcp/organization` still grants `terraform-admin` env-folder
+  roles (`terraform_admin_folder_roles`) when the legacy flag is on.
+
+- **G12 — GCP re-audit hardening (2026-11-06), mock-tested only.** Validate on a
+  real org before relying on it:
+  (1) **scoped access policies** (`enable_scoped_access_policies`, default on):
+  `google_access_context_manager_access_policy` with `scopes = [folders/<env>]`
+  per environment is created by organization-apply with org
+  `accesscontextmanager.policyAdmin`; confirm creation does not require an
+  existing org-level policy, that the workload perimeter in it accepts the host
+  and service-team projects, and that the default dry-run ingress/egress rules
+  are valid inside a scoped policy;
+  (2) **`landingZonePlanViewer`** custom role: every permission must be
+  custom-role-supported at org level, and the plan of each root must succeed
+  without `roles/viewer` (a missing get/list shows up as a 403 in plan);
+  (3) **per-folder projects-apply delegation**: confirm that a folder-level
+  conditional `folderIamAdmin` lets projects-apply set the env-folder grants and
+  that the org-node grant can be removed (apply order gcp-bootstrap ->
+  gcp-organization -> gcp-projects);
+  (4) **containment additions** `storage buckets.deleteTagBinding` and
+  `cloudkms cryptoKeyVersions.update` (both deny-supported) do not break a
+  no-change apply; the `tag_binding_change` / `kms_key_version_disable` watch
+  filters match real audit-log method names;
+  (5) **PAM** (`enable_pam`, opt-in): entitlement creation at the org node and an
+  end-to-end request/approve flow;
+  (6) **group-only org admin** (`allow_user_principals_for_break_glass = false`
+  by default) removes existing `user:` org/billing admin bindings on the next
+  gcp-organization apply: make sure a group (or PAM) holds admin first.
+  Not deny-supported, so alert-only: `resourcemanager.tagValueBindings.delete`,
+  `tagValues.delete`, `tagKeys.delete`, `cloudkms keyRings.deleteTagBinding`.
+
+- **A4 — CloudTrail CloudWatch Logs + CIS section-4 alarms, now default ON**
+  (`enable_cloudwatch_logs = true`, `modules/aws/security/cloudtrail-org`). The
+  full CIS AWS 4.1–4.15 metric-filter set ships with a module-created,
+  logs-granted CMK and a KMS-encrypted SNS topic in the management account.
+  Mock-tested only. **Validate on a real org**: (1) `CreateLogGroup` succeeds
+  with the generated key policy (`logs.<region>` + `kms:EncryptionContext:aws:logs:arn`);
+  (2) CloudWatch alarms can publish to the encrypted topic; (3) org-wide
+  `unauthorized-api-calls` volume is tolerable (drop it with
+  `cloudtrail_cis_alarms_excluded` if not). The security-notifications
+  break-glass metric alarm (`cloudtrail_log_group_name`) still assumes a log
+  group in the security-tooling account; the trail's group is in the management
+  account, so leave that input empty or point it at a copy.
+- **A8 — RESOLVED (2026-11-05): vended-log delivery to the log archive.** The
+  log-archive bucket now grants `delivery.logs.amazonaws.com` AclCheck + Write
+  (`AWSLogs/*`, `bucket-owner-full-control`), both scoped by `aws:SourceOrgID`, and
+  the log CMK's default `log_service_principals` includes it, so cross-account VPC
+  flow / Network Firewall / Resolver query logs can deliver. Still validate one real
+  delivery per log type (mock-tested only).
+- **A9 — Network Firewall baseline and tfc-apply boundary are mock-only.**
+  (1) The default managed rule-group names are documented by AWS
+  (`MalwareDomainsStrictOrder`, `BotNetCommandAndControlDomainsStrictOrder` in the
+  domain-list groups; `AttackInfrastructureStrictOrder`); confirm regional
+  availability with `aws network-firewall list-rule-groups --scope MANAGED` and
+  check the active-threat-defense pricing. (2) The default stateful action is
+  log-but-pass (`aws:alert_established`). Move to `aws:drop_established` +
+  `aws:alert_established` once egress allow rules exist. (3) Run a full
+  security, workload and backup apply under the `tfc-apply-boundary` boundary,
+  including a destroy/replace of Config and GuardDuty resources, which the
+  boundary deliberately blocks. Use break-glass for those.
+- **A10 — AWS escape-hatch hardening (2026-11 re-audit) is mock-only and has
+  apply-time consequences.** (1) **Boundary propagation**
+  (`enable_apply_boundary_propagation`, default on): `tfc-apply` can only
+  `CreateRole`/`AttachRolePolicy`/`PutRolePolicy`/`PutRolePermissionsBoundary`
+  on roles carrying `tfc-apply-boundary`, and can never delete a boundary. Every
+  `aws_iam_role` created by `tfc-apply` in a member account must therefore set
+  `permissions_boundary = arn:aws:iam::<account>:policy/tfc-apply-boundary`.
+  `modules/aws/iam/iam-role` supports this; `modules/aws/security/cloudtrail-org`,
+  `modules/aws/security/incident-response` and `modules/aws/stages/app-services`
+  do **not yet** expose a `permissions_boundary` input, so their role creation in
+  member accounts fails until they do (or disable propagation). Residual:
+  `iam:UpdateAssumeRolePolicy` on pre-existing unbounded roles that the
+  deny-tamper SCP does not protect. (2) **Plan-role data-plane deny**
+  (`enable_plan_role_data_read_deny`, default on): plans that refresh data-reading
+  resources fail as `tfc-plan`. In-repo this is `envs/aws/workload`'s
+  `aws_secretsmanager_secret_version.saas_bridge` (opt-in,
+  `enable_saas_secret_bridge`): add its ARN to
+  `tfc_plan_role_data_read_exempt_arns`. (3) **Protected KMS key policies are
+  break-glass only**: `modules/aws/data/kms-key` now sets the policy at
+  `CreateKey` (a `removed` block forgets the old `aws_kms_key_policy` without
+  destroying it), but any later key-policy change on a key tagged
+  `protected = true` must be applied by break-glass. With `key_policy_admin_arns`
+  set, the CreateKey lockout safety check is bypassed, and every listed role
+  must already exist in that account. (4) **`dp:*` tags are break-glass only**
+  (baseline SCP): opting a resource out of the RCP data perimeter, and
+  re-applying a full S3 tag set on a bucket that carries a `dp:*` tag, need
+  break-glass. **Validate** that `aws:TagKeys` is populated on
+  `s3:PutBucketTagging`/`s3:CreateBucket` and on `kms:CreateKey`/`iam:CreateRole`
+  with tags.
+
 ## MODERNIZATION — latest-best-practice gaps (2026 review)
 
 From a 2026 gap analysis of both landing zones against the current AWS SRA and
@@ -69,13 +191,23 @@ GCP:
   → `cloud-audit-logs`, default `false`, mock-tested). When enabled it applies a
   **locked** retention policy of `audit_log_retention_days` (irreversible — for
   compliance regimes that require tamper-proof retention). Default preserves the
-  prior operator-correctable behaviour.
+  prior operator-correctable behaviour. **2026-11-05 (M-4):** both audit buckets now
+  ship Object Versioning + a 30-day soft-delete policy by default
+  (`audit_soft_delete_retention_days`); enabling the lock turns versioning off on
+  the audit bucket because GCS forbids versioning together with a retention policy.
 - **G9 — IAM Deny policies** — ✅ **SHIPPED opt-in**. New leaf module
   `modules/gcp/iam/deny-policy` (its own mock tests) wired into
   `stages/organization` at the org node via `iam_deny_policies` (on
   `envs/gcp/organization`, default `[]`). Coarse allow-independent backstop that
   blocks sensitive permissions regardless of roles (deny before allow). Inert
   until populated. Ref: <https://docs.cloud.google.com/iam/docs/deny-overview>
+  **2026-11-05 (C3):** the built-in `enable_admin_containment` policy now denies
+  org-wide sink update/delete, exclusion changes, perimeter update/delete and
+  `policies.delete` (the old `accessPolicies.delete` string was not a valid deny
+  permission), plus tag-scoped (`containment/protected`) audit-bucket/object/CMEK
+  destruction. On in the prod preset. `iam.denypolicies.*` is not deny-supported →
+  covered by the `deny_policy_change` control-plane alert instead. Needs real-org
+  validation.
 - **G10 — SCC is notification-only; no posture service or tier** (MEDIUM,
   BEHAVIOR-CHANGING). `modules/gcp/governance/scc` wires only Pub/Sub findings
   notification. The security posture service (drift detection) needs SCC Premium
@@ -92,6 +224,32 @@ GCP:
   the violation logs are clean — dry-run gives no exfiltration protection, so do
   not leave a production perimeter in dry-run. Ref:
   <https://docs.cloud.google.com/vpc-service-controls/docs/dry-run-mode>
+  **2026-11-05 (SOTA M):** the vpc-sc module now supports an enforced `status`
+  plus a staged dry-run `spec` (`dry_run_restricted_services` /
+  `dry_run_ingress_policies` / `dry_run_egress_policies`), and the workload and
+  network-hub roots warn (check blocks) when a prod-like environment has no
+  perimeter or a dry-run one.
+- **G12 — CIS GCP Foundations gaps (2026-11-05)** — ✅ **SHIPPED**, mock-tested
+  only. Validate on a non-prod org before you cite these to an auditor.
+  (a) CIS 2.4–2.11 log-based metrics and alerts (`cis_log_metrics` in
+  `modules/gcp/monitoring/control-plane`, `enable_cis_log_metrics`, default on)
+  live in the audit project. The aggregated org sink feeds them every project's
+  Admin Activity. CIS and SCC Security Health Analytics check each project for
+  its own metric, so per-project findings stay open: record the central design
+  as a compensating control. The 2.5 and 2.6 metrics duplicate the
+  `audit_config_change` and `custom_role_change` log-match watches. Remove one
+  of each pair if the double notification is noise.
+  (b) `compute.requireOsLogin` is enforced at the org node (`enforce_os_login`).
+  Exempt folders with `os_login_exempt_environment_keys`. **Behaviour change:**
+  VMs that rely on metadata SSH keys lose SSH access unless their folder is
+  exempt.
+  (c) Artifact Registry scanning: the Container Scanning API is enabled, and
+  DOCKER repositories are set to `INHERITED`. Scanning is billed per image.
+  (d) VM backup and patching in `envs/gcp/workload`. `enable_vm_backup_policy`
+  (default on) only creates snapshot policies, so attach disks to them.
+  `enable_os_patch_management` (default on) runs a weekly patch job; the
+  workload apply SA holds `roles/osconfig.patchDeploymentAdmin` via the
+  gcp-bootstrap `workload_folder_roles`.
 - **KMS Autokey / HSM-for-sensitive** (LOW, SAFE-CONFIG, future). No Cloud KMS
   Autokey; CMEK defaults to `SOFTWARE` protection (HSM is per-key selectable).
   Autokey (GA 2024, dedicated-project storage GA 2026) and HSM-by-default for
@@ -105,21 +263,17 @@ GCP:
 
 Enable only after validating in a real/test org. Each defaults to prior behaviour.
 
-- **G3 — bootstrap SA privilege split** (`enable_privilege_split`,
-  `modules/gcp/stages/bootstrap`). **Self-declared INCOMPLETE**: fully activating
-  the split also requires WIF-binding the resman SA and switching downstream
-  impersonation. Do **not** enable as-is.
-- **G4 — dedicated logging project** (`logging_project_id`,
-  `modules/gcp/stages/organization`). Also needs cross-project CMEK grant wiring.
+- **G4 — dedicated logging project** (`logging_project_id` +
+  `logging_project_number`, `modules/gcp/stages/organization`). The audit bucket,
+  BigQuery dataset, audit CMEK keyring (`<prefix>-audit-cmek`, granted to the
+  logging project's own service agents — no cross-project KMS grant) and the
+  control-plane alerts all move there. The project must NOT be owned by the
+  automation SA. Decide before the first apply (KMS keys are undeletable).
 - **G5 — VPC-SC perimeter expansion** (`vpc_sc_additional_restricted_services`,
   `vpc_sc_ingress_identities`, `modules/gcp/stages/network-hub`). Set the ingress
   identity BEFORE expanding services or an enforced apply is blocked.
 - **A3 — dedicated Identity Center account** (`identity_account_id`,
   `modules/aws/stages/security`). Point at a real dedicated identity account.
-- **A4 — CloudTrail CloudWatch Logs + CIS alarms** (`enable_cloudwatch_logs`,
-  `modules/aws/security/cloudtrail-org`). See A1: supply a `logs.*`-granted CMK
-  via `cloudwatch_logs_kms_key_arn`, and note the break-glass alarm lives in a
-  different account.
 
 ## Capability parity (2026 review)
 
@@ -150,23 +304,31 @@ side (all mock-tested, secure defaults):
   does not yet expose `sb_publishable_`/`sb_secret_` on `supabase_apikeys`; the
   module uses the legacy JWT keys, which Supabase deprecates end-2026. Expose the
   new keys as outputs once the provider supports them.
-- **S4 — Vercel write-only secret values (`value_wo`).** Requires vercel provider
-  **5.x** (pinned `~> 4.0`, 4.8.2 rejects `value_wo`) **and Terraform ≥ 1.11**.
-  Once the Vercel major bump lands, move env-var values to `value_wo` and retire
-  the SHA256 drift-hack. (GCP/Supabase secrets can adopt write-only sooner — the
-  Terraform floor was raised off 1.9.8, and the google provider already supports it.)
+- **S4 — RESOLVED (2026-11-05).** The Terraform floor is now `~> 1.11` and secrets use
+  write-only arguments, so they never enter plan or state: GCP Secret Manager
+  (`secret_data_wo`), Cloud SQL users (`password_wo`), Aurora master password
+  (`master_password_wo`), sensitive TFC variables (`value_wo`) and sensitive Vercel env
+  vars (`value_wo`, supported by vercel 4.8.2). Remaining: `supabase_project.database_password`
+  (no write-only argument in the supabase provider yet) and the Vercel change-detection
+  fingerprint, which is an unsalted SHA-256 of the env values.
+  Ephemeral inputs (2026-11-06): `rds-aurora.master_password` is `ephemeral = true`;
+  `cloud-sql` adds an ephemeral `user_passwords` map (opt in per user with
+  `ephemeral_password = true`) and `secret-manager` an ephemeral
+  `ephemeral_secret_values` map (opt in per secret with `ephemeral_value = true`) —
+  the opt-in flags exist because an ephemeral value cannot drive `for_each`, so the
+  legacy sensitive inputs stay for backward compatibility. Vercel env-var inputs
+  cannot be ephemeral: they also feed the `for_each` keys and the stored fingerprints.
 
 ## DECISION — needs a human call
 
 - **Behaviour-changing security defaults** (not applied, would change posture):
   packet-mirroring default mirrors all traffic; vpc-peering exports public-IP
   subnet routes; the shared VPC-endpoint policy is `Action="*"`.
-- **tfsec → Trivy PR gate.** tfsec is EOL (Aqua → Trivy). Trivy already runs
-  post-merge; promoting it to the PR gate is a scanner swap that may surface new
-  findings — validate what Trivy reports before flipping the gate.
 - **`host` stage decomposition.** `modules/gcp/stages/host` (~2,000 LOC) is
   large-but-cohesive; a targeted split (firewall / egress / advanced sub-stages)
   is optional maintainability work, not a bug.
-- **Toolchain currency automation.** Dependabot tracks GitHub Actions only
-  (terraform-ecosystem intentionally omitted — provider majors broke `validate`).
-  Consider Renovate for grouped, compatibility-aware provider bumps.
+- **Toolchain currency automation.** Dependabot covers both GitHub Actions and
+  the `terraform` ecosystem (`directories: ["/**"]`, one grouped weekly PR,
+  labelled for review, never auto-merged); the repo pins keep proposals inside
+  the current provider major. Open call: switch to Renovate only if grouped,
+  compatibility-aware *major* bumps or `required_version` bumps are wanted.

@@ -17,6 +17,12 @@ mock_provider "aws" {
   }
 }
 
+variables {
+  # Isolate the suite from any committed config/landing-zone.yaml.
+  landing_zone_config_path = ""
+  landing_zone_name        = "acme"
+}
+
 run "consumes_remote_state_contract" {
   command = plan
 
@@ -39,12 +45,58 @@ run "consumes_remote_state_contract" {
   }
 
   assert {
-    condition     = data.terraform_remote_state.aws_organization.outputs.account_role_arns["shared_services"] != ""
+    condition     = data.terraform_remote_state.aws_organization[0].outputs.account_role_arns["shared_services"] != ""
     error_message = "remote-state account_role_arns must expose the shared_services role the provider assumes"
   }
 
   assert {
     condition     = output.account_ids["shared_services"] == "222222222222"
     error_message = "remote-state account_ids must expose member-account IDs for wiring assignments"
+  }
+}
+
+# landing_zone_name has no default and rejects the upstream placeholders.
+run "rejects_placeholder_landing_zone_name" {
+  command = plan
+
+  variables {
+    landing_zone_name = "ashes"
+  }
+
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = {
+      outputs = {
+        organization_id       = "o-abcdefghij"
+        management_account_id = "111111111111"
+        account_ids = {
+          shared_services = "222222222222"
+          network         = "333333333333"
+        }
+        account_role_arns = {
+          shared_services = "arn:aws:iam::222222222222:role/cross-account"
+          network         = "arn:aws:iam::333333333333:role/cross-account"
+        }
+      }
+    }
+  }
+
+  expect_failures = [var.landing_zone_name]
+}
+
+# Stage contract override (FAST-style): organization_contract replaces the
+# aws-organization remote-state read entirely (no override_data here).
+run "organization_contract_skips_remote_state" {
+  command = plan
+
+  variables {
+    organization_contract = {
+      account_ids = { shared_services = "444444444444" }
+    }
+  }
+
+  assert {
+    condition     = length(data.terraform_remote_state.aws_organization) == 0 && output.account_ids["shared_services"] == "444444444444"
+    error_message = "a supplied organization_contract must skip the aws-organization read and feed the root"
   }
 }

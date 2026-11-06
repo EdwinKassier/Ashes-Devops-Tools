@@ -1,0 +1,11 @@
+# Test fixture for the workspace_variables_file mechanism (root.tftest.hcl).
+workspaces:
+  aws-network:
+    name_prefix: acme
+    allowed_regions: [eu-west-2, eu-west-1]
+  gcp-organization:
+    domain: fixture.example
+    log_level:
+      value: INFO
+      category: env
+      description: Example env var.

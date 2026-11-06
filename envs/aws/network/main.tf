@@ -6,10 +6,27 @@
 # organization cross-root contract (organization_id, management_account_id,
 # account_role_arns) and re-exports the network cross-root contract for
 # downstream app roots.
+# Stage contract override (FAST-style): var.organization_contract (or
+# aws.contracts.organization in config/landing-zone.yaml) replaces this read —
+# count = 0 — so the root can plan without the aws-organization workspace.
+locals {
+  organization_contract = var.organization_contract != null ? var.organization_contract : local.cfg.organization_contract
+  read_organization     = local.organization_contract == null
+  # The organization contract this root consumes, whichever source supplied it
+  # (the remote state is projected onto the contract's fields so both branches
+  # share one type).
+  org = local.read_organization ? {
+    organization_id       = data.terraform_remote_state.aws_organization[0].outputs.organization_id
+    management_account_id = data.terraform_remote_state.aws_organization[0].outputs.management_account_id
+    account_ids           = tomap(data.terraform_remote_state.aws_organization[0].outputs.account_ids)
+  } : local.organization_contract
+}
+
 data "terraform_remote_state" "aws_organization" {
+  count   = local.read_organization ? 1 : 0
   backend = "cloud"
   config = {
-    organization = var.tfc_organization
+    organization = local.tfc_organization
     workspaces   = { name = var.organization_workspace_name }
   }
 }
@@ -18,17 +35,17 @@ locals {
   # Org ARN for RAM org-wide sharing, built from existing organization outputs
   # (management account id + org id) so no extra remote-state dependency is
   # needed just to obtain the ARN.
-  org_arn = "arn:aws:organizations::${data.terraform_remote_state.aws_organization.outputs.management_account_id}:organization/${data.terraform_remote_state.aws_organization.outputs.organization_id}"
+  org_arn = "arn:aws:organizations::${local.org.management_account_id}:organization/${local.org.organization_id}"
 }
 
 module "aws_network_hub" {
   source = "../../../modules/aws/stages/network-hub"
 
-  org_id  = data.terraform_remote_state.aws_organization.outputs.organization_id
+  org_id  = local.org.organization_id
   org_arn = local.org_arn
 
-  aws_region          = var.aws_region
-  aws_enabled_regions = var.aws_enabled_regions
+  aws_region          = local.aws_region
+  aws_enabled_regions = local.aws_enabled_regions
 
   top_cidr           = var.top_cidr
   regional_cidrs     = var.regional_cidrs
@@ -37,8 +54,8 @@ module "aws_network_hub" {
   availability_zones = var.availability_zones
   az_count           = var.az_count
 
-  flow_log_destination_arn = "arn:aws:s3:::${var.log_archive_bucket_name}"
-  log_bucket_name          = var.log_archive_bucket_name
+  flow_log_destination_arn = "arn:aws:s3:::${local.log_archive_bucket_name}"
+  log_bucket_name          = local.log_archive_bucket_name
 
   private_hosted_zone_name       = var.private_hosted_zone_name
   enable_network_firewall        = var.enable_network_firewall

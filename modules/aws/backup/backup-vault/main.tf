@@ -12,6 +12,34 @@
 # validated rather than assumed. The selection targets EBS recovery points by a
 # tag condition so the plan is apply-ready without hard-coding resource ARNs.
 
+locals {
+  create_restore_testing_role = var.restore_testing_role_arn == null
+  restore_testing_role_arn    = local.create_restore_testing_role ? aws_iam_role.restore_testing[0].arn : var.restore_testing_role_arn
+}
+
+# Restore-testing service role (created unless an existing ARN is passed):
+# trusted by backup.amazonaws.com only, with the AWS managed restore policy.
+resource "aws_iam_role" "restore_testing" {
+  count = local.create_restore_testing_role ? 1 : 0
+  name  = var.restore_testing_role_name
+
+  permissions_boundary = var.permissions_boundary_arn
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "backup.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "restore_testing" {
+  count      = local.create_restore_testing_role ? 1 : 0
+  role       = aws_iam_role.restore_testing[0].name
+  policy_arn = "arn:${var.partition}:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForRestores"
+}
+
 resource "aws_backup_vault" "this" {
   name        = var.vault_name
   kms_key_arn = var.kms_key_arn != "" ? var.kms_key_arn : null
@@ -44,7 +72,7 @@ resource "aws_backup_restore_testing_selection" "this" {
   name                      = var.restore_testing_selection_name
   restore_testing_plan_name = aws_backup_restore_testing_plan.this.name
   protected_resource_type   = "EBS"
-  iam_role_arn              = var.restore_testing_role_arn
+  iam_role_arn              = local.restore_testing_role_arn
 
   # EBS selections require either protected_resource_arns or a condition set.
   # Select by tag so newly created, correctly tagged volumes are covered
@@ -55,4 +83,6 @@ resource "aws_backup_restore_testing_selection" "this" {
       value = var.restore_testing_tag_value
     }
   }
+
+  depends_on = [aws_iam_role_policy_attachment.restore_testing]
 }

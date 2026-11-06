@@ -2,8 +2,8 @@
 
 **When to use:** The Workload Identity Federation pipeline is broken, GitHub Actions cannot authenticate to GCP, and you need emergency access to investigate or remediate a production incident.
 
-**Time:** 10–20 minutes to establish access.  
-**Risk:** High — this procedure grants temporary elevated GCP access outside normal controls. All actions must be logged and the access revoked immediately after the incident.  
+**Time:** 10–20 minutes to establish access.
+**Risk:** High — this procedure grants temporary elevated GCP access outside normal controls. All actions must be logged and the access revoked immediately after the incident.
 **Prerequisites:** You have `roles/resourcemanager.organizationAdmin` on the GCP organization, or a human approver who does.
 
 ---

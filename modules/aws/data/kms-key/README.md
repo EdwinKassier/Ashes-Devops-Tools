@@ -4,13 +4,18 @@ Reusable customer-managed KMS key (CMK) sized for cross-account log delivery.
 Creates the key (with rotation enabled), an alias, and a key policy built with
 `jsonencode()` that grants log-delivery service principals (CloudTrail, Config,
 Security Lake) the minimum KMS actions, scoped to this organization by
-`aws:SourceOrgID`. A key-administration statement (`kms:*` to `key_admin_arn`)
-is always present to prevent locking the key out of management.
+`aws:SourceOrgID`. A key-administration statement for `key_admin_arn` is always
+present to prevent locking the key out of management. It grants management
+actions only (no Encrypt/Decrypt/GenerateDataKey/ReEncrypt, no CreateGrant), so
+the key admin cannot read protected data; key usage is granted separately via
+`key_user_arns`. Set `enable_protection_tag = true` to tag the key
+`protected = "true"`, which the organization deny-tamper SCP uses to block
+ScheduleKeyDeletion/DisableKey except via break-glass.
 
 The log-service grants deliberately omit `kms:ViaService`: CloudTrail (and
 Config/Security Lake) call KMS under their own service principal, not via S3, so
 a ViaService condition would deny log delivery. The optional `via_services`
-input scopes only the general-usage grant for `key_users`.
+input scopes only the general-usage grant for `key_user_arns`.
 
 <!-- BEGIN_TF_DOCS -->
 
@@ -24,11 +29,10 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	alias = 
-	key_admin_arn = 
-	management_account_id = 
-	org_id = 
-	
+	alias =
+	key_admin_arn =
+	management_account_id =
+	org_id =
 }
 ```
 
@@ -36,7 +40,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.46.0, < 7.0.0 |
 
 ## Providers
@@ -52,9 +56,8 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_kms_alias.this (modules/aws/data/kms-key/main.tf#L130)
-- resource.aws_kms_key.this (modules/aws/data/kms-key/main.tf#L124)
-- resource.aws_kms_key_policy.this (modules/aws/data/kms-key/main.tf#L135)
+- resource.aws_kms_alias.this (modules/aws/data/kms-key/main.tf#L200)
+- resource.aws_kms_key.this (modules/aws/data/kms-key/main.tf#L180)
 
 
 ## Inputs
@@ -62,14 +65,18 @@ The following resources are created:
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_alias"></a> [alias](#input\_alias) | Alias for the CMK, without the "alias/" prefix (the module adds it). Used both for the aws\_kms\_alias name and the key description. | `string` | n/a | yes |
-| <a name="input_key_admin_arn"></a> [key\_admin\_arn](#input\_key\_admin\_arn) | ARN of the principal (role/user) granted key administration (kms:*) on the CMK. REQUIRED to prevent locking the key out of management. | `string` | n/a | yes |
+| <a name="input_key_admin_arn"></a> [key\_admin\_arn](#input\_key\_admin\_arn) | ARN of the principal (role/user) granted key ADMINISTRATION on the CMK: management actions only (Enable/Disable, rotation, tagging, ScheduleKeyDeletion/CancelKeyDeletion, ...), no Encrypt/Decrypt/GenerateDataKey/ReEncrypt, no CreateGrant and — unless key\_policy\_admin\_arns is empty — no PutKeyPolicy. REQUIRED to prevent locking the key out of management. Grant usage via key\_user\_arns. | `string` | n/a | yes |
 | <a name="input_management_account_id"></a> [management\_account\_id](#input\_management\_account\_id) | Organization management (payer) account ID. Used to scope the CloudTrail EncryptionContext condition to trails in that account. | `string` | n/a | yes |
 | <a name="input_org_id"></a> [org\_id](#input\_org\_id) | AWS Organizations organization ID (o-xxxxxxxxxx). Used in the aws:SourceOrgID condition that scopes log-service grants to this org. | `string` | n/a | yes |
 | <a name="input_deletion_window_in_days"></a> [deletion\_window\_in\_days](#input\_deletion\_window\_in\_days) | Waiting period, in days, before the CMK is deleted after scheduling deletion. AWS permits 7-30. | `number` | `30` | no |
-| <a name="input_key_users"></a> [key\_users](#input\_key\_users) | Optional list of principal ARNs granted general-usage (Encrypt/Decrypt/GenerateDataKey/etc.) on the CMK. Empty by default (no general-usage statement). | `list(string)` | `[]` | no |
-| <a name="input_log_service_principals"></a> [log\_service\_principals](#input\_log\_service\_principals) | AWS log-delivery service principals granted GenerateDataKey/Decrypt/DescribeKey on the CMK, scoped by aws:SourceOrgID. CloudTrail additionally gets an EncryptionContext condition. | `list(string)` | <pre>[<br/>  "cloudtrail.amazonaws.com",<br/>  "config.amazonaws.com",<br/>  "securitylake.amazonaws.com"<br/>]</pre> | no |
+| <a name="input_enable_protection_tag"></a> [enable\_protection\_tag](#input\_enable\_protection\_tag) | Tag the key <protection\_tag\_key> = "true" so the organization deny-tamper SCP blocks ScheduleKeyDeletion/DisableKey/DisableKeyRotation and protection-tag removal except via break-glass. Default false; the security stage enables it for the log-archive, forensics and security-tooling keys. | `bool` | `false` | no |
+| <a name="input_key_policy_admin_arns"></a> [key\_policy\_admin\_arns](#input\_key\_policy\_admin\_arns) | Principal ARNs granted kms:PutKeyPolicy — and nothing else — on the CMK. Whoever can rewrite the key policy can grant itself kms:Decrypt, so set this to the break-glass role(s) and keep the pipeline out. When set, the CreateKey lockout safety check is bypassed (the caller is intentionally not a policy admin) and later Terraform key-policy changes must be applied as one of these principals. Empty (default) = legacy behaviour: key\_admin\_arn also holds PutKeyPolicy. | `list(string)` | `[]` | no |
+| <a name="input_key_user_arns"></a> [key\_user\_arns](#input\_key\_user\_arns) | Optional list of principal ARNs granted key USAGE (Encrypt/Decrypt/ReEncrypt/GenerateDataKey/DescribeKey) on the CMK. Kept separate from key\_admin\_arn, which receives management actions only. Empty by default (no general-usage statement). | `list(string)` | `[]` | no |
+| <a name="input_log_service_principals"></a> [log\_service\_principals](#input\_log\_service\_principals) | AWS log-delivery service principals granted GenerateDataKey/Decrypt/DescribeKey on the CMK, scoped by aws:SourceOrgID. CloudTrail additionally gets an EncryptionContext condition. | `list(string)` | <pre>[<br/>  "cloudtrail.amazonaws.com",<br/>  "config.amazonaws.com",<br/>  "securitylake.amazonaws.com",<br/>  "delivery.logs.amazonaws.com"<br/>]</pre> | no |
+| <a name="input_protection_tag_key"></a> [protection\_tag\_key](#input\_protection\_tag\_key) | Tag key used when enable\_protection\_tag is true. Must match the organization-policy module's kms\_protection\_tag\_key. | `string` | `"protected"` | no |
 | <a name="input_service_principals"></a> [service\_principals](#input\_service\_principals) | Optional list of AWS service principals (e.g. sns.amazonaws.com, ssm.amazonaws.com, cloudwatch.amazonaws.com) granted general-usage (Encrypt/Decrypt/GenerateDataKey/etc.) on the CMK, scoped by aws:SourceOrgID so only calls originating within this org can use the key. Unlike log\_service\_principals these carry no CloudTrail EncryptionContext condition. Empty by default (no service-principal statement). | `list(string)` | `[]` | no |
-| <a name="input_via_services"></a> [via\_services](#input\_via\_services) | Optional list of kms:ViaService values that scope the general-usage grant for key\_users (e.g. s3.eu-west-1.amazonaws.com). Never applied to the log-service grants. | `list(string)` | `[]` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Additional tags applied to the CMK. | `map(string)` | `{}` | no |
+| <a name="input_via_services"></a> [via\_services](#input\_via\_services) | Optional list of kms:ViaService values that scope the general-usage grant for key\_user\_arns (e.g. s3.eu-west-1.amazonaws.com). Never applied to the log-service grants. | `list(string)` | `[]` | no |
 
 ## Outputs
 

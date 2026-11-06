@@ -99,10 +99,9 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	organization_id = 
-	perimeter_name = 
-	perimeter_title = 
-	
+	organization_id =
+	perimeter_name =
+	perimeter_title =
 }
 ```
 
@@ -110,7 +109,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
 
 ## Providers
@@ -127,10 +126,10 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_access_context_manager_access_level.levels (modules/gcp/network/vpc-sc/main.tf#L49)
+- resource.google_access_context_manager_access_level.levels (modules/gcp/network/vpc-sc/main.tf#L66)
 - resource.google_access_context_manager_access_policy.policy (modules/gcp/network/vpc-sc/main.tf#L34)
-- resource.google_access_context_manager_service_perimeter.bridge (modules/gcp/network/vpc-sc/main.tf#L297)
-- resource.google_access_context_manager_service_perimeter.perimeter (modules/gcp/network/vpc-sc/main.tf#L98)
+- resource.google_access_context_manager_service_perimeter.bridge (modules/gcp/network/vpc-sc/main.tf#L317)
+- resource.google_access_context_manager_service_perimeter.perimeter (modules/gcp/network/vpc-sc/main.tf#L115)
 - resource.terraform_data.deletion_protection (modules/gcp/network/vpc-sc/main.tf#L20)
 
 
@@ -146,6 +145,9 @@ The following resources are created:
 | <a name="input_access_policy_title"></a> [access\_policy\_title](#input\_access\_policy\_title) | Title for the access policy (if creating new) | `string` | `"Organization Access Policy"` | no |
 | <a name="input_create_access_policy"></a> [create\_access\_policy](#input\_create\_access\_policy) | Whether to create a new access policy (only one per org allowed) | `bool` | `false` | no |
 | <a name="input_description"></a> [description](#input\_description) | Description of the service perimeter | `string` | `"Managed by Terraform"` | no |
+| <a name="input_dry_run_egress_policies"></a> [dry\_run\_egress\_policies](#input\_dry\_run\_egress\_policies) | Optional dry-run egress policies (same shape as egress\_policies). When set on an enforced perimeter, stages them in the dry-run spec. Default null = same as egress\_policies. | <pre>list(object({<br/>    identity_type = optional(string)<br/>    identities    = optional(list(string))<br/>    resources     = optional(list(string))<br/>    operations = optional(list(object({<br/>      service_name = string<br/>      method_selectors = optional(list(object({<br/>        method     = optional(string)<br/>        permission = optional(string)<br/>      })))<br/>    })))<br/>  }))</pre> | `null` | no |
+| <a name="input_dry_run_ingress_policies"></a> [dry\_run\_ingress\_policies](#input\_dry\_run\_ingress\_policies) | Optional dry-run ingress policies (same shape as ingress\_policies). When set on an enforced perimeter, stages them in the dry-run spec. Default null = same as ingress\_policies. | <pre>list(object({<br/>    identity_type = optional(string)<br/>    identities    = optional(list(string))<br/>    sources = optional(list(object({<br/>      access_level = optional(string)<br/>      resource     = optional(string)<br/>    })))<br/>    resources = optional(list(string))<br/>    operations = optional(list(object({<br/>      service_name = string<br/>      method_selectors = optional(list(object({<br/>        method     = optional(string)<br/>        permission = optional(string)<br/>      })))<br/>    })))<br/>  }))</pre> | `null` | no |
+| <a name="input_dry_run_restricted_services"></a> [dry\_run\_restricted\_services](#input\_dry\_run\_restricted\_services) | Optional dry-run restricted\_services. When set on an enforced perimeter, stages this list in the dry-run spec while status keeps enforcing restricted\_services. Default null = same as restricted\_services. | `list(string)` | `null` | no |
 | <a name="input_egress_policies"></a> [egress\_policies](#input\_egress\_policies) | Egress policies for the perimeter | <pre>list(object({<br/>    identity_type = optional(string)<br/>    identities    = optional(list(string))<br/>    resources     = optional(list(string))<br/>    operations = optional(list(object({<br/>      service_name = string<br/>      method_selectors = optional(list(object({<br/>        method     = optional(string)<br/>        permission = optional(string)<br/>      })))<br/>    })))<br/>  }))</pre> | `[]` | no |
 | <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | When true, a sentinel terraform\_data resource with prevent\_destroy = true is<br/>created alongside the perimeter. Terraform will refuse to plan destruction of<br/>the perimeter while this sentinel exists. To tear down a protected perimeter:<br/><br/>  1. Set enable\_deletion\_protection = false and apply (removes the sentinel).<br/>  2. Run the destroy plan in a second apply.<br/><br/>IMPORTANT: Terraform's prevent\_destroy is a static compile-time literal and<br/>cannot be passed as a variable directly on the resource. The sentinel pattern<br/>provides equivalent protection while remaining toggle-able without state<br/>surgery. | `bool` | `true` | no |
 | <a name="input_enable_dry_run"></a> [enable\_dry\_run](#input\_enable\_dry\_run) | Enable dry run mode for the service perimeter.<br/>When enabled, VPC-SC violations are logged but not enforced.<br/>This is recommended for initial rollout to identify potential issues before enforcement.<br/><br/>Set to false once you've verified no unexpected violations occur. | `bool` | `false` | no |
@@ -162,6 +164,8 @@ The following resources are created:
 | <a name="output_access_levels"></a> [access\_levels](#output\_access\_levels) | Map of created access levels |
 | <a name="output_access_policy"></a> [access\_policy](#output\_access\_policy) | The created access policy resource (if created) |
 | <a name="output_access_policy_name"></a> [access\_policy\_name](#output\_access\_policy\_name) | The name of the access policy |
+| <a name="output_dry_run_spec_staged"></a> [dry\_run\_spec\_staged](#output\_dry\_run\_spec\_staged) | True when an enforced perimeter also carries a staged dry-run spec (any dry\_run\_* override set). |
+| <a name="output_enforced"></a> [enforced](#output\_enforced) | True when the perimeter has an enforced status (enable\_dry\_run = false). |
 | <a name="output_id"></a> [id](#output\_id) | The ID of the service perimeter |
 | <a name="output_name"></a> [name](#output\_name) | The resource name of the service perimeter |
 | <a name="output_perimeter"></a> [perimeter](#output\_perimeter) | The service perimeter resource |

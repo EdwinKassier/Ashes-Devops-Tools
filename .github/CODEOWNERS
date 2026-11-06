@@ -1,3 +1,13 @@
+# ############################################################################
+# !!!  PLACEHOLDER OWNERS - CODE-OWNER REVIEW IS NOT ENFORCED YET  !!!
+# Every @your-org/* team below is a placeholder. Until they are replaced with
+# real teams, GitHub silently ignores these lines and NO code-owner review is
+# required for any path (including IAM, KMS, org policy and CI).
+# The "CODEOWNERS placeholders" job in terraform-plan.yml warns on every run;
+# set the repository variable CODEOWNERS_ENFORCE=true after replacing them so
+# a placeholder reappearing fails CI (docs/guides/CI_SECRETS.md).
+# ############################################################################
+#
 # CODEOWNERS — team ownership for the landing zone (audit L / bus-factor).
 #
 # ACTION REQUIRED: replace every @your-org/* placeholder below with your real
@@ -29,7 +39,6 @@
 /Makefile                 @your-org/platform-team
 /.terraform-docs.yml      @your-org/platform-team
 /.tflint.hcl              @your-org/platform-team
-/.tfsec.yml               @your-org/platform-team @your-org/security-team
 /.checkov.yaml            @your-org/platform-team @your-org/security-team
 /.pre-commit-config.yaml  @your-org/platform-team @your-org/security-team
 

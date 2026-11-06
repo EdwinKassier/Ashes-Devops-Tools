@@ -32,12 +32,11 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	image = 
-	location = 
-	name = 
-	project_id = 
-	service_account_email = 
-	
+	image =
+	location =
+	name =
+	project_id =
+	service_account_email =
 }
 ```
 
@@ -45,7 +44,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
 
 ## Providers
@@ -62,18 +61,19 @@ The following resources are created:
 
 
 - resource.google_cloud_run_v2_service.this (modules/gcp/compute/cloud-run/main.tf#L13)
-- resource.google_cloud_run_v2_service_iam_member.unauthenticated (modules/gcp/compute/cloud-run/main.tf#L87)
+- resource.google_cloud_run_v2_service_iam_member.unauthenticated (modules/gcp/compute/cloud-run/main.tf#L111)
 
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_image"></a> [image](#input\_image) | Fully qualified container image to deploy (e.g. europe-west1-docker.pkg.dev/project/repo/app:tag). | `string` | n/a | yes |
+| <a name="input_image"></a> [image](#input\_image) | Fully qualified container image to deploy at creation (e.g. europe-west1-docker.pkg.dev/project/repo/app:tag). Later image changes are owned by the delivery pipeline and ignored by Terraform. | `string` | n/a | yes |
 | <a name="input_location"></a> [location](#input\_location) | The GCP region for the Cloud Run service (e.g. europe-west1). | `string` | n/a | yes |
 | <a name="input_name"></a> [name](#input\_name) | Name of the Cloud Run service. | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The GCP project ID where the Cloud Run service is created. | `string` | n/a | yes |
 | <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | Email of the dedicated runtime service account the service runs as. Required — never run on the default compute SA. | `string` | n/a | yes |
+| <a name="input_binary_authorization"></a> [binary\_authorization](#input\_binary\_authorization) | Optional Binary Authorization enforcement. Null (default) disables it. Set<br/>`{}` to enforce the project's default Binary Authorization policy, or set<br/>`policy` to the full name of a platform policy<br/>(projects/<p>/platforms/cloudRun/policies/<name>). `breakglass_justification`<br/>deploys an image that violates the policy (audited) — leave null normally. | <pre>object({<br/>    policy                   = optional(string)<br/>    breakglass_justification = optional(string)<br/>  })</pre> | `null` | no |
 | <a name="input_concurrency"></a> [concurrency](#input\_concurrency) | Maximum number of concurrent requests per instance (max\_instance\_request\_concurrency). | `number` | `80` | no |
 | <a name="input_cpu"></a> [cpu](#input\_cpu) | CPU limit per container instance (e.g. "1000m", "1", "2"). | `string` | `"1000m"` | no |
 | <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | Prevent accidental destruction of the Cloud Run service. Maps directly to the<br/>resource's deletion\_protection attribute. Defaults to true; set to false to allow<br/>`terraform destroy` to remove the service. | `bool` | `true` | no |
@@ -93,6 +93,7 @@ The following resources are created:
 | Name | Description |
 |------|-------------|
 | <a name="output_id"></a> [id](#output\_id) | The fully qualified identifier of the Cloud Run service. |
+| <a name="output_ingress"></a> [ingress](#output\_ingress) | The ingress traffic policy applied to the service. |
 | <a name="output_latest_ready_revision"></a> [latest\_ready\_revision](#output\_latest\_ready\_revision) | The name of the latest revision that is serving ready traffic. |
 | <a name="output_name"></a> [name](#output\_name) | The name of the Cloud Run service. |
 | <a name="output_uri"></a> [uri](#output\_uri) | The main URI at which the Cloud Run service is reachable. |

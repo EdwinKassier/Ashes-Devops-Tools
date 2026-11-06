@@ -1,0 +1,154 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyLeaveOrganization",
+      "Effect": "Deny",
+      "Action": "organizations:LeaveOrganization",
+      "Resource": "*",
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": ${break_glass_arns}
+        }
+      }
+    },
+    {
+      "Sid": "DenyDisableSecurityServices",
+      "Effect": "Deny",
+      "Action": [
+        "cloudtrail:StopLogging",
+        "cloudtrail:DeleteTrail",
+        "guardduty:DeleteDetector",
+        "guardduty:DeleteMembers",
+        "guardduty:DisassociateFromMasterAccount",
+        "guardduty:DisassociateFromAdministratorAccount",
+        "securityhub:DisableSecurityHub",
+        "access-analyzer:DeleteAnalyzer",
+        "macie2:DisableMacie",
+        "inspector2:Disable"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": ${break_glass_arns}
+        }
+      }
+    },
+    {
+      "Sid": "DenyWeakenSecurityServices",
+      "Effect": "Deny",
+      "Action": [
+        "cloudtrail:PutEventSelectors",
+        "cloudtrail:PutInsightSelectors",
+        "cloudtrail:UpdateTrail",
+        "guardduty:CreateFilter",
+        "guardduty:UpdateFilter",
+        "guardduty:UpdateDetector",
+        "securityhub:BatchDisableStandards",
+        "config:DeleteConfigurationRecorder",
+        "config:StopConfigurationRecorder",
+        "config:PutConfigurationRecorder",
+        "config:DeleteDeliveryChannel",
+        "ec2:DeleteFlowLogs"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": ${privileged_arns}
+        }
+      }
+    },
+    {
+      "Sid": "DenyPrivilegedRoleTampering",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:UpdateRole",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:PutRolePermissionsBoundary",
+        "iam:DeleteRolePermissionsBoundary"
+      ],
+      "Resource": ${privileged_arns},
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": ${privileged_arns}
+        }
+      }
+    },
+    {
+      "Sid": "DenyLogArchiveObjectLockTampering",
+      "Effect": "Deny",
+      "Action": [
+        "s3:BypassGovernanceRetention",
+        "s3:PutBucketObjectLockConfiguration"
+      ],
+      "Resource": [
+        "arn:aws:s3:::${log_archive_bucket_name}",
+        "arn:aws:s3:::${log_archive_bucket_name}/*"
+      ],
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": ${privileged_arns}
+        }
+      }
+    },
+    {
+      "Sid": "DenyProtectedKeyDestruction",
+      "Effect": "Deny",
+      "Action": [
+        "kms:ScheduleKeyDeletion",
+        "kms:DisableKey",
+        "kms:DisableKeyRotation",
+        "kms:DeleteImportedKeyMaterial"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/${kms_protection_tag_key}": "true"
+        },
+        "ArnNotLike": {
+          "aws:PrincipalArn": ${break_glass_arns}
+        }
+      }
+    },
+    {
+      "Sid": "DenyProtectedKeyUntag",
+      "Effect": "Deny",
+      "Action": [
+        "kms:TagResource",
+        "kms:UntagResource"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/${kms_protection_tag_key}": "true"
+        },
+        "ForAnyValue:StringEquals": {
+          "aws:TagKeys": "${kms_protection_tag_key}"
+        },
+        "ArnNotLike": {
+          "aws:PrincipalArn": ${break_glass_arns}
+        }
+      }
+    },
+    {
+      "Sid": "DenyProtectedKeyPolicyChange",
+      "Effect": "Deny",
+      "Action": "kms:PutKeyPolicy",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/${kms_protection_tag_key}": "true"
+        },
+        "ArnNotLike": {
+          "aws:PrincipalArn": ${break_glass_arns}
+        }
+      }
+    }
+  ]
+}

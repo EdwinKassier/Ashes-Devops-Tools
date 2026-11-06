@@ -93,8 +93,8 @@ run "empty_allowed_branches_rejected" {
 
 # ── env var wiring (sensitive attribute requirement) ───────────────────────────
 # vercel_project_environment_variable.sensitive is schema-required (required=True).
-# The module provides it via each.value.sensitive which defaults to false via
-# optional(bool, false). This run confirms the wiring is correct under mock_provider.
+# The module provides it via each.value.sensitive which defaults to TRUE via
+# optional(bool, true) — secure by default. These runs confirm the wiring.
 
 run "env_var_with_sensitive_false_accepted" {
   command = plan
@@ -102,6 +102,44 @@ run "env_var_with_sensitive_false_accepted" {
     qa_environment_variables = [
       { key = "NEXT_PUBLIC_API_URL", value = "https://api.example.com", sensitive = false }
     ]
+  }
+}
+
+run "env_var_sensitive_defaults_to_true" {
+  command = plan
+  variables {
+    qa_environment_variables     = [{ key = "API_SECRET", value = "s3cr3t" }]
+    uat_environment_variables    = [{ key = "API_SECRET", value = "s3cr3t" }]
+    prod_environment_variables   = [{ key = "API_SECRET", value = "s3cr3t" }]
+    shared_environment_variables = [{ key = "SHARED_SECRET", value = "s3cr3t" }]
+  }
+
+  assert {
+    condition = alltrue([
+      vercel_project_environment_variable.qa["API_SECRET"].sensitive,
+      vercel_project_environment_variable.uat["API_SECRET"].sensitive,
+      vercel_project_environment_variable.prod["API_SECRET"].sensitive,
+      vercel_project_environment_variable.shared["SHARED_SECRET"].sensitive,
+      vercel_project_environment_variable.shared_uat["SHARED_SECRET"].sensitive,
+    ])
+    error_message = "An env var without an explicit sensitive flag must default to sensitive = true (secure by default)."
+  }
+
+  assert {
+    condition     = !contains(vercel_project_environment_variable.qa["API_SECRET"].target, "development") && !contains(vercel_project_environment_variable.prod["API_SECRET"].target, "development")
+    error_message = "No env var may target development: Vercel rejects sensitive = true on development-only variables."
+  }
+}
+
+run "env_var_sensitive_false_opt_out_honoured" {
+  command = plan
+  variables {
+    qa_environment_variables = [{ key = "NEXT_PUBLIC_API_URL", value = "https://api.example.com", sensitive = false }]
+  }
+
+  assert {
+    condition     = vercel_project_environment_variable.qa["NEXT_PUBLIC_API_URL"].sensitive == false
+    error_message = "An explicit sensitive = false must be honoured."
   }
 }
 

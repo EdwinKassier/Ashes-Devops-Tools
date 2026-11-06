@@ -19,7 +19,7 @@ module "api_gateway" {
   region     = "us-central1"
 
   openapi_spec_path = "api-spec.yaml.tftpl"
-  
+
   managed_service_ids = {
     "users-service" = "https://users-run-service-url..."
     "auth-service"  = "https://auth-run-service-url..."
@@ -62,9 +62,9 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	project_id = 
-	service_account_email = 
-	
+	project_id =
+	region =
+	service_account_email =
 }
 ```
 
@@ -72,7 +72,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | ~> 7.0 |
 
@@ -89,10 +89,10 @@ module "example" {
 The following resources are created:
 
 
-- resource.google-beta_google_api_gateway_api.api (modules/gcp/network/api-gateway/main.tf#L17)
-- resource.google-beta_google_api_gateway_api_config.api_config (modules/gcp/network/api-gateway/main.tf#L26)
-- resource.google-beta_google_api_gateway_gateway.gateway (modules/gcp/network/api-gateway/main.tf#L56)
-- resource.google-beta_google_compute_region_network_endpoint_group.serverless_neg (modules/gcp/network/api-gateway/main.tf#L68)
+- resource.google-beta_google_api_gateway_api.api (modules/gcp/network/api-gateway/main.tf#L26)
+- resource.google-beta_google_api_gateway_api_config.api_config (modules/gcp/network/api-gateway/main.tf#L35)
+- resource.google-beta_google_api_gateway_gateway.gateway (modules/gcp/network/api-gateway/main.tf#L65)
+- resource.google-beta_google_compute_region_network_endpoint_group.serverless_neg (modules/gcp/network/api-gateway/main.tf#L77)
 
 
 ## Inputs
@@ -100,15 +100,15 @@ The following resources are created:
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The ID of the project where the API Gateway will be created | `string` | n/a | yes |
+| <a name="input_region"></a> [region](#input\_region) | The region where the API Gateway will be deployed | `string` | n/a | yes |
 | <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | The service account email to use for the API Gateway backend | `string` | n/a | yes |
 | <a name="input_api_id"></a> [api\_id](#input\_api\_id) | Identifier to use for the API | `string` | `"ashes-api"` | no |
 | <a name="input_display_name"></a> [display\_name](#input\_display\_name) | Display name for the API | `string` | `"Ashes API Gateway"` | no |
 | <a name="input_gateway_display_name"></a> [gateway\_display\_name](#input\_gateway\_display\_name) | Display name for the gateway instance | `string` | `"Ashes API Gateway Instance"` | no |
 | <a name="input_gateway_id"></a> [gateway\_id](#input\_gateway\_id) | Identifier to use for this gateway instance | `string` | `"ashes-gateway"` | no |
-| <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to the gateway | `map(string)` | <pre>{<br/>  "environment": "production",<br/>  "managed_by": "terraform"<br/>}</pre> | no |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to the API and gateway. A legacy `managed_by` key is accepted and rewritten to the canonical `managed-by`. | `map(string)` | <pre>{<br/>  "environment": "production",<br/>  "managed-by": "terraform"<br/>}</pre> | no |
 | <a name="input_managed_service_ids"></a> [managed\_service\_ids](#input\_managed\_service\_ids) | A map of Service IDs to inject into the OpenAPI spec, replacing the need for external script discovery. | `map(string)` | `{}` | no |
 | <a name="input_openapi_spec"></a> [openapi\_spec](#input\_openapi\_spec) | OpenAPI specification that will be used to configure the API | `string` | `"openapi: '3.0.0'\ninfo:\n  title: 'Ashes API Gateway'\n  version: '1.0.0'\npaths:\n  /health:\n    get:\n      summary: Health check endpoint\n      operationId: health\n      responses:\n        '200':\n          description: OK\n          content:\n            application/json:\n              schema:\n                type: object\n                properties:\n                  status:\n                    type: string\n"` | no |
-| <a name="input_region"></a> [region](#input\_region) | The region where the API Gateway will be deployed | `string` | `"us-central1"` | no |
 
 ## Outputs
 

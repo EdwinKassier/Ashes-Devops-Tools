@@ -25,3 +25,24 @@ run "short_deletion_window_rejected" {
 
   expect_failures = [var.deletion_window_in_days]
 }
+
+run "wildcard_key_user_rejected" {
+  # Reject case: a wildcard-account key user would grant usage org-wide.
+  command = plan
+
+  variables {
+    key_user_arns = ["arn:aws:iam::*:role/LogReader"]
+  }
+
+  expect_failures = [var.key_user_arns]
+}
+
+run "wildcard_key_policy_admin_rejected" {
+  command = plan
+
+  variables {
+    key_policy_admin_arns = ["arn:aws:iam::111122223333:role/*"]
+  }
+
+  expect_failures = [var.key_policy_admin_arns]
+}

@@ -19,7 +19,12 @@ integration story is undecided, so the pieces do not form a product.
 - `envs/saas` is a credential-free root: it declares no `aws`/`google` provider,
   so applying `saas-<name>` pulls in no cloud credentials. `enable_supabase`,
   `enable_vercel`, and `enable_vault_secrets` gate the three features
-  independently.
+  independently. A Supabase-only or Vercel-only run needs only that provider's
+  token: the disabled provider gets an inert placeholder token (see
+  [provider-selection.md](provider-selection.md#single-provider-mode-in-the-saas-root)).
+- Vault helpers live in the private `iac_vault` schema, which PostgREST does
+  not expose. They are not callable with the anon or authenticated keys. Vercel
+  env vars default to `sensitive = true`.
 - The SaaS root exposes outputs: `supabase_api_url`, `supabase_anon_key`,
   `supabase_service_role_key` (sensitive), `supabase_database_password`
   (sensitive), and `vercel_project_id`.

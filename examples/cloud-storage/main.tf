@@ -25,4 +25,3 @@ module "storage" {
   allowed_members    = ["serviceAccount:pipeline@my-project-id.iam.gserviceaccount.com"]
   log_retention_days = 30
 }
-

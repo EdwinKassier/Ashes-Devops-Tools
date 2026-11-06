@@ -1,0 +1,84 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "EnforceOrgIdentities",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": [
+        "s3:*",
+        "sts:AssumeRole",
+        "sts:DecodeAuthorizationMessage",
+        "sts:GetAccessKeyInfo",
+        "sts:GetFederationToken",
+        "sts:GetServiceBearerToken",
+        "sts:GetSessionToken",
+        "sts:SetContext",
+        "sts:TagSession",
+        "kms:*",
+        "sqs:*",
+        "secretsmanager:*"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringNotEqualsIfExists": {
+          "aws:PrincipalOrgID": "${org_id}",
+%{ if length(trusted_account_ids) > 0 ~}
+          "aws:PrincipalAccount": ${jsonencode(trusted_account_ids)},
+%{ endif ~}
+          "aws:ResourceTag/dp:exclude:identity": "true"
+        },
+        "BoolIfExists": {
+          "aws:PrincipalIsAWSService": "false"
+        }
+      }
+    },
+    {
+      "Sid": "ConfusedDeputyProtection",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": [
+        "s3:*",
+        "sts:AssumeRole",
+        "sts:DecodeAuthorizationMessage",
+        "sts:GetAccessKeyInfo",
+        "sts:GetFederationToken",
+        "sts:GetServiceBearerToken",
+        "sts:GetSessionToken",
+        "sts:SetContext",
+        "sts:TagSession",
+        "kms:*",
+        "sqs:*",
+        "secretsmanager:*"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringNotEqualsIfExists": {
+          "aws:SourceOrgID": "${org_id}",
+%{ if length(trusted_account_ids) > 0 ~}
+          "aws:SourceAccount": ${jsonencode(trusted_account_ids)},
+%{ endif ~}
+          "aws:ResourceTag/dp:exclude:source": "true"
+        },
+        "Null": {
+          "aws:SourceAccount": "false"
+        },
+        "Bool": {
+          "aws:PrincipalIsAWSService": "true"
+        }
+      }
+    },
+    {
+      "Sid": "RequireSecureTransport",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "*",
+      "Resource": "*",
+      "Condition": {
+        "Bool": {
+          "aws:SecureTransport": "false"
+        }
+      }
+    }
+  ]
+}

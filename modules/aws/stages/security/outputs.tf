@@ -47,3 +47,28 @@ output "break_glass_role_arn" {
   description = "ARN of the break-glass role the assumption alarm watches: the stage-managed role when create_break_glass is true, else the externally-managed ARN passed in. Use it to set the org SCP break-glass exemptions. Empty when neither is set."
   value       = local.effective_break_glass_role_arn
 }
+
+output "cloudtrail_log_group_name" {
+  description = "CloudWatch Logs group the org trail delivers into (management account); null when enable_cloudwatch_logs = false."
+  value       = module.cloudtrail.cloudwatch_log_group_name
+}
+
+output "cis_alarm_sns_topic_arn" {
+  description = "SNS topic (management account) the CIS section-4 alarms publish to; null when enable_cloudwatch_logs = false."
+  value       = module.cloudtrail.cis_alarm_sns_topic_arn
+}
+
+output "key_admin_arns" {
+  description = "Key administrator per CMK (log_archive / forensics / security_tooling): key_admin_arn, or each key account's key_admin_role_name role when null."
+  value       = local.key_admin_arns
+}
+
+output "config_role_arn" {
+  description = "IAM role the security-tooling Config recorders use (the AWSServiceRoleForConfig SLR unless config_role_arn was set)."
+  value       = module.config.config_role_arn
+}
+
+output "config_aggregator_role_arn" {
+  description = "IAM role the Config organization aggregator assumes (created by the stage unless aggregator_role_arn was set)."
+  value       = module.config.aggregator_role_arn
+}

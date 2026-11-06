@@ -64,9 +64,8 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	keyring_name = 
-	project_id = 
-	
+	keyring_name =
+	project_id =
 }
 ```
 
@@ -74,7 +73,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
 
 ## Providers
@@ -91,7 +90,7 @@ The following resources are created:
 
 
 - resource.google_kms_crypto_key.keys (modules/gcp/governance/kms/main.tf#L14)
-- resource.google_kms_crypto_key_iam_member.key_iam (modules/gcp/governance/kms/main.tf#L36)
+- resource.google_kms_crypto_key_iam_member.key_iam (modules/gcp/governance/kms/main.tf#L38)
 - resource.google_kms_key_ring.keyring (modules/gcp/governance/kms/main.tf#L7)
 
 

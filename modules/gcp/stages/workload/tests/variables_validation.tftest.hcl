@@ -2,7 +2,6 @@
 # All runs use mock_provider so no GCP credentials are required.
 
 mock_provider "google" {}
-mock_provider "google-beta" {}
 mock_provider "random" {}
 
 variables {
@@ -144,4 +143,26 @@ run "accepts_no_shared_vpc_with_empty_host_project_id" {
     shared_vpc_host_project_id   = ""
     shared_vpc_subnets           = {}
   }
+}
+
+run "rejects_unknown_default_service_account_action" {
+  command = plan
+
+  variables {
+    enable_shared_vpc_attachment   = false
+    default_service_account_action = "REMOVE"
+  }
+
+  expect_failures = [var.default_service_account_action]
+}
+
+run "rejects_project_name_too_long_for_suffix" {
+  command = plan
+
+  variables {
+    enable_shared_vpc_attachment = false
+    project_name                 = "a-very-long-workload-name-x"
+  }
+
+  expect_failures = [var.project_name]
 }

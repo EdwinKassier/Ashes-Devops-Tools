@@ -9,7 +9,6 @@
 
 mock_provider "supabase" {}
 mock_provider "vercel" {}
-mock_provider "null" {}
 
 variables {
   supabase_organization_id   = "abcdefghijklmnop"

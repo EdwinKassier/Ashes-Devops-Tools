@@ -12,7 +12,6 @@ variable "project_id" {
 variable "region" {
   description = "The region where the API Gateway will be deployed"
   type        = string
-  default     = "us-central1"
 }
 
 variable "api_id" {
@@ -50,11 +49,11 @@ variable "gateway_display_name" {
 }
 
 variable "labels" {
-  description = "Labels to apply to the gateway"
+  description = "Labels to apply to the API and gateway. A legacy `managed_by` key is accepted and rewritten to the canonical `managed-by`."
   type        = map(string)
   default = {
     environment = "production"
-    managed_by  = "terraform"
+    managed-by  = "terraform"
   }
 }
 

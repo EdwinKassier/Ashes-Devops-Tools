@@ -2,7 +2,7 @@
  * Copyright 2023 Ashes
  *
  * VPC Flow Logs Export Module - Main Configuration
- * 
+ *
  * Creates a log sink for VPC Flow Logs with destination options
  * (BigQuery, Cloud Storage, or Pub/Sub) and supporting resources.
  */

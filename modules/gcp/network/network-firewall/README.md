@@ -19,12 +19,12 @@ module "fw_allow_internal" {
   firewall_rule_name = "allow-internal-traffic"
   network            = "my-vpc"
   priority           = 65534
-  
+
   allow_rules = [{
     protocol = "tcp"
     ports    = ["0-65535"]
   }]
-  
+
   source_ranges = ["10.0.0.0/8"]
 }
 ```
@@ -62,10 +62,9 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	firewall_rule_name = 
-	network = 
-	project_id = 
-	
+	firewall_rule_name =
+	network =
+	project_id =
 }
 ```
 
@@ -73,7 +72,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
 
 ## Providers

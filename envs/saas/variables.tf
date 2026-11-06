@@ -1,7 +1,13 @@
+variable "landing_zone_config_path" {
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values."
+  type        = string
+  default     = null
+}
+
 # ── Terraform Cloud / cross-cloud wiring (audit H9, option C) ────────────────
 
 variable "tfc_organization" {
-  description = "Terraform Cloud organization name. Required only when cross_cloud_references is non-empty (it reads upstream workspace state). Leave null for a standalone SaaS deployment."
+  description = "Terraform Cloud organization name. Required only when cross_cloud_references is non-empty (it reads upstream workspace state). Leave null for a standalone SaaS deployment. Null = org.tfc.organization from config/landing-zone.yaml."
   type        = string
   default     = null
 }
@@ -18,13 +24,13 @@ variable "cross_cloud_references" {
       workspace_name  upstream TFC workspace, e.g. "gcp-workload-prod".
       output_key      the output to read from that workspace, e.g. "api_endpoint".
       vercel_env_key  the Vercel env var name to set, e.g. "NEXT_PUBLIC_API_URL".
-      sensitive       mark the resulting Vercel env var sensitive (default false).
+      sensitive       mark the resulting Vercel env var sensitive (default true, write-only in Vercel; set false only for values that must be readable in the dashboard).
   EOT
   type = map(object({
     workspace_name = string
     output_key     = string
     vercel_env_key = string
-    sensitive      = optional(bool, false)
+    sensitive      = optional(bool, true)
   }))
   default = {}
 
@@ -37,7 +43,7 @@ variable "cross_cloud_references" {
   }
 
   validation {
-    condition     = length(var.cross_cloud_references) == 0 || var.tfc_organization != null
+    condition     = length(var.cross_cloud_references) == 0 || coalesce(var.tfc_organization, local.cfg.tfc_organization, "!unset") != "!unset"
     error_message = "cross_cloud_references requires tfc_organization to be set (it reads upstream workspace state)."
   }
 }
@@ -45,15 +51,15 @@ variable "cross_cloud_references" {
 # ── Feature flags ─────────────────────────────────────────────────────────────
 
 variable "enable_supabase" {
-  description = "Provision the Supabase project. Set false for a Vercel-only deployment — the Supabase inputs may then be left at their defaults."
+  description = "Provision the Supabase project. Set false for a Vercel-only deployment — the Supabase inputs may then be left at their defaults. Null = saas.supabase from config/landing-zone.yaml, else true."
   type        = bool
-  default     = true
+  default     = null
 }
 
 variable "enable_vercel" {
-  description = "Provision the Vercel project. Set false for a Supabase-only deployment — the Vercel inputs may then be left at their defaults."
+  description = "Provision the Vercel project. Set false for a Supabase-only deployment — the Vercel inputs may then be left at their defaults. Null = saas.vercel from config/landing-zone.yaml, else true."
   type        = bool
-  default     = true
+  default     = null
 }
 
 variable "enable_vault_secrets" {
@@ -117,6 +123,16 @@ variable "supabase_db_schema" {
   description = "Comma-separated list of Postgres schemas exposed via the REST API."
   type        = string
   default     = "public,graphql_public"
+
+  validation {
+    # iac_vault holds the vault-secrets SECURITY DEFINER helpers; exposing it via
+    # PostgREST would let API keys reach them. vault holds the encrypted secrets.
+    condition = length(setintersection(
+      toset([for s in split(",", var.supabase_db_schema) : lower(trimspace(s))]),
+      toset(["iac_vault", "vault"]),
+    )) == 0
+    error_message = "supabase_db_schema must not expose the iac_vault or vault schemas via the REST API (they hold the Vault secrets and their privileged helpers)."
+  }
 }
 
 variable "supabase_db_extra_search_path" {
@@ -214,41 +230,41 @@ variable "vercel_domains" {
 }
 
 variable "vercel_qa_env_vars" {
-  description = "Vercel environment variables for the QA (preview) environment."
+  description = "Vercel environment variables for the QA (preview) environment. Each entry's sensitive defaults to true (secure by default)."
   type = list(object({
     key       = string
     value     = string
-    sensitive = optional(bool, false)
+    sensitive = optional(bool, true)
   }))
   default = []
 }
 
 variable "vercel_uat_env_vars" {
-  description = "Vercel environment variables for the UAT custom environment."
+  description = "Vercel environment variables for the UAT custom environment. Each entry's sensitive defaults to true (secure by default)."
   type = list(object({
     key       = string
     value     = string
-    sensitive = optional(bool, false)
+    sensitive = optional(bool, true)
   }))
   default = []
 }
 
 variable "vercel_prod_env_vars" {
-  description = "Vercel environment variables for the production environment."
+  description = "Vercel environment variables for the production environment. Each entry's sensitive defaults to true (secure by default)."
   type = list(object({
     key       = string
     value     = string
-    sensitive = optional(bool, false)
+    sensitive = optional(bool, true)
   }))
   default = []
 }
 
 variable "vercel_shared_env_vars" {
-  description = "Vercel environment variables shared across all three environments."
+  description = "Vercel environment variables shared across all three environments. Each entry's sensitive defaults to true (secure by default)."
   type = list(object({
     key       = string
     value     = string
-    sensitive = optional(bool, false)
+    sensitive = optional(bool, true)
   }))
   default = []
 }

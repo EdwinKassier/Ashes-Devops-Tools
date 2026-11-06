@@ -5,9 +5,9 @@
 module "config_org" {
   source = "../../"
 
-  config_role_arn     = "arn:aws:iam::111111111111:role/aws-service-role/config.amazonaws.com/AWSServiceRoleForConfig"
-  aggregator_role_arn = "arn:aws:iam::111111111111:role/aws-config-aggregator"
-  log_archive_bucket  = "ashes-org-log-archive"
+  # config_role_arn / aggregator_role_arn omitted: the module creates the
+  # AWSServiceRoleForConfig service-linked role and the org aggregator role.
+  log_archive_bucket = "ashes-org-log-archive"
 
   aws_enabled_regions = ["eu-west-2", "eu-west-1"]
 }

@@ -7,7 +7,7 @@ variable "enable_firewall_manager" {
 variable "fms_admin_account_id" {
   description = "12-digit account ID nominated as the Firewall Manager administrator (the Security Tooling account). Registered from the management account via the aliased provider. Required when enable_firewall_manager is true."
   type        = string
-  default     = ""
+  default     = null
 
   validation {
     condition     = !var.enable_firewall_manager || can(regex("^[0-9]{12}$", var.fms_admin_account_id))

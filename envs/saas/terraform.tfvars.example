@@ -6,6 +6,10 @@
 #   export SUPABASE_ACCESS_TOKEN="..."       # needed when enable_supabase = true
 #   export VERCEL_API_TOKEN="..."            # needed when enable_vercel   = true
 #
+# enable_supabase / enable_vercel default to saas.supabase / saas.vercel and
+# tfc_organization to org.tfc.organization in the committed
+# config/landing-zone.yaml; a value set here overrides the file.
+#
 # Copy this file to terraform.tfvars and uncomment ONE of the three stanzas.
 
 # ─────────────────────────────────────────────────────────────────────────────

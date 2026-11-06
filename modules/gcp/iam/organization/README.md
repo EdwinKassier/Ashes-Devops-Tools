@@ -22,22 +22,22 @@ module "organization" {
 
   domain     = "example.com"
   project_id = "my-project-id"
-  
+
   org_admin_members = [
     "user:admin@example.com",
     "group:admins@example.com"
   ]
-  
+
   billing_admin_members = [
     "user:billing@example.com"
   ]
-  
+
   allowed_regions = [
     "europe-west1",
     "europe-west2",
     "us-central1"
   ]
-  
+
   tags = {
     environment = "production"
     managed_by  = "terraform"
@@ -87,7 +87,7 @@ module "organization" {
 - This module should be applied with organization admin privileges
 - Ensure you have appropriate permissions to manage GCP organizations
 - The organization must be set up in Cloud Identity before using this module
-- Consider reviewing and customizing the organization policies based on your security requirements 
+- Consider reviewing and customizing the organization policies based on your security requirements
 
 <!-- BEGIN_TF_DOCS -->
 
@@ -101,9 +101,8 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	domain = 
-	project_id = 
-	
+	domain =
+	project_id =
 }
 ```
 
@@ -111,7 +110,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
 
 ## Providers

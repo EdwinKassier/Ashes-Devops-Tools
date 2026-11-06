@@ -5,6 +5,7 @@
 mock_provider "google" {}
 
 variables {
+  region       = "us-central1"
   project_id   = "mock-project"
   kms_key_name = "projects/mock-project/locations/us-central1/keyRings/test-ring/cryptoKeys/test-key"
   repositories = {}
@@ -91,5 +92,47 @@ run "repository_urls_are_per_format" {
   assert {
     condition     = !contains(keys(output.repository_urls), "generic-repo")
     error_message = "GENERIC format has no registry host and must be omitted from repository_urls"
+  }
+}
+
+# ── cleanup policies are wired (and absent by default) ──────────────────────────
+
+run "cleanup_policies_are_wired" {
+  command = plan
+
+  variables {
+    repositories = {
+      "docker-repo" = {
+        description = "Docker repo"
+        cleanup_policies = {
+          "delete-untagged" = {
+            action    = "DELETE"
+            condition = { tag_state = "UNTAGGED", older_than = "604800s" }
+          }
+          "keep-recent" = {
+            action               = "KEEP"
+            most_recent_versions = { keep_count = 10 }
+          }
+        }
+      }
+      "plain-repo" = {
+        description = "No cleanup"
+      }
+    }
+  }
+
+  assert {
+    condition     = length(google_artifact_registry_repository.repo["docker-repo"].cleanup_policies) == 2
+    error_message = "both cleanup policies must be planned on the repository."
+  }
+
+  assert {
+    condition     = google_artifact_registry_repository.repo["docker-repo"].cleanup_policy_dry_run == false
+    error_message = "cleanup policies must be enforced (not dry-run) by default."
+  }
+
+  assert {
+    condition     = length(google_artifact_registry_repository.repo["plain-repo"].cleanup_policies) == 0
+    error_message = "a repository without cleanup_policies must plan none."
   }
 }

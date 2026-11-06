@@ -129,4 +129,3 @@ module "private_service_connect" {
   network    = module.vpc[0].id
   target     = var.psc_target
 }
-

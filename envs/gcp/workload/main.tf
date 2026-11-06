@@ -1,14 +1,30 @@
-# This root depends on the organization root (envs/gcp/organization) via remote state.
-# Trade-offs of this coupling:
-#   Pro: avoids re-declaring org-level outputs (billing account, folder IDs, hub network).
-#   Con: envs/gcp/workload cannot be planned or applied in isolation — the organization workspace
-#        must exist and its outputs must be populated first.
-# If you are onboarding a new environment, run envs/gcp/organization first.
-# If you need to work offline, override outputs with a stub backend using a local tfvars file.
+# Upstream stage contracts (FAST-style "stage contract override"). Each one comes
+# from, in order: the <layer>_contract variable, gcp.contracts.<layer> in
+# config/landing-zone.yaml, then the upstream workspace's terraform_remote_state.
+# A remote-state read happens ONLY when no contract was supplied (count = 0
+# otherwise), so this root can plan without the upstream workspaces existing:
+#   - organization → org_id, billing_account, admin_project_number
+#   - projects     → environment_config[<env>] (host project, folder, region, ...)
+#   - network_hub  → hub_network {vpc_self_link, dns_domain}. OPTIONAL: with
+#     enable_network_hub = false there is no hub peering and no DNS peering zone
+#     (local.hub_vpc_peerings / local.hub_dns_zones are empty).
+# Consumers (incl. the host module block) must use the locals below, never
+# data.terraform_remote_state.* directly: the data sources are count-gated.
+locals {
+  organization_contract = var.organization_contract != null ? var.organization_contract : local.cfg.organization_contract
+  projects_contract     = var.projects_contract != null ? var.projects_contract : local.cfg.projects_contract
+  network_hub_contract  = var.network_hub_contract != null ? var.network_hub_contract : local.cfg.network_hub_contract
+
+  read_organization = local.organization_contract == null
+  read_projects     = local.projects_contract == null
+  read_network_hub  = var.enable_network_hub && local.network_hub_contract == null
+}
+
 data "terraform_remote_state" "organization" {
+  count   = local.read_organization ? 1 : 0
   backend = "cloud"
   config = {
-    organization = var.tfc_organization
+    organization = local.tfc_organization
     workspaces = {
       name = var.organization_workspace_name
     }
@@ -16,13 +32,14 @@ data "terraform_remote_state" "organization" {
 }
 
 # The projects and network-hub stages were split into their own roots (audit H3),
-# so this root now reads environment_config from gcp-projects and hub_network from
-# gcp-network-hub. org_id / billing_account / admin_project_number still come from
+# so environment_config comes from gcp-projects and hub_network from
+# gcp-network-hub. org_id / billing_account / admin_project_number come from
 # gcp-organization above.
 data "terraform_remote_state" "projects" {
+  count   = local.read_projects ? 1 : 0
   backend = "cloud"
   config = {
-    organization = var.tfc_organization
+    organization = local.tfc_organization
     workspaces = {
       name = var.projects_workspace_name
     }
@@ -30,9 +47,10 @@ data "terraform_remote_state" "projects" {
 }
 
 data "terraform_remote_state" "network_hub" {
+  count   = local.read_network_hub ? 1 : 0
   backend = "cloud"
   config = {
-    organization = var.tfc_organization
+    organization = local.tfc_organization
     workspaces = {
       name = var.network_hub_workspace_name
     }
@@ -40,7 +58,48 @@ data "terraform_remote_state" "network_hub" {
 }
 
 locals {
-  env_config = data.terraform_remote_state.projects.outputs.environment_config[var.environment]
+  org_id               = local.read_organization ? data.terraform_remote_state.organization[0].outputs.org_id : local.organization_contract.org_id
+  billing_account      = local.read_organization ? data.terraform_remote_state.organization[0].outputs.billing_account : local.organization_contract.billing_account
+  admin_project_number = local.read_organization ? data.terraform_remote_state.organization[0].outputs.admin_project_number : local.organization_contract.admin_project_number
+
+  # Hub network contract, or null when the network hub is not part of this
+  # landing zone (enable_network_hub = false).
+  hub_network = (
+    !var.enable_network_hub ? null :
+    local.read_network_hub ? data.terraform_remote_state.network_hub[0].outputs.hub_network : local.network_hub_contract
+  )
+
+  # Hub-dependent host inputs: empty maps in standalone mode (no hub peering, no
+  # DNS peering zone). Built with a filtered for-expression so both modes share
+  # one map type.
+  hub_vpc_peerings = {
+    for k, v in {
+      "hub-peering" = {
+        peer_network         = try(local.hub_network.vpc_self_link, null)
+        export_custom_routes = true
+        import_custom_routes = true
+      }
+    } : k => v if local.hub_network != null
+  }
+  hub_dns_zones = {
+    for k, v in {
+      "internal-peering" = {
+        dns_name        = try(local.hub_network.dns_domain, null)
+        visibility      = "private"
+        description     = "Peering zone to resolve internal hub DNS"
+        peering_network = try(local.hub_network.vpc_self_link, null)
+        dnssec_enabled  = true
+      }
+    } : k => v if local.hub_network != null
+  }
+}
+
+locals {
+  env_config = (
+    local.read_projects
+    ? data.terraform_remote_state.projects[0].outputs.environment_config[var.environment]
+    : local.projects_contract.environment_config[var.environment]
+  )
 
   labels = merge(
     {
@@ -58,7 +117,7 @@ locals {
       sources = [
         {
           access_level = null
-          resource     = "//iam.googleapis.com/projects/${data.terraform_remote_state.organization.outputs.admin_project_number}/locations/global/workloadIdentityPools/*"
+          resource     = "//iam.googleapis.com/projects/${local.admin_project_number}/locations/global/workloadIdentityPools/*"
         }
       ]
       resources = null
@@ -93,6 +152,16 @@ locals {
     }
   ]
 
+  # Access policy for the environment perimeter: an explicit
+  # vpc_sc_access_policy_name (legacy org-wide policy) wins; otherwise the
+  # environment's own folder-scoped policy from gcp-projects environment_config,
+  # on which only this environment's workload SAs hold policyEditor.
+  vpc_sc_access_policy = var.vpc_sc_access_policy_name != null ? var.vpc_sc_access_policy_name : try(local.env_config.vpc_sc_access_policy_id, null)
+
+  # Explicit production marker from gcp-projects environment_config. The name
+  # match is only a fallback for an environment_config that predates it.
+  is_production = coalesce(try(local.env_config.is_production, null), can(regex("prod", lower(var.environment))))
+
   # Effective VPC-SC policies: caller-supplied values override the defaults above.
   effective_vpc_sc_ingress_policies = length(var.vpc_sc_ingress_policies) > 0 ? var.vpc_sc_ingress_policies : tolist(local.default_vpc_sc_ingress_policies)
   effective_vpc_sc_egress_policies  = length(var.vpc_sc_egress_policies) > 0 ? var.vpc_sc_egress_policies : tolist(local.default_vpc_sc_egress_policies)
@@ -102,58 +171,60 @@ data "google_project" "host_project" {
   project_id = local.env_config.host_project_id
 }
 
+# Stage contracts: the remote states above are count-gated, so module "host"
+# consumes local.hub_vpc_peerings / local.hub_dns_zones / local.org_id only.
+# Environment spoke network: the net-spoke composition (formerly the
+# deprecated stages/host god-module). The module label stays "host" so every
+# module.host.* reference, output and test keeps working; moved.tf migrates the
+# network-core addresses that changed shape (module.host.module.network.*).
 module "host" {
-  source = "../../../modules/gcp/stages/host"
+  source = "../../../modules/gcp/stages/net-spoke"
 
-  project_id     = local.env_config.host_project_id
-  project_prefix = var.project_prefix
-  region         = local.env_config.region
-  vpc_name       = "${var.project_prefix}-${var.environment}-vpc"
-  vpc_cidr_block = local.env_config.cidr_block
+  project_id          = local.env_config.host_project_id
+  project_prefix      = local.project_prefix
+  region              = local.env_config.region
+  deletion_protection = var.enable_deletion_protection
+  labels              = local.labels
 
-  enable_networking          = true
-  enable_shared_vpc_host     = true
-  enable_deletion_protection = var.enable_deletion_protection
-
-  enable_cloud_armor         = var.enable_cloud_armor
-  enable_owasp_rules         = var.enable_owasp_rules
-  enable_adaptive_protection = var.enable_adaptive_protection
-  owasp_sensitivity          = var.owasp_sensitivity
-
-  log_config_flow_sampling        = var.log_config_flow_sampling
-  log_config_aggregation_interval = var.log_config_aggregation_interval
-
-  labels = local.labels
-
-  vpc_peerings = {
-    "hub-peering" = {
-      peer_network         = data.terraform_remote_state.network_hub.outputs.hub_network.vpc_self_link
-      export_custom_routes = true
-      import_custom_routes = true
+  network = {
+    name            = "${local.project_prefix}-${var.environment}-vpc"
+    cidr_block      = local.env_config.cidr_block
+    shared_vpc_host = true
+    flow_logs = {
+      aggregation_interval = var.log_config_aggregation_interval
+      sampling             = var.log_config_flow_sampling
     }
   }
 
-  dns_zones = {
-    "internal-peering" = {
-      dns_name        = data.terraform_remote_state.network_hub.outputs.hub_network.dns_domain
-      visibility      = "private"
-      description     = "Peering zone to resolve internal hub DNS"
-      peering_network = data.terraform_remote_state.network_hub.outputs.hub_network.vpc_self_link
-      dnssec_enabled  = true
+  edge = {
+    cloud_armor = {
+      enabled             = var.enable_cloud_armor
+      owasp_rules         = var.enable_owasp_rules
+      adaptive_protection = var.enable_adaptive_protection
+      owasp_sensitivity   = var.owasp_sensitivity
     }
   }
 
-  enable_vpc_flow_logs_export           = true
-  vpc_flow_logs_create_bigquery_dataset = true
-  # BigQuery dataset IDs only allow alphanumerics and underscores — replace hyphens from environment name.
-  vpc_flow_logs_bigquery_dataset_id = "vpc_flow_logs_${replace(var.environment, "-", "_")}"
-  vpc_flow_logs_bigquery_location   = local.env_config.region
-  vpc_flow_logs_retention_days      = var.vpc_flow_logs_retention_days
+  # Hub peering and the DNS peering zone (empty maps in standalone mode).
+  peerings  = local.hub_vpc_peerings
+  dns_zones = local.hub_dns_zones
 
-  vpc_service_controls = {
+  flow_logs_export = {
+    enabled                 = true
+    create_bigquery_dataset = true
+    # BigQuery dataset IDs only allow alphanumerics and underscores — replace hyphens from environment name.
+    bigquery_dataset_id = "vpc_flow_logs_${replace(var.environment, "-", "_")}"
+    bigquery_location   = local.env_config.region
+    retention_days      = var.vpc_flow_logs_retention_days
+  }
+
+  # Only created when an access policy is known (the env's scoped policy, or an
+  # explicit vpc_sc_access_policy_name). Passing a perimeter with a null access
+  # policy trips the vpc-sc module's validation.
+  vpc_service_controls = local.vpc_sc_access_policy == null ? {} : {
     "${var.environment}_perimeter" = {
-      organization_id    = "organizations/${data.terraform_remote_state.organization.outputs.org_id}"
-      access_policy_name = var.vpc_sc_access_policy_name
+      organization_id    = "organizations/${local.org_id}"
+      access_policy_name = local.vpc_sc_access_policy
       perimeter_title    = coalesce(var.vpc_sc_perimeter_title, "${upper(var.environment)} Perimeter")
       perimeter_type     = "PERIMETER_TYPE_REGULAR"
       enable_dry_run     = var.vpc_sc_enable_dry_run
@@ -165,6 +236,8 @@ module "host" {
       restricted_services = var.vpc_sc_restricted_services
       ingress_policies    = local.effective_vpc_sc_ingress_policies
       egress_policies     = local.effective_vpc_sc_egress_policies
+      # Enforced status + staged dry-run delta (null = no staged spec).
+      dry_run_restricted_services = var.vpc_sc_dry_run_restricted_services
     }
   }
 }
@@ -173,9 +246,9 @@ module "budget" {
   count  = var.monthly_budget_limit > 0 ? 1 : 0
   source = "../../../modules/gcp/governance/billing"
 
-  billing_account      = data.terraform_remote_state.organization.outputs.billing_account
+  billing_account      = local.billing_account
   project_id           = local.env_config.host_project_id
-  project_name         = "${var.project_prefix}-${var.environment}"
+  project_name         = "${local.project_prefix}-${var.environment}"
   monthly_budget_limit = var.monthly_budget_limit
   currency_code        = var.budget_currency
   region               = local.env_config.region
@@ -191,8 +264,8 @@ module "budget" {
   # kms_key_name: Intentionally omitted at the app-env level. The org-level
   # budget topic is CMEK-encrypted via the CMEK key created in stages/organization.
   # App-environment budget topics use Google-managed encryption. To change this,
-  # pass the CMEK key from remote state:
-  #   kms_key_name = data.terraform_remote_state.organization.outputs.cmek_key_names["budget-alerts"]
+  # pass the CMEK key from remote state (or add it to organization_contract):
+  #   kms_key_name = data.terraform_remote_state.organization[0].outputs.cmek_key_names["budget-alerts"]
   # Ensure the Pub/Sub service agent has roles/cloudkms.cryptoKeyEncrypterDecrypter first.
 
   labels = local.labels
@@ -214,9 +287,9 @@ module "service_team" {
   for_each = var.service_teams
 
   project_name    = each.key
-  org_id          = data.terraform_remote_state.organization.outputs.org_id
+  org_id          = local.org_id
   folder_id       = trimprefix(local.env_config.folder_id, "folders/")
-  billing_account = trimprefix(data.terraform_remote_state.organization.outputs.billing_account, "billingAccounts/")
+  billing_account = trimprefix(local.billing_account, "billingAccounts/")
 
   activate_apis = each.value.activate_apis
 
@@ -235,6 +308,69 @@ module "service_team" {
 }
 
 # =============================================================================
+# VM BACKUP + OS PATCHING (CIS/NIST CP-9, SI-2 — BCK-05, VUL-05)
+#
+# Targets the env host project and every service-team project (Compute resource
+# policies attach only to disks in their own project; patch deployments are
+# project-scoped). Keys are static (host + team keys) so for_each is plan-safe
+# even while the team projects are still being created.
+#
+# - enable_vm_backup_policy (default true): a snapshot-schedule resource policy
+#   per project. It costs nothing until a disk is attached to it: attach it with
+#   google_compute_disk_resource_policy_attachment or the disk's resource_policies.
+# - enable_os_patch_management (default false): a weekly VM Manager patch
+#   deployment per project, plus osconfig.googleapis.com. Off by default because
+#   the workload apply SA needs roles/osconfig.patchDeploymentAdmin, which is not
+#   in the default gcp-bootstrap workload_folder_roles allow-list; add it there
+#   first. VMs need the OS Config agent and enable-osconfig=TRUE metadata.
+# =============================================================================
+
+locals {
+  vm_ops_projects = merge(
+    { host = local.env_config.host_project_id },
+    { for k, _ in var.service_teams : "team-${k}" => module.service_team[k].project_id },
+  )
+
+  effective_vm_backup_schedules = var.vm_backup_schedules != null ? var.vm_backup_schedules : {
+    "vm-daily-snapshots" = {}
+  }
+
+  effective_os_patch_deployments = var.os_patch_deployments != null ? var.os_patch_deployments : {
+    "weekly-os-patch" = {
+      description = "Weekly OS patching for ${var.environment} (Terraform-managed)."
+    }
+  }
+}
+
+module "vm_backup_policy" {
+  source   = "../../../modules/gcp/backup/backup-plan"
+  for_each = var.enable_vm_backup_policy ? local.vm_ops_projects : {}
+
+  project_id = each.value
+  region     = local.env_config.region
+  labels     = local.labels
+  schedules  = local.effective_vm_backup_schedules
+}
+
+resource "google_project_service" "osconfig" {
+  for_each = var.enable_os_patch_management ? local.vm_ops_projects : {}
+
+  project            = each.value
+  service            = "osconfig.googleapis.com"
+  disable_on_destroy = false
+}
+
+module "os_patch_management" {
+  source   = "../../../modules/gcp/ops/os-config"
+  for_each = var.enable_os_patch_management ? local.vm_ops_projects : {}
+
+  project_id        = each.value
+  patch_deployments = local.effective_os_patch_deployments
+
+  depends_on = [google_project_service.osconfig]
+}
+
+# =============================================================================
 # SaaS SECRET BRIDGE (audit H9, hybrid option C — first increment)
 #
 # Opt-in. Reads the Supabase outputs from a saas-<name> workspace and writes them
@@ -247,7 +383,7 @@ data "terraform_remote_state" "saas" {
   count   = var.enable_saas_secret_bridge ? 1 : 0
   backend = "cloud"
   config = {
-    organization = var.tfc_organization
+    organization = local.tfc_organization
     workspaces = {
       name = var.saas_workspace_name
     }
@@ -278,5 +414,60 @@ module "saas_secret_bridge" {
 
   secret_accessors = {
     (var.saas_secret_name) = var.saas_secret_accessor_members
+  }
+}
+
+# =============================================================================
+# APPLICATION GOLDEN PATH (audit: "app golden path is docs-only")
+#
+# One module call. A service team adds an entry to var.app_services and gets, in
+# the env host project: an Artifact Registry repo, a runtime SA, a Cloud Run v2
+# service on the env Shared VPC (Direct VPC egress), optional private Cloud SQL,
+# and an optional GitHub deploy identity on an app-only WIF pool. The default
+# (app_services = {}, every flag off) creates nothing. Guide:
+# docs/guides/deploying-a-service.md.
+# =============================================================================
+
+module "app_services" {
+  source = "../../../modules/gcp/stages/app-services"
+
+  project_id     = local.env_config.host_project_id
+  project_number = local.env_config.host_project_number
+  region         = local.env_config.region
+  environment    = var.environment
+  labels         = local.labels
+
+  # The env VPC (not the hub): the host stage creates Private Service Access on
+  # it by default, which private-IP Cloud SQL requires.
+  network_id = module.host.network_id
+  # Default Cloud Run / GKE subnet: the first private (compute-tier) subnet.
+  subnetwork_id = var.app_subnetwork_id != null ? var.app_subnetwork_id : try(values(module.host.subnets.private)[0].id, null)
+
+  services                       = var.app_services
+  enable_deletion_protection     = var.enable_deletion_protection
+  artifact_registry_kms_key_name = var.artifact_registry_kms_key_name
+  enable_vulnerability_scanning  = var.enable_artifact_registry_vulnerability_scanning
+
+  enable_app_deploy_wif      = var.enable_app_deploy_wif
+  app_deploy_wif_pool_id     = var.app_deploy_wif_pool_id
+  github_repository_owner_id = var.github_repository_owner_id
+
+  enable_gke_autopilot              = var.enable_gke_autopilot
+  gke_master_ipv4_cidr_block        = var.gke_master_ipv4_cidr_block
+  gke_master_authorized_networks    = var.gke_master_authorized_networks
+  gke_cluster_secondary_range_name  = var.gke_cluster_secondary_range_name
+  gke_services_secondary_range_name = var.gke_services_secondary_range_name
+
+  # PSA (for Cloud SQL), subnets and the bridged SaaS secret must exist first.
+  depends_on = [module.host, module.saas_secret_bridge]
+}
+
+# Nothing else ties production to an enforced perimeter. Warn (check blocks never
+# fail the plan) when a production environment (environment_config is_production)
+# has no perimeter or only a dry-run one.
+check "vpc_sc_enforced_in_prod" {
+  assert {
+    condition     = !local.is_production || (local.vpc_sc_access_policy != null && !var.vpc_sc_enable_dry_run)
+    error_message = "Environment '${var.environment}' is production but its VPC-SC perimeter is ${local.vpc_sc_access_policy == null ? "NOT CREATED (no scoped access policy in environment_config and vpc_sc_access_policy_name is null)" : "in DRY-RUN (vpc_sc_enable_dry_run = true)"}. Dry-run gives no exfiltration protection: validate the violation logs, then set vpc_sc_enable_dry_run = false (use vpc_sc_dry_run_restricted_services to keep staging further changes)."
   }
 }

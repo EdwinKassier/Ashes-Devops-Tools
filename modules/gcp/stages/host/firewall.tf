@@ -197,4 +197,3 @@ module "hierarchical_firewall_policies" {
   associations   = try(each.value.associations, [])
   enable_logging = try(each.value.enable_logging, true)
 }
-

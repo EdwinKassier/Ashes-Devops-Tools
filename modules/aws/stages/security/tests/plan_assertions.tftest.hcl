@@ -88,7 +88,13 @@ override_module {
 # AWS-side format validation under `command = apply` (e.g. patch-baseline IDs,
 # IAM role ARNs). They produce no cross-child or asserted outputs, so override
 # them out to keep the apply clean while still exercising their wiring.
-override_module { target = module.cloudtrail }
+override_module {
+  target = module.cloudtrail
+  outputs = {
+    cloudwatch_log_group_name = "/aws/cloudtrail/org-trail"
+    cis_alarm_sns_topic_arn   = "arn:aws:sns:eu-west-2:111111111111:org-trail-cis-alarms"
+  }
+}
 override_module { target = module.access_analyzer }
 override_module { target = module.delegated_admin }
 override_module { target = module.org_security_service }
@@ -98,6 +104,18 @@ override_module { target = module.incident_response }
 override_module { target = module.service_quotas }
 
 run "composes_security_baseline" {
+  # CIS section-4 alarms are on by default: the trail's log group and the
+  # alarm topic are surfaced as stage outputs.
+  assert {
+    condition     = output.cloudtrail_log_group_name == "/aws/cloudtrail/org-trail" && output.cis_alarm_sns_topic_arn == "arn:aws:sns:eu-west-2:111111111111:org-trail-cis-alarms"
+    error_message = "Stage must surface the CloudTrail log group and CIS alarm topic"
+  }
+
+  assert {
+    condition     = var.enable_cloudwatch_logs == true && var.cloudtrail_s3_data_events == "write"
+    error_message = "CIS 4.x alarms and S3 write data events (CIS 3.8) must be on by default"
+  }
+
   command = apply
 
   # GuardDuty detector map is keyed by the (plan-known) enabled Region.
@@ -197,5 +215,75 @@ run "managed_break_glass_is_created_and_watched" {
   assert {
     condition     = local.effective_break_glass_role_arn == "arn:aws:iam::111111111111:role/OrganizationBreakGlass"
     error_message = "the assumption alarm must watch the stage-created break-glass role ARN."
+  }
+}
+
+# Default identities: with no key_admin / Config role ARNs the stage grants each
+# CMK's own-account tfc-apply role key administration and lets config-org create
+# the Config service-linked role and the org aggregator role.
+run "default_operator_roles" {
+  command = plan
+
+  variables {
+    key_admin_arn       = null
+    config_role_arn     = null
+    aggregator_role_arn = null
+  }
+
+  assert {
+    condition = local.key_admin_arns == {
+      log_archive      = "arn:aws:iam::333333333333:role/tfc-apply"
+      forensics        = "arn:aws:iam::444444444444:role/tfc-apply"
+      security_tooling = "arn:aws:iam::222222222222:role/tfc-apply"
+    }
+    error_message = "key_admin_arn = null must default each CMK's admin to its own account's tfc-apply role."
+  }
+}
+
+run "explicit_key_admin_wins" {
+  command = plan
+
+  assert {
+    condition     = alltrue([for a in values(local.key_admin_arns) : a == "arn:aws:iam::333333333333:role/kms-admin"])
+    error_message = "An explicit key_admin_arn must be used for every CMK."
+  }
+}
+
+# Boundary propagation (tfc-oidc-baseline): roles the stage creates in the
+# security-tooling account (Config aggregator, IR roles) carry that account's
+# tfc-apply-boundary, derived from the security_tooling provider.
+run "security_tooling_roles_carry_tfc_apply_boundary" {
+  command = plan
+
+  variables {
+    aggregator_role_arn = null
+  }
+
+  override_data {
+    target = data.aws_caller_identity.security_tooling[0]
+    values = { account_id = "222222222222" }
+  }
+
+  override_data {
+    target = data.aws_partition.security_tooling[0]
+    values = { partition = "aws" }
+  }
+
+  assert {
+    condition     = local.security_tooling_boundary_arn == "arn:aws:iam::222222222222:policy/tfc-apply-boundary"
+    error_message = "The security-tooling boundary ARN (passed to config + incident_response) must be derived from the security_tooling provider."
+  }
+}
+
+run "security_tooling_boundary_disabled_with_null_name" {
+  command = plan
+
+  variables {
+    tfc_apply_boundary_policy_name = null
+  }
+
+  assert {
+    condition     = local.security_tooling_boundary_arn == null && length(data.aws_caller_identity.security_tooling) == 0
+    error_message = "tfc_apply_boundary_policy_name = null must disable the boundary and skip the identity lookup."
   }
 }

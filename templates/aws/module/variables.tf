@@ -19,3 +19,9 @@ variable "value" {
   type        = string
   default     = "placeholder"
 }
+
+variable "tags" {
+  description = "Tags applied to every taggable resource this module creates. Org-wide tags (CostCenter, Environment, Owner, ...) come from the root provider's default_tags; use this for module-specific additions."
+  type        = map(string)
+  default     = {}
+}

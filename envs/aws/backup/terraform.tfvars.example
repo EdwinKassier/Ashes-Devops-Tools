@@ -1,6 +1,18 @@
+# Optional overrides. Shared values (landing_zone_name, tfc_organization,
+# aws_region, owner/cost_center, account IDs, role ARNs, accounts, workload
+# environments) are read from config/landing-zone.yaml when it exists, so a
+# VCS-driven TFC run needs no tfvars; any variable set here (or in TFC) wins
+# over the config file.
+#
 # Copy to terraform.tfvars and fill in. Inputs marked REQUIRED have no usable
-# default — you MUST supply them (the TFC org and the two operator role ARNs).
+# default — you MUST supply them (landing_zone_name and the TFC org). The backup
+# and restore-testing roles are created by this root unless you pass your own.
 # The rest have working defaults you can override.
+
+# REQUIRED unless org.name is set in config/landing-zone.yaml — landing-zone
+# identifier written to the LandingZone tag. The upstream placeholders
+# "ashes" / "my-org" are rejected.
+landing_zone_name = "acme"
 
 # REQUIRED — Terraform Cloud org that owns this root's workspace and the
 # aws-organization workspace it reads. Usually passed to `terraform init` via
@@ -26,10 +38,13 @@ min_retention_days  = 7
 max_retention_days  = 3650
 changeable_for_days = 3
 
-# REQUIRED — account-qualified ARN of the role AWS Backup assumes to run backup
-# jobs for the org backup plan (rendered into the org BACKUP_POLICY).
-backup_role_arn = "arn:aws:iam::111111111111:role/aws-backup-role"
+# Optional — role AWS Backup assumes IN EACH Workloads-OU member account for the
+# org backup plan. Default null: this root deploys backup_role_name
+# (aws-backup-org-role) to every Workloads-OU account through a service-managed
+# StackSet and renders arn:aws:iam::$account:role/aws-backup-org-role into the
+# org BACKUP_POLICY. Override only to bring your own per-account role.
+# backup_role_arn = "arn:aws:iam::$account:role/my-backup-role"
 
-# REQUIRED — account-qualified ARN of the role (in the backup account) AWS Backup
-# assumes to perform restore testing jobs.
-restore_testing_role_arn = "arn:aws:iam::444444444444:role/backup-restore-test"
+# Optional — restore-testing role in the backup account. Default null: created
+# (aws-backup-restore-testing, AWSBackupServiceRolePolicyForRestores).
+# restore_testing_role_arn = "arn:aws:iam::444444444444:role/backup-restore-test"

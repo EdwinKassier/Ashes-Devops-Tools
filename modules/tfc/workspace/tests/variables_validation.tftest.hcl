@@ -55,3 +55,18 @@ run "rejects_non_email_without_url" {
   }
   expect_failures = [var.notifications]
 }
+
+run "rejects_vcs_repo_without_credential" {
+  command = plan
+  variables {
+    vcs_repo = { identifier = "acme/repo" }
+  }
+  expect_failures = [var.vcs_repo]
+}
+
+run "accepts_vcs_repo_with_github_app" {
+  command = plan
+  variables {
+    vcs_repo = { identifier = "acme/repo", github_app_installation_id = "ghain-abc" }
+  }
+}

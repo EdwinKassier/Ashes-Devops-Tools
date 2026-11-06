@@ -128,10 +128,11 @@ variable "manage_master_user_password" {
 }
 
 variable "master_password" {
-  description = "Master password. Only used when manage_master_user_password is false. Prefer leaving manage_master_user_password = true so the password never enters Terraform state."
+  description = "Master password. Only used when manage_master_user_password is false. Ephemeral and written with the write-only master_password_wo argument, so it never enters plan or state; it may be fed from an ephemeral resource (e.g. aws_secretsmanager_secret_version). Prefer manage_master_user_password = true (RDS-managed secret)."
   type        = string
   default     = null
   sensitive   = true
+  ephemeral   = true
 
   # Cross-variable validation (Terraform 1.9+): if RDS is not managing the
   # password, one must be supplied here.
@@ -269,4 +270,15 @@ variable "monitoring_role_arn" {
   description = "IAM role ARN RDS uses for enhanced monitoring. Required when monitoring_interval > 0."
   type        = string
   default     = ""
+}
+
+variable "master_password_version" {
+  description = "Write-only version counter for master_password (only used when manage_master_user_password is false). Increment to rotate the password."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.master_password_version >= 1 && floor(var.master_password_version) == var.master_password_version
+    error_message = "master_password_version must be a positive integer."
+  }
 }

@@ -2,19 +2,25 @@
 /**
  * Bootstrap the Supabase Vault for the target project:
  *
- *   1. Enable the `vault` extension in the `vault` schema.
- *   2. (Re)create three SECURITY DEFINER helpers granted to service_role:
- *      - public.upsert_vault_secret(name, value, description)
- *      - public.delete_vault_secret(name)
- *      - public.delete_vault_secrets_by_prefix(prefix) — filters out
- *        UPPER_SNAKE_CASE names so the IaC namespace cannot be
- *        bulk-deleted via this entry point.
- *   3. Restrict execute privilege on all three to service_role.
+ *   1. Enable the `supabase_vault` extension.
+ *   2. Drop the legacy public.* helpers created by earlier module versions
+ *      (they were reachable through PostgREST with the anon key).
+ *   3. (Re)create two SECURITY DEFINER helpers in the private, NOT
+ *      API-exposed `iac_vault` schema, each with `search_path = ''` and
+ *      fully-qualified references:
+ *      - iac_vault.upsert_vault_secret(name, value, description)
+ *      - iac_vault.delete_vault_secret(name)
+ *      Both refuse any name outside the IaC namespace (^[A-Z][A-Z0-9_]*$).
+ *   4. Revoke EXECUTE from PUBLIC, anon and authenticated; grant it to
+ *      service_role only.
  *
- * Idempotent — safe to re-run on every apply. Reconcile and the runtime
- * vault helpers (`@mo-stack/core-db/vault`, `apps/nextjs/src/utils/vault`)
- * all go through these functions, so a successful bootstrap is the
- * precondition for both IaC and runtime vault operations.
+ * Idempotent — safe to re-run on every apply. reconcile.mjs goes through
+ * these functions (direct pg connection or the Management API — neither
+ * uses PostgREST), so a successful bootstrap is its precondition.
+ *
+ * Runtime-managed (per-tenant, non UPPER_SNAKE_CASE) secrets are out of this
+ * module's scope: an application that needs RPC access to them must ship its
+ * own, separately-reviewed helpers.
  *
  * Required env: POSTGRES_URL (session-mode pooler URL is fine).
  *
@@ -92,13 +98,40 @@ const ssl = isLocal
     };
 const poolOptions = { connectionString: url, ssl, max: 1 };
 
+// Schema that holds the IaC vault helpers. Deliberately NOT `public` and must
+// never be listed in the PostgREST exposed schemas (Supabase API settings →
+// "Exposed schemas" / the settings module's db_schema): PostgREST only serves
+// RPCs from exposed schemas, so the anon/authenticated API keys cannot reach
+// these functions over /rest/v1/rpc at all. Grants below are defence in depth.
+const IAC_SCHEMA = "iac_vault";
+
+// Name pattern of the IaC-managed namespace. Kept in lockstep with
+// IAC_MANAGED_NAME in reconcile.mjs and the Terraform variable validation.
+// Both helpers refuse to touch any other name, so even a caller holding
+// EXECUTE cannot read-modify runtime-managed (non UPPER_SNAKE_CASE) entries.
 const SQL = `
   CREATE EXTENSION IF NOT EXISTS supabase_vault;
 
-  -- upsert_vault_secret: used by both reconcile.mjs (IaC-managed
-  -- UPPER_SNAKE_CASE entries) and runtime callers (per-tenant tokens
-  -- via setVaultSecret in @mo-stack/core-db/vault).
-  CREATE OR REPLACE FUNCTION public.upsert_vault_secret(
+  -- ── Migration: remove the legacy public.* helpers ─────────────────────────
+  -- Earlier versions of this module created these in the API-exposed public
+  -- schema. Supabase's default privileges grant EXECUTE on new public
+  -- functions to anon and authenticated explicitly, and REVOKE ... FROM
+  -- PUBLIC does not remove those grants — so the frontend anon key could call
+  -- POST /rest/v1/rpc/upsert_vault_secret. Drop them unconditionally.
+  DROP FUNCTION IF EXISTS public.upsert_vault_secret(text, text, text);
+  DROP FUNCTION IF EXISTS public.delete_vault_secret(text);
+  DROP FUNCTION IF EXISTS public.delete_vault_secrets_by_prefix(text);
+
+  -- ── Private schema ────────────────────────────────────────────────────────
+  CREATE SCHEMA IF NOT EXISTS ${IAC_SCHEMA};
+  REVOKE ALL ON SCHEMA ${IAC_SCHEMA} FROM PUBLIC;
+  REVOKE ALL ON SCHEMA ${IAC_SCHEMA} FROM anon, authenticated;
+  GRANT USAGE ON SCHEMA ${IAC_SCHEMA} TO service_role;
+
+  -- upsert_vault_secret: create or update an IaC-managed vault entry.
+  -- SECURITY DEFINER with an EMPTY search_path: every object is schema-
+  -- qualified, so a caller cannot shadow vault.* or operators via search_path.
+  CREATE OR REPLACE FUNCTION ${IAC_SCHEMA}.upsert_vault_secret(
     secret_name text,
     secret_value text,
     secret_description text DEFAULT ''
@@ -106,12 +139,17 @@ const SQL = `
   RETURNS void
   LANGUAGE plpgsql
   SECURITY DEFINER
-  SET search_path = public
+  SET search_path = ''
   AS $$
   DECLARE
     existing_id uuid;
   BEGIN
-    SELECT id INTO existing_id FROM vault.secrets WHERE name = secret_name;
+    IF secret_name IS NULL OR secret_name OPERATOR(pg_catalog.!~) '^[A-Z][A-Z0-9_]*$' THEN
+      RAISE EXCEPTION 'iac_vault: % is outside the IaC-managed namespace (^[A-Z][A-Z0-9_]*$)', secret_name
+        USING ERRCODE = 'insufficient_privilege';
+    END IF;
+
+    SELECT s.id INTO existing_id FROM vault.secrets AS s WHERE s.name OPERATOR(pg_catalog.=) secret_name;
     IF existing_id IS NOT NULL THEN
       PERFORM vault.update_secret(existing_id, secret_value, secret_name, secret_description);
     ELSE
@@ -120,63 +158,35 @@ const SQL = `
   END;
   $$;
 
-  REVOKE ALL ON FUNCTION public.upsert_vault_secret(text, text, text) FROM PUBLIC;
-  GRANT EXECUTE ON FUNCTION public.upsert_vault_secret(text, text, text) TO service_role;
-
-  -- delete_vault_secret: used by reconcile.mjs (orphan deletion of
-  -- IaC-managed entries) and runtime callers (per-tenant token cleanup
-  -- via deleteVaultSecret). Idempotent — succeeds whether the secret
-  -- exists or not.
-  CREATE OR REPLACE FUNCTION public.delete_vault_secret(secret_name text)
+  -- delete_vault_secret: delete one IaC-managed entry (reconcile orphan
+  -- sweep). Idempotent. Refuses any name outside the IaC namespace, so it
+  -- cannot be used to delete runtime-managed entries.
+  CREATE OR REPLACE FUNCTION ${IAC_SCHEMA}.delete_vault_secret(secret_name text)
   RETURNS void
   LANGUAGE plpgsql
   SECURITY DEFINER
-  SET search_path = public
+  SET search_path = ''
   AS $$
   BEGIN
-    DELETE FROM vault.secrets WHERE name = secret_name;
+    IF secret_name IS NULL OR secret_name OPERATOR(pg_catalog.!~) '^[A-Z][A-Z0-9_]*$' THEN
+      RAISE EXCEPTION 'iac_vault: % is outside the IaC-managed namespace (^[A-Z][A-Z0-9_]*$)', secret_name
+        USING ERRCODE = 'insufficient_privilege';
+    END IF;
+
+    DELETE FROM vault.secrets AS s WHERE s.name OPERATOR(pg_catalog.=) secret_name;
   END;
   $$;
 
-  REVOKE ALL ON FUNCTION public.delete_vault_secret(text) FROM PUBLIC;
-  GRANT EXECUTE ON FUNCTION public.delete_vault_secret(text) TO service_role;
+  -- Execute: owner (the bootstrap role) and service_role only. Revoke from
+  -- PUBLIC *and* from anon/authenticated explicitly, because Supabase grants
+  -- those roles directly (not via PUBLIC) through default privileges.
+  REVOKE ALL ON FUNCTION ${IAC_SCHEMA}.upsert_vault_secret(text, text, text) FROM PUBLIC;
+  REVOKE ALL ON FUNCTION ${IAC_SCHEMA}.upsert_vault_secret(text, text, text) FROM anon, authenticated;
+  GRANT EXECUTE ON FUNCTION ${IAC_SCHEMA}.upsert_vault_secret(text, text, text) TO service_role;
 
-  -- delete_vault_secrets_by_prefix: bulk-delete runtime-managed entries
-  -- whose name starts with the given prefix. Returns the number of rows
-  -- deleted. IaC-namespace entries (UPPER_SNAKE_CASE names) are filtered
-  -- out at the SQL level so app code physically cannot bulk-delete
-  -- infrastructure secrets even if the prefix would otherwise match.
-  --
-  -- LIKE-wildcard handling: name_prefix is treated as a LITERAL prefix.
-  -- The TypeScript helper deleteVaultSecretsByPrefix() escapes
-  -- backslash, %, and _ with a leading backslash before calling this
-  -- function. The LIKE clause below uses ESCAPE with a backslash so
-  -- those escapes are honored: a prefix of 'xero_oauth_' (literal
-  -- underscores) cannot accidentally match 'xero_oauthX' via the
-  -- single-char '_' wildcard. The trailing % we append here remains a
-  -- real wildcard since it is not escaped.
-  --
-  -- If you call this SQL function directly (bypassing the TS helper),
-  -- you MUST escape backslash, %, and _ in name_prefix yourself.
-  CREATE OR REPLACE FUNCTION public.delete_vault_secrets_by_prefix(name_prefix text)
-  RETURNS integer
-  LANGUAGE plpgsql
-  SECURITY DEFINER
-  SET search_path = public
-  AS $$
-  DECLARE
-    deleted_count integer;
-  BEGIN
-    DELETE FROM vault.secrets
-    WHERE name LIKE name_prefix || '%' ESCAPE '\\'
-      AND name !~ '^[A-Z][A-Z0-9_]*$';  -- exclude IaC namespace
-    GET DIAGNOSTICS deleted_count = ROW_COUNT;
-    RETURN deleted_count;
-  END;
-  $$;
-
-  REVOKE ALL ON FUNCTION public.delete_vault_secrets_by_prefix(text) FROM PUBLIC;
-  GRANT EXECUTE ON FUNCTION public.delete_vault_secrets_by_prefix(text) TO service_role;
+  REVOKE ALL ON FUNCTION ${IAC_SCHEMA}.delete_vault_secret(text) FROM PUBLIC;
+  REVOKE ALL ON FUNCTION ${IAC_SCHEMA}.delete_vault_secret(text) FROM anon, authenticated;
+  GRANT EXECUTE ON FUNCTION ${IAC_SCHEMA}.delete_vault_secret(text) TO service_role;
 `;
 
 // Use the Supabase Management API (SUPABASE_ACCESS_TOKEN is injected by CI) to:
@@ -318,8 +328,8 @@ if (projectRef && accessToken && isSupabasePooler) {
           );
         } else {
           console.log(
-            "[vault-secrets/bootstrap] vault extension + upsert_vault_secret + " +
-              "delete_vault_secret + delete_vault_secrets_by_prefix installed via Management API",
+            `[vault-secrets/bootstrap] vault extension + ${IAC_SCHEMA}.upsert_vault_secret + ` +
+              `${IAC_SCHEMA}.delete_vault_secret installed via Management API`,
           );
           bootstrapComplete = true;
         }
@@ -350,8 +360,8 @@ for (let attempt = bootstrapComplete ? MAX_ATTEMPTS + 1 : 1; attempt <= MAX_ATTE
   try {
     await pool.query(SQL);
     console.log(
-      "[vault-secrets/bootstrap] vault extension + upsert_vault_secret + " +
-        "delete_vault_secret + delete_vault_secrets_by_prefix installed",
+      `[vault-secrets/bootstrap] vault extension + ${IAC_SCHEMA}.upsert_vault_secret + ` +
+        `${IAC_SCHEMA}.delete_vault_secret installed`,
     );
     await pool.end();
     break;

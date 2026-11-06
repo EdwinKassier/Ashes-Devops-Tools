@@ -4,11 +4,11 @@ output "managed_secret_names" {
 }
 
 output "bootstrap_trigger_id" {
-  description = "Unique ID of the bootstrap null_resource; changes when the bootstrap script is re-run."
-  value       = null_resource.bootstrap.id
+  description = "Unique ID of the bootstrap terraform_data resource; changes when the bootstrap script is re-run."
+  value       = terraform_data.bootstrap.id
 }
 
 output "reconcile_trigger_id" {
-  description = "Unique ID of the reconcile null_resource; changes when secrets are reconciled."
-  value       = null_resource.reconcile.id
+  description = "Unique ID of the reconcile terraform_data resource; changes when secrets are reconciled."
+  value       = terraform_data.reconcile.id
 }

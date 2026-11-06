@@ -2,7 +2,7 @@
 /**
  * Reconcile the Supabase Vault contents against a desired-state map.
  *
- * Invoked by the vault-secrets Terraform module's null_resource.reconcile
+ * Invoked by the vault-secrets Terraform module's terraform_data.reconcile
  * provisioner once per apply. Idempotent. Handles add/update/remove in
  * one pass — no destroy provisioner, no per-secret resource lifecycle.
  *
@@ -28,11 +28,11 @@
  *      touched.
  *   3. SAFETY GUARD: refuse to delete every existing entry when
  *      desired is empty (see `VAULT_ALLOW_EMPTY_DESIRED` above).
- *   4. For each desired entry: upsert via public.upsert_vault_secret.
+ *   4. For each desired entry: upsert via iac_vault.upsert_vault_secret.
  *   5. For each existing IaC-managed name NOT in desired: delete via
- *      public.delete_vault_secret(name) — one row per call. Same SQL
- *      function the runtime API uses, so reconcile and app code share
- *      one write path.
+ *      iac_vault.delete_vault_secret(name) — one row per call. Both
+ *      helpers live in the private (non-API-exposed) iac_vault schema and
+ *      refuse names outside the IaC namespace.
  *
  * Concurrency: GitHub Actions concurrency groups (terraform-{env}) prevent
  * simultaneous applies into the same DB, so step 2-5 doesn't race. If you
@@ -296,7 +296,7 @@ if (projectRef && accessToken && isSupabasePooler) {
       await mgmtQuery(
         projectRef,
         accessToken,
-        `SELECT public.upsert_vault_secret(${sqlLiteral(name)}, ${sqlLiteral(value)}, 'Managed by Terraform vault-secrets module')`,
+        `SELECT iac_vault.upsert_vault_secret(${sqlLiteral(name)}, ${sqlLiteral(value)}, 'Managed by Terraform vault-secrets module')`,
       );
       console.log(`[vault-secrets/reconcile] ${name}: upserted`);
       upserted++;
@@ -308,7 +308,7 @@ if (projectRef && accessToken && isSupabasePooler) {
         await mgmtQuery(
           projectRef,
           accessToken,
-          `SELECT public.delete_vault_secret(${sqlLiteral(name)})`,
+          `SELECT iac_vault.delete_vault_secret(${sqlLiteral(name)})`,
         );
         console.log(`[vault-secrets/reconcile] ${name}: deleted (orphan)`);
         deleted++;
@@ -414,7 +414,7 @@ try {
   // before reaching this loop), so no per-entry name check is needed.
   for (const [name, value] of desiredEntries) {
     await pool.query(
-      "SELECT public.upsert_vault_secret($1::text, $2::text, $3::text)",
+      "SELECT iac_vault.upsert_vault_secret($1::text, $2::text, $3::text)",
       [name, value, "Managed by Terraform vault-secrets module"],
     );
     console.log(`[vault-secrets/reconcile] ${name}: upserted`);
@@ -422,14 +422,14 @@ try {
   }
 
   // 3. Delete orphans — IaC-managed names in the vault that aren't in the
-  // desired set. Goes through public.delete_vault_secret so runtime and
-  // IaC use the same write path. This is what makes "remove a VAULT_*
+  // desired set. Goes through iac_vault.delete_vault_secret, which itself
+  // refuses non-IaC names (defence in depth). This is what makes "remove a VAULT_*
   // GitHub secret → it disappears from the vault on next deploy" work.
   // Runtime-managed entries (lowercase names) were filtered out of
   // `existing` above and are untouched.
   for (const name of existing) {
     if (!desiredNames.has(name)) {
-      await pool.query("SELECT public.delete_vault_secret($1::text)", [name]);
+      await pool.query("SELECT iac_vault.delete_vault_secret($1::text)", [name]);
       console.log(`[vault-secrets/reconcile] ${name}: deleted (orphan)`);
       deleted++;
     }

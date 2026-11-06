@@ -1,0 +1,6 @@
+# Test fixture: a committed file must never carry secrets.
+workspaces:
+  aws-network:
+    api_token:
+      value: not-a-real-secret
+      sensitive: true

@@ -38,7 +38,6 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	
 }
 ```
 
@@ -46,7 +45,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.46.0, < 7.0.0 |
 
 ## Providers
@@ -62,12 +61,12 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_iam_role.break_glass (modules/aws/iam/iam-role/main.tf#L57)
+- resource.aws_iam_role.break_glass (modules/aws/iam/iam-role/main.tf#L58)
 - resource.aws_iam_role.this (modules/aws/iam/iam-role/main.tf#L29)
-- resource.aws_iam_role_policy.break_glass_standing (modules/aws/iam/iam-role/main.tf#L76)
-- resource.aws_iam_role_policy.inline (modules/aws/iam/iam-role/main.tf#L46)
-- resource.aws_iam_role_policy_attachment.break_glass_active (modules/aws/iam/iam-role/main.tf#L91)
-- resource.aws_iam_role_policy_attachment.this (modules/aws/iam/iam-role/main.tf#L40)
+- resource.aws_iam_role_policy.break_glass_standing (modules/aws/iam/iam-role/main.tf#L78)
+- resource.aws_iam_role_policy.inline (modules/aws/iam/iam-role/main.tf#L47)
+- resource.aws_iam_role_policy_attachment.break_glass_active (modules/aws/iam/iam-role/main.tf#L93)
+- resource.aws_iam_role_policy_attachment.this (modules/aws/iam/iam-role/main.tf#L41)
 
 
 ## Inputs
@@ -79,6 +78,7 @@ The following resources are created:
 | <a name="input_break_glass_role_name"></a> [break\_glass\_role\_name](#input\_break\_glass\_role\_name) | Name of the break-glass emergency-access role. | `string` | `"break-glass"` | no |
 | <a name="input_break_glass_trusted_principals"></a> [break\_glass\_trusted\_principals](#input\_break\_glass\_trusted\_principals) | Account-qualified IAM principal ARNs allowed to assume the break-glass role (subject to the MFA conditions). Empty by default so no principal can assume it until explicitly configured. | `list(string)` | `[]` | no |
 | <a name="input_enable_break_glass"></a> [enable\_break\_glass](#input\_enable\_break\_glass) | Create the break-glass emergency-access role. Disabled-by-default: standing state is a deny-all inline policy. | `bool` | `true` | no |
+| <a name="input_permissions_boundary_arn"></a> [permissions\_boundary\_arn](#input\_permissions\_boundary\_arn) | Permissions-boundary managed policy ARN set on every IAM role this module creates (a role's own roles[*].permissions\_boundary takes precedence). Required when the roles are created by a member-account tfc-apply role with boundary propagation on (tfc-oidc-baseline enable\_apply\_boundary\_propagation): pass arn:PARTITION:iam::ACCOUNT\_ID:policy/tfc-apply-boundary. Null (default) = no boundary. | `string` | `null` | no |
 | <a name="input_roles"></a> [roles](#input\_roles) | Map of IAM role name to its configuration. trust\_policy is a JSON assume-role policy document. managed\_policy\_arns are attached via separate attachment resources; inline\_policy (JSON) is attached as a role inline policy when non-empty. | <pre>map(object({<br/>    trust_policy         = string<br/>    max_session_duration = optional(number, 3600)<br/>    managed_policy_arns  = optional(list(string), [])<br/>    inline_policy        = optional(string, "")<br/>    permissions_boundary = optional(string)<br/>  }))</pre> | `{}` | no |
 
 ## Outputs

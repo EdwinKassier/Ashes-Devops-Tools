@@ -3,11 +3,16 @@
 # AWS roots/modules (modules/aws/**, envs/aws-*) auto-flow through
 # validate-all / lint / test / docs / security because scripts/terraform-roots.sh
 # discovers roots structurally and has no cloud filter.
-# Note: the validate matrix grows from ~103 to ~180 legs as AWS lands
-# (GitHub per-job matrix cap is 256 — thin margin), and CI needs registry
-# egress to download the hashicorp/aws provider.
+# CI validates roots in a fixed number of shards (terraform-plan.yml), so the
+# root count no longer approaches GitHub's 256-leg matrix cap. CI needs
+# registry egress to download the hashicorp/aws provider.
+#
+# trivy replaces tfsec (EOL, folded into Trivy): keep it equal to the
+# trivy-action `version:` in .github/workflows/reusable-security.yml.
+# shellcheck: the pre-commit hook pins shellcheck-py v<this>.1.
 terraform 1.14.3
 tflint 0.62.0
-tfsec 1.28.6
+trivy 0.70.0
+shellcheck 0.11.0
 terraform-docs 0.19.0
-checkov 3.2.0
+checkov 3.3.17

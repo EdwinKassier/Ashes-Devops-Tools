@@ -32,8 +32,8 @@ variable "terraform_run_role_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/.+$", var.terraform_run_role_arn))
-    error_message = "terraform_run_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/...)."
+    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.terraform_run_role_arn))
+    error_message = "terraform_run_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/<name>) with no wildcards (* or ?)."
   }
 }
 
@@ -42,8 +42,8 @@ variable "break_glass_role_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/.+$", var.break_glass_role_arn))
-    error_message = "break_glass_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/...)."
+    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.break_glass_role_arn))
+    error_message = "break_glass_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/<name>) with no wildcards (* or ?)."
   }
 }
 
@@ -55,6 +55,68 @@ variable "log_archive_bucket_name" {
     condition     = length(trimspace(var.log_archive_bucket_name)) > 0
     error_message = "log_archive_bucket_name must be a non-empty S3 bucket name."
   }
+}
+
+# -----------------------------------------------------------------------------
+# Member-account carve-outs for the deny-tamper SCP (role-name patterns)
+#
+# SCPs never apply to the management account, so deny-tamper exemptions must
+# match MEMBER-account sessions. These names render as
+# arn:aws:iam::*:role/<name> in aws:PrincipalArn conditions.
+# -----------------------------------------------------------------------------
+
+variable "pipeline_role_names" {
+  description = "Names or name patterns (optionally path-prefixed, e.g. \"automation/tfc-apply\" or \"stacksets-exec-*\") of the member-account Terraform pipeline roles. Rendered as arn:aws:iam::*:role/<name> and exempted from the deny-tamper reconfiguration statements (Config recorders, GuardDuty/CloudTrail settings, flow logs, log-archive Object Lock). These roles are also protected from IAM modification by anyone other than themselves or break-glass. NOT exempt from the destructive statements (break-glass only)."
+  type        = list(string)
+  default     = ["tfc-apply", "OrganizationAccountAccessRole", "stacksets-exec-*"]
+
+  validation {
+    condition     = length(var.pipeline_role_names) > 0 && alltrue([for n in var.pipeline_role_names : can(regex("^[A-Za-z0-9+=,.@_/*-]{1,512}$", n)) && !can(regex("^[*/]*$", n))])
+    error_message = "pipeline_role_names must be a non-empty list of IAM role names or name patterns (optionally path-prefixed, e.g. stacksets-exec-*); a bare \"*\" is not allowed."
+  }
+}
+
+variable "break_glass_role_names" {
+  description = "Names of the break-glass role as it exists in MEMBER accounts. Rendered as arn:aws:iam::*:role/<name> and the sole exemption from the destructive deny-tamper statements. Empty (default) derives the name from break_glass_role_arn — a role with that name must then exist in each member account for break-glass to work there."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for n in var.break_glass_role_names : can(regex("^[A-Za-z0-9+=,.@_/-]{1,512}$", n))])
+    error_message = "break_glass_role_names entries must be IAM role names without wildcards (optionally path-prefixed)."
+  }
+}
+
+variable "kms_protection_tag_key" {
+  description = "Resource-tag key marking KMS keys protected by the deny-tamper SCP. Keys tagged <key> = \"true\" cannot be scheduled for deletion, disabled, have rotation disabled or the tag removed except by break-glass; their key policy can only be changed by break-glass (so Terraform key-policy changes to protected keys need a break-glass apply). Must match the tag the aws/data/kms-key module applies (protection_tag_key)."
+  type        = string
+  default     = "protected"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9 _.:/=+@-]{1,128}$", var.kms_protection_tag_key)) && !startswith(var.kms_protection_tag_key, "aws:")
+    error_message = "kms_protection_tag_key must be a valid AWS tag key (1-128 chars, not starting with aws:)."
+  }
+}
+
+# -----------------------------------------------------------------------------
+# Data perimeter (RCP) + declarative EC2 inputs
+# -----------------------------------------------------------------------------
+
+variable "data_perimeter_trusted_account_ids" {
+  description = "Optional 12-digit account IDs OUTSIDE the organization that are trusted by the RCP data perimeter: their principals (aws:PrincipalAccount) may access org resources, and AWS service calls on their behalf (aws:SourceAccount) pass the confused-deputy check. Empty (default) trusts only the organization. Individual resources can also opt out with the dp:exclude:identity / dp:exclude:source = \"true\" resource tags; the baseline SCP lets only break-glass set or remove dp:* tags."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for a in var.data_perimeter_trusted_account_ids : can(regex("^[0-9]{12}$", a))])
+    error_message = "data_perimeter_trusted_account_ids entries must be 12-digit AWS account IDs."
+  }
+}
+
+variable "allow_vpc_bpa_exclusions" {
+  description = "Whether member accounts may create VPC Block Public Access exclusions under the declarative EC2 policy. Default false (exclusions_allowed = disabled) so a member-account admin cannot exempt a VPC from the org-wide internet-gateway ingress block."
+  type        = bool
+  default     = false
 }
 
 variable "default_region" {

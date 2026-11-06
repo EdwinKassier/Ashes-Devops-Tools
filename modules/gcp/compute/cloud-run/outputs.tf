@@ -23,3 +23,8 @@ output "id" {
   description = "The fully qualified identifier of the Cloud Run service."
   value       = google_cloud_run_v2_service.this.id
 }
+
+output "ingress" {
+  description = "The ingress traffic policy applied to the service."
+  value       = google_cloud_run_v2_service.this.ingress
+}

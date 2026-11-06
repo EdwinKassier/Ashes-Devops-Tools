@@ -4,6 +4,13 @@ This guide covers everything needed to deploy the **GCP** landing zone from scra
 
 > **Deploying AWS?** The AWS landing zone has its own phase-0 stand-up flow and credential model — see [AWS bootstrap](#4a-aws-bootstrap-separate-stand-up-flow) below and the full **[AWS Bootstrap runbook](../runbooks/aws-bootstrap.md)**. Cloud selection is which workspaces you apply, not a runtime flag: **[Provider Selection](../architecture/provider-selection.md)**.
 
+## At a Glance
+
+1. **Configure once:** run `scripts/init-landing-zone.sh` (or `make init ARGS="..."`), or copy [`config/landing-zone.example.yaml`](../../config/landing-zone.example.yaml) to `config/landing-zone.yaml` and edit it. This one file holds the org name and prefix, domain, Terraform Cloud organization and projects, regions, the GCP environments, the AWS accounts and workload environments, and which clouds are enabled ([section 2a](#2a-configure-the-landing-zone-one-file)).
+2. **Commit it.** It holds no secrets. Every root reads it, so VCS-driven Terraform Cloud runs (which never see a local tfvars file) get their values from the repo.
+3. **Apply `envs/tfc-admin`.** It creates every workspace from the same file: the enabled clouds, one `gcp-workload-<env>` / `aws-workload-<env>` per environment, and the TFC projects.
+4. **Bootstrap in order:** GCP `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` (below). AWS: the [AWS Bootstrap runbook](../runbooks/aws-bootstrap.md).
+
 ---
 
 ## Pre-flight Checklist
@@ -33,11 +40,11 @@ gcloud services enable cloudresourcemanager.googleapis.com \
 
 ### Tooling
 
-- [ ] `terraform version` reports `>= 1.9.8` (see `.terraform-version`)
+- [ ] `terraform version` reports `>= 1.11` (CI pins the version in `.terraform-version`)
 - [ ] `gcloud version` reports `>= 450.0.0`
 - [ ] `jq` installed (used by CI scripts)
 - [ ] Node.js >= 18 installed (required only if using `enable_vault_secrets = true` in any `saas-workload` call)
-- [ ] A Terraform Cloud account with a workspace named `gcp-organization` (or the name in your `backend.hcl`)
+- [ ] A Terraform Cloud organization with the five GCP workspaces: `gcp-bootstrap`, `gcp-organization`, `gcp-projects`, `gcp-network-hub` and one `gcp-workload-<env>` per environment. Create them with `envs/tfc-admin` (`gcp.enabled: true` in `config/landing-zone.yaml`, or `enable_gcp = true`; every cloud defaults to disabled). It creates `gcp-bootstrap` in **local** execution mode, so the phase-0 apply below runs on your machine with your ADC while TFC stores the state ([bootstrap runbook](../runbooks/bootstrap.md#creating-and-wiring-the-tfc-workspaces-tfc-admin-two-pass))
 
 ---
 
@@ -55,7 +62,30 @@ make install
 make pre-commit-install
 ```
 
-`make install` installs repo-managed tools: TFLint, tfsec, Checkov, terraform-docs, and pre-commit at the exact versions in `.tool-versions`. Terraform itself must be installed separately — use `tfenv` or `mise` with the version in `.terraform-version`.
+`make install` installs repo-managed tools: TFLint, Checkov, terraform-docs, and pre-commit at the exact versions in `.tool-versions`. Install Trivy at the `.tool-versions` version too — `make security` refuses a mismatched binary (tfsec is end-of-life and no longer used). Terraform itself must be installed separately — use `tfenv` or `mise` with the version in `.terraform-version`.
+
+## 2a. Configure the Landing Zone (one file)
+
+```bash
+scripts/init-landing-zone.sh --org-name acme --clouds gcp,aws \
+  --domain acme.com --billing-account 0A1B2C-3D4E5F-6A7B8C \
+  --gcp-admin-email admin@acme.com --aws-management-account 123456789012
+# or interactively: scripts/init-landing-zone.sh
+# or by hand:       cp config/landing-zone.example.yaml config/landing-zone.yaml
+git add config/landing-zone.yaml && git commit -m "config: landing zone"
+```
+
+The script validates the inputs the same way the Terraform variables do. It writes `config/landing-zone.yaml` and lists the placeholders still left (AWS root emails, admin groups). `--rebrand` also renames the README title. Review the environments, CIDRs and groups before you commit.
+
+How the roots read it:
+
+- **Precedence:** an explicit variable (tfvars, `TF_VAR_*`, a TFC workspace or variable-set variable) > `config/landing-zone.yaml` > the root's built-in default. Existing tfvars keep working unchanged.
+- **Single source:** `environments` (GCP roots and tfc-admin), `project_prefix`, `landing_zone_name`, `tfc_organization`, regions, the AWS account map and the workload-env → account-key mapping are no longer duplicated across roots.
+- **Fail fast:** a value that is still unset, or still an upstream placeholder (`my-org`, `REPLACE_WITH_*`, `@example.com` root emails), fails the plan. The error names the variable and the config key.
+- **Optional:** with no `config/landing-zone.yaml`, every root behaves as before. Each root's `landing_zone_config_path` variable points elsewhere, and `""` disables the lookup.
+- **Per-workspace overrides** still go in [`config/tfc-workspaces.yaml`](../../config/tfc-workspaces.example.yaml), which tfc-admin writes as workspace variables. Those win over the config file.
+
+---
 
 ## 3. Authenticate to Google Cloud
 
@@ -102,40 +132,56 @@ The `pg ^8.20.0` package connects to the Supabase session-mode pooler to execute
 
 The `modules/gcp/stages/bootstrap` module creates the WIF pool that GitHub Actions uses to authenticate. This creates a chicken-and-egg dependency: you need WIF to run Terraform via CI, but you need to run Terraform to create WIF. The solution is a single manual apply of the bootstrap module.
 
-**Step 1 — Create the backend configuration file:**
+**Step 1 — Point every GCP root at your Terraform Cloud organization:**
+
+Each root's `backend.tf` hard-codes its workspace name (`gcp-bootstrap`, `gcp-organization`,
+`gcp-projects`, `gcp-network-hub`, or the `gcp-workload-` prefix) and takes only the TFC
+**organization** out-of-band. Either export it once for every `init`:
 
 ```bash
-cat > envs/gcp/organization/backend.hcl <<EOF
-organization = "YOUR_TFC_ORG_NAME"
-EOF
+export TF_CLI_ARGS_init="-backend-config=organization=YOUR_TFC_ORG_NAME"
 ```
 
-`envs/gcp/organization/backend.tf` already hardcodes `workspaces { name = "gcp-organization" }` — do not pass a `workspaces` block via `-backend-config`; a second `workspaces` value conflicts with the one baked into `backend.tf`.
-
-This file is gitignored; it is never committed.
-
-**Step 2 — Initialize:**
+or write a gitignored `backend.hcl` (never committed) into each root:
 
 ```bash
-terraform -chdir=envs/gcp/organization init -backend-config=backend.hcl
+for r in bootstrap organization projects network-hub workload; do
+  printf 'organization = "YOUR_TFC_ORG_NAME"\n' > "envs/gcp/$r/backend.hcl"
+done
 ```
 
-**Step 3 — Create your tfvars file** (see [Variable Reference](#6-variable-reference) below):
+Do not pass a `workspaces` block via `-backend-config`; it conflicts with the one baked into `backend.tf`.
+
+**Step 2 — Initialize the roots, in apply order:**
 
 ```bash
-cp envs/gcp/organization/terraform.tfvars.example envs/gcp/organization/local.auto.tfvars
-# Edit local.auto.tfvars with your org_id, billing_account, github_org, github_repo,
-# and project_prefix — the "my-org" default is a deliberate tripwire and fails validation
+for r in bootstrap organization projects network-hub; do
+  terraform -chdir=envs/gcp/$r init -backend-config=backend.hcl   # omit -backend-config if using TF_CLI_ARGS_init
+done
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload init -backend-config=backend.hcl
+```
+
+**Step 3 — Bootstrap-only inputs** (see [Variable Reference](#6-variable-reference) below):
+
+`project_prefix`, `domain`, `billing_account`, `admin_email`, `tfc_organization`, `default_region` and `environments` already come from `config/landing-zone.yaml`. Only the bootstrap-specific inputs that are not in the config file need a local tfvars file:
+
+```bash
+cp envs/gcp/bootstrap/terraform.tfvars.example envs/gcp/bootstrap/local.auto.tfvars
+# Keep only what config/landing-zone.yaml does not hold (github_org, github_repo,
+# enable_tfc_oidc, ...). Delete the rest: an explicit variable overrides the config.
 ```
 
 **Step 4 — Apply the bootstrap root first (two-phase, as the human admin):**
 
 The GCP control plane is four roots applied in order: `gcp-bootstrap` →
 `gcp-organization` → `gcp-projects` → `gcp-network-hub`. Bootstrap is first and is
-special: its providers impersonate a `terraform-admin` service account that the
-bootstrap apply itself creates. On the FIRST apply, leave `terraform_admin_email`
-unset (`null`) so Terraform runs as your own credentials; set it on every later
-apply. The [bootstrap runbook](../runbooks/bootstrap.md) has the full two-phase detail.
+special: its providers can impersonate a `terraform-admin` service account that
+the bootstrap apply itself creates. For this phase-0 local apply leave
+`terraform_admin_email` unset (`null`) so Terraform runs as your own ADC. Every
+later run happens in Terraform Cloud with dynamic credentials, and there it stays
+unset too (the run already *is* the right service account). Set it only for a
+deliberate local break-glass re-apply. The [bootstrap runbook](../runbooks/bootstrap.md)
+has the full two-phase detail.
 
 ```bash
 terraform -chdir=envs/gcp/bootstrap plan
@@ -170,19 +216,29 @@ In your GitHub repo → Settings → Secrets and variables → Actions:
 | `TFC_ORGANIZATION` | Variable | Your Terraform Cloud org name |
 | `TFC_TOKEN` | Secret | A TFC team token scoped to "Read runs" on the GCP workspaces |
 
-**Step 7 — Set `terraform_admin_email` and apply the remaining roots in order:**
+**Step 7 — Wire dynamic credentials (tfc-admin pass 2) and apply the remaining roots in order, in Terraform Cloud:**
 
-Put the `terraform_admin_email` from step 5 on every GCP workspace variable set,
-then apply the remaining control-plane roots in order (each reads the previous via
-remote state), via CI by pushing to `main`, or manually:
+Re-apply `envs/tfc-admin` with `gcp_bootstrap_outputs_from_tfc = true` (or copy the
+bootstrap outputs `tfc_workload_provider_name` / `tfc_plan_service_accounts` /
+`tfc_apply_service_accounts` into its variables) and `workspace_execution_modes = {}`.
+Every GCP workspace now gets its `TFC_GCP_*` env vars and `gcp-bootstrap` switches
+to remote execution. Do **not** set `terraform_admin_email` on any workspace.
+Shared inputs already come from the committed `config/landing-zone.yaml`. Commit any
+remaining per-workspace inputs to `config/tfc-workspaces.yaml` (see
+[`config/tfc-workspaces.example.yaml`](../../config/tfc-workspaces.example.yaml)),
+because VCS-driven runs never see a local tfvars file. Then apply the remaining roots
+**in Terraform Cloud** (never locally — see
+[CLAUDE.md → State & Apply Rules](../../CLAUDE.md#state--apply-rules)): merge to `main`
+for VCS-driven runs, or queue a run on each workspace in order. Each root reads the
+previous one's remote state, so wait for each apply to finish:
 
-```bash
-terraform -chdir=envs/gcp/organization apply
-terraform -chdir=envs/gcp/projects apply
-terraform -chdir=envs/gcp/network-hub apply
-```
+1. `gcp-organization` — folders, org policies, KMS, audit logging, billing
+2. `gcp-projects` — host/spoke projects, `environment_config`
+3. `gcp-network-hub` — hub VPC, DNS, hub VPC-SC
+4. `gcp-workload-<env>` — one per environment (see [Add Environment](../runbooks/add-environment.md))
 
-After this apply, all future changes go through GitHub Actions. Revoke your personal ADC credentials:
+You can preview any root locally first, e.g. `terraform -chdir=envs/gcp/projects plan`.
+Once bootstrap has run, revoke your personal ADC credentials:
 
 ```bash
 gcloud auth application-default revoke
@@ -194,7 +250,7 @@ gcloud auth application-default revoke
 
 The AWS landing zone does **not** share the GCP bootstrap above. It has its own phase-0 stand-up: creating the AWS organization out-of-band, then bringing a runnable `aws-organization` workspace online, then applying the layered roots in order (`aws-organization` → `aws-security` → `aws-network` → `aws-identity` → `aws-shared-services` → `aws-backup` → `aws-workload`). IAM Identity Center is enabled/delegated between the organization and security/identity layers.
 
-**AWS credentials:** the AWS roots authenticate via Terraform Cloud dynamic (OIDC) credentials — set `TFC_AWS_PROVIDER_AUTH=true` and `TFC_AWS_RUN_ROLE_ARN` on the workspace — or, for local runs, `AWS_PROFILE`. Only the roots you apply pull in credentials; an unapplied workspace needs none (see the env-var table in [CLAUDE.md](../../CLAUDE.md#required-environment-variables)).
+**AWS credentials:** the AWS roots authenticate via Terraform Cloud dynamic (OIDC) credentials (`TFC_AWS_PROVIDER_AUTH`, `TFC_AWS_PLAN_ROLE_ARN`, `TFC_AWS_APPLY_ROLE_ARN`, plus a `TFC_AWS_*_<alias>` set per member account on `aws-security` / `aws-backup`) or, for local runs, `AWS_PROFILE`. `envs/tfc-admin` (`aws.enabled: true` in `config/landing-zone.yaml`) creates the AWS workspaces and writes those env vars: the hand-created management roles via `aws_management_plan_role_arn` / `aws_management_apply_role_arn`, and the member-account roles from the `aws-organization` outputs. Every AWS root requires `landing_zone_name` (no built-in default; set `org.name` in `config/landing-zone.yaml`). Only the roots you apply pull in credentials; an unapplied workspace needs none (see the env-var table in [CLAUDE.md](../../CLAUDE.md#required-environment-variables)).
 
 > Full phase-0 procedure, prerequisites, and layer-by-layer apply order: **[AWS Bootstrap runbook →](../runbooks/aws-bootstrap.md)**. To add an account/environment later: **[AWS Add Account →](../runbooks/aws-add-account.md)**.
 
@@ -226,31 +282,47 @@ TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=
 
 ## 6. Variable Reference
 
+Any variable below that maps to a `config/landing-zone.yaml` key (shown in brackets) may be left out of tfvars. An explicit variable still wins.
+
+### `envs/gcp/bootstrap` — Required Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `domain` (`org.domain`) | GCP organization domain name — used to look up the org ID | `"example.com"` |
+| `admin_email` (`gcp.admin_email`) | Email of the organization administrator | `"admin@example.com"` |
+| `github_org` | GitHub organization name for WIF OIDC trust (no default, on purpose) | `"my-github-org"` |
+| `github_repo` | GitHub repository name (without org prefix) for WIF OIDC trust | `"my-infra-repo"` |
+| `project_prefix` (`org.prefix`) | Short prefix for all project names, shared by every GCP root | `"ashes"` |
+| `tfc_organization` (`org.tfc.organization`) | Terraform Cloud org name, for the TFC WIF provider | `"my-tfc-org"` |
+
 ### `envs/gcp/organization` — Required Variables
 
 > **Note:** `org_id` and `billing_account_id` are **not input variables** — they are resolved automatically from data sources (`data.google_organization` and `data.google_billing_account`). Set `domain` and either `billing_account` or `billing_account_display_name` instead.
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `domain` | GCP organization domain name — used to look up the org ID | `"example.com"` |
-| `admin_email` | Email of the organization administrator; the bootstrap SA is created under this identity | `"admin@example.com"` |
-| `github_org` | GitHub organization name for WIF OIDC trust | `"my-github-org"` |
-| `github_repo` | GitHub repository name (without org prefix) for WIF OIDC trust | `"my-infra-repo"` |
-| `hub_vpc_cidr_block` | CIDR for the hub VPC — must not overlap with DNS hub or any spoke | `"10.0.0.0/16"` |
-| `dns_hub_vpc_cidr_block` | CIDR for the DNS hub VPC — must not overlap with hub or any spoke | `"10.1.0.0/16"` |
-| `environments` | Map of environment configs (region, CIDR, budget, IAM bindings) — see `terraform.tfvars.example` | _(see example)_ |
+| `domain` (`org.domain`) | GCP organization domain name — used to look up the org ID | `"example.com"` |
+| `admin_email` (`gcp.admin_email`) | Email of the organization administrator | `"admin@example.com"` |
+| `environments` (`gcp.environments`) | Map of environment configs (region, CIDR, budget, IAM bindings). Defined once in the config file and read by every GCP root | *(see example)* |
+| `organization_admin_groups` (`gcp.organization_admin_groups`) | Google Groups granted Organization Admin (at least one, unless `allow_user_principals_for_break_glass`) | `["gcp-org-admins@example.com"]` |
+
+### `envs/gcp/network-hub` — Required Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `hub_vpc_cidr_block` (`gcp.network.hub_cidr_block`) | CIDR for the hub VPC — must not overlap with DNS hub or any spoke | `"10.0.0.0/16"` |
+| `dns_hub_vpc_cidr_block` (`gcp.network.dns_hub_cidr_block`) | CIDR for the DNS hub VPC — must not overlap with hub or any spoke | `"10.1.0.0/16"` |
 
 ### `envs/gcp/organization` — Key Optional Variables
 
-| Variable | Default | Description |
+| Variable | Default (or config key) | Description |
 |----------|---------|-------------|
 | `billing_account` | `null` | Billing account ID — required unless `billing_account_display_name` is set |
 | `billing_account_display_name` | `null` | Alternative to `billing_account` — looks up by display name |
-| `project_prefix` | `"my-org"` | Short prefix for all project names (1–10 chars, lowercase, starts with a letter). **Tripwire:** the default `"my-org"` is deliberately invalid — a `validation` block rejects it at plan time. You **must** change this to your real organization identifier before your first plan. |
-| `default_region` | `"europe-west1"` | Primary region for KMS, logging, network hub |
-| `tfc_organization` | `null` | Terraform Cloud org name for dynamic provider credentials |
+| `project_prefix` | `org.prefix` | Short prefix for all project names (1–10 chars, lowercase, starts with a letter). **Tripwire:** the example config's `"my-org"` is deliberately invalid — a `validation` block rejects it at plan time. You **must** change it to your real organization identifier before your first plan. |
+| `default_region` | `org.regions.gcp`, else `"europe-west1"` | Primary region for KMS, logging, network hub |
+| `tfc_organization` | `org.tfc.organization` | Terraform Cloud org name for dynamic provider credentials |
 | `break_glass_user` | `null` | Email granted Organization Admin in emergencies |
-| `organization_admin_groups` | `[]` | Google Groups granted Organization Admin role |
 | `monthly_budget_amount` | `1000` | Org-level budget alert threshold (in `budget_currency`) |
 | `security_contact_email` | `null` | Email for security notifications via Essential Contacts |
 
@@ -258,18 +330,18 @@ TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `project_prefix` | Matches org root prefix | `"ashes"` |
-| `environment` | Short env name (used in resource naming); must match a key in the org root's `environments` map | `"dev"` |
-| `tfc_organization` | Terraform Cloud org name — used to read organization remote state | `"my-tfc-org"` |
+| `project_prefix` (`org.prefix`) | Matches org root prefix | `"ashes"` |
+| `environment` | Short env name (used in resource naming); must match a key in `gcp.environments`. tfc-admin sets it from the workspace name | `"dev"` |
+| `tfc_organization` (`org.tfc.organization`) | Terraform Cloud org name — used to read organization remote state | `"my-tfc-org"` |
 
-> **VPC CIDR:** The per-environment CIDR is not set here — it comes from the `environments` map (its `cidr_block`), which flows into the `environment_config` published by `gcp-projects` and consumed by `gcp-workload`. The `environments` map is required by the `gcp-organization`, `gcp-projects`, and `gcp-network-hub` workspaces; set it consistently on all three (see their `terraform.tfvars.example`).
+> **VPC CIDR:** The per-environment CIDR is not set here — it comes from the `environments` map (its `cidr_block`), which flows into the `environment_config` published by `gcp-projects` and consumed by `gcp-workload`. The `environments` map is defined once, under `gcp.environments` in `config/landing-zone.yaml`, and every GCP root reads it from there.
 
 ### `envs/gcp/workload` — Key Optional Variables
 
-| Variable | Default | Description |
+| Variable | Default (or config key) | Description |
 |----------|---------|-------------|
-| `region` | `"europe-west1"` | Default GCP region for this environment; should match the region used for its spoke/host project in the organization root |
-| `terraform_admin_email` | `null` | SA to impersonate for local runs (from bootstrap output). Example: `"terraform-admin@ashes-admin-xxxx.iam.gserviceaccount.com"` |
+| `region` | `gcp.environments[<env>].region`, else `org.regions.gcp`, else `"europe-west1"` | Default GCP region for this environment |
+| `terraform_admin_email` | `null` | SA to impersonate for deliberate local break-glass runs only (from bootstrap output). Leave `null` for the phase-0 apply and on every TFC workspace. Example: `"terraform-admin@ashes-admin-xxxx.iam.gserviceaccount.com"` |
 | `enable_cloud_armor` | `false` | Attach WAF policy to external load balancers |
 | `enable_owasp_rules` | `false` | Enable Cloud Armor OWASP managed rules (requires `enable_cloud_armor`) |
 | `owasp_sensitivity` | `2` | Cloud Armor OWASP rule sensitivity (1=strict, 4=permissive) |
@@ -285,14 +357,16 @@ TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=
 ```bash
 make fmt-check
 make docs-check
-make security
+make count-check   # README/CLAUDE.md counts match the tree
+make links         # no broken relative Markdown links
+make security      # Trivy + Checkov at the CI-pinned versions
 ```
 
 ## 8. Run Deeper Checks
 
 ```bash
 make validate-all   # requires registry.terraform.io access
-make lint           # requires TFLint Google plugin (see .tool-versions)
+make lint           # requires the TFLint google + aws ruleset plugins (tflint --init)
 make test           # runs all .tftest.hcl suites with mock_provider (no GCP creds needed)
 ```
 
@@ -314,11 +388,11 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
 
 ## Verification Checklist
 
-- [ ] `terraform version` reports `>= 1.9.8`
+- [ ] `terraform version` reports `>= 1.11`
 - [ ] `make help` prints supported commands
 - [ ] `make fmt-check`, `make docs-check`, and `make security` succeed
 - [ ] `make test` reports `X passed, 0 failed`
-- [ ] `terraform -chdir=envs/gcp/organization init -backend-config=backend.hcl` succeeds
+- [ ] `terraform init` succeeds for all five GCP roots (`bootstrap`, `organization`, `projects`, `network-hub`, `workload`)
 - [ ] Bootstrap outputs include `github_oidc_pool_id` and `tfc_oidc_pool_id`
 
 ---
@@ -329,13 +403,13 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
 |:---|:---|
 | `make fmt-check` | Check Terraform formatting |
 | `make docs-check` | Check terraform-docs drift |
-| `make security` | Run tfsec + Checkov |
+| `make security` | Run Trivy + Checkov |
 | `make validate-all` | Validate all roots |
 | `make lint` | Run TFLint across all roots |
 | `make test` | Run all .tftest.hcl suites |
 | `make plan-gcp-organization` | Plan control-plane changes |
 | `make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars` | Plan an app environment |
-| `make ci` | Full local pipeline (fmt-check + docs-check + validate-all + lint + test + security) |
+| `make ci` | Full local pipeline (fmt-check + consistency + count-check + links + shellcheck + docs-check + validate-all + lint + test + security) |
 
 ---
 

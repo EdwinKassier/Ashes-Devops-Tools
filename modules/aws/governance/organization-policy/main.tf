@@ -16,47 +16,97 @@
 # managed here.
 
 locals {
-  # scp-deny-tamper: only the break-glass role is exempt from DenyLeaveOrganization
-  # and DenyDisableSecurityServices. The Terraform run role is NOT exempt from those
-  # two statements, so a pipeline compromise cannot stop CloudTrail, delete GuardDuty
-  # or leave the organization. Trade-off: tearing down or replacing a managed security
-  # service (trail / detector / Config recorder) must be performed via break-glass,
-  # not a routine Terraform apply. The run role remains exempt where it legitimately
-  # needs the action: self-management (DenyCreatePrivilegedRoleImpersonation) and
-  # building the WORM log-archive bucket (DenyLogArchiveObjectLockTampering).
+  # scp-deny-tamper carve-outs are ROLE-NAME patterns that match the role in ANY
+  # member account (arn:aws:iam::*:role/<name>), not account-qualified ARNs.
+  # SCPs never apply to the management account, so a carve-out (or a protected
+  # resource) keyed on a management-account ARN is inert: it can neither exempt a
+  # member-account session nor protect anything. The previous version protected
+  # and exempted management-account roles only — that statement has been replaced
+  # by DenyPrivilegedRoleTampering, which protects the member-account pipeline
+  # roles, OrganizationAccountAccessRole and the break-glass role.
+  #
+  # Two exemption tiers:
+  #   * break_glass_arns — break-glass only. Destructive actions (leave org,
+  #     stop/delete CloudTrail, delete GuardDuty detector/members, disable
+  #     Security Hub / Macie / Inspector, delete Access Analyzer, destroy or
+  #     untag protected KMS keys, change a protected key's policy). A pipeline
+  #     compromise cannot perform these — in particular it cannot rewrite a
+  #     protected key policy to grant itself kms:Decrypt. Consequence: Terraform
+  #     key-policy changes to protected keys require a break-glass apply (the
+  #     aws/data/kms-key module sets the policy at CreateKey, so creation is
+  #     unaffected).
+  #     Trade-off: tearing down one of these services must go through break-glass.
+  #     For this to work in member accounts a role with the break-glass name
+  #     must exist there (e.g. deployed by StackSet).
+  #   * privileged_arns — pipeline roles + break-glass. Reconfiguration actions
+  #     that routine Terraform legitimately performs in member accounts (Config
+  #     recorders in workload accounts, GuardDuty/CloudTrail settings in the
+  #     security-tooling account, flow-log replacement, log-archive Object Lock).
+  #     Local member-account admins are denied.
+  break_glass_role_names = length(var.break_glass_role_names) > 0 ? var.break_glass_role_names : [
+    regex("role/(.+)$", var.break_glass_role_arn)[0]
+  ]
+  break_glass_principal_arns = [for n in local.break_glass_role_names : "arn:aws:iam::*:role/${n}"]
+  privileged_principal_arns = distinct(concat(
+    [for n in var.pipeline_role_names : "arn:aws:iam::*:role/${n}"],
+    local.break_glass_principal_arns,
+  ))
+
   default_policies = {
+    # Minified (jsonencode(jsondecode(...))) so the 5,120-character SCP size
+    # quota is spent on content, not indentation.
     scp-deny-tamper = {
       type = "SERVICE_CONTROL_POLICY"
-      content = templatefile("${path.module}/policies/scp-deny-tamper.json", {
-        terraform_run_role_arn  = var.terraform_run_role_arn
-        break_glass_role_arn    = var.break_glass_role_arn
+      content = jsonencode(jsondecode(templatefile("${path.module}/policies/scp-deny-tamper.json.tftpl", {
+        break_glass_arns        = jsonencode(local.break_glass_principal_arns)
+        privileged_arns         = jsonencode(local.privileged_principal_arns)
         log_archive_bucket_name = var.log_archive_bucket_name
-      })
+        kms_protection_tag_key  = var.kms_protection_tag_key
+      })))
     }
     scp-region-restriction = {
       type = "SERVICE_CONTROL_POLICY"
-      content = templatefile("${path.module}/policies/scp-region-restriction.json", {
+      content = templatefile("${path.module}/policies/scp-region-restriction.json.tftpl", {
         allowed_regions        = jsonencode(var.allowed_regions)
         terraform_run_role_arn = var.terraform_run_role_arn
         break_glass_role_arn   = var.break_glass_role_arn
       })
     }
+    # Baseline also carries two org-wide break-glass-only denies (kept here so
+    # deny-tamper stays under the 5,120-char quota and no extra SCP attachment
+    # is needed — a target allows at most 5 SCPs incl. FullAWSAccess):
+    #   * DenyIamUserCredentials — no IAM users / access keys / console
+    #     passwords (no module in this repo creates IAM users; identities come
+    #     from Identity Center and OIDC federation).
+    #   * DenyDataPerimeterTagTampering — the RCP's dp:exclude:* resource-tag
+    #     escape hatches can only be set or removed by break-glass, so a member
+    #     principal cannot self-exempt a resource from the data perimeter.
     scp-baseline = {
       type = "SERVICE_CONTROL_POLICY"
-      content = templatefile("${path.module}/policies/scp-baseline.json", {
+      content = jsonencode(jsondecode(templatefile("${path.module}/policies/scp-baseline.json.tftpl", {
         terraform_run_role_arn = var.terraform_run_role_arn
         break_glass_role_arn   = var.break_glass_role_arn
-      })
+        break_glass_arns       = jsonencode(local.break_glass_principal_arns)
+      })))
     }
     rcp-data-perimeter = {
       type = "RESOURCE_CONTROL_POLICY"
-      content = templatefile("${path.module}/policies/rcp-data-perimeter.json", {
-        org_id = var.org_id
-      })
+      # Follows the AWS data-perimeter-policy-examples RCP: explicit STS action
+      # list (AssumeRoleWithWebIdentity / AssumeRoleWithSAML are deliberately
+      # excluded so OIDC/SAML federation, e.g. TFC dynamic credentials, still
+      # works), a Null aws:SourceAccount guard on the confused-deputy statement
+      # (service-principal calls without source context — EC2/Lambda/ECS role
+      # assumption — are not denied), and dp:exclude:* resource-tag escape hatches.
+      content = jsonencode(jsondecode(templatefile("${path.module}/policies/rcp-data-perimeter.json.tftpl", {
+        org_id              = var.org_id
+        trusted_account_ids = var.data_perimeter_trusted_account_ids
+      })))
     }
     declarative-ec2 = {
-      type    = "DECLARATIVE_POLICY_EC2"
-      content = templatefile("${path.module}/policies/declarative-ec2.json", {})
+      type = "DECLARATIVE_POLICY_EC2"
+      content = templatefile("${path.module}/policies/declarative-ec2.json", {
+        vpc_bpa_exclusions_allowed = var.allow_vpc_bpa_exclusions ? "enabled" : "disabled"
+      })
     }
     tag-policy = {
       type    = "TAG_POLICY"

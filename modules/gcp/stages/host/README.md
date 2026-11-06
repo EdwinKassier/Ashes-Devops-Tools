@@ -1,10 +1,26 @@
-# Host Module
+# Host Module (deprecated)
 
-Compatibility wrapper for the application environment root.
+> **Deprecated.** This god-module (74 inputs, 16 `enable_*` toggles) is kept
+> unchanged for one deprecation cycle so existing callers' state is untouched,
+> and will be removed in a later release. No in-repo root uses it any more.
+> Migrate to the purpose-built compositions:
+>
+> | Former use | Replacement | Reference migration |
+> |------------|-------------|---------------------|
+> | Hub Shared VPC | [`stages/net-hub`](../net-hub/) | [`stages/network-hub/moved.tf`](../network-hub/moved.tf) |
+> | DNS-anchor VPC (NAT, Armor, PSC, PSA off) | [`stages/dns-anchor`](../dns-anchor/) | [`stages/network-hub/moved.tf`](../network-hub/moved.tf) |
+> | Per-environment spoke | [`stages/net-spoke`](../net-spoke/) | [`envs/gcp/workload/moved.tf`](../../../../envs/gcp/workload/moved.tf) |
+>
+> All three share the [`network/tiered-vpc`](../../network/tiered-vpc/) core,
+> which keeps this module's resource names and CIDR maths. Each composition
+> ships a `host_parity` test suite that plans this module and the replacement
+> side by side and asserts identical names, CIDRs and settings. CDN, API
+> Gateway, internal load balancers, packet mirroring and standalone NAT are not
+> carried over: compose them directly from the `network/` primitives.
 
 ## Overview
 
-This module composes the lower-level networking, security, and governance modules used by [envs/gcp/workload](../../envs/gcp/workload/). It is retained for compatibility and internal orchestration; new consumers should prefer the staged roots and stage modules over calling `modules/gcp/stages/host` directly.
+This module composes the lower-level networking, security, and governance modules into one environment stack, every capability behind an `enable_*` toggle.
 
 ## File layout
 
@@ -73,7 +89,7 @@ module "infrastructure" {
   # CDN
   enable_cdn   = true
   cdn_domains  = ["app.example.com", "api.example.com"]
-  
+
   # DNS
   dns_zones = {
     "example-public" = {
@@ -126,7 +142,7 @@ cloud_armor_custom_rules = {
 }
 ```
 
-See [`modules/gcp/network/cloud-armor/README.md`](../network/cloud-armor/README.md) for the full variable reference and rate-limiting options.
+See [`modules/gcp/network/cloud-armor/README.md`](../../network/cloud-armor/README.md) for the full variable reference and rate-limiting options.
 
 The generated module reference below is the source of truth for inputs, outputs, and required providers.
 
@@ -160,10 +176,12 @@ The generated module reference below is the source of truth for inputs, outputs,
 <!-- BEGIN_TF_DOCS -->
 Copyright 2023 Ashes
 
-Host Module - Unified Infrastructure Orchestration
+Host Module - DEPRECATED unified network stack
 
-Compatibility wrapper used by envs/gcp/workload to compose network,
-security, and governance modules into one environment stack.
+Deprecated: kept unchanged for one deprecation cycle so external callers'
+state is untouched. In-repo callers now use the purpose-built compositions
+stages/net-hub, stages/net-spoke and stages/dns-anchor (over the shared
+network/tiered-vpc core); see README.md for the migration guide.
 
 ## Usage
 
@@ -174,10 +192,9 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	project_id = 
-	project_prefix = 
-	vpc_cidr_block = 
-	
+	project_id =
+	project_prefix =
+	vpc_cidr_block =
 }
 ```
 
@@ -185,7 +202,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.9 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | ~> 7.0 |
 
@@ -236,9 +253,9 @@ module "example" {
 The following resources are created:
 
 
-- resource.terraform_data.deletion_protection_guard (modules/gcp/stages/host/main.tf#L55)
-- resource.terraform_data.subnet_cidr_count_guard (modules/gcp/stages/host/main.tf#L70)
-- data source.google_compute_zones.available (modules/gcp/stages/host/main.tf#L35)
+- resource.terraform_data.deletion_protection_guard (modules/gcp/stages/host/main.tf#L57)
+- resource.terraform_data.subnet_cidr_count_guard (modules/gcp/stages/host/main.tf#L72)
+- data source.google_compute_zones.available (modules/gcp/stages/host/main.tf#L37)
 - data source.google_project.current (modules/gcp/stages/host/observability.tf#L8)
 
 
@@ -311,7 +328,7 @@ The following resources are created:
 | <a name="input_vpc_flow_logs_storage_location"></a> [vpc\_flow\_logs\_storage\_location](#input\_vpc\_flow\_logs\_storage\_location) | Location for the Cloud Storage bucket | `string` | `"US"` | no |
 | <a name="input_vpc_name"></a> [vpc\_name](#input\_vpc\_name) | Name of the VPC network | `string` | `"main-vpc"` | no |
 | <a name="input_vpc_peerings"></a> [vpc\_peerings](#input\_vpc\_peerings) | Map of VPC peering configurations | <pre>map(object({<br/>    peer_network           = string<br/>    create_reverse_peering = optional(bool, true)<br/>    export_custom_routes   = optional(bool, false)<br/>    import_custom_routes   = optional(bool, false)<br/>  }))</pre> | `{}` | no |
-| <a name="input_vpc_service_controls"></a> [vpc\_service\_controls](#input\_vpc\_service\_controls) | Map of VPC Service Controls perimeters to create | <pre>map(object({<br/>    # organization_id must be the FULL resource form 'organizations/<numeric-id>'<br/>    # (Access Context Manager's access-policy parent requires this form). NOTE:<br/>    # this diverges from every other org-id input in the repo (governance/tags,<br/>    # governance/cloud-audit-logs, stages/organization var.org_id) which take the<br/>    # BARE numeric id. envs/gcp/workload prefixes the bare org_id output here accordingly.<br/>    # See docs: the vpc-sc module is the sole outlier; a future normalization<br/>    # would have vpc-sc accept the bare id and prefix internally.<br/>    organization_id      = string<br/>    access_policy_name   = optional(string)<br/>    create_access_policy = optional(bool, false)<br/>    perimeter_title      = string<br/>    description          = optional(string, "Managed by Terraform")<br/>    perimeter_type       = optional(string, "PERIMETER_TYPE_REGULAR")<br/>    protected_projects   = optional(list(string), [])<br/>    restricted_services  = optional(list(string), [])<br/>    access_levels = optional(list(object({<br/>      name               = string<br/>      title              = string<br/>      description        = optional(string)<br/>      combining_function = optional(string, "AND")<br/>      conditions = list(object({<br/>        ip_subnetworks = optional(list(string))<br/>        members        = optional(list(string))<br/>        negate         = optional(bool, false)<br/>        regions        = optional(list(string))<br/>      }))<br/>    })), [])<br/>    ingress_policies = optional(list(object({<br/>      identity_type = optional(string)<br/>      identities    = optional(list(string))<br/>      sources = optional(list(object({<br/>        access_level = optional(string)<br/>        resource     = optional(string)<br/>      })))<br/>      resources = optional(list(string))<br/>      operations = optional(list(object({<br/>        service_name = string<br/>        method_selectors = optional(list(object({<br/>          method     = optional(string)<br/>          permission = optional(string)<br/>        })))<br/>      })))<br/>    })), [])<br/>    egress_policies = optional(list(object({<br/>      identity_type = optional(string)<br/>      identities    = optional(list(string))<br/>      resources     = optional(list(string))<br/>      operations = optional(list(object({<br/>        service_name = string<br/>        method_selectors = optional(list(object({<br/>          method     = optional(string)<br/>          permission = optional(string)<br/>        })))<br/>      })))<br/>    })), [])<br/>    enable_dry_run             = optional(bool, true)<br/>    enable_deletion_protection = optional(bool, true)<br/>  }))</pre> | `{}` | no |
+| <a name="input_vpc_service_controls"></a> [vpc\_service\_controls](#input\_vpc\_service\_controls) | Map of VPC Service Controls perimeters to create | <pre>map(object({<br/>    # organization_id must be the FULL resource form 'organizations/<numeric-id>'<br/>    # (Access Context Manager's access-policy parent requires this form). NOTE:<br/>    # this diverges from every other org-id input in the repo (governance/tags,<br/>    # governance/cloud-audit-logs, stages/organization var.org_id) which take the<br/>    # BARE numeric id. envs/gcp/workload prefixes the bare org_id output here accordingly.<br/>    # See docs: the vpc-sc module is the sole outlier; a future normalization<br/>    # would have vpc-sc accept the bare id and prefix internally.<br/>    organization_id      = string<br/>    access_policy_name   = optional(string)<br/>    create_access_policy = optional(bool, false)<br/>    perimeter_title      = string<br/>    description          = optional(string, "Managed by Terraform")<br/>    perimeter_type       = optional(string, "PERIMETER_TYPE_REGULAR")<br/>    protected_projects   = optional(list(string), [])<br/>    restricted_services  = optional(list(string), [])<br/>    access_levels = optional(list(object({<br/>      name               = string<br/>      title              = string<br/>      description        = optional(string)<br/>      combining_function = optional(string, "AND")<br/>      conditions = list(object({<br/>        ip_subnetworks = optional(list(string))<br/>        members        = optional(list(string))<br/>        negate         = optional(bool, false)<br/>        regions        = optional(list(string))<br/>      }))<br/>    })), [])<br/>    ingress_policies = optional(list(object({<br/>      identity_type = optional(string)<br/>      identities    = optional(list(string))<br/>      sources = optional(list(object({<br/>        access_level = optional(string)<br/>        resource     = optional(string)<br/>      })))<br/>      resources = optional(list(string))<br/>      operations = optional(list(object({<br/>        service_name = string<br/>        method_selectors = optional(list(object({<br/>          method     = optional(string)<br/>          permission = optional(string)<br/>        })))<br/>      })))<br/>    })), [])<br/>    egress_policies = optional(list(object({<br/>      identity_type = optional(string)<br/>      identities    = optional(list(string))<br/>      resources     = optional(list(string))<br/>      operations = optional(list(object({<br/>        service_name = string<br/>        method_selectors = optional(list(object({<br/>          method     = optional(string)<br/>          permission = optional(string)<br/>        })))<br/>      })))<br/>    })), [])<br/>    enable_dry_run             = optional(bool, true)<br/>    enable_deletion_protection = optional(bool, true)<br/>    # Staged dry-run delta on an ENFORCED perimeter (see network/vpc-sc). null = same as enforced.<br/>    dry_run_restricted_services = optional(list(string))<br/>    dry_run_ingress_policies = optional(list(object({<br/>      identity_type = optional(string)<br/>      identities    = optional(list(string))<br/>      sources = optional(list(object({<br/>        access_level = optional(string)<br/>        resource     = optional(string)<br/>      })))<br/>      resources = optional(list(string))<br/>      operations = optional(list(object({<br/>        service_name = string<br/>        method_selectors = optional(list(object({<br/>          method     = optional(string)<br/>          permission = optional(string)<br/>        })))<br/>      })))<br/>    })))<br/>    dry_run_egress_policies = optional(list(object({<br/>      identity_type = optional(string)<br/>      identities    = optional(list(string))<br/>      resources     = optional(list(string))<br/>      operations = optional(list(object({<br/>        service_name = string<br/>        method_selectors = optional(list(object({<br/>          method     = optional(string)<br/>          permission = optional(string)<br/>        })))<br/>      })))<br/>    })))<br/>  }))</pre> | `{}` | no |
 | <a name="input_vpn_advertised_ip_ranges"></a> [vpn\_advertised\_ip\_ranges](#input\_vpn\_advertised\_ip\_ranges) | IP ranges to advertise via BGP | <pre>list(object({<br/>    range       = string<br/>    description = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_vpn_local_ips"></a> [vpn\_local\_ips](#input\_vpn\_local\_ips) | Local IP addresses for VPN interfaces | `list(string)` | <pre>[<br/>  "169.254.0.1",<br/>  "169.254.0.3"<br/>]</pre> | no |
 | <a name="input_vpn_peer_asn"></a> [vpn\_peer\_asn](#input\_vpn\_peer\_asn) | Peer router BGP ASN | `number` | `64513` | no |
@@ -352,6 +369,7 @@ The following resources are created:
 | <a name="output_packet_mirroring_policies"></a> [packet\_mirroring\_policies](#output\_packet\_mirroring\_policies) | All packet mirroring policy outputs |
 | <a name="output_packet_mirroring_policy_ids"></a> [packet\_mirroring\_policy\_ids](#output\_packet\_mirroring\_policy\_ids) | The IDs of all packet mirroring policies |
 | <a name="output_peering_states"></a> [peering\_states](#output\_peering\_states) | The state of each VPC peering connection |
+| <a name="output_private_service_access_range_name"></a> [private\_service\_access\_range\_name](#output\_private\_service\_access\_range\_name) | Name of the Private Service Access range reserved on this VPC (private-IP Cloud SQL / Memorystore peer through it), or null when PSA is disabled. |
 | <a name="output_security_policy_id"></a> [security\_policy\_id](#output\_security\_policy\_id) | The Cloud Armor security policy ID |
 | <a name="output_security_policy_self_link"></a> [security\_policy\_self\_link](#output\_security\_policy\_self\_link) | The Cloud Armor security policy self link |
 | <a name="output_shared_vpc_service_project_ids"></a> [shared\_vpc\_service\_project\_ids](#output\_shared\_vpc\_service\_project\_ids) | The IDs of all Shared VPC service project attachments |

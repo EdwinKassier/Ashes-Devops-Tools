@@ -92,4 +92,4 @@ variable "log_metadata" {
   description = "Logging metadata configuration (INCLUDE_ALL_METADATA or EXCLUDE_ALL_METADATA)"
   type        = string
   default     = "INCLUDE_ALL_METADATA"
-} 
+}

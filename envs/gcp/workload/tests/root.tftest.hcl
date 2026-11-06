@@ -11,10 +11,12 @@ mock_provider "google" {}
 mock_provider "google-beta" {}
 
 variables {
-  project_prefix       = "acme"
-  environment          = "dev"
-  tfc_organization     = "acme-tfc"
-  monthly_budget_limit = 0 # disable the budget module for this contract test
+  # Isolate the suite from any committed config/landing-zone.yaml.
+  landing_zone_config_path = ""
+  project_prefix           = "acme"
+  environment              = "dev"
+  tfc_organization         = "acme-tfc"
+  monthly_budget_limit     = 0 # disable the budget module for this contract test
 }
 
 override_data {
@@ -95,6 +97,12 @@ run "workload_consumes_cross_root_contract" {
     error_message = "workload must re-export the host network name"
   }
 
+  # No app_services by default: the golden-path stage creates nothing.
+  assert {
+    condition     = length(output.app_services) == 0 && output.app_deploy_workload_identity_provider == null && output.gke_cluster_name == null
+    error_message = "with app_services = {} and every app flag off, the app-services stage must create nothing"
+  }
+
   # No service_teams by default: the registry creates nothing (audit H10).
   assert {
     condition     = length(module.service_team) == 0
@@ -159,8 +167,8 @@ run "saas_secret_bridge_creates_secret_when_enabled" {
     target = data.terraform_remote_state.saas[0]
     values = {
       outputs = {
-        supabase_api_url          = "https://abcd.supabase.co"
-        supabase_service_role_key = "service-role-key-xxxx"
+        supabase_api_url           = "https://abcd.supabase.co"
+        supabase_service_role_key  = "service-role-key-xxxx"
         supabase_database_password = "db-password-xxxx"
       }
     }
@@ -169,5 +177,121 @@ run "saas_secret_bridge_creates_secret_when_enabled" {
   assert {
     condition     = length(module.saas_secret_bridge) == 1
     error_message = "enabling the bridge must instantiate the secret-manager module once."
+  }
+}
+
+# Application golden path (modules/gcp/stages/app-services): one app_services
+# entry yields an internal Cloud Run service, an image repo and a WIF-bound deploy
+# SA in the env host project, on the env VPC's first private subnet.
+run "app_service_golden_path" {
+  command = plan
+
+  variables {
+    enable_app_deploy_wif = true
+    app_services = {
+      api = {
+        github = { repository_id = "123456789", ref = "refs/heads/main" }
+      }
+    }
+  }
+
+  override_module {
+    target = module.host
+    outputs = {
+      dns_zones         = {}
+      nat_ip            = "34.1.2.3"
+      network_id        = "projects/acme-dev-host-abcd/global/networks/acme-dev-vpc"
+      network_name      = "acme-dev-vpc"
+      network_self_link = "https://www.googleapis.com/compute/v1/projects/acme-dev-host-abcd/global/networks/acme-dev-vpc"
+      subnets = {
+        private = {
+          "europe-west1-b" = { id = "projects/acme-dev-host-abcd/regions/europe-west1/subnetworks/acme-dev-vpc-private-europe-west1-b" }
+        }
+      }
+      security_policy_id   = null
+      vpc_peerings         = {}
+      vpc_service_controls = {}
+    }
+  }
+
+  assert {
+    condition     = output.app_services["api"].image_repository == "europe-west1-docker.pkg.dev/acme-dev-host-abcd/api/api"
+    error_message = "the image repo must be in the env host project and region from environment_config"
+  }
+
+  assert {
+    condition     = output.app_github_actions["api"].GCP_DEPLOY_SA == "api-deploy@acme-dev-host-abcd.iam.gserviceaccount.com"
+    error_message = "the per-service deploy SA must be exposed for the GitHub Actions workflow"
+  }
+
+  # The WIF pool name is built from the HOST project number in environment_config.
+  assert {
+    condition     = output.app_deploy_workload_identity_provider == "projects/222222222222/locations/global/workloadIdentityPools/apps-dev/providers/github"
+    error_message = "the app-deploy WIF provider must live in the env host project (host_project_number), not the infra admin project"
+  }
+
+  assert {
+    condition     = module.app_services.services["api"].service_name == "api"
+    error_message = "the Cloud Run service must be named after the app_services key"
+  }
+}
+
+# BCK-05 / VUL-05: VM snapshot schedules on by default (host project), VM
+# Manager patching also on by default.
+run "vm_backup_and_patching_on_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(module.vm_backup_policy) == 1 && contains(module.vm_backup_policy["host"].schedule_names, "vm-daily-snapshots")
+    error_message = "the host project must get the default daily snapshot-schedule policy."
+  }
+
+  assert {
+    condition     = length(module.os_patch_management) == 1 && length(google_project_service.osconfig) == 1
+    error_message = "OS patch management must be on by default for the host project (the workload apply SA holds roles/osconfig.patchDeploymentAdmin)."
+  }
+}
+
+run "vm_ops_cover_service_teams_when_enabled" {
+  command = plan
+
+  variables {
+    enable_os_patch_management = true
+    service_teams = {
+      payments = {
+        project_admin_group_email = "payments-admins@acme.test"
+        shared_vpc_subnets = {
+          private = { region = "europe-west1", subnet_name = "acme-dev-vpc-private-europe-west1-b" }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = toset(keys(module.vm_backup_policy)) == toset(["host", "team-payments"])
+    error_message = "snapshot schedules must be created in the host project and in every service-team project."
+  }
+
+  assert {
+    condition     = toset(keys(module.os_patch_management)) == toset(["host", "team-payments"]) && google_project_service.osconfig["host"].service == "osconfig.googleapis.com"
+    error_message = "enable_os_patch_management must enable osconfig and create a patch deployment per target project."
+  }
+
+  assert {
+    condition     = contains(keys(module.os_patch_management["host"].patch_deployment_ids), "weekly-os-patch")
+    error_message = "the default patch deployment must be weekly-os-patch."
+  }
+}
+
+run "vm_backup_can_be_disabled" {
+  command = plan
+
+  variables {
+    enable_vm_backup_policy = false
+  }
+
+  assert {
+    condition     = length(module.vm_backup_policy) == 0
+    error_message = "enable_vm_backup_policy = false must create no snapshot policies."
   }
 }

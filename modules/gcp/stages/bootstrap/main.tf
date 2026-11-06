@@ -1,23 +1,20 @@
-# Guard: fail fast when TFC OIDC is enabled but no workspaces are bound.
-# Variable-level validation cannot cross-reference other variables, so a
-# precondition on a terraform_data resource is used instead.
-resource "terraform_data" "tfc_workspaces_guard" {
-  count = var.enable_tfc_oidc && var.tfc_organization != null ? 1 : 0
-  lifecycle {
-    precondition {
-      condition     = length(var.tfc_workspaces) > 0
-      error_message = "tfc_workspaces must not be empty when enable_tfc_oidc = true. Provide at least one workspace name."
-    }
-  }
+# Admin Project - Foundation of the Automation.
+# Created through the shared project primitive (modules/gcp/project), so the
+# admin project gets the same baseline as every other project: no default
+# network, deletion_policy = PREVENT, APIs never disabled on destroy. The naming
+# scheme (<prefix>-admin-<suffix>) stays here in the stage.
+resource "random_id" "suffix" {
+  byte_length = 4
 }
 
-# Admin Project - Foundation of the Automation
-resource "google_project" "admin_project" {
-  name                = "${var.project_prefix}-admin"
-  project_id          = "${var.project_prefix}-admin-${random_id.suffix.hex}"
-  org_id              = var.org_id
-  billing_account     = var.billing_account
-  auto_create_network = false
+module "admin_project" {
+  source = "../../project"
+
+  name            = "${var.project_prefix}-admin"
+  project_id      = "${var.project_prefix}-admin-${random_id.suffix.hex}"
+  parent          = "organizations/${var.org_id}"
+  billing_account = var.billing_account
+
   labels = {
     environment = "admin"
     purpose     = "administration"
@@ -26,15 +23,9 @@ resource "google_project" "admin_project" {
 
   # The admin/automation project must not be deletable by a routine plan.
   deletion_policy = "PREVENT"
-}
 
-resource "random_id" "suffix" {
-  byte_length = 4
-}
-
-# Enable essential APIs on the admin project
-resource "google_project_service" "admin_project_services" {
-  for_each = toset([
+  # Essential APIs on the admin project.
+  services = [
     "cloudresourcemanager.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
@@ -54,20 +45,19 @@ resource "google_project_service" "admin_project_services" {
     "pubsub.googleapis.com",
     "bigquery.googleapis.com",
     "monitoring.googleapis.com",
-  ])
-
-  project = google_project.admin_project.project_id
-  service = each.key
-
-  disable_dependent_services = false
-  disable_on_destroy         = false
+  ]
 }
 
-# Terraform Admin Service Account
+# Terraform Admin Service Account (= the gcp-bootstrap APPLY identity).
+#
+# C2: this SA is no longer shared by every TFC workspace. It is impersonable by the
+# human admin for the documented phase-0 bootstrap, and WIF-bound ONLY to the
+# gcp-bootstrap workspace's apply phase. Every other stage / environment runs as
+# its own per-stage plan (read-only) or apply SA — see service_accounts.tf.
 module "terraform_admin_sa" {
   source = "../../iam/service-account"
 
-  project_id   = google_project.admin_project.project_id
+  project_id   = module.admin_project.project_id
   account_id   = "terraform-admin"
   display_name = "Terraform Admin"
   description  = "Centralised Terraform Admin for managing downstream resources"
@@ -76,139 +66,67 @@ module "terraform_admin_sa" {
   impersonation_members = ["user:${var.admin_email}"]
 }
 
-# Audit finding G3: privilege split (opt-in, default OFF = current single-SA behavior).
-# When enable_privilege_split = true, a second "terraform-resman" SA is created and the
-# highest-privilege org roles (org-policy, Access Context Manager, logging, SCC, IAM
-# security admin) are granted to IT instead of the everyday terraform-admin SA, so a
-# compromised routine run cannot rewrite guardrails/audit config.
-# ⚠️ INCOMPLETE + PREVIEW (not yet validated against a real apply): fully activating the split ALSO requires switching the
-# downstream organization/network stages' impersonation to this resman SA (they currently
-# impersonate terraform_admin_email). Enable + validate on a real org before relying on it.
-module "resman_sa" {
-  source = "../../iam/service-account"
-  count  = var.enable_privilege_split ? 1 : 0
 
-  project_id            = google_project.admin_project.project_id
-  account_id            = "terraform-resman"
-  display_name          = "Terraform Resource Manager (privileged)"
-  description           = "Holds high-privilege org roles when the bootstrap privilege split is enabled"
-  impersonation_members = ["user:${var.admin_email}"]
-}
+# ─── Workload Identity Federation ────────────────────────────────────────────
 
-locals {
-  # Roles that move to the resman SA when the split is enabled.
-  privileged_split_roles = toset([
-    "roles/orgpolicy.policyAdmin",
-    "roles/accesscontextmanager.policyAdmin",
-    "roles/logging.admin",
-    "roles/securitycenter.admin",
-    "roles/iam.securityAdmin",
-  ])
-  resman_sa_email = var.enable_privilege_split ? module.resman_sa[0].email : module.terraform_admin_sa.email
-}
-
-# Workload Identity for GitHub Actions (or TFC in future)
+# GitHub Actions WIF (C2): OFF by default — no workflow in this repo requests
+# `id-token: write`, so a standing trust was unused privilege. When enabled it
+# trusts ONE repository by its immutable numeric IDs (repository_id +
+# repository_owner_id, never the renameable names), only from refs/heads/main,
+# and binds it to the READ-ONLY organization PLAN SA — never an apply/admin SA.
 module "gh_oidc" {
   source = "../../iam/workload-identity"
+  count  = var.enable_github_wif ? 1 : 0
 
-  project_id   = google_project.admin_project.project_id
-  pool_id      = "github-pool"
+  project_id   = module.admin_project.project_id
+  pool_id      = var.github_wif_pool_id
   display_name = "GitHub Actions Pool"
 
-  enable_github_provider = true
-  github_organization    = var.github_org
+  enable_github_provider     = true
+  github_organization        = var.github_org
+  github_repository_owner_id = var.github_repository_owner_id
 
-  # Security: Restrict to main branch only for production deployments
-  github_allowed_refs                 = ["refs/heads/main"]
-  github_attribute_condition_override = "assertion.sub == 'repo:${var.github_org}/${var.github_repo}:ref:refs/heads/main'"
+  github_allowed_refs = ["refs/heads/main"]
+  github_attribute_condition_override = join(" && ", [
+    "assertion.repository_owner_id == '${coalesce(var.github_repository_owner_id, "unset")}'",
+    "assertion.repository_id == '${coalesce(var.github_repository_id, "unset")}'",
+    "assertion.ref == 'refs/heads/main'",
+  ])
 
   github_sa_bindings = [
     {
-      repository            = "${var.github_org}/${var.github_repo}"
-      service_account_email = module.terraform_admin_sa.email
+      repository            = "${coalesce(var.github_org, "unset")}/${coalesce(var.github_repo, "unset")}"
+      repository_id         = var.github_repository_id
+      key                   = "organization-plan"
+      service_account_email = google_service_account.stage["organization-plan"].email
     }
   ]
 }
 
-# Workload Identity for Terraform Cloud (Dynamic Credentials)
+# Terraform Cloud WIF (Dynamic Credentials) — FAST-style plan/apply split.
+# Every (workspace, run phase) gets its own binding: the plan phase of a
+# workspace can only mint the stage's read-only plan SA, and only the apply phase
+# can mint the write SA. Bindings use the immutable workspace ID when
+# tfc_workspace_ids supplies one, else the workspace name.
 module "tfc_oidc" {
   source = "../../iam/workload-identity"
   count  = var.enable_tfc_oidc && var.tfc_organization != null ? 1 : 0
 
-  project_id   = google_project.admin_project.project_id
+  project_id   = module.admin_project.project_id
   pool_id      = "tfc-pool"
   display_name = "Terraform Cloud Pool"
 
   enable_tfc_provider = true
   tfc_organization    = var.tfc_organization
+  tfc_organization_id = var.tfc_organization_id
+  tfc_project_ids     = var.tfc_project_ids
 
   tfc_sa_bindings = [
-    for ws in var.tfc_workspaces : {
-      workspace_name        = ws
-      service_account_email = module.terraform_admin_sa.email
+    for key, sa in local.tfc_identities : {
+      workspace_name        = sa.workspace
+      workspace_id          = lookup(var.tfc_workspace_ids, sa.workspace, null)
+      run_phase             = sa.phase
+      service_account_email = local.stage_sa_email[key]
     }
   ]
-}
-
-# Grant Org-Level Roles to the Terraform Admin SA
-# Note: Folder roles are granted in the organization module where folders exist
-resource "google_organization_iam_member" "terraform_admin_standard_org_roles" {
-  for_each = toset([
-    "roles/orgpolicy.policyAdmin",
-    "roles/accesscontextmanager.policyAdmin",
-    "roles/logging.admin",
-    "roles/resourcemanager.organizationViewer",
-    "roles/compute.xpnAdmin",
-    "roles/resourcemanager.tagAdmin", # Tag management for governance
-  ])
-
-  org_id = var.org_id
-  role   = each.key #tfsec:ignore:google-iam-no-privileged-service-accounts - the bootstrap SA legitimately requires these elevated org roles to stand up the landing zone; access is restricted to this single SA and key-less via WIF
-  # Audit G3: privileged roles route to the resman SA when the split is enabled;
-  # otherwise resman_sa_email == terraform-admin SA (unchanged).
-  member = "serviceAccount:${contains(local.privileged_split_roles, each.key) ? local.resman_sa_email : module.terraform_admin_sa.email}"
-}
-
-# Grant the Terraform admin SA the minimum billing-account-level role required to
-# create and manage billing budgets via google_billing_budget. Without this, budget
-# creation fails with a permissions error even though the SA has roles/billing.projectManager
-# on the folder (which does NOT grant billing.budgets.create at the account level).
-# roles/billing.costsManager is the narrowest predefined role that includes this permission.
-resource "google_billing_account_iam_member" "terraform_admin_billing_costs_manager" {
-  # checkov:skip=CKV_GCP_89:billing.costsManager at the billing account is the minimum required to
-  # create google_billing_budget resources. A more granular permission is not available as a
-  # predefined role; a custom role would require roles/iam.roleAdmin (equally privileged).
-  billing_account_id = var.billing_account
-  role               = "roles/billing.costsManager"
-  member             = "serviceAccount:${module.terraform_admin_sa.email}"
-}
-
-resource "google_organization_iam_member" "terraform_admin_exception_org_roles" {
-  # checkov:skip=CKV_GCP_45:Justified — roles are intentionally isolated in a dedicated resource block
-  # with per-role commentary. See rationale below; these are the minimum org-level privileges the
-  # bootstrap SA requires to automate the full landing zone lifecycle.
-  #
-  # roles/securitycenter.admin:
-  #   Manages SCC notification configs, findings, and BigQuery exports created by the
-  #   organization and governance stages. No narrower predefined role exists for this.
-  #
-  # roles/iam.securityAdmin:
-  #   Grants resourcemanager.{projects,folders,organizations}.{get,set}IamPolicy so
-  #   the SA can create and manage IAM bindings across the org hierarchy. A custom role
-  #   scoped to only these permissions would require the SA to already hold
-  #   roles/iam.roleAdmin (which is equally privileged), creating a circular dependency.
-  #   Prefer over roles/resourcemanager.organizationAdmin, which additionally grants
-  #   full org resource management (create/delete folders, move projects, etc.).
-  #   Access is restricted to this single SA by org policy; rotation is automated via
-  #   the key-less WIF flows provisioned by this bootstrap module.
-  for_each = toset([
-    "roles/securitycenter.admin", # SCC findings and notifications management
-    "roles/iam.securityAdmin",    # Minimum IAM-policy management scope — see rationale above
-  ])
-
-  org_id = var.org_id
-  role   = each.key #tfsec:ignore:google-iam-no-privileged-service-accounts - securitycenter.admin and iam.securityAdmin are the minimum org-level privileges the bootstrap SA needs (see per-role rationale above); a narrower custom role would require the equally-privileged roles/iam.roleAdmin
-  # Audit G3: privileged roles route to the resman SA when the split is enabled;
-  # otherwise resman_sa_email == terraform-admin SA (unchanged).
-  member = "serviceAccount:${contains(local.privileged_split_roles, each.key) ? local.resman_sa_email : module.terraform_admin_sa.email}"
 }

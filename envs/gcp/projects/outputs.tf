@@ -20,9 +20,9 @@ output "project_numbers" {
 # org folders/tag values (remote state) with this root's project IDs/numbers and
 # the environment definitions. gcp-workload reads this.
 output "environment_config" {
-  description = "Per-environment config: folder, host project, region, CIDR, labels, environment tag value."
+  description = "Per-environment config: folder, host project, region, CIDR, labels, environment tag value, is_production, and the environment's folder-scoped VPC-SC access policy ID."
   value = {
-    for env_key, env in var.environments : env_key => {
+    for env_key, env in local.environments : env_key => {
       folder_id           = local.org.folders[env_key].id
       folder_name         = local.org.folders[env_key].display_name
       host_project_id     = module.projects.project_ids["${env_key}-host"]
@@ -33,6 +33,16 @@ output "environment_config" {
       tag_value_ids = {
         environment = local.org.tag_values["environment-${env_key}"]
       }
+      # Explicit production marker for the workload guardrail checks.
+      is_production = env.is_production
+      # This environment's folder-scoped VPC-SC access policy (gcp-organization);
+      # null when scoped policies are disabled or the org state predates them.
+      vpc_sc_access_policy_id = try(local.org.scoped_access_policy_ids[env_key], null)
     }
   }
+}
+
+output "automation_folder_grants" {
+  description = "Folder IAM grants made to the workload / network-hub automation SAs."
+  value       = module.projects.automation_folder_grants
 }

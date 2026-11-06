@@ -6,6 +6,11 @@
 # audit pipeline). Everything is opt-in: enable=false makes the module a no-op,
 # and admins control the watch set and the notification channels.
 #
+# It also ships the CIS GCP Foundations 2.4-2.11 log-based metrics and their alert
+# policies (enable_cis_log_metrics, default on). With org_id set, the aggregated
+# org sink routes every project's Admin Activity logs here, so one set of CIS
+# alerts covers the org.
+#
 # Apply this in the project that receives the aggregated org Admin Activity audit
 # logs (typically the org logging/audit project), so the filters have logs to
 # match. Terraform Cloud run-failure alerting lives in modules/tfc/workspace.
@@ -17,7 +22,44 @@ locals {
     var.extra_notification_channel_ids,
   ) : []
 
-  active_watches = var.enable ? var.watches : {}
+  # Break-glass use watch: any Admin Activity by a break-glass principal.
+  break_glass_watch = length(var.break_glass_principal_emails) == 0 ? {} : {
+    break_glass_use = {
+      display_name  = "Break-glass principal used"
+      filter        = "logName:\"cloudaudit.googleapis.com\" AND (${join(" OR ", [for e in var.break_glass_principal_emails : "protoPayload.authenticationInfo.principalEmail=\"${e}\""])})"
+      severity      = "CRITICAL"
+      documentation = "A break-glass principal performed an administrative action. Confirm an incident is open and the use was authorised; rotate the credential afterwards."
+    }
+  }
+
+  active_watches = var.enable ? merge(var.watches, local.break_glass_watch) : {}
+
+  route_org_logs = var.enable && var.org_id != null
+}
+
+# Org- and folder-level audit entries (org IAM, org policy, VPC-SC, org sinks,
+# deny policies) live in the organization's own log buckets, not in any project,
+# so a project-scoped log-match alert never sees them. Route the org's Admin
+# Activity + Policy audit logs into project_id (excluding project_id's own logs,
+# which are already there) so the watches below can match them.
+resource "google_logging_organization_sink" "control_plane" {
+  count = local.route_org_logs ? 1 : 0
+
+  name             = var.org_log_route_sink_name
+  org_id           = var.org_id
+  destination      = "logging.googleapis.com/projects/${var.project_id}"
+  include_children = true
+  filter           = "(logName:\"cloudaudit.googleapis.com%2Factivity\" OR logName:\"cloudaudit.googleapis.com%2Fpolicy\") AND NOT logName:\"projects/${var.project_id}/\""
+  description      = "Routes org Admin Activity/Policy audit logs to the control-plane monitoring project for log-match alerting."
+}
+
+# A sink whose destination is another project needs logging.logWriter there.
+resource "google_project_iam_member" "control_plane_sink_writer" {
+  count = local.route_org_logs ? 1 : 0
+
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = google_logging_organization_sink.control_plane[0].writer_identity
 }
 
 resource "google_monitoring_notification_channel" "email" {
@@ -108,6 +150,73 @@ resource "google_monitoring_alert_policy" "log_export_error" {
 
   documentation {
     content   = "The audit-log export sink is reporting delivery errors. The audit pipeline may be stalled: check the sink's destination permissions and existence."
+    mime_type = "text/markdown"
+  }
+}
+
+# CIS GCP Foundations 2.4-2.11: log-based metrics + alert policies.
+#
+# CIS scopes these to a project. Here they live in the control-plane project, and
+# the aggregated org sink above (include_children = true, Admin Activity from every
+# project) feeds it, so one set of metrics and alerts covers every project in the
+# org. Without org_id they only see project_id's own logs.
+locals {
+  active_cis_metrics = var.enable && var.enable_cis_log_metrics ? var.cis_log_metrics : {}
+}
+
+resource "google_logging_metric" "cis" {
+  for_each = local.active_cis_metrics
+
+  project     = var.project_id
+  name        = "${var.cis_log_metric_name_prefix}${each.key}"
+  description = each.value.cis_control != null ? "CIS GCP ${each.value.cis_control}: ${each.value.display_name}" : each.value.display_name
+  filter      = each.value.filter
+
+  metric_descriptor {
+    metric_kind  = "DELTA"
+    value_type   = "INT64"
+    unit         = "1"
+    display_name = each.value.display_name
+  }
+}
+
+resource "google_monitoring_alert_policy" "cis" {
+  for_each = local.active_cis_metrics
+
+  project      = var.project_id
+  display_name = "${var.alert_display_name_prefix}${each.value.cis_control != null ? "CIS ${each.value.cis_control} " : ""}${each.value.display_name}"
+  combiner     = "OR"
+  severity     = try(each.value.severity, "WARNING")
+
+  conditions {
+    display_name = "${google_logging_metric.cis[each.key].name} > 0"
+
+    condition_threshold {
+      filter          = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.cis[each.key].name}\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = "0s"
+
+      aggregations {
+        alignment_period     = "60s"
+        per_series_aligner   = "ALIGN_SUM"
+        cross_series_reducer = "REDUCE_SUM"
+      }
+
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  notification_channels = local.all_channel_ids
+
+  alert_strategy {
+    auto_close = "1800s"
+  }
+
+  documentation {
+    content   = try(each.value.documentation, null) != null ? each.value.documentation : "CIS GCP ${coalesce(each.value.cis_control, "custom")} log-metric alert: a matching change was logged. Confirm it was authorised. Filter: `${each.value.filter}`"
     mime_type = "text/markdown"
   }
 }

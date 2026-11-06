@@ -14,6 +14,16 @@ plugin "google" {
   source  = "github.com/terraform-linters/tflint-ruleset-google"
 }
 
+# AWS Plugin — rules only match aws_* resources, so enabling it repo-wide is a
+# no-op for GCP/SaaS modules. Covers the ~49 AWS modules (invalid instance
+# types, deprecated arguments, invalid enum values the provider would reject
+# only at apply time). Bump `version` together with the google ruleset.
+plugin "aws" {
+  enabled = true
+  version = "0.50.0"
+  source  = "github.com/terraform-linters/tflint-ruleset-aws"
+}
+
 # Terraform Plugin
 plugin "terraform" {
   enabled = true
@@ -54,7 +64,6 @@ rule "terraform_module_pinned_source" {
   style   = "semver"
 }
 
-
 rule "terraform_required_version" {
   enabled = true
 }
@@ -71,8 +80,6 @@ rule "terraform_workspace_remote" {
   enabled = true
 }
 
-
 rule "terraform_module_version" {
   enabled = true
 }
-
