@@ -158,12 +158,12 @@ rewritten.
 
 `tfc-management-roles` no longer grants the aws-security apply role `kms:*` on
 keys carrying `Workspace = aws-security` (a tag anyone with `kms:TagResource`
-could plant). `CreateOwnedKeysOnly` stays, now limited to the owner tag key plus
-the `tags` keys. The org trail's CloudWatch Logs CMK is instead managed through
+could plant). `CreateOwnedKeysOnly` stays unchanged (owner request tag required). The org trail's CloudWatch Logs CMK is instead managed through
 its own key policy: a new `PipelineKeyManagement` statement
 (`cloudwatch_logs_kms_key_manager_arns`, defaulting to the
 `tfc-mgmt-aws-security-apply` role) grants describe/get/list, rotation,
-description, tags and aliases. The account-root `kms:*` statement is kept.
+description, tags and aliases, plus data-key use (`PipelineKeyUseViaServices`,
+`kms:ViaService` SNS and Logs only). The account-root `kms:*` statement is kept.
 
 **Manual step for existing estates (before applying the new
 `tfc-management-roles`):** the pipeline's `kms:PutKeyPolicy` is denied, so the
@@ -174,13 +174,18 @@ aws-security plan/apply gets AccessDenied on the key. Substitute your values:
 ```sh
 KEY_ID=$(aws kms describe-key --key-id alias/<trail_name>-cloudwatch --query KeyMetadata.KeyId --output text)
 aws kms get-key-policy --key-id "$KEY_ID" --policy-name default --query Policy --output text > policy.json
-# Edit policy.json: append this statement to "Statement" (keep the existing ones):
+# Edit policy.json: append these statements to "Statement" (keep the existing ones):
 #   {"Sid":"PipelineKeyManagement","Effect":"Allow",
 #    "Principal":{"AWS":"arn:aws:iam::<MGMT_ACCOUNT_ID>:role/tfc-mgmt-aws-security-apply"},
 #    "Action":["kms:Describe*","kms:Get*","kms:List*","kms:EnableKeyRotation",
 #              "kms:UpdateKeyDescription","kms:TagResource","kms:UntagResource",
 #              "kms:CreateAlias","kms:UpdateAlias","kms:DeleteAlias"],
 #    "Resource":"*"}
+#   {"Sid":"PipelineKeyUseViaServices","Effect":"Allow",
+#    "Principal":{"AWS":"arn:aws:iam::<MGMT_ACCOUNT_ID>:role/tfc-mgmt-aws-security-apply"},
+#    "Action":["kms:GenerateDataKey*","kms:Decrypt"],"Resource":"*",
+#    "Condition":{"StringEquals":{"kms:ViaService":
+#      ["sns.<REGION>.amazonaws.com","logs.<REGION>.amazonaws.com"]}}}
 aws kms put-key-policy --key-id "$KEY_ID" --policy-name default --policy file://policy.json
 ```
 

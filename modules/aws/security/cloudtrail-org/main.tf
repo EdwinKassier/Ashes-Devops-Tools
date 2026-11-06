@@ -200,6 +200,23 @@ locals {
           ]
           Resource = "*"
         },
+      ],
+      length(var.cloudwatch_logs_kms_key_manager_arns) == 0 ? [] : [
+        {
+          # The CMK encrypts the CIS alarm SNS topic and the trail log group;
+          # creating or updating them needs data-key access through those
+          # services only.
+          Sid       = "PipelineKeyUseViaServices"
+          Effect    = "Allow"
+          Principal = { AWS = var.cloudwatch_logs_kms_key_manager_arns }
+          Action    = ["kms:GenerateDataKey*", "kms:Decrypt"]
+          Resource  = "*"
+          Condition = {
+            StringEquals = {
+              "kms:ViaService" = ["sns.${local.region}.amazonaws.com", "logs.${local.region}.amazonaws.com"]
+            }
+          }
+        },
     ])
   })
 }

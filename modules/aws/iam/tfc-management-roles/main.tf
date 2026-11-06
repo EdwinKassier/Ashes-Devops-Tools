@@ -207,21 +207,18 @@ locals {
         Resource = ["arn:${local.partition}:sns:*:${local.account_id}:${var.security_trail_name}-*"]
       },
       {
-        # Keys may be created (and tagged at creation) only with the owner tag,
-        # and only with the owner tag key plus the landing-zone tag keys. Tags
-        # grant NOTHING afterwards: day-2 management of the key is by its own
-        # key policy (PipelineKeyManagement in cloudtrail-org), so a tag cannot
-        # be planted on someone else's key to gain kms:* on it.
-        Sid      = "CreateOwnedKeysOnly"
-        Effect   = "Allow"
-        Action   = ["kms:CreateKey", "kms:TagResource"]
-        Resource = "*"
-        Condition = {
-          StringEquals = { "aws:RequestTag/${var.security_owner_tag.key}" = var.security_owner_tag.value }
-          "ForAllValues:StringEquals" = {
-            "aws:TagKeys" = distinct(concat([var.security_owner_tag.key], keys(var.tags)))
-          }
-        }
+        # Keys may be created (and tagged at creation) only with the owner tag.
+        # Deliberately NO aws:TagKeys allow-list: the aws-security provider's
+        # default_tags (ManagedBy, LandingZone, Environment, ...) are applied to
+        # every key it creates, so an allow-list would deny CreateKey itself.
+        # Tags grant NOTHING afterwards: day-2 management of the key is by its
+        # own key policy (PipelineKeyManagement in cloudtrail-org), so a tag
+        # cannot be planted on someone else's key to gain kms:* on it.
+        Sid       = "CreateOwnedKeysOnly"
+        Effect    = "Allow"
+        Action    = ["kms:CreateKey", "kms:TagResource"]
+        Resource  = "*"
+        Condition = { StringEquals = { "aws:RequestTag/${var.security_owner_tag.key}" = var.security_owner_tag.value } }
       },
       {
         Sid    = "TrailKeyAliasesOnly"

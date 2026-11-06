@@ -58,12 +58,12 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_iam_role.this (modules/aws/iam/tfc-management-roles/main.tf#L345)
-- resource.aws_iam_role_policy.apply (modules/aws/iam/tfc-management-roles/main.tf#L386)
-- resource.aws_iam_role_policy.plan_guard (modules/aws/iam/tfc-management-roles/main.tf#L378)
-- resource.aws_iam_role_policy_attachment.read_only (modules/aws/iam/tfc-management-roles/main.tf#L369)
-- data source.aws_caller_identity.current (modules/aws/iam/tfc-management-roles/main.tf#L343)
-- data source.aws_partition.current (modules/aws/iam/tfc-management-roles/main.tf#L341)
+- resource.aws_iam_role.this (modules/aws/iam/tfc-management-roles/main.tf#L342)
+- resource.aws_iam_role_policy.apply (modules/aws/iam/tfc-management-roles/main.tf#L383)
+- resource.aws_iam_role_policy.plan_guard (modules/aws/iam/tfc-management-roles/main.tf#L375)
+- resource.aws_iam_role_policy_attachment.read_only (modules/aws/iam/tfc-management-roles/main.tf#L366)
+- data source.aws_caller_identity.current (modules/aws/iam/tfc-management-roles/main.tf#L340)
+- data source.aws_partition.current (modules/aws/iam/tfc-management-roles/main.tf#L338)
 
 
 ## Inputs

@@ -364,6 +364,16 @@ run "pipeline_manager_statement_grants_refresh_and_rotation" {
   }
 
   assert {
+    condition = anytrue([
+      for s in jsondecode(aws_kms_key.cloudwatch[0].policy).Statement :
+      s.Sid == "PipelineKeyUseViaServices" && s.Effect == "Allow" &&
+      toset(s.Action) == toset(["kms:GenerateDataKey*", "kms:Decrypt"]) &&
+      toset(s.Condition.StringEquals["kms:ViaService"]) == toset(["sns.us-east-1.amazonaws.com", "logs.us-east-1.amazonaws.com"])
+    ])
+    error_message = "Pipeline data-key use must be limited to SNS and Logs via kms:ViaService."
+  }
+
+  assert {
     condition     = anytrue([for s in jsondecode(aws_kms_key.cloudwatch[0].policy).Statement : s.Sid == "KeyAdministration"])
     error_message = "KeyAdministration must remain alongside the pipeline statement."
   }

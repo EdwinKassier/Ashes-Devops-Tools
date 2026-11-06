@@ -209,13 +209,13 @@ run "no_tag_based_kms_access" {
     error_message = "The aws-security apply role must hold no Allow kms:*."
   }
 
+  # No aws:TagKeys allow-list: the provider default_tags would deny CreateKey.
   assert {
     condition = anytrue([
       for s in jsondecode(output.apply_policies["aws-security"]).Statement :
-      s.Sid == "CreateOwnedKeysOnly" &&
-      toset(keys(s.Condition)) == toset(["StringEquals", "ForAllValues:StringEquals"]) &&
-      toset(s.Condition["ForAllValues:StringEquals"]["aws:TagKeys"]) == toset(["Workspace", "Team"])
+      s.Sid == "CreateOwnedKeysOnly" && toset(keys(s.Condition)) == toset(["StringEquals"]) &&
+      !can(s.Condition.StringEquals["aws:TagKeys"]) && !can(s.Condition["ForAllValues:StringEquals"])
     ])
-    error_message = "CreateOwnedKeysOnly must limit aws:TagKeys to the owner tag key plus var.tags keys."
+    error_message = "CreateOwnedKeysOnly must be conditioned only on the owner request tag, with no aws:TagKeys restriction."
   }
 }
