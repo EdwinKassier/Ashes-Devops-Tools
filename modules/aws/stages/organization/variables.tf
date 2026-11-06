@@ -314,3 +314,21 @@ variable "member_break_glass_require_mfa" {
   type        = bool
   default     = true
 }
+
+variable "enable_tfc_management_roles" {
+  description = "Create a dedicated least-privilege management-account plan/apply role pair per management-default workspace (tfc_management_workspaces). tfc-admin binds them instead of the shared phase-0 management role, so aws-security / aws-backup cannot pivot into member accounts or change the org structure. Requires tfc_organization and the management account's TFC OIDC provider (phase 0). Default true."
+  type        = bool
+  default     = true
+}
+
+variable "tfc_management_workspaces" {
+  description = "Management-default workspaces that get their own role pair (tfc-management-roles workspaces). aws-security and aws-backup have built-in least-privilege policies; others need apply_policy_json."
+  type = map(object({
+    project           = optional(string)
+    apply_policy_json = optional(string)
+  }))
+  default = {
+    "aws-security" = {}
+    "aws-backup"   = {}
+  }
+}

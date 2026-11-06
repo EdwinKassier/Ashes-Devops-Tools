@@ -73,7 +73,9 @@ Run #1 of `aws-organization` needs AWS credentials in the management account **b
 }
 ```
 
-In the plan role, use `run_phase:plan` in place of `run_phase:apply`. Never wildcard the organization. Then drive the roles with TFC's native [dynamic credentials](https://developer.hashicorp.com/terraform/cloud-docs/workspaces/dynamic-provider-credentials/aws-configuration) by setting these **workspace environment variables**:
+In the plan role, use `run_phase:plan` in place of `run_phase:apply`. Never wildcard the organization.
+
+> **The shared role is temporary for `aws-security` / `aws-backup`.** The first `aws-organization` apply creates a dedicated least-privilege plan/apply pair for each of them in the management account: `tfc-mgmt-aws-security-*` and `tfc-mgmt-aws-backup-*`, from [`tfc-management-roles`](../../modules/aws/iam/tfc-management-roles/README.md), with `enable_tfc_management_roles` defaulting to true. With `aws_organization_outputs_from_tfc = true`, `tfc-admin` then binds each workspace to its own pair. Once both workspaces have run on their dedicated roles, remove their two `sub` entries from the phase-0 trust above, so only `aws-organization` can reach the management admin role. The dedicated apply roles cannot assume `OrganizationAccountAccessRole`, change accounts or OUs, or edit any `tfc-mgmt-*` role. Then drive the roles with TFC's native [dynamic credentials](https://developer.hashicorp.com/terraform/cloud-docs/workspaces/dynamic-provider-credentials/aws-configuration) by setting these **workspace environment variables**:
 
 ```text
 TFC_AWS_PROVIDER_AUTH  = true

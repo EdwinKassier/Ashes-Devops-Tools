@@ -24,6 +24,11 @@ jobs:
   docs:
     name: Generate Module Documentation
     runs-on: ubuntu-latest
+    # Secrets for this job live in the `docs-bot` GitHub environment, restricted
+    # to the default branch (docs/guides/CI_SECRETS.md "Environment-scoped
+    # secrets"). A repo-level secret is readable by a workflow pushed to ANY
+    # branch; an environment secret only by runs its branch policy allows.
+    environment: docs-bot
     timeout-minutes: 15
     steps:
       # Egress/process audit for this job (audit mode: observe, never block).

@@ -440,6 +440,53 @@ run "multi_account_alias_credentials" {
   }
 }
 
+# S6: aws-security / aws-backup get their own least-privilege management
+# roles from aws-organization; only aws-organization keeps the shared one.
+run "dedicated_management_roles_per_workspace" {
+  command = plan
+
+  variables {
+    aws_organization_outputs_from_tfc = true
+    aws_management_plan_role_arn      = "arn:aws:iam::111111111111:role/tfc-mgmt-plan"
+    aws_management_apply_role_arn     = "arn:aws:iam::111111111111:role/tfc-mgmt-apply"
+  }
+
+  override_data {
+    target = data.tfe_outputs.aws_organization[0]
+    values = {
+      nonsensitive_values = {
+        tfc_plan_role_arns = {
+          security_tooling = "arn:aws:iam::333333333333:role/tfc-plan"
+          log_archive      = "arn:aws:iam::555555555555:role/tfc-plan"
+          forensics        = "arn:aws:iam::666666666666:role/tfc-plan"
+        }
+        tfc_apply_role_arns = {
+          security_tooling = "arn:aws:iam::333333333333:role/tfc-apply"
+          log_archive      = "arn:aws:iam::555555555555:role/tfc-apply"
+          forensics        = "arn:aws:iam::666666666666:role/tfc-apply"
+        }
+        tfc_workspace_bindings         = { security_tooling = ["aws-security"], log_archive = ["aws-security"], forensics = ["aws-security"] }
+        tfc_management_plan_role_arns  = { "aws-security" = "arn:aws:iam::111111111111:role/tfc-mgmt-aws-security-plan" }
+        tfc_management_apply_role_arns = { "aws-security" = "arn:aws:iam::111111111111:role/tfc-mgmt-aws-security-apply" }
+      }
+    }
+  }
+
+  override_data {
+    target = data.tfe_workspace.tfc_admin[0]
+    values = { id = "ws-tfcadmin" }
+  }
+
+  assert {
+    condition = (
+      module.workspace["aws-security"].variable_values["TFC_AWS_PLAN_ROLE_ARN"] == "arn:aws:iam::111111111111:role/tfc-mgmt-aws-security-plan" &&
+      module.workspace["aws-security"].variable_values["TFC_AWS_APPLY_ROLE_ARN"] == "arn:aws:iam::111111111111:role/tfc-mgmt-aws-security-apply" &&
+      module.workspace["aws-organization"].variable_values["TFC_AWS_APPLY_ROLE_ARN"] == "arn:aws:iam::111111111111:role/tfc-mgmt-apply"
+    )
+    error_message = "aws-security must use its dedicated management roles; aws-organization keeps the shared phase-0 role."
+  }
+}
+
 run "explicit_alias_roles" {
   command = plan
 

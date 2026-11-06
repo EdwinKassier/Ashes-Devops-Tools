@@ -138,6 +138,38 @@ The cloud jobs run in the `e2e-sandbox` GitHub environment, which gives them a s
 subject. The preflight job has no environment, so it reads repository-level variables
 only. Set the variables above at repository level.
 
+## Environment-scoped secrets
+
+A repository-level secret is readable by **any workflow on any branch**. Anyone with write
+access could push a branch whose workflow prints `secrets.TFC_TOKEN_DRIFT`. The jobs that use a
+privileged secret therefore run in a GitHub **environment**. Store each secret in that
+environment, not at repository level, and restrict the environment's deployment branches:
+
+| Environment | Secrets | Deployment branch / tag policy | Used by |
+|---|---|---|---|
+| `tfc-drift` | `TFC_TOKEN_DRIFT` | `main` only | `drift-detection.yml` |
+| `release` | `RELEASE_PLEASE_TOKEN` | `main` only | `release.yml` |
+| `docs-bot` | `DOCS_BOT_PAT` (optional) | `main` only | `documentation.yml` |
+| `tfc-readonly` | `TFC_TOKEN` | tags `gcp-*/v*`, `aws-*/v*`, `saas/*/v*`, `tfc-admin/v*` | `terraform-apply.yml` |
+| `e2e-sandbox` | none (OIDC only) | `main`, plus PR branches if you use the `e2e` label | `sandbox-e2e.yml` |
+
+```bash
+repo=OWNER/REPO
+for env in tfc-drift release docs-bot; do
+  gh api -X PUT "repos/$repo/environments/$env" \
+    -F 'deployment_branch_policy[protected_branches]=false' \
+    -F 'deployment_branch_policy[custom_branch_policies]=true'
+  gh api -X POST "repos/$repo/environments/$env/deployment-branch-policies" -f name=main -f type=branch
+done
+gh secret set TFC_TOKEN_DRIFT --env tfc-drift        # then delete the repo-level copy:
+gh secret delete TFC_TOKEN_DRIFT                      # (repeat for each secret)
+```
+
+The workflows already name these environments. GitHub creates an environment, unprotected, the
+first time a job references it, so the branch policy above is what makes the scoping real.
+Prefer a GitHub App installation token over `RELEASE_PLEASE_TOKEN` / `DOCS_BOT_PAT` PATs where
+your organization allows it.
+
 ## Drift detection behavior without secrets
 
 `drift-detection.yml` runs a `check-credentials` job before the matrix job. It evaluates

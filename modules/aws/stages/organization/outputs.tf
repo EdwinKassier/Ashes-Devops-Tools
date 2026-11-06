@@ -62,3 +62,13 @@ output "member_break_glass_stack_set_name" {
   description = "Name of the StackSet deploying the break-glass role into member accounts, or null when disabled."
   value       = var.enable_tfc_oidc_baseline ? module.tfc_oidc_baseline[0].member_break_glass_stack_set_name : null
 }
+
+output "tfc_management_plan_role_arns" {
+  description = "Workspace name -> dedicated management-account PLAN role ARN (aws-security, aws-backup). Empty when enable_tfc_management_roles is false."
+  value       = try(module.tfc_management_roles[0].plan_role_arns, {})
+}
+
+output "tfc_management_apply_role_arns" {
+  description = "Workspace name -> dedicated management-account APPLY role ARN. Empty when enable_tfc_management_roles is false."
+  value       = try(module.tfc_management_roles[0].apply_role_arns, {})
+}

@@ -377,3 +377,9 @@ variable "github_federation_owners" {
   type        = list(string)
   default     = null
 }
+
+variable "enable_tfc_management_roles" {
+  description = "Create dedicated least-privilege management-account roles for aws-security and aws-backup (tfc-management-roles), bound by tfc-admin instead of the shared phase-0 management role. Default true."
+  type        = bool
+  default     = true
+}

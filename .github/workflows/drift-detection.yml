@@ -46,6 +46,11 @@ jobs:
   check-credentials:
     name: Check Terraform Cloud credentials
     runs-on: ubuntu-latest
+    # Secrets for this job live in the `tfc-drift` GitHub environment, restricted
+    # to the default branch (docs/guides/CI_SECRETS.md "Environment-scoped
+    # secrets"). A repo-level secret is readable by a workflow pushed to ANY
+    # branch; an environment secret only by runs its branch policy allows.
+    environment: tfc-drift
     timeout-minutes: 5
     outputs:
       configured: ${{ steps.check.outputs.configured }}
@@ -85,6 +90,11 @@ jobs:
   detect-drift:
     name: Detect Drift (${{ matrix.workspace }})
     runs-on: ubuntu-latest
+    # Secrets for this job live in the `tfc-drift` GitHub environment, restricted
+    # to the default branch (docs/guides/CI_SECRETS.md "Environment-scoped
+    # secrets"). A repo-level secret is readable by a workflow pushed to ANY
+    # branch; an environment secret only by runs its branch policy allows.
+    environment: tfc-drift
     timeout-minutes: 30
     needs: check-credentials
     if: needs.check-credentials.outputs.configured == 'true'

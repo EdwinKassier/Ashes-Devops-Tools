@@ -87,6 +87,20 @@ release metadata for a Terraform Cloud run.
   stage and both roots). HCP EU and TFE now work on GCP.
 - **New config keys:** `gcp.break_glass_group`, `gcp.alert_emails` and `gcp.admin_containment`.
   The bootstrap runbook now lists the Cloud Identity groups as prerequisites.
+- **S6 — One management-account role pair per management-default root.** The new module
+  `modules/aws/iam/tfc-management-roles` is created by `aws-organization`
+  (`enable_tfc_management_roles`, default true). It gives `aws-security` and `aws-backup` their
+  own exact-subject plan/apply roles:
+  - **`aws-security`:** delegated-admin registration and the organization trail only.
+  - **`aws-backup`:** `BACKUP_POLICY` org policies only.
+  - **Denied for both:** assuming `OrganizationAccountAccessRole` or member `tfc-*` roles,
+    account/OU changes, and editing any `tfc-mgmt-*` role.
+
+  `tfc-admin` binds them from the aws-organization outputs. Only `aws-organization` keeps the
+  shared phase-0 role.
+- **S7 — Privileged CI secrets are environment-scoped.** The `release`, `docs-bot`, `tfc-drift`
+  and `tfc-readonly` jobs run in GitHub environments. CI_SECRETS.md documents moving the secrets
+  into those environments, with main/tag-only deployment policies.
 - **The RCP data perimeter now covers ECR and CloudWatch Logs** (`ecr:*`, `logs:*`).
 - **`organization-policy` gains a `policy_contents` output**, for evidence and tests.
 

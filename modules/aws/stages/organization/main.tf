@@ -165,3 +165,17 @@ module "tfc_oidc_baseline" {
   # Trusted access for StackSets is enabled by module.organization.
   depends_on = [module.organization]
 }
+
+# Least-privilege management-account roles, one plan/apply pair per
+# management-default workspace (aws-security, aws-backup), so those roots no
+# longer share the phase-0 management admin role. aws-organization itself keeps
+# the phase-0 role.
+module "tfc_management_roles" {
+  source = "../../iam/tfc-management-roles"
+  count  = var.enable_tfc_management_roles && var.tfc_organization != null ? 1 : 0
+
+  tfc_organization = var.tfc_organization
+  tfc_hostname     = var.tfc_hostname
+  tfc_project      = var.tfc_project
+  workspaces       = var.tfc_management_workspaces
+}

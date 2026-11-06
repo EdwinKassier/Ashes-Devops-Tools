@@ -164,6 +164,10 @@ locals {
   aws_organization_outputs = try(data.tfe_outputs.aws_organization[0].nonsensitive_values, {})
   aws_output_plan_roles    = try(tomap(local.aws_organization_outputs.tfc_plan_role_arns), {})
   aws_output_apply_roles   = try(tomap(local.aws_organization_outputs.tfc_apply_role_arns), {})
+  # Dedicated per-workspace management roles (aws-security, aws-backup) from
+  # aws-organization; they replace the shared phase-0 role for those roots.
+  aws_output_mgmt_plan_roles  = try(tomap(local.aws_organization_outputs.tfc_management_plan_role_arns), {})
+  aws_output_mgmt_apply_roles = try(tomap(local.aws_organization_outputs.tfc_management_apply_role_arns), {})
 
   # Roots whose DEFAULT provider is the management (payer) account. Their default
   # credentials are the phase-0 management-account role, never a member role.
@@ -216,11 +220,14 @@ locals {
     for ws, aliases in local.aws_alias_roles : ws => alltrue([for r in values(aliases) : r.plan != null && r.apply != null])
   }
 
-  aws_management_defaults = var.aws_management_plan_role_arn == null ? {} : {
+  # Per workspace: the dedicated management role pair when aws-organization
+  # created one, else the shared phase-0 role (aws-organization always uses it).
+  aws_management_defaults = {
     for ws in local.aws_management_workspaces : ws => {
-      plan  = var.aws_management_plan_role_arn
-      apply = var.aws_management_apply_role_arn
-    } if contains(local.workspace_names, ws) && lookup(local.aws_aliases_complete, ws, true)
+      plan  = try(local.aws_output_mgmt_plan_roles[ws], var.aws_management_plan_role_arn)
+      apply = try(local.aws_output_mgmt_apply_roles[ws], var.aws_management_apply_role_arn)
+    } if contains(local.workspace_names, ws) && lookup(local.aws_aliases_complete, ws, true) &&
+    (try(local.aws_output_mgmt_plan_roles[ws], var.aws_management_plan_role_arn) != null)
   }
 
   aws_plan_roles = merge(

@@ -23,6 +23,11 @@ jobs:
   verify-run:
     name: Verify Terraform Cloud Run
     runs-on: ubuntu-latest
+    # Secrets for this job live in the `tfc-readonly` GitHub environment, restricted
+    # to the deployment tags (gcp-*/v*, aws-*/v*, ...) (docs/guides/CI_SECRETS.md "Environment-scoped
+    # secrets"). A repo-level secret is readable by a workflow pushed to ANY
+    # branch; an environment secret only by runs its branch policy allows.
+    environment: tfc-readonly
     timeout-minutes: 15
     permissions:
       contents: read

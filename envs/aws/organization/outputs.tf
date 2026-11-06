@@ -51,3 +51,16 @@ output "tfc_workspace_bindings" {
   description = "Map of account key -> TFC workspace names bound to that account's tfc-plan / tfc-apply roles."
   value       = module.aws_organization.tfc_workspace_bindings
 }
+
+# Dedicated least-privilege management-account roles per management-default
+# workspace; tfc-admin (aws_organization_outputs_from_tfc) binds them in place
+# of the shared phase-0 management role.
+output "tfc_management_plan_role_arns" {
+  description = "Workspace name -> dedicated management-account PLAN role ARN (aws-security, aws-backup)."
+  value       = module.aws_organization.tfc_management_plan_role_arns
+}
+
+output "tfc_management_apply_role_arns" {
+  description = "Workspace name -> dedicated management-account APPLY role ARN (aws-security, aws-backup)."
+  value       = module.aws_organization.tfc_management_apply_role_arns
+}
