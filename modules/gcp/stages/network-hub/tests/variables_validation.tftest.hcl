@@ -1,9 +1,10 @@
 # Variable validation tests for the stages/network-hub module.
 # All runs use mock_provider so no GCP credentials are required.
 #
-# modules/host has a data.google_compute_zones postcondition that fails with
-# empty mock results, so all runs override the deeply-nested child modules via
-# override_module (Terraform >= 1.9) to isolate variable validation.
+# net-hub and dns-anchor read data.google_compute_zones (with a non-empty
+# postcondition that fails on empty mock results), so every run overrides the
+# two network compositions via override_module (Terraform >= 1.9) to isolate
+# the stage's own variable validation.
 
 mock_provider "google" {}
 mock_provider "google-beta" {}
@@ -32,16 +33,21 @@ run "accepts_valid_hub_vpc_cidr_block" {
   command = plan
 
   override_module {
-    target  = module.hub_network
-    outputs = { network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core" }
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
   }
   override_module {
-    target  = module.dns_hub_network
-    outputs = { network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core" }
-  }
-  override_module {
-    target  = module.dns_hub_zone
-    outputs = {}
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
   }
 
   variables {
@@ -53,16 +59,21 @@ run "accepts_slash_24_hub_vpc_cidr_block" {
   command = plan
 
   override_module {
-    target  = module.hub_network
-    outputs = { network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core" }
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
   }
   override_module {
-    target  = module.dns_hub_network
-    outputs = { network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core" }
-  }
-  override_module {
-    target  = module.dns_hub_zone
-    outputs = {}
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
   }
 
   variables {
@@ -74,16 +85,21 @@ run "rejects_invalid_hub_vpc_cidr_block" {
   command = plan
 
   override_module {
-    target  = module.hub_network
-    outputs = { network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core" }
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
   }
   override_module {
-    target  = module.dns_hub_network
-    outputs = { network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core" }
-  }
-  override_module {
-    target  = module.dns_hub_zone
-    outputs = {}
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
   }
 
   expect_failures = [var.hub_vpc_cidr_block]
@@ -97,16 +113,21 @@ run "rejects_hub_vpc_cidr_without_prefix_length" {
   command = plan
 
   override_module {
-    target  = module.hub_network
-    outputs = { network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core" }
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
   }
   override_module {
-    target  = module.dns_hub_network
-    outputs = { network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core" }
-  }
-  override_module {
-    target  = module.dns_hub_zone
-    outputs = {}
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
   }
 
   expect_failures = [var.hub_vpc_cidr_block]
@@ -122,16 +143,21 @@ run "accepts_valid_dns_hub_vpc_cidr_block" {
   command = plan
 
   override_module {
-    target  = module.hub_network
-    outputs = { network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core" }
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
   }
   override_module {
-    target  = module.dns_hub_network
-    outputs = { network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core" }
-  }
-  override_module {
-    target  = module.dns_hub_zone
-    outputs = {}
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
   }
 
   variables {
@@ -143,16 +169,21 @@ run "rejects_invalid_dns_hub_vpc_cidr_block" {
   command = plan
 
   override_module {
-    target  = module.hub_network
-    outputs = { network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core" }
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
   }
   override_module {
-    target  = module.dns_hub_network
-    outputs = { network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core" }
-  }
-  override_module {
-    target  = module.dns_hub_zone
-    outputs = {}
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
   }
 
   expect_failures = [var.dns_hub_vpc_cidr_block]
@@ -168,16 +199,21 @@ run "accepts_valid_org_id" {
   command = plan
 
   override_module {
-    target  = module.hub_network
-    outputs = { network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core" }
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
   }
   override_module {
-    target  = module.dns_hub_network
-    outputs = { network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core" }
-  }
-  override_module {
-    target  = module.dns_hub_zone
-    outputs = {}
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
   }
 
   variables {
@@ -190,16 +226,21 @@ run "accepts_bare_numeric_org_id" {
   command = plan
 
   override_module {
-    target  = module.hub_network
-    outputs = { network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core" }
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
   }
   override_module {
-    target  = module.dns_hub_network
-    outputs = { network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core" }
-  }
-  override_module {
-    target  = module.dns_hub_zone
-    outputs = {}
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
   }
 
   variables {
@@ -211,16 +252,21 @@ run "rejects_org_id_with_non_numeric_suffix" {
   command = plan
 
   override_module {
-    target  = module.hub_network
-    outputs = { network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core" }
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
   }
   override_module {
-    target  = module.dns_hub_network
-    outputs = { network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core" }
-  }
-  override_module {
-    target  = module.dns_hub_zone
-    outputs = {}
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
   }
 
   expect_failures = [var.org_id]

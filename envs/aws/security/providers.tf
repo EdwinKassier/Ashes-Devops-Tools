@@ -33,14 +33,14 @@ provider "aws" {
   # assuming account_role_arns["security_tooling"] (OrganizationAccountAccessRole).
   shared_config_files = var.tfc_aws_dynamic_credentials == null ? null : [var.tfc_aws_dynamic_credentials.aliases["security_tooling"].shared_config_file]
   dynamic "assume_role" {
-    for_each = var.tfc_aws_dynamic_credentials == null ? [data.terraform_remote_state.aws_organization.outputs.account_role_arns["security_tooling"]] : []
+    for_each = var.tfc_aws_dynamic_credentials == null ? [local.org.account_role_arns["security_tooling"]] : []
     content {
       role_arn = assume_role.value
     }
   }
   # No try(): a missing account_ids key fails the plan loudly instead of
   # silently dropping the wrong-account guard.
-  allowed_account_ids = [data.terraform_remote_state.aws_organization.outputs.account_ids["security_tooling"]]
+  allowed_account_ids = [local.org.account_ids["security_tooling"]]
 }
 
 provider "aws" {
@@ -55,14 +55,14 @@ provider "aws" {
   # assuming account_role_arns["log_archive"] (OrganizationAccountAccessRole).
   shared_config_files = var.tfc_aws_dynamic_credentials == null ? null : [var.tfc_aws_dynamic_credentials.aliases["log_archive"].shared_config_file]
   dynamic "assume_role" {
-    for_each = var.tfc_aws_dynamic_credentials == null ? [data.terraform_remote_state.aws_organization.outputs.account_role_arns["log_archive"]] : []
+    for_each = var.tfc_aws_dynamic_credentials == null ? [local.org.account_role_arns["log_archive"]] : []
     content {
       role_arn = assume_role.value
     }
   }
   # No try(): a missing account_ids key fails the plan loudly instead of
   # silently dropping the wrong-account guard.
-  allowed_account_ids = [data.terraform_remote_state.aws_organization.outputs.account_ids["log_archive"]]
+  allowed_account_ids = [local.org.account_ids["log_archive"]]
 }
 
 provider "aws" {
@@ -77,14 +77,14 @@ provider "aws" {
   # assuming account_role_arns["forensics"] (OrganizationAccountAccessRole).
   shared_config_files = var.tfc_aws_dynamic_credentials == null ? null : [var.tfc_aws_dynamic_credentials.aliases["forensics"].shared_config_file]
   dynamic "assume_role" {
-    for_each = var.tfc_aws_dynamic_credentials == null ? [data.terraform_remote_state.aws_organization.outputs.account_role_arns["forensics"]] : []
+    for_each = var.tfc_aws_dynamic_credentials == null ? [local.org.account_role_arns["forensics"]] : []
     content {
       role_arn = assume_role.value
     }
   }
   # No try(): a missing account_ids key fails the plan loudly instead of
   # silently dropping the wrong-account guard.
-  allowed_account_ids = [data.terraform_remote_state.aws_organization.outputs.account_ids["forensics"]]
+  allowed_account_ids = [local.org.account_ids["forensics"]]
 }
 
 # Canonical tag set written by EVERY aws provider in this root (default_tags).

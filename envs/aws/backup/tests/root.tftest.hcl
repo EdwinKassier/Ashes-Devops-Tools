@@ -30,6 +30,7 @@ run "consumes_remote_state_contract" {
         ou_ids = {
           Workloads = "ou-abcd-workloads0"
         }
+        account_ids = { backup = "444444444444" }
         account_role_arns = {
           backup = "arn:aws:iam::444444444444:role/cross-account"
         }
@@ -38,12 +39,12 @@ run "consumes_remote_state_contract" {
   }
 
   assert {
-    condition     = data.terraform_remote_state.aws_organization.outputs.account_role_arns["backup"] == "arn:aws:iam::444444444444:role/cross-account"
+    condition     = data.terraform_remote_state.aws_organization[0].outputs.account_role_arns["backup"] == "arn:aws:iam::444444444444:role/cross-account"
     error_message = "remote-state account_role_arns must expose the backup role the aws.backup provider assumes"
   }
 
   assert {
-    condition     = data.terraform_remote_state.aws_organization.outputs.ou_ids["Workloads"] == "ou-abcd-workloads0"
+    condition     = data.terraform_remote_state.aws_organization[0].outputs.ou_ids["Workloads"] == "ou-abcd-workloads0"
     error_message = "remote-state ou_ids must expose the Workloads OU the org BACKUP_POLICY attaches to"
   }
 }
@@ -63,6 +64,7 @@ run "rejects_placeholder_landing_zone_name" {
         ou_ids = {
           Workloads = "ou-abcd-workloads0"
         }
+        account_ids = { backup = "444444444444" }
         account_role_arns = {
           backup = "arn:aws:iam::444444444444:role/cross-account"
         }
@@ -71,4 +73,23 @@ run "rejects_placeholder_landing_zone_name" {
   }
 
   expect_failures = [var.landing_zone_name]
+}
+
+# Stage contract override (FAST-style): organization_contract replaces the
+# aws-organization remote-state read entirely (no override_data here).
+run "organization_contract_skips_remote_state" {
+  command = plan
+
+  variables {
+    organization_contract = {
+      account_ids       = { backup = "444444444444" }
+      account_role_arns = { backup = "arn:aws:iam::444444444444:role/cross-account" }
+      ou_ids            = { Workloads = "ou-abcd-workloads0" }
+    }
+  }
+
+  assert {
+    condition     = length(data.terraform_remote_state.aws_organization) == 0 && local.org.ou_ids["Workloads"] == "ou-abcd-workloads0"
+    error_message = "a supplied organization_contract must skip the aws-organization read and feed the root"
+  }
 }

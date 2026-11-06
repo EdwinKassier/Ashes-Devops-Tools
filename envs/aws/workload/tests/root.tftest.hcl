@@ -27,6 +27,7 @@ run "consumes_remote_state_contracts" {
     target = data.terraform_remote_state.aws_organization
     values = {
       outputs = {
+        account_ids = { workload_dev = "222222222222" }
         account_role_arns = {
           workload_dev = "arn:aws:iam::222222222222:role/cross-account"
         }
@@ -56,19 +57,19 @@ run "consumes_remote_state_contracts" {
   # M7: with var.log_archive_bucket_name = null, the central bucket name is sourced
   # from the aws-security remote state (its owner), not a hand-typed string.
   assert {
-    condition     = data.terraform_remote_state.aws_security.outputs.log_archive_bucket_name == "ashes-org-log-archive"
+    condition     = data.terraform_remote_state.aws_security[0].outputs.log_archive_bucket_name == "ashes-org-log-archive"
     error_message = "aws_security must expose log_archive_bucket_name for aws-workload to consume"
   }
 
   # The workload-account role the providers assume is readable from the org contract.
   assert {
-    condition     = data.terraform_remote_state.aws_organization.outputs.account_role_arns[var.workload_account_key] != ""
+    condition     = data.terraform_remote_state.aws_organization[0].outputs.account_role_arns[var.workload_account_key] != ""
     error_message = "aws_organization account_role_arns must expose the workload_account_key role"
   }
 
   # The shared TGW id is readable from the network contract.
   assert {
-    condition     = data.terraform_remote_state.aws_network.outputs.tgw_id == "tgw-000000000000abcd"
+    condition     = data.terraform_remote_state.aws_network[0].outputs.tgw_id == "tgw-000000000000abcd"
     error_message = "aws_network tgw_id contract key must be readable by the root"
   }
 
@@ -98,7 +99,7 @@ run "consumes_remote_state_contracts" {
 
   # The regional IPAM pool for this root's region is readable from the network contract.
   assert {
-    condition     = data.terraform_remote_state.aws_network.outputs.ipam_pool_ids[local.aws_region] == "ipam-pool-eu-west-2-0"
+    condition     = data.terraform_remote_state.aws_network[0].outputs.ipam_pool_ids[local.aws_region] == "ipam-pool-eu-west-2-0"
     error_message = "aws_network ipam_pool_ids must expose a pool for aws_region"
   }
 }
@@ -110,7 +111,7 @@ run "saas_secret_bridge_default_off" {
 
   override_data {
     target = data.terraform_remote_state.aws_organization
-    values = { outputs = { account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } }
+    values = { outputs = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } }
   }
   override_data {
     target = data.terraform_remote_state.aws_network
@@ -138,7 +139,7 @@ run "saas_secret_bridge_creates_secret_when_enabled" {
 
   override_data {
     target = data.terraform_remote_state.aws_organization
-    values = { outputs = { account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } }
+    values = { outputs = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } }
   }
   override_data {
     target = data.terraform_remote_state.aws_network
@@ -180,7 +181,7 @@ run "app_services_default_creates_nothing" {
 
   override_data {
     target = data.terraform_remote_state.aws_organization
-    values = { outputs = { account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } }
+    values = { outputs = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } }
   }
   override_data {
     target = data.terraform_remote_state.aws_network
@@ -212,7 +213,7 @@ run "app_services_one_service" {
 
   override_data {
     target = data.terraform_remote_state.aws_organization
-    values = { outputs = { account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } }
+    values = { outputs = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } }
   }
   override_data {
     target = data.terraform_remote_state.aws_network
@@ -256,6 +257,7 @@ run "rejects_placeholder_landing_zone_name" {
     target = data.terraform_remote_state.aws_organization
     values = {
       outputs = {
+        account_ids = { workload_dev = "222222222222" }
         account_role_arns = {
           workload_dev = "arn:aws:iam::222222222222:role/cross-account"
         }

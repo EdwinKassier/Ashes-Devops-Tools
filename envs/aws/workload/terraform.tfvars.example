@@ -108,3 +108,12 @@ enable_github_oidc = false
 # app_alb_certificate_arn = "arn:aws:acm:eu-west-2:222222222222:certificate/abcd"  # HTTPS :443, :80 redirects
 # app_alb_ingress_cidrs   = ["10.0.0.0/8"]   # default [vpc_cidr]; widen for other spokes via the TGW
 # app_alarm_sns_topic_arn = "arn:aws:sns:eu-west-2:222222222222:workload-alarms"
+
+# Stage contract overrides (optional; also settable as aws.contracts.<layer> in
+# config/landing-zone.yaml). A supplied contract skips that remote-state read.
+# organization_contract = { account_ids = { workload_dev = "222222222222" } }
+# network_contract      = { tgw_id = "tgw-0123456789abcdef0", ipam_pool_ids = { "eu-west-2" = "ipam-pool-0123456789abcdef0" } }
+# security_contract     = { log_archive_bucket_name = "my-org-org-log-archive" }
+#
+# Standalone spoke without the aws-network layer (no TGW, no IPAM, no egress):
+# enable_network_hub = false

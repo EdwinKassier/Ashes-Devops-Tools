@@ -28,6 +28,18 @@ locals {
     # aws.workload_environments: env => {account_key, vpc_cidr}.
     workload_account_keys = { for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => tostring(e.account_key) if try(e.account_key, null) != null }
     vpc_cidrs             = { for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => tostring(e.vpc_cidr) if try(e.vpc_cidr, null) != null }
+    # aws.contracts.<layer>: stage contract overrides (same shape as the
+    # <layer>_contract variables). Present => that remote-state read is skipped.
+    organization_contract = try(local.lz.aws.contracts.organization, null) == null ? null : {
+      account_ids = { for k, v in try(local.lz.aws.contracts.organization.account_ids, {}) : k => tostring(v) }
+    }
+    network_contract = try(local.lz.aws.contracts.network, null) == null ? null : {
+      tgw_id        = try(tostring(local.lz.aws.contracts.network.tgw_id), null)
+      ipam_pool_ids = { for k, v in try(local.lz.aws.contracts.network.ipam_pool_ids, {}) : k => tostring(v) }
+    }
+    security_contract = try(local.lz.aws.contracts.security.log_archive_bucket_name, null) == null ? null : {
+      log_archive_bucket_name = tostring(local.lz.aws.contracts.security.log_archive_bucket_name)
+    }
   }
 
   # Required values fall back to an inert sentinel only so static tools (tflint)

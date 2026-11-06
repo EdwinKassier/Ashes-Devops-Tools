@@ -26,6 +26,58 @@ variable "network_workspace_name" {
   default     = "aws-network"
 }
 
+# -----------------------------------------------------------------------------
+# Stage contract overrides (FAST-style). Each one, when set (here or as
+# aws.contracts.<layer> in config/landing-zone.yaml), replaces the matching
+# terraform_remote_state read entirely — the upstream workspace is not read.
+# -----------------------------------------------------------------------------
+
+variable "organization_contract" {
+  description = "aws-organization stage contract: account_ids (account key => 12-digit account ID; must contain workload_account_key). Null = aws.contracts.organization from config/landing-zone.yaml, else read from the aws-organization workspace's remote state."
+  type = object({
+    account_ids = map(string)
+  })
+  default = null
+
+  validation {
+    condition     = var.organization_contract == null || alltrue([for id in values(try(var.organization_contract.account_ids, {})) : can(regex("^[0-9]{12}$", id))])
+    error_message = "organization_contract.account_ids values must be 12-digit AWS account IDs."
+  }
+}
+
+variable "network_contract" {
+  description = "aws-network stage contract: tgw_id (shared transit gateway, null = no attachment) and ipam_pool_ids (region => IPAM pool ID; a missing region uses the literal vpc_cidr). Null = aws.contracts.network from config/landing-zone.yaml, else read from the aws-network workspace's remote state. Ignored when enable_network_hub = false."
+  type = object({
+    tgw_id        = optional(string)
+    ipam_pool_ids = optional(map(string), {})
+  })
+  default = null
+
+  validation {
+    condition     = try(var.network_contract.tgw_id, null) == null || can(regex("^tgw-", try(var.network_contract.tgw_id, "")))
+    error_message = "network_contract.tgw_id must be null or a transit gateway id (tgw-xxxxxxxx)."
+  }
+}
+
+variable "enable_network_hub" {
+  description = "Attach the spoke to the aws-network hub (shared TGW + IPAM pool, from network_contract or the aws-network remote state). False = standalone mode: no aws-network read, no TGW attachment or routes, the literal vpc_cidr, and NAT-less private tiers (no egress off the VPC)."
+  type        = bool
+  default     = true
+}
+
+variable "security_contract" {
+  description = "aws-security stage contract: log_archive_bucket_name (central log-archive bucket). Null = aws.contracts.security from config/landing-zone.yaml, else read from the aws-security workspace's remote state. var.log_archive_bucket_name, if set, wins (legacy single-field form)."
+  type = object({
+    log_archive_bucket_name = string
+  })
+  default = null
+
+  validation {
+    condition     = var.security_contract == null || length(trimspace(try(var.security_contract.log_archive_bucket_name, ""))) > 0
+    error_message = "security_contract.log_archive_bucket_name must be a non-empty S3 bucket name."
+  }
+}
+
 variable "workload_account_key" {
   description = "Key into the aws-organization root's account_role_arns map identifying THIS environment's workload account (e.g. \"workload_dev\"). Both the default and us_east_1 providers assume that role. Null = aws.workload_environments[<environment>].account_key from config/landing-zone.yaml (needs var.environment, which tfc-admin sets on every aws-workload-<env> workspace)."
   type        = string
@@ -79,7 +131,7 @@ variable "vpc_cidr" {
 # -----------------------------------------------------------------------------
 
 variable "log_archive_bucket_name" {
-  description = "Name of the central log-archive bucket (receives this workload's VPC flow logs, Config snapshots/history, and Session Manager logs). Default null sources it from the aws-security root's remote state (its owner — see audit M7), so a rename there flows through automatically. Set a value only to override for an out-of-band setup."
+  description = "Name of the central log-archive bucket (receives this workload's VPC flow logs, Config snapshots/history, and Session Manager logs). Legacy single-field form of security_contract: when set, the aws-security remote state is not read. Default null sources it from security_contract, else the aws-security root's remote state (its owner — see audit M7)."
   type        = string
   default     = null
 

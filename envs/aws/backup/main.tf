@@ -4,7 +4,24 @@
 # vault in the delegated backup account plus the organization BACKUP_POLICY
 # attached to the Workloads OU. It is a CONSUMER of the cross-root contract
 # (account_role_arns["backup"], ou_ids["Workloads"]).
+# Stage contract override (FAST-style): var.organization_contract (or
+# aws.contracts.organization in config/landing-zone.yaml) replaces this read —
+# count = 0 — so the root can plan without the aws-organization workspace.
+locals {
+  organization_contract = var.organization_contract != null ? var.organization_contract : local.cfg.organization_contract
+  read_organization     = local.organization_contract == null
+  # The organization contract this root consumes, whichever source supplied it
+  # (the remote state is projected onto the contract's fields so both branches
+  # share one type).
+  org = local.read_organization ? {
+    account_ids       = tomap(data.terraform_remote_state.aws_organization[0].outputs.account_ids)
+    account_role_arns = tomap(data.terraform_remote_state.aws_organization[0].outputs.account_role_arns)
+    ou_ids            = tomap(data.terraform_remote_state.aws_organization[0].outputs.ou_ids)
+  } : local.organization_contract
+}
+
 data "terraform_remote_state" "aws_organization" {
+  count   = local.read_organization ? 1 : 0
   backend = "cloud"
   config = {
     organization = local.tfc_organization
@@ -26,7 +43,7 @@ module "aws_backup" {
 
   # Cross-root contract: the org policy attaches to the Workloads OU published by
   # the aws-organization root.
-  workloads_ou_id = data.terraform_remote_state.aws_organization.outputs.ou_ids["Workloads"]
+  workloads_ou_id = local.org.ou_ids["Workloads"]
 
   aws_region = local.aws_region
 

@@ -9,8 +9,8 @@ output "subnet_ids_by_tier" {
 }
 
 output "tgw_attachment_id" {
-  description = "The ID of the spoke VPC's transit-gateway attachment to the shared hub."
-  value       = aws_ec2_transit_gateway_vpc_attachment.spoke.id
+  description = "The ID of the spoke VPC's transit-gateway attachment to the shared hub (null in standalone mode, tgw_id = null)."
+  value       = try(aws_ec2_transit_gateway_vpc_attachment.spoke[0].id, null)
 }
 
 output "workload_role_arns" {

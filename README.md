@@ -18,8 +18,8 @@
 [![Terraform Validation](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml)
 [![Security Scan](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml)
 [![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?style=flat-square&logo=pre-commit)](https://pre-commit.com)
-[![Modules](https://img.shields.io/badge/modules-114-blueviolet?style=flat-square)](modules/)
-[![Tests](https://img.shields.io/badge/test_suites-259-blue?style=flat-square)](modules/)
+[![Modules](https://img.shields.io/badge/modules-118-blueviolet?style=flat-square)](modules/)
+[![Tests](https://img.shields.io/badge/test_suites-272-blue?style=flat-square)](modules/)
 
 <sub>Module/test-suite counts are static badges, enforced in CI: <code>make count</code> prints the live figures and <code>scripts/check-docs-counts.sh</code> (meta-lint) fails when this README or CLAUDE.md disagrees with the tree.</sub>
 
@@ -116,7 +116,7 @@ Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives i
 
 ## Module Library
 
-114 modules — **56 GCP · 51 AWS · 6 SaaS · 1 TFC** — each with auto-generated docs and `mock_provider` tests.
+118 modules — **60 GCP · 51 AWS · 6 SaaS · 1 TFC** — each with auto-generated docs and `mock_provider` tests.
 
 Both clouds are organized into the **same conceptual domains** so you can map a capability across providers at a glance. Each table reads: **capability → Google Cloud module → Amazon Web Services module**. A `—` means the platform has no dedicated module for that capability (often because it is native, or lives in an adjacent domain — noted inline). Link text is the module's path under `modules/<cloud>/`.
 
@@ -260,10 +260,10 @@ Composite stages wrap the primitives above into deployable landing-zone layers, 
 | Organization &amp; guardrails | [`stages/organization`](modules/gcp/stages/organization/) | [`stages/organization`](modules/aws/stages/organization/) |
 | Security baseline | *(folded into `stages/organization`)* | [`stages/security`](modules/aws/stages/security/) |
 | Projects / accounts | [`stages/projects`](modules/gcp/stages/projects/) | *(accounts via `stages/organization`)* |
-| Network hub | [`stages/network-hub`](modules/gcp/stages/network-hub/) | [`stages/network-hub`](modules/aws/stages/network-hub/) |
+| Network hub | [`stages/network-hub`](modules/gcp/stages/network-hub/) (composes [`stages/net-hub`](modules/gcp/stages/net-hub/) + [`stages/dns-anchor`](modules/gcp/stages/dns-anchor/)) | [`stages/network-hub`](modules/aws/stages/network-hub/) |
 | Shared services | *(via `stages/projects`)* | [`stages/shared-services`](modules/aws/stages/shared-services/) |
 | Backup | — | [`stages/backup`](modules/aws/stages/backup/) |
-| Workload (per environment) | [`stages/workload`](modules/gcp/stages/workload/), [`stages/host`](modules/gcp/stages/host/) | [`stages/workload`](modules/aws/stages/workload/) |
+| Workload (per environment) | [`stages/workload`](modules/gcp/stages/workload/), [`stages/net-spoke`](modules/gcp/stages/net-spoke/) *(replaces the deprecated [`stages/host`](modules/gcp/stages/host/))* | [`stages/workload`](modules/aws/stages/workload/) |
 
 </details>
 

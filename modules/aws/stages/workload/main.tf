@@ -74,11 +74,13 @@ locals {
   # tgw_destination_cidrs entry to the shared TGW. The target is read from the
   # attachment resource so the routes are only created once the VPC is attached
   # (a VPC route to a TGW is rejected before the attachment exists).
+  # Standalone mode (tgw_id = null): no attachment, so no TGW routes at all.
+  routed_tiers = var.tgw_id == null ? [] : var.tgw_route_tiers
   spoke_routes = {
-    for tier in var.tgw_route_tiers : tier => [
+    for tier in local.routed_tiers : tier => [
       for cidr in var.tgw_destination_cidrs : {
         destination_cidr_block = cidr
-        transit_gateway_id     = aws_ec2_transit_gateway_vpc_attachment.spoke.transit_gateway_id
+        transit_gateway_id     = aws_ec2_transit_gateway_vpc_attachment.spoke[0].transit_gateway_id
       }
     ]
   }
@@ -109,9 +111,13 @@ module "vpc" {
 # live); the network account owns the TGW and manages its route-table
 # association/propagation. So both default-route-table flags are false here —
 # the workload never touches the hub's segment routing.
+#
+# Skipped entirely when tgw_id = null (standalone spoke, no aws-network layer).
 # ---------------------------------------------------------------------------
 
 resource "aws_ec2_transit_gateway_vpc_attachment" "spoke" {
+  count = var.tgw_id == null ? 0 : 1
+
   transit_gateway_id = var.tgw_id
   vpc_id             = module.vpc.vpc_id
   subnet_ids         = module.vpc.subnet_ids_by_tier["tgw"]
@@ -122,6 +128,11 @@ resource "aws_ec2_transit_gateway_vpc_attachment" "spoke" {
   transit_gateway_default_route_table_propagation = false
 
   tags = merge(var.tags, { Name = "${local.name}-spoke" })
+}
+
+moved {
+  from = aws_ec2_transit_gateway_vpc_attachment.spoke
+  to   = aws_ec2_transit_gateway_vpc_attachment.spoke[0]
 }
 
 # ---------------------------------------------------------------------------

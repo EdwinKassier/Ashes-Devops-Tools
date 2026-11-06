@@ -46,6 +46,17 @@ locals {
         is_production           = tobool(try(e.is_production, false))
       }
     }
+
+    # gcp.contracts.<layer>: stage contract overrides (same shape as the
+    # <layer>_contract variables). Present => that remote-state read is skipped.
+    organization_contract = try(local.lz.gcp.contracts.organization, null) == null ? null : {
+      org_id  = tostring(local.lz.gcp.contracts.organization.org_id)
+      folders = { for k, f in try({ for k, f in local.lz.gcp.contracts.organization.folders : k => f }, {}) : k => { id = tostring(f.id), name = tostring(try(f.name, f.id)), display_name = tostring(try(f.display_name, k)) } }
+    }
+    projects_contract = try(local.lz.gcp.contracts.projects.project_ids, null) == null ? null : {
+      project_ids     = { for k, v in local.lz.gcp.contracts.projects.project_ids : k => tostring(v) }
+      project_numbers = { for k, v in try(local.lz.gcp.contracts.projects.project_numbers, {}) : k => tostring(v) }
+    }
   }
 
   # Effective values. Required ones fall back to an inert sentinel only so

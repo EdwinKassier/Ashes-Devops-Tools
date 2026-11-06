@@ -5,8 +5,11 @@
 # of the control-plane roots, after gcp-projects.
 
 locals {
-  org      = data.terraform_remote_state.gcp_organization.outputs
-  projects = data.terraform_remote_state.gcp_projects.outputs
+  # Remote state when read (count = 1), else the supplied contract. try() only
+  # selects the source — it does not unify the two object types — and a failed
+  # read still errors at plan time.
+  org      = try(data.terraform_remote_state.gcp_organization[0].outputs, local.organization_contract)
+  projects = try(data.terraform_remote_state.gcp_projects[0].outputs, local.projects_contract)
 }
 
 module "network_hub" {

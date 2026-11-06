@@ -138,3 +138,30 @@ run "prod_named_env_without_flag_does_not_warn" {
     }
   }
 }
+
+# Stage contract override (FAST-style): organization_contract / projects_contract
+# replace the upstream remote-state reads entirely (count = 0).
+run "contracts_skip_remote_state" {
+  command = plan
+
+  variables {
+    organization_contract = {
+      org_id  = "123456789012"
+      folders = { dev = { id = "folders/111", name = "folders/111", display_name = "Development" } }
+    }
+    projects_contract = {
+      project_ids     = { "shared-hub" = "acme-hub-abcd", "shared-dns" = "acme-dns-abcd", "dev-host" = "acme-dev-host-abcd" }
+      project_numbers = { "shared-hub" = "111111111111", "shared-dns" = "222222222222", "dev-host" = "333333333333" }
+    }
+  }
+
+  assert {
+    condition = (
+      length(data.terraform_remote_state.gcp_organization) == 0 &&
+      length(data.terraform_remote_state.gcp_projects) == 0 &&
+      local.org.org_id == "123456789012" &&
+      local.projects.project_ids["shared-hub"] == "acme-hub-abcd"
+    )
+    error_message = "supplied contracts must skip the gcp-organization / gcp-projects reads and feed the root"
+  }
+}

@@ -1,0 +1,27 @@
+# Test fixture: stage contracts from the config file (contracts.tftest.hcl).
+version: 1
+org:
+  prefix: cfgco
+  regions:
+    gcp: europe-west1
+  tfc:
+    organization: cfg-tfc
+gcp:
+  contracts:
+    organization:
+      org_id: "123456789012"
+      billing_account: billingAccounts/000000-111111-222222
+      admin_project_number: "111111111111"
+    projects:
+      environment_config:
+        dev:
+          folder_id: folders/111
+          host_project_id: cfgco-dev-host
+          host_project_number: "222222222222"
+          region: europe-west1
+          cidr_block: 10.10.0.0/16
+          labels: {tier: non-production}
+          is_production: false
+    network_hub:
+      vpc_self_link: https://www.googleapis.com/compute/v1/projects/cfgco-hub/global/networks/hub-vpc
+      dns_domain: hub.internal.

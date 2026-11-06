@@ -131,3 +131,32 @@ run "environment_config_tolerates_pre_scoped_org_state" {
     error_message = "an org state without scoped_access_policy_ids must yield a null policy ID, not an error."
   }
 }
+
+# Stage contract override (FAST-style): bootstrap_contract / organization_contract
+# replace the upstream remote-state reads entirely (count = 0).
+run "contracts_skip_remote_state" {
+  command = plan
+
+  variables {
+    bootstrap_contract = {
+      admin_project_id = "acme-admin-abcd"
+      suffix           = "abcd"
+    }
+    organization_contract = {
+      billing_account = "billingAccounts/000000-111111-222222"
+      folders         = { dev = { id = "folders/999", name = "folders/999", display_name = "Development" } }
+      tag_values      = { "environment-dev" = "tagValues/999" }
+    }
+  }
+
+  assert {
+    condition = (
+      length(data.terraform_remote_state.gcp_bootstrap) == 0 &&
+      length(data.terraform_remote_state.gcp_organization) == 0 &&
+      output.environment_config["dev"].folder_id == "folders/999" &&
+      output.environment_config["dev"].tag_value_ids.environment == "tagValues/999" &&
+      output.environment_config["dev"].vpc_sc_access_policy_id == null
+    )
+    error_message = "supplied contracts must skip the gcp-bootstrap / gcp-organization reads and feed environment_config"
+  }
+}

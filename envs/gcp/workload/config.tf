@@ -46,6 +46,32 @@ locals {
         is_production           = tobool(try(e.is_production, false))
       }
     }
+
+    # gcp.contracts.<layer>: stage contract overrides (same shape as the
+    # <layer>_contract variables). Present => that remote-state read is skipped.
+    organization_contract = try(local.lz.gcp.contracts.organization, null) == null ? null : {
+      org_id               = tostring(local.lz.gcp.contracts.organization.org_id)
+      billing_account      = tostring(local.lz.gcp.contracts.organization.billing_account)
+      admin_project_number = tostring(local.lz.gcp.contracts.organization.admin_project_number)
+    }
+    projects_contract = try(local.lz.gcp.contracts.projects, null) == null ? null : {
+      environment_config = {
+        for k, e in try({ for k, e in local.lz.gcp.contracts.projects.environment_config : k => e }, {}) : k => {
+          folder_id               = tostring(e.folder_id)
+          host_project_id         = tostring(e.host_project_id)
+          host_project_number     = tostring(e.host_project_number)
+          region                  = tostring(e.region)
+          cidr_block              = tostring(e.cidr_block)
+          labels                  = try({ for lk, lv in e.labels : lk => tostring(lv) }, {})
+          is_production           = try(tobool(e.is_production), null)
+          vpc_sc_access_policy_id = try(tostring(e.vpc_sc_access_policy_id), null)
+        }
+      }
+    }
+    network_hub_contract = try(local.lz.gcp.contracts.network_hub, null) == null ? null : {
+      vpc_self_link = tostring(local.lz.gcp.contracts.network_hub.vpc_self_link)
+      dns_domain    = tostring(local.lz.gcp.contracts.network_hub.dns_domain)
+    }
   }
 
   # Effective values. Required ones fall back to an inert sentinel only so

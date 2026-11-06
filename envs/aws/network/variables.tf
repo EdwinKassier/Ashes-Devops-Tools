@@ -20,6 +20,21 @@ variable "organization_workspace_name" {
   default     = "aws-organization"
 }
 
+variable "organization_contract" {
+  description = "aws-organization stage contract (FAST-style override): organization_id (o-xxxxxxxxxx), management_account_id, account_ids (account key => 12-digit ID). When set, the aws-organization remote state is NOT read. Null = aws.contracts.organization from config/landing-zone.yaml, else read from the organization_workspace_name workspace's remote state."
+  type = object({
+    organization_id       = string
+    management_account_id = string
+    account_ids           = map(string)
+  })
+  default = null
+
+  validation {
+    condition     = var.organization_contract == null || alltrue([for id in values(try(var.organization_contract.account_ids, {})) : can(regex("^[0-9]{12}$", id))])
+    error_message = "organization_contract.account_ids values must be 12-digit AWS account IDs."
+  }
+}
+
 # -----------------------------------------------------------------------------
 # Provider region + IPAM operating regions
 # -----------------------------------------------------------------------------

@@ -57,7 +57,7 @@ run "composes_workload_edge_disabled" {
 
   # The spoke attaches to the SHARED transit gateway passed in (routing contract).
   assert {
-    condition     = aws_ec2_transit_gateway_vpc_attachment.spoke.transit_gateway_id == var.tgw_id
+    condition     = aws_ec2_transit_gateway_vpc_attachment.spoke[0].transit_gateway_id == var.tgw_id
     error_message = "spoke attachment must target the shared transit gateway var.tgw_id"
   }
 
@@ -65,15 +65,15 @@ run "composes_workload_edge_disabled" {
   # association/propagation are both disabled (the network account manages them).
   assert {
     condition = (
-      aws_ec2_transit_gateway_vpc_attachment.spoke.transit_gateway_default_route_table_association == false &&
-      aws_ec2_transit_gateway_vpc_attachment.spoke.transit_gateway_default_route_table_propagation == false
+      aws_ec2_transit_gateway_vpc_attachment.spoke[0].transit_gateway_default_route_table_association == false &&
+      aws_ec2_transit_gateway_vpc_attachment.spoke[0].transit_gateway_default_route_table_propagation == false
     )
     error_message = "spoke attachment must not use the TGW default route tables"
   }
 
   # The attachment is placed in the spoke's tgw-tier subnets.
   assert {
-    condition     = length(aws_ec2_transit_gateway_vpc_attachment.spoke.subnet_ids) == 2
+    condition     = length(aws_ec2_transit_gateway_vpc_attachment.spoke[0].subnet_ids) == 2
     error_message = "spoke attachment must span the tgw-tier subnets (one per AZ)"
   }
 
@@ -97,7 +97,7 @@ run "composes_workload_edge_disabled" {
 
   # Name is derived, not hard-coded (legacy "workload" when environment is unset).
   assert {
-    condition     = output.name == "workload" && aws_ec2_transit_gateway_vpc_attachment.spoke.tags["Name"] == "workload-spoke"
+    condition     = output.name == "workload" && aws_ec2_transit_gateway_vpc_attachment.spoke[0].tags["Name"] == "workload-spoke"
     error_message = "with no environment/name the legacy workload name must be kept"
   }
 

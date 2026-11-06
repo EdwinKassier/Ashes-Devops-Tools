@@ -45,7 +45,7 @@ run "consumes_remote_state_contract" {
   }
 
   assert {
-    condition     = data.terraform_remote_state.aws_organization.outputs.account_role_arns["shared_services"] != ""
+    condition     = data.terraform_remote_state.aws_organization[0].outputs.account_role_arns["shared_services"] != ""
     error_message = "remote-state account_role_arns must expose the shared_services role the provider assumes"
   }
 
@@ -82,4 +82,21 @@ run "rejects_placeholder_landing_zone_name" {
   }
 
   expect_failures = [var.landing_zone_name]
+}
+
+# Stage contract override (FAST-style): organization_contract replaces the
+# aws-organization remote-state read entirely (no override_data here).
+run "organization_contract_skips_remote_state" {
+  command = plan
+
+  variables {
+    organization_contract = {
+      account_ids = { shared_services = "444444444444" }
+    }
+  }
+
+  assert {
+    condition     = length(data.terraform_remote_state.aws_organization) == 0 && output.account_ids["shared_services"] == "444444444444"
+    error_message = "a supplied organization_contract must skip the aws-organization read and feed the root"
+  }
 }

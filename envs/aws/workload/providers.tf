@@ -23,10 +23,9 @@ provider "aws" {
       role_arn = assume_role.value
     }
   }
-  # Fail fast if the resolved credentials are not the target member account.
-  # No try(): a missing account_ids key fails the plan loudly instead of
-  # silently dropping the wrong-account guard.
-  allowed_account_ids = [data.terraform_remote_state.aws_organization.outputs.account_ids[local.workload_account_key]]
+  # Fail fast if the resolved credentials are not the target member account
+  # (local.workload_account_id: organization contract or remote state, main.tf).
+  allowed_account_ids = [local.workload_account_id]
 }
 
 provider "aws" {
@@ -47,10 +46,9 @@ provider "aws" {
       role_arn = assume_role.value
     }
   }
-  # Fail fast if the resolved credentials are not the target member account.
-  # No try(): a missing account_ids key fails the plan loudly instead of
-  # silently dropping the wrong-account guard.
-  allowed_account_ids = [data.terraform_remote_state.aws_organization.outputs.account_ids[local.workload_account_key]]
+  # Fail fast if the resolved credentials are not the target member account
+  # (local.workload_account_id: organization contract or remote state, main.tf).
+  allowed_account_ids = [local.workload_account_id]
 }
 
 # Canonical tag set written by EVERY aws provider in this root (default_tags).

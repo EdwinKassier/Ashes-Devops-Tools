@@ -1,11 +1,27 @@
-# This root depends on the organization root (envs/gcp/organization) via remote state.
-# Trade-offs of this coupling:
-#   Pro: avoids re-declaring org-level outputs (billing account, folder IDs, hub network).
-#   Con: envs/gcp/workload cannot be planned or applied in isolation — the organization workspace
-#        must exist and its outputs must be populated first.
-# If you are onboarding a new environment, run envs/gcp/organization first.
-# If you need to work offline, override outputs with a stub backend using a local tfvars file.
+# Upstream stage contracts (FAST-style "stage contract override"). Each one comes
+# from, in order: the <layer>_contract variable, gcp.contracts.<layer> in
+# config/landing-zone.yaml, then the upstream workspace's terraform_remote_state.
+# A remote-state read happens ONLY when no contract was supplied (count = 0
+# otherwise), so this root can plan without the upstream workspaces existing:
+#   - organization → org_id, billing_account, admin_project_number
+#   - projects     → environment_config[<env>] (host project, folder, region, ...)
+#   - network_hub  → hub_network {vpc_self_link, dns_domain}. OPTIONAL: with
+#     enable_network_hub = false there is no hub peering and no DNS peering zone
+#     (local.hub_vpc_peerings / local.hub_dns_zones are empty).
+# Consumers (incl. the host module block) must use the locals below, never
+# data.terraform_remote_state.* directly: the data sources are count-gated.
+locals {
+  organization_contract = var.organization_contract != null ? var.organization_contract : local.cfg.organization_contract
+  projects_contract     = var.projects_contract != null ? var.projects_contract : local.cfg.projects_contract
+  network_hub_contract  = var.network_hub_contract != null ? var.network_hub_contract : local.cfg.network_hub_contract
+
+  read_organization = local.organization_contract == null
+  read_projects     = local.projects_contract == null
+  read_network_hub  = var.enable_network_hub && local.network_hub_contract == null
+}
+
 data "terraform_remote_state" "organization" {
+  count   = local.read_organization ? 1 : 0
   backend = "cloud"
   config = {
     organization = local.tfc_organization
@@ -16,10 +32,11 @@ data "terraform_remote_state" "organization" {
 }
 
 # The projects and network-hub stages were split into their own roots (audit H3),
-# so this root now reads environment_config from gcp-projects and hub_network from
-# gcp-network-hub. org_id / billing_account / admin_project_number still come from
+# so environment_config comes from gcp-projects and hub_network from
+# gcp-network-hub. org_id / billing_account / admin_project_number come from
 # gcp-organization above.
 data "terraform_remote_state" "projects" {
+  count   = local.read_projects ? 1 : 0
   backend = "cloud"
   config = {
     organization = local.tfc_organization
@@ -30,6 +47,7 @@ data "terraform_remote_state" "projects" {
 }
 
 data "terraform_remote_state" "network_hub" {
+  count   = local.read_network_hub ? 1 : 0
   backend = "cloud"
   config = {
     organization = local.tfc_organization
@@ -40,7 +58,48 @@ data "terraform_remote_state" "network_hub" {
 }
 
 locals {
-  env_config = data.terraform_remote_state.projects.outputs.environment_config[var.environment]
+  org_id               = local.read_organization ? data.terraform_remote_state.organization[0].outputs.org_id : local.organization_contract.org_id
+  billing_account      = local.read_organization ? data.terraform_remote_state.organization[0].outputs.billing_account : local.organization_contract.billing_account
+  admin_project_number = local.read_organization ? data.terraform_remote_state.organization[0].outputs.admin_project_number : local.organization_contract.admin_project_number
+
+  # Hub network contract, or null when the network hub is not part of this
+  # landing zone (enable_network_hub = false).
+  hub_network = (
+    !var.enable_network_hub ? null :
+    local.read_network_hub ? data.terraform_remote_state.network_hub[0].outputs.hub_network : local.network_hub_contract
+  )
+
+  # Hub-dependent host inputs: empty maps in standalone mode (no hub peering, no
+  # DNS peering zone). Built with a filtered for-expression so both modes share
+  # one map type.
+  hub_vpc_peerings = {
+    for k, v in {
+      "hub-peering" = {
+        peer_network         = try(local.hub_network.vpc_self_link, null)
+        export_custom_routes = true
+        import_custom_routes = true
+      }
+    } : k => v if local.hub_network != null
+  }
+  hub_dns_zones = {
+    for k, v in {
+      "internal-peering" = {
+        dns_name        = try(local.hub_network.dns_domain, null)
+        visibility      = "private"
+        description     = "Peering zone to resolve internal hub DNS"
+        peering_network = try(local.hub_network.vpc_self_link, null)
+        dnssec_enabled  = true
+      }
+    } : k => v if local.hub_network != null
+  }
+}
+
+locals {
+  env_config = (
+    local.read_projects
+    ? data.terraform_remote_state.projects[0].outputs.environment_config[var.environment]
+    : local.projects_contract.environment_config[var.environment]
+  )
 
   labels = merge(
     {
@@ -58,7 +117,7 @@ locals {
       sources = [
         {
           access_level = null
-          resource     = "//iam.googleapis.com/projects/${data.terraform_remote_state.organization.outputs.admin_project_number}/locations/global/workloadIdentityPools/*"
+          resource     = "//iam.googleapis.com/projects/${local.admin_project_number}/locations/global/workloadIdentityPools/*"
         }
       ]
       resources = null
@@ -112,60 +171,59 @@ data "google_project" "host_project" {
   project_id = local.env_config.host_project_id
 }
 
+# Stage contracts: the remote states above are count-gated, so module "host"
+# consumes local.hub_vpc_peerings / local.hub_dns_zones / local.org_id only.
+# Environment spoke network: the net-spoke composition (formerly the
+# deprecated stages/host god-module). The module label stays "host" so every
+# module.host.* reference, output and test keeps working; moved.tf migrates the
+# network-core addresses that changed shape (module.host.module.network.*).
 module "host" {
-  source = "../../../modules/gcp/stages/host"
+  source = "../../../modules/gcp/stages/net-spoke"
 
-  project_id     = local.env_config.host_project_id
-  project_prefix = local.project_prefix
-  region         = local.env_config.region
-  vpc_name       = "${local.project_prefix}-${var.environment}-vpc"
-  vpc_cidr_block = local.env_config.cidr_block
+  project_id          = local.env_config.host_project_id
+  project_prefix      = local.project_prefix
+  region              = local.env_config.region
+  deletion_protection = var.enable_deletion_protection
+  labels              = local.labels
 
-  enable_networking          = true
-  enable_shared_vpc_host     = true
-  enable_deletion_protection = var.enable_deletion_protection
-
-  enable_cloud_armor         = var.enable_cloud_armor
-  enable_owasp_rules         = var.enable_owasp_rules
-  enable_adaptive_protection = var.enable_adaptive_protection
-  owasp_sensitivity          = var.owasp_sensitivity
-
-  log_config_flow_sampling        = var.log_config_flow_sampling
-  log_config_aggregation_interval = var.log_config_aggregation_interval
-
-  labels = local.labels
-
-  vpc_peerings = {
-    "hub-peering" = {
-      peer_network         = data.terraform_remote_state.network_hub.outputs.hub_network.vpc_self_link
-      export_custom_routes = true
-      import_custom_routes = true
+  network = {
+    name            = "${local.project_prefix}-${var.environment}-vpc"
+    cidr_block      = local.env_config.cidr_block
+    shared_vpc_host = true
+    flow_logs = {
+      aggregation_interval = var.log_config_aggregation_interval
+      sampling             = var.log_config_flow_sampling
     }
   }
 
-  dns_zones = {
-    "internal-peering" = {
-      dns_name        = data.terraform_remote_state.network_hub.outputs.hub_network.dns_domain
-      visibility      = "private"
-      description     = "Peering zone to resolve internal hub DNS"
-      peering_network = data.terraform_remote_state.network_hub.outputs.hub_network.vpc_self_link
-      dnssec_enabled  = true
+  edge = {
+    cloud_armor = {
+      enabled             = var.enable_cloud_armor
+      owasp_rules         = var.enable_owasp_rules
+      adaptive_protection = var.enable_adaptive_protection
+      owasp_sensitivity   = var.owasp_sensitivity
     }
   }
 
-  enable_vpc_flow_logs_export           = true
-  vpc_flow_logs_create_bigquery_dataset = true
-  # BigQuery dataset IDs only allow alphanumerics and underscores — replace hyphens from environment name.
-  vpc_flow_logs_bigquery_dataset_id = "vpc_flow_logs_${replace(var.environment, "-", "_")}"
-  vpc_flow_logs_bigquery_location   = local.env_config.region
-  vpc_flow_logs_retention_days      = var.vpc_flow_logs_retention_days
+  # Hub peering and the DNS peering zone (empty maps in standalone mode).
+  peerings  = local.hub_vpc_peerings
+  dns_zones = local.hub_dns_zones
+
+  flow_logs_export = {
+    enabled                 = true
+    create_bigquery_dataset = true
+    # BigQuery dataset IDs only allow alphanumerics and underscores — replace hyphens from environment name.
+    bigquery_dataset_id = "vpc_flow_logs_${replace(var.environment, "-", "_")}"
+    bigquery_location   = local.env_config.region
+    retention_days      = var.vpc_flow_logs_retention_days
+  }
 
   # Only created when an access policy is known (the env's scoped policy, or an
   # explicit vpc_sc_access_policy_name). Passing a perimeter with a null access
   # policy trips the vpc-sc module's validation.
   vpc_service_controls = local.vpc_sc_access_policy == null ? {} : {
     "${var.environment}_perimeter" = {
-      organization_id    = "organizations/${data.terraform_remote_state.organization.outputs.org_id}"
+      organization_id    = "organizations/${local.org_id}"
       access_policy_name = local.vpc_sc_access_policy
       perimeter_title    = coalesce(var.vpc_sc_perimeter_title, "${upper(var.environment)} Perimeter")
       perimeter_type     = "PERIMETER_TYPE_REGULAR"
@@ -188,7 +246,7 @@ module "budget" {
   count  = var.monthly_budget_limit > 0 ? 1 : 0
   source = "../../../modules/gcp/governance/billing"
 
-  billing_account      = data.terraform_remote_state.organization.outputs.billing_account
+  billing_account      = local.billing_account
   project_id           = local.env_config.host_project_id
   project_name         = "${local.project_prefix}-${var.environment}"
   monthly_budget_limit = var.monthly_budget_limit
@@ -206,8 +264,8 @@ module "budget" {
   # kms_key_name: Intentionally omitted at the app-env level. The org-level
   # budget topic is CMEK-encrypted via the CMEK key created in stages/organization.
   # App-environment budget topics use Google-managed encryption. To change this,
-  # pass the CMEK key from remote state:
-  #   kms_key_name = data.terraform_remote_state.organization.outputs.cmek_key_names["budget-alerts"]
+  # pass the CMEK key from remote state (or add it to organization_contract):
+  #   kms_key_name = data.terraform_remote_state.organization[0].outputs.cmek_key_names["budget-alerts"]
   # Ensure the Pub/Sub service agent has roles/cloudkms.cryptoKeyEncrypterDecrypter first.
 
   labels = local.labels
@@ -229,9 +287,9 @@ module "service_team" {
   for_each = var.service_teams
 
   project_name    = each.key
-  org_id          = data.terraform_remote_state.organization.outputs.org_id
+  org_id          = local.org_id
   folder_id       = trimprefix(local.env_config.folder_id, "folders/")
-  billing_account = trimprefix(data.terraform_remote_state.organization.outputs.billing_account, "billingAccounts/")
+  billing_account = trimprefix(local.billing_account, "billingAccounts/")
 
   activate_apis = each.value.activate_apis
 

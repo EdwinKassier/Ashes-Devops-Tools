@@ -5,7 +5,22 @@
 # instance, administered from the shared-services delegated-admin account. It is
 # a CONSUMER of the organization cross-root contract (account_role_arns for the
 # provider, account_ids for wiring assignments to concrete member accounts).
+# Stage contract override (FAST-style): var.organization_contract (or
+# aws.contracts.organization in config/landing-zone.yaml) replaces this read —
+# count = 0 — so the root can plan without the aws-organization workspace.
+locals {
+  organization_contract = var.organization_contract != null ? var.organization_contract : local.cfg.organization_contract
+  read_organization     = local.organization_contract == null
+  # The organization contract this root consumes, whichever source supplied it
+  # (the remote state is projected onto the contract's fields so both branches
+  # share one type).
+  org = local.read_organization ? {
+    account_ids = tomap(data.terraform_remote_state.aws_organization[0].outputs.account_ids)
+  } : local.organization_contract
+}
+
 data "terraform_remote_state" "aws_organization" {
+  count   = local.read_organization ? 1 : 0
   backend = "cloud"
   config = {
     organization = local.tfc_organization
@@ -16,7 +31,7 @@ data "terraform_remote_state" "aws_organization" {
 locals {
   # Assignments passed straight through. Callers may set account_id directly, or
   # reference a member account by name from the org cross-root contract
-  # (data.terraform_remote_state.aws_organization.outputs.account_ids), e.g. in
+  # (local.org.account_ids), e.g. in
   # tfvars:
   #
   #   assignments = {

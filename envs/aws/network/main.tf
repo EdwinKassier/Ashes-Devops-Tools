@@ -6,7 +6,24 @@
 # organization cross-root contract (organization_id, management_account_id,
 # account_role_arns) and re-exports the network cross-root contract for
 # downstream app roots.
+# Stage contract override (FAST-style): var.organization_contract (or
+# aws.contracts.organization in config/landing-zone.yaml) replaces this read —
+# count = 0 — so the root can plan without the aws-organization workspace.
+locals {
+  organization_contract = var.organization_contract != null ? var.organization_contract : local.cfg.organization_contract
+  read_organization     = local.organization_contract == null
+  # The organization contract this root consumes, whichever source supplied it
+  # (the remote state is projected onto the contract's fields so both branches
+  # share one type).
+  org = local.read_organization ? {
+    organization_id       = data.terraform_remote_state.aws_organization[0].outputs.organization_id
+    management_account_id = data.terraform_remote_state.aws_organization[0].outputs.management_account_id
+    account_ids           = tomap(data.terraform_remote_state.aws_organization[0].outputs.account_ids)
+  } : local.organization_contract
+}
+
 data "terraform_remote_state" "aws_organization" {
+  count   = local.read_organization ? 1 : 0
   backend = "cloud"
   config = {
     organization = local.tfc_organization
@@ -18,13 +35,13 @@ locals {
   # Org ARN for RAM org-wide sharing, built from existing organization outputs
   # (management account id + org id) so no extra remote-state dependency is
   # needed just to obtain the ARN.
-  org_arn = "arn:aws:organizations::${data.terraform_remote_state.aws_organization.outputs.management_account_id}:organization/${data.terraform_remote_state.aws_organization.outputs.organization_id}"
+  org_arn = "arn:aws:organizations::${local.org.management_account_id}:organization/${local.org.organization_id}"
 }
 
 module "aws_network_hub" {
   source = "../../../modules/aws/stages/network-hub"
 
-  org_id  = data.terraform_remote_state.aws_organization.outputs.organization_id
+  org_id  = local.org.organization_id
   org_arn = local.org_arn
 
   aws_region          = local.aws_region

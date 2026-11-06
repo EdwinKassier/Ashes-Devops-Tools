@@ -16,6 +16,21 @@ This module creates two core projects:
 1. `net-hub`: Hosts the Shared VPC code
 2. `dns-hub`: Hosts private DNS zones
 
+## Composition
+
+| Call | Source | Role |
+|------|--------|------|
+| `module.hub` | [`net-hub`](../net-hub/) | Hub Shared VPC, NAT, PSA, PSC, hierarchical firewall, hub VPC-SC perimeter |
+| `module.dns_anchor` | [`dns-anchor`](../dns-anchor/) | DNS-anchor VPC and the `internal-root` private zone |
+| `module.hub_cloud_armor` | [`network/cloud-armor`](../../network/cloud-armor/) | Hub WAF policy kept from the `stages/host` era |
+
+Until this release the stage called the deprecated `stages/host` module twice
+(`module.hub_network`, `module.dns_hub_network`). [`moved.tf`](./moved.tf)
+migrates every object those calls held, so the first plan after upgrading
+shows moves only. The hub perimeter key is now `hub_data_perimeter`: the old
+`hub-data-perimeter` key failed the vpc-sc name validation, so no perimeter
+can exist in state under it.
+
 ## Usage
 
 ```hcl
@@ -88,9 +103,9 @@ module "example" {
 ## Modules
 
 
-- dns_hub_network - ../host
-- dns_hub_zone - ../../network/dns
-- hub_network - ../host
+- dns_anchor - ../dns-anchor
+- hub - ../net-hub
+- hub_cloud_armor - ../../network/cloud-armor
 
 
 

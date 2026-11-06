@@ -1,10 +1,26 @@
-# Host Module
+# Host Module (deprecated)
 
-Compatibility wrapper for the application environment root.
+> **Deprecated.** This god-module (74 inputs, 16 `enable_*` toggles) is kept
+> unchanged for one deprecation cycle so existing callers' state is untouched,
+> and will be removed in a later release. No in-repo root uses it any more.
+> Migrate to the purpose-built compositions:
+>
+> | Former use | Replacement | Reference migration |
+> |------------|-------------|---------------------|
+> | Hub Shared VPC | [`stages/net-hub`](../net-hub/) | [`stages/network-hub/moved.tf`](../network-hub/moved.tf) |
+> | DNS-anchor VPC (NAT, Armor, PSC, PSA off) | [`stages/dns-anchor`](../dns-anchor/) | [`stages/network-hub/moved.tf`](../network-hub/moved.tf) |
+> | Per-environment spoke | [`stages/net-spoke`](../net-spoke/) | [`envs/gcp/workload/moved.tf`](../../../../envs/gcp/workload/moved.tf) |
+>
+> All three share the [`network/tiered-vpc`](../../network/tiered-vpc/) core,
+> which keeps this module's resource names and CIDR maths. Each composition
+> ships a `host_parity` test suite that plans this module and the replacement
+> side by side and asserts identical names, CIDRs and settings. CDN, API
+> Gateway, internal load balancers, packet mirroring and standalone NAT are not
+> carried over: compose them directly from the `network/` primitives.
 
 ## Overview
 
-This module composes the lower-level networking, security, and governance modules used by [envs/gcp/workload](../../../../envs/gcp/workload/). It is retained for compatibility and internal orchestration; new consumers should prefer the staged roots and stage modules over calling `modules/gcp/stages/host` directly.
+This module composes the lower-level networking, security, and governance modules into one environment stack, every capability behind an `enable_*` toggle.
 
 ## File layout
 
@@ -160,10 +176,12 @@ The generated module reference below is the source of truth for inputs, outputs,
 <!-- BEGIN_TF_DOCS -->
 Copyright 2023 Ashes
 
-Host Module - Unified Infrastructure Orchestration
+Host Module - DEPRECATED unified network stack
 
-Compatibility wrapper used by envs/gcp/workload to compose network,
-security, and governance modules into one environment stack.
+Deprecated: kept unchanged for one deprecation cycle so external callers'
+state is untouched. In-repo callers now use the purpose-built compositions
+stages/net-hub, stages/net-spoke and stages/dns-anchor (over the shared
+network/tiered-vpc core); see README.md for the migration guide.
 
 ## Usage
 
@@ -235,9 +253,9 @@ module "example" {
 The following resources are created:
 
 
-- resource.terraform_data.deletion_protection_guard (modules/gcp/stages/host/main.tf#L55)
-- resource.terraform_data.subnet_cidr_count_guard (modules/gcp/stages/host/main.tf#L70)
-- data source.google_compute_zones.available (modules/gcp/stages/host/main.tf#L35)
+- resource.terraform_data.deletion_protection_guard (modules/gcp/stages/host/main.tf#L57)
+- resource.terraform_data.subnet_cidr_count_guard (modules/gcp/stages/host/main.tf#L72)
+- data source.google_compute_zones.available (modules/gcp/stages/host/main.tf#L37)
 - data source.google_project.current (modules/gcp/stages/host/observability.tf#L8)
 
 

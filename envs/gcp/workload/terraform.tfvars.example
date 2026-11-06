@@ -129,3 +129,11 @@ enable_gke_autopilot  = false # optional env-level GKE Autopilot cluster
 # os_patch_deployments = {
 #   weekly-os-patch = { day_of_week = "SUNDAY", start_time = "03:00", reboot_config = "DEFAULT" }
 # }
+
+# Stage contract overrides (optional; also settable as gcp.contracts.<layer> in
+# config/landing-zone.yaml). A supplied contract skips that remote-state read.
+# organization_contract = { org_id = "123456789012", billing_account = "billingAccounts/000000-111111-222222", admin_project_number = "111111111111" }
+# network_hub_contract  = { vpc_self_link = "https://www.googleapis.com/compute/v1/projects/my-hub/global/networks/hub-vpc", dns_domain = "hub.internal." }
+#
+# Environment without the gcp-network-hub layer (no hub peering / DNS peering zone):
+# enable_network_hub = false

@@ -50,9 +50,30 @@ run "spoke_routes_to_tgw" {
   assert {
     condition = (
       output.name == "workload-dev" &&
-      aws_ec2_transit_gateway_vpc_attachment.spoke.tags["Name"] == "workload-dev-spoke"
+      aws_ec2_transit_gateway_vpc_attachment.spoke[0].tags["Name"] == "workload-dev-spoke"
     )
     error_message = "name must default to workload-<environment> and tags must reach the TGW attachment"
+  }
+}
+
+# Standalone mode (no aws-network layer): tgw_id = null plans the spoke VPC with
+# no TGW attachment and no TGW routes, so the private tier stays local-only.
+run "standalone_without_tgw" {
+  command = plan
+
+  variables {
+    tgw_id      = null
+    environment = "dev"
+  }
+
+  assert {
+    condition = (
+      length(aws_ec2_transit_gateway_vpc_attachment.spoke) == 0 &&
+      length(output.tgw_routes) == 0 &&
+      output.tgw_attachment_id == null &&
+      length(output.route_table_ids_by_tier["private"]) == 2
+    )
+    error_message = "tgw_id = null must plan a standalone spoke: no TGW attachment, no TGW routes"
   }
 }
 

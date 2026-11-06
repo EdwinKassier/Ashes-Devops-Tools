@@ -150,3 +150,27 @@ variable "projects_workspace_name" {
   type        = string
   default     = "gcp-projects"
 }
+
+# Stage contract overrides (FAST-style): when set (here or as gcp.contracts.<layer>
+# in config/landing-zone.yaml) the matching remote-state read is skipped.
+variable "organization_contract" {
+  description = "gcp-organization stage contract: org_id and folders (key => {id, name, display_name}). Null = gcp.contracts.organization from config/landing-zone.yaml, else read from the gcp-organization workspace's remote state."
+  type = object({
+    org_id = string
+    folders = map(object({
+      id           = string
+      name         = string
+      display_name = string
+    }))
+  })
+  default = null
+}
+
+variable "projects_contract" {
+  description = "gcp-projects stage contract: project_ids and project_numbers (project key => value; needs shared-hub, shared-dns and every <env>-host). Null = gcp.contracts.projects from config/landing-zone.yaml, else read from the gcp-projects workspace's remote state."
+  type = object({
+    project_ids     = map(string)
+    project_numbers = map(string)
+  })
+  default = null
+}

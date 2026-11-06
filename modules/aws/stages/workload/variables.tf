@@ -124,12 +124,13 @@ variable "subnets" {
 # -----------------------------------------------------------------------------
 
 variable "tgw_id" {
-  description = "ID of the SHARED transit gateway (shared into this workload account over RAM by the network account) that the spoke VPC attaches to."
+  description = "ID of the SHARED transit gateway (shared into this workload account over RAM by the network account) that the spoke VPC attaches to. Null (default) is standalone mode: no TGW attachment and no TGW routes, so the spoke's private/isolated tiers stay local-only (no NAT, no egress) until a network hub exists."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^tgw-", var.tgw_id))
-    error_message = "tgw_id must be a transit gateway id (tgw-xxxxxxxx)."
+    condition     = var.tgw_id == null || can(regex("^tgw-", coalesce(var.tgw_id, "x")))
+    error_message = "tgw_id must be null (standalone) or a transit gateway id (tgw-xxxxxxxx)."
   }
 }
 

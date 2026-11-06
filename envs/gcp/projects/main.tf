@@ -5,8 +5,11 @@
 # state. Apply after gcp-organization and before gcp-network-hub.
 
 locals {
-  org       = data.terraform_remote_state.gcp_organization.outputs
-  bootstrap = data.terraform_remote_state.gcp_bootstrap.outputs
+  # Remote state when read (count = 1), else the supplied contract. try() only
+  # selects the source — it does not unify the two object types — and a failed
+  # read still errors at plan time.
+  org       = try(data.terraform_remote_state.gcp_organization[0].outputs, local.organization_contract)
+  bootstrap = try(data.terraform_remote_state.gcp_bootstrap[0].outputs, local.bootstrap_contract)
 
   project_environments = merge(
     {

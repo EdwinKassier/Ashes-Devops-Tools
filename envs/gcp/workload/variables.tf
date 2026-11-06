@@ -81,6 +81,64 @@ variable "network_hub_workspace_name" {
   default     = "gcp-network-hub"
 }
 
+# -----------------------------------------------------------------------------
+# Stage contract overrides (FAST-style). Each one, when set (here or as
+# gcp.contracts.<layer> in config/landing-zone.yaml), replaces the matching
+# terraform_remote_state read entirely — the upstream workspace is not read.
+# -----------------------------------------------------------------------------
+
+variable "organization_contract" {
+  description = "gcp-organization stage contract: org_id (numeric), billing_account (billingAccounts/XXXXXX-XXXXXX-XXXXXX or bare ID) and admin_project_number. Null = gcp.contracts.organization from config/landing-zone.yaml, else read from the gcp-organization workspace's remote state."
+  type = object({
+    org_id               = string
+    billing_account      = string
+    admin_project_number = string
+  })
+  default = null
+
+  validation {
+    condition     = var.organization_contract == null || (can(regex("^[0-9]+$", try(var.organization_contract.org_id, ""))) && can(regex("^[0-9]+$", try(var.organization_contract.admin_project_number, ""))))
+    error_message = "organization_contract.org_id and admin_project_number must be numeric."
+  }
+}
+
+variable "projects_contract" {
+  description = "gcp-projects stage contract: environment_config (environment => folder_id, host_project_id, host_project_number, region, cidr_block, labels, is_production, vpc_sc_access_policy_id); must contain var.environment. Null = gcp.contracts.projects from config/landing-zone.yaml, else read from the gcp-projects workspace's remote state."
+  type = object({
+    environment_config = map(object({
+      folder_id               = string
+      host_project_id         = string
+      host_project_number     = string
+      region                  = string
+      cidr_block              = string
+      labels                  = optional(map(string), {})
+      is_production           = optional(bool)
+      vpc_sc_access_policy_id = optional(string)
+    }))
+  })
+  default = null
+}
+
+variable "network_hub_contract" {
+  description = "gcp-network-hub stage contract: hub_network {vpc_self_link, dns_domain} the env VPC peers with and forwards DNS to. Null = gcp.contracts.network_hub from config/landing-zone.yaml, else read from the gcp-network-hub workspace's remote state. Ignored when enable_network_hub = false."
+  type = object({
+    vpc_self_link = string
+    dns_domain    = string
+  })
+  default = null
+
+  validation {
+    condition     = var.network_hub_contract == null || endswith(try(var.network_hub_contract.dns_domain, ""), ".")
+    error_message = "network_hub_contract.dns_domain must be a fully-qualified DNS name ending in a dot (e.g. hub.internal.)."
+  }
+}
+
+variable "enable_network_hub" {
+  description = "Connect the environment VPC to the gcp-network-hub (VPC peering + DNS peering zone, from network_hub_contract or the gcp-network-hub remote state). False = standalone: no gcp-network-hub read, no hub peering, no DNS peering zone."
+  type        = bool
+  default     = true
+}
+
 variable "monthly_budget_limit" {
   description = <<-EOT
     Monthly budget limit for this application environment in var.budget_currency.

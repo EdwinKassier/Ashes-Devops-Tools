@@ -1,6 +1,6 @@
 # CLAUDE.md — Agent Onboarding
 
-Terraform GCP + AWS landing zone. 114 modules, 14 deployable roots, remote state via Terraform Cloud.
+Terraform GCP + AWS landing zone. 118 modules, 14 deployable roots, remote state via Terraform Cloud.
 
 ---
 
@@ -27,9 +27,9 @@ envs/                   # deployable roots, nested by cloud (workspace names kee
 
 modules/               # grouped by owning cloud (domain)
   gcp/                  # GCP-native modules
-    stages/             # Orchestration wrappers: bootstrap, organization, projects, network-hub, workload, host
+    stages/             # Orchestration wrappers: bootstrap, organization, projects, network-hub, workload; network compositions net-hub, net-spoke, dns-anchor; host (DEPRECATED facade, no in-repo callers)
     project/            # THE project primitive — every stage creates GCP projects through it (no naming scheme inside)
-    network/            # ~23 primitives: vpc, subnet, dns, dns-records, vpn, vpc-sc, cloud-armor, internal-lb, api-gateway, cdn, app-ingress, …
+    network/            # ~24 primitives: tiered-vpc (shared VPC + 3-tier subnets + baseline firewall core), vpc, subnet, dns, dns-records, vpn, vpc-sc, cloud-armor, internal-lb, api-gateway, cdn, app-ingress, …
     governance/         # billing, kms, org-policy, scc, tags, cloud-audit-logs, private-ca
     iam/                # organization, role, service-account, workload-identity, identity-group*, deny-policy
     monitoring/         # alert-policy, compute-dashboard, slo, control-plane (landing-zone self-observability)

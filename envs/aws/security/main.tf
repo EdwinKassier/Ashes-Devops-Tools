@@ -5,7 +5,26 @@
 # CONSUMER of the cross-root contract (organization_id, organization_root_id,
 # account_ids, account_role_arns, management_account_id) and re-exports the
 # security cross-root contract for downstream roots.
+# Stage contract override (FAST-style): var.organization_contract (or
+# aws.contracts.organization in config/landing-zone.yaml) replaces this read —
+# count = 0 — so the root can plan without the aws-organization workspace.
+locals {
+  organization_contract = var.organization_contract != null ? var.organization_contract : local.cfg.organization_contract
+  read_organization     = local.organization_contract == null
+  # The organization contract this root consumes, whichever source supplied it
+  # (the remote state is projected onto the contract's fields so both branches
+  # share one type).
+  org = local.read_organization ? {
+    organization_id       = data.terraform_remote_state.aws_organization[0].outputs.organization_id
+    organization_root_id  = data.terraform_remote_state.aws_organization[0].outputs.organization_root_id
+    management_account_id = data.terraform_remote_state.aws_organization[0].outputs.management_account_id
+    account_ids           = tomap(data.terraform_remote_state.aws_organization[0].outputs.account_ids)
+    account_role_arns     = tomap(data.terraform_remote_state.aws_organization[0].outputs.account_role_arns)
+  } : local.organization_contract
+}
+
 data "terraform_remote_state" "aws_organization" {
+  count   = local.read_organization ? 1 : 0
   backend = "cloud"
   config = {
     organization = local.tfc_organization
@@ -27,14 +46,14 @@ module "aws_security" {
     aws.forensics        = aws.forensics
   }
 
-  org_id                      = data.terraform_remote_state.aws_organization.outputs.organization_id
-  org_root_id                 = data.terraform_remote_state.aws_organization.outputs.organization_root_id
-  management_account_id       = data.terraform_remote_state.aws_organization.outputs.management_account_id
-  security_tooling_account_id = data.terraform_remote_state.aws_organization.outputs.account_ids["security_tooling"]
-  log_archive_account_id      = data.terraform_remote_state.aws_organization.outputs.account_ids["log_archive"]
-  shared_services_account_id  = data.terraform_remote_state.aws_organization.outputs.account_ids["shared_services"]
+  org_id                      = local.org.organization_id
+  org_root_id                 = local.org.organization_root_id
+  management_account_id       = local.org.management_account_id
+  security_tooling_account_id = local.org.account_ids["security_tooling"]
+  log_archive_account_id      = local.org.account_ids["log_archive"]
+  shared_services_account_id  = local.org.account_ids["shared_services"]
   identity_account_id         = var.identity_account_id
-  forensics_account_id        = data.terraform_remote_state.aws_organization.outputs.account_ids["forensics"]
+  forensics_account_id        = local.org.account_ids["forensics"]
 
   aws_region          = local.aws_region
   aws_enabled_regions = local.aws_enabled_regions

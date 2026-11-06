@@ -72,31 +72,68 @@ aws-security       # security tooling, log archive, guardrails
 
 ### Within a cloud: the layers are a dependency DAG, not independent add-ons
 
-Cloud selection is additive *across* clouds (next section). *Within* a cloud it is **not** freely additive: each root reads its upstream roots' outputs through unconditional `terraform_remote_state` data sources, so an upstream workspace must have been applied (and have outputs) before a downstream root can plan. Leaving a root out also leaves out everything that reads it.
+Cloud selection is additive *across* clouds (next section). *Within* a cloud each root consumes its upstream layers' outputs — a **stage contract** — through `terraform_remote_state`. By default the contract is read from the upstream workspace, so that workspace must have been applied (and have outputs) first. Every upstream read can instead be **supplied directly** (the FAST "stage contract override" pattern), and two layers are genuinely **optional**:
 
-| Root | Hard upstream reads (must be applied first) | Optional reads (off by default) |
-|---|---|---|
-| `gcp-bootstrap` | — | — |
-| `gcp-organization` | `gcp-bootstrap` | — |
-| `gcp-projects` | `gcp-bootstrap`, `gcp-organization` | — |
-| `gcp-network-hub` | `gcp-organization`, `gcp-projects` | — |
-| `gcp-workload-<env>` | `gcp-organization`, `gcp-projects`, `gcp-network-hub` | `saas-<name>` (`enable_saas_secret_bridge`) |
-| `aws-organization` | — | — |
-| `aws-security` | `aws-organization` | — |
-| `aws-network` | `aws-organization` | — |
-| `aws-identity` | `aws-organization` | — |
-| `aws-shared-services` | `aws-organization` | — |
-| `aws-backup` | `aws-organization` | — |
-| `aws-workload-<env>` | `aws-organization`, `aws-network` (TGW + IPAM pool), `aws-security` (log archive bucket) | `saas-<name>` (`enable_saas_secret_bridge`) |
-| `saas-<name>` | — | any workspace named in `cross_cloud_references` |
+| Root | Upstream contracts (read unless supplied) | Optional layers (can be absent) | Opt-in reads (off by default) |
+|---|---|---|---|
+| `gcp-bootstrap` | — | — | — |
+| `gcp-organization` | `gcp-bootstrap` | — | — |
+| `gcp-projects` | `gcp-bootstrap` (`bootstrap_contract`), `gcp-organization` (`organization_contract`) | — | — |
+| `gcp-network-hub` | `gcp-organization` (`organization_contract`), `gcp-projects` (`projects_contract`) | — | — |
+| `gcp-workload-<env>` | `gcp-organization` (`organization_contract`), `gcp-projects` (`projects_contract`), `gcp-network-hub` (`network_hub_contract`) | `gcp-network-hub` (`enable_network_hub = false`: no hub peering, no DNS peering zone) | `saas-<name>` (`enable_saas_secret_bridge`) |
+| `aws-organization` | — | — | — |
+| `aws-security` | `aws-organization` (`organization_contract`) | — | — |
+| `aws-network` | `aws-organization` (`organization_contract`) | — | — |
+| `aws-identity` | `aws-organization` (`organization_contract`) | — | — |
+| `aws-shared-services` | `aws-organization` (`organization_contract`) | — | — |
+| `aws-backup` | `aws-organization` (`organization_contract`) | — | — |
+| `aws-workload-<env>` | `aws-organization` (`organization_contract`), `aws-network` (`network_contract`: TGW + IPAM pools), `aws-security` (`security_contract`: log archive bucket) | `aws-network` (`enable_network_hub = false`: standalone VPC) | `saas-<name>` (`enable_saas_secret_bridge`) |
+| `saas-<name>` | — | — | any workspace named in `cross_cloud_references` |
+
+#### Supplying a stage contract
+
+Each `<layer>_contract` is a typed object (default `null`) carrying exactly the upstream outputs the root consumes. It resolves with the usual single-source precedence — **explicit variable > `config/landing-zone.yaml` > remote state**:
+
+1. the `<layer>_contract` variable (tfvars / TFC workspace variable);
+2. `<cloud>.contracts.<layer>` in `config/landing-zone.yaml`, whose shape mirrors the upstream root's outputs (one document can serve every root that reads that layer — each root takes only the fields it needs);
+3. otherwise the upstream workspace's `terraform_remote_state`.
+
+When a contract is supplied the data source has `count = 0`: the upstream workspace is **not read at all**, so it need not exist (a different state backend, a brownfield estate, or an out-of-band foundation). Every root's tests prove this with `length(data.terraform_remote_state.<layer>) == 0`.
+
+```yaml
+# config/landing-zone.yaml (excerpt)
+aws:
+  contracts:
+    organization:
+      account_ids: {network: "111111111111", workload_dev: "222222222222"}
+      organization_id: o-abcdefghij
+      management_account_id: "000000000000"
+    network:
+      tgw_id: tgw-0123456789abcdef0
+      ipam_pool_ids: {eu-west-2: ipam-pool-0123456789abcdef0}
+    security:
+      log_archive_bucket_name: my-org-org-log-archive
+gcp:
+  contracts:
+    network_hub:
+      vpc_self_link: https://www.googleapis.com/compute/v1/projects/my-hub/global/networks/hub-vpc
+      dns_domain: hub.internal.
+```
+
+A supplied contract is a hand-maintained copy of upstream outputs: it does not follow a rename or rotation upstream (see [known gaps](../known-gaps.md#open--validate-before-relying-on), G13).
+
+#### Optional layers
+
+- **`aws-workload-<env>` without `aws-network`** — `enable_network_hub = false` plans a **standalone spoke**: the literal `vpc_cidr` (no IPAM pool), no Transit Gateway attachment and no TGW routes. The private and isolated tiers are NAT-less (no egress off the VPC) until a hub exists; flip the flag back to attach later.
+- **`gcp-workload-<env>` without `gcp-network-hub`** — `enable_network_hub = false` creates the environment VPC with no hub VPC peering and no DNS peering zone.
+
+`aws-organization`, `aws-security`, `gcp-organization` and `gcp-projects` cannot be *absent* for a downstream root (their outputs — account IDs, the log archive bucket, the host project — have no sensible default), but each can be *supplied* instead of read.
 
 What this means in practice:
 
-- **GCP is a strict chain.** A GCP workload needs all four upstream GCP roots; there is no supported "workload without network-hub" path today.
-- **AWS is a star around `aws-organization`, plus a workload join.** `aws-identity`, `aws-shared-services` and `aws-backup` are genuinely optional leaves (only `aws-organization` upstream, nothing downstream reads them). `aws-network` is **not** optional once you want an `aws-workload-<env>`: the workload root reads its Transit Gateway and IPAM pool unconditionally, as it does `aws-security`.
+- **GCP is a chain whose links can be supplied.** `gcp-network-hub` is optional for a workload; the other upstream layers can be replaced by contracts.
+- **AWS is a star around `aws-organization`, plus a workload join.** `aws-identity`, `aws-shared-services` and `aws-backup` are optional leaves (nothing downstream reads them). `aws-network` is optional too: a workload without it is a standalone VPC.
 - The documented apply order (`aws-organization → aws-security → aws-network → …`) is one valid topological order of this DAG, not a requirement that every layer exist.
-
-Layer skipping (for example a workload that brings its own VPC instead of reading `aws-network`) is not implemented yet; until it is, treat the table above as the real dependency contract.
 
 ---
 
@@ -107,7 +144,7 @@ Pick what you want; apply exactly those workspaces. Credentials come from the ro
 | You want… | Apply these workspaces | Credentials required |
 |---|---|---|
 | GCP only | `gcp-bootstrap`, `gcp-organization`, `gcp-projects`, `gcp-network-hub`, `gcp-workload-<env>` | GCP ADC |
-| AWS only (baseline) | `aws-organization`, `aws-security` (+ `aws-identity`/`aws-shared-services`/`aws-backup` as needed; `aws-workload-<env>` additionally requires `aws-network`) | AWS (management + assume-role) |
+| AWS only (baseline) | `aws-organization`, `aws-security` (+ `aws-identity`/`aws-shared-services`/`aws-backup`/`aws-network` as needed; `aws-workload-<env>` without `aws-network` is a standalone VPC) | AWS (management + assume-role) |
 | Supabase only | `saas-<name>` with `enable_supabase=true, enable_vercel=false` | `SUPABASE_ACCESS_TOKEN` only (no aws/google provider in the root) |
 | Vercel only | `saas-<name>` with `enable_vercel=true, enable_supabase=false` | `VERCEL_API_TOKEN` only (no aws/google provider in the root) |
 | Supabase + Vercel | `saas-<name>` with both true | `SUPABASE_ACCESS_TOKEN` + `VERCEL_API_TOKEN` (still no aws/google provider) |

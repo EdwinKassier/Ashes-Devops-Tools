@@ -106,3 +106,33 @@ variable "organization_workspace_name" {
   type        = string
   default     = "gcp-organization"
 }
+
+# Stage contract overrides (FAST-style): when set (here or as gcp.contracts.<layer>
+# in config/landing-zone.yaml) the matching remote-state read is skipped.
+variable "bootstrap_contract" {
+  description = "gcp-bootstrap stage contract: admin_project_id and suffix, plus the optional automation identities (workload_service_accounts, workload_folder_roles, stage_service_accounts, network_folder_roles; omitted = no folder grants). Null = gcp.contracts.bootstrap from config/landing-zone.yaml, else read from the gcp-bootstrap workspace's remote state."
+  type = object({
+    admin_project_id          = string
+    suffix                    = string
+    workload_service_accounts = optional(map(object({ plan = string, apply = string })), {})
+    workload_folder_roles     = optional(object({ plan = list(string), apply = list(string) }), { plan = [], apply = [] })
+    stage_service_accounts    = optional(map(object({ plan = string, apply = string })), {})
+    network_folder_roles      = optional(object({ plan = list(string), apply = list(string) }), { plan = [], apply = [] })
+  })
+  default = null
+}
+
+variable "organization_contract" {
+  description = "gcp-organization stage contract: billing_account, folders (key => {id, name, display_name}), tag_values (needs environment-<env>) and scoped_access_policy_ids (optional). Null = gcp.contracts.organization from config/landing-zone.yaml, else read from the gcp-organization workspace's remote state."
+  type = object({
+    billing_account = string
+    folders = map(object({
+      id           = string
+      name         = string
+      display_name = string
+    }))
+    tag_values               = map(string)
+    scoped_access_policy_ids = optional(map(string), {})
+  })
+  default = null
+}

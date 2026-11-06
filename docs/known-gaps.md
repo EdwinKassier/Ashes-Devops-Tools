@@ -19,6 +19,17 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   **Validate on a real org and switch CloudTrail to `aws:SourceArn` before
   relying on it.** Ref: <https://docs.aws.amazon.com/awscloudtrail/latest/userguide/create-kms-key-policy-for-cloudtrail.html>
 
+- **G13 — stage contract overrides are hand-maintained and mock-tested only.**
+  Every root's `<layer>_contract` (or `<cloud>.contracts.<layer>` in
+  `config/landing-zone.yaml`) replaces the upstream `terraform_remote_state`
+  read; a supplied contract does **not** follow an upstream rename/rotation
+  (e.g. the log archive bucket, audit M7) — keep it in sync or prefer the
+  read. Standalone `aws-workload` (`enable_network_hub = false`) has no egress
+  and still plans the (unused) `tgw` subnet tier; attaching later replaces the
+  VPC if it then moves to an IPAM pool. `gcp-workload`'s `module "host"` must
+  consume `local.hub_vpc_peerings` / `local.hub_dns_zones` / `local.org_id`.
+  **Validate** a contract-only plan against a real estate before relying on it.
+
 - **C2 — per-stage GCP automation identities (supersedes G3).** Shipped
   default-ON in `modules/gcp/stages/bootstrap` (`service_accounts.tf`): a
   read-only plan SA and a least-privilege apply SA per control-plane stage and

@@ -25,6 +25,13 @@ locals {
     aws_region            = try(tostring(local.lz.org.regions.aws), null)
     tfc_organization      = try(tostring(local.lz.org.tfc.organization), null)
     management_account_id = try(tostring(local.lz.aws.management_account_id), null)
+    # aws.contracts.organization: stage contract override (same shape as
+    # var.organization_contract). Present => the aws-organization read is skipped.
+    organization_contract = try(local.lz.aws.contracts.organization, null) == null ? null : {
+      account_ids       = { for k, v in try(local.lz.aws.contracts.organization.account_ids, {}) : k => tostring(v) }
+      account_role_arns = { for k, v in try(local.lz.aws.contracts.organization.account_role_arns, {}) : k => tostring(v) }
+      ou_ids            = { for k, v in try(local.lz.aws.contracts.organization.ou_ids, {}) : k => tostring(v) }
+    }
   }
 
   # Required values fall back to an inert sentinel only so static tools (tflint)

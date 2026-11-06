@@ -60,17 +60,17 @@ run "consumes_remote_state_contract" {
   }
 
   assert {
-    condition     = data.terraform_remote_state.aws_organization.outputs.organization_root_id == "r-abcd"
+    condition     = data.terraform_remote_state.aws_organization[0].outputs.organization_root_id == "r-abcd"
     error_message = "remote-state organization_root_id contract key must be readable by the root"
   }
 
   assert {
-    condition     = data.terraform_remote_state.aws_organization.outputs.account_ids["forensics"] == "555555555555"
+    condition     = data.terraform_remote_state.aws_organization[0].outputs.account_ids["forensics"] == "555555555555"
     error_message = "remote-state account_ids must expose the forensics account the root consumes"
   }
 
   assert {
-    condition     = data.terraform_remote_state.aws_organization.outputs.account_role_arns["security_tooling"] != ""
+    condition     = data.terraform_remote_state.aws_organization[0].outputs.account_role_arns["security_tooling"] != ""
     error_message = "remote-state account_role_arns must expose the security_tooling role the provider assumes"
   }
 }
@@ -106,4 +106,25 @@ run "rejects_placeholder_landing_zone_name" {
   }
 
   expect_failures = [var.landing_zone_name]
+}
+
+# Stage contract override (FAST-style): organization_contract replaces the
+# aws-organization remote-state read entirely (no override_data here).
+run "organization_contract_skips_remote_state" {
+  command = plan
+
+  variables {
+    organization_contract = {
+      organization_id       = "o-abcdefghij"
+      organization_root_id  = "r-abcd"
+      management_account_id = "111111111111"
+      account_ids           = { security_tooling = "222222222222", log_archive = "333333333333", shared_services = "444444444444", forensics = "555555555555" }
+      account_role_arns     = { security_tooling = "arn:aws:iam::222222222222:role/cross-account", log_archive = "arn:aws:iam::333333333333:role/cross-account", shared_services = "arn:aws:iam::444444444444:role/cross-account", forensics = "arn:aws:iam::555555555555:role/cross-account" }
+    }
+  }
+
+  assert {
+    condition     = length(data.terraform_remote_state.aws_organization) == 0 && local.org.organization_root_id == "r-abcd" && local.org.account_ids["forensics"] == "555555555555"
+    error_message = "a supplied organization_contract must skip the aws-organization read and feed the root"
+  }
 }

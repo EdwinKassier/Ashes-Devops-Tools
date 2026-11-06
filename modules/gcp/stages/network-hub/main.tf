@@ -30,27 +30,27 @@ locals {
   ], var.vpc_sc_additional_restricted_services))
 }
 
-# Hub Network Actuation (The "Pipes")
-module "hub_network" {
-  source = "../host"
+# Hub network (the "pipes"): net-hub composition on the 'net-hub' project
+# created in the shared environment. Formerly module.hub_network (stages/host);
+# see moved.tf for the state migration.
+module "hub" {
+  source = "../net-hub"
 
-  # Target the 'net-hub' project created in the 'shared' environment
-  project_id     = var.hub_project_id
-  project_prefix = var.project_prefix
-  region         = var.default_region
+  project_id          = var.hub_project_id
+  project_prefix      = var.project_prefix
+  region              = var.default_region
+  deletion_protection = var.enable_deletion_protection
 
-  # Enable Networking & Shared VPC Host
-  enable_networking          = true
-  enable_shared_vpc_host     = true
-  enable_deletion_protection = var.enable_deletion_protection
-  vpc_name                   = "hub-vpc-core"
-  vpc_cidr_block             = var.hub_vpc_cidr_block
-
-  # Observability: Enable Flow Logs for Audit
-  log_config_flow_sampling        = 0.5
-  log_config_aggregation_interval = "INTERVAL_5_SEC"
-
-
+  network = {
+    name            = "hub-vpc-core"
+    cidr_block      = var.hub_vpc_cidr_block
+    shared_vpc_host = true
+    # Observability: subnet flow logs for audit.
+    flow_logs = {
+      aggregation_interval = "INTERVAL_5_SEC"
+      sampling             = 0.5
+    }
+  }
 
   # Hierarchical Firewall Policy (Defense in Depth)
   hierarchical_firewall_policies = {
@@ -84,7 +84,10 @@ module "hub_network" {
   # protected_projects: pass project NUMBERS (not IDs). The ACM API requires numeric
   # project numbers; project ID strings are silently rejected or cause misleading errors.
   vpc_service_controls = var.vpc_sc_access_policy_name != null ? {
-    "hub-data-perimeter" = {
+    # Underscores, not hyphens: the vpc-sc primitive only accepts
+    # ^[a-zA-Z][a-zA-Z0-9_]{0,62}$ (the former "hub-data-perimeter" key failed
+    # validation, so no perimeter can exist in state under it).
+    "hub_data_perimeter" = {
       organization_id    = local.org_id_normalized
       access_policy_name = var.vpc_sc_access_policy_name
       perimeter_title    = "Hub Network Data Protection Perimeter"
@@ -113,48 +116,45 @@ module "hub_network" {
   } : {}
 }
 
+# Hub Cloud Armor policy. stages/host created this project-level WAF policy
+# for the hub by default (enable_cloud_armor defaulted to true); it is kept as
+# a standalone primitive so the decomposition onto net-hub destroys nothing.
+# It is not attached to any backend; remove it deliberately (FinOps review)
+# rather than as a side effect of the refactor.
+module "hub_cloud_armor" {
+  source = "../../network/cloud-armor"
 
-# DNS Hub (Name Resolution)
-module "dns_hub_network" {
-  source = "../host"
-
-  # Target the 'dns-hub' project created in the 'shared' environment
-  project_id     = var.dns_project_id
-  project_prefix = var.project_prefix
-  region         = var.default_region
-
-  # Just a simple VPC to anchor the private zone. It has no workloads, load
-  # balancers or Google-API clients, so it does not need Cloud NAT, Cloud Armor,
-  # Private Service Connect or Private Service Access. Turning them off avoids
-  # duplicating those billable resources onto the DNS-anchor VPC (FinOps F4).
-  enable_networking              = true
-  enable_shared_vpc_host         = false
-  enable_deletion_protection     = var.enable_deletion_protection
-  enable_cloud_nat               = false
-  enable_cloud_armor             = false
-  enable_private_service_connect = false
-  enable_private_service_access  = false
-  vpc_name                       = "dns-vpc-core"
-  vpc_cidr_block                 = var.dns_hub_vpc_cidr_block
+  project_id                 = var.hub_project_id
+  policy_name                = "${var.project_prefix}-security-policy"
+  description                = "WAF security policy for ${var.project_prefix}"
+  enable_owasp_rules         = true
+  enable_adaptive_protection = true
+  enable_log4j_protection    = true
+  owasp_sensitivity          = 2
+  custom_rules               = {}
 }
 
-module "dns_hub_zone" {
-  source = "../../network/dns"
+# DNS hub (name resolution): dns-anchor composition on the 'dns-hub' project.
+# A workload-free VPC anchoring the organization's root private zone; spokes
+# resolve it through DNS peering. Formerly module.dns_hub_network (stages/host)
+# plus module.dns_hub_zone; see moved.tf.
+module "dns_anchor" {
+  source = "../dns-anchor"
 
-  project_id = var.dns_project_id
-  zone_name  = "internal-root"
-  dns_name   = "${var.internal_domain}."
-  visibility = "private"
+  project_id          = var.dns_project_id
+  region              = var.default_region
+  deletion_protection = var.enable_deletion_protection
 
-  description = "Root Internal Zone for Organization"
+  network = {
+    name       = "dns-vpc-core"
+    cidr_block = var.dns_hub_vpc_cidr_block
+  }
 
-  # Bind to the DNS Hub's own VPC (required for private zones)
-  private_visibility_networks = [
-    module.dns_hub_network.network_self_link
-  ]
-
-  enable_logging = true
-  dnssec_enabled = true
-
-  depends_on = [module.dns_hub_network]
+  dns_zones = {
+    "internal-root" = {
+      dns_name       = "${var.internal_domain}."
+      description    = "Root Internal Zone for Organization"
+      dnssec_enabled = true
+    }
+  }
 }
