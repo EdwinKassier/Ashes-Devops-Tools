@@ -58,18 +58,20 @@ variable "permission_sets" {
     description         = string
     session_duration    = string
     managed_policy_arns = optional(list(string), [])
-    inline_policy       = optional(string, "")
+    # AWS-managed policy names (e.g. "ReadOnlyAccess"); the ARN is built for the running partition.
+    managed_policy_names = optional(list(string), [])
+    inline_policy        = optional(string, "")
   }))
   default = {
     AdministratorAccess = {
-      description         = "Full administrative access. Assign only to break-glass groups."
-      session_duration    = "PT1H"
-      managed_policy_arns = ["arn:aws:iam::aws:policy/AdministratorAccess"]
+      description          = "Full administrative access. Assign only to break-glass groups."
+      session_duration     = "PT1H"
+      managed_policy_names = ["AdministratorAccess"]
     }
     ReadOnly = {
-      description         = "Organization-wide read-only access for auditors and viewers."
-      session_duration    = "PT1H"
-      managed_policy_arns = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
+      description          = "Organization-wide read-only access for auditors and viewers."
+      session_duration     = "PT1H"
+      managed_policy_names = ["ReadOnlyAccess"]
     }
   }
 }

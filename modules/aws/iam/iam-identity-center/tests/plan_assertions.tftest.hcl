@@ -71,3 +71,50 @@ run "module_tags_applied" {
     error_message = "module-level tags must land on aws_ssoadmin_permission_set.this"
   }
 }
+
+# Defaults name AWS-managed policies; the ARN follows the partition, and the
+# attachment keys stay in the canonical arn:aws form (no state churn).
+run "default_policies_resolve_in_commercial_partition" {
+  command = plan
+
+  override_data {
+    target = data.aws_partition.current
+    values = { partition = "aws" }
+  }
+
+  assert {
+    condition = (
+      local.managed_attachments["AdministratorAccess/arn:aws:iam::aws:policy/AdministratorAccess"].arn == "arn:aws:iam::aws:policy/AdministratorAccess" &&
+      local.managed_attachments["ReadOnly/arn:aws:iam::aws:policy/ReadOnlyAccess"].arn == "arn:aws:iam::aws:policy/ReadOnlyAccess"
+    )
+    error_message = "default managed policy names must resolve to arn:aws ARNs in the commercial partition."
+  }
+}
+
+run "default_policies_resolve_in_govcloud" {
+  command = plan
+
+  override_data {
+    target = data.aws_partition.current
+    values = { partition = "aws-us-gov" }
+  }
+
+  variables {
+    permission_sets = {
+      Admin = {
+        description          = "x"
+        session_duration     = "PT1H"
+        managed_policy_names = ["AdministratorAccess"]
+        managed_policy_arns  = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
+      }
+    }
+  }
+
+  assert {
+    condition = (
+      local.managed_attachments["Admin/arn:aws:iam::aws:policy/AdministratorAccess"].arn == "arn:aws-us-gov:iam::aws:policy/AdministratorAccess" &&
+      local.managed_attachments["Admin/arn:aws:iam::aws:policy/ReadOnlyAccess"].arn == "arn:aws-us-gov:iam::aws:policy/ReadOnlyAccess"
+    )
+    error_message = "policy names and AWS-managed ARNs must follow the partition (aws-us-gov)."
+  }
+}

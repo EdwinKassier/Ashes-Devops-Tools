@@ -3,23 +3,25 @@
 # -----------------------------------------------------------------------------
 
 variable "permission_sets" {
-  description = "Map of permission set name to its definition. session_duration is an ISO-8601 duration (e.g. PT1H). managed_policy_arns are AWS-managed policy ARNs attached to the set; inline_policy is an optional inline IAM policy JSON document."
+  description = "Map of permission set name to its definition. session_duration is an ISO-8601 duration (e.g. PT1H). managed_policy_names are AWS-managed policy names (the ARN is built for the running partition: aws, aws-us-gov or aws-cn) and managed_policy_arns are full policy ARNs (customer-managed, or AWS-managed written out); both attach to the set; inline_policy is an optional inline IAM policy JSON document."
   type = map(object({
     description         = string
     session_duration    = string
     managed_policy_arns = optional(list(string), [])
-    inline_policy       = optional(string, "")
+    # AWS-managed policy names (e.g. "ReadOnlyAccess"); the ARN is built for the running partition.
+    managed_policy_names = optional(list(string), [])
+    inline_policy        = optional(string, "")
   }))
   default = {
     AdministratorAccess = {
-      description         = "Full administrative access. Assign only to break-glass groups."
-      session_duration    = "PT1H"
-      managed_policy_arns = ["arn:aws:iam::aws:policy/AdministratorAccess"]
+      description          = "Full administrative access. Assign only to break-glass groups."
+      session_duration     = "PT1H"
+      managed_policy_names = ["AdministratorAccess"]
     }
     ReadOnly = {
-      description         = "Organization-wide read-only access for auditors and viewers."
-      session_duration    = "PT1H"
-      managed_policy_arns = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
+      description          = "Organization-wide read-only access for auditors and viewers."
+      session_duration     = "PT1H"
+      managed_policy_names = ["ReadOnlyAccess"]
     }
   }
 

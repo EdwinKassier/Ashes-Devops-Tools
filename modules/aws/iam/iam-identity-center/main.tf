@@ -19,15 +19,28 @@ locals {
   # identity store.)
   instance_arn = tolist(data.aws_ssoadmin_instances.this.arns)[0]
 
-  # Flatten permission_sets x their managed_policy_arns into a single map whose
+  # Flatten permission_sets x their managed policies into a single map whose
   # keys are plan-known strings ("<permission set>/<policy arn>"), so each
   # attachment is an independent, statically-keyed for_each element.
-  managed_attachments = merge([
-    for ps_name, ps in var.permission_sets : {
-      for arn in ps.managed_policy_arns :
-      "${ps_name}/${arn}" => { ps = ps_name, arn = replace(arn, "/^arn:aws:/", "arn:${local.partition}:") }
-    }
-  ]...)
+  #
+  # AWS-managed policies named in managed_policy_names get their ARN built from
+  # the running partition (aws, aws-us-gov, aws-cn). The map key keeps the
+  # canonical arn:aws form, so it is unchanged for sets that previously listed
+  # the same policy under managed_policy_arns (no attachment is replaced).
+  managed_attachments = merge(concat(
+    [
+      for ps_name, ps in var.permission_sets : {
+        for arn in ps.managed_policy_arns :
+        "${ps_name}/${arn}" => { ps = ps_name, arn = replace(arn, "/^arn:aws:/", "arn:${local.partition}:") }
+      }
+    ],
+    [
+      for ps_name, ps in var.permission_sets : {
+        for name in ps.managed_policy_names :
+        "${ps_name}/arn:aws:iam::aws:policy/${name}" => { ps = ps_name, arn = "arn:${local.partition}:iam::aws:policy/${name}" }
+      }
+    ],
+  )...)
 }
 
 resource "aws_ssoadmin_permission_set" "this" {
