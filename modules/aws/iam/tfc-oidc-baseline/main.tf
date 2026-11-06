@@ -265,38 +265,7 @@ locals {
         Resource  = "*"
         Condition = { "ForAnyValue:StringLike" = { "aws:TagKeys" = "dp:*" } }
       },
-      {
-        # The apply identity must not rewrite its own trust, policies or
-        # boundary, the sibling plan role, or the OIDC provider: those are owned
-        # by this StackSet (CloudFormation's execution role is unaffected).
-        Sid    = "DenyTamperingWithTfcBaseline"
-        Effect = "Deny"
-        Action = [
-          "iam:AttachRolePolicy",
-          "iam:DeleteRole",
-          "iam:DeleteRolePermissionsBoundary",
-          "iam:DeleteRolePolicy",
-          "iam:DetachRolePolicy",
-          "iam:PutRolePermissionsBoundary",
-          "iam:PutRolePolicy",
-          "iam:UpdateAssumeRolePolicy",
-          "iam:UpdateRole",
-          "iam:UpdateRoleDescription",
-          "iam:TagRole",
-          "iam:UntagRole",
-          "iam:CreatePolicyVersion",
-          "iam:DeletePolicy",
-          "iam:DeletePolicyVersion",
-          "iam:SetDefaultPolicyVersion",
-          "iam:DeleteOpenIDConnectProvider",
-          "iam:UpdateOpenIDConnectProviderThumbprint",
-          "iam:AddClientIDToOpenIDConnectProvider",
-          "iam:RemoveClientIDFromOpenIDConnectProvider",
-          "iam:TagOpenIDConnectProvider",
-          "iam:UntagOpenIDConnectProvider",
-        ]
-        Resource = [for a in local.baseline_protected_arns : { "Fn::Sub" = a }]
-      },
+      local.baseline_tamper_statement,
       {
         # No new trust anchors from the pipeline. A role carrying this
         # boundary may still be granted AdministratorAccess; if the pipeline
@@ -405,6 +374,54 @@ locals {
     "codecommit:GetFile",
   ]
 
+  # Deny on tampering with the StackSet-owned baseline. Lives in the embedded
+  # boundary, or, when an external boundary replaces it, inline on the apply role
+  # (an explicit deny in an identity policy holds under any boundary).
+  baseline_tamper_statement = {
+    # The apply identity must not rewrite its own trust, policies or
+    # boundary, the sibling plan role, or the OIDC provider: those are owned
+    # by this StackSet (CloudFormation's execution role is unaffected).
+    Sid    = "DenyTamperingWithTfcBaseline"
+    Effect = "Deny"
+    Action = [
+      "iam:AttachRolePolicy",
+      "iam:DeleteRole",
+      "iam:DeleteRolePermissionsBoundary",
+      "iam:DeleteRolePolicy",
+      "iam:DetachRolePolicy",
+      "iam:PutRolePermissionsBoundary",
+      "iam:PutRolePolicy",
+      "iam:UpdateAssumeRolePolicy",
+      "iam:UpdateRole",
+      "iam:UpdateRoleDescription",
+      "iam:TagRole",
+      "iam:UntagRole",
+      "iam:CreatePolicyVersion",
+      "iam:DeletePolicy",
+      "iam:DeletePolicyVersion",
+      "iam:SetDefaultPolicyVersion",
+      "iam:DeleteOpenIDConnectProvider",
+      "iam:UpdateOpenIDConnectProviderThumbprint",
+      "iam:AddClientIDToOpenIDConnectProvider",
+      "iam:RemoveClientIDFromOpenIDConnectProvider",
+      "iam:TagOpenIDConnectProvider",
+      "iam:UntagOpenIDConnectProvider",
+    ]
+    Resource = [for a in local.baseline_protected_arns : { "Fn::Sub" = a }]
+  }
+
+  # External boundary mode: the embedded boundary (and the tamper deny in it)
+  # does not exist, so the same deny is attached to the apply role itself.
+  apply_role_policies_property = {
+    for _ in(var.enable_apply_permissions_boundary && var.apply_permissions_boundary_arn != null ? [1] : []) : "Policies" => [{
+      PolicyName = "deny-baseline-tampering"
+      PolicyDocument = {
+        Version   = "2012-10-17"
+        Statement = [local.baseline_tamper_statement]
+      }
+    }]
+  }
+
   # The plan role's Policies property ({} = omitted).
   plan_role_policies_property = {
     for _ in(var.enable_plan_role_data_read_deny ? [1] : []) : "Policies" => [{
@@ -481,6 +498,7 @@ locals {
             MaxSessionDuration       = var.max_session_duration
           },
           local.apply_boundary_property,
+          local.apply_role_policies_property,
         )
       }
     }

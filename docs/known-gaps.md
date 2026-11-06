@@ -11,6 +11,13 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
 
 ## OPEN — validate before relying on
 
+- **Region SCP no longer exempts the run role.** `scp-region-restriction`
+  now exempts break-glass only; global-endpoint services stay in `NotAction`
+  (plus `networkmanager:*` and `notifications:*`). Mock-tested only.
+  **Validate in the sandbox:** a routine plan and apply of every member-account
+  layer, run as `tfc-plan`/`tfc-apply`, makes no call that this SCP denies. A
+  global-endpoint API missing from `NotAction` would surface here.
+
 - **TFC organization owners are the root of AWS trust.** AWS OIDC trust can
   condition only on the claims `aud`, `sub`, `amr`, `email` and `oaud`, so
   trust is bound by **workspace name**. Anyone who can create or rename a

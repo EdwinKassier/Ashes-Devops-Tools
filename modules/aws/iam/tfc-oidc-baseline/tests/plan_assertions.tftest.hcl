@@ -305,6 +305,45 @@ run "external_boundary_is_protected" {
   }
 }
 
+run "external_boundary_mode_attaches_tamper_deny_to_apply_role" {
+  command = plan
+
+  variables {
+    apply_permissions_boundary_arn = "arn:aws:iam::111111111111:policy/org-apply-boundary"
+  }
+
+  assert {
+    condition = alltrue([
+      for name, r in jsondecode(output.template_body).Resources :
+      !startswith(name, "TfcApplyRole") || (
+        length(r.Properties.Policies) == 1 &&
+        r.Properties.Policies[0].PolicyDocument.Statement[0].Sid == "DenyTamperingWithTfcBaseline" &&
+        contains(r.Properties.Policies[0].PolicyDocument.Statement[0].Action, "iam:PutRolePolicy") &&
+        contains(r.Properties.Policies[0].PolicyDocument.Statement[0].Action, "iam:DeleteRolePolicy") &&
+        contains([for x in r.Properties.Policies[0].PolicyDocument.Statement[0].Resource : x["Fn::Sub"]], "arn:aws:iam::111111111111:policy/org-apply-boundary")
+      )
+    ])
+    error_message = "with an external boundary the tamper deny must be inline on every apply role."
+  }
+}
+
+run "embedded_boundary_mode_has_no_inline_tamper_deny" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for name, r in jsondecode(output.template_body).Resources :
+      !startswith(name, "TfcApplyRole") || !contains(keys(r.Properties), "Policies")
+    ])
+    error_message = "embedded mode carries the tamper deny in the boundary, not inline."
+  }
+
+  assert {
+    condition     = length([for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement : s if s.Sid == "DenyTamperingWithTfcBaseline"]) == 1
+    error_message = "the embedded boundary must carry exactly one tamper deny."
+  }
+}
+
 run "embedded_boundary_is_protected_by_default" {
   command = plan
 

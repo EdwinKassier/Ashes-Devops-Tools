@@ -15,7 +15,9 @@ name: Sandbox E2E (real apply)
 #   * A new push revokes the grant: a `synchronize` on a labelled PR removes the
 #     `e2e` label (job `revoke-label`) and does not run the suites, so a
 #     reviewer-approved label never carries over to code nobody has looked at.
-#     A maintainer re-applies the label to run the new head.
+#     A maintainer re-applies the label to run the new head. `reopened` is not
+#     a trigger: commits can land while a PR is closed without a synchronize
+#     event, so a reopen must never run on a stale label.
 #   * Every cloud job waits for a required reviewer on the `e2e-sandbox`
 #     environment (docs/guides/sandbox-e2e.md).
 #   * Guaranteed teardown: `terraform test` destroys what it created, then an
@@ -50,7 +52,6 @@ on:
       - opened
       - labeled
       - synchronize
-      - reopened
 
 # Nothing by default; each job grants only what it needs.
 permissions: {}
@@ -156,8 +157,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      issues: write
-      pull-requests: write
+      issues: write   # removeLabel is an issues API call
     steps:
       # Egress/process audit for this job (audit mode: observe, never block).
       - name: Harden runner
