@@ -34,3 +34,16 @@ run "org_enables_all_features_and_sra_ous" {
     error_message = "RCP and backup policy types must be enabled"
   }
 }
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    tags = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_organizations_organizational_unit.top["Security"].tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_organizations_organizational_unit.top"
+  }
+}

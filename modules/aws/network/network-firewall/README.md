@@ -67,10 +67,10 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_networkfirewall_firewall.this (modules/aws/network/network-firewall/main.tf#L171)
-- resource.aws_networkfirewall_firewall_policy.this (modules/aws/network/network-firewall/main.tf#L123)
-- resource.aws_networkfirewall_logging_configuration.this (modules/aws/network/network-firewall/main.tf#L199)
-- resource.aws_networkfirewall_rule_group.domain_allowlist (modules/aws/network/network-firewall/main.tf#L90)
+- resource.aws_networkfirewall_firewall.this (modules/aws/network/network-firewall/main.tf#L177)
+- resource.aws_networkfirewall_firewall_policy.this (modules/aws/network/network-firewall/main.tf#L127)
+- resource.aws_networkfirewall_logging_configuration.this (modules/aws/network/network-firewall/main.tf#L207)
+- resource.aws_networkfirewall_rule_group.domain_allowlist (modules/aws/network/network-firewall/main.tf#L92)
 - resource.aws_networkfirewall_rule_group.stateful (modules/aws/network/network-firewall/main.tf#L63)
 - data source.aws_region.current (modules/aws/network/network-firewall/main.tf#L37)
 
@@ -98,6 +98,7 @@ The following resources are created:
 | <a name="input_rule_group_name"></a> [rule\_group\_name](#input\_rule\_group\_name) | Name of the custom Suricata rule group (the allowlist group is named <rule\_group\_name>-egress-allowlist). | `string` | `"org-stateful"` | no |
 | <a name="input_stateful_default_actions"></a> [stateful\_default\_actions](#input\_stateful\_default\_actions) | STRICT\_ORDER default actions for traffic no rule matched. Default ["aws:alert\_established"] = log-but-pass (safe on day one: never blackholes existing flows). AWS-recommended steady state once allow rules exist: ["aws:drop\_established", "aws:alert\_established"]. At most one drop and one alert action. | `list(string)` | <pre>[<br/>  "aws:alert_established"<br/>]</pre> | no |
 | <a name="input_suricata_rules"></a> [suricata\_rules](#input\_suricata\_rules) | Optional custom Suricata rules (evaluated at priority 1000, after the AWS-managed threat groups, under STRICT\_ORDER). Empty (default) = no custom rule group. Rules must not rely on action-order semantics. | `string` | `""` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 
 ## Outputs
 

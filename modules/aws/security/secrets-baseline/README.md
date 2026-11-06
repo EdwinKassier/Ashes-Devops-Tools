@@ -46,8 +46,8 @@ The following resources are created:
 
 
 - resource.aws_secretsmanager_secret.this (modules/aws/security/secrets-baseline/main.tf#L13)
-- resource.aws_secretsmanager_secret_policy.this (modules/aws/security/secrets-baseline/main.tf#L28)
-- resource.aws_secretsmanager_secret_rotation.this (modules/aws/security/secrets-baseline/main.tf#L49)
+- resource.aws_secretsmanager_secret_policy.this (modules/aws/security/secrets-baseline/main.tf#L29)
+- resource.aws_secretsmanager_secret_rotation.this (modules/aws/security/secrets-baseline/main.tf#L50)
 
 
 ## Inputs
@@ -58,6 +58,7 @@ The following resources are created:
 | <a name="input_kms_key_id"></a> [kms\_key\_id](#input\_kms\_key\_id) | ARN or ID of a customer-managed KMS key used to encrypt all secrets. When empty, secrets use the account default aws/secretsmanager managed key. | `string` | `""` | no |
 | <a name="input_org_id"></a> [org\_id](#input\_org\_id) | AWS organization ID (o-xxxxxxxxxx) used in the aws:PrincipalOrgID condition that scopes secret access to the organization. Required when enable\_secrets\_baseline is true. | `string` | `""` | no |
 | <a name="input_secrets"></a> [secrets](#input\_secrets) | Map of secret name to its configuration. rotation\_lambda\_arn, when set, enables automatic rotation for that secret; rotation\_days controls the rotation interval. | <pre>map(object({<br/>    rotation_lambda_arn = optional(string, "")<br/>    rotation_days       = optional(number, 30)<br/>  }))</pre> | `{}` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 
 ## Outputs
 

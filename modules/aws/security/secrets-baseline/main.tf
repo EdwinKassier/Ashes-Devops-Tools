@@ -20,6 +20,7 @@ resource "aws_secretsmanager_secret" "this" {
   for_each   = var.enable_secrets_baseline ? var.secrets : {}
   name       = each.key
   kms_key_id = var.kms_key_id != "" ? var.kms_key_id : null
+  tags       = var.tags
 }
 
 # Resource policy: allow GetSecretValue only for principals in the org.

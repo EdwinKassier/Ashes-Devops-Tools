@@ -38,3 +38,10 @@ variable "target_ou_id" {
     error_message = "target_ou_id must be an Organizations OU id (ou-xxxx-yyyy) or root id (r-xxxx)."
   }
 }
+
+variable "tags" {
+  description = "Tags applied to every taggable resource this module creates (merged after provider default_tags; resource-specific tags such as Name win)."
+  type        = map(string)
+  default     = {}
+  nullable    = false
+}

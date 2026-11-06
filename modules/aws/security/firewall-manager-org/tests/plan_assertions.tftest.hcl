@@ -48,3 +48,16 @@ run "disabled_creates_nothing" {
     error_message = "No FMS policies must be created when disabled"
   }
 }
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    tags = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_fms_policy.this["security-group-audit"].tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_fms_policy.this"
+  }
+}

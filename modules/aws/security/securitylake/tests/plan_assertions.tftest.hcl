@@ -58,3 +58,16 @@ run "disabled_creates_nothing" {
     error_message = "Log sources must not be created when enable_security_lake is false"
   }
 }
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    tags = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_securitylake_data_lake.this[0].tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_securitylake_data_lake.this"
+  }
+}

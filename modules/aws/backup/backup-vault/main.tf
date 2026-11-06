@@ -32,6 +32,8 @@ resource "aws_iam_role" "restore_testing" {
       Action    = "sts:AssumeRole"
     }]
   })
+
+  tags = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "restore_testing" {
@@ -43,6 +45,7 @@ resource "aws_iam_role_policy_attachment" "restore_testing" {
 resource "aws_backup_vault" "this" {
   name        = var.vault_name
   kms_key_arn = var.kms_key_arn != "" ? var.kms_key_arn : null
+  tags        = var.tags
 }
 
 resource "aws_backup_vault_lock_configuration" "this" {
@@ -66,6 +69,8 @@ resource "aws_backup_restore_testing_plan" "this" {
     recovery_point_types  = ["SNAPSHOT"]
     selection_window_days = var.selection_window_days
   }
+
+  tags = var.tags
 }
 
 resource "aws_backup_restore_testing_selection" "this" {

@@ -25,5 +25,7 @@ resource "aws_fms_policy" "this" {
     managed_service_data = try(each.value.managed_service_data, null)
   }
 
+  tags = var.tags
+
   depends_on = [aws_fms_admin_account.this]
 }

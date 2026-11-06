@@ -52,25 +52,25 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_ram_principal_association.org (modules/aws/network/route53-resolver/main.tf#L97)
-- resource.aws_ram_resource_association.profile (modules/aws/network/route53-resolver/main.tf#L92)
-- resource.aws_ram_resource_share.profile (modules/aws/network/route53-resolver/main.tf#L87)
-- resource.aws_route53_resolver_dnssec_config.this (modules/aws/network/route53-resolver/main.tf#L165)
+- resource.aws_ram_principal_association.org (modules/aws/network/route53-resolver/main.tf#L105)
+- resource.aws_ram_resource_association.profile (modules/aws/network/route53-resolver/main.tf#L100)
+- resource.aws_ram_resource_share.profile (modules/aws/network/route53-resolver/main.tf#L94)
+- resource.aws_route53_resolver_dnssec_config.this (modules/aws/network/route53-resolver/main.tf#L177)
 - resource.aws_route53_resolver_endpoint.inbound (modules/aws/network/route53-resolver/main.tf#L15)
-- resource.aws_route53_resolver_endpoint.outbound (modules/aws/network/route53-resolver/main.tf#L28)
-- resource.aws_route53_resolver_firewall_config.this (modules/aws/network/route53-resolver/main.tf#L140)
-- resource.aws_route53_resolver_firewall_domain_list.blocked (modules/aws/network/route53-resolver/main.tf#L107)
-- resource.aws_route53_resolver_firewall_rule.block (modules/aws/network/route53-resolver/main.tf#L120)
-- resource.aws_route53_resolver_firewall_rule_group.this (modules/aws/network/route53-resolver/main.tf#L114)
-- resource.aws_route53_resolver_firewall_rule_group_association.this (modules/aws/network/route53-resolver/main.tf#L131)
-- resource.aws_route53_resolver_query_log_config.this (modules/aws/network/route53-resolver/main.tf#L149)
-- resource.aws_route53_resolver_query_log_config_association.this (modules/aws/network/route53-resolver/main.tf#L156)
-- resource.aws_route53_resolver_rule.fwd (modules/aws/network/route53-resolver/main.tf#L45)
-- resource.aws_route53_resolver_rule_association.fwd (modules/aws/network/route53-resolver/main.tf#L61)
-- resource.aws_route53profiles_profile.this (modules/aws/network/route53-resolver/main.tf#L73)
-- resource.aws_route53profiles_resource_association.vpc (modules/aws/network/route53-resolver/main.tf#L77)
-- data source.aws_caller_identity.current (modules/aws/network/route53-resolver/main.tf#L85)
-- data source.aws_region.current (modules/aws/network/route53-resolver/main.tf#L83)
+- resource.aws_route53_resolver_endpoint.outbound (modules/aws/network/route53-resolver/main.tf#L30)
+- resource.aws_route53_resolver_firewall_config.this (modules/aws/network/route53-resolver/main.tf#L151)
+- resource.aws_route53_resolver_firewall_domain_list.blocked (modules/aws/network/route53-resolver/main.tf#L115)
+- resource.aws_route53_resolver_firewall_rule.block (modules/aws/network/route53-resolver/main.tf#L130)
+- resource.aws_route53_resolver_firewall_rule_group.this (modules/aws/network/route53-resolver/main.tf#L123)
+- resource.aws_route53_resolver_firewall_rule_group_association.this (modules/aws/network/route53-resolver/main.tf#L141)
+- resource.aws_route53_resolver_query_log_config.this (modules/aws/network/route53-resolver/main.tf#L160)
+- resource.aws_route53_resolver_query_log_config_association.this (modules/aws/network/route53-resolver/main.tf#L168)
+- resource.aws_route53_resolver_rule.fwd (modules/aws/network/route53-resolver/main.tf#L49)
+- resource.aws_route53_resolver_rule_association.fwd (modules/aws/network/route53-resolver/main.tf#L67)
+- resource.aws_route53profiles_profile.this (modules/aws/network/route53-resolver/main.tf#L79)
+- resource.aws_route53profiles_resource_association.vpc (modules/aws/network/route53-resolver/main.tf#L84)
+- data source.aws_caller_identity.current (modules/aws/network/route53-resolver/main.tf#L92)
+- data source.aws_region.current (modules/aws/network/route53-resolver/main.tf#L90)
 
 
 ## Inputs
@@ -88,6 +88,7 @@ The following resources are created:
 | <a name="input_query_log_destination_arn"></a> [query\_log\_destination\_arn](#input\_query\_log\_destination\_arn) | ARN of the destination (S3 bucket, CloudWatch log group, or Kinesis stream) that receives resolver query logs. Required when enable\_query\_logging is true. | `string` | `null` | no |
 | <a name="input_security_group_ids"></a> [security\_group\_ids](#input\_security\_group\_ids) | Security group IDs attached to the inbound and outbound resolver endpoints. At least one is required by the resolver endpoint resource. | `list(string)` | <pre>[<br/>  "sg-aaaaaaaaaaaaaaaaa"<br/>]</pre> | no |
 | <a name="input_subnet_ids"></a> [subnet\_ids](#input\_subnet\_ids) | Subnet IDs the inbound and outbound resolver endpoints place IPs in. At least two are required (one per AZ) because the endpoint ip\_address block enforces a minimum of two entries. | `list(string)` | <pre>[<br/>  "subnet-aaaa",<br/>  "subnet-bbbb"<br/>]</pre> | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 
 ## Outputs
 

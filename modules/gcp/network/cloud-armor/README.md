@@ -103,9 +103,9 @@ The following resources are created:
 
 
 - resource.google_compute_security_policy.policy (modules/gcp/network/cloud-armor/main.tf#L1)
-- resource.google_compute_security_policy_rule.log4j_protection (modules/gcp/network/cloud-armor/main.tf#L145)
-- resource.google_compute_security_policy_rule.owasp_rules (modules/gcp/network/cloud-armor/main.tf#L126)
-- resource.google_compute_security_policy_rule.preconfigured_waf_rules (modules/gcp/network/cloud-armor/main.tf#L162)
+- resource.google_compute_security_policy_rule.log4j_protection (modules/gcp/network/cloud-armor/main.tf#L146)
+- resource.google_compute_security_policy_rule.owasp_rules (modules/gcp/network/cloud-armor/main.tf#L127)
+- resource.google_compute_security_policy_rule.preconfigured_waf_rules (modules/gcp/network/cloud-armor/main.tf#L163)
 
 
 ## Inputs
@@ -120,6 +120,7 @@ The following resources are created:
 | <a name="input_enable_adaptive_protection"></a> [enable\_adaptive\_protection](#input\_enable\_adaptive\_protection) | Enable adaptive protection features | `bool` | `false` | no |
 | <a name="input_enable_log4j_protection"></a> [enable\_log4j\_protection](#input\_enable\_log4j\_protection) | Enable the Cloud Armor canary rule that blocks Log4Shell-style payloads | `bool` | `true` | no |
 | <a name="input_enable_owasp_rules"></a> [enable\_owasp\_rules](#input\_enable\_owasp\_rules) | Enable preconfigured OWASP ModSecurity Core Rule Set | `bool` | `false` | no |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels applied to every labelable resource this module creates (merged with the provider default\_labels; resource-specific labels win). | `map(string)` | `{}` | no |
 | <a name="input_owasp_sensitivity"></a> [owasp\_sensitivity](#input\_owasp\_sensitivity) | OWASP rule sensitivity level (1-4, lower is more sensitive) | `number` | `2` | no |
 | <a name="input_preconfigured_waf_rules"></a> [preconfigured\_waf\_rules](#input\_preconfigured\_waf\_rules) | Additional preconfigured WAF rules to enable | <pre>list(object({<br/>    rule_id     = string<br/>    action      = string<br/>    priority    = number<br/>    description = optional(string)<br/>    sensitivity = optional(number, 2)<br/>  }))</pre> | `[]` | no |
 

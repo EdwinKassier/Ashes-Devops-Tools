@@ -100,3 +100,19 @@ run "dns_firewall_disabled" {
     error_message = "No DNS Firewall block list must be created when enable_dns_firewall is false."
   }
 }
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    vpc_id                    = "vpc-0123456789abcdef0"
+    org_arn                   = "arn:aws:organizations::111122223333:organization/o-exampleorgid"
+    query_log_destination_arn = "arn:aws:s3:::example-log-archive-bucket"
+    tags                      = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_route53_resolver_endpoint.inbound.tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_route53_resolver_endpoint.inbound"
+  }
+}

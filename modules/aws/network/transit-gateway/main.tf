@@ -26,14 +26,14 @@ resource "aws_ec2_transit_gateway" "this" {
   default_route_table_association = "disable"
   default_route_table_propagation = "disable"
 
-  tags = { Name = var.description }
+  tags = merge(var.tags, { Name = var.description })
 }
 
 resource "aws_ec2_transit_gateway_route_table" "this" {
   for_each = toset(var.route_tables)
 
   transit_gateway_id = aws_ec2_transit_gateway.this.id
-  tags               = { Name = each.value }
+  tags               = merge(var.tags, { Name = each.value })
 }
 
 resource "aws_ec2_transit_gateway_vpc_attachment" "this" {
@@ -48,6 +48,7 @@ resource "aws_ec2_transit_gateway_vpc_attachment" "this" {
   # segment wiring is explicit; never fall back to the (disabled) default table.
   transit_gateway_default_route_table_association = false
   transit_gateway_default_route_table_propagation = false
+  tags                                            = var.tags
 }
 
 resource "aws_ec2_transit_gateway_route_table_association" "this" {
@@ -83,6 +84,7 @@ resource "aws_ec2_transit_gateway_route" "this" {
 resource "aws_ram_resource_share" "this" {
   name                      = var.share_name
   allow_external_principals = false
+  tags                      = var.tags
 }
 
 resource "aws_ram_resource_association" "tgw" {

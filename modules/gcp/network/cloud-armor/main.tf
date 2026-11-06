@@ -3,6 +3,7 @@ resource "google_compute_security_policy" "policy" {
   project     = var.project_id
   name        = var.policy_name
   description = var.description
+  labels      = var.labels
 
   # Default rule (executed last)
   rule {

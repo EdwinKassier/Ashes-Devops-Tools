@@ -19,10 +19,12 @@ resource "aws_organizations_organizational_unit" "top" {
   for_each  = toset(var.top_level_ous)
   name      = each.key
   parent_id = aws_organizations_organization.this.roots[0].id
+  tags      = var.tags
 }
 
 resource "aws_organizations_organizational_unit" "child" {
   for_each  = { for c in var.child_ous : "${c.parent}/${c.name}" => c }
   name      = each.value.name
   parent_id = aws_organizations_organizational_unit.top[each.value.parent].id
+  tags      = var.tags
 }

@@ -600,3 +600,16 @@ run "region_restriction_allows_edge_and_global_sts" {
     error_message = "sts must be exempt from the region deny, and ACM/KMS must be confined to the allowed regions plus us-east-1."
   }
 }
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    tags = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_organizations_policy.policy["scp-baseline"].tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_organizations_policy.policy"
+  }
+}

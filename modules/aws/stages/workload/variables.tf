@@ -25,7 +25,7 @@ variable "name" {
 }
 
 variable "tags" {
-  description = "Tags applied to the stage's own taggable resources (spoke VPC and its children, TGW attachment). Org-wide tags (CostCenter, Environment, Owner, ...) normally come from the provider default_tags; use this for stage-specific additions."
+  description = "Tags applied to the stage's own taggable resources (spoke VPC and its children, TGW attachment) and passed to the IAM role, Config recorder, Systems Manager and edge-security child modules. Org-wide tags (CostCenter, Environment, Owner, ...) normally come from the provider default_tags; use this for stage-specific additions."
   type        = map(string)
   default     = {}
 }

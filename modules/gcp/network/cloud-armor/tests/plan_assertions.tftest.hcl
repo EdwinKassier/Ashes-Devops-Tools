@@ -150,3 +150,17 @@ run "custom_and_preconfigured_rules" {
     error_message = "Preconfigured WAF expression must default sensitivity to 2."
   }
 }
+
+run "module_labels_applied" {
+  command = plan
+
+  variables {
+    labels = { owner = "test" }
+
+  }
+
+  assert {
+    condition     = google_compute_security_policy.policy.labels["owner"] == "test"
+    error_message = "var.labels must land on the security policy."
+  }
+}

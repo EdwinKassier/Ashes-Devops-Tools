@@ -114,6 +114,7 @@ resource "aws_s3_bucket" "this" {
 
   # Object Lock must be enabled at creation; it cannot be toggled afterward.
   object_lock_enabled = true
+  tags                = var.tags
 }
 
 resource "aws_s3_bucket_public_access_block" "this" {

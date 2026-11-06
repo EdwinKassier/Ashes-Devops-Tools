@@ -88,3 +88,16 @@ run "grants_vended_log_delivery" {
     error_message = "the log archive must grant delivery.logs.amazonaws.com AclCheck + Write, both scoped by aws:SourceOrgID."
   }
 }
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    tags = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_s3_bucket.this.tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_s3_bucket.this"
+  }
+}

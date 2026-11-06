@@ -158,3 +158,16 @@ run "ir_roles_permissions_boundary" {
     error_message = "The isolation Lambda and forensics snapshot-share roles must carry permissions_boundary_arn."
   }
 }
+
+run "module_tags_applied" {
+  command = apply
+
+  variables {
+    tags = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_iam_role.forensics_snapshot[0].tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_iam_role.forensics_snapshot"
+  }
+}

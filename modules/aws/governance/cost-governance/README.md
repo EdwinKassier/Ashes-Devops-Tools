@@ -59,9 +59,9 @@ The following resources are created:
 
 
 - resource.aws_budgets_budget.this (modules/aws/governance/cost-governance/main.tf#L24)
-- resource.aws_ce_anomaly_monitor.this (modules/aws/governance/cost-governance/main.tf#L57)
-- resource.aws_ce_anomaly_subscription.this (modules/aws/governance/cost-governance/main.tf#L65)
-- resource.aws_ce_cost_allocation_tag.this (modules/aws/governance/cost-governance/main.tf#L91)
+- resource.aws_ce_anomaly_monitor.this (modules/aws/governance/cost-governance/main.tf#L59)
+- resource.aws_ce_anomaly_subscription.this (modules/aws/governance/cost-governance/main.tf#L68)
+- resource.aws_ce_cost_allocation_tag.this (modules/aws/governance/cost-governance/main.tf#L96)
 
 
 ## Inputs
@@ -76,6 +76,7 @@ The following resources are created:
 | <a name="input_cost_allocation_tags"></a> [cost\_allocation\_tags](#input\_cost\_allocation\_tags) | Tag keys to activate as cost-allocation tags in Cost Explorer / the Cost & Usage Report. Should mirror the B3 tag-policy keys. | `list(string)` | <pre>[<br/>  "CostCenter",<br/>  "Environment",<br/>  "Owner"<br/>]</pre> | no |
 | <a name="input_enable_cost_governance"></a> [enable\_cost\_governance](#input\_enable\_cost\_governance) | Master gate. When false, no budgets, anomaly monitor/subscription or cost-allocation tags are created (the module composes as a no-op). | `bool` | `true` | no |
 | <a name="input_notifications_topic_arn"></a> [notifications\_topic\_arn](#input\_notifications\_topic\_arn) | Optional SNS topic ARN that budget notifications are published to, in addition to any per-budget email subscribers. Empty string disables SNS fan-out. | `string` | `""` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 
 ## Outputs
 

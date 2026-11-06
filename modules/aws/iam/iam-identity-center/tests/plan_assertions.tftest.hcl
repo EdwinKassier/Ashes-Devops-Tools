@@ -58,3 +58,16 @@ run "group_assignment_is_planned" {
     error_message = "Account assignments must target an AWS account"
   }
 }
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    tags = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_ssoadmin_permission_set.this["AdministratorAccess"].tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_ssoadmin_permission_set.this"
+  }
+}

@@ -14,6 +14,7 @@
 resource "aws_accessanalyzer_analyzer" "external" {
   analyzer_name = var.external_analyzer_name
   type          = "ORGANIZATION"
+  tags          = var.tags
 }
 
 resource "aws_accessanalyzer_analyzer" "unused" {
@@ -25,4 +26,6 @@ resource "aws_accessanalyzer_analyzer" "unused" {
       unused_access_age = var.unused_access_age
     }
   }
+
+  tags = var.tags
 }

@@ -104,3 +104,10 @@ variable "inventory_schedule" {
     error_message = "inventory_schedule must be a non-empty schedule expression."
   }
 }
+
+variable "tags" {
+  description = "Tags applied to every taggable resource this module creates (merged after provider default_tags; resource-specific tags such as Name win)."
+  type        = map(string)
+  default     = {}
+  nullable    = false
+}

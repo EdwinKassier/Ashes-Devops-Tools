@@ -31,3 +31,19 @@ run "backup_policy_rendered_and_attached" {
     error_message = "Rendered policy must target the configured backup vault name"
   }
 }
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    backup_role_arn   = "arn:aws:iam::123456789012:role/OrgBackupRole"
+    target_ou_id      = "ou-abcd-1example"
+    backup_vault_name = "org-backup-vault"
+    tags              = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_organizations_policy.backup.tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_organizations_policy.backup"
+  }
+}

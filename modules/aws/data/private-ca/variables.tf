@@ -80,3 +80,10 @@ variable "org_arn" {
     error_message = "org_arn must be a valid AWS Organizations ARN (arn:aws:organizations::...) when enable_private_ca and share_org are both true."
   }
 }
+
+variable "tags" {
+  description = "Tags applied to every taggable resource this module creates (merged after provider default_tags; resource-specific tags such as Name win)."
+  type        = map(string)
+  default     = {}
+  nullable    = false
+}

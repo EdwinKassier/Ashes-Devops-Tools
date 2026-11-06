@@ -19,6 +19,7 @@ resource "aws_sns_topic" "this" {
   count             = var.enable_security_notifications ? 1 : 0
   name              = var.topic_name
   kms_master_key_id = var.kms_key_id
+  tags              = var.tags
 }
 
 # Allow EventBridge and CloudWatch to publish into the topic.
@@ -67,6 +68,7 @@ resource "aws_cloudwatch_event_rule" "this" {
   for_each      = local.event_rules
   name          = "sec-notify-${each.key}"
   event_pattern = each.value
+  tags          = var.tags
 }
 
 resource "aws_cloudwatch_event_target" "this" {
@@ -126,6 +128,7 @@ resource "aws_cloudwatch_metric_alarm" "break_glass" {
 
   alarm_actions = [aws_sns_topic.this[0].arn]
   ok_actions    = [aws_sns_topic.this[0].arn]
+  tags          = var.tags
 }
 
 # Security Hub automation rule: auto-note informational findings so operators
@@ -152,4 +155,6 @@ resource "aws_securityhub_automation_rule" "suppress_known" {
       }
     }
   }
+
+  tags = var.tags
 }

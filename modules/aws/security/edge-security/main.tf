@@ -83,6 +83,8 @@ resource "aws_wafv2_web_acl" "cloudfront" {
     metric_name                = "${var.name_prefix}-cf-acl"
     sampled_requests_enabled   = true
   }
+
+  tags = var.tags
 }
 
 # ACM certificate for the custom domain. CloudFront requires certs in us-east-1.
@@ -91,6 +93,8 @@ resource "aws_acm_certificate" "this" {
   provider          = aws.us_east_1
   domain_name       = var.domain_name
   validation_method = "DNS"
+
+  tags = var.tags
 
   lifecycle {
     create_before_destroy = true
@@ -177,6 +181,8 @@ resource "aws_cloudfront_distribution" "this" { #tfsec:ignore:aws-cloudfront-ena
     ssl_support_method             = var.domain_name != "" ? "sni-only" : null
     minimum_protocol_version       = var.domain_name != "" ? "TLSv1.2_2021" : null
   }
+
+  tags = var.tags
 }
 
 # Shield Advanced enrollment for the distribution. Cost-gated.
@@ -184,6 +190,7 @@ resource "aws_shield_protection" "this" {
   count        = var.enable_edge && var.enable_shield ? 1 : 0
   name         = "${var.name_prefix}-cf"
   resource_arn = aws_cloudfront_distribution.this[0].arn
+  tags         = var.tags
 }
 
 # WAF logging to the caller-supplied destination. Created in us-east-1 to match
@@ -220,6 +227,8 @@ resource "aws_cloudfront_vpc_origin" "this" {
       quantity = 1
     }
   }
+
+  tags = var.tags
 }
 
 # =============================================================================
@@ -293,6 +302,8 @@ resource "aws_wafv2_web_acl" "regional" {
     metric_name                = "${var.name_prefix}-regional-acl"
     sampled_requests_enabled   = true
   }
+
+  tags = var.tags
 }
 
 resource "aws_wafv2_web_acl_association" "regional" {

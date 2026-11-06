@@ -7,6 +7,7 @@ resource "google_storage_bucket" "audit_logs_access" {
   force_destroy               = var.force_destroy_bucket
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
+  labels                      = var.labels
 
   versioning {
     enabled = true
@@ -51,6 +52,7 @@ resource "google_storage_bucket" "audit_logs" {
   force_destroy               = var.force_destroy_bucket
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
+  labels                      = var.labels
 
   # M-4: Object Versioning keeps overwritten/deleted generations as noncurrent
   # versions. GCS does not allow Object Versioning on a bucket that has a
@@ -232,10 +234,10 @@ resource "google_bigquery_dataset" "audit_logs_analytics" {
     }
   }
 
-  labels = {
+  labels = merge(var.labels, {
     purpose    = "audit-logs"
     managed-by = "terraform"
-  }
+  })
 }
 
 # Organization-level log sink to BigQuery for analytics

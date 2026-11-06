@@ -51,12 +51,12 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_backup_restore_testing_plan.this (modules/aws/backup/backup-vault/main.tf#L58)
-- resource.aws_backup_restore_testing_selection.this (modules/aws/backup/backup-vault/main.tf#L71)
-- resource.aws_backup_vault.this (modules/aws/backup/backup-vault/main.tf#L43)
-- resource.aws_backup_vault_lock_configuration.this (modules/aws/backup/backup-vault/main.tf#L48)
+- resource.aws_backup_restore_testing_plan.this (modules/aws/backup/backup-vault/main.tf#L61)
+- resource.aws_backup_restore_testing_selection.this (modules/aws/backup/backup-vault/main.tf#L76)
+- resource.aws_backup_vault.this (modules/aws/backup/backup-vault/main.tf#L45)
+- resource.aws_backup_vault_lock_configuration.this (modules/aws/backup/backup-vault/main.tf#L51)
 - resource.aws_iam_role.restore_testing (modules/aws/backup/backup-vault/main.tf#L22)
-- resource.aws_iam_role_policy_attachment.restore_testing (modules/aws/backup/backup-vault/main.tf#L37)
+- resource.aws_iam_role_policy_attachment.restore_testing (modules/aws/backup/backup-vault/main.tf#L39)
 
 
 ## Inputs
@@ -78,6 +78,7 @@ The following resources are created:
 | <a name="input_restore_testing_tag_value"></a> [restore\_testing\_tag\_value](#input\_restore\_testing\_tag\_value) | Resource tag value used to select EBS recovery points for restore testing. | `string` | `"true"` | no |
 | <a name="input_selection_window_days"></a> [selection\_window\_days](#input\_selection\_window\_days) | Number of days from which to select recovery points for restore testing (LATEST\_WITHIN\_WINDOW). Must be at least 1. | `number` | `7` | no |
 | <a name="input_start_window_hours"></a> [start\_window\_hours](#input\_start\_window\_hours) | Number of hours in which restore testing jobs must start before being cancelled. | `number` | `1` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 | <a name="input_vault_name"></a> [vault\_name](#input\_vault\_name) | Name of the AWS Backup vault. | `string` | `"org-backup-vault"` | no |
 
 ## Outputs

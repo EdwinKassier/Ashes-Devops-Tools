@@ -20,6 +20,8 @@ resource "aws_vpc_ipam" "this" {
       region_name = operating_regions.value
     }
   }
+
+  tags = var.tags
 }
 
 # Top-level pool: owns the full supernet. A top pool has no locale (it is not
@@ -29,6 +31,7 @@ resource "aws_vpc_ipam_pool" "top" {
   ipam_scope_id  = aws_vpc_ipam.this.private_default_scope_id
   locale         = null
   description    = "Top-level IPAM pool owning the ${var.top_cidr} supernet."
+  tags           = var.tags
 }
 
 resource "aws_vpc_ipam_pool_cidr" "top" {
@@ -46,6 +49,7 @@ resource "aws_vpc_ipam_pool" "regional" {
   locale              = each.value
   source_ipam_pool_id = aws_vpc_ipam_pool.top.id
   description         = "Regional IPAM pool for ${each.value}."
+  tags                = var.tags
 }
 
 # Each regional pool provisions its slice of the supernet.
@@ -61,6 +65,7 @@ resource "aws_vpc_ipam_pool_cidr" "regional" {
 resource "aws_ram_resource_share" "this" {
   name                      = var.share_name
   allow_external_principals = false
+  tags                      = var.tags
 }
 
 resource "aws_ram_resource_association" "pools" {

@@ -50,7 +50,7 @@ The following resources are created:
 
 
 - resource.aws_organizations_policy.backup (modules/aws/backup/backup-org-policy/main.tf#L13)
-- resource.aws_organizations_policy_attachment.target (modules/aws/backup/backup-org-policy/main.tf#L23)
+- resource.aws_organizations_policy_attachment.target (modules/aws/backup/backup-org-policy/main.tf#L25)
 
 
 ## Inputs
@@ -63,6 +63,7 @@ The following resources are created:
 | <a name="input_content"></a> [content](#input\_content) | Full JSON policy document. When non-empty this overrides the templated default and is used verbatim (must be valid Organizations backup-policy @@assign JSON). | `string` | `""` | no |
 | <a name="input_default_region"></a> [default\_region](#input\_default\_region) | AWS region the org backup plan writes recovery points to (single region). Rendered into the templated policy's regions @@assign. No cross-region copy\_action is configured — see docs/known-gaps.md. | `string` | `"eu-west-2"` | no |
 | <a name="input_policy_name"></a> [policy\_name](#input\_policy\_name) | Name of the AWS Organizations BACKUP\_POLICY. | `string` | `"org-backup-policy"` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 
 ## Outputs
 

@@ -97,11 +97,11 @@ The following resources are created:
 
 
 - resource.google_pubsub_topic.scc_notifications (modules/gcp/governance/scc/main.tf#L5)
-- resource.google_pubsub_topic.scc_notifications_multi (modules/gcp/governance/scc/main.tf#L38)
-- resource.google_pubsub_topic_iam_member.scc_publisher (modules/gcp/governance/scc/main.tf#L25)
-- resource.google_pubsub_topic_iam_member.scc_publisher_multi (modules/gcp/governance/scc/main.tf#L66)
-- resource.google_scc_notification_config.notification_config (modules/gcp/governance/scc/main.tf#L12)
-- resource.google_scc_notification_config.notification_config_multi (modules/gcp/governance/scc/main.tf#L52)
+- resource.google_pubsub_topic.scc_notifications_multi (modules/gcp/governance/scc/main.tf#L39)
+- resource.google_pubsub_topic_iam_member.scc_publisher (modules/gcp/governance/scc/main.tf#L26)
+- resource.google_pubsub_topic_iam_member.scc_publisher_multi (modules/gcp/governance/scc/main.tf#L67)
+- resource.google_scc_notification_config.notification_config (modules/gcp/governance/scc/main.tf#L13)
+- resource.google_scc_notification_config.notification_config_multi (modules/gcp/governance/scc/main.tf#L53)
 
 
 ## Inputs
@@ -114,6 +114,7 @@ The following resources are created:
 | <a name="input_description"></a> [description](#input\_description) | Description of the notification config (legacy single config) | `string` | `"SCC notifications for active findings"` | no |
 | <a name="input_filter"></a> [filter](#input\_filter) | The filter string to trigger notifications (legacy single config) | `string` | `"state=\"ACTIVE\""` | no |
 | <a name="input_kms_key_name"></a> [kms\_key\_name](#input\_kms\_key\_name) | Optional customer-managed KMS key used to encrypt SCC notification topics | `string` | `null` | no |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels applied to every labelable resource this module creates (merged with the provider default\_labels; resource-specific labels win). | `map(string)` | `{}` | no |
 | <a name="input_notification_configs"></a> [notification\_configs](#input\_notification\_configs) | Map of notification configurations for severity-based routing.<br/>When provided, this takes precedence over the legacy single config variables.<br/><br/>Example:<br/>notification\_configs = {<br/>  "critical-high" = {<br/>    pubsub\_topic\_name = "scc-critical-findings"<br/>    description       = "Critical and High severity findings"<br/>    filter            = "state=\"ACTIVE\" AND (severity=\"CRITICAL\" OR severity=\"HIGH\")"<br/>  }<br/>  "medium-low" = {<br/>    pubsub\_topic\_name = "scc-medium-findings"<br/>    description       = "Medium and Low severity findings"<br/>    filter            = "state=\"ACTIVE\" AND (severity=\"MEDIUM\" OR severity=\"LOW\")"<br/>  }<br/>} | <pre>map(object({<br/>    pubsub_topic_name = string<br/>    description       = optional(string, "SCC notification configuration")<br/>    filter            = string<br/>  }))</pre> | `{}` | no |
 | <a name="input_pubsub_topic_name"></a> [pubsub\_topic\_name](#input\_pubsub\_topic\_name) | Name of the Pub/Sub topic for SCC notifications (legacy single config) | `string` | `"scc-notifications"` | no |
 

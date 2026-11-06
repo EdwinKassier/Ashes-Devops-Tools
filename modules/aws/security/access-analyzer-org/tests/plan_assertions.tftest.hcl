@@ -19,3 +19,16 @@ run "analyzers_are_organization_scoped" {
     error_message = "Unused analyzer must be organization unused-access scoped"
   }
 }
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    tags = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_accessanalyzer_analyzer.external.tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_accessanalyzer_analyzer.external"
+  }
+}

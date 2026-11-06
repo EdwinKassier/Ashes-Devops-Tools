@@ -137,3 +137,17 @@ variable "resource_labels" {
   type        = map(string)
   default     = {}
 }
+
+variable "labels" {
+  description = "Labels applied to every labelable resource this module creates (merged with the provider default_labels; resource-specific labels win)."
+  type        = map(string)
+  default     = {}
+  nullable    = false
+
+  validation {
+    condition = alltrue([
+      for k, v in var.labels : can(regex("^[a-z][a-z0-9_-]{0,62}$", k)) && can(regex("^[a-z0-9_-]{0,63}$", v))
+    ])
+    error_message = "labels keys/values must be lowercase GCP label syntax (keys start with a letter, <= 63 chars)."
+  }
+}

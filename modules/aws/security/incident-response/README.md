@@ -116,14 +116,14 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_cloudwatch_event_rule.guardduty_high (modules/aws/security/incident-response/main.tf#L75)
-- resource.aws_cloudwatch_event_target.isolate (modules/aws/security/incident-response/main.tf#L87)
-- resource.aws_iam_role.forensics_snapshot (modules/aws/security/incident-response/main.tf#L131)
+- resource.aws_cloudwatch_event_rule.guardduty_high (modules/aws/security/incident-response/main.tf#L78)
+- resource.aws_cloudwatch_event_target.isolate (modules/aws/security/incident-response/main.tf#L92)
+- resource.aws_iam_role.forensics_snapshot (modules/aws/security/incident-response/main.tf#L137)
 - resource.aws_iam_role.isolation_lambda (modules/aws/security/incident-response/main.tf#L22)
-- resource.aws_iam_role_policy.forensics_kms (modules/aws/security/incident-response/main.tf#L159)
-- resource.aws_lambda_function.isolate (modules/aws/security/incident-response/main.tf#L59)
-- resource.aws_lambda_permission.eventbridge (modules/aws/security/incident-response/main.tf#L97)
-- resource.aws_security_group.quarantine (modules/aws/security/incident-response/main.tf#L110)
+- resource.aws_iam_role_policy.forensics_kms (modules/aws/security/incident-response/main.tf#L167)
+- resource.aws_lambda_function.isolate (modules/aws/security/incident-response/main.tf#L61)
+- resource.aws_lambda_permission.eventbridge (modules/aws/security/incident-response/main.tf#L102)
+- resource.aws_security_group.quarantine (modules/aws/security/incident-response/main.tf#L115)
 - data source.archive_file.isolate (modules/aws/security/incident-response/main.tf#L14)
 
 
@@ -137,6 +137,7 @@ The following resources are created:
 | <a name="input_org_id"></a> [org\_id](#input\_org\_id) | AWS Organizations organization ID (o-xxxx) used to scope the forensics role trust policy via aws:PrincipalOrgID and the forensics KMS grant via aws:SourceOrgID. | `string` | `""` | no |
 | <a name="input_permissions_boundary_arn"></a> [permissions\_boundary\_arn](#input\_permissions\_boundary\_arn) | Permissions-boundary managed policy ARN set on every IAM role this module creates. Required when the roles are created by a member-account tfc-apply role with boundary propagation on (tfc-oidc-baseline enable\_apply\_boundary\_propagation): pass arn:PARTITION:iam::ACCOUNT\_ID:policy/tfc-apply-boundary. Null (default) = no boundary. | `string` | `null` | no |
 | <a name="input_quarantine_vpc_id"></a> [quarantine\_vpc\_id](#input\_quarantine\_vpc\_id) | VPC ID in which the deny-all quarantine security group is created. Empty (default) skips the SG; supply the VPC that holds the workloads the isolation Lambda may need to quarantine. The Lambda attaches this SG to a flagged instance's ENIs to cut off all traffic. | `string` | `""` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 
 ## Outputs
 

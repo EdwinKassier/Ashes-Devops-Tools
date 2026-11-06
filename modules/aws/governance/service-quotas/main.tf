@@ -49,4 +49,5 @@ resource "aws_cloudwatch_metric_alarm" "usage" {
   }
 
   alarm_actions = var.notifications_topic_arn != "" ? [var.notifications_topic_arn] : []
+  tags          = var.tags
 }

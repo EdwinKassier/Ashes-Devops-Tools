@@ -137,3 +137,16 @@ run "aggregator_role_permissions_boundary" {
     error_message = "The org aggregator role must carry permissions_boundary_arn."
   }
 }
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    tags = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_config_configuration_aggregator.org[0].tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_config_configuration_aggregator.org"
+  }
+}

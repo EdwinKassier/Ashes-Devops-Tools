@@ -53,14 +53,14 @@ The following resources are created:
 
 
 - resource.aws_ec2_transit_gateway.this (modules/aws/network/transit-gateway/main.tf#L21)
-- resource.aws_ec2_transit_gateway_route.this (modules/aws/network/transit-gateway/main.tf#L72)
+- resource.aws_ec2_transit_gateway_route.this (modules/aws/network/transit-gateway/main.tf#L73)
 - resource.aws_ec2_transit_gateway_route_table.this (modules/aws/network/transit-gateway/main.tf#L32)
-- resource.aws_ec2_transit_gateway_route_table_association.this (modules/aws/network/transit-gateway/main.tf#L53)
-- resource.aws_ec2_transit_gateway_route_table_propagation.this (modules/aws/network/transit-gateway/main.tf#L63)
+- resource.aws_ec2_transit_gateway_route_table_association.this (modules/aws/network/transit-gateway/main.tf#L54)
+- resource.aws_ec2_transit_gateway_route_table_propagation.this (modules/aws/network/transit-gateway/main.tf#L64)
 - resource.aws_ec2_transit_gateway_vpc_attachment.this (modules/aws/network/transit-gateway/main.tf#L39)
-- resource.aws_ram_principal_association.org (modules/aws/network/transit-gateway/main.tf#L93)
-- resource.aws_ram_resource_association.tgw (modules/aws/network/transit-gateway/main.tf#L88)
-- resource.aws_ram_resource_share.this (modules/aws/network/transit-gateway/main.tf#L83)
+- resource.aws_ram_principal_association.org (modules/aws/network/transit-gateway/main.tf#L95)
+- resource.aws_ram_resource_association.tgw (modules/aws/network/transit-gateway/main.tf#L90)
+- resource.aws_ram_resource_share.this (modules/aws/network/transit-gateway/main.tf#L84)
 
 
 ## Inputs
@@ -74,6 +74,7 @@ The following resources are created:
 | <a name="input_route_tables"></a> [route\_tables](#input\_route\_tables) | Segment route tables to create on the transit gateway. Each attachment associates with exactly one of these segments. | `list(string)` | <pre>[<br/>  "prod",<br/>  "nonprod",<br/>  "inspection",<br/>  "shared"<br/>]</pre> | no |
 | <a name="input_routes"></a> [routes](#input\_routes) | Static routes keyed by a plan-known string. cidr is the destination; attachment (a var.attachments key) is the next hop; blackhole drops the traffic. Set exactly one of attachment or blackhole per route. | <pre>map(object({<br/>    route_table = string<br/>    cidr        = string<br/>    attachment  = optional(string)<br/>    blackhole   = optional(bool, false)<br/>  }))</pre> | <pre>{<br/>  "nonprod:default": {<br/>    "attachment": "inspection",<br/>    "cidr": "0.0.0.0/0",<br/>    "route_table": "nonprod"<br/>  },<br/>  "prod:default": {<br/>    "attachment": "inspection",<br/>    "cidr": "0.0.0.0/0",<br/>    "route_table": "prod"<br/>  }<br/>}</pre> | no |
 | <a name="input_share_name"></a> [share\_name](#input\_share\_name) | Name of the RAM resource share used to share the transit gateway across the organization. | `string` | `"tgw-share"` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 
 ## Outputs
 

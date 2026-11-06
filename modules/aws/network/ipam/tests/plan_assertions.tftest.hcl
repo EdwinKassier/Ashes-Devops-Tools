@@ -37,3 +37,17 @@ run "ipam_pools_configured" {
     error_message = "RAM share must not allow external principals."
   }
 }
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    org_arn = "arn:aws:organizations::123456789012:organization/o-exampleorgid"
+    tags    = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_vpc_ipam.this.tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_vpc_ipam.this"
+  }
+}

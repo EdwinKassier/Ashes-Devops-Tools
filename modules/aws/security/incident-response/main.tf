@@ -33,6 +33,8 @@ resource "aws_iam_role" "isolation_lambda" {
       Action    = "sts:AssumeRole"
     }]
   })
+
+  tags = var.tags
 }
 
 # Isolation Lambda: attaches the quarantine SG to a flagged instance (scaffold).
@@ -69,6 +71,7 @@ resource "aws_lambda_function" "isolate" {
   handler          = "isolate.handler"
   filename         = data.archive_file.isolate[0].output_path
   source_code_hash = data.archive_file.isolate[0].output_base64sha256
+  tags             = var.tags
 }
 
 # EventBridge rule matching high-severity (>= 7) GuardDuty findings.
@@ -81,6 +84,8 @@ resource "aws_cloudwatch_event_rule" "guardduty_high" {
     detail-type = ["GuardDuty Finding"]
     detail      = { severity = [{ numeric = [">=", 7] }] }
   })
+
+  tags = var.tags
 }
 
 # Route matching findings to the isolation Lambda.
@@ -116,6 +121,7 @@ resource "aws_security_group" "quarantine" {
 
   # No ingress or egress rules => AWS applies an implicit deny-all in both
   # directions, which is exactly the isolation posture we want.
+  tags = var.tags
 }
 
 # Intra-org forensics role: lets the forensics account assume in to share/copy
@@ -150,6 +156,8 @@ resource "aws_iam_role" "forensics_snapshot" {
       }
     }]
   })
+
+  tags = var.tags
 }
 
 # When a forensics KMS key is supplied, allow the forensics role to decrypt and

@@ -159,3 +159,17 @@ run "log_analytics_locked_with_bucket_lock_and_cmek" {
     error_message = "log_analytics_kms_key_name must set the bucket CMEK."
   }
 }
+
+run "module_labels_applied" {
+  command = plan
+
+  variables {
+    labels = { owner = "test" }
+
+  }
+
+  assert {
+    condition     = google_storage_bucket.audit_logs.labels["owner"] == "test" && google_storage_bucket.audit_logs_access.labels["owner"] == "test"
+    error_message = "var.labels must land on the audit-log buckets."
+  }
+}

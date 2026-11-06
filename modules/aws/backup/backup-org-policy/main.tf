@@ -18,6 +18,8 @@ resource "aws_organizations_policy" "backup" {
     backup_vault_name = var.backup_vault_name
     backup_role_arn   = var.backup_role_arn
   })
+
+  tags = var.tags
 }
 
 resource "aws_organizations_policy_attachment" "target" {

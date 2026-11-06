@@ -178,7 +178,7 @@ variable "enable_network_access_analyzer" {
 }
 
 variable "tags" {
-  description = "Tags applied to the stage's own taggable resources (NAT gateways, EIPs) and passed to the hub VPCs. Org-wide tags normally come from the provider default_tags; use this for stage-specific additions."
+  description = "Tags applied to the stage's own taggable resources (NAT gateways, EIPs) and passed to every child module (hub VPCs, IPAM, TGW, Network Firewall, endpoints, Resolver, Network Access Analyzer). Org-wide tags normally come from the provider default_tags; use this for stage-specific additions."
   type        = map(string)
   default     = {}
 }

@@ -76,3 +76,17 @@ run "restore_testing_role_permissions_boundary" {
     error_message = "The restore-testing role must carry permissions_boundary_arn."
   }
 }
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    restore_testing_role_arn = "arn:aws:iam::123456789012:role/BackupRestoreTestRole"
+    tags                     = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_backup_vault.this.tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_backup_vault.this"
+  }
+}

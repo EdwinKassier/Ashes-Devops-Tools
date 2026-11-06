@@ -33,6 +33,8 @@ resource "aws_ssm_document" "session_preferences" {
       s3EncryptionEnabled         = true
     }
   })
+
+  tags = var.tags
 }
 
 # Patch baseline: auto-approve Security/Bugfix, Critical/Important after delay.
@@ -56,6 +58,8 @@ resource "aws_ssm_patch_baseline" "this" {
       values = ["Critical", "Important"]
     }
   }
+
+  tags = var.tags
 }
 
 # Make the baseline the account default for its operating system.
@@ -75,4 +79,5 @@ resource "aws_ssm_association" "inventory" {
   }
 
   schedule_expression = var.inventory_schedule
+  tags                = var.tags
 }

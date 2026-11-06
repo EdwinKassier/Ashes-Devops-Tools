@@ -47,3 +47,16 @@ run "runtime_monitoring_manages_agents" {
     error_message = "agent management belongs only on RUNTIME_MONITORING."
   }
 }
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    tags = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_guardduty_detector.this["eu-west-2"].tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_guardduty_detector.this"
+  }
+}

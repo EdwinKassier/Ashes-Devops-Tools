@@ -62,13 +62,13 @@ The following resources are created:
 
 
 - resource.aws_s3_bucket.this (modules/aws/data/log-archive-bucket/main.tf#L101)
-- resource.aws_s3_bucket_lifecycle_configuration.this (modules/aws/data/log-archive-bucket/main.tf#L168)
-- resource.aws_s3_bucket_logging.this (modules/aws/data/log-archive-bucket/main.tf#L139)
-- resource.aws_s3_bucket_object_lock_configuration.this (modules/aws/data/log-archive-bucket/main.tf#L157)
-- resource.aws_s3_bucket_policy.this (modules/aws/data/log-archive-bucket/main.tf#L195)
-- resource.aws_s3_bucket_public_access_block.this (modules/aws/data/log-archive-bucket/main.tf#L119)
-- resource.aws_s3_bucket_server_side_encryption_configuration.this (modules/aws/data/log-archive-bucket/main.tf#L145)
-- resource.aws_s3_bucket_versioning.this (modules/aws/data/log-archive-bucket/main.tf#L128)
+- resource.aws_s3_bucket_lifecycle_configuration.this (modules/aws/data/log-archive-bucket/main.tf#L169)
+- resource.aws_s3_bucket_logging.this (modules/aws/data/log-archive-bucket/main.tf#L140)
+- resource.aws_s3_bucket_object_lock_configuration.this (modules/aws/data/log-archive-bucket/main.tf#L158)
+- resource.aws_s3_bucket_policy.this (modules/aws/data/log-archive-bucket/main.tf#L196)
+- resource.aws_s3_bucket_public_access_block.this (modules/aws/data/log-archive-bucket/main.tf#L120)
+- resource.aws_s3_bucket_server_side_encryption_configuration.this (modules/aws/data/log-archive-bucket/main.tf#L146)
+- resource.aws_s3_bucket_versioning.this (modules/aws/data/log-archive-bucket/main.tf#L129)
 
 
 ## Inputs
@@ -82,6 +82,7 @@ The following resources are created:
 | <a name="input_access_log_prefix"></a> [access\_log\_prefix](#input\_access\_log\_prefix) | Key prefix for S3 server access logs. | `string` | `"s3-access-logs/"` | no |
 | <a name="input_object_lock_mode"></a> [object\_lock\_mode](#input\_object\_lock\_mode) | Default S3 Object Lock retention mode. COMPLIANCE is WORM against all principals (incl. root) and blocks destroy until retention lapses; GOVERNANCE is bypassable by privileged principals. | `string` | `"COMPLIANCE"` | no |
 | <a name="input_retention_days"></a> [retention\_days](#input\_retention\_days) | Default Object Lock retention period, in days. Also drives lifecycle expiration. | `number` | `365` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 
 ## Outputs
 

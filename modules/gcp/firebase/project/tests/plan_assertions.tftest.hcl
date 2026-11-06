@@ -48,3 +48,17 @@ run "kms_key_encrypts_web_config_bucket" {
     error_message = "When kms_key_name is set, the web-config bucket must use it as the default CMEK."
   }
 }
+
+run "module_labels_applied" {
+  command = plan
+
+  variables {
+    labels           = { owner = "test" }
+    web_display_name = "My Web App"
+  }
+
+  assert {
+    condition     = google_storage_bucket.firebase_web_config[0].labels["owner"] == "test" && google_storage_bucket.firebase_web_config[0].labels["purpose"] == "firebase-web-config"
+    error_message = "var.labels must merge into the web-config bucket labels (module labels kept)."
+  }
+}

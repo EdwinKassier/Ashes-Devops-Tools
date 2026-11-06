@@ -88,6 +88,7 @@ resource "aws_inspector2_enabler" "this" {
 
 resource "aws_detective_graph" "this" {
   count = local.detective_enabled
+  tags  = var.tags
 }
 
 # Registered from the MANAGEMENT account.
@@ -115,11 +116,14 @@ resource "aws_detective_organization_configuration" "this" {
 resource "aws_resourceexplorer2_index" "this" {
   count = local.resource_explorer_enabled
   type  = "AGGREGATOR"
+  tags  = var.tags
 }
 
 resource "aws_resourceexplorer2_view" "this" {
   count = local.resource_explorer_enabled
   name  = "org-aggregator"
+
+  tags = var.tags
 
   depends_on = [aws_resourceexplorer2_index.this]
 }

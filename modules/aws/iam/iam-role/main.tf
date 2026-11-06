@@ -36,6 +36,7 @@ resource "aws_iam_role" "this" {
   max_session_duration = try(each.value.max_session_duration, 3600)
   # Per-role boundary wins; otherwise the module-wide permissions_boundary_arn.
   permissions_boundary = each.value.permissions_boundary != null ? each.value.permissions_boundary : var.permissions_boundary_arn
+  tags                 = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "this" {
@@ -72,6 +73,8 @@ resource "aws_iam_role" "break_glass" {
       }
     }]
   })
+
+  tags = var.tags
 }
 
 # Standing state: deny-all unless explicitly activated during an incident.

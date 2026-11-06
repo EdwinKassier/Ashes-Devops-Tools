@@ -91,17 +91,17 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_compute_backend_service.this (modules/gcp/network/app-ingress/main.tf#L24)
+- resource.google_compute_backend_service.this (modules/gcp/network/app-ingress/main.tf#L25)
 - resource.google_compute_global_address.this (modules/gcp/network/app-ingress/main.tf#L7)
-- resource.google_compute_global_forwarding_rule.http (modules/gcp/network/app-ingress/main.tf#L95)
-- resource.google_compute_global_forwarding_rule.https (modules/gcp/network/app-ingress/main.tf#L68)
-- resource.google_compute_managed_ssl_certificate.this (modules/gcp/network/app-ingress/main.tf#L49)
-- resource.google_compute_region_network_endpoint_group.this (modules/gcp/network/app-ingress/main.tf#L13)
-- resource.google_compute_target_http_proxy.redirect (modules/gcp/network/app-ingress/main.tf#L89)
-- resource.google_compute_target_https_proxy.this (modules/gcp/network/app-ingress/main.tf#L58)
-- resource.google_compute_url_map.redirect (modules/gcp/network/app-ingress/main.tf#L78)
-- resource.google_compute_url_map.this (modules/gcp/network/app-ingress/main.tf#L43)
-- resource.google_dns_record_set.this (modules/gcp/network/app-ingress/main.tf#L105)
+- resource.google_compute_global_forwarding_rule.http (modules/gcp/network/app-ingress/main.tf#L97)
+- resource.google_compute_global_forwarding_rule.https (modules/gcp/network/app-ingress/main.tf#L69)
+- resource.google_compute_managed_ssl_certificate.this (modules/gcp/network/app-ingress/main.tf#L50)
+- resource.google_compute_region_network_endpoint_group.this (modules/gcp/network/app-ingress/main.tf#L14)
+- resource.google_compute_target_http_proxy.redirect (modules/gcp/network/app-ingress/main.tf#L91)
+- resource.google_compute_target_https_proxy.this (modules/gcp/network/app-ingress/main.tf#L59)
+- resource.google_compute_url_map.redirect (modules/gcp/network/app-ingress/main.tf#L80)
+- resource.google_compute_url_map.this (modules/gcp/network/app-ingress/main.tf#L44)
+- resource.google_dns_record_set.this (modules/gcp/network/app-ingress/main.tf#L108)
 
 
 ## Inputs
@@ -116,6 +116,7 @@ The following resources are created:
 | <a name="input_dns_managed_zone"></a> [dns\_managed\_zone](#input\_dns\_managed\_zone) | Optional Cloud DNS managed-zone name in var.project\_id. When set, the module creates an A record per domain pointing at the load balancer IP. Null leaves DNS to the operator (the module still outputs the IP to point records at). | `string` | `null` | no |
 | <a name="input_dns_ttl"></a> [dns\_ttl](#input\_dns\_ttl) | TTL in seconds for the DNS A records, used only when dns\_managed\_zone is set. | `number` | `300` | no |
 | <a name="input_enable_cdn"></a> [enable\_cdn](#input\_enable\_cdn) | Enable Cloud CDN on the backend service. Default false; turn on for cacheable public content. | `bool` | `false` | no |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels applied to every labelable resource this module creates (merged with the provider default\_labels; resource-specific labels win). | `map(string)` | `{}` | no |
 | <a name="input_security_policy_id"></a> [security\_policy\_id](#input\_security\_policy\_id) | Optional Cloud Armor security policy ID (self\_link) to attach to the backend service. Null leaves the backend without an edge WAF, so set this for any internet-facing service that needs rate limiting or OWASP rules. | `string` | `null` | no |
 | <a name="input_ssl_policy_id"></a> [ssl\_policy\_id](#input\_ssl\_policy\_id) | Optional SSL policy ID (self\_link) for the HTTPS proxy. Null uses Google's default negotiation; set a MODERN or RESTRICTED policy to pin a minimum TLS version. | `string` | `null` | no |
 

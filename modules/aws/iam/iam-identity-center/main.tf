@@ -37,6 +37,7 @@ resource "aws_ssoadmin_permission_set" "this" {
   name             = each.key
   description      = each.value.description
   session_duration = each.value.session_duration # ISO-8601 duration, e.g. "PT1H"
+  tags             = var.tags
 }
 
 resource "aws_ssoadmin_managed_policy_attachment" "this" {

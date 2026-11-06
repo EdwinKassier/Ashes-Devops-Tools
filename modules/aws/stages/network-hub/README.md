@@ -101,12 +101,12 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_eip.nat (modules/aws/stages/network-hub/main.tf#L160)
-- resource.aws_nat_gateway.this (modules/aws/stages/network-hub/main.tf#L168)
-- resource.aws_route.egress_default (modules/aws/stages/network-hub/main.tf#L183)
-- resource.aws_route.egress_tgw_default (modules/aws/stages/network-hub/main.tf#L193)
-- resource.aws_route.hub_to_tgw (modules/aws/stages/network-hub/main.tf#L215)
-- resource.aws_route.inspection_tgw_to_firewall (modules/aws/stages/network-hub/main.tf#L207)
+- resource.aws_eip.nat (modules/aws/stages/network-hub/main.tf#L162)
+- resource.aws_nat_gateway.this (modules/aws/stages/network-hub/main.tf#L170)
+- resource.aws_route.egress_default (modules/aws/stages/network-hub/main.tf#L185)
+- resource.aws_route.egress_tgw_default (modules/aws/stages/network-hub/main.tf#L195)
+- resource.aws_route.hub_to_tgw (modules/aws/stages/network-hub/main.tf#L217)
+- resource.aws_route.inspection_tgw_to_firewall (modules/aws/stages/network-hub/main.tf#L209)
 
 
 ## Inputs
@@ -131,7 +131,7 @@ The following resources are created:
 | <a name="input_network_firewall_suricata_rules"></a> [network\_firewall\_suricata\_rules](#input\_network\_firewall\_suricata\_rules) | Optional custom Suricata rules (STRICT\_ORDER semantics) evaluated after the managed threat groups. Empty (default) = none. | `string` | `""` | no |
 | <a name="input_private_hosted_zone_name"></a> [private\_hosted\_zone\_name](#input\_private\_hosted\_zone\_name) | Name of the shared Route 53 private hosted zone for split-horizon DNS in the egress VPC. Empty string skips creating the zone. | `string` | `""` | no |
 | <a name="input_regional_cidrs"></a> [regional\_cidrs](#input\_regional\_cidrs) | Map of region to the CIDR each regional IPAM pool provisions. Every CIDR should fall within top\_cidr. | `map(string)` | <pre>{<br/>  "eu-west-2": "10.0.0.0/12"<br/>}</pre> | no |
-| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to the stage's own taggable resources (NAT gateways, EIPs) and passed to the hub VPCs. Org-wide tags normally come from the provider default\_tags; use this for stage-specific additions. | `map(string)` | `{}` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to the stage's own taggable resources (NAT gateways, EIPs) and passed to every child module (hub VPCs, IPAM, TGW, Network Firewall, endpoints, Resolver, Network Access Analyzer). Org-wide tags normally come from the provider default\_tags; use this for stage-specific additions. | `map(string)` | `{}` | no |
 | <a name="input_top_cidr"></a> [top\_cidr](#input\_top\_cidr) | CIDR of the top-level supernet owned by the top IPAM pool. | `string` | `"10.0.0.0/8"` | no |
 
 ## Outputs

@@ -20,6 +20,8 @@ resource "aws_securitylake_data_lake" "this" {
       }]
     }
   }
+
+  tags = var.tags
 }
 
 resource "aws_securitylake_aws_log_source" "this" {
@@ -49,6 +51,8 @@ resource "aws_securitylake_subscriber" "this" {
     external_id = var.subscriber_external_id
     principal   = var.subscriber_principal
   }
+
+  tags = var.tags
 
   depends_on = [aws_securitylake_aws_log_source.this]
 }

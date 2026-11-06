@@ -11,6 +11,7 @@ resource "google_monitoring_slo" "this" {
 
   goal                = var.goal
   rolling_period_days = var.rolling_period_days
+  user_labels         = var.labels
 
   basic_sli {
     dynamic "availability" {
@@ -53,6 +54,7 @@ resource "google_monitoring_alert_policy" "burn_rate" {
   }
 
   notification_channels = var.notification_channels
+  user_labels           = var.labels
 
   documentation {
     content = "The error budget for ${var.display_name} is burning faster than ${var.burn_rate_threshold}x. At this rate the ${var.rolling_period_days}-day SLO will be missed. Investigate the service."

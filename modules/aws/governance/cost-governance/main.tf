@@ -49,6 +49,8 @@ resource "aws_budgets_budget" "this" {
     subscriber_sns_topic_arns  = var.notifications_topic_arn != "" ? [var.notifications_topic_arn] : []
     subscriber_email_addresses = try(each.value.emails, [])
   }
+
+  tags = var.tags
 }
 
 # DIMENSIONAL/SERVICE monitor: no monitor_specification is required for the
@@ -60,6 +62,7 @@ resource "aws_ce_anomaly_monitor" "this" {
   name              = var.anomaly_monitor_name
   monitor_type      = "DIMENSIONAL"
   monitor_dimension = "SERVICE"
+  tags              = var.tags
 }
 
 resource "aws_ce_anomaly_subscription" "this" {
@@ -84,6 +87,8 @@ resource "aws_ce_anomaly_subscription" "this" {
       values        = [tostring(var.anomaly_threshold_usd)]
     }
   }
+
+  tags = var.tags
 }
 
 # Activate the B3 tag-policy keys in Cost Explorer / CUR. status is title-case

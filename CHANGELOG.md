@@ -115,6 +115,12 @@ release metadata for a Terraform Cloud run.
     the root (`app_alert_notification_channel_ids`). An optional Pub/Sub topic and subscription
     with a dead-letter topic gives the runtime SA access to its own topic and subscription only
     (`services[*].alerts` / `.pubsub`).
+- **Consistent `tags` / `labels` inputs.**
+  - 27 AWS modules gain `tags`, applied to every taggable resource. Resource-specific tags such as
+    `Name` still win. The network-hub and workload stages pass it through.
+  - 10 GCP modules gain `labels` (validated GCP label syntax), applied to every labelable
+    resource, including `resource_labels` / `user_labels`.
+  - Modules are now taggable when consumed outside this repo, without provider `default_tags`.
 - **Validation and contract suites for every AWS layer root** (backup, identity,
   shared-services, network, security): 10 new suites, about 70 runs.
 - **`aws-network` `az_count` minimum is now 2.** One AZ passed validation but could not plan

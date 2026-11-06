@@ -113,11 +113,11 @@ resource "google_storage_bucket" "firebase_web_config_access_logs" {
     }
   }
 
-  labels = {
+  labels = merge(var.labels, {
     managed-by  = "terraform"
     purpose     = "firebase-web-config-access-logs"
     environment = "shared"
-  }
+  })
 }
 
 resource "google_storage_bucket_iam_member" "firebase_web_config_access_log_writer" {
@@ -155,11 +155,11 @@ resource "google_storage_bucket" "firebase_web_config" {
     }
   }
 
-  labels = {
+  labels = merge(var.labels, {
     managed-by  = "terraform"
     purpose     = "firebase-web-config"
     environment = "shared"
-  }
+  })
 
   depends_on = [google_storage_bucket_iam_member.firebase_web_config_access_log_writer]
 }

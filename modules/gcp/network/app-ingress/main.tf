@@ -7,6 +7,7 @@
 resource "google_compute_global_address" "this" {
   project = var.project_id
   name    = "${var.name}-ip"
+  labels  = var.labels
 }
 
 # Serverless NEG targeting the Cloud Run service.
@@ -72,6 +73,7 @@ resource "google_compute_global_forwarding_rule" "https" {
   ip_address            = google_compute_global_address.this.id
   port_range            = "443"
   load_balancing_scheme = "EXTERNAL_MANAGED"
+  labels                = var.labels
 }
 
 # HTTP listener that redirects to HTTPS (no plaintext serving).
@@ -99,6 +101,7 @@ resource "google_compute_global_forwarding_rule" "http" {
   ip_address            = google_compute_global_address.this.id
   port_range            = "80"
   load_balancing_scheme = "EXTERNAL_MANAGED"
+  labels                = var.labels
 }
 
 # Optional DNS A record pointing the domain(s) at the load balancer.

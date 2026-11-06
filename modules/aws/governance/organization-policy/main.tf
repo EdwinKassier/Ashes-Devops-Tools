@@ -217,6 +217,7 @@ resource "aws_organizations_policy" "policy" {
   name     = each.key
   type     = each.value.type
   content  = each.value.content
+  tags     = var.tags
 }
 
 resource "aws_organizations_policy_attachment" "attach" {

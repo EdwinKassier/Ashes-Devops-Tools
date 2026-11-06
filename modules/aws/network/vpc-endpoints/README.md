@@ -56,7 +56,7 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_route53_zone.shared (modules/aws/network/vpc-endpoints/main.tf#L47)
+- resource.aws_route53_zone.shared (modules/aws/network/vpc-endpoints/main.tf#L49)
 - resource.aws_vpc_endpoint.interface (modules/aws/network/vpc-endpoints/main.tf#L15)
 
 
@@ -72,6 +72,7 @@ The following resources are created:
 | <a name="input_private_hosted_zone_name"></a> [private\_hosted\_zone\_name](#input\_private\_hosted\_zone\_name) | Name of the shared Route 53 private hosted zone for split-horizon DNS. Empty string skips creating the zone. | `string` | `""` | no |
 | <a name="input_security_group_ids"></a> [security\_group\_ids](#input\_security\_group\_ids) | Security group IDs to associate with the interface endpoint ENIs. | `list(string)` | `[]` | no |
 | <a name="input_subnet_ids"></a> [subnet\_ids](#input\_subnet\_ids) | Subnet IDs (one per AZ, in the hub VPC) to place the interface endpoint ENIs in. | `list(string)` | `[]` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 
 ## Outputs
 

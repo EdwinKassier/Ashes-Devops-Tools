@@ -26,6 +26,7 @@ resource "aws_guardduty_detector" "this" {
   for_each = toset(var.aws_enabled_regions)
   region   = each.value
   enable   = true
+  tags     = var.tags
 }
 
 # Registered from the MANAGEMENT account: nominates the Security Tooling account

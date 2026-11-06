@@ -109,3 +109,17 @@ run "multi_config_takes_precedence" {
     error_message = "Each multi topic must get a publisher binding in the module project."
   }
 }
+
+run "module_labels_applied" {
+  command = plan
+
+  variables {
+    labels = { owner = "test" }
+
+  }
+
+  assert {
+    condition     = google_pubsub_topic.scc_notifications[0].labels["owner"] == "test"
+    error_message = "var.labels must land on the SCC notification topic."
+  }
+}

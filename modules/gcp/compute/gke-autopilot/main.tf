@@ -109,5 +109,5 @@ resource "google_container_cluster" "this" {
     channel = "CHANNEL_STANDARD"
   }
 
-  resource_labels = var.resource_labels
+  resource_labels = merge(var.labels, var.resource_labels)
 }
