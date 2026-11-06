@@ -22,6 +22,7 @@
   "packages": {
     ".": {
       "release-type": "simple",
+      "release-as": "0.1.0",
       "package-name": "ashes-devops-tools",
       "changelog-path": "CHANGELOG.md",
       "extra-files": [
