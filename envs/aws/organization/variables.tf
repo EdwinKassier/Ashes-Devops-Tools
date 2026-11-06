@@ -359,3 +359,9 @@ variable "member_break_glass_require_mfa" {
   type        = bool
   default     = true
 }
+
+variable "allow_vpc_bpa_exclusions" {
+  description = "Allow member accounts to create VPC Block Public Access exclusions under the org declarative EC2 policy. Default false (no VPC can bypass the org-wide internet-gateway ingress block). Set true only if an aws-workload environment uses app_ingress_mode = \"public_alb\"; that root then excludes only its own spoke VPC. cloudfront_vpc_origin needs no exclusion."
+  type        = bool
+  default     = false
+}

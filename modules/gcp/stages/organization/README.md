@@ -113,13 +113,13 @@ The following resources are created:
 
 - resource.google_access_context_manager_access_policy.environment (modules/gcp/stages/organization/automation_delegation.tf#L41)
 - resource.google_access_context_manager_access_policy_iam_member.environment (modules/gcp/stages/organization/automation_delegation.tf#L49)
-- resource.google_bigquery_dataset.billing_export (modules/gcp/stages/organization/main.tf#L664)
-- resource.google_bigquery_dataset_iam_member.billing_export_writer (modules/gcp/stages/organization/main.tf#L695)
-- resource.google_essential_contacts_contact.billing (modules/gcp/stages/organization/main.tf#L636)
-- resource.google_essential_contacts_contact.security (modules/gcp/stages/organization/main.tf#L627)
+- resource.google_bigquery_dataset.billing_export (modules/gcp/stages/organization/main.tf#L675)
+- resource.google_bigquery_dataset_iam_member.billing_export_writer (modules/gcp/stages/organization/main.tf#L706)
+- resource.google_essential_contacts_contact.billing (modules/gcp/stages/organization/main.tf#L647)
+- resource.google_essential_contacts_contact.security (modules/gcp/stages/organization/main.tf#L638)
 - resource.google_folder_iam_member.projects_delegated_folder_iam (modules/gcp/stages/organization/automation_delegation.tf#L57)
 - resource.google_folder_iam_member.terraform_admin_folder_roles (modules/gcp/stages/organization/main.tf#L45)
-- resource.google_logging_organization_settings.this (modules/gcp/stages/organization/main.tf#L604)
+- resource.google_logging_organization_settings.this (modules/gcp/stages/organization/main.tf#L615)
 - resource.google_privileged_access_manager_entitlement.org_admin (modules/gcp/stages/organization/pam.tf#L10)
 - resource.google_tags_location_tag_binding.containment_audit_keyring (modules/gcp/stages/organization/containment.tf#L37)
 - resource.google_tags_location_tag_binding.containment_buckets (modules/gcp/stages/organization/containment.tf#L19)
@@ -190,6 +190,7 @@ The following resources are created:
 | <a name="input_prefer_managed_constraints"></a> [prefer\_managed\_constraints](#input\_prefer\_managed\_constraints) | Set every baseline org-policy constraint that has a like-for-like managed successor (constraints/*.managed.*: service-account key creation/upload, default-SA basic roles, serial port, OS Login, nested virtualization, guest attributes, VM external IPs, Cloud SQL public IP) through the managed version. Default true. Constraints without a managed equivalent (and iam.allowedPolicyMemberDomains, see docs/known-gaps.md) stay legacy. | `bool` | `true` | no |
 | <a name="input_principal_access_boundary_allowed_resources"></a> [principal\_access\_boundary\_allowed\_resources](#input\_principal\_access\_boundary\_allowed\_resources) | Resources the bounded automation SAs may act on (//cloudresourcemanager.googleapis.com/organizations\|folders\|projects/<id>). Empty = this organization only. | `list(string)` | `[]` | no |
 | <a name="input_projects_apply_service_account"></a> [projects\_apply\_service\_account](#input\_projects\_apply\_service\_account) | Email of the gcp-projects APPLY SA (gcp-bootstrap output stage\_service\_accounts["projects"].apply). When set, it gets a conditional roles/resourcemanager.folderIamAdmin on each environment folder (delegated\_workload\_folder\_roles only) and on the shared folder (delegated\_network\_folder\_roles only). Null = no delegation. | `string` | `null` | no |
+| <a name="input_restrict_cloud_run_ingress"></a> [restrict\_cloud\_run\_ingress](#input\_restrict\_cloud\_run\_ingress) | Enforce run.allowedIngress org-wide so Cloud Run services accept only internal or Cloud Load Balancing traffic (never ingress "all"). Public apps are served through the external ALB + Cloud Armor. Default true. | `bool` | `true` | no |
 | <a name="input_security_contact_email"></a> [security\_contact\_email](#input\_security\_contact\_email) | Email address for security notifications via Essential Contacts (SCC alerts, compliance notifications). Optional — if null, no Essential Contact is registered for the SECURITY category. | `string` | `null` | no |
 | <a name="input_shared_folder_key"></a> [shared\_folder\_key](#input\_shared\_folder\_key) | Key in environments of the shared (hub/DNS) folder. It gets no scoped access policy (the hub perimeter lives in the org-wide policy) and its delegated folder-IAM admits only delegated\_network\_folder\_roles. | `string` | `"shared"` | no |
 | <a name="input_workload_service_accounts"></a> [workload\_service\_accounts](#input\_workload\_service\_accounts) | Map of environment key -> { plan, apply } workload SA emails (gcp-bootstrap output workload\_service\_accounts). Granted on their own environment's scoped access policy. Default {} = no grants. | <pre>map(object({<br/>    plan  = string<br/>    apply = string<br/>  }))</pre> | `{}` | no |

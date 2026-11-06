@@ -418,7 +418,18 @@ module "org_policies" {
       allow_all      = null
       deny_all       = true
     }
-  ], local.cmek_list_policy)
+    ], local.cmek_list_policy,
+    # Cloud Run ingress: no service may accept traffic from the internet directly
+    # (ingress "all"). Public apps go through the external ALB + Cloud Armor
+    # (internal-and-cloud-load-balancing). Closes the invoker_iam_disabled +
+    # INGRESS_TRAFFIC_ALL bypass of domain-restricted sharing.
+    var.restrict_cloud_run_ingress ? [{
+      constraint     = "run.allowedIngress"
+      allowed_values = ["internal", "internal-and-cloud-load-balancing"]
+      denied_values  = null
+      allow_all      = null
+      deny_all       = null
+  }] : [])
 
   boolean_policies = concat([
     {

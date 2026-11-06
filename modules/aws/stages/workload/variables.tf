@@ -293,3 +293,9 @@ variable "tfc_apply_boundary_policy_name" {
     error_message = "tfc_apply_boundary_policy_name must be null or a valid IAM policy name (1-128 chars of [A-Za-z0-9+=,.@_-])."
   }
 }
+
+variable "enable_vpc_bpa_exclusion" {
+  description = "Create a VPC Block Public Access exclusion (allow-bidirectional) for this spoke VPC so an internet-facing ALB in its public tier can receive traffic. The org declarative EC2 policy blocks internet-gateway ingress for every VPC; an exclusion is only accepted when aws-organization sets allow_vpc_bpa_exclusions = true. Scoped to this one VPC. Default false."
+  type        = bool
+  default     = false
+}

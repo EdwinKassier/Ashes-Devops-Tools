@@ -223,6 +223,20 @@ variable "public_access_mode" {
     condition     = contains(["invoker_iam_disabled", "allusers_binding"], var.public_access_mode)
     error_message = "public_access_mode must be invoker_iam_disabled or allusers_binding."
   }
+
+  # invoker_iam_disabled + INGRESS_TRAFFIC_ALL = a public run.app URL with no IAM,
+  # no Cloud Armor and nothing domain-restricted sharing can see. Require an
+  # explicit acknowledgement for that combination.
+  validation {
+    condition     = !(var.enable_unauthenticated && var.public_access_mode == "invoker_iam_disabled" && var.ingress == "INGRESS_TRAFFIC_ALL") || var.allow_public_run_url
+    error_message = "enable_unauthenticated with invoker_iam_disabled and INGRESS_TRAFFIC_ALL publishes an unprotected run.app URL. Use INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER behind the external ALB, or set allow_public_run_url = true deliberately."
+  }
+}
+
+variable "allow_public_run_url" {
+  description = "Acknowledge that an unauthenticated service with INGRESS_TRAFFIC_ALL is reachable on its public run.app URL with no IAM check and no Cloud Armor. Default false (rejected). The gcp-organization run.allowedIngress policy also denies \"all\" ingress by default."
+  type        = bool
+  default     = false
 }
 
 # -----------------------------------------------------------------------------

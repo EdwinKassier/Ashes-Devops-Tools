@@ -53,6 +53,11 @@ policy "database_private_encrypted" {
   enforcement_level = "mandatory"
 }
 
+policy "gcp_cloud_run_no_public_url" {
+  query             = "data.terraform.policies.gcp_cloud_run_no_public_url.deny"
+  enforcement_level = "mandatory"
+}
+
 # ── Advisory ────────────────────────────────────────────────────────────────
 policy "aws_s3_bucket_public_access_block_present" {
   query             = "data.terraform.policies.aws_s3_public_access.warn"

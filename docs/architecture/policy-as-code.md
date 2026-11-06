@@ -54,6 +54,7 @@ returns a set of messages, and an empty set means the policy passed.
 |---|---|---|
 | `gcs_no_public_buckets` | mandatory | `google_storage_bucket` sets `uniform_bucket_level_access = true` and `public_access_prevention = "enforced"`. |
 | `gcp_iam_no_public_members` | mandatory | No `allUsers` / `allAuthenticatedUsers` in any `google_*_iam_member`, `_iam_binding` or `_iam_policy` (`policy_data`). |
+| `gcp_cloud_run_no_public_url` | mandatory | No `google_cloud_run_v2_service` with `invoker_iam_disabled = true` and `ingress = INGRESS_TRAFFIC_ALL` (an unauthenticated, unprotected run.app URL). Public apps use `INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER` behind the external ALB. |
 | `aws_s3_public_access` | mandatory | No `public-read` / `public-read-write` / `authenticated-read` canned ACL. Every bucket- and account-level public access block keeps all four switches `true`. |
 | `aws_sg_no_public_admin_ports` | mandatory | No ingress from `0.0.0.0/0` or `::/0` that reaches TCP 22 or 3389, including all-protocol (`-1`) rules. Covers `aws_security_group`, `aws_security_group_rule` and `aws_vpc_security_group_ingress_rule`. |
 | `aws_iam_no_admin_wildcard` | mandatory | No `Allow` statement with `Action "*"` on `Resource "*"` in `aws_iam_policy`, `aws_iam_{role,user,group}_policy` or `aws_iam_role.inline_policy`. `Deny` statements are fine (break-glass deny-all). |

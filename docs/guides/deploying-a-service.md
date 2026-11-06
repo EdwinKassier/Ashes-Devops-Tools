@@ -436,7 +436,7 @@ its own GitHub environment.
 |---|---|---|
 | `internal` (default) | Internal ALB, reachable from the spoke and, through `app_alb_ingress_cidrs`, from other spokes over the TGW | none |
 | `cloudfront_vpc_origin` | The ALB stays internal. CloudFront reaches it through a **VPC origin** (the workload stage attaches an internet gateway with no routes, which VPC origins require) and serves `https://<id>.cloudfront.net` behind a CloudFront WAF (AWS Common + KnownBadInputs). All methods, no caching. | none. Optional `app_edge_domain_name` (ACM certificate in us-east-1, validate via DNS). Leave `app_alb_certificate_arn` unset. |
-| `public_alb` | The workload stage adds a `public` subnet tier and an internet gateway. The ALB is internet-facing there on HTTPS (ingress `0.0.0.0/0` unless `app_alb_ingress_cidrs` is set), with a regional WAF (`enable_app_waf`, default on). | `app_alb_certificate_arn` (required) |
+| `public_alb` | The workload stage adds a `public` subnet tier and an internet gateway. The ALB is internet-facing there on HTTPS (ingress `0.0.0.0/0` unless `app_alb_ingress_cidrs` is set), with a regional WAF (`enable_app_waf`, default on). The org declarative EC2 policy blocks internet-gateway ingress on every VPC (VPC Block Public Access), so this mode also creates a VPC-scoped BPA exclusion for the spoke VPC. | `app_alb_certificate_arn` (required); `allow_vpc_bpa_exclusions = true` in `aws-organization` (otherwise AWS rejects the exclusion and the ALB gets no traffic) |
 
 `app_endpoint` outputs the resulting base URL. Tasks always stay in the private
 tier with no public IP.

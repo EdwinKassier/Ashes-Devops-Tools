@@ -90,10 +90,10 @@ run "default_audit_store_and_org_policies" {
 
   assert {
     condition = alltrue([
-      for c in ["gcp.resourceLocations", "iam.allowedPolicyMemberDomains", "compute.restrictVpcPeering"] :
+      for c in ["gcp.resourceLocations", "iam.allowedPolicyMemberDomains", "compute.restrictVpcPeering", "run.allowedIngress"] :
       contains(keys(module.org_policies.list_policy_names), c)
     ]) && contains(keys(module.org_policies.managed_policy_names), "compute.managed.vmExternalIpAccess")
-    error_message = "the org-policy baseline must set resource locations, domain-restricted sharing, external-IP and peering list constraints."
+    error_message = "the org-policy baseline must set resource locations, domain-restricted sharing, external-IP, peering and Cloud Run ingress list constraints."
   }
 
   assert {

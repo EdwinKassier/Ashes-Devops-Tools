@@ -470,10 +470,10 @@ module "app_services" {
 # with the environment Cloud Armor policy, Google-managed certificate for the
 # service's domains, HTTPS proxy and an HTTP->HTTPS redirect. The Cloud Run
 # service is switched to INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER so the run.app
-# URL is not a bypass. Unauthenticated invocation is an allUsers run.invoker
-# binding: the gcp-organization domain-restricted-sharing policy
-# (iam.allowedPolicyMemberDomains) rejects it unless the host project has an
-# exception — see docs/guides/deploying-a-service.md.
+# URL is not a bypass. Unauthenticated invocation disables the Cloud Run Invoker
+# IAM check (invoker_iam_disabled) rather than binding allUsers, so it works
+# under domain-restricted sharing; exposure is bounded to the ALB + Cloud Armor
+# by ingress, the app-services validation and the org run.allowedIngress policy.
 # =============================================================================
 
 locals {

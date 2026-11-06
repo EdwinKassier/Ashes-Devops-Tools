@@ -246,3 +246,21 @@ module "edge_security" {
   name_prefix        = var.edge_name_prefix
   origin_domain_name = var.edge_origin_domain_name
 }
+
+# ---------------------------------------------------------------------------
+# VPC Block Public Access exclusion (public app ingress only)
+# ---------------------------------------------------------------------------
+# The org declarative EC2 policy enforces VPC BPA (block internet-gateway
+# ingress) on every member VPC. An internet-facing ALB therefore receives no
+# traffic unless THIS VPC is excluded. The exclusion is scoped to the spoke VPC
+# only and is created solely when the workload root selects public_alb ingress;
+# AWS accepts it only if aws-organization allows exclusions
+# (allow_vpc_bpa_exclusions = true).
+resource "aws_vpc_block_public_access_exclusion" "public_ingress" {
+  count = var.enable_vpc_bpa_exclusion ? 1 : 0
+
+  vpc_id                          = module.vpc.vpc_id
+  internet_gateway_exclusion_mode = "allow-bidirectional"
+
+  tags = merge(var.tags, { Name = "${local.name}-public-ingress" })
+}

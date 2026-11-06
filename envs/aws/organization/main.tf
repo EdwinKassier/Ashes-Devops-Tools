@@ -37,4 +37,8 @@ module "aws_organization" {
   enable_member_break_glass_role            = var.enable_member_break_glass_role
   member_break_glass_trusted_principal_arns = var.member_break_glass_trusted_principal_arns
   member_break_glass_require_mfa            = var.member_break_glass_require_mfa
+
+  # VPC Block Public Access exclusions: required only for aws-workload
+  # app_ingress_mode = "public_alb" (internet-facing ALB). Off by default.
+  allow_vpc_bpa_exclusions = var.allow_vpc_bpa_exclusions
 }

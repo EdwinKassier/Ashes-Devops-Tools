@@ -48,6 +48,7 @@ module "organization" {
   break_glass_user                 = var.break_glass_user
   terraform_admin_email            = local.bootstrap.terraform_admin_email
   enable_legacy_admin_folder_roles = var.enable_legacy_admin_folder_roles
+  restrict_cloud_run_ingress       = var.restrict_cloud_run_ingress
   organization_admin_groups        = local.organization_admin_groups
   billing_admin_groups             = local.billing_admin_groups
 

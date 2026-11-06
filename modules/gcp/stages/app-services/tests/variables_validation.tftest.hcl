@@ -74,6 +74,18 @@ run "rejects_public_invoker_on_internal_ingress" {
   expect_failures = [var.services]
 }
 
+# A public service must sit behind the external ALB: INGRESS_TRAFFIC_ALL with the
+# Invoker IAM check disabled would publish an unprotected run.app URL.
+run "rejects_public_invoker_on_all_ingress" {
+  command = plan
+
+  variables {
+    services = { api = { enable_unauthenticated = true, ingress = "INGRESS_TRAFFIC_ALL" } }
+  }
+
+  expect_failures = [var.services]
+}
+
 run "requires_subnetwork_for_services" {
   command = plan
 

@@ -125,6 +125,10 @@ module "aws_workload" {
   # built until there is an ALB (services non-empty).
   enable_public_subnets   = local.app_public_alb && local.apps_enabled
   create_internet_gateway = local.app_vpc_origin && local.apps_enabled
+  # The org declarative EC2 policy blocks internet-gateway ingress (VPC BPA) on
+  # every VPC, so a public ALB needs this spoke VPC excluded. Requires
+  # aws-organization allow_vpc_bpa_exclusions = true (otherwise AWS rejects it).
+  enable_vpc_bpa_exclusion = local.app_public_alb && local.apps_enabled
 
   enable_edge    = var.enable_edge
   workload_roles = var.workload_roles

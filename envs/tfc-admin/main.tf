@@ -629,7 +629,7 @@ import {
 
 # ── Optional OPA policy set (mixed mandatory / advisory) ───────────────────
 # Sourced from policies/opa/ in this repo via VCS. Enforcement level is set per
-# policy in policies/opa/policies.hcl: 7 mandatory (public exposure, identity,
+# policy in policies/opa/policies.hcl: 8 mandatory (public exposure, identity,
 # encryption) + 3 advisory. The set is NOT overridable by default
 # (policy_set_overridable = false), so a mandatory failure is a hard stop that
 # no "Manage Policy Overrides" user can wave through; advisory results never

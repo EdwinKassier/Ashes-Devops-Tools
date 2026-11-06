@@ -32,6 +32,11 @@ run "workload_cmk_created_and_used_by_default" {
   }
 
   assert {
+    condition     = module.aws_workload.vpc_bpa_exclusion_enabled == false
+    error_message = "internal ingress (default) must not create a VPC BPA exclusion"
+  }
+
+  assert {
     condition     = length(aws_kms_key.workload) == 1 && aws_kms_key.workload[0].enable_key_rotation && aws_kms_alias.workload[0].name == "alias/workload-dev"
     error_message = "kms_key_arn = \"\" must create a rotating workload CMK aliased alias/workload-<env>."
   }
@@ -101,6 +106,12 @@ run "public_alb_mode" {
   variables {
     app_ingress_mode        = "public_alb"
     app_alb_certificate_arn = "arn:aws:acm:eu-west-2:222222222222:certificate/abcd"
+  }
+
+  # The org VPC BPA policy drops all IGW ingress unless THIS VPC is excluded.
+  assert {
+    condition     = module.aws_workload.vpc_bpa_exclusion_enabled == true
+    error_message = "public_alb must create a VPC BPA exclusion for the spoke VPC, or the internet-facing ALB receives no traffic"
   }
 
   assert {

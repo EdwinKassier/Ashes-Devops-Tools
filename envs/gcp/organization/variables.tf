@@ -471,3 +471,9 @@ variable "principal_access_boundary_allowed_resources" {
   type        = list(string)
   default     = []
 }
+
+variable "restrict_cloud_run_ingress" {
+  description = "Enforce run.allowedIngress org-wide so Cloud Run services accept only internal or Cloud Load Balancing traffic (never ingress \"all\"). Public apps are served through the external ALB + Cloud Armor. Default true."
+  type        = bool
+  default     = true
+}

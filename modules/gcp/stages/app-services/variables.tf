@@ -254,8 +254,11 @@ variable "services" {
   }
 
   validation {
-    condition     = alltrue([for k, s in var.services : !s.enable_unauthenticated || s.ingress == "INGRESS_TRAFFIC_ALL" || s.ingress == "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"])
-    error_message = "enable_unauthenticated only makes sense with INGRESS_TRAFFIC_ALL or INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER (front door) ingress."
+    # Public services must sit behind the external ALB + Cloud Armor: with the
+    # Invoker IAM check disabled, INGRESS_TRAFFIC_ALL would publish an unprotected
+    # run.app URL that domain-restricted sharing cannot catch.
+    condition     = alltrue([for k, s in var.services : !s.enable_unauthenticated || s.ingress == "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"])
+    error_message = "enable_unauthenticated requires ingress = INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER (public only through the external ALB + Cloud Armor). INGRESS_TRAFFIC_ALL would expose an unprotected run.app URL."
   }
 
   validation {

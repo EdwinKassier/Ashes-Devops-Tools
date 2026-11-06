@@ -88,6 +88,7 @@ The following resources are created:
 
 - resource.aws_ebs_default_kms_key.home (modules/aws/stages/workload/main.tf#L186)
 - resource.aws_ec2_transit_gateway_vpc_attachment.spoke (modules/aws/stages/workload/main.tf#L133)
+- resource.aws_vpc_block_public_access_exclusion.public_ingress (modules/aws/stages/workload/main.tf#L259)
 - data source.aws_caller_identity.current (modules/aws/stages/workload/main.tf#L50)
 - data source.aws_partition.current (modules/aws/stages/workload/main.tf#L54)
 
@@ -111,6 +112,7 @@ The following resources are created:
 | <a name="input_enable_edge"></a> [enable\_edge](#input\_enable\_edge) | Deploy the per-workload edge-security stack (CloudFront + WAF, in us-east-1). Off by default; a workload opts in when it fronts an internet-facing app. | `bool` | `false` | no |
 | <a name="input_enable_public_subnets"></a> [enable\_public\_subnets](#input\_enable\_public\_subnets) | Add a public subnet tier ("public": newbits 8, number\_offset 24, one subnet per AZ) whose route tables default-route to an internet gateway this stage creates. Only for an internet-facing app ALB (aws-workload app\_ingress\_mode = "public\_alb"); tasks and databases stay in the private/isolated tiers. Default false: no public subnets, no IGW. | `bool` | `false` | no |
 | <a name="input_enable_ssm"></a> [enable\_ssm](#input\_enable\_ssm) | Deploy the Systems Manager baseline (Session Manager preferences, patch baseline, inventory). On by default. Requires a non-empty kms\_key\_arn (Session Manager sessions/logs are KMS-encrypted; an empty key would leave the session document's kmsKeyId blank). | `bool` | `true` | no |
+| <a name="input_enable_vpc_bpa_exclusion"></a> [enable\_vpc\_bpa\_exclusion](#input\_enable\_vpc\_bpa\_exclusion) | Create a VPC Block Public Access exclusion (allow-bidirectional) for this spoke VPC so an internet-facing ALB in its public tier can receive traffic. The org declarative EC2 policy blocks internet-gateway ingress for every VPC; an exclusion is only accepted when aws-organization sets allow\_vpc\_bpa\_exclusions = true. Scoped to this one VPC. Default false. | `bool` | `false` | no |
 | <a name="input_environment"></a> [environment](#input\_environment) | Environment this workload account serves (e.g. dev, staging, prod). Used to derive the default resource name workload-<environment>. null keeps the legacy name "workload". | `string` | `null` | no |
 | <a name="input_ipam_pool_id"></a> [ipam\_pool\_id](#input\_ipam\_pool\_id) | IPAM pool ID to allocate the spoke VPC CIDR from (the network account's regional pool, shared over RAM). Empty string uses the literal vpc\_cidr instead. | `string` | `""` | no |
 | <a name="input_kms_key_arn"></a> [kms\_key\_arn](#input\_kms\_key\_arn) | ARN of the CMK used as the account default EBS encryption key and (when enable\_ssm is true) to encrypt Session Manager sessions/logs. Empty string leaves default EBS encryption on the AWS-managed key; must be a non-empty key when enable\_ssm is true. | `string` | `""` | no |
@@ -135,6 +137,8 @@ The following resources are created:
 | <a name="output_subnet_ids_by_tier"></a> [subnet\_ids\_by\_tier](#output\_subnet\_ids\_by\_tier) | Map of subnet tier name to the list of subnet IDs created for that tier (one per AZ) in the spoke VPC. |
 | <a name="output_tgw_attachment_id"></a> [tgw\_attachment\_id](#output\_tgw\_attachment\_id) | The ID of the spoke VPC's transit-gateway attachment to the shared hub (null in standalone mode, tgw\_id = null). |
 | <a name="output_tgw_routes"></a> [tgw\_routes](#output\_tgw\_routes) | The spoke routing contract handed to the vpc module: tier -> list of {destination\_cidr\_block, transit\_gateway\_id} routes to the shared transit gateway. |
+| <a name="output_vpc_bpa_exclusion_enabled"></a> [vpc\_bpa\_exclusion\_enabled](#output\_vpc\_bpa\_exclusion\_enabled) | Whether this spoke VPC has a VPC Block Public Access exclusion (true only for public ALB ingress). |
+| <a name="output_vpc_bpa_exclusion_id"></a> [vpc\_bpa\_exclusion\_id](#output\_vpc\_bpa\_exclusion\_id) | ID of the VPC Block Public Access exclusion for this spoke VPC, or null when enable\_vpc\_bpa\_exclusion is false. |
 | <a name="output_vpc_id"></a> [vpc\_id](#output\_vpc\_id) | The ID of the workload spoke VPC. |
 | <a name="output_workload_role_arns"></a> [workload\_role\_arns](#output\_workload\_role\_arns) | Map of workload IAM role name to role ARN. |
 <!-- END_TF_DOCS -->

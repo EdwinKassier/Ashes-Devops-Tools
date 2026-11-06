@@ -80,3 +80,28 @@ run "stage_owned_ebs_default_key" {
     error_message = "enable_ebs_default_kms_key = true must set the home-region default EBS key"
   }
 }
+
+# The org declarative EC2 policy blocks IGW ingress (VPC BPA) on every VPC: no
+# exclusion by default, and a VPC-scoped allow-bidirectional one on request.
+run "no_bpa_exclusion_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(aws_vpc_block_public_access_exclusion.public_ingress) == 0
+    error_message = "no VPC BPA exclusion may exist unless explicitly requested"
+  }
+}
+
+run "bpa_exclusion_scoped_to_spoke_vpc" {
+  command = plan
+
+  variables {
+    enable_public_subnets    = true
+    enable_vpc_bpa_exclusion = true
+  }
+
+  assert {
+    condition     = length(aws_vpc_block_public_access_exclusion.public_ingress) == 1 && aws_vpc_block_public_access_exclusion.public_ingress[0].internet_gateway_exclusion_mode == "allow-bidirectional" && aws_vpc_block_public_access_exclusion.public_ingress[0].subnet_id == null
+    error_message = "the exclusion must be allow-bidirectional and scoped to the VPC (not a subnet)"
+  }
+}
