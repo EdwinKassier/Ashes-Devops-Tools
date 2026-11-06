@@ -104,6 +104,19 @@ release metadata for a Terraform Cloud run.
 - **The RCP data perimeter now covers ECR and CloudWatch Logs** (`ecr:*`, `logs:*`).
 - **`organization-policy` gains a `policy_contents` output**, for evidence and tests.
 
+#### First-run fixes from the boilerplate re-score
+
+- **The default `production` profile now plans `aws-security`.** The Security Lake metastore role
+  (`AmazonSecurityLakeMetaStoreManagerV2`, with the apply boundary) is created in code when
+  `meta_store_manager_role_arn` is empty. It used to be an undocumented, hand-made prerequisite.
+- **The AWS phase-0 artefacts are shipped:**
+  - [`templates/aws/bootstrap/phase0-management.yaml`](templates/aws/bootstrap/phase0-management.yaml)
+    creates the TFC OIDC provider, `tfc-mgmt-plan` / `tfc-mgmt-apply` with exact-subject trust, and
+    the MFA-gated `OrganizationBreakGlass` role.
+  - [`templates/aws/bootstrap/delete-default-vpcs.yaml`](templates/aws/bootstrap/delete-default-vpcs.yaml)
+    is the org-wide default-VPC deletion StackSet.
+  - Both pass `cfn-lint` (`make cfn-lint`).
+
 #### Re-audit fixes (independent re-score, 2026-11-06)
 
 - **Critical: the `aws-security` management role could take over the org.** It allowed

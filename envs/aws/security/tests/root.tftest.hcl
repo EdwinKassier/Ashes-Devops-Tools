@@ -188,3 +188,18 @@ run "production_profile_keeps_full_stack" {
     error_message = "the default (production) profile must keep Security Lake, Macie and record-all Config."
   }
 }
+
+# The untouched default (production profile, no hand-made metastore role)
+# must plan.
+run "production_default_plans_without_meta_store_role" {
+  command = plan
+
+  variables {
+    enable_security_lake = null
+  }
+
+  assert {
+    condition     = local.enable_security_lake == true
+    error_message = "the default production profile must plan with Security Lake on and no hand-made metastore role."
+  }
+}

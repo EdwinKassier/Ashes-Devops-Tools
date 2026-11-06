@@ -339,3 +339,22 @@ run "organization_trail_can_be_owned_elsewhere" {
     error_message = "create_organization_trail = false must not create the org trail."
   }
 }
+
+# With no metastore role supplied, the stage creates it (default production
+# profile no longer needs a hand-made prerequisite).
+run "security_lake_creates_meta_store_role" {
+  command = plan
+
+  variables {
+    meta_store_manager_role_arn = ""
+  }
+
+  assert {
+    condition = (
+      length(aws_iam_role.securitylake_meta_store) == 1 &&
+      jsondecode(aws_iam_role.securitylake_meta_store[0].assume_role_policy).Statement[0].Principal.Service == "lambda.amazonaws.com" &&
+      endswith(aws_iam_role_policy_attachment.securitylake_meta_store[0].policy_arn, ":policy/service-role/AmazonSecurityLakeMetastoreManager")
+    )
+    error_message = "an empty meta_store_manager_role_arn must create the Security Lake metastore role."
+  }
+}

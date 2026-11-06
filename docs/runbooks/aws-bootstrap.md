@@ -50,7 +50,18 @@ Run #1 of `aws-organization` needs AWS credentials in the management account **b
 
 **Option A — Static admin credentials (simplest, least secure).** Create a temporary IAM admin user (or use root, discouraged) in the management account and generate an access key. Set it as workspace environment variables (Step 4). Delete the key immediately after run #1.
 
-**Option B — Hand-created OIDC / TFC dynamic-credentials roles (recommended).** In the **management account**, create:
+**Option B — OIDC / TFC dynamic-credentials roles (recommended).** Deploy the shipped template [`templates/aws/bootstrap/phase0-management.yaml`](../../templates/aws/bootstrap/phase0-management.yaml) as one CloudFormation stack in the management account. It creates exactly the resources below, plus the MFA-gated `OrganizationBreakGlass` role, and outputs the ARNs that `aws.terraform_run_role_arn` and `aws.break_glass_role_arn` need:
+
+```bash
+aws cloudformation deploy --stack-name ashes-phase0 \
+  --template-file templates/aws/bootstrap/phase0-management.yaml \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --parameter-overrides TfcOrganization=<tfc-org> TfcProject=<prefix>aws \
+    BreakGlassTrustedPrincipalArn=arn:aws:iam::<mgmt-account-id>:user/break-glass
+aws cloudformation describe-stacks --stack-name ashes-phase0 --query 'Stacks[0].Outputs'
+```
+
+After aws-organization has created the dedicated `aws-security` / `aws-backup` roles, update the stack with `TrustSecurityAndBackup=false`. Keep `create_break_glass = false` in aws-security: the break-glass role belongs to this phase-0 stack, and the aws-security management role is deliberately denied access to it. To create the resources by hand instead, in the **management account** create:
 
 1. An IAM OIDC identity provider for `https://app.terraform.io` with audience `aws.workload.identity`.
 2. A **plan** role, e.g. `tfc-mgmt-plan`, with `ReadOnlyAccess`, and an **apply** role, e.g. `tfc-mgmt-apply`, with an admin-scoped policy. Each trusts only the management-account workspaces, for its own run phase:
@@ -144,9 +155,20 @@ Every AWS account is created with a default VPC in every Region. A single Terraf
 
 **This is a documented manual step, not something Terraform does for you:**
 
-1. In the management (or delegated CloudFormation) account, create a **service-managed StackSet** targeting the whole organization (or the OUs you care about), with **automatic deployment to new accounts enabled**.
-2. The stack template deletes the default VPC (and its subnets, IGW, route tables) in each enabled Region.
-3. Deploy it **after** the foundational accounts exist (i.e. after phase-1 apply), and leave auto-deployment on so future accounts are cleaned up when they join the org.
+1. In the management (or delegated CloudFormation) account, create a **service-managed StackSet** from the shipped template [`templates/aws/bootstrap/delete-default-vpcs.yaml`](../../templates/aws/bootstrap/delete-default-vpcs.yaml). Target the organization root, or the OUs you care about, with **automatic deployment to new accounts enabled**:
+
+   ```bash
+   aws cloudformation create-stack-set --stack-set-name delete-default-vpcs \
+     --template-body file://templates/aws/bootstrap/delete-default-vpcs.yaml \
+     --permission-model SERVICE_MANAGED --capabilities CAPABILITY_IAM \
+     --auto-deployment Enabled=true,RetainStacksOnAccountRemoval=false \
+     --parameters ParameterKey=Regions,ParameterValue=eu-west-2
+   aws cloudformation create-stack-instances --stack-set-name delete-default-vpcs \
+     --deployment-targets OrganizationalUnitIds=<root-id> --regions eu-west-2
+   ```
+
+2. The template's custom resource deletes the default VPC, with its default subnets and internet gateway, in each listed Region, or in every enabled Region when the list is empty. A default VPC that still has network interfaces is skipped and reported, never force-deleted.
+3. Deploy it **after** the foundational accounts exist (after the phase-1 apply), and leave auto-deployment on so future accounts are cleaned up when they join. List only the allowed Regions: the region-restriction SCP denies the others.
 
 This links to the account-baseline concept: per-account defaults the declarative EC2 policy does **not** cover (default-VPC deletion, EBS-encryption-by-default, account S3 Block Public Access, password policy). The Terraform-managed slice of that baseline is applied per layer via `modules/aws/governance/account-baseline`; the default-VPC deletion specifically stays a StackSet because it cannot be reliably done for every Region from one root.
 

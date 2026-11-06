@@ -206,13 +206,13 @@ variable "aggregator_role_arn" {
 }
 
 variable "meta_store_manager_role_arn" {
-  description = "ARN of the AmazonSecurityLakeMetaStoreManager IAM role Security Lake uses to manage the Lake Formation metastore. Required when enable_security_lake is true."
+  description = "ARN of an existing AmazonSecurityLakeMetaStoreManager role. Empty (default) with enable_security_lake: the stage creates AmazonSecurityLakeMetaStoreManagerV2 in the security-tooling account (with the tfc-apply boundary)."
   type        = string
   default     = ""
 
   validation {
-    condition     = !var.enable_security_lake || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", var.meta_store_manager_role_arn))
-    error_message = "meta_store_manager_role_arn must be a valid IAM role ARN when enable_security_lake is true."
+    condition     = var.meta_store_manager_role_arn == "" || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", var.meta_store_manager_role_arn))
+    error_message = "meta_store_manager_role_arn must be empty (create the role) or a valid IAM role ARN."
   }
 }
 

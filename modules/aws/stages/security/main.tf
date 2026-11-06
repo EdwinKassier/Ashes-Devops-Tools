@@ -341,7 +341,7 @@ module "securitylake" {
   }
 
   enable_security_lake        = var.enable_security_lake
-  meta_store_manager_role_arn = var.meta_store_manager_role_arn
+  meta_store_manager_role_arn = local.meta_store_manager_role_arn
   kms_key_id                  = module.log_cmk.key_arn
   aws_enabled_regions         = var.aws_enabled_regions
 }

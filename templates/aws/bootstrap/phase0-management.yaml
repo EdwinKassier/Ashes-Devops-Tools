@@ -1,0 +1,174 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Ashes landing zone, AWS phase 0 (management account). Creates the HCP
+  Terraform OIDC provider, the tfc-mgmt-plan / tfc-mgmt-apply roles that the
+  aws-organization workspace assumes through TFC dynamic credentials (and that
+  aws-security / aws-backup use until aws-organization creates their dedicated
+  roles), and the MFA-gated OrganizationBreakGlass role. Deploy ONCE, as a
+  plain stack in the management account, before the first aws-organization
+  run. See docs/runbooks/aws-bootstrap.md, Step 2 (Option B).
+
+# The trust policies are full JSON documents built with Fn::Sub, because their
+# condition KEYS embed the TFC hostname ("<host>:sub"), and a YAML mapping key
+# cannot be an intrinsic function.
+
+Parameters:
+  TfcHostname:
+    Type: String
+    Default: app.terraform.io
+    Description: HCP Terraform / TFE hostname (app.terraform.io, app.eu.terraform.io, or your TFE host).
+    AllowedPattern: "^[a-z0-9.-]+$"
+  TfcOrganization:
+    Type: String
+    Description: TFC organization name (org.tfc.organization). Matched literally, never wildcarded.
+    AllowedPattern: "^[A-Za-z0-9_-]+$"
+  TfcProject:
+    Type: String
+    Default: landing-zone-aws
+    Description: TFC project of the aws-* workspaces (org.tfc.aws_project, default <project_name_prefix>aws).
+  TrustSecurityAndBackup:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: >-
+      Also trust aws-security and aws-backup. Set "false" (stack update) once
+      aws-organization has created their dedicated tfc-mgmt-aws-security-* /
+      tfc-mgmt-aws-backup-* roles and tfc-admin has bound them, so only
+      aws-organization can reach the management admin role.
+  BreakGlassTrustedPrincipalArn:
+    Type: String
+    Description: >-
+      IAM principal allowed to assume the break-glass role: a dedicated IAM
+      user or role whose credentials live in a sealed process. MFA is always
+      required.
+    AllowedPattern: "^arn:aws[a-z-]*:iam::[0-9]{12}:(user|role)/.+$"
+  BreakGlassMfaMaxAgeSeconds:
+    Type: Number
+    Default: 3600
+    MinValue: 300
+    MaxValue: 43200
+
+Conditions:
+  TrustSecurityAndBackupApply:
+    Fn::Equals:
+      - Ref: TrustSecurityAndBackup
+      - "true"
+
+Resources:
+  TfcOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url:
+        Fn::Sub: "https://${TfcHostname}"
+      ClientIdList:
+        - aws.workload.identity
+
+  TfcMgmtPlanRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: tfc-mgmt-plan
+      Description: Terraform Cloud PLAN phase for the management-account workspaces (read-only).
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - Fn::Sub: "arn:${AWS::Partition}:iam::aws:policy/ReadOnlyAccess"
+      AssumeRolePolicyDocument:
+        Fn::Sub: |-
+          {
+            "Version": "2012-10-17",
+            "Statement": [{
+              "Effect": "Allow",
+              "Principal": {"Federated": "${TfcOidcProvider}"},
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {"StringEquals": {
+                "${TfcHostname}:aud": "aws.workload.identity",
+                "${TfcHostname}:sub": [
+                  "organization:${TfcOrganization}:project:${TfcProject}:workspace:aws-organization:run_phase:plan",
+                  "organization:${TfcOrganization}:project:${TfcProject}:workspace:aws-security:run_phase:plan",
+                  "organization:${TfcOrganization}:project:${TfcProject}:workspace:aws-backup:run_phase:plan"
+                ]
+              }}
+            }]
+          }
+
+  TfcMgmtApplyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: tfc-mgmt-apply
+      Description: Terraform Cloud APPLY phase for aws-organization (management account admin).
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - Fn::Sub: "arn:${AWS::Partition}:iam::aws:policy/AdministratorAccess"
+      AssumeRolePolicyDocument:
+        Fn::If:
+          - TrustSecurityAndBackupApply
+          - Fn::Sub: |-
+              {
+                "Version": "2012-10-17",
+                "Statement": [{
+                  "Effect": "Allow",
+                  "Principal": {"Federated": "${TfcOidcProvider}"},
+                  "Action": "sts:AssumeRoleWithWebIdentity",
+                  "Condition": {"StringEquals": {
+                    "${TfcHostname}:aud": "aws.workload.identity",
+                    "${TfcHostname}:sub": [
+                      "organization:${TfcOrganization}:project:${TfcProject}:workspace:aws-organization:run_phase:apply",
+                      "organization:${TfcOrganization}:project:${TfcProject}:workspace:aws-security:run_phase:apply",
+                      "organization:${TfcOrganization}:project:${TfcProject}:workspace:aws-backup:run_phase:apply"
+                    ]
+                  }}
+                }]
+              }
+          - Fn::Sub: |-
+              {
+                "Version": "2012-10-17",
+                "Statement": [{
+                  "Effect": "Allow",
+                  "Principal": {"Federated": "${TfcOidcProvider}"},
+                  "Action": "sts:AssumeRoleWithWebIdentity",
+                  "Condition": {"StringEquals": {
+                    "${TfcHostname}:aud": "aws.workload.identity",
+                    "${TfcHostname}:sub": [
+                      "organization:${TfcOrganization}:project:${TfcProject}:workspace:aws-organization:run_phase:apply"
+                    ]
+                  }}
+                }]
+              }
+
+  OrganizationBreakGlass:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: OrganizationBreakGlass
+      Description: >-
+        Emergency access. MFA required, one-hour sessions, every assumption
+        alarmed by aws-security; exempt from the deny-tamper SCPs by name.
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - Fn::Sub: "arn:${AWS::Partition}:iam::aws:policy/AdministratorAccess"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS:
+                Ref: BreakGlassTrustedPrincipalArn
+            Action: sts:AssumeRole
+            Condition:
+              Bool:
+                aws:MultiFactorAuthPresent: "true"
+              NumericLessThan:
+                aws:MultiFactorAuthAge:
+                  Ref: BreakGlassMfaMaxAgeSeconds
+
+Outputs:
+  TerraformRunRoleArn:
+    Description: aws.terraform_run_role_arn in config/landing-zone.yaml, and tfc-admin aws_management_apply_role_arn.
+    Value:
+      Fn::GetAtt: [TfcMgmtApplyRole, Arn]
+  PlanRoleArn:
+    Description: tfc-admin aws_management_plan_role_arn.
+    Value:
+      Fn::GetAtt: [TfcMgmtPlanRole, Arn]
+  BreakGlassRoleArn:
+    Description: aws.break_glass_role_arn in config/landing-zone.yaml.
+    Value:
+      Fn::GetAtt: [OrganizationBreakGlass, Arn]
