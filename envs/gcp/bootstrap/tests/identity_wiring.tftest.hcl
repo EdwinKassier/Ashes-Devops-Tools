@@ -119,7 +119,7 @@ run "plan_roles_and_access_policy_defaults" {
   }
 }
 
-# N2/H3: deny-policy ownership defaults to the separate guardrail owner, which
+# Deny-policy ownership defaults to the separate guardrail owner, which
 # gcp-organization reads to stop applying deny policies itself.
 run "guardrail_owner_defaults_to_separate" {
   command = plan

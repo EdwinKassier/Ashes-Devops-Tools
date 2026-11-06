@@ -1,6 +1,6 @@
 # gcp-projects root: workload + spoke projects.
 #
-# Extracted from gcp-organization (audit H3). Reads the org folders and billing
+# Extracted from gcp-organization. Reads the org folders and billing
 # account, and the admin project / suffix, from the upstream roots via remote
 # state. Apply after gcp-organization and before gcp-network-hub.
 

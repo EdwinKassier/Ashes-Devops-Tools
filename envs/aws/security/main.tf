@@ -70,7 +70,7 @@ module "aws_security" {
   meta_store_manager_role_arn       = var.meta_store_manager_role_arn
   break_glass_role_arn              = var.break_glass_role_arn
 
-  # Managed break-glass role (audit M3): opt-in. When create_break_glass is true
+  # Managed break-glass role: opt-in. When create_break_glass is true
   # the stage creates the role and watches it; otherwise break_glass_role_arn above
   # points at an externally-managed role.
   create_break_glass             = var.create_break_glass

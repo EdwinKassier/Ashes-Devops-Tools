@@ -77,7 +77,7 @@ locals {
 
   # The central log-archive bucket name comes from aws-security (its owner) unless
   # a contract supplies it, so a rename there cannot silently leave this
-  # workload writing to a stale bucket (audit M7).
+  # workload writing to a stale bucket.
   log_archive_bucket_name = (
     local.read_security
     ? data.terraform_remote_state.aws_security[0].outputs.log_archive_bucket_name
@@ -261,7 +261,7 @@ resource "aws_secretsmanager_secret" "saas_bridge" {
   # Re-apply the bridge to refresh it instead.
   count       = var.enable_saas_secret_bridge ? 1 : 0
   name        = var.saas_secret_name
-  description = "Bridged Supabase connection details from ${var.saas_workspace_name} (audit H9)."
+  description = "Bridged Supabase connection details from ${var.saas_workspace_name}."
   kms_key_id  = local.kms_key_arn
 }
 

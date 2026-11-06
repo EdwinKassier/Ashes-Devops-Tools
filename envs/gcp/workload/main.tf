@@ -31,7 +31,7 @@ data "terraform_remote_state" "organization" {
   }
 }
 
-# The projects and network-hub stages were split into their own roots (audit H3),
+# The projects and network-hub stages were split into their own roots,
 # so environment_config comes from gcp-projects and hub_network from
 # gcp-network-hub. org_id / billing_account / admin_project_number come from
 # gcp-organization above.
@@ -281,7 +281,7 @@ module "budget" {
 }
 
 # =============================================================================
-# SERVICE TEAM REGISTRY (audit H10)
+# SERVICE TEAM REGISTRY
 #
 # One module instance per entry in var.service_teams. Onboarding or offboarding a
 # team is a change to the service_teams map, not a hand-edited module block. The

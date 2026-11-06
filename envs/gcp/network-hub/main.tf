@@ -1,6 +1,6 @@
 # gcp-network-hub root: hub VPC, DNS anchor, and the hub VPC-SC perimeter.
 #
-# Extracted from gcp-organization (audit H3). Reads org folders/org_id and the
+# Extracted from gcp-organization. Reads org folders/org_id and the
 # host project IDs/numbers from the upstream roots via remote state. Apply last
 # of the control-plane roots, after gcp-projects.
 

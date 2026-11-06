@@ -52,7 +52,7 @@ run "bucket_hardening_configured" {
     error_message = "Bucket policy must deny non-TLS (aws:SecureTransport) access"
   }
 
-  # Structural (M6): every Allow log-delivery statement must itself carry the
+  # Structural: every Allow log-delivery statement must itself carry the
   # SourceOrgID scope equal to var.org_id, not merely have the string appear
   # somewhere in the document. Catches a refactor that drops the condition from
   # one grant while keeping it on another.
@@ -65,7 +65,7 @@ run "bucket_hardening_configured" {
     error_message = "every Allow statement must be scoped by aws:SourceOrgID = var.org_id"
   }
 
-  # Structural (M6): a Deny statement must actually deny insecure transport.
+  # Structural: a Deny statement must actually deny insecure transport.
   assert {
     condition = anytrue([
       for s in jsondecode(aws_s3_bucket_policy.this.policy).Statement :

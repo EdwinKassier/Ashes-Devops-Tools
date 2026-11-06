@@ -183,7 +183,7 @@ run "composes_security_baseline" {
   }
 }
 
-# Managed break-glass role (audit M3): when create_break_glass is true, the stage
+# Managed break-glass role: when create_break_glass is true, the stage
 # creates the role and the assumption alarm watches the stage-created ARN, not an
 # external string.
 run "managed_break_glass_is_created_and_watched" {
@@ -240,7 +240,7 @@ run "default_operator_roles" {
   }
 }
 
-# N7: the pipeline key admin must not hold kms:PutKeyPolicy — each CMK's policy
+# The pipeline key admin must not hold kms:PutKeyPolicy — each CMK's policy
 # admin defaults to the member break-glass role in the key's OWN account
 # (PutKeyPolicy is not cross-account), and is never the key admin.
 run "key_policy_admin_defaults_to_member_break_glass" {

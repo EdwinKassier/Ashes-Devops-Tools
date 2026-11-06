@@ -90,7 +90,7 @@ run "workload_sas_have_no_org_level_iam" {
       for k in concat(keys(google_organization_iam_member.stage_org_roles), keys(google_organization_iam_member.stage_org_security_admin)) :
       k if startswith(k, "wl-")
     ]) == 0
-    error_message = "Workload SAs must not hold ANY org-level IAM binding (C2)."
+    error_message = "Workload SAs must not hold ANY org-level IAM binding."
   }
 
   assert {
@@ -368,7 +368,7 @@ run "admin_project_uses_project_primitive" {
   }
 }
 
-# N2/H3: by default the organization apply SA does NOT hold roles/iam.denyAdmin;
+# By default the organization apply SA does NOT hold roles/iam.denyAdmin;
 # a dedicated guardrails SA does, impersonable only by guardrail_owner_members.
 run "guardrail_owner_is_separate_by_default" {
   command = plan
@@ -421,7 +421,7 @@ run "guardrail_owner_legacy_organization_mode" {
   }
 }
 
-# N6: the phase-0 human impersonation of terraform-admin is switchable.
+# The phase-0 human impersonation of terraform-admin is switchable.
 run "phase0_admin_impersonation_can_be_revoked" {
   command = plan
 

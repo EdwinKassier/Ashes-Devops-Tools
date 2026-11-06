@@ -10,7 +10,7 @@ provider "aws" {
   default_tags {
     tags = local.aws_default_tags
   }
-  # C4: fail fast if the resolved credentials are not the management (payer)
+  # Fail fast if the resolved credentials are not the management (payer)
   # account. The default provider owns the org BACKUP_POLICY; the backup account
   # is reached via the aliased assume-role provider below.
   allowed_account_ids = [local.management_account_id]

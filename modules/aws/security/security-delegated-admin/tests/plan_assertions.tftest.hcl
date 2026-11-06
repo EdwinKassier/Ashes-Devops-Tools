@@ -33,7 +33,7 @@ run "default_set_registers_no_dedicated_resource_services" {
     error_message = "config.amazonaws.com must be delegated to the security tooling account"
   }
 
-  # AWS Backup is delegated to Security Tooling in the default set (C8).
+  # AWS Backup is delegated to Security Tooling in the default set.
   assert {
     condition     = aws_organizations_delegated_administrator.this["backup.amazonaws.com"].account_id == "111111111111"
     error_message = "backup.amazonaws.com must be delegated to the security tooling account in the default set"

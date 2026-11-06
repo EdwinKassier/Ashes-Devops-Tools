@@ -8,7 +8,7 @@ provider "aws" {
   default_tags {
     tags = local.aws_default_tags
   }
-  # C4: fail fast if the resolved credentials are not the management (payer)
+  # Fail fast if the resolved credentials are not the management (payer)
   # account. This root creates org-level resources (org, SCPs, account factory);
   # a mis-set AWS_PROFILE or TFC run role must never deploy them into the wrong
   # account. Admins set management_account_id to their own payer account.

@@ -50,7 +50,7 @@ module "admin_project" {
 
 # Terraform Admin Service Account (= the gcp-bootstrap APPLY identity).
 #
-# C2: this SA is no longer shared by every TFC workspace. It is impersonable by the
+# This SA is no longer shared by every TFC workspace. It is impersonable by the
 # human admin for the documented phase-0 bootstrap, and WIF-bound ONLY to the
 # gcp-bootstrap workspace's apply phase. Every other stage / environment runs as
 # its own per-stage plan (read-only) or apply SA — see service_accounts.tf.
@@ -87,7 +87,7 @@ locals {
 
 # ─── Workload Identity Federation ────────────────────────────────────────────
 
-# GitHub Actions WIF (C2): OFF by default — no workflow in this repo requests
+# GitHub Actions WIF: OFF by default — no workflow in this repo requests
 # `id-token: write`, so a standing trust was unused privilege. When enabled it
 # trusts ONE repository by its immutable numeric IDs (repository_id +
 # repository_owner_id, never the renameable names), only from refs/heads/main,

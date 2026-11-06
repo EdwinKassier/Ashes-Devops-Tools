@@ -72,7 +72,7 @@ variable "suffix" {
   }
 }
 
-# ─── Automation identities (audit C2) ────────────────────────────────────────
+# ─── Automation identities ────────────────────────────────────────
 
 variable "workload_service_accounts" {
   description = "Map of environment key -> { plan, apply } SA emails (gcp-bootstrap output workload_service_accounts). Each pair is granted var.workload_folder_roles on its OWN environment folder (var.folders[<env>]). Default {} = no grants."

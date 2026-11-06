@@ -40,7 +40,7 @@ variable "organization_contract" {
 # -----------------------------------------------------------------------------
 
 variable "management_account_id" {
-  description = "12-digit AWS management (payer) account ID. The default provider sets allowed_account_ids to this, so Terraform fails fast if the resolved credentials are a different account (audit C4). Null = aws.management_account_id from config/landing-zone.yaml (quote it there); no built-in default."
+  description = "12-digit AWS management (payer) account ID. The default provider sets allowed_account_ids to this, so Terraform fails fast if the resolved credentials are a different account. Null = aws.management_account_id from config/landing-zone.yaml (quote it there); no built-in default."
   type        = string
   default     = null
 

@@ -336,7 +336,7 @@ variable "vpc_sc_egress_policies" {
 }
 
 # -----------------------------------------------------------------------------
-# SERVICE TEAM REGISTRY (audit H10)
+# SERVICE TEAM REGISTRY
 #
 # Data-driven onboarding: a service team is a map entry, not a new module block.
 # Default empty, so no service projects are created unless an admin declares them.

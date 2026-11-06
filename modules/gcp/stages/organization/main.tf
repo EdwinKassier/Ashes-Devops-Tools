@@ -318,7 +318,7 @@ locals {
             "accesscontextmanager.googleapis.com/servicePerimeters.replaceAll",
             "accesscontextmanager.googleapis.com/servicePerimeters.commit",
             "accesscontextmanager.googleapis.com/policies.delete",
-            # N3: access levels gate perimeter ingress, and access-policy IAM /
+            # Access levels gate perimeter ingress, and access-policy IAM /
             # scopes decide who may edit perimeters. Creation stays allowed (a
             # new level is inert until a perimeter, itself protected, uses it).
             "accesscontextmanager.googleapis.com/accessLevels.update",
@@ -346,7 +346,7 @@ locals {
             "storage.googleapis.com/buckets.delete",
             "storage.googleapis.com/buckets.setIamPolicy",
             "storage.googleapis.com/buckets.deleteTagBinding",
-            # N3: buckets.update covers retention policy, lifecycle, versioning,
+            # Buckets.update covers retention policy, lifecycle, versioning,
             # soft delete, CMEK and logging config of the audit buckets.
             "storage.googleapis.com/buckets.update",
             "storage.googleapis.com/objects.delete",
@@ -389,7 +389,7 @@ module "org_policies" {
 
   # Opt-in custom organization-policy constraints (CEL-defined, resource-shape
   # guardrails the fixed boolean/list constraints can't express). Default [] =
-  # none. See docs/known-gaps.md (G6).
+  # none. See docs/known-gaps.md.
   custom_constraints = var.custom_org_constraints
 }
 
@@ -599,10 +599,10 @@ locals {
   )
 }
 
-# G9: opt-in IAM deny policies at the org node — a coarse, allow-independent
+# Opt-in IAM deny policies at the org node — a coarse, allow-independent
 # backstop for sensitive permissions (evaluated before allow). Default [] = none.
 #
-# Guardrail ownership (N2/H3): in the default guardrail_owner_mode = "separate"
+# Guardrail ownership: in the default guardrail_owner_mode = "separate"
 # this stage does NOT manage deny policies — its apply identity holds no
 # roles/iam.denyAdmin (gcp-bootstrap), so it could not delete the containment
 # policy that constrains it. It outputs the policies as gcloud-ready specs

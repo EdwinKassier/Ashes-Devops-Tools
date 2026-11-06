@@ -231,7 +231,7 @@ run "cis_log_metrics_can_be_disabled" {
   }
 }
 
-# N2/H3: the self-grant of a guardrail-owner role (denyAdmin) by the org apply SA
+# The self-grant of a guardrail-owner role (denyAdmin) by the org apply SA
 # cannot be denied, so it must page.
 run "guardrail_owner_grant_is_watched" {
   command = plan

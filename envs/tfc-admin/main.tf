@@ -1,4 +1,4 @@
-# tfc-admin: declare the whole Terraform Cloud workspace layer as code (audit C3).
+# tfc-admin: declare the whole Terraform Cloud workspace layer as code.
 #
 # Workspaces, projects, VCS wiring + trigger patterns, explicit remote-state
 # sharing, health assessments, dynamic-credential env vars, shared variable sets,
@@ -363,7 +363,7 @@ locals {
   # Projects that hold at least one control-plane / bootstrap workspace.
   control_plane_projects = toset([for k, p in local.workspace_project_key : p if local.is_control_plane[k] && contains(local.project_keys, p)])
 
-  # ── Team access (audit N4) ────────────────────────────────────────────────
+  # ── Team access ────────────────────────────────────────────────
   # The broad platform team never gets fixed write on a control-plane project:
   # write would let one member edit a control-plane variable (containment /
   # break-glass inputs) and confirm the apply alone. There it gets custom access
@@ -414,7 +414,7 @@ locals {
     for k, p in local.workspace_project_key : k if !local.is_control_plane[k] && contains(local.control_plane_projects, p)
   ])
 
-  # ── Speculative plans (audit N5) ──────────────────────────────────────────
+  # ── Speculative plans ──────────────────────────────────────────
   speculative_disabled = setunion(
     toset(var.speculative_disabled_workspaces),
     var.disable_speculative_on_production ? local.production_workloads : toset([]),
@@ -616,7 +616,7 @@ module "workspace" {
   variables        = local.workspace_vars[each.key]
   variable_set_ids = { common = tfe_variable_set.common.id }
 
-  # Control-plane and bootstrap workspaces alert on failed runs (audit M-ops);
+  # Control-plane and bootstrap workspaces alert on failed runs;
   # workload workspaces use the separate workload channel (both default empty).
   notifications = local.is_control_plane[each.key] ? var.control_plane_notifications : var.workload_notifications
 }

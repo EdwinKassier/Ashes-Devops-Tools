@@ -59,7 +59,7 @@ run "variable_values_omit_sensitive" {
   }
 }
 
-# Opt-in run notifications (audit M-ops): default off, and a configured one wires
+# Opt-in run notifications: default off, and a configured one wires
 # through to a tfe_notification_configuration with the failed-run triggers.
 run "notifications_default_off" {
   command = plan

@@ -40,7 +40,7 @@ output "folders" {
 }
 
 # Projects, environment_config and hub_network moved to the gcp-projects and
-# gcp-network-hub roots when those stages were split out (audit H3). Downstream
+# gcp-network-hub roots when those stages were split out. Downstream
 # gcp-workload reads environment_config from gcp-projects and hub_network from
 # gcp-network-hub.
 

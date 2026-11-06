@@ -150,6 +150,6 @@ module "organization" {
 }
 
 # The projects stage (gcp-projects) and network-hub stage (gcp-network-hub) were
-# split into their own roots and states (audit H3). gcp-projects reads this
+# split into their own roots and states. gcp-projects reads this
 # root's folders/tag values; gcp-network-hub reads gcp-projects' host project
 # IDs. See docs/architecture/gcp-state-decomposition.md.

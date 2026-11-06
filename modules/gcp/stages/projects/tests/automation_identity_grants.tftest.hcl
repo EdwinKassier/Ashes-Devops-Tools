@@ -1,4 +1,4 @@
-# C2: workload SAs are granted roles ONLY on their own environment folder (never
+# Workload SAs are granted roles ONLY on their own environment folder (never
 # the org node or another env's folder), plan SAs only read-only roles, and the
 # network-hub SAs only on the shared folder.
 # All runs use mock_provider so no GCP credentials are required.

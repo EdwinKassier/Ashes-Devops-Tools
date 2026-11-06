@@ -54,7 +54,7 @@ run "consumes_remote_state_contracts" {
     }
   }
 
-  # M7: with var.log_archive_bucket_name = null, the central bucket name is sourced
+  # With var.log_archive_bucket_name = null, the central bucket name is sourced
   # from the aws-security remote state (its owner), not a hand-typed string.
   assert {
     condition     = data.terraform_remote_state.aws_security[0].outputs.log_archive_bucket_name == "ashes-org-log-archive"

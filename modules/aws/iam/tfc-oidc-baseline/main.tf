@@ -521,7 +521,7 @@ resource "aws_cloudformation_stack_set" "this" {
 
     precondition {
       # Inline template_body limit is 51,200 bytes; beyond that a template_url
-      # (S3) would be required.
+      # would be required.
       condition     = length(local.template_body) <= 51200
       error_message = "The generated StackSet template exceeds CloudFormation's 51,200-byte inline limit — reduce account_bindings or split the baseline."
     }

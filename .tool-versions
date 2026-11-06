@@ -1,6 +1,6 @@
 # AWS provider (hashicorp/aws) is NOT managed here. It is pinned per-module in
 # each module's/root's versions.tf (>= 6.46.0, < 7.0.0), not via asdf.
-# AWS roots/modules (modules/aws/**, envs/aws-*) auto-flow through
+# AWS roots/modules (modules/aws/**, envs/aws/**) auto-flow through
 # validate-all / lint / test / docs / security because scripts/terraform-roots.sh
 # discovers roots structurally and has no cloud filter.
 # CI validates roots in a fixed number of shards (terraform-plan.yml), so the

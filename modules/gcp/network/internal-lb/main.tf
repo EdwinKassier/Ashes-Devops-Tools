@@ -93,8 +93,8 @@ resource "google_compute_region_backend_service" "backend" {
   health_checks         = [local.health_check]
 
   session_affinity = var.session_affinity
-  # locality_lb_policy is only valid for INTERNAL_MANAGED (L7); INTERNAL
-  # passthrough (L4) backend services reject it.
+  # locality_lb_policy is only valid for INTERNAL_MANAGED; INTERNAL
+  # passthrough backend services reject it.
   locality_lb_policy              = var.is_l7 ? var.locality_lb_policy : null
   connection_draining_timeout_sec = var.connection_draining_timeout_sec
 

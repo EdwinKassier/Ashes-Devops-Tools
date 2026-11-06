@@ -1,4 +1,4 @@
-# Service-level objective for a monitored service (audit C1: the platform had no
+# Service-level objective for a monitored service (the platform had no
 # app observability). Attaches an availability or latency SLO to an existing
 # monitored service (e.g. the one GCP auto-creates for a Cloud Run service), and
 # optionally alerts when the error budget burns too fast.

@@ -10,7 +10,7 @@
 # During an incident it is activated by flipping `break_glass_active`, which
 # swaps the deny-all standing policy for the AWS-managed AdministratorAccess.
 # There is deliberately no CloudWatch alarm here; the break-glass-use alarm
-# lives in the security-notifications module (C14).
+# lives in the security-notifications module.
 
 locals {
   # Flatten roles x managed_policy_arns into plan-known attachment keys.

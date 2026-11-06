@@ -50,6 +50,6 @@ output "vercel_uat_environment_id" {
 }
 
 output "cross_cloud_injected_env_keys" {
-  description = "Vercel shared env var keys injected from cross_cloud_references (audit H9). Empty when the frontend-URL seam is unused."
+  description = "Vercel shared env var keys injected from cross_cloud_references. Empty when the frontend-URL seam is unused."
   value       = [for v in local.cross_cloud_env_vars : v.key]
 }

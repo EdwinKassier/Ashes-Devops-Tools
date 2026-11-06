@@ -84,7 +84,7 @@ run "key_and_policy_configured" {
     error_message = "CloudTrail grant must include the EncryptionContext condition"
   }
 
-  # Structural (M6): the CloudTrail grant statement itself (Sid Allow-cloudtrail-*)
+  # Structural: the CloudTrail grant statement itself (Sid Allow-cloudtrail-*)
   # carries aws:SourceOrgID = org_id AND the EncryptionContext condition — not just
   # the strings appearing somewhere in the document. Catches a refactor that moves
   # either condition onto the wrong statement.
@@ -109,7 +109,7 @@ run "key_and_policy_configured" {
 run "service_principals_grant_present" {
   # A security-tooling CMK grants local AWS services (SNS/SSM/CloudWatch) usage,
   # with no log-service grants at all. The ServiceUsage statement must appear,
-  # scoped (N7) to the key's OWN account via aws:SourceAccount — not the whole
+  # scoped to the key's OWN account via aws:SourceAccount — not the whole
   # org — and must NOT carry the CloudTrail EncryptionContext condition.
   command = plan
 
@@ -225,7 +225,7 @@ run "key_users_separate_from_admin" {
 }
 
 run "key_policy_admin_is_separate_from_key_admin" {
-  # M3: PutKeyPolicy (=> self-grant of Decrypt) is held only by the key-policy
+  # PutKeyPolicy (=> self-grant of Decrypt) is held only by the key-policy
   # admins (break-glass), and the policy is set at CreateKey.
   command = plan
 

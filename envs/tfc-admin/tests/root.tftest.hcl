@@ -118,7 +118,7 @@ run "trigger_patterns_cover_module_domains" {
   }
 }
 
-# C2: no privileged speculative plan for a PR on the control plane.
+# No privileged speculative plan for a PR on the control plane.
 run "speculative_plans_off_for_control_plane" {
   command = plan
 
@@ -141,7 +141,7 @@ run "speculative_plans_off_for_control_plane" {
     error_message = "saas-<name> workspaces must not run speculative PR plans (account-wide static tokens)."
   }
 
-  # N5: a PR must not get a plan with the production plan identity.
+  # A PR must not get a plan with the production plan identity.
   assert {
     condition     = module.workspace["gcp-workload-prod"].speculative_enabled == false && module.workspace["aws-workload-prod"].speculative_enabled == false
     error_message = "production workload workspaces must have speculative_enabled = false."
@@ -440,7 +440,7 @@ run "multi_account_alias_credentials" {
   }
 }
 
-# S6: aws-security / aws-backup get their own least-privilege management
+# Aws-security / aws-backup get their own least-privilege management
 # roles from aws-organization; only aws-organization keeps the shared one.
 run "dedicated_management_roles_per_workspace" {
   command = plan
@@ -668,7 +668,7 @@ run "workspace_variables_file_rejects_secrets" {
   expect_failures = [terraform_data.input_contract]
 }
 
-# Control-plane run notifications (audit M-ops): a configured control-plane
+# Control-plane run notifications: a configured control-plane
 # notification reaches foundational workspaces but not workload workspaces.
 run "control_plane_notifications_routed_by_tag" {
   command = plan
@@ -692,7 +692,7 @@ run "control_plane_notifications_routed_by_tag" {
   }
 }
 
-# N4: the broad platform team gets only custom plan-level access on projects
+# The broad platform team gets only custom plan-level access on projects
 # holding the control plane (no variable edits, no apply); a separate approvers
 # team confirms control-plane applies; workload projects keep fixed write.
 run "team_access_least_privilege" {

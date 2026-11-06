@@ -36,7 +36,7 @@ run "workspaces_derived_from_config" {
   }
 }
 
-# N5: speculative plans follow is_production from gcp.environments /
+# Speculative plans follow is_production from gcp.environments /
 # aws.workload_environments (aws staging is flagged production in the fixture).
 run "production_from_config" {
   command = plan

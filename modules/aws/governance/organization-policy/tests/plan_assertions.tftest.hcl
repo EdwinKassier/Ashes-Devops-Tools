@@ -59,7 +59,7 @@ run "guardrail_policies_render_correctly" {
     error_message = "deny-tamper SCP must render to valid IAM policy JSON"
   }
 
-  # H1: the Terraform run role must NOT be exempt from the tamper-deny statements,
+  # The Terraform run role must NOT be exempt from the tamper-deny statements,
   # so a pipeline compromise cannot disable security services or leave the org.
   assert {
     condition = alltrue([
@@ -168,7 +168,7 @@ run "deny_tamper_scp_hardened" {
 }
 
 run "privileged_role_tamper_never_exempts_the_pipeline" {
-  # N1: a compromised member tfc-apply must not be able to CreateRole with the
+  # A compromised member tfc-apply must not be able to CreateRole with the
   # break-glass name (inheriting every break-glass SCP exemption) nor rewrite
   # OrganizationAccountAccessRole's trust and assume it.
   command = plan
@@ -232,7 +232,7 @@ run "privileged_role_tier_omitted_when_every_pipeline_role_is_stackset_managed" 
 run "protected_key_policy_change_is_break_glass_only" {
   command = plan
 
-  # M3: a pipeline role must not be able to rewrite a protected key policy (and
+  # A pipeline role must not be able to rewrite a protected key policy (and
   # thereby grant itself kms:Decrypt) — break-glass is the sole exemption.
   assert {
     condition     = one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyProtectedKeyPolicyChange"]).Condition.ArnNotLike["aws:PrincipalArn"] == ["arn:aws:iam::*:role/break-glass"]
@@ -243,7 +243,7 @@ run "protected_key_policy_change_is_break_glass_only" {
 run "baseline_scp_identity_and_perimeter_guards" {
   command = plan
 
-  # M2: no IAM users / long-lived credentials org-wide except break-glass.
+  # No IAM users / long-lived credentials org-wide except break-glass.
   assert {
     condition = (
       toset(one([for s in jsondecode(aws_organizations_policy.policy["scp-baseline"].content).Statement : s if s.Sid == "DenyIamUserCredentials"]).Action) == toset(["iam:CreateUser", "iam:CreateAccessKey", "iam:CreateLoginProfile"]) &&
@@ -252,7 +252,7 @@ run "baseline_scp_identity_and_perimeter_guards" {
     error_message = "DenyIamUserCredentials must deny CreateUser/CreateAccessKey/CreateLoginProfile for everyone but break-glass"
   }
 
-  # H2: dp:* data-perimeter exemption tags can only be set/removed by break-glass,
+  # Dp:* data-perimeter exemption tags can only be set/removed by break-glass,
   # on every tag-capable path (create-time tags and Tag/Untag) of each RCP service.
   assert {
     condition = (
@@ -302,7 +302,7 @@ run "deny_tamper_scp_size_with_custom_names" {
 run "rcp_data_perimeter_safe_for_federation_and_service_roles" {
   command = plan
 
-  # C4: EnforceOrgIdentities must NOT deny sts:* — that blocks OIDC/SAML
+  # EnforceOrgIdentities must NOT deny sts:* — that blocks OIDC/SAML
   # federation (TFC dynamic credentials) whose sessions carry no PrincipalOrgID.
   assert {
     condition     = !contains(one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == "EnforceOrgIdentities"]).Action, "sts:*")

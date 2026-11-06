@@ -1,4 +1,4 @@
-# Impersonation is OPTIONAL (audit C2). Leave terraform_admin_email null in
+# Impersonation is OPTIONAL. Leave terraform_admin_email null in
 # Terraform Cloud: dynamic credentials already authenticate plan as
 # <prefix>-wl-<env>-plan and apply as <prefix>-wl-<env>-apply, and a null
 # impersonate_service_account means "use the ambient credentials". A plan SA

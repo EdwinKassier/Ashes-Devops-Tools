@@ -1,4 +1,4 @@
-# Golden-path front door for a Cloud Run service (audit C1): a global external
+# Golden-path front door for a Cloud Run service: a global external
 # HTTPS load balancer with a Google-managed certificate, HTTP->HTTPS redirect,
 # optional Cloud Armor and optional DNS record. Compose this in front of a
 # modules/gcp/compute/cloud-run service to expose it securely.

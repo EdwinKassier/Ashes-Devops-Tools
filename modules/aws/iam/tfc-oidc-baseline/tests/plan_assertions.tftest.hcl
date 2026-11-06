@@ -299,7 +299,7 @@ run "boundary_can_be_disabled" {
 }
 
 run "apply_boundary_propagates_to_created_roles" {
-  # M2: the apply identity must not escape its boundary by creating an
+  # The apply identity must not escape its boundary by creating an
   # unbounded role (or granting to one) and assuming it.
   command = plan
 
@@ -344,7 +344,7 @@ run "boundary_propagation_can_be_disabled" {
 }
 
 run "plan_role_denies_data_plane_reads" {
-  # M4: ReadOnlyAccess grants data reads; the plan role gets an inline deny.
+  # ReadOnlyAccess grants data reads; the plan role gets an inline deny.
   command = plan
 
   assert {
@@ -461,7 +461,7 @@ run "apply_boundary_blocks_privileged_role_squatting_and_security_teardown" {
 }
 
 run "plan_role_denies_secret_bearing_reads_not_needed_for_refresh" {
-  # N5: actions that leak secrets and are never used by Terraform refresh.
+  # Actions that leak secrets and are never used by Terraform refresh.
   command = plan
 
   assert {

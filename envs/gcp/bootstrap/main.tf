@@ -1,6 +1,6 @@
 # gcp-bootstrap root: phase-0 automation foundation.
 #
-# Extracted from gcp-organization (audit H3) so the WIF / Terraform-admin-SA
+# Extracted from gcp-organization so the WIF / Terraform-admin-SA
 # control plane has its own state and blast radius. It is the PRODUCER of the
 # admin project, the Terraform admin SA, and the WIF pools; gcp-organization
 # reads these via terraform_remote_state. Apply this root before gcp-organization.

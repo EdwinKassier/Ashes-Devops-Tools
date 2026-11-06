@@ -27,7 +27,7 @@ envs/                   # deployable roots, nested by cloud (workspace names kee
 
 modules/               # grouped by owning cloud (domain)
   gcp/                  # GCP-native modules
-    stages/             # Orchestration wrappers: bootstrap, organization, projects, network-hub, workload; network compositions net-hub, net-spoke, dns-anchor; host (DEPRECATED facade, no in-repo callers)
+    stages/             # Orchestration wrappers: bootstrap, organization, projects, network-hub, workload, app-services (Cloud Run/SQL/GKE golden path); network compositions net-hub, net-spoke, dns-anchor; host (DEPRECATED facade, no in-repo callers)
     project/            # THE project primitive — every stage creates GCP projects through it (no naming scheme inside)
     network/            # ~24 primitives: tiered-vpc (shared VPC + 3-tier subnets + baseline firewall core), vpc, subnet, dns, dns-records, vpn, vpc-sc, cloud-armor, internal-lb, api-gateway, cdn, app-ingress, …
     governance/         # billing, kms, org-policy, scc, tags, cloud-audit-logs, private-ca
@@ -49,7 +49,7 @@ modules/               # grouped by owning cloud (domain)
     data/               # kms-key, log-archive-bucket, private-ca, ecr, rds-aurora
     backup/             # backup-vault, backup-org-policy
     ops/                # systems-manager, cloudwatch
-    stages/             # organization, security, network-hub, shared-services, backup, workload
+    stages/             # organization, security, network-hub, shared-services, backup, workload, app-services (ECS Fargate/ALB/Aurora golden path)
   supabase/             # project, settings, environment, vault-secrets
   vercel/               # project
   saas/                 # stages/saas-workload — composes supabase + vercel

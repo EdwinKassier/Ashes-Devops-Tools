@@ -384,7 +384,7 @@ variable "cloudtrail_lambda_data_events" {
 }
 
 # -----------------------------------------------------------------------------
-# Managed break-glass role (audit M3)
+# Managed break-glass role
 #
 # When create_break_glass is true, the stage creates the emergency-access role
 # itself (MFA-gated trust, deny-all standing policy, AdministratorAccess only

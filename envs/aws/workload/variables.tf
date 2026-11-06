@@ -142,7 +142,7 @@ variable "log_archive_bucket_name" {
 }
 
 variable "security_workspace_name" {
-  description = "Name of the aws-security TFC workspace, read via remote state for the central log-archive bucket name (audit M7)."
+  description = "Name of the aws-security TFC workspace, read via remote state for the central log-archive bucket name."
   type        = string
   default     = "aws-security"
 }

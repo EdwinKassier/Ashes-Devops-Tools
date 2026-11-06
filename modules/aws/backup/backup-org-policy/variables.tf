@@ -11,7 +11,7 @@ variable "content" {
 }
 
 variable "default_region" {
-  description = "AWS region the org backup plan writes recovery points to (single region). Rendered into the templated policy's regions @@assign. No cross-region copy_action is configured — see docs/known-gaps.md (A5)."
+  description = "AWS region the org backup plan writes recovery points to (single region). Rendered into the templated policy's regions @@assign. No cross-region copy_action is configured — see docs/known-gaps.md."
   type        = string
   default     = "eu-west-2"
 }

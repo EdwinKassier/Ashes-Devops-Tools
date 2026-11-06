@@ -50,7 +50,7 @@ locals {
 
   # The ARN the assumption alarm watches: the role this stage creates when
   # create_break_glass is true, otherwise the externally-managed ARN the caller
-  # passes. So "managed here" and "monitored here" stay in lockstep (audit M3).
+  # passes. So "managed here" and "monitored here" stay in lockstep.
   effective_break_glass_role_arn = var.create_break_glass ? module.break_glass[0].break_glass_role_arn : var.break_glass_role_arn
 
   # Key administrator per CMK: the explicit key_admin_arn, else the key's own
@@ -82,7 +82,7 @@ locals {
 }
 
 # ---------------------------------------------------------------------------
-# Managed break-glass role (management account) — audit M3
+# Managed break-glass role (management account)
 #
 # Opt-in. Deny-all by default; AdministratorAccess only while break_glass_active.
 # MFA-required trust scoped to break_glass_trusted_principals. Its assumption is
@@ -244,7 +244,7 @@ module "config" {
   recorder_only              = false
   # Record global resource types in the home Region only, not once per Region.
   home_region = var.aws_region
-  # F5: record ALL supported resource types (default true, the full-coverage but
+  # Record ALL supported resource types (default true, the full-coverage but
   # most expensive Config mode). Set false for cost-sensitive non-prod.
   record_all_supported = var.config_record_all_supported
   # The org aggregator role is created in the security-tooling account.
@@ -264,7 +264,7 @@ module "guardduty" {
 
   aws_enabled_regions         = var.aws_enabled_regions
   security_tooling_account_id = var.security_tooling_account_id
-  # F5: agentless EBS malware scanning (default true, billed per GB scanned). Set
+  # Agentless EBS malware scanning (default true, billed per GB scanned). Set
   # false for non-prod where it is not required.
   enable_ebs_malware_protection = var.guardduty_enable_ebs_malware_protection
 }

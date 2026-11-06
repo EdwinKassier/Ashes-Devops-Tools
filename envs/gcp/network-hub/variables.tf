@@ -99,7 +99,7 @@ variable "vpc_sc_access_policy_name" {
 }
 
 variable "vpc_sc_enable_dry_run" {
-  description = "When true (default), the hub VPC-SC perimeter logs violations but does NOT block (dry-run). Set to false to ENFORCE, only after validating the violation logs. See docs/known-gaps.md (G11) and docs/runbooks/production-hardening.md."
+  description = "When true (default), the hub VPC-SC perimeter logs violations but does NOT block (dry-run). Set to false to ENFORCE, only after validating the violation logs. See docs/known-gaps.md and docs/runbooks/production-hardening.md."
   type        = bool
   default     = true
 }

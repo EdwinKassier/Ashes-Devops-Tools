@@ -1,5 +1,5 @@
 # gcp-network-hub reads the org (folders, org_id) and projects (host project IDs
-# and numbers) via remote state (audit H3). Apply order: gcp-bootstrap ->
+# and numbers) via remote state. Apply order: gcp-bootstrap ->
 # gcp-organization -> gcp-projects -> gcp-network-hub.
 #
 # Stage contract override (FAST-style): a supplied organization_contract /
