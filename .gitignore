@@ -34,7 +34,7 @@ tfplan
 *.auto.tfvars
 *.auto.tfvars.json
 !examples/*.tfvars
-!examples/presets/*.tfvars
+!examples/**/*.tfvars
 
 # The single-source landing-zone configuration is COMMITTED (it holds no
 # secrets) so VCS-driven Terraform Cloud runs read it. Never ignore it.
