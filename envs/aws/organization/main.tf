@@ -29,6 +29,7 @@ module "aws_organization" {
   enable_tfc_management_roles            = var.enable_tfc_management_roles
   backup_service_role_region             = local.aws_region
   org_policy_overrides                   = var.org_policy_overrides
+  partition                              = var.partition
   disabled_org_policies                  = var.disabled_org_policies
   org_policy_attachments                 = var.org_policy_attachments
   github_federation_owners               = local.github_federation_owners
