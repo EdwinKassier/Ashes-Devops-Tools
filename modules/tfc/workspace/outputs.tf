@@ -18,6 +18,11 @@ output "variable_keys" {
   value       = sort(keys(var.variables))
 }
 
+output "variable_values" {
+  description = "Values of the NON-sensitive variables set directly on the workspace, keyed by name (sensitive ones are omitted)."
+  value       = { for k, v in var.variables : k => v.value if !try(v.sensitive, false) }
+}
+
 output "trigger_patterns" {
   description = "Trigger patterns configured on the workspace."
   value       = tfe_workspace.this.trigger_patterns

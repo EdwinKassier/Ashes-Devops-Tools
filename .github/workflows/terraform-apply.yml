@@ -33,6 +33,12 @@ jobs:
       status: ${{ steps.run_status.outputs.status }}
       commit_match: ${{ steps.run_status.outputs.commit_match }}
     steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
       - name: Parse tag
         id: parse
         env:
@@ -175,6 +181,12 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
       - name: Create release summary
         run: |
           echo "## Release Summary" >> "$GITHUB_STEP_SUMMARY"

@@ -59,6 +59,7 @@ module "example" {
 
 	# Required variables
 	project_id =
+	region =
 }
 ```
 
@@ -90,8 +91,8 @@ The following resources are created:
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project ID where the snapshot-schedule resource policies will be created (6-30 characters, lowercase alphanumeric and hyphens). | `string` | n/a | yes |
+| <a name="input_region"></a> [region](#input\_region) | Region where the snapshot-schedule resource policies are created. Resource policies are regional and can only be attached to disks in the same region. | `string` | n/a | yes |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels applied to snapshots created by every schedule. Merged with each schedule's own snapshot\_properties.labels. | `map(string)` | `{}` | no |
-| <a name="input_region"></a> [region](#input\_region) | Region where the snapshot-schedule resource policies are created. Resource policies are regional and can only be attached to disks in the same region. | `string` | `"europe-west1"` | no |
 | <a name="input_schedules"></a> [schedules](#input\_schedules) | Map of snapshot-schedule policies to create. The map key is the resource policy name.<br/>Each entry may specify at most one cadence (daily\_schedule, weekly\_schedule, or<br/>hourly\_schedule); when none is given a secure default daily schedule (04:00, once per<br/>day) is applied. retention\_policy and snapshot\_properties fall back to secure defaults. | <pre>map(object({<br/>    daily_schedule = optional(object({<br/>      days_in_cycle = optional(number, 1)<br/>      start_time    = optional(string, "04:00")<br/>    }))<br/>    weekly_schedule = optional(object({<br/>      day_of_weeks = list(object({<br/>        day        = string<br/>        start_time = string<br/>      }))<br/>    }))<br/>    hourly_schedule = optional(object({<br/>      hours_in_cycle = number<br/>      start_time     = string<br/>    }))<br/>    retention_policy = optional(object({<br/>      max_retention_days    = optional(number, 30)<br/>      on_source_disk_delete = optional(string, "KEEP_AUTO_SNAPSHOTS")<br/>    }), {})<br/>    snapshot_properties = optional(object({<br/>      labels            = optional(map(string), {})<br/>      storage_locations = optional(list(string))<br/>      guest_flush       = optional(bool, false)<br/>    }), {})<br/>  }))</pre> | <pre>{<br/>  "daily": {<br/>    "daily_schedule": {<br/>      "days_in_cycle": 1,<br/>      "start_time": "04:00"<br/>    },<br/>    "retention_policy": {<br/>      "max_retention_days": 30<br/>    }<br/>  }<br/>}</pre> | no |
 
 ## Outputs

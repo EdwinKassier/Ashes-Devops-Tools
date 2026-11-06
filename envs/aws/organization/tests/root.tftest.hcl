@@ -16,6 +16,7 @@
 mock_provider "aws" {}
 
 variables {
+  landing_zone_name     = "acme"
   management_account_id = "111111111111" # C4 account guard
   accounts = {                           # L2: non-placeholder emails
     log_archive      = { email = "aws+log-archive@acme.test", ou = "Security" }
@@ -181,4 +182,15 @@ run "rejects_example_workload_account_emails" {
   }
 
   expect_failures = [var.workload_accounts]
+}
+
+# landing_zone_name has no default and rejects the upstream placeholders.
+run "rejects_placeholder_landing_zone_name" {
+  command = plan
+
+  variables {
+    landing_zone_name = "ashes"
+  }
+
+  expect_failures = [var.landing_zone_name]
 }

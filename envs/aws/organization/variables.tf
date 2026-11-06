@@ -121,7 +121,7 @@ variable "allowed_regions" {
 }
 
 variable "terraform_run_role_arn" {
-  description = "Account-qualified exact ARN of the Terraform Cloud run role. Carved out of every guardrail deny statement so automation is not locked out."
+  description = "Account-qualified exact ARN of the MANAGEMENT-account Terraform Cloud apply role (the phase-0, hand-created role from the aws-bootstrap runbook Step 2, e.g. arn:aws:iam::<mgmt>:role/tfc-mgmt-apply; the same ARN tfc-admin sets as TFC_AWS_APPLY_ROLE_ARN via aws_management_apply_role_arn). Carved out of every guardrail deny statement so automation is not locked out. Not created by this root: StackSets never deploy to the management account."
   type        = string
 
   validation {
@@ -131,7 +131,7 @@ variable "terraform_run_role_arn" {
 }
 
 variable "break_glass_role_arn" {
-  description = "Account-qualified exact ARN of the emergency break-glass role. Carved out of every guardrail deny statement."
+  description = "Account-qualified exact ARN of the emergency break-glass role in the management account. Carved out of every guardrail deny statement. Either hand-create it in phase-0 (aws-bootstrap runbook Step 2) or let aws-security create it (create_break_glass = true, role name break_glass_role_name) and pass the ARN it will have here (arn:aws:iam::<mgmt>:role/<break_glass_role_name>); an SCP carve-out may name a role that does not exist yet."
   type        = string
 
   validation {
@@ -211,13 +211,17 @@ variable "cost_anomaly_email" {
 # -----------------------------------------------------------------------------
 
 variable "landing_zone_name" {
-  description = "Landing-zone identifier written to the LandingZone tag on every resource."
+  description = "Landing-zone identifier written to the LandingZone tag on every resource. No default: set your own organization's identifier (same value in every AWS root; set it once in the tfc-admin common variable set via common_workspace_variables). The upstream placeholders \"ashes\" and \"my-org\" are rejected."
   type        = string
-  default     = "ashes"
 
   validation {
-    condition     = length(trimspace(var.landing_zone_name)) > 0
-    error_message = "landing_zone_name must be a non-empty string."
+    condition     = can(regex("^[a-z][a-z0-9-]{1,30}$", var.landing_zone_name))
+    error_message = "landing_zone_name must be 2-31 chars: a lowercase letter, then lowercase letters, digits or hyphens."
+  }
+
+  validation {
+    condition     = !contains(["ashes", "my-org"], lower(var.landing_zone_name))
+    error_message = "landing_zone_name is still an upstream placeholder (ashes / my-org). Set your own landing-zone identifier."
   }
 }
 
@@ -299,7 +303,7 @@ variable "tfc_project" {
 }
 
 variable "tfc_workspace_bindings" {
-  description = "Map of account key (from accounts / workload_accounts) -> TFC workspaces allowed to assume that account's tfc-plan / tfc-apply roles (optional per-account project override). Add one entry per workload account, e.g. workload_dev = { workspaces = [\"aws-workload-dev\"] }."
+  description = "Map of account key (from accounts / workload_accounts) -> TFC workspaces allowed to assume that account's tfc-plan / tfc-apply roles (optional per-account project override). The defaults bind the six foundational accounts only; ADD one entry per workload account, e.g. workload_dev = { workspaces = [\"aws-workload-dev\"] }, and set the same key as environments.dev.aws_account_key in tfc-admin so aws-workload-dev gets that account's roles and its workload_account_key."
   type = map(object({
     workspaces = list(string)
     project    = optional(string)

@@ -23,3 +23,13 @@ run "changeable_for_days_below_minimum_rejected" {
 
   expect_failures = [var.changeable_for_days]
 }
+
+run "malformed_restore_testing_role_arn_rejected" {
+  command = plan
+
+  variables {
+    restore_testing_role_arn = "BackupRestoreTestRole"
+  }
+
+  expect_failures = [var.restore_testing_role_arn]
+}

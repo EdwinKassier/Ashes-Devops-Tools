@@ -107,19 +107,43 @@ variable "tfc_project_ids" {
 }
 
 variable "tfc_workspace_ids" {
-  description = "Optional map of TFC workspace name -> immutable workspace ID (ws-xxxxxxxx). Workspaces listed here are WIF-bound by ID instead of by (mutable, squattable) name. Populate from the tfc-admin root once the workspaces exist."
+  description = "Optional map of TFC workspace name -> immutable workspace ID (ws-xxxxxxxx). Workspaces listed here are WIF-bound by ID instead of by (mutable, squattable) name. Populate from the tfc-admin root once the workspaces exist; a check warns when an is_production environment or a control-plane workspace has no entry."
   type        = map(string)
   default     = {}
 }
 
 variable "vpc_sc_access_policy_id" {
-  description = "Optional numeric Access Context Manager policy ID. When set, workload apply SAs get policyEditor (plan SAs policyReader) on this policy only, so gcp-workload-<env> can manage its perimeter without an org-level role."
+  description = "Optional numeric ID of the org-wide Access Context Manager policy. Only used with enable_legacy_org_access_policy_grants = true; by default each environment gets its own folder-scoped policy from gcp-organization."
   type        = string
   default     = null
 }
 
+variable "enable_legacy_org_access_policy_grants" {
+  description = "LEGACY. Grant every workload apply SA policyEditor (plan: policyReader) on the org-wide policy vpc_sc_access_policy_id, which lets any environment edit every perimeter. Default false; enable only while migrating perimeters to the scoped policies."
+  type        = bool
+  default     = false
+}
+
+variable "enable_scoped_access_policies" {
+  description = "Give the organization stage SAs the Access Context Manager rights needed to create one folder-scoped access policy per environment (gcp-organization enable_scoped_access_policies). Default true; keep the two in step."
+  type        = bool
+  default     = true
+}
+
+variable "enable_org_level_folder_iam_delegation" {
+  description = "LEGACY. Bind the projects-apply conditional folderIamAdmin at the org node (every folder). Default false: gcp-organization binds it per target folder. Enable only to bridge a migration."
+  type        = bool
+  default     = false
+}
+
+variable "enable_pam" {
+  description = "Grant the organization stage SAs Privileged Access Manager rights so gcp-organization can manage the just-in-time org-admin entitlement (gcp-organization enable_pam). Default false."
+  type        = bool
+  default     = false
+}
+
 variable "environments" {
-  description = "Map of application environment definitions. Only the keys are used here (each key gets a <prefix>-wl-<env>-plan/-apply SA pair bound to TFC workspace gcp-workload-<env>); the full objects are consumed by the gcp-organization root."
+  description = "Map of application environment definitions. Here each key gets a <prefix>-wl-<env>-plan/-apply SA pair bound to TFC workspace gcp-workload-<env>, and is_production (default false) marks the environments whose workspaces must be WIF-bound by immutable ID (tfc_workspace_ids). Keep the map identical across the GCP roots."
   type = map(object({
     display_name            = string
     region                  = string
@@ -127,6 +151,7 @@ variable "environments" {
     budget_monthly_limit    = number
     iam_group_role_bindings = map(set(string))
     labels                  = optional(map(string), {})
+    is_production           = optional(bool, false)
   }))
 
   # Environment keys become project/workspace keys (e.g. "<env>-host",

@@ -141,10 +141,11 @@ module "config_recorder" {
 
   recorder_only = true
 
-  aws_enabled_regions = var.aws_enabled_regions
-  config_role_arn     = var.config_role_arn
-  aggregator_role_arn = "" # unused in recorder_only mode
-  log_archive_bucket  = var.log_archive_bucket_name
+  aws_enabled_regions        = var.aws_enabled_regions
+  config_role_arn            = var.config_role_arn
+  create_service_linked_role = var.create_config_service_linked_role
+  aggregator_role_arn        = "" # unused in recorder_only mode
+  log_archive_bucket         = var.log_archive_bucket_name
 }
 
 # ---------------------------------------------------------------------------

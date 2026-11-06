@@ -104,3 +104,47 @@ run "rejects_non_numeric_access_policy_id" {
     vpc_sc_access_policy_id = "accessPolicies/123"
   }
 }
+
+run "rejects_roles_viewer_in_workload_plan_roles" {
+  command = plan
+  variables {
+    workload_folder_roles = {
+      plan  = ["roles/viewer"]
+      apply = []
+    }
+  }
+  expect_failures = [var.workload_folder_roles]
+}
+
+run "rejects_data_plane_permission_in_plan_viewer_role" {
+  command = plan
+  variables {
+    plan_viewer_permissions = ["storage.buckets.get", "storage.objects.get"]
+  }
+  expect_failures = [var.plan_viewer_permissions]
+}
+
+run "rejects_placeholder_tfc_workspace_id" {
+  command = plan
+  variables {
+    tfc_workspace_ids = { "gcp-workload-prod" = "ws-REPLACEME" }
+  }
+  expect_failures = [var.tfc_workspace_ids]
+}
+
+run "rejects_production_env_not_in_workload_envs" {
+  command = plan
+  variables {
+    workload_environments            = ["dev"]
+    production_workload_environments = ["prod"]
+  }
+  expect_failures = [var.production_workload_environments]
+}
+
+run "rejects_legacy_access_policy_grants_without_policy" {
+  command = plan
+  variables {
+    enable_legacy_org_access_policy_grants = true
+  }
+  expect_failures = [var.enable_legacy_org_access_policy_grants]
+}

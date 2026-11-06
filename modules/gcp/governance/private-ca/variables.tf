@@ -15,7 +15,6 @@ variable "project_id" {
 variable "location" {
   description = "GCP region for the CA pool and certificate authority (e.g. europe-west1)."
   type        = string
-  default     = "europe-west1"
 }
 
 # -----------------------------------------------------------------------------

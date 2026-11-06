@@ -37,7 +37,7 @@ gcloud services enable cloudresourcemanager.googleapis.com \
 - [ ] `gcloud version` reports `>= 450.0.0`
 - [ ] `jq` installed (used by CI scripts)
 - [ ] Node.js >= 18 installed (required only if using `enable_vault_secrets = true` in any `saas-workload` call)
-- [ ] A Terraform Cloud organization with the five GCP workspaces: `gcp-bootstrap`, `gcp-organization`, `gcp-projects`, `gcp-network-hub` and one `gcp-workload-<env>` per environment (codify them with `envs/tfc-admin`, or create them by hand)
+- [ ] A Terraform Cloud organization with the five GCP workspaces: `gcp-bootstrap`, `gcp-organization`, `gcp-projects`, `gcp-network-hub` and one `gcp-workload-<env>` per environment. Create them with `envs/tfc-admin` (`enable_gcp = true`; every cloud flag defaults to `false`). It creates `gcp-bootstrap` in **local** execution mode, so the phase-0 apply below runs on your machine with your ADC while TFC stores the state ([bootstrap runbook](../runbooks/bootstrap.md#creating-and-wiring-the-tfc-workspaces-tfc-admin-two-pass))
 
 ---
 
@@ -145,10 +145,13 @@ cp envs/gcp/bootstrap/terraform.tfvars.example envs/gcp/bootstrap/local.auto.tfv
 
 The GCP control plane is four roots applied in order: `gcp-bootstrap` →
 `gcp-organization` → `gcp-projects` → `gcp-network-hub`. Bootstrap is first and is
-special: its providers impersonate a `terraform-admin` service account that the
-bootstrap apply itself creates. On the FIRST apply, leave `terraform_admin_email`
-unset (`null`) so Terraform runs as your own credentials; set it on every later
-apply. The [bootstrap runbook](../runbooks/bootstrap.md) has the full two-phase detail.
+special: its providers can impersonate a `terraform-admin` service account that
+the bootstrap apply itself creates. For this phase-0 local apply leave
+`terraform_admin_email` unset (`null`) so Terraform runs as your own ADC. Every
+later run happens in Terraform Cloud with dynamic credentials, and there it stays
+unset too (the run already *is* the right service account). Set it only for a
+deliberate local break-glass re-apply. The [bootstrap runbook](../runbooks/bootstrap.md)
+has the full two-phase detail.
 
 ```bash
 terraform -chdir=envs/gcp/bootstrap plan
@@ -183,10 +186,17 @@ In your GitHub repo → Settings → Secrets and variables → Actions:
 | `TFC_ORGANIZATION` | Variable | Your Terraform Cloud org name |
 | `TFC_TOKEN` | Secret | A TFC team token scoped to "Read runs" on the GCP workspaces |
 
-**Step 7 — Set `terraform_admin_email` and apply the remaining roots in order, in Terraform Cloud:**
+**Step 7 — Wire dynamic credentials (tfc-admin pass 2) and apply the remaining roots in order, in Terraform Cloud:**
 
-Put the `terraform_admin_email` from step 5 on every GCP workspace variable set, then
-apply the remaining roots **in Terraform Cloud** (never locally — see
+Re-apply `envs/tfc-admin` with `gcp_bootstrap_outputs_from_tfc = true` (or copy the
+bootstrap outputs `tfc_workload_provider_name` / `tfc_plan_service_accounts` /
+`tfc_apply_service_accounts` into its variables) and `workspace_execution_modes = {}`.
+Every GCP workspace now gets its `TFC_GCP_*` env vars and `gcp-bootstrap` switches
+to remote execution. Do **not** set `terraform_admin_email` on any workspace.
+Commit each workspace's Terraform inputs to `config/tfc-workspaces.yaml` (see
+[`config/tfc-workspaces.example.yaml`](../../config/tfc-workspaces.example.yaml)),
+because VCS-driven runs never see a local tfvars file. Then apply the remaining roots
+**in Terraform Cloud** (never locally — see
 [CLAUDE.md → State & Apply Rules](../../CLAUDE.md#state--apply-rules)): merge to `main`
 for VCS-driven runs, or queue a run on each workspace in order. Each root reads the
 previous one's remote state, so wait for each apply to finish:
@@ -209,7 +219,7 @@ gcloud auth application-default revoke
 
 The AWS landing zone does **not** share the GCP bootstrap above. It has its own phase-0 stand-up: creating the AWS organization out-of-band, then bringing a runnable `aws-organization` workspace online, then applying the layered roots in order (`aws-organization` → `aws-security` → `aws-network` → `aws-identity` → `aws-shared-services` → `aws-backup` → `aws-workload`). IAM Identity Center is enabled/delegated between the organization and security/identity layers.
 
-**AWS credentials:** the AWS roots authenticate via Terraform Cloud dynamic (OIDC) credentials — set `TFC_AWS_PROVIDER_AUTH=true` and `TFC_AWS_RUN_ROLE_ARN` on the workspace — or, for local runs, `AWS_PROFILE`. Only the roots you apply pull in credentials; an unapplied workspace needs none (see the env-var table in [CLAUDE.md](../../CLAUDE.md#required-environment-variables)).
+**AWS credentials:** the AWS roots authenticate via Terraform Cloud dynamic (OIDC) credentials (`TFC_AWS_PROVIDER_AUTH`, `TFC_AWS_PLAN_ROLE_ARN`, `TFC_AWS_APPLY_ROLE_ARN`, plus a `TFC_AWS_*_<alias>` set per member account on `aws-security` / `aws-backup`) or, for local runs, `AWS_PROFILE`. `envs/tfc-admin` (`enable_aws = true`) creates the AWS workspaces and writes those env vars: the hand-created management roles via `aws_management_plan_role_arn` / `aws_management_apply_role_arn`, and the member-account roles from the `aws-organization` outputs. Every AWS root requires `landing_zone_name` (no default). Only the roots you apply pull in credentials; an unapplied workspace needs none (see the env-var table in [CLAUDE.md](../../CLAUDE.md#required-environment-variables)).
 
 > Full phase-0 procedure, prerequisites, and layer-by-layer apply order: **[AWS Bootstrap runbook →](../runbooks/aws-bootstrap.md)**. To add an account/environment later: **[AWS Add Account →](../runbooks/aws-add-account.md)**.
 
@@ -260,7 +270,7 @@ TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=
 |----------|-------------|---------|
 | `domain` | GCP organization domain name — used to look up the org ID | `"example.com"` |
 | `admin_email` | Email of the organization administrator | `"admin@example.com"` |
-| `environments` | Map of environment configs (region, CIDR, budget, IAM bindings) — see `terraform.tfvars.example`; must match `gcp-projects` and `gcp-network-hub` | _(see example)_ |
+| `environments` | Map of environment configs (region, CIDR, budget, IAM bindings) — see `terraform.tfvars.example`; must match `gcp-projects` and `gcp-network-hub` | *(see example)* |
 
 ### `envs/gcp/network-hub` — Required Variables
 
@@ -298,7 +308,7 @@ TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `region` | `"europe-west1"` | Default GCP region for this environment; should match the region used for its spoke/host project in the organization root |
-| `terraform_admin_email` | `null` | SA to impersonate for local runs (from bootstrap output). Example: `"terraform-admin@ashes-admin-xxxx.iam.gserviceaccount.com"` |
+| `terraform_admin_email` | `null` | SA to impersonate for deliberate local break-glass runs only (from bootstrap output). Leave `null` for the phase-0 apply and on every TFC workspace. Example: `"terraform-admin@ashes-admin-xxxx.iam.gserviceaccount.com"` |
 | `enable_cloud_armor` | `false` | Attach WAF policy to external load balancers |
 | `enable_owasp_rules` | `false` | Enable Cloud Armor OWASP managed rules (requires `enable_cloud_armor`) |
 | `owasp_sensitivity` | `2` | Cloud Armor OWASP rule sensitivity (1=strict, 4=permissive) |

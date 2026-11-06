@@ -166,6 +166,50 @@ run "deny_tamper_scp_hardened" {
   }
 }
 
+run "protected_key_policy_change_is_break_glass_only" {
+  command = plan
+
+  # M3: a pipeline role must not be able to rewrite a protected key policy (and
+  # thereby grant itself kms:Decrypt) — break-glass is the sole exemption.
+  assert {
+    condition     = one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyProtectedKeyPolicyChange"]).Condition.ArnNotLike["aws:PrincipalArn"] == ["arn:aws:iam::*:role/break-glass"]
+    error_message = "DenyProtectedKeyPolicyChange must exempt break-glass only (no pipeline roles)"
+  }
+}
+
+run "baseline_scp_identity_and_perimeter_guards" {
+  command = plan
+
+  # M2: no IAM users / long-lived credentials org-wide except break-glass.
+  assert {
+    condition = (
+      toset(one([for s in jsondecode(aws_organizations_policy.policy["scp-baseline"].content).Statement : s if s.Sid == "DenyIamUserCredentials"]).Action) == toset(["iam:CreateUser", "iam:CreateAccessKey", "iam:CreateLoginProfile"]) &&
+      one([for s in jsondecode(aws_organizations_policy.policy["scp-baseline"].content).Statement : s if s.Sid == "DenyIamUserCredentials"]).Condition.ArnNotLike["aws:PrincipalArn"] == ["arn:aws:iam::*:role/break-glass"]
+    )
+    error_message = "DenyIamUserCredentials must deny CreateUser/CreateAccessKey/CreateLoginProfile for everyone but break-glass"
+  }
+
+  # H2: dp:* data-perimeter exemption tags can only be set/removed by break-glass,
+  # on every tag-capable path (create-time tags and Tag/Untag) of each RCP service.
+  assert {
+    condition = (
+      one([for s in jsondecode(aws_organizations_policy.policy["scp-baseline"].content).Statement : s if s.Sid == "DenyDataPerimeterTagTampering"]).Condition["ForAnyValue:StringLike"]["aws:TagKeys"] == "dp:*" &&
+      one([for s in jsondecode(aws_organizations_policy.policy["scp-baseline"].content).Statement : s if s.Sid == "DenyDataPerimeterTagTampering"]).Condition.ArnNotLike["aws:PrincipalArn"] == ["arn:aws:iam::*:role/break-glass"] &&
+      length(setsubtract(
+        ["iam:CreateRole", "iam:TagRole", "iam:UntagRole", "s3:CreateBucket", "s3:PutBucketTagging", "s3:TagResource", "s3:UntagResource", "kms:CreateKey", "kms:TagResource", "kms:UntagResource", "sqs:CreateQueue", "sqs:TagQueue", "sqs:UntagQueue", "secretsmanager:CreateSecret", "secretsmanager:TagResource", "secretsmanager:UntagResource"],
+        one([for s in jsondecode(aws_organizations_policy.policy["scp-baseline"].content).Statement : s if s.Sid == "DenyDataPerimeterTagTampering"]).Action
+      )) == 0
+    )
+    error_message = "DenyDataPerimeterTagTampering must cover every dp:* tagging path for the RCP services, break-glass only"
+  }
+
+  # Every SCP stays under the 5,120-character quota.
+  assert {
+    condition     = alltrue([for k, p in aws_organizations_policy.policy : length(p.content) < 5120 if p.type == "SERVICE_CONTROL_POLICY"])
+    error_message = "every SCP must stay under the 5,120-character SCP size quota"
+  }
+}
+
 run "deny_tamper_scp_size_with_custom_names" {
   # Realistic worst case: several path-prefixed pipeline roles plus a separate
   # member-account break-glass name must still fit the 5,120-character quota.
@@ -174,6 +218,11 @@ run "deny_tamper_scp_size_with_custom_names" {
   variables {
     pipeline_role_names    = ["automation/tfc-plan", "automation/tfc-apply", "OrganizationAccountAccessRole", "stacksets-exec-*"]
     break_glass_role_names = ["emergency/break-glass-admin"]
+  }
+
+  assert {
+    condition     = alltrue([for k, p in aws_organizations_policy.policy : length(p.content) < 5120 if p.type == "SERVICE_CONTROL_POLICY"])
+    error_message = "every SCP (incl. baseline with the identity/perimeter guards) must stay under the 5,120-character quota"
   }
 
   assert {

@@ -12,6 +12,7 @@ Repository secrets and variables referenced by `.github/workflows/`. Configure t
 | `TFC_TOKEN` | Secret | `terraform-apply.yml` | Terraform Cloud team token with **READ** access to workspace runs. Used only to verify run status before publishing a release; it does not trigger or modify runs. |
 | `TFC_TOKEN_DRIFT` | Secret | `drift-detection.yml` | Terraform Cloud team token with **Queue Plans (write)** on the target workspaces. Drift detection creates speculative plan-only runs (`POST /runs`), which read access cannot do. There is **no fallback** to `TFC_TOKEN`: if unset, scheduled runs skip and manual runs fail with an explicit error, so the release token is never silently granted Queue Plans. |
 | `TFC_ORGANIZATION` | Variable | `drift-detection.yml`, `terraform-apply.yml` | Terraform Cloud organization name that owns the workspaces. |
+| `RELEASE_PLEASE_TOKEN` | Secret | `release.yml` | Machine-account token release-please uses to open the release PR and cut `vX.Y.Z` tags. **Required; no fallback.** See [below](#release_please_token). |
 
 Without both of these, `drift-detection.yml` **skips cleanly** on its scheduled runs (see
 "Drift detection behavior without secrets" below) rather than failing red. `terraform-apply.yml`
@@ -21,6 +22,30 @@ a GitHub Release when the run applied and its commit matches the tag. (The workf
 "Terraform Release Metadata" for this reason; `terraform-plan.yml`, named "Terraform Validation",
 runs `terraform validate` and the mock tests, and likewise never produces a real plan - that is
 the TFC speculative plan.)
+
+## RELEASE_PLEASE_TOKEN
+
+`release.yml` runs on every push to `main` and **fails on its first step** with
+`RELEASE_PLEASE_TOKEN missing` when the secret is unset. It deliberately does not fall back
+to `GITHUB_TOKEN`: a pull request opened with `GITHUB_TOKEN` does not trigger
+`pull_request` workflows, so the release PR would never receive the required
+**Validation Summary** check and could never merge under branch protection. A red run that
+names the missing secret is a better signal than a release PR that is stuck forever.
+
+Create one of the following and store it as the repository secret `RELEASE_PLEASE_TOKEN`:
+
+- **Fine-grained PAT** on a machine account (preferred over a classic PAT), scoped to this
+  repository only, with **Contents: Read and write**, **Pull requests: Read and write**
+  and **Issues: Read and write** (release-please creates its `autorelease:*` labels).
+  Give it an expiry and a calendar reminder to rotate it.
+- **GitHub App installation token**: an App installed on this repository with the same three
+  permissions. Mint the token in a step before release-please (for example with a SHA-pinned
+  `actions/create-github-app-token`) and pass it in place of the secret.
+- **Classic PAT** with `repo` scope: works, but is broader than needed.
+
+The machine account must be allowed to push tags that your branch and tag rulesets protect.
+Forks and clones that do not cut releases can disable the workflow instead
+(**Actions → Release → Disable workflow**).
 
 ## Dynamic provider credentials (GCP and AWS roots) — managed by tfc-admin
 
@@ -66,6 +91,7 @@ bootstrap role, the downstream member-account roles, and the workspaces that con
 | `TFC_DRIFT_WORKSPACES` | Variable | `drift-detection.yml` | JSON array of TFC workspace names to check for drift, e.g. `["gcp-organization","gcp-workload-dev","gcp-workload-prod"]`. | `["gcp-organization","gcp-workload-dev"]` |
 | `DOCS_BOT_PAT` | Secret | `documentation.yml` | Machine-account PAT (repo scope) used to open auto-generated docs PRs so they trigger downstream CI. `GITHUB_TOKEN`-authored PRs do not trigger other workflows. | Falls back to `secrets.GITHUB_TOKEN` (docs PRs will not trigger CI checks). |
 | `DOCS_REVIEWER` | Variable | `documentation.yml` | GitHub username to request as reviewer on auto-generated docs PRs. | No reviewer requested. |
+| `CODEOWNERS_ENFORCE` | Variable | `terraform-plan.yml` (CODEOWNERS placeholders job) | Set to `true` once `.github/CODEOWNERS` names real teams: any remaining `@your-org/` placeholder then fails the build. | Placeholders produce a warning only, so forks stay green. |
 
 ## Sandbox E2E
 

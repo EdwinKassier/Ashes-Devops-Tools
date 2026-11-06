@@ -36,7 +36,7 @@ module "example" {
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
-| <a name="requirement_vercel"></a> [vercel](#requirement\_vercel) | ~> 4.0 |
+| <a name="requirement_vercel"></a> [vercel](#requirement\_vercel) | >= 4.8.2, < 5.0.0 |
 
 ## Providers
 
@@ -52,21 +52,21 @@ module "example" {
 The following resources are created:
 
 
-- resource.terraform_data.env_key_uniqueness (modules/vercel/project/main.tf#L118)
-- resource.terraform_data.prod_vars_version (modules/vercel/project/main.tf#L176)
-- resource.terraform_data.qa_vars_version (modules/vercel/project/main.tf#L168)
-- resource.terraform_data.shared_vars_version (modules/vercel/project/main.tf#L180)
-- resource.terraform_data.uat_vars_version (modules/vercel/project/main.tf#L172)
-- resource.vercel_custom_environment.uat (modules/vercel/project/main.tf#L154)
-- resource.vercel_project.this (modules/vercel/project/main.tf#L135)
-- resource.vercel_project_domain.prod (modules/vercel/project/main.tf#L319)
-- resource.vercel_project_domain.qa (modules/vercel/project/main.tf#L297)
-- resource.vercel_project_domain.uat (modules/vercel/project/main.tf#L310)
-- resource.vercel_project_environment_variable.prod (modules/vercel/project/main.tf#L231)
-- resource.vercel_project_environment_variable.qa (modules/vercel/project/main.tf#L186)
-- resource.vercel_project_environment_variable.shared (modules/vercel/project/main.tf#L258)
-- resource.vercel_project_environment_variable.shared_uat (modules/vercel/project/main.tf#L276)
-- resource.vercel_project_environment_variable.uat (modules/vercel/project/main.tf#L210)
+- resource.terraform_data.env_key_uniqueness (modules/vercel/project/main.tf#L120)
+- resource.terraform_data.prod_vars_version (modules/vercel/project/main.tf#L178)
+- resource.terraform_data.qa_vars_version (modules/vercel/project/main.tf#L170)
+- resource.terraform_data.shared_vars_version (modules/vercel/project/main.tf#L182)
+- resource.terraform_data.uat_vars_version (modules/vercel/project/main.tf#L174)
+- resource.vercel_custom_environment.uat (modules/vercel/project/main.tf#L156)
+- resource.vercel_project.this (modules/vercel/project/main.tf#L137)
+- resource.vercel_project_domain.prod (modules/vercel/project/main.tf#L321)
+- resource.vercel_project_domain.qa (modules/vercel/project/main.tf#L299)
+- resource.vercel_project_domain.uat (modules/vercel/project/main.tf#L312)
+- resource.vercel_project_environment_variable.prod (modules/vercel/project/main.tf#L233)
+- resource.vercel_project_environment_variable.qa (modules/vercel/project/main.tf#L188)
+- resource.vercel_project_environment_variable.shared (modules/vercel/project/main.tf#L260)
+- resource.vercel_project_environment_variable.shared_uat (modules/vercel/project/main.tf#L278)
+- resource.vercel_project_environment_variable.uat (modules/vercel/project/main.tf#L212)
 
 
 ## Inputs

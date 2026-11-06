@@ -156,7 +156,35 @@ aws-organization → aws-security → aws-network → aws-identity
                  → aws-shared-services → aws-backup → aws-workload
 ```
 
-The **minimum governed footprint** is `aws-organization` + `aws-security`; everything from `aws-network` down is additive. `envs/saas` sits deliberately outside the AWS chain — it configures no AWS credentials and is selected purely by whether you apply its workspace.
+That line is one valid apply order. The real constraint is the **dependency DAG** formed by each root's unconditional `terraform_remote_state` reads (an edge means "must be applied first"):
+
+```mermaid
+graph LR
+    subgraph GCP
+      gb[gcp-bootstrap] --> go[gcp-organization]
+      gb --> gp[gcp-projects]
+      go --> gp
+      go --> gn[gcp-network-hub]
+      gp --> gn
+      go --> gw[gcp-workload-env]
+      gp --> gw
+      gn --> gw
+    end
+    subgraph AWS
+      ao[aws-organization] --> as[aws-security]
+      ao --> an[aws-network]
+      ao --> ai[aws-identity]
+      ao --> ass[aws-shared-services]
+      ao --> ab[aws-backup]
+      ao --> aw[aws-workload-env]
+      an --> aw
+      as --> aw
+    end
+    s[saas-name] -. optional secret bridge .-> gw
+    s -. optional secret bridge .-> aw
+```
+
+The **minimum governed footprint** is `aws-organization` + `aws-security`. `aws-identity`, `aws-shared-services` and `aws-backup` are optional leaves; `aws-network` is optional **only if you deploy no `aws-workload-<env>`**, because the workload root reads its Transit Gateway and IPAM pool (and the `aws-security` log archive bucket) unconditionally. The GCP roots are a strict chain: a GCP workload needs all four upstream GCP roots. Layer skipping is not implemented yet; see [provider selection](provider-selection.md#within-a-cloud-the-layers-are-a-dependency-dag-not-independent-add-ons) for the per-root table. `envs/saas` sits deliberately outside both chains — it configures no AWS or Google credentials and is selected purely by whether you apply its workspace; the workload roots read it only when `enable_saas_secret_bridge = true`.
 
 ### Two-phase bootstrap
 

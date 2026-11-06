@@ -11,7 +11,6 @@ variable "project_id" {
 variable "region" {
   description = "The region where the Artifact Registry repositories will be created"
   type        = string
-  default     = "us-central1"
 
   validation {
     condition     = can(regex("^[a-z]+(-[a-z]+[0-9]+)?$", var.region))

@@ -12,9 +12,10 @@ mock_provider "aws" {}
 mock_provider "aws" { alias = "backup" }
 
 variables {
-  management_account_id    = "111111111111" # C4 account guard
-  backup_role_arn          = "arn:aws:iam::111111111111:role/aws-backup-role"
-  restore_testing_role_arn = "arn:aws:iam::444444444444:role/backup-restore-test"
+  landing_zone_name     = "acme"
+  management_account_id = "111111111111" # C4 account guard
+  # backup_role_arn / restore_testing_role_arn omitted: the stage creates both
+  # roles (member-account StackSet role, backup-account restore-testing role).
 }
 
 run "consumes_remote_state_contract" {
@@ -43,4 +44,29 @@ run "consumes_remote_state_contract" {
     condition     = data.terraform_remote_state.aws_organization.outputs.ou_ids["Workloads"] == "ou-abcd-workloads0"
     error_message = "remote-state ou_ids must expose the Workloads OU the org BACKUP_POLICY attaches to"
   }
+}
+
+# landing_zone_name has no default and rejects the upstream placeholders.
+run "rejects_placeholder_landing_zone_name" {
+  command = plan
+
+  variables {
+    landing_zone_name = "ashes"
+  }
+
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = {
+      outputs = {
+        ou_ids = {
+          Workloads = "ou-abcd-workloads0"
+        }
+        account_role_arns = {
+          backup = "arn:aws:iam::444444444444:role/cross-account"
+        }
+      }
+    }
+  }
+
+  expect_failures = [var.landing_zone_name]
 }

@@ -97,6 +97,21 @@ variable "watches" {
       filter       = "protoPayload.serviceName=\"cloudkms.googleapis.com\" AND protoPayload.methodName=\"DestroyCryptoKeyVersion\""
       severity     = "ERROR"
     }
+    kms_key_version_disable = {
+      # Disabling the audit CMEK key version makes the audit store unreadable and
+      # unwritable without destroying anything; it is as damaging as a destroy.
+      display_name = "KMS key version disabled"
+      filter       = "protoPayload.serviceName=\"cloudkms.googleapis.com\" AND protoPayload.methodName=\"UpdateCryptoKeyVersion\" AND protoPayload.request.cryptoKeyVersion.state=\"DISABLED\""
+      severity     = "ERROR"
+    }
+    tag_binding_change = {
+      # Tag-binding / tag-value / tag-key deletion is not supported by IAM deny,
+      # and the admin-containment deny is scoped by a tag: stripping the tag
+      # from the audit keyring would lift the protection. Detection covers it.
+      display_name = "Resource Manager tag binding, value or key deleted"
+      filter       = "protoPayload.serviceName=\"cloudresourcemanager.googleapis.com\" AND protoPayload.methodName:(\"DeleteTagBinding\" OR \"DeleteTagValue\" OR \"DeleteTagKey\")"
+      severity     = "ERROR"
+    }
   }
 
   validation {

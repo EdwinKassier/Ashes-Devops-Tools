@@ -61,6 +61,18 @@ for pf in envs/aws/*/providers.tf; do
   fi
 done
 
+echo "==> Every google/google-beta provider block in envs/gcp/*/providers.tf sets default_labels"
+# The GCP twin of the default_tags check: the canonical label set (managed-by,
+# landing-zone, workspace, environment) is written via provider default_labels.
+for pf in envs/gcp/*/providers.tf; do
+  [ -e "$pf" ] || continue
+  nprov=$(grep -cE '^provider "google(-beta)?"' "$pf" || true)
+  nlabels=$(grep -cE '^[[:space:]]*default_labels[[:space:]]*=' "$pf" || true)
+  if [ "$nprov" -eq 0 ] || [ "$nlabels" -lt "$nprov" ]; then
+    note "$pf: $nprov google provider block(s) but $nlabels default_labels attribute(s)"
+  fi
+done
+
 if [ "$fail" -eq 0 ]; then
   echo "OK: all consistency invariants hold."
 else

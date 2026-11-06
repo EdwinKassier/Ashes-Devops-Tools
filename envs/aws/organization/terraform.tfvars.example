@@ -2,6 +2,11 @@
 # default — you MUST supply them (the two role ARNs, the log-archive bucket
 # name, and real root emails for every account).
 
+# REQUIRED — landing-zone identifier written to the LandingZone tag. No
+# default; the upstream placeholders "ashes" / "my-org" are rejected. Use the
+# same value in every AWS root (tfc-admin: put it in common_workspace_variables).
+landing_zone_name = "acme"
+
 # NB: the Terraform Cloud org that owns this root's workspace is a BACKEND config
 # value, not a tfvars input. Pass it to `terraform init` via backend.hcl or
 # TF_CLI_ARGS_init="-backend-config=organization=<your-tfc-org>" (see backend.tf).
@@ -30,11 +35,15 @@ accounts = {
 #   sandbox = { email = "aws+sandbox@ashes.example.com", ou = "Workloads" }
 # }
 
-# REQUIRED — account-qualified ARN of the Terraform Cloud run role. Carved out of
-# every guardrail deny statement so automation is not locked out.
-terraform_run_role_arn = "arn:aws:iam::111111111111:role/terraform-run"
+# REQUIRED — the MANAGEMENT-account TFC apply role you hand-created in phase-0
+# (docs/runbooks/aws-bootstrap.md Step 2). Carved out of every guardrail deny
+# statement so automation is not locked out. Same ARN as tfc-admin's
+# aws_management_apply_role_arn.
+terraform_run_role_arn = "arn:aws:iam::111111111111:role/tfc-mgmt-apply"
 
-# REQUIRED — account-qualified ARN of the emergency break-glass role.
+# REQUIRED — the management-account break-glass role: hand-created in phase-0,
+# or the role aws-security will create with create_break_glass = true
+# (arn:aws:iam::<mgmt>:role/OrganizationBreakGlass by default).
 break_glass_role_arn = "arn:aws:iam::111111111111:role/break-glass"
 
 # REQUIRED — central log-archive S3 bucket protected by the deny-tamper SCP.
@@ -74,7 +83,10 @@ cost_anomaly_email = "finops@ashes.example.com"
 tfc_organization = "ashes"
 
 # Optional — TFC project the workspaces live in (literal match in the sub claim).
-# tfc_project = "Default Project"
+# If tfc-admin manages the workspaces (enable_projects = true, the default) they
+# live in "<project_name_prefix>aws" = "landing-zone-aws", NOT "Default Project":
+# set this to match or every tfc-plan / tfc-apply AssumeRole is denied.
+# tfc_project = "landing-zone-aws"
 
 # Optional — account key -> bound workspaces. Add one entry per workload account.
 # tfc_workspace_bindings = {

@@ -8,19 +8,25 @@ variables {
 run "default_watches_cover_the_control_plane" {
   command = plan
 
-  # One alert policy per default watch (8 guardrail watches).
+  # One alert policy per default watch (10 guardrail watches).
   assert {
-    condition     = length(google_monitoring_alert_policy.watch) == 8
-    error_message = "the default watch set must create one alert policy per guardrail (8)."
+    condition     = length(google_monitoring_alert_policy.watch) == 10
+    error_message = "the default watch set must create one alert policy per guardrail (10)."
   }
 
   # Each default guardrail is present.
   assert {
     condition = alltrue([
-      for k in ["org_policy_change", "org_iam_change", "vpc_sc_change", "audit_config_change", "log_sink_change", "custom_role_change", "deny_policy_change", "kms_key_destroy"] :
+      for k in ["org_policy_change", "org_iam_change", "vpc_sc_change", "audit_config_change", "log_sink_change", "custom_role_change", "deny_policy_change", "kms_key_destroy", "kms_key_version_disable", "tag_binding_change"] :
       contains(keys(google_monitoring_alert_policy.watch), k)
     ])
     error_message = "the default watches must include org policy, org/folder IAM, VPC-SC, audit config, and log sink changes."
+  }
+
+  # Containment bypass paths that IAM deny cannot block are watched instead.
+  assert {
+    condition     = strcontains(google_monitoring_alert_policy.watch["tag_binding_change"].conditions[0].condition_matched_log[0].filter, "DeleteTagBinding") && strcontains(google_monitoring_alert_policy.watch["kms_key_version_disable"].conditions[0].condition_matched_log[0].filter, "DISABLED")
+    error_message = "tag binding deletion and KMS key-version disable must be watched."
   }
 
   # The org-policy watch is a log-match alert on the orgpolicy service.
@@ -220,7 +226,7 @@ run "cis_log_metrics_can_be_disabled" {
   }
 
   assert {
-    condition     = length(google_logging_metric.cis) == 0 && length(google_monitoring_alert_policy.cis) == 0 && length(google_monitoring_alert_policy.watch) == 8
+    condition     = length(google_logging_metric.cis) == 0 && length(google_monitoring_alert_policy.cis) == 0 && length(google_monitoring_alert_policy.watch) == 10
     error_message = "enable_cis_log_metrics = false must drop only the CIS metrics and alerts."
   }
 }

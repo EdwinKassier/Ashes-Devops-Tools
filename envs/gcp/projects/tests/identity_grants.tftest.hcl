@@ -1,4 +1,4 @@
-# C2 wiring test for the gcp-projects root: the workload / network-hub SAs read
+# Wiring test for the gcp-projects root: the workload / network-hub SAs read
 # from gcp-bootstrap remote state are granted folder roles by the REAL projects
 # stage (not overridden here) — workload SAs on their own env folder only.
 # No GCP credentials required.
@@ -38,7 +38,7 @@ override_data {
         }
       }
       workload_folder_roles = {
-        plan  = ["roles/viewer"]
+        plan  = ["organizations/123/roles/landingZonePlanViewer"]
         apply = ["roles/compute.admin"]
       }
       stage_service_accounts = {
@@ -76,10 +76,10 @@ run "workload_and_network_sas_get_folder_scoped_roles" {
 
   assert {
     condition = output.automation_folder_grants == {
-      "dev|plan|roles/viewer"                    = { folder = "folders/111", role = "roles/viewer" }
-      "dev|apply|roles/compute.admin"            = { folder = "folders/111", role = "roles/compute.admin" }
-      "network|plan|roles/compute.viewer"        = { folder = "folders/100", role = "roles/compute.viewer" }
-      "network|apply|roles/compute.networkAdmin" = { folder = "folders/100", role = "roles/compute.networkAdmin" }
+      "dev|plan|organizations/123/roles/landingZonePlanViewer" = { folder = "folders/111", role = "organizations/123/roles/landingZonePlanViewer" }
+      "dev|apply|roles/compute.admin"                          = { folder = "folders/111", role = "roles/compute.admin" }
+      "network|plan|roles/compute.viewer"                      = { folder = "folders/100", role = "roles/compute.viewer" }
+      "network|apply|roles/compute.networkAdmin"               = { folder = "folders/100", role = "roles/compute.networkAdmin" }
     }
     error_message = "Workload SAs must be granted only on their own env folder and network-hub SAs only on the shared folder; stale envs ignored."
   }

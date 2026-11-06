@@ -130,6 +130,17 @@ module "registry" {
 # =============================================================================
 # RUNTIME IDENTITY — least privilege: no project roles unless asked for
 # =============================================================================
+#
+# Why raw google_service_account here rather than modules/gcp/iam/service-account
+# (and raw WIF pool/provider below rather than modules/gcp/iam/workload-identity):
+# these are for_each over the caller's var.services keys. Wrapping them in a
+# module changes every address (google_service_account.runtime["api"] ->
+# module.runtime_sa["api"]...), and a `moved` block cannot express per-key moves
+# for keys only known from tfvars — a whole-resource `moved` into a for_each
+# module is silently ignored and plans destroy + create. Recreating an SA gives
+# it a new unique_id and drops every binding on it, so that refactor would break
+# live environments. The workload-identity module also differs in behaviour
+# (name-based `sub` condition, extra attribute mappings). Keep these inline.
 
 resource "google_service_account" "runtime" {
   for_each = var.services

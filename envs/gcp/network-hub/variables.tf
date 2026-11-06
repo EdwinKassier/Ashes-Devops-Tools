@@ -23,6 +23,7 @@ variable "environments" {
     budget_monthly_limit    = number
     iam_group_role_bindings = map(set(string))
     labels                  = optional(map(string), {})
+    is_production           = optional(bool, false)
   }))
 
   # Environment keys become project/workspace keys (e.g. "<env>-host",

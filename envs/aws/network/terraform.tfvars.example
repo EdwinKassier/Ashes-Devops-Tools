@@ -2,6 +2,11 @@
 # default — you MUST supply them (the TFC org and the log-archive bucket name).
 # The rest have working defaults you can override.
 
+# REQUIRED — landing-zone identifier written to the LandingZone tag. No
+# default; the upstream placeholders "ashes" / "my-org" are rejected. Use the
+# same value in every AWS root (tfc-admin: put it in common_workspace_variables).
+landing_zone_name = "acme"
+
 # REQUIRED — Terraform Cloud org that owns this root's workspace and the
 # aws-organization workspace it reads. Usually passed to `terraform init` via
 # backend.hcl / TF_CLI_ARGS_init rather than here.

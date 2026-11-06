@@ -129,3 +129,20 @@ output "control_plane_alert_policy_ids" {
   description = "Map of control-plane watch name to alert policy ID."
   value       = module.organization.control_plane_alert_policy_ids
 }
+
+# Per-environment folder-scoped access policies, surfaced by gcp-projects as
+# environment_config[<env>].vpc_sc_access_policy_id for the workload perimeter.
+output "scoped_access_policy_ids" {
+  description = "Map of environment key -> numeric ID of its folder-scoped Access Context Manager policy."
+  value       = module.organization.scoped_access_policy_ids
+}
+
+output "delegated_folder_iam_targets" {
+  description = "Folders on which the gcp-projects apply SA holds the conditional folderIamAdmin, with each folder's role allow-list."
+  value       = module.organization.delegated_folder_iam_targets
+}
+
+output "pam_entitlement_name" {
+  description = "Resource name of the just-in-time org-admin PAM entitlement (null when enable_pam = false)."
+  value       = module.organization.pam_entitlement_name
+}

@@ -6,14 +6,17 @@
 # (auto-deploying to accounts that join the targeted OUs) creates in each member:
 #
 #   - AWS::IAM::OIDCProvider for https://<tfc_hostname> (aud aws.workload.identity)
-#   - <plan_role_name>  (default tfc-plan)  — read-only; trusts ONLY
+#   - <plan_role_name>  (default tfc-plan)  — read-only (ReadOnlyAccess plus an
+#       inline deny on data-plane reads: GetObject/GetSecretValue/Decrypt/...); trusts ONLY
 #       <host>:sub = organization:<org>:project:<project>:workspace:<ws>:run_phase:plan
 #   - <apply_role_name> (default tfc-apply) — apply policy; trusts ONLY
 #       <host>:sub = organization:<org>:project:<project>:workspace:<ws>:run_phase:apply
 #       capped by a permissions boundary (default: the embedded TfcApplyBoundary
 #       managed policy) so the apply identity cannot leave the org, blind the
-#       detective controls, rewrite its own trust/boundary, or mint long-lived
-#       IAM user credentials, while every other action stays allowed.
+#       detective controls, rewrite its own trust/boundary, mint long-lived
+#       IAM user credentials, or create/grant to a role that does not carry
+#       the same boundary (boundary propagation); every other action stays
+#       allowed.
 #
 # One template serves every account. Per-account workspace scoping is compiled
 # into the template as CloudFormation Conditions keyed on AWS::AccountId, so a
@@ -86,12 +89,41 @@ locals {
     "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:role/${var.plan_role_name}",
     "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:role/${var.apply_role_name}",
     "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:oidc-provider/${var.tfc_hostname}",
-    "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:policy/${var.apply_boundary_policy_name}",
+    local.apply_boundary_arn_sub,
   ]
+
+  # The embedded boundary's own ARN (CloudFormation Fn::Sub string).
+  apply_boundary_arn_sub = "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:policy/${var.apply_boundary_policy_name}"
+
+  # "Boundary must propagate": without these, the apply identity could create an
+  # unbounded role, attach AdministratorAccess to it and assume it — escaping
+  # every deny above. Every role tfc-apply creates (or grants permissions to)
+  # must carry this same boundary, and no boundary may be removed. Consequence:
+  # modules applied by tfc-apply in member accounts must set
+  # permissions_boundary = arn:<partition>:iam::<account>:policy/<apply_boundary_policy_name>
+  # on every aws_iam_role they create.
+  # (for-expression filter, not a ternary: the two statements differ in shape.)
+  apply_boundary_propagation_statements = [for s in [
+    {
+      Sid      = "DenyRoleWithoutApplyBoundary"
+      Effect   = "Deny"
+      Action   = ["iam:CreateRole", "iam:PutRolePermissionsBoundary", "iam:AttachRolePolicy", "iam:PutRolePolicy"]
+      Resource = "*"
+      Condition = {
+        StringNotEquals = { "iam:PermissionsBoundary" = { "Fn::Sub" = local.apply_boundary_arn_sub } }
+      }
+    },
+    {
+      Sid      = "DenyPermissionsBoundaryRemoval"
+      Effect   = "Deny"
+      Action   = ["iam:DeleteRolePermissionsBoundary", "iam:DeleteUserPermissionsBoundary"]
+      Resource = "*"
+    },
+  ] : s if var.enable_apply_boundary_propagation]
 
   apply_boundary_document = {
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         # A boundary is an intersection: everything not denied below remains
         # grantable by the role's identity policies (apply_role_policy_arns).
@@ -165,7 +197,9 @@ locals {
         Action   = ["iam:CreateUser", "iam:CreateAccessKey", "iam:CreateLoginProfile"]
         Resource = "*"
       },
-    ]
+      ],
+      local.apply_boundary_propagation_statements,
+    )
   }
 
   apply_boundary_resource = local.create_apply_boundary ? {
@@ -187,6 +221,57 @@ locals {
     { for _ in(var.enable_apply_permissions_boundary && var.apply_permissions_boundary_arn != null ? [1] : []) : "PermissionsBoundary" => var.apply_permissions_boundary_arn },
   )
 
+  # --- Plan-role data-plane read deny ---------------------------------------
+  # ReadOnlyAccess includes data-plane reads (s3:GetObject, GetSecretValue,
+  # dynamodb:Scan, ...). Speculative PR plans run as tfc-plan, so an inline deny
+  # keeps the plan identity to control-plane metadata. Trade-off: planning a
+  # resource whose refresh reads data (aws_s3_object, aws_secretsmanager_secret_version,
+  # aws_ssm_parameter, ...) fails unless its ARN is in plan_role_data_read_exempt_arns.
+  plan_role_data_read_deny_actions = [
+    "s3:GetObject*",
+    "secretsmanager:GetSecretValue",
+    "secretsmanager:BatchGetSecretValue",
+    "ssm:GetParameter*",
+    "kms:Decrypt",
+    "dynamodb:GetItem",
+    "dynamodb:BatchGetItem",
+    "dynamodb:Query",
+    "dynamodb:Scan",
+    "dynamodb:PartiQLSelect",
+    "dynamodb:GetRecords",
+    "sqs:ReceiveMessage",
+    "kinesis:GetRecords",
+    "logs:GetLogEvents",
+    "logs:FilterLogEvents",
+    "logs:StartQuery",
+    "logs:GetQueryResults",
+    "logs:StartLiveTail",
+    "rds-data:*",
+    "redshift-data:GetStatementResult",
+    "athena:GetQueryResults",
+    "ecr:GetDownloadUrlForLayer",
+    "ecr:BatchGetImage",
+  ]
+
+  # The plan role's Policies property ({} = omitted).
+  plan_role_policies_property = {
+    for _ in(var.enable_plan_role_data_read_deny ? [1] : []) : "Policies" => [{
+      PolicyName = "deny-data-plane-reads"
+      PolicyDocument = {
+        Version = "2012-10-17"
+        Statement = [merge(
+          {
+            Sid    = "DenyDataPlaneReads"
+            Effect = "Deny"
+            Action = local.plan_role_data_read_deny_actions
+          },
+          { for _ in(length(var.plan_role_data_read_exempt_arns) > 0 ? [] : [1]) : "Resource" => "*" },
+          { for _ in(length(var.plan_role_data_read_exempt_arns) > 0 ? [1] : []) : "NotResource" => var.plan_role_data_read_exempt_arns },
+        )]
+      }
+    }]
+  }
+
   oidc_provider = {
     TfcOidcProvider = {
       Type = "AWS::IAM::OIDCProvider"
@@ -205,13 +290,16 @@ locals {
       "TfcPlanRole${local.logical_suffix[k]}" = {
         Type      = "AWS::IAM::Role"
         Condition = "Is${local.logical_suffix[k]}"
-        Properties = {
-          RoleName                 = var.plan_role_name
-          Description              = "Terraform Cloud PLAN phase (read-only) for ${k}"
-          AssumeRolePolicyDocument = local.trust_policies[k]["plan"]
-          ManagedPolicyArns        = var.plan_role_policy_arns
-          MaxSessionDuration       = var.max_session_duration
-        }
+        Properties = merge(
+          {
+            RoleName                 = var.plan_role_name
+            Description              = "Terraform Cloud PLAN phase (read-only) for ${k}"
+            AssumeRolePolicyDocument = local.trust_policies[k]["plan"]
+            ManagedPolicyArns        = var.plan_role_policy_arns
+            MaxSessionDuration       = var.max_session_duration
+          },
+          local.plan_role_policies_property,
+        )
       }
       "TfcApplyRole${local.logical_suffix[k]}" = {
         Type      = "AWS::IAM::Role"

@@ -89,13 +89,20 @@ variable "security_workspace_name" {
 }
 
 variable "config_role_arn" {
-  description = "ARN of the IAM role AWS Config assumes to record resource configurations in this workload account/Region."
+  description = "ARN of the IAM role AWS Config assumes to record resource configurations in this account/Region. Null (default) uses the account's AWSServiceRoleForConfig service-linked role (created unless create_config_service_linked_role = false)."
   type        = string
+  default     = null
 
   validation {
-    condition     = length(trimspace(var.config_role_arn)) > 0
-    error_message = "config_role_arn must be a non-empty IAM role ARN."
+    condition     = var.config_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", coalesce(var.config_role_arn, "x")))
+    error_message = "config_role_arn must be null or an account-qualified IAM role ARN."
   }
+}
+
+variable "create_config_service_linked_role" {
+  description = "With config_role_arn = null, create the AWSServiceRoleForConfig service-linked role in the workload account. Set false if Config was ever enabled in the account (the SLR already exists)."
+  type        = bool
+  default     = true
 }
 
 variable "kms_key_arn" {
@@ -186,13 +193,17 @@ variable "saas_secret_reader_arns" {
 # -----------------------------------------------------------------------------
 
 variable "landing_zone_name" {
-  description = "Landing-zone identifier written to the LandingZone tag on every resource."
+  description = "Landing-zone identifier written to the LandingZone tag on every resource. No default: set your own organization's identifier (same value in every AWS root; set it once in the tfc-admin common variable set via common_workspace_variables). The upstream placeholders \"ashes\" and \"my-org\" are rejected."
   type        = string
-  default     = "ashes"
 
   validation {
-    condition     = length(trimspace(var.landing_zone_name)) > 0
-    error_message = "landing_zone_name must be a non-empty string."
+    condition     = can(regex("^[a-z][a-z0-9-]{1,30}$", var.landing_zone_name))
+    error_message = "landing_zone_name must be 2-31 chars: a lowercase letter, then lowercase letters, digits or hyphens."
+  }
+
+  validation {
+    condition     = !contains(["ashes", "my-org"], lower(var.landing_zone_name))
+    error_message = "landing_zone_name is still an upstream placeholder (ashes / my-org). Set your own landing-zone identifier."
   }
 }
 

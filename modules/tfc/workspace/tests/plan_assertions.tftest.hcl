@@ -36,6 +36,27 @@ run "workspace_configured" {
     condition     = tfe_variable.this["tfc_organization"].category == "terraform" && tfe_variable.this["TFC_AWS_PROVIDER_AUTH"].category == "env"
     error_message = "variable categories must be wired through (terraform vs env)."
   }
+
+  assert {
+    condition     = output.variable_values == { tfc_organization = "acme", TFC_AWS_PROVIDER_AUTH = "true" }
+    error_message = "variable_values must expose the non-sensitive values."
+  }
+}
+
+run "variable_values_omit_sensitive" {
+  command = plan
+
+  variables {
+    variables = {
+      region = { value = "eu-west-2", category = "terraform" }
+      token  = { value = "s3cr3t", category = "env", sensitive = true }
+    }
+  }
+
+  assert {
+    condition     = !contains(keys(output.variable_values), "token") && output.variable_values["region"] == "eu-west-2"
+    error_message = "sensitive variables must not appear in variable_values."
+  }
 }
 
 # Opt-in run notifications (audit M-ops): default off, and a configured one wires

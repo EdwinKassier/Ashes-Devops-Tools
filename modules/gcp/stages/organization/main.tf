@@ -1,29 +1,43 @@
 # Organization Structure
+#
+# Standing org/billing admin goes to GROUPS only. Individual user principals
+# (admin_email, break_glass_user) are granted only with the explicit
+# allow_user_principals_for_break_glass escape hatch; prefer a break-glass group
+# plus the just-in-time PAM entitlement (pam.tf) for human elevation.
+locals {
+  admin_user_members = var.allow_user_principals_for_break_glass ? distinct(concat(
+    ["user:${var.admin_email}"],
+    var.break_glass_user != null ? ["user:${var.break_glass_user}"] : [],
+  )) : []
+
+  org_admin_members = distinct(concat(
+    [for group in var.organization_admin_groups : "group:${group}"],
+    local.admin_user_members,
+  ))
+
+  billing_admin_members = distinct(concat(
+    [for group in var.billing_admin_groups : "group:${group}"],
+    var.allow_user_principals_for_break_glass ? ["user:${var.admin_email}"] : [],
+  ))
+
+  production_environment_keys = sort([for k, e in var.environments : k if e.is_production])
+}
+
 module "organization" {
   source = "../../iam/organization"
 
   domain     = var.domain
   project_id = var.admin_project_id
 
-  # Default organization admins
-  org_admin_members = distinct(concat(
-    ["user:${var.admin_email}"],
-    var.break_glass_user != null ? ["user:${var.break_glass_user}"] : [],
-    [for group in var.organization_admin_groups : "group:${group}"]
-  ))
-
-  # Default billing admins
-  billing_admin_members = distinct(concat(
-    ["user:${var.admin_email}"],
-    [for group in var.billing_admin_groups : "group:${group}"]
-  ))
+  org_admin_members     = local.org_admin_members
+  billing_admin_members = local.billing_admin_members
 
   # Organizational Units (excluding projects, they are created later)
   organizational_units = var.environments
 }
 
 # LEGACY: grant the phase-0 bootstrap SA (terraform-admin) rights on every folder.
-# Superseded by the per-stage plan/apply service accounts (audit C2): gcp-projects
+# Superseded by the per-stage plan/apply service accounts: gcp-projects
 # creates projects as projects-apply (org-level projectCreator/billing) and grants
 # the network-hub and wl-<env> SAs their folder roles. Off by default so the
 # bootstrap identity holds no standing folder-admin rights; enable only while
@@ -168,6 +182,16 @@ module "control_plane_alerting" {
   enable_cis_log_metrics = var.enable_cis_log_metrics
 }
 
+# Production needs the containment deny policy: without it the automation
+# identity can retarget the audit sink, untag and delete the audit store or empty
+# a perimeter. Warn (never fail) so a non-prod bootstrap still applies.
+check "production_requires_admin_containment" {
+  assert {
+    condition     = length(local.production_environment_keys) == 0 || var.enable_admin_containment
+    error_message = "Production environments (${join(", ", local.production_environment_keys)}) exist but enable_admin_containment = false: the audit store and VPC-SC perimeters are not protected from the automation identity. Enable it with a real break-glass group (examples/presets/prod-gcp-organization.tfvars). The WORM lock (enable_audit_bucket_lock) stays a separate, irreversible opt-in."
+  }
+}
+
 check "control_plane_alerts_have_a_destination" {
   assert {
     condition     = !var.enable_control_plane_alerting || length(var.alert_notification_emails) + length(var.alert_notification_channels) > 0
@@ -207,18 +231,18 @@ module "tags" {
       description = "Data sensitivity level per the organization data classification policy"
     }
     }, var.enable_admin_containment ? {
-    # C3: marks the audit store (buckets + CMEK keyring) for the tag-conditioned
+    # Marks the audit store (buckets + CMEK keyring) for the tag-conditioned
     # containment deny rule. IAM deny conditions can only match resource tags.
     "containment" = {
       values      = ["protected"]
-      description = "Resources protected by the admin-containment IAM deny policy (audit C3). Do not bind elsewhere without review."
+      description = "Resources protected by the admin-containment IAM deny policy. Do not bind elsewhere without review."
     }
   } : {})
 }
 
 # Organization Policies (Governance)
 locals {
-  # H1/M2: opt-in CMEK-required org policy (gcp.restrictNonCmekServices). Default
+  # Opt-in CMEK-required org policy (gcp.restrictNonCmekServices). Default
   # off (empty list), so a default apply is unchanged. Enable with
   # var.enable_cmek_org_policy; the hardening preset turns it on. Admins choose
   # which services require CMEK via var.cmek_required_services.
@@ -232,7 +256,7 @@ locals {
     }
   ] : []
 
-  # C2/C3: opt-in containment of the automation (Terraform-admin) identity. A
+  # Opt-in containment of the automation (Terraform-admin) identity. A
   # CI/WIF compromise of that SA could otherwise erase or blind the audit trail
   # and remove the VPC-SC data perimeter. Two deny rules, both exempting only
   # containment_exempt_principals (break-glass):
@@ -247,9 +271,11 @@ locals {
   #     empty a perimeter. Sink/perimeter CREATION stays allowed.
   #  2. TAG-SCOPED to the audit store (tag containment/protected, bound to the
   #     audit + access-log buckets and the audit CMEK keyring in containment.tf):
-  #     bucket delete/IAM change, object delete, key-version destroy, key IAM
-  #     change. IAM deny conditions can ONLY match resource tags, so the tag is
-  #     how the deny is scoped to the audit bucket rather than every bucket.
+  #     bucket delete/IAM change, bucket tag-binding delete (so the tag that
+  #     scopes this rule cannot be stripped first), object delete, key-version
+  #     destroy and disable (cryptoKeyVersions.update), key IAM change. IAM deny
+  #     conditions can ONLY match resource tags, so the tag is how the deny is
+  #     scoped to the audit bucket rather than every bucket.
   #
   # Permissions requested but OMITTED because they are not in the IAM deny
   # supported-permissions list (docs.cloud.google.com/iam/docs/deny-permissions-support):
@@ -258,13 +284,18 @@ locals {
   #  - accesscontextmanager.accessPolicies.delete — the supported name is
   #    accesscontextmanager.googleapis.com/policies.delete (used below; the
   #    previous accessPolicies.delete string was invalid).
+  #  - resourcemanager.tagValueBindings.delete / tagValues.delete / tagKeys.delete
+  #    and cloudkms keyRings.deleteTagBinding — not deny-supported. The bucket
+  #    tag binding IS protected (storage buckets.deleteTagBinding); the keyring
+  #    binding and the tag key/value are covered by the control-plane watch
+  #    "tag_binding_change" (a tag value with live bindings cannot be deleted).
   # orgpolicy.policy.set is deliberately NOT denied: Terraform sets org policies
   # every time the baseline changes; the org_policy_change watch covers it.
   # Default off: enable only after validating on a non-prod org.
   containment_deny_policy = var.enable_admin_containment ? [
     {
       name         = "contain-admin-identity"
-      display_name = "Contain automation identity (audit C2/C3)"
+      display_name = "Contain automation identity"
       rules = [
         {
           description       = "Org-wide: deny mutation of logging sinks/exclusions/log buckets and VPC-SC perimeters to all but break-glass."
@@ -286,13 +317,15 @@ locals {
           denial_condition     = null
         },
         {
-          description       = "Audit store (tag containment/protected): deny bucket delete/IAM change, object delete, key-version destroy and key IAM change to all but break-glass."
+          description       = "Audit store (tag containment/protected): deny bucket delete/IAM change/untag, object delete, key-version destroy/disable and key IAM change to all but break-glass."
           denied_principals = ["principalSet://goog/public:all"]
           denied_permissions = [
             "storage.googleapis.com/buckets.delete",
             "storage.googleapis.com/buckets.setIamPolicy",
+            "storage.googleapis.com/buckets.deleteTagBinding",
             "storage.googleapis.com/objects.delete",
             "cloudkms.googleapis.com/cryptoKeyVersions.destroy",
+            "cloudkms.googleapis.com/cryptoKeyVersions.update",
             "cloudkms.googleapis.com/cryptoKeys.setIamPolicy",
           ]
           exception_principals = var.containment_exempt_principals

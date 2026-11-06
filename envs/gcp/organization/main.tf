@@ -3,6 +3,7 @@ locals {
     display_name            = "Shared Services"
     description             = "Shared platform services"
     iam_group_role_bindings = var.shared_iam_group_role_bindings
+    is_production           = false
   }
 
   organization_units = merge(
@@ -14,6 +15,7 @@ locals {
         display_name            = env.display_name
         description             = "${env.display_name} environment"
         iam_group_role_bindings = env.iam_group_role_bindings
+        is_production           = env.is_production
       }
     }
   )
@@ -44,6 +46,30 @@ module "organization" {
   organization_admin_groups        = var.organization_admin_groups
   billing_admin_groups             = var.billing_admin_groups
 
+  # Standing admin is group-only; user principals only via the escape hatch.
+  allow_user_principals_for_break_glass = var.allow_user_principals_for_break_glass
+
+  # Just-in-time org admin (Privileged Access Manager), opt-in.
+  enable_pam               = var.enable_pam
+  pam_eligible_groups      = var.pam_eligible_groups
+  pam_approver_groups      = var.pam_approver_groups
+  pam_max_request_duration = var.pam_max_request_duration
+
+  # Per-environment folder-scoped VPC-SC access policies; each environment's
+  # workload SAs get rights on their own policy only. try() keeps an older
+  # gcp-bootstrap state (no such outputs) planning with no grants.
+  enable_scoped_access_policies = var.enable_scoped_access_policies
+  workload_service_accounts = {
+    for env, sas in try(local.bootstrap.workload_service_accounts, {}) : env => sas
+    if contains(keys(var.environments), env)
+  }
+
+  # projects-apply delegated folder IAM, bound on each environment folder and the
+  # shared folder (not the org node).
+  projects_apply_service_account  = try(local.bootstrap.stage_service_accounts["projects"].apply, null)
+  delegated_workload_folder_roles = try(local.bootstrap.delegated_workload_folder_roles, [])
+  delegated_network_folder_roles  = try(local.bootstrap.delegated_network_folder_roles, [])
+
   default_region                        = var.default_region
   allowed_regions                       = var.allowed_regions
   strict_folder_policy_environment_keys = var.strict_folder_policy_environment_keys
@@ -54,38 +80,38 @@ module "organization" {
   monthly_budget_amount                 = var.monthly_budget_amount
   budget_currency                       = var.budget_currency
 
-  # Audit G4/C3: dedicated logging project for the org audit sink, bucket, audit
+  # Dedicated logging project for the org audit sink, bucket, audit
   # CMEK and control-plane alerts (default null = admin project).
   logging_project_id     = var.logging_project_id
   logging_project_number = var.logging_project_number
 
-  # M-4: soft delete on the audit buckets (Object Versioning is always on unless
+  # Soft delete on the audit buckets (Object Versioning is always on unless
   # the WORM lock is enabled, which GCS does not allow together with versioning).
   audit_soft_delete_retention_days = var.audit_soft_delete_retention_days
 
-  # Security High: control-plane alerting (on by default).
+  # Control-plane alerting (on by default).
   enable_control_plane_alerting = var.enable_control_plane_alerting
   alert_notification_emails     = var.alert_notification_emails
   alert_notification_channels   = var.alert_notification_channels
   break_glass_principal_emails  = var.break_glass_principal_emails
   enable_cis_log_metrics        = var.enable_cis_log_metrics
 
-  # G6: opt-in custom org-policy constraints (default [] = none).
+  # Opt-in custom org-policy constraints (default [] = none).
   custom_org_constraints = var.custom_org_constraints
 
-  # G8: opt-in WORM lock on the audit-log bucket (default false).
+  # Opt-in WORM lock on the audit-log bucket (default false; irreversible).
   enable_audit_bucket_lock = var.enable_audit_bucket_lock
 
-  # G9: opt-in IAM deny policies at the org node (default [] = none).
+  # Opt-in IAM deny policies at the org node (default [] = none).
   iam_deny_policies = var.iam_deny_policies
 
-  # H1/M2: opt-in org-wide CMEK enforcement (default off). The prod-hardening
+  # Opt-in org-wide CMEK enforcement (default off). The prod-hardening
   # preset turns this on.
   enable_cmek_org_policy = var.enable_cmek_org_policy
   cmek_required_services = var.cmek_required_services
 
-  # C2/C3: opt-in containment of the automation identity (default off; the prod
-  # preset turns it on). Set containment_exempt_principals to your break-glass
+  # Opt-in containment of the automation identity (default off; the prod preset
+  # turns it on, and a check warns when an is_production environment lacks it). Set containment_exempt_principals to your break-glass
   # principal when enabling — placeholders are rejected.
   enable_admin_containment      = var.enable_admin_containment
   containment_exempt_principals = var.containment_exempt_principals

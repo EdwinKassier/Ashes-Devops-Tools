@@ -1,46 +1,21 @@
-# Advisory: no Cloud Storage bucket may be publicly reachable.
-#   - google_storage_bucket must set public_access_prevention = "enforced".
-#   - no bucket IAM grant to allUsers / allAuthenticatedUsers.
-# Input is the HCP Terraform OPA document; input.plan is the JSON plan.
+# MANDATORY: Cloud Storage buckets must be private by construction.
+#   - uniform_bucket_level_access = true (no per-object ACLs)
+#   - public_access_prevention    = "enforced"
+# Public IAM grants on buckets are covered by gcp_iam_no_public_members.
 package terraform.policies.gcs_no_public_buckets
 
 import rego.v1
 
-import input.plan as plan
+import data.terraform.lib
 
-public_members := {"allUsers", "allAuthenticatedUsers"}
-
-bucket_iam_types := {
-	"google_storage_bucket_iam_member",
-	"google_storage_bucket_iam_binding",
-}
-
-writes(rc) if {
-	some action in rc.change.actions
-	action in {"create", "update"}
+required := {
+	"public_access_prevention": "enforced",
+	"uniform_bucket_level_access": true,
 }
 
 deny contains msg if {
-	some rc in plan.resource_changes
-	rc.type == "google_storage_bucket"
-	writes(rc)
-	rc.change.after.public_access_prevention != "enforced"
-	msg := sprintf("%s: public_access_prevention must be \"enforced\"", [rc.address])
-}
-
-deny contains msg if {
-	some rc in plan.resource_changes
-	rc.type in bucket_iam_types
-	writes(rc)
-	some member in members(rc.change.after)
-	member in public_members
-	msg := sprintf("%s: grants bucket access to public principal %s", [rc.address, member])
-}
-
-# iam_binding carries a members list; iam_member a single member string.
-members(after) := after.members if is_array(after.members)
-
-members(after) := [after.member] if {
-	not is_array(after.members)
-	is_string(after.member)
+	some rc in lib.written_of_type("google_storage_bucket")
+	some attr, want in required
+	lib.known_and_not(rc, attr, want)
+	msg := sprintf("%s: %s must be %v", [rc.address, attr, want])
 }

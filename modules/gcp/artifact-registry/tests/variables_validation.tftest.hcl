@@ -4,6 +4,7 @@
 mock_provider "google" {}
 
 variables {
+  region       = "us-central1"
   project_id   = "mock-project"
   kms_key_name = "projects/mock-project/locations/us-central1/keyRings/test-ring/cryptoKeys/test-key"
   repositories = {}

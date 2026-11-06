@@ -153,3 +153,13 @@ run "invalid_boundary_arn_rejected" {
 
   expect_failures = [var.apply_permissions_boundary_arn]
 }
+
+run "service_wide_data_read_exemption_rejected" {
+  command = plan
+
+  variables {
+    plan_role_data_read_exempt_arns = ["arn:aws:s3:::*"]
+  }
+
+  expect_failures = [var.plan_role_data_read_exempt_arns]
+}

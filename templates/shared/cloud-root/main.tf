@@ -24,5 +24,5 @@
 # subscription IDs) come from the remote state above — never hard-coded.
 #
 # module "stage" {
-#   source = "../../modules/<cloud>/stages/<layer>"
+#   source = "../../../modules/<cloud>/stages/<layer>" # envs/<cloud>/<layer> -> repo root
 # }

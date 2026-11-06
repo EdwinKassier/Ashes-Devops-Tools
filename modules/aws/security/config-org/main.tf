@@ -17,6 +17,52 @@
 # provider-level `region` argument (AWS provider v6 enhanced Region support), so
 # no per-Region provider aliases are required.
 
+locals {
+  use_service_linked_role    = var.config_role_arn == null
+  create_service_linked_role = local.use_service_linked_role && var.create_service_linked_role
+  create_aggregator_role     = !var.recorder_only && (var.aggregator_role_arn == null || var.aggregator_role_arn == "")
+
+  # The recorder role: an explicit ARN, else the account's service-linked role
+  # at its well-known path (created below, or pre-existing). Built from the
+  # caller identity rather than the SLR resource so it is plan-known.
+  config_role_arn = local.use_service_linked_role ? "arn:${var.partition}:iam::${coalesce(var.account_id, try(data.aws_caller_identity.current[0].account_id, null))}:role/aws-service-role/config.amazonaws.com/AWSServiceRoleForConfig" : var.config_role_arn
+
+  aggregator_role_arn = local.create_aggregator_role ? aws_iam_role.aggregator[0].arn : var.aggregator_role_arn
+}
+
+data "aws_caller_identity" "current" {
+  count = local.use_service_linked_role && var.account_id == null ? 1 : 0
+}
+
+# AWS Config service-linked role (AWSServiceRoleForConfig): the AWS-recommended
+# recorder identity. It is account-global, so one per account covers every
+# per-Region recorder below.
+resource "aws_iam_service_linked_role" "config" {
+  count            = local.create_service_linked_role ? 1 : 0
+  aws_service_name = "config.amazonaws.com"
+}
+
+# Organization aggregator role: trusted by config.amazonaws.com, with the AWS
+# managed AWSConfigRoleForOrganizations policy (organizations:Describe*/List*).
+resource "aws_iam_role" "aggregator" {
+  count = local.create_aggregator_role ? 1 : 0
+  name  = var.aggregator_role_name
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "config.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "aggregator" {
+  count      = local.create_aggregator_role ? 1 : 0
+  role       = aws_iam_role.aggregator[0].name
+  policy_arn = "arn:${var.partition}:iam::aws:policy/service-role/AWSConfigRoleForOrganizations"
+}
+
 resource "aws_config_configuration_recorder" "this" {
   # checkov:skip=CKV2_AWS_48:Recording all supported resource types IS the default —
   #   recording_group.all_supported = var.record_all_supported, which defaults to true.
@@ -27,7 +73,7 @@ resource "aws_config_configuration_recorder" "this" {
   for_each = toset(var.aws_enabled_regions)
   name     = var.recorder_name
   region   = each.value
-  role_arn = var.config_role_arn
+  role_arn = local.config_role_arn
 
   recording_group {
     all_supported = var.record_all_supported
@@ -38,6 +84,9 @@ resource "aws_config_configuration_recorder" "this" {
     # include_global_resource_types is only valid when all_supported = true.
     include_global_resource_types = (each.value == var.home_region) && var.record_all_supported
   }
+
+  # The service-linked role must exist before the recorder references it.
+  depends_on = [aws_iam_service_linked_role.config]
 }
 
 resource "aws_config_delivery_channel" "this" {
@@ -66,8 +115,12 @@ resource "aws_config_configuration_aggregator" "org" {
 
   organization_aggregation_source {
     all_regions = true
-    role_arn    = var.aggregator_role_arn
+    role_arn    = local.aggregator_role_arn
   }
+
+  # IAM is eventually consistent: the managed policy must be attached before the
+  # aggregator first assumes the role.
+  depends_on = [aws_iam_role_policy_attachment.aggregator]
 }
 
 resource "aws_config_organization_conformance_pack" "this" {

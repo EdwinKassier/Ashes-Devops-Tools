@@ -40,3 +40,17 @@ updates:
       - "dependencies"
       - "terraform"
     open-pull-requests-limit: 5
+
+  # Hash-locked CI tooling (commitizen for the conventional-commit check).
+  # Dependabot regenerates the --generate-hashes lock from commitizen.in.
+  - package-ecosystem: "pip"
+    directory: "/.github/requirements"
+    schedule:
+      interval: "weekly"
+    groups:
+      ci-python:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - "dependencies"

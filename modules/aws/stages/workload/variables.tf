@@ -185,13 +185,20 @@ variable "log_archive_bucket_name" {
 }
 
 variable "config_role_arn" {
-  description = "ARN of the IAM role AWS Config assumes to record resource configurations in this account/Region."
+  description = "ARN of the IAM role AWS Config assumes to record resource configurations in this account/Region. Null (default) uses the account's AWSServiceRoleForConfig service-linked role (created unless create_config_service_linked_role = false)."
   type        = string
+  default     = null
 
   validation {
-    condition     = length(trimspace(var.config_role_arn)) > 0
-    error_message = "config_role_arn must be a non-empty IAM role ARN."
+    condition     = var.config_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", coalesce(var.config_role_arn, "x")))
+    error_message = "config_role_arn must be null or an account-qualified IAM role ARN."
   }
+}
+
+variable "create_config_service_linked_role" {
+  description = "With config_role_arn = null, create the AWSServiceRoleForConfig service-linked role in the workload account. Set false if Config was ever enabled in the account (the SLR already exists)."
+  type        = bool
+  default     = true
 }
 
 variable "kms_key_arn" {

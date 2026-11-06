@@ -82,14 +82,19 @@ resource "google_secret_manager_secret" "this" {
 resource "google_secret_manager_secret_version" "this" {
   # for_each cannot take a sensitive value; iterate the (non-secret) names and
   # look the sensitive value up by key so only secret_data stays sensitive.
-  for_each = nonsensitive(toset(keys(var.secret_values)))
+  # Secrets flagged ephemeral_value join the set from var.secrets (non-ephemeral),
+  # since an ephemeral map's keys cannot drive for_each.
+  for_each = setunion(
+    nonsensitive(toset(keys(var.secret_values))),
+    toset([for name, cfg in var.secrets : name if cfg.ephemeral_value]),
+  )
 
   secret = google_secret_manager_secret.this[each.key].id
 
   # Write-only (Terraform >= 1.11): the plaintext is sent to the API but NEVER
   # persisted in plan or state. Bump secret_value_versions[<name>] to push a new
   # value (write-only attributes cannot be diffed).
-  secret_data_wo         = var.secret_values[each.key]
+  secret_data_wo         = var.secrets[each.key].ephemeral_value ? var.ephemeral_secret_values[each.key] : var.secret_values[each.key]
   secret_data_wo_version = lookup(var.secret_value_versions, each.key, 1)
 }
 

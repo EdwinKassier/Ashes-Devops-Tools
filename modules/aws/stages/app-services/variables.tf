@@ -96,10 +96,22 @@ variable "services" {
     the shared ALB, and optionally a GitHub Actions deploy role (github) and an
     Aurora PostgreSQL cluster (database). Empty (default) creates nothing.
 
-    github.subject overrides the OIDC subject for repositories that use a
-    customised sub claim template (e.g. one including repository_id or
-    job_workflow_ref); otherwise the subject is
-    repo:<repository>:environment:<environment> (or :ref:<ref> when ref is set).
+    github OIDC subject precedence:
+      1. github.subject — an exact sub for any other customised claim template.
+      2. github.repository_id + github.repository_owner_id (RECOMMENDED default
+         when set) — immutable numeric IDs, so renaming/transferring a repo or
+         re-creating a deleted name cannot inherit the trust:
+           repository_owner_id:<owner_id>:repository_id:<repo_id>:environment:<env>
+         (or :ref:<ref> when ref is set). Requires a ONE-TIME customisation of
+         the repo's sub claim template:
+           gh api -X PUT repos/<org>/<repo>/actions/oidc/customization/sub \
+             -F use_default=false \
+             -f 'include_claim_keys[]=repository_owner_id' \
+             -f 'include_claim_keys[]=repository_id' \
+             -f 'include_claim_keys[]=context'
+         IDs: gh api repos/<org>/<repo> --jq '.owner.id, .id'.
+      3. Fallback: repo:<repository>:environment:<environment> (or :ref:<ref>) —
+         the default GitHub template; name-based, so mutable.
   EOT
   type = map(object({
     # Image the FIRST task-definition revision runs. null => <ecr-repo>:bootstrap
@@ -135,6 +147,11 @@ variable "services" {
       environment = optional(string) # GitHub environment; null => var.environment
       ref         = optional(string) # e.g. refs/heads/main; used instead of environment
       subject     = optional(string) # exact sub for a customised claim template
+
+      # Immutable numeric IDs (set both): switches the sub to the ID-based
+      # customised template. See the description for the one-time gh setup.
+      repository_id       = optional(string)
+      repository_owner_id = optional(string)
     }))
 
     # Aurora PostgreSQL for this service. null => none.
@@ -145,7 +162,7 @@ variable "services" {
       enable_serverless_v2    = optional(bool, true)
       serverless_min_capacity = optional(number, 0.5)
       serverless_max_capacity = optional(number, 4)
-      database_name           = optional(string) # null => service name with _ for -
+      database_name           = optional(string) # null => service name, hyphens replaced by underscores
       backup_retention_period = optional(number, 7)
       deletion_protection     = optional(bool, true)
       skip_final_snapshot     = optional(bool, false)
@@ -182,6 +199,17 @@ variable "services" {
       )
     ])
     error_message = "services[*].github subject/ref/environment must not contain wildcards (* or ?) — deploy-role trust is an exact match."
+  }
+
+  validation {
+    condition = alltrue([
+      for s in values(var.services) : s.github == null || (
+        (s.github.repository_id == null) == (s.github.repository_owner_id == null) &&
+        (s.github.repository_id == null || can(regex("^[0-9]{1,20}$", coalesce(s.github.repository_id, "x")))) &&
+        (s.github.repository_owner_id == null || can(regex("^[0-9]{1,20}$", coalesce(s.github.repository_owner_id, "x"))))
+      )
+    ])
+    error_message = "services[*].github.repository_id and repository_owner_id must be set together, as numeric GitHub IDs (gh api repos/<org>/<repo> --jq '.owner.id, .id')."
   }
 
   validation {

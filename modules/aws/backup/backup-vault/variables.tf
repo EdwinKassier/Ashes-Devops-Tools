@@ -95,8 +95,36 @@ variable "restore_testing_selection_name" {
 }
 
 variable "restore_testing_role_arn" {
-  description = "ARN of the IAM role AWS Backup assumes to perform restore testing jobs."
+  description = "ARN of an existing IAM role AWS Backup assumes to perform restore testing jobs. Null (default) creates restore_testing_role_name here (trusting backup.amazonaws.com, with the AWS managed AWSBackupServiceRolePolicyForRestores policy)."
   type        = string
+  default     = null
+
+  validation {
+    condition     = var.restore_testing_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", coalesce(var.restore_testing_role_arn, "x")))
+    error_message = "restore_testing_role_arn must be null or an account-qualified IAM role ARN."
+  }
+}
+
+variable "restore_testing_role_name" {
+  description = "Name of the restore-testing IAM role created when restore_testing_role_arn is null."
+  type        = string
+  default     = "aws-backup-restore-testing"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9+=,.@_-]{1,64}$", var.restore_testing_role_name))
+    error_message = "restore_testing_role_name must be a valid IAM role name (1-64 chars of [A-Za-z0-9+=,.@_-])."
+  }
+}
+
+variable "partition" {
+  description = "AWS partition for the managed-policy ARNs attached to the created restore-testing role (aws, aws-us-gov, aws-cn)."
+  type        = string
+  default     = "aws"
+
+  validation {
+    condition     = can(regex("^aws(-[a-z]+)*$", var.partition))
+    error_message = "partition must be aws, aws-us-gov, aws-cn, ..."
+  }
 }
 
 variable "restore_testing_tag_key" {

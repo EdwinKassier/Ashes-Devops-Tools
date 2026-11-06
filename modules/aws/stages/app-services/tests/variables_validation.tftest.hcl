@@ -29,6 +29,24 @@ run "wildcard_ref_rejected" {
   }
 }
 
+run "repository_id_without_owner_id_rejected" {
+  command         = plan
+  expect_failures = [var.services]
+  variables {
+    enable_github_oidc = true
+    services           = { orders = { github = { repository = "acme/orders", repository_id = "5678" } } }
+  }
+}
+
+run "non_numeric_repository_id_rejected" {
+  command         = plan
+  expect_failures = [var.services]
+  variables {
+    enable_github_oidc = true
+    services           = { orders = { github = { repository = "acme/orders", repository_id = "acme-orders", repository_owner_id = "1234" } } }
+  }
+}
+
 run "bad_repository_rejected" {
   command         = plan
   expect_failures = [var.services]

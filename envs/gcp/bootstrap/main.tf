@@ -5,7 +5,7 @@
 # admin project, the Terraform admin SA, and the WIF pools; gcp-organization
 # reads these via terraform_remote_state. Apply this root before gcp-organization.
 
-# Audit C2: every control-plane workspace (gcp-bootstrap, gcp-organization,
+# Every control-plane workspace (gcp-bootstrap, gcp-organization,
 # gcp-projects, gcp-network-hub) and every gcp-workload-<env> gets its OWN plan
 # (read-only) and apply SA, bound per run phase. Workload SAs receive no
 # org-level role; gcp-projects grants them roles on their env folder.
@@ -25,7 +25,22 @@ module "bootstrap" {
   tfc_workspace_ids     = var.tfc_workspace_ids
   workload_environments = toset(keys(var.environments))
 
-  vpc_sc_access_policy_id = var.vpc_sc_access_policy_id
+  # Environments marked is_production: a check warns while their workspaces (and
+  # the control-plane workspaces) are still WIF-bound by name, not ID.
+  production_workload_environments = toset([for k, e in var.environments : k if e.is_production])
+
+  # Workload VPC-SC: each environment gets its own folder-scoped access policy
+  # (created by gcp-organization). The org-wide grant is legacy, opt-in only.
+  enable_scoped_access_policies          = var.enable_scoped_access_policies
+  vpc_sc_access_policy_id                = var.vpc_sc_access_policy_id
+  enable_legacy_org_access_policy_grants = var.enable_legacy_org_access_policy_grants
+
+  # projects-apply folder-IAM delegation is bound per folder by gcp-organization;
+  # the org-node binding is legacy, opt-in only.
+  enable_org_level_folder_iam_delegation = var.enable_org_level_folder_iam_delegation
+
+  # Just-in-time org admin (PAM) managed by gcp-organization.
+  enable_pam = var.enable_pam
 
   # GitHub WIF — off by default (unused); see variables.tf.
   enable_github_wif          = var.enable_github_wif

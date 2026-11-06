@@ -182,8 +182,10 @@ run "containment_denies_mutation_and_tag_scopes_audit_store" {
       for p in [
         "storage.googleapis.com/buckets.delete",
         "storage.googleapis.com/buckets.setIamPolicy",
+        "storage.googleapis.com/buckets.deleteTagBinding",
         "storage.googleapis.com/objects.delete",
         "cloudkms.googleapis.com/cryptoKeyVersions.destroy",
+        "cloudkms.googleapis.com/cryptoKeyVersions.update",
         "cloudkms.googleapis.com/cryptoKeys.setIamPolicy",
       ] : contains(output.admin_containment_rules[1].denied_permissions, p)
     ]) && output.admin_containment_rules[1].tag_scoped
@@ -346,5 +348,186 @@ run "cis_log_metrics_wired_by_default" {
   assert {
     condition     = length(output.control_plane_cis_log_metric_names) == 8 && output.control_plane_cis_log_metric_names["vpc_firewall_rule_change"] == "cis-vpc_firewall_rule_change"
     error_message = "the org stage must create the 8 CIS 2.4-2.11 log metrics in the alerting project by default."
+  }
+}
+
+# ── Admin principals: groups only by default ────────────────────────────────
+
+run "standing_admin_is_group_only_by_default" {
+  command = plan
+
+  assert {
+    condition     = output.org_admin_members == tolist(["group:org-admins@acme.io"]) && output.billing_admin_members == tolist(["group:billing-admins@acme.io"])
+    error_message = "standing org/billing admin must be granted to groups only (no user:admin_email / user:break_glass_user) by default."
+  }
+
+  assert {
+    condition     = length([for m in concat(output.org_admin_members, output.billing_admin_members) : m if startswith(m, "user:")]) == 0
+    error_message = "no user: principal may hold standing org or billing admin without the escape hatch."
+  }
+}
+
+run "user_principals_only_with_break_glass_escape" {
+  command = plan
+
+  variables {
+    allow_user_principals_for_break_glass = true
+  }
+
+  assert {
+    condition     = contains(output.org_admin_members, "user:admin@acme.io") && contains(output.org_admin_members, "user:break-glass@acme.io") && contains(output.billing_admin_members, "user:admin@acme.io")
+    error_message = "allow_user_principals_for_break_glass must add admin_email / break_glass_user as user principals."
+  }
+}
+
+# ── VPC-SC: per-environment scoped access policies ──────────────────────────
+
+run "scoped_access_policy_per_environment" {
+  command = plan
+
+  variables {
+    workload_service_accounts = {
+      dev = {
+        plan  = "acme-wl-dev-plan@acme-admin-project.iam.gserviceaccount.com"
+        apply = "acme-wl-dev-apply@acme-admin-project.iam.gserviceaccount.com"
+      }
+    }
+  }
+
+  assert {
+    condition     = sort(keys(google_access_context_manager_access_policy.environment)) == sort(["dev"]) && tolist(google_access_context_manager_access_policy.environment["dev"].scopes) == tolist(["folders/111111111"]) && google_access_context_manager_access_policy.environment["dev"].parent == "organizations/123456789"
+    error_message = "each environment folder must get its own access policy scoped to that folder only."
+  }
+
+  assert {
+    condition     = google_access_context_manager_access_policy_iam_member.environment["dev|apply"].role == "roles/accesscontextmanager.policyEditor" && google_access_context_manager_access_policy_iam_member.environment["dev|apply"].member == "serviceAccount:acme-wl-dev-apply@acme-admin-project.iam.gserviceaccount.com" && google_access_context_manager_access_policy_iam_member.environment["dev|plan"].role == "roles/accesscontextmanager.policyReader"
+    error_message = "the environment workload apply SA gets policyEditor (plan SA policyReader) on its OWN scoped policy."
+  }
+
+  assert {
+    condition     = length(google_access_context_manager_access_policy_iam_member.environment) == 2
+    error_message = "no other access-policy grants may be made."
+  }
+}
+
+run "scoped_access_policies_can_be_disabled" {
+  command = plan
+
+  variables {
+    enable_scoped_access_policies = false
+  }
+
+  assert {
+    condition     = length(google_access_context_manager_access_policy.environment) == 0 && length(output.scoped_access_policy_ids) == 0
+    error_message = "enable_scoped_access_policies = false must create no scoped policies."
+  }
+}
+
+# ── projects-apply delegated folder IAM: per folder, never org-wide ─────────
+
+run "projects_delegation_is_bound_per_folder" {
+  command = plan
+
+  variables {
+    environments = {
+      shared = {
+        display_name            = "Shared"
+        description             = "Shared"
+        iam_group_role_bindings = {}
+      }
+      dev = {
+        display_name            = "Development"
+        description             = "Development environment"
+        iam_group_role_bindings = {}
+      }
+    }
+    projects_apply_service_account  = "acme-projects-apply@acme-admin-project.iam.gserviceaccount.com"
+    delegated_workload_folder_roles = ["roles/compute.admin", "roles/run.admin"]
+    delegated_network_folder_roles  = ["roles/compute.networkAdmin"]
+  }
+
+  override_module {
+    target  = module.organization
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "acme.io", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = {}, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" }, shared = { id = "222222222", name = "folders/222222222", display_name = "Shared" } } }
+  }
+
+  assert {
+    condition     = sort(keys(google_folder_iam_member.projects_delegated_folder_iam)) == sort(["dev", "shared"]) && google_folder_iam_member.projects_delegated_folder_iam["dev"].folder == "folders/111111111" && google_folder_iam_member.projects_delegated_folder_iam["shared"].folder == "folders/222222222"
+    error_message = "projects-apply folderIamAdmin must be bound on each target folder, not the org node."
+  }
+
+  assert {
+    condition     = strcontains(google_folder_iam_member.projects_delegated_folder_iam["dev"].condition[0].expression, "'roles/compute.admin'") && !strcontains(google_folder_iam_member.projects_delegated_folder_iam["dev"].condition[0].expression, "networkAdmin") && strcontains(google_folder_iam_member.projects_delegated_folder_iam["shared"].condition[0].expression, "'roles/compute.networkAdmin'") && !strcontains(google_folder_iam_member.projects_delegated_folder_iam["shared"].condition[0].expression, "run.admin")
+    error_message = "env folders admit only the workload roles, the shared folder only the network roles."
+  }
+
+  assert {
+    condition     = sort(keys(google_access_context_manager_access_policy.environment)) == sort(["dev"])
+    error_message = "the shared folder must not get a scoped access policy (the hub perimeter lives in the org-wide policy)."
+  }
+}
+
+# ── Containment: production warning, deny coverage ──────────────────────────
+
+run "production_without_containment_warns" {
+  command = plan
+
+  variables {
+    environments = {
+      prod = {
+        display_name            = "Production"
+        description             = "Production environment"
+        iam_group_role_bindings = {}
+        is_production           = true
+      }
+    }
+  }
+
+  override_module {
+    target  = module.organization
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "acme.io", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = {}, folders = { prod = { id = "333333333", name = "folders/333333333", display_name = "Production" } } }
+  }
+
+  expect_failures = [check.production_requires_admin_containment]
+
+  assert {
+    condition     = output.production_environment_keys == tolist(["prod"])
+    error_message = "is_production must drive the production environment list."
+  }
+}
+
+# ── PAM: just-in-time org admin ──────────────────────────────────────────────
+
+run "pam_entitlement_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(google_privileged_access_manager_entitlement.org_admin) == 0
+    error_message = "the PAM entitlement must be opt-in."
+  }
+}
+
+run "pam_entitlement_requires_approval" {
+  command = plan
+
+  variables {
+    enable_pam          = true
+    pam_eligible_groups = ["org-admin-requesters@acme.io"]
+    pam_approver_groups = ["org-admin-approvers@acme.io"]
+  }
+
+  assert {
+    condition     = google_privileged_access_manager_entitlement.org_admin[0].parent == "organizations/123456789" && google_privileged_access_manager_entitlement.org_admin[0].max_request_duration == "3600s"
+    error_message = "the entitlement must be at the org node with a 1h maximum grant."
+  }
+
+  assert {
+    condition     = google_privileged_access_manager_entitlement.org_admin[0].eligible_users[0].principals == toset(["group:org-admin-requesters@acme.io"]) && google_privileged_access_manager_entitlement.org_admin[0].approval_workflow[0].manual_approvals[0].steps[0].approvers[0].principals == toset(["group:org-admin-approvers@acme.io"])
+    error_message = "eligible users and approvers must be the configured groups."
+  }
+
+  assert {
+    condition     = google_privileged_access_manager_entitlement.org_admin[0].privileged_access[0].gcp_iam_access[0].role_bindings[0].role == "roles/resourcemanager.organizationAdmin"
+    error_message = "the entitlement must grant organizationAdmin just in time."
   }
 }

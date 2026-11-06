@@ -1,4 +1,4 @@
-# Audit C3: bind the containment/protected tag to the audit store so the
+# Bind the containment/protected tag to the audit store so the
 # tag-conditioned rule of the containment deny policy (main.tf) applies to the
 # audit + access-log buckets and the audit CMEK keyring (and, by tag
 # inheritance, its keys and key versions) — and nothing else. Only created when

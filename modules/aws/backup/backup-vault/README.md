@@ -28,7 +28,6 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	restore_testing_role_arn =
 }
 ```
 
@@ -52,22 +51,26 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_backup_restore_testing_plan.this (modules/aws/backup/backup-vault/main.tf#L30)
-- resource.aws_backup_restore_testing_selection.this (modules/aws/backup/backup-vault/main.tf#L43)
-- resource.aws_backup_vault.this (modules/aws/backup/backup-vault/main.tf#L15)
-- resource.aws_backup_vault_lock_configuration.this (modules/aws/backup/backup-vault/main.tf#L20)
+- resource.aws_backup_restore_testing_plan.this (modules/aws/backup/backup-vault/main.tf#L56)
+- resource.aws_backup_restore_testing_selection.this (modules/aws/backup/backup-vault/main.tf#L69)
+- resource.aws_backup_vault.this (modules/aws/backup/backup-vault/main.tf#L41)
+- resource.aws_backup_vault_lock_configuration.this (modules/aws/backup/backup-vault/main.tf#L46)
+- resource.aws_iam_role.restore_testing (modules/aws/backup/backup-vault/main.tf#L22)
+- resource.aws_iam_role_policy_attachment.restore_testing (modules/aws/backup/backup-vault/main.tf#L35)
 
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_restore_testing_role_arn"></a> [restore\_testing\_role\_arn](#input\_restore\_testing\_role\_arn) | ARN of the IAM role AWS Backup assumes to perform restore testing jobs. | `string` | n/a | yes |
 | <a name="input_changeable_for_days"></a> [changeable\_for\_days](#input\_changeable\_for\_days) | Cooling-off window (days) during which the Vault Lock can still be changed or deleted. A non-null value enables Compliance mode (WORM); after this window the lock is immutable. Must be at least 3. | `number` | `3` | no |
 | <a name="input_kms_key_arn"></a> [kms\_key\_arn](#input\_kms\_key\_arn) | ARN of the KMS key used to encrypt recovery points in the vault. Empty string uses the AWS-managed default Backup key. | `string` | `""` | no |
 | <a name="input_max_retention_days"></a> [max\_retention\_days](#input\_max\_retention\_days) | Maximum retention (days) allowed for recovery points stored in the vault. | `number` | `3650` | no |
 | <a name="input_min_retention_days"></a> [min\_retention\_days](#input\_min\_retention\_days) | Minimum retention (days) enforced on every recovery point stored in the vault. Recovery points cannot be deleted before this age. | `number` | `7` | no |
+| <a name="input_partition"></a> [partition](#input\_partition) | AWS partition for the managed-policy ARNs attached to the created restore-testing role (aws, aws-us-gov, aws-cn). | `string` | `"aws"` | no |
 | <a name="input_restore_testing_plan_name"></a> [restore\_testing\_plan\_name](#input\_restore\_testing\_plan\_name) | Name of the AWS Backup restore testing plan. AWS restricts this to alphanumeric characters and underscores. | `string` | `"org_restore_test"` | no |
+| <a name="input_restore_testing_role_arn"></a> [restore\_testing\_role\_arn](#input\_restore\_testing\_role\_arn) | ARN of an existing IAM role AWS Backup assumes to perform restore testing jobs. Null (default) creates restore\_testing\_role\_name here (trusting backup.amazonaws.com, with the AWS managed AWSBackupServiceRolePolicyForRestores policy). | `string` | `null` | no |
+| <a name="input_restore_testing_role_name"></a> [restore\_testing\_role\_name](#input\_restore\_testing\_role\_name) | Name of the restore-testing IAM role created when restore\_testing\_role\_arn is null. | `string` | `"aws-backup-restore-testing"` | no |
 | <a name="input_restore_testing_schedule"></a> [restore\_testing\_schedule](#input\_restore\_testing\_schedule) | Cron schedule expression for the restore testing plan. | `string` | `"cron(0 5 ? * SUN *)"` | no |
 | <a name="input_restore_testing_selection_name"></a> [restore\_testing\_selection\_name](#input\_restore\_testing\_selection\_name) | Name of the restore testing selection (the resource set that gets restored). AWS restricts this to alphanumeric characters and underscores. | `string` | `"ebs_restore_test"` | no |
 | <a name="input_restore_testing_tag_key"></a> [restore\_testing\_tag\_key](#input\_restore\_testing\_tag\_key) | Resource tag key used to select EBS recovery points for restore testing. Combined with restore\_testing\_tag\_value in a protected\_resource\_conditions string\_equals match. | `string` | `"backup"` | no |
@@ -81,6 +84,7 @@ The following resources are created:
 | Name | Description |
 |------|-------------|
 | <a name="output_restore_testing_plan_arn"></a> [restore\_testing\_plan\_arn](#output\_restore\_testing\_plan\_arn) | The ARN of the restore testing plan, if one was created. |
+| <a name="output_restore_testing_role_arn"></a> [restore\_testing\_role\_arn](#output\_restore\_testing\_role\_arn) | ARN of the role restore testing jobs assume (created here when restore\_testing\_role\_arn was null). |
 | <a name="output_vault_arn"></a> [vault\_arn](#output\_vault\_arn) | The ARN of the AWS Backup vault. |
 | <a name="output_vault_name"></a> [vault\_name](#output\_vault\_name) | The name of the AWS Backup vault. |
 <!-- END_TF_DOCS -->

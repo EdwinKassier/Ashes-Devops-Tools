@@ -146,7 +146,7 @@
           "aws:ResourceTag/${kms_protection_tag_key}": "true"
         },
         "ArnNotLike": {
-          "aws:PrincipalArn": ${privileged_arns}
+          "aws:PrincipalArn": ${break_glass_arns}
         }
       }
     }

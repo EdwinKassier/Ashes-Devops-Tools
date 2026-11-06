@@ -247,3 +247,30 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+# -----------------------------------------------------------------------------
+# Escape-hatch hardening
+# -----------------------------------------------------------------------------
+
+variable "enable_apply_boundary_propagation" {
+  description = "Make the embedded tfc-apply boundary self-propagating (default true): tfc-apply may only CreateRole / PutRolePermissionsBoundary / AttachRolePolicy / PutRolePolicy when the target role carries this same boundary (iam:PermissionsBoundary), and may never delete a permissions boundary. Without it the apply identity can create an unbounded role, attach AdministratorAccess and assume it. Every aws_iam_role created by tfc-apply in a member account must then set permissions_boundary to arn:<partition>:iam::<account>:policy/<apply_boundary_policy_name>. Applies to the embedded boundary only (apply_permissions_boundary_arn = null)."
+  type        = bool
+  default     = true
+}
+
+variable "enable_plan_role_data_read_deny" {
+  description = "Attach an inline deny to the plan role for data-plane reads that ReadOnlyAccess otherwise grants (s3:GetObject*, secretsmanager:GetSecretValue, ssm:GetParameter*, kms:Decrypt, DynamoDB item reads, sqs:ReceiveMessage, kinesis:GetRecords, CloudWatch Logs event reads/queries, rds-data, Athena/Redshift Data results, ECR image pulls). Default true: speculative PR plans run as this role, so it reads configuration, not data."
+  type        = bool
+  default     = true
+}
+
+variable "plan_role_data_read_exempt_arns" {
+  description = "Resource ARNs (patterns allowed) excluded from the plan-role data-plane deny (rendered as NotResource). Use for Terraform-managed resources whose refresh reads data, e.g. an aws_secretsmanager_secret_version or aws_s3_object the plan must diff. Empty (default) = deny on every resource."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for a in var.plan_role_data_read_exempt_arns : can(regex("^arn:aws[a-z-]*:[a-z0-9-]+:[^:]*:[^:]*:.*[A-Za-z0-9]", a))])
+    error_message = "plan_role_data_read_exempt_arns entries must be resource ARNs naming a resource (not a bare service-wide wildcard such as arn:aws:s3:::*)."
+  }
+}

@@ -69,10 +69,11 @@ module "projects" {
   # Suffix comes from the gcp-bootstrap root for project-ID consistency.
   suffix = local.bootstrap.suffix
 
-  # Audit C2: per-environment workload SAs (no org-level roles) get their rights
-  # on their OWN env folder here; the network-hub SAs on the shared folder. All
-  # come from gcp-bootstrap; try() keeps a pre-C2 bootstrap state planning (no
-  # grants) until gcp-bootstrap is re-applied.
+  # Per-environment workload SAs (no org-level roles) get their rights on their
+  # OWN env folder here; the network-hub SAs on the shared folder. All come from
+  # gcp-bootstrap; try() keeps an older bootstrap state planning (no grants)
+  # until gcp-bootstrap is re-applied. The grants are made through the
+  # per-folder delegated folderIamAdmin that gcp-organization binds.
   workload_service_accounts = {
     for env, sas in try(local.bootstrap.workload_service_accounts, {}) : env => sas
     if contains(keys(var.environments), env)

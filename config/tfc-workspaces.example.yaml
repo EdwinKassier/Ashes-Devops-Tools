@@ -1,0 +1,48 @@
+# Committed per-workspace Terraform variables for VCS-driven TFC runs.
+#
+# VCS-driven runs never see a local terraform.tfvars, so each workspace's inputs
+# must live in TFC. envs/tfc-admin reads THIS file's real counterpart,
+# config/tfc-workspaces.yaml (var.workspace_variables_file, default
+# "../../config/tfc-workspaces.yaml"), when it exists, and sets every entry as a
+# workspace variable. Copy this file to config/tfc-workspaces.yaml, edit it,
+# commit it, and re-apply tfc-admin.
+#
+# Rules:
+#   - Top-level key `workspaces`, then workspace name => variable name => value.
+#   - Scalars (string/number/bool) become plain string variables.
+#   - Lists and maps become HCL variables (hcl = true) automatically.
+#   - The long form {value, category, hcl, description} sets an env var or
+#     overrides hcl explicitly.
+#   - NO SECRETS: `sensitive: true` is rejected (the file is committed). Pass
+#     secrets via tfc-admin's workspace_variables (written write-only).
+#   - tfc-admin derives `environment` (and `workload_account_key` from
+#     environments[*].aws_account_key) for the workload workspaces; entries here
+#     override the derived values, and tfc-admin's workspace_variables override
+#     this file.
+#   - Every workspace named here must be managed by tfc-admin (enable_* flags),
+#     otherwise the plan fails.
+
+workspaces:
+  aws-organization:
+    management_account_id: "111111111111"
+    name_prefix: acme
+    terraform_run_role_arn: arn:aws:iam::111111111111:role/tfc-mgmt-apply
+    break_glass_role_arn: arn:aws:iam::111111111111:role/break-glass
+    log_archive_bucket_name: acme-org-log-archive
+    allowed_regions: [eu-west-2]
+    tfc_organization: acme
+
+  aws-security:
+    management_account_id: "111111111111"
+    name_prefix: acme
+
+  aws-network:
+    name_prefix: acme
+
+  aws-workload-dev:
+    name_prefix: acme
+    # environment / workload_account_key are derived by tfc-admin.
+
+  gcp-organization:
+    domain: acme.example
+    project_prefix: acme

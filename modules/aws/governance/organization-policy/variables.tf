@@ -32,8 +32,8 @@ variable "terraform_run_role_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/.+$", var.terraform_run_role_arn))
-    error_message = "terraform_run_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/...)."
+    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.terraform_run_role_arn))
+    error_message = "terraform_run_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/<name>) with no wildcards (* or ?)."
   }
 }
 
@@ -42,8 +42,8 @@ variable "break_glass_role_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/.+$", var.break_glass_role_arn))
-    error_message = "break_glass_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/...)."
+    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.break_glass_role_arn))
+    error_message = "break_glass_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/<name>) with no wildcards (* or ?)."
   }
 }
 
@@ -66,7 +66,7 @@ variable "log_archive_bucket_name" {
 # -----------------------------------------------------------------------------
 
 variable "pipeline_role_names" {
-  description = "Names or name patterns (optionally path-prefixed, e.g. \"automation/tfc-apply\" or \"stacksets-exec-*\") of the member-account Terraform pipeline roles. Rendered as arn:aws:iam::*:role/<name> and exempted from the deny-tamper reconfiguration statements (Config recorders, GuardDuty/CloudTrail settings, flow logs, protected KMS key policies). These roles are also protected from IAM modification by anyone other than themselves or break-glass. NOT exempt from the destructive statements (break-glass only)."
+  description = "Names or name patterns (optionally path-prefixed, e.g. \"automation/tfc-apply\" or \"stacksets-exec-*\") of the member-account Terraform pipeline roles. Rendered as arn:aws:iam::*:role/<name> and exempted from the deny-tamper reconfiguration statements (Config recorders, GuardDuty/CloudTrail settings, flow logs, log-archive Object Lock). These roles are also protected from IAM modification by anyone other than themselves or break-glass. NOT exempt from the destructive statements (break-glass only)."
   type        = list(string)
   default     = ["tfc-apply", "OrganizationAccountAccessRole", "stacksets-exec-*"]
 
@@ -88,7 +88,7 @@ variable "break_glass_role_names" {
 }
 
 variable "kms_protection_tag_key" {
-  description = "Resource-tag key marking KMS keys protected by the deny-tamper SCP. Keys tagged <key> = \"true\" cannot be scheduled for deletion, disabled, have rotation disabled or the tag removed except by break-glass; their key policy can only be changed by the pipeline roles or break-glass. Must match the tag the aws/data/kms-key module applies (protection_tag_key)."
+  description = "Resource-tag key marking KMS keys protected by the deny-tamper SCP. Keys tagged <key> = \"true\" cannot be scheduled for deletion, disabled, have rotation disabled or the tag removed except by break-glass; their key policy can only be changed by break-glass (so Terraform key-policy changes to protected keys need a break-glass apply). Must match the tag the aws/data/kms-key module applies (protection_tag_key)."
   type        = string
   default     = "protected"
 
@@ -103,7 +103,7 @@ variable "kms_protection_tag_key" {
 # -----------------------------------------------------------------------------
 
 variable "data_perimeter_trusted_account_ids" {
-  description = "Optional 12-digit account IDs OUTSIDE the organization that are trusted by the RCP data perimeter: their principals (aws:PrincipalAccount) may access org resources, and AWS service calls on their behalf (aws:SourceAccount) pass the confused-deputy check. Empty (default) trusts only the organization. Individual resources can also opt out with the dp:exclude:identity / dp:exclude:source = \"true\" resource tags."
+  description = "Optional 12-digit account IDs OUTSIDE the organization that are trusted by the RCP data perimeter: their principals (aws:PrincipalAccount) may access org resources, and AWS service calls on their behalf (aws:SourceAccount) pass the confused-deputy check. Empty (default) trusts only the organization. Individual resources can also opt out with the dp:exclude:identity / dp:exclude:source = \"true\" resource tags; the baseline SCP lets only break-glass set or remove dp:* tags."
   type        = list(string)
   default     = []
 

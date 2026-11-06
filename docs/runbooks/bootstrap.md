@@ -63,23 +63,25 @@ gcloud services enable cloudresourcemanager.googleapis.com \
 
 ### Step 2 — Configure the TFC backend organization
 
-The workspace name is baked into `backend.tf`; only the TFC **organization** is supplied out-of-band. Pick **one** form:
+The workspace name is baked into each root's `backend.tf`; only the TFC **organization** is supplied out-of-band. Phase-0 applies `envs/gcp/bootstrap` (workspace `gcp-bootstrap`) first, so initialise that root. Pick **one** form:
 
 ```bash
 # Form A — gitignored backend.hcl (never committed)
-cat > envs/gcp/organization/backend.hcl <<EOF
+cat > envs/gcp/bootstrap/backend.hcl <<EOF
 organization = "YOUR_TFC_ORG_NAME"
 EOF
-terraform -chdir=envs/gcp/organization init -backend-config=backend.hcl
+terraform -chdir=envs/gcp/bootstrap init -backend-config=backend.hcl
 ```
 
 ```bash
 # Form B — TF_CLI_ARGS_init
 export TF_CLI_ARGS_init="-backend-config=organization=YOUR_TFC_ORG_NAME"
-terraform -chdir=envs/gcp/organization init
+terraform -chdir=envs/gcp/bootstrap init
 ```
 
-> Do **not** pass a `workspaces` block via `-backend-config` — `backend.tf` already hard-codes `workspaces { name = "gcp-organization" }`, and a second value conflicts with it.
+The `gcp-bootstrap` workspace must already exist (tfc-admin pass 1, [below](#creating-and-wiring-the-tfc-workspaces-tfc-admin-two-pass)). tfc-admin creates it with **execution mode `local`** (`workspace_execution_modes` default `{ "gcp-bootstrap" = "local" }`): `terraform apply` runs on your machine with your ADC and only the state is stored in TFC. A remote run would have no GCP credentials, because the WIF pool does not exist yet.
+
+> Do **not** pass a `workspaces` block via `-backend-config` — `backend.tf` already hard-codes the workspace name, and a second value conflicts with it.
 
 ### Step 3 — Write the tfvars file
 
@@ -130,7 +132,7 @@ terraform -chdir=envs/gcp/bootstrap output -raw terraform_admin_email
 # e.g. terraform-admin@ashes-admin-1a2b3c4d.iam.gserviceaccount.com
 ```
 
-**Phase 2 — hand over to Terraform Cloud dynamic credentials (no impersonation).** Wire the workspaces (pass 2 of the tfc-admin flow below) so each `gcp-*` workspace gets `TFC_GCP_PLAN_SERVICE_ACCOUNT_EMAIL` / `TFC_GCP_APPLY_SERVICE_ACCOUNT_EMAIL` from the bootstrap outputs `tfc_plan_service_accounts` / `tfc_apply_service_accounts`, and **do not** set `terraform_admin_email` on any TFC workspace: the run already *is* the right SA, and a plan SA has no `serviceAccountTokenCreator` on the admin SA, so setting it fails closed. Then apply the organization root from TFC:
+**Phase 2 — hand over to Terraform Cloud dynamic credentials (no impersonation).** Wire the workspaces (pass 2 of the tfc-admin flow below) so each `gcp-*` workspace gets `TFC_GCP_PLAN_SERVICE_ACCOUNT_EMAIL` / `TFC_GCP_APPLY_SERVICE_ACCOUNT_EMAIL` from the bootstrap outputs `tfc_plan_service_accounts` / `tfc_apply_service_accounts`, and **do not** set `terraform_admin_email` on any TFC workspace: the run already *is* the right SA, and a plan SA has no `serviceAccountTokenCreator` on the admin SA, so setting it fails closed. In the same tfc-admin apply set `workspace_execution_modes = {}` so `gcp-bootstrap` switches from `local` to `remote` and its later runs use its own plan/apply SAs. Then apply the organization root from TFC:
 
 ```bash
 # queued from TFC (VCS run on main) — runs plan as <prefix>-organization-plan,
@@ -190,8 +192,8 @@ Do **not** hand-create the GCP workspaces or hand-type dynamic-credential env va
 
 Because the WIF pool and the per-workspace plan/apply service accounts are created by `gcp-bootstrap`, which itself runs in a workspace tfc-admin creates, wiring is **two-pass**:
 
-1. **Pass 1 — workspaces only.** Create the `tfc-admin` workspace by hand once (working directory `envs/tfc-admin`, `TFE_TOKEN` as a sensitive env var holding an owners/manage-workspaces team token), then apply it with `enable_gcp = true` and your `environments` map. Every `gcp-*` workspace now exists with triggers, settings and remote-state sharing, but **no** `TFC_GCP_*` env vars (they are only set when their inputs are non-null).
-2. **Apply `gcp-bootstrap`** (the phase-0 human apply described above). It publishes `tfc_workload_provider_name` (`projects/<number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>`) and the per-workspace maps `tfc_plan_service_accounts` / `tfc_apply_service_accounts` (keyed by workspace name).
+1. **Pass 1 — workspaces only.** Create the `tfc-admin` workspace by hand once (working directory `envs/tfc-admin`, `TFE_TOKEN` as a sensitive env var holding an owners/manage-workspaces team token), then apply it with `enable_gcp = true` (every `enable_*` cloud flag defaults to `false`, and at least one must be `true`) and your `environments` map. Every `gcp-*` workspace now exists with triggers, settings and remote-state sharing, but **no** `TFC_GCP_*` env vars (they are only set when their inputs are non-null). `gcp-bootstrap` is created in execution mode `local`; every other workspace is `remote`.
+2. **Apply `gcp-bootstrap`** (the phase-0 human apply described above, from your machine with ADC and `terraform_admin_email` unset). It publishes `tfc_workload_provider_name` (`projects/<number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>`) and the per-workspace maps `tfc_plan_service_accounts` / `tfc_apply_service_accounts` (keyed by workspace name).
 3. **Pass 2 — dynamic credentials.** Either copy those outputs into the tfc-admin variables `gcp_workload_provider_name`, `gcp_plan_service_accounts`, `gcp_apply_service_accounts`, **or** set `gcp_bootstrap_outputs_from_tfc = true` to read them via `tfe_outputs` (tfc-admin is then added as a remote-state consumer of `gcp-bootstrap`). Re-apply tfc-admin. Each GCP workspace in the maps receives:
 
    | Env var | Value |
@@ -201,9 +203,13 @@ Because the WIF pool and the per-workspace plan/apply service accounts are creat
    | `TFC_GCP_PLAN_SERVICE_ACCOUNT_EMAIL` | the workspace's read-only plan SA |
    | `TFC_GCP_APPLY_SERVICE_ACCOUNT_EMAIL` | the workspace's apply SA |
 
+   In the same pass set `workspace_execution_modes = {}`. That moves `gcp-bootstrap` from `local` to `remote` execution now that it has dynamic credentials.
+
 4. Apply the remaining GCP roots in order (`gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>`) from TFC. Because control-plane workspaces have speculative plans disabled, review their plans from a run queued on `main` (or a CLI-driven plan by an operator), not from PR checks.
 
-The same flow applies to AWS (`enable_aws = true`; inputs `aws_plan_role_arns` / `aws_apply_role_arns` keyed by workspace, or `aws_organization_outputs_from_tfc = true`, which maps each workspace to an account key via the `aws-organization` output `tfc_workspace_bindings` (overridable with `aws_workspace_account_keys`) and uses that account's `tfc_plan_role_arns` / `tfc_apply_role_arns`).
+**VCS-driven runs get no local tfvars.** Commit each workspace's Terraform inputs to `config/tfc-workspaces.yaml` (start from [`config/tfc-workspaces.example.yaml`](../../config/tfc-workspaces.example.yaml)); tfc-admin reads it when present (`workspace_variables_file`) and sets every entry as a workspace variable. Secrets are rejected in that file; pass them through `workspace_variables` (write-only).
+
+The same flow applies to AWS (`enable_aws = true`): see the [AWS bootstrap runbook](aws-bootstrap.md#step-3--create-the-aws-tfc-workspaces-with-tfc-admin-pass-1). Single-account workspaces map to an account key via the `aws-organization` output `tfc_workspace_bindings`, `environments[<env>].aws_account_key` or `aws_workspace_account_keys`. The multi-account roots `aws-security` / `aws-backup` get the management role (`aws_management_plan_role_arn` / `aws_management_apply_role_arn`) as their default configuration and one `TFC_AWS_*_<alias>` set per member-account alias.
 
 **GitHub Actions (release metadata / drift).** In the repo → Settings → Secrets and variables → Actions:
 
@@ -216,7 +222,7 @@ The same flow applies to AWS (`enable_aws = true`; inputs `aws_plan_role_arns` /
 
 See [CI_SECRETS.md](../guides/CI_SECRETS.md).
 
-> **Escape hatch — run #1 with local state.** If you prefer the org created before the workspace exists, run phase 1 with `terraform -chdir=envs/gcp/organization init -backend=false` and a local apply, then re-`init` **with** the `cloud` backend to migrate the local state into the new TFC workspace. Creating the workspace first and letting TFC run remotely is cleaner in most cases.
+> **Escape hatch — run #1 with local state.** If you want the bootstrap applied before any TFC workspace exists, run phase 1 with `terraform -chdir=envs/gcp/bootstrap init -backend=false` and a local apply, then (after tfc-admin pass 1 creates `gcp-bootstrap`) re-`init` **with** the `cloud` backend to migrate the local state into it. The default path — tfc-admin creates `gcp-bootstrap` in `local` execution mode and you apply from your machine with TFC holding state — avoids the migration.
 
 ---
 

@@ -22,7 +22,9 @@ provider "aws" {
     }
   }
   # Fail fast if the resolved credentials are not the target member account.
-  allowed_account_ids = try([data.terraform_remote_state.aws_organization.outputs.account_ids["shared_services"]], null)
+  # No try(): a missing account_ids key fails the plan loudly instead of
+  # silently dropping the wrong-account guard.
+  allowed_account_ids = [data.terraform_remote_state.aws_organization.outputs.account_ids["shared_services"]]
 }
 
 # Canonical tag set written by EVERY aws provider in this root (default_tags).

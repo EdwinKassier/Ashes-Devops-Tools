@@ -13,11 +13,11 @@ mock_provider "aws" { alias = "log_archive" }
 mock_provider "aws" { alias = "forensics" }
 
 variables {
+  landing_zone_name       = "acme"
   management_account_id   = "111111111111" # C4 account guard
   log_archive_bucket_name = "ashes-org-log-archive"
-  key_admin_arn           = "arn:aws:iam::111111111111:role/key-admin"
-  config_role_arn         = "arn:aws:iam::222222222222:role/aws-config-recorder"
-  aggregator_role_arn     = "arn:aws:iam::222222222222:role/aws-config-aggregator"
+  # key_admin_arn / config_role_arn / aggregator_role_arn omitted: the defaults
+  # (own-account tfc-apply key admin, Config SLR, created aggregator role) must plan.
   # Security Lake off so meta_store_manager_role_arn is not required.
   enable_security_lake = false
 }
@@ -71,4 +71,37 @@ run "consumes_remote_state_contract" {
     condition     = data.terraform_remote_state.aws_organization.outputs.account_role_arns["security_tooling"] != ""
     error_message = "remote-state account_role_arns must expose the security_tooling role the provider assumes"
   }
+}
+
+# landing_zone_name has no default and rejects the upstream placeholders.
+run "rejects_placeholder_landing_zone_name" {
+  command = plan
+
+  variables {
+    landing_zone_name = "ashes"
+  }
+
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = {
+      outputs = {
+        organization_id       = "o-abcdefghij"
+        organization_root_id  = "r-abcd"
+        management_account_id = "111111111111"
+        account_ids = {
+          security_tooling = "222222222222"
+          log_archive      = "333333333333"
+          shared_services  = "444444444444"
+          forensics        = "555555555555"
+        }
+        account_role_arns = {
+          security_tooling = "arn:aws:iam::222222222222:role/cross-account"
+          log_archive      = "arn:aws:iam::333333333333:role/cross-account"
+          forensics        = "arn:aws:iam::555555555555:role/cross-account"
+        }
+      }
+    }
+  }
+
+  expect_failures = [var.landing_zone_name]
 }

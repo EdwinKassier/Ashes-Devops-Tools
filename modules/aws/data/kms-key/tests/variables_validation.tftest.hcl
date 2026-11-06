@@ -36,3 +36,13 @@ run "wildcard_key_user_rejected" {
 
   expect_failures = [var.key_user_arns]
 }
+
+run "wildcard_key_policy_admin_rejected" {
+  command = plan
+
+  variables {
+    key_policy_admin_arns = ["arn:aws:iam::111122223333:role/*"]
+  }
+
+  expect_failures = [var.key_policy_admin_arns]
+}

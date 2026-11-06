@@ -31,18 +31,45 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   expected; (2) the role matrix is sufficient for each stage's first apply
   (notably `logging.configWriter` vs `logging.admin`,
   `securitycenter.notificationConfigEditor`, `monitoring.metricsScopesAdmin`,
-  plan-SA `roles/viewer` reading GCS bucket metadata, and that bootstrap-apply's
-  org `iam.securityAdmin` covers billing-account and access-policy IAM);
+  that the metadata-only plan role set (predefined viewers + the
+  `landingZonePlanViewer` custom role) is enough for every stage's plan, and that
+  bootstrap-apply's org `iam.securityAdmin` covers billing-account IAM);
   (3) the projects-apply `modifiedGrantsByRole` delegated-grant condition is
-  accepted for the full role list; (4) brownfield projects created by
-  `terraform-admin` may need a one-off owner grant to projects-apply. Residual:
-  bootstrap-apply and organization-apply still hold org `iam.securityAdmin`
-  (inherent to managing org IAM); projects-apply's delegated grant can target
-  any folder, so keep privileged projects (e.g. a G4 logging project) outside
-  folders it can reach; `vpc_sc_access_policy_id` grants workload apply SAs
-  editor on the whole access policy (scoped access policies would narrow this);
-  `envs/gcp/organization` still grants `terraform-admin` env-folder roles
-  (`terraform_admin_folder_roles`) that are now unused.
+  accepted for the full role list on each folder binding; (4) brownfield
+  projects created by `terraform-admin` may need a one-off owner grant to
+  projects-apply. Residual: bootstrap-apply and organization-apply still hold org
+  `iam.securityAdmin` (inherent to managing org IAM); network-hub-apply's org
+  `accesscontextmanager.policyAdmin` inherits onto the per-environment scoped
+  policies; `envs/gcp/organization` still grants `terraform-admin` env-folder
+  roles (`terraform_admin_folder_roles`) when the legacy flag is on.
+
+- **G12 — GCP re-audit hardening (2026-11-06), mock-tested only.** Validate on a
+  real org before relying on it:
+  (1) **scoped access policies** (`enable_scoped_access_policies`, default on):
+  `google_access_context_manager_access_policy` with `scopes = [folders/<env>]`
+  per environment is created by organization-apply with org
+  `accesscontextmanager.policyAdmin`; confirm creation does not require an
+  existing org-level policy, that the workload perimeter in it accepts the host
+  and service-team projects, and that the default dry-run ingress/egress rules
+  are valid inside a scoped policy;
+  (2) **`landingZonePlanViewer`** custom role: every permission must be
+  custom-role-supported at org level, and the plan of each root must succeed
+  without `roles/viewer` (a missing get/list shows up as a 403 in plan);
+  (3) **per-folder projects-apply delegation**: confirm that a folder-level
+  conditional `folderIamAdmin` lets projects-apply set the env-folder grants and
+  that the org-node grant can be removed (apply order gcp-bootstrap ->
+  gcp-organization -> gcp-projects);
+  (4) **containment additions** `storage buckets.deleteTagBinding` and
+  `cloudkms cryptoKeyVersions.update` (both deny-supported) do not break a
+  no-change apply; the `tag_binding_change` / `kms_key_version_disable` watch
+  filters match real audit-log method names;
+  (5) **PAM** (`enable_pam`, opt-in): entitlement creation at the org node and an
+  end-to-end request/approve flow;
+  (6) **group-only org admin** (`allow_user_principals_for_break_glass = false`
+  by default) removes existing `user:` org/billing admin bindings on the next
+  gcp-organization apply: make sure a group (or PAM) holds admin first.
+  Not deny-supported, so alert-only: `resourcemanager.tagValueBindings.delete`,
+  `tagValues.delete`, `tagKeys.delete`, `cloudkms keyRings.deleteTagBinding`.
 
 - **A4 — CloudTrail CloudWatch Logs + CIS section-4 alarms, now default ON**
   (`enable_cloudwatch_logs = true`, `modules/aws/security/cloudtrail-org`). The
@@ -73,6 +100,35 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   security, workload and backup apply under the `tfc-apply-boundary` boundary,
   including a destroy/replace of Config and GuardDuty resources, which the
   boundary deliberately blocks. Use break-glass for those.
+- **A10 — AWS escape-hatch hardening (2026-11 re-audit) is mock-only and has
+  apply-time consequences.** (1) **Boundary propagation**
+  (`enable_apply_boundary_propagation`, default on): `tfc-apply` can only
+  `CreateRole`/`AttachRolePolicy`/`PutRolePolicy`/`PutRolePermissionsBoundary`
+  on roles carrying `tfc-apply-boundary`, and can never delete a boundary. Every
+  `aws_iam_role` created by `tfc-apply` in a member account must therefore set
+  `permissions_boundary = arn:aws:iam::<account>:policy/tfc-apply-boundary`.
+  `modules/aws/iam/iam-role` supports this; `modules/aws/security/cloudtrail-org`,
+  `modules/aws/security/incident-response` and `modules/aws/stages/app-services`
+  do **not yet** expose a `permissions_boundary` input, so their role creation in
+  member accounts fails until they do (or disable propagation). Residual:
+  `iam:UpdateAssumeRolePolicy` on pre-existing unbounded roles that the
+  deny-tamper SCP does not protect. (2) **Plan-role data-plane deny**
+  (`enable_plan_role_data_read_deny`, default on): plans that refresh data-reading
+  resources fail as `tfc-plan`. In-repo this is `envs/aws/workload`'s
+  `aws_secretsmanager_secret_version.saas_bridge` (opt-in,
+  `enable_saas_secret_bridge`): add its ARN to
+  `tfc_plan_role_data_read_exempt_arns`. (3) **Protected KMS key policies are
+  break-glass only**: `modules/aws/data/kms-key` now sets the policy at
+  `CreateKey` (a `removed` block forgets the old `aws_kms_key_policy` without
+  destroying it), but any later key-policy change on a key tagged
+  `protected = true` must be applied by break-glass. With `key_policy_admin_arns`
+  set, the CreateKey lockout safety check is bypassed, and every listed role
+  must already exist in that account. (4) **`dp:*` tags are break-glass only**
+  (baseline SCP): opting a resource out of the RCP data perimeter, and
+  re-applying a full S3 tag set on a bucket that carries a `dp:*` tag, need
+  break-glass. **Validate** that `aws:TagKeys` is populated on
+  `s3:PutBucketTagging`/`s3:CreateBucket` and on `kms:CreateKey`/`iam:CreateRole`
+  with tags.
 
 ## MODERNIZATION — latest-best-practice gaps (2026 review)
 
@@ -244,18 +300,24 @@ side (all mock-tested, secure defaults):
   vars (`value_wo`, supported by vercel 4.8.2). Remaining: `supabase_project.database_password`
   (no write-only argument in the supabase provider yet) and the Vercel change-detection
   fingerprint, which is an unsalted SHA-256 of the env values.
+  Ephemeral inputs (2026-11-06): `rds-aurora.master_password` is `ephemeral = true`;
+  `cloud-sql` adds an ephemeral `user_passwords` map (opt in per user with
+  `ephemeral_password = true`) and `secret-manager` an ephemeral
+  `ephemeral_secret_values` map (opt in per secret with `ephemeral_value = true`) —
+  the opt-in flags exist because an ephemeral value cannot drive `for_each`, so the
+  legacy sensitive inputs stay for backward compatibility. Vercel env-var inputs
+  cannot be ephemeral: they also feed the `for_each` keys and the stored fingerprints.
 
 ## DECISION — needs a human call
 
 - **Behaviour-changing security defaults** (not applied, would change posture):
   packet-mirroring default mirrors all traffic; vpc-peering exports public-IP
   subnet routes; the shared VPC-endpoint policy is `Action="*"`.
-- **tfsec → Trivy PR gate.** tfsec is EOL (Aqua → Trivy). Trivy already runs
-  post-merge; promoting it to the PR gate is a scanner swap that may surface new
-  findings — validate what Trivy reports before flipping the gate.
 - **`host` stage decomposition.** `modules/gcp/stages/host` (~2,000 LOC) is
   large-but-cohesive; a targeted split (firewall / egress / advanced sub-stages)
   is optional maintainability work, not a bug.
-- **Toolchain currency automation.** Dependabot tracks GitHub Actions only
-  (terraform-ecosystem intentionally omitted — provider majors broke `validate`).
-  Consider Renovate for grouped, compatibility-aware provider bumps.
+- **Toolchain currency automation.** Dependabot covers both GitHub Actions and
+  the `terraform` ecosystem (`directories: ["/**"]`, one grouped weekly PR,
+  labelled for review, never auto-merged); the repo pins keep proposals inside
+  the current provider major. Open call: switch to Renovate only if grouped,
+  compatibility-aware *major* bumps or `required_version` bumps are wanted.

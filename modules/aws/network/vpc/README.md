@@ -27,6 +27,7 @@ module "example" {
 
 	# Required variables
 	flow_log_destination_arn =
+	region =
 }
 ```
 
@@ -68,6 +69,7 @@ The following resources are created:
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_flow_log_destination_arn"></a> [flow\_log\_destination\_arn](#input\_flow\_log\_destination\_arn) | ARN of the S3 bucket (in the central log archive) that receives VPC flow logs. | `string` | n/a | yes |
+| <a name="input_region"></a> [region](#input\_region) | AWS region, used to build gateway endpoint service names (com.amazonaws.<region>.<service>). | `string` | n/a | yes |
 | <a name="input_availability_zones"></a> [availability\_zones](#input\_availability\_zones) | Availability zones to place subnets in. Only the first az\_count entries are used. | `list(string)` | <pre>[<br/>  "eu-west-2a",<br/>  "eu-west-2b",<br/>  "eu-west-2c"<br/>]</pre> | no |
 | <a name="input_az_count"></a> [az\_count](#input\_az\_count) | Number of availability zones to spread each subnet tier across. Must not exceed the number of availability\_zones. | `number` | `2` | no |
 | <a name="input_cidr_block"></a> [cidr\_block](#input\_cidr\_block) | IPv4 CIDR used for subnet math (cidrsubnet). Also the literal VPC CIDR when ipam\_pool\_id is empty. When using IPAM, still set this to the CIDR IPAM will allocate so subnet layout is deterministic. | `string` | `"10.0.0.0/16"` | no |
@@ -78,7 +80,6 @@ The following resources are created:
 | <a name="input_ipam_pool_id"></a> [ipam\_pool\_id](#input\_ipam\_pool\_id) | IPAM pool ID to allocate the VPC CIDR from. Empty string uses the literal cidr\_block instead. | `string` | `""` | no |
 | <a name="input_name"></a> [name](#input\_name) | Name applied to the VPC and used as the prefix for subnet Name tags. | `string` | `"landing-zone"` | no |
 | <a name="input_netmask_length"></a> [netmask\_length](#input\_netmask\_length) | Netmask length requested from the IPAM pool when ipam\_pool\_id is set. Ignored when using a literal cidr\_block. | `number` | `16` | no |
-| <a name="input_region"></a> [region](#input\_region) | AWS region, used to build gateway endpoint service names (com.amazonaws.<region>.<service>). | `string` | `"eu-west-2"` | no |
 | <a name="input_routes"></a> [routes](#input\_routes) | Static routes keyed by subnet tier; each route is added to EVERY AZ route table of that tier. Set exactly one target per route (e.g. transit\_gateway\_id for spoke default routing to the hub). Per-AZ targets (such as per-AZ NAT gateways) should instead be added by the caller against route\_table\_ids\_by\_tier. | <pre>map(list(object({<br/>    destination_cidr_block    = string<br/>    transit_gateway_id        = optional(string)<br/>    nat_gateway_id            = optional(string)<br/>    gateway_id                = optional(string)<br/>    vpc_endpoint_id           = optional(string)<br/>    network_interface_id      = optional(string)<br/>    vpc_peering_connection_id = optional(string)<br/>  })))</pre> | `{}` | no |
 | <a name="input_subnets"></a> [subnets](#input\_subnets) | Subnet tiers, keyed by tier name. newbits/number\_offset drive cidrsubnet(cidr\_block, newbits, number\_offset + az\_index); public toggles map\_public\_ip\_on\_launch. | <pre>map(object({<br/>    newbits       = number<br/>    number_offset = number<br/>    public        = optional(bool, false)<br/>  }))</pre> | <pre>{<br/>  "isolated": {<br/>    "newbits": 8,<br/>    "number_offset": 16<br/>  },<br/>  "private": {<br/>    "newbits": 8,<br/>    "number_offset": 8<br/>  },<br/>  "public": {<br/>    "newbits": 8,<br/>    "number_offset": 0,<br/>    "public": true<br/>  }<br/>}</pre> | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged under the per-resource Name/Tier tags). Org-wide tags (CostCenter, Environment, Owner, ...) normally come from the provider default\_tags; use this for module-specific additions. | `map(string)` | `{}` | no |

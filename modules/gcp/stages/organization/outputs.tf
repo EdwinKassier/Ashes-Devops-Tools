@@ -49,7 +49,7 @@ output "control_plane_alert_policy_ids" {
 }
 
 output "admin_containment_rules" {
-  description = "Rules of the C2/C3 admin-containment IAM deny policy (empty when enable_admin_containment = false): denied permissions, exempt principals and whether the rule is tag-scoped to the audit store."
+  description = "Rules of the admin-containment IAM deny policy (empty when enable_admin_containment = false): denied permissions, exempt principals and whether the rule is tag-scoped to the audit store."
   value = flatten([
     for p in local.containment_deny_policy : [
       for r in p.rules : {
@@ -100,4 +100,39 @@ output "os_login_exempt_environment_keys" {
 output "control_plane_cis_log_metric_names" {
   description = "Map of CIS GCP 2.4-2.11 log-metric key to log-based metric name in the alerting project (empty when disabled)"
   value       = module.control_plane_alerting.cis_log_metric_names
+}
+
+output "scoped_access_policy_ids" {
+  description = "Map of environment key -> numeric ID of its folder-scoped Access Context Manager policy (empty when enable_scoped_access_policies = false). gcp-projects surfaces it as environment_config[<env>].vpc_sc_access_policy_id for the workload perimeter."
+  value       = { for k, p in google_access_context_manager_access_policy.environment : k => p.name }
+}
+
+output "scoped_access_policy_grants" {
+  description = "Workload SA grants on the scoped access policies, keyed \"<env>|<phase>\": { env, role, member }."
+  value       = local.scoped_policy_grants
+}
+
+output "delegated_folder_iam_targets" {
+  description = "Folders on which projects-apply holds the conditional folderIamAdmin, keyed by folder key, with the role allow-list of each."
+  value       = local.delegated_folder_iam_targets
+}
+
+output "org_admin_members" {
+  description = "Principals holding standing roles/resourcemanager.organizationAdmin (groups only unless allow_user_principals_for_break_glass = true)."
+  value       = local.org_admin_members
+}
+
+output "billing_admin_members" {
+  description = "Principals holding standing roles/billing.admin (groups only unless allow_user_principals_for_break_glass = true)."
+  value       = local.billing_admin_members
+}
+
+output "pam_entitlement_name" {
+  description = "Resource name of the just-in-time org-admin PAM entitlement (null when enable_pam = false)."
+  value       = var.enable_pam ? google_privileged_access_manager_entitlement.org_admin[0].name : null
+}
+
+output "production_environment_keys" {
+  description = "Environment keys marked is_production = true."
+  value       = local.production_environment_keys
 }

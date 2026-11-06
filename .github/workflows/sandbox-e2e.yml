@@ -69,6 +69,12 @@ jobs:
       gcp: ${{ steps.check.outputs.gcp }}
       aws: ${{ steps.check.outputs.aws }}
     steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
       - name: Check sandbox configuration
         id: check
         env:
@@ -130,6 +136,12 @@ jobs:
       TF_VAR_run_id: ${{ github.run_id }}
       TF_VAR_run_attempt: ${{ github.run_attempt }}
     steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -188,6 +200,12 @@ jobs:
       TF_VAR_run_id: ${{ github.run_id }}
       TF_VAR_run_attempt: ${{ github.run_attempt }}
     steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:

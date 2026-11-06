@@ -43,8 +43,8 @@ run "admin_sa_keeps_only_bootstrap_roles" {
     condition = sort([
       for k, m in merge(google_organization_iam_member.stage_org_roles, google_organization_iam_member.stage_org_security_admin) :
       m.role if startswith(k, "bootstrap-apply|")
-    ]) == sort(["roles/iam.securityAdmin", "roles/resourcemanager.organizationViewer"])
-    error_message = "terraform-admin (bootstrap apply) must hold only org IAM admin + org viewer at the org node."
+    ]) == sort(["roles/iam.organizationRoleAdmin", "roles/iam.securityAdmin", "roles/resourcemanager.organizationViewer"])
+    error_message = "terraform-admin (bootstrap apply) must hold only org IAM admin, org role admin (plan viewer custom role) + org viewer at the org node."
   }
 
   assert {
@@ -134,8 +134,10 @@ run "stage_apply_sas_are_least_privilege" {
   }
 
   assert {
-    condition     = contains([for k, m in google_organization_iam_member.stage_org_roles : m.role if startswith(k, "network-hub-apply|")], "roles/accesscontextmanager.policyAdmin") && !contains([for k, m in google_organization_iam_member.stage_org_roles : m.role if startswith(k, "organization-apply|")], "roles/accesscontextmanager.policyAdmin")
-    error_message = "accesscontextmanager.policyAdmin belongs to the network-hub apply SA only."
+    condition = sort([
+      for k, m in google_organization_iam_member.stage_org_roles : split("|", k)[0] if m.role == "roles/accesscontextmanager.policyAdmin"
+    ]) == sort(["network-hub-apply", "organization-apply"])
+    error_message = "accesscontextmanager.policyAdmin belongs to the network-hub apply SA (hub perimeter) and the organization apply SA (creates the per-environment scoped policies) only."
   }
 
   assert {
@@ -144,8 +146,123 @@ run "stage_apply_sas_are_least_privilege" {
   }
 
   assert {
-    condition     = strcontains(google_organization_iam_member.projects_delegated_folder_iam.condition[0].expression, "modifiedGrantsByRole") && !strcontains(google_organization_iam_member.projects_delegated_folder_iam.condition[0].expression, "roles/owner") && strcontains(google_organization_iam_member.projects_delegated_folder_iam.condition[0].expression, "'roles/compute.admin'")
-    error_message = "projects-apply folder IAM must be a conditional delegated grant limited to the workload/network folder roles (never roles/owner)."
+    condition     = length(google_organization_iam_member.projects_delegated_folder_iam) == 0 && !contains(output.org_role_grants["projects-apply"], "roles/resourcemanager.folderIamAdmin")
+    error_message = "projects-apply must NOT hold folderIamAdmin at the org node by default: gcp-organization binds it per target folder."
+  }
+
+  assert {
+    condition     = contains(output.delegated_workload_folder_roles, "roles/compute.admin") && !contains(output.delegated_workload_folder_roles, "roles/compute.orgFirewallPolicyAdmin") && contains(output.delegated_network_folder_roles, "roles/compute.orgFirewallPolicyAdmin") && !contains(output.delegated_network_folder_roles, "roles/secretmanager.admin")
+    error_message = "the per-folder delegation allow-lists must be split: workload roles for env folders, network roles for the shared folder."
+  }
+}
+
+run "legacy_org_level_folder_delegation_is_opt_in" {
+  command = plan
+
+  variables {
+    enable_org_level_folder_iam_delegation = true
+  }
+
+  assert {
+    condition     = strcontains(google_organization_iam_member.projects_delegated_folder_iam[0].condition[0].expression, "modifiedGrantsByRole") && !strcontains(google_organization_iam_member.projects_delegated_folder_iam[0].condition[0].expression, "roles/owner") && strcontains(google_organization_iam_member.projects_delegated_folder_iam[0].condition[0].expression, "'roles/compute.admin'")
+    error_message = "the legacy org-level delegation must still be a conditional grant limited to the folder role lists (never roles/owner)."
+  }
+}
+
+run "plan_identities_get_metadata_only_viewer_role" {
+  command = plan
+
+  assert {
+    condition     = google_organization_iam_custom_role.plan_viewer[0].role_id == "landingZonePlanViewer" && google_organization_iam_custom_role.plan_viewer[0].org_id == "123456789"
+    error_message = "the plan viewer custom role must be created at the org node."
+  }
+
+  assert {
+    condition = length(setintersection(toset(google_organization_iam_custom_role.plan_viewer[0].permissions), toset([
+      "storage.objects.get", "storage.objects.list", "bigquery.tables.getData", "secretmanager.versions.access",
+      "cloudkms.cryptoKeyVersions.useToDecrypt", "logging.logEntries.list", "logging.privateLogEntries.list",
+    ]))) == 0 && contains(google_organization_iam_custom_role.plan_viewer[0].permissions, "storage.buckets.get")
+    error_message = "the plan viewer role must read bucket metadata but never object, table, secret, decrypt or log-entry data."
+  }
+
+  assert {
+    condition = length([
+      for k, v in merge(google_organization_iam_member.stage_org_roles, google_project_iam_member.stage_admin_project_roles) :
+      k if endswith(split("|", k)[0], "-plan") && contains(["roles/viewer", "roles/editor", "roles/owner"], v.role)
+    ]) == 0
+    error_message = "no plan identity may hold roles/viewer (data read), editor or owner on the org or admin project."
+  }
+
+  assert {
+    condition     = contains(keys(google_project_iam_member.stage_admin_project_roles), "organization-plan|organizations/123456789/roles/landingZonePlanViewer")
+    error_message = "organization-plan must get the plan viewer custom role on the admin project in place of roles/viewer."
+  }
+
+  assert {
+    condition     = !contains(output.workload_folder_roles.plan, "roles/viewer") && contains(output.workload_folder_roles.plan, "organizations/123456789/roles/landingZonePlanViewer") && contains(output.delegated_workload_folder_roles, "organizations/123456789/roles/landingZonePlanViewer")
+    error_message = "workload plan folder roles must carry the custom plan viewer role (and its delegation), not roles/viewer."
+  }
+}
+
+run "workload_access_policy_grants_are_not_org_wide" {
+  command = plan
+
+  variables {
+    vpc_sc_access_policy_id = "987654321"
+  }
+
+  assert {
+    condition     = length(google_access_context_manager_access_policy_iam_member.workload) == 0
+    error_message = "by default no workload SA may be granted on the org-wide access policy (a dev apply could edit prod/hub perimeters)."
+  }
+}
+
+run "legacy_org_access_policy_grants_are_opt_in" {
+  command = plan
+
+  variables {
+    vpc_sc_access_policy_id                = "987654321"
+    enable_legacy_org_access_policy_grants = true
+  }
+
+  assert {
+    condition     = google_access_context_manager_access_policy_iam_member.workload["wl-prod-apply"].role == "roles/accesscontextmanager.policyEditor" && google_access_context_manager_access_policy_iam_member.workload["wl-prod-apply"].name == "accessPolicies/987654321"
+    error_message = "the legacy mode must still grant policyEditor on the org-wide policy."
+  }
+}
+
+run "production_workspaces_must_be_bound_by_id" {
+  command = plan
+
+  variables {
+    production_workload_environments = ["prod"]
+  }
+
+  expect_failures = [check.production_workspaces_bound_by_id]
+
+  assert {
+    condition     = contains(output.production_workspaces_bound_by_name, "gcp-workload-prod") && contains(output.production_workspaces_bound_by_name, "gcp-bootstrap")
+    error_message = "the production workload and control-plane workspaces bound by name must be reported."
+  }
+}
+
+run "production_workspaces_bound_by_id_pass" {
+  command = plan
+
+  variables {
+    production_workload_environments = ["prod"]
+    tfc_workspace_ids = {
+      "gcp-bootstrap"     = "ws-Boot1"
+      "gcp-organization"  = "ws-Org1"
+      "gcp-projects"      = "ws-Proj1"
+      "gcp-network-hub"   = "ws-Hub1"
+      "gcp-workload-prod" = "ws-Prod1"
+    }
+  }
+
+  assert {
+    condition     = length(output.production_workspaces_bound_by_name) == 0
+    error_message = "with every production workspace ID supplied nothing may be reported as name-bound."
   }
 }
 

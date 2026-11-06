@@ -3,6 +3,11 @@
 
 mock_provider "aws" {}
 
+# region is required (no hard-coded default); runs may override it.
+variables {
+  region = "eu-west-2"
+}
+
 run "defaults_accepted" {
   # Defaults plus the required flow_log_destination_arn must pass validation.
   command = plan

@@ -2,6 +2,11 @@
 # default — you MUST supply them. Select the workspace for this environment with
 # TF_WORKSPACE, e.g. `export TF_WORKSPACE=aws-workload-dev`.
 
+# REQUIRED — landing-zone identifier written to the LandingZone tag. No
+# default; the upstream placeholders "ashes" / "my-org" are rejected. Use the
+# same value in every AWS root (tfc-admin: put it in common_workspace_variables).
+landing_zone_name = "acme"
+
 # REQUIRED — Terraform Cloud org that owns this root's workspace and the
 # aws-organization + aws-network workspaces it reads. Usually passed to
 # `terraform init` via backend.hcl / TF_CLI_ARGS_init rather than here.
@@ -11,9 +16,10 @@
 organization_workspace_name = "aws-organization"
 network_workspace_name      = "aws-network"
 
-# REQUIRED — key into the aws-organization account_role_arns map for THIS env's
-# workload account. Both providers assume this role.
-# workload_account_key = "workload_dev"
+# REQUIRED — key into the aws-organization account_ids / tfc_*_role_arns maps for
+# THIS env's workload account (the providers' allowed_account_ids guard). Under
+# tfc-admin it is set on aws-workload-<env> from environments[<env>].aws_account_key.
+workload_account_key = "workload_dev"
 
 # Optional — deploy region (also the region the workload-account role is assumed
 # in and the key used to pick the regional IPAM pool) and the enabled regions.
@@ -25,9 +31,12 @@ vpc_cidr = "10.20.0.0/16"
 
 # REQUIRED — central log-archive bucket name. MUST match the name the
 # aws-organization and aws-network roots use (cross-root naming contract).
-# log_archive_bucket_name = "ashes-org-log-archive"
+log_archive_bucket_name = "acme-org-log-archive"
 
-# REQUIRED — IAM role AWS Config assumes to record resources in this account.
+# Optional — IAM role AWS Config assumes to record resources in this account.
+# Default null: the account's AWS Config service-linked role
+# (AWSServiceRoleForConfig) is used, created by this root unless
+# create_config_service_linked_role = false (set false if the account already has it).
 # config_role_arn = "arn:aws:iam::222222222222:role/config-recorder"
 
 # CMK for default EBS encryption + Session Manager. Empty leaves EBS on the

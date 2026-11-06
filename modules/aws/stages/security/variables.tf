@@ -128,12 +128,24 @@ variable "log_archive_bucket_name" {
 }
 
 variable "key_admin_arn" {
-  description = "Account-qualified ARN of the principal granted key ADMINISTRATION (management actions only: no Encrypt/Decrypt/GenerateDataKey/ReEncrypt, no CreateGrant) on the log-archive, forensics and security-tooling CMKs. REQUIRED to avoid locking the keys out of management. Grant key usage separately via kms_key_user_arns."
+  description = "Account-qualified ARN of the principal granted key ADMINISTRATION (management actions only: no Encrypt/Decrypt/GenerateDataKey/ReEncrypt, no CreateGrant) on the log-archive, forensics and security-tooling CMKs. Null (default) grants each key's OWN account role key_admin_role_name (the TFC OIDC baseline tfc-apply role that applies this stage), e.g. arn:aws:iam::<log-archive id>:role/tfc-apply, so the keys can never be locked out of management. Grant key usage separately via kms_key_user_arns."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:(role|user)/.+$", var.key_admin_arn))
-    error_message = "key_admin_arn must be an account-qualified IAM role/user ARN."
+    condition     = var.key_admin_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:(role|user)/.+$", coalesce(var.key_admin_arn, "x")))
+    error_message = "key_admin_arn must be null or an account-qualified IAM role/user ARN."
+  }
+}
+
+variable "key_admin_role_name" {
+  description = "With key_admin_arn = null, the role name (in each CMK's own account) granted key administration. Default tfc-apply: the role the TFC OIDC baseline creates and this stage applies as, so it must already exist. Set to your own per-account admin role if you run with OrganizationAccountAccessRole instead."
+  type        = string
+  default     = "tfc-apply"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9+=,.@_/-]{1,64}$", var.key_admin_role_name))
+    error_message = "key_admin_role_name must be a valid IAM role name."
   }
 }
 
@@ -155,22 +167,30 @@ variable "enable_kms_protection_tag" {
 }
 
 variable "config_role_arn" {
-  description = "ARN of the IAM role AWS Config assumes to record resource configurations in each account/Region."
+  description = "ARN of the IAM role AWS Config assumes to record resource configurations in the security-tooling account. Null (default) uses the AWSServiceRoleForConfig service-linked role (created unless create_config_service_linked_role = false)."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", var.config_role_arn))
-    error_message = "config_role_arn must be an account-qualified IAM role ARN."
+    condition     = var.config_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", coalesce(var.config_role_arn, "x")))
+    error_message = "config_role_arn must be null or an account-qualified IAM role ARN."
   }
 }
 
+variable "create_config_service_linked_role" {
+  description = "With config_role_arn = null, create the AWSServiceRoleForConfig service-linked role in the security-tooling account. Set false if Config was ever enabled there (the SLR already exists)."
+  type        = bool
+  default     = true
+}
+
 variable "aggregator_role_arn" {
-  description = "ARN of the IAM role the Config organization aggregator assumes to collect Config data across the organization."
+  description = "ARN of an existing IAM role the Config organization aggregator assumes. Null (default) creates aws-config-org-aggregator in the security-tooling account with the AWSConfigRoleForOrganizations managed policy."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", var.aggregator_role_arn))
-    error_message = "aggregator_role_arn must be an account-qualified IAM role ARN."
+    condition     = var.aggregator_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", coalesce(var.aggregator_role_arn, "x")))
+    error_message = "aggregator_role_arn must be null or an account-qualified IAM role ARN."
   }
 }
 

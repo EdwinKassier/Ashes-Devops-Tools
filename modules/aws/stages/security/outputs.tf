@@ -57,3 +57,18 @@ output "cis_alarm_sns_topic_arn" {
   description = "SNS topic (management account) the CIS section-4 alarms publish to; null when enable_cloudwatch_logs = false."
   value       = module.cloudtrail.cis_alarm_sns_topic_arn
 }
+
+output "key_admin_arns" {
+  description = "Key administrator per CMK (log_archive / forensics / security_tooling): key_admin_arn, or each key account's key_admin_role_name role when null."
+  value       = local.key_admin_arns
+}
+
+output "config_role_arn" {
+  description = "IAM role the security-tooling Config recorders use (the AWSServiceRoleForConfig SLR unless config_role_arn was set)."
+  value       = module.config.config_role_arn
+}
+
+output "config_aggregator_role_arn" {
+  description = "IAM role the Config organization aggregator assumes (created by the stage unless aggregator_role_arn was set)."
+  value       = module.config.aggregator_role_arn
+}

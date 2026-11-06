@@ -40,3 +40,12 @@ moved {
   from = google_project_service.admin_project_services
   to   = module.admin_project.google_project_service.this
 }
+
+# The org-node projects-apply delegation became optional (count) when the
+# delegation moved to per-folder bindings in gcp-organization. With the legacy
+# flag on, the existing binding keeps its address; with it off (default) the
+# moved instance is planned for removal.
+moved {
+  from = google_organization_iam_member.projects_delegated_folder_iam
+  to   = google_organization_iam_member.projects_delegated_folder_iam[0]
+}

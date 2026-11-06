@@ -238,6 +238,33 @@ run "github_subject_variants" {
   }
 }
 
+# ── Immutable repository-ID subject (customised claim template) ─────────────
+
+run "github_repository_id_subject_is_default_when_ids_set" {
+  command = plan
+
+  variables {
+    enable_github_oidc = true
+    services = {
+      orders = { github = { repository = "acme/orders", repository_id = "5678", repository_owner_id = "1234" } }
+      api    = { github = { repository = "acme/api", repository_id = "9012", repository_owner_id = "1234", ref = "refs/heads/main" } }
+    }
+  }
+
+  assert {
+    condition = (
+      jsondecode(aws_iam_role.deploy["orders"].assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == "repository_owner_id:1234:repository_id:5678:environment:dev" &&
+      output.github_oidc_subjects["api"] == "repository_owner_id:1234:repository_id:9012:ref:refs/heads/main"
+    )
+    error_message = "with repository_id set, the deploy-role sub must be the immutable ID-based subject (environment or ref context)."
+  }
+
+  assert {
+    condition     = !strcontains(jsondecode(aws_iam_role.deploy["orders"].assume_role_policy).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"], "repo:acme/orders")
+    error_message = "the ID-based subject must not fall back to the mutable repository name."
+  }
+}
+
 # ── Existing OIDC provider is reused, not recreated ─────────────────────────
 
 run "existing_oidc_provider_reused" {

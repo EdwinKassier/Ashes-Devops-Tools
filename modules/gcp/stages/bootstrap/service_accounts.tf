@@ -1,4 +1,4 @@
-# Per-stage automation identities (audit C2 — Cloud Foundation Fabric FAST pattern).
+# Per-stage automation identities (Cloud Foundation Fabric FAST pattern).
 #
 # Before: ONE org-level security-admin SA (terraform-admin) was WIF-bound to every
 # TFC workspace — control plane AND every gcp-workload-<env> — in BOTH run phases.
@@ -12,10 +12,21 @@
 # the existing terraform-admin SA (it must manage org IAM for all the others).
 #
 # Role matrix (org = organization node, admin = admin/seed project, billing =
-# billing account). Workload SAs get billing + optional access-policy roles only.
+# billing account). Workload SAs get billing roles only here; their VPC-SC rights
+# are granted by gcp-organization on their OWN folder-scoped access policy.
+#
+# Plan identities never get roles/viewer (it reads GCS objects through legacy
+# bucket roles and BigQuery table data). They get metadata-only predefined
+# viewers plus the org custom role below (plan_viewer.tf), which holds only
+# get/list/getIamPolicy permissions.
 
 locals {
   control_plane_stages = ["bootstrap", "organization", "projects", "network-hub"]
+
+  # Full resource name of the org-level plan viewer custom role (plan_viewer.tf).
+  # Built from the inputs (not the resource) so for_each keys stay plan-known.
+  plan_viewer_role  = "organizations/${var.org_id}/roles/${var.plan_viewer_role_id}"
+  plan_viewer_roles = var.enable_plan_viewer_role ? [local.plan_viewer_role] : []
 
   # Read-only baseline every control-plane plan SA gets at the org node.
   plan_org_baseline = [
@@ -32,8 +43,9 @@ locals {
     }
     # bootstrap-apply = terraform-admin SA. iam.securityAdmin is required to
     # manage the org/billing/admin-project IAM of every other stage SA.
+    # iam.organizationRoleAdmin: the plan viewer custom role (plan_viewer.tf).
     "bootstrap-apply" = {
-      org           = ["roles/resourcemanager.organizationViewer", "roles/iam.securityAdmin"]
+      org           = ["roles/resourcemanager.organizationViewer", "roles/iam.securityAdmin", "roles/iam.organizationRoleAdmin"]
       admin_project = ["roles/iam.serviceAccountAdmin", "roles/iam.workloadIdentityPoolAdmin", "roles/serviceusage.serviceUsageAdmin"]
       billing       = []
     }
@@ -45,16 +57,27 @@ locals {
         "roles/resourcemanager.tagViewer",
         "roles/iam.denyReviewer",
         "roles/essentialcontacts.viewer",
-      ])
-      admin_project = ["roles/viewer"]
-      billing       = ["roles/billing.viewer"]
+        ], var.enable_scoped_access_policies ? ["roles/accesscontextmanager.policyReader"] : [],
+      var.enable_pam ? ["roles/privilegedaccessmanager.viewer"] : [])
+      # Metadata-only viewers (no roles/viewer: no object or table-data reads).
+      admin_project = concat([
+        "roles/cloudkms.viewer",
+        "roles/monitoring.viewer",
+        "roles/pubsub.viewer",
+        "roles/bigquery.metadataViewer",
+        "roles/serviceusage.serviceUsageViewer",
+      ], local.plan_viewer_roles)
+      billing = ["roles/billing.viewer"]
     }
     # Folders + folder IAM, org IAM (org admin groups, audit configs), org
     # policies, org sinks, SCC notifications, tags, deny policies, contacts;
     # KMS / audit bucket / Pub/Sub / BigQuery / alerting in the admin project;
-    # billing budgets.
+    # billing budgets. With enable_scoped_access_policies it also creates one
+    # folder-scoped access policy per environment and grants the workload SAs
+    # their rights on it (accesscontextmanager.policyAdmin); with enable_pam it
+    # manages the JIT org-admin entitlement (privilegedaccessmanager.admin).
     "organization-apply" = {
-      org = [
+      org = concat([
         "roles/resourcemanager.organizationViewer",
         "roles/resourcemanager.folderAdmin",
         "roles/iam.securityAdmin",
@@ -65,7 +88,8 @@ locals {
         "roles/resourcemanager.tagUser",
         "roles/iam.denyAdmin",
         "roles/essentialcontacts.admin",
-      ]
+        ], var.enable_scoped_access_policies ? ["roles/accesscontextmanager.policyAdmin"] : [],
+      var.enable_pam ? ["roles/privilegedaccessmanager.admin"] : [])
       admin_project = [
         "roles/cloudkms.admin",
         "roles/storage.admin",
@@ -84,8 +108,9 @@ locals {
     }
     # Project creation + billing link + metrics scope. Folder IAM (to grant the
     # workload / network SAs their folder roles) is a SEPARATE, conditional
-    # delegated grant below — it can only ever hand out the role list in
-    # local.delegated_folder_roles.
+    # delegated folderIamAdmin grant made by gcp-organization on EACH target
+    # folder (env folders: workload roles only; shared folder: network roles
+    # only), so it cannot reach any other folder or the org node.
     "projects-apply" = {
       org = [
         "roles/browser",
@@ -169,22 +194,34 @@ locals {
       }
     ]...),
   )
-  access_policy_grants = var.vpc_sc_access_policy_id == null ? {} : {
+  # LEGACY (enable_legacy_org_access_policy_grants): workload SAs on the single
+  # org-wide access policy. Every wl-<env>-apply could then edit EVERY perimeter
+  # (prod and hub included), so it is off by default; the default model grants
+  # each environment rights on its own folder-scoped policy (gcp-organization).
+  access_policy_grants = var.enable_legacy_org_access_policy_grants && var.vpc_sc_access_policy_id != null ? {
     for sa_key, sa in local.workload_identities : sa_key => {
       sa_key = sa_key
       role   = sa.phase == "apply" ? "roles/accesscontextmanager.policyEditor" : "roles/accesscontextmanager.policyReader"
     }
+  } : {}
+
+  # Effective folder role lists: the plan viewer custom role is appended to the
+  # workload plan roles (env folders) and the network plan roles (shared folder).
+  effective_workload_folder_roles = {
+    plan  = distinct(concat(var.workload_folder_roles.plan, local.plan_viewer_roles))
+    apply = var.workload_folder_roles.apply
+  }
+  effective_network_folder_roles = {
+    plan  = distinct(concat(var.network_folder_roles.plan, local.plan_viewer_roles))
+    apply = var.network_folder_roles.apply
   }
 
   # Roles the projects-apply SA may hand out on folders (IAM delegated role
   # grants). Admin project sits directly under the org node, not in a folder, so
   # this delegation can never reach the automation project or the org node.
-  delegated_folder_roles = sort(distinct(concat(
-    var.workload_folder_roles.plan,
-    var.workload_folder_roles.apply,
-    var.network_folder_roles.plan,
-    var.network_folder_roles.apply,
-  )))
+  delegated_workload_folder_roles = sort(distinct(concat(local.effective_workload_folder_roles.plan, local.effective_workload_folder_roles.apply)))
+  delegated_network_folder_roles  = sort(distinct(concat(local.effective_network_folder_roles.plan, local.effective_network_folder_roles.apply)))
+  delegated_folder_roles          = sort(distinct(concat(local.delegated_workload_folder_roles, local.delegated_network_folder_roles)))
 }
 
 resource "google_service_account" "stage" {
@@ -193,7 +230,7 @@ resource "google_service_account" "stage" {
   project      = module.admin_project.project_id
   account_id   = each.value.account_id
   display_name = "Terraform ${each.value.kind == "workload" ? "workload ${each.value.env}" : each.value.stage} (${each.value.phase})"
-  description  = "TFC ${each.value.phase}-phase identity for workspace ${each.value.workspace}. ${each.value.phase == "plan" ? "Read-only." : "Least-privilege write."} Managed by gcp-bootstrap (audit C2)."
+  description  = "TFC ${each.value.phase}-phase identity for workspace ${each.value.workspace}. ${each.value.phase == "plan" ? "Read-only." : "Least-privilege write."} Managed by gcp-bootstrap."
 }
 
 # Org-level roles. Workload SAs are deliberately absent from local.stage_roles,
@@ -211,7 +248,7 @@ resource "google_organization_iam_member" "stage_org_roles" {
 # (org IAM, org audit configs, folder IAM). Neither is reachable from a plan
 # phase or from any workload workspace.
 resource "google_organization_iam_member" "stage_org_security_admin" {
-  # checkov:skip=CKV_GCP_45:iam.securityAdmin is restricted to the bootstrap and organization APPLY identities (apply-phase WIF only); see the C2 role matrix above.
+  # checkov:skip=CKV_GCP_45:iam.securityAdmin is restricted to the bootstrap and organization APPLY identities (apply-phase WIF only); see the role matrix above.
   for_each = { for k, v in local.org_grants : k => v if v.role == "roles/iam.securityAdmin" }
 
   org_id = var.org_id
@@ -219,23 +256,30 @@ resource "google_organization_iam_member" "stage_org_security_admin" {
   member = "serviceAccount:${local.stage_sa_email[each.value.sa_key]}"
 }
 
-# projects-apply: delegated folder-IAM admin. The condition restricts which roles
-# it may add/remove on folder IAM policies to the workload/network folder role
-# lists, so it cannot grant itself (or anyone) roles/owner or org-level power.
+# LEGACY (enable_org_level_folder_iam_delegation): projects-apply delegated
+# folder-IAM admin bound at the ORG node. The condition limits WHICH roles it may
+# grant but not WHERE: any folder in the org. The default model binds it on each
+# target folder instead (gcp-organization, from the delegated_*_folder_roles
+# outputs). Kept only to bridge a migration; off by default.
 resource "google_organization_iam_member" "projects_delegated_folder_iam" {
+  count = var.enable_org_level_folder_iam_delegation ? 1 : 0
+
   org_id = var.org_id
   role   = "roles/resourcemanager.folderIamAdmin"
   member = "serviceAccount:${local.stage_sa_email["projects-apply"]}"
 
   condition {
     title       = "delegated_folder_role_grants"
-    description = "projects-apply may only grant the workload/network folder roles (audit C2)"
+    description = "projects-apply may only grant the workload/network folder roles"
     expression  = "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly([${join(", ", [for r in local.delegated_folder_roles : "'${r}'"])}])"
   }
 }
 
 resource "google_project_iam_member" "stage_admin_project_roles" {
   for_each = local.admin_project_grants
+
+  # The plan viewer custom role must exist before it is granted.
+  depends_on = [google_organization_iam_custom_role.plan_viewer]
 
   project = module.admin_project.project_id
   role    = each.value.role
@@ -251,12 +295,33 @@ resource "google_billing_account_iam_member" "stage_billing_roles" {
   member             = "serviceAccount:${local.stage_sa_email[each.value.sa_key]}"
 }
 
-# Optional: workload environments that manage their own VPC-SC perimeter get
-# policy-scoped (not org-scoped) Access Context Manager rights.
+# LEGACY: workload SAs on the org-wide access policy (see access_policy_grants).
 resource "google_access_context_manager_access_policy_iam_member" "workload" {
   for_each = local.access_policy_grants
 
   name   = "accessPolicies/${var.vpc_sc_access_policy_id}"
   role   = each.value.role
   member = "serviceAccount:${local.stage_sa_email[each.value.sa_key]}"
+}
+
+# WIF bindings fall back to the (mutable, squattable) workspace NAME when a
+# workspace has no tfc_workspace_ids entry. Tolerable while standing up a
+# non-production org; once any environment is production, every control-plane
+# workspace and every production workload workspace should be bound by its
+# immutable ID. A check warns (never fails the plan) so the first apply — run
+# before the workspaces exist — still works.
+locals {
+  name_bound_production_workspaces = sort([
+    for ws in concat(
+      values(var.control_plane_workspaces),
+      [for env in var.production_workload_environments : "${var.tfc_workload_workspace_prefix}${env}"],
+    ) : ws if !contains(keys(var.tfc_workspace_ids), ws)
+  ])
+}
+
+check "production_workspaces_bound_by_id" {
+  assert {
+    condition     = !var.enable_tfc_oidc || length(var.production_workload_environments) == 0 || length(local.name_bound_production_workspaces) == 0
+    error_message = "Production environments exist (${join(", ", sort(tolist(var.production_workload_environments)))}) but these workspaces are WIF-bound by mutable NAME, not immutable ID: ${join(", ", local.name_bound_production_workspaces)}. Add their ws-... IDs to tfc_workspace_ids (tfc-admin output workspace_ids) and re-apply gcp-bootstrap."
+  }
 }

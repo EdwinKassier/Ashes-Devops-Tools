@@ -5,6 +5,7 @@ mock_provider "google" {}
 mock_provider "google-beta" {}
 
 variables {
+  region                = "us-central1"
   project_id            = "mock-project"
   service_account_email = "sa@mock-project.iam.gserviceaccount.com"
 }

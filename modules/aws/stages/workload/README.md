@@ -52,7 +52,6 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
-	config_role_arn =
 	flow_log_destination_arn =
 	log_archive_bucket_name =
 	tgw_id =
@@ -95,7 +94,6 @@ The following resources are created:
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_config_role_arn"></a> [config\_role\_arn](#input\_config\_role\_arn) | ARN of the IAM role AWS Config assumes to record resource configurations in this account/Region. | `string` | n/a | yes |
 | <a name="input_flow_log_destination_arn"></a> [flow\_log\_destination\_arn](#input\_flow\_log\_destination\_arn) | ARN of the central log-archive S3 bucket that receives the spoke VPC's flow logs. | `string` | n/a | yes |
 | <a name="input_log_archive_bucket_name"></a> [log\_archive\_bucket\_name](#input\_log\_archive\_bucket\_name) | Name of the central log-archive S3 bucket that receives Config snapshots/history and Session Manager session logs. | `string` | n/a | yes |
 | <a name="input_tgw_id"></a> [tgw\_id](#input\_tgw\_id) | ID of the SHARED transit gateway (shared into this workload account over RAM by the network account) that the spoke VPC attaches to. | `string` | n/a | yes |
@@ -103,6 +101,8 @@ The following resources are created:
 | <a name="input_aws_enabled_regions"></a> [aws\_enabled\_regions](#input\_aws\_enabled\_regions) | Regions in which to enforce the account baseline (default EBS encryption) and deploy a Config recorder. Defaults to the single home Region. | `list(string)` | <pre>[<br/>  "eu-west-2"<br/>]</pre> | no |
 | <a name="input_aws_region"></a> [aws\_region](#input\_aws\_region) | AWS region the workload's spoke VPC is deployed in and the region the default provider operates in. Used for subnet math and gateway-endpoint service names. | `string` | `"eu-west-2"` | no |
 | <a name="input_az_count"></a> [az\_count](#input\_az\_count) | Number of availability zones to spread each subnet tier across. | `number` | `2` | no |
+| <a name="input_config_role_arn"></a> [config\_role\_arn](#input\_config\_role\_arn) | ARN of the IAM role AWS Config assumes to record resource configurations in this account/Region. Null (default) uses the account's AWSServiceRoleForConfig service-linked role (created unless create\_config\_service\_linked\_role = false). | `string` | `null` | no |
+| <a name="input_create_config_service_linked_role"></a> [create\_config\_service\_linked\_role](#input\_create\_config\_service\_linked\_role) | With config\_role\_arn = null, create the AWSServiceRoleForConfig service-linked role in the workload account. Set false if Config was ever enabled in the account (the SLR already exists). | `bool` | `true` | no |
 | <a name="input_edge_name_prefix"></a> [edge\_name\_prefix](#input\_edge\_name\_prefix) | Prefix applied to the edge WAF Web ACL, CloudFront Shield protection, and metric names. Ignored when enable\_edge is false. | `string` | `"workload-edge"` | no |
 | <a name="input_edge_origin_domain_name"></a> [edge\_origin\_domain\_name](#input\_edge\_origin\_domain\_name) | DNS name of the origin the edge CloudFront distribution fetches from. Ignored when enable\_edge is false. | `string` | `"origin.example.com"` | no |
 | <a name="input_enable_edge"></a> [enable\_edge](#input\_enable\_edge) | Deploy the per-workload edge-security stack (CloudFront + WAF, in us-east-1). Off by default; a workload opts in when it fronts an internet-facing app. | `bool` | `false` | no |
@@ -122,6 +122,7 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
+| <a name="output_config_role_arn"></a> [config\_role\_arn](#output\_config\_role\_arn) | IAM role the workload account's Config recorders use (the AWSServiceRoleForConfig service-linked role unless config\_role\_arn was set). |
 | <a name="output_name"></a> [name](#output\_name) | The resolved spoke name (var.name, else workload-<environment>). |
 | <a name="output_route_table_ids_by_tier"></a> [route\_table\_ids\_by\_tier](#output\_route\_table\_ids\_by\_tier) | Map of spoke subnet tier to its per-AZ route table IDs (owned by the vpc module). |
 | <a name="output_subnet_ids_by_tier"></a> [subnet\_ids\_by\_tier](#output\_subnet\_ids\_by\_tier) | Map of subnet tier name to the list of subnet IDs created for that tier (one per AZ) in the spoke VPC. |

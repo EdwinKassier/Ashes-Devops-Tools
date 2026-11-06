@@ -33,7 +33,7 @@ module "example" {
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
-| <a name="requirement_tfe"></a> [tfe](#requirement\_tfe) | ~> 0.60 |
+| <a name="requirement_tfe"></a> [tfe](#requirement\_tfe) | >= 0.83.0, < 1.0.0 |
 
 ## Providers
 
@@ -95,4 +95,5 @@ The following resources are created:
 | <a name="output_trigger_patterns"></a> [trigger\_patterns](#output\_trigger\_patterns) | Trigger patterns configured on the workspace. |
 | <a name="output_variable_keys"></a> [variable\_keys](#output\_variable\_keys) | Sorted keys of the variables set directly on the workspace (values omitted; some are sensitive). |
 | <a name="output_variable_set_labels"></a> [variable\_set\_labels](#output\_variable\_set\_labels) | Labels of the variable sets attached to this workspace. |
+| <a name="output_variable_values"></a> [variable\_values](#output\_variable\_values) | Values of the NON-sensitive variables set directly on the workspace, keyed by name (sensitive ones are omitted). |
 <!-- END_TF_DOCS -->

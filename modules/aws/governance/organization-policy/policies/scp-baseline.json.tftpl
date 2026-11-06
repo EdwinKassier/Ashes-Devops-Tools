@@ -1,0 +1,68 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyRootUserActions",
+      "Effect": "Deny",
+      "Action": "*",
+      "Resource": "*",
+      "Condition": {
+        "StringLike": {
+          "aws:PrincipalArn": "arn:aws:iam::*:root"
+        },
+        "ArnNotLike": {
+          "aws:PrincipalArn": [
+            "${terraform_run_role_arn}",
+            "${break_glass_role_arn}"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "DenyIamUserCredentials",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateUser",
+        "iam:CreateAccessKey",
+        "iam:CreateLoginProfile"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": ${break_glass_arns}
+        }
+      }
+    },
+    {
+      "Sid": "DenyDataPerimeterTagTampering",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateRole",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "s3:CreateBucket",
+        "s3:PutBucketTagging",
+        "s3:TagResource",
+        "s3:UntagResource",
+        "kms:CreateKey",
+        "kms:TagResource",
+        "kms:UntagResource",
+        "sqs:CreateQueue",
+        "sqs:TagQueue",
+        "sqs:UntagQueue",
+        "secretsmanager:CreateSecret",
+        "secretsmanager:TagResource",
+        "secretsmanager:UntagResource"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ForAnyValue:StringLike": {
+          "aws:TagKeys": "dp:*"
+        },
+        "ArnNotLike": {
+          "aws:PrincipalArn": ${break_glass_arns}
+        }
+      }
+    }
+  ]
+}

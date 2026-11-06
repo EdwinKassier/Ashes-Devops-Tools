@@ -11,7 +11,6 @@ variable "project_id" {
 variable "region" {
   description = "Region where the snapshot-schedule resource policies are created. Resource policies are regional and can only be attached to disks in the same region."
   type        = string
-  default     = "europe-west1"
 }
 
 variable "labels" {

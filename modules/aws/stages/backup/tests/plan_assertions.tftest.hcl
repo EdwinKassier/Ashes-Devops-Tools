@@ -53,3 +53,45 @@ run "composes_backup_baseline" {
     error_message = "backup_policy_id output must surface module.backup_org_policy.policy_id"
   }
 }
+
+# Default roles: backup_role_arn = null deploys the member-account backup role
+# through a service-managed StackSet on the Workloads OU and renders a
+# $account-templated ARN into the org policy; restore_testing_role_arn = null is
+# created by the vault child (asserted in modules/aws/backup/backup-vault).
+run "backup_role_stack_set_by_default" {
+  command = plan
+
+  variables {
+    backup_role_arn          = null
+    restore_testing_role_arn = null
+  }
+
+  assert {
+    condition     = output.backup_role_arn == "arn:aws:iam::$account:role/aws-backup-org-role"
+    error_message = "The org policy must name the StackSet role via the $account policy variable."
+  }
+
+  assert {
+    condition     = aws_cloudformation_stack_set.backup_role[0].permission_model == "SERVICE_MANAGED" && aws_cloudformation_stack_set.backup_role[0].auto_deployment[0].enabled
+    error_message = "The backup role must be deployed by an auto-deploying service-managed StackSet."
+  }
+
+  assert {
+    condition     = tolist(aws_cloudformation_stack_set_instance.backup_role[0].deployment_targets[0].organizational_unit_ids) == tolist(["ou-abcd-11111111"])
+    error_message = "The StackSet must target the Workloads OU the policy is attached to."
+  }
+
+  assert {
+    condition     = jsondecode(aws_cloudformation_stack_set.backup_role[0].template_body).Resources.BackupServiceRole.Properties.AssumeRolePolicyDocument.Statement[0].Principal.Service == "backup.amazonaws.com"
+    error_message = "The StackSet role must be trusted by backup.amazonaws.com only."
+  }
+}
+
+run "explicit_backup_role_creates_no_stack_set" {
+  command = plan
+
+  assert {
+    condition     = length(aws_cloudformation_stack_set.backup_role) == 0 && output.backup_role_arn == "arn:aws:iam::111111111111:role/aws-backup-role"
+    error_message = "An explicit backup_role_arn must be used as-is with no StackSet."
+  }
+}

@@ -108,7 +108,12 @@ module "tfc_oidc_baseline" {
   # Permissions boundary on tfc-apply (default: embedded tfc-apply-boundary).
   enable_apply_permissions_boundary = var.tfc_enable_apply_permissions_boundary
   apply_permissions_boundary_arn    = var.tfc_apply_permissions_boundary_arn
+  enable_apply_boundary_propagation = var.tfc_enable_apply_boundary_propagation
   call_as                           = var.tfc_oidc_call_as
+
+  # Plan-role data-plane read deny (ReadOnlyAccess minus GetObject/GetSecretValue/...).
+  enable_plan_role_data_read_deny = var.tfc_enable_plan_role_data_read_deny
+  plan_role_data_read_exempt_arns = var.tfc_plan_role_data_read_exempt_arns
 
   account_bindings = {
     for k, b in var.tfc_workspace_bindings : k => {

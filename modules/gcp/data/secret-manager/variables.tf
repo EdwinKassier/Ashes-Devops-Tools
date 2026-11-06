@@ -25,6 +25,10 @@ variable "secrets" {
       kms_key_name = optional CMEK key. For automatic replication a single multi-region
                      key; for user-managed replication the key is applied to each
                      replica (keys must be valid in each region — see README).
+      ephemeral_value = when true, an initial version is created from the ephemeral
+                        var.ephemeral_secret_values[name] instead of var.secret_values.
+                        The flag lives here because the version set must stay
+                        non-ephemeral (an ephemeral map cannot drive for_each).
   EOT
   type = map(object({
     labels = optional(map(string), {})
@@ -32,7 +36,8 @@ variable "secrets" {
       automatic            = optional(bool, true)
       user_managed_regions = optional(list(string), [])
     }), {})
-    kms_key_name = optional(string)
+    kms_key_name    = optional(string)
+    ephemeral_value = optional(bool, false)
   }))
   default = {}
 
@@ -62,6 +67,44 @@ variable "secret_values" {
       contains(keys(var.secrets), name)
     ])
     error_message = "every key in secret_values must correspond to a secret declared in var.secrets."
+  }
+
+  validation {
+    condition = alltrue([
+      for name in nonsensitive(keys(var.secret_values)) :
+      !try(var.secrets[name].ephemeral_value, false)
+    ])
+    error_message = "a secret with ephemeral_value = true takes its value from ephemeral_secret_values, not secret_values."
+  }
+}
+
+variable "ephemeral_secret_values" {
+  description = <<-EOT
+    Ephemeral initial secret VALUES as secret_name => value, for secrets declared in
+    var.secrets with ephemeral_value = true. Written with the write-only secret_data_wo
+    argument and never stored in plan or state; feed it from an ephemeral resource or an
+    ephemeral root variable. Prefer this over secret_values, whose value must be known
+    to (and is held in memory by) the calling configuration. Bump secret_value_versions
+    to push a new value.
+  EOT
+  type        = map(string)
+  default     = {}
+  sensitive   = true
+  ephemeral   = true
+
+  validation {
+    condition = alltrue([
+      for name in keys(var.ephemeral_secret_values) :
+      try(var.secrets[name].ephemeral_value, false)
+    ])
+    error_message = "every key in ephemeral_secret_values must name a secret in var.secrets with ephemeral_value = true."
+  }
+
+  validation {
+    condition = alltrue([
+      for name, cfg in var.secrets : contains(keys(var.ephemeral_secret_values), name) if cfg.ephemeral_value
+    ])
+    error_message = "every secret with ephemeral_value = true needs an entry in ephemeral_secret_values."
   }
 }
 

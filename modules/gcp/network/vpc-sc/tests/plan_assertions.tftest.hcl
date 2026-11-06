@@ -107,3 +107,46 @@ run "pure_dry_run_has_spec_only" {
     error_message = "a pure dry-run perimeter is neither enforced nor 'staged'."
   }
 }
+
+# The module reads optional() attributes directly (no try() wrappers): unset
+# attributes take their declared defaults and minimal policy objects still plan.
+run "optional_attributes_take_declared_defaults" {
+  command = plan
+
+  variables {
+    access_levels = [
+      {
+        name       = "corp_ips"
+        title      = "Corporate IPs"
+        conditions = [{ ip_subnetworks = ["203.0.113.0/24"] }]
+      }
+    ]
+    ingress_policies = [
+      {
+        identity_type = "ANY_IDENTITY"
+        operations    = [{ service_name = "storage.googleapis.com" }]
+      }
+    ]
+    egress_policies = [
+      {
+        identity_type = "ANY_IDENTITY"
+        resources     = ["*"]
+      }
+    ]
+  }
+
+  assert {
+    condition     = google_access_context_manager_access_level.levels["corp_ips"].basic[0].combining_function == "AND" && google_access_context_manager_access_level.levels["corp_ips"].basic[0].conditions[0].negate == false
+    error_message = "unset combining_function / negate must fall back to their optional() defaults (AND / false)."
+  }
+
+  assert {
+    condition     = length(google_access_context_manager_access_level.levels["corp_ips"].basic[0].conditions[0].device_policy) == 0
+    error_message = "an unset device_policy must render no device_policy block."
+  }
+
+  assert {
+    condition     = google_access_context_manager_service_perimeter.perimeter[0].status[0].ingress_policies[0].ingress_to[0].operations[0].service_name == "storage.googleapis.com" && length(google_access_context_manager_service_perimeter.perimeter[0].status[0].ingress_policies[0].ingress_from[0].sources) == 0
+    error_message = "a minimal ingress policy must plan with its operations and no sources."
+  }
+}

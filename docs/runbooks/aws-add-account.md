@@ -63,25 +63,33 @@ terraform -chdir=envs/aws/organization output -json tfc_apply_role_arns
 
 ---
 
-## Step 3 — Create the TFC workspace and wire its run role
+## Step 3 — Create the TFC workspace and wire its run role (tfc-admin)
 
-Create the downstream workspace out-of-band (the org root does **not** self-provision workspaces — see the decision section in [`aws-bootstrap.md`](aws-bootstrap.md#who-creates-the-downstream-workspaces-decision)):
+`envs/tfc-admin` creates and wires the workspace (see the decision section in [`aws-bootstrap.md`](aws-bootstrap.md#who-creates-the-downstream-workspaces-decision)). Add the environment to its `environments` map, naming the account key:
 
-1. **Workspace name:** `aws-workload-<key>` (e.g. `aws-workload-payments_prod`). For a per-env root this matches the `aws-workload-` prefix; the env is selected with `TF_WORKSPACE`.
-2. **VCS + working directory:** connect to this repo, working directory `envs/aws/workload`.
-3. **Credentials:** set these workspace environment variables from the Step 2 outputs:
+```hcl
+environments = {
+  # ...existing environments...
+  payments_prod = { aws_account_key = "payments_prod" }
+}
+aws_organization_outputs_from_tfc = true
+```
 
-   ```text
-   TFC_AWS_PROVIDER_AUTH  = true
-   TFC_AWS_PLAN_ROLE_ARN  = <tfc_plan_role_arns["payments_prod"]>
-   TFC_AWS_APPLY_ROLE_ARN = <tfc_apply_role_arns["payments_prod"]>
-   ```
+Re-apply tfc-admin. It creates `aws-workload-payments_prod` (VCS, working directory `envs/aws/workload`, triggers, remote-state access to `aws-organization` / `aws-network` / `aws-security`) and sets:
 
-   Leave the Terraform variable `assume_role_arn` unset (`null`), so the provider uses those credentials directly with no role hop. Speculative PR plans then run as the read-only `tfc-plan` role.
+| Variable | Kind | Value |
+|---|---|---|
+| `environment` | terraform | `payments_prod` (from the workspace name) |
+| `workload_account_key` | terraform | `payments_prod` (from `aws_account_key`) |
+| `TFC_AWS_PROVIDER_AUTH` | env | `true` |
+| `TFC_AWS_PLAN_ROLE_ARN` | env | `tfc_plan_role_arns["payments_prod"]` |
+| `TFC_AWS_APPLY_ROLE_ARN` | env | `tfc_apply_role_arns["payments_prod"]` |
 
-4. **Trust:** nothing to do by hand. The roles already trust exactly this workspace name, because of the Step 1 binding. The workspace name must match the binding character for character. If the workspace is not in `tfc_project`, set `project` on the binding.
+Put the workspace's other Terraform inputs (`landing_zone_name`, `log_archive_bucket_name`, `kms_key_arn`, …) in the committed `config/tfc-workspaces.yaml` under `aws-workload-payments_prod` — VCS-driven runs get no local tfvars. Leave `assume_role_arn` unset (`null`), so the provider uses the dynamic credentials directly with no role hop. Speculative PR plans then run as the read-only `tfc-plan` role.
 
-For a **foundational** account, use the corresponding key (`security_tooling`, `network`, `shared_services`, `backup`, …) and the matching layer root/workspace instead of `aws-workload-*`. The multi-account `aws-security` / `aws-backup` workspaces use per-alias variables (`TFC_AWS_PROVIDER_AUTH_<alias>`, `TFC_AWS_PLAN_ROLE_ARN_<alias>`, `TFC_AWS_APPLY_ROLE_ARN_<alias>`) for each member account they touch. See [aws-bootstrap](aws-bootstrap.md#per-workspace-environment-variables).
+**Trust:** nothing to do by hand. The roles already trust exactly this workspace name, because of the Step 1 binding. The workspace name must match the binding character for character, and the binding's project (`tfc_project`, `landing-zone-aws` under tfc-admin) must match the workspace's project.
+
+For a **foundational** account, use the corresponding key (`security_tooling`, `network`, `shared_services`, `backup`, …) and the matching layer root/workspace instead of `aws-workload-*`. The multi-account `aws-security` / `aws-backup` workspaces use per-alias variables (`TFC_AWS_PROVIDER_AUTH_<alias>`, `TFC_AWS_PLAN_ROLE_ARN_<alias>`, `TFC_AWS_APPLY_ROLE_ARN_<alias>`) for each member account they touch; tfc-admin derives them from the same outputs. See [aws-bootstrap](aws-bootstrap.md#per-workspace-environment-variables).
 
 ---
 

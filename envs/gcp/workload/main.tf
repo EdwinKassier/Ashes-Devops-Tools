@@ -93,6 +93,16 @@ locals {
     }
   ]
 
+  # Access policy for the environment perimeter: an explicit
+  # vpc_sc_access_policy_name (legacy org-wide policy) wins; otherwise the
+  # environment's own folder-scoped policy from gcp-projects environment_config,
+  # on which only this environment's workload SAs hold policyEditor.
+  vpc_sc_access_policy = var.vpc_sc_access_policy_name != null ? var.vpc_sc_access_policy_name : try(local.env_config.vpc_sc_access_policy_id, null)
+
+  # Explicit production marker from gcp-projects environment_config. The name
+  # match is only a fallback for an environment_config that predates it.
+  is_production = coalesce(try(local.env_config.is_production, null), can(regex("prod", lower(var.environment))))
+
   # Effective VPC-SC policies: caller-supplied values override the defaults above.
   effective_vpc_sc_ingress_policies = length(var.vpc_sc_ingress_policies) > 0 ? var.vpc_sc_ingress_policies : tolist(local.default_vpc_sc_ingress_policies)
   effective_vpc_sc_egress_policies  = length(var.vpc_sc_egress_policies) > 0 ? var.vpc_sc_egress_policies : tolist(local.default_vpc_sc_egress_policies)
@@ -150,13 +160,13 @@ module "host" {
   vpc_flow_logs_bigquery_location   = local.env_config.region
   vpc_flow_logs_retention_days      = var.vpc_flow_logs_retention_days
 
-  # Only created when vpc_sc_access_policy_name is set (same gate as gcp-network-hub).
-  # Passing a perimeter with a null access policy trips the vpc-sc module's validation,
-  # which made the default plan of this root fail.
-  vpc_service_controls = var.vpc_sc_access_policy_name == null ? {} : {
+  # Only created when an access policy is known (the env's scoped policy, or an
+  # explicit vpc_sc_access_policy_name). Passing a perimeter with a null access
+  # policy trips the vpc-sc module's validation.
+  vpc_service_controls = local.vpc_sc_access_policy == null ? {} : {
     "${var.environment}_perimeter" = {
       organization_id    = "organizations/${data.terraform_remote_state.organization.outputs.org_id}"
-      access_policy_name = var.vpc_sc_access_policy_name
+      access_policy_name = local.vpc_sc_access_policy
       perimeter_title    = coalesce(var.vpc_sc_perimeter_title, "${upper(var.environment)} Perimeter")
       perimeter_type     = "PERIMETER_TYPE_REGULAR"
       enable_dry_run     = var.vpc_sc_enable_dry_run
@@ -394,12 +404,12 @@ module "app_services" {
   depends_on = [module.host, module.saas_secret_bridge]
 }
 
-# SOTA M: nothing tied prod to an enforced perimeter. Warn (check blocks never
-# fail the plan) when a production-like environment has no perimeter or only a
-# dry-run one. Perimeter creation stays gated on vpc_sc_access_policy_name.
+# Nothing else ties production to an enforced perimeter. Warn (check blocks never
+# fail the plan) when a production environment (environment_config is_production)
+# has no perimeter or only a dry-run one.
 check "vpc_sc_enforced_in_prod" {
   assert {
-    condition     = !can(regex("prod", lower(var.environment))) || (var.vpc_sc_access_policy_name != null && !var.vpc_sc_enable_dry_run)
-    error_message = "Environment '${var.environment}' looks like production but its VPC-SC perimeter is ${var.vpc_sc_access_policy_name == null ? "NOT CREATED (vpc_sc_access_policy_name is null)" : "in DRY-RUN (vpc_sc_enable_dry_run = true)"}. Dry-run gives no exfiltration protection: validate the violation logs, then set vpc_sc_enable_dry_run = false (use vpc_sc_dry_run_restricted_services to keep staging further changes)."
+    condition     = !local.is_production || (local.vpc_sc_access_policy != null && !var.vpc_sc_enable_dry_run)
+    error_message = "Environment '${var.environment}' is production but its VPC-SC perimeter is ${local.vpc_sc_access_policy == null ? "NOT CREATED (no scoped access policy in environment_config and vpc_sc_access_policy_name is null)" : "in DRY-RUN (vpc_sc_enable_dry_run = true)"}. Dry-run gives no exfiltration protection: validate the violation logs, then set vpc_sc_enable_dry_run = false (use vpc_sc_dry_run_restricted_services to keep staging further changes)."
   }
 }

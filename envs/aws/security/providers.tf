@@ -38,7 +38,9 @@ provider "aws" {
       role_arn = assume_role.value
     }
   }
-  allowed_account_ids = try([data.terraform_remote_state.aws_organization.outputs.account_ids["security_tooling"]], null)
+  # No try(): a missing account_ids key fails the plan loudly instead of
+  # silently dropping the wrong-account guard.
+  allowed_account_ids = [data.terraform_remote_state.aws_organization.outputs.account_ids["security_tooling"]]
 }
 
 provider "aws" {
@@ -58,7 +60,9 @@ provider "aws" {
       role_arn = assume_role.value
     }
   }
-  allowed_account_ids = try([data.terraform_remote_state.aws_organization.outputs.account_ids["log_archive"]], null)
+  # No try(): a missing account_ids key fails the plan loudly instead of
+  # silently dropping the wrong-account guard.
+  allowed_account_ids = [data.terraform_remote_state.aws_organization.outputs.account_ids["log_archive"]]
 }
 
 provider "aws" {
@@ -78,7 +82,9 @@ provider "aws" {
       role_arn = assume_role.value
     }
   }
-  allowed_account_ids = try([data.terraform_remote_state.aws_organization.outputs.account_ids["forensics"]], null)
+  # No try(): a missing account_ids key fails the plan loudly instead of
+  # silently dropping the wrong-account guard.
+  allowed_account_ids = [data.terraform_remote_state.aws_organization.outputs.account_ids["forensics"]]
 }
 
 # Canonical tag set written by EVERY aws provider in this root (default_tags).

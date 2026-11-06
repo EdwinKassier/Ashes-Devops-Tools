@@ -49,6 +49,12 @@ jobs:
     outputs:
       configured: ${{ steps.check.outputs.configured }}
     steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
       - name: Check whether TFC_TOKEN_DRIFT / TFC_ORGANIZATION are configured
         id: check
         # `secrets.*` cannot be referenced directly in a job-level `if:`, so we
@@ -119,6 +125,12 @@ jobs:
         # yamllint disable-line rule:line-length
         workspace: ${{ fromJSON(vars.TFC_DRIFT_WORKSPACES || '["gcp-bootstrap","gcp-organization","gcp-projects","gcp-network-hub","gcp-workload-dev","aws-organization","aws-security","aws-network"]') }}
     steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
       - name: Assert Terraform Cloud credentials are configured
         env:
           TFC_TOKEN: ${{ secrets.TFC_TOKEN_DRIFT }}
@@ -315,6 +327,12 @@ jobs:
     needs: [check-credentials, detect-drift]
     if: always()
     steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
       - name: Publish summary
         # needs.detect-drift.result is the aggregated matrix result:
         #   success  = ALL workspace jobs passed (no drift detected in any workspace)

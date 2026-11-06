@@ -66,7 +66,7 @@ variable "github_repo" {
 }
 
 variable "enable_github_wif" {
-  description = "Create the GitHub Actions WIF pool. Default false: no workflow in this repo uses GCP OIDC, so a standing trust is unused privilege (audit C2). When true, the trust is pinned to github_repository_id + github_repository_owner_id on refs/heads/main and bound ONLY to the read-only organization plan SA."
+  description = "Create the GitHub Actions WIF pool. Default false: no workflow in this repo uses GCP OIDC, so a standing trust is unused privilege. When true, the trust is pinned to github_repository_id + github_repository_owner_id on refs/heads/main and bound ONLY to the read-only organization plan SA."
   type        = bool
   default     = false
 
@@ -173,9 +173,25 @@ variable "tfc_workload_workspace_prefix" {
 }
 
 variable "tfc_workspace_ids" {
-  description = "Optional map of TFC workspace NAME -> immutable workspace ID (ws-xxxxxxxx). When a workspace has an entry, its WIF bindings match the immutable ID (attribute.workspace_id_phase) instead of the name, so deleting/recreating or squatting the name gains nothing."
+  description = "Optional map of TFC workspace NAME -> immutable workspace ID (ws-xxxxxxxx). When a workspace has an entry, its WIF bindings match the immutable ID (attribute.workspace_id_phase) instead of the name, so deleting/recreating or squatting the name gains nothing. Expected for every control-plane workspace and every production workload workspace (see production_workload_environments)."
   type        = map(string)
   default     = {}
+
+  validation {
+    condition     = alltrue([for id in values(var.tfc_workspace_ids) : can(regex("^ws-[A-Za-z0-9]+$", id)) && !can(regex("(?i)(replace|changeme|xxxx)", id))])
+    error_message = "tfc_workspace_ids values must be real TFC workspace IDs (ws-<alphanumerics>, from the tfc-admin root output or the TFC UI). Placeholders such as ws-REPLACEME are rejected."
+  }
+}
+
+variable "production_workload_environments" {
+  description = "Subset of workload_environments that are production (the environments map entries with is_production = true). A check warns when any of their workspaces, or any control-plane workspace, is still WIF-bound by mutable NAME instead of an immutable tfc_workspace_ids entry."
+  type        = set(string)
+  default     = []
+
+  validation {
+    condition     = length(setsubtract(var.production_workload_environments, var.workload_environments)) == 0
+    error_message = "production_workload_environments must be a subset of workload_environments."
+  }
 }
 
 variable "workload_folder_roles" {
@@ -185,10 +201,25 @@ variable "workload_folder_roles" {
     apply = list(string)
   })
   default = {
+    # Metadata-only viewers; the plan viewer custom role (enable_plan_viewer_role)
+    # is appended. Deliberately NOT roles/viewer, which reads object/table data.
     plan = [
-      "roles/viewer",
-      "roles/iam.securityReviewer",
       "roles/resourcemanager.folderViewer",
+      "roles/iam.securityReviewer",
+      "roles/iam.serviceAccountViewer",
+      "roles/iam.workloadIdentityPoolViewer",
+      "roles/serviceusage.serviceUsageViewer",
+      "roles/compute.viewer",
+      "roles/dns.reader",
+      "roles/cloudkms.viewer",
+      "roles/secretmanager.viewer",
+      "roles/pubsub.viewer",
+      "roles/bigquery.metadataViewer",
+      "roles/cloudsql.viewer",
+      "roles/run.viewer",
+      "roles/container.clusterViewer",
+      "roles/monitoring.viewer",
+      "roles/osconfig.patchDeploymentViewer",
     ]
     apply = [
       "roles/resourcemanager.projectIamAdmin",
@@ -219,7 +250,12 @@ variable "workload_folder_roles" {
 
   validation {
     condition     = !contains(concat(var.workload_folder_roles.plan, var.workload_folder_roles.apply), "roles/owner")
-    error_message = "roles/owner must not be a workload folder role: it would become delegable by projects-apply on every folder."
+    error_message = "roles/owner must not be a workload folder role: it would become delegable by projects-apply on the environment folders."
+  }
+
+  validation {
+    condition     = length(setintersection(toset(var.workload_folder_roles.plan), toset(["roles/viewer", "roles/editor", "roles/owner"]))) == 0
+    error_message = "workload_folder_roles.plan must not contain roles/viewer, roles/editor or roles/owner: roles/viewer reads Cloud Storage objects and BigQuery table data. Use metadata-only viewers plus the plan viewer custom role."
   }
 }
 
@@ -249,7 +285,12 @@ variable "network_folder_roles" {
 
   validation {
     condition     = !contains(concat(var.network_folder_roles.plan, var.network_folder_roles.apply), "roles/owner")
-    error_message = "roles/owner must not be a network folder role: it would become delegable by projects-apply on every folder."
+    error_message = "roles/owner must not be a network folder role: it would become delegable by projects-apply on the shared folder."
+  }
+
+  validation {
+    condition     = length(setintersection(toset(var.network_folder_roles.plan), toset(["roles/viewer", "roles/editor", "roles/owner"]))) == 0
+    error_message = "network_folder_roles.plan must not contain roles/viewer, roles/editor or roles/owner (data access from a plan identity)."
   }
 }
 
@@ -266,7 +307,7 @@ variable "workload_billing_roles" {
 }
 
 variable "vpc_sc_access_policy_id" {
-  description = "Optional numeric Access Context Manager policy ID. When set, workload apply SAs get roles/accesscontextmanager.policyEditor (plan: policyReader) on THIS policy only, so gcp-workload-<env> can manage its own perimeter without an org-level role."
+  description = "Optional numeric ID of the org-wide Access Context Manager policy. Only used with enable_legacy_org_access_policy_grants = true. The default model gives each environment its own folder-scoped access policy (created by gcp-organization), so a workload SA can never edit another environment's or the hub's perimeter."
   type        = string
   default     = null
 
@@ -274,4 +315,117 @@ variable "vpc_sc_access_policy_id" {
     condition     = var.vpc_sc_access_policy_id == null || can(regex("^[0-9]+$", var.vpc_sc_access_policy_id))
     error_message = "vpc_sc_access_policy_id must be the numeric access policy ID (without the accessPolicies/ prefix)."
   }
+}
+
+variable "enable_legacy_org_access_policy_grants" {
+  description = "LEGACY. Grant every workload apply SA roles/accesscontextmanager.policyEditor (plan: policyReader) on the org-wide policy vpc_sc_access_policy_id. Any one environment could then edit every perimeter in the org, including production and the hub. Default false: use enable_scoped_access_policies instead. Enable only while migrating an existing deployment whose workload perimeters still live in the org-wide policy."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.enable_legacy_org_access_policy_grants || var.vpc_sc_access_policy_id != null
+    error_message = "enable_legacy_org_access_policy_grants = true requires vpc_sc_access_policy_id."
+  }
+}
+
+variable "enable_scoped_access_policies" {
+  description = "Default model for workload VPC-SC: gcp-organization creates one folder-scoped access policy per environment folder and grants that environment's SAs rights on it only. This grants the organization stage SAs what that needs (apply: roles/accesscontextmanager.policyAdmin, plan: policyReader at the org node). Keep it in step with the gcp-organization enable_scoped_access_policies input. Default true."
+  type        = bool
+  default     = true
+}
+
+variable "enable_org_level_folder_iam_delegation" {
+  description = "LEGACY. Bind the projects-apply conditional roles/resourcemanager.folderIamAdmin at the ORG node, where it applies to every folder. Default false: gcp-organization binds it on each environment folder (workload roles only) and the shared folder (network roles only). Enable only to bridge a migration until gcp-organization has been re-applied."
+  type        = bool
+  default     = false
+}
+
+variable "enable_plan_viewer_role" {
+  description = "Create the org custom role plan_viewer_role_id (metadata-only get/list/getIamPolicy, no data access) and grant it to the plan identities: organization-plan on the admin project, and (through the gcp-projects folder grants) the workload and network plan SAs. Default true. Needs roles/iam.organizationRoleAdmin for the bootstrap apply identity (granted here)."
+  type        = bool
+  default     = true
+}
+
+variable "plan_viewer_role_id" {
+  description = "role_id of the org-level plan viewer custom role. A deleted custom role ID is unusable for 37 days, so change it if you recreate the role within that window."
+  type        = string
+  default     = "landingZonePlanViewer"
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9_.]{3,64}$", var.plan_viewer_role_id))
+    error_message = "plan_viewer_role_id must be 3-64 characters of letters, digits, '_' and '.'."
+  }
+}
+
+variable "plan_viewer_permissions" {
+  description = "Permissions of the plan viewer custom role. Metadata-only by design: it fills the gaps left by the predefined metadata viewers in the plan role lists (bucket and repository metadata, logging and monitoring configuration). Data-plane permissions (object reads, table data, secret payloads, decrypt, log entries, token minting) are rejected."
+  type        = list(string)
+  default = [
+    "artifactregistry.repositories.get",
+    "artifactregistry.repositories.getIamPolicy",
+    "artifactregistry.repositories.list",
+    "iam.roles.get",
+    "iam.roles.list",
+    "logging.buckets.get",
+    "logging.buckets.list",
+    "logging.exclusions.get",
+    "logging.exclusions.list",
+    "logging.logMetrics.get",
+    "logging.logMetrics.list",
+    "logging.sinks.get",
+    "logging.sinks.list",
+    "logging.views.get",
+    "logging.views.list",
+    "monitoring.alertPolicies.get",
+    "monitoring.alertPolicies.list",
+    "monitoring.dashboards.get",
+    "monitoring.dashboards.list",
+    "monitoring.notificationChannels.get",
+    "monitoring.notificationChannels.list",
+    "resourcemanager.folders.get",
+    "resourcemanager.projects.get",
+    "resourcemanager.tagKeys.get",
+    "resourcemanager.tagValues.get",
+    "storage.buckets.get",
+    "storage.buckets.getIamPolicy",
+    "storage.buckets.list",
+    "storage.buckets.listEffectiveTags",
+    "storage.buckets.listTagBindings",
+  ]
+
+  validation {
+    condition     = length(var.plan_viewer_permissions) > 0
+    error_message = "plan_viewer_permissions must not be empty (set enable_plan_viewer_role = false instead)."
+  }
+
+  validation {
+    condition = length(setintersection(toset(var.plan_viewer_permissions), toset([
+      "storage.objects.get",
+      "storage.objects.list",
+      "bigquery.tables.getData",
+      "bigquery.tables.export",
+      "bigquery.jobs.create",
+      "secretmanager.versions.access",
+      "cloudkms.cryptoKeyVersions.useToDecrypt",
+      "logging.logEntries.list",
+      "logging.privateLogEntries.list",
+      "logging.views.access",
+      "artifactregistry.repositories.downloadArtifacts",
+      "cloudsql.instances.export",
+      "iam.serviceAccounts.getAccessToken",
+      "iam.serviceAccounts.actAs",
+    ]))) == 0
+    error_message = "plan_viewer_permissions must not contain data-plane permissions (storage.objects.get/list, bigquery.tables.getData/export, bigquery.jobs.create, secretmanager.versions.access, cloudkms.cryptoKeyVersions.useToDecrypt, logging.logEntries.list, logging.privateLogEntries.list, logging.views.access, artifactregistry.repositories.downloadArtifacts, cloudsql.instances.export, iam.serviceAccounts.getAccessToken/actAs)."
+  }
+
+  validation {
+    condition     = alltrue([for p in var.plan_viewer_permissions : can(regex("\\.(get|list|getIamPolicy|listEffectiveTags|listTagBindings)$", p))])
+    error_message = "plan_viewer_permissions may only contain get / list / getIamPolicy / listEffectiveTags / listTagBindings permissions."
+  }
+}
+
+variable "enable_pam" {
+  description = "Grant the organization stage SAs Privileged Access Manager rights at the org node (apply: roles/privilegedaccessmanager.admin, plan: viewer) so gcp-organization can manage the just-in-time org-admin entitlement. Keep it in step with the gcp-organization enable_pam input. Default false."
+  type        = bool
+  default     = false
 }

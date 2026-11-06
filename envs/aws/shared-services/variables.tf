@@ -81,13 +81,17 @@ variable "secrets_kms_key_id" {
 # -----------------------------------------------------------------------------
 
 variable "landing_zone_name" {
-  description = "Landing-zone identifier written to the LandingZone tag on every resource."
+  description = "Landing-zone identifier written to the LandingZone tag on every resource. No default: set your own organization's identifier (same value in every AWS root; set it once in the tfc-admin common variable set via common_workspace_variables). The upstream placeholders \"ashes\" and \"my-org\" are rejected."
   type        = string
-  default     = "ashes"
 
   validation {
-    condition     = length(trimspace(var.landing_zone_name)) > 0
-    error_message = "landing_zone_name must be a non-empty string."
+    condition     = can(regex("^[a-z][a-z0-9-]{1,30}$", var.landing_zone_name))
+    error_message = "landing_zone_name must be 2-31 chars: a lowercase letter, then lowercase letters, digits or hyphens."
+  }
+
+  validation {
+    condition     = !contains(["ashes", "my-org"], lower(var.landing_zone_name))
+    error_message = "landing_zone_name is still an upstream placeholder (ashes / my-org). Set your own landing-zone identifier."
   }
 }
 

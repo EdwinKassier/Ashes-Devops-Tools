@@ -73,8 +73,8 @@ variable "terraform_run_role_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/.+$", var.terraform_run_role_arn))
-    error_message = "terraform_run_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/...)."
+    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.terraform_run_role_arn))
+    error_message = "terraform_run_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/<name>) with no wildcards (* or ?)."
   }
 }
 
@@ -83,8 +83,8 @@ variable "break_glass_role_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/.+$", var.break_glass_role_arn))
-    error_message = "break_glass_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/...)."
+    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.break_glass_role_arn))
+    error_message = "break_glass_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/<name>) with no wildcards (* or ?)."
   }
 }
 
@@ -237,7 +237,7 @@ variable "tfc_apply_role_policy_arns" {
 }
 
 variable "tfc_enable_apply_permissions_boundary" {
-  description = "Cap every member-account tfc-apply role with a permissions boundary (default true). With tfc_apply_permissions_boundary_arn = null the StackSet embeds tfc-apply-boundary: allow-all except leaving the org, stopping/deleting CloudTrail/GuardDuty/Config, modifying the TFC roles/OIDC provider/boundary, and creating IAM users/access keys."
+  description = "Cap every member-account tfc-apply role with a permissions boundary (default true). With tfc_apply_permissions_boundary_arn = null the StackSet embeds tfc-apply-boundary: allow-all except leaving the org, stopping/deleting CloudTrail/GuardDuty/Config, modifying the TFC roles/OIDC provider/boundary, creating IAM users/access keys, and (tfc_enable_apply_boundary_propagation) creating or granting to roles without the same boundary."
   type        = bool
   default     = true
 }
@@ -246,6 +246,24 @@ variable "tfc_apply_permissions_boundary_arn" {
   description = "Optional existing permissions-boundary policy ARN for the tfc-apply roles (must exist in every bound account). Null (default) = the embedded tfc-apply-boundary."
   type        = string
   default     = null
+}
+
+variable "tfc_enable_apply_boundary_propagation" {
+  description = "Make the embedded tfc-apply boundary self-propagating (default true): tfc-apply can only create / grant to roles carrying the same boundary and can never remove a boundary, closing the create-unbounded-role escape. Every aws_iam_role created by tfc-apply in a member account must then set permissions_boundary to the tfc-apply-boundary ARN."
+  type        = bool
+  default     = true
+}
+
+variable "tfc_enable_plan_role_data_read_deny" {
+  description = "Attach an inline deny on data-plane reads (s3:GetObject*, secretsmanager:GetSecretValue, ssm:GetParameter*, kms:Decrypt, DynamoDB/SQS/Kinesis/Logs reads, ...) to every member-account tfc-plan role (default true)."
+  type        = bool
+  default     = true
+}
+
+variable "tfc_plan_role_data_read_exempt_arns" {
+  description = "Resource ARNs excluded from the tfc-plan data-plane deny (NotResource), for Terraform-managed resources whose refresh reads data (e.g. the aws-workload SaaS bridge secret). Empty (default) = deny everywhere."
+  type        = list(string)
+  default     = []
 }
 
 variable "tfc_oidc_call_as" {

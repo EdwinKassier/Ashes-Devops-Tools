@@ -39,14 +39,16 @@ module "aws_security" {
   aws_region          = var.aws_region
   aws_enabled_regions = var.aws_enabled_regions
 
-  log_archive_bucket_name     = var.log_archive_bucket_name
-  key_admin_arn               = var.key_admin_arn
-  kms_key_user_arns           = var.kms_key_user_arns
-  enable_kms_protection_tag   = var.enable_kms_protection_tag
-  config_role_arn             = var.config_role_arn
-  aggregator_role_arn         = var.aggregator_role_arn
-  meta_store_manager_role_arn = var.meta_store_manager_role_arn
-  break_glass_role_arn        = var.break_glass_role_arn
+  log_archive_bucket_name           = var.log_archive_bucket_name
+  key_admin_arn                     = var.key_admin_arn
+  key_admin_role_name               = var.key_admin_role_name
+  kms_key_user_arns                 = var.kms_key_user_arns
+  enable_kms_protection_tag         = var.enable_kms_protection_tag
+  config_role_arn                   = var.config_role_arn
+  create_config_service_linked_role = var.create_config_service_linked_role
+  aggregator_role_arn               = var.aggregator_role_arn
+  meta_store_manager_role_arn       = var.meta_store_manager_role_arn
+  break_glass_role_arn              = var.break_glass_role_arn
 
   # Managed break-glass role (audit M3): opt-in. When create_break_glass is true
   # the stage creates the role and watches it; otherwise break_glass_role_arn above

@@ -10,6 +10,10 @@
 
 mock_provider "aws" {}
 
+variables {
+  landing_zone_name = "acme"
+}
+
 run "consumes_remote_state_contract" {
   command = plan
 
@@ -40,4 +44,28 @@ run "consumes_remote_state_contract" {
     condition     = local.org_arn == "arn:aws:organizations::111111111111:organization/o-abcdefghij"
     error_message = "org_arn must be built from management_account_id and organization_id for RAM org-wide sharing"
   }
+}
+
+# landing_zone_name has no default and rejects the upstream placeholders.
+run "rejects_placeholder_landing_zone_name" {
+  command = plan
+
+  variables {
+    landing_zone_name = "ashes"
+  }
+
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = {
+      outputs = {
+        organization_id       = "o-abcdefghij"
+        management_account_id = "111111111111"
+        account_role_arns = {
+          shared_services = "arn:aws:iam::222222222222:role/cross-account"
+        }
+      }
+    }
+  }
+
+  expect_failures = [var.landing_zone_name]
 }

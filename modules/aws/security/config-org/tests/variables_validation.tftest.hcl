@@ -26,3 +26,23 @@ run "empty_log_archive_bucket_rejected" {
 
   expect_failures = [var.log_archive_bucket]
 }
+
+run "malformed_config_role_arn_rejected" {
+  command = plan
+
+  variables {
+    config_role_arn = "not-an-arn"
+  }
+
+  expect_failures = [var.config_role_arn]
+}
+
+run "malformed_aggregator_role_arn_rejected" {
+  command = plan
+
+  variables {
+    aggregator_role_arn = "not-an-arn"
+  }
+
+  expect_failures = [var.aggregator_role_arn]
+}

@@ -128,10 +128,11 @@ variable "manage_master_user_password" {
 }
 
 variable "master_password" {
-  description = "Master password. Only used when manage_master_user_password is false; written with the write-only master_password_wo argument so it never enters plan or state. Prefer manage_master_user_password = true (RDS-managed secret)."
+  description = "Master password. Only used when manage_master_user_password is false. Ephemeral and written with the write-only master_password_wo argument, so it never enters plan or state; it may be fed from an ephemeral resource (e.g. aws_secretsmanager_secret_version). Prefer manage_master_user_password = true (RDS-managed secret)."
   type        = string
   default     = null
   sensitive   = true
+  ephemeral   = true
 
   # Cross-variable validation (Terraform 1.9+): if RDS is not managing the
   # password, one must be supplied here.

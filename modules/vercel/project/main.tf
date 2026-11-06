@@ -23,14 +23,16 @@
 #   Upgrade note: flipping an existing variable's sensitive flag makes the
 #   provider replace that env var (destroy + create).
 #
-# AUDIT S4 (write-only secrets — deferred, toolchain-blocked):
-#   Ideally env var values would use the Terraform write-only argument
-#   `value_wo` so secrets never land in state. The vercel 4.8.x provider schema
-#   DOES expose `value_wo` (write-only, mutually exclusive with `value`), but
-#   write-only arguments need Terraform >= 1.11 and the repo pins ~> 1.9.
-#   Adopting it is a toolchain bump; the replace_triggered_by fingerprint
-#   mechanism above would then provide change detection. Until then, values
-#   remain in TFC state (encrypted at rest).
+# WRITE-ONLY SECRETS:
+#   Sensitive env var values use the write-only `value_wo` argument (vercel
+#   provider >= 4.8.2, Terraform >= 1.11), so they never land in plan or state;
+#   non-sensitive values keep `value`. The *_environment_variables inputs are
+#   deliberately NOT `ephemeral = true`: the same lists drive the env-var
+#   for_each keys and the sha256 fingerprints below (stored in state as
+#   replace_triggered_by drift detection), and an ephemeral value may only feed
+#   write-only arguments. To keep a secret out of the calling configuration
+#   entirely, set it out-of-band (Vercel UI/CLI) or via an ephemeral root
+#   variable in a dedicated resource outside this module.
 #
 # POSIX SH:
 #   ignore_command is executed in /bin/sh by Vercel (not bash). All

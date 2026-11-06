@@ -10,7 +10,8 @@
 # infrastructure and declares no cloud provider.
 #
 # Cloud selection: enable_gcp / enable_aws / enable_saas decide which workspaces
-# exist, so an AWS-only or SaaS-only adopter gets no dead gcp-* workspaces.
+# exist (all default false; at least one must be enabled), so an AWS-only or
+# SaaS-only adopter gets no dead gcp-* workspaces.
 
 locals {
   # Module domains each root consumes. A module-only PR must trigger a plan on
@@ -160,11 +161,27 @@ locals {
   }
 
   aws_organization_outputs = try(data.tfe_outputs.aws_organization[0].nonsensitive_values, {})
+  aws_output_plan_roles    = try(tomap(local.aws_organization_outputs.tfc_plan_role_arns), {})
+  aws_output_apply_roles   = try(tomap(local.aws_organization_outputs.tfc_apply_role_arns), {})
 
-  # Workspace => account key: inverted from aws-organization's
-  # tfc_workspace_bindings (account key => workspace names), overridden by
-  # var.aws_workspace_account_keys. A workspace bound to several accounts takes
-  # the first (sorted) one unless set explicitly.
+  # Roots whose DEFAULT provider is the management (payer) account. Their default
+  # credentials are the phase-0 management-account role, never a member role.
+  aws_management_workspaces = ["aws-organization", "aws-security", "aws-backup"]
+
+  # Multi-account roots and their member-account provider aliases (alias name ==
+  # aws-organization account key; see envs/aws/{security,backup}/providers.tf).
+  # Each alias authenticates directly as that account's tfc-plan / tfc-apply role
+  # through a TFC multiple-configuration dynamic credential.
+  aws_alias_accounts = {
+    "aws-security" = ["security_tooling", "log_archive", "forensics"]
+    "aws-backup"   = ["backup"]
+  }
+
+  # Single-account workspace => account key. Sources, lowest precedence first:
+  # aws-organization's tfc_workspace_bindings (account key => workspace names,
+  # inverted), environments[*].aws_account_key for aws-workload-<env>, then
+  # var.aws_workspace_account_keys. Management-default roots are excluded: their
+  # bindings exist only to trust the alias roles.
   aws_bound_workspaces = {
     for pair in flatten([
       for acct, wss in try(tomap(local.aws_organization_outputs.tfc_workspace_bindings), {}) : [
@@ -172,52 +189,152 @@ locals {
       ]
     ]) : pair.ws => pair.acct...
   }
-  aws_workspace_accounts = merge(
-    { for ws, accts in local.aws_bound_workspaces : ws => sort(accts)[0] },
-    var.aws_workspace_account_keys,
-  )
+  aws_workspace_accounts = {
+    for ws, acct in merge(
+      { for ws, accts in local.aws_bound_workspaces : ws => sort(accts)[0] },
+      { for env, e in var.environments : "aws-workload-${env}" => e.aws_account_key if e.aws_account_key != null },
+      var.aws_workspace_account_keys,
+    ) : ws => acct if !contains(local.aws_management_workspaces, ws)
+  }
+
+  # Per-alias role pairs for the managed multi-account workspaces: explicit
+  # aws_alias_role_arns win over the aws-organization outputs.
+  aws_alias_roles = {
+    for ws, aliases in local.aws_alias_accounts : ws => {
+      for a in aliases : a => {
+        plan  = try(var.aws_alias_role_arns[ws][a].plan_role_arn, local.aws_output_plan_roles[a], null)
+        apply = try(var.aws_alias_role_arns[ws][a].apply_role_arn, local.aws_output_apply_roles[a], null)
+      }
+    } if contains(local.workspace_names, ws)
+  }
+  # A multi-account workspace is credential-complete only when every alias has
+  # both roles; the derived management default is withheld until then, because
+  # TFC would otherwise inject tfc_aws_dynamic_credentials without the aliases
+  # the root's providers index.
+  aws_aliases_complete = {
+    for ws, aliases in local.aws_alias_roles : ws => alltrue([for r in values(aliases) : r.plan != null && r.apply != null])
+  }
+
+  aws_management_defaults = var.aws_management_plan_role_arn == null ? {} : {
+    for ws in local.aws_management_workspaces : ws => {
+      plan  = var.aws_management_plan_role_arn
+      apply = var.aws_management_apply_role_arn
+    } if contains(local.workspace_names, ws) && lookup(local.aws_aliases_complete, ws, true)
+  }
 
   aws_plan_roles = merge(
+    { for ws, r in local.aws_management_defaults : ws => r.plan },
     {
-      for ws, acct in local.aws_workspace_accounts : ws => local.aws_organization_outputs.tfc_plan_role_arns[acct]
-      if try(local.aws_organization_outputs.tfc_plan_role_arns[acct], null) != null
+      for ws, acct in local.aws_workspace_accounts : ws => local.aws_output_plan_roles[acct]
+      if try(local.aws_output_plan_roles[acct], null) != null
     },
     var.aws_plan_role_arns,
   )
   aws_apply_roles = merge(
+    { for ws, r in local.aws_management_defaults : ws => r.apply },
     {
-      for ws, acct in local.aws_workspace_accounts : ws => local.aws_organization_outputs.tfc_apply_role_arns[acct]
-      if try(local.aws_organization_outputs.tfc_apply_role_arns[acct], null) != null
+      for ws, acct in local.aws_workspace_accounts : ws => local.aws_output_apply_roles[acct]
+      if try(local.aws_output_apply_roles[acct], null) != null
     },
     var.aws_apply_role_arns,
   )
 
+  # Alias env vars are emitted only for a workspace whose default credentials are
+  # set too (a TFC alias configuration without the default one is unusable).
+  aws_alias_env = {
+    for ws, aliases in local.aws_alias_roles : ws => merge([
+      for a, r in aliases : {
+        "TFC_AWS_PROVIDER_AUTH_${a}"  = { value = "true", category = "env", hcl = false, sensitive = false, description = "Enable the ${a} AWS dynamic-credential configuration (provider alias aws.${a})." }
+        "TFC_AWS_PLAN_ROLE_ARN_${a}"  = { value = r.plan, category = "env", hcl = false, sensitive = false, description = "${a} account tfc-plan role assumed by alias aws.${a} during plan." }
+        "TFC_AWS_APPLY_ROLE_ARN_${a}" = { value = r.apply, category = "env", hcl = false, sensitive = false, description = "${a} account tfc-apply role assumed by alias aws.${a} during apply." }
+      } if r.plan != null && r.apply != null
+    ]...)
+    if try(local.aws_plan_roles[ws], null) != null
+  }
+
   aws_credential_env = {
-    for ws, w in local.workspaces : ws => {
-      for k, v in {
-        TFC_AWS_PROVIDER_AUTH  = "true"
-        TFC_AWS_PLAN_ROLE_ARN  = try(local.aws_plan_roles[ws], null)
-        TFC_AWS_APPLY_ROLE_ARN = try(local.aws_apply_roles[ws], null)
-      } : k => { value = v, category = "env", hcl = false, sensitive = false, description = local.credential_env_descriptions[k] } if v != null
-    }
+    for ws, w in local.workspaces : ws => merge(
+      {
+        for k, v in {
+          TFC_AWS_PROVIDER_AUTH  = "true"
+          TFC_AWS_PLAN_ROLE_ARN  = try(local.aws_plan_roles[ws], null)
+          TFC_AWS_APPLY_ROLE_ARN = try(local.aws_apply_roles[ws], null)
+        } : k => { value = v, category = "env", hcl = false, sensitive = false, description = local.credential_env_descriptions[k] } if v != null
+      },
+      lookup(local.aws_alias_env, ws, {}),
+    )
     if w.cloud == "aws" && (try(local.aws_plan_roles[ws], null) != null || try(local.aws_apply_roles[ws], null) != null)
   }
 
-  # gcp-workload-<env> roots declare var.environment; set it from the workspace
-  # name so the env is never hand-typed (overridable via workspace_variables).
-  derived_terraform_vars = {
-    for ws in local.gcp_workload_names : ws => {
-      environment = { value = trimprefix(ws, "gcp-workload-"), category = "terraform", hcl = false, sensitive = false, description = "Environment key (derived from the workspace name)." }
+  # A multi-account workspace with default credentials but missing alias roles
+  # would fail at plan time inside the root; fail here instead.
+  aws_incomplete_multi_account = [
+    for ws, complete in local.aws_aliases_complete : ws
+    if !complete && contains(keys(local.aws_credential_env), ws)
+  ]
+
+  # Workload roots declare var.environment; set it from the workspace name so the
+  # env is never hand-typed. aws-workload-<env> also gets workload_account_key
+  # when environments[env].aws_account_key is set. Overridable via
+  # workspace_variables (or the committed workspace_variables_file).
+  derived_terraform_vars = merge(
+    {
+      for ws in local.gcp_workload_names : ws => {
+        environment = { value = trimprefix(ws, "gcp-workload-"), category = "terraform", hcl = false, sensitive = false, description = "Environment key (derived from the workspace name)." }
+      }
+    },
+    {
+      for ws in local.aws_workload_names : ws => merge(
+        { environment = { value = trimprefix(ws, "aws-workload-"), category = "terraform", hcl = false, sensitive = false, description = "Environment key (derived from the workspace name)." } },
+        try(var.environments[trimprefix(ws, "aws-workload-")].aws_account_key, null) == null ? {} : {
+          workload_account_key = { value = var.environments[trimprefix(ws, "aws-workload-")].aws_account_key, category = "terraform", hcl = false, sensitive = false, description = "aws-organization account key this workload deploys into (environments[*].aws_account_key)." }
+        },
+      )
+    },
+  )
+
+  # ── Committed per-workspace variables (VCS-driven runs) ───────────────────
+  workspace_variables_file_path = var.workspace_variables_file == null ? null : (
+    startswith(var.workspace_variables_file, "/") ? var.workspace_variables_file : "${path.root}/${var.workspace_variables_file}"
+  )
+  workspace_variables_file_present = local.workspace_variables_file_path != null && fileexists(coalesce(local.workspace_variables_file_path, "/nonexistent"))
+  workspace_variables_file_raw     = local.workspace_variables_file_present ? yamldecode(file(local.workspace_variables_file_path)) : {}
+
+  # Normalise each entry: a bare scalar is a string value; a bare list/map is
+  # set as an HCL value (JSON is valid HCL); an object with `value` carries the
+  # full {value, category, hcl, description} form.
+  file_workspace_variables = {
+    for ws, vars in try(local.workspace_variables_file_raw.workspaces, {}) : ws => {
+      for k, v in vars : k => {
+        value       = can(v.value) ? (can(tostring(v.value)) ? tostring(v.value) : jsonencode(v.value)) : (can(tostring(v)) ? tostring(v) : jsonencode(v))
+        category    = can(v.value) ? try(v.category, "terraform") : "terraform"
+        hcl         = can(v.value) ? try(v.hcl, !can(tostring(v.value))) : !can(tostring(v))
+        sensitive   = can(v.value) ? try(v.sensitive, false) : false
+        description = can(v.value) ? try(v.description, null) : "Set from ${var.workspace_variables_file}."
+        version     = 1
+      }
     }
   }
+  file_sensitive_entries = flatten([
+    for ws, vars in local.file_workspace_variables : [for k, v in vars : "${ws}.${k}" if v.sensitive]
+  ])
+  file_bad_categories = flatten([
+    for ws, vars in local.file_workspace_variables : [for k, v in vars : "${ws}.${k}" if !contains(["terraform", "env"], v.category)]
+  ])
 
   workspace_vars = {
     for ws in local.workspace_names : ws => merge(
       lookup(local.gcp_credential_env, ws, {}),
       lookup(local.aws_credential_env, ws, {}),
       lookup(local.derived_terraform_vars, ws, {}),
+      lookup(local.file_workspace_variables, ws, {}),
       lookup(var.workspace_variables, ws, {}),
     )
+  }
+
+  # Execution mode: per-workspace override over the global default.
+  execution_modes = {
+    for ws in local.workspace_names : ws => lookup(var.workspace_execution_modes, ws, var.execution_mode)
   }
 
   # ── Projects ──────────────────────────────────────────────────────────────
@@ -238,6 +355,7 @@ locals {
   unknown_workspace_keys = setsubtract(
     toset(concat(
       keys(var.workspace_variables),
+      keys(local.file_workspace_variables),
       keys(var.extra_remote_state_consumers),
       flatten(values(var.extra_remote_state_consumers)),
     )),
@@ -246,7 +364,12 @@ locals {
   wrong_cloud_credential_keys = concat(
     [for k in concat(keys(var.gcp_plan_service_accounts), keys(var.gcp_apply_service_accounts)) : k if try(local.workspaces[k].cloud, "") != "gcp"],
     [for k in concat(keys(var.aws_plan_role_arns), keys(var.aws_apply_role_arns), keys(var.aws_workspace_account_keys)) : k if try(local.workspaces[k].cloud, "") != "aws"],
+    [for k in keys(var.aws_alias_role_arns) : k if !contains(keys(local.aws_alias_roles), k)],
+    [for k in keys(var.aws_workspace_account_keys) : k if contains(local.aws_management_workspaces, k)],
   )
+  unknown_alias_keys = flatten([
+    for ws, aliases in var.aws_alias_role_arns : [for a in keys(aliases) : "${ws}.${a}" if !contains(lookup(local.aws_alias_accounts, ws, []), a)]
+  ])
 }
 
 # Fail the plan on inputs that reference workspaces this root does not manage.
@@ -263,6 +386,22 @@ resource "terraform_data" "input_contract" {
     precondition {
       condition     = length(var.gcp_plan_service_accounts) + length(var.gcp_apply_service_accounts) == 0 || local.gcp_workload_provider_name != "unset"
       error_message = "gcp_plan_service_accounts/gcp_apply_service_accounts need gcp_workload_provider_name (or gcp_bootstrap_outputs_from_tfc = true)."
+    }
+    precondition {
+      condition     = length(local.unknown_alias_keys) == 0
+      error_message = "aws_alias_role_arns names aliases the root does not declare (aws-security: security_tooling, log_archive, forensics; aws-backup: backup): ${join(", ", local.unknown_alias_keys)}."
+    }
+    precondition {
+      condition     = length(local.aws_incomplete_multi_account) == 0
+      error_message = "Multi-account AWS workspaces have default credentials but not every alias role (TFC_AWS_*_<alias>): ${join(", ", local.aws_incomplete_multi_account)}. Supply aws_alias_role_arns or aws_organization_outputs_from_tfc, or remove the workspace's explicit aws_plan_role_arns / aws_apply_role_arns."
+    }
+    precondition {
+      condition     = length(local.file_sensitive_entries) == 0
+      error_message = "workspace_variables_file must not hold sensitive values (it is committed): ${join(", ", local.file_sensitive_entries)}. Set secrets via workspace_variables (write-only) instead."
+    }
+    precondition {
+      condition     = length(local.file_bad_categories) == 0
+      error_message = "workspace_variables_file categories must be terraform or env: ${join(", ", local.file_bad_categories)}."
     }
   }
 }
@@ -374,8 +513,8 @@ resource "tfe_workspace_settings" "this" {
   for_each = local.workspaces
 
   workspace_id              = module.workspace[each.key].id
-  execution_mode            = var.execution_mode
-  agent_pool_id             = var.execution_mode == "agent" ? var.agent_pool_id : null
+  execution_mode            = local.execution_modes[each.key]
+  agent_pool_id             = local.execution_modes[each.key] == "agent" ? var.agent_pool_id : null
   global_remote_state       = false
   remote_state_consumer_ids = local.consumer_ids[each.key]
 }

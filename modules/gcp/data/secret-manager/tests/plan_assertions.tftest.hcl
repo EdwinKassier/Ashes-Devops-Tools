@@ -118,3 +118,30 @@ run "no_versions_or_guard_when_disabled" {
     error_message = "the deletion-protection guard must be absent when disabled."
   }
 }
+
+# A secret flagged ephemeral_value gets its version from the ephemeral
+# ephemeral_secret_values map, alongside an inline secret_values entry.
+run "ephemeral_secret_value_creates_version" {
+  command = plan
+
+  variables {
+    secrets = {
+      database-url = {}
+      api-token    = { ephemeral_value = true }
+    }
+    secret_values           = { database-url = "postgres://example" }
+    ephemeral_secret_values = { api-token = "tok-123" }
+    secret_value_versions   = { api-token = 2 }
+    secret_accessors        = {}
+  }
+
+  assert {
+    condition     = length(google_secret_manager_secret_version.this) == 2
+    error_message = "both the inline and the ephemeral secret must get a version."
+  }
+
+  assert {
+    condition     = google_secret_manager_secret_version.this["api-token"].secret_data == null && google_secret_manager_secret_version.this["api-token"].secret_data_wo_version == 2
+    error_message = "the ephemeral secret must be written via secret_data_wo with its version counter."
+  }
+}

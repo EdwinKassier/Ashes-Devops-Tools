@@ -32,3 +32,32 @@ run "vault_lock_and_restore_testing_configured" {
     error_message = "Restore testing selection must target EBS recovery points"
   }
 }
+
+# No restore_testing_role_arn: the module creates the restore-testing service
+# role (trusted by backup.amazonaws.com, AWSBackupServiceRolePolicyForRestores).
+run "restore_testing_role_created_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(aws_iam_role.restore_testing) == 1 && jsondecode(aws_iam_role.restore_testing[0].assume_role_policy).Statement[0].Principal.Service == "backup.amazonaws.com"
+    error_message = "With restore_testing_role_arn = null a backup.amazonaws.com-trusted role must be created."
+  }
+
+  assert {
+    condition     = aws_iam_role_policy_attachment.restore_testing[0].policy_arn == "arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForRestores"
+    error_message = "The created role must carry AWSBackupServiceRolePolicyForRestores."
+  }
+}
+
+run "explicit_restore_testing_role_creates_nothing" {
+  command = plan
+
+  variables {
+    restore_testing_role_arn = "arn:aws:iam::123456789012:role/BackupRestoreTestRole"
+  }
+
+  assert {
+    condition     = length(aws_iam_role.restore_testing) == 0 && aws_backup_restore_testing_selection.this.iam_role_arn == "arn:aws:iam::123456789012:role/BackupRestoreTestRole"
+    error_message = "An explicit restore_testing_role_arn must be used as-is and no role created."
+  }
+}

@@ -101,19 +101,19 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_artifact_registry_repository_iam_member.deploy (modules/gcp/stages/app-services/main.tf#L371)
-- resource.google_cloud_run_v2_service_iam_member.deploy (modules/gcp/stages/app-services/main.tf#L359)
-- resource.google_cloud_run_v2_service_iam_member.invoker (modules/gcp/stages/app-services/main.tf#L222)
-- resource.google_iam_workload_identity_pool.apps (modules/gcp/stages/app-services/main.tf#L298)
-- resource.google_iam_workload_identity_pool_provider.github (modules/gcp/stages/app-services/main.tf#L309)
-- resource.google_project_iam_member.runtime_extra (modules/gcp/stages/app-services/main.tf#L156)
-- resource.google_project_iam_member.runtime_sql (modules/gcp/stages/app-services/main.tf#L273)
+- resource.google_artifact_registry_repository_iam_member.deploy (modules/gcp/stages/app-services/main.tf#L382)
+- resource.google_cloud_run_v2_service_iam_member.deploy (modules/gcp/stages/app-services/main.tf#L370)
+- resource.google_cloud_run_v2_service_iam_member.invoker (modules/gcp/stages/app-services/main.tf#L233)
+- resource.google_iam_workload_identity_pool.apps (modules/gcp/stages/app-services/main.tf#L309)
+- resource.google_iam_workload_identity_pool_provider.github (modules/gcp/stages/app-services/main.tf#L320)
+- resource.google_project_iam_member.runtime_extra (modules/gcp/stages/app-services/main.tf#L167)
+- resource.google_project_iam_member.runtime_sql (modules/gcp/stages/app-services/main.tf#L284)
 - resource.google_project_service.this (modules/gcp/stages/app-services/main.tf#L82)
-- resource.google_secret_manager_secret_iam_member.runtime (modules/gcp/stages/app-services/main.tf#L145)
-- resource.google_service_account.deploy (modules/gcp/stages/app-services/main.tf#L337)
-- resource.google_service_account.runtime (modules/gcp/stages/app-services/main.tf#L134)
-- resource.google_service_account_iam_member.deploy_act_as_runtime (modules/gcp/stages/app-services/main.tf#L384)
-- resource.google_service_account_iam_member.deploy_wif (modules/gcp/stages/app-services/main.tf#L349)
+- resource.google_secret_manager_secret_iam_member.runtime (modules/gcp/stages/app-services/main.tf#L156)
+- resource.google_service_account.deploy (modules/gcp/stages/app-services/main.tf#L348)
+- resource.google_service_account.runtime (modules/gcp/stages/app-services/main.tf#L145)
+- resource.google_service_account_iam_member.deploy_act_as_runtime (modules/gcp/stages/app-services/main.tf#L395)
+- resource.google_service_account_iam_member.deploy_wif (modules/gcp/stages/app-services/main.tf#L360)
 
 
 ## Inputs

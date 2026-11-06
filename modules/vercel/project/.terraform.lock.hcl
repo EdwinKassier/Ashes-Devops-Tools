@@ -3,9 +3,11 @@
 
 provider "registry.terraform.io/vercel/vercel" {
   version     = "4.8.2"
-  constraints = "~> 4.0"
+  constraints = ">= 4.8.2, < 5.0.0"
   hashes = [
     "h1:MhzAmliF1bfToR+O65kY8+8o577SV8nHF+KteYfMABs=",
+    "h1:dKb6T/1d1966tYl0TW7/79V2YdghiTmLYM7H2XSQopI=",
+    "h1:wpon/8MboR83zj9JXzIldIbp2TFvIHK0XBFrL7V5ZDo=",
     "zh:02c745e21fd3dbd89fa6762a41339d40f499a4f49e413a01baf34315db95c26e",
     "zh:0cd7daf928ffb6447ad9a0c92156b8fcdbb1bbd15c0dcf497ba5b27c64fb1806",
     "zh:125d0a32363598faf2effe2e4c81603e582615b11ccf4be0e07d1fcb7be79b05",

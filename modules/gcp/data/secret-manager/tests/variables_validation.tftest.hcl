@@ -66,3 +66,46 @@ run "accessor_for_unknown_secret_rejected" {
     secret_accessors = { does-not-exist = ["serviceAccount:a@mock-project-id.iam.gserviceaccount.com"] }
   }
 }
+
+# ── ephemeral_secret_values ───────────────────────────────────────────────────
+run "ephemeral_value_for_flagged_secret_accepted" {
+  command = plan
+
+  variables {
+    secrets                 = { api-token = { ephemeral_value = true } }
+    ephemeral_secret_values = { api-token = "tok-123" }
+  }
+}
+
+run "ephemeral_value_for_unflagged_secret_rejected" {
+  command = plan
+
+  expect_failures = [var.ephemeral_secret_values]
+
+  variables {
+    secrets                 = { api-token = {} }
+    ephemeral_secret_values = { api-token = "tok-123" }
+  }
+}
+
+run "flagged_secret_without_ephemeral_value_rejected" {
+  command = plan
+
+  expect_failures = [var.ephemeral_secret_values]
+
+  variables {
+    secrets = { api-token = { ephemeral_value = true } }
+  }
+}
+
+run "flagged_secret_in_secret_values_rejected" {
+  command = plan
+
+  expect_failures = [var.secret_values]
+
+  variables {
+    secrets                 = { api-token = { ephemeral_value = true } }
+    secret_values           = { api-token = "inline" }
+    ephemeral_secret_values = { api-token = "tok-123" }
+  }
+}

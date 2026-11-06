@@ -4,15 +4,27 @@ variable "tfc_organization" {
 }
 
 variable "environments" {
-  description = "Application environments to create per-env workload workspaces for (gcp-workload-<env>, and aws-workload-<env> when enable_aws). Only the keys are used. Keep in sync with the cloud roots' environments map."
-  type        = map(object({}))
-  default     = {}
+  description = "Application environments to create per-env workload workspaces for (gcp-workload-<env> when enable_gcp, aws-workload-<env> when enable_aws). Keep the keys in sync with the cloud roots' environments map. Optional aws_account_key names the aws-organization account key (accounts / workload_accounts, e.g. workload_dev) the aws-workload-<env> workspace deploys into: it is set as that workspace's workload_account_key variable and selects the tfc-plan/tfc-apply roles read via aws_organization_outputs_from_tfc."
+  type = map(object({
+    aws_account_key = optional(string)
+  }))
+  default = {}
+
+  validation {
+    condition     = alltrue([for k in keys(var.environments) : can(regex("^[a-z][a-z0-9_-]*$", k))])
+    error_message = "environments keys must be lowercase alphanumeric with hyphens/underscores (they become workspace names)."
+  }
 }
 
 variable "enable_gcp" {
-  description = "Declare the GCP control-plane (gcp-bootstrap/organization/projects/network-hub) and gcp-workload-<env> workspaces. Default true (current behaviour); set false for an AWS-only or SaaS-only estate."
+  description = "Declare the GCP control-plane (gcp-bootstrap/organization/projects/network-hub) and gcp-workload-<env> workspaces. Default false: opt in per cloud. At least one of enable_gcp / enable_aws / enable_saas must be true."
   type        = bool
-  default     = true
+  default     = false
+
+  validation {
+    condition     = var.enable_gcp || var.enable_aws || var.enable_saas
+    error_message = "Enable at least one cloud: set enable_gcp, enable_aws and/or enable_saas to true (a tfc-admin with no cloud declares no workspaces)."
+  }
 }
 
 variable "enable_aws" {
@@ -69,6 +81,31 @@ variable "execution_mode" {
   validation {
     condition     = contains(["remote", "agent"], var.execution_mode)
     error_message = "execution_mode must be remote or agent (local would skip TFC-held credentials and policy)."
+  }
+}
+
+variable "workspace_execution_modes" {
+  description = <<-EOT
+    Per-workspace execution-mode override (workspace name => remote | agent | local),
+    merged over execution_mode. Default { gcp-bootstrap = "local" }: the GCP phase-0
+    apply runs on the operator's machine with their ADC (TFC holds state only),
+    because no GCP credentials exist yet for a remote run. After the second
+    bootstrap pass (TFC_GCP_* env vars wired from the gcp-bootstrap outputs), set
+    this to {} so gcp-bootstrap also runs remotely. "local" is accepted only for
+    the phase-0 workspaces gcp-bootstrap and aws-organization. Names not managed
+    here are ignored.
+  EOT
+  type        = map(string)
+  default     = { "gcp-bootstrap" = "local" }
+
+  validation {
+    condition     = alltrue([for m in values(var.workspace_execution_modes) : contains(["remote", "local", "agent"], m)])
+    error_message = "workspace_execution_modes values must be remote, agent, or local."
+  }
+
+  validation {
+    condition     = alltrue([for ws, m in var.workspace_execution_modes : m != "local" || contains(["gcp-bootstrap", "aws-organization"], ws)])
+    error_message = "execution mode local is only allowed for the phase-0 workspaces gcp-bootstrap and aws-organization (local runs skip TFC-held credentials and policy)."
   }
 }
 
@@ -180,6 +217,57 @@ variable "aws_apply_role_arns" {
   }
 }
 
+variable "aws_management_plan_role_arn" {
+  description = "Management-account (payer) IAM role assumed during PLAN by the workspaces whose default provider is the management account: aws-organization, aws-security and aws-backup (TFC_AWS_PLAN_ROLE_ARN). This is the phase-0 hand-created role (aws-bootstrap runbook, Step 2; StackSets never deploy to the management account). Null = not set. aws_plan_role_arns overrides it per workspace."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.aws_management_plan_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", var.aws_management_plan_role_arn))
+    error_message = "aws_management_plan_role_arn must be an IAM role ARN."
+  }
+}
+
+variable "aws_management_apply_role_arn" {
+  description = "Management-account (payer) IAM role assumed during APPLY by aws-organization, aws-security and aws-backup (TFC_AWS_APPLY_ROLE_ARN). Normally the same ARN passed to aws-organization as terraform_run_role_arn. Set together with aws_management_plan_role_arn."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.aws_management_apply_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", var.aws_management_apply_role_arn))
+    error_message = "aws_management_apply_role_arn must be an IAM role ARN."
+  }
+
+  validation {
+    condition     = (var.aws_management_plan_role_arn == null) == (var.aws_management_apply_role_arn == null)
+    error_message = "Set aws_management_plan_role_arn and aws_management_apply_role_arn together (a run phase without a role would fail)."
+  }
+}
+
+variable "aws_alias_role_arns" {
+  description = <<-EOT
+    Explicit per-alias roles for the multi-account roots (TFC multiple dynamic-credential
+    configurations): workspace => provider alias => {plan_role_arn, apply_role_arn},
+    set as TFC_AWS_PROVIDER_AUTH_<alias> / TFC_AWS_PLAN_ROLE_ARN_<alias> /
+    TFC_AWS_APPLY_ROLE_ARN_<alias>. Aliases: aws-security = security_tooling,
+    log_archive, forensics; aws-backup = backup. Overrides the values derived from
+    the aws-organization outputs tfc_plan_role_arns / tfc_apply_role_arns (keyed by
+    the same account keys) when aws_organization_outputs_from_tfc = true.
+  EOT
+  type = map(map(object({
+    plan_role_arn  = string
+    apply_role_arn = string
+  })))
+  default = {}
+
+  validation {
+    condition = alltrue(flatten([for ws in values(var.aws_alias_role_arns) : [
+      for r in values(ws) : can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", r.plan_role_arn)) && can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", r.apply_role_arn))
+    ]]))
+    error_message = "aws_alias_role_arns plan_role_arn / apply_role_arn values must be IAM role ARNs."
+  }
+}
+
 variable "aws_organization_outputs_from_tfc" {
   description = "Derive per-workspace plan/apply role ARNs from the aws-organization outputs tfc_plan_role_arns / tfc_apply_role_arns (keyed by account key) via tfe_outputs, using aws_workspace_account_keys. Grants tfc-admin read on aws-organization state."
   type        = bool
@@ -187,7 +275,7 @@ variable "aws_organization_outputs_from_tfc" {
 }
 
 variable "aws_workspace_account_keys" {
-  description = "Workspace name => aws-organization account key whose tfc-plan/tfc-apply roles the workspace uses, e.g. {\"aws-security\" = \"security_tooling\"}. Only used with aws_organization_outputs_from_tfc; overrides the mapping derived from the aws-organization output tfc_workspace_bindings."
+  description = "Single-account workspace name => aws-organization account key whose tfc-plan/tfc-apply roles the workspace uses as its DEFAULT credentials, e.g. {\"aws-network\" = \"network\"}. Only used with aws_organization_outputs_from_tfc; overrides the mapping derived from tfc_workspace_bindings and environments[*].aws_account_key. The multi-account roots (aws-organization, aws-security, aws-backup) use the management-account role as their default and are not accepted here."
   type        = map(string)
   default     = {}
 }
@@ -208,6 +296,24 @@ variable "workspace_variables" {
     condition     = alltrue(flatten([for ws in values(var.workspace_variables) : [for v in values(ws) : contains(["terraform", "env"], v.category)]]))
     error_message = "workspace_variables categories must be terraform or env."
   }
+}
+
+variable "workspace_variables_file" {
+  description = <<-EOT
+    Committed per-workspace Terraform variables for VCS-driven runs (which get no
+    local tfvars). Path relative to this root (or absolute); read only if the file
+    exists, so the default is a no-op until you create it. YAML shape (see
+    config/tfc-workspaces.example.yaml):
+      workspaces:
+        <workspace>:
+          <key>: <scalar>                       # string/number/bool
+          <key>: [list] | {map}                 # set as an HCL value
+          <key>: {value: ..., category: env, hcl: true, description: ...}
+    Entries are merged under workspace_variables (which wins). sensitive = true is
+    rejected: secrets never belong in a committed file. Null disables the lookup.
+  EOT
+  type        = string
+  default     = "../../config/tfc-workspaces.yaml"
 }
 
 # ── Projects, teams, policy ──────────────────────────────────────────────────

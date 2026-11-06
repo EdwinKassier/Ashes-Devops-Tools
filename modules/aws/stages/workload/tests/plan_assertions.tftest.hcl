@@ -134,3 +134,23 @@ run "composes_workload_edge_enabled" {
     error_message = "edge-security module must be present when enable_edge is true"
   }
 }
+
+# config_role_arn = null: the recorder uses the account's Config service-linked
+# role, created by config-org (no hand-made recorder role needed).
+run "config_recorder_defaults_to_service_linked_role" {
+  command = apply
+
+  variables {
+    config_role_arn = null
+  }
+
+  override_data {
+    target = module.config_recorder.data.aws_caller_identity.current[0]
+    values = { account_id = "222222222222" }
+  }
+
+  assert {
+    condition     = output.config_role_arn == "arn:aws:iam::222222222222:role/aws-service-role/config.amazonaws.com/AWSServiceRoleForConfig"
+    error_message = "With config_role_arn = null the recorder must resolve to the service-linked role."
+  }
+}

@@ -10,7 +10,7 @@ terraform {
     }
     vercel = {
       source  = "vercel/vercel"
-      version = "~> 4.0"
+      version = ">= 4.8.2, < 5.0.0"
     }
     # MIGRATION ONLY: modules/supabase/vault-secrets now uses built-in
     # terraform_data and no longer needs hashicorp/null. It stays declared (and

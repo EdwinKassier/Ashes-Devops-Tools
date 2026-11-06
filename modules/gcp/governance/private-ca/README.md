@@ -65,6 +65,7 @@ module "example" {
 
 	# Required variables
 	ca_pool_name =
+	location =
 	name =
 	project_id =
 }
@@ -99,6 +100,7 @@ The following resources are created:
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_ca_pool_name"></a> [ca\_pool\_name](#input\_ca\_pool\_name) | Name of the CA pool (1-63 alphanumeric characters, hyphens, and underscores). | `string` | n/a | yes |
+| <a name="input_location"></a> [location](#input\_location) | GCP region for the CA pool and certificate authority (e.g. europe-west1). | `string` | n/a | yes |
 | <a name="input_name"></a> [name](#input\_name) | Certificate authority ID (1-63 alphanumeric characters, hyphens, and underscores). | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project ID where the CA pool and certificate authority will be created (6-30 characters, lowercase alphanumeric and hyphens). | `string` | n/a | yes |
 | <a name="input_ca_type"></a> [ca\_type](#input\_ca\_type) | Type of certificate authority. ROOT anchors the hierarchy (self-signed); SUBORDINATE is signed by a parent CA. | `string` | `"ROOT"` | no |
@@ -108,7 +110,6 @@ The following resources are created:
 | <a name="input_key_algorithm"></a> [key\_algorithm](#input\_key\_algorithm) | Algorithm used to generate the CA's key pair (e.g. RSA\_PKCS1\_4096\_SHA256, EC\_P256\_SHA256, EC\_P384\_SHA384). | `string` | `"RSA_PKCS1_4096_SHA256"` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels applied to the CA pool and certificate authority. | `map(string)` | `{}` | no |
 | <a name="input_lifetime"></a> [lifetime](#input\_lifetime) | Lifetime of the CA certificate as a duration in seconds (e.g. '315360000s' for 10 years). Defaults to 10 years, appropriate for a long-lived root. | `string` | `"315360000s"` | no |
-| <a name="input_location"></a> [location](#input\_location) | GCP region for the CA pool and certificate authority (e.g. europe-west1). | `string` | `"europe-west1"` | no |
 | <a name="input_skip_grace_period"></a> [skip\_grace\_period](#input\_skip\_grace\_period) | When true, deletion skips the CAS grace period and the CA is scheduled for permanent destruction immediately. Defaults to false so the recovery grace period is honoured. | `bool` | `false` | no |
 | <a name="input_subject"></a> [subject](#input\_subject) | Subject placed in the CA certificate: organization (O) and common name (CN). | <pre>object({<br/>    organization = string<br/>    common_name  = string<br/>  })</pre> | <pre>{<br/>  "common_name": "org-internal-ca",<br/>  "organization": "Example Org"<br/>}</pre> | no |
 | <a name="input_tier"></a> [tier](#input\_tier) | CA pool tier. ENTERPRISE supports per-certificate revocation and long-lived CAs; DEVOPS is cheaper but drops per-certificate features. Defaults to ENTERPRISE. | `string` | `"ENTERPRISE"` | no |

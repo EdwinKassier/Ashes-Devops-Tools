@@ -45,9 +45,37 @@ into the enforced input and clear the override.
 
 **Prod guard.** `envs/gcp/workload` (check `vpc_sc_enforced_in_prod`) and
 `envs/gcp/network-hub` (check `hub_vpc_sc_enforced_when_prod_present`) emit a plan
-**warning** when a production-like environment (name contains `prod`) has no
-perimeter or a dry-run one. It warns rather than fails so the dry-run rollout
-above stays possible.
+**warning** when a production environment has no perimeter or a dry-run one.
+Production is the explicit `is_production = true` attribute on the shared
+`environments` map (surfaced to gcp-workload as
+`environment_config[<env>].is_production`), not a name match. It warns rather
+than fails so the dry-run rollout above stays possible.
+
+**One access policy per environment.** By default (`enable_scoped_access_policies
+= true` in gcp-bootstrap and gcp-organization) gcp-organization creates a
+**folder-scoped** Access Context Manager policy for each environment folder and
+grants only that environment's `wl-<env>-apply` SA `policyEditor` on it (`-plan`:
+`policyReader`). gcp-projects passes its ID through
+`environment_config[<env>].vpc_sc_access_policy_id`, and gcp-workload builds the
+environment perimeter there. A dev workload therefore cannot edit a prod or hub
+perimeter. A scoped policy can only hold projects under its folder, which is
+exactly the environment's host and service-team projects. The hub perimeter stays
+in the org-wide policy (gcp-network-hub).
+
+Migrating from the old model (every workload SA `policyEditor` on the org-wide
+policy, `vpc_sc_access_policy_id` in gcp-bootstrap):
+
+1. Apply gcp-bootstrap (adds `accesscontextmanager.policyAdmin` for
+   organization-apply), then gcp-organization (creates the scoped policies and
+   grants), then gcp-projects (publishes the IDs).
+2. To keep an existing workload perimeter in the org-wide policy during the move,
+   set `enable_legacy_org_access_policy_grants = true` (gcp-bootstrap) and keep
+   `vpc_sc_access_policy_name` set on that workload. An explicit
+   `vpc_sc_access_policy_name` wins over the scoped policy.
+3. Recreate each workload perimeter in its scoped policy (unset
+   `vpc_sc_access_policy_name`; start in dry-run), then turn the legacy grant off.
+   A project can sit in a scoped-policy perimeter and an org-policy perimeter at
+   the same time, so there is no gap while both exist.
 
 ## 2. Inert controls to enable for production (audit M3)
 
@@ -106,6 +134,30 @@ speculative plan can only ever obtain a read-only identity. The phase-0
 The GitHub Actions pool is off by default (`enable_github_wif = false`, kept off by
 `examples/presets/prod-gcp-bootstrap.tfvars`). See `docs/runbooks/bootstrap.md`.
 
+Three refinements close the remaining paths:
+
+- **Plan identities read no data.** No plan SA holds `roles/viewer` (it reads
+  Cloud Storage objects through the legacy bucket roles, and BigQuery table
+  data). Plan SAs get metadata-only predefined viewers plus the org custom role
+  `landingZonePlanViewer` (gcp-bootstrap `enable_plan_viewer_role`, default on),
+  which holds only get/list/getIamPolicy on configuration. Variable validation
+  rejects data-plane permissions (`storage.objects.get`,
+  `bigquery.tables.getData`, `secretmanager.versions.access`, ...) and
+  `roles/viewer` in the plan folder role lists.
+- **Folder-IAM delegation is per folder.** projects-apply's conditional
+  `folderIamAdmin` is bound by gcp-organization on each environment folder (the
+  workload role list only) and on the shared folder (the network role list
+  only), never at the org node, so it cannot grant on any other folder.
+  `enable_org_level_folder_iam_delegation` (gcp-bootstrap) restores the old
+  org-node binding for a migration only. Order: gcp-bootstrap, then
+  gcp-organization, then gcp-projects.
+- **Production workspaces bind by ID.** Mark production environments
+  `is_production = true`. gcp-bootstrap then warns (check
+  `production_workspaces_bound_by_id`) while any control-plane workspace or
+  production workload workspace is still WIF-bound by its mutable name. The
+  bootstrap preset ships `ws-REPLACEME` placeholders that validation rejects:
+  set the real IDs from the tfc-admin `workspace_ids` output.
+
 ### 2. Deny-policy backstop (audit C2/C3)
 
 `enable_admin_containment = true` (gcp-organization; **on** in
@@ -116,10 +168,14 @@ and exempt only `containment_exempt_principals` (your break-glass group).
 | Rule | Scope | Denied permissions |
 |---|---|---|
 | 1 | Whole org (no condition) | `logging` `sinks.update`, `sinks.delete`, `exclusions.create/update/delete`, `buckets.delete`; `accesscontextmanager` `servicePerimeters.update/delete/replaceAll/commit`, `policies.delete` |
-| 2 | Resources tagged `containment/protected`: the audit bucket, its access-log bucket and the audit CMEK keyring (keys and versions inherit the tag) | `storage` `buckets.delete`, `buckets.setIamPolicy`, `objects.delete`; `cloudkms` `cryptoKeyVersions.destroy`, `cryptoKeys.setIamPolicy` |
+| 2 | Resources tagged `containment/protected`: the audit bucket, its access-log bucket and the audit CMEK keyring (keys and versions inherit the tag) | `storage` `buckets.delete`, `buckets.setIamPolicy`, `buckets.deleteTagBinding`, `objects.delete`; `cloudkms` `cryptoKeyVersions.destroy`, `cryptoKeyVersions.update` (disable), `cryptoKeys.setIamPolicy` |
 
 IAM deny conditions can match **only resource tags**, so rule 2 uses a tag to
-reach the audit bucket rather than every bucket in the org.
+reach the audit bucket rather than every bucket in the org. Because the tag is
+the scope, stripping it would lift the protection, so rule 2 also denies
+`buckets.deleteTagBinding` on the tagged buckets. Disabling the audit key
+version is as damaging as destroying it, so `cryptoKeyVersions.update` is denied
+too.
 
 These permissions are **not** in Google's deny-supported list, so the policy can't
 include them. Each one has an alert instead:
@@ -128,6 +184,17 @@ include them. Each one has an alert instead:
   protect itself. The `deny_policy_change` alert covers this.
 - `orgpolicy.policy.set`: this one is deliberately left open. Terraform uses it on
   every baseline change. The `org_policy_change` alert covers it.
+- `resourcemanager.tagValueBindings.delete`, `tagValues.delete`,
+  `tagKeys.delete` and `cloudkms` `keyRings.deleteTagBinding`: untagging the
+  audit keyring, or deleting the `containment` tag, is not deny-supported. The
+  `tag_binding_change` alert covers it (a tag value with live bindings cannot be
+  deleted anyway, and the bucket bindings are denied above).
+
+**Production default.** Containment stays opt-in (it changes how every sink and
+perimeter change is applied), but gcp-organization warns (check
+`production_requires_admin_containment`) when any environment is
+`is_production = true` and `enable_admin_containment = false`. The WORM lock
+(`enable_audit_bucket_lock`) stays a separate opt-in because it is irreversible.
 
 **Operational consequence.** Terraform legitimately calls `sinks.update` and
 `servicePerimeters.update`. Once containment is on, any change to any logging
@@ -194,7 +261,8 @@ any project. Log-match alerts fire on:
 - sink and exclusion changes
 - custom role changes
 - deny policy changes
-- KMS key-version destroy
+- KMS key-version destroy and disable
+- tag binding, tag value and tag key deletion
 - audit-config changes
 - any action by `break_glass_user` / `break_glass_principal_emails` (CRITICAL)
 
@@ -208,3 +276,14 @@ standing backdoor around the guardrails. Manage it deliberately: a tight trust
 policy, no standing credentials, and a mandatory alarm on its use (a CloudTrail /
 EventBridge rule on AWS `AssumeRole` of the break-glass role; on GCP the
 `break_glass_use` control-plane watch above). Review its scope on every access.
+
+On GCP, standing `organizationAdmin` / `billing.admin` go to **groups only**
+(`organization_admin_groups` / `billing_admin_groups`, required). `admin_email`
+and `break_glass_user` are granted as `user:` principals only with
+`allow_user_principals_for_break_glass = true`; `break_glass_user` is always
+watched by the break-glass alert either way. For human elevation prefer the
+just-in-time Privileged Access Manager entitlement: `enable_pam = true` in both
+gcp-bootstrap (gives organization-apply `privilegedaccessmanager.admin`) and
+gcp-organization, with `pam_eligible_groups` (requesters) and a disjoint
+`pam_approver_groups`. A grant lasts at most `pam_max_request_duration` (default
+1h) and needs a justification and an approval.

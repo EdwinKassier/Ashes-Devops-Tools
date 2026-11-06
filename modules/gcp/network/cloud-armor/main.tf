@@ -52,8 +52,8 @@ resource "google_compute_security_policy" "policy" {
             count        = rate_limit_options.value.threshold_count
             interval_sec = rate_limit_options.value.interval_sec
           }
-          conform_action = try(rate_limit_options.value.conform_action, "allow")
-          exceed_action  = try(rate_limit_options.value.exceed_action, "deny(429)")
+          conform_action = try(coalesce(rate_limit_options.value.conform_action, "allow"), "allow")
+          exceed_action  = try(coalesce(rate_limit_options.value.exceed_action, "deny(429)"), "deny(429)")
           # enforce_on_key and enforce_on_key_configs are mutually exclusive in the
           # Cloud Armor API. When enforce_on_key is set, use the scalar form; when
           # it is null, use enforce_on_key_configs for fine-grained per-type config.

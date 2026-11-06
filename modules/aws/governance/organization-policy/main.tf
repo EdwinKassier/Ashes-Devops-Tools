@@ -29,14 +29,19 @@ locals {
   #   * break_glass_arns — break-glass only. Destructive actions (leave org,
   #     stop/delete CloudTrail, delete GuardDuty detector/members, disable
   #     Security Hub / Macie / Inspector, delete Access Analyzer, destroy or
-  #     untag protected KMS keys). A pipeline compromise cannot perform these.
+  #     untag protected KMS keys, change a protected key's policy). A pipeline
+  #     compromise cannot perform these — in particular it cannot rewrite a
+  #     protected key policy to grant itself kms:Decrypt. Consequence: Terraform
+  #     key-policy changes to protected keys require a break-glass apply (the
+  #     aws/data/kms-key module sets the policy at CreateKey, so creation is
+  #     unaffected).
   #     Trade-off: tearing down one of these services must go through break-glass.
   #     For this to work in member accounts a role with the break-glass name
   #     must exist there (e.g. deployed by StackSet).
   #   * privileged_arns — pipeline roles + break-glass. Reconfiguration actions
   #     that routine Terraform legitimately performs in member accounts (Config
   #     recorders in workload accounts, GuardDuty/CloudTrail settings in the
-  #     security-tooling account, flow-log replacement, protected key policies).
+  #     security-tooling account, flow-log replacement, log-archive Object Lock).
   #     Local member-account admins are denied.
   break_glass_role_names = length(var.break_glass_role_names) > 0 ? var.break_glass_role_names : [
     regex("role/(.+)$", var.break_glass_role_arn)[0]
@@ -67,12 +72,22 @@ locals {
         break_glass_role_arn   = var.break_glass_role_arn
       })
     }
+    # Baseline also carries two org-wide break-glass-only denies (kept here so
+    # deny-tamper stays under the 5,120-char quota and no extra SCP attachment
+    # is needed — a target allows at most 5 SCPs incl. FullAWSAccess):
+    #   * DenyIamUserCredentials — no IAM users / access keys / console
+    #     passwords (no module in this repo creates IAM users; identities come
+    #     from Identity Center and OIDC federation).
+    #   * DenyDataPerimeterTagTampering — the RCP's dp:exclude:* resource-tag
+    #     escape hatches can only be set or removed by break-glass, so a member
+    #     principal cannot self-exempt a resource from the data perimeter.
     scp-baseline = {
       type = "SERVICE_CONTROL_POLICY"
-      content = templatefile("${path.module}/policies/scp-baseline.json", {
+      content = jsonencode(jsondecode(templatefile("${path.module}/policies/scp-baseline.json.tftpl", {
         terraform_run_role_arn = var.terraform_run_role_arn
         break_glass_role_arn   = var.break_glass_role_arn
-      })
+        break_glass_arns       = jsonencode(local.break_glass_principal_arns)
+      })))
     }
     rcp-data-perimeter = {
       type = "RESOURCE_CONTROL_POLICY"

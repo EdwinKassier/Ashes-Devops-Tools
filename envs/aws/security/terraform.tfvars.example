@@ -1,6 +1,12 @@
 # Copy to terraform.tfvars and fill in. Inputs marked REQUIRED have no usable
-# default — you MUST supply them (the log-archive bucket name and the operator
-# role ARNs). The rest have working defaults you can override.
+# default — you MUST supply them (landing_zone_name and the log-archive bucket
+# name). The operator roles (key admin, Config recorder/aggregator) default to
+# roles this root creates or the TFC OIDC baseline already created. The rest have working defaults you can override.
+
+# REQUIRED — landing-zone identifier written to the LandingZone tag. No
+# default; the upstream placeholders "ashes" / "my-org" are rejected. Use the
+# same value in every AWS root (tfc-admin: put it in common_workspace_variables).
+landing_zone_name = "acme"
 
 # REQUIRED — Terraform Cloud org that owns this root's workspace and the
 # aws-organization workspace it reads. Usually passed to `terraform init` via
@@ -19,16 +25,19 @@ aws_enabled_regions = ["eu-west-2"]
 # SCP references in the aws-organization root (cross-root naming contract).
 log_archive_bucket_name = "ashes-org-log-archive"
 
-# REQUIRED — account-qualified ARN of the KMS key administrator (kms:*) on the
-# log and forensics CMKs. Avoids locking the keys out of management.
-key_admin_arn = "arn:aws:iam::111111111111:role/key-admin"
+# Optional — KMS key administrator (management actions only) on the log,
+# forensics and security-tooling CMKs. Default null: each key's own account
+# tfc-apply role (key_admin_role_name) administers it.
+# key_admin_arn = "arn:aws:iam::111111111111:role/key-admin"
 
-# REQUIRED — account-qualified ARN of the role AWS Config assumes to record
-# resource configurations.
-config_role_arn = "arn:aws:iam::222222222222:role/aws-config-recorder"
+# Optional — Config recorder role. Default null: the AWSServiceRoleForConfig
+# service-linked role, created here (set create_config_service_linked_role =
+# false if Config was already enabled in the security-tooling account).
+# config_role_arn = "arn:aws:iam::222222222222:role/aws-config-recorder"
 
-# REQUIRED — account-qualified ARN of the role the Config org aggregator assumes.
-aggregator_role_arn = "arn:aws:iam::222222222222:role/aws-config-aggregator"
+# Optional — Config org aggregator role. Default null: created here
+# (aws-config-org-aggregator + AWSConfigRoleForOrganizations).
+# aggregator_role_arn = "arn:aws:iam::222222222222:role/aws-config-aggregator"
 
 # Optional (REQUIRED when enable_security_lake = true) — the
 # AmazonSecurityLakeMetaStoreManager role ARN.

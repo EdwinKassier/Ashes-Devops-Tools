@@ -156,6 +156,9 @@ resource "google_sql_user" "this" {
   # Built-in users authenticate with a password; IAM users must not carry one.
   # Write-only (Terraform >= 1.11): the password is sent to the API but never
   # stored in plan or state. Bump the user's password_version to rotate it.
-  password_wo         = local.users_by_name[each.value].type == "BUILT_IN" ? local.users_by_name[each.value].password : null
-  password_wo_version = local.users_by_name[each.value].type == "BUILT_IN" && local.users_by_name[each.value].password != null ? local.users_by_name[each.value].password_version : null
+  # ephemeral_password users read it from the ephemeral var.user_passwords.
+  password_wo = local.users_by_name[each.value].type != "BUILT_IN" ? null : (
+    local.users_by_name[each.value].ephemeral_password ? var.user_passwords[each.value] : local.users_by_name[each.value].password
+  )
+  password_wo_version = local.users_by_name[each.value].type == "BUILT_IN" && (local.users_by_name[each.value].password != null || local.users_by_name[each.value].ephemeral_password) ? local.users_by_name[each.value].password_version : null
 }

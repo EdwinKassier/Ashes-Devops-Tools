@@ -37,5 +37,6 @@ module "aws_backup" {
   changeable_for_days = var.changeable_for_days
 
   backup_role_arn          = var.backup_role_arn
+  backup_role_name         = var.backup_role_name
   restore_testing_role_arn = var.restore_testing_role_arn
 }

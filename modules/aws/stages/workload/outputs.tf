@@ -32,3 +32,8 @@ output "name" {
   description = "The resolved spoke name (var.name, else workload-<environment>)."
   value       = local.name
 }
+
+output "config_role_arn" {
+  description = "IAM role the workload account's Config recorders use (the AWSServiceRoleForConfig service-linked role unless config_role_arn was set)."
+  value       = module.config_recorder.config_role_arn
+}

@@ -33,7 +33,7 @@ variable "project_services" {
 }
 
 variable "environments" {
-  description = "Map of application environment definitions. Keep in sync with the gcp-organization root."
+  description = "Map of application environment definitions. is_production (default false) is surfaced as environment_config[<env>].is_production for the gcp-workload guardrail checks. Keep in sync with the gcp-organization root."
   type = map(object({
     display_name            = string
     region                  = string
@@ -41,6 +41,7 @@ variable "environments" {
     budget_monthly_limit    = number
     iam_group_role_bindings = map(set(string))
     labels                  = optional(map(string), {})
+    is_production           = optional(bool, false)
   }))
 
   # Environment keys become project/workspace keys (e.g. "<env>-host",
@@ -65,7 +66,7 @@ variable "default_region" {
 }
 
 variable "terraform_admin_email" {
-  description = "OPTIONAL SA for the providers to impersonate, for deliberate LOCAL human runs only. Leave null in Terraform Cloud: dynamic credentials already authenticate plan as <prefix>-projects-plan and apply as <prefix>-projects-apply (audit C2)."
+  description = "OPTIONAL SA for the providers to impersonate, for deliberate LOCAL human runs only. Leave null in Terraform Cloud: dynamic credentials already authenticate plan as <prefix>-projects-plan and apply as <prefix>-projects-apply."
   type        = string
   default     = null
 

@@ -65,13 +65,20 @@ variable "log_archive_bucket_name" {
 }
 
 variable "key_admin_arn" {
-  description = "Account-qualified ARN of the principal granted key ADMINISTRATION (management actions only: no Encrypt/Decrypt/GenerateDataKey/ReEncrypt, no CreateGrant) on the log-archive, forensics and security-tooling CMKs. REQUIRED to avoid locking the keys out of management. Grant key usage separately via kms_key_user_arns."
+  description = "Account-qualified ARN of the principal granted key ADMINISTRATION (management actions only: no Encrypt/Decrypt/GenerateDataKey/ReEncrypt, no CreateGrant) on the log-archive, forensics and security-tooling CMKs. Null (default) grants each key's own account role key_admin_role_name (tfc-apply, the role this root applies as under TFC dynamic credentials). Grant key usage separately via kms_key_user_arns."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:(role|user)/.+$", var.key_admin_arn))
-    error_message = "key_admin_arn must be an account-qualified IAM role/user ARN."
+    condition     = var.key_admin_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:(role|user)/.+$", coalesce(var.key_admin_arn, "x")))
+    error_message = "key_admin_arn must be null or an account-qualified IAM role/user ARN."
   }
+}
+
+variable "key_admin_role_name" {
+  description = "With key_admin_arn = null, the role name in each CMK's own account granted key administration. Default tfc-apply (created by the aws-organization TFC OIDC baseline). Set it to an existing per-account admin role if you run the legacy OrganizationAccountAccessRole path with the baseline disabled."
+  type        = string
+  default     = "tfc-apply"
 }
 
 variable "kms_key_user_arns" {
@@ -92,22 +99,30 @@ variable "enable_kms_protection_tag" {
 }
 
 variable "config_role_arn" {
-  description = "ARN of the IAM role AWS Config assumes to record resource configurations in each account/region."
+  description = "ARN of the IAM role AWS Config assumes to record resource configurations in the security-tooling account. Null (default) uses the AWSServiceRoleForConfig service-linked role, created by this root unless create_config_service_linked_role = false."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", var.config_role_arn))
-    error_message = "config_role_arn must be an account-qualified IAM role ARN."
+    condition     = var.config_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", coalesce(var.config_role_arn, "x")))
+    error_message = "config_role_arn must be null or an account-qualified IAM role ARN."
   }
 }
 
+variable "create_config_service_linked_role" {
+  description = "With config_role_arn = null, create AWSServiceRoleForConfig in the security-tooling account. Set false if Config was ever enabled there (the service-linked role already exists)."
+  type        = bool
+  default     = true
+}
+
 variable "aggregator_role_arn" {
-  description = "ARN of the IAM role the Config organization aggregator assumes to collect Config data across the organization."
+  description = "ARN of an existing IAM role the Config organization aggregator assumes. Null (default) creates aws-config-org-aggregator in the security-tooling account with the AWSConfigRoleForOrganizations managed policy."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", var.aggregator_role_arn))
-    error_message = "aggregator_role_arn must be an account-qualified IAM role ARN."
+    condition     = var.aggregator_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", coalesce(var.aggregator_role_arn, "x")))
+    error_message = "aggregator_role_arn must be null or an account-qualified IAM role ARN."
   }
 }
 
@@ -311,13 +326,17 @@ variable "break_glass_active" {
 # -----------------------------------------------------------------------------
 
 variable "landing_zone_name" {
-  description = "Landing-zone identifier written to the LandingZone tag on every resource."
+  description = "Landing-zone identifier written to the LandingZone tag on every resource. No default: set your own organization's identifier (same value in every AWS root; set it once in the tfc-admin common variable set via common_workspace_variables). The upstream placeholders \"ashes\" and \"my-org\" are rejected."
   type        = string
-  default     = "ashes"
 
   validation {
-    condition     = length(trimspace(var.landing_zone_name)) > 0
-    error_message = "landing_zone_name must be a non-empty string."
+    condition     = can(regex("^[a-z][a-z0-9-]{1,30}$", var.landing_zone_name))
+    error_message = "landing_zone_name must be 2-31 chars: a lowercase letter, then lowercase letters, digits or hyphens."
+  }
+
+  validation {
+    condition     = !contains(["ashes", "my-org"], lower(var.landing_zone_name))
+    error_message = "landing_zone_name is still an upstream placeholder (ashes / my-org). Set your own landing-zone identifier."
   }
 }
 

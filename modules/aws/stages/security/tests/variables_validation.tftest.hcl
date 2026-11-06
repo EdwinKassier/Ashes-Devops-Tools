@@ -88,3 +88,13 @@ run "invalid_cloudtrail_s3_data_events_rejected" {
 
   expect_failures = [var.cloudtrail_s3_data_events]
 }
+
+run "rejects_malformed_key_admin_arn" {
+  command = plan
+
+  variables {
+    key_admin_arn = "kms-admin"
+  }
+
+  expect_failures = [var.key_admin_arn]
+}

@@ -38,8 +38,8 @@ module "organization" {
     }
   }
 
-  organization_admin_groups             = ["group:gcp-organization-admins@example.com"]
-  billing_admin_groups                  = ["group:gcp-billing-admins@example.com"]
+  organization_admin_groups             = ["gcp-organization-admins@example.com"]
+  billing_admin_groups                  = ["gcp-billing-admins@example.com"]
   default_region                        = "us-central1"
   allowed_regions                       = ["us-central1", "us-east1", "europe-west1"]
   strict_folder_policy_environment_keys = ["prod"]

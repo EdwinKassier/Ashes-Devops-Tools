@@ -11,6 +11,7 @@ mock_provider "aws" {}
 mock_provider "aws" { alias = "us_east_1" }
 
 variables {
+  landing_zone_name       = "acme"
   workload_account_key    = "workload_dev"
   log_archive_bucket_name = null # sourced from the aws-security remote state (audit M7)
   config_role_arn         = "arn:aws:iam::222222222222:role/config-recorder"
@@ -239,4 +240,45 @@ run "app_services_one_service" {
     condition     = output.app_services["orders"].database_public == false
     error_message = "the service database must not be publicly accessible."
   }
+}
+
+# landing_zone_name has no default and rejects the upstream placeholders.
+run "rejects_placeholder_landing_zone_name" {
+  command = plan
+
+  variables {
+    landing_zone_name = "ashes"
+  }
+
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = {
+      outputs = {
+        account_role_arns = {
+          workload_dev = "arn:aws:iam::222222222222:role/cross-account"
+        }
+      }
+    }
+  }
+
+  override_data {
+    target = data.terraform_remote_state.aws_network
+    values = {
+      outputs = {
+        tgw_id        = "tgw-000000000000abcd"
+        ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" }
+      }
+    }
+  }
+
+  override_data {
+    target = data.terraform_remote_state.aws_security
+    values = {
+      outputs = {
+        log_archive_bucket_name = "ashes-org-log-archive"
+      }
+    }
+  }
+
+  expect_failures = [var.landing_zone_name]
 }

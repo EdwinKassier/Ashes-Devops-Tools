@@ -57,7 +57,7 @@ output "resman_email" {
   value       = module.bootstrap.resman_email
 }
 
-# ── Audit C2: per-stage / per-phase identities ───────────────────────────────
+# ── Per-stage / per-phase identities ─────────────────────────────────────────
 # Consumed by envs/tfc-admin to set TFC_GCP_PLAN_SERVICE_ACCOUNT_EMAIL,
 # TFC_GCP_APPLY_SERVICE_ACCOUNT_EMAIL and TFC_GCP_WORKLOAD_PROVIDER_NAME on each
 # workspace. Keep these keys stable.
@@ -95,4 +95,24 @@ output "workload_folder_roles" {
 output "network_folder_roles" {
   description = "Shared-folder roles for the network-hub SAs ({ plan, apply }); consumed by gcp-projects."
   value       = module.bootstrap.network_folder_roles
+}
+
+output "delegated_workload_folder_roles" {
+  description = "Roles projects-apply may grant on each environment folder; consumed by gcp-organization (per-folder delegated folderIamAdmin)."
+  value       = module.bootstrap.delegated_workload_folder_roles
+}
+
+output "delegated_network_folder_roles" {
+  description = "Roles projects-apply may grant on the shared folder; consumed by gcp-organization (per-folder delegated folderIamAdmin)."
+  value       = module.bootstrap.delegated_network_folder_roles
+}
+
+output "plan_viewer_role" {
+  description = "Full name of the metadata-only plan viewer custom role (null when disabled)."
+  value       = module.bootstrap.plan_viewer_role
+}
+
+output "production_workspaces_bound_by_name" {
+  description = "Control-plane and production workload workspaces still WIF-bound by mutable name; add their IDs to tfc_workspace_ids."
+  value       = module.bootstrap.production_workspaces_bound_by_name
 }

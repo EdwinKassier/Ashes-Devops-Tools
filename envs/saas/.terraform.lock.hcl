@@ -50,7 +50,7 @@ provider "registry.terraform.io/supabase/supabase" {
 
 provider "registry.terraform.io/vercel/vercel" {
   version     = "4.8.2"
-  constraints = "~> 4.0"
+  constraints = ">= 4.8.2, < 5.0.0"
   hashes = [
     "h1:MhzAmliF1bfToR+O65kY8+8o577SV8nHF+KteYfMABs=",
     "h1:dKb6T/1d1966tYl0TW7/79V2YdghiTmLYM7H2XSQopI=",

@@ -297,3 +297,105 @@ run "boundary_can_be_disabled" {
     error_message = "disabling the boundary must remove it from the template and the apply role"
   }
 }
+
+run "apply_boundary_propagates_to_created_roles" {
+  # M2: the apply identity must not escape its boundary by creating an
+  # unbounded role (or granting to one) and assuming it.
+  command = plan
+
+  assert {
+    condition = one([
+      for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement : s if s.Sid == "DenyRoleWithoutApplyBoundary"
+      ]).Effect == "Deny" && length(setsubtract(
+      ["iam:CreateRole", "iam:PutRolePermissionsBoundary", "iam:AttachRolePolicy", "iam:PutRolePolicy"],
+      one([for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement : s if s.Sid == "DenyRoleWithoutApplyBoundary"]).Action
+    )) == 0
+    error_message = "the boundary must deny CreateRole/PutRolePermissionsBoundary/AttachRolePolicy/PutRolePolicy on roles lacking the same boundary"
+  }
+
+  assert {
+    condition     = endswith(one([for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement : s if s.Sid == "DenyRoleWithoutApplyBoundary"]).Condition.StringNotEquals["iam:PermissionsBoundary"]["Fn::Sub"], ":policy/tfc-apply-boundary")
+    error_message = "the propagation condition must pin iam:PermissionsBoundary to the embedded boundary's own ARN"
+  }
+
+  assert {
+    condition     = contains(one([for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement : s if s.Sid == "DenyPermissionsBoundaryRemoval"]).Action, "iam:DeleteRolePermissionsBoundary") && one([for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement : s if s.Sid == "DenyPermissionsBoundaryRemoval"]).Resource == "*"
+    error_message = "the boundary must deny removing any role's permissions boundary"
+  }
+
+  # IAM managed-policy size quota (6,144 characters, whitespace excluded).
+  assert {
+    condition     = length(jsonencode(jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument)) < 6144
+    error_message = "the embedded boundary must stay under the 6,144-character managed-policy quota"
+  }
+}
+
+run "boundary_propagation_can_be_disabled" {
+  command = plan
+
+  variables {
+    enable_apply_boundary_propagation = false
+  }
+
+  assert {
+    condition     = length([for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement : s if s.Sid == "DenyRoleWithoutApplyBoundary"]) == 0
+    error_message = "enable_apply_boundary_propagation = false must omit the propagation statements"
+  }
+}
+
+run "plan_role_denies_data_plane_reads" {
+  # M4: ReadOnlyAccess grants data reads; the plan role gets an inline deny.
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for name, r in jsondecode(output.template_body).Resources :
+      !startswith(name, "TfcPlanRole") || (
+        r.Properties.Policies[0].PolicyDocument.Statement[0].Effect == "Deny" &&
+        r.Properties.Policies[0].PolicyDocument.Statement[0].Resource == "*" &&
+        length(setsubtract(
+          ["s3:GetObject*", "secretsmanager:GetSecretValue", "ssm:GetParameter*", "kms:Decrypt", "dynamodb:GetItem", "dynamodb:BatchGetItem", "dynamodb:Query", "dynamodb:Scan", "sqs:ReceiveMessage", "kinesis:GetRecords", "logs:GetLogEvents", "logs:FilterLogEvents", "logs:StartQuery", "rds-data:*", "athena:GetQueryResults"],
+          r.Properties.Policies[0].PolicyDocument.Statement[0].Action
+        )) == 0
+      )
+    ])
+    error_message = "every plan role must carry the data-plane read deny on all resources"
+  }
+
+  assert {
+    condition = alltrue([
+      for name, r in jsondecode(output.template_body).Resources :
+      !startswith(name, "TfcApplyRole") || !contains(keys(r.Properties), "Policies")
+    ])
+    error_message = "the data-plane deny applies to the plan role only"
+  }
+}
+
+run "plan_role_data_read_exemptions_render_as_not_resource" {
+  command = plan
+
+  variables {
+    plan_role_data_read_exempt_arns = ["arn:aws:secretsmanager:eu-west-2:444444444444:secret:supabase-connection-*"]
+  }
+
+  assert {
+    condition = (
+      jsondecode(output.template_body).Resources.TfcPlanRoleNetwork.Properties.Policies[0].PolicyDocument.Statement[0].NotResource == ["arn:aws:secretsmanager:eu-west-2:444444444444:secret:supabase-connection-*"] &&
+      !contains(keys(jsondecode(output.template_body).Resources.TfcPlanRoleNetwork.Properties.Policies[0].PolicyDocument.Statement[0]), "Resource")
+    )
+    error_message = "exempt ARNs must render as NotResource (and replace Resource = *)"
+  }
+}
+
+run "plan_role_data_read_deny_can_be_disabled" {
+  command = plan
+
+  variables {
+    enable_plan_role_data_read_deny = false
+  }
+
+  assert {
+    condition     = !contains(keys(jsondecode(output.template_body).Resources.TfcPlanRoleNetwork.Properties), "Policies")
+    error_message = "enable_plan_role_data_read_deny = false must omit the inline deny"
+  }
+}

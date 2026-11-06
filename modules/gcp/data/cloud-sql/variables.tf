@@ -57,7 +57,7 @@ variable "tier" {
 }
 
 variable "edition" {
-  description = "Cloud SQL edition. ENTERPRISE (default) matches the db-custom-* tiers; ENTERPRISE_PLUS needs a db-perf-optimized-* tier. Set explicitly because PostgreSQL 16+ otherwise defaults to ENTERPRISE_PLUS and the default tier fails to create."
+  description = "Cloud SQL edition. ENTERPRISE (default) matches the `db-custom-*` tiers; ENTERPRISE_PLUS needs a `db-perf-optimized-*` tier. Set explicitly because PostgreSQL 16+ otherwise defaults to ENTERPRISE_PLUS and the default tier fails to create."
   type        = string
   default     = "ENTERPRISE"
 
@@ -206,15 +206,54 @@ variable "users" {
     "CLOUD_IAM_SERVICE_ACCOUNT") and omit the password. Passwords are written with the
     write-only password_wo argument, so they never land in plan or state; increment
     `password_version` to rotate. The variable is still marked sensitive.
+
+    To keep a password out of the module input entirely, set
+    `ephemeral_password = true` (and omit `password`): the password is then read
+    from the ephemeral var.user_passwords[name]. The flag lives here because the
+    user set and the write-only version must stay non-ephemeral.
   EOT
   type = list(object({
-    name             = string
-    password         = optional(string)
-    password_version = optional(number, 1)
-    type             = optional(string, "BUILT_IN")
+    name               = string
+    password           = optional(string)
+    password_version   = optional(number, 1)
+    type               = optional(string, "BUILT_IN")
+    ephemeral_password = optional(bool, false)
   }))
   default   = []
   sensitive = true
+
+  validation {
+    condition     = alltrue([for u in var.users : !(u.ephemeral_password && u.password != null)])
+    error_message = "a user with ephemeral_password = true must not also set password (it is read from user_passwords)."
+  }
+
+  validation {
+    condition     = alltrue([for u in var.users : !u.ephemeral_password || u.type == "BUILT_IN"])
+    error_message = "ephemeral_password = true is only valid for BUILT_IN users (IAM users carry no password)."
+  }
+}
+
+variable "user_passwords" {
+  description = "Ephemeral built-in user passwords as user name => password, for users declared in var.users with ephemeral_password = true. Never stored in plan or state; feed it from an ephemeral resource (e.g. google_secret_manager_secret_version) or an ephemeral root variable. Every key must name such a user."
+  type        = map(string)
+  default     = {}
+  sensitive   = true
+  ephemeral   = true
+
+  validation {
+    condition = alltrue([
+      for name in keys(var.user_passwords) :
+      contains([for u in var.users : u.name if u.ephemeral_password], name)
+    ])
+    error_message = "every key in user_passwords must name a user in var.users with ephemeral_password = true."
+  }
+
+  validation {
+    condition = alltrue([
+      for u in var.users : contains(keys(var.user_passwords), u.name) if u.ephemeral_password
+    ])
+    error_message = "every user with ephemeral_password = true needs an entry in user_passwords."
+  }
 }
 
 # -----------------------------------------------------------------------------

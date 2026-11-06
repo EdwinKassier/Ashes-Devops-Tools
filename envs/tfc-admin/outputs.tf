@@ -35,3 +35,13 @@ output "policy_set_id" {
   description = "ID of the OPA policy set, or null when enable_policy_sets = false."
   value       = try(tfe_policy_set.opa[0].id, null)
 }
+
+output "workspace_execution_modes" {
+  description = "Effective execution mode per managed workspace (execution_mode merged with workspace_execution_modes)."
+  value       = local.execution_modes
+}
+
+output "workspace_variables_file_loaded" {
+  description = "Whether the committed workspace_variables_file existed and was merged into the workspace variables."
+  value       = local.workspace_variables_file_present
+}

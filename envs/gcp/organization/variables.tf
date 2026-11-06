@@ -63,7 +63,7 @@ variable "shared_iam_group_role_bindings" {
 }
 
 variable "environments" {
-  description = "Map of application environment definitions"
+  description = "Map of application environment definitions. is_production (default false) marks production environments: it drives the production guardrail checks here and in gcp-bootstrap / gcp-workload. Keep the map identical across the GCP roots."
   type = map(object({
     display_name            = string
     region                  = string
@@ -71,6 +71,7 @@ variable "environments" {
     budget_monthly_limit    = number
     iam_group_role_bindings = map(set(string))
     labels                  = optional(map(string), {})
+    is_production           = optional(bool, false)
   }))
 
   # Environment keys become project/workspace keys (e.g. "<env>-host",
@@ -117,7 +118,7 @@ variable "admin_email" {
 }
 
 variable "break_glass_user" {
-  description = "Email address for the break glass user (optional). Grants Organization Admin."
+  description = "Email address for the break glass user (optional). Always watched by the break-glass alert; granted Organization Admin only when allow_user_principals_for_break_glass = true."
   type        = string
   default     = null
 
@@ -128,13 +129,13 @@ variable "break_glass_user" {
 }
 
 variable "organization_admin_groups" {
-  description = "List of groups to be granted Organization Admin role"
+  description = "Bare group emails granted Organization Admin. Standing admin is group-only: at least one is required unless allow_user_principals_for_break_glass = true."
   type        = list(string)
   default     = []
 }
 
 variable "billing_admin_groups" {
-  description = "List of groups to be granted Billing Admin role"
+  description = "Bare group emails granted Billing Admin. At least one is required unless allow_user_principals_for_break_glass = true."
   type        = list(string)
   default     = []
 }
@@ -233,7 +234,7 @@ variable "terraform_admin_email" {
   }
 }
 
-# --- Audit finding G4 / C3: dedicated logging project (opt-in, default = unchanged) ---
+# --- Dedicated logging project (opt-in, default = unchanged) ---
 variable "logging_project_id" {
   description = "Dedicated logging project for the org audit sink/bucket, audit CMEK keyring and control-plane alerts (separation of duties). Default null = admin project. MUST NOT be owned by the Terraform admin/automation SA (create it out-of-band or from a separate identity). Decide before the first apply. Requires logging_project_number. PREVIEW: not yet validated against a real apply."
   type        = string
@@ -295,7 +296,7 @@ variable "break_glass_principal_emails" {
 }
 
 variable "enable_cmek_org_policy" {
-  description = "H1/M2: enforce CMEK on sensitive services org-wide (gcp.restrictNonCmekServices). Default false; set true (or use examples/presets/prod-gcp-organization.tfvars) once CMEK keys are wired for cmek_required_services."
+  description = "Enforce CMEK on sensitive services org-wide (gcp.restrictNonCmekServices). Default false; set true (or use examples/presets/prod-gcp-organization.tfvars) once CMEK keys are wired for cmek_required_services."
   type        = bool
   default     = false
 }
@@ -314,13 +315,13 @@ variable "cmek_required_services" {
 }
 
 variable "enable_admin_containment" {
-  description = "C2/C3: IAM deny policy blocking (for all but containment_exempt_principals) org-wide sink update/delete, exclusion changes, log-bucket delete and VPC-SC perimeter update/delete, plus — tag-scoped to the audit store — bucket delete/IAM change, object delete, key-version destroy and key IAM change. Once on, any sink/exclusion/perimeter change must be applied by break-glass. Default false; examples/presets/prod-gcp-organization.tfvars turns it on."
+  description = "IAM deny policy blocking (for all but containment_exempt_principals) org-wide sink update/delete, exclusion changes, log-bucket delete and VPC-SC perimeter update/delete, plus — tag-scoped to the audit store — bucket delete/IAM change/untag, object delete, key-version destroy/disable and key IAM change. Once on, any sink/exclusion/perimeter change must be applied by break-glass. Default false; examples/presets/prod-gcp-organization.tfvars turns it on."
   type        = bool
   default     = false
 }
 
 variable "containment_exempt_principals" {
-  description = "Break-glass principals exempt from the C2/C3 containment deny policy, as IAM v2 principal identifiers (e.g. principalSet://goog/group/break-glass@acme.com). Required (non-empty) when enable_admin_containment is true. Placeholder values (REPLACE-ME, your-domain, example.com, .invalid) are rejected so a copied preset fails loudly."
+  description = "Break-glass principals exempt from the admin-containment deny policy, as IAM v2 principal identifiers (e.g. principalSet://goog/group/break-glass@acme.com). Required (non-empty) when enable_admin_containment is true. Placeholder values (REPLACE-ME, your-domain, example.com, .invalid) are rejected so a copied preset fails loudly."
   type        = list(string)
   default     = []
 
@@ -334,4 +335,40 @@ variable "enable_legacy_admin_folder_roles" {
   description = "Grant the phase-0 bootstrap SA (terraform_admin_email) folderAdmin/projectCreator/billing.projectManager/networkAdmin on every folder. Legacy single-identity model; default false because the per-stage plan/apply service accounts replace it. Enable only while migrating an existing deployment."
   type        = bool
   default     = false
+}
+
+variable "allow_user_principals_for_break_glass" {
+  description = "Escape hatch: also grant admin_email and break_glass_user standing Organization Admin (admin_email also Billing Admin) as user: principals. Default false (groups only); prefer a break-glass group or enable_pam."
+  type        = bool
+  default     = false
+}
+
+variable "enable_pam" {
+  description = "Create a just-in-time Privileged Access Manager entitlement for Organization Admin (pam_eligible_groups request, pam_approver_groups approve). Requires gcp-bootstrap enable_pam = true. Default false."
+  type        = bool
+  default     = false
+}
+
+variable "pam_eligible_groups" {
+  description = "Bare group emails whose members may request just-in-time Organization Admin (enable_pam)."
+  type        = list(string)
+  default     = []
+}
+
+variable "pam_approver_groups" {
+  description = "Bare group emails whose members approve just-in-time Organization Admin requests (enable_pam). Must not overlap pam_eligible_groups."
+  type        = list(string)
+  default     = []
+}
+
+variable "pam_max_request_duration" {
+  description = "Maximum just-in-time grant duration, '<seconds>s' (max 86400s). Default 3600s."
+  type        = string
+  default     = "3600s"
+}
+
+variable "enable_scoped_access_policies" {
+  description = "Create one folder-scoped VPC-SC access policy per environment and grant that environment's workload SAs rights on it only (gcp-workload builds its perimeter there). Requires gcp-bootstrap enable_scoped_access_policies = true. Default true."
+  type        = bool
+  default     = true
 }

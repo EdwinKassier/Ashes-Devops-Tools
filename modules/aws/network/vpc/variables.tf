@@ -48,7 +48,6 @@ variable "enable_ipv6" {
 variable "region" {
   description = "AWS region, used to build gateway endpoint service names (com.amazonaws.<region>.<service>)."
   type        = string
-  default     = "eu-west-2"
 
   validation {
     condition     = length(trimspace(var.region)) > 0

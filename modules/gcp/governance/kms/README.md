@@ -90,7 +90,7 @@ The following resources are created:
 
 
 - resource.google_kms_crypto_key.keys (modules/gcp/governance/kms/main.tf#L14)
-- resource.google_kms_crypto_key_iam_member.key_iam (modules/gcp/governance/kms/main.tf#L36)
+- resource.google_kms_crypto_key_iam_member.key_iam (modules/gcp/governance/kms/main.tf#L38)
 - resource.google_kms_key_ring.keyring (modules/gcp/governance/kms/main.tf#L7)
 
 

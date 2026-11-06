@@ -17,6 +17,8 @@ variables {
   billing_account           = "ABCDEF-123456-789012"
   tfc_organization          = "acme-tfc"
   alert_notification_emails = ["secops@acme.io"]
+  organization_admin_groups = ["gcp-org-admins@acme.io"]
+  billing_admin_groups      = ["gcp-billing-admins@acme.io"]
   environments = {
     dev = {
       display_name            = "Development"
@@ -46,6 +48,15 @@ override_data {
       github_oidc_provider_name = "projects/123456789012/locations/global/workloadIdentityPools/github-pool/providers/github"
       tfc_oidc_pool_id          = null
       tfc_oidc_provider_name    = null
+      workload_service_accounts = {
+        dev  = { plan = "acme-wl-dev-plan@acme-admin-abcd.iam.gserviceaccount.com", apply = "acme-wl-dev-apply@acme-admin-abcd.iam.gserviceaccount.com" }
+        prod = { plan = "acme-wl-prod-plan@acme-admin-abcd.iam.gserviceaccount.com", apply = "acme-wl-prod-apply@acme-admin-abcd.iam.gserviceaccount.com" }
+      }
+      stage_service_accounts = {
+        projects = { plan = "acme-projects-plan@acme-admin-abcd.iam.gserviceaccount.com", apply = "acme-projects-apply@acme-admin-abcd.iam.gserviceaccount.com" }
+      }
+      delegated_workload_folder_roles = ["roles/compute.admin", "roles/run.admin"]
+      delegated_network_folder_roles  = ["roles/compute.networkAdmin"]
     }
   }
 }
@@ -227,4 +238,56 @@ run "containment_rejects_preset_placeholder" {
   }
 
   expect_failures = [var.containment_exempt_principals]
+}
+
+# Standing admin is group-only; the bootstrap admin user is not a standing org admin.
+run "standing_admin_is_group_only" {
+  command = plan
+
+  assert {
+    condition     = module.organization.org_admin_members == tolist(["group:gcp-org-admins@acme.io"]) && length([for m in module.organization.billing_admin_members : m if startswith(m, "user:")]) == 0
+    error_message = "org/billing admin must be granted to groups only by default."
+  }
+}
+
+# Each environment's workload SAs get rights on their OWN scoped access policy;
+# projects-apply's folder-IAM delegation is bound per folder.
+run "scoped_policies_and_per_folder_delegation" {
+  command = plan
+
+  assert {
+    condition     = sort(keys(module.organization.scoped_access_policy_grants)) == sort(["dev|apply", "dev|plan", "prod|apply", "prod|plan"]) && module.organization.scoped_access_policy_grants["prod|apply"].member == "serviceAccount:acme-wl-prod-apply@acme-admin-abcd.iam.gserviceaccount.com" && module.organization.scoped_access_policy_grants["prod|apply"].env == "prod"
+    error_message = "each workload SA must be granted on its own environment's scoped access policy only."
+  }
+
+  assert {
+    condition     = sort(keys(output.delegated_folder_iam_targets)) == sort(["dev", "prod", "shared"]) && output.delegated_folder_iam_targets["shared"] == tolist(["roles/compute.networkAdmin"]) && !contains(output.delegated_folder_iam_targets["prod"], "roles/compute.networkAdmin")
+    error_message = "projects-apply delegation must be bound on every env folder (workload roles) and the shared folder (network roles)."
+  }
+}
+
+# is_production flows into the stage (whose check warns without containment; the
+# warning path is covered by the stage tests), so pair it with containment here.
+run "production_environment_with_containment" {
+  command = plan
+
+  variables {
+    enable_admin_containment      = true
+    containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
+    environments = {
+      prod = {
+        display_name            = "Production"
+        region                  = "europe-west1"
+        cidr_block              = "10.30.0.0/16"
+        budget_monthly_limit    = 1000
+        iam_group_role_bindings = {}
+        is_production           = true
+      }
+    }
+  }
+
+  assert {
+    condition     = module.organization.production_environment_keys == tolist(["prod"])
+    error_message = "is_production must flow into the organization stage."
+  }
 }

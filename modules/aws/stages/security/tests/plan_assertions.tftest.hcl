@@ -217,3 +217,34 @@ run "managed_break_glass_is_created_and_watched" {
     error_message = "the assumption alarm must watch the stage-created break-glass role ARN."
   }
 }
+
+# Default identities: with no key_admin / Config role ARNs the stage grants each
+# CMK's own-account tfc-apply role key administration and lets config-org create
+# the Config service-linked role and the org aggregator role.
+run "default_operator_roles" {
+  command = plan
+
+  variables {
+    key_admin_arn       = null
+    config_role_arn     = null
+    aggregator_role_arn = null
+  }
+
+  assert {
+    condition = local.key_admin_arns == {
+      log_archive      = "arn:aws:iam::333333333333:role/tfc-apply"
+      forensics        = "arn:aws:iam::444444444444:role/tfc-apply"
+      security_tooling = "arn:aws:iam::222222222222:role/tfc-apply"
+    }
+    error_message = "key_admin_arn = null must default each CMK's admin to its own account's tfc-apply role."
+  }
+}
+
+run "explicit_key_admin_wins" {
+  command = plan
+
+  assert {
+    condition     = alltrue([for a in values(local.key_admin_arns) : a == "arn:aws:iam::333333333333:role/kms-admin"])
+    error_message = "An explicit key_admin_arn must be used for every CMK."
+  }
+}

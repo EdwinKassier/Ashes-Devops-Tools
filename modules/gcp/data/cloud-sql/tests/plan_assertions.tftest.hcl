@@ -125,6 +125,30 @@ run "databases_and_users_fan_out" {
   }
 }
 
+# A user flagged ephemeral_password reads its password from the ephemeral
+# user_passwords map; the write-only version counter stays plannable.
+run "ephemeral_password_user_planned" {
+  command = plan
+
+  variables {
+    users = [
+      { name = "app", ephemeral_password = true, password_version = 3 },
+      { name = "legacy", password = "inline-value" },
+    ]
+    user_passwords = { app = "s3cret-value" }
+  }
+
+  assert {
+    condition     = length(google_sql_user.this) == 2
+    error_message = "Both the ephemeral-password and inline-password users must be planned."
+  }
+
+  assert {
+    condition     = google_sql_user.this["app"].password_wo_version == 3
+    error_message = "password_wo_version must come from the user's password_version for ephemeral_password users."
+  }
+}
+
 # PostgreSQL 16+ defaults to ENTERPRISE_PLUS, which rejects db-custom-* tiers; the
 # module pins ENTERPRISE so the default tier is creatable.
 run "edition_defaults_to_enterprise" {

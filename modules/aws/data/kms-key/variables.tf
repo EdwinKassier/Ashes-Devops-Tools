@@ -40,12 +40,23 @@ variable "management_account_id" {
 }
 
 variable "key_admin_arn" {
-  description = "ARN of the principal (role/user) granted key ADMINISTRATION on the CMK: management actions only (PutKeyPolicy, Enable/Disable, rotation, tagging, ScheduleKeyDeletion/CancelKeyDeletion, ...), no Encrypt/Decrypt/GenerateDataKey/ReEncrypt and no CreateGrant. REQUIRED to prevent locking the key out of management. Grant usage via key_user_arns."
+  description = "ARN of the principal (role/user) granted key ADMINISTRATION on the CMK: management actions only (Enable/Disable, rotation, tagging, ScheduleKeyDeletion/CancelKeyDeletion, ...), no Encrypt/Decrypt/GenerateDataKey/ReEncrypt, no CreateGrant and — unless key_policy_admin_arns is empty — no PutKeyPolicy. REQUIRED to prevent locking the key out of management. Grant usage via key_user_arns."
   type        = string
 
   validation {
     condition     = length(trimspace(var.key_admin_arn)) > 0
     error_message = "key_admin_arn must be a non-empty string."
+  }
+}
+
+variable "key_policy_admin_arns" {
+  description = "Principal ARNs granted kms:PutKeyPolicy — and nothing else — on the CMK. Whoever can rewrite the key policy can grant itself kms:Decrypt, so set this to the break-glass role(s) and keep the pipeline out. When set, the CreateKey lockout safety check is bypassed (the caller is intentionally not a policy admin) and later Terraform key-policy changes must be applied as one of these principals. Empty (default) = legacy behaviour: key_admin_arn also holds PutKeyPolicy."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for a in var.key_policy_admin_arns : can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", a))])
+    error_message = "key_policy_admin_arns entries must be account-qualified IAM role ARNs without wildcards."
   }
 }
 

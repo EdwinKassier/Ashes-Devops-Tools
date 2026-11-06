@@ -124,19 +124,20 @@ count-check: ## Fail if README.md / CLAUDE.md counts drifted from the tree (CI: 
 links: ## Fail on broken repo-relative links in any Markdown file (offline; CI: meta-lint)
 	@python3 scripts/check-md-links.py
 
-shellcheck: ## Run shellcheck (pinned shellcheck-py, same as pre-commit) on scripts/*.sh
+shellcheck: ## Run shellcheck (pinned shellcheck-py, same as pre-commit) on scripts/*.sh and tests/e2e/scripts/*.sh
 	@if command -v uvx >/dev/null 2>&1; then \
-		uvx --from shellcheck-py==$(SHELLCHECK_VERSION).1 shellcheck --severity=warning scripts/*.sh; \
+		uvx --from shellcheck-py==$(SHELLCHECK_VERSION).1 shellcheck --severity=warning scripts/*.sh tests/e2e/scripts/*.sh; \
 	else \
-		shellcheck --severity=warning scripts/*.sh; \
+		shellcheck --severity=warning scripts/*.sh tests/e2e/scripts/*.sh; \
 	fi
 
+# TEST_DIRS overrides the discovered set (the CI test shards pass their slice):
+#   make test TEST_DIRS="modules/gcp/network/vpc modules/gcp/governance/kms"
+# Discovery (scripts/terraform-roots.sh tests) excludes tests/e2e, whose suites
+# do REAL applies and run only in sandbox-e2e.yml.
 test: ## Run terraform test suites (searches module roots and their tests/ subdirs)
 	@set -e; \
-	test_dirs="$$(find envs modules -type f \( -name '*.tftest.hcl' -o -name '*.tftest.json' \) \
-	  | xargs -I{} dirname {} \
-	  | sed 's|/tests$$||' \
-	  | sort -u)"; \
+	test_dirs="$(if $(TEST_DIRS),$(TEST_DIRS),$$($(ROOT_DISCOVERY) tests))"; \
 	if [ -z "$$test_dirs" ]; then \
 		echo "$(YELLOW)No terraform test suites found$(NC)"; \
 		exit 0; \

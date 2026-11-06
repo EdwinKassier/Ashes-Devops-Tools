@@ -6,6 +6,11 @@
 
 mock_provider "aws" {}
 
+# region is required (no hard-coded default); runs may override it.
+variables {
+  region = "eu-west-2"
+}
+
 run "vpc_and_subnets_configured" {
   command = plan
 

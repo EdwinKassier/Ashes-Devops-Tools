@@ -42,6 +42,17 @@ run "defaults_accepted" {
   command = plan
 }
 
+run "wildcard_break_glass_role_arn_rejected" {
+  # Reject case: role/* would turn the break-glass carve-out into "any role".
+  command = plan
+
+  variables {
+    break_glass_role_arn = "arn:aws:iam::111111111111:role/*"
+  }
+
+  expect_failures = [var.break_glass_role_arn]
+}
+
 run "invalid_account_email_rejected" {
   # Reject case: an account with a malformed root email must fail the account
   # module's email validation.

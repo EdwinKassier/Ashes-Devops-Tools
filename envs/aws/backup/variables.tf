@@ -83,22 +83,30 @@ variable "changeable_for_days" {
 # -----------------------------------------------------------------------------
 
 variable "backup_role_arn" {
-  description = "REQUIRED. ARN of the IAM role AWS Backup assumes to run backup jobs for the resources selected by the org backup plan. Rendered into the org BACKUP_POLICY."
+  description = "ARN of the IAM role AWS Backup assumes in EACH member account under the Workloads OU to run the org backup plan, rendered into the org BACKUP_POLICY (may use $account). Null (default): the stage deploys backup_role_name to every Workloads-OU account via a service-managed StackSet and renders arn:aws:iam::$account:role/<backup_role_name>."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/.+", var.backup_role_arn))
-    error_message = "backup_role_arn must be an account-qualified IAM role ARN."
+    condition     = var.backup_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::([0-9]{12}|[$]account):role/.+$", coalesce(var.backup_role_arn, "x")))
+    error_message = "backup_role_arn must be null or an IAM role ARN whose account is a 12-digit ID or $account."
   }
 }
 
-variable "restore_testing_role_arn" {
-  description = "REQUIRED. ARN of the IAM role (in the backup account) AWS Backup assumes to perform restore testing jobs."
+variable "backup_role_name" {
+  description = "Name of the member-account AWS Backup service role the StackSet deploys when backup_role_arn is null."
   type        = string
+  default     = "aws-backup-org-role"
+}
+
+variable "restore_testing_role_arn" {
+  description = "ARN of an existing IAM role in the BACKUP account that AWS Backup assumes for restore testing. Null (default) creates aws-backup-restore-testing there (backup.amazonaws.com trust, AWSBackupServiceRolePolicyForRestores)."
+  type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/.+", var.restore_testing_role_arn))
-    error_message = "restore_testing_role_arn must be an account-qualified IAM role ARN."
+    condition     = var.restore_testing_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", coalesce(var.restore_testing_role_arn, "x")))
+    error_message = "restore_testing_role_arn must be null or an account-qualified IAM role ARN."
   }
 }
 
@@ -113,13 +121,17 @@ variable "restore_testing_role_arn" {
 # -----------------------------------------------------------------------------
 
 variable "landing_zone_name" {
-  description = "Landing-zone identifier written to the LandingZone tag on every resource."
+  description = "Landing-zone identifier written to the LandingZone tag on every resource. No default: set your own organization's identifier (same value in every AWS root; set it once in the tfc-admin common variable set via common_workspace_variables). The upstream placeholders \"ashes\" and \"my-org\" are rejected."
   type        = string
-  default     = "ashes"
 
   validation {
-    condition     = length(trimspace(var.landing_zone_name)) > 0
-    error_message = "landing_zone_name must be a non-empty string."
+    condition     = can(regex("^[a-z][a-z0-9-]{1,30}$", var.landing_zone_name))
+    error_message = "landing_zone_name must be 2-31 chars: a lowercase letter, then lowercase letters, digits or hyphens."
+  }
+
+  validation {
+    condition     = !contains(["ashes", "my-org"], lower(var.landing_zone_name))
+    error_message = "landing_zone_name is still an upstream placeholder (ashes / my-org). Set your own landing-zone identifier."
   }
 }
 

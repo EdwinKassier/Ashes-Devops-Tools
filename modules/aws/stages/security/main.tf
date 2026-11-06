@@ -27,6 +27,15 @@ locals {
   # create_break_glass is true, otherwise the externally-managed ARN the caller
   # passes. So "managed here" and "monitored here" stay in lockstep (audit M3).
   effective_break_glass_role_arn = var.create_break_glass ? module.break_glass[0].break_glass_role_arn : var.break_glass_role_arn
+
+  # Key administrator per CMK: the explicit key_admin_arn, else the key's own
+  # account role key_admin_role_name (tfc-apply by default — the principal that
+  # applies the key, so the key can never be created un-administrable).
+  key_admin_arns = {
+    log_archive      = coalesce(var.key_admin_arn, "arn:aws:iam::${var.log_archive_account_id}:role/${var.key_admin_role_name}")
+    forensics        = coalesce(var.key_admin_arn, "arn:aws:iam::${var.forensics_account_id}:role/${var.key_admin_role_name}")
+    security_tooling = coalesce(var.key_admin_arn, "arn:aws:iam::${var.security_tooling_account_id}:role/${var.key_admin_role_name}")
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -72,7 +81,7 @@ module "log_cmk" {
   alias                 = "log-archive"
   org_id                = var.org_id
   management_account_id = var.management_account_id
-  key_admin_arn         = var.key_admin_arn
+  key_admin_arn         = local.key_admin_arns["log_archive"]
   key_user_arns         = try(var.kms_key_user_arns["log_archive"], [])
   enable_protection_tag = var.enable_kms_protection_tag
   # log_service_principals uses the module SRA default
@@ -88,7 +97,7 @@ module "forensics_cmk" {
   alias                 = "forensics"
   org_id                = var.org_id
   management_account_id = var.management_account_id
-  key_admin_arn         = var.key_admin_arn
+  key_admin_arn         = local.key_admin_arns["forensics"]
   key_user_arns         = try(var.kms_key_user_arns["forensics"], [])
   enable_protection_tag = var.enable_kms_protection_tag
 }
@@ -108,7 +117,7 @@ module "sectool_cmk" {
   alias                  = "security-tooling"
   org_id                 = var.org_id
   management_account_id  = var.management_account_id
-  key_admin_arn          = var.key_admin_arn
+  key_admin_arn          = local.key_admin_arns["security_tooling"]
   key_user_arns          = try(var.kms_key_user_arns["security_tooling"], [])
   enable_protection_tag  = var.enable_kms_protection_tag
   log_service_principals = []
@@ -173,10 +182,14 @@ module "config" {
   }
 
   aws_enabled_regions = var.aws_enabled_regions
-  config_role_arn     = var.config_role_arn
-  aggregator_role_arn = var.aggregator_role_arn
-  log_archive_bucket  = module.log_archive_bucket.bucket_name
-  recorder_only       = false
+  # Null role ARNs -> the module creates the AWSServiceRoleForConfig SLR and
+  # the org aggregator role in the security-tooling account.
+  config_role_arn            = var.config_role_arn
+  create_service_linked_role = var.create_config_service_linked_role
+  account_id                 = var.security_tooling_account_id
+  aggregator_role_arn        = var.aggregator_role_arn
+  log_archive_bucket         = module.log_archive_bucket.bucket_name
+  recorder_only              = false
   # Record global resource types in the home Region only, not once per Region.
   home_region = var.aws_region
   # F5: record ALL supported resource types (default true, the full-coverage but

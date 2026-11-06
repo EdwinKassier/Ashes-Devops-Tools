@@ -6,7 +6,10 @@
 #
 # Statement design:
 #   * KeyAdministration — management-plane actions ONLY for var.key_admin_arn
-#     (PutKeyPolicy, Enable/Disable, rotation, tagging, deletion scheduling...).
+#     (Enable/Disable, rotation, tagging, deletion scheduling...), NOT
+#     PutKeyPolicy (see KeyPolicyAdministration).
+#   * KeyPolicyAdministration — kms:PutKeyPolicy only, for
+#     var.key_policy_admin_arns (break-glass); falls back to key_admin_arn.
 #     REQUIRED to avoid locking the key. It deliberately grants NO cryptographic
 #     operations (Encrypt/Decrypt/ReEncrypt/GenerateDataKey) and NO
 #     kms:CreateGrant, so the key administrator cannot read data protected by
@@ -113,7 +116,6 @@ locals {
     "kms:Describe*",
     "kms:Enable*",
     "kms:List*",
-    "kms:Put*",
     "kms:Update*",
     "kms:Revoke*",
     "kms:Disable*",
@@ -134,6 +136,21 @@ locals {
     Resource  = "*"
   }
 
+  # kms:PutKeyPolicy is split out of KeyAdministration: whoever can rewrite the
+  # key policy can grant itself kms:Decrypt, so it goes only to
+  # key_policy_admin_arns (break-glass). Empty falls back to key_admin_arn
+  # (legacy behaviour). On keys carrying the protection tag the deny-tamper SCP
+  # additionally restricts PutKeyPolicy to break-glass in member accounts.
+  key_policy_admin_principals = length(var.key_policy_admin_arns) > 0 ? var.key_policy_admin_arns : [var.key_admin_arn]
+
+  key_policy_admin_statement = {
+    Sid       = "KeyPolicyAdministration"
+    Effect    = "Allow"
+    Principal = { AWS = local.key_policy_admin_principals }
+    Action    = ["kms:PutKeyPolicy"]
+    Resource  = "*"
+  }
+
   key_tags = merge(
     var.tags,
     var.enable_protection_tag ? { (var.protection_tag_key) = "true" } : {},
@@ -142,7 +159,7 @@ locals {
   key_policy = jsonencode({
     Version = "2012-10-17"
     Statement = concat(
-      [local.key_admin_statement],
+      [local.key_admin_statement, local.key_policy_admin_statement],
       local.log_service_statements,
       local.key_user_statements,
       local.service_principal_statements,
@@ -150,19 +167,37 @@ locals {
   })
 }
 
+# The key policy is set AT CreateKey (aws_kms_key.policy), not by a separate
+# aws_kms_key_policy PutKeyPolicy call: the deny-tamper SCP lets only
+# break-glass PutKeyPolicy on protected keys, so a post-create PutKeyPolicy by
+# the pipeline would be denied. Consequence: any LATER Terraform change to a
+# protected key's policy must be applied by break-glass.
+#
+# When key_policy_admin_arns is set, the caller (pipeline) is deliberately not
+# granted PutKeyPolicy, so KMS's lockout safety check is bypassed — the
+# key_policy_admin_arns principals retain PutKeyPolicy, so the key is never
+# unmanageable.
 resource "aws_kms_key" "this" {
-  description             = "CMK: ${var.alias}"
-  enable_key_rotation     = true
-  deletion_window_in_days = var.deletion_window_in_days
-  tags                    = local.key_tags
+  description                        = "CMK: ${var.alias}"
+  enable_key_rotation                = true
+  deletion_window_in_days            = var.deletion_window_in_days
+  policy                             = local.key_policy
+  bypass_policy_lockout_safety_check = length(var.key_policy_admin_arns) > 0
+  tags                               = local.key_tags
+}
+
+# Formerly a separate aws_kms_key_policy. Forget it without destroying (a
+# destroy would reset the key to the default policy); aws_kms_key.policy now
+# owns the same document.
+removed {
+  from = aws_kms_key_policy.this
+
+  lifecycle {
+    destroy = false
+  }
 }
 
 resource "aws_kms_alias" "this" {
   name          = "alias/${var.alias}"
   target_key_id = aws_kms_key.this.key_id
-}
-
-resource "aws_kms_key_policy" "this" {
-  key_id = aws_kms_key.this.key_id
-  policy = local.key_policy
 }

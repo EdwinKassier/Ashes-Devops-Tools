@@ -10,7 +10,8 @@
 #   - Fargate service       — private subnets, no public IP, circuit breaker,
 #                             behind the shared ALB (compute/ecs-fargate)
 #   - GitHub deploy role    — optional (github + enable_github_oidc): OIDC trust
-#                             pinned to aud=sts.amazonaws.com and an EXACT sub;
+#                             pinned to aud=sts.amazonaws.com and an EXACT sub
+#                             (immutable repository_id-based when IDs are set);
 #                             can push to ITS repo, roll ITS service, and pass
 #                             ONLY its own task roles
 #   - Aurora PostgreSQL     — optional (database): RDS-managed master secret,
@@ -72,13 +73,24 @@ locals {
   # Services that get a GitHub Actions deploy role.
   deploy_services = var.enable_github_oidc ? { for k, s in var.services : k => s if s.github != null } : {}
 
-  # Exact OIDC subject per deploy role. Precedence: explicit subject (customised
-  # claim template) > ref > GitHub environment (default: var.environment).
+  # Exact OIDC subject per deploy role. AWS IAM can only condition on standard
+  # claims (sub/aud), so immutable repository IDs are matched through GitHub's
+  # customised sub claim template (include_claim_keys = repository_owner_id,
+  # repository_id, context). Precedence: explicit subject > ID-based (when
+  # repository_id is set; the default to use) > name-based repo:<org>/<repo>
+  # (mutable — a renamed/transferred/re-created repo name inherits trust).
+  # The trailing context is ref:<ref> when ref is set, else environment:<env>.
+  github_context = {
+    for k, s in local.deploy_services : k => (
+      s.github.ref != null ? "ref:${s.github.ref}" : "environment:${coalesce(s.github.environment, var.environment)}"
+    )
+  }
+
   github_subjects = {
     for k, s in local.deploy_services : k => (
       s.github.subject != null ? s.github.subject :
-      s.github.ref != null ? "repo:${s.github.repository}:ref:${s.github.ref}" :
-      "repo:${s.github.repository}:environment:${coalesce(s.github.environment, var.environment)}"
+      s.github.repository_id != null ? "repository_owner_id:${s.github.repository_owner_id}:repository_id:${s.github.repository_id}:${local.github_context[k]}" :
+      "repo:${s.github.repository}:${local.github_context[k]}"
     )
   }
 

@@ -13,9 +13,12 @@ variables {
     dev  = {}
     prod = {}
   }
+  enable_gcp      = true
   enable_aws      = true
   enable_saas     = true
   saas_workspaces = ["web"]
+  # Keep the suite independent of any committed config/tfc-workspaces.yaml.
+  workspace_variables_file = null
 }
 
 run "declares_every_workspace" {
@@ -44,7 +47,7 @@ run "declares_every_workspace" {
   }
 }
 
-run "gcp_only_by_default" {
+run "gcp_only" {
   command = plan
 
   variables {
@@ -226,10 +229,10 @@ run "credential_env_set_per_workspace" {
     gcp_workload_provider_name = "projects/123456789/locations/global/workloadIdentityPools/tfc-pool/providers/tfc-provider"
     gcp_plan_service_accounts  = { "gcp-organization" = "tfc-plan-org@admin-proj.iam.gserviceaccount.com" }
     gcp_apply_service_accounts = { "gcp-organization" = "tfc-apply-org@admin-proj.iam.gserviceaccount.com" }
-    aws_plan_role_arns         = { "aws-security" = "arn:aws:iam::111111111111:role/tfc-plan" }
-    aws_apply_role_arns        = { "aws-security" = "arn:aws:iam::111111111111:role/tfc-apply" }
+    aws_plan_role_arns         = { "aws-network" = "arn:aws:iam::111111111111:role/tfc-plan" }
+    aws_apply_role_arns        = { "aws-network" = "arn:aws:iam::111111111111:role/tfc-apply" }
     workspace_variables = {
-      "aws-workload-dev" = { environment = { value = "dev" } }
+      "aws-workload-dev" = { environment = { value = "dev-override" } }
     }
   }
 
@@ -242,18 +245,18 @@ run "credential_env_set_per_workspace" {
   }
 
   assert {
-    condition     = module.workspace["aws-security"].variable_keys == sort(["TFC_AWS_PROVIDER_AUTH", "TFC_AWS_PLAN_ROLE_ARN", "TFC_AWS_APPLY_ROLE_ARN"])
+    condition     = module.workspace["aws-network"].variable_keys == sort(["TFC_AWS_PROVIDER_AUTH", "TFC_AWS_PLAN_ROLE_ARN", "TFC_AWS_APPLY_ROLE_ARN"])
     error_message = "an AWS workspace with roles must get the three TFC_AWS_* env vars."
   }
 
   assert {
-    condition     = output.dynamic_credential_workspaces.gcp == tolist(["gcp-organization"]) && output.dynamic_credential_workspaces.aws == tolist(["aws-security"])
+    condition     = output.dynamic_credential_workspaces.gcp == tolist(["gcp-organization"]) && output.dynamic_credential_workspaces.aws == tolist(["aws-network"])
     error_message = "credentials must be set only on the workspaces named in the input maps."
   }
 
   assert {
     condition     = module.workspace["aws-workload-dev"].variable_keys == tolist(["environment"])
-    error_message = "workspace_variables must be set on the named workspace."
+    error_message = "aws-workload-<env> must receive the derived environment variable."
   }
 }
 
@@ -303,9 +306,59 @@ run "credentials_from_upstream_outputs" {
     target = data.tfe_outputs.aws_organization[0]
     values = {
       nonsensitive_values = {
-        tfc_plan_role_arns     = { prod = "arn:aws:iam::222222222222:role/tfc-plan", security_tooling = "arn:aws:iam::333333333333:role/tfc-plan" }
-        tfc_apply_role_arns    = { prod = "arn:aws:iam::222222222222:role/tfc-apply", security_tooling = "arn:aws:iam::333333333333:role/tfc-apply" }
-        tfc_workspace_bindings = { security_tooling = ["aws-security"] }
+        tfc_plan_role_arns     = { prod = "arn:aws:iam::222222222222:role/tfc-plan", network = "arn:aws:iam::444444444444:role/tfc-plan", security_tooling = "arn:aws:iam::333333333333:role/tfc-plan" }
+        tfc_apply_role_arns    = { prod = "arn:aws:iam::222222222222:role/tfc-apply", network = "arn:aws:iam::444444444444:role/tfc-apply", security_tooling = "arn:aws:iam::333333333333:role/tfc-apply" }
+        tfc_workspace_bindings = { security_tooling = ["aws-security"], network = ["aws-network"] }
+      }
+    }
+  }
+
+  override_data {
+    target = data.tfe_workspace.tfc_admin[0]
+    values = { id = "ws-tfcadmin" }
+  }
+
+  # aws-security is a multi-account root: its binding must NOT turn the
+  # security_tooling member role into its default credentials (the default is
+  # the management account, and no management role is supplied here).
+  assert {
+    condition     = output.dynamic_credential_workspaces.gcp == tolist(["gcp-projects"]) && output.dynamic_credential_workspaces.aws == tolist(["aws-network", "aws-workload-prod"])
+    error_message = "credentials read from upstream outputs must reach the single-account workspaces only (explicit aws_workspace_account_keys and derived tfc_workspace_bindings)."
+  }
+
+  # tfc-admin must be allowed to read the upstream states it pulls outputs from.
+  assert {
+    condition     = contains(tfe_workspace_settings.this["gcp-bootstrap"].remote_state_consumer_ids, "ws-tfcadmin") && contains(tfe_workspace_settings.this["aws-organization"].remote_state_consumer_ids, "ws-tfcadmin")
+    error_message = "tfc-admin must be a remote-state consumer of gcp-bootstrap and aws-organization when reading their outputs."
+  }
+}
+
+# Multi-account roots: default = management account, one TFC configuration per
+# member-account alias derived from the aws-organization outputs.
+run "multi_account_alias_credentials" {
+  command = plan
+
+  variables {
+    aws_organization_outputs_from_tfc = true
+    aws_management_plan_role_arn      = "arn:aws:iam::111111111111:role/tfc-mgmt-plan"
+    aws_management_apply_role_arn     = "arn:aws:iam::111111111111:role/tfc-mgmt-apply"
+  }
+
+  override_data {
+    target = data.tfe_outputs.aws_organization[0]
+    values = {
+      nonsensitive_values = {
+        tfc_plan_role_arns = {
+          security_tooling = "arn:aws:iam::333333333333:role/tfc-plan"
+          log_archive      = "arn:aws:iam::555555555555:role/tfc-plan"
+          forensics        = "arn:aws:iam::666666666666:role/tfc-plan"
+        }
+        tfc_apply_role_arns = {
+          security_tooling = "arn:aws:iam::333333333333:role/tfc-apply"
+          log_archive      = "arn:aws:iam::555555555555:role/tfc-apply"
+          forensics        = "arn:aws:iam::666666666666:role/tfc-apply"
+        }
+        tfc_workspace_bindings = { security_tooling = ["aws-security"], log_archive = ["aws-security"], forensics = ["aws-security"] }
       }
     }
   }
@@ -316,15 +369,210 @@ run "credentials_from_upstream_outputs" {
   }
 
   assert {
-    condition     = output.dynamic_credential_workspaces.gcp == tolist(["gcp-projects"]) && output.dynamic_credential_workspaces.aws == tolist(["aws-security", "aws-workload-prod"])
-    error_message = "credentials read from upstream outputs must reach the mapped workspaces (explicit aws_workspace_account_keys and derived tfc_workspace_bindings)."
+    condition = module.workspace["aws-security"].variable_keys == sort(concat(
+      ["TFC_AWS_PROVIDER_AUTH", "TFC_AWS_PLAN_ROLE_ARN", "TFC_AWS_APPLY_ROLE_ARN"],
+      flatten([for a in ["security_tooling", "log_archive", "forensics"] : ["TFC_AWS_PROVIDER_AUTH_${a}", "TFC_AWS_PLAN_ROLE_ARN_${a}", "TFC_AWS_APPLY_ROLE_ARN_${a}"]]),
+    ))
+    error_message = "aws-security must get the default (management) config plus one TFC_AWS_*_<alias> set per member-account alias."
   }
 
-  # tfc-admin must be allowed to read the upstream states it pulls outputs from.
   assert {
-    condition     = contains(tfe_workspace_settings.this["gcp-bootstrap"].remote_state_consumer_ids, "ws-tfcadmin") && contains(tfe_workspace_settings.this["aws-organization"].remote_state_consumer_ids, "ws-tfcadmin")
-    error_message = "tfc-admin must be a remote-state consumer of gcp-bootstrap and aws-organization when reading their outputs."
+    condition     = module.workspace["aws-security"].variable_values["TFC_AWS_PLAN_ROLE_ARN"] == "arn:aws:iam::111111111111:role/tfc-mgmt-plan" && module.workspace["aws-security"].variable_values["TFC_AWS_APPLY_ROLE_ARN_log_archive"] == "arn:aws:iam::555555555555:role/tfc-apply"
+    error_message = "the default config must be the management role and each alias its own member-account role."
   }
+
+  # aws-organization gets the management role (single provider, no aliases);
+  # aws-backup has no backup-account roles yet, so it is withheld entirely.
+  assert {
+    condition     = module.workspace["aws-organization"].variable_keys == sort(["TFC_AWS_PROVIDER_AUTH", "TFC_AWS_PLAN_ROLE_ARN", "TFC_AWS_APPLY_ROLE_ARN"])
+    error_message = "aws-organization must get only the management-account default configuration."
+  }
+
+  assert {
+    condition     = !contains(output.dynamic_credential_workspaces.aws, "aws-backup")
+    error_message = "a multi-account workspace whose aliases are incomplete must receive no AWS credentials."
+  }
+}
+
+run "explicit_alias_roles" {
+  command = plan
+
+  variables {
+    aws_management_plan_role_arn  = "arn:aws:iam::111111111111:role/tfc-mgmt-plan"
+    aws_management_apply_role_arn = "arn:aws:iam::111111111111:role/tfc-mgmt-apply"
+    aws_alias_role_arns = {
+      "aws-backup" = { backup = { plan_role_arn = "arn:aws:iam::777777777777:role/tfc-plan", apply_role_arn = "arn:aws:iam::777777777777:role/tfc-apply" } }
+    }
+  }
+
+  assert {
+    condition     = contains(module.workspace["aws-backup"].variable_keys, "TFC_AWS_APPLY_ROLE_ARN_backup") && length(module.workspace["aws-backup"].variable_keys) == 6
+    error_message = "aws-backup must get the management default plus the backup alias configuration."
+  }
+}
+
+run "multi_account_explicit_default_without_aliases_fails" {
+  command = plan
+
+  variables {
+    aws_plan_role_arns  = { "aws-security" = "arn:aws:iam::111111111111:role/tfc-mgmt-plan" }
+    aws_apply_role_arns = { "aws-security" = "arn:aws:iam::111111111111:role/tfc-mgmt-apply" }
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+run "alias_role_unknown_alias_fails" {
+  command = plan
+
+  variables {
+    aws_alias_role_arns = {
+      "aws-security" = { typo = { plan_role_arn = "arn:aws:iam::777777777777:role/tfc-plan", apply_role_arn = "arn:aws:iam::777777777777:role/tfc-apply" } }
+    }
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+run "account_key_rejected_for_management_workspace" {
+  command = plan
+
+  variables {
+    aws_workspace_account_keys = { "aws-security" = "security_tooling" }
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+# environments[*].aws_account_key wires aws-workload-<env>: workload_account_key
+# variable plus that account's roles from the aws-organization outputs.
+run "aws_workload_account_binding" {
+  command = plan
+
+  variables {
+    environments = {
+      dev  = { aws_account_key = "workload_dev" }
+      prod = {}
+    }
+    aws_organization_outputs_from_tfc = true
+  }
+
+  override_data {
+    target = data.tfe_outputs.aws_organization[0]
+    values = {
+      nonsensitive_values = {
+        tfc_plan_role_arns     = { workload_dev = "arn:aws:iam::888888888888:role/tfc-plan" }
+        tfc_apply_role_arns    = { workload_dev = "arn:aws:iam::888888888888:role/tfc-apply" }
+        tfc_workspace_bindings = {}
+      }
+    }
+  }
+
+  override_data {
+    target = data.tfe_workspace.tfc_admin[0]
+    values = { id = "ws-tfcadmin" }
+  }
+
+  assert {
+    condition     = module.workspace["aws-workload-dev"].variable_values["workload_account_key"] == "workload_dev" && module.workspace["aws-workload-dev"].variable_values["environment"] == "dev" && module.workspace["aws-workload-dev"].variable_values["TFC_AWS_PLAN_ROLE_ARN"] == "arn:aws:iam::888888888888:role/tfc-plan"
+    error_message = "aws-workload-dev must get environment, workload_account_key and the bound account's roles."
+  }
+
+  assert {
+    condition     = module.workspace["aws-workload-prod"].variable_keys == tolist(["environment"])
+    error_message = "an environment without aws_account_key only gets the derived environment variable."
+  }
+}
+
+# GCP phase-0: gcp-bootstrap runs locally (operator ADC) by default; every other
+# workspace stays remote.
+run "execution_mode_overrides" {
+  command = plan
+
+  assert {
+    condition     = tfe_workspace_settings.this["gcp-bootstrap"].execution_mode == "local" && tfe_workspace_settings.this["gcp-organization"].execution_mode == "remote" && tfe_workspace_settings.this["aws-organization"].execution_mode == "remote"
+    error_message = "gcp-bootstrap must default to local execution and every other workspace to remote."
+  }
+}
+
+run "execution_mode_switch_to_remote_after_second_pass" {
+  command = plan
+
+  variables {
+    workspace_execution_modes = {}
+  }
+
+  assert {
+    condition     = alltrue([for k, m in output.workspace_execution_modes : m == "remote"])
+    error_message = "with no overrides every workspace runs remotely."
+  }
+}
+
+run "execution_mode_local_rejected_outside_phase0" {
+  command = plan
+
+  variables {
+    workspace_execution_modes = { "gcp-organization" = "local" }
+  }
+
+  expect_failures = [var.workspace_execution_modes]
+}
+
+run "at_least_one_cloud_required" {
+  command = plan
+
+  variables {
+    enable_gcp  = false
+    enable_aws  = false
+    enable_saas = false
+  }
+
+  expect_failures = [var.enable_gcp]
+}
+
+# Committed per-workspace variables for VCS-driven runs.
+run "workspace_variables_file_loaded" {
+  command = plan
+
+  variables {
+    workspace_variables_file = "tests/fixtures/tfc-workspaces.yaml"
+    workspace_variables = {
+      "gcp-organization" = { domain = { value = "override.example" } }
+    }
+  }
+
+  assert {
+    condition     = output.workspace_variables_file_loaded && module.workspace["aws-network"].variable_values["name_prefix"] == "acme" && module.workspace["aws-network"].variable_values["allowed_regions"] == jsonencode(["eu-west-2", "eu-west-1"])
+    error_message = "scalar and list entries from the committed file must reach the workspace (lists as HCL)."
+  }
+
+  assert {
+    condition     = module.workspace["gcp-organization"].variable_values["domain"] == "override.example"
+    error_message = "workspace_variables must win over the committed file."
+  }
+}
+
+run "workspace_variables_file_missing_is_noop" {
+  command = plan
+
+  variables {
+    workspace_variables_file = "tests/fixtures/does-not-exist.yaml"
+  }
+
+  assert {
+    condition     = !output.workspace_variables_file_loaded
+    error_message = "a missing workspace_variables_file must be ignored."
+  }
+}
+
+run "workspace_variables_file_rejects_secrets" {
+  command = plan
+
+  variables {
+    workspace_variables_file = "tests/fixtures/tfc-workspaces-sensitive.yaml"
+  }
+
+  expect_failures = [terraform_data.input_contract]
 }
 
 # Control-plane run notifications (audit M-ops): a configured control-plane

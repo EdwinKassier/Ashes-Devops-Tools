@@ -49,7 +49,7 @@ variable "customer_id" {
 }
 
 variable "admin_email" {
-  description = "Email address of the primary administrator"
+  description = "Email address of the primary administrator. Granted standing org/billing admin as a user: principal ONLY when allow_user_principals_for_break_glass = true."
   type        = string
 
   validation {
@@ -59,7 +59,7 @@ variable "admin_email" {
 }
 
 variable "break_glass_user" {
-  description = "Optional email address of a break-glass emergency user granted org admin access"
+  description = "Optional break-glass emergency user email. Always watched by the CRITICAL break-glass control-plane alert; granted standing org admin ONLY when allow_user_principals_for_break_glass = true (prefer a break-glass group, or the PAM entitlement)."
   type        = string
   default     = null
 
@@ -100,11 +100,12 @@ variable "project_prefix" {
 }
 
 variable "environments" {
-  description = "Map of environment definitions keyed by environment name (e.g., dev, staging, prod)"
+  description = "Map of environment definitions keyed by environment name (e.g., dev, staging, prod). is_production (default false) marks production environments for the production guardrail checks."
   type = map(object({
     display_name            = string
     description             = string
     iam_group_role_bindings = map(set(string))
+    is_production           = optional(bool, false)
   }))
 
   validation {
@@ -114,23 +115,44 @@ variable "environments" {
 }
 
 variable "organization_admin_groups" {
-  description = "List of Google Group email addresses to grant organization admin roles"
+  description = "Google Group email addresses (bare, no 'group:' prefix) granted roles/resourcemanager.organizationAdmin. Standing org admin is group-only: must be non-empty unless allow_user_principals_for_break_glass = true, and must not contain admin_email or break_glass_user (those are users)."
   type        = list(string)
 
   validation {
-    condition     = alltrue([for g in var.organization_admin_groups : can(regex("^[^@]+@[^@]+\\.[^@]+$", g))])
-    error_message = "Each organization_admin_groups entry must be a valid email address."
+    condition     = alltrue([for g in var.organization_admin_groups : can(regex("^[^@:\\s]+@[^@\\s]+\\.[^@\\s]+$", g))])
+    error_message = "Each organization_admin_groups entry must be a bare group email address (no 'user:'/'group:'/'serviceAccount:' prefix)."
+  }
+
+  validation {
+    condition     = length(var.organization_admin_groups) > 0 || var.allow_user_principals_for_break_glass
+    error_message = "organization_admin_groups must list at least one group: standing org admin is granted to groups only. To grant admin_email / break_glass_user as users instead, set allow_user_principals_for_break_glass = true (break-glass only)."
+  }
+
+  validation {
+    condition     = !contains([for g in var.organization_admin_groups : lower(g)], lower(var.admin_email)) && (var.break_glass_user == null || !contains([for g in var.organization_admin_groups : lower(g)], lower(coalesce(var.break_glass_user, "-"))))
+    error_message = "organization_admin_groups must not contain admin_email or break_glass_user: they are user accounts and would be bound as group: principals."
   }
 }
 
 variable "billing_admin_groups" {
-  description = "List of Google Group email addresses to grant billing admin roles"
+  description = "Google Group email addresses (bare, no 'group:' prefix) granted roles/billing.admin. Group-only unless allow_user_principals_for_break_glass = true."
   type        = list(string)
 
   validation {
-    condition     = alltrue([for g in var.billing_admin_groups : can(regex("^[^@]+@[^@]+\\.[^@]+$", g))])
-    error_message = "Each billing_admin_groups entry must be a valid email address."
+    condition     = alltrue([for g in var.billing_admin_groups : can(regex("^[^@:\\s]+@[^@\\s]+\\.[^@\\s]+$", g))])
+    error_message = "Each billing_admin_groups entry must be a bare group email address (no 'user:'/'group:'/'serviceAccount:' prefix)."
   }
+
+  validation {
+    condition     = length(var.billing_admin_groups) > 0 || var.allow_user_principals_for_break_glass
+    error_message = "billing_admin_groups must list at least one group: standing billing admin is granted to groups only (or set allow_user_principals_for_break_glass = true)."
+  }
+}
+
+variable "allow_user_principals_for_break_glass" {
+  description = "Escape hatch. When true, admin_email and break_glass_user are ALSO granted standing roles/resourcemanager.organizationAdmin (and admin_email roles/billing.admin) as user: principals. Default false: standing admin goes to groups only; use a break-glass group or the PAM entitlement (enable_pam) for individual elevation."
+  type        = bool
+  default     = false
 }
 
 variable "default_region" {
@@ -236,7 +258,7 @@ variable "audit_log_retention_days" {
   }
 }
 
-# --- Audit finding G4 / C3: dedicated logging project (opt-in, default = unchanged) ---
+# --- Dedicated logging project (opt-in, default = unchanged) ---
 variable "logging_project_id" {
   description = <<-EOT
     Dedicated logging project ID for the org audit sink, audit bucket, BigQuery audit
@@ -276,7 +298,7 @@ variable "logging_project_number" {
 }
 
 variable "audit_soft_delete_retention_days" {
-  description = "Soft-delete window (days) on the org audit-log buckets (M-4): deleted/overwritten objects stay restorable for this long. 7-90, or 0 to disable. Default 30."
+  description = "Soft-delete window (days) on the org audit-log buckets: deleted/overwritten objects stay restorable for this long. 7-90, or 0 to disable. Default 30."
   type        = number
   default     = 30
 
@@ -286,9 +308,9 @@ variable "audit_soft_delete_retention_days" {
   }
 }
 
-# --- Control-plane alerting (audit Security High) ---
+# --- Control-plane alerting ---
 variable "enable_control_plane_alerting" {
-  description = "Create log-match alerts on control-plane changes (org IAM, org policy, VPC-SC, sinks/exclusions, custom roles, deny policies, KMS key destroy) and on break-glass use, in the audit/logging project. Default true."
+  description = "Create log-match alerts on control-plane changes (org IAM, org policy, VPC-SC, sinks/exclusions, custom roles, deny policies, KMS key-version destroy/disable, tag binding/key/value deletion) and on break-glass use, in the audit/logging project. Default true."
   type        = bool
   default     = true
 }
@@ -369,7 +391,7 @@ variable "iam_deny_policies" {
 }
 
 variable "enable_cmek_org_policy" {
-  description = "H1/M2: enforce CMEK on sensitive services org-wide via the gcp.restrictNonCmekServices org policy. Default false, so a default apply is unchanged; the prod-hardening preset turns it on. Enabling denies creating resources in cmek_required_services without a customer-managed key, so wire CMEK keys for those services first."
+  description = "Enforce CMEK on sensitive services org-wide via the gcp.restrictNonCmekServices org policy. Default false, so a default apply is unchanged; the prod-hardening preset turns it on. Enabling denies creating resources in cmek_required_services without a customer-managed key, so wire CMEK keys for those services first."
   type        = bool
   default     = false
 }
@@ -388,13 +410,13 @@ variable "cmek_required_services" {
 }
 
 variable "enable_admin_containment" {
-  description = "C2/C3: IAM deny policy at the org node that blocks, for all principals except containment_exempt_principals (break-glass): org-wide update/delete of logging sinks, exclusion changes, log-bucket delete, VPC-SC perimeter update/delete/replaceAll/commit and access-policy delete; and, scoped by the containment/protected tag to the audit buckets + audit CMEK keyring, bucket delete/setIamPolicy, object delete, key-version destroy and key setIamPolicy. Once on, Terraform changes to ANY sink, exclusion or perimeter must run as break-glass. Default false; the prod preset turns it on."
+  description = "IAM deny policy at the org node that blocks, for all principals except containment_exempt_principals (break-glass): org-wide update/delete of logging sinks, exclusion changes, log-bucket delete, VPC-SC perimeter update/delete/replaceAll/commit and access-policy delete; and, scoped by the containment/protected tag to the audit buckets + audit CMEK keyring, bucket delete/setIamPolicy/deleteTagBinding, object delete, key-version destroy/update (disable) and key setIamPolicy. Once on, Terraform changes to ANY sink, exclusion or perimeter must run as break-glass. Default false (a check warns when a production environment exists without it); the prod preset turns it on."
   type        = bool
   default     = false
 }
 
 variable "containment_exempt_principals" {
-  description = "Break-glass principals exempt from the C2 containment deny policy, e.g. [\"principalSet://goog/group/break-glass@example.com\"]. Required (non-empty) when enable_admin_containment is true."
+  description = "Break-glass principals exempt from the admin-containment deny policy, e.g. [\"principalSet://goog/group/break-glass@example.com\"]. Required (non-empty) when enable_admin_containment is true."
   type        = list(string)
   default     = []
 
@@ -418,4 +440,151 @@ variable "enable_legacy_admin_folder_roles" {
   description = "Grant the phase-0 bootstrap SA (terraform_admin_email) folderAdmin/projectCreator/billing.projectManager/networkAdmin on every folder. Legacy single-identity model; default false because the per-stage plan/apply service accounts replace it. Enable only while migrating an existing deployment."
   type        = bool
   default     = false
+}
+
+# --- VPC-SC: per-environment scoped access policies ---
+
+variable "enable_scoped_access_policies" {
+  description = "Create one folder-scoped Access Context Manager policy per environment folder (every key in environments except shared_folder_key) and grant that environment's workload SAs (workload_service_accounts) policyEditor (apply) / policyReader (plan) on it only. The workload root builds its perimeter in this policy. Requires the gcp-bootstrap enable_scoped_access_policies input (policyAdmin for the organization apply SA). Default true."
+  type        = bool
+  default     = true
+}
+
+variable "shared_folder_key" {
+  description = "Key in environments of the shared (hub/DNS) folder. It gets no scoped access policy (the hub perimeter lives in the org-wide policy) and its delegated folder-IAM admits only delegated_network_folder_roles."
+  type        = string
+  default     = "shared"
+}
+
+variable "workload_service_accounts" {
+  description = "Map of environment key -> { plan, apply } workload SA emails (gcp-bootstrap output workload_service_accounts). Granted on their own environment's scoped access policy. Default {} = no grants."
+  type = map(object({
+    plan  = string
+    apply = string
+  }))
+  default = {}
+
+  validation {
+    condition     = alltrue([for env, sas in var.workload_service_accounts : can(regex("^[^@]+@[^@]+\\.iam\\.gserviceaccount\\.com$", sas.plan)) && can(regex("^[^@]+@[^@]+\\.iam\\.gserviceaccount\\.com$", sas.apply)) && sas.plan != sas.apply])
+    error_message = "Each workload_service_accounts entry needs distinct plan and apply service-account emails (*.iam.gserviceaccount.com)."
+  }
+}
+
+# --- projects-apply delegated folder-IAM (bound per folder) ---
+
+variable "projects_apply_service_account" {
+  description = "Email of the gcp-projects APPLY SA (gcp-bootstrap output stage_service_accounts[\"projects\"].apply). When set, it gets a conditional roles/resourcemanager.folderIamAdmin on each environment folder (delegated_workload_folder_roles only) and on the shared folder (delegated_network_folder_roles only). Null = no delegation."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.projects_apply_service_account == null || can(regex("^[^@]+@[^@]+\\.iam\\.gserviceaccount\\.com$", var.projects_apply_service_account))
+    error_message = "projects_apply_service_account must be a service-account email (*.iam.gserviceaccount.com) or null."
+  }
+}
+
+variable "delegated_workload_folder_roles" {
+  description = "Roles projects-apply may grant on environment folders (gcp-bootstrap output delegated_workload_folder_roles)."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = length(setintersection(toset(var.delegated_workload_folder_roles), toset(["roles/owner", "roles/resourcemanager.folderAdmin", "roles/resourcemanager.folderIamAdmin", "roles/iam.securityAdmin"]))) == 0
+    error_message = "delegated_workload_folder_roles must not contain roles/owner, folderAdmin, folderIamAdmin or iam.securityAdmin (the delegate could escalate)."
+  }
+}
+
+variable "delegated_network_folder_roles" {
+  description = "Roles projects-apply may grant on the shared folder (gcp-bootstrap output delegated_network_folder_roles)."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = length(setintersection(toset(var.delegated_network_folder_roles), toset(["roles/owner", "roles/resourcemanager.folderAdmin", "roles/resourcemanager.folderIamAdmin", "roles/iam.securityAdmin"]))) == 0
+    error_message = "delegated_network_folder_roles must not contain roles/owner, folderAdmin, folderIamAdmin or iam.securityAdmin (the delegate could escalate)."
+  }
+}
+
+# --- Privileged Access Manager: just-in-time org admin ---
+
+variable "enable_pam" {
+  description = "Create a Privileged Access Manager entitlement at the org node: members of pam_eligible_groups may request pam_roles for up to pam_max_request_duration, with justification, approved by pam_approver_groups. Requires the gcp-bootstrap enable_pam input. Default false."
+  type        = bool
+  default     = false
+}
+
+variable "pam_entitlement_id" {
+  description = "ID of the PAM org-admin entitlement."
+  type        = string
+  default     = "jit-org-admin"
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{3,61}[a-z0-9]$", var.pam_entitlement_id))
+    error_message = "pam_entitlement_id must be 5-63 lowercase letters, digits or hyphens, starting with a letter."
+  }
+}
+
+variable "pam_roles" {
+  description = "Roles granted for the duration of an approved PAM request."
+  type        = list(string)
+  default     = ["roles/resourcemanager.organizationAdmin"]
+
+  validation {
+    condition     = length(var.pam_roles) > 0 && alltrue([for r in var.pam_roles : startswith(r, "roles/") || can(regex("^organizations/[0-9]+/roles/", r))])
+    error_message = "pam_roles must be a non-empty list of role names (roles/... or organizations/<id>/roles/...)."
+  }
+}
+
+variable "pam_eligible_groups" {
+  description = "Bare group emails whose members may request the PAM entitlement. Required when enable_pam = true."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = !var.enable_pam || length(var.pam_eligible_groups) > 0
+    error_message = "pam_eligible_groups must be non-empty when enable_pam = true."
+  }
+
+  validation {
+    condition     = alltrue([for g in var.pam_eligible_groups : can(regex("^[^@:\\s]+@[^@\\s]+\\.[^@\\s]+$", g)) && !can(regex("(?i)(replace-me|\\.invalid$)", g))])
+    error_message = "pam_eligible_groups entries must be bare group email addresses (placeholders such as REPLACE-ME / .invalid are rejected)."
+  }
+}
+
+variable "pam_approver_groups" {
+  description = "Bare group emails whose members approve PAM requests. Required when enable_pam = true; keep it disjoint from pam_eligible_groups so nobody approves their own request."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = !var.enable_pam || length(var.pam_approver_groups) > 0
+    error_message = "pam_approver_groups must be non-empty when enable_pam = true."
+  }
+
+  validation {
+    condition     = length(setintersection(toset(var.pam_approver_groups), toset(var.pam_eligible_groups))) == 0
+    error_message = "pam_approver_groups must not overlap pam_eligible_groups (self-approval)."
+  }
+
+  validation {
+    condition     = alltrue([for g in var.pam_approver_groups : can(regex("^[^@:\\s]+@[^@\\s]+\\.[^@\\s]+$", g)) && !can(regex("(?i)(replace-me|\\.invalid$)", g))])
+    error_message = "pam_approver_groups entries must be bare group email addresses (placeholders such as REPLACE-ME / .invalid are rejected)."
+  }
+}
+
+variable "pam_max_request_duration" {
+  description = "Maximum duration of a PAM grant, in seconds with an 's' suffix (e.g. 3600s). Default 1 hour."
+  type        = string
+  default     = "3600s"
+
+  validation {
+    condition     = can(regex("^[0-9]+s$", var.pam_max_request_duration)) && tonumber(trimsuffix(var.pam_max_request_duration, "s")) <= 86400
+    error_message = "pam_max_request_duration must be '<seconds>s' and at most 86400s (24h)."
+  }
+}
+
+variable "pam_notification_emails" {
+  description = "Optional extra emails notified of PAM grants (admin_email_recipients)."
+  type        = list(string)
+  default     = []
 }
