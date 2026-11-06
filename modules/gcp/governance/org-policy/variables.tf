@@ -113,7 +113,7 @@ variable "custom_constraints" {
     condition      = string                      # CEL condition, e.g., "resource.management.autoUpgrade == true"
     method_types   = list(string)                # Operations to restrict: CREATE, UPDATE, DELETE
     resource_types = list(string)                # Resources to restrict: e.g. ["container.googleapis.com/NodePool"]
-    enforcement    = optional(string, "enforce") # enforce | dry_run | off
+    enforcement    = optional(string, "enforce") # enforce, dry_run or off
   }))
   default = []
 
