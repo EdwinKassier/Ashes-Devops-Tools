@@ -477,7 +477,7 @@ run "projects_delegation_is_bound_per_folder" {
   }
 }
 
-# ── Containment: production fails the plan, deny coverage ──────────────────────────
+# ── Containment: production fails the plan, deny coverage ───────────────────
 
 run "production_without_containment_fails" {
   command = plan
@@ -533,7 +533,7 @@ run "explicit_waiver_plans" {
   }
 }
 
-# ── PAM: just-in-time org admin ──────────────────────────────────────────────
+# ── PAM: just-in-time org admin ─────────────────────────────────────────────
 
 run "pam_entitlement_off_by_default" {
   command = plan

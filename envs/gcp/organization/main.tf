@@ -133,8 +133,8 @@ module "organization" {
   # (it would deny everyone); output.admin_containment_enabled fails the plan.
   enable_admin_containment      = local.enable_admin_containment && length(local.containment_exempt_principals) > 0
   containment_exempt_principals = local.containment_exempt_principals
-  # Explicit opt-out, or the root's own precondition already fails the plan.
-  production_containment_waived = var.enable_admin_containment == false || (local.enable_admin_containment && length(local.containment_exempt_principals) == 0)
+  # Explicit opt-out (variable or gcp.admin_containment: false in config; unset is not a waiver), or the root's own precondition already fails the plan.
+  production_containment_waived = var.enable_admin_containment == false || local.cfg.admin_containment == false || (local.enable_admin_containment && length(local.containment_exempt_principals) == 0)
 
   # Deny policies are applied by the guardrail owner (separate) or here (legacy).
   guardrail_owner_mode = local.guardrail_owner_mode

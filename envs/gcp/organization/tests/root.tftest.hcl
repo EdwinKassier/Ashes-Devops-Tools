@@ -380,6 +380,30 @@ run "containment_derived_on_for_production_from_config" {
   }
 }
 
+# An explicit gcp.admin_containment: false in config waives the production
+# containment requirement (unset is not a waiver).
+run "config_false_waives_containment" {
+  command = plan
+
+  variables {
+    landing_zone_config_path  = "tests/fixtures/landing-zone-prod-containment-waived.yaml"
+    domain                    = null
+    project_prefix            = null
+    admin_email               = null
+    billing_account           = null
+    tfc_organization          = null
+    alert_notification_emails = []
+    organization_admin_groups = null
+    billing_admin_groups      = null
+    environments              = null
+  }
+
+  assert {
+    condition     = output.admin_containment_enabled == false && length(module.organization.admin_containment_rules) == 0
+    error_message = "gcp.admin_containment: false must waive containment for a production estate and plan."
+  }
+}
+
 # Production without a break-glass principal fails the plan instead of
 # silently shipping an unprotected audit store.
 run "production_without_break_glass_fails" {
