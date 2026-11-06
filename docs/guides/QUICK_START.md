@@ -175,6 +175,16 @@ cp envs/gcp/bootstrap/terraform.tfvars.example envs/gcp/bootstrap/local.auto.tfv
 # ...). Delete the rest: an explicit variable overrides the config.
 ```
 
+**Step 3b — Write the workspace IDs (production estates):**
+
+The scaffolded config is `org.profile: production` with a `prod` environment, so `gcp-bootstrap` refuses to bind WIF by workspace name and needs the immutable IDs. The local phase-0 run ignores workspace variables, so write them from tfc-admin (applied in pass 1) into a gitignored file:
+
+```bash
+make bootstrap-ids   # terraform -chdir=envs/tfc-admin output -raw gcp_bootstrap_tfvars > envs/gcp/bootstrap/tfc-workspaces.auto.tfvars
+```
+
+Skip it only for a non-production estate. Without it the plan fails naming `production_workspaces_bound_by_id`.
+
 **Step 4 — Apply the bootstrap root first (two-phase, as the human admin):**
 
 The GCP control plane is four roots applied in order: `gcp-bootstrap` →

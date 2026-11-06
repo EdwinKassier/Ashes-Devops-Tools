@@ -309,7 +309,10 @@ e2e-aws: ## REAL apply: run tests/e2e/aws in the ambient (sandbox!) AWS account,
 # ---------------------------------------------------------------------------
 # Single-source configuration (config/landing-zone.yaml)
 # ---------------------------------------------------------------------------
-.PHONY: init
+.PHONY: init bootstrap-ids
 
 init: ## Scaffold config/landing-zone.yaml: make init ARGS="--org-name acme --clouds gcp,aws ..."
 	@./scripts/init-landing-zone.sh $(ARGS)
+
+bootstrap-ids: ## Write the tfc-admin workspace IDs for the local phase-0 gcp-bootstrap apply (gitignored)
+	terraform -chdir=envs/tfc-admin output -raw gcp_bootstrap_tfvars > envs/gcp/bootstrap/tfc-workspaces.auto.tfvars

@@ -90,7 +90,7 @@ cp envs/gcp/organization/terraform.tfvars.example envs/gcp/organization/local.au
 **Required for a production estate: the workspace IDs.** gcp-bootstrap binds each workspace's service accounts by immutable workspace ID. When any environment `is_production`, it refuses to bind by (squattable) name. tfc-admin pass 1 has already created the workspaces and knows their IDs. The local phase-0 run ignores workspace variables, so write the IDs into a gitignored tfvars file:
 
 ```bash
-terraform -chdir=envs/tfc-admin output -raw gcp_bootstrap_tfvars > envs/gcp/bootstrap/tfc-workspaces.auto.tfvars
+make bootstrap-ids   # = terraform -chdir=envs/tfc-admin output -raw gcp_bootstrap_tfvars > envs/gcp/bootstrap/tfc-workspaces.auto.tfvars
 ```
 
 Later remote gcp-bootstrap runs get the same map as a workspace variable, set by tfc-admin.

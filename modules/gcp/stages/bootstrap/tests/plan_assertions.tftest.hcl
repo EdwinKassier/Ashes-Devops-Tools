@@ -587,3 +587,56 @@ run "production_with_expiry_plans" {
     error_message = "a time-boxed production estate must plan."
   }
 }
+
+# ─── Scaffolded-config path (QUICK_START GCP) ────────────────────────────────
+# tests/fixtures/landing-zone.scaffolded.yaml is the output of
+# scripts/init-landing-zone.sh (org.profile production, a prod environment),
+# with the 7-day phase-0 expiry replaced by a fixed far-future literal. The
+# stage does not read YAML; these runs feed it the scaffolded VALUES, the way
+# envs/gcp/bootstrap/config.tf would.
+
+run "scaffolded_values_without_ids_fail_with_hint" {
+  command = plan
+
+  variables {
+    project_prefix                        = yamldecode(file("tests/fixtures/landing-zone.scaffolded.yaml")).org.prefix
+    admin_email                           = yamldecode(file("tests/fixtures/landing-zone.scaffolded.yaml")).gcp.admin_email
+    tfc_organization                      = yamldecode(file("tests/fixtures/landing-zone.scaffolded.yaml")).org.tfc.organization
+    workload_environments                 = keys(yamldecode(file("tests/fixtures/landing-zone.scaffolded.yaml")).gcp.environments)
+    production_workload_environments      = [for k, e in yamldecode(file("tests/fixtures/landing-zone.scaffolded.yaml")).gcp.environments : k if e.is_production]
+    phase0_admin_impersonation_expires_at = yamldecode(file("tests/fixtures/landing-zone.scaffolded.yaml")).gcp.phase0_admin_impersonation_expires_at
+  }
+
+  # No tfc_workspace_ids (a fresh scaffold before `make bootstrap-ids`): the
+  # production precondition must fail (its message names the tfc-admin
+  # workspace_ids hint). The unbound gcp-guardrails workspace trips its sibling
+  # precondition in the same plan, so both are expected.
+  expect_failures = [terraform_data.production_workspaces_bound_by_id, terraform_data.guardrails_workspace_bound_by_id]
+}
+
+run "scaffolded_values_with_ids_plan" {
+  command = plan
+
+  variables {
+    project_prefix                        = yamldecode(file("tests/fixtures/landing-zone.scaffolded.yaml")).org.prefix
+    admin_email                           = yamldecode(file("tests/fixtures/landing-zone.scaffolded.yaml")).gcp.admin_email
+    tfc_organization                      = yamldecode(file("tests/fixtures/landing-zone.scaffolded.yaml")).org.tfc.organization
+    workload_environments                 = keys(yamldecode(file("tests/fixtures/landing-zone.scaffolded.yaml")).gcp.environments)
+    production_workload_environments      = [for k, e in yamldecode(file("tests/fixtures/landing-zone.scaffolded.yaml")).gcp.environments : k if e.is_production]
+    phase0_admin_impersonation_expires_at = yamldecode(file("tests/fixtures/landing-zone.scaffolded.yaml")).gcp.phase0_admin_impersonation_expires_at
+    # What `make bootstrap-ids` writes (tfc-admin output gcp_bootstrap_tfvars).
+    tfc_workspace_ids = {
+      "gcp-bootstrap"     = "ws-Boot1"
+      "gcp-organization"  = "ws-Org1"
+      "gcp-projects"      = "ws-Proj1"
+      "gcp-network-hub"   = "ws-Hub1"
+      "gcp-workload-prod" = "ws-Prod1"
+      "gcp-guardrails"    = "ws-Guard1"
+    }
+  }
+
+  assert {
+    condition     = length(output.production_workspaces_bound_by_name) == 0
+    error_message = "the scaffolded production config plans cleanly once every workspace ID is supplied."
+  }
+}

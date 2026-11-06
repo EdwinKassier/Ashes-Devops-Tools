@@ -6,6 +6,8 @@ crash.log
 crash.*.log
 *.tfvars
 *.tfvars.json
+# Written by `make bootstrap-ids` (immutable TFC workspace IDs; already covered by *.tfvars)
+envs/gcp/bootstrap/tfc-workspaces.auto.tfvars
 override.tf
 override.tf.json
 *_override.tf
