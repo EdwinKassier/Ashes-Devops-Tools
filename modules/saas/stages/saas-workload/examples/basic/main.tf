@@ -25,7 +25,7 @@ locals {
 }
 
 module "qa_saas_workload" {
-  source = "../../"
+  source = "git::https://github.com/EdwinKassier/Ashes-Devops-Tools.git//modules/saas/stages/saas-workload?ref=v0.1.0" # x-release-please-version
 
   # Supabase
   supabase_organization_id    = local.organization_id

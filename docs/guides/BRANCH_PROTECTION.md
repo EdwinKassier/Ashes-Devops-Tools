@@ -114,6 +114,12 @@ gh api repos/OWNER/REPO/rulesets \
 
 ---
 
+### Release gate: `Sandbox convergence`
+
+Once the sandbox workflow exists, add **`Sandbox convergence`** (HCP Terraform health-assessment result for the sandbox) as a required check on release-please PRs (head branch `release-please--*`), via a ruleset scoped to that branch pattern. It is not a required context on ordinary PRs. Until the workflow lands the check does not exist and the release PR is gated by maintainer review only; do not add it as a required context before it reports, or releases will block.
+
+---
+
 ## Dependabot Security Updates
 
 Ensure Dependabot auto-approves and merges **security** PRs only:

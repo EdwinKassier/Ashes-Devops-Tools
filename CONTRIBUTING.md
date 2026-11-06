@@ -276,3 +276,22 @@ Additional guidelines:
 - Terraform Cloud remains the source of truth for live state and apply runs.
 - GitHub release tags such as `gcp-organization/vX.Y.Z` and `gcp-workload/<env>/vX.Y.Z` publish metadata after verifying a successful Terraform Cloud run.
 - Those tags do not perform a live apply.
+
+## Consuming modules
+
+Versions are repo-wide SemVer tags (`vX.Y.Z`, cut by release-please); there are no per-module tags. Two ways to consume a tagged release:
+
+- **Fork at a tag.** Fork the repository and branch from the tag you want; take upstream releases by merging later tags (see `UPGRADING.md`).
+- **Pin a module by git source:**
+
+  ```hcl
+  module "org" {
+    source = "git::https://github.com/EdwinKassier/Ashes-Devops-Tools.git//modules/gcp/stages/organization?ref=v0.1.0"
+  }
+  ```
+
+Three examples (`modules/gcp/stages/organization`, `modules/aws/stages/security`, `modules/saas/stages/saas-workload`, each under `examples/basic/`) use this form with an `# x-release-please-version` marker; the `extra-files` list in `release-please-config.json` bumps their `ref` on every release. Until the first tag is published they cannot `terraform init`, so `scripts/terraform-roots.sh` skips any example carrying that marker in the validate shards. After `v0.1.0` exists, remove that skip so CI validates them against the published tag.
+
+### Release gate: sandbox convergence
+
+A release PR should merge only with a green `Sandbox convergence` (HCP health assessment) check, so production forks consume only versions proven in the sandbox. This is a branch-protection requirement (see `docs/guides/BRANCH_PROTECTION.md`); the sandbox workflow that emits the check does not exist yet, so until it lands the gate is enforced by maintainer review.

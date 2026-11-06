@@ -13,7 +13,7 @@ locals {
 }
 
 module "organization" {
-  source = "../../"
+  source = "git::https://github.com/EdwinKassier/Ashes-Devops-Tools.git//modules/gcp/stages/organization?ref=v0.1.0" # x-release-please-version
 
   domain                = "example.com"
   org_id                = local.org_id

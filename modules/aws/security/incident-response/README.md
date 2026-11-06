@@ -116,15 +116,15 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_cloudwatch_event_rule.guardduty_high (modules/aws/security/incident-response/main.tf#L78)
-- resource.aws_cloudwatch_event_target.isolate (modules/aws/security/incident-response/main.tf#L92)
-- resource.aws_iam_role.forensics_snapshot (modules/aws/security/incident-response/main.tf#L137)
-- resource.aws_iam_role.isolation_lambda (modules/aws/security/incident-response/main.tf#L22)
-- resource.aws_iam_role_policy.forensics_kms (modules/aws/security/incident-response/main.tf#L167)
-- resource.aws_lambda_function.isolate (modules/aws/security/incident-response/main.tf#L61)
-- resource.aws_lambda_permission.eventbridge (modules/aws/security/incident-response/main.tf#L102)
-- resource.aws_security_group.quarantine (modules/aws/security/incident-response/main.tf#L115)
-- data source.archive_file.isolate (modules/aws/security/incident-response/main.tf#L14)
+- resource.aws_cloudwatch_event_rule.guardduty_high (modules/aws/security/incident-response/main.tf#L79)
+- resource.aws_cloudwatch_event_target.isolate (modules/aws/security/incident-response/main.tf#L93)
+- resource.aws_iam_role.forensics_snapshot (modules/aws/security/incident-response/main.tf#L138)
+- resource.aws_iam_role.isolation_lambda (modules/aws/security/incident-response/main.tf#L23)
+- resource.aws_iam_role_policy.forensics_kms (modules/aws/security/incident-response/main.tf#L168)
+- resource.aws_lambda_function.isolate (modules/aws/security/incident-response/main.tf#L62)
+- resource.aws_lambda_permission.eventbridge (modules/aws/security/incident-response/main.tf#L103)
+- resource.aws_security_group.quarantine (modules/aws/security/incident-response/main.tf#L116)
+- data source.archive_file.isolate (modules/aws/security/incident-response/main.tf#L15)
 - data source.aws_partition.current (modules/aws/security/incident-response/partition.tf#L4)
 
 

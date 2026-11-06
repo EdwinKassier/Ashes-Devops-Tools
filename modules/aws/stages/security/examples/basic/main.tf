@@ -30,7 +30,7 @@ provider "aws" {
 }
 
 module "aws_security" {
-  source = "../../"
+  source = "git::https://github.com/EdwinKassier/Ashes-Devops-Tools.git//modules/aws/stages/security?ref=v0.1.0" # x-release-please-version
 
   providers = {
     aws.management       = aws.management
