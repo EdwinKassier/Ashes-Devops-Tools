@@ -4,7 +4,7 @@
 
 **Time:** 20–40 minutes of hands-on Terraform + TFC work, plus AWS account-creation wait (a few minutes) and any manual OU/email confirmation.
 **Risk:** Medium. Account creation is org-mutating and hard to reverse (see the `close_on_deletion` caveats in [`aws-teardown.md`](aws-teardown.md)). The apply happens in the `aws-organization` root, whose blast radius is the whole org.
-**Prerequisites:** The landing zone is already stood up per [`aws-bootstrap.md`](aws-bootstrap.md). You have write access to `envs/aws/organization/terraform.tfvars`, a unique root email for the new account, and permission to create a TFC workspace and set its variables.
+**Prerequisites:** The landing zone is already stood up per [`aws-bootstrap.md`](aws-bootstrap.md). You can commit to `config/landing-zone.yaml`, and you have a unique root email for the new account, and permission to create a TFC workspace and set its variables.
 
 ---
 
@@ -14,17 +14,21 @@
 
 ## Step 1 — Add the account to the org map
 
-Edit `envs/aws/organization/terraform.tfvars`. For a **workload** account, add a row to `workload_accounts`; for a foundational account, add to `accounts`.
+Edit the committed `config/landing-zone.yaml`. For a **workload** account, add a row to `aws.workload_accounts` **and** an `aws.workload_environments` entry naming it. For a foundational account, add to `aws.accounts`.
 
-```hcl
-# Workload account — placed under Workloads/Prod or Workloads/NonProd
-workload_accounts = {
-  # ...existing...
-  payments_prod = { email = "aws+payments-prod@example.com", ou = "Prod" }
-}
+```yaml
+aws:
+  workload_accounts:
+    # ...existing...
+    payments_prod: {email: aws+payments-prod@example.com, ou: Prod}   # placed under Workloads/Prod
+  workload_environments:
+    # ...existing...
+    payments_prod: {account_key: payments_prod}
 ```
 
-Bind the account to its workspace in the **same** edit, in `tfc_workspace_bindings`. Without a binding, the account gets only the OIDC provider and no roles:
+That single edit drives three roots. `aws-organization` vends the account and derives its OIDC trust binding (`payments_prod` → `aws-workload-payments_prod`). tfc-admin creates the `aws-workload-payments_prod` workspace with `workload_account_key = "payments_prod"`. `aws-workload` reads the same mapping. Without a binding, the account gets only the OIDC provider and no roles.
+
+If `aws-organization` sets `workload_accounts` or `tfc_workspace_bindings` **explicitly** (tfvars or a TFC variable), the explicit value wins over the file. Add the entry there instead, keeping the foundational defaults:
 
 ```hcl
 tfc_workspace_bindings = {
@@ -65,29 +69,21 @@ terraform -chdir=envs/aws/organization output -json tfc_apply_role_arns
 
 ## Step 3 — Create the TFC workspace and wire its run role (tfc-admin)
 
-`envs/tfc-admin` creates and wires the workspace (see the decision section in [`aws-bootstrap.md`](aws-bootstrap.md#who-creates-the-downstream-workspaces-decision)). Add the environment to its `environments` map, naming the account key:
-
-```hcl
-environments = {
-  # ...existing environments...
-  payments_prod = { aws_account_key = "payments_prod" }
-}
-aws_organization_outputs_from_tfc = true
-```
+`envs/tfc-admin` creates and wires the workspace (see the decision section in [`aws-bootstrap.md`](aws-bootstrap.md#who-creates-the-downstream-workspaces-decision)). It already knows the environment from `aws.workload_environments` (Step 1). An explicit tfc-admin `environments` variable overrides the config file; if you set one, add `payments_prod = { aws_account_key = "payments_prod" }` to it. Make sure `aws_organization_outputs_from_tfc = true`.
 
 Re-apply tfc-admin. It creates `aws-workload-payments_prod` (VCS, working directory `envs/aws/workload`, triggers, remote-state access to `aws-organization` / `aws-network` / `aws-security`) and sets:
 
 | Variable | Kind | Value |
 |---|---|---|
 | `environment` | terraform | `payments_prod` (from the workspace name) |
-| `workload_account_key` | terraform | `payments_prod` (from `aws_account_key`) |
+| `workload_account_key` | terraform | `payments_prod` (from `aws.workload_environments[*].account_key`) |
 | `TFC_AWS_PROVIDER_AUTH` | env | `true` |
 | `TFC_AWS_PLAN_ROLE_ARN` | env | `tfc_plan_role_arns["payments_prod"]` |
 | `TFC_AWS_APPLY_ROLE_ARN` | env | `tfc_apply_role_arns["payments_prod"]` |
 
-Put the workspace's other Terraform inputs (`landing_zone_name`, `log_archive_bucket_name`, `kms_key_arn`, …) in the committed `config/tfc-workspaces.yaml` under `aws-workload-payments_prod` — VCS-driven runs get no local tfvars. Leave `assume_role_arn` unset (`null`), so the provider uses the dynamic credentials directly with no role hop. Speculative PR plans then run as the read-only `tfc-plan` role.
+Shared inputs (`landing_zone_name`, `tfc_organization`, region, tags) come from `config/landing-zone.yaml`. Put the workspace's other Terraform inputs (`kms_key_arn`, …) in the committed `config/tfc-workspaces.yaml` under `aws-workload-payments_prod`, because VCS-driven runs get no local tfvars. Leave `assume_role_arn` unset (`null`), so the provider uses the dynamic credentials directly with no role hop. Speculative PR plans then run as the read-only `tfc-plan` role.
 
-**Trust:** nothing to do by hand. The roles already trust exactly this workspace name, because of the Step 1 binding. The workspace name must match the binding character for character, and the binding's project (`tfc_project`, `landing-zone-aws` under tfc-admin) must match the workspace's project.
+**Trust:** nothing to do by hand. The roles already trust exactly this workspace name, because of the Step 1 binding. The workspace name must match the binding character for character, and the binding's project (`tfc_project`, default `landing-zone-aws`, matching tfc-admin) must match the workspace's project.
 
 For a **foundational** account, use the corresponding key (`security_tooling`, `network`, `shared_services`, `backup`, …) and the matching layer root/workspace instead of `aws-workload-*`. The multi-account `aws-security` / `aws-backup` workspaces use per-alias variables (`TFC_AWS_PROVIDER_AUTH_<alias>`, `TFC_AWS_PLAN_ROLE_ARN_<alias>`, `TFC_AWS_APPLY_ROLE_ARN_<alias>`) for each member account they touch; tfc-admin derives them from the same outputs. See [aws-bootstrap](aws-bootstrap.md#per-workspace-environment-variables).
 
@@ -103,7 +99,7 @@ terraform -chdir=envs/aws/workload plan   # read-only local check; apply via TFC
 ```
 
 > **Deployment ordering — org first, always.** The workload entry must be added
-> to the `aws-organization` root's `workload_accounts` map **and**
+> to `aws.workload_accounts` (the `aws-organization` root's `workload_accounts`) **and**
 > `aws-organization` must be applied (Steps 1–2) *before* you plan or apply the
 > new `aws-workload-<env>` workspace. Until the org root has published the
 > key and the StackSet has created the account's `tfc-plan` role, the workspace

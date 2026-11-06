@@ -1,10 +1,16 @@
+# Optional overrides. Shared values (landing_zone_name, tfc_organization,
+# aws_region, owner/cost_center, account IDs, role ARNs, accounts, workload
+# environments) are read from config/landing-zone.yaml when it exists, so a
+# VCS-driven TFC run needs no tfvars; any variable set here (or in TFC) wins
+# over the config file.
+#
 # Copy to terraform.tfvars and fill in. Inputs marked REQUIRED have no usable
 # default — you MUST supply them (the two role ARNs, the log-archive bucket
 # name, and real root emails for every account).
 
-# REQUIRED — landing-zone identifier written to the LandingZone tag. No
-# default; the upstream placeholders "ashes" / "my-org" are rejected. Use the
-# same value in every AWS root (tfc-admin: put it in common_workspace_variables).
+# REQUIRED unless org.name is set in config/landing-zone.yaml — landing-zone
+# identifier written to the LandingZone tag. The upstream placeholders
+# "ashes" / "my-org" are rejected.
 landing_zone_name = "acme"
 
 # NB: the Terraform Cloud org that owns this root's workspace is a BACKEND config
@@ -83,12 +89,15 @@ cost_anomaly_email = "finops@ashes.example.com"
 tfc_organization = "ashes"
 
 # Optional — TFC project the workspaces live in (literal match in the sub claim).
-# If tfc-admin manages the workspaces (enable_projects = true, the default) they
-# live in "<project_name_prefix>aws" = "landing-zone-aws", NOT "Default Project":
-# set this to match or every tfc-plan / tfc-apply AssumeRole is denied.
+# Default: org.tfc.aws_project from config/landing-zone.yaml, else
+# "<org.tfc.project_name_prefix>aws" = "landing-zone-aws", the project tfc-admin
+# puts the aws-* workspaces in. Override only if your workspaces live elsewhere,
+# or every tfc-plan / tfc-apply AssumeRole is denied.
 # tfc_project = "landing-zone-aws"
 
-# Optional — account key -> bound workspaces. Add one entry per workload account.
+# Optional — account key -> bound workspaces. Default: the six foundational
+# bindings plus one per aws.workload_environments entry in the config file.
+# Setting it replaces that derivation, so then add one entry per workload account.
 # tfc_workspace_bindings = {
 #   security_tooling = { workspaces = ["aws-security"] }
 #   log_archive      = { workspaces = ["aws-security"] }

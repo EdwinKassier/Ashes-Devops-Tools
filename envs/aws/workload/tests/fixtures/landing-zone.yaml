@@ -1,0 +1,13 @@
+# Test fixture: config-file fallback for the aws-workload root (config.tftest.hcl).
+version: 1
+org:
+  name: cfgco
+  regions:
+    aws: eu-west-2
+  tfc:
+    organization: cfg-tfc
+aws:
+  enabled_regions: [eu-west-2, eu-west-1]
+  workload_environments:
+    dev: {account_key: workload_nonprod, vpc_cidr: 10.40.0.0/16}
+    prod: {account_key: workload_prod}

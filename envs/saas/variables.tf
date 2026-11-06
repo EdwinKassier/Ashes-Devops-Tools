@@ -1,7 +1,13 @@
+variable "landing_zone_config_path" {
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values."
+  type        = string
+  default     = null
+}
+
 # ── Terraform Cloud / cross-cloud wiring (audit H9, option C) ────────────────
 
 variable "tfc_organization" {
-  description = "Terraform Cloud organization name. Required only when cross_cloud_references is non-empty (it reads upstream workspace state). Leave null for a standalone SaaS deployment."
+  description = "Terraform Cloud organization name. Required only when cross_cloud_references is non-empty (it reads upstream workspace state). Leave null for a standalone SaaS deployment. Null = org.tfc.organization from config/landing-zone.yaml."
   type        = string
   default     = null
 }
@@ -37,7 +43,7 @@ variable "cross_cloud_references" {
   }
 
   validation {
-    condition     = length(var.cross_cloud_references) == 0 || var.tfc_organization != null
+    condition     = length(var.cross_cloud_references) == 0 || coalesce(var.tfc_organization, local.cfg.tfc_organization, "!unset") != "!unset"
     error_message = "cross_cloud_references requires tfc_organization to be set (it reads upstream workspace state)."
   }
 }
@@ -45,15 +51,15 @@ variable "cross_cloud_references" {
 # ── Feature flags ─────────────────────────────────────────────────────────────
 
 variable "enable_supabase" {
-  description = "Provision the Supabase project. Set false for a Vercel-only deployment — the Supabase inputs may then be left at their defaults."
+  description = "Provision the Supabase project. Set false for a Vercel-only deployment — the Supabase inputs may then be left at their defaults. Null = saas.supabase from config/landing-zone.yaml, else true."
   type        = bool
-  default     = true
+  default     = null
 }
 
 variable "enable_vercel" {
-  description = "Provision the Vercel project. Set false for a Supabase-only deployment — the Vercel inputs may then be left at their defaults."
+  description = "Provision the Vercel project. Set false for a Supabase-only deployment — the Vercel inputs may then be left at their defaults. Null = saas.vercel from config/landing-zone.yaml, else true."
   type        = bool
-  default     = true
+  default     = null
 }
 
 variable "enable_vault_secrets" {

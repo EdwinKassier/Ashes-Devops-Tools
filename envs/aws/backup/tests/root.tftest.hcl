@@ -12,8 +12,10 @@ mock_provider "aws" {}
 mock_provider "aws" { alias = "backup" }
 
 variables {
-  landing_zone_name     = "acme"
-  management_account_id = "111111111111" # C4 account guard
+  # Isolate the suite from any committed config/landing-zone.yaml.
+  landing_zone_config_path = ""
+  landing_zone_name        = "acme"
+  management_account_id    = "111111111111" # C4 account guard
   # backup_role_arn / restore_testing_role_arn omitted: the stage creates both
   # roles (member-account StackSet role, backup-account restore-testing role).
 }

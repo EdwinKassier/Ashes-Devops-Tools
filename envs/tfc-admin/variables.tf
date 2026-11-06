@@ -1,56 +1,79 @@
-variable "tfc_organization" {
-  description = "Terraform Cloud organization that owns all the managed workspaces."
+variable "landing_zone_config_path" {
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values."
   type        = string
+  default     = null
+}
+
+variable "tfc_organization" {
+  description = "Terraform Cloud organization that owns all the managed workspaces. Null = org.tfc.organization from config/landing-zone.yaml."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_-]+$", coalesce(var.tfc_organization, local.cfg.tfc_organization, "!unset")))
+    error_message = "tfc_organization is unset or invalid: set var.tfc_organization or org.tfc.organization in config/landing-zone.yaml (letters, digits, '-' and '_')."
+  }
+
+  validation {
+    condition     = coalesce(var.tfc_organization, local.cfg.tfc_organization, "!unset") != "my-org"
+    error_message = "tfc_organization is still the config/landing-zone.example.yaml placeholder 'my-org'. Set your Terraform Cloud organization."
+  }
 }
 
 variable "environments" {
-  description = "Application environments to create per-env workload workspaces for (gcp-workload-<env> when enable_gcp, aws-workload-<env> when enable_aws). Keep the keys in sync with the cloud roots' environments map. Optional aws_account_key names the aws-organization account key (accounts / workload_accounts, e.g. workload_dev) the aws-workload-<env> workspace deploys into: it is set as that workspace's workload_account_key variable and selects the tfc-plan/tfc-apply roles read via aws_organization_outputs_from_tfc."
+  description = "Application environments to create per-env workload workspaces for (gcp-workload-<env> when enable_gcp, aws-workload-<env> when enable_aws). Null (default) derives them from config/landing-zone.yaml instead: gcp.environments keys for gcp-workload-<env> and aws.workload_environments (with account_key) for aws-workload-<env>, so the environment list is written once. Optional aws_account_key names the aws-organization account key (accounts / workload_accounts, e.g. workload_dev) the aws-workload-<env> workspace deploys into: it is set as that workspace's workload_account_key variable and selects the tfc-plan/tfc-apply roles read via aws_organization_outputs_from_tfc."
   type = map(object({
     aws_account_key = optional(string)
   }))
-  default = {}
+  default = null
 
   validation {
-    condition     = alltrue([for k in keys(var.environments) : can(regex("^[a-z][a-z0-9_-]*$", k))])
+    condition     = alltrue([for k in concat(keys(coalesce(var.environments, {})), local.cfg.gcp_environment_keys, keys(local.cfg.aws_environments)) : can(regex("^[a-z][a-z0-9_-]*$", k))])
     error_message = "environments keys must be lowercase alphanumeric with hyphens/underscores (they become workspace names)."
   }
 }
 
 variable "enable_gcp" {
-  description = "Declare the GCP control-plane (gcp-bootstrap/organization/projects/network-hub) and gcp-workload-<env> workspaces. Default false: opt in per cloud. At least one of enable_gcp / enable_aws / enable_saas must be true."
+  description = "Declare the GCP control-plane (gcp-bootstrap/organization/projects/network-hub) and gcp-workload-<env> workspaces. Null = gcp.enabled from config/landing-zone.yaml, else false: opt in per cloud. At least one of enable_gcp / enable_aws / enable_saas must be true."
   type        = bool
-  default     = false
+  default     = null
 
   validation {
-    condition     = var.enable_gcp || var.enable_aws || var.enable_saas
-    error_message = "Enable at least one cloud: set enable_gcp, enable_aws and/or enable_saas to true (a tfc-admin with no cloud declares no workspaces)."
+    condition = anytrue([
+      var.enable_gcp != null ? var.enable_gcp : coalesce(local.cfg.enable_gcp, false),
+      var.enable_aws != null ? var.enable_aws : coalesce(local.cfg.enable_aws, false),
+      var.enable_saas != null ? var.enable_saas : coalesce(local.cfg.enable_saas, false),
+    ])
+    error_message = "Enable at least one cloud: set enable_gcp, enable_aws and/or enable_saas (or gcp/aws/saas .enabled in config/landing-zone.yaml) to true (a tfc-admin with no cloud declares no workspaces)."
   }
 }
 
 variable "enable_aws" {
-  description = "Declare the AWS control-plane and aws-workload-<env> workspaces. Default false; set true for an AWS or multi-cloud estate."
+  description = "Declare the AWS control-plane and aws-workload-<env> workspaces. Null = aws.enabled from config/landing-zone.yaml, else false; set true for an AWS or multi-cloud estate."
   type        = bool
-  default     = false
+  default     = null
 }
 
 variable "enable_saas" {
-  description = "Declare one saas-<name> workspace (working dir envs/saas) per saas_workspaces entry. Default false."
+  description = "Declare one saas-<name> workspace (working dir envs/saas) per saas_workspaces entry. Null = saas.enabled from config/landing-zone.yaml, else false."
   type        = bool
-  default     = false
+  default     = null
 
   validation {
-    condition     = !var.enable_saas || length(var.saas_workspaces) > 0
+    condition = !(var.enable_saas != null ? var.enable_saas : coalesce(local.cfg.enable_saas, false)) || length(
+      var.saas_workspaces != null ? var.saas_workspaces : coalesce(local.cfg.saas_workspaces, [])
+    ) > 0
     error_message = "enable_saas = true requires at least one saas_workspaces entry."
   }
 }
 
 variable "saas_workspaces" {
-  description = "SaaS workspace name suffixes (saas-<name>). Only used when enable_saas = true."
+  description = "SaaS workspace name suffixes (saas-<name>). Only used when enable_saas = true. Null = saas.workspaces from config/landing-zone.yaml, else []."
   type        = list(string)
-  default     = []
+  default     = null
 
   validation {
-    condition     = alltrue([for n in var.saas_workspaces : can(regex("^[a-z0-9][a-z0-9-]*$", n))])
+    condition     = alltrue([for n in(var.saas_workspaces != null ? var.saas_workspaces : coalesce(local.cfg.saas_workspaces, [])) : can(regex("^[a-z0-9][a-z0-9-]*$", n))])
     error_message = "saas_workspaces entries must be lowercase alphanumeric with hyphens."
   }
 }
@@ -126,7 +149,7 @@ variable "speculative_disabled_workspaces" {
 }
 
 variable "enable_health_assessments" {
-  description = "Enable TFC health assessments (native drift detection + continuous validation) on every managed workspace. Requires an HCP Terraform tier that includes them."
+  description = "Enable TFC health assessments (native drift detection + continuous validation) on every managed workspace. Requires a PAID HCP Terraform tier that includes them (set false on the free tier)."
   type        = bool
   default     = true
 }
@@ -325,9 +348,9 @@ variable "enable_projects" {
 }
 
 variable "project_name_prefix" {
-  description = "Prefix for TFC project, variable-set and policy-set names."
+  description = "Prefix for TFC project (<prefix><cloud>), variable-set and policy-set names. Null = org.tfc.project_name_prefix from config/landing-zone.yaml, else \"landing-zone-\". An explicit org.tfc.<cloud>_project in the config overrides one project's name; aws-organization derives its OIDC-trust tfc_project from the same keys."
   type        = string
-  default     = "landing-zone-"
+  default     = null
 }
 
 variable "platform_team_id" {
@@ -353,15 +376,20 @@ variable "viewer_team_ids" {
 }
 
 variable "enable_policy_sets" {
-  description = "Create an OPA policy set sourced from policies/opa in the VCS repo, attached to every managed workspace. Policies are advisory (see policies/opa/policies.hcl). Requires vcs_repo and a tier with policy enforcement. Default false."
+  description = "Create an OPA policy set sourced from policies/opa in the VCS repo, attached to every managed workspace. Enforcement is mixed: 7 mandatory + 3 advisory policies (policies/opa/policies.hcl); the set is overridable. Requires vcs_repo and a PAID HCP Terraform tier with policy enforcement. Default false."
   type        = bool
   default     = false
 }
 
 variable "opa_version" {
-  description = "OPA version for the policy set. Null = the TFC default (latest)."
+  description = "OPA version for the policy set, pinned so a TFC default bump cannot change policy evaluation unreviewed. Keep it equal to the OPA_VERSION the CI policy tests use (.github/workflows/terraform-plan.yml) and to a version HCP Terraform offers. Null = the TFC default (latest)."
   type        = string
-  default     = null
+  default     = "1.22.2"
+
+  validation {
+    condition     = var.opa_version == null || can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+$", coalesce(var.opa_version, "0.0.0")))
+    error_message = "opa_version must be an exact semantic version such as 1.22.2 (or null for the TFC default)."
+  }
 }
 
 variable "terraform_version" {
@@ -371,7 +399,7 @@ variable "terraform_version" {
 }
 
 variable "vcs_repo" {
-  description = "Optional VCS connection applied to every workspace (and the OPA policy set): {identifier = \"org/repo\", branch = \"main\", oauth_token_id = \"ot-...\"} or github_app_installation_id. Null = API/CLI-driven workspaces."
+  description = "Optional VCS connection applied to every workspace (and the OPA policy set): {identifier = \"org/repo\", branch = \"main\", oauth_token_id = \"ot-...\"} or github_app_installation_id. Null = org.tfc.vcs_repo from config/landing-zone.yaml, else API/CLI-driven workspaces."
   type = object({
     identifier                 = string
     branch                     = optional(string, "main")

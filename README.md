@@ -19,7 +19,7 @@
 [![Security Scan](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml)
 [![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?style=flat-square&logo=pre-commit)](https://pre-commit.com)
 [![Modules](https://img.shields.io/badge/modules-114-blueviolet?style=flat-square)](modules/)
-[![Tests](https://img.shields.io/badge/test_suites-255-blue?style=flat-square)](modules/)
+[![Tests](https://img.shields.io/badge/test_suites-259-blue?style=flat-square)](modules/)
 
 <sub>Module/test-suite counts are static badges, enforced in CI: <code>make count</code> prints the live figures and <code>scripts/check-docs-counts.sh</code> (meta-lint) fails when this README or CLAUDE.md disagrees with the tree.</sub>
 
@@ -50,7 +50,12 @@ git clone https://github.com/EdwinKassier/Ashes-Devops-Tools.git
 cd Ashes-Devops-Tools
 make install && make pre-commit-install
 
-# 2. Authenticate (only the clouds whose workspaces you apply)
+# 2. Configure the whole landing zone in ONE committed file, config/landing-zone.yaml
+#    (org name/prefix, domain, TFC org, regions, environments, AWS accounts, clouds).
+scripts/init-landing-zone.sh            # interactive; or pass --org-name ... --clouds gcp,aws
+git add config/landing-zone.yaml && git commit -m "config: landing zone"
+
+# 3. Authenticate (only the clouds whose workspaces you apply)
 gcloud auth application-default login     # GCP roots (gcp-bootstrap, gcp-organization, gcp-projects, gcp-network-hub, gcp-workload-<env>)
 export SUPABASE_ACCESS_TOKEN="sbp_..."   # required for supabase modules
 export VERCEL_API_TOKEN="..."            # required for vercel modules
@@ -59,9 +64,13 @@ export VERCEL_API_TOKEN="..."            # required for vercel modules
 # multi-account roots add TFC_AWS_*_<alias> per provider alias (set by envs/tfc-admin),
 # or AWS_PROFILE for local runs — see the AWS Bootstrap runbook for the full flow.
 
-# 3. Run the local validation suite (no cloud credentials needed for tests)
+# 4. Run the local validation suite (no cloud credentials needed for tests)
 make ci
+
+# 5. Apply envs/tfc-admin (creates every workspace from the config), then bootstrap
 ```
+
+Every root reads `config/landing-zone.yaml`. An explicit variable (tfvars or a TFC variable) wins over it, and an unset or placeholder value fails the plan. The schema is [`config/landing-zone.example.yaml`](config/landing-zone.example.yaml).
 
 > Full bootstrap sequence, backend config, and first apply: **[Quick Start Guide →](docs/guides/QUICK_START.md)**
 

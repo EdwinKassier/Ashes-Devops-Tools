@@ -1,6 +1,6 @@
 # Phase-3 per-env workload root. Reads TWO upstream roots' remote state:
 #   - aws_organization → account_role_arns (the per-env workload account role the
-#     providers assume, keyed by var.workload_account_key).
+#     providers assume, keyed by local.workload_account_key).
 #   - aws_network      → the network cross-root contract (tgw_id + ipam_pool_ids)
 #     the spoke VPC attaches to / allocates its CIDR from.
 # It composes the aws-workload stage in a SINGLE workload account. It declares
@@ -8,7 +8,7 @@
 data "terraform_remote_state" "aws_organization" {
   backend = "cloud"
   config = {
-    organization = var.tfc_organization
+    organization = local.tfc_organization
     workspaces   = { name = var.organization_workspace_name }
   }
 }
@@ -16,7 +16,7 @@ data "terraform_remote_state" "aws_organization" {
 data "terraform_remote_state" "aws_network" {
   backend = "cloud"
   config = {
-    organization = var.tfc_organization
+    organization = local.tfc_organization
     workspaces   = { name = var.network_workspace_name }
   }
 }
@@ -24,7 +24,7 @@ data "terraform_remote_state" "aws_network" {
 data "terraform_remote_state" "aws_security" {
   backend = "cloud"
   config = {
-    organization = var.tfc_organization
+    organization = local.tfc_organization
     workspaces   = { name = var.security_workspace_name }
   }
 }
@@ -45,9 +45,9 @@ module "aws_workload" {
     aws.us_east_1 = aws.us_east_1
   }
 
-  aws_region          = var.aws_region
-  aws_enabled_regions = var.aws_enabled_regions
-  vpc_cidr            = var.vpc_cidr
+  aws_region          = local.aws_region
+  aws_enabled_regions = local.aws_enabled_regions
+  vpc_cidr            = local.vpc_cidr
 
   # Spoke is named workload-<environment> (local.environment, see providers.tf)
   # and routes the configured tiers to the shared TGW.
@@ -58,7 +58,7 @@ module "aws_workload" {
   # Network cross-root contract: attach the spoke to the shared TGW and allocate
   # the VPC CIDR from the region's shared IPAM pool.
   tgw_id       = data.terraform_remote_state.aws_network.outputs.tgw_id
-  ipam_pool_id = data.terraform_remote_state.aws_network.outputs.ipam_pool_ids[var.aws_region]
+  ipam_pool_id = data.terraform_remote_state.aws_network.outputs.ipam_pool_ids[local.aws_region]
 
   # Flow logs + Config snapshots + Session Manager logs all land in the central
   # log-archive bucket (cross-root naming contract).
@@ -86,13 +86,13 @@ module "app_services" {
   source = "../../../modules/aws/stages/app-services"
 
   environment = local.environment
-  aws_region  = var.aws_region
+  aws_region  = local.aws_region
 
   # Placement: the spoke VPC this root just built. Tasks + the internal ALB in
   # the private tier (egress via the TGW to central inspection); Aurora in the
   # isolated tier (no route off the VPC).
   vpc_id              = module.aws_workload.vpc_id
-  vpc_cidr            = var.vpc_cidr
+  vpc_cidr            = local.vpc_cidr
   service_subnet_ids  = lookup(module.aws_workload.subnet_ids_by_tier, var.app_service_subnet_tier, [])
   alb_subnet_ids      = lookup(module.aws_workload.subnet_ids_by_tier, var.app_alb_subnet_tier, [])
   database_subnet_ids = lookup(module.aws_workload.subnet_ids_by_tier, var.app_database_subnet_tier, [])
@@ -128,7 +128,7 @@ data "terraform_remote_state" "saas" {
   count   = var.enable_saas_secret_bridge ? 1 : 0
   backend = "cloud"
   config = {
-    organization = var.tfc_organization
+    organization = local.tfc_organization
     workspaces   = { name = var.saas_workspace_name }
   }
 }

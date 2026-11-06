@@ -1,38 +1,55 @@
+variable "landing_zone_config_path" {
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values."
+  type        = string
+  default     = null
+}
+
 variable "project_prefix" {
   description = <<-EOT
     Short prefix prepended to all GCP project IDs to ensure global uniqueness.
     Must start with a lowercase letter; only lowercase letters, digits, and hyphens allowed.
     Keep this to 6 characters or fewer — GCP project IDs are capped at 30 characters and
-    the prefix consumes part of that budget.
-    Set this to your organisation's identifier (e.g. "acme", "xyz-co"). Do NOT use the
-    default value "my-org" in a real deployment.
+    the prefix consumes part of that budget. Null = org.prefix from
+    config/landing-zone.yaml (shared by every GCP root). The placeholder "my-org" is rejected.
   EOT
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^[a-z][a-z0-9-]{0,9}$", var.project_prefix))
-    error_message = "project_prefix must start with a lowercase letter, contain only lowercase letters, digits, and hyphens, and be 10 characters or fewer."
+    condition     = can(regex("^[a-z][a-z0-9-]{0,9}$", coalesce(var.project_prefix, local.cfg.project_prefix, "!unset")))
+    error_message = "project_prefix is unset or invalid: set var.project_prefix or org.prefix in config/landing-zone.yaml. It must start with a lowercase letter, contain only lowercase letters, digits, and hyphens, and be 10 characters or fewer."
   }
 
   validation {
-    condition     = var.project_prefix != "my-org"
+    condition     = coalesce(var.project_prefix, local.cfg.project_prefix, "!unset") != "my-org"
     error_message = "project_prefix is still set to the placeholder 'my-org'. Set it to your organisation's actual identifier before deploying."
   }
 }
 
 variable "domain" {
-  description = "The domain name of the organization (e.g., 'example.com')"
-  type        = string
-}
-
-variable "billing_account" {
-  description = "Billing account ID (optional if billing_account_display_name is provided)"
+  description = "The domain name of the organization (e.g., 'example.com'). Null = org.domain from config/landing-zone.yaml."
   type        = string
   default     = null
 
   validation {
-    condition     = var.billing_account != null || var.billing_account_display_name != null
-    error_message = "At least one of billing_account or billing_account_display_name must be set."
+    condition     = length(trimspace(coalesce(var.domain, local.cfg.domain, " "))) > 0
+    error_message = "domain is unset: set var.domain or org.domain in config/landing-zone.yaml."
+  }
+}
+
+variable "billing_account" {
+  description = "Billing account ID (optional if billing_account_display_name is provided). Null = gcp.billing_account from config/landing-zone.yaml."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = coalesce(var.billing_account, local.cfg.billing_account, var.billing_account_display_name, "!unset") != "!unset"
+    error_message = "At least one of billing_account (or gcp.billing_account in config/landing-zone.yaml) or billing_account_display_name must be set."
+  }
+
+  validation {
+    condition     = !startswith(coalesce(var.billing_account, local.cfg.billing_account, "ok"), "REPLACE_WITH")
+    error_message = "billing_account is still the config/landing-zone.example.yaml placeholder: set your billing account ID."
   }
 }
 
@@ -43,12 +60,13 @@ variable "billing_account_display_name" {
 }
 
 variable "admin_email" {
-  description = "Email address for the organization administrator"
+  description = "Email address for the organization administrator. Null = gcp.admin_email from config/landing-zone.yaml."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^[^@]+@[^@]+\\.[^@]+$", var.admin_email))
-    error_message = "admin_email must be a valid email address."
+    condition     = can(regex("^[^@]+@[^@]+\\.[^@]+$", coalesce(var.admin_email, local.cfg.admin_email, "!unset")))
+    error_message = "admin_email is unset or not a valid email address: set var.admin_email or gcp.admin_email in config/landing-zone.yaml."
   }
 }
 
@@ -83,7 +101,7 @@ variable "github_repository_owner_id" {
 }
 
 variable "tfc_organization" {
-  description = "Terraform Cloud organization used for dynamic credentials"
+  description = "Terraform Cloud organization used for dynamic credentials. Null = org.tfc.organization from config/landing-zone.yaml."
   type        = string
   default     = null
 }
@@ -143,7 +161,7 @@ variable "enable_pam" {
 }
 
 variable "environments" {
-  description = "Map of application environment definitions. Here each key gets a <prefix>-wl-<env>-plan/-apply SA pair bound to TFC workspace gcp-workload-<env>, and is_production (default false) marks the environments whose workspaces must be WIF-bound by immutable ID (tfc_workspace_ids). Keep the map identical across the GCP roots."
+  description = "Map of application environment definitions. Here each key gets a <prefix>-wl-<env>-plan/-apply SA pair bound to TFC workspace gcp-workload-<env>, and is_production (default false) marks the environments whose workspaces must be WIF-bound by immutable ID (tfc_workspace_ids). Null = gcp.environments from config/landing-zone.yaml (the single source shared by every GCP root and tfc-admin)."
   type = map(object({
     display_name            = string
     region                  = string
@@ -153,26 +171,32 @@ variable "environments" {
     labels                  = optional(map(string), {})
     is_production           = optional(bool, false)
   }))
+  default = null
+
+  validation {
+    condition     = var.environments != null || length(local.cfg.environments) > 0
+    error_message = "environments is unset: define gcp.environments in config/landing-zone.yaml or set var.environments."
+  }
 
   # Environment keys become project/workspace keys (e.g. "<env>-host",
   # "gcp-workload-<env>"). "shared" is reserved for the hub/DNS projects: a
   # right-wins merge() would silently replace them with an environment named
   # "shared". Keys must also be a valid lowercase token.
   validation {
-    condition     = alltrue([for k in keys(var.environments) : k != "shared" && can(regex("^[a-z][a-z0-9-]{0,14}$", k))])
+    condition     = alltrue([for k in(var.environments != null ? keys(var.environments) : keys(local.cfg.environments)) : k != "shared" && can(regex("^[a-z][a-z0-9-]{0,14}$", k))])
     error_message = "environments keys must be lowercase tokens (^[a-z][a-z0-9-]{0,14}$) and must not be the reserved key \"shared\"."
   }
 
   validation {
-    condition     = alltrue([for e in values(var.environments) : can(cidrnetmask(e.cidr_block))])
-    error_message = "Each environment's cidr_block must be valid CIDR notation, e.g. 10.10.0.0/16. Keep the environments map identical across the GCP roots."
+    condition     = alltrue([for c in(var.environments != null ? [for e in values(var.environments) : e.cidr_block] : [for e in values(local.cfg.environments) : e.cidr_block]) : can(cidrnetmask(c))])
+    error_message = "Each environment's cidr_block must be valid CIDR notation, e.g. 10.10.0.0/16."
   }
 }
 
 variable "default_region" {
-  description = "Default region for resources"
+  description = "Default region for resources. Null = org.regions.gcp from config/landing-zone.yaml, else europe-west1."
   type        = string
-  default     = "europe-west1"
+  default     = null
 }
 
 variable "terraform_admin_email" {

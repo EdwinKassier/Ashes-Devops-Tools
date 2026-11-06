@@ -12,22 +12,22 @@
 module "bootstrap" {
   source = "../../../modules/gcp/stages/bootstrap"
 
-  project_prefix  = var.project_prefix
+  project_prefix  = local.project_prefix
   org_id          = data.google_organization.org.org_id
   billing_account = data.google_billing_account.billing.id
-  admin_email     = var.admin_email
+  admin_email     = local.admin_email
 
   # Terraform Cloud dynamic credentials
   enable_tfc_oidc       = var.enable_tfc_oidc
-  tfc_organization      = var.tfc_organization
+  tfc_organization      = local.tfc_organization
   tfc_organization_id   = var.tfc_organization_id
   tfc_project_ids       = var.tfc_project_ids
   tfc_workspace_ids     = var.tfc_workspace_ids
-  workload_environments = toset(keys(var.environments))
+  workload_environments = toset(keys(local.environments))
 
   # Environments marked is_production: a check warns while their workspaces (and
   # the control-plane workspaces) are still WIF-bound by name, not ID.
-  production_workload_environments = toset([for k, e in var.environments : k if e.is_production])
+  production_workload_environments = toset([for k, e in local.environments : k if e.is_production])
 
   # Workload VPC-SC: each environment gets its own folder-scoped access policy
   # (created by gcp-organization). The org-wide grant is legacy, opt-in only.

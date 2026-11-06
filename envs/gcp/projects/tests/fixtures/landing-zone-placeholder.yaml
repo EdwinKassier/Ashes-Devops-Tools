@@ -1,0 +1,7 @@
+# Test fixture: an untouched copy of config/landing-zone.example.yaml must fail fast.
+org:
+  prefix: my-org
+gcp:
+  environments:
+    dev:
+      cidr_block: 10.10.0.0/16

@@ -5,13 +5,13 @@
 # cannot impersonate the admin SA, so setting it on a TFC workspace now fails
 # closed. Set it only for a deliberate local human run.
 provider "google" {
-  region                      = var.region
+  region                      = local.region
   impersonate_service_account = var.terraform_admin_email
   default_labels              = local.gcp_default_labels
 }
 
 provider "google-beta" {
-  region                      = var.region
+  region                      = local.region
   impersonate_service_account = var.terraform_admin_email
   default_labels              = local.gcp_default_labels
 }
@@ -26,7 +26,7 @@ provider "google-beta" {
 locals {
   gcp_default_labels = {
     managed-by   = "terraform"
-    landing-zone = var.project_prefix
+    landing-zone = local.project_prefix
     workspace    = "gcp-workload-${var.environment}"
     environment  = var.environment
   }

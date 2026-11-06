@@ -10,8 +10,8 @@ module "saas_workload" {
   source = "../../modules/saas/stages/saas-workload"
 
   # ── Feature flags ─────────────────────────────────────────────────────────
-  enable_supabase      = var.enable_supabase
-  enable_vercel        = var.enable_vercel
+  enable_supabase      = local.enable_supabase
+  enable_vercel        = local.enable_vercel
   enable_vault_secrets = var.enable_vault_secrets
 
   # ── Supabase pass-through (used only when enable_supabase = true) ──────────
@@ -67,7 +67,7 @@ data "terraform_remote_state" "cross_cloud" {
 
   backend = "cloud"
   config = {
-    organization = var.tfc_organization
+    organization = local.tfc_organization
     workspaces = {
       name = each.value
     }

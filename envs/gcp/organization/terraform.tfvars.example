@@ -1,3 +1,8 @@
+# Single source: every value below that has a config/landing-zone.yaml key
+# (project_prefix, environments, tfc_organization, regions, ...) is read from
+# that committed file when left unset here. Set it here only to OVERRIDE it
+# (explicit variable > config file > built-in default).
+
 # Organization Configuration
 domain            = "example.com"
 organization_name = "My Company"
@@ -66,9 +71,11 @@ environments = {
   }
 }
 
-# Optional: Add specific admin groups
-# organization_admin_groups = ["gcp-org-admins@example.com"]
-# billing_admin_groups      = ["gcp-billing-admins@example.com"]
+# REQUIRED (here or as gcp.organization_admin_groups / gcp.billing_admin_groups in
+# config/landing-zone.yaml): standing admin is group-only, so at least one group
+# each, unless allow_user_principals_for_break_glass = true. Replace the placeholders.
+organization_admin_groups = ["gcp-org-admins@example.com"]
+billing_admin_groups      = ["gcp-billing-admins@example.com"]
 
 # Regions
 default_region  = "europe-west1"

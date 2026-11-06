@@ -11,10 +11,12 @@ mock_provider "google" {}
 mock_provider "google-beta" {}
 
 variables {
-  project_prefix       = "acme"
-  environment          = "dev"
-  tfc_organization     = "acme-tfc"
-  monthly_budget_limit = 0 # disable the budget module for this contract test
+  # Isolate the suite from any committed config/landing-zone.yaml.
+  landing_zone_config_path = ""
+  project_prefix           = "acme"
+  environment              = "dev"
+  tfc_organization         = "acme-tfc"
+  monthly_budget_limit     = 0 # disable the budget module for this contract test
 }
 
 override_data {

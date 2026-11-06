@@ -34,7 +34,7 @@ locals {
       }
     },
     {
-      for env_key, env in var.environments : env_key => {
+      for env_key, env in local.environments : env_key => {
         display_name = env.display_name
         description  = "${env.display_name} environment"
         projects = {
@@ -58,8 +58,8 @@ locals {
 module "projects" {
   source = "../../../modules/gcp/stages/projects"
 
-  project_prefix          = var.project_prefix
-  organization_name       = var.organization_name
+  project_prefix          = local.project_prefix
+  organization_name       = local.organization_name
   default_billing_account = local.org.billing_account
   admin_project_id        = local.bootstrap.admin_project_id
   folders                 = local.org.folders
@@ -76,7 +76,7 @@ module "projects" {
   # per-folder delegated folderIamAdmin that gcp-organization binds.
   workload_service_accounts = {
     for env, sas in try(local.bootstrap.workload_service_accounts, {}) : env => sas
-    if contains(keys(var.environments), env)
+    if contains(keys(local.environments), env)
   }
   workload_folder_roles    = try(local.bootstrap.workload_folder_roles, { plan = [], apply = [] })
   network_service_accounts = try(local.bootstrap.stage_service_accounts["network-hub"], null)

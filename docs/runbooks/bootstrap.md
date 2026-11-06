@@ -83,21 +83,24 @@ The `gcp-bootstrap` workspace must already exist (tfc-admin pass 1, [below](#cre
 
 > Do **not** pass a `workspaces` block via `-backend-config` — `backend.tf` already hard-codes the workspace name, and a second value conflicts with it.
 
-### Step 3 — Write the tfvars file
+### Step 3 — Fill in `config/landing-zone.yaml` (and tfvars only for the rest)
+
+The shared inputs live once in the committed `config/landing-zone.yaml`. Generate it with `scripts/init-landing-zone.sh`, or copy [`config/landing-zone.example.yaml`](../../config/landing-zone.example.yaml). Every GCP root reads it. An explicit variable (tfvars or TFC variable) still wins over the file. A value that is still unset, or still a placeholder, fails the plan with a message naming the variable and the config key. Only inputs the file does not hold need a gitignored tfvars file:
 
 ```bash
-cp envs/gcp/organization/terraform.tfvars.example envs/gcp/organization/local.auto.tfvars
+cp envs/gcp/organization/terraform.tfvars.example envs/gcp/organization/local.auto.tfvars   # optional
 ```
 
-Set at minimum:
+Set at minimum (config key in brackets):
 
-- `domain` — the org's Cloud Identity / Workspace domain (used to look up the org ID; `org_id` and `billing_account_id` are **not** input variables).
-- `billing_account` **or** `billing_account_display_name` — at least one is required.
-- `project_prefix` — your real org identifier. The default `"my-org"` is a **deliberate tripwire**: a `validation` block rejects it at plan time, and a second validation enforces the `^[a-z][a-z0-9-]{0,9}$` shape.
+- `domain` (`org.domain`) — the org's Cloud Identity / Workspace domain (used to look up the org ID; `org_id` and `billing_account_id` are **not** input variables).
+- `billing_account` (`gcp.billing_account`) **or** `billing_account_display_name` — at least one is required.
+- `admin_email` (`gcp.admin_email`) and `organization_admin_groups` / `billing_admin_groups` (`gcp.organization_admin_groups` / `gcp.billing_admin_groups`) — standing admin is group-only, so at least one group each is required.
+- `project_prefix` (`org.prefix`) — your real org identifier. The example's `"my-org"` is a **deliberate tripwire**: a `validation` block rejects it at plan time, and a second validation enforces the `^[a-z][a-z0-9-]{0,9}$` shape.
 - (gcp-bootstrap, optional) `enable_github_wif` + `github_repository_id` / `github_repository_owner_id` — only if you want GitHub Actions OIDC (off by default, read-only SA only).
-- `hub_vpc_cidr_block` and `dns_hub_vpc_cidr_block` — non-overlapping CIDRs for the hub and DNS-hub VPCs.
-- `environments` — the map of environment definitions (each with `display_name`, `region`, `cidr_block`, `budget_monthly_limit`, `iam_group_role_bindings`). The keys become folder keys, project keys, `gcp-workload-<key>` workspace names, and the `environment_config` output keys.
-- `tfc_organization` — same TFC org as the backend; needed for the TFC WIF pool.
+- `hub_vpc_cidr_block` and `dns_hub_vpc_cidr_block` (`gcp.network.hub_cidr_block` / `gcp.network.dns_hub_cidr_block`) — non-overlapping CIDRs for the hub and DNS-hub VPCs.
+- `environments` (`gcp.environments`) — the map of environment definitions (each with `display_name`, `region`, `cidr_block`, `budget_monthly_limit`, `iam_group_role_bindings`, optional `is_production` / `labels`). The keys become folder keys, project keys, `gcp-workload-<key>` workspace names, and the `environment_config` output keys. It is defined once, and every GCP root and tfc-admin reads the same map.
+- `tfc_organization` (`org.tfc.organization`) — same TFC org as the backend; needed for the TFC WIF pool.
 
 > **Leave `terraform_admin_email` unset (null) for the first apply — and in Terraform Cloud, leave it unset forever.** In TFC each run authenticates via dynamic credentials as its phase-specific SA (audit C2); `terraform_admin_email` is only for deliberate local human runs. See the next section.
 
@@ -192,7 +195,7 @@ Do **not** hand-create the GCP workspaces or hand-type dynamic-credential env va
 
 Because the WIF pool and the per-workspace plan/apply service accounts are created by `gcp-bootstrap`, which itself runs in a workspace tfc-admin creates, wiring is **two-pass**:
 
-1. **Pass 1 — workspaces only.** Create the `tfc-admin` workspace by hand once (working directory `envs/tfc-admin`, `TFE_TOKEN` as a sensitive env var holding an owners/manage-workspaces team token), then apply it with `enable_gcp = true` (every `enable_*` cloud flag defaults to `false`, and at least one must be `true`) and your `environments` map. Every `gcp-*` workspace now exists with triggers, settings and remote-state sharing, but **no** `TFC_GCP_*` env vars (they are only set when their inputs are non-null). `gcp-bootstrap` is created in execution mode `local`; every other workspace is `remote`.
+1. **Pass 1 — workspaces only.** Create the `tfc-admin` workspace by hand once (working directory `envs/tfc-admin`, `TFE_TOKEN` as a sensitive env var holding an owners/manage-workspaces team token), then apply it. With `gcp.enabled: true` in the committed `config/landing-zone.yaml`, tfc-admin derives the cloud flags, one `gcp-workload-<env>` per `gcp.environments` key, and the project names from that file. The explicit `enable_gcp` / `environments` variables still override it. Every cloud defaults to disabled, and at least one must be enabled. Every `gcp-*` workspace now exists with triggers, settings and remote-state sharing, but **no** `TFC_GCP_*` env vars (they are only set when their inputs are non-null). `gcp-bootstrap` is created in execution mode `local`; every other workspace is `remote`.
 2. **Apply `gcp-bootstrap`** (the phase-0 human apply described above, from your machine with ADC and `terraform_admin_email` unset). It publishes `tfc_workload_provider_name` (`projects/<number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>`) and the per-workspace maps `tfc_plan_service_accounts` / `tfc_apply_service_accounts` (keyed by workspace name).
 3. **Pass 2 — dynamic credentials.** Either copy those outputs into the tfc-admin variables `gcp_workload_provider_name`, `gcp_plan_service_accounts`, `gcp_apply_service_accounts`, **or** set `gcp_bootstrap_outputs_from_tfc = true` to read them via `tfe_outputs` (tfc-admin is then added as a remote-state consumer of `gcp-bootstrap`). Re-apply tfc-admin. Each GCP workspace in the maps receives:
 
@@ -207,9 +210,9 @@ Because the WIF pool and the per-workspace plan/apply service accounts are creat
 
 4. Apply the remaining GCP roots in order (`gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>`) from TFC. Because control-plane workspaces have speculative plans disabled, review their plans from a run queued on `main` (or a CLI-driven plan by an operator), not from PR checks.
 
-**VCS-driven runs get no local tfvars.** Commit each workspace's Terraform inputs to `config/tfc-workspaces.yaml` (start from [`config/tfc-workspaces.example.yaml`](../../config/tfc-workspaces.example.yaml)); tfc-admin reads it when present (`workspace_variables_file`) and sets every entry as a workspace variable. Secrets are rejected in that file; pass them through `workspace_variables` (write-only).
+**VCS-driven runs get no local tfvars.** The shared inputs come from the committed `config/landing-zone.yaml`, which every root reads. Commit any other per-workspace Terraform inputs to `config/tfc-workspaces.yaml` (start from [`config/tfc-workspaces.example.yaml`](../../config/tfc-workspaces.example.yaml)); tfc-admin reads it when present (`workspace_variables_file`) and sets every entry as a workspace variable. Secrets are rejected in that file; pass them through `workspace_variables` (write-only).
 
-The same flow applies to AWS (`enable_aws = true`): see the [AWS bootstrap runbook](aws-bootstrap.md#step-3--create-the-aws-tfc-workspaces-with-tfc-admin-pass-1). Single-account workspaces map to an account key via the `aws-organization` output `tfc_workspace_bindings`, `environments[<env>].aws_account_key` or `aws_workspace_account_keys`. The multi-account roots `aws-security` / `aws-backup` get the management role (`aws_management_plan_role_arn` / `aws_management_apply_role_arn`) as their default configuration and one `TFC_AWS_*_<alias>` set per member-account alias.
+The same flow applies to AWS (`aws.enabled: true`): see the [AWS bootstrap runbook](aws-bootstrap.md#step-3--create-the-aws-tfc-workspaces-with-tfc-admin-pass-1). Single-account workspaces map to an account key via the `aws-organization` output `tfc_workspace_bindings`, `aws.workload_environments[<env>].account_key` in the config file (or `environments[<env>].aws_account_key`), or `aws_workspace_account_keys`. The multi-account roots `aws-security` / `aws-backup` get the management role (`aws_management_plan_role_arn` / `aws_management_apply_role_arn`) as their default configuration and one `TFC_AWS_*_<alias>` set per member-account alias.
 
 **GitHub Actions (release metadata / drift).** In the repo → Settings → Secrets and variables → Actions:
 
@@ -230,8 +233,8 @@ See [CI_SECRETS.md](../guides/CI_SECRETS.md).
 
 Once `gcp-organization` is applied and its outputs are published, each application environment is a separate `gcp-workload-<env>` workspace that reads the org remote state. **Do not duplicate that procedure here** — it is fully covered in [add-environment.md](add-environment.md). In brief:
 
-1. Add the environment to the `environments` map in the org root tfvars and **re-apply `gcp-organization`** (this creates the env's folder + host project). Also add the env to the `environments` map of **gcp-bootstrap** and re-apply it (creates the `<prefix>-wl-<env>-plan/-apply` SAs and their `gcp-workload-<env>:plan/:apply` WIF bindings), then re-apply **gcp-projects** (env-folder grants) and **tfc-admin** (the workspace's `TFC_GCP_*` env vars).
-2. Create the `gcp-workload-<env>` TFC workspace (working directory `envs/gcp/workload`), set the `environment` Terraform variable and the `-var-file` for its tfvars.
+1. Add **one** entry under `gcp.environments` in `config/landing-zone.yaml` and commit it. Re-apply **tfc-admin**, which creates `gcp-workload-<env>` with its `environment` variable. Then re-apply **gcp-bootstrap** (creates the `<prefix>-wl-<env>-plan/-apply` SAs and their `gcp-workload-<env>:plan/:apply` WIF bindings), **gcp-organization** (the env folder), **gcp-projects** (host project and env-folder grants) and **gcp-network-hub**. Re-apply tfc-admin once more for the workspace's `TFC_GCP_*` env vars.
+2. Add a `-var-file` for the workload's own tfvars if it needs any.
 3. Plan and apply the workload root — it reads `environment_config[<env>]` (CIDR, region, folder, host project) from the org remote state; the per-env CIDR is **not** set in the workload tfvars.
 
 See [add-environment.md](add-environment.md) for the exact steps, expected plan output, and rollback.

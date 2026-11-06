@@ -23,6 +23,18 @@ The only way to make a cloud genuinely optional is to make its provider **absent
 
 `enable_*` flags still exist, but they only gate **features within a root** — for example `enable_supabase`, `enable_vercel`, `enable_edge`. They never turn a whole cloud on or off.
 
+### Declaring the selection: `config/landing-zone.yaml`
+
+Which workspaces exist is declared once, in the committed [`config/landing-zone.yaml`](../../config/landing-zone.example.yaml):
+
+```yaml
+gcp:  {enabled: true,  ...}   # tfc-admin enable_gcp  -> gcp-* workspaces
+aws:  {enabled: false, ...}   # tfc-admin enable_aws  -> aws-* workspaces
+saas: {enabled: true, workspaces: [web], supabase: true, vercel: false}
+```
+
+`envs/tfc-admin` reads these flags and creates only the enabled clouds' workspaces, plus one `gcp-workload-<env>` per `gcp.environments` key and one `aws-workload-<env>` per `aws.workload_environments` key. Its explicit `enable_gcp` / `enable_aws` / `enable_saas` variables still override the file. `saas.supabase` / `saas.vercel` feed the `saas` root's feature flags `enable_supabase` / `enable_vercel`. This does not contradict the rule above. The flags decide which workspaces tfc-admin **declares**; they never make a provider conditional inside a root. A disabled cloud's roots simply have no workspace, so they are never applied and need no credentials.
+
 ---
 
 ## The per-cloud-root model
@@ -117,7 +129,7 @@ This composes cleanly because **no root forces another cloud's credentials**:
 - The AWS roots need only AWS credentials.
 - The `saas` root needs only the SaaS token(s) for the features you enable — and SaaS never lives inside an AWS or GCP root. (Within that one root, see [Single-provider mode in the `saas` root](#single-provider-mode-in-the-saas-root) for how the disabled SaaS provider avoids needing its token.)
 
-So the credentials a deployment needs are exactly the union of the credentials of the roots you apply. There is no hidden cross-cloud coupling, and there is no top-level `enable_aws` / `enable_gcp` switch — selection is purely which workspaces you run.
+So the credentials a deployment needs are exactly the union of the credentials of the roots you apply. There is no hidden cross-cloud coupling, and no root has a runtime `enable_aws` / `enable_gcp` switch. Selection is purely which workspaces you run, and the `<cloud>.enabled` keys in `config/landing-zone.yaml` decide which workspaces tfc-admin creates.
 
 ---
 

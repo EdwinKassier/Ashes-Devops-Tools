@@ -10,6 +10,11 @@
 mock_provider "supabase" {}
 mock_provider "vercel" {}
 
+# Isolate the suite from any committed config/landing-zone.yaml.
+variables {
+  landing_zone_config_path = ""
+}
+
 # No-op: both features off. Must plan credential-free; disabled outputs are null.
 run "saas_noop_plans_credential_free" {
   command = plan

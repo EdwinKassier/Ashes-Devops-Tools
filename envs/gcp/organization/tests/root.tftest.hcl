@@ -10,6 +10,8 @@ mock_provider "google-beta" {}
 mock_provider "random" {}
 
 variables {
+  # Isolate the suite from any committed config/landing-zone.yaml.
+  landing_zone_config_path  = ""
   domain                    = "acme.io"
   project_prefix            = "acme"
   admin_email               = "admin@acme.io"

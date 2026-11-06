@@ -7,7 +7,7 @@
 # account, each authenticating DIRECTLY as that account's tfc-plan / tfc-apply
 # role — or, for local / legacy runs, by assuming account_role_arns (OAAR).
 provider "aws" {
-  region = var.aws_region
+  region = local.aws_region
   default_tags {
     tags = local.aws_default_tags
   }
@@ -15,7 +15,7 @@ provider "aws" {
   # account. The default provider owns org-level resources (org CloudTrail,
   # delegated-admin registrations); the other accounts are reached via the
   # aliased assume-role providers below.
-  allowed_account_ids = [var.management_account_id]
+  allowed_account_ids = [local.management_account_id]
   # TFC multi-configuration dynamic credentials (see var.tfc_aws_dynamic_credentials):
   # the default config is the management-account role this workspace runs as.
   shared_config_files = var.tfc_aws_dynamic_credentials == null ? null : [var.tfc_aws_dynamic_credentials.default.shared_config_file]
@@ -23,7 +23,7 @@ provider "aws" {
 
 provider "aws" {
   alias  = "security_tooling"
-  region = var.aws_region
+  region = local.aws_region
   default_tags {
     tags = local.aws_default_tags
   }
@@ -45,7 +45,7 @@ provider "aws" {
 
 provider "aws" {
   alias  = "log_archive"
-  region = var.aws_region
+  region = local.aws_region
   default_tags {
     tags = local.aws_default_tags
   }
@@ -67,7 +67,7 @@ provider "aws" {
 
 provider "aws" {
   alias  = "forensics"
-  region = var.aws_region
+  region = local.aws_region
   default_tags {
     tags = local.aws_default_tags
   }
@@ -97,11 +97,11 @@ locals {
   aws_default_tags = merge(
     {
       ManagedBy   = "terraform"
-      LandingZone = var.landing_zone_name
+      LandingZone = local.landing_zone_name
       Workspace   = "aws-security"
       Environment = "shared"
-      CostCenter  = var.cost_center
-      Owner       = var.owner
+      CostCenter  = local.cost_center
+      Owner       = local.owner
     },
     var.default_tags,
   )

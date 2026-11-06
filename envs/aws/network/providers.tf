@@ -4,7 +4,7 @@
 # by assuming var.assume_role_arn). All network-hub resources (TGW, IPAM,
 # inspection/egress VPCs, Route 53 resolver, endpoints) live in that one account.
 provider "aws" {
-  region = var.aws_region
+  region = local.aws_region
   default_tags {
     tags = local.aws_default_tags
   }
@@ -36,11 +36,11 @@ locals {
   aws_default_tags = merge(
     {
       ManagedBy   = "terraform"
-      LandingZone = var.landing_zone_name
+      LandingZone = local.landing_zone_name
       Workspace   = "aws-network"
       Environment = "shared"
-      CostCenter  = var.cost_center
-      Owner       = var.owner
+      CostCenter  = local.cost_center
+      Owner       = local.owner
     },
     var.default_tags,
   )

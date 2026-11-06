@@ -1,10 +1,10 @@
 # Phase-1 foundation root. The organization, guardrails (SCP/RCP/declarative/tag),
 # foundational account vending, and centralized root-access management all run in
 # the MANAGEMENT (payer) account, so this root has a SINGLE default provider and
-# NO aliased providers. Region comes from var.aws_region so the same root can be
+# NO aliased providers. Region comes from local.aws_region so the same root can be
 # pointed at any region without code edits.
 provider "aws" {
-  region = var.aws_region
+  region = local.aws_region
   default_tags {
     tags = local.aws_default_tags
   }
@@ -12,7 +12,7 @@ provider "aws" {
   # account. This root creates org-level resources (org, SCPs, account factory);
   # a mis-set AWS_PROFILE or TFC run role must never deploy them into the wrong
   # account. Admins set management_account_id to their own payer account.
-  allowed_account_ids = [var.management_account_id]
+  allowed_account_ids = [local.management_account_id]
 }
 
 # Canonical tag set written by EVERY aws provider in this root (default_tags).
@@ -25,11 +25,11 @@ locals {
   aws_default_tags = merge(
     {
       ManagedBy   = "terraform"
-      LandingZone = var.landing_zone_name
+      LandingZone = local.landing_zone_name
       Workspace   = "aws-organization"
       Environment = "shared"
-      CostCenter  = var.cost_center
-      Owner       = var.owner
+      CostCenter  = local.cost_center
+      Owner       = local.owner
     },
     var.default_tags,
   )

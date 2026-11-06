@@ -8,26 +8,31 @@
 # inside a terraform_remote_state data source).
 # -----------------------------------------------------------------------------
 
-variable "management_account_id" {
-  description = "12-digit AWS management (payer) account ID. The default provider sets allowed_account_ids to this, so Terraform fails fast if the resolved credentials are a different account (audit C4). No default: admins must state their own payer account."
+variable "landing_zone_config_path" {
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values."
   type        = string
+  default     = null
+}
+
+variable "management_account_id" {
+  description = "12-digit AWS management (payer) account ID. The default provider sets allowed_account_ids to this, so Terraform fails fast if the resolved credentials are a different account (audit C4). Null = aws.management_account_id from config/landing-zone.yaml (quote it there); no built-in default."
+  type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^[0-9]{12}$", var.management_account_id))
-    error_message = "management_account_id must be a 12-digit AWS account ID."
+    condition     = can(regex("^[0-9]{12}$", coalesce(var.management_account_id, local.cfg.management_account_id, "!unset")))
+    error_message = "management_account_id is unset or invalid: set var.management_account_id or aws.management_account_id in config/landing-zone.yaml (quoted) to the 12-digit AWS account ID."
   }
 }
 
 variable "aws_region" {
-  description = "Primary AWS region for the default (management-account) provider, e.g. eu-west-2."
+  description = "Primary AWS region for the default (management-account) provider, e.g. eu-west-2. Null = org.regions.aws from config/landing-zone.yaml, else eu-west-2."
   type        = string
-  default     = "eu-west-2"
+  default     = null
 
-  # AWS region names are short (well under the RE2 1000-repeat cap). Shape:
-  # <geo>-<direction>-<number>, e.g. eu-west-2, us-east-1, ap-southeast-3.
   validation {
-    condition     = can(regex("^[a-z]{2}-[a-z]+-[1-9][0-9]?$", var.aws_region))
-    error_message = "aws_region must be a valid AWS region name, e.g. eu-west-2."
+    condition     = can(regex("^[a-z]{2}-[a-z]+-[1-9][0-9]?$", coalesce(var.aws_region, local.cfg.aws_region, "eu-west-2")))
+    error_message = "aws_region (or org.regions.aws in config/landing-zone.yaml) must be a valid AWS region name, e.g. eu-west-2."
   }
 }
 
@@ -41,7 +46,7 @@ variable "aws_region" {
 # -----------------------------------------------------------------------------
 
 variable "accounts" {
-  description = "Foundational member accounts to create, keyed by account name. Each entry sets the root email, the target OU name (must exist in the organization OU tree), optional alternate contacts, and optional tags. Defaults to the six SRA foundational accounts with placeholder emails the root is expected to override."
+  description = "Foundational member accounts to create, keyed by account name. Each entry sets the root email, the target OU name (must exist in the organization OU tree), optional alternate contacts, and optional tags. Null = aws.accounts from config/landing-zone.yaml, else the six SRA foundational accounts with placeholder emails (rejected below, so they must be overridden)."
   type = map(object({
     email = string
     ou    = string
@@ -54,18 +59,11 @@ variable "accounts" {
     })), {})
     tags = optional(map(string), {})
   }))
-  default = {
-    log_archive      = { email = "aws+log-archive@example.com", ou = "Security" }
-    security_tooling = { email = "aws+security-tooling@example.com", ou = "Security" }
-    network          = { email = "aws+network@example.com", ou = "Infrastructure" }
-    shared_services  = { email = "aws+shared-services@example.com", ou = "Infrastructure" }
-    backup           = { email = "aws+backup@example.com", ou = "Infrastructure" }
-    forensics        = { email = "aws+forensics@example.com", ou = "Security" }
-  }
+  default = null
 
   validation {
-    condition     = alltrue([for a in values(var.accounts) : can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", a.email))])
-    error_message = "Every accounts entry must have a valid root email address."
+    condition     = alltrue([for e in(var.accounts != null ? [for a in values(var.accounts) : a.email] : [for a in values(local.cfg_or_default_accounts) : a.email]) : can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", e))])
+    error_message = "Every accounts entry (var.accounts or aws.accounts in config/landing-zone.yaml) must have a valid root email address."
   }
 
   # L2: the default emails are placeholders. Reject them so an unmodified apply
@@ -73,13 +71,13 @@ variable "accounts" {
   # addresses (each account needs a unique, deliverable root email).
   validation {
     # [@.] also catches subdomains of the reserved example domains (e.g. @acme.example.com).
-    condition     = alltrue([for a in values(var.accounts) : !can(regex("[@.]example\\.(com|org|net)$", lower(a.email)))])
-    error_message = "accounts still uses placeholder @example.com emails. Set real, unique root email addresses for each account before applying."
+    condition     = alltrue([for e in(var.accounts != null ? [for a in values(var.accounts) : a.email] : [for a in values(local.cfg_or_default_accounts) : a.email]) : !can(regex("[@.]example\\.(com|org|net)$", lower(e)))])
+    error_message = "accounts still uses placeholder @example.com emails. Set real, unique root email addresses for each account (var.accounts or aws.accounts in config/landing-zone.yaml) before applying."
   }
 }
 
 variable "workload_accounts" {
-  description = "Additional workload member accounts to create, keyed by account name. Merged with var.accounts by the stage; same object shape."
+  description = "Additional workload member accounts to create, keyed by account name. Merged with var.accounts by the stage; same object shape. Null = aws.workload_accounts from config/landing-zone.yaml, else {}."
   type = map(object({
     email = string
     ou    = string
@@ -92,15 +90,15 @@ variable "workload_accounts" {
     })), {})
     tags = optional(map(string), {})
   }))
-  default = {}
+  default = null
 
   validation {
-    condition     = alltrue([for a in values(var.workload_accounts) : can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", a.email))])
-    error_message = "Every workload_accounts entry must have a valid root email address."
+    condition     = alltrue([for e in(var.workload_accounts != null ? [for a in values(var.workload_accounts) : a.email] : [for a in values(local.cfg.workload_accounts) : a.email]) : can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", e))])
+    error_message = "Every workload_accounts entry (var.workload_accounts or aws.workload_accounts in config/landing-zone.yaml) must have a valid root email address."
   }
 
   validation {
-    condition     = alltrue([for a in values(var.workload_accounts) : !can(regex("[@.]example\\.(com|org|net)$", lower(a.email)))])
+    condition     = alltrue([for e in(var.workload_accounts != null ? [for a in values(var.workload_accounts) : a.email] : [for a in values(local.cfg.workload_accounts) : a.email]) : !can(regex("[@.]example\\.(com|org|net)$", lower(e)))])
     error_message = "workload_accounts still uses placeholder example.com/org/net emails. Set real, unique root email addresses before applying."
   }
 }
@@ -110,43 +108,46 @@ variable "workload_accounts" {
 # -----------------------------------------------------------------------------
 
 variable "allowed_regions" {
-  description = "Regions permitted by the region-restriction SCP. Requests to any other region are denied (global services are carved out)."
+  description = "Regions permitted by the region-restriction SCP. Requests to any other region are denied (global services are carved out). Null = aws.allowed_regions from config/landing-zone.yaml, else [\"eu-west-2\"]."
   type        = list(string)
-  default     = ["eu-west-2"]
+  default     = null
 
   validation {
-    condition     = length(var.allowed_regions) > 0
-    error_message = "allowed_regions must contain at least one region."
+    condition     = length(var.allowed_regions != null ? var.allowed_regions : coalesce(local.cfg.allowed_regions, ["eu-west-2"])) > 0
+    error_message = "allowed_regions (or aws.allowed_regions in config/landing-zone.yaml) must contain at least one region."
   }
 }
 
 variable "terraform_run_role_arn" {
-  description = "Account-qualified exact ARN of the MANAGEMENT-account Terraform Cloud apply role (the phase-0, hand-created role from the aws-bootstrap runbook Step 2, e.g. arn:aws:iam::<mgmt>:role/tfc-mgmt-apply; the same ARN tfc-admin sets as TFC_AWS_APPLY_ROLE_ARN via aws_management_apply_role_arn). Carved out of every guardrail deny statement so automation is not locked out. Not created by this root: StackSets never deploy to the management account."
+  description = "Account-qualified exact ARN of the MANAGEMENT-account Terraform Cloud apply role (the phase-0, hand-created role from the aws-bootstrap runbook Step 2, e.g. arn:aws:iam::<mgmt>:role/tfc-mgmt-apply; the same ARN tfc-admin sets as TFC_AWS_APPLY_ROLE_ARN via aws_management_apply_role_arn). Carved out of every guardrail deny statement so automation is not locked out. Not created by this root: StackSets never deploy to the management account. Null = aws.terraform_run_role_arn from config/landing-zone.yaml."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/.+$", var.terraform_run_role_arn))
-    error_message = "terraform_run_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/...)."
+    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/.+$", coalesce(var.terraform_run_role_arn, local.cfg.terraform_run_role_arn, "!unset")))
+    error_message = "terraform_run_role_arn is unset or invalid: set var.terraform_run_role_arn or aws.terraform_run_role_arn in config/landing-zone.yaml to an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/...)."
   }
 }
 
 variable "break_glass_role_arn" {
-  description = "Account-qualified exact ARN of the emergency break-glass role in the management account. Carved out of every guardrail deny statement. Either hand-create it in phase-0 (aws-bootstrap runbook Step 2) or let aws-security create it (create_break_glass = true, role name break_glass_role_name) and pass the ARN it will have here (arn:aws:iam::<mgmt>:role/<break_glass_role_name>); an SCP carve-out may name a role that does not exist yet."
+  description = "Account-qualified exact ARN of the emergency break-glass role in the management account. Carved out of every guardrail deny statement. Either hand-create it in phase-0 (aws-bootstrap runbook Step 2) or let aws-security create it (create_break_glass = true, role name break_glass_role_name) and pass the ARN it will have here (arn:aws:iam::<mgmt>:role/<break_glass_role_name>); an SCP carve-out may name a role that does not exist yet. Null = aws.break_glass_role_arn from config/landing-zone.yaml."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/.+$", var.break_glass_role_arn))
-    error_message = "break_glass_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/...)."
+    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/.+$", coalesce(var.break_glass_role_arn, local.cfg.break_glass_role_arn, "!unset")))
+    error_message = "break_glass_role_arn is unset or invalid: set var.break_glass_role_arn or aws.break_glass_role_arn in config/landing-zone.yaml to an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/...)."
   }
 }
 
 variable "log_archive_bucket_name" {
-  description = "Name of the central log-archive S3 bucket protected from Object Lock / governance-retention tampering by the deny-tamper SCP."
+  description = "Name of the central log-archive S3 bucket protected from Object Lock / governance-retention tampering by the deny-tamper SCP. Null = aws.log_archive_bucket_name from config/landing-zone.yaml."
   type        = string
+  default     = null
 
   validation {
-    condition     = length(trimspace(var.log_archive_bucket_name)) > 0
-    error_message = "log_archive_bucket_name must be a non-empty S3 bucket name."
+    condition     = length(trimspace(coalesce(var.log_archive_bucket_name, local.cfg.log_archive_bucket_name, " "))) > 0
+    error_message = "log_archive_bucket_name is unset: set var.log_archive_bucket_name or aws.log_archive_bucket_name in config/landing-zone.yaml to a non-empty S3 bucket name."
   }
 }
 
@@ -211,38 +212,39 @@ variable "cost_anomaly_email" {
 # -----------------------------------------------------------------------------
 
 variable "landing_zone_name" {
-  description = "Landing-zone identifier written to the LandingZone tag on every resource. No default: set your own organization's identifier (same value in every AWS root; set it once in the tfc-admin common variable set via common_workspace_variables). The upstream placeholders \"ashes\" and \"my-org\" are rejected."
+  description = "Landing-zone identifier written to the LandingZone tag on every resource. Null = org.name from config/landing-zone.yaml (the single source shared by every AWS root). The upstream placeholders \"ashes\" and \"my-org\" are rejected."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^[a-z][a-z0-9-]{1,30}$", var.landing_zone_name))
-    error_message = "landing_zone_name must be 2-31 chars: a lowercase letter, then lowercase letters, digits or hyphens."
+    condition     = can(regex("^[a-z][a-z0-9-]{1,30}$", coalesce(var.landing_zone_name, local.cfg.landing_zone_name, "!unset")))
+    error_message = "landing_zone_name is unset or invalid: set var.landing_zone_name or org.name in config/landing-zone.yaml. It must be 2-31 chars: a lowercase letter, then lowercase letters, digits or hyphens."
   }
 
   validation {
-    condition     = !contains(["ashes", "my-org"], lower(var.landing_zone_name))
+    condition     = !contains(["ashes", "my-org"], lower(coalesce(var.landing_zone_name, local.cfg.landing_zone_name, "!unset")))
     error_message = "landing_zone_name is still an upstream placeholder (ashes / my-org). Set your own landing-zone identifier."
   }
 }
 
 variable "cost_center" {
-  description = "Value of the CostCenter cost-allocation tag on every resource in this root."
+  description = "Value of the CostCenter cost-allocation tag on every resource in this root. Null = org.cost_center from config/landing-zone.yaml, else \"platform\"."
   type        = string
-  default     = "platform"
+  default     = null
 
   validation {
-    condition     = length(trimspace(var.cost_center)) > 0
+    condition     = length(trimspace(var.cost_center != null ? var.cost_center : coalesce(local.cfg.cost_center, "platform"))) > 0
     error_message = "cost_center must be a non-empty string (empty tag values cause perpetual diffs)."
   }
 }
 
 variable "owner" {
-  description = "Value of the Owner cost-allocation tag on every resource in this root (team or distribution list)."
+  description = "Value of the Owner cost-allocation tag on every resource in this root (team or distribution list). Null = org.owner from config/landing-zone.yaml, else \"platform-team\"."
   type        = string
-  default     = "platform-team"
+  default     = null
 
   validation {
-    condition     = length(trimspace(var.owner)) > 0
+    condition     = length(trimspace(var.owner != null ? var.owner : coalesce(local.cfg.owner, "platform-team"))) > 0
     error_message = "owner must be a non-empty string (empty tag values cause perpetual diffs)."
   }
 }
@@ -280,13 +282,13 @@ variable "enable_tfc_oidc_baseline" {
 }
 
 variable "tfc_organization" {
-  description = "Terraform Cloud organization whose workspaces the member-account roles trust. Matched literally (no wildcards). Required when enable_tfc_oidc_baseline is true. Not the same mechanism as the backend organization (backend.hcl), but normally the same value."
+  description = "Terraform Cloud organization whose workspaces the member-account roles trust. Matched literally (no wildcards). Required when enable_tfc_oidc_baseline is true. Not the same mechanism as the backend organization (backend.hcl), but normally the same value. Null = org.tfc.organization from config/landing-zone.yaml."
   type        = string
   default     = null
 
   validation {
-    condition     = var.enable_tfc_oidc_baseline ? var.tfc_organization != null : true
-    error_message = "tfc_organization is required when enable_tfc_oidc_baseline is true."
+    condition     = var.enable_tfc_oidc_baseline ? (var.tfc_organization != null || local.cfg.tfc_organization != null) : true
+    error_message = "tfc_organization is required when enable_tfc_oidc_baseline is true: set var.tfc_organization or org.tfc.organization in config/landing-zone.yaml."
   }
 }
 
@@ -297,25 +299,18 @@ variable "tfc_hostname" {
 }
 
 variable "tfc_project" {
-  description = "Default TFC project of the bound workspaces (matched literally in the trust sub). Override per account with tfc_workspace_bindings[*].project."
+  description = "Default TFC project of the bound workspaces (matched literally in the trust sub). Override per account with tfc_workspace_bindings[*].project. Null = org.tfc.aws_project from config/landing-zone.yaml, else <org.tfc.project_name_prefix>aws, i.e. landing-zone-aws: the project tfc-admin puts the aws-* workspaces in (<project_name_prefix>aws)."
   type        = string
-  default     = "Default Project"
+  default     = null
 }
 
 variable "tfc_workspace_bindings" {
-  description = "Map of account key (from accounts / workload_accounts) -> TFC workspaces allowed to assume that account's tfc-plan / tfc-apply roles (optional per-account project override). The defaults bind the six foundational accounts only; ADD one entry per workload account, e.g. workload_dev = { workspaces = [\"aws-workload-dev\"] }, and set the same key as environments.dev.aws_account_key in tfc-admin so aws-workload-dev gets that account's roles and its workload_account_key."
+  description = "Map of account key (from accounts / workload_accounts) -> TFC workspaces allowed to assume that account's tfc-plan / tfc-apply roles (optional per-account project override). Null = the six foundational bindings plus one per aws.workload_environments entry in config/landing-zone.yaml (account_key => aws-workload-<env>), so tfc-admin's workload workspaces and these trusts come from the same source. An explicit map replaces that derivation entirely: then ADD one entry per workload account, e.g. workload_dev = { workspaces = [\"aws-workload-dev\"] }."
   type = map(object({
     workspaces = list(string)
     project    = optional(string)
   }))
-  default = {
-    security_tooling = { workspaces = ["aws-security"] }
-    log_archive      = { workspaces = ["aws-security"] }
-    forensics        = { workspaces = ["aws-security"] }
-    network          = { workspaces = ["aws-network"] }
-    shared_services  = { workspaces = ["aws-identity", "aws-shared-services"] }
-    backup           = { workspaces = ["aws-backup"] }
-  }
+  default = null
 }
 
 variable "tfc_oidc_allow_workspace_wildcards" {

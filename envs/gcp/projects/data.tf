@@ -3,7 +3,7 @@
 data "terraform_remote_state" "gcp_bootstrap" {
   backend = "cloud"
   config = {
-    organization = var.tfc_organization
+    organization = local.tfc_organization
     workspaces = {
       name = var.bootstrap_workspace_name
     }
@@ -13,7 +13,7 @@ data "terraform_remote_state" "gcp_bootstrap" {
 data "terraform_remote_state" "gcp_organization" {
   backend = "cloud"
   config = {
-    organization = var.tfc_organization
+    organization = local.tfc_organization
     workspaces = {
       name = var.organization_workspace_name
     }

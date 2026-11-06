@@ -47,17 +47,17 @@ output "folders" {
 # Environment Variables
 output "project_prefix" {
   description = "Project prefix used for naming"
-  value       = var.project_prefix
+  value       = local.project_prefix
 }
 
 output "organization_name" {
   description = "Name of the organization"
-  value       = var.organization_name
+  value       = local.organization_name
 }
 
 output "default_region" {
   description = "Default region for resources"
-  value       = var.default_region
+  value       = local.default_region
 }
 
 # Service Accounts

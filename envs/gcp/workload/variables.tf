@@ -1,10 +1,17 @@
-variable "project_prefix" {
-  description = "Short name prefix used by the organization root. Must match the organization root's project_prefix exactly — used for resource naming consistency."
+variable "landing_zone_config_path" {
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values."
   type        = string
+  default     = null
+}
+
+variable "project_prefix" {
+  description = "Short name prefix used by the organization root (resource naming). Null = org.prefix from config/landing-zone.yaml, the same source as every other GCP root."
+  type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^[a-z][a-z0-9-]*$", var.project_prefix))
-    error_message = "project_prefix must start with a lowercase letter and contain only lowercase letters, digits, and hyphens."
+    condition     = can(regex("^[a-z][a-z0-9-]*$", coalesce(var.project_prefix, local.cfg.project_prefix, "!unset")))
+    error_message = "project_prefix is unset or invalid: set var.project_prefix or org.prefix in config/landing-zone.yaml. It must start with a lowercase letter and contain only lowercase letters, digits, and hyphens."
   }
 }
 
@@ -23,9 +30,9 @@ variable "environment" {
 }
 
 variable "region" {
-  description = "Default Google Cloud region for this application environment (e.g. \"europe-west1\"). Must match the region used when provisioning spoke projects in the organization root."
+  description = "Default Google Cloud region for this application environment (e.g. \"europe-west1\"). Must match the region used when provisioning spoke projects. Null = gcp.environments[<environment>].region from config/landing-zone.yaml, else org.regions.gcp, else europe-west1."
   type        = string
-  default     = "europe-west1"
+  default     = null
 }
 
 variable "terraform_admin_email" {
@@ -46,8 +53,14 @@ variable "terraform_admin_email" {
 }
 
 variable "tfc_organization" {
-  description = "Terraform Cloud organization used to read organization remote state"
+  description = "Terraform Cloud organization used to read organization remote state. Null = org.tfc.organization from config/landing-zone.yaml."
   type        = string
+  default     = null
+
+  validation {
+    condition     = coalesce(var.tfc_organization, local.cfg.tfc_organization, "!unset") != "!unset"
+    error_message = "tfc_organization is unset: set var.tfc_organization or org.tfc.organization in config/landing-zone.yaml."
+  }
 }
 
 variable "organization_workspace_name" {

@@ -1,22 +1,29 @@
-variable "project_prefix" {
-  description = "Short prefix prepended to all GCP project IDs. Keep in sync with the gcp-organization root."
+variable "landing_zone_config_path" {
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values."
   type        = string
+  default     = null
+}
+
+variable "project_prefix" {
+  description = "Short prefix prepended to all GCP project IDs. Null = org.prefix from config/landing-zone.yaml (shared by every GCP root)."
+  type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^[a-z][a-z0-9-]{0,9}$", var.project_prefix))
-    error_message = "project_prefix must start with a lowercase letter, contain only lowercase letters, digits, and hyphens, and be 10 characters or fewer."
+    condition     = can(regex("^[a-z][a-z0-9-]{0,9}$", coalesce(var.project_prefix, local.cfg.project_prefix, "!unset")))
+    error_message = "project_prefix is unset or invalid: set var.project_prefix or org.prefix in config/landing-zone.yaml. It must start with a lowercase letter, contain only lowercase letters, digits, and hyphens, and be 10 characters or fewer."
   }
 
   validation {
-    condition     = var.project_prefix != "my-org"
+    condition     = coalesce(var.project_prefix, local.cfg.project_prefix, "!unset") != "my-org"
     error_message = "project_prefix is still set to the placeholder 'my-org'. Set it to your organisation's actual identifier before deploying."
   }
 }
 
 variable "organization_name" {
-  description = "Name of the organization"
+  description = "Name of the organization. Null = org.display_name from config/landing-zone.yaml, else \"My Organization\"."
   type        = string
-  default     = "My Organization"
+  default     = null
 }
 
 variable "project_services" {
@@ -33,7 +40,7 @@ variable "project_services" {
 }
 
 variable "environments" {
-  description = "Map of application environment definitions. is_production (default false) is surfaced as environment_config[<env>].is_production for the gcp-workload guardrail checks. Keep in sync with the gcp-organization root."
+  description = "Map of application environment definitions. is_production (default false) is surfaced as environment_config[<env>].is_production for the gcp-workload guardrail checks. Null = gcp.environments from config/landing-zone.yaml (the single source shared by every GCP root and tfc-admin)."
   type = map(object({
     display_name            = string
     region                  = string
@@ -43,26 +50,32 @@ variable "environments" {
     labels                  = optional(map(string), {})
     is_production           = optional(bool, false)
   }))
+  default = null
+
+  validation {
+    condition     = var.environments != null || length(local.cfg.environments) > 0
+    error_message = "environments is unset: define gcp.environments in config/landing-zone.yaml or set var.environments."
+  }
 
   # Environment keys become project/workspace keys (e.g. "<env>-host",
   # "gcp-workload-<env>"). "shared" is reserved for the hub/DNS projects: a
   # right-wins merge() would silently replace them with an environment named
   # "shared". Keys must also be a valid lowercase token.
   validation {
-    condition     = alltrue([for k in keys(var.environments) : k != "shared" && can(regex("^[a-z][a-z0-9-]{0,14}$", k))])
+    condition     = alltrue([for k in(var.environments != null ? keys(var.environments) : keys(local.cfg.environments)) : k != "shared" && can(regex("^[a-z][a-z0-9-]{0,14}$", k))])
     error_message = "environments keys must be lowercase tokens (^[a-z][a-z0-9-]{0,14}$) and must not be the reserved key \"shared\"."
   }
 
   validation {
-    condition     = alltrue([for e in values(var.environments) : can(cidrnetmask(e.cidr_block))])
-    error_message = "Each environment's cidr_block must be valid CIDR notation, e.g. 10.10.0.0/16. Keep the environments map identical across the GCP roots."
+    condition     = alltrue([for c in(var.environments != null ? [for e in values(var.environments) : e.cidr_block] : [for e in values(local.cfg.environments) : e.cidr_block]) : can(cidrnetmask(c))])
+    error_message = "Each environment's cidr_block must be valid CIDR notation, e.g. 10.10.0.0/16."
   }
 }
 
 variable "default_region" {
-  description = "Default region for resources"
+  description = "Default region for resources. Null = org.regions.gcp from config/landing-zone.yaml, else europe-west1."
   type        = string
-  default     = "europe-west1"
+  default     = null
 }
 
 variable "terraform_admin_email" {
@@ -77,7 +90,7 @@ variable "terraform_admin_email" {
 }
 
 variable "tfc_organization" {
-  description = "Terraform Cloud organization that owns the upstream workspaces read via remote state."
+  description = "Terraform Cloud organization that owns the upstream workspaces read via remote state. Null = org.tfc.organization from config/landing-zone.yaml."
   type        = string
   default     = null
 }

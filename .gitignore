@@ -36,6 +36,11 @@ tfplan
 !examples/*.tfvars
 !examples/presets/*.tfvars
 
+# The single-source landing-zone configuration is COMMITTED (it holds no
+# secrets) so VCS-driven Terraform Cloud runs read it. Never ignore it.
+!config/landing-zone.yaml
+!config/tfc-workspaces.yaml
+
 # Include override files you do wish to add to version control using negated pattern
 # !example_override.tf
 

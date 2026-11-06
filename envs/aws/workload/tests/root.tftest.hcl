@@ -11,11 +11,13 @@ mock_provider "aws" {}
 mock_provider "aws" { alias = "us_east_1" }
 
 variables {
-  landing_zone_name       = "acme"
-  workload_account_key    = "workload_dev"
-  log_archive_bucket_name = null # sourced from the aws-security remote state (audit M7)
-  config_role_arn         = "arn:aws:iam::222222222222:role/config-recorder"
-  kms_key_arn             = "arn:aws:kms:eu-west-2:222222222222:key/abcd-1234"
+  # Isolate the suite from any committed config/landing-zone.yaml.
+  landing_zone_config_path = ""
+  landing_zone_name        = "acme"
+  workload_account_key     = "workload_dev"
+  log_archive_bucket_name  = null # sourced from the aws-security remote state (audit M7)
+  config_role_arn          = "arn:aws:iam::222222222222:role/config-recorder"
+  kms_key_arn              = "arn:aws:kms:eu-west-2:222222222222:key/abcd-1234"
 }
 
 run "consumes_remote_state_contracts" {
@@ -96,8 +98,8 @@ run "consumes_remote_state_contracts" {
 
   # The regional IPAM pool for this root's region is readable from the network contract.
   assert {
-    condition     = data.terraform_remote_state.aws_network.outputs.ipam_pool_ids[var.aws_region] == "ipam-pool-eu-west-2-0"
-    error_message = "aws_network ipam_pool_ids must expose a pool for var.aws_region"
+    condition     = data.terraform_remote_state.aws_network.outputs.ipam_pool_ids[local.aws_region] == "ipam-pool-eu-west-2-0"
+    error_message = "aws_network ipam_pool_ids must expose a pool for aws_region"
   }
 }
 

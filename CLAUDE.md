@@ -68,6 +68,19 @@ Full rationale, root inventory, and the any-combination matrix: [`docs/architect
 
 ---
 
+## Configuration
+
+One committed file, `config/landing-zone.yaml` (schema and placeholders: `config/landing-zone.example.yaml`; scaffold: `scripts/init-landing-zone.sh` / `make init`), feeds every root under `envs/**`, so VCS-driven TFC runs need no tfvars.
+
+- Each root has a `config.tf`: `local.lz` is the decoded file (path via `landing_zone_config_path`; `""` disables it), and `local.cfg` holds the config-only values.
+- Precedence: explicit variable (tfvars / TFC var) > config file > built-in default. Config-backed variables default to `null` and are read as `local.<name>`.
+- Validations check the *effective* value (`coalesce(var.x, local.cfg.x, ...)`), so an unset value or an untouched placeholder fails the plan, and the error names the config key.
+- tfc-admin derives the workspaces (`<cloud>.enabled`, `gcp.environments`, `aws.workload_environments`) and the project names from the same file. `config/tfc-workspaces.yaml` holds per-workspace overrides.
+- Tests isolate themselves with `landing_zone_config_path = ""`. Config-fallback suites use `tests/fixtures/landing-zone*.yaml`.
+- No secrets in it, ever.
+
+---
+
 ## Toolchain Requirements
 
 | Tool | Required version |

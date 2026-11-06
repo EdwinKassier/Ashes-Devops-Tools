@@ -33,9 +33,9 @@ locals {
 }
 
 provider "supabase" {
-  access_token = var.enable_supabase ? null : local.supabase_disabled_placeholder_token
+  access_token = local.enable_supabase ? null : local.supabase_disabled_placeholder_token
 }
 
 provider "vercel" {
-  api_token = var.enable_vercel ? null : local.vercel_disabled_placeholder_token
+  api_token = local.enable_vercel ? null : local.vercel_disabled_placeholder_token
 }

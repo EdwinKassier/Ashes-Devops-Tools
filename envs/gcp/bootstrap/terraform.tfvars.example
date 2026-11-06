@@ -1,6 +1,10 @@
 # gcp-bootstrap root — example variables.
 # Apply this root BEFORE gcp-organization (it produces the admin project,
 # Terraform admin SA, and WIF pools the other GCP roots read via remote state).
+# Single source: every value below that has a config/landing-zone.yaml key
+# (project_prefix, environments, tfc_organization, regions, ...) is read from
+# that committed file when left unset here. Set it here only to OVERRIDE it
+# (explicit variable > config file > built-in default).
 
 # Organization and billing
 domain          = "example.com"
@@ -37,8 +41,8 @@ enable_tfc_oidc  = true
 # terraform_admin_email = "terraform-admin@<admin-project-id>.iam.gserviceaccount.com"
 
 # Environments — only the KEYS are used here (each key gets its own
-# <prefix>-wl-<env>-plan / -apply SA pair, bound to TFC workspace gcp-workload-<env>). Keep this in sync with the same
-# variable on the gcp-organization root.
+# <prefix>-wl-<env>-plan / -apply SA pair, bound to TFC workspace gcp-workload-<env>).
+# Normally omitted: gcp.environments in config/landing-zone.yaml is the shared source.
 environments = {
   dev = {
     display_name            = "Development"

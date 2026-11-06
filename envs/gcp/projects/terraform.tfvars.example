@@ -1,6 +1,10 @@
 # gcp-projects root — example variables. Apply after gcp-organization and before
 # gcp-network-hub. Reads folders/tags/billing from gcp-organization and the admin
 # project/suffix from gcp-bootstrap via remote state.
+# Single source: every value below that has a config/landing-zone.yaml key
+# (project_prefix, environments, tfc_organization, regions, ...) is read from
+# that committed file when left unset here. Set it here only to OVERRIDE it
+# (explicit variable > config file > built-in default).
 
 project_prefix    = "verify-org"
 organization_name = "My Organization"
@@ -10,8 +14,8 @@ tfc_organization  = "your-tfc-org-name"
 # the gcp-projects plan/apply SAs (audit C2). Only a local human run may set it.
 # terraform_admin_email = "terraform-admin@<admin-project-id>.iam.gserviceaccount.com"
 
-# Keep `environments` identical across gcp-organization, gcp-projects and
-# gcp-network-hub — the keys drive folders, projects, and workspace names.
+# Normally omitted: gcp.environments in config/landing-zone.yaml is the shared
+# source. The keys drive folders, projects, and workspace names.
 environments = {
   dev = {
     display_name            = "Development"

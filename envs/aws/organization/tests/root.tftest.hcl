@@ -16,9 +16,11 @@
 mock_provider "aws" {}
 
 variables {
-  landing_zone_name     = "acme"
-  management_account_id = "111111111111" # C4 account guard
-  accounts = {                           # L2: non-placeholder emails
+  # Isolate the suite from any committed config/landing-zone.yaml.
+  landing_zone_config_path = ""
+  landing_zone_name        = "acme"
+  management_account_id    = "111111111111" # C4 account guard
+  accounts = {                              # L2: non-placeholder emails
     log_archive      = { email = "aws+log-archive@acme.test", ou = "Security" }
     security_tooling = { email = "aws+security-tooling@acme.test", ou = "Security" }
     network          = { email = "aws+network@acme.test", ou = "Infrastructure" }

@@ -8,7 +8,7 @@
 data "terraform_remote_state" "aws_organization" {
   backend = "cloud"
   config = {
-    organization = var.tfc_organization
+    organization = local.tfc_organization
     workspaces   = { name = var.organization_workspace_name }
   }
 }

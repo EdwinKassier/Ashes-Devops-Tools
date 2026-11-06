@@ -3,5 +3,5 @@
 # workspace layer; it declares no cloud provider, so it pulls in no cloud
 # credentials (the any-combination property holds).
 provider "tfe" {
-  organization = var.tfc_organization
+  organization = local.tfc_organization
 }

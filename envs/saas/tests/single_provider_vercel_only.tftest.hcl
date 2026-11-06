@@ -11,6 +11,11 @@
 
 mock_provider "vercel" {}
 
+# Isolate the suite from any committed config/landing-zone.yaml.
+variables {
+  landing_zone_config_path = ""
+}
+
 run "vercel_only_plans_without_supabase_token" {
   command = plan
 

@@ -19,11 +19,13 @@ mock_provider "google-beta" {}
 mock_provider "random" {}
 
 variables {
-  project_prefix   = "acme"
-  domain           = "example.com"
-  billing_account  = "000000-111111-222222"
-  admin_email      = "admin@example.com"
-  tfc_organization = "acme-tfc"
+  # Isolate the suite from any committed config/landing-zone.yaml.
+  landing_zone_config_path = ""
+  project_prefix           = "acme"
+  domain                   = "example.com"
+  billing_account          = "000000-111111-222222"
+  admin_email              = "admin@example.com"
+  tfc_organization         = "acme-tfc"
   environments = {
     dev = {
       display_name            = "Development"

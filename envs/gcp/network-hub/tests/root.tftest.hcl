@@ -9,9 +9,11 @@ mock_provider "google-beta" {}
 mock_provider "random" {}
 
 variables {
-  project_prefix         = "acme"
-  hub_vpc_cidr_block     = "10.0.0.0/16"
-  dns_hub_vpc_cidr_block = "10.1.0.0/16"
+  # Isolate the suite from any committed config/landing-zone.yaml.
+  landing_zone_config_path = ""
+  project_prefix           = "acme"
+  hub_vpc_cidr_block       = "10.0.0.0/16"
+  dns_hub_vpc_cidr_block   = "10.1.0.0/16"
   environments = {
     dev = {
       display_name            = "Development"

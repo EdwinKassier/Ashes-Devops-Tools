@@ -7,7 +7,8 @@
 **Prerequisites:** the four GCP control-plane roots — `gcp-bootstrap`, `gcp-organization`, `gcp-projects` and `gcp-network-hub` — have each been applied at least once. You have Terraform Cloud access.
 
 > **Five-root flow.** A new environment touches every GCP root, because each one derives
-> something from the shared `environments` map: `gcp-bootstrap` grants WIF trust to the
+> something from the shared `environments` map (`gcp.environments` in the committed
+> `config/landing-zone.yaml`, the single source every GCP root and tfc-admin reads): `gcp-bootstrap` grants WIF trust to the
 > `gcp-workload-<env>` workspace, `gcp-organization` creates the environment folder,
 > `gcp-projects` vends the host project and publishes `environment_config[<env>]`, and
 > `gcp-network-hub` adds the new host project to the hub VPC-SC perimeter. `gcp-workload-<env>` then builds the
@@ -18,11 +19,41 @@
 
 ## Steps
 
-### 1. Create a Terraform Cloud workspace
+### 1. Add the environment to `config/landing-zone.yaml`
 
-Preferred: add the environment key to the `environments` variable of the `tfc-admin` workspace
-(`envs/tfc-admin`) and let Terraform Cloud apply it — that creates `gcp-workload-{env}` with the
-right working directory, VCS trigger and variable sets.
+Per-environment CIDR, region, and other config are **not** set in `envs/gcp/workload` tfvars. They
+live in the `environments` map and reach `envs/gcp/workload` through the `environment_config` that
+`gcp-projects` publishes to remote state (`environment_config[var.environment]`). See
+[cidr-expansion.md](cidr-expansion.md) for the authoritative model.
+
+Add **one** entry under `gcp.environments` and commit it. All four control-plane roots and tfc-admin
+read the same map, so nothing needs to be kept in sync by hand:
+
+```yaml
+gcp:
+  environments:
+    # ... existing environments unchanged ...
+    staging:
+      display_name: Staging
+      region: europe-west1          # optional, default org.regions.gcp
+      cidr_block: 10.129.0.0/16     # must not overlap dev (10.128.0.0/16), the hub, or any other spoke
+      budget_monthly_limit: 500
+      is_production: false
+      iam_group_role_bindings: {}
+```
+
+Choose a non-overlapping CIDR. Refer to [network-topology.md](../architecture/network-topology.md) and
+the [CIDR plan](../architecture/cidr-plan.md) for the layout.
+
+> **Explicit `environments` variable?** If a workspace sets `environments` explicitly (tfvars or a TFC
+> variable), that value wins over the config file. Remove it so that the root reads the file, or add the
+> entry there too.
+
+### 2. Create the Terraform Cloud workspace (tfc-admin)
+
+Re-apply the `tfc-admin` workspace (`envs/tfc-admin`). It derives one `gcp-workload-<env>` workspace per
+`gcp.environments` key, with the right working directory, VCS trigger, variable sets and the
+`environment` variable set from the workspace name.
 
 Manual fallback, in the Terraform Cloud UI (or via the TFC API):
 
@@ -31,34 +62,6 @@ Manual fallback, in the Terraform Cloud UI (or via the TFC API):
 3. Set execution mode: **Remote** (or **Agent** if using self-hosted runners)
 4. Configure VCS connection to this repository, triggering on changes to `envs/gcp/workload/**`
 5. Set the Terraform working directory to `envs/gcp/workload`
-
-### 2. Add the environment to the shared `environments` map
-
-Per-environment CIDR, region, and other config are **not** set in `envs/gcp/workload` tfvars — they
-live in the `environments` map and reach `envs/gcp/workload` via the `environment_config` that
-`gcp-projects` publishes to remote state (`environment_config[var.environment]`). See
-[cidr-expansion.md](cidr-expansion.md) for the authoritative model.
-
-Add the same entry to the `environments` variable on **all four** control-plane workspaces —
-`gcp-bootstrap`, `gcp-organization`, `gcp-projects` and `gcp-network-hub` (a shared TFC variable
-set is the easiest way to keep them identical; the roots validate the map and a mismatch fails
-the plan):
-
-```hcl
-environments = {
-  # ... existing environments unchanged ...
-  staging = {
-    display_name            = "Staging"
-    region                  = "europe-west1"
-    cidr_block              = "10.129.0.0/16"   # must not overlap dev (10.128.0.0/16), the hub, or any other spoke
-    budget_monthly_limit    = 500
-    iam_group_role_bindings = {}
-  }
-}
-```
-
-Choose a non-overlapping CIDR. Refer to [network-topology.md](../architecture/network-topology.md) and
-the [CIDR plan](../architecture/cidr-plan.md) for the layout.
 
 ### 3. Apply the control-plane roots, in order, in Terraform Cloud
 
@@ -74,17 +77,14 @@ environment and no changes to existing ones.
 | 3 | `gcp-projects` | The host project; publishes `environment_config["staging"]` |
 | 4 | `gcp-network-hub` | Adds the new host project to the hub VPC-SC perimeter |
 
-### 4. Create a tfvars file for the new environment
+### 4. (Optional) Create a tfvars file for the new environment
+
+`environment` comes from tfc-admin, and `project_prefix` / `tfc_organization` / `region` come from
+`config/landing-zone.yaml`. A tfvars file is needed only for workload-specific inputs (Cloud Armor,
+app services, ...):
 
 ```bash
 cp examples/dev.tfvars examples/staging.tfvars
-```
-
-Edit `examples/staging.tfvars` and set at minimum:
-
-```hcl
-environment    = "staging"
-project_prefix = "ashes"
 ```
 
 Do **not** set a CIDR here — `envs/gcp/workload` reads it from the `gcp-projects` remote state (`environment_config`) automatically.
@@ -96,15 +96,11 @@ git add examples/staging.tfvars
 git commit -m "feat: add staging environment tfvars"
 ```
 
-### 5. Set workspace variables in Terraform Cloud
+### 5. Point the workspace at the tfvars file (only if you created one)
 
-In the `gcp-workload-staging` workspace, set the following as a **Terraform variable**:
-
-| Key | Value | Sensitive? |
-|-----|-------|------------|
-| `environment` | `staging` | No |
-
-And as an **environment variable**:
+tfc-admin already sets the `environment` Terraform variable. If you created a tfvars file in step 4, set
+this **environment variable**, either on the workspace or in `config/tfc-workspaces.yaml` with
+`category: env`:
 
 | Key | Value |
 |-----|-------|
@@ -144,7 +140,7 @@ gcloud compute networks describe $(terraform -chdir=envs/gcp/workload output -ra
 
 If the apply created partial resources, follow [Apply Recovery](apply-recovery.md) (roll forward first).
 To remove the environment entirely, queue a **destroy** run on the `gcp-workload-staging` workspace in
-Terraform Cloud, then remove the entry from the `environments` map and apply the control-plane roots
+Terraform Cloud, then remove the entry from `gcp.environments` in `config/landing-zone.yaml` and apply the control-plane roots
 in **reverse** order (`gcp-network-hub` → `gcp-projects` → `gcp-organization` → `gcp-bootstrap`). See
 [Teardown](teardown.md) for the `prevent_destroy` and CMEK caveats.
 

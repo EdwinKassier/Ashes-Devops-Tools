@@ -17,7 +17,9 @@ variables {
   enable_aws      = true
   enable_saas     = true
   saas_workspaces = ["web"]
-  # Keep the suite independent of any committed config/tfc-workspaces.yaml.
+  # Keep the suite independent of any committed config/tfc-workspaces.yaml
+  # and config/landing-zone.yaml.
+  landing_zone_config_path = ""
   workspace_variables_file = null
 }
 

@@ -18,7 +18,9 @@ mock_provider "aws" {
 }
 
 variables {
-  landing_zone_name = "acme"
+  # Isolate the suite from any committed config/landing-zone.yaml.
+  landing_zone_config_path = ""
+  landing_zone_name        = "acme"
 }
 
 run "consumes_remote_state_contract" {

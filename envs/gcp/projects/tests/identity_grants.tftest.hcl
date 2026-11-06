@@ -8,7 +8,9 @@ mock_provider "google-beta" {}
 mock_provider "random" {}
 
 variables {
-  project_prefix = "acme"
+  # Isolate the suite from any committed config/landing-zone.yaml.
+  landing_zone_config_path = ""
+  project_prefix           = "acme"
   environments = {
     dev = {
       display_name            = "Development"

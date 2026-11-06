@@ -11,7 +11,7 @@ locals {
       shared = local.shared_environment
     },
     {
-      for env_key, env in var.environments : env_key => {
+      for env_key, env in local.environments : env_key => {
         display_name            = env.display_name
         description             = "${env.display_name} environment"
         iam_group_role_bindings = env.iam_group_role_bindings
@@ -30,21 +30,21 @@ locals {
 module "organization" {
   source = "../../../modules/gcp/stages/organization"
 
-  domain               = var.domain
+  domain               = local.domain
   org_id               = data.google_organization.org.org_id
   customer_id          = data.google_organization.org.directory_customer_id
   admin_project_id     = local.bootstrap.admin_project_id
   admin_project_number = local.bootstrap.admin_project_number
   billing_account      = data.google_billing_account.billing.id
-  project_prefix       = var.project_prefix
+  project_prefix       = local.project_prefix
   environments         = local.organization_units
 
-  admin_email                      = var.admin_email
+  admin_email                      = local.admin_email
   break_glass_user                 = var.break_glass_user
   terraform_admin_email            = local.bootstrap.terraform_admin_email
   enable_legacy_admin_folder_roles = var.enable_legacy_admin_folder_roles
-  organization_admin_groups        = var.organization_admin_groups
-  billing_admin_groups             = var.billing_admin_groups
+  organization_admin_groups        = local.organization_admin_groups
+  billing_admin_groups             = local.billing_admin_groups
 
   # Standing admin is group-only; user principals only via the escape hatch.
   allow_user_principals_for_break_glass = var.allow_user_principals_for_break_glass
@@ -61,7 +61,7 @@ module "organization" {
   enable_scoped_access_policies = var.enable_scoped_access_policies
   workload_service_accounts = {
     for env, sas in try(local.bootstrap.workload_service_accounts, {}) : env => sas
-    if contains(keys(var.environments), env)
+    if contains(keys(local.environments), env)
   }
 
   # projects-apply delegated folder IAM, bound on each environment folder and the
@@ -70,8 +70,8 @@ module "organization" {
   delegated_workload_folder_roles = try(local.bootstrap.delegated_workload_folder_roles, [])
   delegated_network_folder_roles  = try(local.bootstrap.delegated_network_folder_roles, [])
 
-  default_region                        = var.default_region
-  allowed_regions                       = var.allowed_regions
+  default_region                        = local.default_region
+  allowed_regions                       = local.allowed_regions
   strict_folder_policy_environment_keys = var.strict_folder_policy_environment_keys
   enforce_os_login                      = var.enforce_os_login
   os_login_exempt_environment_keys      = var.os_login_exempt_environment_keys

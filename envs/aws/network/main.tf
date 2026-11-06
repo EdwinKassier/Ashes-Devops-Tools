@@ -9,7 +9,7 @@
 data "terraform_remote_state" "aws_organization" {
   backend = "cloud"
   config = {
-    organization = var.tfc_organization
+    organization = local.tfc_organization
     workspaces   = { name = var.organization_workspace_name }
   }
 }
@@ -27,8 +27,8 @@ module "aws_network_hub" {
   org_id  = data.terraform_remote_state.aws_organization.outputs.organization_id
   org_arn = local.org_arn
 
-  aws_region          = var.aws_region
-  aws_enabled_regions = var.aws_enabled_regions
+  aws_region          = local.aws_region
+  aws_enabled_regions = local.aws_enabled_regions
 
   top_cidr           = var.top_cidr
   regional_cidrs     = var.regional_cidrs
@@ -37,8 +37,8 @@ module "aws_network_hub" {
   availability_zones = var.availability_zones
   az_count           = var.az_count
 
-  flow_log_destination_arn = "arn:aws:s3:::${var.log_archive_bucket_name}"
-  log_bucket_name          = var.log_archive_bucket_name
+  flow_log_destination_arn = "arn:aws:s3:::${local.log_archive_bucket_name}"
+  log_bucket_name          = local.log_archive_bucket_name
 
   private_hosted_zone_name       = var.private_hosted_zone_name
   enable_network_firewall        = var.enable_network_firewall

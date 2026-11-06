@@ -1,5 +1,5 @@
 # Phase-3 per-env workload root. BOTH providers authenticate into the SAME per-env
-# workload account (var.workload_account_key) — via the workspace's TFC dynamic
+# workload account (local.workload_account_key) — via the workspace's TFC dynamic
 # credentials for that account's tfc-plan / tfc-apply role, or, for legacy runs,
 # by assuming var.assume_role_arn. The default provider operates in the workload's home
 # region; the us_east_1 alias operates in us-east-1 (same account) for the
@@ -7,7 +7,7 @@
 #
 # Declares ONLY the aws provider — no supabase/vercel (SaaS lives in envs/saas).
 provider "aws" {
-  region = var.aws_region
+  region = local.aws_region
   default_tags {
     tags = local.aws_default_tags
   }
@@ -16,7 +16,7 @@ provider "aws" {
   # the aws-organization TFC OIDC baseline), so no role hop happens and no
   # management-account principal is involved. Legacy/local runs that start from
   # management-account credentials set assume_role_arn to
-  # account_role_arns[var.workload_account_key] (OrganizationAccountAccessRole).
+  # account_role_arns[local.workload_account_key] (OrganizationAccountAccessRole).
   dynamic "assume_role" {
     for_each = var.assume_role_arn == null ? [] : [var.assume_role_arn]
     content {
@@ -26,7 +26,7 @@ provider "aws" {
   # Fail fast if the resolved credentials are not the target member account.
   # No try(): a missing account_ids key fails the plan loudly instead of
   # silently dropping the wrong-account guard.
-  allowed_account_ids = [data.terraform_remote_state.aws_organization.outputs.account_ids[var.workload_account_key]]
+  allowed_account_ids = [data.terraform_remote_state.aws_organization.outputs.account_ids[local.workload_account_key]]
 }
 
 provider "aws" {
@@ -40,7 +40,7 @@ provider "aws" {
   # the aws-organization TFC OIDC baseline), so no role hop happens and no
   # management-account principal is involved. Legacy/local runs that start from
   # management-account credentials set assume_role_arn to
-  # account_role_arns[var.workload_account_key] (OrganizationAccountAccessRole).
+  # account_role_arns[local.workload_account_key] (OrganizationAccountAccessRole).
   dynamic "assume_role" {
     for_each = var.assume_role_arn == null ? [] : [var.assume_role_arn]
     content {
@@ -50,7 +50,7 @@ provider "aws" {
   # Fail fast if the resolved credentials are not the target member account.
   # No try(): a missing account_ids key fails the plan loudly instead of
   # silently dropping the wrong-account guard.
-  allowed_account_ids = [data.terraform_remote_state.aws_organization.outputs.account_ids[var.workload_account_key]]
+  allowed_account_ids = [data.terraform_remote_state.aws_organization.outputs.account_ids[local.workload_account_key]]
 }
 
 # Canonical tag set written by EVERY aws provider in this root (default_tags).
@@ -62,16 +62,16 @@ provider "aws" {
 locals {
   # Environment for tags + naming: explicit var.environment, else derived from
   # workload_account_key (workload_dev -> dev).
-  environment = coalesce(var.environment, trimprefix(trimprefix(var.workload_account_key, "workload_"), "workload-"))
+  environment = coalesce(var.environment, trimprefix(trimprefix(local.workload_account_key, "workload_"), "workload-"))
 
   aws_default_tags = merge(
     {
       ManagedBy   = "terraform"
-      LandingZone = var.landing_zone_name
+      LandingZone = local.landing_zone_name
       Workspace   = "aws-workload-${local.environment}"
       Environment = local.environment
-      CostCenter  = var.cost_center
-      Owner       = var.owner
+      CostCenter  = local.cost_center
+      Owner       = local.owner
     },
     var.default_tags,
   )

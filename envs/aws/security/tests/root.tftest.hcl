@@ -13,9 +13,11 @@ mock_provider "aws" { alias = "log_archive" }
 mock_provider "aws" { alias = "forensics" }
 
 variables {
-  landing_zone_name       = "acme"
-  management_account_id   = "111111111111" # C4 account guard
-  log_archive_bucket_name = "ashes-org-log-archive"
+  # Isolate the suite from any committed config/landing-zone.yaml.
+  landing_zone_config_path = ""
+  landing_zone_name        = "acme"
+  management_account_id    = "111111111111" # C4 account guard
+  log_archive_bucket_name  = "ashes-org-log-archive"
   # key_admin_arn / config_role_arn / aggregator_role_arn omitted: the defaults
   # (own-account tfc-apply key admin, Config SLR, created aggregator role) must plan.
   # Security Lake off so meta_store_manager_role_arn is not required.

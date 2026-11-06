@@ -11,6 +11,11 @@
 
 mock_provider "supabase" {}
 
+# Isolate the suite from any committed config/landing-zone.yaml.
+variables {
+  landing_zone_config_path = ""
+}
+
 run "supabase_only_plans_without_vercel_token" {
   command = plan
 

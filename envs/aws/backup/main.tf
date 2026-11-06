@@ -7,7 +7,7 @@
 data "terraform_remote_state" "aws_organization" {
   backend = "cloud"
   config = {
-    organization = var.tfc_organization
+    organization = local.tfc_organization
     workspaces   = { name = var.organization_workspace_name }
   }
 }
@@ -28,7 +28,7 @@ module "aws_backup" {
   # the aws-organization root.
   workloads_ou_id = data.terraform_remote_state.aws_organization.outputs.ou_ids["Workloads"]
 
-  aws_region = var.aws_region
+  aws_region = local.aws_region
 
   vault_name          = var.vault_name
   kms_key_arn         = var.kms_key_arn

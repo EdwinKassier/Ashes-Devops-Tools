@@ -6,14 +6,14 @@
 # TFC "backup" dynamic-credential alias (its tfc-plan / tfc-apply role, no role
 # chaining) or, for local / legacy runs, by assuming account_role_arns["backup"].
 provider "aws" {
-  region = var.aws_region
+  region = local.aws_region
   default_tags {
     tags = local.aws_default_tags
   }
   # C4: fail fast if the resolved credentials are not the management (payer)
   # account. The default provider owns the org BACKUP_POLICY; the backup account
   # is reached via the aliased assume-role provider below.
-  allowed_account_ids = [var.management_account_id]
+  allowed_account_ids = [local.management_account_id]
   # TFC multi-configuration dynamic credentials (see var.tfc_aws_dynamic_credentials):
   # the default config is the management-account role this workspace runs as.
   shared_config_files = var.tfc_aws_dynamic_credentials == null ? null : [var.tfc_aws_dynamic_credentials.default.shared_config_file]
@@ -21,7 +21,7 @@ provider "aws" {
 
 provider "aws" {
   alias  = "backup"
-  region = var.aws_region
+  region = local.aws_region
   default_tags {
     tags = local.aws_default_tags
   }
@@ -51,11 +51,11 @@ locals {
   aws_default_tags = merge(
     {
       ManagedBy   = "terraform"
-      LandingZone = var.landing_zone_name
+      LandingZone = local.landing_zone_name
       Workspace   = "aws-backup"
       Environment = "shared"
-      CostCenter  = var.cost_center
-      Owner       = var.owner
+      CostCenter  = local.cost_center
+      Owner       = local.owner
     },
     var.default_tags,
   )

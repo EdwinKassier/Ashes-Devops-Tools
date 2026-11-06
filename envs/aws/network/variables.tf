@@ -2,8 +2,14 @@
 # Terraform Cloud + cross-root wiring
 # -----------------------------------------------------------------------------
 
+variable "landing_zone_config_path" {
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values."
+  type        = string
+  default     = null
+}
+
 variable "tfc_organization" {
-  description = "Terraform Cloud organization that owns this root's workspace and the aws-organization workspace it reads. Supplied to the backend via backend.hcl / TF_CLI_ARGS_init (kept out of the code so the same root works across orgs and CI)."
+  description = "Terraform Cloud organization that owns this root's workspace and the aws-organization workspace it reads. Supplied to the backend via backend.hcl / TF_CLI_ARGS_init (kept out of the code so the same root works across orgs and CI). Null = org.tfc.organization from config/landing-zone.yaml."
   type        = string
   default     = null
 }
@@ -19,24 +25,24 @@ variable "organization_workspace_name" {
 # -----------------------------------------------------------------------------
 
 variable "aws_region" {
-  description = "AWS region the network hub is deployed in and the region the default provider assumes the network-account role in."
+  description = "AWS region the network hub is deployed in and the region the default provider assumes the network-account role in. Null = org.regions.aws from config/landing-zone.yaml, else eu-west-2."
   type        = string
-  default     = "eu-west-2"
+  default     = null
 
   validation {
-    condition     = can(regex("^[a-z]{2}-[a-z]+-[1-9][0-9]?$", var.aws_region))
-    error_message = "aws_region must be a valid AWS region name, e.g. eu-west-2."
+    condition     = can(regex("^[a-z]{2}-[a-z]+-[1-9][0-9]?$", coalesce(var.aws_region, local.cfg.aws_region, "eu-west-2")))
+    error_message = "aws_region (or org.regions.aws in config/landing-zone.yaml) must be a valid AWS region name, e.g. eu-west-2."
   }
 }
 
 variable "aws_enabled_regions" {
-  description = "Regions IPAM operates in. Each becomes an operating region on the IPAM and gets its own regional pool."
+  description = "Regions IPAM operates in. Each becomes an operating region on the IPAM and gets its own regional pool. Null = aws.enabled_regions from config/landing-zone.yaml, else [\"eu-west-2\"]."
   type        = list(string)
-  default     = ["eu-west-2"]
+  default     = null
 
   validation {
-    condition     = length(var.aws_enabled_regions) > 0
-    error_message = "aws_enabled_regions must contain at least one region."
+    condition     = length(var.aws_enabled_regions != null ? var.aws_enabled_regions : coalesce(local.cfg.aws_enabled_regions, ["eu-west-2"])) > 0
+    error_message = "aws_enabled_regions (or aws.enabled_regions in config/landing-zone.yaml) must contain at least one region."
   }
 }
 
@@ -120,12 +126,13 @@ variable "az_count" {
 # -----------------------------------------------------------------------------
 
 variable "log_archive_bucket_name" {
-  description = "Deterministic name of the central log-archive bucket that receives VPC flow logs and Network Firewall logs. Cross-root naming contract: it MUST match the name the aws-organization and aws-security roots use."
+  description = "Deterministic name of the central log-archive bucket that receives VPC flow logs and Network Firewall logs. Cross-root naming contract: it MUST match the name the aws-organization and aws-security roots use. Null = aws.log_archive_bucket_name from config/landing-zone.yaml."
   type        = string
+  default     = null
 
   validation {
-    condition     = length(trimspace(var.log_archive_bucket_name)) > 0
-    error_message = "log_archive_bucket_name must be a non-empty S3 bucket name."
+    condition     = length(trimspace(coalesce(var.log_archive_bucket_name, local.cfg.log_archive_bucket_name, " "))) > 0
+    error_message = "log_archive_bucket_name is unset: set var.log_archive_bucket_name or aws.log_archive_bucket_name in config/landing-zone.yaml to a non-empty S3 bucket name."
   }
 }
 
@@ -158,38 +165,39 @@ variable "enable_network_access_analyzer" {
 # -----------------------------------------------------------------------------
 
 variable "landing_zone_name" {
-  description = "Landing-zone identifier written to the LandingZone tag on every resource. No default: set your own organization's identifier (same value in every AWS root; set it once in the tfc-admin common variable set via common_workspace_variables). The upstream placeholders \"ashes\" and \"my-org\" are rejected."
+  description = "Landing-zone identifier written to the LandingZone tag on every resource. Null = org.name from config/landing-zone.yaml (the single source shared by every AWS root). The upstream placeholders \"ashes\" and \"my-org\" are rejected."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^[a-z][a-z0-9-]{1,30}$", var.landing_zone_name))
-    error_message = "landing_zone_name must be 2-31 chars: a lowercase letter, then lowercase letters, digits or hyphens."
+    condition     = can(regex("^[a-z][a-z0-9-]{1,30}$", coalesce(var.landing_zone_name, local.cfg.landing_zone_name, "!unset")))
+    error_message = "landing_zone_name is unset or invalid: set var.landing_zone_name or org.name in config/landing-zone.yaml. It must be 2-31 chars: a lowercase letter, then lowercase letters, digits or hyphens."
   }
 
   validation {
-    condition     = !contains(["ashes", "my-org"], lower(var.landing_zone_name))
+    condition     = !contains(["ashes", "my-org"], lower(coalesce(var.landing_zone_name, local.cfg.landing_zone_name, "!unset")))
     error_message = "landing_zone_name is still an upstream placeholder (ashes / my-org). Set your own landing-zone identifier."
   }
 }
 
 variable "cost_center" {
-  description = "Value of the CostCenter cost-allocation tag on every resource in this root."
+  description = "Value of the CostCenter cost-allocation tag on every resource in this root. Null = org.cost_center from config/landing-zone.yaml, else \"platform\"."
   type        = string
-  default     = "platform"
+  default     = null
 
   validation {
-    condition     = length(trimspace(var.cost_center)) > 0
+    condition     = length(trimspace(var.cost_center != null ? var.cost_center : coalesce(local.cfg.cost_center, "platform"))) > 0
     error_message = "cost_center must be a non-empty string (empty tag values cause perpetual diffs)."
   }
 }
 
 variable "owner" {
-  description = "Value of the Owner cost-allocation tag on every resource in this root (team or distribution list)."
+  description = "Value of the Owner cost-allocation tag on every resource in this root (team or distribution list). Null = org.owner from config/landing-zone.yaml, else \"platform-team\"."
   type        = string
-  default     = "platform-team"
+  default     = null
 
   validation {
-    condition     = length(trimspace(var.owner)) > 0
+    condition     = length(trimspace(var.owner != null ? var.owner : coalesce(local.cfg.owner, "platform-team"))) > 0
     error_message = "owner must be a non-empty string (empty tag values cause perpetual diffs)."
   }
 }

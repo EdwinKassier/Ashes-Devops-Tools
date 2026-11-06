@@ -1,6 +1,10 @@
 # gcp-network-hub root — example variables. Apply last of the control-plane
 # roots, after gcp-projects. Reads host project IDs from gcp-projects and
 # folders/org_id from gcp-organization via remote state.
+# Single source: every value below that has a config/landing-zone.yaml key
+# (project_prefix, environments, tfc_organization, regions, ...) is read from
+# that committed file when left unset here. Set it here only to OVERRIDE it
+# (explicit variable > config file > built-in default).
 
 project_prefix   = "verify-org"
 tfc_organization = "your-tfc-org-name"
@@ -16,9 +20,8 @@ dns_hub_vpc_cidr_block = "10.1.0.0/16"
 # vpc_sc_access_policy_name = "1234567890"
 # vpc_sc_enable_dry_run     = true
 
-# Keep `environments` identical across gcp-organization, gcp-projects and
-# gcp-network-hub. Only the keys are used here (to wire each env's host project
-# into the hub).
+# Normally omitted: gcp.environments in config/landing-zone.yaml is the shared
+# source. Only the keys are used here (to wire each env's host project into the hub).
 environments = {
   dev = {
     display_name            = "Development"

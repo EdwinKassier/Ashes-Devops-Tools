@@ -105,11 +105,20 @@ With Option A, retire the static key after run #1 and move the workspace to Opti
 
 ### Step 3 — Create the AWS TFC workspaces with `tfc-admin` (pass 1)
 
-Do not hand-create workspaces. [`envs/tfc-admin`](../../envs/tfc-admin/README.md) declares every AWS workspace (`aws-organization`, `aws-security`, `aws-network`, `aws-identity`, `aws-shared-services`, `aws-backup`, one `aws-workload-<env>` per `environments` key) with VCS wiring, working directories, trigger patterns, remote-state sharing and dynamic-credential env vars. Hand-create only the `tfc-admin` workspace itself (working directory `envs/tfc-admin`, a `TFE_TOKEN` sensitive env var), then apply it with:
+Do not hand-create workspaces. [`envs/tfc-admin`](../../envs/tfc-admin/README.md) declares every AWS workspace (`aws-organization`, `aws-security`, `aws-network`, `aws-identity`, `aws-shared-services`, `aws-backup`, one `aws-workload-<env>` per `aws.workload_environments` key) with VCS wiring, working directories, trigger patterns, remote-state sharing and dynamic-credential env vars. Hand-create only the `tfc-admin` workspace itself (working directory `envs/tfc-admin`, a `TFE_TOKEN` sensitive env var).
+
+The cloud flag, the workload environments and their account keys come from the committed `config/landing-zone.yaml` (`scripts/init-landing-zone.sh --clouds aws ...`, or copy [`config/landing-zone.example.yaml`](../../config/landing-zone.example.yaml)):
+
+```yaml
+aws:
+  enabled: true                 # tfc-admin enable_aws
+  workload_environments:
+    dev: {account_key: workload_dev}   # aws-workload-dev + its workload_account_key
+```
+
+Then apply tfc-admin with only the inputs the file does not hold:
 
 ```hcl
-enable_aws                    = true          # every enable_* flag defaults to false
-environments                  = { dev = { aws_account_key = "workload_dev" } }
 aws_management_plan_role_arn  = "arn:aws:iam::<mgmt-account-id>:role/tfc-mgmt-plan"
 aws_management_apply_role_arn = "arn:aws:iam::<mgmt-account-id>:role/tfc-mgmt-apply"
 vcs_repo                      = { identifier = "<org>/<repo>", oauth_token_id = "ot-..." }
@@ -117,9 +126,9 @@ vcs_repo                      = { identifier = "<org>/<repo>", oauth_token_id = 
 
 Pass 1 sets `TFC_AWS_PROVIDER_AUTH` / `TFC_AWS_PLAN_ROLE_ARN` / `TFC_AWS_APPLY_ROLE_ARN` on `aws-organization` only. `aws-security` and `aws-backup` also run their default provider as the management role, but they get **no** credentials until their member-account alias roles exist (pass 2), because a multi-account workspace with only the default configuration cannot plan.
 
-**Project name must match the role trust.** tfc-admin puts the AWS workspaces in the project `landing-zone-aws` (`project_name_prefix` + `aws`; `enable_projects = true`). Use that project in the Step 2 trust `sub` and set `tfc_project = "landing-zone-aws"` on `aws-organization`, or every AssumeRoleWithWebIdentity is denied.
+**Project name must match the role trust.** tfc-admin puts the AWS workspaces in the project `landing-zone-aws` (`project_name_prefix` + `aws`, or `org.tfc.aws_project`; `enable_projects = true`). `aws-organization`'s `tfc_project` now reads the same config key and defaults to `landing-zone-aws` (it used to default to `Default Project`), so the two agree out of the box. Use that project in the Step 2 trust `sub` as well, or every AssumeRoleWithWebIdentity is denied.
 
-**VCS-driven runs get no local tfvars.** Put each workspace's Terraform inputs in a committed `config/tfc-workspaces.yaml` (copy [`config/tfc-workspaces.example.yaml`](../../config/tfc-workspaces.example.yaml)); tfc-admin sets them as workspace variables (`workspace_variables_file`). Secrets are rejected there: pass them through tfc-admin `workspace_variables` (written write-only). Org-wide values such as `landing_zone_name` (required in every AWS root, no default) belong in `common_workspace_variables`.
+**VCS-driven runs get no local tfvars.** Every AWS root reads the committed `config/landing-zone.yaml`: `landing_zone_name` (`org.name`), `owner`, `cost_center`, `aws_region` (`org.regions.aws`), `tfc_organization`, `management_account_id`, `log_archive_bucket_name`, the region lists, the account map and the two role ARNs. An explicit variable still wins. Put any remaining per-workspace inputs in a committed `config/tfc-workspaces.yaml` (copy [`config/tfc-workspaces.example.yaml`](../../config/tfc-workspaces.example.yaml)); tfc-admin sets them as workspace variables (`workspace_variables_file`). Secrets are rejected there: pass them through tfc-admin `workspace_variables` (written write-only). Org-wide values not in the config file belong in `common_workspace_variables`.
 
 **Run #1 state note (the chicken-and-egg).** With Option B the first `aws-organization` run executes remotely in TFC. With Option A (or no TFC credentials yet) set tfc-admin `workspace_execution_modes = { "aws-organization" = "local" }`: the run then executes on your machine with the credentials in your shell while state still lands in the TFC workspace. Switch it back (remove the entry, re-apply tfc-admin) once the Option B roles exist. The `-backend=false` local-state-then-migrate route also works, but is rarely needed now that tfc-admin creates the workspace up front.
 
@@ -165,7 +174,7 @@ Default bindings:
 | `network` | `aws-network` |
 | `shared_services` | `aws-identity`, `aws-shared-services` |
 | `backup` | `aws-backup` |
-| *(each workload account)* | **not bound by default** — add e.g. `workload_dev = { workspaces = ["aws-workload-dev"] }` and set tfc-admin `environments.dev.aws_account_key = "workload_dev"` |
+| *(each workload account)* | **not bound by default** — derived from `aws.workload_environments` in `config/landing-zone.yaml` (e.g. `dev: {account_key: workload_dev}` binds `workload_dev` to `aws-workload-dev`), or add e.g. `workload_dev = { workspaces = ["aws-workload-dev"] }` to `tfc_workspace_bindings` |
 
 The role ARNs are published as **`tfc_plan_role_arns`** and **`tfc_apply_role_arns`**. Both are maps keyed by account key:
 
@@ -185,7 +194,7 @@ terraform -chdir=envs/aws/organization output -json tfc_apply_role_arns
 | `aws-shared-services` | `true` | `tfc_plan_role_arns["shared_services"]` | `tfc_apply_role_arns["shared_services"]` |
 | `aws-workload-<env>` | `true` | `tfc_plan_role_arns["<workload key>"]` | `tfc_apply_role_arns["<workload key>"]` |
 
-tfc-admin sets all of these for you on pass 2 (`aws_organization_outputs_from_tfc = true`); the tables document what it writes. Single-account workspaces map to an account through `tfc_workspace_bindings`, `environments[<env>].aws_account_key` (which also sets `workload_account_key` on `aws-workload-<env>`) or `aws_workspace_account_keys`.
+tfc-admin sets all of these for you on pass 2 (`aws_organization_outputs_from_tfc = true`); the tables document what it writes. Single-account workspaces map to an account through `tfc_workspace_bindings`, `aws.workload_environments[<env>].account_key` in the config file or tfc-admin `environments[<env>].aws_account_key` (either also sets `workload_account_key` on `aws-workload-<env>`) or `aws_workspace_account_keys`.
 
 **Multi-account roots** (`aws-security`, `aws-backup`) use TFC [multiple dynamic-credential configurations](https://developer.hashicorp.com/terraform/cloud-docs/workspaces/dynamic-provider-credentials/specifying-multiple-configurations). tfc-admin writes the default configuration from `aws_management_plan_role_arn` / `aws_management_apply_role_arn` and one configuration per alias from the `aws-organization` outputs (override with `aws_alias_role_arns`). It never maps these workspaces to a member account's role as their default, and it withholds all of their AWS credentials until every alias has roles:
 
@@ -216,13 +225,13 @@ Follow this order top to bottom. **Manual gates** are inline and must be complet
 
 1. **Phase-0** — management account, bootstrap identity, `aws-organization` workspace (Steps 1–3 above).
 
-2. **Apply `aws-organization`.** Set its inputs (committed `config/tfc-workspaces.yaml`, or `terraform.tfvars` from `terraform.tfvars.example` for a local run): `landing_zone_name`, real unique root emails for every account, `terraform_run_role_arn` and `break_glass_role_arn` (see Step 2), `log_archive_bucket_name`, and a `tfc_workspace_bindings` entry per workload account, then apply:
+2. **Apply `aws-organization`.** Its inputs come from the committed `config/landing-zone.yaml`: `org.name`, real unique root emails for every account in `aws.accounts` / `aws.workload_accounts`, `aws.terraform_run_role_arn` and `aws.break_glass_role_arn` (see Step 2), and `aws.log_archive_bucket_name`. The workload bindings are derived from `aws.workload_environments`. Explicit variables (`config/tfc-workspaces.yaml`, or `terraform.tfvars` for a local run) override them. Then apply:
 
    ```bash
    terraform -chdir=envs/aws/organization apply
    ```
 
-   Also set `tfc_organization`, plus `tfc_project = "landing-zone-aws"` when tfc-admin manages the workspaces (it must match the workspace project literally). The apply creates the org, the OU tree, the foundational accounts, the guardrails and the **TFC OIDC baseline StackSet**. It publishes `account_ids`, `account_role_arns`, `tfc_plan_role_arns` and `tfc_apply_role_arns`.
+   `tfc_organization` comes from `org.tfc.organization`. `tfc_project` defaults to the tfc-admin AWS project (`landing-zone-aws`, or `org.tfc.aws_project`), which must match the workspace project literally. The apply creates the org, the OU tree, the foundational accounts, the guardrails and the **TFC OIDC baseline StackSet**. It publishes `account_ids`, `account_role_arns`, `tfc_plan_role_arns` and `tfc_apply_role_arns`.
 
    > **StackSets trusted access.** The organization module enables `member.org.stacksets.cloudformation.amazonaws.com` trusted access. If the StackSet create fails with an organizations-access error, run `aws cloudformation activate-organizations-access` once in the management account and re-apply. It is idempotent, and it is the AWS-recommended way to enable StackSets trusted access.
 

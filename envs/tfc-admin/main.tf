@@ -2,16 +2,17 @@
 #
 # Workspaces, projects, VCS wiring + trigger patterns, explicit remote-state
 # sharing, health assessments, dynamic-credential env vars, shared variable sets,
-# team access and an optional OPA policy set are managed from the same
-# environments map the cloud roots consume, so a new environment or cloud is a
-# reviewed change, not console clicking. Apply it FIRST (the tfc-admin workspace
+# team access and an optional OPA policy set are derived from the same
+# config/landing-zone.yaml the cloud roots read (config.tf), so a new
+# environment or cloud is a reviewed one-file change, not console clicking. Apply it FIRST (the tfc-admin workspace
 # itself is created by hand once, then it manages all the others; optionally it
 # adopts itself via manage_tfc_admin_workspace). It never applies cloud
 # infrastructure and declares no cloud provider.
 #
-# Cloud selection: enable_gcp / enable_aws / enable_saas decide which workspaces
-# exist (all default false; at least one must be enabled), so an AWS-only or
-# SaaS-only adopter gets no dead gcp-* workspaces.
+# Cloud selection: enable_gcp / enable_aws / enable_saas (else gcp/aws/saas
+# .enabled in the config file; all default false; at least one must be enabled)
+# decide which workspaces exist, so an AWS-only or SaaS-only adopter gets no
+# dead gcp-* workspaces.
 
 locals {
   # Module domains each root consumes. A module-only PR must trigger a plan on
@@ -24,19 +25,19 @@ locals {
     platform = ["modules/tfc/**"]
   }
 
-  gcp_control_plane = var.enable_gcp ? {
+  gcp_control_plane = local.enable_gcp ? {
     "gcp-bootstrap"    = { dir = "envs/gcp/bootstrap", cloud = "gcp", desc = "GCP phase-0: admin project, Terraform admin SA, WIF pools", tags = ["cloud:gcp", "layer:bootstrap"] }
     "gcp-organization" = { dir = "envs/gcp/organization", cloud = "gcp", desc = "GCP org: folders, org policy, KMS, audit, billing", tags = ["cloud:gcp", "layer:control-plane"] }
     "gcp-projects"     = { dir = "envs/gcp/projects", cloud = "gcp", desc = "GCP host/spoke projects", tags = ["cloud:gcp", "layer:control-plane"] }
     "gcp-network-hub"  = { dir = "envs/gcp/network-hub", cloud = "gcp", desc = "GCP hub VPC, DNS anchor, hub VPC-SC", tags = ["cloud:gcp", "layer:control-plane"] }
   } : {}
 
-  gcp_workloads = var.enable_gcp ? {
-    for env in keys(var.environments) :
+  gcp_workloads = local.enable_gcp ? {
+    for env in local.gcp_environment_keys :
     "gcp-workload-${env}" => { dir = "envs/gcp/workload", cloud = "gcp", desc = "GCP ${env} workload", tags = ["cloud:gcp", "layer:workload", "env:${env}"] }
   } : {}
 
-  aws_control_plane = var.enable_aws ? {
+  aws_control_plane = local.enable_aws ? {
     "aws-organization"    = { dir = "envs/aws/organization", cloud = "aws", desc = "AWS org, SCP/RCP, account factory", tags = ["cloud:aws", "layer:control-plane"] }
     "aws-security"        = { dir = "envs/aws/security", cloud = "aws", desc = "AWS security baseline + log archive", tags = ["cloud:aws", "layer:control-plane"] }
     "aws-network"         = { dir = "envs/aws/network", cloud = "aws", desc = "AWS shared networking (TGW/IPAM)", tags = ["cloud:aws", "layer:control-plane"] }
@@ -45,13 +46,13 @@ locals {
     "aws-backup"          = { dir = "envs/aws/backup", cloud = "aws", desc = "AWS centralized backup", tags = ["cloud:aws", "layer:control-plane"] }
   } : {}
 
-  aws_workloads = var.enable_aws ? {
-    for env in keys(var.environments) :
+  aws_workloads = local.enable_aws ? {
+    for env in keys(local.aws_environments) :
     "aws-workload-${env}" => { dir = "envs/aws/workload", cloud = "aws", desc = "AWS ${env} workload", tags = ["cloud:aws", "layer:workload", "env:${env}"] }
   } : {}
 
-  saas = var.enable_saas ? {
-    for name in var.saas_workspaces :
+  saas = local.enable_saas ? {
+    for name in local.saas_workspaces :
     "saas-${name}" => { dir = "envs/saas", cloud = "saas", desc = "SaaS ${name} (Supabase/Vercel)", tags = ["cloud:saas", "layer:workload"] }
   } : {}
 
@@ -192,7 +193,7 @@ locals {
   aws_workspace_accounts = {
     for ws, acct in merge(
       { for ws, accts in local.aws_bound_workspaces : ws => sort(accts)[0] },
-      { for env, e in var.environments : "aws-workload-${env}" => e.aws_account_key if e.aws_account_key != null },
+      { for env, e in local.aws_environments : "aws-workload-${env}" => e.aws_account_key if e.aws_account_key != null },
       var.aws_workspace_account_keys,
     ) : ws => acct if !contains(local.aws_management_workspaces, ws)
   }
@@ -286,8 +287,8 @@ locals {
     {
       for ws in local.aws_workload_names : ws => merge(
         { environment = { value = trimprefix(ws, "aws-workload-"), category = "terraform", hcl = false, sensitive = false, description = "Environment key (derived from the workspace name)." } },
-        try(var.environments[trimprefix(ws, "aws-workload-")].aws_account_key, null) == null ? {} : {
-          workload_account_key = { value = var.environments[trimprefix(ws, "aws-workload-")].aws_account_key, category = "terraform", hcl = false, sensitive = false, description = "aws-organization account key this workload deploys into (environments[*].aws_account_key)." }
+        try(local.aws_environments[trimprefix(ws, "aws-workload-")].aws_account_key, null) == null ? {} : {
+          workload_account_key = { value = local.aws_environments[trimprefix(ws, "aws-workload-")].aws_account_key, category = "terraform", hcl = false, sensitive = false, description = "aws-organization account key this workload deploys into (environments[*].aws_account_key or aws.workload_environments[*].account_key)." }
         },
       )
     },
@@ -409,13 +410,13 @@ resource "terraform_data" "input_contract" {
 # ── Upstream outputs (second pass of the bootstrap) ─────────────────────────
 data "tfe_outputs" "gcp_bootstrap" {
   count        = var.gcp_bootstrap_outputs_from_tfc ? 1 : 0
-  organization = var.tfc_organization
+  organization = local.tfc_organization
   workspace    = "gcp-bootstrap"
 }
 
 data "tfe_outputs" "aws_organization" {
   count        = var.aws_organization_outputs_from_tfc ? 1 : 0
-  organization = var.tfc_organization
+  organization = local.tfc_organization
   workspace    = "aws-organization"
 }
 
@@ -424,15 +425,15 @@ data "tfe_outputs" "aws_organization" {
 data "tfe_workspace" "tfc_admin" {
   count        = length(local.tfc_admin_reads) > 0 && !var.manage_tfc_admin_workspace ? 1 : 0
   name         = var.tfc_admin_workspace_name
-  organization = var.tfc_organization
+  organization = local.tfc_organization
 }
 
 # ── Projects + team access ──────────────────────────────────────────────────
 resource "tfe_project" "this" {
   for_each = local.project_keys
 
-  organization = var.tfc_organization
-  name         = "${var.project_name_prefix}${each.key}"
+  organization = local.tfc_organization
+  name         = local.project_names[each.key]
   description  = "Landing-zone ${each.key} workspaces (managed by tfc-admin)."
 }
 
@@ -449,14 +450,14 @@ resource "tfe_team_project_access" "this" {
 # workspace, instead of being copied onto each one. Workspace variables still
 # override set values (priority = false).
 resource "tfe_variable_set" "common" {
-  organization = var.tfc_organization
-  name         = "${var.project_name_prefix}common"
+  organization = local.tfc_organization
+  name         = "${local.project_name_prefix}common"
   description  = "Values shared by every landing-zone workspace (managed by tfc-admin)."
 }
 
 resource "tfe_variable" "common" {
   for_each = merge(
-    { tfc_organization = { value = var.tfc_organization, category = "terraform", hcl = false, sensitive = false, description = "TFC organization (remote-state reads).", version = 1 } },
+    { tfc_organization = { value = local.tfc_organization, category = "terraform", hcl = false, sensitive = false, description = "TFC organization (remote-state reads).", version = 1 } },
     var.common_workspace_variables,
   )
 
@@ -478,14 +479,14 @@ module "workspace" {
   for_each = local.workspaces
 
   name              = each.key
-  organization      = var.tfc_organization
+  organization      = local.tfc_organization
   description       = each.value.desc
   working_directory = each.value.dir
   tag_names         = each.value.tags
   terraform_version = var.terraform_version
   project_id        = var.enable_projects ? tfe_project.this[each.value.cloud].id : null
 
-  vcs_repo              = var.vcs_repo
+  vcs_repo              = local.vcs_repo
   file_triggers_enabled = true
   trigger_patterns      = concat(["${each.value.dir}/**"], local.module_paths[each.value.cloud])
 
@@ -523,19 +524,21 @@ resource "tfe_workspace_settings" "this" {
 import {
   for_each = var.manage_tfc_admin_workspace && var.import_tfc_admin_workspace ? toset([var.tfc_admin_workspace_name]) : toset([])
   to       = module.workspace[each.key].tfe_workspace.this
-  id       = "${var.tfc_organization}/${each.key}"
+  id       = "${local.tfc_organization}/${each.key}"
 }
 
-# ── Optional OPA policy set (advisory) ──────────────────────────────────────
+# ── Optional OPA policy set (mixed mandatory / advisory) ───────────────────
 # Sourced from policies/opa/ in this repo via VCS. Enforcement level is set per
-# policy in policies/opa/policies.hcl (advisory by default). Requires an HCP
-# Terraform tier with policy enforcement and var.vcs_repo.
+# policy in policies/opa/policies.hcl: 7 mandatory (public exposure, identity,
+# encryption) + 3 advisory. The set is overridable, so a mandatory failure can
+# be overridden by a user with "Manage Policy Overrides". Requires a PAID HCP
+# Terraform tier with policy enforcement (not the free tier) and a vcs_repo.
 resource "tfe_policy_set" "opa" {
   count = var.enable_policy_sets ? 1 : 0
 
-  organization        = var.tfc_organization
-  name                = "${var.project_name_prefix}opa-guardrails"
-  description         = "Landing-zone OPA guardrails from policies/opa (advisory)."
+  organization        = local.tfc_organization
+  name                = "${local.project_name_prefix}opa-guardrails"
+  description         = "Landing-zone OPA guardrails from policies/opa (mixed mandatory/advisory; see policies.hcl)."
   kind                = "opa"
   overridable         = true
   policy_tool_version = var.opa_version
@@ -543,7 +546,7 @@ resource "tfe_policy_set" "opa" {
   workspace_ids       = [for k in sort(keys(module.workspace)) : module.workspace[k].id]
 
   dynamic "vcs_repo" {
-    for_each = var.vcs_repo == null ? [] : [var.vcs_repo]
+    for_each = local.vcs_repo == null ? [] : [local.vcs_repo]
     content {
       identifier                 = vcs_repo.value.identifier
       branch                     = vcs_repo.value.branch
@@ -554,8 +557,8 @@ resource "tfe_policy_set" "opa" {
 
   lifecycle {
     precondition {
-      condition     = var.vcs_repo != null
-      error_message = "enable_policy_sets = true requires vcs_repo (the policy set is sourced from policies/opa in the repo)."
+      condition     = local.vcs_repo != null
+      error_message = "enable_policy_sets = true requires vcs_repo (or org.tfc.vcs_repo in config/landing-zone.yaml): the policy set is sourced from policies/opa in the repo."
     }
   }
 }

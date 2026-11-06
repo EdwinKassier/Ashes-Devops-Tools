@@ -1,3 +1,7 @@
+# Single source: every value below that has a config/landing-zone.yaml key
+# (project_prefix, environments, tfc_organization, regions, ...) is read from
+# that committed file when left unset here. Set it here only to OVERRIDE it
+# (explicit variable > config file > built-in default).
 tfc_organization             = "your-tfc-org-name"
 organization_workspace_name  = "gcp-organization"
 terraform_admin_email        = "terraform-admin@your-project.iam.gserviceaccount.com"

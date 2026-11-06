@@ -278,3 +278,11 @@ e2e-aws: ## REAL apply: run tests/e2e/aws in the ambient (sandbox!) AWS account,
 		$(TERRAFORM) -chdir=tests/e2e/aws test || rc=$$?; \
 	./tests/e2e/scripts/cleanup-aws.sh '$(E2E_AWS_REGION)' '$(E2E_RUN_ID)' || [ $$rc -ne 0 ] || rc=1; \
 	exit $$rc
+
+# ---------------------------------------------------------------------------
+# Single-source configuration (config/landing-zone.yaml)
+# ---------------------------------------------------------------------------
+.PHONY: init
+
+init: ## Scaffold config/landing-zone.yaml: make init ARGS="--org-name acme --clouds gcp,aws ..."
+	@./scripts/init-landing-zone.sh $(ARGS)

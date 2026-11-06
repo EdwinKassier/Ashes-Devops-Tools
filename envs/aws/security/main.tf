@@ -8,7 +8,7 @@
 data "terraform_remote_state" "aws_organization" {
   backend = "cloud"
   config = {
-    organization = var.tfc_organization
+    organization = local.tfc_organization
     workspaces   = { name = var.organization_workspace_name }
   }
 }
@@ -36,10 +36,10 @@ module "aws_security" {
   identity_account_id         = var.identity_account_id
   forensics_account_id        = data.terraform_remote_state.aws_organization.outputs.account_ids["forensics"]
 
-  aws_region          = var.aws_region
-  aws_enabled_regions = var.aws_enabled_regions
+  aws_region          = local.aws_region
+  aws_enabled_regions = local.aws_enabled_regions
 
-  log_archive_bucket_name           = var.log_archive_bucket_name
+  log_archive_bucket_name           = local.log_archive_bucket_name
   key_admin_arn                     = var.key_admin_arn
   key_admin_role_name               = var.key_admin_role_name
   kms_key_user_arns                 = var.kms_key_user_arns

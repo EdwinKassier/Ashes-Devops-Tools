@@ -7,6 +7,13 @@
 # workspace variable. Copy this file to config/tfc-workspaces.yaml, edit it,
 # commit it, and re-apply tfc-admin.
 #
+# Relationship to config/landing-zone.yaml: that file is the SINGLE SOURCE for
+# shared values (org name/prefix, TFC org, regions, environments, AWS accounts),
+# which every root reads directly. Use THIS file only for per-workspace values
+# the landing-zone config does not hold, or to override it for one workspace (a
+# workspace variable beats the config file). The aws-organization entries below
+# are only needed when you do not keep them in config/landing-zone.yaml.
+#
 # Rules:
 #   - Top-level key `workspaces`, then workspace name => variable name => value.
 #   - Scalars (string/number/bool) become plain string variables.

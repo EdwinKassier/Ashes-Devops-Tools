@@ -22,7 +22,7 @@ output "project_numbers" {
 output "environment_config" {
   description = "Per-environment config: folder, host project, region, CIDR, labels, environment tag value, is_production, and the environment's folder-scoped VPC-SC access policy ID."
   value = {
-    for env_key, env in var.environments : env_key => {
+    for env_key, env in local.environments : env_key => {
       folder_id           = local.org.folders[env_key].id
       folder_name         = local.org.folders[env_key].display_name
       host_project_id     = module.projects.project_ids["${env_key}-host"]

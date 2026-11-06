@@ -1,0 +1,23 @@
+# Test fixture: config-file fallback for the gcp-projects root (config.tftest.hcl).
+version: 1
+org:
+  prefix: cfgco
+  display_name: Config Co
+  regions:
+    gcp: europe-west2
+  tfc:
+    organization: cfg-tfc
+gcp:
+  environments:
+    dev:
+      cidr_block: 10.10.0.0/16
+      budget_monthly_limit: 100
+      labels:
+        tier: non-production
+      iam_group_role_bindings:
+        devs@cfg.example.com: [roles/viewer]
+    prod:
+      display_name: Production
+      region: europe-west1
+      cidr_block: 10.30.0.0/16
+      is_production: true

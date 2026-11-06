@@ -8,7 +8,7 @@
 data "terraform_remote_state" "organization" {
   backend = "cloud"
   config = {
-    organization = var.tfc_organization
+    organization = local.tfc_organization
     workspaces = {
       name = var.organization_workspace_name
     }
@@ -22,7 +22,7 @@ data "terraform_remote_state" "organization" {
 data "terraform_remote_state" "projects" {
   backend = "cloud"
   config = {
-    organization = var.tfc_organization
+    organization = local.tfc_organization
     workspaces = {
       name = var.projects_workspace_name
     }
@@ -32,7 +32,7 @@ data "terraform_remote_state" "projects" {
 data "terraform_remote_state" "network_hub" {
   backend = "cloud"
   config = {
-    organization = var.tfc_organization
+    organization = local.tfc_organization
     workspaces = {
       name = var.network_hub_workspace_name
     }
@@ -116,9 +116,9 @@ module "host" {
   source = "../../../modules/gcp/stages/host"
 
   project_id     = local.env_config.host_project_id
-  project_prefix = var.project_prefix
+  project_prefix = local.project_prefix
   region         = local.env_config.region
-  vpc_name       = "${var.project_prefix}-${var.environment}-vpc"
+  vpc_name       = "${local.project_prefix}-${var.environment}-vpc"
   vpc_cidr_block = local.env_config.cidr_block
 
   enable_networking          = true
@@ -190,7 +190,7 @@ module "budget" {
 
   billing_account      = data.terraform_remote_state.organization.outputs.billing_account
   project_id           = local.env_config.host_project_id
-  project_name         = "${var.project_prefix}-${var.environment}"
+  project_name         = "${local.project_prefix}-${var.environment}"
   monthly_budget_limit = var.monthly_budget_limit
   currency_code        = var.budget_currency
   region               = local.env_config.region
@@ -325,7 +325,7 @@ data "terraform_remote_state" "saas" {
   count   = var.enable_saas_secret_bridge ? 1 : 0
   backend = "cloud"
   config = {
-    organization = var.tfc_organization
+    organization = local.tfc_organization
     workspaces = {
       name = var.saas_workspace_name
     }
