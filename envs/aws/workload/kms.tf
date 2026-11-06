@@ -54,6 +54,19 @@ locals {
         }
       },
       {
+        # CloudWatch alarms publish to the app-services alarm topic, which is
+        # encrypted with this key; without this grant notifications are
+        # silently dropped.
+        Sid       = "CloudWatchAlarmsToEncryptedTopic"
+        Effect    = "Allow"
+        Principal = { Service = "cloudwatch.amazonaws.com" }
+        Action    = ["kms:Decrypt", "kms:GenerateDataKey*"]
+        Resource  = "*"
+        Condition = {
+          StringEquals = { "aws:SourceAccount" = local.workload_account_id }
+        }
+      },
+      {
         Sid       = "EcrThisAccount"
         Effect    = "Allow"
         Principal = { AWS = "arn:${local.kms_partition}:iam::${local.workload_account_id}:root" }

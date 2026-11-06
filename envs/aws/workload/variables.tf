@@ -412,6 +412,24 @@ variable "services" {
       deletion_protection     = optional(bool, true)
       skip_final_snapshot     = optional(bool, false)
     }))
+
+    # Per-service CloudWatch alarms (CPU, memory, 5xx, p99 latency, DLQ).
+    alarms = optional(object({
+      enabled             = optional(bool, true)
+      cpu_threshold       = optional(number, 85)
+      memory_threshold    = optional(number, 85)
+      error_5xx_threshold = optional(number, 10)
+      p99_latency_seconds = optional(number, 2)
+    }), {})
+
+    # Optional per-service SQS work queue with a dead-letter queue; the task
+    # role may use only its own queue (QUEUE_URL is injected).
+    queue = optional(object({
+      enabled                    = optional(bool, false)
+      visibility_timeout_seconds = optional(number, 30)
+      max_receive_count          = optional(number, 5)
+      message_retention_seconds  = optional(number, 345600)
+    }), {})
   }))
   default = {}
 }

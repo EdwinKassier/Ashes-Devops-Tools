@@ -72,7 +72,7 @@ default AWS footprint is about USD 1,500/month before any workload, see
 
 | Preset | Root | What it changes | Approx saving |
 |---|---|---|---|
-| `nonprod-aws-network.tfvars` | `envs/aws/network` | `az_count = 1`, `enable_network_firewall = false` | ~USD 800/mo |
+| `nonprod-aws-network.tfvars` | `envs/aws/network` | `az_count = 2` (the minimum), `enable_network_firewall = false` | ~USD 800/mo |
 | `nonprod-aws-security.tfvars` | `envs/aws/security` | `enable_security_lake = false`, `enabled_security_services = []`, `config_record_all_supported = false`, `guardduty_enable_ebs_malware_protection = false` | ~USD 70-300/mo |
 
 ```bash
@@ -83,6 +83,6 @@ terraform -chdir=envs/aws/network plan \
 ## Warning
 
 Do not use the cost presets for production. They remove inline traffic inspection
-(Network Firewall), cross-AZ redundancy (`az_count = 1`), two security services
+(Network Firewall), a third AZ (`az_count = 2`, the minimum the Resolver endpoints allow), two security services
 (Macie, Inspector), and reduce Config/GuardDuty coverage. Keep the defaults, and
 add the hardening presets, for any production environment.

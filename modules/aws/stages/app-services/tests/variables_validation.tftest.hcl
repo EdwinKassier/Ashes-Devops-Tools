@@ -119,3 +119,59 @@ run "rejects_blank_bootstrap_image" {
 
   expect_failures = [var.bootstrap_image]
 }
+
+run "alarm_cpu_threshold_over_100_rejected" {
+  command         = plan
+  expect_failures = [var.services]
+  variables {
+    services = { orders = { alarms = { cpu_threshold = 150 } } }
+  }
+}
+
+run "alarm_zero_p99_rejected" {
+  command         = plan
+  expect_failures = [var.services]
+  variables {
+    services = { orders = { alarms = { p99_latency_seconds = 0 } } }
+  }
+}
+
+run "queue_visibility_timeout_out_of_range_rejected" {
+  command         = plan
+  expect_failures = [var.services]
+  variables {
+    services = { orders = { queue = { enabled = true, visibility_timeout_seconds = 50000 } } }
+  }
+}
+
+run "queue_zero_max_receive_count_rejected" {
+  command         = plan
+  expect_failures = [var.services]
+  variables {
+    services = { orders = { queue = { enabled = true, max_receive_count = 0 } } }
+  }
+}
+
+run "bad_alarm_topic_arn_rejected" {
+  command         = plan
+  expect_failures = [var.alarm_sns_topic_arn]
+  variables {
+    alarm_sns_topic_arn = "oncall"
+  }
+}
+
+run "bad_queue_kms_key_rejected" {
+  command         = plan
+  expect_failures = [var.queue_kms_key_arn]
+  variables {
+    queue_kms_key_arn = "alias/queue"
+  }
+}
+
+run "bad_alarm_topic_kms_key_rejected" {
+  command         = plan
+  expect_failures = [var.alarm_topic_kms_key_arn]
+  variables {
+    alarm_topic_kms_key_arn = "alias/aws/sns"
+  }
+}

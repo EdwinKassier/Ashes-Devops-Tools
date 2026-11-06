@@ -101,8 +101,8 @@ variable "az_count" {
   default     = 2
 
   validation {
-    condition     = var.az_count >= 1 && var.az_count <= 3
-    error_message = "az_count must be between 1 and 3."
+    condition     = var.az_count >= 2 && var.az_count <= 3
+    error_message = "az_count must be between 2 and 3 (the Route 53 Resolver endpoints need subnets in at least two AZs)."
   }
 
   validation {

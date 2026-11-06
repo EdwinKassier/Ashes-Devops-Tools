@@ -7,7 +7,9 @@
  * project: an Artifact Registry docker repo, a least-privilege runtime SA, a Cloud
  * Run v2 service (internal ingress, Direct VPC egress, scale-to-zero, secrets from
  * Secret Manager), an optional private-IP Cloud SQL Postgres with IAM auth, and an
- * optional GitHub deploy identity (WIF, bound on the immutable repository_id).
+ * optional GitHub deploy identity (WIF, bound on the immutable repository_id),
+ * per-service Cloud Monitoring alert policies (5xx ratio, p99 latency) and an
+ * optional Pub/Sub topic + subscription + dead-letter topic.
  * An optional GKE Autopilot cluster is available at environment level.
  * Everything is behind flags: the default (services = {}) creates nothing.
  */
@@ -15,6 +17,14 @@
 locals {
   services_with_db     = { for k, s in var.services : k => s if s.database != null }
   services_with_github = { for k, s in var.services : k => s if s.github != null }
+  services_with_alerts = var.enable_alerts ? { for k, s in var.services : k => s if s.alerts.enabled } : {}
+  services_with_pubsub = { for k, s in var.services : k => s if s.pubsub.enabled }
+
+  # Deterministic Pub/Sub names (env vars + outputs without read-back).
+  pubsub_topic        = { for k, s in local.services_with_pubsub : k => "projects/${var.project_id}/topics/${k}" }
+  pubsub_subscription = { for k, s in local.services_with_pubsub : k => "projects/${var.project_id}/subscriptions/${k}-sub" }
+  pubsub_dlq_topic    = { for k, s in local.services_with_pubsub : k => "projects/${var.project_id}/topics/${k}-dlq" }
+  pubsub_agent        = var.project_number == null ? null : "serviceAccount:service-${var.project_number}@gcp-sa-pubsub.iam.gserviceaccount.com"
 
   # Deterministic names (known at plan time; no read-back of computed attributes).
   runtime_sa_email = { for k, s in var.services : k => "${k}-run@${var.project_id}.iam.gserviceaccount.com" }
@@ -79,6 +89,8 @@ locals {
     length(local.services_with_db) > 0 ? ["sqladmin.googleapis.com", "servicenetworking.googleapis.com"] : [],
     var.enable_app_deploy_wif ? ["iam.googleapis.com", "iamcredentials.googleapis.com", "sts.googleapis.com"] : [],
     var.enable_gke_autopilot ? ["container.googleapis.com"] : [],
+    length(local.services_with_alerts) > 0 ? ["monitoring.googleapis.com"] : [],
+    length(local.services_with_pubsub) > 0 ? ["pubsub.googleapis.com"] : [],
   ))
 }
 
@@ -207,7 +219,11 @@ module "service" {
       DB_INSTANCE_CONNECTION_NAME = "${var.project_id}:${var.region}:${local.db_instance_name[each.key]}"
       DB_IAM_USER                 = trimsuffix(local.runtime_sa_email[each.key], ".gserviceaccount.com")
       DB_NAME                     = try(each.value.database.databases[0], "")
-    }
+    },
+    each.value.pubsub.enabled ? {
+      PUBSUB_TOPIC        = local.pubsub_topic[each.key]
+      PUBSUB_SUBSCRIPTION = local.pubsub_subscription[each.key]
+    } : {}
   )
   secret_env_vars = [for name, ref in each.value.secrets : { name = name, secret = ref.secret, version = ref.version }]
 
@@ -403,6 +419,225 @@ resource "google_service_account_iam_member" "deploy_act_as_runtime" {
   member             = "serviceAccount:${local.deploy_sa_email[each.key]}"
 
   depends_on = [google_service_account.deploy]
+}
+
+# =============================================================================
+# ALERT POLICIES — per service, on its Cloud Run revisions
+# =============================================================================
+#
+# Native resources rather than modules/gcp/monitoring/alert-policy: that module
+# builds project-wide policies (every Cloud Run service in one condition) with
+# rate-based thresholds; the golden path needs one policy per service, filtered
+# on its service_name, with a 5xx RATIO.
+
+resource "google_monitoring_alert_policy" "error_ratio" {
+  for_each = local.services_with_alerts
+
+  project      = var.project_id
+  display_name = "${var.environment}/${each.key}: 5xx ratio > ${format("%.3g", each.value.alerts.error_ratio_threshold * 100)}%"
+  combiner     = "OR"
+  severity     = "ERROR"
+
+  conditions {
+    display_name = "${each.key} 5xx / all requests"
+    condition_threshold {
+      filter             = "resource.type = \"cloud_run_revision\" AND resource.labels.service_name = \"${each.key}\" AND metric.type = \"run.googleapis.com/request_count\" AND metric.labels.response_code_class = \"5xx\""
+      denominator_filter = "resource.type = \"cloud_run_revision\" AND resource.labels.service_name = \"${each.key}\" AND metric.type = \"run.googleapis.com/request_count\""
+      comparison         = "COMPARISON_GT"
+      threshold_value    = each.value.alerts.error_ratio_threshold
+      duration           = each.value.alerts.duration
+
+      aggregations {
+        alignment_period     = "300s"
+        per_series_aligner   = "ALIGN_RATE"
+        cross_series_reducer = "REDUCE_SUM"
+        group_by_fields      = ["resource.labels.service_name"]
+      }
+      denominator_aggregations {
+        alignment_period     = "300s"
+        per_series_aligner   = "ALIGN_RATE"
+        cross_series_reducer = "REDUCE_SUM"
+        group_by_fields      = ["resource.labels.service_name"]
+      }
+
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  notification_channels = var.alert_notification_channel_ids
+
+  alert_strategy {
+    auto_close = "1800s"
+  }
+
+  documentation {
+    content   = "More than ${format("%.3g", each.value.alerts.error_ratio_threshold * 100)}% of requests to Cloud Run service ${each.key} (${var.environment}) returned 5xx for ${each.value.alerts.duration}. Check the latest revision's logs and roll back if it was a deploy."
+    mime_type = "text/markdown"
+  }
+
+  user_labels = merge(var.labels, { service = each.key })
+
+  depends_on = [google_project_service.this]
+}
+
+resource "google_monitoring_alert_policy" "latency_p99" {
+  for_each = local.services_with_alerts
+
+  project      = var.project_id
+  display_name = "${var.environment}/${each.key}: p99 latency > ${each.value.alerts.p99_latency_ms}ms"
+  combiner     = "OR"
+  severity     = "WARNING"
+
+  conditions {
+    display_name = "${each.key} p99 request latency"
+    condition_threshold {
+      filter          = "resource.type = \"cloud_run_revision\" AND resource.labels.service_name = \"${each.key}\" AND metric.type = \"run.googleapis.com/request_latencies\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = each.value.alerts.p99_latency_ms
+      duration        = each.value.alerts.duration
+
+      aggregations {
+        alignment_period     = "300s"
+        per_series_aligner   = "ALIGN_PERCENTILE_99"
+        cross_series_reducer = "REDUCE_MAX"
+        group_by_fields      = ["resource.labels.service_name"]
+      }
+
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  notification_channels = var.alert_notification_channel_ids
+
+  alert_strategy {
+    auto_close = "1800s"
+  }
+
+  documentation {
+    content   = "p99 request latency of Cloud Run service ${each.key} (${var.environment}) has exceeded ${each.value.alerts.p99_latency_ms}ms for ${each.value.alerts.duration}."
+    mime_type = "text/markdown"
+  }
+
+  user_labels = merge(var.labels, { service = each.key })
+
+  depends_on = [google_project_service.this]
+}
+
+# =============================================================================
+# PUB/SUB — optional per service: topic, subscription, dead-letter topic
+# =============================================================================
+
+resource "google_pubsub_topic" "service" {
+  for_each = local.services_with_pubsub
+
+  project      = var.project_id
+  name         = each.key
+  kms_key_name = var.pubsub_kms_key_name
+  labels       = merge(var.labels, { service = each.key })
+
+  depends_on = [google_project_service.this]
+}
+
+resource "google_pubsub_topic" "dead_letter" {
+  for_each = local.services_with_pubsub
+
+  project      = var.project_id
+  name         = "${each.key}-dlq"
+  kms_key_name = var.pubsub_kms_key_name
+  labels       = merge(var.labels, { service = each.key })
+
+  depends_on = [google_project_service.this]
+}
+
+resource "google_pubsub_subscription" "service" {
+  for_each = local.services_with_pubsub
+
+  project                    = var.project_id
+  name                       = "${each.key}-sub"
+  topic                      = google_pubsub_topic.service[each.key].id
+  ack_deadline_seconds       = each.value.pubsub.ack_deadline_seconds
+  message_retention_duration = each.value.pubsub.message_retention_duration
+
+  dead_letter_policy {
+    dead_letter_topic     = google_pubsub_topic.dead_letter[each.key].id
+    max_delivery_attempts = each.value.pubsub.max_delivery_attempts
+  }
+
+  retry_policy {
+    minimum_backoff = "10s"
+    maximum_backoff = "600s"
+  }
+
+  # Never expire for inactivity (the default deletes an idle subscription after 31 days).
+  expiration_policy {
+    ttl = ""
+  }
+
+  labels = merge(var.labels, { service = each.key })
+}
+
+# Messages on a topic with no subscription are dropped: this keeps dead letters.
+resource "google_pubsub_subscription" "dead_letter" {
+  for_each = local.services_with_pubsub
+
+  project                    = var.project_id
+  name                       = "${each.key}-dlq-sub"
+  topic                      = google_pubsub_topic.dead_letter[each.key].id
+  ack_deadline_seconds       = 60
+  message_retention_duration = "604800s"
+
+  expiration_policy {
+    ttl = ""
+  }
+
+  labels = merge(var.labels, { service = each.key })
+}
+
+# Runtime SA: publish to ITS topic, consume ITS subscription. Nothing project-wide.
+resource "google_pubsub_topic_iam_member" "runtime_publisher" {
+  for_each = local.services_with_pubsub
+
+  project = var.project_id
+  topic   = google_pubsub_topic.service[each.key].name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${local.runtime_sa_email[each.key]}"
+
+  depends_on = [google_service_account.runtime]
+}
+
+resource "google_pubsub_subscription_iam_member" "runtime_subscriber" {
+  for_each = local.services_with_pubsub
+
+  project      = var.project_id
+  subscription = google_pubsub_subscription.service[each.key].name
+  role         = "roles/pubsub.subscriber"
+  member       = "serviceAccount:${local.runtime_sa_email[each.key]}"
+
+  depends_on = [google_service_account.runtime]
+}
+
+# Dead-letter forwarding: the Pub/Sub service agent must publish to the DLQ
+# topic and acknowledge (subscribe) on the source subscription.
+resource "google_pubsub_topic_iam_member" "agent_dead_letter_publisher" {
+  for_each = local.services_with_pubsub
+
+  project = var.project_id
+  topic   = google_pubsub_topic.dead_letter[each.key].name
+  role    = "roles/pubsub.publisher"
+  member  = local.pubsub_agent
+}
+
+resource "google_pubsub_subscription_iam_member" "agent_source_subscriber" {
+  for_each = local.services_with_pubsub
+
+  project      = var.project_id
+  subscription = google_pubsub_subscription.service[each.key].name
+  role         = "roles/pubsub.subscriber"
+  member       = local.pubsub_agent
 }
 
 # =============================================================================

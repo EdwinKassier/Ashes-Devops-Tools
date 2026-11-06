@@ -104,6 +104,25 @@ release metadata for a Terraform Cloud run.
 - **The RCP data perimeter now covers ECR and CloudWatch Logs** (`ecr:*`, `logs:*`).
 - **`organization-policy` gains a `policy_contents` output**, for evidence and tests.
 
+#### Golden paths and test depth
+
+- **Per-service observability and messaging in both app-services golden paths:**
+  - **AWS:** per-service CloudWatch alarms (CPU, memory, 5xx, p99 latency, DLQ depth). They notify
+    a KMS-encrypted SNS topic, and the workload key policy now lets `cloudwatch.amazonaws.com`
+    use the key. An optional SQS queue with a DLQ gives the task role access to its own queue only
+    (`services[*].alarms` / `.queue`).
+  - **GCP:** per-service alert policies (5xx ratio, p99 latency) with notification channels from
+    the root (`app_alert_notification_channel_ids`). An optional Pub/Sub topic and subscription
+    with a dead-letter topic gives the runtime SA access to its own topic and subscription only
+    (`services[*].alerts` / `.pubsub`).
+- **Validation and contract suites for every AWS layer root** (backup, identity,
+  shared-services, network, security): 10 new suites, about 70 runs.
+- **`aws-network` `az_count` minimum is now 2.** One AZ passed validation but could not plan
+  (the Route 53 Resolver needs two subnets). The `nonprod-aws-network` preset that used 1 is
+  fixed.
+- **SaaS root errors name the `saas.stacks` / `saas.defaults` keys.** The hub VPC-SC access policy
+  now comes from config (`gcp.network.vpc_sc_access_policy`).
+
 #### First-run fixes from the boilerplate re-score
 
 - **The default `production` profile now plans `aws-security`.** The Security Lake metastore role

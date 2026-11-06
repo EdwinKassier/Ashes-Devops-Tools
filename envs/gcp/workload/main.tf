@@ -462,6 +462,10 @@ module "app_services" {
   app_deploy_wif_pool_id     = var.app_deploy_wif_pool_id
   github_repository_owner_id = var.github_repository_owner_id
 
+  # Per-service Cloud Monitoring alerts (5xx ratio, p99 latency).
+  enable_alerts                  = var.enable_app_alerts
+  alert_notification_channel_ids = var.app_alert_notification_channel_ids
+
   enable_gke_autopilot              = var.enable_gke_autopilot
   gke_master_ipv4_cidr_block        = var.gke_master_ipv4_cidr_block
   gke_master_authorized_networks    = var.gke_master_authorized_networks

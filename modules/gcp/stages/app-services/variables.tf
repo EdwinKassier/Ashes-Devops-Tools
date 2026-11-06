@@ -32,6 +32,13 @@ variable "project_number" {
     condition     = !var.enable_app_deploy_wif || var.project_number != null
     error_message = "project_number is required when enable_app_deploy_wif = true."
   }
+
+  validation {
+    # The Pub/Sub service agent (service-<number>@gcp-sa-pubsub) is granted
+    # dead-letter forwarding, so its email needs the project number.
+    condition     = alltrue([for k, s in var.services : !s.pubsub.enabled]) || var.project_number != null
+    error_message = "project_number is required when any service sets pubsub.enabled = true (dead-letter forwarding grants the Pub/Sub service agent)."
+  }
 }
 
 variable "region" {
@@ -223,6 +230,26 @@ variable "services" {
       ref           = optional(string)
       environment   = optional(string)
     }))
+
+    # Cloud Monitoring alert policies for this service (with var.enable_alerts):
+    # 5xx request ratio and p99 request latency of its Cloud Run revisions.
+    alerts = optional(object({
+      enabled               = optional(bool, true)
+      error_ratio_threshold = optional(number, 0.05) # 5xx / all requests, (0, 1]
+      p99_latency_ms        = optional(number, 2000)
+      duration              = optional(string, "300s") # sustained before it fires
+    }), {})
+
+    # Pub/Sub topic `<name>` + pull subscription `<name>-sub` with a dead-letter
+    # topic `<name>-dlq` (+ `<name>-dlq-sub` so dead letters are retained). The
+    # runtime SA may publish to ITS topic and consume ITS subscription only;
+    # PUBSUB_TOPIC / PUBSUB_SUBSCRIPTION are injected as env vars.
+    pubsub = optional(object({
+      enabled                    = optional(bool, false)
+      ack_deadline_seconds       = optional(number, 60)
+      max_delivery_attempts      = optional(number, 5)
+      message_retention_duration = optional(string, "604800s")
+    }), {})
   }))
   default = {}
 
@@ -264,6 +291,56 @@ variable "services" {
   validation {
     condition     = var.enable_app_deploy_wif || alltrue([for k, s in var.services : s.github == null])
     error_message = "a service sets `github` (a deploy identity) but enable_app_deploy_wif = false. Enable the app-deploy WIF pool."
+  }
+
+  validation {
+    condition = alltrue([for k, s in var.services : (
+      s.alerts.error_ratio_threshold > 0 && s.alerts.error_ratio_threshold <= 1 &&
+      s.alerts.p99_latency_ms > 0 &&
+      can(regex("^[0-9]+s$", s.alerts.duration))
+    )])
+    error_message = "services[*].alerts: error_ratio_threshold must be in (0, 1], p99_latency_ms > 0, duration a seconds string such as \"300s\"."
+  }
+
+  validation {
+    condition = alltrue([for k, s in var.services : (
+      s.pubsub.ack_deadline_seconds >= 10 && s.pubsub.ack_deadline_seconds <= 600 &&
+      s.pubsub.max_delivery_attempts >= 5 && s.pubsub.max_delivery_attempts <= 100 &&
+      can(regex("^[0-9]+s$", s.pubsub.message_retention_duration))
+    )])
+    error_message = "services[*].pubsub: ack_deadline_seconds must be 10-600, max_delivery_attempts 5-100 (Pub/Sub limits), message_retention_duration a seconds string such as \"604800s\"."
+  }
+}
+
+# -----------------------------------------------------------------------------
+# OBSERVABILITY + MESSAGING
+# -----------------------------------------------------------------------------
+
+variable "enable_alerts" {
+  description = "Create per-service Cloud Monitoring alert policies (Cloud Run 5xx ratio and p99 latency; thresholds and per-service opt-out in services[*].alerts) and enable monitoring.googleapis.com. Only takes effect when services is non-empty."
+  type        = bool
+  default     = true
+}
+
+variable "alert_notification_channel_ids" {
+  description = "Existing Cloud Monitoring notification channels (projects/<p>/notificationChannels/<id>) every service alert policy notifies. Empty creates the policies with no channel (incidents are visible in the console only)."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for c in var.alert_notification_channel_ids : can(regex("^projects/[^/]+/notificationChannels/[^/]+$", c))])
+    error_message = "alert_notification_channel_ids entries must be notification channel resource names: projects/<project>/notificationChannels/<id>."
+  }
+}
+
+variable "pubsub_kms_key_name" {
+  description = "Optional CMEK (projects/<p>/locations/<l>/keyRings/<r>/cryptoKeys/<k>) for every service topic and dead-letter topic. Null uses Google-managed encryption. The Pub/Sub service agent needs roles/cloudkms.cryptoKeyEncrypterDecrypter on the key first."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.pubsub_kms_key_name == null || can(regex("^projects/[^/]+/locations/[^/]+/keyRings/[^/]+/cryptoKeys/[^/]+$", coalesce(var.pubsub_kms_key_name, "x")))
+    error_message = "pubsub_kms_key_name must be null or a KMS crypto key resource name."
   }
 }
 

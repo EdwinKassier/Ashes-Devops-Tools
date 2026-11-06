@@ -610,3 +610,16 @@ variable "private_service_connect_target" {
     error_message = "private_service_connect_target must be all-apis or vpc-sc."
   }
 }
+
+variable "enable_app_alerts" {
+  description = "Per-service Cloud Monitoring alert policies (5xx ratio, p99 latency) for app_services. Per-service thresholds go in app_services[*].alerts."
+  type        = bool
+  default     = true
+}
+
+variable "app_alert_notification_channel_ids" {
+  description = "Cloud Monitoring notification channel IDs (projects/<p>/notificationChannels/<id>) the app alert policies notify. Empty = alerts fire without notifying anyone."
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
