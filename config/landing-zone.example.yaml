@@ -187,6 +187,11 @@ aws:
     - eu-west-2
   enabled_regions:
     - eu-west-2
+  # Email addresses subscribed to the org-guard-alerts topic (aws-organization,
+  # us-east-1): org-wide detection disabled, or org-trail selectors / tags
+  # changed. Each address must confirm its subscription. Absent = no emails.
+  # guard_alert_emails:
+  #   - secops@example.com
   # GitHub users/orgs whose Actions OIDC tokens may assume roles in any account
   # (RCP pin: sub must be repo:<owner>/*). List every owner whose repos deploy
   # here through app-services. Empty or absent leaves GitHub federation unpinned.

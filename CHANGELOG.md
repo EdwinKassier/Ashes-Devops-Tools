@@ -34,6 +34,15 @@ release metadata for a Terraform Cloud run.
 
 ### Wave A of the [2026-11-06 enterprise boilerplate audit](docs/audit/2026-11-06-enterprise-boilerplate-audit.md)
 
+- **The management aws-security role cannot disable org detection (S-H1).** Disabling delegated
+  admins or trusted access and deregistering delegated admins now need the off-by-default
+  `enable_security_service_teardown` gate, which is a separate inline policy. The role is
+  also denied trail untagging and resource-policy edits, CIS-alarm deletion and disabling,
+  and trail log-group, metric-filter and retention deletion. `aws-organization` owns the new
+  `org-guard-alerts` topic (us-east-1, CMK-encrypted, `aws.guard_alert_emails`). Its EventBridge
+  rule covers those calls and org-trail selector and tag changes, with forwarding from every
+  other enabled region.
+
 #### Fixed
 
 - **Every root's backend now initialises (C1).** All 14 `envs/**/backend.tf`, plus both clone-me

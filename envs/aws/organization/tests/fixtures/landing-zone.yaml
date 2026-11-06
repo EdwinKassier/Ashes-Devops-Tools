@@ -12,6 +12,8 @@ org:
 aws:
   management_account_id: "012345678901"
   allowed_regions: [eu-west-1, eu-west-2]
+  enabled_regions: [eu-west-1, us-east-1]
+  guard_alert_emails: [secops@cfg.test]
   terraform_run_role_arn: arn:aws:iam::012345678901:role/tfc-mgmt-apply
   break_glass_role_arn: arn:aws:iam::012345678901:role/break-glass
   log_archive_bucket_name: cfgco-org-log-archive

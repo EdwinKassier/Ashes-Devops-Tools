@@ -76,6 +76,12 @@ Because closure is slow and hard to reverse, prefer removing accounts from the o
 - **Network:** detach all spoke VPC attachments from the Transit Gateway before destroying `aws-network`, or the TGW destroy fails.
 - **Identity:** remove IAM Identity Center account assignments and permission sets (`aws-identity`) before touching the accounts they reference.
 - **Delegated admin:** the security services (GuardDuty/Config/Security Hub) are delegated to Security Tooling; de-register delegation as part of `aws-security` destroy, and expect member auto-enrollment to need cleanup.
+  - The dedicated `tfc-mgmt-aws-security-apply` role **cannot** disable org-wide detection by default (`Disable*AdminAccount`, `DisableAWSServiceAccess`, `DeregisterDelegatedAdministrator`), so an `aws-security` destroy fails with AccessDenied until you open the teardown gate.
+  - To open it, set `enable_security_service_teardown = true` on `aws-organization` and apply it (reviewed PR). This attaches the `tfc-apply-security-teardown` inline policy to the aws-security apply role. Then destroy `aws-security`.
+  - Close the gate straight after: set it back to `false` and apply `aws-organization`.
+  - Every disable/deregister call emails the `org-guard-alerts` topic (`aws.guard_alert_emails`), in every enabled region. Expect those alerts during teardown.
+  - The `org-guard-alerts` topic, rules and forwarder role belong to `aws-organization`, so they outlive `aws-security`.
+  - The gate does **not** cover the org trail itself. The aws-security role is still denied deleting or stopping the trail, deleting or silencing its CIS alarms, and deleting its log group, metric filters or retention. Those deletes need break-glass or the phase-0 management role.
 - **Org last:** `aws-organization` can only be destroyed once every member account has been removed/closed and no OU still contains accounts.
 
 ---

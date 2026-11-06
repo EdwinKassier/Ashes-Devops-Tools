@@ -50,6 +50,19 @@ override_data {
   values = { account_id = "111111111111" }
 }
 
+# Guard-alert ARNs are computed; pin them so the policies are plan-known.
+override_resource {
+  target          = aws_sns_topic.guard_alerts
+  override_during = plan
+  values          = { arn = "arn:aws:sns:us-east-1:111111111111:org-guard-alerts" }
+}
+
+override_resource {
+  target          = aws_iam_role.guard_alerts_forwarder
+  override_during = plan
+  values          = { arn = "arn:aws:iam::111111111111:role/org-guard-alerts-forwarder" }
+}
+
 run "composes_accounts_and_guardrails" {
   command = plan
 
@@ -283,4 +296,143 @@ run "github_provider_only_when_pinned" {
   # create_github_oidc_provider = false omits the provider; the template body
   # is unknown at plan here (it embeds computed account IDs).
   expect_failures = [check.github_federation_pinned]
+}
+
+# Guard alerts: owned by aws-organization (out of the aws-security role's
+# reach), in us-east-1 where Organizations events arrive.
+run "guard_topic_in_us_east_1_with_events_kms_grant" {
+  command = plan
+
+  variables {
+    guard_alert_emails = ["secops@example.com"]
+  }
+
+  assert {
+    condition = (
+      aws_sns_topic.guard_alerts.name == "org-guard-alerts" &&
+      aws_sns_topic.guard_alerts.region == "us-east-1" &&
+      aws_kms_key.guard_alerts.region == "us-east-1" &&
+      aws_kms_key.guard_alerts.enable_key_rotation
+    )
+    error_message = "org-guard-alerts and its rotating CMK must live in us-east-1."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_kms_key.guard_alerts.policy).Statement :
+      s.Effect == "Allow" && try(s.Principal.Service, "") == "events.amazonaws.com" &&
+      toset(flatten([s.Action])) == toset(["kms:GenerateDataKey*", "kms:Decrypt"])
+    ])
+    error_message = "The guard-alerts CMK must let events.amazonaws.com call kms:GenerateDataKey* and kms:Decrypt."
+  }
+
+  # The topic accepts publishes only from the guard rule.
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_sns_topic_policy.guard_alerts.policy).Statement :
+      s.Effect == "Allow" && try(s.Principal.Service, "") == "events.amazonaws.com" && s.Action == "sns:Publish" &&
+      s.Condition.ArnEquals["aws:SourceArn"] == "arn:aws:events:us-east-1:111111111111:rule/org-guard-alerts"
+    ])
+    error_message = "Only the us-east-1 org-guard-alerts rule may publish to the topic."
+  }
+
+  assert {
+    condition = (
+      toset([for s in aws_sns_topic_subscription.guard_alerts : s.endpoint]) == toset(["secops@example.com"]) &&
+      alltrue([for s in aws_sns_topic_subscription.guard_alerts : s.protocol == "email" && s.region == "us-east-1"])
+    )
+    error_message = "guard_alert_emails must be subscribed (email) to the topic."
+  }
+
+  # The us-east-1 rule matches the org-detection teardown and trail tampering
+  # calls, and targets the topic.
+  assert {
+    condition = (
+      aws_cloudwatch_event_rule.guard_alerts.region == "us-east-1" &&
+      aws_cloudwatch_event_rule.guard_alerts.name == "org-guard-alerts" &&
+      aws_cloudwatch_event_target.guard_alerts.region == "us-east-1" &&
+      aws_cloudwatch_event_target.guard_alerts.rule == "org-guard-alerts" &&
+      jsondecode(aws_cloudwatch_event_rule.guard_alerts.event_pattern)["detail-type"] == ["AWS API Call via CloudTrail"] &&
+      toset(flatten([for b in jsondecode(aws_cloudwatch_event_rule.guard_alerts.event_pattern).detail["$or"] : b.eventName])) == toset([
+        "DisableAWSServiceAccess", "DeregisterDelegatedAdministrator",
+        "PutEventSelectors", "PutInsightSelectors", "RemoveTags",
+        "DisableOrganizationAdminAccount", "DisableDelegatedAdminAccount",
+      ]) &&
+      toset(flatten([for b in jsondecode(aws_cloudwatch_event_rule.guard_alerts.event_pattern).detail["$or"] : b.eventSource])) == toset([
+        "organizations.amazonaws.com", "cloudtrail.amazonaws.com", "guardduty.amazonaws.com",
+        "securityhub.amazonaws.com", "macie2.amazonaws.com", "inspector2.amazonaws.com",
+      ])
+    )
+    error_message = "The us-east-1 org-guard-alerts rule must match the detection-teardown and trail-tampering CloudTrail calls and target the topic."
+  }
+
+  # Trail calls are filtered to THE org trail (name or ARN).
+  assert {
+    condition = anytrue([
+      for b in jsondecode(aws_cloudwatch_event_rule.guard_alerts.event_pattern).detail["$or"] :
+      contains(b.eventName, "PutEventSelectors") && contains(b.requestParameters.trailName, "org-trail")
+    ])
+    error_message = "Selector calls must be matched on the org trail."
+  }
+}
+
+run "other_regions_forward_to_us_east_1_bus_with_role" {
+  command = plan
+
+  variables {
+    aws_enabled_regions = ["eu-west-2", "us-east-1", "eu-west-1"]
+  }
+
+  assert {
+    condition = (
+      toset(keys(aws_cloudwatch_event_rule.guard_alerts_forward)) == toset(["eu-west-2", "eu-west-1"]) &&
+      alltrue([for r, rule in aws_cloudwatch_event_rule.guard_alerts_forward : rule.region == r && rule.event_pattern == aws_cloudwatch_event_rule.guard_alerts.event_pattern])
+    )
+    error_message = "Every enabled region except us-east-1 must get a forwarding rule with the same pattern."
+  }
+
+  assert {
+    condition = alltrue([
+      for r, t in aws_cloudwatch_event_target.guard_alerts_forward :
+      t.region == r && t.arn == "arn:aws:events:us-east-1:111111111111:event-bus/default" && t.role_arn == aws_iam_role.guard_alerts_forwarder.arn
+    ])
+    error_message = "Forwarding rules must target the us-east-1 default bus with the forwarder role."
+  }
+
+  assert {
+    condition = (
+      aws_iam_role.guard_alerts_forwarder.name == "org-guard-alerts-forwarder" &&
+      jsondecode(aws_iam_role.guard_alerts_forwarder.assume_role_policy).Statement[0].Principal.Service == "events.amazonaws.com" &&
+      jsondecode(aws_iam_role_policy.guard_alerts_forwarder.policy).Statement[0].Action == "events:PutEvents" &&
+      jsondecode(aws_iam_role_policy.guard_alerts_forwarder.policy).Statement[0].Resource == "arn:aws:events:us-east-1:111111111111:event-bus/default"
+    )
+    error_message = "The forwarder role must be assumable by EventBridge and only PutEvents to the us-east-1 default bus."
+  }
+}
+
+# Single-region us-east-1 landing zone: no forwarding rules; no emails = no subscriptions.
+run "guard_alerts_us_east_1_only_minimum_config" {
+  command = plan
+
+  variables {
+    aws_enabled_regions = ["us-east-1"]
+  }
+
+  assert {
+    condition     = length(aws_cloudwatch_event_rule.guard_alerts_forward) == 0 && length(aws_sns_topic_subscription.guard_alerts) == 0
+    error_message = "us-east-1 alone needs no forwarding rule, and no emails means no subscriptions."
+  }
+}
+
+run "teardown_gate_passes_through" {
+  command = plan
+
+  variables {
+    enable_security_service_teardown = true
+  }
+
+  assert {
+    condition     = length(module.tfc_management_roles[0].security_teardown_policy) > 0
+    error_message = "enable_security_service_teardown must reach tfc-management-roles."
+  }
 }

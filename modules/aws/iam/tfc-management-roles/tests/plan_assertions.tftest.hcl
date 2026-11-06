@@ -219,3 +219,133 @@ run "no_tag_based_kms_access" {
     error_message = "CreateOwnedKeysOnly must be conditioned only on the owner request tag, with no aws:TagKeys restriction."
   }
 }
+
+# Org-wide detection (delegated admins, trusted access) can be switched off
+# only with the explicit teardown gate: a routine aws-security apply cannot.
+run "aws_security_cannot_disable_org_detection" {
+  command = plan
+
+  # Two delegated accounts, as the aws-organization stage passes
+  # (security_tooling + backup): the size assertion below is realistic.
+  variables {
+    delegated_admin_account_ids = ["222222222222", "333333333333"]
+  }
+
+  assert {
+    condition = !anytrue([
+      for s in jsondecode(output.apply_policies["aws-security"]).Statement :
+      s.Effect == "Allow" && anytrue([for a in flatten([s.Action]) : contains([
+        "organizations:DisableAWSServiceAccess", "organizations:DeregisterDelegatedAdministrator",
+        "guardduty:DisableOrganizationAdminAccount", "securityhub:DisableOrganizationAdminAccount",
+        "macie2:DisableOrganizationAdminAccount", "inspector2:DisableDelegatedAdminAccount",
+        "detective:DisableOrganizationAdminAccount", "fms:DisassociateAdminAccount",
+      ], a) || strcontains(a, "*") && !contains(["organizations:Describe*", "organizations:List*", "logs:Describe*", "logs:List*", "sns:List*", "cloudwatch:Describe*", "kms:List*", "kms:Describe*", "logs:*", "sns:*", "cloudtrail:*"], a)])
+    ])
+    error_message = "With the teardown gate off, no aws-security Allow may grant a disable / deregister / disassociate action (or an unexpected wildcard)."
+  }
+
+  assert {
+    condition = (
+      one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "SecurityServicesDelegationOnly"]).Action == ["organizations:EnableAWSServiceAccess"] &&
+      one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "DelegateOnlyToSecurityAccounts"]).Action == ["organizations:RegisterDelegatedAdministrator"] &&
+      length([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if startswith(s.Sid, "SecurityServiceTeardown")]) == 0 &&
+      length(aws_iam_role_policy.security_teardown) == 0 && output.security_teardown_policy == null
+    )
+    error_message = "Gate off: delegation statements allow only EnableAWSServiceAccess / RegisterDelegatedAdministrator, and no SecurityServiceTeardown statement exists."
+  }
+
+  # Selector, tag, resource-policy, alarm and log-group tampering is denied.
+  assert {
+    condition = (
+      length(setintersection(toset(flatten([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s.Action if s.Effect == "Deny" && startswith(s.Sid, "DenyTrailAndKeyDestruction")])), toset([
+        "cloudtrail:RemoveTags", "cloudtrail:PutResourcePolicy", "cloudtrail:DeleteResourcePolicy",
+        "cloudwatch:DeleteAlarms", "cloudwatch:DisableAlarmActions",
+        "logs:DeleteLogGroup", "logs:DeleteRetentionPolicy", "logs:DeleteSubscriptionFilter", "logs:DeleteMetricFilter",
+      ]))) == 9 &&
+      !contains(flatten([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s.Action if s.Effect == "Deny"]), "logs:PutRetentionPolicy") &&
+      one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "DenyTrailAndKeyDestructionAlarms"]).Resource == ["arn:aws:cloudwatch:*:111111111111:alarm:org-trail-*"] &&
+      toset(one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "DenyTrailAndKeyDestructionLogs"]).Resource) == toset([
+        "arn:aws:logs:*:111111111111:log-group:/aws/cloudtrail/org-trail",
+        "arn:aws:logs:*:111111111111:log-group:/aws/cloudtrail/org-trail:*",
+      ]) &&
+      !contains(one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "TrailAlarmsOnly"]).Action, "cloudwatch:DeleteAlarms")
+    )
+    error_message = "DenyTrailAndKeyDestruction* must deny trail tag/resource-policy edits, alarm deletion/disable on the trail alarms and log-group destruction (not PutRetentionPolicy); TrailAlarmsOnly must not allow DeleteAlarms."
+  }
+
+  assert {
+    condition     = length(output.apply_policies["aws-security"]) <= 6144
+    error_message = "The aws-security apply policy must stay within the 6,144-character managed-policy size."
+  }
+}
+
+run "teardown_gate_adds_disable_actions" {
+  command = plan
+
+  variables {
+    delegated_admin_account_ids      = ["222222222222"]
+    enable_security_service_teardown = true
+  }
+
+  # The gate attaches a separate inline policy to the aws-security APPLY role only.
+  assert {
+    condition = (
+      toset(keys(aws_iam_role_policy.security_teardown)) == toset(["aws-security:apply"]) &&
+      aws_iam_role_policy.security_teardown["aws-security:apply"].policy == output.security_teardown_policy
+    )
+    error_message = "The teardown gate must attach tfc-apply-security-teardown to the aws-security apply role only."
+  }
+
+  assert {
+    condition = (
+      toset(flatten([for s in jsondecode(output.security_teardown_policy).Statement : s.Action if s.Effect == "Allow" && startswith(s.Sid, "SecurityServiceTeardown")])) == toset([
+        "organizations:DisableAWSServiceAccess", "organizations:DeregisterDelegatedAdministrator",
+        "guardduty:DisableOrganizationAdminAccount", "securityhub:DisableOrganizationAdminAccount",
+        "macie2:DisableOrganizationAdminAccount", "inspector2:DisableDelegatedAdminAccount",
+        "detective:DisableOrganizationAdminAccount", "fms:DisassociateAdminAccount",
+      ]) &&
+      # The disable/deregister actions appear nowhere in the routine policy.
+      !anytrue([for s in jsondecode(output.apply_policies["aws-security"]).Statement : anytrue([for a in flatten([s.Action]) : contains(["organizations:DisableAWSServiceAccess", "organizations:DeregisterDelegatedAdministrator", "guardduty:DisableOrganizationAdminAccount"], a)])])
+    )
+    error_message = "The teardown gate must add exactly the disable / deregister actions, only in SecurityServiceTeardown statements."
+  }
+
+  # Teardown stays pinned to the security services and the security accounts.
+  assert {
+    condition = (
+      one([for s in jsondecode(output.security_teardown_policy).Statement : s if s.Sid == "SecurityServiceTeardownDelegation"]).Resource == ["arn:aws:organizations::111111111111:account/o-*/222222222222"] &&
+      !contains(one([for s in jsondecode(output.security_teardown_policy).Statement : s if s.Sid == "SecurityServiceTeardownTrustedAccess"]).Condition.StringEquals["organizations:ServicePrincipal"], "sso.amazonaws.com")
+    )
+    error_message = "Teardown deregistration must be pinned to the security accounts and service-access disables to the security service principals."
+  }
+
+  assert {
+    condition     = length(output.apply_policies["aws-security"]) <= 6144 && length(output.security_teardown_policy) <= 6144
+    error_message = "The aws-security apply and teardown policies must each stay within 6,144 characters."
+  }
+}
+
+run "routine_apply_still_allowed" {
+  command = plan
+
+  variables {
+    delegated_admin_account_ids = ["222222222222"]
+  }
+
+  assert {
+    condition = alltrue([
+      for a in [
+        "organizations:EnableAWSServiceAccess", "organizations:RegisterDelegatedAdministrator",
+        "cloudtrail:CreateTrail", "cloudtrail:PutEventSelectors", "cloudwatch:PutMetricAlarm",
+        "logs:CreateLogGroup", "logs:PutRetentionPolicy",
+        ] : anytrue([
+          for s in jsondecode(output.apply_policies["aws-security"]).Statement :
+          s.Effect == "Allow" && anytrue([for p in flatten([s.Action]) : p == a || (endswith(p, "*") && startswith(a, trimsuffix(p, "*")))])
+          ]) && !anytrue([
+          for s in jsondecode(output.apply_policies["aws-security"]).Statement :
+          s.Effect == "Deny" && anytrue([for p in flatten([s.Action]) : p == a || (endswith(p, "*") && startswith(a, trimsuffix(p, "*")))])
+      ])
+    ])
+    error_message = "Routine aws-security applies (trusted access, delegated-admin registration, trail, selectors, alarms, log group, retention) must stay allowed and undenied."
+  }
+}

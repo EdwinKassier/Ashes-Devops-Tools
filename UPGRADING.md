@@ -192,6 +192,29 @@ aws kms put-key-policy --key-id "$KEY_ID" --policy-name default --policy file://
 Then upgrade `tfc-management-roles`, and confirm aws-security plans with no
 changes to the key policy. Fresh estates need nothing.
 
+### aws-security cannot disable org detection; org-owned guard alerts
+
+`tfc-management-roles` drops these actions from the aws-security apply role:
+`Disable*AdminAccount`, `fms:DisassociateAdminAccount`,
+`organizations:DisableAWSServiceAccess`,
+`DeregisterDelegatedAdministrator` and `cloudwatch:DeleteAlarms`. It now
+denies trail untagging and resource-policy edits, CIS-alarm deletion and
+disabling, and trail log-group, metric-filter and retention deletion.
+`aws-organization` creates `org-guard-alerts` in us-east-1 of the management
+account: a CMK, an SNS topic and an EventBridge rule. It also creates one
+forwarding rule per other `aws.enabled_regions` region, plus the
+`org-guard-alerts-forwarder` IAM role.
+
+- **No manual step for a routine upgrade.** Apply `aws-organization` first; it
+  only adds resources. Optionally set `aws.guard_alert_emails`, then confirm
+  each subscription email.
+- **A plan that now replaces a CIS alarm or metric filter fails** with
+  AccessDenied on the delete. Run that apply as break-glass or the phase-0
+  role.
+- **Destroying aws-security** (or removing a delegated admin) needs
+  `enable_security_service_teardown = true` on `aws-organization`. See
+  `docs/runbooks/aws-teardown.md`.
+
 ## Production egress fails closed (aws-network)
 
 `aws-network` now fails the plan when the profile is `production` and an AWS

@@ -77,3 +77,8 @@ output "org_trail_cloudwatch_role_arn" {
   description = "ARN of the organization trail's CloudWatch Logs delivery role (null when create_org_trail_delivery_role is false)."
   value       = try(aws_iam_role.org_trail_cloudwatch[0].arn, null)
 }
+
+output "guard_alerts_topic_arn" {
+  description = "ARN of the org-guard-alerts SNS topic (us-east-1, management account): org-detection teardown and organization-trail tampering alerts."
+  value       = aws_sns_topic.guard_alerts.arn
+}

@@ -64,3 +64,8 @@ output "tfc_management_apply_role_arns" {
   description = "Workspace name -> dedicated management-account APPLY role ARN (aws-security, aws-backup)."
   value       = module.aws_organization.tfc_management_apply_role_arns
 }
+
+output "guard_alerts_topic_arn" {
+  description = "ARN of the org-guard-alerts SNS topic (us-east-1, management account): org-detection teardown and organization-trail tampering alerts."
+  value       = module.aws_organization.guard_alerts_topic_arn
+}

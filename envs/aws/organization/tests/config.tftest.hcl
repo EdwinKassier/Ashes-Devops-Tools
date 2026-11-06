@@ -78,6 +78,29 @@ run "values_come_from_config_file" {
   }
 }
 
+run "guard_alert_inputs_come_from_config_file" {
+  command = plan
+
+  assert {
+    condition     = join(",", local.aws_enabled_regions) == "eu-west-1,us-east-1" && join(",", local.guard_alert_emails) == "secops@cfg.test"
+    error_message = "aws_enabled_regions / guard_alert_emails must fall back to aws.enabled_regions / aws.guard_alert_emails."
+  }
+}
+
+run "guard_alert_inputs_variables_win" {
+  command = plan
+
+  variables {
+    aws_enabled_regions = ["eu-west-2"]
+    guard_alert_emails  = []
+  }
+
+  assert {
+    condition     = join(",", local.aws_enabled_regions) == "eu-west-2" && length(local.guard_alert_emails) == 0
+    error_message = "explicit aws_enabled_regions / guard_alert_emails must win over the config file."
+  }
+}
+
 run "tfc_project_default_without_config_prefix" {
   command = plan
 

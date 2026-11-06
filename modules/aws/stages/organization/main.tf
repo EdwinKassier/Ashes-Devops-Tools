@@ -201,6 +201,9 @@ module "tfc_management_roles" {
 
   # aws-security may delegate the security services only to security tooling.
   delegated_admin_account_ids = [for k in ["security_tooling", "backup"] : module.account[k].account_id if contains(keys(local.all_accounts), k)]
+
+  # Turning org-wide detection off is a gated, reviewed teardown step.
+  enable_security_service_teardown = var.enable_security_service_teardown
 }
 
 # GitHub deploy roles need a pinned owner: without github_federation_owners the

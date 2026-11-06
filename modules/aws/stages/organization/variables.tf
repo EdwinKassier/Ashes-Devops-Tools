@@ -438,3 +438,34 @@ variable "partition" {
   type        = string
   default     = "aws"
 }
+
+variable "aws_enabled_regions" {
+  description = "Regions in which the regional security services run (the aws-security root's aws_enabled_regions). Every one except us-east-1 gets an EventBridge rule forwarding org-detection guard events to us-east-1."
+  type        = list(string)
+  default     = ["eu-west-2"]
+  nullable    = false
+
+  validation {
+    condition     = length(var.aws_enabled_regions) > 0
+    error_message = "aws_enabled_regions must contain at least one region."
+  }
+}
+
+variable "guard_alert_emails" {
+  description = "Email addresses subscribed to the org-guard-alerts SNS topic (us-east-1, management account): alerts when org-wide detection is disabled or the organization trail's selectors / tags change. Each address must confirm its subscription. Empty = topic and rules only."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for e in var.guard_alert_emails : can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", e))])
+    error_message = "guard_alert_emails entries must be email addresses."
+  }
+}
+
+variable "enable_security_service_teardown" {
+  description = "Teardown gate for the aws-security management apply role: allow it to disable the security services' delegated admins and trusted access. Default false; set true only for a reviewed aws-security destroy (docs/runbooks/aws-teardown.md), then back to false."
+  type        = bool
+  default     = false
+  nullable    = false
+}

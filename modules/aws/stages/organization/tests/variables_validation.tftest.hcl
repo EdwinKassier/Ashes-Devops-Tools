@@ -112,3 +112,23 @@ run "wildcard_member_break_glass_trusted_principal_rejected" {
 
   expect_failures = [var.member_break_glass_trusted_principal_arns]
 }
+
+run "guard_alert_emails_must_be_addresses" {
+  command = plan
+
+  variables {
+    guard_alert_emails = ["not-an-email"]
+  }
+
+  expect_failures = [var.guard_alert_emails]
+}
+
+run "aws_enabled_regions_must_not_be_empty" {
+  command = plan
+
+  variables {
+    aws_enabled_regions = []
+  }
+
+  expect_failures = [var.aws_enabled_regions]
+}

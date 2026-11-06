@@ -148,3 +148,10 @@ variable "security_owner_tag" {
     value = "aws-security"
   }
 }
+
+variable "enable_security_service_teardown" {
+  description = "Teardown gate: let the aws-security apply role switch org-wide detection OFF (Disable*AdminAccount, DisableAWSServiceAccess, DeregisterDelegatedAdministrator for the security services). Default false: a routine aws-security apply can enable and register, never disable. Set true only for a reviewed aws-security destroy (docs/runbooks/aws-teardown.md), then back to false."
+  type        = bool
+  default     = false
+  nullable    = false
+}

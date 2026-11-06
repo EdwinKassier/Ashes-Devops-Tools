@@ -10,6 +10,7 @@ module "aws_organization" {
   accounts                = local.accounts
   workload_accounts       = local.workload_accounts
   allowed_regions         = local.allowed_regions
+  aws_enabled_regions     = local.aws_enabled_regions
   terraform_run_role_arn  = local.terraform_run_role_arn
   break_glass_role_arn    = local.break_glass_role_arn
   log_archive_bucket_name = local.log_archive_bucket_name
@@ -27,6 +28,8 @@ module "aws_organization" {
   tfc_hostname                           = var.tfc_hostname
   pin_tfc_federation_to_org              = var.pin_tfc_federation_to_org
   enable_tfc_management_roles            = var.enable_tfc_management_roles
+  enable_security_service_teardown       = var.enable_security_service_teardown
+  guard_alert_emails                     = local.guard_alert_emails
   backup_service_role_region             = local.aws_region
   org_policy_overrides                   = var.org_policy_overrides
   partition                              = var.partition

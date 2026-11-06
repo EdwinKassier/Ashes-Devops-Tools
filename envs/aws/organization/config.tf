@@ -33,6 +33,8 @@ locals {
     management_account_id   = try(tostring(local.lz.aws.management_account_id), null)
     log_archive_bucket_name = try(tostring(local.lz.aws.log_archive_bucket_name), null)
     allowed_regions         = try([for r in local.lz.aws.allowed_regions : tostring(r)], null)
+    aws_enabled_regions     = try([for r in local.lz.aws.enabled_regions : tostring(r)], null)
+    guard_alert_emails      = try([for e in local.lz.aws.guard_alert_emails : tostring(e)], null)
     terraform_run_role_arn  = try(tostring(local.lz.aws.terraform_run_role_arn), null)
     break_glass_role_arn    = try(tostring(local.lz.aws.break_glass_role_arn), null)
     # tfc-admin puts the aws-* workspaces in <project_name_prefix>aws.
@@ -116,9 +118,13 @@ locals {
   management_account_id   = coalesce(var.management_account_id, local.cfg.management_account_id, "000000000000")
   log_archive_bucket_name = coalesce(var.log_archive_bucket_name, local.cfg.log_archive_bucket_name, "unset")
 
-  accounts               = var.accounts != null ? var.accounts : local.cfg_or_default_accounts
-  workload_accounts      = var.workload_accounts != null ? var.workload_accounts : local.cfg.workload_accounts
-  allowed_regions        = var.allowed_regions != null ? var.allowed_regions : coalesce(local.cfg.allowed_regions, ["eu-west-2"])
+  accounts          = var.accounts != null ? var.accounts : local.cfg_or_default_accounts
+  workload_accounts = var.workload_accounts != null ? var.workload_accounts : local.cfg.workload_accounts
+  allowed_regions   = var.allowed_regions != null ? var.allowed_regions : coalesce(local.cfg.allowed_regions, ["eu-west-2"])
+  # Same precedence and fallback as the aws-security root: the guard alerts
+  # forward from every region the security services run in.
+  aws_enabled_regions    = var.aws_enabled_regions != null ? var.aws_enabled_regions : coalesce(local.cfg.aws_enabled_regions, ["eu-west-2"])
+  guard_alert_emails     = var.guard_alert_emails != null ? var.guard_alert_emails : coalesce(local.cfg.guard_alert_emails, [])
   terraform_run_role_arn = coalesce(var.terraform_run_role_arn, local.cfg.terraform_run_role_arn, "arn:aws:iam::000000000000:role/unset")
   break_glass_role_arn   = coalesce(var.break_glass_role_arn, local.cfg.break_glass_role_arn, "arn:aws:iam::000000000000:role/unset")
   tfc_project            = coalesce(var.tfc_project, local.cfg.tfc_project)

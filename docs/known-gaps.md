@@ -11,6 +11,19 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
 
 ## OPEN — validate before relying on
 
+- **Org-trail selector changes are detected, not prevented.** The
+  aws-security management apply role keeps `cloudtrail:PutEventSelectors` /
+  `PutInsightSelectors`, because `aws_cloudtrail` calls them on create. A
+  selector change (for example, dropping management events) is caught only
+  by the `org-guard-alerts` EventBridge rule. That rule is in us-east-1 plus
+  forwarders in every other enabled region, and it is owned by
+  `aws-organization`. The CIS 4.5 alarm does not match selector calls. This
+  stays detect-only until Task 1.11 moves trail management to security
+  tooling, where the SCP applies. The rules and forwarding are mock-tested
+  only. **Validate in the sandbox:** a `PutEventSelectors` call and a
+  GuardDuty admin call made from a non-us-east-1 region must both email the
+  topic.
+
 - **A1 — CloudTrail KMS grant condition.** `modules/aws/security/cloudtrail-org`
   scopes the log-service KMS grant with `aws:SourceOrgID`, but AWS documents
   `aws:SourceArn` (the trail ARN) as the CloudTrail KMS-key-policy condition

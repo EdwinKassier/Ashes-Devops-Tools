@@ -124,6 +124,30 @@ variable "allowed_regions" {
   }
 }
 
+variable "aws_enabled_regions" {
+  description = "Regions the regional security services run in (the aws-security root's aws_enabled_regions). Each one except us-east-1 forwards org-detection guard events to us-east-1. Null = aws.enabled_regions from config/landing-zone.yaml, else [\"eu-west-2\"]."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = length(var.aws_enabled_regions != null ? var.aws_enabled_regions : coalesce(local.cfg.aws_enabled_regions, ["eu-west-2"])) > 0
+    error_message = "aws_enabled_regions (or aws.enabled_regions in config/landing-zone.yaml) must contain at least one region."
+  }
+}
+
+variable "guard_alert_emails" {
+  description = "Email addresses subscribed to the org-guard-alerts SNS topic (us-east-1, management account): alerts when org-wide detection is disabled or the organization trail's selectors / tags change. Null = aws.guard_alert_emails from config/landing-zone.yaml, else none."
+  type        = list(string)
+  default     = null
+}
+
+variable "enable_security_service_teardown" {
+  description = "Teardown gate: let the aws-security management apply role disable the security services' delegated admins and trusted access. Default false; set true only for a reviewed aws-security destroy (docs/runbooks/aws-teardown.md), then back to false."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "terraform_run_role_arn" {
   description = "Account-qualified exact ARN of the MANAGEMENT-account Terraform Cloud apply role (the phase-0, hand-created role from the aws-bootstrap runbook Step 2, e.g. arn:aws:iam::<mgmt>:role/tfc-mgmt-apply; the same ARN tfc-admin sets as TFC_AWS_APPLY_ROLE_ARN via aws_management_apply_role_arn). Carved out of every guardrail deny statement so automation is not locked out. Not created by this root: StackSets never deploy to the management account. Null = aws.terraform_run_role_arn from config/landing-zone.yaml."
   type        = string
