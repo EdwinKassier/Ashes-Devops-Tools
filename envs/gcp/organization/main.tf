@@ -22,7 +22,7 @@ locals {
 
   # Outputs from the gcp-bootstrap root (admin project, Terraform admin SA, WIF
   # pools). gcp-bootstrap is applied first; this root reads it via remote state
-  # (audit H3 — control-plane state decomposition).
+  #.
   # Remote state when read (count = 1), else the supplied contract.
   bootstrap = try(data.terraform_remote_state.gcp_bootstrap[0].outputs, local.bootstrap_contract)
 

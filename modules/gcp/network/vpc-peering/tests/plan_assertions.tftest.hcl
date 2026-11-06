@@ -2,7 +2,7 @@
 # The module's defining behavior is that reverse_peering INVERTS the custom-route
 # export/import direction relative to the forward peering. Prior tests only
 # validated inputs, so a swapped import/export would pass silently
-# (audit round-3 §D8 / finding #10). These assert the inversion on the plan.
+#. These assert the inversion on the plan.
 
 mock_provider "google" {}
 

@@ -151,7 +151,7 @@ locals {
 }
 
 # =============================================================================
-# APP SERVICES — the application golden path (audit: Boilerplate H)
+# APP SERVICES — the application golden path 
 #
 # One entry in var.services = an ECR repo, a Fargate service in the spoke's
 # private subnets behind the shared internal ALB, least-privilege task roles, a
@@ -238,7 +238,7 @@ module "app_edge" {
 }
 
 # =============================================================================
-# SaaS SECRET BRIDGE (audit H9, hybrid option C — AWS counterpart)
+# SaaS SECRET BRIDGE
 #
 # Opt-in. Reads the Supabase outputs from a saas-<name> workspace and writes them
 # into an AWS Secrets Manager secret, so an ECS/Fargate task can consume Supabase

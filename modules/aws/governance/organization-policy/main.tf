@@ -213,3 +213,17 @@ resource "aws_organizations_policy_attachment" "attach" {
   policy_id = aws_organizations_policy.policy[each.value.policy_key].id
   target_id = each.value.target_id
 }
+
+# The core guardrails are the landing zone's security floor. Replacing or
+# dropping one is allowed (escape hatch), but never silently.
+locals {
+  core_guardrails     = ["scp-deny-tamper", "scp-baseline", "rcp-data-perimeter"]
+  weakened_guardrails = sort([for k in local.core_guardrails : k if contains(var.disabled_policies, k) || contains(keys(var.policy_overrides), k) || (length(var.policies) > 0 && !contains(keys(var.policies), k))])
+}
+
+check "core_guardrails_not_weakened" {
+  assert {
+    condition     = length(local.weakened_guardrails) == 0
+    error_message = "Core guardrail policies are replaced or removed: ${join(", ", local.weakened_guardrails)}. The deny-tamper SCP, root/IAM-user baseline SCP and RCP data perimeter are the security floor; make sure the replacement keeps their protections and record the exception."
+  }
+}

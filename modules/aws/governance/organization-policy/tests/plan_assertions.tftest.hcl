@@ -534,3 +534,16 @@ run "policy_overrides_and_disabled_policies" {
     error_message = "overrides must replace/add policies, disabled_policies must drop built-ins, and the rest must stay."
   }
 }
+
+# Replacing a core guardrail is allowed but always warns.
+run "overriding_core_guardrail_warns" {
+  command = plan
+
+  variables {
+    policy_overrides = {
+      "scp-deny-tamper" = { type = "SERVICE_CONTROL_POLICY", content = "{\"Version\":\"2012-10-17\",\"Statement\":[]}" }
+    }
+  }
+
+  expect_failures = [check.core_guardrails_not_weakened]
+}

@@ -16,11 +16,8 @@
 # management role); tfc-admin reads their ARNs from its outputs.
 
 locals {
-  # Real AWS returns an aws* partition and a 12-digit account; under a composing
-  # mock_provider these data sources return random strings the provider's ARN
-  # validators reject, so fall back to well-formed values.
-  partition  = can(regex("^aws(-[a-z]+)*$", data.aws_partition.current.partition)) ? data.aws_partition.current.partition : "aws"
-  account_id = can(regex("^[0-9]{12}$", data.aws_caller_identity.current.account_id)) ? data.aws_caller_identity.current.account_id : "000000000000"
+  partition  = data.aws_partition.current.partition
+  account_id = data.aws_caller_identity.current.account_id
 
   aud_key = "${var.tfc_hostname}:aud"
   sub_key = "${var.tfc_hostname}:sub"
@@ -61,8 +58,14 @@ locals {
       "iam:CreateUser",
       "iam:CreateAccessKey",
       "iam:CreateLoginProfile",
+      # Same identity-provider set as the tfc-oidc-baseline boundary's
+      # DenyNewIdentityProviders (asserted equal by the tests): no new trust
+      # anchor and no repointing of an existing one.
       "iam:CreateOpenIDConnectProvider",
+      "iam:AddClientIDToOpenIDConnectProvider",
+      "iam:UpdateOpenIDConnectProviderThumbprint",
       "iam:CreateSAMLProvider",
+      "iam:UpdateSAMLProvider",
     ]
     Resource = "*"
   }

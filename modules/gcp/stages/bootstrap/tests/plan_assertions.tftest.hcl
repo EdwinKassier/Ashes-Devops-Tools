@@ -1,4 +1,4 @@
-# Plan assertions for the bootstrap stage — audit C2 identity model.
+# Plan assertions for the bootstrap stage identity model.
 #
 # * The shared terraform-admin SA keeps ONLY what the gcp-bootstrap apply needs
 #   (org IAM admin + org viewer); the old org-wide orgpolicy/ACM/logging/SCC/xpn/

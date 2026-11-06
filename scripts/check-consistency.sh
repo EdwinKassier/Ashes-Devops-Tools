@@ -73,6 +73,16 @@ for pf in envs/gcp/*/providers.tf; do
   fi
 done
 
+echo "==> No audit provenance codes in Terraform code (CLAUDE.md: they belong in docs/known-gaps.md)"
+# Comments and descriptions read as a remediation log when they carry finding
+# IDs ("audit C2", "(audit H9, option C)"). Point at docs instead.
+prov=$(git grep -nE '\baudit ([A-Z]{1,2}[0-9]+|round|Modularity|Security|Boilerplate|M-ops)\b|\(G[0-9]+\)' -- '*.tf' '*.hcl' 2>/dev/null || true)
+if [ -n "$prov" ]; then
+  echo "$prov" | sed 's/^/  /' >&2
+  echo "  ERROR: audit/finding provenance codes in Terraform code (see above)" >&2
+  fail=1
+fi
+
 echo "==> Multi-platform lockfiles (FATAL for deployable roots, informational for library modules)"
 # A lockfile written by a plain local `terraform init` carries one h1: hash per
 # provider (the host platform). The canonical command writes one per platform:

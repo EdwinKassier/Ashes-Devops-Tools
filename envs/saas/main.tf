@@ -50,7 +50,7 @@ module "saas_workload" {
   vercel_shared_env_vars = local.effective_vercel_shared_env_vars
 }
 
-# ── Cross-cloud wiring seam (audit H9, option C — frontend-URL seam) ──────────
+# ── Cross-cloud wiring seam ──────────
 #
 # A SaaS root can consume an output from another cloud's root (AWS or GCP)
 # WITHOUT configuring that cloud's provider: terraform_remote_state reads from

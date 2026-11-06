@@ -162,7 +162,7 @@ module "audit_logs" {
   bigquery_kms_key_name     = local.audit_key_names["audit-analytics"]
 }
 
-# Control-plane alerting (audit Security High: "No control-plane alerting").
+# Control-plane alerting.
 # Log-match alerts on org IAM, org policy, VPC-SC, sink/exclusion, custom-role,
 # deny-policy and KMS-destroy changes, plus any break-glass use. Lives in the
 # audit/logging project; an aggregated org sink routes org- and folder-level

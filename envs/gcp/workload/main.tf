@@ -380,7 +380,7 @@ module "os_patch_management" {
 }
 
 # =============================================================================
-# SaaS SECRET BRIDGE (audit H9, hybrid option C — first increment)
+# SaaS SECRET BRIDGE
 #
 # Opt-in. Reads the Supabase outputs from a saas-<name> workspace and writes them
 # into a GCP Secret Manager secret in the host project, so a GCP runtime can use
@@ -427,7 +427,7 @@ module "saas_secret_bridge" {
 }
 
 # =============================================================================
-# APPLICATION GOLDEN PATH (audit: "app golden path is docs-only")
+# APPLICATION GOLDEN PATH 
 #
 # One module call. A service team adds an entry to var.app_services and gets, in
 # the env host project: an Artifact Registry repo, a runtime SA, a Cloud Run v2

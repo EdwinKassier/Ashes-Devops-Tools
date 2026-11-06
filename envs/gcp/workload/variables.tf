@@ -256,7 +256,7 @@ variable "vpc_sc_enable_dry_run" {
     API traffic on a bad rule. Validate the violation logs (Cloud Logging / the VPC-SC violations dashboard),
     then PROMOTE to enforcement by setting this false.
     NOTE: dry-run provides NO data-exfiltration protection — do not leave a production perimeter in dry-run.
-    See docs/architecture/network-topology.md and docs/known-gaps.md (G11).
+    See docs/architecture/network-topology.md and docs/known-gaps.md.
     Null = a configured preset (e.g. prod-gcp-workload sets false), else true.
   EOT
   type        = bool
@@ -397,7 +397,7 @@ variable "service_teams" {
 }
 
 # -----------------------------------------------------------------------------
-# SaaS secret bridge (audit H9, hybrid option C — first increment)
+# SaaS secret bridge
 #
 # Opt-in. When enabled, this workload reads the Supabase outputs from a saas-<name>
 # workspace and writes them into a GCP Secret Manager secret in the host project,
@@ -412,7 +412,7 @@ variable "service_teams" {
 # -----------------------------------------------------------------------------
 
 variable "enable_saas_secret_bridge" {
-  description = "Bridge Supabase connection details from a saas-<name> workspace into a GCP Secret Manager secret in the host project (opt-in, audit H9). Default false."
+  description = "Bridge Supabase connection details from a saas-<name> workspace into a GCP Secret Manager secret in the host project (opt-in). Default false."
   type        = bool
   default     = false
 

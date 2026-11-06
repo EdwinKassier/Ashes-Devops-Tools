@@ -4,7 +4,7 @@ variable "landing_zone_config_path" {
   default     = null
 }
 
-# ── Terraform Cloud / cross-cloud wiring (audit H9, option C) ────────────────
+# ── Terraform Cloud / cross-cloud wiring ────────────────
 
 variable "tfc_organization" {
   description = "Terraform Cloud organization name. Required only when cross_cloud_references is non-empty (it reads upstream workspace state). Leave null for a standalone SaaS deployment. Null = org.tfc.organization from config/landing-zone.yaml."

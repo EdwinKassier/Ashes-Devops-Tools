@@ -36,6 +36,18 @@ override_module {
   }
 }
 
+# tfc-management-roles reads the partition / caller identity; mocks return
+# random strings the provider's ARN validators reject, so pin real shapes.
+override_data {
+  target = module.tfc_management_roles[0].data.aws_partition.current
+  values = { partition = "aws" }
+}
+
+override_data {
+  target = module.tfc_management_roles[0].data.aws_caller_identity.current
+  values = { account_id = "111111111111" }
+}
+
 run "defaults_accepted" {
   # Accept case: the default foundational account set + required carve-out ARNs
   # must pass all validations and plan cleanly.

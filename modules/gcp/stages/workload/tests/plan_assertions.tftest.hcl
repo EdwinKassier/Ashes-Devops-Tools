@@ -1,5 +1,5 @@
 # Plan assertions for the workload stage after the move from the upstream
-# project-factory to the shared project primitive (audit Modularity-H).
+# project-factory to the shared project primitive.
 # mock_provider only — no GCP credentials required.
 
 mock_provider "google" {}

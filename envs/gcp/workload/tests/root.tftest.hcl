@@ -142,7 +142,7 @@ run "service_team_registry_fans_out" {
   }
 }
 
-# SaaS secret bridge (audit H9, hybrid option C): opt-in, default off, and when
+# SaaS secret bridge: opt-in, default off, and when
 # enabled it writes the Supabase connection details into a Secret Manager secret.
 run "saas_secret_bridge_default_off" {
   command = plan

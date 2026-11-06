@@ -63,7 +63,7 @@ locals {
       # CloudWatch Logs vended-log delivery (VPC flow logs, Network Firewall
       # ALERT/FLOW logs, Route 53 Resolver query logs) from any account in the
       # org. Without these two statements cross-account delivery fails silently
-      # (audit / known-gaps A8). Pattern: AWS "Logs sent to Amazon S3" docs.
+      #. Pattern: AWS "Logs sent to Amazon S3" docs.
       {
         Sid       = "AWSLogDeliveryAclCheck"
         Effect    = "Allow"

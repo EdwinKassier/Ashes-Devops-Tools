@@ -131,7 +131,7 @@ variable "vpc_cidr" {
 # -----------------------------------------------------------------------------
 
 variable "log_archive_bucket_name" {
-  description = "Name of the central log-archive bucket (receives this workload's VPC flow logs, Config snapshots/history, and Session Manager logs). Legacy single-field form of security_contract: when set, the aws-security remote state is not read. Default null sources it from security_contract, else the aws-security root's remote state (its owner — see audit M7)."
+  description = "Name of the central log-archive bucket (receives this workload's VPC flow logs, Config snapshots/history, and Session Manager logs). Legacy single-field form of security_contract: when set, the aws-security remote state is not read. Default null sources it from security_contract, else the aws-security root's remote state (its owner —)."
   type        = string
   default     = null
 
@@ -194,7 +194,7 @@ variable "workload_roles" {
 }
 
 # -----------------------------------------------------------------------------
-# SaaS secret bridge (audit H9, hybrid option C) — AWS counterpart to the GCP one.
+# SaaS secret bridge — AWS counterpart to the GCP one.
 #
 # Opt-in. When enabled, this workload reads the Supabase outputs from a saas-<name>
 # workspace and writes them into an AWS Secrets Manager secret, so an ECS/Fargate
@@ -208,7 +208,7 @@ variable "workload_roles" {
 # -----------------------------------------------------------------------------
 
 variable "enable_saas_secret_bridge" {
-  description = "Bridge Supabase connection details from a saas-<name> workspace into an AWS Secrets Manager secret (opt-in, audit H9). Default false."
+  description = "Bridge Supabase connection details from a saas-<name> workspace into an AWS Secrets Manager secret (opt-in). Default false."
   type        = bool
   default     = false
 

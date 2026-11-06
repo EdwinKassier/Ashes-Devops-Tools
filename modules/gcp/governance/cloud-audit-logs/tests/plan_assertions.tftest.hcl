@@ -1,6 +1,6 @@
 # Plan assertions for the governance/cloud-audit-logs module: verify the audit-log
 # bucket is planned with the expected identity, and that the opt-in WORM lock (G8 /
-# audit M2) attaches a locked retention policy only when enable_bucket_lock = true.
+# attaches a locked retention policy only when enable_bucket_lock = true.
 # All runs use mock_provider so no GCP credentials are required.
 
 mock_provider "google" {}

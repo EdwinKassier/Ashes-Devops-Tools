@@ -1,7 +1,7 @@
 # Resource-assertion tests for the network/cdn module.
 # Asserts that var.enable_cdn actually toggles both the backend service's
 # enable_cdn attribute AND the presence of the cdn_policy dynamic block — prior
-# tests only validated inputs (audit round-3 §D8 / finding #10).
+# tests only validated inputs.
 
 mock_provider "google" {}
 

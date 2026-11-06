@@ -1,7 +1,7 @@
 # Resource-assertion tests for the firebase/project module.
 # Prior tests only planned; nothing asserted that the web-config bucket is
 # private/encrypted or that the Apple API key is bundle-restricted
-# (audit round-3 §D8 / finding #10). These attributes are config-derived and
+#. These attributes are config-derived and
 # plan-knowable under mock_provider.
 
 mock_provider "google" {}

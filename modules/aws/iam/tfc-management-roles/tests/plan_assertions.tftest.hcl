@@ -88,3 +88,23 @@ run "custom_workspace_policy" {
     error_message = "per-workspace project and apply_policy_json must be honoured."
   }
 }
+
+# The management roles deny exactly the identity-provider actions the member
+# apply boundary denies (tfc-oidc-baseline DenyNewIdentityProviders).
+run "identity_provider_denies_match_member_boundary" {
+  command = plan
+
+  assert {
+    condition = toset([
+      for a in one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "DenyOrgTakeover"]).Action : a
+      if startswith(a, "iam:") && (strcontains(a, "OpenIDConnectProvider") || strcontains(a, "SAMLProvider"))
+      ]) == toset([
+      "iam:CreateOpenIDConnectProvider",
+      "iam:AddClientIDToOpenIDConnectProvider",
+      "iam:UpdateOpenIDConnectProviderThumbprint",
+      "iam:CreateSAMLProvider",
+      "iam:UpdateSAMLProvider",
+    ])
+    error_message = "the management roles' identity-provider denies must equal the member boundary's DenyNewIdentityProviders set."
+  }
+}

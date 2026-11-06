@@ -9,7 +9,7 @@
 # an existing deployment to complete the migration, delete this file.
 
 # NOTE: the former "Bootstrap Module Mappings" were removed when the bootstrap
-# stage was split into its own root and state (envs/gcp/bootstrap, audit H3).
+# stage was split into its own root and state (envs/gcp/bootstrap).
 # Relocating those resources out of this state is a cross-STATE migration
 # (terraform state mv / removed + import), which a `moved` block cannot express.
 # See docs/architecture/gcp-state-decomposition.md.
@@ -71,6 +71,6 @@ moved {
 
 # NOTE: the former "Projects Module Mappings" and "Network Hub Module Mappings"
 # were removed when the projects and network-hub stages were split into their own
-# roots and states (envs/gcp/projects, envs/gcp/network-hub; audit H3). Relocating
+# roots and states (envs/gcp/projects, envs/gcp/network-hub). Relocating
 # those resources is a cross-STATE migration (terraform state mv / import), not a
 # `moved` block. See docs/architecture/gcp-state-decomposition.md.

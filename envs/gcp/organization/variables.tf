@@ -318,7 +318,7 @@ variable "enable_cis_log_metrics" {
 }
 
 variable "enable_control_plane_alerting" {
-  description = "Log-match alerts on org IAM / org policy / VPC-SC / sink / custom-role / deny-policy / KMS-destroy changes and on break-glass use (audit Security High). Default true."
+  description = "Log-match alerts on org IAM / org policy / VPC-SC / sink / custom-role / deny-policy / KMS-destroy changes and on break-glass use. Default true."
   type        = bool
   default     = true
 }

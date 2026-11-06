@@ -1,4 +1,4 @@
-# State migration for audit Modularity-H (raw google_project -> the shared
+# State migration for the move from a raw google_project -> the shared
 # project primitive, modules/gcp/project).
 #
 # 1. PROJECTS — google_project.projects["<key>"] now lives at

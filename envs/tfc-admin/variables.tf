@@ -472,7 +472,7 @@ variable "common_workspace_variables" {
 variable "control_plane_notifications" {
   description = <<-EOT
     Run notifications applied to every control-plane and bootstrap workspace
-    (audit M-ops). Default empty. Set a Slack or generic webhook to be alerted when
+. Default empty. Set a Slack or generic webhook to be alerted when
     a foundational apply fails or needs attention. Entry shape matches
     modules/tfc/workspace var.notifications.
   EOT

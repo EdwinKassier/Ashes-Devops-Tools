@@ -1,7 +1,7 @@
 # Resource-assertion tests for the network/vpn module.
 # Prior tests only validated inputs; nothing asserted that tunnel_count actually
 # creates N tunnels, that IKEv2 is used, or that shared_secret is wired
-# (audit round-3 §D8 / finding #10). These assert the tunnel wiring on the plan.
+#. These assert the tunnel wiring on the plan.
 
 mock_provider "google" {}
 

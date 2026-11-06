@@ -79,7 +79,7 @@ run "exposing_iac_vault_schema_rejected" {
   }
 }
 
-# Frontend-URL seam (audit H9, option C): by default no cross-cloud references,
+# Frontend-URL seam: by default no cross-cloud references,
 # so the root stays standalone with no injected env vars.
 run "cross_cloud_seam_off_by_default" {
   command = plan

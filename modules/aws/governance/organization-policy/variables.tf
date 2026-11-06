@@ -221,10 +221,15 @@ variable "policy_overrides" {
 }
 
 variable "disabled_policies" {
-  description = "Built-in policy keys NOT to create (e.g. backup-policy when the backup stage owns it, or aiservices-opt-out). Their attachments must be removed too."
+  description = "Built-in policy keys NOT to create (e.g. backup-policy when the backup stage owns it, or aiservices-opt-out). Their attachments must be removed too. A key may not be both disabled and overridden."
   type        = list(string)
   default     = []
   nullable    = false
+
+  validation {
+    condition     = length(setintersection(toset(var.disabled_policies), toset(keys(var.policy_overrides)))) == 0
+    error_message = "A policy key is in both disabled_policies and policy_overrides: an override would silently re-create the disabled policy. Use one or the other."
+  }
 }
 
 variable "attachments" {

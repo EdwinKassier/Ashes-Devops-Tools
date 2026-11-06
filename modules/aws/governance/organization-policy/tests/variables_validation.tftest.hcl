@@ -146,3 +146,14 @@ run "federation_pin_rejects_owner_with_slash" {
 
   expect_failures = [var.federation_tenant_pins]
 }
+
+run "disabled_and_overridden_key_rejected" {
+  command = plan
+
+  variables {
+    disabled_policies = ["tag-policy"]
+    policy_overrides  = { "tag-policy" = { type = "TAG_POLICY", content = "{}" } }
+  }
+
+  expect_failures = [var.disabled_policies]
+}

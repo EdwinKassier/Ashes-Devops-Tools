@@ -162,7 +162,7 @@ variable "variables" {
 variable "notifications" {
   description = <<-EOT
     Run notifications for this workspace, keyed by name. Default empty. Use this to
-    alert on failed control-plane runs (audit M-ops): a failed apply on a
+    alert on failed control-plane runs: a failed apply on a
     foundational workspace is a control-plane event that should page someone.
 
     Per entry:

@@ -2,7 +2,7 @@
 
 # gcp-bootstrap (applied first) produces the admin project, Terraform admin SA,
 # and WIF pools. This root reads them via remote state rather than composing the
-# bootstrap stage in-state (audit H3 — control-plane state decomposition).
+# bootstrap stage in-state.
 #
 # Stage contract override (FAST-style, as in gcp-projects / gcp-network-hub): a
 # supplied bootstrap_contract (variable or gcp.contracts.bootstrap in
