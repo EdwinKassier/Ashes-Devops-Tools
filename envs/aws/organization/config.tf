@@ -61,6 +61,7 @@ locals {
     for k, a in local.raw_accounts : k => {
       email = tostring(try(a.email, ""))
       ou    = tostring(try(a.ou, ""))
+      name  = try(tostring(a.name), null)
       alternate_contacts = try({
         for ck, c in a.alternate_contacts : ck => {
           contact_type  = tostring(c.contact_type)
@@ -85,7 +86,7 @@ locals {
       shared_services  = { email = "aws+shared-services@example.com", ou = "Infrastructure" }
       backup           = { email = "aws+backup@example.com", ou = "Infrastructure" }
       forensics        = { email = "aws+forensics@example.com", ou = "Security" }
-    } : k => merge(a, { alternate_contacts = {}, tags = {} })
+    } : k => merge(a, { name = null, alternate_contacts = {}, tags = {} })
   }
   # Indexed tuple (not a conditional): the two objects have different keys.
   cfg_or_default_accounts = [local.cfg.accounts, local.default_accounts][length(local.cfg.accounts) > 0 ? 0 : 1]

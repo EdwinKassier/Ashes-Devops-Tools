@@ -264,8 +264,8 @@ gcloud projects describe "$(terraform -chdir=envs/gcp/organization output -raw a
 gcloud resource-manager folders list --organization="$(terraform -chdir=envs/gcp/organization output -raw org_id)"
 
 # Cross-root contract is published (workload roots depend on this)
-terraform -chdir=envs/gcp/organization output -json environment_config | jq 'keys'
-terraform -chdir=envs/gcp/organization output -json hub_network
+terraform -chdir=envs/gcp/projects output -json environment_config | jq 'keys'
+terraform -chdir=envs/gcp/network-hub output -json hub_network
 ```
 
 Checklist:

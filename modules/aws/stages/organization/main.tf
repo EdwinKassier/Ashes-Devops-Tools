@@ -30,7 +30,7 @@ module "account" {
   source   = "../../governance/account"
   for_each = local.all_accounts
 
-  account_name       = each.key
+  account_name       = coalesce(try(each.value.name, null), each.key)
   email              = each.value.email
   parent_ou_id       = module.organization.ou_ids[each.value.ou]
   alternate_contacts = try(each.value.alternate_contacts, {})

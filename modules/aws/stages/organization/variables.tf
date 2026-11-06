@@ -7,6 +7,9 @@ variable "accounts" {
   type = map(object({
     email = string
     ou    = string
+    # Display name of the account. Null = the map key. Set it when adopting an
+    # existing account whose name differs from the key (adopt_existing).
+    name = optional(string)
     alternate_contacts = optional(map(object({
       contact_type  = string
       name          = string
@@ -36,6 +39,9 @@ variable "workload_accounts" {
   type = map(object({
     email = string
     ou    = string
+    # Display name of the account. Null = the map key. Set it when adopting an
+    # existing account whose name differs from the key (adopt_existing).
+    name = optional(string)
     alternate_contacts = optional(map(object({
       contact_type  = string
       name          = string

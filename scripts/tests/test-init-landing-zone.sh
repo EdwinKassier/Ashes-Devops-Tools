@@ -139,6 +139,39 @@ else
   fail "--force overwrites an existing file"; cat "${log}" >&2
 fi
 
+echo "==> AWS email pattern, GitHub owner and SaaS stack flags"
+out2="${workdir}/flags.yaml"
+if bash "${SCRIPT}" --non-interactive --output "${out2}" --org-name acme --tfc-org acme-tfc --clouds aws,saas \
+  --aws-management-account 123456789012 --aws-email-pattern 'aws+{key}@acme.io' --github-owner acme \
+  --supabase-org abcdefgh1234 --vercel-team team_x --github-repo acme/web </dev/null >"${log}" 2>&1; then
+  pass "flags run exits 0"
+  assert_line "${out2}" 'log_archive: \{email: aws\+log-archive@acme\.io' "email pattern fills the account emails"
+  assert_no_line "${out2}" '^[^#]*@example\.com' "no example.com emails left"
+  assert_line "${out2}" '^  github_federation_owners:$' "github_federation_owners uncommented"
+  assert_line "${out2}" '^    - acme$' "github owner listed"
+  assert_line "${out2}" '^      organization_id: abcdefgh1234$' "saas.defaults.supabase.organization_id"
+  assert_line "${out2}" '^      team_id: team_x$' "saas.defaults.vercel.team_id"
+  assert_line "${out2}" '^        github_repo: acme/web$' "saas.stacks.web.vercel.github_repo"
+  assert_line "${out2}" '^        project_name: acme-web$' "SaaS project names default to <prefix>-web"
+  assert_no_line "${log}" 'Still placeholders' "no placeholders reported for the enabled clouds"
+  if yamllint_cmd -s -d "${YAMLLINT_RULES}" "${out2}"; then pass "flags output is yamllint-clean"; else fail "flags output is yamllint-clean"; fi
+else
+  fail "flags run exits 0"; cat "${log}" >&2
+fi
+expect_reject "rejects an email pattern without {key}" --output "${workdir}/f.yaml" --org-name acme --clouds aws \
+  --aws-email-pattern 'aws@acme.io'
+expect_reject "rejects an example.com email pattern" --output "${workdir}/g.yaml" --org-name acme --clouds aws \
+  --aws-email-pattern 'aws+{key}@example.com'
+
+echo "==> a gcp-only run does not report AWS placeholders"
+out3="${workdir}/gcp-only.yaml"
+if bash "${SCRIPT}" --non-interactive --output "${out3}" --org-name acme --tfc-org acme-tfc --clouds gcp --domain acme.com \
+  </dev/null >"${log}" 2>&1; then
+  assert_no_line "${log}" 'example\.com, ou:' "AWS account emails not reported on a gcp-only run"
+else
+  fail "gcp-only run exits 0"; cat "${log}" >&2
+fi
+
 echo
 echo "test-init-landing-zone: ${passes} passed, ${failures} failed"
 [[ "${failures}" -eq 0 ]]

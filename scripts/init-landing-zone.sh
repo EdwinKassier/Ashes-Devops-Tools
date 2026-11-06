@@ -29,6 +29,11 @@ AWS_MGMT_ACCOUNT=""
 GCP_REGION=""
 AWS_REGION=""
 CLOUDS=""
+AWS_EMAIL_PATTERN=""
+GITHUB_OWNER=""
+SUPABASE_ORG=""
+VERCEL_TEAM=""
+GITHUB_REPO=""
 REBRAND=false
 FORCE=false
 INTERACTIVE=true
@@ -56,6 +61,13 @@ Options:
   --aws-management-account ID   12-digit AWS management (payer) account ID.
   --gcp-region REGION           Default GCP region (org.regions.gcp). Default europe-west2.
   --aws-region REGION           Default AWS region (org.regions.aws). Default eu-west-2.
+  --aws-email-pattern PATTERN   Root-email pattern for every AWS account, with {key} replaced
+                                by the account key, e.g. 'aws+{key}@acme.com'. Each address
+                                must be real, unique and deliverable (plus-addressing works).
+  --github-owner NAME           GitHub user/org whose Actions may deploy (aws.github_federation_owners).
+  --supabase-org ID             Supabase organization ID (saas.defaults.supabase.organization_id).
+  --vercel-team ID              Vercel team ID (saas.defaults.vercel.team_id).
+  --github-repo OWNER/REPO      Repository of the first SaaS stack, "web" (saas.stacks.web).
   --output PATH                 Output file. Default config/landing-zone.yaml.
   --rebrand                     Also replace the "Ashes DevOps Tools" title in README.md.
   --force                       Overwrite an existing output file.
@@ -87,6 +99,11 @@ while [[ $# -gt 0 ]]; do
     --aws-management-account) need_arg "$@"; AWS_MGMT_ACCOUNT="$2"; shift 2 ;;
     --gcp-region) need_arg "$@"; GCP_REGION="$2"; shift 2 ;;
     --aws-region) need_arg "$@"; AWS_REGION="$2"; shift 2 ;;
+    --aws-email-pattern) need_arg "$@"; AWS_EMAIL_PATTERN="$2"; shift 2 ;;
+    --github-owner) need_arg "$@"; GITHUB_OWNER="$2"; shift 2 ;;
+    --supabase-org) need_arg "$@"; SUPABASE_ORG="$2"; shift 2 ;;
+    --vercel-team) need_arg "$@"; VERCEL_TEAM="$2"; shift 2 ;;
+    --github-repo) need_arg "$@"; GITHUB_REPO="$2"; shift 2 ;;
     --output) need_arg "$@"; OUTPUT="$2"; shift 2 ;;
     --rebrand) REBRAND=true; shift ;;
     --force) FORCE=true; shift ;;
@@ -185,6 +202,23 @@ fi
 if [[ -n "${AWS_MGMT_ACCOUNT}" ]]; then
   [[ "${AWS_MGMT_ACCOUNT}" =~ ^[0-9]{12}$ ]] || die "--aws-management-account must be a 12-digit AWS account ID"
 fi
+if [[ -n "${AWS_EMAIL_PATTERN}" ]]; then
+  [[ "${AWS_EMAIL_PATTERN}" =~ ^[A-Za-z0-9._%+-]*\{key\}[A-Za-z0-9._%+-]*@[a-z0-9.-]+\.[a-z]+$ ]] ||
+    die "--aws-email-pattern must contain {key} in the local part, e.g. aws+{key}@acme.com"
+  [[ "${AWS_EMAIL_PATTERN}" != *@example.com ]] || die "--aws-email-pattern must use a real, deliverable domain"
+fi
+if [[ -n "${GITHUB_OWNER}" ]]; then
+  [[ "${GITHUB_OWNER}" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,38}$ ]] || die "--github-owner must be a GitHub user/org name"
+fi
+if [[ -n "${SUPABASE_ORG}" ]]; then
+  [[ "${SUPABASE_ORG}" =~ ^[a-z0-9]{8,}$ ]] || die "--supabase-org must be at least 8 lowercase alphanumerics"
+fi
+if [[ -n "${VERCEL_TEAM}" ]]; then
+  [[ "${VERCEL_TEAM}" =~ ^[A-Za-z0-9_-]+$ ]] || die "--vercel-team must be a Vercel team ID"
+fi
+if [[ -n "${GITHUB_REPO}" ]]; then
+  [[ "${GITHUB_REPO}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die "--github-repo must be OWNER/REPO"
+fi
 [[ "${GCP_REGION}" =~ ^[a-z]+-[a-z]+[0-9]+$ ]] || die "--gcp-region '${GCP_REGION}' is not a GCP region name"
 [[ "${AWS_REGION}" =~ ^[a-z]{2}-[a-z]+-[1-9][0-9]?$ ]] || die "--aws-region '${AWS_REGION}' is not an AWS region name"
 
@@ -213,6 +247,28 @@ fi
 [[ -z "${BILLING_ACCOUNT}" ]] || sed_args+=(-e "s|REPLACE_WITH_BILLING_ACCOUNT_ID|$(esc "${BILLING_ACCOUNT}")|")
 [[ -z "${GCP_ADMIN_EMAIL}" ]] || sed_args+=(-e "s|REPLACE_WITH_ADMIN_EMAIL|$(esc "${GCP_ADMIN_EMAIL}")|")
 [[ -z "${AWS_MGMT_ACCOUNT}" ]] || sed_args+=(-e "s|REPLACE_WITH_12_DIGIT_ID|${AWS_MGMT_ACCOUNT}|g")
+if [[ -n "${AWS_EMAIL_PATTERN}" ]]; then
+  # aws+<key>@example.com -> the pattern with {key} = the account key (log-archive, workload-dev, ...).
+  email_lhs="${AWS_EMAIL_PATTERN%%\{key\}*}"
+  email_rhs="${AWS_EMAIL_PATTERN#*\{key\}}"
+  sed_args+=(-e "s|aws+\([a-z0-9-]*\)@example\.com|$(esc "${email_lhs}")\1$(esc "${email_rhs}")|g")
+fi
+if [[ -n "${GITHUB_OWNER}" ]]; then
+  sed_args+=(
+    -e "s|^  # github_federation_owners:\$|  github_federation_owners:|"
+    -e "s|^  #   - my-github-org\$|    - $(esc "${GITHUB_OWNER}")|"
+  )
+fi
+# SaaS: uncomment and fill saas.defaults / saas.stacks.web when values are given.
+if has_cloud saas && [[ -n "${SUPABASE_ORG}${VERCEL_TEAM}${GITHUB_REPO}" ]]; then
+  sed_args+=(
+    -e "/^  # defaults:\$/,/^  #       production_branch: main\$/s|^  # |  |"
+  )
+  [[ -z "${SUPABASE_ORG}" ]] || sed_args+=(-e "s|REPLACE_WITH_SUPABASE_ORG_ID|$(esc "${SUPABASE_ORG}")|")
+  [[ -z "${VERCEL_TEAM}" ]] || sed_args+=(-e "s|REPLACE_WITH_VERCEL_TEAM_ID|$(esc "${VERCEL_TEAM}")|")
+  [[ -z "${GITHUB_REPO}" ]] || sed_args+=(-e "s|github_repo: my-org/web|github_repo: $(esc "${GITHUB_REPO}")|")
+  sed_args+=(-e "s|project_name: my-org-web|project_name: $(esc "${PREFIX}")-web|g")
+fi
 
 tmp="$(mktemp)"
 trap 'rm -f "${tmp}"' EXIT
@@ -256,7 +312,17 @@ if [[ "${REBRAND}" == true ]]; then
 fi
 
 # ── Next steps ───────────────────────────────────────────────────────────────
-remaining="$(grep -nE 'REPLACE_WITH_|@example\.com' "${OUTPUT}" | grep -vE '^[0-9]+:[[:space:]]*#' || true)"
+# Only report placeholders in sections the plan will read (org + enabled clouds).
+remaining="$(awk -v gcp="$(has_cloud gcp && echo 1 || echo 0)" -v aws="$(has_cloud aws && echo 1 || echo 0)" \
+  -v saas="$(has_cloud saas && echo 1 || echo 0)" '
+  /^[a-z_]+:/ { section = $1; sub(":", "", section) }
+  /^[[:space:]]*#/ { next }
+  /REPLACE_WITH_|@example\.com/ {
+    if (section == "gcp" && !gcp) next
+    if (section == "aws" && !aws) next
+    if (section == "saas" && !saas) next
+    print NR ":" $0
+  }' "${OUTPUT}")"
 cat <<EOF
 
 Next steps:

@@ -15,7 +15,7 @@ This guide covers everything needed to deploy the **GCP** landing zone from scra
 time is set by the steps around them: organization and billing access, quota and
 API enablement, group creation, IAM propagation, VPC-SC dry-run review, and
 first-apply fixes. Plan on about **2–3 working days** for the GCP foundation
-(through `gcp-network-hub` plus one `gcp-workload-<env>`), and about **a week**
+(through `gcp-network-hub` plus one `gcp-workload-<env>`), and about **1–2 weeks**
 for the AWS landing zone (account creation and the manual console gates in the
 [AWS Bootstrap runbook](../runbooks/aws-bootstrap.md)).
 
@@ -75,15 +75,19 @@ make pre-commit-install
 ## 2a. Configure the Landing Zone (one file)
 
 ```bash
-scripts/init-landing-zone.sh --org-name acme --clouds gcp,aws \
+scripts/init-landing-zone.sh --org-name acme --tfc-org acme --clouds gcp,aws \
   --domain acme.com --billing-account 0A1B2C-3D4E5F-6A7B8C \
-  --gcp-admin-email admin@acme.com --aws-management-account 123456789012
+  --gcp-admin-email admin@acme.com --aws-management-account 123456789012 \
+  --aws-email-pattern 'aws+{key}@acme.com' --github-owner acme
+# SaaS: add --clouds saas --supabase-org <id> --vercel-team <id> --github-repo acme/web
 # or interactively: scripts/init-landing-zone.sh
 # or by hand:       cp config/landing-zone.example.yaml config/landing-zone.yaml
 git add config/landing-zone.yaml && git commit -m "config: landing zone"
 ```
 
-The script validates the inputs the same way the Terraform variables do. It writes `config/landing-zone.yaml` and lists the placeholders still left (AWS root emails, admin groups). `--rebrand` also renames the README title. Review the environments, CIDRs and groups before you commit.
+The script validates the inputs the same way the Terraform variables do. It writes `config/landing-zone.yaml` and lists the placeholders still left for the clouds you enabled, such as admin groups. `--rebrand` also renames the README title. Review the environments, CIDRs and groups before you commit.
+
+**CI on a fresh fork.** Scheduled drift detection and sandbox E2E **fail** until they are configured ([CI secrets](CI_SECRETS.md)), because a check that never ran must not read as green. If you are not ready to configure them, set the repository variable `REAL_CLOUD_CHECKS_OPT_OUT=true` to acknowledge running without them: `gh variable set REAL_CLOUD_CHECKS_OPT_OUT --body true`.
 
 How the roots read it:
 
@@ -130,7 +134,7 @@ Generate a token at [https://vercel.com/account/tokens](https://vercel.com/accou
 
 **Node.js requirement for vault-secrets:**
 
-`enable_vault_secrets = true` executes a Node.js script to bootstrap and reconcile the Supabase Vault. Dependencies install **automatically** at apply time — a `null_resource.npm_install` runs `npm ci` in `modules/supabase/vault-secrets/scripts` before the bootstrap/reconcile scripts. No manual step is required; the apply runner only needs **Node.js 18+ and npm** on PATH (CI runners on ubuntu-latest have them).
+`enable_vault_secrets = true` executes a Node.js script to bootstrap and reconcile the Supabase Vault. Dependencies install **automatically** at apply time — a `terraform_data.npm_install` runs `npm ci` in `modules/supabase/vault-secrets/scripts` before the bootstrap/reconcile scripts. No manual step is required; the apply runner only needs **Node.js 18+ and npm** on PATH (GitHub ubuntu-latest runners have them; on HCP Terraform use an agent pool whose image includes Node.js, since the hosted worker image is not guaranteed to).
 
 The `pg ^8.20.0` package connects to the Supabase session-mode pooler to execute the bootstrap SQL. `scripts/node_modules/` is gitignored and rebuilt by the automated `npm ci`. To prime it locally: `npm ci --prefix modules/supabase/vault-secrets/scripts`.
 
@@ -201,7 +205,6 @@ Terraform will create:
 terraform -chdir=envs/gcp/bootstrap output -json | jq '{
   admin_project_id:      .admin_project_id.value,
   terraform_admin_email: .terraform_admin_email.value,
-  github_oidc_pool_id:   .github_oidc_pool_id.value,
   tfc_oidc_pool_id:      .tfc_oidc_pool_id.value
 }'
 ```
@@ -394,7 +397,7 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
 - [ ] `make fmt-check`, `make docs-check`, and `make security` succeed
 - [ ] `make test` reports `X passed, 0 failed`
 - [ ] `terraform init` succeeds for all five GCP roots (`bootstrap`, `organization`, `projects`, `network-hub`, `workload`)
-- [ ] Bootstrap outputs include `github_oidc_pool_id` and `tfc_oidc_pool_id`
+- [ ] Bootstrap outputs include `tfc_oidc_pool_id` (and `github_oidc_pool_id` only if you enabled `enable_github_wif`)
 
 ---
 

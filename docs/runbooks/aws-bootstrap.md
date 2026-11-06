@@ -2,7 +2,7 @@
 
 **When to use:** You are standing up the AWS landing zone from zero — no AWS organization, no Terraform Cloud workspaces, no state. This is the AWS equivalent of the GCP [Quick Start](../guides/QUICK_START.md) bootstrap section, and it solves the same chicken-and-egg problem: the TFC workspace and AWS run credentials must exist **before** `terraform init` can store state.
 
-**Time:** 2–4 hours for the first stand-up (mostly waiting on AWS account creation and manual console gates).
+**Time:** about 1–2 weeks for a first production stand-up, mostly account creation, the Identity Center console gate, IAM propagation and reviewing each layer's first plan. A sandbox run-through with the shipped phase-0 template takes about a day.
 **Risk:** High for the management-account steps — you are operating with elevated, out-of-band credentials that bypass the guardrails the org root will later install. Every phase-0 action should be logged and the bootstrap identity revoked once CI takes over.
 **Prerequisites:** See the out-of-band list below. You are comfortable with the [provider-selection model](../architecture/provider-selection.md) (one cloud = one root = one workspace) and the [cross-root contract](../architecture/adding-a-cloud.md) (downstream roots assume roles whose ARNs the org root publishes).
 
@@ -287,7 +287,7 @@ Follow this order top to bottom. **Manual gates** are inline and must be complet
 
 Teardown is the **reverse** of the stand-up order (destroy workloads first, `aws-organization` last), and it carries a hard caveat: the Log Archive bucket uses **S3 Object Lock in COMPLIANCE mode**, which cannot be shortened or bypassed even by the root user — objects are immutable until their retention expires, so the bucket (and often the whole `log_archive` account) cannot be destroyed on demand.
 
-The full reverse-order destroy procedure and the Object-Lock caveat are covered in `docs/runbooks/aws-teardown.md` (a later task). Do not attempt a blind `terraform destroy` across roots before reading it.
+The full reverse-order destroy procedure and the Object-Lock caveat are covered in [`aws-teardown.md`](aws-teardown.md). Do not attempt a blind `terraform destroy` across roots before reading it.
 
 ---
 
