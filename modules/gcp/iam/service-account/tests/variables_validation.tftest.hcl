@@ -121,3 +121,13 @@ run "rejects_invalid_workload_identity_member_prefix" {
     workload_identity_members = ["user:someone@example.com"]
   }
 }
+
+run "impersonation_expiry_must_be_rfc3339_utc" {
+  command = plan
+
+  variables {
+    impersonation_expires_at = "next week"
+  }
+
+  expect_failures = [var.impersonation_expires_at]
+}

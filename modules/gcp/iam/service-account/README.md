@@ -153,7 +153,7 @@ The following resources are created:
 - resource.google_project_iam_member.sa_project_roles (modules/gcp/iam/service-account/main.tf#L13)
 - resource.google_service_account.service_account (modules/gcp/iam/service-account/main.tf#L5)
 - resource.google_service_account_iam_member.impersonation (modules/gcp/iam/service-account/main.tf#L41)
-- resource.google_service_account_iam_member.workload_identity_user (modules/gcp/iam/service-account/main.tf#L50)
+- resource.google_service_account_iam_member.workload_identity_user (modules/gcp/iam/service-account/main.tf#L61)
 
 
 ## Inputs
@@ -165,6 +165,7 @@ The following resources are created:
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The ID of the project where the service account will be created | `string` | n/a | yes |
 | <a name="input_description"></a> [description](#input\_description) | A description of the service account | `string` | `null` | no |
 | <a name="input_folder_roles"></a> [folder\_roles](#input\_folder\_roles) | List of folder-level IAM role assignments | <pre>list(object({<br/>    folder_id = string<br/>    role      = string<br/>  }))</pre> | `[]` | no |
+| <a name="input_impersonation_expires_at"></a> [impersonation\_expires\_at](#input\_impersonation\_expires\_at) | Optional RFC 3339 UTC timestamp (e.g. 2026-12-31T00:00:00Z) after which the impersonation\_members grants stop working (IAM condition on request.time). Null = no expiry. | `string` | `null` | no |
 | <a name="input_impersonation_members"></a> [impersonation\_members](#input\_impersonation\_members) | List of members allowed to impersonate this service account (format: user:email, group:email, serviceAccount:email) | `list(string)` | `[]` | no |
 | <a name="input_organization_roles"></a> [organization\_roles](#input\_organization\_roles) | List of organization-level IAM role assignments | <pre>list(object({<br/>    org_id = string<br/>    role   = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_project_roles"></a> [project\_roles](#input\_project\_roles) | List of IAM roles to grant to the service account at project level | `list(string)` | `[]` | no |

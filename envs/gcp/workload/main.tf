@@ -206,6 +206,14 @@ module "host" {
     }
   }
 
+  # Google APIs via PSC. Behind an ENFORCED perimeter the endpoint targets the
+  # vpc-sc (restricted.googleapis.com) bundle, so APIs outside the perimeter's
+  # supported set are unreachable from the VPC rather than an exfil path; while
+  # the perimeter is absent or in dry-run, all-apis keeps everything working.
+  private_service_connect = {
+    target = local.psc_target
+  }
+
   # Hub peering and the DNS peering zone (empty maps in standalone mode).
   peerings  = local.hub_vpc_peerings
   dns_zones = local.hub_dns_zones
@@ -516,4 +524,8 @@ check "vpc_sc_enforced_in_prod" {
     condition     = !local.is_production || (local.vpc_sc_access_policy != null && !local.vpc_sc_enable_dry_run)
     error_message = "Environment '${var.environment}' is production but its VPC-SC perimeter is ${local.vpc_sc_access_policy == null ? "NOT CREATED (no scoped access policy in environment_config and vpc_sc_access_policy_name is null)" : "in DRY-RUN (vpc_sc_enable_dry_run = true)"}. Dry-run gives no exfiltration protection: validate the violation logs, then set vpc_sc_enable_dry_run = false (use vpc_sc_dry_run_restricted_services to keep staging further changes)."
   }
+}
+
+locals {
+  psc_target = coalesce(var.private_service_connect_target, local.vpc_sc_access_policy != null && !local.vpc_sc_enable_dry_run ? "vpc-sc" : "all-apis")
 }

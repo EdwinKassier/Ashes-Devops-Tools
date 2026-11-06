@@ -53,6 +53,16 @@ policy "database_private_encrypted" {
   enforcement_level = "mandatory"
 }
 
+policy "aws_iam_federated_trust_pinned" {
+  query             = "data.terraform.policies.aws_iam_federated_trust_pinned.deny"
+  enforcement_level = "mandatory"
+}
+
+policy "gcp_no_basic_roles_high_scope" {
+  query             = "data.terraform.policies.gcp_no_basic_roles_high_scope.deny"
+  enforcement_level = "mandatory"
+}
+
 policy "gcp_cloud_run_no_public_url" {
   query             = "data.terraform.policies.gcp_cloud_run_no_public_url.deny"
   enforcement_level = "mandatory"

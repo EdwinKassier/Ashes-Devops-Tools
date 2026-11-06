@@ -599,3 +599,14 @@ variable "public_ingress_services" {
     error_message = "Every public_ingress_services (or gcp.workload.public_ingress.<environment>) key must be an app_services entry."
   }
 }
+
+variable "private_service_connect_target" {
+  description = "PSC endpoint bundle for Google APIs: all-apis or vpc-sc. Null (default) derives it: vpc-sc once the environment's VPC-SC perimeter is enforced, else all-apis."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.private_service_connect_target == null || contains(["all-apis", "vpc-sc"], coalesce(var.private_service_connect_target, "all-apis"))
+    error_message = "private_service_connect_target must be all-apis or vpc-sc."
+  }
+}

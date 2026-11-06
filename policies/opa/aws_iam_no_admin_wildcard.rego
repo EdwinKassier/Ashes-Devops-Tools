@@ -37,10 +37,18 @@ admin_statement(stmt) if {
 	"*" in lib.as_list(object.get(stmt, "Resource", null))
 }
 
+# NotAction + Allow on every resource is admin minus a short list: the classic
+# way around an "Action: *" check.
+admin_statement(stmt) if {
+	stmt.Effect == "Allow"
+	object.get(stmt, "NotAction", null) != null
+	"*" in lib.as_list(object.get(stmt, "Resource", null))
+}
+
 deny contains msg if {
 	some [address, raw] in documents
 	doc := lib.policy_doc(raw)
 	some stmt in lib.statements(doc)
 	admin_statement(stmt)
-	msg := sprintf("%s: policy Allows Action \"*\" on Resource \"*\"", [address])
+	msg := sprintf("%s: policy Allows Action \"*\" (or NotAction) on Resource \"*\"", [address])
 }

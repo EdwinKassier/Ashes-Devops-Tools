@@ -417,7 +417,7 @@ variable "viewer_team_ids" {
 }
 
 variable "enable_policy_sets" {
-  description = "Create an OPA policy set sourced from policies/opa in the VCS repo, attached to every managed workspace. Enforcement is mixed: 8 mandatory + 3 advisory policies (policies/opa/policies.hcl); mandatory failures are not overridable unless policy_set_overridable = true. Requires vcs_repo and a PAID HCP Terraform tier with policy enforcement. Default false."
+  description = "Create an OPA policy set sourced from policies/opa in the VCS repo, attached to every managed workspace. Enforcement is mixed: 10 mandatory + 3 advisory policies (policies/opa/policies.hcl); mandatory failures are not overridable unless policy_set_overridable = true. Requires vcs_repo and a PAID HCP Terraform tier with policy enforcement. Default false."
   type        = bool
   default     = false
 }

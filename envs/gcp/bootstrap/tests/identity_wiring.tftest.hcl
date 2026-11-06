@@ -75,6 +75,7 @@ run "production_environment_bound_by_workspace_ids" {
   command = plan
 
   variables {
+    phase0_admin_impersonation_expires_at = "2026-12-31T00:00:00Z"
     tfc_workspace_ids = {
       "gcp-bootstrap"     = "ws-Boot1"
       "gcp-organization"  = "ws-Org1"

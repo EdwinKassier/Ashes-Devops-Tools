@@ -91,6 +91,12 @@ run "perimeter_created_when_access_policy_set" {
     condition     = length(module.host.vpc_service_controls) == 1
     error_message = "setting vpc_sc_access_policy_name must create the environment perimeter"
   }
+
+  # Dry-run perimeter: keep all-apis until the perimeter is enforced.
+  assert {
+    condition     = local.psc_target == "all-apis"
+    error_message = "a dry-run perimeter must keep the all-apis PSC bundle."
+  }
 }
 
 # SOTA M: an enforced perimeter can stage a dry-run delta (status + spec).
@@ -106,6 +112,12 @@ run "enforced_perimeter_stages_dry_run_delta" {
   assert {
     condition     = module.host.vpc_service_controls["dev_perimeter"].enforced && module.host.vpc_service_controls["dev_perimeter"].dry_run_spec_staged
     error_message = "vpc_sc_dry_run_restricted_services on an enforced perimeter must keep status enforced AND stage a dry-run spec"
+  }
+
+  # Enforced perimeter: Google APIs through the restricted (vpc-sc) bundle.
+  assert {
+    condition     = local.psc_target == "vpc-sc"
+    error_message = "an enforced perimeter must switch the PSC endpoint to the vpc-sc bundle."
   }
 }
 

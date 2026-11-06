@@ -235,7 +235,8 @@ run "production_workspaces_must_be_bound_by_id" {
   command = plan
 
   variables {
-    production_workload_environments = ["prod"]
+    production_workload_environments      = ["prod"]
+    phase0_admin_impersonation_expires_at = "2026-12-31T00:00:00Z"
   }
 
   # Hard failure (precondition), not a warning: a production org must not plan
@@ -247,7 +248,8 @@ run "production_workspaces_bound_by_id_pass" {
   command = plan
 
   variables {
-    production_workload_environments = ["prod"]
+    production_workload_environments      = ["prod"]
+    phase0_admin_impersonation_expires_at = "2026-12-31T00:00:00Z"
     tfc_workspace_ids = {
       "gcp-bootstrap"     = "ws-Boot1"
       "gcp-organization"  = "ws-Org1"
@@ -458,4 +460,22 @@ run "principal_access_boundary_grants_are_opt_in" {
     condition     = contains(keys(google_organization_iam_member.stage_org_roles), "organization-plan|roles/iam.principalAccessBoundaryViewer")
     error_message = "enable_principal_access_boundary must grant organization-plan the PAB viewer role."
   }
+}
+
+# A production estate must not keep an open-ended human path to terraform-admin.
+run "production_phase0_impersonation_without_expiry_warns" {
+  command = plan
+
+  variables {
+    production_workload_environments = ["prod"]
+    tfc_workspace_ids = {
+      "gcp-bootstrap"     = "ws-Boot1"
+      "gcp-organization"  = "ws-Org1"
+      "gcp-projects"      = "ws-Proj1"
+      "gcp-network-hub"   = "ws-Hub1"
+      "gcp-workload-prod" = "ws-Prod1"
+    }
+  }
+
+  expect_failures = [check.phase0_impersonation_is_time_boxed]
 }

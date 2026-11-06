@@ -66,7 +66,18 @@ module "terraform_admin_sa" {
   # apply. Set enable_phase0_admin_impersonation = false once the gcp-bootstrap
   # workspace applies through TFC dynamic credentials (pass 2), so no standing
   # human path to the bootstrap apply identity remains.
-  impersonation_members = local.phase0_admin_impersonation_members
+  impersonation_members    = local.phase0_admin_impersonation_members
+  impersonation_expires_at = var.phase0_admin_impersonation_expires_at
+}
+
+# The phase-0 human path reaches the org-level security-admin identity. On a
+# production estate it must not be open-ended: disable it after the TFC
+# handover, or at least time-box it.
+check "phase0_impersonation_is_time_boxed" {
+  assert {
+    condition     = !var.enable_phase0_admin_impersonation || length(var.production_workload_environments) == 0 || var.phase0_admin_impersonation_expires_at != null
+    error_message = "Production environments exist and ${var.admin_email} can impersonate terraform-admin (org security admin) with no expiry. After the TFC handover set enable_phase0_admin_impersonation = false, or set phase0_admin_impersonation_expires_at (RFC 3339) to time-box it."
+  }
 }
 
 locals {

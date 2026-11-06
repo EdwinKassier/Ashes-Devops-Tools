@@ -88,3 +88,14 @@ variable "workload_identity_members" {
     error_message = "Each workload_identity_members entry must be prefixed with 'principalSet://' (federated identity) or 'serviceAccount:' (SA impersonation)."
   }
 }
+
+variable "impersonation_expires_at" {
+  description = "Optional RFC 3339 UTC timestamp (e.g. 2026-12-31T00:00:00Z) after which the impersonation_members grants stop working (IAM condition on request.time). Null = no expiry."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.impersonation_expires_at == null || can(regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$", coalesce(var.impersonation_expires_at, "x")))
+    error_message = "impersonation_expires_at must be an RFC 3339 UTC timestamp like 2026-12-31T00:00:00Z."
+  }
+}

@@ -104,6 +104,20 @@ release metadata for a Terraform Cloud run.
 - **The RCP data perimeter now covers ECR and CloudWatch Logs** (`ecr:*`, `logs:*`).
 - **`organization-policy` gains a `policy_contents` output**, for evidence and tests.
 
+#### Wave D
+
+- **Phase-0 human impersonation can be time-boxed.** `phase0_admin_impersonation_expires_at`
+  adds a `request.time` IAM condition, through the new `impersonation_expires_at` input on
+  `iam/service-account`. A check warns when a production estate keeps an open-ended human path to
+  terraform-admin.
+- **The PSC Google-APIs endpoint switches to the `vpc-sc` bundle once the environment's perimeter
+  is enforced** (`private_service_connect_target`, default derived).
+- **The OPA set goes from 8 to 10 mandatory policies.**
+  - New `aws_iam_federated_trust_pinned`: web-identity trusts must pin `aud` and a literal-tenant
+    `sub`.
+  - New `gcp_no_basic_roles_high_scope`: no Owner/Editor at organization or folder scope.
+  - `aws_iam_no_admin_wildcard` now also flags `NotAction` on `Resource "*"`.
+
 #### Boilerplate (Wave C)
 
 - **`make` sets a shared `TF_PLUGIN_CACHE_DIR`**, so `make ci` on a fresh clone no longer
