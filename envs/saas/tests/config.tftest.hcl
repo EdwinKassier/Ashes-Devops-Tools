@@ -41,3 +41,20 @@ run "explicit_variables_win" {
     error_message = "explicit variables must win over the config file."
   }
 }
+
+# An empty stack config fails with errors naming the config keys.
+run "missing_stack_config_names_the_keys" {
+  command = plan
+
+  variables {
+    stack = "unconfigured"
+  }
+
+  # Isolate the root's own checks from the stage's duplicate validations.
+  override_module {
+    target  = module.saas_workload
+    outputs = {}
+  }
+
+  expect_failures = [output.stack]
+}

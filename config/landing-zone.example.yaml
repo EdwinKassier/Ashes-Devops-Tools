@@ -111,6 +111,10 @@ gcp:
   network:
     hub_cidr_block: 10.0.0.0/16
     dns_hub_cidr_block: 10.1.0.0/16
+    # Numeric ID of the org Access Context Manager policy for the hub VPC-SC
+    # perimeter (gcloud access-context-manager policies list --organization=ID).
+    # Unset, no hub perimeter is created and a production environment warns.
+    # vpc_sc_access_policy: "1234567890"
   # Application environments, consumed by gcp-bootstrap, gcp-organization,
   # gcp-projects, gcp-network-hub, gcp-workload-<env> and tfc-admin (one
   # gcp-workload-<env> workspace per key). Keys: ^[a-z][a-z0-9-]{0,14}$, not

@@ -31,6 +31,7 @@ locals {
     billing_admin_groups      = try([for g in local.lz.gcp.billing_admin_groups : tostring(g)], null)
     allowed_regions           = try([for r in local.lz.gcp.allowed_regions : tostring(r)], null)
     hub_vpc_cidr_block        = try(tostring(local.lz.gcp.network.hub_cidr_block), null)
+    vpc_sc_access_policy      = try(tostring(local.lz.gcp.network.vpc_sc_access_policy), null)
     dns_hub_vpc_cidr_block    = try(tostring(local.lz.gcp.network.dns_hub_cidr_block), null)
     # Normalised to the attribute types of var.environments (region defaults to
     # org.regions.gcp, display_name to the key). A malformed entry is caught by
@@ -62,10 +63,12 @@ locals {
   # Effective values. Required ones fall back to an inert sentinel only so
   # static tools (tflint) can evaluate the root; the variable validations reject
   # the unset case first.
-  project_prefix         = coalesce(var.project_prefix, local.cfg.project_prefix, "unset")
-  default_region         = coalesce(var.default_region, local.cfg.default_region, "europe-west2")
-  environments           = var.environments != null ? var.environments : local.cfg.environments
-  hub_vpc_cidr_block     = coalesce(var.hub_vpc_cidr_block, local.cfg.hub_vpc_cidr_block, "0.0.0.0/32")
-  dns_hub_vpc_cidr_block = coalesce(var.dns_hub_vpc_cidr_block, local.cfg.dns_hub_vpc_cidr_block, "0.0.0.0/32")
-  tfc_organization       = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
+  project_prefix     = coalesce(var.project_prefix, local.cfg.project_prefix, "unset")
+  default_region     = coalesce(var.default_region, local.cfg.default_region, "europe-west2")
+  environments       = var.environments != null ? var.environments : local.cfg.environments
+  hub_vpc_cidr_block = coalesce(var.hub_vpc_cidr_block, local.cfg.hub_vpc_cidr_block, "0.0.0.0/32")
+  # Org Access Context Manager policy for the hub perimeter (numeric ID).
+  vpc_sc_access_policy_name = var.vpc_sc_access_policy_name != null ? var.vpc_sc_access_policy_name : local.cfg.vpc_sc_access_policy
+  dns_hub_vpc_cidr_block    = coalesce(var.dns_hub_vpc_cidr_block, local.cfg.dns_hub_vpc_cidr_block, "0.0.0.0/32")
+  tfc_organization          = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
 }

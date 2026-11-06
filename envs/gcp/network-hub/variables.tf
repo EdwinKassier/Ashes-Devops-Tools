@@ -88,7 +88,7 @@ variable "dns_hub_vpc_cidr_block" {
 }
 
 variable "vpc_sc_access_policy_name" {
-  description = "Bare numeric ID of the org-level Access Context Manager access policy for the hub VPC-SC perimeter (e.g. '1234567890'). Optional — if null, no hub perimeter is created. Do NOT include the 'accessPolicies/' prefix."
+  description = "Bare numeric ID of the org-level Access Context Manager access policy for the hub VPC-SC perimeter (e.g. '1234567890'). Optional — if null, no hub perimeter is created. Do NOT include the 'accessPolicies/' prefix. Null = gcp.network.vpc_sc_access_policy from config/landing-zone.yaml."
   type        = string
   default     = null
 
