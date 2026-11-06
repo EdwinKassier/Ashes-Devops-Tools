@@ -115,6 +115,7 @@ The following resources are created:
 - resource.google_service_account.stage (modules/gcp/stages/bootstrap/service_accounts.tf#L234)
 - resource.google_service_account_iam_member.guardrails_impersonation (modules/gcp/stages/bootstrap/service_accounts.tf#L369)
 - resource.random_id.suffix (modules/gcp/stages/bootstrap/main.tf#L6)
+- resource.terraform_data.phase0_impersonation_is_time_boxed (modules/gcp/stages/bootstrap/main.tf#L77)
 - resource.terraform_data.production_workspaces_bound_by_id (modules/gcp/stages/bootstrap/service_accounts.tf#L329)
 
 

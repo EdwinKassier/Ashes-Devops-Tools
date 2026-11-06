@@ -72,11 +72,14 @@ module "terraform_admin_sa" {
 
 # The phase-0 human path reaches the org-level security-admin identity. On a
 # production estate it must not be open-ended: disable it after the TFC
-# handover, or at least time-box it.
-check "phase0_impersonation_is_time_boxed" {
-  assert {
-    condition     = !var.enable_phase0_admin_impersonation || length(var.production_workload_environments) == 0 || var.phase0_admin_impersonation_expires_at != null
-    error_message = "Production environments exist and ${var.admin_email} can impersonate terraform-admin (org security admin) with no expiry. After the TFC handover set enable_phase0_admin_impersonation = false, or set phase0_admin_impersonation_expires_at (RFC 3339) to time-box it."
+# handover, or time-box it. A precondition (not a check) so the plan fails; it
+# only tests that an expiry is set and never compares it with the current time.
+resource "terraform_data" "phase0_impersonation_is_time_boxed" {
+  lifecycle {
+    precondition {
+      condition     = !var.enable_phase0_admin_impersonation || length(var.production_workload_environments) == 0 || var.phase0_admin_impersonation_expires_at != null
+      error_message = "Production environments exist and ${var.admin_email} can impersonate terraform-admin (org security admin) with no expiry. After the TFC handover set enable_phase0_admin_impersonation = false, or set phase0_admin_impersonation_expires_at (RFC 3339; gcp.phase0_admin_impersonation_expires_at in config) to time-box it."
+    }
   }
 }
 

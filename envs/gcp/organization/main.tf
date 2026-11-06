@@ -106,7 +106,7 @@ module "organization" {
   custom_org_constraints = var.custom_org_constraints
 
   # Opt-in WORM lock on the audit-log bucket (default false; irreversible).
-  enable_audit_bucket_lock = var.enable_audit_bucket_lock
+  enable_audit_bucket_lock = local.enable_audit_bucket_lock
 
   # Opt-in IAM deny policies at the org node (default [] = none).
   iam_deny_policies = var.iam_deny_policies

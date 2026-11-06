@@ -34,6 +34,7 @@ GITHUB_OWNER=""
 SUPABASE_ORG=""
 VERCEL_TEAM=""
 GITHUB_REPO=""
+AUDIT_BUCKET_LOCK=""
 REBRAND=false
 FORCE=false
 INTERACTIVE=true
@@ -68,6 +69,9 @@ Options:
   --supabase-org ID             Supabase organization ID (saas.defaults.supabase.organization_id).
   --vercel-team ID              Vercel team ID (saas.defaults.vercel.team_id).
   --github-repo OWNER/REPO      Repository of the first SaaS stack, "web" (saas.stacks.web).
+  --audit-bucket-lock BOOL      true|false: irreversible WORM lock on the org audit-log bucket
+                                (gcp.enable_audit_bucket_lock). Default false; prompted for
+                                explicitly when interactive.
   --output PATH                 Output file. Default config/landing-zone.yaml.
   --rebrand                     Also replace the "Ashes DevOps Tools" title in README.md.
   --force                       Overwrite an existing output file.
@@ -104,6 +108,7 @@ while [[ $# -gt 0 ]]; do
     --supabase-org) need_arg "$@"; SUPABASE_ORG="$2"; shift 2 ;;
     --vercel-team) need_arg "$@"; VERCEL_TEAM="$2"; shift 2 ;;
     --github-repo) need_arg "$@"; GITHUB_REPO="$2"; shift 2 ;;
+    --audit-bucket-lock) need_arg "$@"; AUDIT_BUCKET_LOCK="$2"; shift 2 ;;
     --output) need_arg "$@"; OUTPUT="$2"; shift 2 ;;
     --rebrand) REBRAND=true; shift ;;
     --force) FORCE=true; shift ;;
@@ -163,7 +168,9 @@ if has_cloud gcp; then
   prompt BILLING_ACCOUNT "GCP billing account ID (blank to fill in later)"
   prompt GCP_ADMIN_EMAIL "GCP organization admin email (blank to fill in later)"
   prompt GCP_REGION "Default GCP region" "europe-west2"
+  prompt AUDIT_BUCKET_LOCK "Lock the org audit-log bucket (WORM, IRREVERSIBLE; true/false)" "false"
 fi
+AUDIT_BUCKET_LOCK="${AUDIT_BUCKET_LOCK:-false}"
 if has_cloud aws; then
   prompt AWS_MGMT_ACCOUNT "AWS management account ID (12 digits, blank to fill in later)"
   prompt AWS_REGION "Default AWS region" "eu-west-2"
@@ -222,6 +229,17 @@ fi
 [[ "${GCP_REGION}" =~ ^[a-z]+-[a-z]+[0-9]+$ ]] || die "--gcp-region '${GCP_REGION}' is not a GCP region name"
 [[ "${AWS_REGION}" =~ ^[a-z]{2}-[a-z]+-[1-9][0-9]?$ ]] || die "--aws-region '${AWS_REGION}' is not an AWS region name"
 
+[[ "${AUDIT_BUCKET_LOCK}" == true || "${AUDIT_BUCKET_LOCK}" == false ]] ||
+  die "--audit-bucket-lock must be true or false"
+
+# Phase-0 impersonation expiry: now + 7 days (RFC 3339 UTC). BSD date takes
+# -v+7d, GNU date takes -d '+7 days'.
+if PHASE0_EXPIRES_AT="$(date -u -v+7d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"; then
+  :
+else
+  PHASE0_EXPIRES_AT="$(date -u -d '+7 days' +%Y-%m-%dT%H:%M:%SZ)"
+fi
+
 # ── Render ───────────────────────────────────────────────────────────────────
 # All values are validated above to contain no sed metacharacters except '.',
 # which is harmless in a replacement; escape '&', '|' and '\' anyway.
@@ -237,6 +255,8 @@ sed_args=(
   -e "s|my-org-org-log-archive|$(esc "${PREFIX}")-org-log-archive|"
   -e "s|europe-west2|$(esc "${GCP_REGION}")|g"
   -e "s|eu-west-2|$(esc "${AWS_REGION}")|g"
+  -e "s|^  # phase0_admin_impersonation_expires_at: .*\$|  phase0_admin_impersonation_expires_at: \"${PHASE0_EXPIRES_AT}\"|"
+  -e "s|^  # enable_audit_bucket_lock: false\$|  enable_audit_bucket_lock: ${AUDIT_BUCKET_LOCK}|"
 )
 if [[ -n "${DOMAIN}" ]]; then
   sed_args+=(

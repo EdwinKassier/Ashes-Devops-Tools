@@ -104,6 +104,15 @@ gcp:
     - secops@my-org.example.com
   # Optional explicit override of the derived containment default.
   # admin_containment: true
+  # RFC 3339 UTC end of the phase-0 window in which admin_email may impersonate
+  # terraform-admin (gcp-bootstrap). Required, or the plan fails, while the grant
+  # is enabled and any environment is_production. The scaffolder writes now + 7
+  # days; extend it deliberately, or set enable_phase0_admin_impersonation=false
+  # after the TFC handover. Never compared with the current time at plan.
+  # phase0_admin_impersonation_expires_at: "2026-01-01T00:00:00Z"
+  # Opt-in WORM lock on the org audit-log bucket (gcp-organization). IRREVERSIBLE:
+  # leave false unless a compliance regime requires tamper-proof retention.
+  # enable_audit_bucket_lock: false
   # Regions allowed by the resource-location org policy (gcp-organization).
   allowed_regions:
     - europe-west2

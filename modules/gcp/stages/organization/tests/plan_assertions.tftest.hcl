@@ -477,9 +477,9 @@ run "projects_delegation_is_bound_per_folder" {
   }
 }
 
-# ── Containment: production warning, deny coverage ──────────────────────────
+# ── Containment: production fails the plan, deny coverage ──────────────────────────
 
-run "production_without_containment_warns" {
+run "production_without_containment_fails" {
   command = plan
 
   variables {
@@ -498,11 +498,38 @@ run "production_without_containment_warns" {
     outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "acme.io", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = {}, folders = { prod = { id = "333333333", name = "folders/333333333", display_name = "Production" } } }
   }
 
-  expect_failures = [check.production_requires_admin_containment]
+  expect_failures = [terraform_data.production_requires_admin_containment]
 
   assert {
     condition     = output.production_environment_keys == tolist(["prod"])
     error_message = "is_production must drive the production environment list."
+  }
+}
+
+run "explicit_waiver_plans" {
+  command = plan
+
+  variables {
+    enable_admin_containment      = false
+    production_containment_waived = true
+    environments = {
+      prod = {
+        display_name            = "Production"
+        description             = "Production environment"
+        iam_group_role_bindings = {}
+        is_production           = true
+      }
+    }
+  }
+
+  override_module {
+    target  = module.organization
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "acme.io", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = {}, folders = { prod = { id = "333333333", name = "folders/333333333", display_name = "Production" } } }
+  }
+
+  assert {
+    condition     = output.production_environment_keys == tolist(["prod"])
+    error_message = "an explicit enable_admin_containment = false waiver must let a production estate plan."
   }
 }
 

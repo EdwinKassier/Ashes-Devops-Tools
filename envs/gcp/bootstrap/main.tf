@@ -45,7 +45,7 @@ module "bootstrap" {
 
   # Phase-0 human impersonation of terraform-admin (turn off on pass 2).
   enable_phase0_admin_impersonation     = var.enable_phase0_admin_impersonation
-  phase0_admin_impersonation_expires_at = var.phase0_admin_impersonation_expires_at
+  phase0_admin_impersonation_expires_at = local.phase0_admin_impersonation_expires_at
 
   # Deny-policy ownership: a separate guardrails SA holds roles/iam.denyAdmin.
   guardrail_owner_mode    = var.guardrail_owner_mode

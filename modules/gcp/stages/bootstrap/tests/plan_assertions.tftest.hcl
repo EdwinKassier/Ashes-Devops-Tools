@@ -475,20 +475,30 @@ run "principal_access_boundary_grants_are_opt_in" {
   }
 }
 
-# A production estate must not keep an open-ended human path to terraform-admin.
-run "production_phase0_impersonation_without_expiry_warns" {
+# A production estate must not keep an open-ended human path to terraform-admin:
+# the plan fails (precondition), it does not merely warn.
+run "production_without_expiry_fails" {
   command = plan
 
   variables {
     production_workload_environments = ["prod"]
-    tfc_workspace_ids = {
-      "gcp-bootstrap"     = "ws-Boot1"
-      "gcp-organization"  = "ws-Org1"
-      "gcp-projects"      = "ws-Proj1"
-      "gcp-network-hub"   = "ws-Hub1"
-      "gcp-workload-prod" = "ws-Prod1"
-    }
+    tfc_workspace_ids                = { "gcp-bootstrap" = "ws-Boot1", "gcp-organization" = "ws-Org1", "gcp-projects" = "ws-Proj1", "gcp-network-hub" = "ws-Hub1", "gcp-workload-prod" = "ws-Prod1" }
   }
 
-  expect_failures = [check.phase0_impersonation_is_time_boxed]
+  expect_failures = [terraform_data.phase0_impersonation_is_time_boxed]
+}
+
+run "production_with_expiry_plans" {
+  command = plan
+
+  variables {
+    production_workload_environments      = ["prod"]
+    phase0_admin_impersonation_expires_at = "2026-12-31T00:00:00Z"
+    tfc_workspace_ids                     = { "gcp-bootstrap" = "ws-Boot1", "gcp-organization" = "ws-Org1", "gcp-projects" = "ws-Proj1", "gcp-network-hub" = "ws-Hub1", "gcp-workload-prod" = "ws-Prod1" }
+  }
+
+  assert {
+    condition     = length(output.production_workspaces_bound_by_name) == 0
+    error_message = "a time-boxed production estate must plan."
+  }
 }

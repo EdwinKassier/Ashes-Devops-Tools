@@ -189,11 +189,14 @@ module "control_plane_alerting" {
 
 # Production needs the containment deny policy: without it the automation
 # identity can retarget the audit sink, untag and delete the audit store or empty
-# a perimeter. Warn (never fail) so a non-prod bootstrap still applies.
-check "production_requires_admin_containment" {
-  assert {
-    condition     = length(local.production_environment_keys) == 0 || var.enable_admin_containment || var.production_containment_waived
-    error_message = "Production environments (${join(", ", local.production_environment_keys)}) exist but enable_admin_containment = false: the audit store and VPC-SC perimeters are not protected from the automation identity. Enable it with a real break-glass group (examples/presets/prod-gcp-organization.tfvars). The WORM lock (enable_audit_bucket_lock) stays a separate, irreversible opt-in."
+# a perimeter. A precondition fails the plan; enable_admin_containment = false is
+# the explicit waiver.
+resource "terraform_data" "production_requires_admin_containment" {
+  lifecycle {
+    precondition {
+      condition     = length(local.production_environment_keys) == 0 || var.enable_admin_containment || var.production_containment_waived
+      error_message = "Production environments (${join(", ", local.production_environment_keys)}) exist but enable_admin_containment = false: the audit store and VPC-SC perimeters are not protected from the automation identity. Enable it with a real break-glass group (examples/presets/prod-gcp-organization.tfvars), or waive it explicitly with enable_admin_containment = false in the root. The WORM lock (enable_audit_bucket_lock) stays a separate, irreversible opt-in."
+    }
   }
 }
 

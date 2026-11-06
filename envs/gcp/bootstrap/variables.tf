@@ -253,7 +253,7 @@ variable "tfc_hostname" {
 }
 
 variable "phase0_admin_impersonation_expires_at" {
-  description = "RFC 3339 UTC timestamp after which the phase-0 human impersonation of terraform-admin stops working. Set it to the end of your bootstrap window (e.g. two weeks out); disable the grant entirely after the TFC handover."
+  description = "RFC 3339 UTC timestamp after which the phase-0 human impersonation of terraform-admin stops working. Null = gcp.phase0_admin_impersonation_expires_at from config. Required (by either) while the grant is enabled and an environment is_production. Set it to the end of your bootstrap window (e.g. two weeks out); disable the grant entirely after the TFC handover."
   type        = string
   default     = null
 }

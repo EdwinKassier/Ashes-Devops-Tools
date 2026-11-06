@@ -237,9 +237,9 @@ variable "custom_org_constraints" {
 }
 
 variable "enable_audit_bucket_lock" {
-  description = "Opt-in WORM lock on the org audit-log GCS bucket (locked retention of audit_log_retention_days). Default false preserves the current operator-correctable behaviour. A locked policy is IRREVERSIBLE — enable only for compliance regimes that require tamper-proof retention. See docs/known-gaps.md."
+  description = "Opt-in WORM lock on the org audit-log GCS bucket (locked retention of audit_log_retention_days). Null (default) = gcp.enable_audit_bucket_lock from config, else false (operator-correctable). A locked policy is IRREVERSIBLE — enable only for compliance regimes that require tamper-proof retention. See docs/known-gaps.md."
   type        = bool
-  default     = false
+  default     = null
 }
 
 variable "iam_deny_policies" {

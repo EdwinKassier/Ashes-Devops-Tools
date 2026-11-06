@@ -87,6 +87,7 @@ module "example" {
 | Name | Version |
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
+| <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
 
@@ -113,18 +114,19 @@ The following resources are created:
 
 - resource.google_access_context_manager_access_policy.environment (modules/gcp/stages/organization/automation_delegation.tf#L41)
 - resource.google_access_context_manager_access_policy_iam_member.environment (modules/gcp/stages/organization/automation_delegation.tf#L49)
-- resource.google_bigquery_dataset.billing_export (modules/gcp/stages/organization/main.tf#L818)
-- resource.google_bigquery_dataset_iam_member.billing_export_writer (modules/gcp/stages/organization/main.tf#L849)
-- resource.google_essential_contacts_contact.billing (modules/gcp/stages/organization/main.tf#L790)
-- resource.google_essential_contacts_contact.security (modules/gcp/stages/organization/main.tf#L781)
+- resource.google_bigquery_dataset.billing_export (modules/gcp/stages/organization/main.tf#L821)
+- resource.google_bigquery_dataset_iam_member.billing_export_writer (modules/gcp/stages/organization/main.tf#L852)
+- resource.google_essential_contacts_contact.billing (modules/gcp/stages/organization/main.tf#L793)
+- resource.google_essential_contacts_contact.security (modules/gcp/stages/organization/main.tf#L784)
 - resource.google_folder_iam_member.projects_delegated_folder_iam (modules/gcp/stages/organization/automation_delegation.tf#L57)
 - resource.google_folder_iam_member.terraform_admin_folder_roles (modules/gcp/stages/organization/main.tf#L45)
-- resource.google_logging_organization_settings.this (modules/gcp/stages/organization/main.tf#L758)
+- resource.google_logging_organization_settings.this (modules/gcp/stages/organization/main.tf#L761)
 - resource.google_privileged_access_manager_entitlement.org_admin (modules/gcp/stages/organization/pam.tf#L10)
 - resource.google_tags_location_tag_binding.containment_audit_keyring (modules/gcp/stages/organization/containment.tf#L37)
 - resource.google_tags_location_tag_binding.containment_buckets (modules/gcp/stages/organization/containment.tf#L19)
 - resource.google_tags_location_tag_binding.containment_log_analytics_bucket (modules/gcp/stages/organization/containment.tf#L29)
 - resource.google_tags_tag_binding.environment (modules/gcp/stages/organization/tags_binding.tf#L1)
+- resource.terraform_data.production_requires_admin_containment (modules/gcp/stages/organization/main.tf#L194)
 
 
 ## Inputs
