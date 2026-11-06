@@ -107,6 +107,11 @@ locals {
         role_tamper_actions     = jsonencode(local.role_tamper_actions)
         log_archive_bucket_name = var.log_archive_bucket_name
         kms_protection_tag_key  = var.kms_protection_tag_key
+        # GuardDuty / CloudTrail / Security Hub settings are managed centrally
+        # (delegated admin). Outside those accounts even the pipeline is denied,
+        # so a compromised workload tfc-apply cannot add a suppression filter or
+        # trim trail event selectors to blind detection.
+        central_detection_account_ids = var.central_detection_account_ids
       })))
     }
     scp-region-restriction = {

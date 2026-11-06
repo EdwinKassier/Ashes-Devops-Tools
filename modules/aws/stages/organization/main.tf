@@ -78,6 +78,11 @@ module "policies" {
   data_perimeter_trusted_account_ids = var.data_perimeter_trusted_account_ids
   allow_vpc_bpa_exclusions           = var.allow_vpc_bpa_exclusions
 
+  # Detection settings are reachable only from the security accounts' pipeline.
+  central_detection_account_ids = [
+    for k in var.central_detection_account_keys : module.account[k].account_id if contains(keys(local.all_accounts), k)
+  ]
+
   # Web-identity tenant pins (RCP): TFC tokens only from this org's TFC
   # organization, GitHub tokens only from the listed owners.
   federation_tenant_pins = {

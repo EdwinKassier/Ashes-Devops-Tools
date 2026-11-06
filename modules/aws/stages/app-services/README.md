@@ -86,26 +86,26 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_cloudwatch_log_group.service (modules/aws/stages/app-services/main.tf#L190)
-- resource.aws_ecs_cluster.this (modules/aws/stages/app-services/main.tf#L152)
-- resource.aws_iam_openid_connect_provider.github (modules/aws/stages/app-services/main.tf#L137)
-- resource.aws_iam_role.deploy (modules/aws/stages/app-services/main.tf#L344)
-- resource.aws_iam_role.execution (modules/aws/stages/app-services/main.tf#L219)
-- resource.aws_iam_role.task (modules/aws/stages/app-services/main.tf#L289)
-- resource.aws_iam_role_policy.deploy (modules/aws/stages/app-services/main.tf#L373)
-- resource.aws_iam_role_policy.execution (modules/aws/stages/app-services/main.tf#L230)
-- resource.aws_iam_role_policy.task (modules/aws/stages/app-services/main.tf#L300)
-- resource.aws_iam_role_policy.task_exec (modules/aws/stages/app-services/main.tf#L308)
-- resource.aws_iam_role_policy_attachment.task (modules/aws/stages/app-services/main.tf#L331)
-- resource.aws_security_group.database (modules/aws/stages/app-services/main.tf#L501)
-- resource.aws_security_group.service (modules/aws/stages/app-services/main.tf#L449)
-- resource.aws_vpc_security_group_egress_rule.service_https (modules/aws/stages/app-services/main.tf#L473)
-- resource.aws_vpc_security_group_egress_rule.service_to_db (modules/aws/stages/app-services/main.tf#L488)
-- resource.aws_vpc_security_group_ingress_rule.alb (modules/aws/stages/app-services/main.tf#L434)
-- resource.aws_vpc_security_group_ingress_rule.database_from_service (modules/aws/stages/app-services/main.tf#L513)
-- resource.aws_vpc_security_group_ingress_rule.service_from_alb (modules/aws/stages/app-services/main.tf#L460)
-- data source.aws_caller_identity.current (modules/aws/stages/app-services/main.tf#L129)
-- data source.aws_partition.current (modules/aws/stages/app-services/main.tf#L125)
+- resource.aws_cloudwatch_log_group.service (modules/aws/stages/app-services/main.tf#L195)
+- resource.aws_ecs_cluster.this (modules/aws/stages/app-services/main.tf#L157)
+- resource.aws_iam_openid_connect_provider.github (modules/aws/stages/app-services/main.tf#L142)
+- resource.aws_iam_role.deploy (modules/aws/stages/app-services/main.tf#L349)
+- resource.aws_iam_role.execution (modules/aws/stages/app-services/main.tf#L224)
+- resource.aws_iam_role.task (modules/aws/stages/app-services/main.tf#L294)
+- resource.aws_iam_role_policy.deploy (modules/aws/stages/app-services/main.tf#L378)
+- resource.aws_iam_role_policy.execution (modules/aws/stages/app-services/main.tf#L235)
+- resource.aws_iam_role_policy.task (modules/aws/stages/app-services/main.tf#L305)
+- resource.aws_iam_role_policy.task_exec (modules/aws/stages/app-services/main.tf#L313)
+- resource.aws_iam_role_policy_attachment.task (modules/aws/stages/app-services/main.tf#L336)
+- resource.aws_security_group.database (modules/aws/stages/app-services/main.tf#L506)
+- resource.aws_security_group.service (modules/aws/stages/app-services/main.tf#L454)
+- resource.aws_vpc_security_group_egress_rule.service_https (modules/aws/stages/app-services/main.tf#L478)
+- resource.aws_vpc_security_group_egress_rule.service_to_db (modules/aws/stages/app-services/main.tf#L493)
+- resource.aws_vpc_security_group_ingress_rule.alb (modules/aws/stages/app-services/main.tf#L439)
+- resource.aws_vpc_security_group_ingress_rule.database_from_service (modules/aws/stages/app-services/main.tf#L518)
+- resource.aws_vpc_security_group_ingress_rule.service_from_alb (modules/aws/stages/app-services/main.tf#L465)
+- data source.aws_caller_identity.current (modules/aws/stages/app-services/main.tf#L134)
+- data source.aws_partition.current (modules/aws/stages/app-services/main.tf#L130)
 
 
 ## Inputs
@@ -122,11 +122,11 @@ The following resources are created:
 | <a name="input_alb_internal"></a> [alb\_internal](#input\_alb\_internal) | Whether the shared ALB is internal (default; reachable from the spoke and, via the TGW, the rest of the org). Internet exposure belongs at the edge (CloudFront + WAF); an internet-facing ALB here also needs public alb\_subnet\_ids. | `bool` | `true` | no |
 | <a name="input_alb_subnet_ids"></a> [alb\_subnet\_ids](#input\_alb\_subnet\_ids) | Subnet IDs for the shared ALB. Empty uses service\_subnet\_ids (an internal ALB in the private tier). An internet-facing ALB (alb\_internal = false) needs PUBLIC subnets here. | `list(string)` | `[]` | no |
 | <a name="input_bootstrap_image"></a> [bootstrap\_image](#input\_bootstrap\_image) | Placeholder image the FIRST task-definition revision of a service runs when its container\_image is null, so a first apply never references an image tag that does not exist yet. The default (NGINX unprivileged, ECR Public) listens on 8080 = the default container\_port and answers 200 on /, so the service turns healthy before the first CI deploy. Pulling it needs egress to ECR Public (the spoke's TGW default route to central egress); in a standalone spoke with no egress, set container\_image to an image in reach instead. | `string` | `"public.ecr.aws/nginx/nginx-unprivileged:stable-alpine"` | no |
-| <a name="input_create_github_oidc_provider"></a> [create\_github\_oidc\_provider](#input\_create\_github\_oidc\_provider) | Create the account-wide GitHub OIDC provider (one per account per URL). Set false when another root already owns it and pass github\_oidc\_provider\_arn. | `bool` | `true` | no |
+| <a name="input_create_github_oidc_provider"></a> [create\_github\_oidc\_provider](#input\_create\_github\_oidc\_provider) | Create the account-wide GitHub OIDC provider in this module. Default false: in baselined member accounts the tfc-oidc-baseline StackSet owns it and the apply boundary denies iam:CreateOpenIDConnectProvider. Set true only in an account outside that baseline. | `bool` | `false` | no |
 | <a name="input_database_subnet_ids"></a> [database\_subnet\_ids](#input\_database\_subnet\_ids) | Subnet IDs for Aurora DB subnet groups (aws-workload stage subnet\_ids\_by\_tier["isolated"] — no route off the VPC). At least two when any service enables a database. | `list(string)` | `[]` | no |
 | <a name="input_enable_alarms"></a> [enable\_alarms](#input\_enable\_alarms) | Create per-service CloudWatch alarms (CPU, memory, unhealthy targets, target 5xx). Only takes effect when services is non-empty. | `bool` | `true` | no |
-| <a name="input_enable_github_oidc"></a> [enable\_github\_oidc](#input\_enable\_github\_oidc) | Enable GitHub Actions OIDC deploy roles for services that set github. Also creates the account's token.actions.githubusercontent.com OIDC provider unless create\_github\_oidc\_provider is false. | `bool` | `false` | no |
-| <a name="input_github_oidc_provider_arn"></a> [github\_oidc\_provider\_arn](#input\_github\_oidc\_provider\_arn) | ARN of an existing token.actions.githubusercontent.com OIDC provider, used when create\_github\_oidc\_provider is false. | `string` | `null` | no |
+| <a name="input_enable_github_oidc"></a> [enable\_github\_oidc](#input\_enable\_github\_oidc) | Enable GitHub Actions OIDC deploy roles for services that set github. The roles trust the account's token.actions.githubusercontent.com provider, which the tfc-oidc-baseline StackSet creates (create\_github\_oidc\_provider there); set create\_github\_oidc\_provider here only for accounts outside that baseline. | `bool` | `false` | no |
+| <a name="input_github_oidc_provider_arn"></a> [github\_oidc\_provider\_arn](#input\_github\_oidc\_provider\_arn) | ARN of the existing token.actions.githubusercontent.com OIDC provider. Null (default) derives this account's provider ARN (arn:<partition>:iam::<account>:oidc-provider/token.actions.githubusercontent.com), the one the tfc-oidc-baseline StackSet creates. | `string` | `null` | no |
 | <a name="input_kms_key_arn"></a> [kms\_key\_arn](#input\_kms\_key\_arn) | Customer-managed KMS key ARN encrypting the ECR repositories, CloudWatch log groups, Aurora storage, Performance Insights and the RDS-managed master secret. Required when services is non-empty. Its key policy must allow logs.<region>.amazonaws.com (log groups) and the ECS task execution roles (kms:Decrypt for secrets). | `string` | `""` | no |
 | <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | Retention (days) of each service's CloudWatch log group. | `number` | `365` | no |
 | <a name="input_service_subnet_ids"></a> [service\_subnet\_ids](#input\_service\_subnet\_ids) | PRIVATE subnet IDs the Fargate tasks run in (aws-workload stage subnet\_ids\_by\_tier["private"]). At least two (distinct AZs) when services is non-empty. | `list(string)` | `[]` | no |

@@ -25,3 +25,13 @@ run "rejects_non_numeric_account_id" {
 
   expect_failures = [var.security_tooling_account_id]
 }
+
+run "unknown_agent_type_rejected" {
+  command = plan
+
+  variables {
+    runtime_monitoring_agent_management = ["LAMBDA_AGENT_MANAGEMENT"]
+  }
+
+  expect_failures = [var.runtime_monitoring_agent_management]
+}

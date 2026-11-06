@@ -76,6 +76,18 @@ variable "pipeline_role_names" {
   }
 }
 
+variable "central_detection_account_ids" {
+  description = "Account IDs that manage detection centrally: the security-tooling delegated admin, plus the log-archive account if it owns a trail. With any set, GuardDuty filter/detector updates, CloudTrail event/insight selector and trail updates, and Security Hub standard disabling are denied to EVERY principal outside these accounts except break-glass, the pipeline included. Empty (default) keeps the pipeline-wide exemption."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for a in var.central_detection_account_ids : can(regex("^[0-9]{12}$", a))])
+    error_message = "central_detection_account_ids entries must be 12-digit AWS account IDs."
+  }
+}
+
 variable "stackset_managed_role_names" {
   description = "Member-account role names (optionally path-prefixed) that a service-managed StackSet owns — by default the tfc-oidc-baseline tfc-plan / tfc-apply roles. Together with the break-glass role name they are protected by DenyStackSetRoleTampering, whose only exemptions are break-glass and stackset_execution_role_names. Every other pipeline_role_names entry (OrganizationAccountAccessRole, stacksets-exec-*) is protected break-glass-only. The pipeline roles are never exempt from either statement."
   type        = list(string)

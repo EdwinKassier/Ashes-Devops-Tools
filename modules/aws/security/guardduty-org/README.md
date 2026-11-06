@@ -79,6 +79,7 @@ The following resources are created:
 | <a name="input_security_tooling_account_id"></a> [security\_tooling\_account\_id](#input\_security\_tooling\_account\_id) | 12-digit account ID of the Security Tooling account nominated as the GuardDuty delegated administrator (the module's default provider). | `string` | n/a | yes |
 | <a name="input_aws_enabled_regions"></a> [aws\_enabled\_regions](#input\_aws\_enabled\_regions) | Regions in which to enable org-wide GuardDuty. A detector, org configuration and protection-plan features are created in each. | `list(string)` | <pre>[<br/>  "eu-west-2"<br/>]</pre> | no |
 | <a name="input_enable_ebs_malware_protection"></a> [enable\_ebs\_malware\_protection](#input\_enable\_ebs\_malware\_protection) | Enable the EBS\_MALWARE\_PROTECTION feature. COST toggle: agentless EBS malware scanning is billed per GB scanned, so it defaults on but can be disabled. | `bool` | `true` | no |
+| <a name="input_runtime_monitoring_agent_management"></a> [runtime\_monitoring\_agent\_management](#input\_runtime\_monitoring\_agent\_management) | Runtime Monitoring agent types GuardDuty deploys and manages automatically in every member account (additional\_configuration, auto\_enable ALL). Default covers ECS Fargate (this repo's runtime), EKS and EC2. Without agent management, Runtime Monitoring is billed but produces no runtime findings. | `list(string)` | <pre>[<br/>  "ECS_FARGATE_AGENT_MANAGEMENT",<br/>  "EKS_ADDON_MANAGEMENT",<br/>  "EC2_AGENT_MANAGEMENT"<br/>]</pre> | no |
 
 ## Outputs
 

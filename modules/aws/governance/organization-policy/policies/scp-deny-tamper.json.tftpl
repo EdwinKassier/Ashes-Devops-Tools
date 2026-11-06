@@ -58,6 +58,30 @@
         }
       }
     },
+%{ if length(central_detection_account_ids) > 0 ~}
+    {
+      "Sid": "DenyCentralDetectionOutsideSecurityAccounts",
+      "Effect": "Deny",
+      "Action": [
+        "cloudtrail:PutEventSelectors",
+        "cloudtrail:PutInsightSelectors",
+        "cloudtrail:UpdateTrail",
+        "guardduty:CreateFilter",
+        "guardduty:UpdateFilter",
+        "guardduty:UpdateDetector",
+        "securityhub:BatchDisableStandards"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:PrincipalAccount": ${jsonencode(central_detection_account_ids)}
+        },
+        "ArnNotLike": {
+          "aws:PrincipalArn": ${break_glass_arns}
+        }
+      }
+    },
+%{ endif ~}
 %{ if length(admin_role_arns) > 0 ~}
     {
       "Sid": "DenyPrivilegedRoleTampering",

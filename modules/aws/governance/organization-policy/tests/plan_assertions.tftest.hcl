@@ -470,3 +470,27 @@ run "federation_tenant_pins_render" {
     error_message = "the GitHub pin must allow only repo:<owner>/* subjects."
   }
 }
+
+# Central detection settings: with security accounts named, even the pipeline
+# outside them is denied (only break-glass is exempt), and the SCP still fits.
+run "central_detection_scoped_to_security_accounts" {
+  command = plan
+
+  variables {
+    central_detection_account_ids = ["222222222222", "333333333333"]
+  }
+
+  assert {
+    condition = (
+      one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyCentralDetectionOutsideSecurityAccounts"]).Condition.StringNotEquals["aws:PrincipalAccount"] == ["222222222222", "333333333333"] &&
+      contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyCentralDetectionOutsideSecurityAccounts"]).Action, "guardduty:CreateFilter") &&
+      !contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyCentralDetectionOutsideSecurityAccounts"]).Action, "config:PutConfigurationRecorder")
+    )
+    error_message = "GuardDuty/CloudTrail/Security Hub reconfiguration must be denied outside central_detection_account_ids; Config/flow logs stay with the workload pipeline."
+  }
+
+  assert {
+    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 5120
+    error_message = "deny-tamper SCP must stay under the 5,120-character SCP size quota with the central-detection statement."
+  }
+}

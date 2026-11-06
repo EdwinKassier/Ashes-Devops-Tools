@@ -197,6 +197,13 @@ variable "tfc_hostname" {
   default     = "app.terraform.io"
 }
 
+variable "central_detection_account_keys" {
+  description = "Account keys (from accounts) whose pipeline may change GuardDuty filters/detectors, CloudTrail selectors and Security Hub standards; denied everywhere else except break-glass (deny-tamper SCP). Default: the SRA security_tooling and log_archive accounts. Set [] to restore the pipeline-wide exemption."
+  type        = list(string)
+  default     = ["security_tooling", "log_archive"]
+  nullable    = false
+}
+
 variable "pin_tfc_federation_to_org" {
   description = "Deny (RCP, every account) sts:AssumeRoleWithWebIdentity with a <tfc_hostname> token whose sub is not organization:<tfc_organization>:*. Without it, any pipeline that can create a role can make it trust ANOTHER TFC org on the same issuer: a persistence path no permissions boundary sees. Default true; takes effect when tfc_organization is set. Set false only if workspaces in other TFC organizations must assume roles here."
   type        = bool

@@ -61,6 +61,14 @@ release metadata for a Terraform Cloud run.
     and `iam:UpdateOpenIDConnectProviderThumbprint`.
   - The account-wide GitHub OIDC provider is now created by the `tfc-oidc-baseline` StackSet
     (`create_github_oidc_provider`, default true).
+- **S3 — Detection settings are reachable only from the security accounts.** A new
+  `DenyCentralDetectionOutsideSecurityAccounts` deny-tamper statement covers GuardDuty
+  filter/detector updates, CloudTrail selector/trail updates and Security Hub standard disabling.
+  Outside `central_detection_account_keys` (default `security_tooling`, `log_archive`) these are
+  denied to every principal except break-glass, the pipeline included. Config recorders and flow
+  logs stay pipeline-managed, because workload baselines own them.
+- **A4 — GuardDuty Runtime Monitoring now manages its agents** (Fargate, EKS, EC2;
+  `runtime_monitoring_agent_management`). Before, it was billed but produced no findings.
 - **The RCP data perimeter now covers ECR and CloudWatch Logs** (`ecr:*`, `logs:*`).
 - **`organization-policy` gains a `policy_contents` output**, for evidence and tests.
 
