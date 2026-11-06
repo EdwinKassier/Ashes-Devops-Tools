@@ -172,3 +172,19 @@ run "security_wiring_scoped_to_trail_resources" {
     error_message = "kms/logs/sns/cloudtrail wildcards must be scoped (resource or tag condition), and delegation pinned to the security accounts."
   }
 }
+
+# Trail repointing and key-policy rewrites are break-glass only; alarms are
+# limited to the trail's own; delegation fails closed without an account.
+run "security_role_cannot_quietly_defeat_audit" {
+  command = plan
+
+  assert {
+    condition = (
+      length(setintersection(toset(one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "DenyTrailAndKeyDestruction"]).Action), toset(["cloudtrail:UpdateTrail", "kms:PutKeyPolicy", "kms:CreateGrant", "kms:DisableKeyRotation"]))) == 4 &&
+      one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "TrailAlarmsOnly"]).Resource == ["arn:aws:cloudwatch:*:111111111111:alarm:org-trail-*"] &&
+      contains(one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "CreateOwnedKeysOnly"]).Action, "kms:TagResource") &&
+      one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "DelegateOnlyToSecurityAccounts"]).Resource == ["arn:aws:organizations::111111111111:account/o-*/none"]
+    )
+    error_message = "UpdateTrail / PutKeyPolicy / CreateGrant / DisableKeyRotation must be denied, alarms scoped to the trail, create-time tagging allowed, and delegation fail closed."
+  }
+}

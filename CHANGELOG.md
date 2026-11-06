@@ -104,6 +104,32 @@ release metadata for a Terraform Cloud run.
 - **The RCP data perimeter now covers ECR and CloudWatch Logs** (`ecr:*`, `logs:*`).
 - **`organization-policy` gains a `policy_contents` output**, for evidence and tests.
 
+#### Post-re-score fixes (independent re-score at ac707f9)
+
+- **Critical: custom org-policy constraints are now enforced.** The org-policy module created
+  `google_org_policy_custom_constraint` but never a `google_org_policy_policy`, so
+  `custom.wifProviderTenantPinned` and every `custom_org_constraints` entry were inert. Each
+  constraint now gets a policy: `enforcement = enforce` (default), `dry_run` (log only, to stage a
+  new constraint) or `off`. The tenant pin uses `wif_tenant_pin_enforcement`.
+- **The GitHub WIF pin requires matching quotes** around the owner ID. The `.` wildcard let
+  `== "123' && x" == false` through. The RE2 bypass corpus now includes mismatched-quote and
+  relation-chaining cases.
+- **The aws-security role can no longer quietly defeat audit:**
+  - `cloudtrail:UpdateTrail`, `kms:PutKeyPolicy`, `kms:CreateGrant` and `kms:DisableKeyRotation`
+    are denied (break-glass only).
+  - CloudWatch alarm writes are scoped to the trail's own `<trail>-*` alarms.
+  - Create-time `kms:TagResource` is granted, which a tagged `CreateKey` needs.
+  - Delegated-admin registration fails closed when no security account is given.
+  - `PutEventSelectors` stays allowed, because `aws_cloudtrail` calls it on create. Selector changes
+    are caught by the CIS CloudTrail-configuration alarm.
+- **Partition: the AWS-managed policy ARN defaults are normalised.** In the tfc-oidc-baseline
+  template they become `Fn::Sub arn:${AWS::Partition}:...`. In Identity Center permission sets and
+  the backup stage they use the provider partition.
+- **AWS Backup delegated admin is the dedicated backup account** (`backup_account_id`), and the
+  management role's account pin includes it.
+- **The provenance guard also catches `Audit finding X`, `finding #N` and `round-N` comments.**
+  The 5 it had missed are stripped.
+
 #### Post-re-score fixes (independent re-score at a6e4edb)
 
 - **The GCP WIF tenant pin rejects the CEL ternary.** `... == 'acme' && true ? true : true` matched

@@ -36,7 +36,7 @@ module "settings" {
   password_min_length  = var.password_min_length
 }
 
-# Audit finding S1: Supabase is deprecating the legacy JWT keys (anon_key /
+# Supabase is deprecating the legacy JWT keys (anon_key /
 # service_role_key) by end of 2026 in favour of publishable (sb_publishable_...)
 # and secret (sb_secret_...) keys. This module still consumes the legacy pair
 # because the supabase/supabase Terraform provider (pinned ~> 1.0, currently

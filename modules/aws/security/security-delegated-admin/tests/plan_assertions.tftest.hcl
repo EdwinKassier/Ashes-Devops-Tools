@@ -33,7 +33,7 @@ run "default_set_registers_no_dedicated_resource_services" {
     error_message = "config.amazonaws.com must be delegated to the security tooling account"
   }
 
-  # AWS Backup is delegated to Security Tooling in the default set.
+  # AWS Backup falls back to Security Tooling when no backup account is given.
   assert {
     condition     = aws_organizations_delegated_administrator.this["backup.amazonaws.com"].account_id == "111111111111"
     error_message = "backup.amazonaws.com must be delegated to the security tooling account in the default set"
@@ -76,5 +76,18 @@ run "identity_center_delegation_opt_in" {
   assert {
     condition     = aws_organizations_delegated_administrator.this["sso.amazonaws.com"].account_id == "222222222222"
     error_message = "with register_identity_center_admin, sso.amazonaws.com must be delegated to the identity account"
+  }
+}
+
+run "backup_delegated_to_backup_account" {
+  command = plan
+
+  variables {
+    backup_account_id = "333333333333"
+  }
+
+  assert {
+    condition     = aws_organizations_delegated_administrator.this["backup.amazonaws.com"].account_id == "333333333333"
+    error_message = "AWS Backup must be delegated to the dedicated backup account when one is given."
   }
 }

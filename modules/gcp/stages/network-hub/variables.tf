@@ -114,7 +114,7 @@ variable "enable_deletion_protection" {
   default     = true
 }
 
-# --- Audit finding G5: VPC-SC perimeter hardening (opt-in) -------------------
+# --- VPC-SC perimeter hardening (opt-in) ------------------------------------
 # The base perimeter restricts only storage/bigquery/cloudfunctions/run and has
 # no ingress policy. The perimeter now defaults to DRY-RUN
 # (vpc_sc_enable_dry_run = true, G11), so expanding restricted_services is safe

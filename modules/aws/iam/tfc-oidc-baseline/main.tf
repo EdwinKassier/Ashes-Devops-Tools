@@ -453,7 +453,7 @@ locals {
             RoleName                 = var.plan_role_name
             Description              = "Terraform Cloud PLAN phase (read-only) for ${k}"
             AssumeRolePolicyDocument = local.trust_policies[k]["plan"]
-            ManagedPolicyArns        = var.plan_role_policy_arns
+            ManagedPolicyArns        = local.partitioned_plan_role_policy_arns
             MaxSessionDuration       = var.max_session_duration
           },
           local.plan_role_policies_property,
@@ -467,7 +467,7 @@ locals {
             RoleName                 = var.apply_role_name
             Description              = "Terraform Cloud APPLY phase for ${k}"
             AssumeRolePolicyDocument = local.trust_policies[k]["apply"]
-            ManagedPolicyArns        = var.apply_role_policy_arns
+            ManagedPolicyArns        = local.partitioned_apply_role_policy_arns
             MaxSessionDuration       = var.max_session_duration
           },
           local.apply_boundary_property,
@@ -602,7 +602,7 @@ locals {
           Path                     = local.break_glass_role_path
           Description              = "Emergency break-glass access; assumable only from the management-account break-glass principal with MFA"
           AssumeRolePolicyDocument = local.member_break_glass_trust
-          ManagedPolicyArns        = var.member_break_glass_policy_arns
+          ManagedPolicyArns        = local.partitioned_member_break_glass_policy_arns
           MaxSessionDuration       = 3600
         }
       }
@@ -667,4 +667,13 @@ resource "aws_cloudformation_stack_set_instance" "break_glass" {
     failure_tolerance_count = 0
     max_concurrent_count    = 10
   }
+}
+
+# Commercial-partition ARNs in the policy-ARN inputs (their defaults name
+# arn:aws:iam::aws:policy/...) are rewritten to the partition the stack is
+# deployed in, so GovCloud / China accounts get valid ARNs without overrides.
+locals {
+  partitioned_plan_role_policy_arns          = [for a in var.plan_role_policy_arns : { "Fn::Sub" = replace(a, "/^arn:aws:/", "arn:$${AWS::Partition}:") }]
+  partitioned_apply_role_policy_arns         = [for a in var.apply_role_policy_arns : { "Fn::Sub" = replace(a, "/^arn:aws:/", "arn:$${AWS::Partition}:") }]
+  partitioned_member_break_glass_policy_arns = [for a in var.member_break_glass_policy_arns : { "Fn::Sub" = replace(a, "/^arn:aws:/", "arn:$${AWS::Partition}:") }]
 }

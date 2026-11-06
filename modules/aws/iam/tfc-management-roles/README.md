@@ -58,12 +58,12 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_iam_role.this (modules/aws/iam/tfc-management-roles/main.tf#L326)
-- resource.aws_iam_role_policy.apply (modules/aws/iam/tfc-management-roles/main.tf#L367)
-- resource.aws_iam_role_policy.plan_guard (modules/aws/iam/tfc-management-roles/main.tf#L359)
-- resource.aws_iam_role_policy_attachment.read_only (modules/aws/iam/tfc-management-roles/main.tf#L350)
-- data source.aws_caller_identity.current (modules/aws/iam/tfc-management-roles/main.tf#L324)
-- data source.aws_partition.current (modules/aws/iam/tfc-management-roles/main.tf#L322)
+- resource.aws_iam_role.this (modules/aws/iam/tfc-management-roles/main.tf#L345)
+- resource.aws_iam_role_policy.apply (modules/aws/iam/tfc-management-roles/main.tf#L386)
+- resource.aws_iam_role_policy.plan_guard (modules/aws/iam/tfc-management-roles/main.tf#L378)
+- resource.aws_iam_role_policy_attachment.read_only (modules/aws/iam/tfc-management-roles/main.tf#L369)
+- data source.aws_caller_identity.current (modules/aws/iam/tfc-management-roles/main.tf#L343)
+- data source.aws_partition.current (modules/aws/iam/tfc-management-roles/main.tf#L341)
 
 
 ## Inputs
@@ -71,7 +71,7 @@ The following resources are created:
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_tfc_organization"></a> [tfc\_organization](#input\_tfc\_organization) | Terraform Cloud organization of the trusted workspaces (matched literally in the trust sub). | `string` | n/a | yes |
-| <a name="input_delegated_admin_account_ids"></a> [delegated\_admin\_account\_ids](#input\_delegated\_admin\_account\_ids) | Accounts the aws-security role may register as delegated administrators (organizations account-ARN resources): the security-tooling account in the SRA layout. Empty = any account (service principal still restricted); set it. | `list(string)` | `[]` | no |
+| <a name="input_delegated_admin_account_ids"></a> [delegated\_admin\_account\_ids](#input\_delegated\_admin\_account\_ids) | Accounts the aws-security role may register as delegated administrators (organizations account-ARN resources): the security-tooling account in the SRA layout. Empty = NO account (registration fails closed); the aws-organization stage sets the security-tooling account. | `list(string)` | `[]` | no |
 | <a name="input_max_session_duration"></a> [max\_session\_duration](#input\_max\_session\_duration) | Maximum session duration in seconds (3600-43200). | `number` | `3600` | no |
 | <a name="input_member_pivot_role_names"></a> [member\_pivot\_role\_names](#input\_member\_pivot\_role\_names) | Member-account role names the management roles must never assume (OrganizationAccountAccessRole and the member tfc-* roles by default). | `list(string)` | <pre>[<br/>  "OrganizationAccountAccessRole",<br/>  "tfc-plan",<br/>  "tfc-apply",<br/>  "break-glass"<br/>]</pre> | no |
 | <a name="input_oidc_provider_arn"></a> [oidc\_provider\_arn](#input\_oidc\_provider\_arn) | ARN of the management account's TFC OIDC provider (created in phase 0). Null derives arn:<partition>:iam::<this account>:oidc-provider/<tfc\_hostname>. | `string` | `null` | no |

@@ -126,7 +126,7 @@ variable "security_trail_name" {
 }
 
 variable "delegated_admin_account_ids" {
-  description = "Accounts the aws-security role may register as delegated administrators (organizations account-ARN resources): the security-tooling account in the SRA layout. Empty = any account (service principal still restricted); set it."
+  description = "Accounts the aws-security role may register as delegated administrators (organizations account-ARN resources): the security-tooling account in the SRA layout. Empty = NO account (registration fails closed); the aws-organization stage sets the security-tooling account."
   type        = list(string)
   default     = []
   nullable    = false

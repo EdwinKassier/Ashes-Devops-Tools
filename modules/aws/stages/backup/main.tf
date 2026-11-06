@@ -78,7 +78,7 @@ locals {
   # role-deployment primitive. create_backup_role_stack_set = true keeps the
   # legacy in-stage StackSet for estates that apply aws-backup as the phase-0 role.
   create_backup_role = var.backup_role_arn == null && var.create_backup_role_stack_set
-  backup_role_arn    = var.backup_role_arn == null ? "arn:aws:iam::$account:role/${var.backup_role_name}" : var.backup_role_arn
+  backup_role_arn    = var.backup_role_arn == null ? "arn:${var.partition}:iam::$account:role/${var.backup_role_name}" : var.backup_role_arn
 
   backup_role_template = jsonencode({
     AWSTemplateFormatVersion = "2010-09-09"

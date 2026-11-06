@@ -313,7 +313,7 @@ variable "notification_subscribers" {
   }
 }
 
-# --- Audit finding A3: dedicated IAM Identity Center account (opt-in, default = unchanged) ---
+# --- Dedicated IAM Identity Center account (opt-in, default = unchanged) ---
 variable "identity_account_id" {
   description = "Dedicated identity account for IAM Identity Center delegated administration. Default null = the shared-services account (unchanged). Set to a dedicated identity account to tighten the delegated-admin blast radius. PREVIEW: opt-in (default off), not yet validated against a real apply."
   type        = string
@@ -471,4 +471,10 @@ variable "partition" {
   description = "AWS partition (aws, aws-us-gov, aws-cn) for the ARNs this stage builds when the security-tooling partition is not read."
   type        = string
   default     = "aws"
+}
+
+variable "backup_account_id" {
+  description = "Dedicated backup account, registered as the AWS Backup delegated administrator. Null = the security-tooling account."
+  type        = string
+  default     = null
 }

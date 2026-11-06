@@ -112,3 +112,9 @@ variable "create_backup_role_stack_set" {
   type        = bool
   default     = false
 }
+
+variable "partition" {
+  description = "AWS partition (aws, aws-us-gov, aws-cn) for the member Backup role ARN rendered into the BACKUP_POLICY."
+  type        = string
+  default     = "aws"
+}

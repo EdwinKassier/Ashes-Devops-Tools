@@ -21,8 +21,10 @@ locals {
   # account, plus IAM Identity Center (sso) which is delegated to the Identity
   # account.
   default_registrations = {
-    "access-analyzer.amazonaws.com"          = var.security_tooling_account_id
-    "backup.amazonaws.com"                   = var.security_tooling_account_id
+    "access-analyzer.amazonaws.com" = var.security_tooling_account_id
+    # AWS Backup is administered from the dedicated backup account (SRA), the
+    # same account that owns the vault and the restore testing.
+    "backup.amazonaws.com"                   = coalesce(var.backup_account_id, var.security_tooling_account_id)
     "config.amazonaws.com"                   = var.security_tooling_account_id
     "config-multiaccountsetup.amazonaws.com" = var.security_tooling_account_id
     "cloudtrail.amazonaws.com"               = var.security_tooling_account_id

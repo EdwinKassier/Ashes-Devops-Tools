@@ -122,6 +122,7 @@ module "organization" {
   org_policy_overrides                   = var.org_policy_overrides
   allowed_workload_identity_issuers      = coalesce(var.allowed_workload_identity_issuers, ["https://${var.tfc_hostname}", "https://token.actions.githubusercontent.com"])
   allowed_workload_identity_aws_accounts = var.allowed_workload_identity_aws_accounts
+  wif_tenant_pin_enforcement             = var.wif_tenant_pin_enforcement
   wif_tenant_pins = {
     tfc_hostname     = var.tfc_hostname
     tfc_organization = var.pin_wif_to_tfc_organization ? local.tfc_organization : null

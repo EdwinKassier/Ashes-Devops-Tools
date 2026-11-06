@@ -160,7 +160,9 @@ locals {
           "organizations:RegisterDelegatedAdministrator",
           "organizations:DeregisterDelegatedAdministrator",
         ]
-        Resource = length(var.delegated_admin_account_ids) == 0 ? ["*"] : [
+        # Fails closed: with no security account given, the statement grants
+        # nothing (a resource no account ARN can match) rather than every account.
+        Resource = length(var.delegated_admin_account_ids) == 0 ? ["arn:${local.partition}:organizations::${local.account_id}:account/o-*/none"] : [
           for id in var.delegated_admin_account_ids : "arn:${local.partition}:organizations::${local.account_id}:account/o-*/${id}"
         ]
         Condition = { StringEquals = { "organizations:ServicePrincipal" = var.security_service_principals } }
@@ -176,11 +178,18 @@ locals {
         Action = [
           "logs:CreateLogGroup", "logs:Describe*", "logs:List*",
           "sns:CreateTopic", "sns:List*",
-          "cloudwatch:PutMetricAlarm", "cloudwatch:DeleteAlarms", "cloudwatch:Describe*",
-          "cloudwatch:TagResource", "cloudwatch:UntagResource", "cloudwatch:ListTagsForResource",
+          "cloudwatch:Describe*", "cloudwatch:ListTagsForResource",
           "kms:List*", "kms:Describe*",
         ]
         Resource = "*"
+      },
+      {
+        # The CIS alarms are named <trail>-<check>: no other alarm in the
+        # management account can be changed or deleted.
+        Sid      = "TrailAlarmsOnly"
+        Effect   = "Allow"
+        Action   = ["cloudwatch:PutMetricAlarm", "cloudwatch:DeleteAlarms", "cloudwatch:TagResource", "cloudwatch:UntagResource"]
+        Resource = ["arn:${local.partition}:cloudwatch:*:${local.account_id}:alarm:${var.security_trail_name}-*"]
       },
       {
         Sid    = "TrailLogGroupOnly"
@@ -203,7 +212,7 @@ locals {
         # operation on an untagged key, so the tag cannot be planted.
         Sid       = "CreateOwnedKeysOnly"
         Effect    = "Allow"
-        Action    = ["kms:CreateKey"]
+        Action    = ["kms:CreateKey", "kms:TagResource"]
         Resource  = "*"
         Condition = { StringEquals = { "aws:RequestTag/${var.security_owner_tag.key}" = var.security_owner_tag.value } }
       },
@@ -240,9 +249,19 @@ locals {
       {
         # Stopping or deleting the org trail, or destroying its keys, blinds the
         # whole organization: break-glass only.
-        Sid      = "DenyTrailAndKeyDestruction"
-        Effect   = "Deny"
-        Action   = ["cloudtrail:StopLogging", "cloudtrail:DeleteTrail", "kms:ScheduleKeyDeletion", "kms:DisableKey", "kms:DeleteImportedKeyMaterial"]
+        # Repointing the trail (UpdateTrail: bucket, KMS key, org / multi-region
+        # flags) or rewriting a key's policy / grants / rotation is as good as
+        # stopping it. The key policy is set at CreateKey and the trail's
+        # settings at CreateTrail, so routine applies never need these.
+        # PutEventSelectors stays allowed (aws_cloudtrail calls it on create);
+        # selector changes are caught by the CIS CloudTrail-configuration alarm.
+        Sid    = "DenyTrailAndKeyDestruction"
+        Effect = "Deny"
+        Action = [
+          "cloudtrail:StopLogging", "cloudtrail:DeleteTrail", "cloudtrail:UpdateTrail",
+          "kms:ScheduleKeyDeletion", "kms:DisableKey", "kms:DeleteImportedKeyMaterial",
+          "kms:PutKeyPolicy", "kms:CreateGrant", "kms:DisableKeyRotation",
+        ]
         Resource = "*"
       },
     ]

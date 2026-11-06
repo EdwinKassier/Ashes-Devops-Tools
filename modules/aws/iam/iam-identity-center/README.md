@@ -76,6 +76,7 @@ The following resources are created:
 - resource.aws_ssoadmin_managed_policy_attachment.this (modules/aws/iam/iam-identity-center/main.tf#L43)
 - resource.aws_ssoadmin_permission_set.this (modules/aws/iam/iam-identity-center/main.tf#L33)
 - resource.aws_ssoadmin_permission_set_inline_policy.this (modules/aws/iam/iam-identity-center/main.tf#L51)
+- data source.aws_partition.current (modules/aws/iam/iam-identity-center/partition.tf#L3)
 - data source.aws_ssoadmin_instances.this (modules/aws/iam/iam-identity-center/main.tf#L12)
 
 

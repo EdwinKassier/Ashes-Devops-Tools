@@ -104,15 +104,21 @@ variable "managed_policies" {
 }
 
 variable "custom_constraints" {
-  description = "List of custom organization policy constraints to create"
+  description = "Custom organization policy constraints to create AND enforce at var.parent. A custom constraint does nothing until an org policy turns it on, so each one also gets a google_org_policy_policy: enforcement = \"enforce\" (default) enforces it, \"dry_run\" only logs violations (stage a new constraint this way first), \"off\" defines it without a policy."
   type = list(object({
-    name           = string       # Unique name, e.g., "custom.disableGkeAutoUpgrade"
-    display_name   = string       # Human readable name
-    description    = string       # Description of the constraint
-    action_type    = string       # ALLOW or DENY
-    condition      = string       # CEL condition, e.g., "resource.management.autoUpgrade == true"
-    method_types   = list(string) # Operations to restrict: CREATE, UPDATE, DELETE
-    resource_types = list(string) # Resources to restrict: e.g. ["container.googleapis.com/NodePool"]
+    name           = string                      # Unique name, e.g., "custom.disableGkeAutoUpgrade"
+    display_name   = string                      # Human readable name
+    description    = string                      # Description of the constraint
+    action_type    = string                      # ALLOW or DENY
+    condition      = string                      # CEL condition, e.g., "resource.management.autoUpgrade == true"
+    method_types   = list(string)                # Operations to restrict: CREATE, UPDATE, DELETE
+    resource_types = list(string)                # Resources to restrict: e.g. ["container.googleapis.com/NodePool"]
+    enforcement    = optional(string, "enforce") # enforce | dry_run | off
   }))
   default = []
+
+  validation {
+    condition     = alltrue([for c in var.custom_constraints : contains(["enforce", "dry_run", "off"], c.enforcement)])
+    error_message = "custom_constraints[*].enforcement must be enforce, dry_run or off."
+  }
 }

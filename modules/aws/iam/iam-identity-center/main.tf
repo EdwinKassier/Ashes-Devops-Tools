@@ -25,7 +25,7 @@ locals {
   managed_attachments = merge([
     for ps_name, ps in var.permission_sets : {
       for arn in ps.managed_policy_arns :
-      "${ps_name}/${arn}" => { ps = ps_name, arn = arn }
+      "${ps_name}/${arn}" => { ps = ps_name, arn = replace(arn, "/^arn:aws:/", "arn:${local.partition}:") }
     }
   ]...)
 }

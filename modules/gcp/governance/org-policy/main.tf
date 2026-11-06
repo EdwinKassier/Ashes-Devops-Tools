@@ -151,3 +151,32 @@ resource "google_org_policy_custom_constraint" "custom_constraints" {
     }
   }
 }
+
+# A custom constraint has no effect until a policy enforces it. Without this
+# resource every custom constraint above was defined but inert.
+resource "google_org_policy_policy" "custom_constraints" {
+  for_each = { for c in var.custom_constraints : c.name => c if c.enforcement != "off" }
+
+  name   = "${var.parent}/policies/${each.key}"
+  parent = var.parent
+
+  dynamic "spec" {
+    for_each = each.value.enforcement == "enforce" ? [1] : []
+    content {
+      rules {
+        enforce = "TRUE"
+      }
+    }
+  }
+
+  dynamic "dry_run_spec" {
+    for_each = each.value.enforcement == "dry_run" ? [1] : []
+    content {
+      rules {
+        enforce = "TRUE"
+      }
+    }
+  }
+
+  depends_on = [google_org_policy_custom_constraint.custom_constraints]
+}

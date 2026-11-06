@@ -32,6 +32,8 @@ data "terraform_remote_state" "aws_organization" {
 module "aws_backup" {
   source = "../../../modules/aws/stages/backup"
 
+  partition = local.partition
+
   # The default provider authenticates as / into the management account (which
   # owns the org BACKUP_POLICY), so it is mapped to the stage's default aws
   # provider. The backup account is an aliased provider assuming the cross-account

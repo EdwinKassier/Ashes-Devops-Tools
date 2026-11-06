@@ -350,7 +350,7 @@ variable "break_glass_principal_emails" {
 }
 
 variable "custom_org_constraints" {
-  description = "Opt-in custom organization-policy constraints (CEL-defined resource-shape guardrails) applied at the org node. Default [] = none. Latest Google guidance recommends layering custom constraints on the managed baseline; see docs/known-gaps.md."
+  description = "Opt-in custom organization-policy constraints (CEL-defined resource-shape guardrails), created AND enforced at the org node (enforcement = enforce | dry_run | off; dry_run logs violations without blocking, the way to stage a new one). Default [] = none. See docs/known-gaps.md."
   type = list(object({
     name           = string
     display_name   = string
@@ -359,6 +359,7 @@ variable "custom_org_constraints" {
     condition      = string
     method_types   = list(string)
     resource_types = list(string)
+    enforcement    = optional(string, "enforce")
   }))
   default = []
 }
@@ -726,5 +727,16 @@ variable "wif_tenant_pins" {
   validation {
     condition     = (var.wif_tenant_pins.tfc_organization == null || can(regex("^[A-Za-z0-9_-]+$", coalesce(var.wif_tenant_pins.tfc_organization, "x")))) && alltrue([for i in var.wif_tenant_pins.github_owner_ids : can(regex("^[0-9]+$", i))])
     error_message = "wif_tenant_pins.tfc_organization must be a literal TFC organization name and github_owner_ids numeric GitHub owner IDs."
+  }
+}
+
+variable "wif_tenant_pin_enforcement" {
+  description = "How custom.wifProviderTenantPinned is applied: enforce (default; providers that do not pin the tenant are rejected), dry_run (violations are only logged: stage it this way on an org with existing providers), or off."
+  type        = string
+  default     = "enforce"
+
+  validation {
+    condition     = contains(["enforce", "dry_run", "off"], var.wif_tenant_pin_enforcement)
+    error_message = "wif_tenant_pin_enforcement must be enforce, dry_run or off."
   }
 }

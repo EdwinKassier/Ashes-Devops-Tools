@@ -54,6 +54,7 @@ module "aws_security" {
   shared_services_account_id  = local.org.account_ids["shared_services"]
   identity_account_id         = var.identity_account_id
   forensics_account_id        = local.org.account_ids["forensics"]
+  backup_account_id           = lookup(local.org.account_ids, "backup", null)
 
   aws_region          = local.aws_region
   aws_enabled_regions = local.aws_enabled_regions

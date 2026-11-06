@@ -115,20 +115,20 @@ run "plan_role_is_read_only_and_roles_are_account_scoped" {
   command = plan
 
   assert {
-    condition     = jsondecode(output.template_body).Resources.TfcPlanRoleNetwork.Properties.ManagedPolicyArns == ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
+    condition     = jsonencode(jsondecode(output.template_body).Resources.TfcPlanRoleNetwork.Properties.ManagedPolicyArns) == jsonencode([{ "Fn::Sub" = "arn:$${AWS::Partition}:iam::aws:policy/ReadOnlyAccess" }])
     error_message = "the plan role must carry only ReadOnlyAccess"
   }
 
   assert {
     condition = alltrue([
       for name, r in jsondecode(output.template_body).Resources :
-      !startswith(name, "TfcPlanRole") || alltrue([for a in r.Properties.ManagedPolicyArns : !strcontains(a, "AdministratorAccess") && !strcontains(a, "PowerUserAccess")])
+      !startswith(name, "TfcPlanRole") || alltrue([for a in r.Properties.ManagedPolicyArns : !strcontains(a["Fn::Sub"], "AdministratorAccess") && !strcontains(a["Fn::Sub"], "PowerUserAccess")])
     ])
     error_message = "no plan role may carry a write policy"
   }
 
   assert {
-    condition     = jsondecode(output.template_body).Resources.TfcApplyRoleNetwork.Properties.ManagedPolicyArns == ["arn:aws:iam::aws:policy/AdministratorAccess"]
+    condition     = jsonencode(jsondecode(output.template_body).Resources.TfcApplyRoleNetwork.Properties.ManagedPolicyArns) == jsonencode([{ "Fn::Sub" = "arn:$${AWS::Partition}:iam::aws:policy/AdministratorAccess" }])
     error_message = "the apply role defaults to AdministratorAccess"
   }
 

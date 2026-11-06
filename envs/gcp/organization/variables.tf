@@ -222,7 +222,7 @@ variable "budget_currency" {
 }
 
 variable "custom_org_constraints" {
-  description = "Opt-in custom organization-policy constraints (CEL-defined resource-shape guardrails) applied at the org node. Default [] = none. Google recommends layering custom constraints on the managed baseline. See docs/known-gaps.md."
+  description = "Opt-in custom organization-policy constraints (CEL-defined resource-shape guardrails), created AND enforced at the org node (enforcement = enforce | dry_run | off). Default [] = none. See docs/known-gaps.md."
   type = list(object({
     name           = string
     display_name   = string
@@ -231,6 +231,7 @@ variable "custom_org_constraints" {
     condition      = string
     method_types   = list(string)
     resource_types = list(string)
+    enforcement    = optional(string, "enforce")
   }))
   default = []
 }
@@ -522,4 +523,10 @@ variable "wif_github_owner_ids" {
   type        = list(string)
   default     = []
   nullable    = false
+}
+
+variable "wif_tenant_pin_enforcement" {
+  description = "custom.wifProviderTenantPinned: enforce (default), dry_run (log only: stage it first on an org with existing WIF providers) or off."
+  type        = string
+  default     = "enforce"
 }

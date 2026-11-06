@@ -417,10 +417,17 @@ locals {
   wif_tfc_pattern = var.wif_tenant_pins.tfc_organization == null ? null : (
     "^assertion[.]terraform_organization_name == '${var.wif_tenant_pins.tfc_organization}'( && [^|?]*)?$"
   )
-  wif_github_patterns = [
-    for id in var.wif_tenant_pins.github_owner_ids :
-    "^assertion[.]repository_owner_id == .${id}.( && [^()|?]*| && ${local.wif_paren_group})?$"
-  ]
+  # The owner ID must sit in MATCHING quotes ('123' or "123"; \x22 is the
+  # double quote, which also reads correctly after CEL unescapes the string).
+  # A wildcard quote would let `== "123' && x" == false` through: a mismatched
+  # quote swallows the conjunction into the string literal, and the trailing
+  # relation makes the whole condition true for every owner.
+  wif_github_patterns = flatten([
+    for id in var.wif_tenant_pins.github_owner_ids : [
+      for q in ["'", "\\x22"] :
+      "^assertion[.]repository_owner_id == ${q}${id}${q}( && [^()|?]*| && ${local.wif_paren_group})?$"
+    ]
+  ])
 
   wif_tenant_constraints = var.wif_tenant_pins.tfc_organization == null && length(var.wif_tenant_pins.github_owner_ids) == 0 ? [] : [{
     name         = "custom.wifProviderTenantPinned"
@@ -433,6 +440,7 @@ locals {
     ]))
     method_types   = ["CREATE", "UPDATE"]
     resource_types = ["iam.googleapis.com/WorkloadIdentityPoolProvider"]
+    enforcement    = var.wif_tenant_pin_enforcement
   }]
 }
 
