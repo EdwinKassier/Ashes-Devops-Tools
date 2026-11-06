@@ -613,3 +613,23 @@ run "module_tags_applied" {
     error_message = "module-level tags must land on aws_organizations_policy.policy"
   }
 }
+
+# GovCloud / China: every rendered ARN follows the partition.
+run "policies_follow_the_partition" {
+  command = plan
+
+  variables {
+    partition              = "aws-us-gov"
+    terraform_run_role_arn = "arn:aws-us-gov:iam::111111111111:role/tfc-mgmt-apply"
+    break_glass_role_arn   = "arn:aws-us-gov:iam::111111111111:role/break-glass"
+  }
+
+  assert {
+    condition = (
+      !strcontains(aws_organizations_policy.policy["scp-deny-tamper"].content, "arn:aws:") &&
+      !strcontains(aws_organizations_policy.policy["scp-baseline"].content, "arn:aws:") &&
+      strcontains(aws_organizations_policy.policy["scp-baseline"].content, "arn:aws-us-gov:iam::*:root")
+    )
+    error_message = "with partition = aws-us-gov no SCP may contain an arn:aws: ARN."
+  }
+}

@@ -120,8 +120,8 @@
         "s3:PutBucketObjectLockConfiguration"
       ],
       "Resource": [
-        "arn:aws:s3:::${log_archive_bucket_name}",
-        "arn:aws:s3:::${log_archive_bucket_name}/*"
+        "arn:${partition}:s3:::${log_archive_bucket_name}",
+        "arn:${partition}:s3:::${log_archive_bucket_name}/*"
       ],
       "Condition": {
         "ArnNotLike": {

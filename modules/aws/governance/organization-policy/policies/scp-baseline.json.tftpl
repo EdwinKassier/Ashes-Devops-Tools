@@ -8,7 +8,7 @@
       "Resource": "*",
       "Condition": {
         "StringLike": {
-          "aws:PrincipalArn": "arn:aws:iam::*:root"
+          "aws:PrincipalArn": "arn:${partition}:iam::*:root"
         },
         "ArnNotLike": {
           "aws:PrincipalArn": [

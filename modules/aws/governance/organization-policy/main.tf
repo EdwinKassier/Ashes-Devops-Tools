@@ -60,25 +60,25 @@ locals {
   break_glass_role_names = length(var.break_glass_role_names) > 0 ? var.break_glass_role_names : [
     regex("role/(.+)$", var.break_glass_role_arn)[0]
   ]
-  break_glass_principal_arns = [for n in local.break_glass_role_names : "arn:aws:iam::*:role/${n}"]
+  break_glass_principal_arns = [for n in local.break_glass_role_names : "arn:${var.partition}:iam::*:role/${n}"]
   privileged_principal_arns = distinct(concat(
-    [for n in var.pipeline_role_names : "arn:aws:iam::*:role/${n}"],
+    [for n in var.pipeline_role_names : "arn:${var.partition}:iam::*:role/${n}"],
     local.break_glass_principal_arns,
   ))
 
   stackset_role_arns = distinct(concat(
-    [for n in var.stackset_managed_role_names : "arn:aws:iam::*:role/${n}"],
+    [for n in var.stackset_managed_role_names : "arn:${var.partition}:iam::*:role/${n}"],
     local.break_glass_principal_arns,
   ))
   admin_role_arns = [
     for a in distinct(concat(
-      [for n in var.pipeline_role_names : "arn:aws:iam::*:role/${n}"],
-      [for n in var.stackset_execution_role_names : "arn:aws:iam::*:role/${n}"],
+      [for n in var.pipeline_role_names : "arn:${var.partition}:iam::*:role/${n}"],
+      [for n in var.stackset_execution_role_names : "arn:${var.partition}:iam::*:role/${n}"],
     )) : a if !contains(local.stackset_role_arns, a)
   ]
   stackset_exempt_arns = distinct(concat(
     local.break_glass_principal_arns,
-    [for n in var.stackset_execution_role_names : "arn:aws:iam::*:role/${n}"],
+    [for n in var.stackset_execution_role_names : "arn:${var.partition}:iam::*:role/${n}"],
   ))
   role_tamper_actions = [
     "iam:CreateRole",
@@ -99,6 +99,7 @@ locals {
     scp-deny-tamper = {
       type = "SERVICE_CONTROL_POLICY"
       content = jsonencode(jsondecode(templatefile("${path.module}/policies/scp-deny-tamper.json.tftpl", {
+        partition               = var.partition
         break_glass_arns        = jsonencode(local.break_glass_principal_arns)
         privileged_arns         = jsonencode(local.privileged_principal_arns)
         admin_role_arns         = local.admin_role_arns
@@ -137,6 +138,7 @@ locals {
     scp-baseline = {
       type = "SERVICE_CONTROL_POLICY"
       content = jsonencode(jsondecode(templatefile("${path.module}/policies/scp-baseline.json.tftpl", {
+        partition              = var.partition
         terraform_run_role_arn = var.terraform_run_role_arn
         break_glass_role_arn   = var.break_glass_role_arn
         break_glass_arns       = jsonencode(local.break_glass_principal_arns)
@@ -198,6 +200,7 @@ locals {
     backup-policy = {
       type = "BACKUP_POLICY"
       content = templatefile("${path.module}/policies/backup-policy.json", {
+        partition      = var.partition
         default_region = var.default_region
       })
     }

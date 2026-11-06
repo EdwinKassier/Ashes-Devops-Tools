@@ -32,7 +32,7 @@ variable "terraform_run_role_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.terraform_run_role_arn))
+    condition     = can(regex("^arn:aws(-us-gov|-cn)?:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.terraform_run_role_arn))
     error_message = "terraform_run_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/<name>) with no wildcards (* or ?)."
   }
 }
@@ -42,7 +42,7 @@ variable "break_glass_role_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.break_glass_role_arn))
+    condition     = can(regex("^arn:aws(-us-gov|-cn)?:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.break_glass_role_arn))
     error_message = "break_glass_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/<name>) with no wildcards (* or ?)."
   }
 }
@@ -263,4 +263,15 @@ variable "tags" {
   type        = map(string)
   default     = {}
   nullable    = false
+}
+
+variable "partition" {
+  description = "AWS partition the policies are rendered for: aws, aws-us-gov or aws-cn. Every ARN in the SCPs / backup policy uses it."
+  type        = string
+  default     = "aws"
+
+  validation {
+    condition     = contains(["aws", "aws-us-gov", "aws-cn"], var.partition)
+    error_message = "partition must be aws, aws-us-gov or aws-cn."
+  }
 }

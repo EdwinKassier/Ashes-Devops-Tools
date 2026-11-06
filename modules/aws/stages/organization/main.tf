@@ -84,6 +84,7 @@ module "policies" {
   log_archive_bucket_name = var.log_archive_bucket_name
   attachments             = local.effective_attachments
   policy_overrides        = var.org_policy_overrides
+  partition               = var.partition
   disabled_policies       = var.disabled_org_policies
 
   # Member-account carve-outs + perimeter tuning (validated in the policy module).

@@ -455,3 +455,9 @@ variable "allowed_builtin_web_identity_providers" {
   default     = []
   nullable    = false
 }
+
+variable "partition" {
+  description = "AWS partition the organization policies are rendered for (aws, aws-us-gov, aws-cn)."
+  type        = string
+  default     = "aws"
+}

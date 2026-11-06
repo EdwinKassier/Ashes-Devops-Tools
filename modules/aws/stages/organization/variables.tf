@@ -432,3 +432,9 @@ variable "identity_center_admin_account_key" {
     error_message = "identity_center_admin_account_key must name an account in accounts / workload_accounts."
   }
 }
+
+variable "partition" {
+  description = "AWS partition the organization policies are rendered for (aws, aws-us-gov, aws-cn)."
+  type        = string
+  default     = "aws"
+}
