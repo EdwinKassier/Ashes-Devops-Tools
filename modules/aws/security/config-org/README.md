@@ -49,13 +49,13 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_config_configuration_aggregator.org (modules/aws/security/config-org/main.tf#L114)
-- resource.aws_config_configuration_recorder.this (modules/aws/security/config-org/main.tf#L68)
-- resource.aws_config_configuration_recorder_status.this (modules/aws/security/config-org/main.tf#L103)
-- resource.aws_config_delivery_channel.this (modules/aws/security/config-org/main.tf#L94)
-- resource.aws_config_organization_conformance_pack.this (modules/aws/security/config-org/main.tf#L128)
-- resource.aws_iam_role.aggregator (modules/aws/security/config-org/main.tf#L47)
-- resource.aws_iam_role_policy_attachment.aggregator (modules/aws/security/config-org/main.tf#L62)
+- resource.aws_config_configuration_aggregator.org (modules/aws/security/config-org/main.tf#L117)
+- resource.aws_config_configuration_recorder.this (modules/aws/security/config-org/main.tf#L71)
+- resource.aws_config_configuration_recorder_status.this (modules/aws/security/config-org/main.tf#L106)
+- resource.aws_config_delivery_channel.this (modules/aws/security/config-org/main.tf#L97)
+- resource.aws_config_organization_conformance_pack.this (modules/aws/security/config-org/main.tf#L133)
+- resource.aws_iam_role.aggregator (modules/aws/security/config-org/main.tf#L48)
+- resource.aws_iam_role_policy_attachment.aggregator (modules/aws/security/config-org/main.tf#L65)
 - resource.aws_iam_service_linked_role.config (modules/aws/security/config-org/main.tf#L40)
 - data source.aws_caller_identity.current (modules/aws/security/config-org/main.tf#L33)
 
@@ -80,6 +80,7 @@ The following resources are created:
 | <a name="input_record_all_supported"></a> [record\_all\_supported](#input\_record\_all\_supported) | COST TOGGLE. When true (default), each recorder records ALL supported resource types (and, being all\_supported, global resource types too). Recording every resource type in every Region is the most expensive Config mode; set false to pair with a narrower recording\_group managed out-of-band when cost matters. | `bool` | `true` | no |
 | <a name="input_recorder_name"></a> [recorder\_name](#input\_recorder\_name) | Name applied to every per-Region configuration recorder. | `string` | `"org-recorder"` | no |
 | <a name="input_recorder_only"></a> [recorder\_only](#input\_recorder\_only) | When true, deploy only the per-Region recorder/delivery-channel/status and skip the org aggregator and conformance packs. The aws-workload stage sets this true to deploy a single workload account's recorder; the home-account aws-config stage leaves it false. | `bool` | `false` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 
 ## Outputs
 

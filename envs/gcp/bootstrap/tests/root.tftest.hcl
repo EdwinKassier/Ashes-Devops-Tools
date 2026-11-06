@@ -78,7 +78,7 @@ run "bootstrap_output_contract" {
   }
 }
 
-# C2: the tfc-admin root consumes exactly these three output names.
+# The tfc-admin root consumes exactly these three output names.
 run "tfc_identity_output_contract" {
   command = plan
 

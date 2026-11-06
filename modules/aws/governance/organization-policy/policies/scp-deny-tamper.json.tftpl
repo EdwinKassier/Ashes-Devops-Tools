@@ -58,6 +58,36 @@
         }
       }
     },
+%{ if length(central_detection_account_ids) > 0 ~}
+    {
+      "Sid": "DenyCentralDetectionOutsideSecurityAccounts",
+      "Effect": "Deny",
+      "Action": [
+        "cloudtrail:PutEventSelectors",
+        "cloudtrail:PutInsightSelectors",
+        "cloudtrail:UpdateTrail",
+        "guardduty:CreateFilter",
+        "guardduty:UpdateFilter",
+        "guardduty:UpdateDetector",
+        "guardduty:CreateIPSet",
+        "guardduty:UpdateIPSet",
+        "securityhub:BatchDisableStandards",
+        "securityhub:CreateAutomationRule*",
+        "securityhub:UpdateStandardsControl",
+        "inspector2:CreateFilter",
+        "access-analyzer:CreateArchiveRule"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:PrincipalAccount": ${jsonencode(central_detection_account_ids)}
+        },
+        "ArnNotLike": {
+          "aws:PrincipalArn": ${break_glass_arns}
+        }
+      }
+    },
+%{ endif ~}
 %{ if length(admin_role_arns) > 0 ~}
     {
       "Sid": "DenyPrivilegedRoleTampering",
@@ -87,11 +117,13 @@
       "Effect": "Deny",
       "Action": [
         "s3:BypassGovernanceRetention",
-        "s3:PutBucketObjectLockConfiguration"
+        "s3:PutBucketObjectLockConfiguration",
+        "s3:PutBucketPolicy",
+        "s3:DeleteBucketPolicy"
       ],
       "Resource": [
-        "arn:aws:s3:::${log_archive_bucket_name}",
-        "arn:aws:s3:::${log_archive_bucket_name}/*"
+        "arn:${partition}:s3:::${log_archive_bucket_name}",
+        "arn:${partition}:s3:::${log_archive_bucket_name}/*"
       ],
       "Condition": {
         "ArnNotLike": {

@@ -31,7 +31,7 @@ data "terraform_remote_state" "organization" {
   }
 }
 
-# The projects and network-hub stages were split into their own roots (audit H3),
+# The projects and network-hub stages were split into their own roots,
 # so environment_config comes from gcp-projects and hub_network from
 # gcp-network-hub. org_id / billing_account / admin_project_number come from
 # gcp-organization above.
@@ -206,6 +206,14 @@ module "host" {
     }
   }
 
+  # Google APIs via PSC. Behind an ENFORCED perimeter the endpoint targets the
+  # vpc-sc (restricted.googleapis.com) bundle, so APIs outside the perimeter's
+  # supported set are unreachable from the VPC rather than an exfil path; while
+  # the perimeter is absent or in dry-run, all-apis keeps everything working.
+  private_service_connect = {
+    target = local.psc_target
+  }
+
   # Hub peering and the DNS peering zone (empty maps in standalone mode).
   peerings  = local.hub_vpc_peerings
   dns_zones = local.hub_dns_zones
@@ -273,7 +281,7 @@ module "budget" {
 }
 
 # =============================================================================
-# SERVICE TEAM REGISTRY (audit H10)
+# SERVICE TEAM REGISTRY
 #
 # One module instance per entry in var.service_teams. Onboarding or offboarding a
 # team is a change to the service_teams map, not a hand-edited module block. The
@@ -372,7 +380,7 @@ module "os_patch_management" {
 }
 
 # =============================================================================
-# SaaS SECRET BRIDGE (audit H9, hybrid option C — first increment)
+# SaaS SECRET BRIDGE
 #
 # Opt-in. Reads the Supabase outputs from a saas-<name> workspace and writes them
 # into a GCP Secret Manager secret in the host project, so a GCP runtime can use
@@ -419,7 +427,7 @@ module "saas_secret_bridge" {
 }
 
 # =============================================================================
-# APPLICATION GOLDEN PATH (audit: "app golden path is docs-only")
+# APPLICATION GOLDEN PATH 
 #
 # One module call. A service team adds an entry to var.app_services and gets, in
 # the env host project: an Artifact Registry repo, a runtime SA, a Cloud Run v2
@@ -453,6 +461,10 @@ module "app_services" {
   enable_app_deploy_wif      = var.enable_app_deploy_wif
   app_deploy_wif_pool_id     = var.app_deploy_wif_pool_id
   github_repository_owner_id = var.github_repository_owner_id
+
+  # Per-service Cloud Monitoring alerts (5xx ratio, p99 latency).
+  enable_alerts                  = var.enable_app_alerts
+  alert_notification_channel_ids = var.app_alert_notification_channel_ids
 
   enable_gke_autopilot              = var.enable_gke_autopilot
   gke_master_ipv4_cidr_block        = var.gke_master_ipv4_cidr_block
@@ -516,4 +528,8 @@ check "vpc_sc_enforced_in_prod" {
     condition     = !local.is_production || (local.vpc_sc_access_policy != null && !local.vpc_sc_enable_dry_run)
     error_message = "Environment '${var.environment}' is production but its VPC-SC perimeter is ${local.vpc_sc_access_policy == null ? "NOT CREATED (no scoped access policy in environment_config and vpc_sc_access_policy_name is null)" : "in DRY-RUN (vpc_sc_enable_dry_run = true)"}. Dry-run gives no exfiltration protection: validate the violation logs, then set vpc_sc_enable_dry_run = false (use vpc_sc_dry_run_restricted_services to keep staging further changes)."
   }
+}
+
+locals {
+  psc_target = coalesce(var.private_service_connect_target, local.vpc_sc_access_policy != null && !local.vpc_sc_enable_dry_run ? "vpc-sc" : "all-apis")
 }

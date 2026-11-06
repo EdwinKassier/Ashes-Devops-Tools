@@ -26,6 +26,7 @@ resource "aws_acmpca_certificate_authority" "this" {
   # 7..30 day window before a deleted CA is permanently destroyed; keeps a
   # recovery window without forcing the maximum 30-day retention cost.
   permanent_deletion_time_in_days = var.permanent_deletion_time_in_days
+  tags                            = var.tags
 }
 
 # RAM share: created only when both the module is enabled and org sharing is on.
@@ -35,6 +36,7 @@ resource "aws_ram_resource_share" "this" {
   count                     = var.enable_private_ca && var.share_org ? 1 : 0
   name                      = var.share_name
   allow_external_principals = false
+  tags                      = var.tags
 }
 
 resource "aws_ram_resource_association" "ca" {

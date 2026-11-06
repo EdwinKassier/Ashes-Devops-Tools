@@ -11,7 +11,7 @@
 # preventive counterparts live elsewhere (the B3 SCP carve-out and the F1
 # disabled-by-default guardrail). The break-glass detective control lives HERE
 # rather than in the iam-role module, which only defines the role itself; the
-# alarm depends on the org CloudTrail (C3) delivering STS events into the
+# alarm depends on the org CloudTrail delivering STS events into the
 # observed account.
 
 # KMS-encrypted SNS topic that all security notifications are published to.
@@ -19,6 +19,7 @@ resource "aws_sns_topic" "this" {
   count             = var.enable_security_notifications ? 1 : 0
   name              = var.topic_name
   kms_master_key_id = var.kms_key_id
+  tags              = var.tags
 }
 
 # Allow EventBridge and CloudWatch to publish into the topic.
@@ -67,6 +68,7 @@ resource "aws_cloudwatch_event_rule" "this" {
   for_each      = local.event_rules
   name          = "sec-notify-${each.key}"
   event_pattern = each.value
+  tags          = var.tags
 }
 
 resource "aws_cloudwatch_event_target" "this" {
@@ -76,7 +78,7 @@ resource "aws_cloudwatch_event_target" "this" {
   arn       = aws_sns_topic.this[0].arn
 }
 
-# Break-glass CloudWatch metric ALARM (C14).
+# Break-glass CloudWatch metric ALARM.
 #
 # Two complementary break-glass detective paths exist:
 #   * the always-on EventBridge rule above (break-glass-use) — log-group
@@ -126,6 +128,7 @@ resource "aws_cloudwatch_metric_alarm" "break_glass" {
 
   alarm_actions = [aws_sns_topic.this[0].arn]
   ok_actions    = [aws_sns_topic.this[0].arn]
+  tags          = var.tags
 }
 
 # Security Hub automation rule: auto-note informational findings so operators
@@ -152,4 +155,6 @@ resource "aws_securityhub_automation_rule" "suppress_known" {
       }
     }
   }
+
+  tags = var.tags
 }

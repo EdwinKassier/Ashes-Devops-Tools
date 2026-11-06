@@ -98,7 +98,7 @@ variable "vpc_sc_enable_dry_run" {
     When true (the default), the hub VPC-SC perimeter logs violations but does NOT block traffic (dry-run/simulation mode).
     When false, the perimeter is ENFORCED.
     Google recommends dry-run first: validate the violation logs, then promote to enforcement by setting this false.
-    See docs/known-gaps.md (G11).
+    See docs/known-gaps.md.
   EOT
   type        = bool
   default     = true
@@ -114,7 +114,7 @@ variable "enable_deletion_protection" {
   default     = true
 }
 
-# --- Audit finding G5: VPC-SC perimeter hardening (opt-in) -------------------
+# --- VPC-SC perimeter hardening (opt-in) ------------------------------------
 # The base perimeter restricts only storage/bigquery/cloudfunctions/run and has
 # no ingress policy. The perimeter now defaults to DRY-RUN
 # (vpc_sc_enable_dry_run = true, G11), so expanding restricted_services is safe

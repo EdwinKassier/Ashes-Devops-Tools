@@ -89,7 +89,7 @@ run "one_service_full_golden_path" {
   }
 
   assert {
-    condition     = google_iam_workload_identity_pool_provider.github[0].attribute_condition == "(assertion.repository_id == \"123456789\")"
+    condition     = google_iam_workload_identity_pool_provider.github[0].attribute_condition == "((assertion.repository_id == \"123456789\"))"
     error_message = "the provider must fail closed on the declared repository_id."
   }
 
@@ -146,7 +146,7 @@ run "github_ref_and_environment_constrain_condition" {
   }
 
   assert {
-    condition     = google_iam_workload_identity_pool_provider.github[0].attribute_condition == "assertion.repository_owner_id == \"42\" && (assertion.repository_id == \"123\" && assertion.ref == \"refs/heads/main\" && (has(assertion.environment) && assertion.environment == \"dev\"))"
+    condition     = google_iam_workload_identity_pool_provider.github[0].attribute_condition == "assertion.repository_owner_id == \"42\" && ((assertion.repository_id == \"123\" && assertion.ref == \"refs/heads/main\" && (has(assertion.environment) && assertion.environment == \"dev\")))"
     error_message = "owner, ref and environment constraints must all be ANDed into the provider condition."
   }
 }
@@ -275,5 +275,209 @@ run "bootstrap_image_defaults_to_public_sample" {
   assert {
     condition     = output.services["api"].initial_image == "us-docker.pkg.dev/cloudrun/container/hello"
     error_message = "bootstrap_image must default to the public Cloud Run sample."
+  }
+}
+
+# ── Per-service observability ────────────────────────────────────────────────
+
+run "alerts_default_per_service" {
+  command = plan
+
+  variables {
+    services = { api = {} }
+  }
+
+  assert {
+    condition = (
+      keys(google_monitoring_alert_policy.error_ratio) == ["api"] &&
+      keys(google_monitoring_alert_policy.latency_p99) == ["api"] &&
+      contains(keys(google_project_service.this), "monitoring.googleapis.com")
+    )
+    error_message = "every service must get a 5xx-ratio and a p99-latency alert policy by default (and the Monitoring API)."
+  }
+
+  # The 5xx condition is a RATIO scoped to this service's revisions.
+  assert {
+    condition = (
+      strcontains(google_monitoring_alert_policy.error_ratio["api"].conditions[0].condition_threshold[0].filter, "resource.labels.service_name = \"api\"") &&
+      strcontains(google_monitoring_alert_policy.error_ratio["api"].conditions[0].condition_threshold[0].filter, "metric.labels.response_code_class = \"5xx\"") &&
+      strcontains(google_monitoring_alert_policy.error_ratio["api"].conditions[0].condition_threshold[0].denominator_filter, "resource.labels.service_name = \"api\"") &&
+      !strcontains(google_monitoring_alert_policy.error_ratio["api"].conditions[0].condition_threshold[0].denominator_filter, "5xx") &&
+      google_monitoring_alert_policy.error_ratio["api"].conditions[0].condition_threshold[0].threshold_value == 0.05 &&
+      google_monitoring_alert_policy.error_ratio["api"].conditions[0].condition_threshold[0].comparison == "COMPARISON_GT"
+    )
+    error_message = "the 5xx alert must be a 5xx / all-requests ratio > 0.05 on this service only."
+  }
+
+  assert {
+    condition = (
+      strcontains(google_monitoring_alert_policy.latency_p99["api"].conditions[0].condition_threshold[0].filter, "run.googleapis.com/request_latencies") &&
+      strcontains(google_monitoring_alert_policy.latency_p99["api"].conditions[0].condition_threshold[0].filter, "resource.labels.service_name = \"api\"") &&
+      google_monitoring_alert_policy.latency_p99["api"].conditions[0].condition_threshold[0].aggregations[0].per_series_aligner == "ALIGN_PERCENTILE_99" &&
+      google_monitoring_alert_policy.latency_p99["api"].conditions[0].condition_threshold[0].threshold_value == 2000
+    )
+    error_message = "the latency alert must be p99 request latency > 2000ms on this service only."
+  }
+
+  assert {
+    condition     = length(google_monitoring_alert_policy.error_ratio["api"].notification_channels) == 0 && google_monitoring_alert_policy.error_ratio["api"].user_labels["service"] == "api"
+    error_message = "with no alert_notification_channel_ids the policies must have no channels, and carry the service label."
+  }
+
+  assert {
+    condition = (
+      length(google_pubsub_topic.service) == 0 && length(google_pubsub_subscription.service) == 0 &&
+      length(google_pubsub_topic_iam_member.runtime_publisher) == 0 &&
+      !contains(keys(google_project_service.this), "pubsub.googleapis.com") &&
+      output.services["api"].pubsub_topic == null
+    )
+    error_message = "no Pub/Sub resources (or API) unless the service enables pubsub."
+  }
+}
+
+run "alerts_channels_thresholds_and_opt_out" {
+  command = plan
+
+  variables {
+    alert_notification_channel_ids = ["projects/acme-dev-host-abcd/notificationChannels/1234"]
+    services = {
+      api    = { alerts = { p99_latency_ms = 500, error_ratio_threshold = 0.01 } }
+      worker = { alerts = { enabled = false } }
+    }
+  }
+
+  assert {
+    condition     = keys(google_monitoring_alert_policy.error_ratio) == ["api"] && keys(google_monitoring_alert_policy.latency_p99) == ["api"] && length(output.services["worker"].alert_policy_ids) == 0
+    error_message = "alerts.enabled = false must drop that service's alert policies only."
+  }
+
+  assert {
+    condition = (
+      google_monitoring_alert_policy.latency_p99["api"].conditions[0].condition_threshold[0].threshold_value == 500 &&
+      google_monitoring_alert_policy.error_ratio["api"].conditions[0].condition_threshold[0].threshold_value == 0.01 &&
+      tolist(google_monitoring_alert_policy.error_ratio["api"].notification_channels) == tolist(["projects/acme-dev-host-abcd/notificationChannels/1234"]) &&
+      tolist(google_monitoring_alert_policy.latency_p99["api"].notification_channels) == tolist(["projects/acme-dev-host-abcd/notificationChannels/1234"])
+    )
+    error_message = "custom thresholds and notification channels must reach the policies."
+  }
+}
+
+run "alerts_disabled_stage_wide" {
+  command = plan
+
+  variables {
+    enable_alerts = false
+    services      = { api = {} }
+  }
+
+  assert {
+    condition     = length(google_monitoring_alert_policy.error_ratio) == 0 && length(google_monitoring_alert_policy.latency_p99) == 0 && !contains(keys(google_project_service.this), "monitoring.googleapis.com")
+    error_message = "enable_alerts = false must create no alert policies and not enable the Monitoring API."
+  }
+}
+
+# ── Per-service Pub/Sub ──────────────────────────────────────────────────────
+
+run "pubsub_enabled_least_privilege" {
+  command = plan
+
+  override_resource {
+    target          = google_pubsub_topic.dead_letter
+    override_during = plan
+    values          = { id = "projects/acme-dev-host-abcd/topics/api-dlq" }
+  }
+
+  override_resource {
+    target          = google_pubsub_topic.service
+    override_during = plan
+    values          = { id = "projects/acme-dev-host-abcd/topics/api" }
+  }
+
+  variables {
+    services = {
+      api    = { pubsub = { enabled = true, max_delivery_attempts = 10 } }
+      worker = {}
+    }
+  }
+
+  assert {
+    condition = (
+      keys(google_pubsub_topic.service) == ["api"] &&
+      google_pubsub_topic.service["api"].name == "api" &&
+      google_pubsub_topic.dead_letter["api"].name == "api-dlq" &&
+      google_pubsub_subscription.service["api"].name == "api-sub" &&
+      google_pubsub_subscription.service["api"].topic == "projects/acme-dev-host-abcd/topics/api" &&
+      google_pubsub_subscription.dead_letter["api"].topic == "projects/acme-dev-host-abcd/topics/api-dlq" &&
+      contains(keys(google_project_service.this), "pubsub.googleapis.com")
+    )
+    error_message = "pubsub.enabled must create topic <name>, subscription <name>-sub and dead-letter topic <name>-dlq with a retaining subscription."
+  }
+
+  assert {
+    condition = (
+      google_pubsub_subscription.service["api"].dead_letter_policy[0].dead_letter_topic == "projects/acme-dev-host-abcd/topics/api-dlq" &&
+      google_pubsub_subscription.service["api"].dead_letter_policy[0].max_delivery_attempts == 10 &&
+      google_pubsub_subscription.service["api"].expiration_policy[0].ttl == ""
+    )
+    error_message = "the subscription must dead-letter to its own DLQ after max_delivery_attempts and never expire."
+  }
+
+  # Runtime SA: publisher on ITS topic, subscriber on ITS subscription — no
+  # project-level Pub/Sub role, nothing for the service without pubsub.
+  assert {
+    condition = (
+      keys(google_pubsub_topic_iam_member.runtime_publisher) == ["api"] &&
+      google_pubsub_topic_iam_member.runtime_publisher["api"].topic == "api" &&
+      google_pubsub_topic_iam_member.runtime_publisher["api"].role == "roles/pubsub.publisher" &&
+      google_pubsub_topic_iam_member.runtime_publisher["api"].member == "serviceAccount:api-run@acme-dev-host-abcd.iam.gserviceaccount.com" &&
+      keys(google_pubsub_subscription_iam_member.runtime_subscriber) == ["api"] &&
+      google_pubsub_subscription_iam_member.runtime_subscriber["api"].subscription == "api-sub" &&
+      google_pubsub_subscription_iam_member.runtime_subscriber["api"].role == "roles/pubsub.subscriber" &&
+      google_pubsub_subscription_iam_member.runtime_subscriber["api"].member == "serviceAccount:api-run@acme-dev-host-abcd.iam.gserviceaccount.com" &&
+      length(google_project_iam_member.runtime_extra) == 0
+    )
+    error_message = "the runtime SA must get publisher on its own topic and subscriber on its own subscription only."
+  }
+
+  assert {
+    condition = (
+      google_pubsub_topic_iam_member.agent_dead_letter_publisher["api"].topic == "api-dlq" &&
+      google_pubsub_topic_iam_member.agent_dead_letter_publisher["api"].member == "serviceAccount:service-222222222222@gcp-sa-pubsub.iam.gserviceaccount.com" &&
+      google_pubsub_subscription_iam_member.agent_source_subscriber["api"].subscription == "api-sub" &&
+      google_pubsub_subscription_iam_member.agent_source_subscriber["api"].member == "serviceAccount:service-222222222222@gcp-sa-pubsub.iam.gserviceaccount.com"
+    )
+    error_message = "the Pub/Sub service agent must be able to forward dead letters (publisher on the DLQ, subscriber on the source subscription)."
+  }
+
+  assert {
+    condition = (
+      output.services["api"].pubsub_topic == "projects/acme-dev-host-abcd/topics/api" &&
+      output.services["api"].pubsub_subscription == "projects/acme-dev-host-abcd/subscriptions/api-sub" &&
+      output.services["api"].pubsub_dead_letter_topic == "projects/acme-dev-host-abcd/topics/api-dlq" &&
+      output.services["worker"].pubsub_topic == null
+    )
+    error_message = "the services output must expose the topic, subscription and dead-letter topic."
+  }
+
+  assert {
+    condition     = google_pubsub_topic.service["api"].kms_key_name == null
+    error_message = "topics use Google-managed encryption unless pubsub_kms_key_name is set."
+  }
+}
+
+run "pubsub_with_cmek" {
+  command = plan
+
+  variables {
+    pubsub_kms_key_name = "projects/acme-sec/locations/europe-west1/keyRings/apps/cryptoKeys/pubsub"
+    services            = { api = { pubsub = { enabled = true } } }
+  }
+
+  assert {
+    condition = (
+      google_pubsub_topic.service["api"].kms_key_name == var.pubsub_kms_key_name &&
+      google_pubsub_topic.dead_letter["api"].kms_key_name == var.pubsub_kms_key_name
+    )
+    error_message = "pubsub_kms_key_name must encrypt both the topic and the dead-letter topic."
   }
 }

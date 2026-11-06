@@ -1,0 +1,139 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Ashes landing zone, AWS phase 0.5. Deletes the default VPC (and its default
+  subnets and internet gateway) in every enabled Region of the account it is
+  deployed to. Deploy as a SERVICE_MANAGED StackSet from the management account,
+  targeting the organization root with auto-deployment on, so every existing
+  and future member account loses its default VPCs (CIS AWS 5.x, SRA).
+  Deleting the stack does NOT recreate default VPCs. A default VPC that still
+  has dependent resources (instances, ENIs, endpoints) is skipped and reported,
+  never force-deleted. See docs/runbooks/aws-bootstrap.md, Phase-0.5.
+
+Parameters:
+  Regions:
+    Type: CommaDelimitedList
+    Default: ""
+    Description: >-
+      Regions to clean. Empty (default) = every Region enabled for the account
+      (ec2:DescribeRegions). The region-restriction SCP denies the cleanup Lambda
+      outside the allowed Regions unless its role is exempt, so either list the
+      allowed Regions here or deploy before the SCP is attached.
+
+Resources:
+  CleanupRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Deletes default VPCs at stack creation (custom resource).
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - Fn::Sub: "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      Policies:
+        - PolicyName: delete-default-vpcs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeRegions
+                  - ec2:DescribeVpcs
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeInternetGateways
+                  - ec2:DescribeNetworkInterfaces
+                Resource: "*"
+              # The handler only ever passes IDs it found with isDefault=true.
+              - Effect: Allow
+                Action:
+                  - ec2:DeleteSubnet
+                  - ec2:DetachInternetGateway
+                  - ec2:DeleteInternetGateway
+                  - ec2:DeleteVpc
+                Resource: "*"
+
+  CleanupFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Deletes default VPCs (custom resource handler).
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 900
+      MemorySize: 256
+      Role:
+        Fn::GetAtt: [CleanupRole, Arn]
+      Code:
+        ZipFile: |
+          import json
+          import urllib.request
+
+          import boto3
+
+
+          def respond(event, context, status, reason=""):
+              body = json.dumps({
+                  "Status": status,
+                  "Reason": reason[:3500] or "See CloudWatch Logs",
+                  "PhysicalResourceId": "delete-default-vpcs",
+                  "StackId": event["StackId"],
+                  "RequestId": event["RequestId"],
+                  "LogicalResourceId": event["LogicalResourceId"],
+              }).encode()
+              req = urllib.request.Request(event["ResponseURL"], data=body, method="PUT",
+                                           headers={"Content-Type": ""})
+              urllib.request.urlopen(req, timeout=30)
+
+
+          def clean_region(region):
+              ec2 = boto3.client("ec2", region_name=region)
+              vpcs = ec2.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])["Vpcs"]
+              notes = []
+              for vpc in vpcs:
+                  vpc_id = vpc["VpcId"]
+                  enis = ec2.describe_network_interfaces(
+                      Filters=[{"Name": "vpc-id", "Values": [vpc_id]}])["NetworkInterfaces"]
+                  if enis:
+                      notes.append(f"{region}/{vpc_id}: skipped, {len(enis)} ENI(s) in use")
+                      continue
+                  for igw in ec2.describe_internet_gateways(
+                          Filters=[{"Name": "attachment.vpc-id", "Values": [vpc_id]}])["InternetGateways"]:
+                      ec2.detach_internet_gateway(InternetGatewayId=igw["InternetGatewayId"], VpcId=vpc_id)
+                      ec2.delete_internet_gateway(InternetGatewayId=igw["InternetGatewayId"])
+                  for subnet in ec2.describe_subnets(
+                          Filters=[{"Name": "vpc-id", "Values": [vpc_id]}])["Subnets"]:
+                      ec2.delete_subnet(SubnetId=subnet["SubnetId"])
+                  ec2.delete_vpc(VpcId=vpc_id)
+                  notes.append(f"{region}/{vpc_id}: deleted")
+              return notes
+
+
+          def handler(event, context):
+              if event["RequestType"] != "Create":
+                  respond(event, context, "SUCCESS", "No-op on Update/Delete")
+                  return
+              try:
+                  regions = [r for r in event["ResourceProperties"].get("Regions", []) if r]
+                  if not regions:
+                      regions = [r["RegionName"] for r in boto3.client("ec2").describe_regions()["Regions"]]
+                  notes = []
+                  for region in regions:
+                      try:
+                          notes += clean_region(region)
+                      except Exception as exc:  # opt-in / SCP-denied Regions
+                          notes.append(f"{region}: {type(exc).__name__}: {exc}")
+                  print("\n".join(notes))
+                  respond(event, context, "SUCCESS", "; ".join(notes))
+              except Exception as exc:
+                  print(f"FAILED: {exc}")
+                  respond(event, context, "FAILED", str(exc))
+
+  DeleteDefaultVpcs:
+    Type: Custom::DeleteDefaultVpcs
+    Properties:
+      ServiceToken:
+        Fn::GetAtt: [CleanupFunction, Arn]
+      Regions:
+        Ref: Regions

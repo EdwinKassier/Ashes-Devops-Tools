@@ -1,0 +1,7 @@
+# Test fixture: config file WITHOUT aws.contracts.organization, so the
+# aws-identity root still reads the aws-organization remote state.
+version: 1
+org:
+  name: cfgco
+  tfc:
+    organization: cfg-tfc

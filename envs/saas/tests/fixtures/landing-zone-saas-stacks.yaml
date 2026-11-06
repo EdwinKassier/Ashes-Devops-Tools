@@ -1,0 +1,23 @@
+# Fixture: SaaS stacks configured from the single-source config file.
+org:
+  tfc:
+    organization: acme-tfc
+saas:
+  enabled: true
+  workspaces: [web]
+  supabase: true
+  vercel: true
+  defaults:
+    supabase:
+      organization_id: acmeorgid1234
+      region: eu-central-1
+    vercel:
+      team_id: team_acme
+  stacks:
+    web:
+      supabase:
+        project_name: acme-web
+      vercel:
+        project_name: acme-web
+        github_repo: acme/web
+        production_branch: release

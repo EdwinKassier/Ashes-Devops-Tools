@@ -27,7 +27,7 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "attribute.repository"       = "assertion.repository"
     "attribute.repository_owner" = "assertion.repository_owner"
     "attribute.ref"              = "assertion.ref"
-    # Immutable numeric IDs (C2): repository / owner NAMES can be renamed and then
+    # Immutable numeric IDs: repository / owner NAMES can be renamed and then
     # re-registered by someone else, so bindings should key on these instead.
     "attribute.repository_id"       = "assertion.repository_id"
     "attribute.repository_owner_id" = "assertion.repository_owner_id"
@@ -42,7 +42,7 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     issuer_uri = "https://token.actions.githubusercontent.com"
   }
 
-  # H2: a null attribute_condition trusts the ENTIRE GitHub issuer (every repo on
+  # A null attribute_condition trusts the ENTIRE GitHub issuer (every repo on
   # token.actions.githubusercontent.com). When this provider is enabled it must be
   # scoped. Repository SA bindings are branch-agnostic, so scope the ref here too.
   lifecycle {
@@ -64,7 +64,7 @@ locals {
     for subject in local.github_subjects : "assertion.sub == '${subject}'"
   ]) : null
   github_org_condition = var.github_organization != null ? "assertion.repository_owner == '${var.github_organization}'" : null
-  # Immutable owner pin (C2): survives an org rename / name squat.
+  # Immutable owner pin: survives an org rename / name squat.
   github_owner_id_condition = var.github_repository_owner_id != null ? "assertion.repository_owner_id == '${var.github_repository_owner_id}'" : null
 
   github_condition_parts = compact([
@@ -93,13 +93,15 @@ resource "google_iam_workload_identity_pool_provider" "gitlab" {
     "attribute.ref"            = "assertion.ref"
   }
 
-  attribute_condition = var.gitlab_namespace != null ? "assertion.namespace_path.startsWith('${var.gitlab_namespace}')" : null
+  # Exact namespace or a sub-group of it. A bare startsWith('acme') would also
+  # trust the unrelated groups 'acme-evil' and 'acmecorp' on the same issuer.
+  attribute_condition = var.gitlab_namespace != null ? "assertion.namespace_path == '${trimsuffix(var.gitlab_namespace, "/")}' || assertion.namespace_path.startsWith('${trimsuffix(var.gitlab_namespace, "/")}/')" : null
 
   oidc {
     issuer_uri = var.gitlab_url
   }
 
-  # H2: an enabled provider must be scoped, never a null (trust-all) condition.
+  # An enabled provider must be scoped, never a null (trust-all) condition.
   lifecycle {
     precondition {
       condition     = var.gitlab_namespace != null
@@ -130,7 +132,7 @@ resource "google_iam_workload_identity_pool_provider" "aws" {
     account_id = var.aws_account_id
   }
 
-  # H2: an enabled provider must be scoped, never a null (trust-all) condition.
+  # An enabled provider must be scoped, never a null (trust-all) condition.
   lifecycle {
     precondition {
       condition     = var.aws_account_id != null
@@ -145,7 +147,7 @@ resource "google_service_account_iam_member" "github_workload_identity" {
 
   service_account_id = "projects/${var.project_id}/serviceAccounts/${each.value.service_account_email}"
   role               = "roles/iam.workloadIdentityUser"
-  # Prefer the immutable numeric repository_id when supplied (C2); the name-based
+  # Prefer the immutable numeric repository_id when supplied; the name-based
   # principalSet is kept only as a fallback for callers that have not set it.
   member = (
     each.value.repository_id != null
@@ -216,10 +218,10 @@ resource "google_iam_workload_identity_pool_provider" "tfc" {
   attribute_condition = local.tfc_attribute_condition
 
   oidc {
-    issuer_uri = "https://app.terraform.io"
+    issuer_uri = "https://${var.tfc_hostname}"
   }
 
-  # H2: an enabled provider must be scoped, never a null (trust-all) condition.
+  # An enabled provider must be scoped, never a null (trust-all) condition.
   lifecycle {
     precondition {
       condition     = var.tfc_organization != null

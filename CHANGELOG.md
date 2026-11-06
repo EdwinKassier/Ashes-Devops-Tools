@@ -18,6 +18,318 @@ release metadata for a Terraform Cloud run.
 
 ## [Unreleased]
 
+### Wave A of the [2026-11-06 enterprise boilerplate audit](docs/audit/2026-11-06-enterprise-boilerplate-audit.md)
+
+#### Fixed
+
+- **Every root's backend now initialises (C1).** All 14 `envs/**/backend.tf`, plus both clone-me
+  templates, declared `backend "cloud" {}`. That is not a valid backend type: Terraform rejects
+  it, so `terraform init` failed on every root. They are now top-level `cloud {}` blocks.
+- **`tfc-admin` is self-managed by default (C3).** `manage_tfc_admin_workspace` now defaults to
+  `true`. An unmanaged `tfc-admin` workspace kept TFC's default of speculative plans on, so a PR
+  plan could read its org-admin `TFE_TOKEN`. A `check` warns when the workspace is unmanaged and
+  VCS-connected.
+- **SaaS workspaces no longer run speculative PR plans (S5).** This is the new
+  `disable_speculative_on_saas` variable, default `true`. The Supabase and Vercel tokens are
+  static and account-wide.
+- **Drift detection and E2E no longer show green when they did not run (C4).** An unconfigured
+  run now fails. Scheduled runs may skip only with the repository variable
+  `REAL_CLOUD_CHECKS_OPT_OUT=true`, and the drift summary never says "no drift" for a run that
+  never happened.
+
+#### Added
+
+- `scripts/check-backends.sh` (`make backend-check`, in `make ci`, and in the CI `Terraform Format`
+  job). It runs a real, credential-less `terraform init` of every root and template. It passes only
+  if init stops at HCP Terraform auth, so an invalid backend fails the PR, not the first apply.
+- `make required-checks-live` (`check-required-checks.sh --live`) diffs `BRANCH_PROTECTION.md`
+  against the branch protection GitHub actually enforces: contexts, `strict` and `enforce_admins`.
+  It needs repo-admin `gh` auth, so it is not part of the PR gate.
+
+#### Security (Wave B)
+
+- **S8 — GitLab WIF trust is no longer a prefix match.** The condition is now
+  `namespace_path == X || startsWith(X/)`. Before, `acme` also trusted `acme-evil`.
+- **A1 — Root-deny SCP lets centralized root sessions through.** It now carries
+  `BoolIfExists aws:AssumedRoot=false`, so the `sts:AssumeRoot` remediation path works.
+- **S1 — OIDC persistence backdoors are closed on AWS:**
+  - The RCP pins web-identity federation per issuer. TFC tokens are accepted only from your TFC
+    organization (`pin_tfc_federation_to_org`, default on). GitHub tokens are accepted only from
+    `github_federation_owners` (config `aws.github_federation_owners`).
+  - The `tfc-apply` permissions boundary denies `iam:CreateOpenIDConnectProvider`,
+    `iam:CreateSAMLProvider`, `iam:UpdateSAMLProvider`, `iam:AddClientIDToOpenIDConnectProvider`
+    and `iam:UpdateOpenIDConnectProviderThumbprint`.
+  - The account-wide GitHub OIDC provider is now created by the `tfc-oidc-baseline` StackSet
+    (`create_github_oidc_provider`, default true).
+- **S3 — Detection settings are reachable only from the security accounts.** A new
+  `DenyCentralDetectionOutsideSecurityAccounts` deny-tamper statement covers GuardDuty
+  filter/detector updates, CloudTrail selector/trail updates and Security Hub standard disabling.
+  Outside `central_detection_account_keys` (default `security_tooling`, `log_archive`) these are
+  denied to every principal except break-glass, the pipeline included. Config recorders and flow
+  logs stay pipeline-managed, because workload baselines own them.
+- **A4 — GuardDuty Runtime Monitoring now manages its agents** (Fargate, EKS, EC2;
+  `runtime_monitoring_agent_management`). Before, it was billed but produced no findings.
+- **S2 — Workload identity federation is restricted on GCP.** The org baseline now enforces
+  `iam.workloadIdentityPoolProviders`, which allows only the TFC and GitHub issuers
+  (`allowed_workload_identity_issuers`). It also enforces `iam.workloadIdentityPoolAwsAccounts`
+  (deny unless listed), `compute.restrictProtocolForwardingCreationForTypes` (INTERNAL),
+  `compute.disableVpcExternalIpv6` and `compute.setNewProjectDefaultToZonalDNSOnly`.
+- **S4 — GCP admin containment is on by default for production estates.**
+  `enable_admin_containment` now defaults to `null`, which means on whenever an environment is
+  `is_production`. The break-glass principal comes from the new config key
+  `gcp.break_glass_group`. A production estate without one fails the plan
+  (`output.admin_containment_enabled` precondition) instead of only warning.
+- **D1 — `org_policy_overrides` (stage and root).** Change, drop or add any baseline GCP org
+  policy without forking the stage.
+- **`gcp.resourceLocations` uses region value groups.** A bare region is now
+  `in:<region>-locations`, so zonal resources in that region are allowed.
+- **The TFC WIF issuer is parameterised** (`tfc_hostname`, in `workload-identity`, the bootstrap
+  stage and both roots). HCP EU and TFE now work on GCP.
+- **New config keys:** `gcp.break_glass_group`, `gcp.alert_emails` and `gcp.admin_containment`.
+  The bootstrap runbook now lists the Cloud Identity groups as prerequisites.
+- **S6 — One management-account role pair per management-default root.** The new module
+  `modules/aws/iam/tfc-management-roles` is created by `aws-organization`
+  (`enable_tfc_management_roles`, default true). It gives `aws-security` and `aws-backup` their
+  own exact-subject plan/apply roles:
+  - **`aws-security`:** delegated-admin registration and the organization trail only.
+  - **`aws-backup`:** `BACKUP_POLICY` org policies only.
+  - **Denied for both:** assuming `OrganizationAccountAccessRole` or member `tfc-*` roles,
+    account/OU changes, and editing any `tfc-mgmt-*` role.
+
+  `tfc-admin` binds them from the aws-organization outputs. Only `aws-organization` keeps the
+  shared phase-0 role.
+- **S7 — Privileged CI secrets are environment-scoped.** The `release`, `docs-bot`, `tfc-drift`
+  and `tfc-readonly` jobs run in GitHub environments. CI_SECRETS.md documents moving the secrets
+  into those environments, with main/tag-only deployment policies.
+- **The RCP data perimeter now covers ECR and CloudWatch Logs** (`ecr:*`, `logs:*`).
+- **`organization-policy` gains a `policy_contents` output**, for evidence and tests.
+
+#### Post-re-score fixes (independent re-score at ac707f9)
+
+- **Critical: custom org-policy constraints are now enforced.** The org-policy module created
+  `google_org_policy_custom_constraint` but never a `google_org_policy_policy`, so
+  `custom.wifProviderTenantPinned` and every `custom_org_constraints` entry were inert. Each
+  constraint now gets a policy: `enforcement = enforce` (default), `dry_run` (log only, to stage a
+  new constraint) or `off`. The tenant pin uses `wif_tenant_pin_enforcement`.
+- **The GitHub WIF pin requires matching quotes** around the owner ID. The `.` wildcard let
+  `== "123' && x" == false` through. The RE2 bypass corpus now includes mismatched-quote and
+  relation-chaining cases.
+- **The aws-security role can no longer quietly defeat audit:**
+  - `cloudtrail:UpdateTrail`, `kms:PutKeyPolicy`, `kms:CreateGrant` and `kms:DisableKeyRotation`
+    are denied (break-glass only).
+  - CloudWatch alarm writes are scoped to the trail's own `<trail>-*` alarms.
+  - Create-time `kms:TagResource` is granted, which a tagged `CreateKey` needs.
+  - Delegated-admin registration fails closed when no security account is given.
+  - `PutEventSelectors` stays allowed, because `aws_cloudtrail` calls it on create. Selector changes
+    are caught by the CIS CloudTrail-configuration alarm.
+- **Partition: the AWS-managed policy ARN defaults are normalised.** In the tfc-oidc-baseline
+  template they become `Fn::Sub arn:${AWS::Partition}:...`. In Identity Center permission sets and
+  the backup stage they use the provider partition.
+- **AWS Backup delegated admin is the dedicated backup account** (`backup_account_id`), and the
+  management role's account pin includes it.
+- **The provenance guard also catches `Audit finding X`, `finding #N` and `round-N` comments.**
+  The 5 it had missed are stripped.
+
+#### Post-re-score fixes (independent re-score at a6e4edb)
+
+- **The GCP WIF tenant pin rejects the CEL ternary.** `... == 'acme' && true ? true : true` matched
+  the previous pattern. The AND-only tail now excludes `?` as well as `|`, and a bypass corpus runs
+  through Terraform's RE2 in the stage tests. The earlier "tested against bypass strings" claim
+  covered only `||` strings.
+- **aws-security management role, third pass:**
+  - `logs:*`, `sns:*` and `kms:*` are scoped to the org trail's log group, its `<trail>-*`
+    topics, and keys tagged `Workspace = aws-security`. CreateKey requires the tag, so it cannot be
+    planted on another key.
+  - Delegated-admin registration is pinned to the security-tooling account's ARN.
+  - `account.amazonaws.com` is dropped from the service-principal list.
+  - The plan-role data-read deny is extended.
+- **Partition support is real for the AWS control plane.**
+  - Every `^arn:aws:` validation now accepts `aws-us-gov` / `aws-cn`.
+  - ARNs built in log-archive-bucket, kms-key, account, iam-role, incident-response,
+    route53-resolver, securityhub-org, the security and organization stages and the
+    security/network/shared-services/workload roots use the provider's partition.
+  - Still to override by hand on GovCloud or China: the AWS-managed policy ARN **defaults**
+    (`arn:aws:iam::aws:policy/...` in identity permission sets, tfc-oidc-baseline and the
+    organization stage). Variables cannot compute defaults.
+- **Break-glass.**
+  - The phase-0 stack's `OrganizationBreakGlass` role is now inert by default
+    (`BreakGlassActive=false` adds a deny-all inline policy) and is activated with a stack update.
+  - The runbook is rewritten for that path, because the dedicated aws-security role can no longer
+    manage the role.
+  - A check warns on `create_break_glass = true`.
+- **The deny-tamper SCP also blocks `s3:PutBucketPolicy` / `DeleteBucketPolicy`** on the log
+  archive for non-privileged principals.
+
+#### Final re-score fixes
+
+- **Critical: `aws-security` management role escalation, second pass.** Limiting role writes to
+  one role name did not help, because whoever can write a role can make it anything. The role now
+  has no IAM role writes at all:
+  - aws-organization creates the trail's CloudWatch delivery role
+    (`create_org_trail_delivery_role`), and aws-security only passes it to CloudTrail
+    (`cloudtrail-org` `cloudwatch_logs_role_arn`).
+  - Delegated-admin registration is limited to the security service principals.
+  - IAM Identity Center (`sso`) delegation moves to aws-organization
+    (`identity_center_admin_account_key`).
+  - `cloudtrail:*` is scoped to the organization trail ARN.
+  - `cloudwatch:TagResource` is added for the tagged CIS alarms.
+- **GCP WIF tenant pin is structural, not a substring check.**
+  `custom.wifProviderTenantPinned` now uses anchored RE2 checks. The tenant clause must be the first
+  conjunct, with nothing OR-ed beside it, so `org != 'acme'` and `... || true` are rejected.
+  app-services renders its GitHub condition in that canonical form.
+- **No unpinned GitHub provider.** The baseline creates the account-wide GitHub OIDC provider only
+  once `github_federation_owners` / `_owner_ids` is set.
+
+#### Golden paths and test depth
+
+- **Per-service observability and messaging in both app-services golden paths:**
+  - **AWS:** per-service CloudWatch alarms (CPU, memory, 5xx, p99 latency, DLQ depth). They notify
+    a KMS-encrypted SNS topic, and the workload key policy now lets `cloudwatch.amazonaws.com`
+    use the key. An optional SQS queue with a DLQ gives the task role access to its own queue only
+    (`services[*].alarms` / `.queue`).
+  - **GCP:** per-service alert policies (5xx ratio, p99 latency) with notification channels from
+    the root (`app_alert_notification_channel_ids`). An optional Pub/Sub topic and subscription
+    with a dead-letter topic gives the runtime SA access to its own topic and subscription only
+    (`services[*].alerts` / `.pubsub`).
+- **Consistent `tags` / `labels` inputs.**
+  - 27 AWS modules gain `tags`, applied to every taggable resource. Resource-specific tags such as
+    `Name` still win. The network-hub and workload stages pass it through.
+  - 10 GCP modules gain `labels` (validated GCP label syntax), applied to every labelable
+    resource, including `resource_labels` / `user_labels`.
+  - Modules are now taggable when consumed outside this repo, without provider `default_tags`.
+- **Validation and contract suites for every AWS layer root** (backup, identity,
+  shared-services, network, security): 10 new suites, about 70 runs.
+- **`aws-network` `az_count` minimum is now 2.** One AZ passed validation but could not plan
+  (the Route 53 Resolver needs two subnets). The `nonprod-aws-network` preset that used 1 is
+  fixed.
+- **SaaS root errors name the `saas.stacks` / `saas.defaults` keys.** The hub VPC-SC access policy
+  now comes from config (`gcp.network.vpc_sc_access_policy`).
+
+#### First-run fixes from the boilerplate re-score
+
+- **The default `production` profile now plans `aws-security`.** The Security Lake metastore role
+  (`AmazonSecurityLakeMetaStoreManagerV2`, with the apply boundary) is created in code when
+  `meta_store_manager_role_arn` is empty. It used to be an undocumented, hand-made prerequisite.
+- **The AWS phase-0 artefacts are shipped:**
+  - [`templates/aws/bootstrap/phase0-management.yaml`](templates/aws/bootstrap/phase0-management.yaml)
+    creates the TFC OIDC provider, `tfc-mgmt-plan` / `tfc-mgmt-apply` with exact-subject trust, and
+    the MFA-gated `OrganizationBreakGlass` role.
+  - [`templates/aws/bootstrap/delete-default-vpcs.yaml`](templates/aws/bootstrap/delete-default-vpcs.yaml)
+    is the org-wide default-VPC deletion StackSet.
+  - Both pass `cfn-lint` (`make cfn-lint`).
+
+#### Re-audit fixes (independent re-score, 2026-11-06)
+
+- **Critical: the `aws-security` management role could take over the org.** It allowed
+  `iam:*Role` on any role in the management account, which sits outside every SCP. It could create
+  a role, attach admin to it and pivot.
+  - IAM writes are now limited to the trail delivery role (`security_trail_role_pattern`), with
+    `iam:PassRole` only to CloudTrail.
+  - Trail stop/delete and key destruction are denied.
+  - The break-glass role names are protected.
+  - Plan roles now carry the data-plane read deny.
+- **`aws-backup` no longer needs CloudFormation.** The member Backup service-role StackSet moves
+  to aws-organization (`create_backup_service_role`, default on). The aws-backup stage only
+  references the role (`create_backup_role_stack_set` restores the old behaviour). Tagging backup
+  policies is scoped by policy ARN rather than an unsupported condition key.
+- **Federation completeness on AWS:**
+  - The RCP denies the built-in web-identity providers (Cognito, Google, Facebook, Amazon) unless
+    they are allow-listed (`allowed_builtin_web_identity_providers`).
+  - A baseline SCP statement, `DenyIdentityProviderChanges`, denies creating or updating OIDC/SAML
+    providers to everyone except break-glass and the StackSet execution role.
+  - The GitHub pin accepts immutable `repository_owner_id:<id>:*` subjects
+    (`github_federation_owner_ids`).
+  - A check warns when the baseline deploys a GitHub provider that is unpinned.
+  - `dp:*` tag tampering is now also denied on ECR and CloudWatch Logs, in both the SCP and the
+    boundary.
+- **GCP WIF tenant pinning.** A custom constraint, `custom.wifProviderTenantPinned`, requires an
+  HCP Terraform provider to reference this estate's TFC organization, and a GitHub provider to
+  reference an allowed `repository_owner_id` (`pin_wif_to_tfc_organization`,
+  `wif_github_owner_ids`).
+- **The region-restriction SCP exempts `sts:*`.** ACM and KMS are confined to the allowed regions
+  plus us-east-1, so CloudFront edge certificates work.
+- **More suppression actions are scoped to the security accounts:** GuardDuty IP sets, Security
+  Hub automation rules and control updates, Inspector filters, Access Analyzer archive rules.
+  `central_detection_account_keys` is now validated, so a typo can no longer silently drop the
+  statement.
+- **OPA.** `aws_iam_federated_trust_pinned` now catches partial tenant wildcards
+  (`organization:acme*:`). A new advisory policy, `aws_iam_federated_trust_unknown`, reports trusts
+  that cannot be checked at plan time.
+- **tfc-admin** rejects reserved env vars (`TFC_*`, `TF_CLI_ARGS*`, provider auth) in the
+  committed `tfc-workspaces.yaml`.
+- **`split_workload_projects`.** AWS workload accounts now trust the `<prefix>aws-workloads`
+  project.
+
+#### Wave D
+
+- **Phase-0 human impersonation can be time-boxed.** `phase0_admin_impersonation_expires_at`
+  adds a `request.time` IAM condition, through the new `impersonation_expires_at` input on
+  `iam/service-account`. A check warns when a production estate keeps an open-ended human path to
+  terraform-admin.
+- **The PSC Google-APIs endpoint switches to the `vpc-sc` bundle once the environment's perimeter
+  is enforced** (`private_service_connect_target`, default derived).
+- **The OPA set goes from 8 to 10 mandatory policies.**
+  - New `aws_iam_federated_trust_pinned`: web-identity trusts must pin `aud` and a literal-tenant
+    `sub`.
+  - New `gcp_no_basic_roles_high_scope`: no Owner/Editor at organization or folder scope.
+  - `aws_iam_no_admin_wildcard` now also flags `NotAction` on `Resource "*"`.
+
+- **D2 — AWS organization-policy escape hatches**, mirroring GCP's `org_policy_overrides`:
+  - `policy_overrides` merges over the built-in set, replacing or adding policies.
+  - `disabled_policies` drops built-ins.
+  - Both are passed through the stage and root as `org_policy_overrides` /
+    `disabled_org_policies` / `org_policy_attachments`.
+  - The unattached duplicate `backup-policy` is disabled by default.
+- **The org-wide EC2 declarative baseline is attached at the root** (`declarative-ec2-baseline`:
+  IMDSv2, no public snapshot/AMI sharing, no serial console). VPC Block Public Access stays
+  Workloads-scoped.
+- **New `aiservices-opt-out` policy** (`AISERVICES_OPT_OUT_POLICY`, enabled by default). Policy
+  types are shape-validated instead of fixed-listed, so new AWS policy types are accepted.
+- **TFC run triggers along the dependency DAG** (`enable_run_triggers`, default true). An upstream
+  apply queues the downstream plan, direct edges only. Apply order is no longer left to the
+  runbooks alone.
+- **Audit provenance codes are stripped** from 117 code comments and descriptions.
+
+#### Boilerplate (Wave C)
+
+- **`make` sets a shared `TF_PLUGIN_CACHE_DIR`**, so `make ci` on a fresh clone no longer
+  downloads a provider copy per directory.
+- **gcp-bootstrap gets the immutable workspace IDs automatically.** tfc-admin writes
+  `tfc_workspace_ids` onto the workspace (`set_gcp_bootstrap_workspace_ids`). For the local
+  phase-0 run, `output.gcp_bootstrap_tfvars` produces the tfvars line. A production estate requires
+  these IDs, and the runbook now says so.
+- **`org.profile: starter | production`** for `aws-network` and `aws-security`. Starter drops the
+  Network Firewall, Security Lake, Macie, record-all Config and EBS malware scanning. Explicit
+  toggles still win.
+- **Brownfield AWS adoption.** `adopt_existing` (config `aws.adopt`) imports an existing
+  organization, OUs and accounts. A new runbook,
+  [`aws-brownfield-adoption.md`](docs/runbooks/aws-brownfield-adoption.md), covers Control Tower
+  coexistence. `aws-security` gains `create_organization_trail`, so it does not run a second org
+  trail next to Control Tower's.
+- **The SaaS path is config-driven.** `saas.stacks.<name>` over `saas.defaults` supplies the
+  Supabase org/project/region and the Vercel team/project/repo/branch. tfc-admin sets `stack` on
+  each `saas-<name>` workspace. A new runbook covers it:
+  [`saas-bootstrap.md`](docs/runbooks/saas-bootstrap.md).
+
+#### Migration
+
+- **Organization.** Set `TF_CLOUD_ORGANIZATION=<org>`, and `TF_CLOUD_HOSTNAME` for HCP EU or TFE,
+  instead of `-backend-config` / `backend.hcl` / `TF_CLI_ARGS_init`. A `cloud` block rejects
+  `-backend-config`.
+- **Per-environment workspaces.** `gcp-workload`, `aws-workload` and `saas` now select their
+  workspace by tags (`cloud:<cloud>` + `layer:workload`) and `TF_WORKSPACE=<full workspace name>`,
+  instead of a `prefix`. Workspaces created by `envs/tfc-admin` already carry these tags. Tag any
+  hand-created workspace to match.
+- **GitHub OIDC provider.** `app-services` / `aws-workload` `create_github_oidc_provider` now
+  defaults to `false`, and the provider ARN is derived for the account. In an account where
+  Terraform already created the provider, either keep `create_github_oidc_provider = true`, or
+  `terraform state rm` it and let the StackSet adopt the URL. Set
+  `create_github_oidc_provider = false` on `tfc-oidc-baseline` for accounts where the StackSet
+  must not create it.
+- **First `tfc-admin` apply after upgrading.** It adopts the existing `tfc-admin` workspace through
+  the import block, which now sets its VCS triggers and turns speculative plans off. If the
+  workspace is deliberately CLI-only, set `manage_tfc_admin_workspace = false`.
+
 Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/2026-11-05-enterprise-boilerplate-audit.md).
 
 ### Added

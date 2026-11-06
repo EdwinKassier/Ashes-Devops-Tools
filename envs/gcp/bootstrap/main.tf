@@ -1,6 +1,6 @@
 # gcp-bootstrap root: phase-0 automation foundation.
 #
-# Extracted from gcp-organization (audit H3) so the WIF / Terraform-admin-SA
+# Extracted from gcp-organization so the WIF / Terraform-admin-SA
 # control plane has its own state and blast radius. It is the PRODUCER of the
 # admin project, the Terraform admin SA, and the WIF pools; gcp-organization
 # reads these via terraform_remote_state. Apply this root before gcp-organization.
@@ -20,6 +20,7 @@ module "bootstrap" {
   # Terraform Cloud dynamic credentials
   enable_tfc_oidc       = var.enable_tfc_oidc
   tfc_organization      = local.tfc_organization
+  tfc_hostname          = var.tfc_hostname
   tfc_organization_id   = var.tfc_organization_id
   tfc_project_ids       = var.tfc_project_ids
   tfc_workspace_ids     = var.tfc_workspace_ids
@@ -43,7 +44,8 @@ module "bootstrap" {
   enable_pam = var.enable_pam
 
   # Phase-0 human impersonation of terraform-admin (turn off on pass 2).
-  enable_phase0_admin_impersonation = var.enable_phase0_admin_impersonation
+  enable_phase0_admin_impersonation     = var.enable_phase0_admin_impersonation
+  phase0_admin_impersonation_expires_at = var.phase0_admin_impersonation_expires_at
 
   # Deny-policy ownership: a separate guardrails SA holds roles/iam.denyAdmin.
   guardrail_owner_mode    = var.guardrail_owner_mode

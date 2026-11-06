@@ -61,7 +61,7 @@ variable "org_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:organizations::", var.org_arn))
+    condition     = can(regex("^arn:aws(-us-gov|-cn)?:organizations::", var.org_arn))
     error_message = "org_arn must be an AWS Organizations ARN beginning with arn:aws:organizations::."
   }
 }
@@ -70,4 +70,11 @@ variable "description" {
   description = "Description applied to the IPAM."
   type        = string
   default     = "SRA landing zone hierarchical IPAM."
+}
+
+variable "tags" {
+  description = "Tags applied to every taggable resource this module creates (merged after provider default_tags; resource-specific tags such as Name win)."
+  type        = map(string)
+  default     = {}
+  nullable    = false
 }

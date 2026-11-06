@@ -183,7 +183,7 @@ run "composes_security_baseline" {
   }
 }
 
-# Managed break-glass role (audit M3): when create_break_glass is true, the stage
+# Managed break-glass role: when create_break_glass is true, the stage
 # creates the role and the assumption alarm watches the stage-created ARN, not an
 # external string.
 run "managed_break_glass_is_created_and_watched" {
@@ -240,7 +240,7 @@ run "default_operator_roles" {
   }
 }
 
-# N7: the pipeline key admin must not hold kms:PutKeyPolicy — each CMK's policy
+# The pipeline key admin must not hold kms:PutKeyPolicy — each CMK's policy
 # admin defaults to the member break-glass role in the key's OWN account
 # (PutKeyPolicy is not cross-account), and is never the key admin.
 run "key_policy_admin_defaults_to_member_break_glass" {
@@ -323,5 +323,38 @@ run "security_tooling_boundary_disabled_with_null_name" {
   assert {
     condition     = local.security_tooling_boundary_arn == null && length(data.aws_caller_identity.security_tooling) == 0
     error_message = "tfc_apply_boundary_policy_name = null must disable the boundary and skip the identity lookup."
+  }
+}
+
+# Control Tower (or another owner) runs the org trail: no second trail here.
+run "organization_trail_can_be_owned_elsewhere" {
+  command = plan
+
+  variables {
+    create_organization_trail = false
+  }
+
+  assert {
+    condition     = length(module.cloudtrail) == 0 && output.cloudtrail_log_group_name == null
+    error_message = "create_organization_trail = false must not create the org trail."
+  }
+}
+
+# With no metastore role supplied, the stage creates it (default production
+# profile no longer needs a hand-made prerequisite).
+run "security_lake_creates_meta_store_role" {
+  command = plan
+
+  variables {
+    meta_store_manager_role_arn = ""
+  }
+
+  assert {
+    condition = (
+      length(aws_iam_role.securitylake_meta_store) == 1 &&
+      jsondecode(aws_iam_role.securitylake_meta_store[0].assume_role_policy).Statement[0].Principal.Service == "lambda.amazonaws.com" &&
+      endswith(aws_iam_role_policy_attachment.securitylake_meta_store[0].policy_arn, ":policy/service-role/AmazonSecurityLakeMetastoreManager")
+    )
+    error_message = "an empty meta_store_manager_role_arn must create the Security Lake metastore role."
   }
 }

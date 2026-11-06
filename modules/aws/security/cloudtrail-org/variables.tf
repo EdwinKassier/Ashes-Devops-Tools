@@ -146,3 +146,14 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "cloudwatch_logs_role_arn" {
+  description = "ARN of an existing role CloudTrail assumes to deliver to the CloudWatch Logs group (/aws/cloudtrail/<trail_name>). Null = this module creates <trail_name>-cloudwatch-delivery. The landing zone passes the role aws-organization creates, so the aws-security pipeline role needs no IAM write permissions."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.cloudwatch_logs_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", coalesce(var.cloudwatch_logs_role_arn, "x")))
+    error_message = "cloudwatch_logs_role_arn must be null or an IAM role ARN."
+  }
+}

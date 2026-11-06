@@ -77,3 +77,8 @@ output "preset_no_external_ips" {
   description = "Zero-trust network list policy pack — denies all external IP addresses on compute instances"
   value       = local.preset_no_external_ips_list
 }
+
+output "custom_constraint_policies" {
+  description = "Custom constraint name -> how its org policy applies it (enforce or dry_run). Constraints with enforcement = off are absent: they are defined but inert."
+  value       = { for c in var.custom_constraints : c.name => c.enforcement if c.enforcement != "off" }
+}

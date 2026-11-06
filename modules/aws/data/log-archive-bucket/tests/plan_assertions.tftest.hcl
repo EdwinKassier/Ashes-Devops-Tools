@@ -52,7 +52,7 @@ run "bucket_hardening_configured" {
     error_message = "Bucket policy must deny non-TLS (aws:SecureTransport) access"
   }
 
-  # Structural (M6): every Allow log-delivery statement must itself carry the
+  # Structural: every Allow log-delivery statement must itself carry the
   # SourceOrgID scope equal to var.org_id, not merely have the string appear
   # somewhere in the document. Catches a refactor that drops the condition from
   # one grant while keeping it on another.
@@ -65,7 +65,7 @@ run "bucket_hardening_configured" {
     error_message = "every Allow statement must be scoped by aws:SourceOrgID = var.org_id"
   }
 
-  # Structural (M6): a Deny statement must actually deny insecure transport.
+  # Structural: a Deny statement must actually deny insecure transport.
   assert {
     condition = anytrue([
       for s in jsondecode(aws_s3_bucket_policy.this.policy).Statement :
@@ -86,5 +86,18 @@ run "grants_vended_log_delivery" {
       if try(s.Principal.Service, "") == "delivery.logs.amazonaws.com" && try(s.Condition.StringEquals["aws:SourceOrgID"], "") == var.org_id
     ]) == 2
     error_message = "the log archive must grant delivery.logs.amazonaws.com AclCheck + Write, both scoped by aws:SourceOrgID."
+  }
+}
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    tags = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_s3_bucket.this.tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_s3_bucket.this"
   }
 }

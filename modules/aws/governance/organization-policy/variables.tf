@@ -32,7 +32,7 @@ variable "terraform_run_role_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.terraform_run_role_arn))
+    condition     = can(regex("^arn:aws(-us-gov|-cn)?:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.terraform_run_role_arn))
     error_message = "terraform_run_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/<name>) with no wildcards (* or ?)."
   }
 }
@@ -42,7 +42,7 @@ variable "break_glass_role_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.break_glass_role_arn))
+    condition     = can(regex("^arn:aws(-us-gov|-cn)?:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.break_glass_role_arn))
     error_message = "break_glass_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/<name>) with no wildcards (* or ?)."
   }
 }
@@ -73,6 +73,18 @@ variable "pipeline_role_names" {
   validation {
     condition     = length(var.pipeline_role_names) > 0 && alltrue([for n in var.pipeline_role_names : can(regex("^[A-Za-z0-9+=,.@_/*-]{1,512}$", n)) && !can(regex("^[*/]*$", n))])
     error_message = "pipeline_role_names must be a non-empty list of IAM role names or name patterns (optionally path-prefixed, e.g. stacksets-exec-*); a bare \"*\" is not allowed."
+  }
+}
+
+variable "central_detection_account_ids" {
+  description = "Account IDs that manage detection centrally: the security-tooling delegated admin, plus the log-archive account if it owns a trail. With any set, GuardDuty filter/detector updates, CloudTrail event/insight selector and trail updates, and Security Hub standard disabling are denied to EVERY principal outside these accounts except break-glass, the pipeline included. Empty (default) keeps the pipeline-wide exemption."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for a in var.central_detection_account_ids : can(regex("^[0-9]{12}$", a))])
+    error_message = "central_detection_account_ids entries must be 12-digit AWS account IDs."
   }
 }
 
@@ -135,6 +147,49 @@ variable "data_perimeter_trusted_account_ids" {
   }
 }
 
+variable "federation_tenant_pins" {
+  description = "Pin OIDC web-identity federation to YOUR tenants on shared issuers (RCP, every account). With tfc_organization set, sts:AssumeRoleWithWebIdentity with a <tfc_hostname> token is denied unless sub starts organization:<tfc_organization>:. With github_owners set, a GitHub Actions token is denied unless sub is repo:<owner>/*. This stops a pipeline from creating a role that trusts another TFC org or GitHub owner on the same issuer. Tokens from other issuers are unaffected (Null guard)."
+  type = object({
+    tfc_hostname     = optional(string, "app.terraform.io")
+    tfc_organization = optional(string)
+    github_owners    = optional(list(string), [])
+    # Immutable owner IDs, for deploy roles that use GitHub's customised
+    # repository_owner_id:<id>:repository_id:<id>:... subject.
+    github_owner_ids = optional(list(string), [])
+    # Built-in web-identity providers (no IAM provider resource needed) that
+    # roles may trust: any of cognito-identity.amazonaws.com,
+    # accounts.google.com, graph.facebook.com, www.amazon.com. Default none.
+    allowed_builtin_providers = optional(list(string), [])
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = var.federation_tenant_pins.tfc_organization == null || can(regex("^[A-Za-z0-9_-]+$", coalesce(var.federation_tenant_pins.tfc_organization, "x")))
+    error_message = "federation_tenant_pins.tfc_organization must be a literal TFC organization name (letters, digits, - and _; no wildcards)."
+  }
+
+  validation {
+    condition     = alltrue([for o in var.federation_tenant_pins.github_owners : can(regex("^[A-Za-z0-9][A-Za-z0-9-]{0,38}$", o))])
+    error_message = "federation_tenant_pins.github_owners entries must be literal GitHub user/org names (no wildcards or slashes)."
+  }
+
+  validation {
+    condition     = alltrue([for i in var.federation_tenant_pins.github_owner_ids : can(regex("^[0-9]+$", i))])
+    error_message = "federation_tenant_pins.github_owner_ids entries must be numeric GitHub owner IDs."
+  }
+
+  validation {
+    condition     = alltrue([for p in var.federation_tenant_pins.allowed_builtin_providers : contains(["cognito-identity.amazonaws.com", "accounts.google.com", "graph.facebook.com", "www.amazon.com"], p)])
+    error_message = "federation_tenant_pins.allowed_builtin_providers entries must be cognito-identity.amazonaws.com, accounts.google.com, graph.facebook.com or www.amazon.com."
+  }
+
+  validation {
+    condition     = can(regex("^[a-z0-9.-]+$", var.federation_tenant_pins.tfc_hostname))
+    error_message = "federation_tenant_pins.tfc_hostname must be a bare hostname such as app.terraform.io."
+  }
+}
+
 variable "allow_vpc_bpa_exclusions" {
   description = "Whether member accounts may create VPC Block Public Access exclusions under the declarative EC2 policy. Default false (exclusions_allowed = disabled) so a member-account admin cannot exempt a VPC from the org-wide internet-gateway ingress block."
   type        = bool
@@ -161,12 +216,36 @@ variable "policies" {
 
   validation {
     condition = alltrue([
-      for p in values(var.policies) : contains(
-        ["SERVICE_CONTROL_POLICY", "RESOURCE_CONTROL_POLICY", "DECLARATIVE_POLICY_EC2", "TAG_POLICY", "BACKUP_POLICY", "AISERVICES_OPT_OUT_POLICY", "CHATBOT_POLICY", "SECURITYHUB_POLICY"],
-        p.type
-      )
+      for p in values(var.policies) : can(regex("^[A-Z][A-Z0-9_]*_POLICY(_[A-Z0-9]+)?$", p.type))
     ])
     error_message = "Each policy type must be a valid AWS Organizations policy type."
+  }
+}
+
+variable "policy_overrides" {
+  description = "Policies merged OVER the built-in set, keyed by policy name: an existing key (e.g. scp-region-restriction) replaces that policy's content, a new key adds a policy. Attach additions through attachments. Content is raw Organizations policy JSON."
+  type = map(object({
+    type    = string
+    content = string
+  }))
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = alltrue([for p in values(var.policy_overrides) : can(regex("^[A-Z][A-Z0-9_]*_POLICY(_[A-Z0-9]+)?$", p.type))])
+    error_message = "policy_overrides types must be AWS Organizations policy types such as SERVICE_CONTROL_POLICY."
+  }
+}
+
+variable "disabled_policies" {
+  description = "Built-in policy keys NOT to create (e.g. backup-policy when the backup stage owns it, or aiservices-opt-out). Their attachments must be removed too. A key may not be both disabled and overridden."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = length(setintersection(toset(var.disabled_policies), toset(keys(var.policy_overrides)))) == 0
+    error_message = "A policy key is in both disabled_policies and policy_overrides: an override would silently re-create the disabled policy. Use one or the other."
   }
 }
 
@@ -177,4 +256,22 @@ variable "attachments" {
     target_id  = string
   }))
   default = {}
+}
+
+variable "tags" {
+  description = "Tags applied to every taggable resource this module creates (merged after provider default_tags; resource-specific tags such as Name win)."
+  type        = map(string)
+  default     = {}
+  nullable    = false
+}
+
+variable "partition" {
+  description = "AWS partition the policies are rendered for: aws, aws-us-gov or aws-cn. Every ARN in the SCPs / backup policy uses it."
+  type        = string
+  default     = "aws"
+
+  validation {
+    condition     = contains(["aws", "aws-us-gov", "aws-cn"], var.partition)
+    error_message = "partition must be aws, aws-us-gov or aws-cn."
+  }
 }

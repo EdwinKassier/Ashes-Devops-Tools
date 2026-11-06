@@ -49,7 +49,7 @@ variable "break_glass_trusted_principals" {
 
   validation {
     # Only enforce ARN shape on entries that are present; an empty list is valid.
-    condition     = alltrue([for p in var.break_glass_trusted_principals : can(regex("^arn:aws:iam::[0-9]{12}:", p))])
+    condition     = alltrue([for p in var.break_glass_trusted_principals : can(regex("^arn:aws(-us-gov|-cn)?:iam::[0-9]{12}:", p))])
     error_message = "Each break_glass_trusted_principals entry must be an account-qualified IAM ARN (arn:aws:iam::<12-digit-account>:...)."
   }
 }
@@ -75,4 +75,11 @@ variable "permissions_boundary_arn" {
     condition     = var.permissions_boundary_arn == null || can(regex("^arn:[^:]+:iam::[^:]*:policy/.+$", var.permissions_boundary_arn))
     error_message = "permissions_boundary_arn must be null or an IAM managed policy ARN (arn:PARTITION:iam::ACCOUNT_ID:policy/NAME)."
   }
+}
+
+variable "tags" {
+  description = "Tags applied to every taggable resource this module creates (merged after provider default_tags; resource-specific tags such as Name win)."
+  type        = map(string)
+  default     = {}
+  nullable    = false
 }

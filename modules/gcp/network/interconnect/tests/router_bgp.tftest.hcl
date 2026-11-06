@@ -153,3 +153,17 @@ run "existing_router_no_peer" {
     error_message = "create_bgp_peer = false must skip the router interface and BGP peer."
   }
 }
+
+run "module_labels_applied" {
+  command = plan
+
+  variables {
+    labels = { owner = "test" }
+
+  }
+
+  assert {
+    condition     = google_compute_interconnect_attachment.partner[0].labels["owner"] == "test"
+    error_message = "var.labels must land on the interconnect attachment."
+  }
+}

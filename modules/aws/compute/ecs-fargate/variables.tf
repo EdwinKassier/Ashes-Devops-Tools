@@ -32,7 +32,7 @@ variable "cluster_arn" {
   default     = ""
 
   validation {
-    condition     = var.cluster_arn == "" || can(regex("^arn:aws:ecs:", var.cluster_arn))
+    condition     = var.cluster_arn == "" || can(regex("^arn:aws(-us-gov|-cn)?:ecs:", var.cluster_arn))
     error_message = "cluster_arn must be empty or a valid ECS cluster ARN beginning with arn:aws:ecs:."
   }
 }
@@ -129,7 +129,7 @@ variable "container_secrets" {
   validation {
     condition = alltrue([
       for s in var.container_secrets :
-      can(regex("^arn:aws:(secretsmanager|ssm):", s.valueFrom))
+      can(regex("^arn:aws(-us-gov|-cn)?:(secretsmanager|ssm):", s.valueFrom))
     ])
     error_message = "Every container_secrets[*].valueFrom must be a Secrets Manager (arn:aws:secretsmanager:) or SSM (arn:aws:ssm:) ARN — plaintext secret values are not allowed."
   }
@@ -199,7 +199,7 @@ variable "execution_role_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:iam::", var.execution_role_arn))
+    condition     = can(regex("^arn:aws(-us-gov|-cn)?:iam::", var.execution_role_arn))
     error_message = "execution_role_arn must be a valid IAM role ARN beginning with arn:aws:iam::."
   }
 }
@@ -209,7 +209,7 @@ variable "task_role_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:iam::", var.task_role_arn))
+    condition     = can(regex("^arn:aws(-us-gov|-cn)?:iam::", var.task_role_arn))
     error_message = "task_role_arn must be a valid IAM role ARN beginning with arn:aws:iam::."
   }
 }
@@ -222,7 +222,7 @@ variable "target_group_arn" {
   default     = ""
 
   validation {
-    condition     = var.target_group_arn == "" || can(regex("^arn:aws:elasticloadbalancing:", var.target_group_arn))
+    condition     = var.target_group_arn == "" || can(regex("^arn:aws(-us-gov|-cn)?:elasticloadbalancing:", var.target_group_arn))
     error_message = "target_group_arn must be empty or a valid target group ARN beginning with arn:aws:elasticloadbalancing:."
   }
 }
@@ -275,7 +275,7 @@ variable "log_kms_key_arn" {
   default     = ""
 
   validation {
-    condition     = var.log_kms_key_arn == "" || can(regex("^arn:aws:kms:", var.log_kms_key_arn))
+    condition     = var.log_kms_key_arn == "" || can(regex("^arn:aws(-us-gov|-cn)?:kms:", var.log_kms_key_arn))
     error_message = "log_kms_key_arn must be empty or a valid KMS key ARN beginning with arn:aws:kms:."
   }
 }

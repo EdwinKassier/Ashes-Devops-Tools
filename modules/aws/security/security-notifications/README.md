@@ -69,14 +69,14 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_cloudwatch_event_rule.this (modules/aws/security/security-notifications/main.tf#L66)
-- resource.aws_cloudwatch_event_target.this (modules/aws/security/security-notifications/main.tf#L72)
-- resource.aws_cloudwatch_log_metric_filter.break_glass (modules/aws/security/security-notifications/main.tf#L98)
-- resource.aws_cloudwatch_metric_alarm.break_glass (modules/aws/security/security-notifications/main.tf#L114)
-- resource.aws_securityhub_automation_rule.suppress_known (modules/aws/security/security-notifications/main.tf#L133)
+- resource.aws_cloudwatch_event_rule.this (modules/aws/security/security-notifications/main.tf#L67)
+- resource.aws_cloudwatch_event_target.this (modules/aws/security/security-notifications/main.tf#L74)
+- resource.aws_cloudwatch_log_metric_filter.break_glass (modules/aws/security/security-notifications/main.tf#L100)
+- resource.aws_cloudwatch_metric_alarm.break_glass (modules/aws/security/security-notifications/main.tf#L116)
+- resource.aws_securityhub_automation_rule.suppress_known (modules/aws/security/security-notifications/main.tf#L136)
 - resource.aws_sns_topic.this (modules/aws/security/security-notifications/main.tf#L18)
-- resource.aws_sns_topic_policy.this (modules/aws/security/security-notifications/main.tf#L25)
-- resource.aws_sns_topic_subscription.this (modules/aws/security/security-notifications/main.tf#L43)
+- resource.aws_sns_topic_policy.this (modules/aws/security/security-notifications/main.tf#L26)
+- resource.aws_sns_topic_subscription.this (modules/aws/security/security-notifications/main.tf#L44)
 
 
 ## Inputs
@@ -90,6 +90,7 @@ The following resources are created:
 | <a name="input_cloudtrail_log_group_name"></a> [cloudtrail\_log\_group\_name](#input\_cloudtrail\_log\_group\_name) | Name of the CloudWatch Logs group the organization CloudTrail delivers into. When set (and break\_glass\_role\_arn is set), a metric-filter + CloudWatch metric alarm on break-glass AssumeRole is created there, alarming into the SNS topic. Empty (default) omits the alarm; the always-on EventBridge rule remains the log-group-independent path. | `string` | `""` | no |
 | <a name="input_enable_security_notifications"></a> [enable\_security\_notifications](#input\_enable\_security\_notifications) | Master switch for the security-notifications detective control. When false, no SNS topic, subscriptions, EventBridge rules, or Security Hub automation rule are created. | `bool` | `true` | no |
 | <a name="input_notification_subscribers"></a> [notification\_subscribers](#input\_notification\_subscribers) | Map of subscribers to attach to the SNS topic, keyed by an arbitrary name. A subscriber is required when the module is enabled — otherwise findings fire into a void. | <pre>map(object({<br/>    protocol = string # one of: email, https, sms, sqs, lambda, etc.<br/>    endpoint = string # e.g. an email address or HTTPS URL<br/>  }))</pre> | `{}` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 | <a name="input_topic_name"></a> [topic\_name](#input\_topic\_name) | Name of the KMS-encrypted SNS topic that all security notifications are published to. | `string` | `"security-notifications"` | no |
 
 ## Outputs

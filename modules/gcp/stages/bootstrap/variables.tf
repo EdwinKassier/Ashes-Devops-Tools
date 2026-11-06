@@ -463,3 +463,15 @@ variable "enable_principal_access_boundary" {
   type        = bool
   default     = false
 }
+
+variable "tfc_hostname" {
+  description = "HCP Terraform / Terraform Enterprise hostname issuing the dynamic-credential tokens the TFC WIF pool trusts (app.terraform.io, app.eu.terraform.io or a TFE host)."
+  type        = string
+  default     = "app.terraform.io"
+}
+
+variable "phase0_admin_impersonation_expires_at" {
+  description = "RFC 3339 UTC timestamp after which the phase-0 admin_email -> terraform-admin impersonation grant stops working (IAM condition). Set it to the end of the bootstrap window. Null = no expiry (a check warns on production estates)."
+  type        = string
+  default     = null
+}

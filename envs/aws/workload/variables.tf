@@ -9,7 +9,7 @@ variable "landing_zone_config_path" {
 }
 
 variable "tfc_organization" {
-  description = "Terraform Cloud organization that owns this root's workspace and the aws-organization + aws-network workspaces it reads. Supplied to the backend via backend.hcl / TF_CLI_ARGS_init (kept out of the code so the same root works across orgs and CI). Null = org.tfc.organization from config/landing-zone.yaml."
+  description = "Terraform Cloud organization that owns this root's workspace and the aws-organization + aws-network workspaces it reads. Supplied to the backend via the TF_CLOUD_ORGANIZATION environment variable (kept out of the code so the same root works across orgs and CI). Null = org.tfc.organization from config/landing-zone.yaml."
   type        = string
   default     = null
 }
@@ -131,7 +131,7 @@ variable "vpc_cidr" {
 # -----------------------------------------------------------------------------
 
 variable "log_archive_bucket_name" {
-  description = "Name of the central log-archive bucket (receives this workload's VPC flow logs, Config snapshots/history, and Session Manager logs). Legacy single-field form of security_contract: when set, the aws-security remote state is not read. Default null sources it from security_contract, else the aws-security root's remote state (its owner — see audit M7)."
+  description = "Name of the central log-archive bucket (receives this workload's VPC flow logs, Config snapshots/history, and Session Manager logs). Legacy single-field form of security_contract: when set, the aws-security remote state is not read. Default null sources it from security_contract, else the aws-security root's remote state (its owner —)."
   type        = string
   default     = null
 
@@ -142,7 +142,7 @@ variable "log_archive_bucket_name" {
 }
 
 variable "security_workspace_name" {
-  description = "Name of the aws-security TFC workspace, read via remote state for the central log-archive bucket name (audit M7)."
+  description = "Name of the aws-security TFC workspace, read via remote state for the central log-archive bucket name."
   type        = string
   default     = "aws-security"
 }
@@ -194,7 +194,7 @@ variable "workload_roles" {
 }
 
 # -----------------------------------------------------------------------------
-# SaaS secret bridge (audit H9, hybrid option C) — AWS counterpart to the GCP one.
+# SaaS secret bridge — AWS counterpart to the GCP one.
 #
 # Opt-in. When enabled, this workload reads the Supabase outputs from a saas-<name>
 # workspace and writes them into an AWS Secrets Manager secret, so an ECS/Fargate
@@ -208,7 +208,7 @@ variable "workload_roles" {
 # -----------------------------------------------------------------------------
 
 variable "enable_saas_secret_bridge" {
-  description = "Bridge Supabase connection details from a saas-<name> workspace into an AWS Secrets Manager secret (opt-in, audit H9). Default false."
+  description = "Bridge Supabase connection details from a saas-<name> workspace into an AWS Secrets Manager secret (opt-in). Default false."
   type        = bool
   default     = false
 
@@ -412,24 +412,42 @@ variable "services" {
       deletion_protection     = optional(bool, true)
       skip_final_snapshot     = optional(bool, false)
     }))
+
+    # Per-service CloudWatch alarms (CPU, memory, 5xx, p99 latency, DLQ).
+    alarms = optional(object({
+      enabled             = optional(bool, true)
+      cpu_threshold       = optional(number, 85)
+      memory_threshold    = optional(number, 85)
+      error_5xx_threshold = optional(number, 10)
+      p99_latency_seconds = optional(number, 2)
+    }), {})
+
+    # Optional per-service SQS work queue with a dead-letter queue; the task
+    # role may use only its own queue (QUEUE_URL is injected).
+    queue = optional(object({
+      enabled                    = optional(bool, false)
+      visibility_timeout_seconds = optional(number, 30)
+      max_receive_count          = optional(number, 5)
+      message_retention_seconds  = optional(number, 345600)
+    }), {})
   }))
   default = {}
 }
 
 variable "enable_github_oidc" {
-  description = "Create GitHub Actions OIDC deploy roles for services that set github (and the account's GitHub OIDC provider unless create_github_oidc_provider = false)."
+  description = "Create GitHub Actions OIDC deploy roles for services that set github. They trust the account's GitHub OIDC provider, created by the tfc-oidc-baseline StackSet."
   type        = bool
   default     = false
 }
 
 variable "create_github_oidc_provider" {
-  description = "Create the account-wide token.actions.githubusercontent.com OIDC provider. Set false when it already exists in this account and pass github_oidc_provider_arn."
+  description = "Create the account-wide token.actions.githubusercontent.com OIDC provider from this root. Default false: the tfc-oidc-baseline StackSet owns it, and the apply boundary denies the pipeline creating identity providers."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "github_oidc_provider_arn" {
-  description = "ARN of an existing GitHub OIDC provider, used when create_github_oidc_provider = false."
+  description = "ARN of the existing GitHub OIDC provider. Null derives this account's baseline-created provider ARN."
   type        = string
   default     = null
 }

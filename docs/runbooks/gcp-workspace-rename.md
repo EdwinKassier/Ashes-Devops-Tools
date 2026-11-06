@@ -82,7 +82,7 @@ rename_ws apps-prod gcp-workload-prod
 
 The backend config in the repo already carries the new names
 (`envs/gcp/organization/backend.tf` → `name = "gcp-organization"`;
-`envs/gcp/workload/backend.tf` → `prefix = "gcp-workload-"`). Re-init locally so your
+`envs/gcp/workload/backend.tf` → `tags = ["cloud:gcp", "layer:workload"]`, selected by `TF_WORKSPACE`). Re-init locally so your
 CLI state points at the renamed workspaces:
 
 ```bash

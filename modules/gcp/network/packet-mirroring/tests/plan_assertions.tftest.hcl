@@ -1,7 +1,6 @@
 # Resource-assertion tests for the network/packet-mirroring module.
 # Prior tests only validated inputs; nothing asserted that the filter and
-# mirrored-source inputs actually map onto the resource (audit round-3 §D8 /
-# finding #10). The filter block and mirrored_resources are config-derived and
+# mirrored-source inputs actually map onto the resource. The filter block and mirrored_resources are config-derived and
 # therefore plan-knowable under mock_provider.
 
 mock_provider "google" {}

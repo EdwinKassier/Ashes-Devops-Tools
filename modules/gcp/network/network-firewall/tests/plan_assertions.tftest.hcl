@@ -1,6 +1,6 @@
 # Plan assertions for the network-firewall module: verify the firewall rule is planned
 # with the caller-supplied identity/direction, and that per-rule logging is opt-in
-# (default off at this primitive; composing stages enable it — audit L4).
+# (default off at this primitive; composing stages enable it).
 # All runs use mock_provider so no GCP credentials are required.
 
 mock_provider "google" {}

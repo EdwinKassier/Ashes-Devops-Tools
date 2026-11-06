@@ -45,3 +45,7 @@ test_role_inline_policy_fails if {
 test_unknown_policy_skipped if {
 	count(p.deny) == 0 with input as one("aws_iam_policy", {})
 }
+
+test_not_action_on_all_resources_fails if {
+	count(p.deny) == 1 with input as one("aws_iam_policy", {"policy": doc([{"Effect": "Allow", "NotAction": ["iam:*"], "Resource": "*"}])})
+}

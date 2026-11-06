@@ -39,6 +39,13 @@ org:
   domain: my-org.example.com
   # Display name of the GCP organization (gcp-organization, gcp-projects).
   display_name: My Organization
+  # Cost/assurance profile (aws-network, aws-security). "production" (default)
+  # is the full inspection and detection stack, about $1.4-1.9k/month idle on
+  # AWS. "starter" drops the Network Firewall, Security Lake, Macie, record-all
+  # Config and EBS malware scanning. It keeps every preventive control and
+  # CloudTrail / Config / GuardDuty / Security Hub / Inspector. Use starter for
+  # sandboxes and early non-prod only. An explicit toggle always wins.
+  profile: production
   # Owner / CostCenter tags (aws-* roots).
   owner: platform-team
   cost_center: platform
@@ -87,6 +94,16 @@ gcp:
     - gcp-organization-admins@my-org.example.com
   billing_admin_groups:
     - gcp-billing-admins@my-org.example.com
+  # Break-glass Cloud Identity group (gcp-organization). It is exempt from the
+  # admin-containment deny policy, which turns on automatically once any
+  # environment is_production. Create the group, with 2+ members, before the
+  # first org apply.
+  break_glass_group: gcp-break-glass@my-org.example.com
+  # Who receives the control-plane guardrail-change alerts (gcp-organization).
+  alert_emails:
+    - secops@my-org.example.com
+  # Optional explicit override of the derived containment default.
+  # admin_containment: true
   # Regions allowed by the resource-location org policy (gcp-organization).
   allowed_regions:
     - europe-west2
@@ -94,6 +111,10 @@ gcp:
   network:
     hub_cidr_block: 10.0.0.0/16
     dns_hub_cidr_block: 10.1.0.0/16
+    # Numeric ID of the org Access Context Manager policy for the hub VPC-SC
+    # perimeter (gcloud access-context-manager policies list --organization=ID).
+    # Unset, no hub perimeter is created and a production environment warns.
+    # vpc_sc_access_policy: "1234567890"
   # Application environments, consumed by gcp-bootstrap, gcp-organization,
   # gcp-projects, gcp-network-hub, gcp-workload-<env> and tfc-admin (one
   # gcp-workload-<env> workspace per key). Keys: ^[a-z][a-z0-9-]{0,14}$, not
@@ -148,6 +169,11 @@ aws:
     - eu-west-2
   enabled_regions:
     - eu-west-2
+  # GitHub users/orgs whose Actions OIDC tokens may assume roles in any account
+  # (RCP pin: sub must be repo:<owner>/*). List every owner whose repos deploy
+  # here through app-services. Empty or absent leaves GitHub federation unpinned.
+  # github_federation_owners:
+  #   - my-github-org
   # Phase-0 management-account roles (aws-bootstrap runbook Step 2).
   terraform_run_role_arn: arn:aws:iam::REPLACE_WITH_12_DIGIT_ID:role/tfc-mgmt-apply
   break_glass_role_arn: arn:aws:iam::REPLACE_WITH_12_DIGIT_ID:role/break-glass
@@ -192,6 +218,24 @@ saas:
   # Provider toggles for the saas root (enable_supabase / enable_vercel).
   supabase: true
   vercel: true
+  # Per-stack settings for saas-<name> workspaces (stack = <name>): saas.stacks
+  # wins over saas.defaults, and an explicit TFC variable wins over both. IDs and
+  # names only. The Supabase database password stays a sensitive TFC variable
+  # (supabase_database_password). See docs/runbooks/saas-bootstrap.md.
+  # defaults:
+  #   supabase:
+  #     organization_id: REPLACE_WITH_SUPABASE_ORG_ID
+  #     region: eu-west-2
+  #   vercel:
+  #     team_id: REPLACE_WITH_VERCEL_TEAM_ID
+  # stacks:
+  #   web:
+  #     supabase:
+  #       project_name: my-org-web
+  #     vercel:
+  #       project_name: my-org-web
+  #       github_repo: my-org/web
+  #       production_branch: main
 
 # Presets: named overlays from examples/presets/<name>.yaml, applied by the
 # root the preset targets (precedence: explicit variable > preset > this file).

@@ -168,6 +168,26 @@ variable "services" {
       deletion_protection     = optional(bool, true)
       skip_final_snapshot     = optional(bool, false)
     }))
+
+    # Per-service CloudWatch alarms (with var.enable_alarms): ECS CPU and memory,
+    # unhealthy ALB targets, target 5xx count, TargetResponseTime p99 and, when
+    # queue is enabled, a non-empty dead-letter queue.
+    alarms = optional(object({
+      enabled             = optional(bool, true)
+      cpu_threshold       = optional(number, 85) # percent, average over 15 minutes
+      memory_threshold    = optional(number, 85) # percent, average over 15 minutes
+      error_5xx_threshold = optional(number, 10) # target 5xx responses per 5 minutes
+      p99_latency_seconds = optional(number, 2)  # TargetResponseTime p99, 15 minutes
+    }), {})
+
+    # Per-service SQS work queue + dead-letter queue. The task role may send,
+    # receive and delete on THIS queue only; QUEUE_URL is injected as an env var.
+    queue = optional(object({
+      enabled                    = optional(bool, false)
+      visibility_timeout_seconds = optional(number, 30)
+      max_receive_count          = optional(number, 5)      # deliveries before a message moves to the DLQ
+      message_retention_seconds  = optional(number, 345600) # 4 days; the DLQ keeps 14 days
+    }), {})
   }))
   default = {}
 
@@ -231,6 +251,32 @@ variable "services" {
     ]))
     error_message = "services[*].secrets values must be Secrets Manager or SSM Parameter Store ARNs — never plaintext."
   }
+
+  validation {
+    condition = alltrue([
+      for s in values(var.services) : (
+        s.alarms.cpu_threshold > 0 && s.alarms.cpu_threshold <= 100 &&
+        s.alarms.memory_threshold > 0 && s.alarms.memory_threshold <= 100
+      )
+    ])
+    error_message = "services[*].alarms.cpu_threshold and memory_threshold must be percentages in (0, 100]."
+  }
+
+  validation {
+    condition     = alltrue([for s in values(var.services) : s.alarms.error_5xx_threshold >= 0 && s.alarms.p99_latency_seconds > 0])
+    error_message = "services[*].alarms.error_5xx_threshold must be >= 0 and p99_latency_seconds must be > 0."
+  }
+
+  validation {
+    condition = alltrue([
+      for s in values(var.services) : (
+        s.queue.visibility_timeout_seconds >= 0 && s.queue.visibility_timeout_seconds <= 43200 &&
+        s.queue.max_receive_count >= 1 && s.queue.max_receive_count <= 1000 &&
+        s.queue.message_retention_seconds >= 60 && s.queue.message_retention_seconds <= 1209600
+      )
+    ])
+    error_message = "services[*].queue: visibility_timeout_seconds must be 0-43200, max_receive_count 1-1000, message_retention_seconds 60-1209600."
+  }
 }
 
 variable "bootstrap_image" {
@@ -249,24 +295,19 @@ variable "bootstrap_image" {
 # -----------------------------------------------------------------------------
 
 variable "enable_github_oidc" {
-  description = "Enable GitHub Actions OIDC deploy roles for services that set github. Also creates the account's token.actions.githubusercontent.com OIDC provider unless create_github_oidc_provider is false."
+  description = "Enable GitHub Actions OIDC deploy roles for services that set github. The roles trust the account's token.actions.githubusercontent.com provider, which the tfc-oidc-baseline StackSet creates (create_github_oidc_provider there); set create_github_oidc_provider here only for accounts outside that baseline."
   type        = bool
   default     = false
 }
 
 variable "create_github_oidc_provider" {
-  description = "Create the account-wide GitHub OIDC provider (one per account per URL). Set false when another root already owns it and pass github_oidc_provider_arn."
+  description = "Create the account-wide GitHub OIDC provider in this module. Default false: in baselined member accounts the tfc-oidc-baseline StackSet owns it and the apply boundary denies iam:CreateOpenIDConnectProvider. Set true only in an account outside that baseline."
   type        = bool
-  default     = true
-
-  validation {
-    condition     = !var.enable_github_oidc || var.create_github_oidc_provider || var.github_oidc_provider_arn != null
-    error_message = "github_oidc_provider_arn is required when enable_github_oidc = true and create_github_oidc_provider = false."
-  }
+  default     = false
 }
 
 variable "github_oidc_provider_arn" {
-  description = "ARN of an existing token.actions.githubusercontent.com OIDC provider, used when create_github_oidc_provider is false."
+  description = "ARN of the existing token.actions.githubusercontent.com OIDC provider. Null (default) derives this account's provider ARN (arn:<partition>:iam::<account>:oidc-provider/token.actions.githubusercontent.com), the one the tfc-oidc-baseline StackSet creates."
   type        = string
   default     = null
 
@@ -341,15 +382,52 @@ variable "log_retention_days" {
 }
 
 variable "enable_alarms" {
-  description = "Create per-service CloudWatch alarms (CPU, memory, unhealthy targets, target 5xx). Only takes effect when services is non-empty."
+  description = "Create per-service CloudWatch alarms (CPU, memory, unhealthy targets, target 5xx, p99 latency, DLQ depth; thresholds and per-service opt-out in services[*].alarms). Only takes effect when services is non-empty."
   type        = bool
   default     = true
 }
 
 variable "alarm_sns_topic_arn" {
-  description = "SNS topic ARN for alarm / OK notifications. null creates the alarms with no notification action."
+  description = "Existing SNS topic ARN for alarm / OK notifications. null (default) uses the topic this module creates (create_alarm_topic), or no notification action when create_alarm_topic = false."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.alarm_sns_topic_arn == null || can(regex("^arn:aws[a-z-]*:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]{1,256}$", coalesce(var.alarm_sns_topic_arn, "x")))
+    error_message = "alarm_sns_topic_arn must be null or an SNS topic ARN (arn:aws:sns:<region>:<account>:<name>)."
+  }
+}
+
+variable "create_alarm_topic" {
+  description = "When alarm_sns_topic_arn is null, create a KMS-encrypted SNS topic <environment>-apps-alarms as the alarm / OK action (CloudWatch may publish to it only for this account's <environment>-apps-* alarms). Subscribe on-call endpoints to it out of band (output alarm_topic_arn). false with no alarm_sns_topic_arn creates alarms with no notification action."
+  type        = bool
+  default     = true
+}
+
+variable "alarm_topic_kms_key_arn" {
+  description = "CMK ARN encrypting the created alarm topic. null uses kms_key_arn. The key policy MUST allow the cloudwatch.amazonaws.com service principal kms:Decrypt and kms:GenerateDataKey* (CloudWatch cannot publish to a topic encrypted with the AWS-managed alias/aws/sns key, and alarms otherwise fail to notify silently)."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.alarm_topic_kms_key_arn == null || can(regex("^arn:aws[a-z-]*:kms:", coalesce(var.alarm_topic_kms_key_arn, "x")))
+    error_message = "alarm_topic_kms_key_arn must be null or a KMS key ARN (arn:aws:kms:...)."
+  }
+}
+
+# -----------------------------------------------------------------------------
+# Queues
+# -----------------------------------------------------------------------------
+
+variable "queue_kms_key_arn" {
+  description = "CMK ARN for SSE-KMS on every service queue and dead-letter queue (services[*].queue). null (default) uses SQS-managed SSE (SSE-SQS). When set, each queue's task role also gets kms:GenerateDataKey / kms:Decrypt on this key via SQS only; producers outside the task (e.g. SNS, EventBridge) need key-policy access of their own."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.queue_kms_key_arn == null || can(regex("^arn:aws[a-z-]*:kms:", coalesce(var.queue_kms_key_arn, "x")))
+    error_message = "queue_kms_key_arn must be null or a KMS key ARN (arn:aws:kms:...)."
+  }
 }
 
 variable "tags" {

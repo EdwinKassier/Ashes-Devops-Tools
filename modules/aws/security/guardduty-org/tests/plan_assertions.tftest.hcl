@@ -30,3 +30,33 @@ run "org_configuration_auto_enables_all" {
     error_message = "RUNTIME_MONITORING feature must be materialized for each enabled Region"
   }
 }
+
+# Runtime Monitoring must manage its agents, or it is billed but blind.
+run "runtime_monitoring_manages_agents" {
+  command = plan
+
+  assert {
+    condition = toset([
+      for c in aws_guardduty_organization_configuration_feature.this["eu-west-2:RUNTIME_MONITORING"].additional_configuration : c.name if c.auto_enable == "ALL"
+    ]) == toset(["ECS_FARGATE_AGENT_MANAGEMENT", "EKS_ADDON_MANAGEMENT", "EC2_AGENT_MANAGEMENT"])
+    error_message = "RUNTIME_MONITORING must auto-enable Fargate, EKS and EC2 agent management for all members."
+  }
+
+  assert {
+    condition     = length(aws_guardduty_organization_configuration_feature.this["eu-west-2:S3_DATA_EVENTS"].additional_configuration) == 0
+    error_message = "agent management belongs only on RUNTIME_MONITORING."
+  }
+}
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    tags = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_guardduty_detector.this["eu-west-2"].tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_guardduty_detector.this"
+  }
+}

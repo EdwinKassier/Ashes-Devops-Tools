@@ -24,6 +24,18 @@ override_module {
   }
 }
 
+# tfc-management-roles reads the partition / caller identity; mocks return
+# random strings the provider's ARN validators reject, so pin real shapes.
+override_data {
+  target = module.aws_organization.module.tfc_management_roles[0].data.aws_partition.current
+  values = { partition = "aws" }
+}
+
+override_data {
+  target = module.aws_organization.module.tfc_management_roles[0].data.aws_caller_identity.current
+  values = { account_id = "111111111111" }
+}
+
 run "values_come_from_config_file" {
   command = plan
 
@@ -139,4 +151,24 @@ run "untouched_placeholders_rejected" {
     var.break_glass_role_arn,
     var.accounts,
   ]
+}
+
+# split_workload_projects: workload-only accounts trust the workloads project
+# (where tfc-admin puts aws-workload-<env>); foundational accounts keep the
+# default project.
+run "split_workload_projects_trust_the_workloads_project" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-split.yaml"
+  }
+
+  assert {
+    condition = (
+      local.tfc_workspace_bindings["workload_prod"].project == "cfg-aws-workloads" &&
+      local.tfc_workspace_bindings["workload_nonprod"].project == "cfg-aws-workloads" &&
+      local.tfc_workspace_bindings["security_tooling"].project == null
+    )
+    error_message = "with split_workload_projects, workload accounts must trust <prefix>aws-workloads and foundational ones the default project."
+  }
 }

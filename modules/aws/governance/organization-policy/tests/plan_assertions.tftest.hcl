@@ -59,7 +59,7 @@ run "guardrail_policies_render_correctly" {
     error_message = "deny-tamper SCP must render to valid IAM policy JSON"
   }
 
-  # H1: the Terraform run role must NOT be exempt from the tamper-deny statements,
+  # The Terraform run role must NOT be exempt from the tamper-deny statements,
   # so a pipeline compromise cannot disable security services or leave the org.
   assert {
     condition = alltrue([
@@ -104,8 +104,8 @@ run "guardrail_policies_render_correctly" {
   }
 
   assert {
-    condition     = length(keys(aws_organizations_policy.policy)) == 7
-    error_message = "the built-in guardrail set must produce all seven policies"
+    condition     = length(keys(aws_organizations_policy.policy)) == 9
+    error_message = "the built-in guardrail set must produce all nine policies"
   }
 }
 
@@ -168,7 +168,7 @@ run "deny_tamper_scp_hardened" {
 }
 
 run "privileged_role_tamper_never_exempts_the_pipeline" {
-  # N1: a compromised member tfc-apply must not be able to CreateRole with the
+  # A compromised member tfc-apply must not be able to CreateRole with the
   # break-glass name (inheriting every break-glass SCP exemption) nor rewrite
   # OrganizationAccountAccessRole's trust and assume it.
   command = plan
@@ -232,7 +232,7 @@ run "privileged_role_tier_omitted_when_every_pipeline_role_is_stackset_managed" 
 run "protected_key_policy_change_is_break_glass_only" {
   command = plan
 
-  # M3: a pipeline role must not be able to rewrite a protected key policy (and
+  # A pipeline role must not be able to rewrite a protected key policy (and
   # thereby grant itself kms:Decrypt) — break-glass is the sole exemption.
   assert {
     condition     = one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyProtectedKeyPolicyChange"]).Condition.ArnNotLike["aws:PrincipalArn"] == ["arn:aws:iam::*:role/break-glass"]
@@ -243,7 +243,7 @@ run "protected_key_policy_change_is_break_glass_only" {
 run "baseline_scp_identity_and_perimeter_guards" {
   command = plan
 
-  # M2: no IAM users / long-lived credentials org-wide except break-glass.
+  # No IAM users / long-lived credentials org-wide except break-glass.
   assert {
     condition = (
       toset(one([for s in jsondecode(aws_organizations_policy.policy["scp-baseline"].content).Statement : s if s.Sid == "DenyIamUserCredentials"]).Action) == toset(["iam:CreateUser", "iam:CreateAccessKey", "iam:CreateLoginProfile"]) &&
@@ -252,7 +252,7 @@ run "baseline_scp_identity_and_perimeter_guards" {
     error_message = "DenyIamUserCredentials must deny CreateUser/CreateAccessKey/CreateLoginProfile for everyone but break-glass"
   }
 
-  # H2: dp:* data-perimeter exemption tags can only be set/removed by break-glass,
+  # Dp:* data-perimeter exemption tags can only be set/removed by break-glass,
   # on every tag-capable path (create-time tags and Tag/Untag) of each RCP service.
   assert {
     condition = (
@@ -302,7 +302,7 @@ run "deny_tamper_scp_size_with_custom_names" {
 run "rcp_data_perimeter_safe_for_federation_and_service_roles" {
   command = plan
 
-  # C4: EnforceOrgIdentities must NOT deny sts:* — that blocks OIDC/SAML
+  # EnforceOrgIdentities must NOT deny sts:* — that blocks OIDC/SAML
   # federation (TFC dynamic credentials) whose sessions carry no PrincipalOrgID.
   assert {
     condition     = !contains(one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == "EnforceOrgIdentities"]).Action, "sts:*")
@@ -410,5 +410,226 @@ run "attachments_key_correctly" {
   assert {
     condition     = contains(keys(aws_organizations_policy_attachment.attach), "baseline@root")
     error_message = "attachments must key on the caller-provided map key"
+  }
+}
+
+# Centralized root access: sts:AssumeRoot sessions (task-scoped, short-lived,
+# issued from the management account / delegated admin) must survive the
+# root-deny. Ordinary root sign-in carries no aws:AssumedRoot key, so the
+# IfExists form keeps denying it.
+run "root_deny_exempts_centralized_root_sessions" {
+  command = plan
+
+  assert {
+    condition     = one([for s in jsondecode(aws_organizations_policy.policy["scp-baseline"].content).Statement : s if s.Sid == "DenyRootUserActions"]).Condition.BoolIfExists["aws:AssumedRoot"] == "false"
+    error_message = "DenyRootUserActions must carry BoolIfExists aws:AssumedRoot=false so sts:AssumeRoot remediation sessions are not denied."
+  }
+}
+
+# RCP web-identity tenant pins: absent by default, one statement per issuer
+# when set, each Null-guarded so other issuers' tokens are unaffected.
+run "federation_tenant_pins_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = length([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if startswith(s.Sid, "Pin")]) == 0
+    error_message = "no federation pin statements without federation_tenant_pins."
+  }
+
+  assert {
+    condition = alltrue([
+      for sid in ["EnforceOrgIdentities", "ConfusedDeputyProtection"] :
+      contains(one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == sid]).Action, "ecr:*") &&
+      contains(one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == sid]).Action, "logs:*")
+    ])
+    error_message = "the RCP identity and confused-deputy statements must cover ECR and CloudWatch Logs."
+  }
+}
+
+run "federation_tenant_pins_render" {
+  command = plan
+
+  variables {
+    federation_tenant_pins = {
+      tfc_organization = "acme"
+      github_owners    = ["acme", "acme-apps"]
+    }
+  }
+
+  assert {
+    condition = (
+      one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == "PinTfcFederationToOrg"]).Action == "sts:AssumeRoleWithWebIdentity" &&
+      one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == "PinTfcFederationToOrg"]).Condition.Null["app.terraform.io:sub"] == "false" &&
+      one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == "PinTfcFederationToOrg"]).Condition.StringNotLike["app.terraform.io:sub"] == "organization:acme:*"
+    )
+    error_message = "the TFC pin must deny web identity whose app.terraform.io:sub is not organization:acme:* (Null-guarded)."
+  }
+
+  assert {
+    condition     = one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == "PinGithubFederationToOwners"]).Condition.StringNotLike["token.actions.githubusercontent.com:sub"] == ["repo:acme/*", "repo:acme-apps/*"]
+    error_message = "the GitHub pin must allow only repo:<owner>/* subjects."
+  }
+
+  assert {
+    condition     = length(aws_organizations_policy.policy["rcp-data-perimeter"].content) < 5120
+    error_message = "the RCP with every pin and all built-in IdP denies must stay under the 5,120-character quota."
+  }
+}
+
+# Central detection settings: with security accounts named, even the pipeline
+# outside them is denied (only break-glass is exempt), and the SCP still fits.
+run "central_detection_scoped_to_security_accounts" {
+  command = plan
+
+  variables {
+    central_detection_account_ids = ["222222222222", "333333333333"]
+  }
+
+  assert {
+    condition = (
+      one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyCentralDetectionOutsideSecurityAccounts"]).Condition.StringNotEquals["aws:PrincipalAccount"] == ["222222222222", "333333333333"] &&
+      contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyCentralDetectionOutsideSecurityAccounts"]).Action, "guardduty:CreateFilter") &&
+      !contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyCentralDetectionOutsideSecurityAccounts"]).Action, "config:PutConfigurationRecorder")
+    )
+    error_message = "GuardDuty/CloudTrail/Security Hub reconfiguration must be denied outside central_detection_account_ids; Config/flow logs stay with the workload pipeline."
+  }
+
+  assert {
+    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 5120
+    error_message = "deny-tamper SCP must stay under the 5,120-character SCP size quota with the central-detection statement."
+  }
+}
+
+# The org-wide EC2 baseline carries no VPC BPA (that stays OU-scoped), and AI
+# services are opted out everywhere.
+run "baseline_declarative_and_ai_opt_out" {
+  command = plan
+
+  assert {
+    condition = (
+      !contains(keys(jsondecode(aws_organizations_policy.policy["declarative-ec2-baseline"].content).ec2_attributes), "vpc_block_public_access") &&
+      jsondecode(aws_organizations_policy.policy["declarative-ec2-baseline"].content).ec2_attributes.instance_metadata_defaults.http_tokens["@@assign"] == "required" &&
+      jsondecode(aws_organizations_policy.policy["aiservices-opt-out"].content).services.default.opt_out_policy["@@assign"] == "optOut" &&
+      aws_organizations_policy.policy["aiservices-opt-out"].type == "AISERVICES_OPT_OUT_POLICY"
+    )
+    error_message = "declarative-ec2-baseline must enforce IMDSv2 without VPC BPA, and aiservices-opt-out must opt out by default."
+  }
+}
+
+# policy_overrides replace or add; disabled_policies drop built-ins.
+run "policy_overrides_and_disabled_policies" {
+  command = plan
+
+  variables {
+    disabled_policies = ["backup-policy", "aiservices-opt-out"]
+    policy_overrides = {
+      "scp-region-restriction" = { type = "SERVICE_CONTROL_POLICY", content = "{\"Version\":\"2012-10-17\",\"Statement\":[]}" }
+      "scp-custom"             = { type = "SERVICE_CONTROL_POLICY", content = "{\"Version\":\"2012-10-17\",\"Statement\":[]}" }
+    }
+  }
+
+  assert {
+    condition = (
+      !contains(keys(aws_organizations_policy.policy), "backup-policy") &&
+      !contains(keys(aws_organizations_policy.policy), "aiservices-opt-out") &&
+      contains(keys(aws_organizations_policy.policy), "scp-custom") &&
+      aws_organizations_policy.policy["scp-region-restriction"].content == "{\"Version\":\"2012-10-17\",\"Statement\":[]}" &&
+      contains(keys(aws_organizations_policy.policy), "scp-deny-tamper")
+    )
+    error_message = "overrides must replace/add policies, disabled_policies must drop built-ins, and the rest must stay."
+  }
+}
+
+# Replacing a core guardrail is allowed but always warns.
+run "overriding_core_guardrail_warns" {
+  command = plan
+
+  variables {
+    policy_overrides = {
+      "scp-deny-tamper" = { type = "SERVICE_CONTROL_POLICY", content = "{\"Version\":\"2012-10-17\",\"Statement\":[]}" }
+    }
+  }
+
+  expect_failures = [check.core_guardrails_not_weakened]
+}
+
+# Built-in web-identity providers (no IAM provider resource) are denied unless
+# allow-listed; IdP creation is denied to all but break-glass / StackSet exec;
+# GitHub owner-ID subjects are allowed by the GitHub pin.
+run "federation_completeness" {
+  command = plan
+
+  variables {
+    federation_tenant_pins = {
+      github_owner_ids          = ["123456"]
+      allowed_builtin_providers = ["cognito-identity.amazonaws.com"]
+    }
+  }
+
+  assert {
+    condition = (
+      length([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if startswith(s.Sid, "DenyBuiltinIdp")]) == 3 &&
+      one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == "DenyBuiltinIdpGraph"]).Condition.Null["graph.facebook.com:app_id"] == "false" &&
+      one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == "DenyBuiltinIdpAccounts"]).Condition.Null["accounts.google.com:aud"] == "false" &&
+      contains(one([for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s if s.Sid == "PinGithubFederationToOwners"]).Condition.StringNotLike["token.actions.githubusercontent.com:sub"], "repository_owner_id:123456:*")
+    )
+    error_message = "built-in IdPs must be denied unless allow-listed (with the right claim key), and GitHub owner-ID subjects must be allowed."
+  }
+
+  assert {
+    condition = (
+      contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-baseline"].content).Statement : s if s.Sid == "DenyIdentityProviderChanges"]).Action, "iam:CreateOpenIDConnectProvider") &&
+      contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-baseline"].content).Statement : s if s.Sid == "DenyDataPerimeterTagTampering"]).Action, "ecr:TagResource") &&
+      length(aws_organizations_policy.policy["scp-baseline"].content) < 5120 &&
+      length(aws_organizations_policy.policy["rcp-data-perimeter"].content) < 5120
+    )
+    error_message = "the baseline SCP must deny IdP changes and ECR/Logs dp:* tagging, and both policies must fit the 5,120-character quota."
+  }
+}
+
+# Global STS is never region-denied; ACM/KMS are allowed in us-east-1 for
+# CloudFront certificates, and nowhere else outside the allowed regions.
+run "region_restriction_allows_edge_and_global_sts" {
+  command = plan
+
+  assert {
+    condition = (
+      contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-region-restriction"].content).Statement : s if s.Sid == "DenyOutsideAllowedRegions"]).NotAction, "sts:*") &&
+      contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-region-restriction"].content).Statement : s if s.Sid == "EdgeCertificatesAndKeysOnlyInAllowedRegionsOrUsEast1"]).Condition.StringNotEquals["aws:RequestedRegion"], "us-east-1")
+    )
+    error_message = "sts must be exempt from the region deny, and ACM/KMS must be confined to the allowed regions plus us-east-1."
+  }
+}
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    tags = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_organizations_policy.policy["scp-baseline"].tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_organizations_policy.policy"
+  }
+}
+
+# GovCloud / China: every rendered ARN follows the partition.
+run "policies_follow_the_partition" {
+  command = plan
+
+  variables {
+    partition              = "aws-us-gov"
+    terraform_run_role_arn = "arn:aws-us-gov:iam::111111111111:role/tfc-mgmt-apply"
+    break_glass_role_arn   = "arn:aws-us-gov:iam::111111111111:role/break-glass"
+  }
+
+  assert {
+    condition = (
+      !strcontains(aws_organizations_policy.policy["scp-deny-tamper"].content, "arn:aws:") &&
+      !strcontains(aws_organizations_policy.policy["scp-baseline"].content, "arn:aws:") &&
+      strcontains(aws_organizations_policy.policy["scp-baseline"].content, "arn:aws-us-gov:iam::*:root")
+    )
+    error_message = "with partition = aws-us-gov no SCP may contain an arn:aws: ARN."
   }
 }

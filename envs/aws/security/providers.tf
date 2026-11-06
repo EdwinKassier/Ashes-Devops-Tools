@@ -11,7 +11,7 @@ provider "aws" {
   default_tags {
     tags = local.aws_default_tags
   }
-  # C4: fail fast if the resolved credentials are not the management (payer)
+  # Fail fast if the resolved credentials are not the management (payer)
   # account. The default provider owns org-level resources (org CloudTrail,
   # delegated-admin registrations); the other accounts are reached via the
   # aliased assume-role providers below.

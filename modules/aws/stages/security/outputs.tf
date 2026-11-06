@@ -50,12 +50,12 @@ output "break_glass_role_arn" {
 
 output "cloudtrail_log_group_name" {
   description = "CloudWatch Logs group the org trail delivers into (management account); null when enable_cloudwatch_logs = false."
-  value       = module.cloudtrail.cloudwatch_log_group_name
+  value       = try(module.cloudtrail[0].cloudwatch_log_group_name, null)
 }
 
 output "cis_alarm_sns_topic_arn" {
   description = "SNS topic (management account) the CIS section-4 alarms publish to; null when enable_cloudwatch_logs = false."
-  value       = module.cloudtrail.cis_alarm_sns_topic_arn
+  value       = try(module.cloudtrail[0].cis_alarm_sns_topic_arn, null)
 }
 
 output "key_admin_arns" {

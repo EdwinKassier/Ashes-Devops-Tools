@@ -1,0 +1,10 @@
+# Test fixture: config file WITHOUT aws.contracts.organization, so the
+# aws-security root still reads the aws-organization remote state.
+version: 1
+org:
+  name: cfgco
+  tfc:
+    organization: cfg-tfc
+aws:
+  management_account_id: "012345678901"
+  log_archive_bucket_name: cfgco-org-log-archive

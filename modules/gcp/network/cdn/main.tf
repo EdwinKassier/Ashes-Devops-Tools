@@ -13,6 +13,7 @@ resource "google_compute_global_address" "default" {
   provider = google
   project  = var.project_id
   name     = "${var.lb_name}-ip"
+  labels   = var.labels
 }
 
 # 2. Managed SSL Certificate (Optional)
@@ -87,6 +88,7 @@ resource "google_compute_global_forwarding_rule" "default" {
   ip_address            = google_compute_global_address.default.id
   port_range            = "443"
   load_balancing_scheme = "EXTERNAL"
+  labels                = var.labels
 }
 
 # =============================================================================
@@ -126,4 +128,5 @@ resource "google_compute_global_forwarding_rule" "http_redirect" {
   ip_address            = google_compute_global_address.default.id
   port_range            = "80"
   load_balancing_scheme = "EXTERNAL"
+  labels                = var.labels
 }

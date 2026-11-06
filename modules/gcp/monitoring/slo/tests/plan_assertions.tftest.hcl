@@ -36,3 +36,17 @@ run "burn_rate_alert_when_enabled" {
     error_message = "enabling the burn-rate alert must create one alert policy."
   }
 }
+
+run "module_labels_applied" {
+  command = plan
+
+  variables {
+    labels = { owner = "test" }
+
+  }
+
+  assert {
+    condition     = google_monitoring_slo.this.user_labels["owner"] == "test"
+    error_message = "var.labels must land on the SLO user_labels."
+  }
+}

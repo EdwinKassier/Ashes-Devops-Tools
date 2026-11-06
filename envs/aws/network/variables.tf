@@ -9,7 +9,7 @@ variable "landing_zone_config_path" {
 }
 
 variable "tfc_organization" {
-  description = "Terraform Cloud organization that owns this root's workspace and the aws-organization workspace it reads. Supplied to the backend via backend.hcl / TF_CLI_ARGS_init (kept out of the code so the same root works across orgs and CI). Null = org.tfc.organization from config/landing-zone.yaml."
+  description = "Terraform Cloud organization that owns this root's workspace and the aws-organization workspace it reads. Supplied to the backend via the TF_CLOUD_ORGANIZATION environment variable (kept out of the code so the same root works across orgs and CI). Null = org.tfc.organization from config/landing-zone.yaml."
   type        = string
   default     = null
 }
@@ -126,8 +126,8 @@ variable "az_count" {
   default     = 2
 
   validation {
-    condition     = var.az_count >= 1 && var.az_count <= 3
-    error_message = "az_count must be between 1 and 3."
+    condition     = var.az_count >= 2 && var.az_count <= 3
+    error_message = "az_count must be between 2 and 3 (the Route 53 Resolver endpoints need subnets in at least two AZs)."
   }
 
   validation {
@@ -158,9 +158,9 @@ variable "private_hosted_zone_name" {
 }
 
 variable "enable_network_firewall" {
-  description = "Whether to deploy the Network Firewall in the inspection VPC. COST TOGGLE: bills per endpoint-hour plus per-GB processed."
+  description = "Whether to deploy the Network Firewall in the inspection VPC. COST TOGGLE: bills per endpoint-hour plus per-GB processed. Null (default) follows profile: on for production, off for starter."
   type        = bool
-  default     = true
+  default     = null
 }
 
 variable "enable_network_access_analyzer" {
@@ -241,5 +241,16 @@ variable "assume_role_arn" {
   validation {
     condition     = var.assume_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", coalesce(var.assume_role_arn, "x")))
     error_message = "assume_role_arn must be null or an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/...)."
+  }
+}
+
+variable "profile" {
+  description = "Cost/assurance profile: production (default; full inspection and detection stack) or starter (cheapest safe non-prod baseline). It only changes the defaults of the profile-driven toggles; any explicit toggle still wins. Null = org.profile from config/landing-zone.yaml, else production."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.profile == null || contains(["production", "starter"], coalesce(var.profile, "production"))
+    error_message = "profile must be production or starter."
   }
 }

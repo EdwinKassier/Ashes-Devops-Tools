@@ -378,3 +378,9 @@ variable "member_break_glass_stack_set_name" {
     error_message = "member_break_glass_stack_set_name must start with a letter and contain only letters, digits and '-' (max 128)."
   }
 }
+
+variable "create_github_oidc_provider" {
+  description = "Also create the account-wide GitHub Actions OIDC provider (https://token.actions.githubusercontent.com, aud sts.amazonaws.com) in every targeted account. The apply boundary denies the pipeline creating identity providers itself, so app-services GitHub deploy roles rely on this one. Default true. Pin which GitHub owners may use it with the organization RCP (github_federation_owners)."
+  type        = bool
+  default     = true
+}

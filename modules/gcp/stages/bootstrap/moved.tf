@@ -1,4 +1,4 @@
-# Safe state migration for the audit C2 identity refactor.
+# Safe state migration for the identity refactor.
 #
 # Bindings whose (role, member) are UNCHANGED are moved so they are not
 # destroyed-then-recreated (which would briefly drop the bootstrap SA's org IAM

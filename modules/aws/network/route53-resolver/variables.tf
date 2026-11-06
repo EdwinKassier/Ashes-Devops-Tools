@@ -96,3 +96,10 @@ variable "enable_dnssec" {
   type        = bool
   default     = false
 }
+
+variable "tags" {
+  description = "Tags applied to every taggable resource this module creates (merged after provider default_tags; resource-specific tags such as Name win)."
+  type        = map(string)
+  default     = {}
+  nullable    = false
+}

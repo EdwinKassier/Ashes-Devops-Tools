@@ -79,7 +79,7 @@ run "projects_output_contract" {
     error_message = "project_ids must expose the shared hub/dns and per-environment host projects (consumed by gcp-network-hub)."
   }
 
-  # Bind producer to consumer (audit M-iac): assert the FULL key set gcp-workload
+  # Bind producer to consumer: assert the FULL key set gcp-workload
   # consumes from environment_config, so a rename or drop of any key fails HERE,
   # at the producer. The consumer's own test mocks this shape and cannot catch
   # producer drift, so this is the real guard on the seam.

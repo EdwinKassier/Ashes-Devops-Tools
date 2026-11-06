@@ -10,7 +10,7 @@
 # During an incident it is activated by flipping `break_glass_active`, which
 # swaps the deny-all standing policy for the AWS-managed AdministratorAccess.
 # There is deliberately no CloudWatch alarm here; the break-glass-use alarm
-# lives in the security-notifications module (C14).
+# lives in the security-notifications module.
 
 locals {
   # Flatten roles x managed_policy_arns into plan-known attachment keys.
@@ -36,6 +36,7 @@ resource "aws_iam_role" "this" {
   max_session_duration = try(each.value.max_session_duration, 3600)
   # Per-role boundary wins; otherwise the module-wide permissions_boundary_arn.
   permissions_boundary = each.value.permissions_boundary != null ? each.value.permissions_boundary : var.permissions_boundary_arn
+  tags                 = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "this" {
@@ -72,6 +73,8 @@ resource "aws_iam_role" "break_glass" {
       }
     }]
   })
+
+  tags = var.tags
 }
 
 # Standing state: deny-all unless explicitly activated during an incident.
@@ -96,5 +99,5 @@ resource "aws_iam_role_policy_attachment" "break_glass_active" {
   # incident. The standing state is deny-all (see break_glass_standing).
   count      = var.enable_break_glass && var.break_glass_active ? 1 : 0
   role       = aws_iam_role.break_glass[0].name
-  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
+  policy_arn = "arn:${local.partition}:iam::aws:policy/AdministratorAccess"
 }

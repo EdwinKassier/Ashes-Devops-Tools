@@ -145,3 +145,17 @@ run "ephemeral_secret_value_creates_version" {
     error_message = "the ephemeral secret must be written via secret_data_wo with its version counter."
   }
 }
+
+run "module_labels_applied" {
+  command = plan
+
+  variables {
+    labels = { owner = "test" }
+
+  }
+
+  assert {
+    condition     = google_secret_manager_secret.this["stripe-key"].labels["owner"] == "test" && google_secret_manager_secret.this["database-url"].labels["app"] == "api" && google_secret_manager_secret.this["database-url"].labels["owner"] == "test"
+    error_message = "var.labels must merge into every secret's labels (per-secret labels kept)."
+  }
+}

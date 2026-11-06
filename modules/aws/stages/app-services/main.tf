@@ -17,8 +17,13 @@
 #   - Aurora PostgreSQL     — optional (database): RDS-managed master secret,
 #                             isolated subnets, SG reachable only from the
 #                             service's SG (data/rds-aurora)
-#   - CloudWatch alarms     — optional (enable_alarms): CPU, memory, unhealthy
-#                             targets, target 5xx (ops/cloudwatch)
+#   - CloudWatch alarms     — on by default (enable_alarms, services[*].alarms):
+#                             CPU, memory, unhealthy targets, target 5xx,
+#                             TargetResponseTime p99, DLQ depth -> a KMS-encrypted
+#                             SNS topic (created here unless alarm_sns_topic_arn)
+#   - SQS queue + DLQ       — optional (queue): SSE (SQS-managed or CMK),
+#                             TLS-only queue policy, redrive to its own DLQ; the
+#                             task role may send/receive/delete on ITS queue only
 #
 # Shared per environment, created only when var.services is non-empty: one ECS
 # cluster (Container Insights) and one ALB (internal by default) with a 404
@@ -98,11 +103,29 @@ locals {
   }
 
   database_services = { for k, s in var.services : k => s if s.database != null }
+  queue_services    = { for k, s in var.services : k => s if s.queue.enabled }
 
+  # Alarms: every service with alarms.enabled, when the stage has any service.
+  alarm_services     = local.enabled && var.enable_alarms ? { for k, s in var.services : k => s if s.alarms.enabled } : {}
+  create_alarm_topic = length(local.alarm_services) > 0 && var.create_alarm_topic && var.alarm_sns_topic_arn == null
+  alarm_has_action   = local.create_alarm_topic || var.alarm_sns_topic_arn != null
+  alarm_topic_arn    = local.create_alarm_topic ? aws_sns_topic.alarms[0].arn : var.alarm_sns_topic_arn
+
+  queue_name = { for k, s in local.queue_services : k => "${var.environment}-${k}" }
+  dlq_name   = { for k, s in local.queue_services : k => "${var.environment}-${k}-dlq" }
+
+  # Real AWS always resolves these; the fallbacks only keep mocked plans valid.
+  partition = coalesce(local.boundary_partition, "aws")
+
+  # Default: the account-wide provider the tfc-oidc-baseline StackSet owns (the
+  # apply boundary forbids the pipeline from registering identity providers).
   github_oidc_provider_arn = (
     var.enable_github_oidc && var.create_github_oidc_provider
     ? try(aws_iam_openid_connect_provider.github[0].arn, null)
-    : var.github_oidc_provider_arn
+    : coalesce(
+      var.github_oidc_provider_arn,
+      "arn:${try(data.aws_partition.current[0].partition, "aws")}:iam::${coalesce(local.account_id, "000000000000")}:oidc-provider/token.actions.githubusercontent.com",
+    )
   )
 
   account_id = try(data.aws_caller_identity.current[0].account_id, null)
@@ -123,7 +146,7 @@ locals {
 }
 
 data "aws_partition" "current" {
-  count = local.enabled && var.tfc_apply_boundary_policy_name != null ? 1 : 0
+  count = local.enabled ? 1 : 0
 }
 
 data "aws_caller_identity" "current" {
@@ -325,6 +348,43 @@ resource "aws_iam_role_policy" "task_exec" {
       ]
       Resource = "*"
     }]
+  })
+}
+
+resource "aws_iam_role_policy" "task_queue" {
+  # The application's own queue only: produce, consume, ack. No DLQ access
+  # (redrive is an operator action), no other queue.
+  for_each = local.queue_services
+
+  name = "queue"
+  role = aws_iam_role.task[each.key].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat(
+      [{
+        Sid    = "OwnQueue"
+        Effect = "Allow"
+        Action = [
+          "sqs:ChangeMessageVisibility",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes",
+          "sqs:GetQueueUrl",
+          "sqs:ReceiveMessage",
+          "sqs:SendMessage",
+        ]
+        Resource = aws_sqs_queue.service[each.key].arn
+      }],
+      var.queue_kms_key_arn != null ? [{
+        Sid      = "QueueKms"
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt", "kms:GenerateDataKey"]
+        Resource = var.queue_kms_key_arn
+        Condition = {
+          StringEquals = { "kms:ViaService" = "sqs.${var.aws_region}.amazonaws.com" }
+        }
+      }] : [],
+    )
   })
 }
 
@@ -651,6 +711,7 @@ module "service" {
 
   container_environment = concat(
     [for n in sort(keys(each.value.environment)) : { name = n, value = each.value.environment[n] }],
+    each.value.queue.enabled ? [{ name = "QUEUE_URL", value = aws_sqs_queue.service[each.key].url }] : [],
     each.value.database != null ? [
       { name = "DB_HOST", value = module.database[each.key].endpoint },
       { name = "DB_PORT", value = "5432" },
@@ -708,6 +769,133 @@ check "bootstrap_image_port" {
 }
 
 # =============================================================================
+# SQS work queue + dead-letter queue (optional, per service)
+# =============================================================================
+
+resource "aws_sqs_queue" "dlq" {
+  for_each = local.queue_services
+
+  name                      = local.dlq_name[each.key]
+  message_retention_seconds = 1209600 # 14 days, the SQS maximum
+
+  # SSE-KMS with the given CMK, else SQS-managed SSE — never unencrypted.
+  sqs_managed_sse_enabled           = var.queue_kms_key_arn == null ? true : null
+  kms_master_key_id                 = var.queue_kms_key_arn
+  kms_data_key_reuse_period_seconds = var.queue_kms_key_arn == null ? null : 300
+
+  tags = merge(var.tags, { Service = each.key })
+}
+
+resource "aws_sqs_queue" "service" {
+  for_each = local.queue_services
+
+  name                       = local.queue_name[each.key]
+  visibility_timeout_seconds = each.value.queue.visibility_timeout_seconds
+  message_retention_seconds  = each.value.queue.message_retention_seconds
+
+  sqs_managed_sse_enabled           = var.queue_kms_key_arn == null ? true : null
+  kms_master_key_id                 = var.queue_kms_key_arn
+  kms_data_key_reuse_period_seconds = var.queue_kms_key_arn == null ? null : 300
+
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.dlq[each.key].arn
+    maxReceiveCount     = each.value.queue.max_receive_count
+  })
+
+  tags = merge(var.tags, { Service = each.key })
+}
+
+# Only the service's own queue may redrive into its DLQ.
+resource "aws_sqs_queue_redrive_allow_policy" "dlq" {
+  for_each = local.queue_services
+
+  queue_url = aws_sqs_queue.dlq[each.key].id
+  redrive_allow_policy = jsonencode({
+    redrivePermission = "byQueue"
+    sourceQueueArns   = [aws_sqs_queue.service[each.key].arn]
+  })
+}
+
+locals {
+  # Queue policies grant nothing (access is identity-based, on the task role);
+  # they only refuse any request that is not over TLS.
+  queue_policy_targets = merge([
+    for k in keys(local.queue_services) : {
+      "${k}|queue" = { url = aws_sqs_queue.service[k].id, arn = aws_sqs_queue.service[k].arn }
+      "${k}|dlq"   = { url = aws_sqs_queue.dlq[k].id, arn = aws_sqs_queue.dlq[k].arn }
+    }
+  ]...)
+}
+
+resource "aws_sqs_queue_policy" "tls_only" {
+  for_each = local.queue_policy_targets
+
+  queue_url = each.value.url
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "DenyInsecureTransport"
+      Effect    = "Deny"
+      Principal = "*"
+      Action    = "sqs:*"
+      Resource  = each.value.arn
+      Condition = { Bool = { "aws:SecureTransport" = "false" } }
+    }]
+  })
+}
+
+# =============================================================================
+# Alarm topic (created unless alarm_sns_topic_arn is given)
+# =============================================================================
+
+resource "aws_sns_topic" "alarms" {
+  count = local.create_alarm_topic ? 1 : 0
+
+  name = "${local.cluster_name}-alarms"
+  # A CMK: CloudWatch cannot publish to a topic under the AWS-managed SNS key.
+  kms_master_key_id = coalesce(var.alarm_topic_kms_key_arn, var.kms_key_arn)
+
+  tags = var.tags
+}
+
+resource "aws_sns_topic_policy" "alarms" {
+  count = local.create_alarm_topic ? 1 : 0
+
+  arn = aws_sns_topic.alarms[0].arn
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        # The default topic policy, narrowed to this account.
+        Sid       = "AccountOwnerManage"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:${local.partition}:iam::${coalesce(local.account_id, "000000000000")}:root" }
+        Action = [
+          "sns:GetTopicAttributes",
+          "sns:ListSubscriptionsByTopic",
+          "sns:Publish",
+          "sns:SetTopicAttributes",
+          "sns:Subscribe",
+        ]
+        Resource = aws_sns_topic.alarms[0].arn
+      },
+      {
+        # Confused-deputy guard: only this account's <environment>-apps-* alarms.
+        Sid       = "CloudWatchAlarmsPublish"
+        Effect    = "Allow"
+        Principal = { Service = "cloudwatch.amazonaws.com" }
+        Action    = "sns:Publish"
+        Resource  = aws_sns_topic.alarms[0].arn
+        Condition = {
+          StringEquals = { "aws:SourceAccount" = local.account_id }
+          ArnLike      = { "aws:SourceArn" = "arn:${local.partition}:cloudwatch:${var.aws_region}:${coalesce(local.account_id, "000000000000")}:alarm:${local.cluster_name}-*" }
+        }
+      },
+    ]
+  })
+}
+
+# =============================================================================
 # Alarms (optional)
 # =============================================================================
 
@@ -716,27 +904,27 @@ module "alarms" {
   count  = local.enabled && var.enable_alarms ? 1 : 0
 
   name_prefix   = local.cluster_name
-  sns_topic_arn = var.alarm_sns_topic_arn
+  sns_topic_arn = local.alarm_topic_arn
 
   alarms = merge([
-    for k in local.service_keys : {
+    for k in local.service_keys : merge({
       "${k}-cpu-high" = {
         namespace           = "AWS/ECS"
         metric_name         = "CPUUtilization"
         comparison_operator = "GreaterThanOrEqualToThreshold"
-        threshold           = 85
+        threshold           = var.services[k].alarms.cpu_threshold
         evaluation_periods  = 3
         dimensions          = { ClusterName = local.cluster_name, ServiceName = k }
-        alarm_description   = "${k}: average CPU >= 85% for 15 minutes."
+        alarm_description   = "${k}: average CPU >= ${var.services[k].alarms.cpu_threshold}% for 15 minutes."
       }
       "${k}-memory-high" = {
         namespace           = "AWS/ECS"
         metric_name         = "MemoryUtilization"
         comparison_operator = "GreaterThanOrEqualToThreshold"
-        threshold           = 85
+        threshold           = var.services[k].alarms.memory_threshold
         evaluation_periods  = 3
         dimensions          = { ClusterName = local.cluster_name, ServiceName = k }
-        alarm_description   = "${k}: average memory >= 85% for 15 minutes."
+        alarm_description   = "${k}: average memory >= ${var.services[k].alarms.memory_threshold}% for 15 minutes."
       }
       "${k}-unhealthy-targets" = {
         namespace           = "AWS/ApplicationELB"
@@ -757,15 +945,52 @@ module "alarms" {
         metric_name         = "HTTPCode_Target_5XX_Count"
         statistic           = "Sum"
         comparison_operator = "GreaterThanThreshold"
-        threshold           = 10
+        threshold           = var.services[k].alarms.error_5xx_threshold
         dimensions = {
           LoadBalancer = module.alb[0].arn_suffix
           TargetGroup  = module.alb[0].target_group_arn_suffixes[k]
         }
-        alarm_description = "${k}: more than 10 target 5xx responses in 5 minutes."
+        alarm_description = "${k}: more than ${var.services[k].alarms.error_5xx_threshold} target 5xx responses in 5 minutes."
       }
-    }
+      }, var.services[k].queue.enabled ? {
+      "${k}-dlq-messages" = {
+        namespace           = "AWS/SQS"
+        metric_name         = "ApproximateNumberOfMessagesVisible"
+        statistic           = "Maximum"
+        comparison_operator = "GreaterThanThreshold"
+        threshold           = 0
+        dimensions          = { QueueName = local.dlq_name[k] }
+        alarm_description   = "${k}: messages are landing in the dead-letter queue ${local.dlq_name[k]}."
+      }
+    } : {}) if contains(keys(local.alarm_services), k)
   ]...)
 
   tags = var.tags
+}
+
+# TargetResponseTime p99 needs an extended (percentile) statistic, which the
+# ops/cloudwatch module does not model, so it is a native alarm here.
+resource "aws_cloudwatch_metric_alarm" "latency_p99" {
+  for_each = local.alarm_services
+
+  alarm_name          = "${local.cluster_name}-${each.key}-latency-p99"
+  alarm_description   = "${each.key}: ALB TargetResponseTime p99 > ${each.value.alarms.p99_latency_seconds}s for 15 minutes."
+  namespace           = "AWS/ApplicationELB"
+  metric_name         = "TargetResponseTime"
+  extended_statistic  = "p99"
+  comparison_operator = "GreaterThanThreshold"
+  threshold           = each.value.alarms.p99_latency_seconds
+  period              = 300
+  evaluation_periods  = 3
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    LoadBalancer = module.alb[0].arn_suffix
+    TargetGroup  = module.alb[0].target_group_arn_suffixes[each.key]
+  }
+
+  alarm_actions = local.alarm_has_action ? [local.alarm_topic_arn] : []
+  ok_actions    = local.alarm_has_action ? [local.alarm_topic_arn] : []
+
+  tags = merge(var.tags, { Service = each.key })
 }

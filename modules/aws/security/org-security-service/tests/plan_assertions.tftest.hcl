@@ -80,3 +80,17 @@ run "enabling_resource_explorer_creates_index_and_view" {
     error_message = "Macie must be disabled when not in enabled_services"
   }
 }
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    enabled_services = ["detective"]
+    tags             = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_detective_graph.this[0].tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_detective_graph.this"
+  }
+}

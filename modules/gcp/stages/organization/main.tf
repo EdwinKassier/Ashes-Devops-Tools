@@ -162,7 +162,7 @@ module "audit_logs" {
   bigquery_kms_key_name     = local.audit_key_names["audit-analytics"]
 }
 
-# Control-plane alerting (audit Security High: "No control-plane alerting").
+# Control-plane alerting.
 # Log-match alerts on org IAM, org policy, VPC-SC, sink/exclusion, custom-role,
 # deny-policy and KMS-destroy changes, plus any break-glass use. Lives in the
 # audit/logging project; an aggregated org sink routes org- and folder-level
@@ -192,7 +192,7 @@ module "control_plane_alerting" {
 # a perimeter. Warn (never fail) so a non-prod bootstrap still applies.
 check "production_requires_admin_containment" {
   assert {
-    condition     = length(local.production_environment_keys) == 0 || var.enable_admin_containment
+    condition     = length(local.production_environment_keys) == 0 || var.enable_admin_containment || var.production_containment_waived
     error_message = "Production environments (${join(", ", local.production_environment_keys)}) exist but enable_admin_containment = false: the audit store and VPC-SC perimeters are not protected from the automation identity. Enable it with a real break-glass group (examples/presets/prod-gcp-organization.tfvars). The WORM lock (enable_audit_bucket_lock) stays a separate, irreversible opt-in."
   }
 }
@@ -318,7 +318,7 @@ locals {
             "accesscontextmanager.googleapis.com/servicePerimeters.replaceAll",
             "accesscontextmanager.googleapis.com/servicePerimeters.commit",
             "accesscontextmanager.googleapis.com/policies.delete",
-            # N3: access levels gate perimeter ingress, and access-policy IAM /
+            # Access levels gate perimeter ingress, and access-policy IAM /
             # scopes decide who may edit perimeters. Creation stays allowed (a
             # new level is inert until a perimeter, itself protected, uses it).
             "accesscontextmanager.googleapis.com/accessLevels.update",
@@ -346,7 +346,7 @@ locals {
             "storage.googleapis.com/buckets.delete",
             "storage.googleapis.com/buckets.setIamPolicy",
             "storage.googleapis.com/buckets.deleteTagBinding",
-            # N3: buckets.update covers retention policy, lifecycle, versioning,
+            # Buckets.update covers retention policy, lifecycle, versioning,
             # soft delete, CMEK and logging config of the audit buckets.
             "storage.googleapis.com/buckets.update",
             "storage.googleapis.com/objects.delete",
@@ -384,10 +384,84 @@ module "org_policies" {
   # outside the org (see docs/known-gaps.md).
   prefer_managed_constraints = var.prefer_managed_constraints
 
-  list_policies = concat([
+  list_policies    = local.effective_list_policies
+  boolean_policies = local.effective_boolean_policies
+
+  # Opt-in custom organization-policy constraints (CEL-defined, resource-shape
+  # guardrails the fixed boolean/list constraints can't express). Default [] =
+  # none. See docs/known-gaps.md.
+  custom_constraints = concat(local.wif_tenant_constraints, var.custom_org_constraints)
+}
+
+# Workload identity federation, tenant level. iam.workloadIdentityPoolProviders
+# limits WHICH issuers a provider may trust; this custom constraint also pins
+# WHO on a shared issuer. A provider for HCP Terraform must condition on this
+# estate's TFC organization, and a GitHub provider must condition on
+# repository_owner_id. Otherwise a pipeline with workloadIdentityPoolAdmin could
+# trust another TFC org or GitHub owner and bind it to a service account: a
+# durable external door that domain-restricted sharing does not see.
+locals {
+  # Anchored structural checks (RE2 via CEL matches), never a substring test:
+  # the tenant clause must be the FIRST conjunct, and everything after it must
+  # be AND-only or ONE balanced parenthesised group, so no top-level `||` can
+  # sit beside it. ("acme" in a condition proves nothing: `org != 'acme'`
+  # contains it too.) [.] / [(] / [)] avoid backslash escaping through HCL+CEL;
+  # `.` matches either quote style around the GitHub owner ID.
+  # CEL operators that bind more loosely than && are `||` and the ternary
+  # `? :`, so neither may appear after the tenant clause at top level: the
+  # AND-only tail excludes `|` and `?`, and a parenthesised tail must end the
+  # string (whatever is INSIDE the group is ANDed with the tenant clause).
+  # tests/plan_assertions.tftest.hcl runs a bypass corpus through RE2.
+  # One balanced group, nested up to 4 deep (has(...) inside a clause list).
+  wif_paren_group = "[(]([^()]|[(]([^()]|[(]([^()]|[(][^()]*[)])*[)])*[)])*[)]"
+  wif_tfc_pattern = var.wif_tenant_pins.tfc_organization == null ? null : (
+    "^assertion[.]terraform_organization_name == '${var.wif_tenant_pins.tfc_organization}'( && [^|?]*)?$"
+  )
+  # The owner ID must sit in MATCHING quotes ('123' or "123"; \x22 is the
+  # double quote, which also reads correctly after CEL unescapes the string).
+  # A wildcard quote would let `== "123' && x" == false` through: a mismatched
+  # quote swallows the conjunction into the string literal, and the trailing
+  # relation makes the whole condition true for every owner.
+  wif_github_patterns = flatten([
+    for id in var.wif_tenant_pins.github_owner_ids : [
+      for q in ["'", "\\x22"] :
+      "^assertion[.]repository_owner_id == ${q}${id}${q}( && [^()|?]*| && ${local.wif_paren_group})?$"
+    ]
+  ])
+
+  wif_tenant_constraints = var.wif_tenant_pins.tfc_organization == null && length(var.wif_tenant_pins.github_owner_ids) == 0 ? [] : [{
+    name         = "custom.wifProviderTenantPinned"
+    display_name = "Workload identity providers pin the tenant"
+    description  = "HCP Terraform providers must start their attribute condition with this estate's TFC organization clause; GitHub Actions providers with an allowed repository_owner_id clause; with nothing OR-ed beside it."
+    action_type  = "DENY"
+    condition = join(" || ", compact([
+      local.wif_tfc_pattern == null ? "" : "(resource.oidc.issuerUri.startsWith('https://${var.wif_tenant_pins.tfc_hostname}') && !resource.attributeCondition.matches(\"${local.wif_tfc_pattern}\"))",
+      length(local.wif_github_patterns) == 0 ? "" : "(resource.oidc.issuerUri.startsWith('https://token.actions.githubusercontent.com') && !(${join(" || ", [for pat in local.wif_github_patterns : "resource.attributeCondition.matches(\"${pat}\")"])}))",
+    ]))
+    method_types   = ["CREATE", "UPDATE"]
+    resource_types = ["iam.googleapis.com/WorkloadIdentityPoolProvider"]
+    enforcement    = var.wif_tenant_pin_enforcement
+  }]
+}
+
+locals {
+  # A bare region ("europe-west2") in gcp.resourceLocations matches the region
+  # only, not its zones, so zonal resources (VMs, GKE nodes, Cloud SQL zones)
+  # would be denied. Bare regions become the in:<region>-locations value group;
+  # anything already a value group or a zone/multi-region is passed through.
+  resource_location_values = [
+    for r in var.allowed_regions : can(regex("^[a-z]+-[a-z]+[0-9]+$", r)) ? "in:${r}-locations" : r
+  ]
+
+  # Workload identity federation is limited to the issuers this estate trusts
+  # (TFC dynamic credentials, GitHub Actions for app deploys). Without it any
+  # project owner can register a provider for an issuer they control and bind
+  # it to a service account: a durable external door that domain-restricted
+  # sharing does not see (principalSet:// members are not domain-checked).
+  default_list_policies = concat([
     {
       constraint     = "gcp.resourceLocations"
-      allowed_values = var.allowed_regions
+      allowed_values = local.resource_location_values
       denied_values  = null
       allow_all      = null
       deny_all       = null
@@ -417,6 +491,30 @@ module "org_policies" {
       denied_values  = null
       allow_all      = null
       deny_all       = true
+    },
+    {
+      constraint     = "iam.workloadIdentityPoolProviders"
+      allowed_values = var.allowed_workload_identity_issuers
+      denied_values  = null
+      allow_all      = null
+      deny_all       = length(var.allowed_workload_identity_issuers) == 0 ? true : null
+    },
+    # No AWS-account federation unless listed.
+    {
+      constraint     = "iam.workloadIdentityPoolAwsAccounts"
+      allowed_values = var.allowed_workload_identity_aws_accounts
+      denied_values  = null
+      allow_all      = null
+      deny_all       = length(var.allowed_workload_identity_aws_accounts) == 0 ? true : null
+    },
+    # Only internal protocol forwarding: no external forwarding rules that
+    # bypass the load-balancer + Cloud Armor edge.
+    {
+      constraint     = "compute.restrictProtocolForwardingCreationForTypes"
+      allowed_values = ["INTERNAL"]
+      denied_values  = null
+      allow_all      = null
+      deny_all       = null
     }
     ], local.cmek_list_policy,
     # Cloud Run ingress: no service may accept traffic from the internet directly
@@ -431,7 +529,7 @@ module "org_policies" {
       deny_all       = null
   }] : [])
 
-  boolean_policies = concat([
+  default_boolean_policies = concat([
     {
       constraint = "compute.skipDefaultNetworkCreation"
       enforce    = true
@@ -482,6 +580,16 @@ module "org_policies" {
     {
       constraint = "compute.requirePrivateGoogleAccess"
       enforce    = true
+    },
+    # No external IPv6 on VPC subnets (the IPv6 twin of vmExternalIpAccess).
+    {
+      constraint = "compute.disableVpcExternalIpv6"
+      enforce    = true
+    },
+    # Zonal DNS for new projects: a zone outage cannot take out instance DNS.
+    {
+      constraint = "compute.setNewProjectDefaultToZonalDNSOnly"
+      enforce    = true
     }
     ], var.enforce_os_login ? [
     # CIS GCP 4.4: OS Login org-wide. Folders in os_login_exempt_environment_keys
@@ -492,16 +600,60 @@ module "org_policies" {
     }
   ] : [])
 
-  # Opt-in custom organization-policy constraints (CEL-defined, resource-shape
-  # guardrails the fixed boolean/list constraints can't express). Default [] =
-  # none. See docs/known-gaps.md (G6).
-  custom_constraints = var.custom_org_constraints
+  # org_policy_overrides: change or drop a baseline constraint without forking
+  # the stage. A boolean override sets enforce; a list override replaces the
+  # value fields; disabled = true removes the constraint from the baseline.
+  # Constraints not in the baseline are added (list if it sets list fields).
+  default_list_constraints    = [for p in local.default_list_policies : p.constraint]
+  default_boolean_constraints = [for p in local.default_boolean_policies : p.constraint]
+  override_is_list = {
+    for c, o in var.org_policy_overrides : c => (
+      contains(local.default_list_constraints, c) ||
+      (!contains(local.default_boolean_constraints, c) && (o.allowed_values != null || o.denied_values != null || o.allow_all != null || o.deny_all != null))
+    )
+  }
+
+  effective_list_policies = concat(
+    [
+      for p in local.default_list_policies : (
+        contains(keys(var.org_policy_overrides), p.constraint) ? {
+          constraint     = p.constraint
+          allowed_values = var.org_policy_overrides[p.constraint].allowed_values
+          denied_values  = var.org_policy_overrides[p.constraint].denied_values
+          allow_all      = var.org_policy_overrides[p.constraint].allow_all
+          deny_all       = var.org_policy_overrides[p.constraint].deny_all
+        } : p
+      ) if !try(var.org_policy_overrides[p.constraint].disabled, false)
+    ],
+    [
+      for c, o in var.org_policy_overrides : {
+        constraint     = c
+        allowed_values = o.allowed_values
+        denied_values  = o.denied_values
+        allow_all      = o.allow_all
+        deny_all       = o.deny_all
+      } if local.override_is_list[c] && !contains(local.default_list_constraints, c) && !o.disabled
+    ],
+  )
+
+  effective_boolean_policies = concat(
+    [
+      for p in local.default_boolean_policies : {
+        constraint = p.constraint
+        enforce    = try(coalesce(var.org_policy_overrides[p.constraint].enforce, p.enforce), p.enforce)
+      } if !try(var.org_policy_overrides[p.constraint].disabled, false)
+    ],
+    [
+      for c, o in var.org_policy_overrides : { constraint = c, enforce = coalesce(o.enforce, true) }
+      if !local.override_is_list[c] && !contains(local.default_boolean_constraints, c) && !o.disabled
+    ],
+  )
 }
 
-# G9: opt-in IAM deny policies at the org node — a coarse, allow-independent
+# Opt-in IAM deny policies at the org node — a coarse, allow-independent
 # backstop for sensitive permissions (evaluated before allow). Default [] = none.
 #
-# Guardrail ownership (N2/H3): in the default guardrail_owner_mode = "separate"
+# Guardrail ownership: in the default guardrail_owner_mode = "separate"
 # this stage does NOT manage deny policies — its apply identity holds no
 # roles/iam.denyAdmin (gcp-bootstrap), so it could not delete the containment
 # policy that constrains it. It outputs the policies as gcloud-ready specs

@@ -75,6 +75,7 @@ run "production_environment_bound_by_workspace_ids" {
   command = plan
 
   variables {
+    phase0_admin_impersonation_expires_at = "2026-12-31T00:00:00Z"
     tfc_workspace_ids = {
       "gcp-bootstrap"     = "ws-Boot1"
       "gcp-organization"  = "ws-Org1"
@@ -118,7 +119,7 @@ run "plan_roles_and_access_policy_defaults" {
   }
 }
 
-# N2/H3: deny-policy ownership defaults to the separate guardrail owner, which
+# Deny-policy ownership defaults to the separate guardrail owner, which
 # gcp-organization reads to stop applying deny policies itself.
 run "guardrail_owner_defaults_to_separate" {
   command = plan

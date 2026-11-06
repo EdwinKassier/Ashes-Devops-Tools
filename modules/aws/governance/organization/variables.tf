@@ -54,14 +54,13 @@ variable "child_ous" {
 variable "enabled_policy_types" {
   description = "Organization policy types to enable at the root. Requires feature_set = ALL."
   type        = list(string)
-  default     = ["SERVICE_CONTROL_POLICY", "RESOURCE_CONTROL_POLICY", "DECLARATIVE_POLICY_EC2", "TAG_POLICY", "BACKUP_POLICY"]
+  default     = ["SERVICE_CONTROL_POLICY", "RESOURCE_CONTROL_POLICY", "DECLARATIVE_POLICY_EC2", "TAG_POLICY", "BACKUP_POLICY", "AISERVICES_OPT_OUT_POLICY"]
 
+  # Shape check rather than a fixed list, so policy types AWS adds later
+  # (they ship regularly) are accepted without a module change.
   validation {
     condition = alltrue([
-      for t in var.enabled_policy_types : contains(
-        ["SERVICE_CONTROL_POLICY", "RESOURCE_CONTROL_POLICY", "DECLARATIVE_POLICY_EC2", "TAG_POLICY", "BACKUP_POLICY", "AISERVICES_OPT_OUT_POLICY", "CHATBOT_POLICY", "SECURITYHUB_POLICY"],
-        t
-      )
+      for t in var.enabled_policy_types : can(regex("^[A-Z][A-Z0-9_]*_POLICY(_[A-Z0-9]+)?$", t))
     ])
     error_message = "enabled_policy_types entries must be valid AWS Organizations policy types."
   }
@@ -99,4 +98,11 @@ variable "aws_service_access_principals" {
     condition     = alltrue([for p in var.aws_service_access_principals : can(regex("[.]amazonaws[.]com$", p))])
     error_message = "Each service access principal must be an AWS service principal ending in .amazonaws.com."
   }
+}
+
+variable "tags" {
+  description = "Tags applied to every taggable resource this module creates (merged after provider default_tags; resource-specific tags such as Name win)."
+  type        = map(string)
+  default     = {}
+  nullable    = false
 }

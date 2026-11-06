@@ -5,7 +5,7 @@
  */
 
 output "services" {
-  description = "Per-service golden-path facts: Cloud Run URL and name, image repository path, runtime and deploy SA emails, and (when a database is declared) the Cloud SQL connection name and IAM DB user."
+  description = "Per-service golden-path facts: Cloud Run URL and name, image repository path, runtime and deploy SA emails, and (when a database is declared) the Cloud SQL connection name and IAM DB user; Pub/Sub topic / subscription / dead-letter topic when pubsub is enabled; the ids of its alert policies."
   value = {
     for k, s in var.services : k => {
       service_name             = module.service[k].name
@@ -16,6 +16,10 @@ output "services" {
       deploy_service_account   = try(local.deploy_sa_email[k], null)
       database_connection_name = s.database == null ? null : module.database[k].connection_name
       database_iam_user        = s.database == null ? null : trimsuffix(local.runtime_sa_email[k], ".gserviceaccount.com")
+      pubsub_topic             = try(local.pubsub_topic[k], null)
+      pubsub_subscription      = try(local.pubsub_subscription[k], null)
+      pubsub_dead_letter_topic = try(local.pubsub_dlq_topic[k], null)
+      alert_policy_ids         = contains(keys(local.services_with_alerts), k) ? [google_monitoring_alert_policy.error_ratio[k].id, google_monitoring_alert_policy.latency_p99[k].id] : []
     }
   }
 }

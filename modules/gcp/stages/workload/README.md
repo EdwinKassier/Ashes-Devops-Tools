@@ -145,7 +145,7 @@ and attaching them to the Shared VPC Host.
 The project itself is created by the shared project primitive
 (modules/gcp/project) — the same module stages/bootstrap and stages/projects
 use — instead of the upstream terraform-google-modules/project-factory
-(audit Modularity-H). The stage keeps only what the upstream factory did for
+The stage keeps only what the upstream factory did for
 this caller: a random 4-hex project-ID suffix, a dedicated
 "project-service-account", and disabling the default compute SA.
 container.googleapis.com is no longer force-enabled: set enable\_gke.

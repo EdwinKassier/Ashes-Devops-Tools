@@ -103,14 +103,14 @@ run "workload_consumes_cross_root_contract" {
     error_message = "with app_services = {} and every app flag off, the app-services stage must create nothing"
   }
 
-  # No service_teams by default: the registry creates nothing (audit H10).
+  # No service_teams by default: the registry creates nothing.
   assert {
     condition     = length(module.service_team) == 0
     error_message = "with no service_teams declared, the registry must create no service projects"
   }
 }
 
-# Data-driven service-team registry (audit H10): declaring a team is a map entry,
+# Data-driven service-team registry: declaring a team is a map entry,
 # which fans out to one workload module instance with normalised folder/billing IDs.
 run "service_team_registry_fans_out" {
   command = plan
@@ -142,7 +142,7 @@ run "service_team_registry_fans_out" {
   }
 }
 
-# SaaS secret bridge (audit H9, hybrid option C): opt-in, default off, and when
+# SaaS secret bridge: opt-in, default off, and when
 # enabled it writes the Supabase connection details into a Secret Manager secret.
 run "saas_secret_bridge_default_off" {
   command = plan

@@ -222,7 +222,7 @@ variable "budget_currency" {
 }
 
 variable "custom_org_constraints" {
-  description = "Opt-in custom organization-policy constraints (CEL-defined resource-shape guardrails) applied at the org node. Default [] = none. Google recommends layering custom constraints on the managed baseline. See docs/known-gaps.md (G6)."
+  description = "Opt-in custom organization-policy constraints (CEL-defined resource-shape guardrails), created AND enforced at the org node (enforcement = enforce | dry_run | off). Default [] = none. See docs/known-gaps.md."
   type = list(object({
     name           = string
     display_name   = string
@@ -231,18 +231,19 @@ variable "custom_org_constraints" {
     condition      = string
     method_types   = list(string)
     resource_types = list(string)
+    enforcement    = optional(string, "enforce")
   }))
   default = []
 }
 
 variable "enable_audit_bucket_lock" {
-  description = "Opt-in WORM lock on the org audit-log GCS bucket (locked retention of audit_log_retention_days). Default false preserves the current operator-correctable behaviour. A locked policy is IRREVERSIBLE — enable only for compliance regimes that require tamper-proof retention. See docs/known-gaps.md (G8)."
+  description = "Opt-in WORM lock on the org audit-log GCS bucket (locked retention of audit_log_retention_days). Default false preserves the current operator-correctable behaviour. A locked policy is IRREVERSIBLE — enable only for compliance regimes that require tamper-proof retention. See docs/known-gaps.md."
   type        = bool
   default     = false
 }
 
 variable "iam_deny_policies" {
-  description = "Opt-in IAM deny policies applied at the org node — a coarse, allow-independent backstop blocking specific permissions for specific principals regardless of roles (deny before allow). Default [] = none. See docs/known-gaps.md (G9)."
+  description = "Opt-in IAM deny policies applied at the org node — a coarse, allow-independent backstop blocking specific permissions for specific principals regardless of roles (deny before allow). Default [] = none. See docs/known-gaps.md."
   type = list(object({
     name         = string
     display_name = optional(string)
@@ -318,13 +319,13 @@ variable "enable_cis_log_metrics" {
 }
 
 variable "enable_control_plane_alerting" {
-  description = "Log-match alerts on org IAM / org policy / VPC-SC / sink / custom-role / deny-policy / KMS-destroy changes and on break-glass use (audit Security High). Default true."
+  description = "Log-match alerts on org IAM / org policy / VPC-SC / sink / custom-role / deny-policy / KMS-destroy changes and on break-glass use. Default true."
   type        = bool
   default     = true
 }
 
 variable "alert_notification_emails" {
-  description = "Email addresses notified by the control-plane alerts. Default [] (a check warns when no destination is set)."
+  description = "Email addresses notified by the control-plane alerts. Empty (default) = gcp.alert_emails from config/landing-zone.yaml; a check warns when no destination is set."
   type        = list(string)
   default     = []
 }
@@ -361,13 +362,13 @@ variable "cmek_required_services" {
 }
 
 variable "enable_admin_containment" {
-  description = "IAM deny policy blocking (for all but containment_exempt_principals) org-wide sink update/delete, exclusion changes, log-bucket delete and VPC-SC perimeter update/delete, plus — tag-scoped to the audit store — bucket delete/IAM change/untag, object delete, key-version destroy/disable and key IAM change. Once on, any sink/exclusion/perimeter change must be applied by break-glass. Default false; examples/presets/prod-gcp-organization.tfvars turns it on."
+  description = "IAM deny policy blocking (for all but containment_exempt_principals) org-wide sink update/delete, exclusion changes, log-bucket delete and VPC-SC perimeter update/delete, plus — tag-scoped to the audit store — bucket delete/IAM change/untag, object delete, key-version destroy/disable and key IAM change. Once on, any sink/exclusion/perimeter change must be applied by break-glass. Null (default) = gcp.admin_containment from config, else ON whenever an environment is_production. Needs a break-glass principal (gcp.break_glass_group or containment_exempt_principals)."
   type        = bool
-  default     = false
+  default     = null
 }
 
 variable "containment_exempt_principals" {
-  description = "Break-glass principals exempt from the admin-containment deny policy, as IAM v2 principal identifiers (e.g. principalSet://goog/group/break-glass@acme.com). Required (non-empty) when enable_admin_containment is true. Placeholder values (REPLACE-ME, your-domain, example.com, .invalid) are rejected so a copied preset fails loudly."
+  description = "Break-glass principals exempt from the admin-containment deny policy, as IAM v2 principal identifiers (e.g. principalSet://goog/group/break-glass@acme.com). Empty (default) = principalSet://goog/group/<gcp.break_glass_group> from config. Required (non-empty) when containment is on. Placeholder values (REPLACE-ME, your-domain, example.com, .invalid) are rejected so a copied preset fails loudly."
   type        = list(string)
   default     = []
 
@@ -476,4 +477,56 @@ variable "restrict_cloud_run_ingress" {
   description = "Enforce run.allowedIngress org-wide so Cloud Run services accept only internal or Cloud Load Balancing traffic (never ingress \"all\"). Public apps are served through the external ALB + Cloud Armor. Default true."
   type        = bool
   default     = true
+}
+
+variable "org_policy_overrides" {
+  description = "Per-constraint overrides of the organization-policy baseline (stage org_policy_overrides): set enforce, replace list values, disabled = true to drop, or add a constraint. Use it instead of forking the stage."
+  type = map(object({
+    enforce        = optional(bool)
+    allowed_values = optional(list(string))
+    denied_values  = optional(list(string))
+    allow_all      = optional(bool)
+    deny_all       = optional(bool)
+    disabled       = optional(bool, false)
+  }))
+  default  = {}
+  nullable = false
+}
+
+variable "allowed_workload_identity_issuers" {
+  description = "OIDC issuers workload identity pool providers may trust (org policy iam.workloadIdentityPoolProviders). Null = https://<tfc_hostname> plus GitHub Actions. Add GitLab / TFE hosts when used."
+  type        = list(string)
+  default     = null
+}
+
+variable "allowed_workload_identity_aws_accounts" {
+  description = "AWS account IDs workload identity pools may federate (iam.workloadIdentityPoolAwsAccounts). Empty (default) denies AWS-account federation."
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
+
+variable "tfc_hostname" {
+  description = "HCP Terraform / Terraform Enterprise hostname whose dynamic-credential tokens the WIF pools trust (app.terraform.io, app.eu.terraform.io or your TFE host)."
+  type        = string
+  default     = "app.terraform.io"
+}
+
+variable "pin_wif_to_tfc_organization" {
+  description = "Enforce (custom org-policy constraint) that every HCP Terraform workload identity provider references tfc_organization in its attribute_condition, so no pipeline can trust another TFC organization. Default true."
+  type        = bool
+  default     = true
+}
+
+variable "wif_github_owner_ids" {
+  description = "Numeric GitHub owner IDs a GitHub Actions workload identity provider must condition on (repository_owner_id). Empty (default) leaves GitHub providers tenant-unpinned (the issuer is still allow-listed)."
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
+
+variable "wif_tenant_pin_enforcement" {
+  description = "custom.wifProviderTenantPinned: enforce (default), dry_run (log only: stage it first on an org with existing WIF providers) or off."
+  type        = string
+  default     = "enforce"
 }

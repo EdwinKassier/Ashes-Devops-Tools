@@ -22,15 +22,25 @@ module "aws_organization" {
   cost_anomaly_email           = var.cost_anomaly_email
 
   # Member-account TFC workload identity (OIDC provider + tfc-plan / tfc-apply).
-  enable_tfc_oidc_baseline              = var.enable_tfc_oidc_baseline
-  tfc_organization                      = local.tfc_organization
-  tfc_hostname                          = var.tfc_hostname
-  tfc_project                           = local.tfc_project
-  tfc_workspace_bindings                = local.tfc_workspace_bindings
-  tfc_oidc_allow_workspace_wildcards    = var.tfc_oidc_allow_workspace_wildcards
-  tfc_apply_role_policy_arns            = var.tfc_apply_role_policy_arns
-  tfc_enable_apply_permissions_boundary = var.tfc_enable_apply_permissions_boundary
-  tfc_apply_permissions_boundary_arn    = var.tfc_apply_permissions_boundary_arn
+  enable_tfc_oidc_baseline               = var.enable_tfc_oidc_baseline
+  tfc_organization                       = local.tfc_organization
+  tfc_hostname                           = var.tfc_hostname
+  pin_tfc_federation_to_org              = var.pin_tfc_federation_to_org
+  enable_tfc_management_roles            = var.enable_tfc_management_roles
+  backup_service_role_region             = local.aws_region
+  org_policy_overrides                   = var.org_policy_overrides
+  partition                              = var.partition
+  disabled_org_policies                  = var.disabled_org_policies
+  org_policy_attachments                 = var.org_policy_attachments
+  github_federation_owners               = local.github_federation_owners
+  github_federation_owner_ids            = var.github_federation_owner_ids
+  allowed_builtin_web_identity_providers = var.allowed_builtin_web_identity_providers
+  tfc_project                            = local.tfc_project
+  tfc_workspace_bindings                 = local.tfc_workspace_bindings
+  tfc_oidc_allow_workspace_wildcards     = var.tfc_oidc_allow_workspace_wildcards
+  tfc_apply_role_policy_arns             = var.tfc_apply_role_policy_arns
+  tfc_enable_apply_permissions_boundary  = var.tfc_enable_apply_permissions_boundary
+  tfc_apply_permissions_boundary_arn     = var.tfc_apply_permissions_boundary_arn
 
   # Member-account break-glass role (occupies the SCP-exempt break-glass name in
   # every member account; trusts the management break-glass principal + MFA).

@@ -44,6 +44,17 @@ resource "google_service_account_iam_member" "impersonation" {
   service_account_id = google_service_account.service_account.name
   role               = "roles/iam.serviceAccountTokenCreator"
   member             = each.value
+
+  # Time-bound human access: the grant stops working at the expiry even if
+  # nobody remembers to remove it.
+  dynamic "condition" {
+    for_each = var.impersonation_expires_at == null ? [] : [var.impersonation_expires_at]
+    content {
+      title       = "expires-${replace(substr(condition.value, 0, 10), "-", "")}"
+      description = "Impersonation grant expires at ${condition.value}."
+      expression  = "request.time < timestamp(\"${condition.value}\")"
+    }
+  }
 }
 
 # Allow specified members to use the service account for Workload Identity

@@ -25,7 +25,7 @@ locals {
   managed_attachments = merge([
     for ps_name, ps in var.permission_sets : {
       for arn in ps.managed_policy_arns :
-      "${ps_name}/${arn}" => { ps = ps_name, arn = arn }
+      "${ps_name}/${arn}" => { ps = ps_name, arn = replace(arn, "/^arn:aws:/", "arn:${local.partition}:") }
     }
   ]...)
 }
@@ -37,6 +37,7 @@ resource "aws_ssoadmin_permission_set" "this" {
   name             = each.key
   description      = each.value.description
   session_duration = each.value.session_duration # ISO-8601 duration, e.g. "PT1H"
+  tags             = var.tags
 }
 
 resource "aws_ssoadmin_managed_policy_attachment" "this" {

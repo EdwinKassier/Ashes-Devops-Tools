@@ -54,15 +54,15 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_acm_certificate.this (modules/aws/security/edge-security/main.tf#L89)
-- resource.aws_cloudfront_distribution.this (modules/aws/security/edge-security/main.tf#L100)
-- resource.aws_cloudfront_vpc_origin.this (modules/aws/security/edge-security/main.tf#L207)
-- resource.aws_shield_protection.this (modules/aws/security/edge-security/main.tf#L183)
+- resource.aws_acm_certificate.this (modules/aws/security/edge-security/main.tf#L91)
+- resource.aws_cloudfront_distribution.this (modules/aws/security/edge-security/main.tf#L104)
+- resource.aws_cloudfront_vpc_origin.this (modules/aws/security/edge-security/main.tf#L214)
+- resource.aws_shield_protection.this (modules/aws/security/edge-security/main.tf#L189)
 - resource.aws_wafv2_web_acl.cloudfront (modules/aws/security/edge-security/main.tf#L19)
-- resource.aws_wafv2_web_acl.regional (modules/aws/security/edge-security/main.tf#L234)
-- resource.aws_wafv2_web_acl_association.regional (modules/aws/security/edge-security/main.tf#L298)
-- resource.aws_wafv2_web_acl_logging_configuration.regional (modules/aws/security/edge-security/main.tf#L304)
-- resource.aws_wafv2_web_acl_logging_configuration.this (modules/aws/security/edge-security/main.tf#L191)
+- resource.aws_wafv2_web_acl.regional (modules/aws/security/edge-security/main.tf#L243)
+- resource.aws_wafv2_web_acl_association.regional (modules/aws/security/edge-security/main.tf#L309)
+- resource.aws_wafv2_web_acl_logging_configuration.regional (modules/aws/security/edge-security/main.tf#L315)
+- resource.aws_wafv2_web_acl_logging_configuration.this (modules/aws/security/edge-security/main.tf#L198)
 
 
 ## Inputs
@@ -81,6 +81,7 @@ The following resources are created:
 | <a name="input_origin_domain_name"></a> [origin\_domain\_name](#input\_origin\_domain\_name) | DNS name of the origin CloudFront fetches from (an ALB, S3 website endpoint, or arbitrary host). | `string` | `"origin.example.com"` | no |
 | <a name="input_origin_request_policy_id"></a> [origin\_request\_policy\_id](#input\_origin\_request\_policy\_id) | ID of the CloudFront origin request policy for the default behavior (which viewer headers, cookies and query strings reach the origin). Null forwards none beyond the cache key. For an application origin use the managed "AllViewerExceptHostHeader" policy (b689b0a8-53d0-40ab-baf2-68738e2966ac). | `string` | `null` | no |
 | <a name="input_regional_waf_resource_arn"></a> [regional\_waf\_resource\_arn](#input\_regional\_waf\_resource\_arn) | ARN of the regional resource (ALB, API Gateway stage, AppSync API, Cognito user pool) the regional Web ACL is associated with. Required when enable\_regional\_waf is true. | `string` | `""` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 | <a name="input_vpc_origin_arn"></a> [vpc\_origin\_arn](#input\_vpc\_origin\_arn) | ARN of the internal ALB / NLB (or EC2 instance) the VPC origin targets. Required when enable\_vpc\_origin is true. | `string` | `""` | no |
 | <a name="input_vpc_origin_http_port"></a> [vpc\_origin\_http\_port](#input\_vpc\_origin\_http\_port) | Port CloudFront uses for HTTP to the VPC origin. | `number` | `80` | no |
 | <a name="input_vpc_origin_https_port"></a> [vpc\_origin\_https\_port](#input\_vpc\_origin\_https\_port) | Port CloudFront uses for HTTPS to the VPC origin. | `number` | `443` | no |

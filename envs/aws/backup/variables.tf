@@ -9,7 +9,7 @@ variable "landing_zone_config_path" {
 }
 
 variable "tfc_organization" {
-  description = "Terraform Cloud organization that owns this root's workspace and the aws-organization workspace it reads. Supplied to the backend via backend.hcl / TF_CLI_ARGS_init (kept out of the code so the same root works across orgs and CI). Null = org.tfc.organization from config/landing-zone.yaml."
+  description = "Terraform Cloud organization that owns this root's workspace and the aws-organization workspace it reads. Supplied to the backend via the TF_CLOUD_ORGANIZATION environment variable (kept out of the code so the same root works across orgs and CI). Null = org.tfc.organization from config/landing-zone.yaml."
   type        = string
   default     = null
 }
@@ -40,7 +40,7 @@ variable "organization_contract" {
 # -----------------------------------------------------------------------------
 
 variable "management_account_id" {
-  description = "12-digit AWS management (payer) account ID. The default provider sets allowed_account_ids to this, so Terraform fails fast if the resolved credentials are a different account (audit C4). Null = aws.management_account_id from config/landing-zone.yaml (quote it there); no built-in default."
+  description = "12-digit AWS management (payer) account ID. The default provider sets allowed_account_ids to this, so Terraform fails fast if the resolved credentials are a different account. Null = aws.management_account_id from config/landing-zone.yaml (quote it there); no built-in default."
   type        = string
   default     = null
 

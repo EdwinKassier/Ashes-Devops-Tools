@@ -8,13 +8,16 @@
       "Resource": "*",
       "Condition": {
         "StringLike": {
-          "aws:PrincipalArn": "arn:aws:iam::*:root"
+          "aws:PrincipalArn": "arn:${partition}:iam::*:root"
         },
         "ArnNotLike": {
           "aws:PrincipalArn": [
             "${terraform_run_role_arn}",
             "${break_glass_role_arn}"
           ]
+        },
+        "BoolIfExists": {
+          "aws:AssumedRoot": "false"
         }
       }
     },
@@ -30,6 +33,23 @@
       "Condition": {
         "ArnNotLike": {
           "aws:PrincipalArn": ${break_glass_arns}
+        }
+      }
+    },
+    {
+      "Sid": "DenyIdentityProviderChanges",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateOpenIDConnectProvider",
+        "iam:AddClientIDToOpenIDConnectProvider",
+        "iam:UpdateOpenIDConnectProviderThumbprint",
+        "iam:CreateSAMLProvider",
+        "iam:UpdateSAMLProvider"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": ${idp_admin_arns}
         }
       }
     },
@@ -52,7 +72,15 @@
         "sqs:UntagQueue",
         "secretsmanager:CreateSecret",
         "secretsmanager:TagResource",
-        "secretsmanager:UntagResource"
+        "secretsmanager:UntagResource",
+        "ecr:CreateRepository",
+        "ecr:TagResource",
+        "ecr:UntagResource",
+        "logs:CreateLogGroup",
+        "logs:TagResource",
+        "logs:TagLogGroup",
+        "logs:UntagResource",
+        "logs:UntagLogGroup"
       ],
       "Resource": "*",
       "Condition": {

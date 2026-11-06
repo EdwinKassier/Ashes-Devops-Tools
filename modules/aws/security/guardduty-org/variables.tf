@@ -29,3 +29,22 @@ variable "enable_ebs_malware_protection" {
   type        = bool
   default     = true
 }
+
+variable "runtime_monitoring_agent_management" {
+  description = "Runtime Monitoring agent types GuardDuty deploys and manages automatically in every member account (additional_configuration, auto_enable ALL). Default covers ECS Fargate (this repo's runtime), EKS and EC2. Without agent management, Runtime Monitoring is billed but produces no runtime findings."
+  type        = list(string)
+  default     = ["ECS_FARGATE_AGENT_MANAGEMENT", "EKS_ADDON_MANAGEMENT", "EC2_AGENT_MANAGEMENT"]
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for n in var.runtime_monitoring_agent_management : contains(["ECS_FARGATE_AGENT_MANAGEMENT", "EKS_ADDON_MANAGEMENT", "EC2_AGENT_MANAGEMENT"], n)])
+    error_message = "runtime_monitoring_agent_management entries must be ECS_FARGATE_AGENT_MANAGEMENT, EKS_ADDON_MANAGEMENT or EC2_AGENT_MANAGEMENT."
+  }
+}
+
+variable "tags" {
+  description = "Tags applied to every taggable resource this module creates (merged after provider default_tags; resource-specific tags such as Name win)."
+  type        = map(string)
+  default     = {}
+  nullable    = false
+}

@@ -73,19 +73,37 @@ for pf in envs/gcp/*/providers.tf; do
   fi
 done
 
-echo "==> Multi-platform lockfiles (INFORMATIONAL — reported, never fails yet)"
+echo "==> No audit provenance codes in Terraform code (CLAUDE.md: they belong in docs/known-gaps.md)"
+# Comments and descriptions read as a remediation log when they carry finding
+# IDs ("audit C2", "(audit H9, option C)"). Point at docs instead.
+prov=$(git grep -niE '\baudit (finding )?([A-Z]{1,2}[0-9]+|round|Modularity|Security|Boilerplate|M-ops)\b|\(G[0-9]+\)|finding #[0-9]+|round-[0-9]+ ' -- '*.tf' '*.hcl' 2>/dev/null || true)
+if [ -n "$prov" ]; then
+  echo "$prov" | sed 's/^/  /' >&2
+  echo "  ERROR: audit/finding provenance codes in Terraform code (see above)" >&2
+  fail=1
+fi
+
+echo "==> Multi-platform lockfiles (FATAL for deployable roots, informational for library modules)"
 # A lockfile written by a plain local `terraform init` carries one h1: hash per
 # provider (the host platform). The canonical command writes one per platform:
 #   terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64
 # A provider block with fewer than 3 h1: hashes marks the file single-platform.
-# TODO: make this fatal once the repo-wide lock sweep lands.
 nlocks=0
 nsingle=0
 while IFS= read -r lf; do
   nlocks=$((nlocks + 1))
   if awk '/^provider /{ if (inblk && h < 3) bad=1; inblk=1; h=0 } /"h1:/{ h++ } END { if (inblk && h < 3) bad=1; exit bad ? 0 : 1 }' "$lf"; then
     nsingle=$((nsingle + 1))
-    [ -z "${LOCK_VERBOSE:-}" ] || echo "  single-platform: $lf"
+    case "$lf" in
+      # A deployable root's lockfile is what CI (linux) and operators (macOS)
+      # actually install from: a single-platform one fails `init -lockfile=readonly`
+      # on the other platform. Library-module lockfiles are ignored by consumers.
+      envs/* | tests/e2e/*)
+        echo "  ERROR single-platform root lockfile: $lf (terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64)" >&2
+        fail=1
+        ;;
+      *) [ -z "${LOCK_VERBOSE:-}" ] || echo "  single-platform: $lf" ;;
+    esac
   fi
 done < <(git ls-files '*.terraform.lock.hcl' 2>/dev/null)
 echo "  ${nsingle}/${nlocks} committed lockfiles lack the linux_amd64/darwin_arm64/darwin_amd64 h1: hashes (LOCK_VERBOSE=1 lists them)"

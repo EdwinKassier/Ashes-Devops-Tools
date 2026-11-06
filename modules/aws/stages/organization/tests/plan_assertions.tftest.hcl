@@ -9,10 +9,11 @@
 mock_provider "aws" {}
 
 variables {
-  terraform_run_role_arn  = "arn:aws:iam::111111111111:role/tfc-run-role"
-  break_glass_role_arn    = "arn:aws:iam::111111111111:role/break-glass"
-  log_archive_bucket_name = "sra-log-archive-111111111111"
-  tfc_organization        = "acme"
+  terraform_run_role_arn   = "arn:aws:iam::111111111111:role/tfc-run-role"
+  break_glass_role_arn     = "arn:aws:iam::111111111111:role/break-glass"
+  log_archive_bucket_name  = "sra-log-archive-111111111111"
+  tfc_organization         = "acme"
+  github_federation_owners = ["acme"]
 }
 
 override_module {
@@ -35,6 +36,18 @@ override_module {
       "Workloads/NonProd" = "ou-abcd-nonprod0"
     }
   }
+}
+
+# tfc-management-roles reads the partition / caller identity; mocks return
+# random strings the provider's ARN validators reject, so pin real shapes.
+override_data {
+  target = module.tfc_management_roles[0].data.aws_partition.current
+  values = { partition = "aws" }
+}
+
+override_data {
+  target = module.tfc_management_roles[0].data.aws_caller_identity.current
+  values = { account_id = "111111111111" }
 }
 
 run "composes_accounts_and_guardrails" {
@@ -170,4 +183,104 @@ run "tfc_oidc_baseline_can_be_disabled" {
     condition     = length(module.tfc_oidc_baseline) == 0 && output.tfc_plan_role_arns == {} && output.tfc_oidc_stack_set_name == null
     error_message = "enable_tfc_oidc_baseline = false must compose no baseline and publish empty role maps"
   }
+}
+
+# The RCP pins TFC web-identity federation to this TFC organization by default.
+run "rcp_pins_tfc_federation_by_default" {
+  command = plan
+
+  variables {
+    github_federation_owners = ["acme"]
+  }
+
+  assert {
+    condition = (
+      one([for s in jsondecode(module.policies.policy_contents["rcp-data-perimeter"]).Statement : s if s.Sid == "PinTfcFederationToOrg"]).Condition.StringNotLike["app.terraform.io:sub"] == "organization:acme:*" &&
+      length([for s in jsondecode(module.policies.policy_contents["rcp-data-perimeter"]).Statement : s if s.Sid == "PinGithubFederationToOwners"]) == 1
+    )
+    error_message = "the stage must pin TFC federation to tfc_organization and GitHub federation to github_federation_owners."
+  }
+}
+
+run "rcp_tfc_pin_opt_out" {
+  command = plan
+
+  variables {
+    pin_tfc_federation_to_org = false
+    github_federation_owners  = []
+    enable_tfc_oidc_baseline  = false
+  }
+
+  assert {
+    condition     = length([for s in jsondecode(module.policies.policy_contents["rcp-data-perimeter"]).Statement : s if startswith(s.Sid, "Pin")]) == 0
+    error_message = "pin_tfc_federation_to_org = false (and no GitHub owners) must render no pin statements."
+  }
+}
+
+# The stage attaches the EC2 baseline and AI opt-out at the root, and does not
+# create the unattached duplicate backup policy (the backup stage owns it).
+run "root_baseline_policies_attached" {
+  command = plan
+
+  assert {
+    condition = (
+      module.policies.attachment_ids != null &&
+      contains(keys(local.effective_attachments), "declarative-baseline@root") &&
+      contains(keys(local.effective_attachments), "aiservices-opt-out@root") &&
+      !contains(keys(module.policies.policy_contents), "backup-policy")
+    )
+    error_message = "the root must get the EC2 baseline and AI opt-out; backup-policy is disabled by default."
+  }
+}
+
+# aws-organization deploys the member Backup service role to the Workloads OU.
+run "backup_service_role_stack_set" {
+  command = plan
+
+  assert {
+    condition = (
+      aws_cloudformation_stack_set.backup_service_role[0].permission_model == "SERVICE_MANAGED" &&
+      tolist(aws_cloudformation_stack_set_instance.backup_service_role[0].deployment_targets[0].organizational_unit_ids) == tolist(["ou-abcd-workload0"]) &&
+      jsondecode(aws_cloudformation_stack_set.backup_service_role[0].template_body).Resources.BackupServiceRole.Properties.RoleName == "aws-backup-org-role"
+    )
+    error_message = "the Backup service role must be deployed by a service-managed StackSet to the Workloads OU."
+  }
+}
+
+run "unpinned_github_with_baseline_warns" {
+  command = plan
+
+  variables {
+    github_federation_owners = []
+  }
+
+  expect_failures = [check.github_federation_pinned]
+}
+
+# aws-organization owns the trail delivery role and Identity Center delegation,
+# so the least-privilege aws-security role needs neither IAM writes nor sso.
+run "organization_owns_trail_role_and_identity_center_delegation" {
+  command = plan
+
+  assert {
+    condition = (
+      aws_iam_role.org_trail_cloudwatch[0].name == "org-trail-cloudwatch-delivery" &&
+      jsondecode(aws_iam_role.org_trail_cloudwatch[0].assume_role_policy).Statement[0].Principal.Service == "cloudtrail.amazonaws.com" &&
+      aws_organizations_delegated_administrator.identity_center[0].service_principal == "sso.amazonaws.com"
+    )
+    error_message = "aws-organization must create the trail delivery role and register the Identity Center delegated admin."
+  }
+}
+
+run "github_provider_only_when_pinned" {
+  command = plan
+
+  variables {
+    github_federation_owners = []
+  }
+
+  # The baseline's own suite (github_provider_opt_out) proves that
+  # create_github_oidc_provider = false omits the provider; the template body
+  # is unknown at plan here (it embeds computed account IDs).
+  expect_failures = [check.github_federation_pinned]
 }

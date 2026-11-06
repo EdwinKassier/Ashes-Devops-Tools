@@ -14,8 +14,8 @@
 landing_zone_name = "acme"
 
 # NB: the Terraform Cloud org that owns this root's workspace is a BACKEND config
-# value, not a tfvars input. Pass it to `terraform init` via backend.hcl or
-# TF_CLI_ARGS_init="-backend-config=organization=<your-tfc-org>" (see backend.tf).
+# value, not a tfvars input. Export TF_CLOUD_ORGANIZATION=<your-tfc-org> before
+# `terraform init` (see backend.tf).
 
 # Optional — primary region for the default (management-account) provider.
 aws_region = "eu-west-2"

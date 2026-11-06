@@ -175,13 +175,13 @@ The following resources are created:
 
 
 - resource.google_iam_workload_identity_pool.pool (modules/gcp/iam/workload-identity/main.tf#L5)
-- resource.google_iam_workload_identity_pool_provider.aws (modules/gcp/iam/workload-identity/main.tf#L112)
+- resource.google_iam_workload_identity_pool_provider.aws (modules/gcp/iam/workload-identity/main.tf#L114)
 - resource.google_iam_workload_identity_pool_provider.github (modules/gcp/iam/workload-identity/main.tf#L14)
 - resource.google_iam_workload_identity_pool_provider.gitlab (modules/gcp/iam/workload-identity/main.tf#L79)
-- resource.google_iam_workload_identity_pool_provider.tfc (modules/gcp/iam/workload-identity/main.tf#L190)
-- resource.google_service_account_iam_member.github_workload_identity (modules/gcp/iam/workload-identity/main.tf#L143)
-- resource.google_service_account_iam_member.gitlab_workload_identity (modules/gcp/iam/workload-identity/main.tf#L158)
-- resource.google_service_account_iam_member.tfc_workload_identity (modules/gcp/iam/workload-identity/main.tf#L237)
+- resource.google_iam_workload_identity_pool_provider.tfc (modules/gcp/iam/workload-identity/main.tf#L192)
+- resource.google_service_account_iam_member.github_workload_identity (modules/gcp/iam/workload-identity/main.tf#L145)
+- resource.google_service_account_iam_member.gitlab_workload_identity (modules/gcp/iam/workload-identity/main.tf#L160)
+- resource.google_service_account_iam_member.tfc_workload_identity (modules/gcp/iam/workload-identity/main.tf#L239)
 
 
 ## Inputs
@@ -203,9 +203,10 @@ The following resources are created:
 | <a name="input_github_organization"></a> [github\_organization](#input\_github\_organization) | GitHub organization to restrict access to (optional). Must contain only alphanumeric characters and hyphens — value is interpolated into a CEL expression. | `string` | `null` | no |
 | <a name="input_github_repository_owner_id"></a> [github\_repository\_owner\_id](#input\_github\_repository\_owner\_id) | Immutable numeric GitHub owner (org/user) ID. When set, the GitHub provider attribute\_condition also requires assertion.repository\_owner\_id to match, so an org rename / name squat cannot satisfy the trust. | `string` | `null` | no |
 | <a name="input_github_sa_bindings"></a> [github\_sa\_bindings](#input\_github\_sa\_bindings) | List of GitHub repository to service account bindings. repository must be 'owner/repo' format — value is interpolated into a CEL expression. Set repository\_id (the immutable numeric GitHub repository ID) to bind on attribute.repository\_id instead of the mutable repository name. Set key when service\_account\_email is unknown until apply. | <pre>list(object({<br/>    repository            = string # Format: owner/repo<br/>    repository_id         = optional(string)<br/>    service_account_email = string<br/>    # Optional static for_each key. Set it when service_account_email is only<br/>    # known after apply (e.g. an SA created in the same plan); otherwise the key<br/>    # defaults to "<repository>-<service_account_email>".<br/>    key = optional(string)<br/>  }))</pre> | `[]` | no |
-| <a name="input_gitlab_namespace"></a> [gitlab\_namespace](#input\_gitlab\_namespace) | GitLab namespace to restrict access to (optional). Value is interpolated into a CEL startsWith() expression — must not contain single quotes. | `string` | `null` | no |
+| <a name="input_gitlab_namespace"></a> [gitlab\_namespace](#input\_gitlab\_namespace) | GitLab namespace (group path) to restrict access to. Matches the namespace itself or any sub-group under it (namespace\_path == X \|\| startsWith(X + '/')), never a sibling sharing the prefix. Interpolated into CEL, so it must not contain single quotes. | `string` | `null` | no |
 | <a name="input_gitlab_sa_bindings"></a> [gitlab\_sa\_bindings](#input\_gitlab\_sa\_bindings) | List of GitLab project to service account bindings | <pre>list(object({<br/>    project_path          = string # Format: group/project<br/>    service_account_email = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_gitlab_url"></a> [gitlab\_url](#input\_gitlab\_url) | GitLab instance URL (e.g., https://gitlab.com) | `string` | `"https://gitlab.com"` | no |
+| <a name="input_tfc_hostname"></a> [tfc\_hostname](#input\_tfc\_hostname) | HCP Terraform / Terraform Enterprise hostname that issues the dynamic-credential tokens (app.terraform.io, app.eu.terraform.io, or a TFE host). | `string` | `"app.terraform.io"` | no |
 | <a name="input_tfc_organization"></a> [tfc\_organization](#input\_tfc\_organization) | Terraform Cloud organization name. Value is interpolated into a CEL expression — must not contain single quotes. | `string` | `null` | no |
 | <a name="input_tfc_organization_id"></a> [tfc\_organization\_id](#input\_tfc\_organization\_id) | Optional immutable Terraform Cloud organization ID (org-xxxxxxxx). When set, the provider attribute\_condition also pins assertion.terraform\_organization\_id, so a renamed/re-registered organization name cannot satisfy the trust. | `string` | `null` | no |
 | <a name="input_tfc_project_ids"></a> [tfc\_project\_ids](#input\_tfc\_project\_ids) | Optional allow-list of Terraform Cloud project IDs (prj-xxxxxxxx). When non-empty, the provider attribute\_condition also requires assertion.terraform\_project\_id to be one of these, so a workspace created in any other TFC project cannot authenticate. | `list(string)` | `[]` | no |

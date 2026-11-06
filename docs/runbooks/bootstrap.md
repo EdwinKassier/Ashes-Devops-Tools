@@ -33,7 +33,11 @@ These must exist before you touch Terraform. None of them is created by this rep
 - [ ] **A GCP Organization + Cloud Identity / Workspace domain.** The org is looked up **by domain**, not by ID (`data.google_organization.org` with `domain = var.domain` in `envs/gcp/organization/data.tf`). The organization and its backing Cloud Identity / Google Workspace domain must already exist. Find your org: `gcloud organizations list`.
 - [ ] **A billing account, linked.** Looked up via `data.google_billing_account.billing` — by ID (`billing_account`) or by display name (`billing_account_display_name`); at least one must be set (enforced by both a variable `validation` and a `lifecycle.precondition`). The account must be **open**. Creating and linking a billing account is a console/admin step. Find it: `gcloud billing accounts list`.
 - [ ] **A human organization administrator.** The first apply runs as your personal ADC. You need these roles **at the organization level**: `roles/resourcemanager.organizationAdmin`, `roles/billing.admin` (or `billing.user` + project-creator), `roles/iam.organizationRoleAdmin`, `roles/orgpolicy.policyAdmin`.
-- [ ] **A Terraform Cloud organization.** The `cloud` backend in `envs/gcp/organization/backend.tf` hard-codes `workspaces { name = "gcp-organization" }` but takes the TFC **organization** out-of-band — via a gitignored `backend.hcl` or `TF_CLI_ARGS_init` (see backend forms below). You need permission to create workspaces in that org.
+- [ ] **Cloud Identity groups, created before the first org apply.** Terraform binds IAM to these groups but never creates them, so a missing group fails the apply with "group does not exist". Each needs at least one member, and two for break-glass:
+  - `gcp.organization_admin_groups` and `gcp.billing_admin_groups`: the standing admin groups.
+  - `gcp.break_glass_group`: exempt from the admin-containment deny policy. That policy turns on automatically once any environment is `is_production`, and the plan fails without this group.
+  - Every group named in `gcp.environments[*].iam_group_role_bindings`.
+- [ ] **A Terraform Cloud organization.** The `cloud` backend in `envs/gcp/organization/backend.tf` hard-codes `workspaces { name = "gcp-organization" }` but takes the TFC **organization** from the `TF_CLOUD_ORGANIZATION` environment variable (see Step 2). You need permission to create workspaces in that org.
 - [ ] **(Optional) GitHub WIF values.** The GitHub WIF pool is **off by default** (`enable_github_wif = false` — no workflow in this repo uses GCP OIDC). To enable it you need the repository's immutable numeric IDs: `gh api repos/<owner>/<repo> --jq '.id, .owner.id'` → `github_repository_id`, `github_repository_owner_id` (plus `github_org` / `github_repo`). The trust keys on the IDs, not the renameable names, and binds only the read-only organization plan SA.
 
 > **Optional — Access Context Manager policy.** VPC-SC perimeters (hub + per-env) are gated on an existing org-level ACM access policy passed as `vpc_sc_access_policy_name` (a bare numeric ID, no `accessPolicies/` prefix). With the default `null`, **no perimeter is created** and the bootstrap proceeds without it. Create the ACM policy out-of-band only if you want data perimeters from day one; find it with `gcloud access-context-manager policies list --organization=ORG_ID`.
@@ -63,25 +67,17 @@ gcloud services enable cloudresourcemanager.googleapis.com \
 
 ### Step 2 — Configure the TFC backend organization
 
-The workspace name is baked into each root's `backend.tf`; only the TFC **organization** is supplied out-of-band. Phase-0 applies `envs/gcp/bootstrap` (workspace `gcp-bootstrap`) first, so initialise that root. Pick **one** form:
+The workspace name is baked into each root's `backend.tf` (an HCP Terraform `cloud {}` block). Only the TFC **organization** is supplied, from the environment. Phase-0 applies `envs/gcp/bootstrap` (workspace `gcp-bootstrap`) first, so initialise that root:
 
 ```bash
-# Form A — gitignored backend.hcl (never committed)
-cat > envs/gcp/bootstrap/backend.hcl <<EOF
-organization = "YOUR_TFC_ORG_NAME"
-EOF
-terraform -chdir=envs/gcp/bootstrap init -backend-config=backend.hcl
-```
-
-```bash
-# Form B — TF_CLI_ARGS_init
-export TF_CLI_ARGS_init="-backend-config=organization=YOUR_TFC_ORG_NAME"
+export TF_CLOUD_ORGANIZATION=YOUR_TFC_ORG_NAME
+# export TF_CLOUD_HOSTNAME=app.eu.terraform.io   # only for HCP EU / Terraform Enterprise
 terraform -chdir=envs/gcp/bootstrap init
 ```
 
 The `gcp-bootstrap` workspace must already exist (tfc-admin pass 1, [below](#creating-and-wiring-the-tfc-workspaces-tfc-admin-two-pass)). tfc-admin creates it with **execution mode `local`** (`workspace_execution_modes` default `{ "gcp-bootstrap" = "local" }`): `terraform apply` runs on your machine with your ADC and only the state is stored in TFC. A remote run would have no GCP credentials, because the WIF pool does not exist yet.
 
-> Do **not** pass a `workspaces` block via `-backend-config` — `backend.tf` already hard-codes the workspace name, and a second value conflicts with it.
+> A `cloud` block accepts no `-backend-config` and no `backend.hcl` (Terraform rejects both). `make backend-check` proves every root's block initialises.
 
 ### Step 3 — Fill in `config/landing-zone.yaml` (and tfvars only for the rest)
 
@@ -90,6 +86,14 @@ The shared inputs live once in the committed `config/landing-zone.yaml`. Generat
 ```bash
 cp envs/gcp/organization/terraform.tfvars.example envs/gcp/organization/local.auto.tfvars   # optional
 ```
+
+**Required for a production estate: the workspace IDs.** gcp-bootstrap binds each workspace's service accounts by immutable workspace ID. When any environment `is_production`, it refuses to bind by (squattable) name. tfc-admin pass 1 has already created the workspaces and knows their IDs. The local phase-0 run ignores workspace variables, so write the IDs into a gitignored tfvars file:
+
+```bash
+terraform -chdir=envs/tfc-admin output -raw gcp_bootstrap_tfvars > envs/gcp/bootstrap/tfc-workspaces.auto.tfvars
+```
+
+Later remote gcp-bootstrap runs get the same map as a workspace variable, set by tfc-admin.
 
 Set at minimum (config key in brackets):
 
@@ -260,8 +264,8 @@ gcloud projects describe "$(terraform -chdir=envs/gcp/organization output -raw a
 gcloud resource-manager folders list --organization="$(terraform -chdir=envs/gcp/organization output -raw org_id)"
 
 # Cross-root contract is published (workload roots depend on this)
-terraform -chdir=envs/gcp/organization output -json environment_config | jq 'keys'
-terraform -chdir=envs/gcp/organization output -json hub_network
+terraform -chdir=envs/gcp/projects output -json environment_config | jq 'keys'
+terraform -chdir=envs/gcp/network-hub output -json hub_network
 ```
 
 Checklist:
@@ -284,7 +288,7 @@ Existing estates bound every workspace to `terraform-admin`. Re-applying gcp-boo
 2. **Apply `tfc-admin`** (pass 2) so every workspace gets `TFC_GCP_PLAN_SERVICE_ACCOUNT_EMAIL` / `TFC_GCP_APPLY_SERVICE_ACCOUNT_EMAIL`, and **remove** any `terraform_admin_email` Terraform variable from the TFC workspaces.
 3. **Apply `gcp-projects`** — grants the workload / network SAs their folder roles. Projects created earlier by `terraform-admin` are owned by it, not by `projects-apply`; label/billing edits to those pre-existing projects may need a one-off `roles/owner` grant to `<prefix>-projects-apply` on them (validate on your org).
 4. **Apply `gcp-organization`, `gcp-network-hub`, `gcp-workload-<env>`** as usual. If an enforced VPC-SC perimeter lists `terraform-admin` in `vpc_sc_ingress_identities`, add the new `<prefix>-network-hub-apply` / `<prefix>-wl-<env>-apply` SAs (`stage_service_accounts` / `workload_service_accounts` outputs) **before** step 1.
-5. Optional hardening once the workspaces exist: set `tfc_workspace_ids` (name → `ws-…`), `tfc_project_ids` and `tfc_organization_id` on gcp-bootstrap and re-apply.
+5. `tfc_workspace_ids` is set automatically. `tfc-admin` writes it onto the gcp-bootstrap workspace (`set_gcp_bootstrap_workspace_ids`), so remote runs bind WIF by immutable ID. Optionally also set `tfc_project_ids` and `tfc_organization_id`.
 
 The unused GitHub pool is **destroyed** by default (`enable_github_wif = false`). GCP soft-deletes pools for 30 days; to re-enable within that window set a new `github_wif_pool_id`.
 

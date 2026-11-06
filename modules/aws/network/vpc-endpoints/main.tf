@@ -40,6 +40,8 @@ resource "aws_vpc_endpoint" "interface" {
       }
     }]
   })
+
+  tags = var.tags
 }
 
 # Shared private hosted zone for split-horizon DNS of the centralized endpoints.
@@ -52,4 +54,6 @@ resource "aws_route53_zone" "shared" {
   vpc {
     vpc_id = var.vpc_id
   }
+
+  tags = var.tags
 }

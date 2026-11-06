@@ -72,7 +72,7 @@ locals {
       Resource = "*"
       Condition = principal == "cloudtrail.amazonaws.com" ? {
         StringEquals = { "aws:SourceOrgID" = var.org_id }
-        StringLike   = { "kms:EncryptionContext:aws:cloudtrail:arn" = "arn:aws:cloudtrail:*:${var.management_account_id}:trail/*" }
+        StringLike   = { "kms:EncryptionContext:aws:cloudtrail:arn" = "arn:${local.partition}:cloudtrail:*:${var.management_account_id}:trail/*" }
         } : {
         StringEquals = { "aws:SourceOrgID" = var.org_id }
       }

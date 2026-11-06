@@ -53,6 +53,16 @@ policy "database_private_encrypted" {
   enforcement_level = "mandatory"
 }
 
+policy "aws_iam_federated_trust_pinned" {
+  query             = "data.terraform.policies.aws_iam_federated_trust_pinned.deny"
+  enforcement_level = "mandatory"
+}
+
+policy "gcp_no_basic_roles_high_scope" {
+  query             = "data.terraform.policies.gcp_no_basic_roles_high_scope.deny"
+  enforcement_level = "mandatory"
+}
+
 policy "gcp_cloud_run_no_public_url" {
   query             = "data.terraform.policies.gcp_cloud_run_no_public_url.deny"
   enforcement_level = "mandatory"
@@ -61,6 +71,11 @@ policy "gcp_cloud_run_no_public_url" {
 # ── Advisory ────────────────────────────────────────────────────────────────
 policy "aws_s3_bucket_public_access_block_present" {
   query             = "data.terraform.policies.aws_s3_public_access.warn"
+  enforcement_level = "advisory"
+}
+
+policy "aws_iam_federated_trust_unknown" {
+  query             = "data.terraform.policies.aws_iam_federated_trust_pinned.federated_unknown"
   enforcement_level = "advisory"
 }
 

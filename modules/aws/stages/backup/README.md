@@ -75,8 +75,8 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_cloudformation_stack_set.backup_role (modules/aws/stages/backup/main.tf#L104)
-- resource.aws_cloudformation_stack_set_instance.backup_role (modules/aws/stages/backup/main.tf#L136)
+- resource.aws_cloudformation_stack_set.backup_role (modules/aws/stages/backup/main.tf#L109)
+- resource.aws_cloudformation_stack_set_instance.backup_role (modules/aws/stages/backup/main.tf#L141)
 - data source.aws_caller_identity.backup (modules/aws/stages/backup/main.tf#L25)
 - data source.aws_partition.backup (modules/aws/stages/backup/main.tf#L30)
 
@@ -91,9 +91,11 @@ The following resources are created:
 | <a name="input_backup_role_name"></a> [backup\_role\_name](#input\_backup\_role\_name) | Name of the member-account AWS Backup service role the StackSet deploys when backup\_role\_arn is null. Trusted by backup.amazonaws.com, with the AWS managed AWSBackupServiceRolePolicyForBackup and AWSBackupServiceRolePolicyForRestores policies. | `string` | `"aws-backup-org-role"` | no |
 | <a name="input_backup_role_stack_set_call_as"></a> [backup\_role\_stack\_set\_call\_as](#input\_backup\_role\_stack\_set\_call\_as) | Whether the backup-role StackSet is managed as the management account (SELF) or a CloudFormation delegated administrator (DELEGATED\_ADMIN). This stage's default provider is the management account, so SELF. | `string` | `"SELF"` | no |
 | <a name="input_changeable_for_days"></a> [changeable\_for\_days](#input\_changeable\_for\_days) | Cooling-off window (days) during which the Compliance-mode Vault Lock can still be changed or deleted. After this window the lock is immutable (WORM). Must be at least 3. | `number` | `3` | no |
+| <a name="input_create_backup_role_stack_set"></a> [create\_backup\_role\_stack\_set](#input\_create\_backup\_role\_stack\_set) | Deploy the member-account Backup service role (backup\_role\_name) from THIS stage through a service-managed StackSet. Default false: aws-organization deploys it (create\_backup\_service\_role there), so the least-privilege aws-backup management role needs no CloudFormation rights. Set true only when aws-backup applies as the phase-0 management role. | `bool` | `false` | no |
 | <a name="input_kms_key_arn"></a> [kms\_key\_arn](#input\_kms\_key\_arn) | ARN of the KMS key used to encrypt recovery points in the vault. Empty string uses the AWS-managed default Backup key. | `string` | `""` | no |
 | <a name="input_max_retention_days"></a> [max\_retention\_days](#input\_max\_retention\_days) | Maximum retention (days) allowed for recovery points stored in the vault. | `number` | `3650` | no |
 | <a name="input_min_retention_days"></a> [min\_retention\_days](#input\_min\_retention\_days) | Minimum retention (days) enforced on every recovery point stored in the vault. Recovery points cannot be deleted before this age. | `number` | `7` | no |
+| <a name="input_partition"></a> [partition](#input\_partition) | AWS partition (aws, aws-us-gov, aws-cn) for the member Backup role ARN rendered into the BACKUP\_POLICY. | `string` | `"aws"` | no |
 | <a name="input_restore_testing_role_arn"></a> [restore\_testing\_role\_arn](#input\_restore\_testing\_role\_arn) | ARN of an existing IAM role (in the backup account) AWS Backup assumes to perform restore testing jobs. Null (default) creates aws-backup-restore-testing in the backup account. | `string` | `null` | no |
 | <a name="input_tfc_apply_boundary_policy_name"></a> [tfc\_apply\_boundary\_policy\_name](#input\_tfc\_apply\_boundary\_policy\_name) | Name of the tfc-apply permissions-boundary managed policy (tfc-oidc-baseline apply\_boundary\_policy\_name). Every IAM role this stage creates in the backup account (the restore-testing role) gets permissions\_boundary = arn:PARTITION:iam::ACCOUNT\_ID:policy/NAME, derived from that account's provider, which the member-account tfc-apply role requires when boundary propagation is on. Null = create roles without a boundary. | `string` | `"tfc-apply-boundary"` | no |
 | <a name="input_vault_name"></a> [vault\_name](#input\_vault\_name) | Name of the AWS Backup vault created in the backup account. This is the cross-account naming contract: the management account's org BACKUP\_POLICY targets the vault by this name. | `string` | `"org-backup-vault"` | no |

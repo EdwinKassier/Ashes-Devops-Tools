@@ -15,7 +15,7 @@ variables {
   landing_zone_config_path = ""
   landing_zone_name        = "acme"
   workload_account_key     = "workload_dev"
-  log_archive_bucket_name  = null # sourced from the aws-security remote state (audit M7)
+  log_archive_bucket_name  = null # sourced from the aws-security remote state
   config_role_arn          = "arn:aws:iam::222222222222:role/config-recorder"
   kms_key_arn              = "arn:aws:kms:eu-west-2:222222222222:key/abcd-1234"
 }
@@ -54,7 +54,7 @@ run "consumes_remote_state_contracts" {
     }
   }
 
-  # M7: with var.log_archive_bucket_name = null, the central bucket name is sourced
+  # With var.log_archive_bucket_name = null, the central bucket name is sourced
   # from the aws-security remote state (its owner), not a hand-typed string.
   assert {
     condition     = data.terraform_remote_state.aws_security[0].outputs.log_archive_bucket_name == "ashes-org-log-archive"
@@ -104,7 +104,7 @@ run "consumes_remote_state_contracts" {
   }
 }
 
-# SaaS secret bridge (audit H9, hybrid option C): opt-in, default off; when
+# SaaS secret bridge: opt-in, default off; when
 # enabled it writes the Supabase connection into an AWS Secrets Manager secret.
 run "saas_secret_bridge_default_off" {
   command = plan

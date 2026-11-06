@@ -45,14 +45,14 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_ram_principal_association.org (modules/aws/network/ipam/main.tf#L73)
-- resource.aws_ram_resource_association.pools (modules/aws/network/ipam/main.tf#L66)
-- resource.aws_ram_resource_share.this (modules/aws/network/ipam/main.tf#L61)
+- resource.aws_ram_principal_association.org (modules/aws/network/ipam/main.tf#L78)
+- resource.aws_ram_resource_association.pools (modules/aws/network/ipam/main.tf#L71)
+- resource.aws_ram_resource_share.this (modules/aws/network/ipam/main.tf#L65)
 - resource.aws_vpc_ipam.this (modules/aws/network/ipam/main.tf#L14)
-- resource.aws_vpc_ipam_pool.regional (modules/aws/network/ipam/main.tf#L41)
-- resource.aws_vpc_ipam_pool.top (modules/aws/network/ipam/main.tf#L27)
-- resource.aws_vpc_ipam_pool_cidr.regional (modules/aws/network/ipam/main.tf#L52)
-- resource.aws_vpc_ipam_pool_cidr.top (modules/aws/network/ipam/main.tf#L34)
+- resource.aws_vpc_ipam_pool.regional (modules/aws/network/ipam/main.tf#L44)
+- resource.aws_vpc_ipam_pool.top (modules/aws/network/ipam/main.tf#L29)
+- resource.aws_vpc_ipam_pool_cidr.regional (modules/aws/network/ipam/main.tf#L56)
+- resource.aws_vpc_ipam_pool_cidr.top (modules/aws/network/ipam/main.tf#L37)
 
 
 ## Inputs
@@ -64,6 +64,7 @@ The following resources are created:
 | <a name="input_description"></a> [description](#input\_description) | Description applied to the IPAM. | `string` | `"SRA landing zone hierarchical IPAM."` | no |
 | <a name="input_regional_cidrs"></a> [regional\_cidrs](#input\_regional\_cidrs) | Map of region to the CIDR each regional pool provisions. Every key should be a region present in aws\_enabled\_regions and every CIDR should fall within top\_cidr. | `map(string)` | <pre>{<br/>  "eu-west-2": "10.0.0.0/12"<br/>}</pre> | no |
 | <a name="input_share_name"></a> [share\_name](#input\_share\_name) | Name of the AWS RAM resource share used to share the regional IPAM pools organization-wide. | `string` | `"ipam-pools"` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 | <a name="input_top_cidr"></a> [top\_cidr](#input\_top\_cidr) | CIDR of the top-level supernet owned by the top IPAM pool. Regional pool CIDRs are carved from within this range. | `string` | `"10.0.0.0/8"` | no |
 
 ## Outputs

@@ -350,7 +350,7 @@ variable "break_glass_principal_emails" {
 }
 
 variable "custom_org_constraints" {
-  description = "Opt-in custom organization-policy constraints (CEL-defined resource-shape guardrails) applied at the org node. Default [] = none. Latest Google guidance recommends layering custom constraints on the managed baseline; see docs/known-gaps.md (G6)."
+  description = "Opt-in custom organization-policy constraints (CEL-defined resource-shape guardrails), created AND enforced at the org node (enforcement = enforce | dry_run | off; dry_run logs violations without blocking, the way to stage a new one). Default [] = none. See docs/known-gaps.md."
   type = list(object({
     name           = string
     display_name   = string
@@ -359,18 +359,19 @@ variable "custom_org_constraints" {
     condition      = string
     method_types   = list(string)
     resource_types = list(string)
+    enforcement    = optional(string, "enforce")
   }))
   default = []
 }
 
 variable "enable_audit_bucket_lock" {
-  description = "Opt-in WORM lock on the org audit-log GCS bucket (a locked retention policy of audit_log_retention_days). Default false preserves the current behaviour (versioned + access-controlled but not immutable, and a lifecycle delete that can be corrected). Enable only for compliance regimes that require tamper-proof retention — a locked policy CANNOT be shortened or removed. See docs/known-gaps.md (G8)."
+  description = "Opt-in WORM lock on the org audit-log GCS bucket (a locked retention policy of audit_log_retention_days). Default false preserves the current behaviour (versioned + access-controlled but not immutable, and a lifecycle delete that can be corrected). Enable only for compliance regimes that require tamper-proof retention — a locked policy CANNOT be shortened or removed. See docs/known-gaps.md."
   type        = bool
   default     = false
 }
 
 variable "iam_deny_policies" {
-  description = "Opt-in IAM deny policies applied at the org node — a coarse, allow-independent backstop that blocks specific permissions for specific principals regardless of roles held (deny is evaluated before allow). Default [] = none. See docs/known-gaps.md (G9)."
+  description = "Opt-in IAM deny policies applied at the org node — a coarse, allow-independent backstop that blocks specific permissions for specific principals regardless of roles held (deny is evaluated before allow). Default [] = none. See docs/known-gaps.md."
   type = list(object({
     name         = string
     display_name = optional(string)
@@ -410,7 +411,7 @@ variable "cmek_required_services" {
 }
 
 variable "enable_admin_containment" {
-  description = "IAM deny policy at the org node that blocks, for all principals except containment_exempt_principals (break-glass): org-wide update/delete of logging sinks, exclusion changes, log-bucket delete, VPC-SC perimeter update/delete/replaceAll/commit and access-policy delete; and, scoped by the containment/protected tag to the audit buckets + audit CMEK keyring, bucket delete/setIamPolicy/deleteTagBinding, object delete, key-version destroy/update (disable) and key setIamPolicy. Once on, Terraform changes to ANY sink, exclusion or perimeter must run as break-glass. Default false (a check warns when a production environment exists without it); the prod preset turns it on."
+  description = "IAM deny policy at the org node that blocks, for all principals except containment_exempt_principals (break-glass): org-wide update/delete of logging sinks, exclusion changes, log-bucket delete, VPC-SC perimeter update/delete/replaceAll/commit and access-policy delete; and, scoped by the containment/protected tag to the audit buckets + audit CMEK keyring, bucket delete/setIamPolicy/deleteTagBinding, object delete, key-version destroy/update (disable) and key setIamPolicy. Once on, Terraform changes to ANY sink, exclusion or perimeter must run as break-glass. Default false at this stage; the gcp-organization root derives it ON whenever an environment is_production (and fails the plan without a break-glass principal)."
   type        = bool
   default     = false
 }
@@ -662,4 +663,80 @@ variable "restrict_cloud_run_ingress" {
   description = "Enforce run.allowedIngress org-wide so Cloud Run services accept only internal or Cloud Load Balancing traffic (never ingress \"all\"). Public apps are served through the external ALB + Cloud Armor. Default true."
   type        = bool
   default     = true
+}
+
+variable "allowed_workload_identity_issuers" {
+  description = "OIDC issuer URIs a workload identity pool provider may be created for (org policy iam.workloadIdentityPoolProviders). Default: HCP Terraform dynamic credentials and GitHub Actions (app-services deploy identities). Add https://gitlab.com (or your TFE / GitLab host) when used. Empty denies every new provider."
+  type        = list(string)
+  default     = ["https://app.terraform.io", "https://token.actions.githubusercontent.com"]
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for u in var.allowed_workload_identity_issuers : can(regex("^https://[a-z0-9.-]+(/.*)?$", u))])
+    error_message = "allowed_workload_identity_issuers entries must be https:// issuer URIs."
+  }
+}
+
+variable "allowed_workload_identity_aws_accounts" {
+  description = "AWS account IDs a workload identity pool may federate (org policy iam.workloadIdentityPoolAwsAccounts). Empty (default) denies AWS-account federation."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for a in var.allowed_workload_identity_aws_accounts : can(regex("^[0-9]{12}$", a))])
+    error_message = "allowed_workload_identity_aws_accounts entries must be 12-digit AWS account IDs."
+  }
+}
+
+variable "org_policy_overrides" {
+  description = "Per-constraint overrides of the organization-policy baseline, keyed by constraint name (e.g. compute.requireOsLogin). For a boolean constraint set enforce. For a list constraint set allowed_values / denied_values / allow_all / deny_all, which replace the baseline values. disabled = true drops the constraint from the baseline. A constraint not in the baseline is added. Use this instead of forking the stage when a single guardrail does not fit."
+  type = map(object({
+    enforce        = optional(bool)
+    allowed_values = optional(list(string))
+    denied_values  = optional(list(string))
+    allow_all      = optional(bool)
+    deny_all       = optional(bool)
+    disabled       = optional(bool, false)
+  }))
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = alltrue([for c in keys(var.org_policy_overrides) : can(regex("^[a-zA-Z0-9]+\\.[a-zA-Z0-9.]+$", c))])
+    error_message = "org_policy_overrides keys must be constraint names such as compute.requireOsLogin (no constraints/ prefix)."
+  }
+}
+
+variable "production_containment_waived" {
+  description = "The caller has deliberately decided to run production environments without admin containment, or reports the missing break-glass principal itself. This silences the production_requires_admin_containment warning. The gcp-organization root sets it only for an explicit enable_admin_containment = false. Default false."
+  type        = bool
+  default     = false
+}
+
+variable "wif_tenant_pins" {
+  description = "Tenant pins for workload identity pool providers (custom org-policy constraint custom.wifProviderTenantPinned). With tfc_organization set, a provider for https://<tfc_hostname> must reference that organization in its attribute_condition. With github_owner_ids set, a GitHub Actions provider must condition on one of those repository_owner_id values. Both empty (default) creates no constraint. The gcp-organization root fills tfc_organization from config."
+  type = object({
+    tfc_hostname     = optional(string, "app.terraform.io")
+    tfc_organization = optional(string)
+    github_owner_ids = optional(list(string), [])
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = (var.wif_tenant_pins.tfc_organization == null || can(regex("^[A-Za-z0-9_-]+$", coalesce(var.wif_tenant_pins.tfc_organization, "x")))) && alltrue([for i in var.wif_tenant_pins.github_owner_ids : can(regex("^[0-9]+$", i))])
+    error_message = "wif_tenant_pins.tfc_organization must be a literal TFC organization name and github_owner_ids numeric GitHub owner IDs."
+  }
+}
+
+variable "wif_tenant_pin_enforcement" {
+  description = "How custom.wifProviderTenantPinned is applied: enforce (default; providers that do not pin the tenant are rejected), dry_run (violations are only logged: stage it this way on an org with existing providers), or off."
+  type        = string
+  default     = "enforce"
+
+  validation {
+    condition     = contains(["enforce", "dry_run", "off"], var.wif_tenant_pin_enforcement)
+    error_message = "wif_tenant_pin_enforcement must be enforce, dry_run or off."
+  }
 }

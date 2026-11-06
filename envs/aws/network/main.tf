@@ -35,7 +35,7 @@ locals {
   # Org ARN for RAM org-wide sharing, built from existing organization outputs
   # (management account id + org id) so no extra remote-state dependency is
   # needed just to obtain the ARN.
-  org_arn = "arn:aws:organizations::${local.org.management_account_id}:organization/${local.org.organization_id}"
+  org_arn = "arn:${local.partition}:organizations::${local.org.management_account_id}:organization/${local.org.organization_id}"
 }
 
 module "aws_network_hub" {
@@ -54,10 +54,10 @@ module "aws_network_hub" {
   availability_zones = var.availability_zones
   az_count           = var.az_count
 
-  flow_log_destination_arn = "arn:aws:s3:::${local.log_archive_bucket_name}"
+  flow_log_destination_arn = "arn:${local.partition}:s3:::${local.log_archive_bucket_name}"
   log_bucket_name          = local.log_archive_bucket_name
 
   private_hosted_zone_name       = var.private_hosted_zone_name
-  enable_network_firewall        = var.enable_network_firewall
+  enable_network_firewall        = local.enable_network_firewall
   enable_network_access_analyzer = var.enable_network_access_analyzer
 }

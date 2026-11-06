@@ -14,7 +14,11 @@ name: Sandbox E2E (real apply)
 #     `pull_request_target`) is used, so fork code never runs with secrets.
 #   * Guaranteed teardown: `terraform test` destroys what it created, then an
 #     always() step deletes anything still tagged/labelled e2e-run-id=<run_id>.
-#   * Not configured => skipped with a notice, never red.
+#   * Not configured => the run FAILS (a real-apply check that never ran must
+#     not show green), unless the repository variable
+#     REAL_CLOUD_CHECKS_OPT_OUT=true acknowledges running without it (shared
+#     with drift-detection.yml). A suite you explicitly asked for (dispatch
+#     input, or the `e2e` PR label) always fails when unconfigured.
 #
 # Setup, costs and the trust policies: docs/guides/sandbox-e2e.md.
 
@@ -84,6 +88,8 @@ jobs:
           GCP_PROJECT: ${{ vars.E2E_GCP_PROJECT }}
           AWS_ROLE_ARN: ${{ vars.E2E_AWS_ROLE_ARN }}
           AWS_REGION: ${{ vars.E2E_AWS_REGION }}
+          OPT_OUT: ${{ vars.REAL_CLOUD_CHECKS_OPT_OUT }}
+          EVENT: ${{ github.event_name }}
           GCP_HINT: >-
             Set repository variables E2E_GCP_WIF_PROVIDER, E2E_GCP_SA and E2E_GCP_PROJECT
             to enable (docs/guides/sandbox-e2e.md).
@@ -93,18 +99,19 @@ jobs:
         run: |
           gcp=false
           aws=false
+          missing=()
           if [ "$CLOUD" = "all" ] || [ "$CLOUD" = "gcp" ]; then
             if [ -n "$GCP_WIF_PROVIDER" ] && [ -n "$GCP_SA" ] && [ -n "$GCP_PROJECT" ]; then
               gcp=true
             else
-              echo "::notice title=GCP e2e skipped::${GCP_HINT}"
+              missing+=("GCP: ${GCP_HINT}")
             fi
           fi
           if [ "$CLOUD" = "all" ] || [ "$CLOUD" = "aws" ]; then
             if [ -n "$AWS_ROLE_ARN" ] && [ -n "$AWS_REGION" ]; then
               aws=true
             else
-              echo "::notice title=AWS e2e skipped::${AWS_HINT}"
+              missing+=("AWS: ${AWS_HINT}")
             fi
           fi
           {
@@ -112,6 +119,22 @@ jobs:
             echo "aws=${aws}"
           } >> "$GITHUB_OUTPUT"
           echo "GCP suite: ${gcp} / AWS suite: ${aws}"
+
+          # An unconfigured suite must not read as a pass. Only a scheduled
+          # run with the explicit opt-out may skip quietly; a suite someone
+          # asked for (dispatch or the `e2e` label) always fails.
+          if [ "${#missing[@]}" -gt 0 ]; then
+            if [ "$OPT_OUT" = "true" ] && [ "$EVENT" = "schedule" ]; then
+              for m in "${missing[@]}"; do
+                echo "::warning title=E2E NOT run (REAL_CLOUD_CHECKS_OPT_OUT=true)::${m}"
+              done
+            else
+              for m in "${missing[@]}"; do
+                echo "::error title=E2E suite not configured::${m}"
+              done
+              exit 1
+            fi
+          fi
 
   gcp:
     name: E2E GCP

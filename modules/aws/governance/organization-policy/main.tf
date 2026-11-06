@@ -60,25 +60,25 @@ locals {
   break_glass_role_names = length(var.break_glass_role_names) > 0 ? var.break_glass_role_names : [
     regex("role/(.+)$", var.break_glass_role_arn)[0]
   ]
-  break_glass_principal_arns = [for n in local.break_glass_role_names : "arn:aws:iam::*:role/${n}"]
+  break_glass_principal_arns = [for n in local.break_glass_role_names : "arn:${var.partition}:iam::*:role/${n}"]
   privileged_principal_arns = distinct(concat(
-    [for n in var.pipeline_role_names : "arn:aws:iam::*:role/${n}"],
+    [for n in var.pipeline_role_names : "arn:${var.partition}:iam::*:role/${n}"],
     local.break_glass_principal_arns,
   ))
 
   stackset_role_arns = distinct(concat(
-    [for n in var.stackset_managed_role_names : "arn:aws:iam::*:role/${n}"],
+    [for n in var.stackset_managed_role_names : "arn:${var.partition}:iam::*:role/${n}"],
     local.break_glass_principal_arns,
   ))
   admin_role_arns = [
     for a in distinct(concat(
-      [for n in var.pipeline_role_names : "arn:aws:iam::*:role/${n}"],
-      [for n in var.stackset_execution_role_names : "arn:aws:iam::*:role/${n}"],
+      [for n in var.pipeline_role_names : "arn:${var.partition}:iam::*:role/${n}"],
+      [for n in var.stackset_execution_role_names : "arn:${var.partition}:iam::*:role/${n}"],
     )) : a if !contains(local.stackset_role_arns, a)
   ]
   stackset_exempt_arns = distinct(concat(
     local.break_glass_principal_arns,
-    [for n in var.stackset_execution_role_names : "arn:aws:iam::*:role/${n}"],
+    [for n in var.stackset_execution_role_names : "arn:${var.partition}:iam::*:role/${n}"],
   ))
   role_tamper_actions = [
     "iam:CreateRole",
@@ -99,6 +99,7 @@ locals {
     scp-deny-tamper = {
       type = "SERVICE_CONTROL_POLICY"
       content = jsonencode(jsondecode(templatefile("${path.module}/policies/scp-deny-tamper.json.tftpl", {
+        partition               = var.partition
         break_glass_arns        = jsonencode(local.break_glass_principal_arns)
         privileged_arns         = jsonencode(local.privileged_principal_arns)
         admin_role_arns         = local.admin_role_arns
@@ -107,14 +108,22 @@ locals {
         role_tamper_actions     = jsonencode(local.role_tamper_actions)
         log_archive_bucket_name = var.log_archive_bucket_name
         kms_protection_tag_key  = var.kms_protection_tag_key
+        # GuardDuty / CloudTrail / Security Hub settings are managed centrally
+        # (delegated admin). Outside those accounts even the pipeline is denied,
+        # so a compromised workload tfc-apply cannot add a suppression filter or
+        # trim trail event selectors to blind detection.
+        central_detection_account_ids = var.central_detection_account_ids
       })))
     }
     scp-region-restriction = {
       type = "SERVICE_CONTROL_POLICY"
       content = templatefile("${path.module}/policies/scp-region-restriction.json.tftpl", {
-        allowed_regions        = jsonencode(var.allowed_regions)
-        terraform_run_role_arn = var.terraform_run_role_arn
-        break_glass_role_arn   = var.break_glass_role_arn
+        allowed_regions = jsonencode(var.allowed_regions)
+        # CloudFront certificates (ACM) and their keys must live in us-east-1,
+        # so edge deployments (enable_edge) work without allowing the region.
+        allowed_regions_with_us_east_1 = jsonencode(distinct(concat(var.allowed_regions, ["us-east-1"])))
+        terraform_run_role_arn         = var.terraform_run_role_arn
+        break_glass_role_arn           = var.break_glass_role_arn
       })
     }
     # Baseline also carries two org-wide break-glass-only denies (kept here so
@@ -129,9 +138,16 @@ locals {
     scp-baseline = {
       type = "SERVICE_CONTROL_POLICY"
       content = jsonencode(jsondecode(templatefile("${path.module}/policies/scp-baseline.json.tftpl", {
+        partition              = var.partition
         terraform_run_role_arn = var.terraform_run_role_arn
         break_glass_role_arn   = var.break_glass_role_arn
         break_glass_arns       = jsonencode(local.break_glass_principal_arns)
+        # New trust anchors (OIDC / SAML providers) are registered only by
+        # break-glass and the StackSet execution role (tfc-oidc-baseline owns the
+        # TFC and GitHub providers). Everyone else, the pipeline and member
+        # admins included, is denied: an attacker-owned issuer plus a role that
+        # trusts it is an MFA-less, rotation-proof door.
+        idp_admin_arns = jsonencode(local.stackset_exempt_arns)
       })))
     }
     rcp-data-perimeter = {
@@ -142,9 +158,18 @@ locals {
       # works), a Null aws:SourceAccount guard on the confused-deputy statement
       # (service-principal calls without source context — EC2/Lambda/ECS role
       # assumption — are not denied), and dp:exclude:* resource-tag escape hatches.
+      # Web-identity federation is instead pinned per issuer (federation_tenant_pins):
+      # a token from app.terraform.io / GitHub is accepted only from YOUR TFC org /
+      # GitHub owners, so an apply identity cannot mint a role trusting another
+      # tenant on the same issuer (a persistence backdoor no boundary can see).
       content = jsonencode(jsondecode(templatefile("${path.module}/policies/rcp-data-perimeter.json.tftpl", {
         org_id              = var.org_id
         trusted_account_ids = var.data_perimeter_trusted_account_ids
+        tfc_hostname        = var.federation_tenant_pins.tfc_hostname
+        tfc_organization    = var.federation_tenant_pins.tfc_organization
+        github_owners       = var.federation_tenant_pins.github_owners
+        github_owner_ids    = var.federation_tenant_pins.github_owner_ids
+        allowed_builtin     = var.federation_tenant_pins.allowed_builtin_providers
       })))
     }
     declarative-ec2 = {
@@ -153,6 +178,21 @@ locals {
         vpc_bpa_exclusions_allowed = var.allow_vpc_bpa_exclusions ? "enabled" : "disabled"
       })
     }
+    # Org-wide EC2 baseline WITHOUT VPC Block Public Access: IMDSv2, no public
+    # snapshot / AMI sharing, no serial console. Attached at the root so the
+    # Security and Infrastructure accounts get it too; declarative-ec2 (with
+    # VPC BPA) stays on the Workloads OU, where public ingress goes through
+    # the edge layer only.
+    declarative-ec2-baseline = {
+      type    = "DECLARATIVE_POLICY_EC2"
+      content = file("${path.module}/policies/declarative-ec2-baseline.json")
+    }
+    # Opt every account out of AWS AI services using its content to improve
+    # those services (data-residency / IP hygiene default).
+    aiservices-opt-out = {
+      type    = "AISERVICES_OPT_OUT_POLICY"
+      content = file("${path.module}/policies/aiservices-opt-out.json")
+    }
     tag-policy = {
       type    = "TAG_POLICY"
       content = templatefile("${path.module}/policies/tag-policy.json", {})
@@ -160,12 +200,19 @@ locals {
     backup-policy = {
       type = "BACKUP_POLICY"
       content = templatefile("${path.module}/policies/backup-policy.json", {
+        partition      = var.partition
         default_region = var.default_region
       })
     }
   }
 
-  effective_policies = length(var.policies) > 0 ? var.policies : local.default_policies
+  # policies (non-empty) replaces the whole set (legacy). Otherwise the built-in
+  # set minus disabled_policies, with policy_overrides merged over it: replace a
+  # built-in policy's content, or add your own, without forking the module.
+  effective_policies = length(var.policies) > 0 ? var.policies : merge(
+    { for k, p in local.default_policies : k => p if !contains(var.disabled_policies, k) },
+    var.policy_overrides,
+  )
 }
 
 resource "aws_organizations_policy" "policy" {
@@ -173,10 +220,25 @@ resource "aws_organizations_policy" "policy" {
   name     = each.key
   type     = each.value.type
   content  = each.value.content
+  tags     = var.tags
 }
 
 resource "aws_organizations_policy_attachment" "attach" {
   for_each  = var.attachments
   policy_id = aws_organizations_policy.policy[each.value.policy_key].id
   target_id = each.value.target_id
+}
+
+# The core guardrails are the landing zone's security floor. Replacing or
+# dropping one is allowed (escape hatch), but never silently.
+locals {
+  core_guardrails     = ["scp-deny-tamper", "scp-baseline", "rcp-data-perimeter"]
+  weakened_guardrails = sort([for k in local.core_guardrails : k if contains(var.disabled_policies, k) || contains(keys(var.policy_overrides), k) || (length(var.policies) > 0 && !contains(keys(var.policies), k))])
+}
+
+check "core_guardrails_not_weakened" {
+  assert {
+    condition     = length(local.weakened_guardrails) == 0
+    error_message = "Core guardrail policies are replaced or removed: ${join(", ", local.weakened_guardrails)}. The deny-tamper SCP, root/IAM-user baseline SCP and RCP data perimeter are the security floor; make sure the replacement keeps their protections and record the exception."
+  }
 }

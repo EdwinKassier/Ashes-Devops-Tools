@@ -81,3 +81,17 @@ run "segments_and_isolation" {
     error_message = "RAM share must not allow external principals."
   }
 }
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    org_arn = "arn:aws:organizations::123456789012:organization/o-exampleorgid"
+    tags    = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_ec2_transit_gateway.this.tags["Owner"] == "test" && aws_ec2_transit_gateway.this.tags["Name"] == var.description
+    error_message = "module-level tags must land on aws_ec2_transit_gateway.this and resource-specific Name must still win"
+  }
+}

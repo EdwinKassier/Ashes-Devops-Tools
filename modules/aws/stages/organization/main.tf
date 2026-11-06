@@ -30,7 +30,7 @@ module "account" {
   source   = "../../governance/account"
   for_each = local.all_accounts
 
-  account_name       = each.key
+  account_name       = coalesce(try(each.value.name, null), each.key)
   email              = each.value.email
   parent_ou_id       = module.organization.ou_ids[each.value.ou]
   alternate_contacts = try(each.value.alternate_contacts, {})
@@ -49,6 +49,18 @@ locals {
     "declarative@workloads"   = { policy_key = "declarative-ec2", target_id = module.organization.ou_ids["Workloads"] }
     "tag-policy@root"         = { policy_key = "tag-policy", target_id = module.organization.roots_id }
   }
+  default_attachments = merge(
+    local.attachments,
+    {
+      "declarative-baseline@root" = { policy_key = "declarative-ec2-baseline", target_id = module.organization.roots_id }
+      "aiservices-opt-out@root"   = { policy_key = "aiservices-opt-out", target_id = module.organization.roots_id }
+    },
+  )
+  # Attachments of disabled built-in policies are dropped with them.
+  effective_attachments = merge(
+    { for k, a in local.default_attachments : k => a if !contains(var.disabled_org_policies, a.policy_key) },
+    var.org_policy_attachments,
+  )
 }
 
 locals {
@@ -70,13 +82,31 @@ module "policies" {
   terraform_run_role_arn  = var.terraform_run_role_arn
   break_glass_role_arn    = var.break_glass_role_arn
   log_archive_bucket_name = var.log_archive_bucket_name
-  attachments             = local.attachments
+  attachments             = local.effective_attachments
+  policy_overrides        = var.org_policy_overrides
+  partition               = var.partition
+  disabled_policies       = var.disabled_org_policies
 
   # Member-account carve-outs + perimeter tuning (validated in the policy module).
   pipeline_role_names                = var.pipeline_role_names
   break_glass_role_names             = var.break_glass_role_names
   data_perimeter_trusted_account_ids = var.data_perimeter_trusted_account_ids
   allow_vpc_bpa_exclusions           = var.allow_vpc_bpa_exclusions
+
+  # Detection settings are reachable only from the security accounts' pipeline.
+  central_detection_account_ids = [for k in var.central_detection_account_keys : module.account[k].account_id]
+
+  # Web-identity tenant pins (RCP): TFC tokens only from this org's TFC
+  # organization, GitHub tokens only from the listed owners.
+  federation_tenant_pins = {
+    tfc_hostname     = var.tfc_hostname
+    tfc_organization = var.pin_tfc_federation_to_org ? var.tfc_organization : null
+    github_owners    = var.github_federation_owners
+    github_owner_ids = var.github_federation_owner_ids
+    # Built-in IdPs (Cognito, Google, Facebook, Amazon) need no IAM provider
+    # resource, so only the RCP can stop a role trusting an attacker's pool.
+    allowed_builtin_providers = var.allowed_builtin_web_identity_providers
+  }
 }
 
 # Centralized root-access management for the organization.
@@ -109,11 +139,14 @@ module "tfc_oidc_baseline" {
   source = "../../iam/tfc-oidc-baseline"
   count  = var.enable_tfc_oidc_baseline ? 1 : 0
 
-  tfc_hostname              = var.tfc_hostname
-  tfc_organization          = var.tfc_organization
-  tfc_project               = var.tfc_project
-  allow_workspace_wildcards = var.tfc_oidc_allow_workspace_wildcards
-  apply_role_policy_arns    = var.tfc_apply_role_policy_arns
+  tfc_hostname     = var.tfc_hostname
+  tfc_organization = var.tfc_organization
+  # The account-wide GitHub OIDC provider exists only once GitHub federation
+  # is pinned to owners: no provider means no unpinned door for repo:<anyone>/*.
+  create_github_oidc_provider = length(var.github_federation_owners) + length(var.github_federation_owner_ids) > 0
+  tfc_project                 = var.tfc_project
+  allow_workspace_wildcards   = var.tfc_oidc_allow_workspace_wildcards
+  apply_role_policy_arns      = var.tfc_apply_role_policy_arns
 
   # Permissions boundary on tfc-apply (default: embedded tfc-apply-boundary).
   enable_apply_permissions_boundary = var.tfc_enable_apply_permissions_boundary
@@ -151,4 +184,30 @@ module "tfc_oidc_baseline" {
 
   # Trusted access for StackSets is enabled by module.organization.
   depends_on = [module.organization]
+}
+
+# Least-privilege management-account roles, one plan/apply pair per
+# management-default workspace (aws-security, aws-backup), so those roots no
+# longer share the phase-0 management admin role. aws-organization itself keeps
+# the phase-0 role.
+module "tfc_management_roles" {
+  source = "../../iam/tfc-management-roles"
+  count  = var.enable_tfc_management_roles && var.tfc_organization != null ? 1 : 0
+
+  tfc_organization = var.tfc_organization
+  tfc_hostname     = var.tfc_hostname
+  tfc_project      = var.tfc_project
+  workspaces       = var.tfc_management_workspaces
+
+  # aws-security may delegate the security services only to security tooling.
+  delegated_admin_account_ids = [for k in ["security_tooling", "backup"] : module.account[k].account_id if contains(keys(local.all_accounts), k)]
+}
+
+# GitHub deploy roles need a pinned owner: without github_federation_owners the
+# baseline creates no GitHub OIDC provider (see tfc_oidc_baseline above).
+check "github_federation_pinned" {
+  assert {
+    condition     = !var.enable_tfc_oidc_baseline || length(var.github_federation_owners) + length(var.github_federation_owner_ids) > 0
+    error_message = "No GitHub owners are pinned (aws.github_federation_owners), so the TFC OIDC baseline creates NO GitHub Actions OIDC provider and app-services GitHub deploy roles cannot be assumed. Set aws.github_federation_owners (or ignore this if no service deploys from GitHub)."
+  }
 }

@@ -111,3 +111,17 @@ run "public_endpoint_with_authorized_networks" {
     error_message = "Authorized network CIDR must be wired into master_authorized_networks_config."
   }
 }
+
+run "module_labels_applied" {
+  command = plan
+
+  variables {
+    labels = { owner = "test" }
+
+  }
+
+  assert {
+    condition     = google_container_cluster.this.resource_labels["owner"] == "test"
+    error_message = "var.labels must land on the cluster resource_labels."
+  }
+}

@@ -80,9 +80,9 @@ variable "saas_workspaces" {
 }
 
 variable "manage_tfc_admin_workspace" {
-  description = "Adopt the hand-created tfc-admin workspace (import block) so its triggers, speculative-plan and remote-state settings are codified too. Default false."
+  description = "Adopt the hand-created tfc-admin workspace (import block) so its triggers, speculative-plan and remote-state settings are codified too. Default true: tfc-admin holds an org-admin TFE_TOKEN, and only a managed workspace gets speculative_enabled = false (an unmanaged one keeps TFC's default, so any PR's plan could read the token). Set false only if the workspace is CLI-driven with no VCS connection."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "import_tfc_admin_workspace" {
@@ -147,6 +147,12 @@ variable "speculative_disabled_workspaces" {
     "aws-organization", "aws-security", "aws-backup", "aws-identity",
     "tfc-admin",
   ]
+}
+
+variable "disable_speculative_on_saas" {
+  description = "Disable automatic speculative PR plans on every saas-<name> workspace. The Supabase and Vercel providers authenticate with static, account-wide tokens and have no separate plan identity, so a PR's speculative plan runs with apply-grade credentials for every project in the account. Default true."
+  type        = bool
+  default     = true
 }
 
 variable "disable_speculative_on_production" {
@@ -411,7 +417,7 @@ variable "viewer_team_ids" {
 }
 
 variable "enable_policy_sets" {
-  description = "Create an OPA policy set sourced from policies/opa in the VCS repo, attached to every managed workspace. Enforcement is mixed: 8 mandatory + 3 advisory policies (policies/opa/policies.hcl); mandatory failures are not overridable unless policy_set_overridable = true. Requires vcs_repo and a PAID HCP Terraform tier with policy enforcement. Default false."
+  description = "Create an OPA policy set sourced from policies/opa in the VCS repo, attached to every managed workspace. Enforcement is mixed: 10 mandatory + 4 advisory policies (policies/opa/policies.hcl); mandatory failures are not overridable unless policy_set_overridable = true. Requires vcs_repo and a PAID HCP Terraform tier with policy enforcement. Default false."
   type        = bool
   default     = false
 }
@@ -466,7 +472,7 @@ variable "common_workspace_variables" {
 variable "control_plane_notifications" {
   description = <<-EOT
     Run notifications applied to every control-plane and bootstrap workspace
-    (audit M-ops). Default empty. Set a Slack or generic webhook to be alerted when
+. Default empty. Set a Slack or generic webhook to be alerted when
     a foundational apply fails or needs attention. Entry shape matches
     modules/tfc/workspace var.notifications.
   EOT
@@ -492,4 +498,16 @@ variable "workload_notifications" {
     enabled          = optional(bool, true)
   }))
   default = {}
+}
+
+variable "set_gcp_bootstrap_workspace_ids" {
+  description = "Write the tfc_workspace_ids map (every gcp-* workspace's immutable ID) as a Terraform variable on gcp-bootstrap, so its WIF bindings use IDs. A production estate requires this. Skipped when workspace_variables already sets tfc_workspace_ids for gcp-bootstrap. Default true."
+  type        = bool
+  default     = true
+}
+
+variable "enable_run_triggers" {
+  description = "Create TFC run triggers along the root dependency DAG (bootstrap -> organization -> projects -> network-hub -> workloads; aws-organization -> security/network/identity/shared-services/backup -> workloads), so an upstream apply queues a downstream plan. auto_apply stays off. Default true."
+  type        = bool
+  default     = true
 }

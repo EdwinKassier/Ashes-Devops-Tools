@@ -70,6 +70,8 @@ module "ipam" {
   top_cidr            = var.top_cidr
   regional_cidrs      = var.regional_cidrs
   org_arn             = var.org_arn
+
+  tags = var.tags
 }
 
 # ---------------------------------------------------------------------------
@@ -288,6 +290,8 @@ module "transit_gateway" {
   # Centralized inspection: prod & nonprod default routes point at the
   # inspection attachment so all egress/east-west traffic is inspected.
   routes = local.tgw_routes
+
+  tags = var.tags
 }
 
 # ---------------------------------------------------------------------------
@@ -312,6 +316,8 @@ module "network_firewall" {
   egress_domain_allowlist  = var.network_firewall_egress_domain_allowlist
   suricata_rules           = var.network_firewall_suricata_rules
   home_net_cidrs           = [var.top_cidr]
+
+  tags = var.tags
 }
 
 # ---------------------------------------------------------------------------
@@ -326,6 +332,8 @@ module "vpc_endpoints" {
   subnet_ids               = module.egress_vpc.subnet_ids_by_tier["private"]
   org_id                   = var.org_id
   private_hosted_zone_name = var.private_hosted_zone_name
+
+  tags = var.tags
 }
 
 # ---------------------------------------------------------------------------
@@ -340,6 +348,8 @@ module "route53_resolver" {
   org_arn                   = var.org_arn
   query_log_destination_arn = var.flow_log_destination_arn
   enable_dns_firewall       = true
+
+  tags = var.tags
 }
 
 # ---------------------------------------------------------------------------
@@ -350,4 +360,6 @@ module "network_access_analyzer" {
   source = "../../network/network-access-analyzer"
 
   enable_network_access_analyzer = var.enable_network_access_analyzer
+
+  tags = var.tags
 }

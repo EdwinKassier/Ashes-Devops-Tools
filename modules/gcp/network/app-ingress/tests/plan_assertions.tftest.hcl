@@ -77,3 +77,17 @@ run "attaches_cloud_armor_when_provided" {
     error_message = "the Cloud Armor policy must attach to the backend service when provided."
   }
 }
+
+run "module_labels_applied" {
+  command = plan
+
+  variables {
+    labels = { owner = "test" }
+
+  }
+
+  assert {
+    condition     = google_compute_global_address.this.labels["owner"] == "test" && google_compute_global_forwarding_rule.https.labels["owner"] == "test"
+    error_message = "var.labels must land on the global address and forwarding rule."
+  }
+}

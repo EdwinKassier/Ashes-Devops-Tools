@@ -59,9 +59,9 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_securitylake_aws_log_source.this (modules/aws/security/securitylake/main.tf#L25)
+- resource.aws_securitylake_aws_log_source.this (modules/aws/security/securitylake/main.tf#L27)
 - resource.aws_securitylake_data_lake.this (modules/aws/security/securitylake/main.tf#L5)
-- resource.aws_securitylake_subscriber.this (modules/aws/security/securitylake/main.tf#L36)
+- resource.aws_securitylake_subscriber.this (modules/aws/security/securitylake/main.tf#L38)
 
 
 ## Inputs
@@ -76,6 +76,7 @@ The following resources are created:
 | <a name="input_subscriber_external_id"></a> [subscriber\_external\_id](#input\_subscriber\_external\_id) | External ID used in the subscriber identity trust condition. | `string` | `"securitylake"` | no |
 | <a name="input_subscriber_name"></a> [subscriber\_name](#input\_subscriber\_name) | Name of the optional Security Lake subscriber. Only used when subscriber\_principal is set. | `string` | `"security-tooling"` | no |
 | <a name="input_subscriber_principal"></a> [subscriber\_principal](#input\_subscriber\_principal) | AWS account ID (12 digits) of the subscriber principal granted read access to the OCSF data. When empty, no subscriber is created. | `string` | `""` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 
 ## Outputs
 

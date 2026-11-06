@@ -27,6 +27,11 @@ jobs:
   release-please:
     name: Release Please
     runs-on: ubuntu-latest
+    # Secrets for this job live in the `release` GitHub environment, restricted
+    # to the default branch (docs/guides/CI_SECRETS.md "Environment-scoped
+    # secrets"). A repo-level secret is readable by a workflow pushed to ANY
+    # branch; an environment secret only by runs its branch policy allows.
+    environment: release
     timeout-minutes: 10
     permissions:
       contents: write       # create the vX.Y.Z tag and GitHub Release

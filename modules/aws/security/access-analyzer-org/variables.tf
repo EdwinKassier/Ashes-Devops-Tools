@@ -30,3 +30,10 @@ variable "unused_access_age" {
     error_message = "unused_access_age must be at least 1 day."
   }
 }
+
+variable "tags" {
+  description = "Tags applied to every taggable resource this module creates (merged after provider default_tags; resource-specific tags such as Name win)."
+  type        = map(string)
+  default     = {}
+  nullable    = false
+}

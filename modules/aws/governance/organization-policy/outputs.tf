@@ -17,3 +17,8 @@ output "attachment_ids" {
   description = "Map of caller attachment key to the attachment resource ID."
   value       = { for key, a in aws_organizations_policy_attachment.attach : key => a.id }
 }
+
+output "policy_contents" {
+  description = "Rendered JSON content of each managed organization policy, keyed by policy key. For audit evidence and composition tests."
+  value       = { for k, p in aws_organizations_policy.policy : k => p.content }
+}

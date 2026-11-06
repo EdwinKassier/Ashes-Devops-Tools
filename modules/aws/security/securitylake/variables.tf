@@ -82,3 +82,10 @@ variable "subscriber_external_id" {
     error_message = "subscriber_external_id must be a non-empty string."
   }
 }
+
+variable "tags" {
+  description = "Tags applied to every taggable resource this module creates (merged after provider default_tags; resource-specific tags such as Name win)."
+  type        = map(string)
+  default     = {}
+  nullable    = false
+}

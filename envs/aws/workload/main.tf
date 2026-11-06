@@ -77,7 +77,7 @@ locals {
 
   # The central log-archive bucket name comes from aws-security (its owner) unless
   # a contract supplies it, so a rename there cannot silently leave this
-  # workload writing to a stale bucket (audit M7).
+  # workload writing to a stale bucket.
   log_archive_bucket_name = (
     local.read_security
     ? data.terraform_remote_state.aws_security[0].outputs.log_archive_bucket_name
@@ -111,7 +111,7 @@ module "aws_workload" {
 
   # Flow logs + Config snapshots + Session Manager logs all land in the central
   # log-archive bucket (cross-root naming contract).
-  flow_log_destination_arn          = "arn:aws:s3:::${local.log_archive_bucket_name}"
+  flow_log_destination_arn          = "arn:${local.partition}:s3:::${local.log_archive_bucket_name}"
   log_archive_bucket_name           = local.log_archive_bucket_name
   config_role_arn                   = var.config_role_arn
   create_config_service_linked_role = var.create_config_service_linked_role
@@ -151,7 +151,7 @@ locals {
 }
 
 # =============================================================================
-# APP SERVICES — the application golden path (audit: Boilerplate H)
+# APP SERVICES — the application golden path 
 #
 # One entry in var.services = an ECR repo, a Fargate service in the spoke's
 # private subnets behind the shared internal ALB, least-privilege task roles, a
@@ -238,7 +238,7 @@ module "app_edge" {
 }
 
 # =============================================================================
-# SaaS SECRET BRIDGE (audit H9, hybrid option C — AWS counterpart)
+# SaaS SECRET BRIDGE
 #
 # Opt-in. Reads the Supabase outputs from a saas-<name> workspace and writes them
 # into an AWS Secrets Manager secret, so an ECS/Fargate task can consume Supabase
@@ -261,7 +261,7 @@ resource "aws_secretsmanager_secret" "saas_bridge" {
   # Re-apply the bridge to refresh it instead.
   count       = var.enable_saas_secret_bridge ? 1 : 0
   name        = var.saas_secret_name
-  description = "Bridged Supabase connection details from ${var.saas_workspace_name} (audit H9)."
+  description = "Bridged Supabase connection details from ${var.saas_workspace_name}."
   kms_key_id  = local.kms_key_arn
 }
 

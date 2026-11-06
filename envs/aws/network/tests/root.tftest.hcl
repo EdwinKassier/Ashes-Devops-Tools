@@ -110,3 +110,57 @@ run "organization_contract_skips_remote_state" {
     error_message = "a supplied organization_contract must skip the aws-organization read and feed the root"
   }
 }
+
+# File-level remote-state override for the profile runs below (run-level
+# overrides above still take precedence).
+override_data {
+  target = data.terraform_remote_state.aws_organization
+  values = {
+    outputs = {
+      organization_id       = "o-abcdefghij"
+      management_account_id = "111111111111"
+      account_ids           = { network = "666666666666" }
+      account_role_arns = {
+        network = "arn:aws:iam::666666666666:role/cross-account"
+      }
+    }
+  }
+}
+
+
+# profile = starter drops the Network Firewall unless explicitly enabled.
+run "starter_profile_drops_network_firewall" {
+  command = plan
+
+  variables {
+    profile = "starter"
+  }
+
+  assert {
+    condition     = local.enable_network_firewall == false
+    error_message = "the starter profile must default enable_network_firewall to false."
+  }
+}
+
+run "explicit_toggle_beats_profile" {
+  command = plan
+
+  variables {
+    profile                 = "starter"
+    enable_network_firewall = true
+  }
+
+  assert {
+    condition     = local.enable_network_firewall == true
+    error_message = "an explicit enable_network_firewall must win over the profile."
+  }
+}
+
+run "production_profile_is_the_default" {
+  command = plan
+
+  assert {
+    condition     = local.profile == "production" && local.enable_network_firewall == true
+    error_message = "with no profile set the production stack (Network Firewall on) must be the default."
+  }
+}

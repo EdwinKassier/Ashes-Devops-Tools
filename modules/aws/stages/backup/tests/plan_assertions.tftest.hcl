@@ -62,8 +62,9 @@ run "backup_role_stack_set_by_default" {
   command = plan
 
   variables {
-    backup_role_arn          = null
-    restore_testing_role_arn = null
+    backup_role_arn              = null
+    create_backup_role_stack_set = true
+    restore_testing_role_arn     = null
   }
 
   assert {
@@ -128,5 +129,19 @@ run "existing_restore_role_needs_no_boundary" {
   assert {
     condition     = local.backup_boundary_arn == null && length(data.aws_caller_identity.backup) == 0
     error_message = "With an existing restore_testing_role_arn no boundary lookup is needed."
+  }
+}
+
+# Default: aws-organization owns the member role; aws-backup only references it.
+run "backup_role_referenced_not_deployed_by_default" {
+  command = plan
+
+  variables {
+    backup_role_arn = null
+  }
+
+  assert {
+    condition     = length(aws_cloudformation_stack_set.backup_role) == 0 && output.backup_role_arn == "arn:aws:iam::$account:role/aws-backup-org-role"
+    error_message = "by default the stage must reference the aws-organization-deployed role and create no StackSet."
   }
 }

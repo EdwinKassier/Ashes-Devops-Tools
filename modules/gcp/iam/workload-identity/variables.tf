@@ -109,7 +109,7 @@ variable "gitlab_url" {
 }
 
 variable "gitlab_namespace" {
-  description = "GitLab namespace to restrict access to (optional). Value is interpolated into a CEL startsWith() expression — must not contain single quotes."
+  description = "GitLab namespace (group path) to restrict access to. Matches the namespace itself or any sub-group under it (namespace_path == X || startsWith(X + '/')), never a sibling sharing the prefix. Interpolated into CEL, so it must not contain single quotes."
   type        = string
   default     = null
 
@@ -220,5 +220,16 @@ variable "tfc_sa_bindings" {
   validation {
     condition     = length(distinct([for b in var.tfc_sa_bindings : "${b.workspace_name}:${b.run_phase}"])) == length(var.tfc_sa_bindings)
     error_message = "Each (workspace_name, run_phase) pair may be bound to only one service account."
+  }
+}
+
+variable "tfc_hostname" {
+  description = "HCP Terraform / Terraform Enterprise hostname that issues the dynamic-credential tokens (app.terraform.io, app.eu.terraform.io, or a TFE host)."
+  type        = string
+  default     = "app.terraform.io"
+
+  validation {
+    condition     = can(regex("^[a-z0-9.-]+(:[0-9]+)?$", var.tfc_hostname))
+    error_message = "tfc_hostname must be a bare hostname (optionally :port), without scheme or path."
   }
 }

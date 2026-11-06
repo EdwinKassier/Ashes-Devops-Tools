@@ -89,16 +89,16 @@ The following resources are created:
 
 
 - resource.aws_detective_graph.this (modules/aws/security/org-security-service/main.tf#L89)
-- resource.aws_detective_organization_admin_account.this (modules/aws/security/org-security-service/main.tf#L94)
-- resource.aws_detective_organization_configuration.this (modules/aws/security/org-security-service/main.tf#L100)
+- resource.aws_detective_organization_admin_account.this (modules/aws/security/org-security-service/main.tf#L95)
+- resource.aws_detective_organization_configuration.this (modules/aws/security/org-security-service/main.tf#L101)
 - resource.aws_inspector2_delegated_admin_account.this (modules/aws/security/org-security-service/main.tf#L55)
 - resource.aws_inspector2_enabler.this (modules/aws/security/org-security-service/main.tf#L77)
 - resource.aws_inspector2_organization_configuration.this (modules/aws/security/org-security-service/main.tf#L61)
 - resource.aws_macie2_account.this (modules/aws/security/org-security-service/main.tf#L32)
 - resource.aws_macie2_organization_admin_account.this (modules/aws/security/org-security-service/main.tf#L37)
 - resource.aws_macie2_organization_configuration.this (modules/aws/security/org-security-service/main.tf#L43)
-- resource.aws_resourceexplorer2_index.this (modules/aws/security/org-security-service/main.tf#L115)
-- resource.aws_resourceexplorer2_view.this (modules/aws/security/org-security-service/main.tf#L120)
+- resource.aws_resourceexplorer2_index.this (modules/aws/security/org-security-service/main.tf#L116)
+- resource.aws_resourceexplorer2_view.this (modules/aws/security/org-security-service/main.tf#L122)
 
 
 ## Inputs
@@ -107,6 +107,7 @@ The following resources are created:
 |------|-------------|------|---------|:--------:|
 | <a name="input_security_tooling_account_id"></a> [security\_tooling\_account\_id](#input\_security\_tooling\_account\_id) | 12-digit account ID of the Security Tooling account nominated as the delegated administrator (the module's default provider). Used as the admin/account ID in the management-account registrations. | `string` | n/a | yes |
 | <a name="input_enabled_services"></a> [enabled\_services](#input\_enabled\_services) | Set of org-security services to enable. Each enables a gated block: macie, inspector, detective, resource-explorer. Detective defaults OFF per SRA. Adding a service means adding a gated block in main.tf and a name to this allowed set. | `set(string)` | <pre>[<br/>  "macie",<br/>  "inspector"<br/>]</pre> | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 
 ## Outputs
 

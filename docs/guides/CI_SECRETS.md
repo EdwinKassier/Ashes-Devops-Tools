@@ -14,8 +14,9 @@ Repository secrets and variables referenced by `.github/workflows/`. Configure t
 | `TFC_ORGANIZATION` | Variable | `drift-detection.yml`, `terraform-apply.yml` | Terraform Cloud organization name that owns the workspaces. |
 | `RELEASE_PLEASE_TOKEN` | Secret | `release.yml` | Machine-account token release-please uses to open the release PR and cut `vX.Y.Z` tags. **Required; no fallback.** See [below](#release_please_token). |
 
-Without both of these, `drift-detection.yml` **skips cleanly** on its scheduled runs (see
-"Drift detection behavior without secrets" below) rather than failing red. `terraform-apply.yml`
+Without both of these, `drift-detection.yml` **fails**, unless the repository variable
+`REAL_CLOUD_CHECKS_OPT_OUT=true` acknowledges running without it (see "Drift detection
+behavior without secrets" below). `terraform-apply.yml`
 does NOT apply anything: the real apply is driven by Terraform Cloud's own VCS integration.
 That workflow only reads the latest TFC run status with the read-only `TFC_TOKEN` and publishes
 a GitHub Release when the run applied and its commit matches the tag. (The workflow is named
@@ -119,21 +120,55 @@ the ones it manages at its next apply).
 Used by `sandbox-e2e.yml`, the real-apply suites in `tests/e2e/`. All are **repository
 variables**, not secrets: both clouds authenticate keylessly (GCP Workload Identity
 Federation, AWS GitHub OIDC), so there is nothing secret to store. When a cloud's
-variables are unset, that cloud's job is **skipped with a notice**, not failed. Sandbox
+variables are unset the run **fails**. The one exception is a scheduled run with
+`REAL_CLOUD_CHECKS_OPT_OUT=true`, which skips with a warning. Sandbox
 setup, trust conditions and cost guardrails are in [Sandbox E2E](sandbox-e2e.md).
 
 | Name | Kind | Used by | Purpose | Default when unset |
 |------|------|---------|---------|---------------------|
-| `E2E_GCP_WIF_PROVIDER` | Variable | `sandbox-e2e.yml` | Full WIF provider resource name: `projects/<number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>`. | GCP suite skipped. |
-| `E2E_GCP_SA` | Variable | `sandbox-e2e.yml` | Email of the sandbox runner service account that the WIF principal impersonates. | GCP suite skipped. |
-| `E2E_GCP_PROJECT` | Variable | `sandbox-e2e.yml` | ID of the **dedicated, disposable** GCP sandbox project. Never a landing-zone project. | GCP suite skipped. |
+| `E2E_GCP_WIF_PROVIDER` | Variable | `sandbox-e2e.yml` | Full WIF provider resource name: `projects/<number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>`. | Run fails (see opt-out). |
+| `E2E_GCP_SA` | Variable | `sandbox-e2e.yml` | Email of the sandbox runner service account that the WIF principal impersonates. | Run fails (see opt-out). |
+| `E2E_GCP_PROJECT` | Variable | `sandbox-e2e.yml` | ID of the **dedicated, disposable** GCP sandbox project. Never a landing-zone project. | Run fails (see opt-out). |
 | `E2E_GCP_REGION` | Variable | `sandbox-e2e.yml` | Region for the GCP suite's regional resources. | `europe-west2` |
-| `E2E_AWS_ROLE_ARN` | Variable | `sandbox-e2e.yml` | ARN of the sandbox runner role assumed via GitHub OIDC. Its trust policy is pinned to `repo:<owner>/<repo>:environment:e2e-sandbox`. | AWS suite skipped. |
-| `E2E_AWS_REGION` | Variable | `sandbox-e2e.yml` | Region of the **dedicated, disposable** AWS sandbox account. | AWS suite skipped. |
+| `E2E_AWS_ROLE_ARN` | Variable | `sandbox-e2e.yml` | ARN of the sandbox runner role assumed via GitHub OIDC. Its trust policy is pinned to `repo:<owner>/<repo>:environment:e2e-sandbox`. | Run fails (see opt-out). |
+| `E2E_AWS_REGION` | Variable | `sandbox-e2e.yml` | Region of the **dedicated, disposable** AWS sandbox account. | Run fails (see opt-out). |
+| `REAL_CLOUD_CHECKS_OPT_OUT` | Variable | `sandbox-e2e.yml`, `drift-detection.yml` | Set to `true` only to acknowledge that this estate runs **without** real-cloud verification. Scheduled E2E and drift runs then skip with a warning instead of failing. The summary never reports "no drift" for a run that did not happen. | Unset: unconfigured checks fail. |
 
 The cloud jobs run in the `e2e-sandbox` GitHub environment, which gives them a stable OIDC
 subject. The preflight job has no environment, so it reads repository-level variables
 only. Set the variables above at repository level.
+
+## Environment-scoped secrets
+
+A repository-level secret is readable by **any workflow on any branch**. Anyone with write
+access could push a branch whose workflow prints `secrets.TFC_TOKEN_DRIFT`. The jobs that use a
+privileged secret therefore run in a GitHub **environment**. Store each secret in that
+environment, not at repository level, and restrict the environment's deployment branches:
+
+| Environment | Secrets | Deployment branch / tag policy | Used by |
+|---|---|---|---|
+| `tfc-drift` | `TFC_TOKEN_DRIFT` | `main` only | `drift-detection.yml` |
+| `release` | `RELEASE_PLEASE_TOKEN` | `main` only | `release.yml` |
+| `docs-bot` | `DOCS_BOT_PAT` (optional) | `main` only | `documentation.yml` |
+| `tfc-readonly` | `TFC_TOKEN` | tags `gcp-*/v*`, `aws-*/v*`, `saas/*/v*`, `tfc-admin/v*` | `terraform-apply.yml` |
+| `e2e-sandbox` | none (OIDC only) | `main`, plus PR branches if you use the `e2e` label | `sandbox-e2e.yml` |
+
+```bash
+repo=OWNER/REPO
+for env in tfc-drift release docs-bot; do
+  gh api -X PUT "repos/$repo/environments/$env" \
+    -F 'deployment_branch_policy[protected_branches]=false' \
+    -F 'deployment_branch_policy[custom_branch_policies]=true'
+  gh api -X POST "repos/$repo/environments/$env/deployment-branch-policies" -f name=main -f type=branch
+done
+gh secret set TFC_TOKEN_DRIFT --env tfc-drift        # then delete the repo-level copy:
+gh secret delete TFC_TOKEN_DRIFT                      # (repeat for each secret)
+```
+
+The workflows already name these environments. GitHub creates an environment, unprotected, the
+first time a job references it, so the branch policy above is what makes the scoping real.
+Prefer a GitHub App installation token over `RELEASE_PLEASE_TOKEN` / `DOCS_BOT_PAT` PATs where
+your organization allows it.
 
 ## Drift detection behavior without secrets
 
@@ -142,13 +177,13 @@ only. Set the variables above at repository level.
 job-level `if:`, so the check runs in a step and exposes a plain job output that the downstream
 `if:` can read) and exposes a `configured` output:
 
-- **Scheduled runs** (`schedule` trigger): if either value is missing, `detect-drift` is skipped
-  (not failed) and the summary job reports "Skipped — Terraform Cloud credentials are not
-  configured." A daily/weekday red workflow with no way to fix it (short of code changes) is a
-  worse signal than an honest skip.
-- **Manual runs** (`workflow_dispatch`): the credential check fails loudly (`exit 1`) if either
-  value is missing, since a human explicitly asked for a drift check and silently skipping would
-  be confusing.
+- **Scheduled runs** (`schedule` trigger): if either value is missing, the credential check
+  **fails** and the summary reports "Drift detection did NOT run". A green run that checked
+  nothing would read as "no drift", which is the dangerous signal. To run without drift
+  detection deliberately, set the repository variable `REAL_CLOUD_CHECKS_OPT_OUT=true`. The run
+  then skips with a warning, and the summary still says drift is unmonitored.
+- **Manual runs** (`workflow_dispatch`): always fail if either value is missing, whatever the
+  opt-out, because a human explicitly asked for a drift check.
 
 ## Cross-checking this list
 

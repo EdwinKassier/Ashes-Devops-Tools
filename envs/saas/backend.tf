@@ -1,14 +1,13 @@
 terraform {
-  backend "cloud" {
-    # Supply organization via TF_CLI_ARGS_init or a gitignored backend.hcl:
-    #   export TF_CLI_ARGS_init="-backend-config=organization=<your-tfc-org>"
-    # or create backend.hcl with: organization = "<your-tfc-org>"
-    # and run: terraform init -backend-config=backend.hcl
-    #
-    # Select the workspace with TF_WORKSPACE=saas-<name>, e.g. saas-collects.
-
+  # HCP Terraform (Terraform Cloud). The `cloud` block takes no -backend-config,
+  # so supply the organization through the environment:
+  #   export TF_CLOUD_ORGANIZATION=<your-tfc-org>
+  #   export TF_CLOUD_HOSTNAME=app.terraform.io   # optional; set for HCP EU / TFE
+  # One workspace per SaaS stack, selected by name: TF_WORKSPACE=saas-<name>
+  # (envs/tfc-admin tags every saas-<name> workspace with these tags).
+  cloud {
     workspaces {
-      prefix = "saas-"
+      tags = ["cloud:saas", "layer:workload"]
     }
   }
 }

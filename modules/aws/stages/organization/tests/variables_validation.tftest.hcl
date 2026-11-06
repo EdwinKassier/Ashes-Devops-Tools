@@ -8,10 +8,11 @@
 mock_provider "aws" {}
 
 variables {
-  terraform_run_role_arn  = "arn:aws:iam::111111111111:role/tfc-run-role"
-  break_glass_role_arn    = "arn:aws:iam::111111111111:role/break-glass"
-  log_archive_bucket_name = "sra-log-archive-111111111111"
-  tfc_organization        = "acme"
+  terraform_run_role_arn   = "arn:aws:iam::111111111111:role/tfc-run-role"
+  break_glass_role_arn     = "arn:aws:iam::111111111111:role/break-glass"
+  log_archive_bucket_name  = "sra-log-archive-111111111111"
+  tfc_organization         = "acme"
+  github_federation_owners = ["acme"]
 }
 
 override_module {
@@ -34,6 +35,18 @@ override_module {
       "Workloads/NonProd" = "ou-abcd-nonprod0"
     }
   }
+}
+
+# tfc-management-roles reads the partition / caller identity; mocks return
+# random strings the provider's ARN validators reject, so pin real shapes.
+override_data {
+  target = module.tfc_management_roles[0].data.aws_partition.current
+  values = { partition = "aws" }
+}
+
+override_data {
+  target = module.tfc_management_roles[0].data.aws_caller_identity.current
+  values = { account_id = "111111111111" }
 }
 
 run "defaults_accepted" {

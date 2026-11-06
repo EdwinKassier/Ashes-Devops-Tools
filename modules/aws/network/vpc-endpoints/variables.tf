@@ -63,3 +63,10 @@ variable "endpoint_policy_json" {
   type        = string
   default     = null
 }
+
+variable "tags" {
+  description = "Tags applied to every taggable resource this module creates (merged after provider default_tags; resource-specific tags such as Name win)."
+  type        = map(string)
+  default     = {}
+  nullable    = false
+}

@@ -26,6 +26,7 @@ resource "aws_guardduty_detector" "this" {
   for_each = toset(var.aws_enabled_regions)
   region   = each.value
   enable   = true
+  tags     = var.tags
 }
 
 # Registered from the MANAGEMENT account: nominates the Security Tooling account
@@ -72,4 +73,15 @@ resource "aws_guardduty_organization_configuration_feature" "this" {
   detector_id = aws_guardduty_detector.this[each.value.region].id
   name        = each.value.feature
   auto_enable = "ALL"
+
+  # Runtime Monitoring only produces findings where the security agent runs.
+  # Without automated agent management it is billed but blind on the repo's
+  # own runtime (ECS Fargate), so every agent type is auto-managed.
+  dynamic "additional_configuration" {
+    for_each = each.value.feature == "RUNTIME_MONITORING" ? var.runtime_monitoring_agent_management : []
+    content {
+      name        = additional_configuration.value
+      auto_enable = "ALL"
+    }
+  }
 }

@@ -100,3 +100,16 @@ run "disabled_creates_nothing" {
     error_message = "No EventBridge rules must be created when disabled"
   }
 }
+
+run "module_tags_applied" {
+  command = apply
+
+  variables {
+    tags = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_sns_topic.this[0].tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_sns_topic.this"
+  }
+}

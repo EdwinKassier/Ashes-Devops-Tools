@@ -53,4 +53,34 @@ done < <(printf '%s\n' "$contexts_line" | sed -E 's/^"contexts":\[//; s/\]$//' |
 
 [ "$checked" -gt 0 ] || { echo "ERROR: empty contexts list in $doc" >&2; exit 1; }
 [ "$fail" -eq 0 ] && echo "Required status checks: all $checked context(s) resolve to reported job names."
+
+# --live: also diff the doc against the branch protection GitHub actually
+# enforces. The doc being right proves nothing if nobody applied it (the live
+# rule once required a phantom "Terraform Tests" context and not
+# "Validation Summary"). Reading protection needs repo-admin, so this is opt-in
+# (`make required-checks-live`) rather than part of the PR gate.
+if [ "${1:-}" = "--live" ]; then
+  repo="${GITHUB_REPOSITORY:-$(gh repo view --json nameWithOwner -q .nameWithOwner)}"
+  branch="${PROTECTED_BRANCH:-main}"
+  if ! live=$(gh api "repos/${repo}/branches/${branch}/protection" 2>&1); then
+    echo "ERROR: cannot read branch protection for ${repo}@${branch} (needs repo admin): ${live}" >&2
+    exit 1
+  fi
+  want=$(printf '%s\n' "$contexts_line" | sed -E 's/^"contexts":\[//; s/\]$//' | tr ',' '\n' | sed -E 's/^[[:space:]]*"//; s/"[[:space:]]*$//' | sort -u)
+  have=$(jq -r '.required_status_checks.contexts[]?' <<<"$live" | sort -u)
+  if [ "$want" != "$have" ]; then
+    echo "ERROR: live required contexts on ${repo}@${branch} differ from $doc" >&2
+    diff <(printf '%s\n' "$want") <(printf '%s\n' "$have") | sed 's/^</  doc only: /; s/^>/  live only:/' | grep -E 'only' >&2 || true
+    fail=1
+  fi
+  for want_kv in "required_status_checks.strict=true" "enforce_admins.enabled=true"; do
+    key="${want_kv%%=*}"
+    got=$(jq -r ".${key} | if . == null then \"unset\" else tostring end" <<<"$live")
+    if [ "$got" != "${want_kv#*=}" ]; then
+      echo "ERROR: live ${key}=${got} on ${repo}@${branch}; $doc requires ${want_kv#*=}" >&2
+      fail=1
+    fi
+  done
+  [ "$fail" -eq 0 ] && echo "Live branch protection on ${repo}@${branch} matches $doc."
+fi
 exit "$fail"

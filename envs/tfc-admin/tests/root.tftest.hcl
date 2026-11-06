@@ -21,6 +21,9 @@ variables {
   # and config/landing-zone.yaml.
   landing_zone_config_path = ""
   workspace_variables_file = null
+  # Mock providers cannot import, so the suite runs with an unmanaged
+  # tfc-admin workspace; self_management_* runs cover the managed default.
+  manage_tfc_admin_workspace = false
 }
 
 run "declares_every_workspace" {
@@ -115,7 +118,7 @@ run "trigger_patterns_cover_module_domains" {
   }
 }
 
-# C2: no privileged speculative plan for a PR on the control plane.
+# No privileged speculative plan for a PR on the control plane.
 run "speculative_plans_off_for_control_plane" {
   command = plan
 
@@ -128,11 +131,17 @@ run "speculative_plans_off_for_control_plane" {
   }
 
   assert {
-    condition     = module.workspace["gcp-workload-dev"].speculative_enabled == true && module.workspace["aws-workload-dev"].speculative_enabled == true && module.workspace["saas-web"].speculative_enabled == true
-    error_message = "non-production workload workspaces keep speculative PR plans."
+    condition     = module.workspace["gcp-workload-dev"].speculative_enabled == true && module.workspace["aws-workload-dev"].speculative_enabled == true
+    error_message = "non-production GCP/AWS workload workspaces keep speculative PR plans."
   }
 
-  # N5: a PR must not get a plan with the production plan identity.
+  # SaaS providers use static account-wide tokens with no plan identity.
+  assert {
+    condition     = module.workspace["saas-web"].speculative_enabled == false
+    error_message = "saas-<name> workspaces must not run speculative PR plans (account-wide static tokens)."
+  }
+
+  # A PR must not get a plan with the production plan identity.
   assert {
     condition     = module.workspace["gcp-workload-prod"].speculative_enabled == false && module.workspace["aws-workload-prod"].speculative_enabled == false
     error_message = "production workload workspaces must have speculative_enabled = false."
@@ -431,6 +440,53 @@ run "multi_account_alias_credentials" {
   }
 }
 
+# Aws-security / aws-backup get their own least-privilege management
+# roles from aws-organization; only aws-organization keeps the shared one.
+run "dedicated_management_roles_per_workspace" {
+  command = plan
+
+  variables {
+    aws_organization_outputs_from_tfc = true
+    aws_management_plan_role_arn      = "arn:aws:iam::111111111111:role/tfc-mgmt-plan"
+    aws_management_apply_role_arn     = "arn:aws:iam::111111111111:role/tfc-mgmt-apply"
+  }
+
+  override_data {
+    target = data.tfe_outputs.aws_organization[0]
+    values = {
+      nonsensitive_values = {
+        tfc_plan_role_arns = {
+          security_tooling = "arn:aws:iam::333333333333:role/tfc-plan"
+          log_archive      = "arn:aws:iam::555555555555:role/tfc-plan"
+          forensics        = "arn:aws:iam::666666666666:role/tfc-plan"
+        }
+        tfc_apply_role_arns = {
+          security_tooling = "arn:aws:iam::333333333333:role/tfc-apply"
+          log_archive      = "arn:aws:iam::555555555555:role/tfc-apply"
+          forensics        = "arn:aws:iam::666666666666:role/tfc-apply"
+        }
+        tfc_workspace_bindings         = { security_tooling = ["aws-security"], log_archive = ["aws-security"], forensics = ["aws-security"] }
+        tfc_management_plan_role_arns  = { "aws-security" = "arn:aws:iam::111111111111:role/tfc-mgmt-aws-security-plan" }
+        tfc_management_apply_role_arns = { "aws-security" = "arn:aws:iam::111111111111:role/tfc-mgmt-aws-security-apply" }
+      }
+    }
+  }
+
+  override_data {
+    target = data.tfe_workspace.tfc_admin[0]
+    values = { id = "ws-tfcadmin" }
+  }
+
+  assert {
+    condition = (
+      module.workspace["aws-security"].variable_values["TFC_AWS_PLAN_ROLE_ARN"] == "arn:aws:iam::111111111111:role/tfc-mgmt-aws-security-plan" &&
+      module.workspace["aws-security"].variable_values["TFC_AWS_APPLY_ROLE_ARN"] == "arn:aws:iam::111111111111:role/tfc-mgmt-aws-security-apply" &&
+      module.workspace["aws-organization"].variable_values["TFC_AWS_APPLY_ROLE_ARN"] == "arn:aws:iam::111111111111:role/tfc-mgmt-apply"
+    )
+    error_message = "aws-security must use its dedicated management roles; aws-organization keeps the shared phase-0 role."
+  }
+}
+
 run "explicit_alias_roles" {
   command = plan
 
@@ -612,7 +668,17 @@ run "workspace_variables_file_rejects_secrets" {
   expect_failures = [terraform_data.input_contract]
 }
 
-# Control-plane run notifications (audit M-ops): a configured control-plane
+run "workspace_variables_file_rejects_reserved_env" {
+  command = plan
+
+  variables {
+    workspace_variables_file = "tests/fixtures/tfc-workspaces-reserved-env.yaml"
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+# Control-plane run notifications: a configured control-plane
 # notification reaches foundational workspaces but not workload workspaces.
 run "control_plane_notifications_routed_by_tag" {
   command = plan
@@ -636,7 +702,7 @@ run "control_plane_notifications_routed_by_tag" {
   }
 }
 
-# N4: the broad platform team gets only custom plan-level access on projects
+# The broad platform team gets only custom plan-level access on projects
 # holding the control plane (no variable edits, no apply); a separate approvers
 # team confirms control-plane applies; workload projects keep fixed write.
 run "team_access_least_privilege" {
@@ -747,8 +813,10 @@ run "policy_set_optional_and_advisory_source" {
   command = plan
 
   variables {
-    enable_policy_sets = true
-    vcs_repo           = { identifier = "acme/landing-zone", oauth_token_id = "ot-abc123" }
+    enable_policy_sets         = true
+    vcs_repo                   = { identifier = "acme/landing-zone", oauth_token_id = "ot-abc123" }
+    manage_tfc_admin_workspace = true
+    import_tfc_admin_workspace = false
   }
 
   assert {
@@ -762,6 +830,19 @@ run "policy_set_optional_and_advisory_source" {
   }
 }
 
+run "speculative_on_saas_opt_out" {
+  command = plan
+
+  variables {
+    disable_speculative_on_saas = false
+  }
+
+  assert {
+    condition     = module.workspace["saas-web"].speculative_enabled == true
+    error_message = "disable_speculative_on_saas = false re-enables SaaS speculative plans."
+  }
+}
+
 run "policy_set_off_by_default" {
   command = plan
 
@@ -769,6 +850,18 @@ run "policy_set_off_by_default" {
     condition     = length(tfe_policy_set.opa) == 0
     error_message = "enable_policy_sets defaults to false."
   }
+}
+
+# An unmanaged tfc-admin with a VCS connection keeps speculative plans on, so
+# a PR plan could read its org-admin TFE_TOKEN: the check must warn.
+run "unmanaged_vcs_tfc_admin_warns" {
+  command = plan
+
+  variables {
+    vcs_repo = { identifier = "acme/landing-zone", oauth_token_id = "ot-abc123" }
+  }
+
+  expect_failures = [check.tfc_admin_workspace_hardened]
 }
 
 run "self_management_adopts_tfc_admin" {
@@ -789,5 +882,62 @@ run "self_management_adopts_tfc_admin" {
   assert {
     condition     = contains(keys(tfe_project.this), "platform")
     error_message = "self-managed tfc-admin lands in the platform project."
+  }
+}
+
+# gcp-bootstrap receives every gcp-* workspace ID so its WIF bindings are by ID.
+run "gcp_bootstrap_gets_workspace_ids" {
+  command = plan
+
+  assert {
+    condition = (
+      length(tfe_variable.gcp_bootstrap_workspace_ids) == 1 &&
+      tfe_variable.gcp_bootstrap_workspace_ids[0].key == "tfc_workspace_ids" &&
+      tfe_variable.gcp_bootstrap_workspace_ids[0].hcl == true &&
+      startswith(output.gcp_bootstrap_tfvars, "tfc_workspace_ids = ")
+    )
+    error_message = "tfc-admin must set tfc_workspace_ids (HCL) on gcp-bootstrap and output the phase-0 tfvars line."
+  }
+}
+
+run "gcp_bootstrap_workspace_ids_opt_out" {
+  command = plan
+
+  variables {
+    set_gcp_bootstrap_workspace_ids = false
+  }
+
+  assert {
+    condition     = length(tfe_variable.gcp_bootstrap_workspace_ids) == 0
+    error_message = "set_gcp_bootstrap_workspace_ids = false must not write the variable."
+  }
+}
+
+# Run triggers follow the dependency DAG's direct edges only.
+run "run_triggers_follow_the_dag" {
+  command = plan
+
+  assert {
+    condition = (
+      contains(output.run_triggers, "gcp-projects->gcp-network-hub") &&
+      contains(output.run_triggers, "gcp-network-hub->gcp-workload-dev") &&
+      contains(output.run_triggers, "aws-network->aws-workload-prod") &&
+      contains(output.run_triggers, "aws-organization->aws-security") &&
+      !contains(output.run_triggers, "gcp-organization->gcp-workload-dev")
+    )
+    error_message = "run triggers must chain each root to its direct upstream, without transitive edges."
+  }
+}
+
+run "run_triggers_opt_out" {
+  command = plan
+
+  variables {
+    enable_run_triggers = false
+  }
+
+  assert {
+    condition     = length(output.run_triggers) == 0
+    error_message = "enable_run_triggers = false must create no run triggers."
   }
 }

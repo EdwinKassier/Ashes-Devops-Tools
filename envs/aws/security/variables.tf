@@ -9,7 +9,7 @@ variable "landing_zone_config_path" {
 }
 
 variable "tfc_organization" {
-  description = "Terraform Cloud organization that owns this root's workspace and the aws-organization workspace it reads. Supplied to the backend via backend.hcl / TF_CLI_ARGS_init (kept out of the code so the same root works across orgs and CI). Null = org.tfc.organization from config/landing-zone.yaml."
+  description = "Terraform Cloud organization that owns this root's workspace and the aws-organization workspace it reads. Supplied to the backend via the TF_CLOUD_ORGANIZATION environment variable (kept out of the code so the same root works across orgs and CI). Null = org.tfc.organization from config/landing-zone.yaml."
   type        = string
   default     = null
 }
@@ -42,7 +42,7 @@ variable "organization_contract" {
 # -----------------------------------------------------------------------------
 
 variable "management_account_id" {
-  description = "12-digit AWS management (payer) account ID. The default provider sets allowed_account_ids to this, so Terraform fails fast if the resolved credentials are a different account (audit C4). Null = aws.management_account_id from config/landing-zone.yaml (quote it there); no built-in default."
+  description = "12-digit AWS management (payer) account ID. The default provider sets allowed_account_ids to this, so Terraform fails fast if the resolved credentials are a different account. Null = aws.management_account_id from config/landing-zone.yaml (quote it there); no built-in default."
   type        = string
   default     = null
 
@@ -158,13 +158,13 @@ variable "aggregator_role_arn" {
 }
 
 variable "meta_store_manager_role_arn" {
-  description = "ARN of the AmazonSecurityLakeMetaStoreManager IAM role Security Lake uses to manage the Lake Formation metastore. Required when enable_security_lake is true."
+  description = "ARN of an existing AmazonSecurityLakeMetaStoreManager role. Empty (default): the security stage creates AmazonSecurityLakeMetaStoreManagerV2 in the security-tooling account when Security Lake is on."
   type        = string
   default     = ""
 
   validation {
-    condition     = !var.enable_security_lake || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", var.meta_store_manager_role_arn))
-    error_message = "meta_store_manager_role_arn must be a valid IAM role ARN when enable_security_lake is true."
+    condition     = var.meta_store_manager_role_arn == "" || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", var.meta_store_manager_role_arn))
+    error_message = "meta_store_manager_role_arn must be empty (the stage creates the metastore role) or a valid IAM role ARN."
   }
 }
 
@@ -200,34 +200,34 @@ variable "notification_subscribers" {
 }
 
 variable "enabled_security_services" {
-  description = "Set of org-security services to enable: any of macie, inspector, detective, resource-explorer. Detective defaults OFF per SRA."
+  description = "Set of org-security services to enable: any of macie, inspector, detective, resource-explorer. Detective defaults OFF per SRA. Null (default) follows profile: [macie, inspector] for production, [inspector] for starter."
   type        = set(string)
-  default     = ["macie", "inspector"]
+  default     = null
 
   validation {
     condition = alltrue([
-      for s in var.enabled_security_services : contains(["macie", "inspector", "detective", "resource-explorer"], s)
+      for s in coalesce(var.enabled_security_services, toset([])) : contains(["macie", "inspector", "detective", "resource-explorer"], s)
     ])
     error_message = "enabled_security_services entries must be one of: macie, inspector, detective, resource-explorer."
   }
 }
 
 variable "config_record_all_supported" {
-  description = "AWS Config records ALL supported resource types (default true — the full-coverage but most expensive Config mode). Set false for cost-sensitive non-prod (FinOps F5). See examples/presets/nonprod-aws-security.tfvars."
+  description = "AWS Config records ALL supported resource types (the full-coverage but most expensive Config mode). Null (default) follows profile: true for production, false for starter. See examples/presets/nonprod-aws-security.tfvars."
   type        = bool
-  default     = true
+  default     = null
 }
 
 variable "guardduty_enable_ebs_malware_protection" {
-  description = "GuardDuty agentless EBS malware scanning (default true; billed per GB scanned). Set false for non-prod where it is not required (FinOps F5)."
+  description = "GuardDuty agentless EBS malware scanning (billed per GB scanned). Null (default) follows profile: true for production, false for starter."
   type        = bool
-  default     = true
+  default     = null
 }
 
 variable "enable_security_lake" {
-  description = "Master COST toggle for Amazon Security Lake. Security Lake incurs ingestion, storage, and normalization charges."
+  description = "Master COST toggle for Amazon Security Lake (ingestion, storage and normalization charges). Null (default) follows profile: on for production, off for starter."
   type        = bool
-  default     = true
+  default     = null
 }
 
 variable "enable_incident_response" {
@@ -242,7 +242,7 @@ variable "enable_service_quotas" {
   default     = false
 }
 
-# --- Audit finding A3: dedicated IAM Identity Center account (opt-in, default = unchanged) ---
+# --- Dedicated IAM Identity Center account (opt-in, default = unchanged) ---
 variable "identity_account_id" {
   description = "Dedicated identity account for IAM Identity Center delegated admin. Default null = shared-services account (unchanged). PREVIEW (not yet validated against a real apply)."
   type        = string
@@ -313,7 +313,7 @@ variable "cloudtrail_lambda_data_events" {
 }
 
 # -----------------------------------------------------------------------------
-# Managed break-glass role (audit M3) — opt-in passthrough to the security stage.
+# Managed break-glass role — opt-in passthrough to the security stage.
 # -----------------------------------------------------------------------------
 
 variable "create_break_glass" {
@@ -417,4 +417,27 @@ variable "tfc_aws_dynamic_credentials" {
     aliases = map(object({ shared_config_file = string }))
   })
   default = null
+}
+
+variable "profile" {
+  description = "Cost/assurance profile: production (default; full inspection and detection stack) or starter (cheapest safe non-prod baseline). It only changes the defaults of the profile-driven toggles; any explicit toggle still wins. Null = org.profile from config/landing-zone.yaml, else production."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.profile == null || contains(["production", "starter"], coalesce(var.profile, "production"))
+    error_message = "profile must be production or starter."
+  }
+}
+
+variable "create_organization_trail" {
+  description = "Create the organization CloudTrail. Set false when AWS Control Tower (or another owner) already runs it. Default true."
+  type        = bool
+  default     = true
+}
+
+variable "cloudtrail_cloudwatch_role_arn" {
+  description = "CloudTrail -> CloudWatch Logs delivery role ARN. Null = arn:aws:iam::<management account>:role/org-trail-cloudwatch-delivery, the role aws-organization creates (create_org_trail_delivery_role)."
+  type        = string
+  default     = null
 }

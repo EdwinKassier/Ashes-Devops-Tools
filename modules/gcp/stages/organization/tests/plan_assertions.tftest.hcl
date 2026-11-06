@@ -655,3 +655,173 @@ run "guardrail_spec_is_gcloud_policy_document" {
     error_message = "in separate mode user deny policies are also applied by the guardrail owner, not this stage."
   }
 }
+
+# Bare regions become in:<region>-locations so zonal resources are allowed;
+# value groups pass through unchanged.
+run "resource_locations_use_region_value_groups" {
+  command = plan
+
+  variables {
+    allowed_regions = ["europe-west2", "in:eu-locations"]
+  }
+
+  assert {
+    condition     = jsonencode(one([for p in local.effective_list_policies : p if p.constraint == "gcp.resourceLocations"]).allowed_values) == jsonencode(["in:europe-west2-locations", "in:eu-locations"])
+    error_message = "bare regions must render as in:<region>-locations value groups."
+  }
+}
+
+# WIF provider creation is limited to the trusted issuers; AWS-account
+# federation is denied unless listed.
+run "workload_identity_federation_restricted" {
+  command = plan
+
+  assert {
+    condition = (
+      one([for p in local.effective_list_policies : p if p.constraint == "iam.workloadIdentityPoolProviders"]).allowed_values == tolist(["https://app.terraform.io", "https://token.actions.githubusercontent.com"]) &&
+      one([for p in local.effective_list_policies : p if p.constraint == "iam.workloadIdentityPoolAwsAccounts"]).deny_all == true &&
+      contains(local.default_boolean_constraints, "compute.disableVpcExternalIpv6")
+    )
+    error_message = "the baseline must allow-list WIF issuers, deny AWS-account federation and disable external IPv6."
+  }
+}
+
+# org_policy_overrides: change, drop and add constraints without forking.
+run "org_policy_overrides_merge_over_baseline" {
+  command = plan
+
+  variables {
+    org_policy_overrides = {
+      "compute.requireShieldedVm"                    = { enforce = false }
+      "cloudfunctions.requireVPCConnector"           = { disabled = true }
+      "compute.restrictVpcPeering"                   = { allow_all = true }
+      "compute.restrictLoadBalancerCreationForTypes" = { allowed_values = ["INTERNAL_HTTP_HTTPS"] }
+    }
+  }
+
+  assert {
+    condition = (
+      one([for p in local.effective_boolean_policies : p if p.constraint == "compute.requireShieldedVm"]).enforce == false &&
+      length([for p in local.effective_boolean_policies : p if p.constraint == "cloudfunctions.requireVPCConnector"]) == 0 &&
+      one([for p in local.effective_list_policies : p if p.constraint == "compute.restrictVpcPeering"]).allow_all == true &&
+      one([for p in local.effective_list_policies : p if p.constraint == "compute.restrictLoadBalancerCreationForTypes"]).allowed_values == tolist(["INTERNAL_HTTP_HTTPS"])
+    )
+    error_message = "overrides must set enforce, drop disabled constraints, replace list values and add new constraints."
+  }
+}
+
+# WIF tenant pins become a custom DENY constraint on provider create/update.
+run "wif_tenant_pin_custom_constraint" {
+  command = plan
+
+  variables {
+    wif_tenant_pins = {
+      tfc_organization = "acme-tfc"
+      github_owner_ids = ["123456"]
+    }
+  }
+
+  assert {
+    condition = (
+      one([for c in local.wif_tenant_constraints : c if c.name == "custom.wifProviderTenantPinned"]).resource_types == ["iam.googleapis.com/WorkloadIdentityPoolProvider"] &&
+      strcontains(one(local.wif_tenant_constraints).condition, "matches(\"^assertion[.]terraform_organization_name == 'acme-tfc'( && [^|?]*)?$\")") &&
+      strcontains(one(local.wif_tenant_constraints).condition, "matches(\"^assertion[.]repository_owner_id == '123456'") &&
+      strcontains(one(local.wif_tenant_constraints).condition, "matches(\"^assertion[.]repository_owner_id == \\x22123456\\x22") &&
+      !strcontains(one(local.wif_tenant_constraints).condition, ".contains(")
+    )
+    error_message = "tenant pins must render a DENY custom constraint referencing the TFC org and GitHub owner IDs."
+  }
+}
+
+run "no_wif_tenant_constraint_without_pins" {
+  command = plan
+
+  assert {
+    condition     = length(local.wif_tenant_constraints) == 0
+    error_message = "without pins no tenant constraint is created."
+  }
+}
+
+# The tenant pin is checked against a bypass corpus with Terraform's own RE2
+# (the engine CEL matches() uses): real conditions this repo renders must
+# pass, and every OR / ternary / negation / reorder trick must fail.
+run "wif_tenant_pin_bypass_corpus" {
+  command = plan
+
+  variables {
+    wif_tenant_pins = {
+      tfc_organization = "acme"
+      github_owner_ids = ["123"]
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      for c in [
+        "assertion.terraform_organization_name == 'acme' && assertion.terraform_organization_id == 'org-x' && assertion.terraform_run_phase in ['plan', 'apply']",
+        "assertion.terraform_organization_name == 'acme' && assertion.terraform_run_phase in ['plan', 'apply']",
+      ] : can(regex(local.wif_tfc_pattern, c))
+    ])
+    error_message = "the conditions the bootstrap TFC pool renders must satisfy the pin."
+  }
+
+  assert {
+    condition = !anytrue([
+      for c in [
+        "assertion.terraform_organization_name != 'acme'",
+        "assertion.terraform_organization_name == 'acme' || true",
+        "assertion.terraform_organization_name == 'acme' && true || true",
+        "assertion.terraform_organization_name == 'acme' && true ? true : true",
+        "assertion.terraform_organization_name == 'acme' && (true) ? true : true",
+        "true && assertion.terraform_organization_name == 'acme'",
+        "assertion.terraform_organization_name == 'acmeevil'",
+        "assertion.terraform_organization_name == 'acme'\n|| true",
+      ] : can(regex(local.wif_tfc_pattern, c))
+    ])
+    error_message = "no OR / ternary / reorder / prefix trick may satisfy the TFC tenant pin."
+  }
+
+  assert {
+    condition = alltrue([
+      for c in [
+        "assertion.repository_owner_id == \"123\" && ((assertion.repository_id == \"9\"))",
+        "assertion.repository_owner_id == \"123\" && ((assertion.repository_id == \"9\" && assertion.ref == \"refs/heads/main\" && (has(assertion.environment) && assertion.environment == \"prod\")) || (assertion.repository_id == \"8\"))",
+        "assertion.repository_owner_id == '123' && assertion.repository_id == '9' && assertion.ref == 'refs/heads/main'",
+      ] : anytrue([for p in local.wif_github_patterns : can(regex(p, c))])
+    ])
+    error_message = "the conditions app-services and the bootstrap GitHub pool render must satisfy the pin."
+  }
+
+  assert {
+    condition = !anytrue([
+      for c in [
+        "assertion.repository_owner_id == \"123\" || true",
+        "assertion.repository_owner_id == \"123\" && (true) || (true)",
+        "assertion.repository_owner_id == \"123\" && (true) ? true : true",
+        "assertion.repository_owner_id == \"123\" && true ? true : true",
+        "assertion.repository_owner_id == \"1234\"",
+        "assertion.repository_owner_id != \"123\"",
+        "assertion.repository_owner_id == \"123' && x\" == false",
+        "assertion.repository_owner_id == '123\" && x' == false",
+        "assertion.repository_owner_id == \"123' && x\" != true",
+        "assertion.repository_owner_id == \"123' && x\" in [false]",
+        "assertion.repository_owner_id == '123' == false",
+      ] : anytrue([for p in local.wif_github_patterns : can(regex(p, c))])
+    ])
+    error_message = "no OR / ternary / prefix trick may satisfy the GitHub owner pin."
+  }
+}
+
+# The WIF tenant pin is enforced, not just defined.
+run "wif_tenant_pin_is_enforced" {
+  command = plan
+
+  variables {
+    wif_tenant_pins = { tfc_organization = "acme" }
+  }
+
+  assert {
+    condition     = one(local.wif_tenant_constraints).enforcement == "enforce" && module.org_policies.custom_constraint_policies["custom.wifProviderTenantPinned"] == "enforce"
+    error_message = "custom.wifProviderTenantPinned must be enforced by default."
+  }
+}

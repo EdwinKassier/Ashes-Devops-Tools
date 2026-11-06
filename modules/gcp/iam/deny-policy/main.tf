@@ -3,7 +3,7 @@
 # always evaluates deny before allow, so a matching deny wins. Recommended by
 # Google's enterprise-foundations guidance as the defense-in-depth complement to
 # Organization Policy constraints (org policy restricts resource *config*; deny
-# policies restrict principal *actions*). See docs/known-gaps.md (G9).
+# policies restrict principal *actions*). See docs/known-gaps.md.
 
 resource "google_iam_deny_policy" "this" {
   for_each = { for p in var.deny_policies : p.name => p }

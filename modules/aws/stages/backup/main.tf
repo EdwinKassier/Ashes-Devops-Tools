@@ -72,8 +72,13 @@ locals {
     : null
   )
 
-  create_backup_role = var.backup_role_arn == null
-  backup_role_arn    = local.create_backup_role ? "arn:aws:iam::$account:role/${var.backup_role_name}" : var.backup_role_arn
+  # The member-account role is deployed by aws-organization by default
+  # (create_backup_service_role there): the aws-backup management role must not
+  # hold CloudFormation StackSet rights, which would be an org-wide
+  # role-deployment primitive. create_backup_role_stack_set = true keeps the
+  # legacy in-stage StackSet for estates that apply aws-backup as the phase-0 role.
+  create_backup_role = var.backup_role_arn == null && var.create_backup_role_stack_set
+  backup_role_arn    = var.backup_role_arn == null ? "arn:${var.partition}:iam::$account:role/${var.backup_role_name}" : var.backup_role_arn
 
   backup_role_template = jsonencode({
     AWSTemplateFormatVersion = "2010-09-09"

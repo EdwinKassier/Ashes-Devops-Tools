@@ -15,7 +15,7 @@
 # mock_provider and its content is assertable in tests.
 
 locals {
-  bucket_arn = "arn:aws:s3:::${var.log_archive_bucket_name}"
+  bucket_arn = "arn:${local.partition}:s3:::${var.log_archive_bucket_name}"
 
   # Transition to GLACIER at 90 days, but never after objects expire (guards the
   # case where retention_days < 90, which S3 would otherwise reject).
@@ -63,7 +63,7 @@ locals {
       # CloudWatch Logs vended-log delivery (VPC flow logs, Network Firewall
       # ALERT/FLOW logs, Route 53 Resolver query logs) from any account in the
       # org. Without these two statements cross-account delivery fails silently
-      # (audit / known-gaps A8). Pattern: AWS "Logs sent to Amazon S3" docs.
+      #. Pattern: AWS "Logs sent to Amazon S3" docs.
       {
         Sid       = "AWSLogDeliveryAclCheck"
         Effect    = "Allow"
@@ -114,6 +114,7 @@ resource "aws_s3_bucket" "this" {
 
   # Object Lock must be enabled at creation; it cannot be toggled afterward.
   object_lock_enabled = true
+  tags                = var.tags
 }
 
 resource "aws_s3_bucket_public_access_block" "this" {

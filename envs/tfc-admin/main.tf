@@ -1,4 +1,4 @@
-# tfc-admin: declare the whole Terraform Cloud workspace layer as code (audit C3).
+# tfc-admin: declare the whole Terraform Cloud workspace layer as code.
 #
 # Workspaces, projects, VCS wiring + trigger patterns, explicit remote-state
 # sharing, health assessments, dynamic-credential env vars, shared variable sets,
@@ -164,6 +164,10 @@ locals {
   aws_organization_outputs = try(data.tfe_outputs.aws_organization[0].nonsensitive_values, {})
   aws_output_plan_roles    = try(tomap(local.aws_organization_outputs.tfc_plan_role_arns), {})
   aws_output_apply_roles   = try(tomap(local.aws_organization_outputs.tfc_apply_role_arns), {})
+  # Dedicated per-workspace management roles (aws-security, aws-backup) from
+  # aws-organization; they replace the shared phase-0 role for those roots.
+  aws_output_mgmt_plan_roles  = try(tomap(local.aws_organization_outputs.tfc_management_plan_role_arns), {})
+  aws_output_mgmt_apply_roles = try(tomap(local.aws_organization_outputs.tfc_management_apply_role_arns), {})
 
   # Roots whose DEFAULT provider is the management (payer) account. Their default
   # credentials are the phase-0 management-account role, never a member role.
@@ -216,11 +220,14 @@ locals {
     for ws, aliases in local.aws_alias_roles : ws => alltrue([for r in values(aliases) : r.plan != null && r.apply != null])
   }
 
-  aws_management_defaults = var.aws_management_plan_role_arn == null ? {} : {
+  # Per workspace: the dedicated management role pair when aws-organization
+  # created one, else the shared phase-0 role (aws-organization always uses it).
+  aws_management_defaults = {
     for ws in local.aws_management_workspaces : ws => {
-      plan  = var.aws_management_plan_role_arn
-      apply = var.aws_management_apply_role_arn
-    } if contains(local.workspace_names, ws) && lookup(local.aws_aliases_complete, ws, true)
+      plan  = try(local.aws_output_mgmt_plan_roles[ws], var.aws_management_plan_role_arn)
+      apply = try(local.aws_output_mgmt_apply_roles[ws], var.aws_management_apply_role_arn)
+    } if contains(local.workspace_names, ws) && lookup(local.aws_aliases_complete, ws, true) &&
+    (try(local.aws_output_mgmt_plan_roles[ws], var.aws_management_plan_role_arn) != null)
   }
 
   aws_plan_roles = merge(
@@ -280,6 +287,11 @@ locals {
   # workspace_variables (or the committed workspace_variables_file).
   derived_terraform_vars = merge(
     {
+      for ws in keys(local.saas) : ws => {
+        stack = { value = trimprefix(ws, "saas-"), category = "terraform", hcl = false, sensitive = false, description = "SaaS stack key in saas.stacks (derived from the workspace name)." }
+      }
+    },
+    {
       for ws in local.gcp_workload_names : ws => {
         environment = { value = trimprefix(ws, "gcp-workload-"), category = "terraform", hcl = false, sensitive = false, description = "Environment key (derived from the workspace name)." }
       }
@@ -316,6 +328,15 @@ locals {
       }
     }
   }
+  # The committed file must not steer credentials or the CLI: dynamic-credential
+  # env vars (TFC_*), CLI argument injection (TF_CLI_ARGS*), provider auth env
+  # vars, or Terraform's own controls. tfc-admin derives the legitimate ones.
+  file_reserved_entries = flatten([
+    for ws, vars in local.file_workspace_variables : [
+      for k, v in vars : "${ws}.${k}"
+      if v.category == "env" && can(regex("^(TFC_|TF_CLI_ARGS|TF_VAR_|TF_WORKSPACE|TF_LOG|AWS_|GOOGLE_|CLOUDSDK_|SUPABASE_|VERCEL_)", k))
+    ]
+  ])
   file_sensitive_entries = flatten([
     for ws, vars in local.file_workspace_variables : [for k, v in vars : "${ws}.${k}" if v.sensitive]
   ])
@@ -351,7 +372,7 @@ locals {
   # Projects that hold at least one control-plane / bootstrap workspace.
   control_plane_projects = toset([for k, p in local.workspace_project_key : p if local.is_control_plane[k] && contains(local.project_keys, p)])
 
-  # ── Team access (audit N4) ────────────────────────────────────────────────
+  # ── Team access ────────────────────────────────────────────────
   # The broad platform team never gets fixed write on a control-plane project:
   # write would let one member edit a control-plane variable (containment /
   # break-glass inputs) and confirm the apply alone. There it gets custom access
@@ -402,10 +423,11 @@ locals {
     for k, p in local.workspace_project_key : k if !local.is_control_plane[k] && contains(local.control_plane_projects, p)
   ])
 
-  # ── Speculative plans (audit N5) ──────────────────────────────────────────
+  # ── Speculative plans ──────────────────────────────────────────
   speculative_disabled = setunion(
     toset(var.speculative_disabled_workspaces),
     var.disable_speculative_on_production ? local.production_workloads : toset([]),
+    var.disable_speculative_on_saas ? toset(keys(local.saas)) : toset([]),
   )
 
   # Every input keyed by workspace name must name a managed workspace of the
@@ -452,6 +474,10 @@ resource "terraform_data" "input_contract" {
     precondition {
       condition     = length(local.aws_incomplete_multi_account) == 0
       error_message = "Multi-account AWS workspaces have default credentials but not every alias role (TFC_AWS_*_<alias>): ${join(", ", local.aws_incomplete_multi_account)}. Supply aws_alias_role_arns or aws_organization_outputs_from_tfc, or remove the workspace's explicit aws_plan_role_arns / aws_apply_role_arns."
+    }
+    precondition {
+      condition     = length(local.file_reserved_entries) == 0
+      error_message = "workspace_variables_file sets reserved environment variables: ${join(", ", local.file_reserved_entries)}. Dynamic-credential (TFC_*), CLI (TF_CLI_ARGS*, TF_*) and provider-auth env vars are derived by tfc-admin or set write-only via workspace_variables, never from the committed file."
     }
     precondition {
       condition     = length(local.file_sensitive_entries) == 0
@@ -603,7 +629,7 @@ module "workspace" {
   variables        = local.workspace_vars[each.key]
   variable_set_ids = { common = tfe_variable_set.common.id }
 
-  # Control-plane and bootstrap workspaces alert on failed runs (audit M-ops);
+  # Control-plane and bootstrap workspaces alert on failed runs;
   # workload workspaces use the separate workload channel (both default empty).
   notifications = local.is_control_plane[each.key] ? var.control_plane_notifications : var.workload_notifications
 }
@@ -621,6 +647,16 @@ resource "tfe_workspace_settings" "this" {
 }
 
 # Adopt the hand-created tfc-admin workspace instead of creating a duplicate.
+# An unmanaged tfc-admin workspace keeps TFC's default speculative_enabled =
+# true. With a VCS connection that hands every PR a plan that can read the
+# org-admin TFE_TOKEN, so warn on every plan until it is adopted.
+check "tfc_admin_workspace_hardened" {
+  assert {
+    condition     = var.manage_tfc_admin_workspace || local.vcs_repo == null
+    error_message = "manage_tfc_admin_workspace = false while vcs_repo is set: the hand-created tfc-admin workspace keeps speculative PR plans ON, so a pull request's plan can read its org-admin TFE_TOKEN. Set manage_tfc_admin_workspace = true, or disable speculative plans on it by hand."
+  }
+}
+
 import {
   for_each = var.manage_tfc_admin_workspace && var.import_tfc_admin_workspace ? toset([var.tfc_admin_workspace_name]) : toset([])
   to       = module.workspace[each.key].tfe_workspace.this
@@ -629,8 +665,8 @@ import {
 
 # ── Optional OPA policy set (mixed mandatory / advisory) ───────────────────
 # Sourced from policies/opa/ in this repo via VCS. Enforcement level is set per
-# policy in policies/opa/policies.hcl: 8 mandatory (public exposure, identity,
-# encryption) + 3 advisory. The set is NOT overridable by default
+# policy in policies/opa/policies.hcl: 10 mandatory (public exposure, identity,
+# encryption) + 4 advisory. The set is NOT overridable by default
 # (policy_set_overridable = false), so a mandatory failure is a hard stop that
 # no "Manage Policy Overrides" user can wave through; advisory results never
 # block. Requires a PAID HCP Terraform tier with policy enforcement (not the
@@ -663,4 +699,78 @@ resource "tfe_policy_set" "opa" {
       error_message = "enable_policy_sets = true requires vcs_repo (or org.tfc.vcs_repo in config/landing-zone.yaml): the policy set is sourced from policies/opa in the repo."
     }
   }
+}
+
+# ── gcp-bootstrap: immutable workspace IDs for the WIF bindings ─────────────
+# gcp-bootstrap binds each gcp-* workspace's plan/apply SA by workspace ID when
+# it knows the ID (by name otherwise, which a production estate rejects). The
+# IDs only exist once this root has created the workspaces, so it writes them
+# onto gcp-bootstrap here (a separate resource, so the workspace module does not
+# depend on its own IDs). The local phase-0 apply runs in local execution mode,
+# which ignores workspace variables: use output.gcp_bootstrap_tfvars there.
+locals {
+  gcp_bootstrap_workspace_ids = {
+    for ws, m in module.workspace : ws => m.id if startswith(ws, "gcp-")
+  }
+  set_gcp_bootstrap_workspace_ids = (
+    var.set_gcp_bootstrap_workspace_ids &&
+    contains(keys(local.workspaces), "gcp-bootstrap") &&
+    !contains(keys(lookup(local.workspace_vars, "gcp-bootstrap", {})), "tfc_workspace_ids")
+  )
+}
+
+resource "tfe_variable" "gcp_bootstrap_workspace_ids" {
+  count = local.set_gcp_bootstrap_workspace_ids ? 1 : 0
+
+  workspace_id = module.workspace["gcp-bootstrap"].id
+  key          = "tfc_workspace_ids"
+  value        = jsonencode(local.gcp_bootstrap_workspace_ids)
+  category     = "terraform"
+  hcl          = true
+  description  = "TFC workspace name -> immutable ID for every gcp-* workspace (set by tfc-admin), so gcp-bootstrap binds WIF by ID, never by squattable name."
+}
+
+# ── Run triggers along the dependency DAG ───────────────────────────────────
+# A successful apply upstream queues a run downstream, so a change to
+# gcp-projects (say) is followed by a plan of gcp-network-hub and every
+# gcp-workload-<env> instead of waiting for someone to remember. Downstream
+# auto_apply stays false: the triggered run is a plan awaiting confirmation.
+# Only the direct edges (the DAG's transitive reduction), so a workload is
+# queued once per upstream change, not once per ancestor.
+locals {
+  run_trigger_edges = {
+    "gcp-organization"    = ["gcp-bootstrap"]
+    "gcp-projects"        = ["gcp-organization"]
+    "gcp-network-hub"     = ["gcp-projects"]
+    "aws-security"        = ["aws-organization"]
+    "aws-network"         = ["aws-organization"]
+    "aws-identity"        = ["aws-organization"]
+    "aws-shared-services" = ["aws-organization"]
+    "aws-backup"          = ["aws-organization"]
+  }
+  run_trigger_pairs = var.enable_run_triggers ? merge(
+    merge([
+      for downstream, sources in local.run_trigger_edges : {
+        for src in sources : "${src}->${downstream}" => { source = src, downstream = downstream }
+        if contains(keys(local.workspaces), src) && contains(keys(local.workspaces), downstream)
+      }
+    ]...),
+    {
+      for ws in local.gcp_workload_names : "gcp-network-hub->${ws}" => { source = "gcp-network-hub", downstream = ws }
+      if contains(keys(local.workspaces), "gcp-network-hub")
+    },
+    merge([
+      for ws in local.aws_workload_names : {
+        for src in ["aws-network", "aws-security"] : "${src}->${ws}" => { source = src, downstream = ws }
+        if contains(keys(local.workspaces), src)
+      }
+    ]...),
+  ) : {}
+}
+
+resource "tfe_run_trigger" "dag" {
+  for_each = local.run_trigger_pairs
+
+  workspace_id  = module.workspace[each.value.downstream].id
+  sourceable_id = module.workspace[each.value.source].id
 }

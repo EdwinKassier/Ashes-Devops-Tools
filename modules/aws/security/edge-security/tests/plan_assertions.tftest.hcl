@@ -99,3 +99,18 @@ run "edge_disabled_provisions_nothing" {
     error_message = "No Web ACL must be created when edge is disabled"
   }
 }
+
+run "module_tags_applied" {
+  command = apply
+
+  variables {
+    enable_edge = true
+    name_prefix = "test"
+    tags        = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_cloudfront_distribution.this[0].tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_cloudfront_distribution.this"
+  }
+}

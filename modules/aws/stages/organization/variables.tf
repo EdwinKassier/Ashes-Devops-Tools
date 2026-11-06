@@ -7,6 +7,9 @@ variable "accounts" {
   type = map(object({
     email = string
     ou    = string
+    # Display name of the account. Null = the map key. Set it when adopting an
+    # existing account whose name differs from the key (adopt_existing).
+    name = optional(string)
     alternate_contacts = optional(map(object({
       contact_type  = string
       name          = string
@@ -36,6 +39,9 @@ variable "workload_accounts" {
   type = map(object({
     email = string
     ou    = string
+    # Display name of the account. Null = the map key. Set it when adopting an
+    # existing account whose name differs from the key (adopt_existing).
+    name = optional(string)
     alternate_contacts = optional(map(object({
       contact_type  = string
       name          = string
@@ -73,7 +79,7 @@ variable "terraform_run_role_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.terraform_run_role_arn))
+    condition     = can(regex("^arn:aws(-us-gov|-cn)?:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.terraform_run_role_arn))
     error_message = "terraform_run_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/<name>) with no wildcards (* or ?)."
   }
 }
@@ -83,7 +89,7 @@ variable "break_glass_role_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.break_glass_role_arn))
+    condition     = can(regex("^arn:aws(-us-gov|-cn)?:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.break_glass_role_arn))
     error_message = "break_glass_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/<name>) with no wildcards (* or ?)."
   }
 }
@@ -197,6 +203,32 @@ variable "tfc_hostname" {
   default     = "app.terraform.io"
 }
 
+variable "central_detection_account_keys" {
+  description = "Account keys (from accounts) whose pipeline may change GuardDuty filters/detectors, CloudTrail selectors and Security Hub standards; denied everywhere else except break-glass (deny-tamper SCP). Default: the SRA security_tooling and log_archive accounts. Set [] to restore the pipeline-wide exemption."
+  type        = list(string)
+  default     = ["security_tooling", "log_archive"]
+  nullable    = false
+
+  # A typo would silently drop the SCP statement (and with it the scoping).
+  validation {
+    condition     = alltrue([for k in var.central_detection_account_keys : contains(keys(merge(var.accounts, var.workload_accounts)), k)])
+    error_message = "central_detection_account_keys must name accounts in accounts / workload_accounts."
+  }
+}
+
+variable "pin_tfc_federation_to_org" {
+  description = "Deny (RCP, every account) sts:AssumeRoleWithWebIdentity with a <tfc_hostname> token whose sub is not organization:<tfc_organization>:*. Without it, any pipeline that can create a role can make it trust ANOTHER TFC org on the same issuer: a persistence path no permissions boundary sees. Default true; takes effect when tfc_organization is set. Set false only if workspaces in other TFC organizations must assume roles here."
+  type        = bool
+  default     = true
+}
+
+variable "github_federation_owners" {
+  description = "GitHub users/orgs whose Actions OIDC tokens may assume roles anywhere in the organization (RCP pin: sub must be repo:<owner>/*). Empty (default) leaves GitHub federation unpinned. Set it to every owner whose repos deploy here (app-services deploy roles)."
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
+
 variable "tfc_project" {
   description = "Default TFC project of the bound workspaces (matched literally in the trust sub). Override per account with tfc_workspace_bindings[*].project."
   type        = string
@@ -293,4 +325,116 @@ variable "member_break_glass_require_mfa" {
   description = "Require MFA (aws:MultiFactorAuthPresent + aws:MultiFactorAuthAge) on the member break-glass trust. Default true. A role-chained session may not carry MFA context: trust MFA-authenticated IAM users, or set false when the trusted management role is itself MFA-gated — validate end to end before relying on it."
   type        = bool
   default     = true
+}
+
+variable "enable_tfc_management_roles" {
+  description = "Create a dedicated least-privilege management-account plan/apply role pair per management-default workspace (tfc_management_workspaces). tfc-admin binds them instead of the shared phase-0 management role, so aws-security / aws-backup cannot pivot into member accounts or change the org structure. Requires tfc_organization and the management account's TFC OIDC provider (phase 0). Default true."
+  type        = bool
+  default     = true
+}
+
+variable "tfc_management_workspaces" {
+  description = "Management-default workspaces that get their own role pair (tfc-management-roles workspaces). aws-security and aws-backup have built-in least-privilege policies; others need apply_policy_json."
+  type = map(object({
+    project           = optional(string)
+    apply_policy_json = optional(string)
+  }))
+  default = {
+    "aws-security" = {}
+    "aws-backup"   = {}
+  }
+}
+
+variable "org_policy_overrides" {
+  description = "Organization policies merged over the built-in guardrail set (organization-policy policy_overrides): an existing key replaces that policy's content, a new key adds one (attach it with org_policy_attachments). Use this instead of forking the stage."
+  type = map(object({
+    type    = string
+    content = string
+  }))
+  default  = {}
+  nullable = false
+}
+
+variable "disabled_org_policies" {
+  description = "Built-in policy keys not to create; their default attachments are dropped too. Default: backup-policy (the aws-backup stage owns the attached BACKUP_POLICY, so the built-in copy would sit unattached)."
+  type        = list(string)
+  default     = ["backup-policy"]
+  nullable    = false
+}
+
+variable "org_policy_attachments" {
+  description = "Extra policy attachments (key => {policy_key, target_id}), e.g. for policies added through org_policy_overrides. Keys must not collide with the built-in attachment keys."
+  type = map(object({
+    policy_key = string
+    target_id  = string
+  }))
+  default  = {}
+  nullable = false
+}
+
+variable "create_backup_service_role" {
+  description = "Deploy the member-account AWS Backup service role (backup_service_role_name) to every Workloads-OU account through a service-managed StackSet. aws-backup's BACKUP_POLICY references it, so aws-backup needs no CloudFormation rights. Default true."
+  type        = bool
+  default     = true
+}
+
+variable "backup_service_role_name" {
+  description = "Name of the member-account AWS Backup service role (must equal aws-backup backup_role_name)."
+  type        = string
+  default     = "aws-backup-org-role"
+}
+
+variable "backup_service_role_stack_set_name" {
+  description = "Name of the StackSet that deploys the Backup service role."
+  type        = string
+  default     = "aws-backup-org-role"
+}
+
+variable "backup_service_role_region" {
+  description = "Region of the Backup service-role stack instances (IAM is global; one region suffices)."
+  type        = string
+  default     = "eu-west-2"
+}
+
+variable "github_federation_owner_ids" {
+  description = "Numeric GitHub owner IDs whose Actions tokens may assume roles (RCP pin repository_owner_id:<id>:*), for deploy roles using the immutable-ID subject template. Complements github_federation_owners."
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
+
+variable "allowed_builtin_web_identity_providers" {
+  description = "Built-in web-identity providers roles may trust (cognito-identity.amazonaws.com, accounts.google.com, graph.facebook.com, www.amazon.com). Default none: the RCP denies sts:AssumeRoleWithWebIdentity with their tokens, since they need no IAM provider resource and so escape every other control."
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
+
+variable "create_org_trail_delivery_role" {
+  description = "Create the organization trail's CloudTrail -> CloudWatch Logs delivery role (<org_trail_name>-cloudwatch-delivery) here, so aws-security needs no IAM write in the management account. Default true."
+  type        = bool
+  default     = true
+}
+
+variable "org_trail_name" {
+  description = "Name of the organization CloudTrail trail aws-security creates (cloudtrail-org trail_name)."
+  type        = string
+  default     = "org-trail"
+}
+
+variable "identity_center_admin_account_key" {
+  description = "Account key (accounts / workload_accounts) to register as the IAM Identity Center delegated administrator. Default shared_services, the aws-identity account in the SRA layout. Null = do not register here."
+  type        = string
+  default     = "shared_services"
+
+  validation {
+    condition     = var.identity_center_admin_account_key == null || contains(keys(merge(var.accounts, var.workload_accounts)), coalesce(var.identity_center_admin_account_key, "x"))
+    error_message = "identity_center_admin_account_key must name an account in accounts / workload_accounts."
+  }
+}
+
+variable "partition" {
+  description = "AWS partition the organization policies are rendered for (aws, aws-us-gov, aws-cn)."
+  type        = string
+  default     = "aws"
 }

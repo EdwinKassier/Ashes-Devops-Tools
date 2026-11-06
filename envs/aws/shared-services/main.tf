@@ -33,7 +33,7 @@ locals {
   # Org ARN for RAM org-wide sharing of the Private CA, built from existing
   # organization outputs (management account id + org id) so no extra
   # remote-state dependency is needed just to obtain the ARN.
-  org_arn = "arn:aws:organizations::${local.org.management_account_id}:organization/${local.org.organization_id}"
+  org_arn = "arn:${local.partition}:organizations::${local.org.management_account_id}:organization/${local.org.organization_id}"
 }
 
 module "aws_shared_services" {

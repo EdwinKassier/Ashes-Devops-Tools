@@ -1,4 +1,4 @@
-# gcp-projects reads its upstreams via remote state (audit H3). Apply order:
+# gcp-projects reads its upstreams via remote state. Apply order:
 # gcp-bootstrap -> gcp-organization -> gcp-projects.
 #
 # Stage contract override (FAST-style): a supplied bootstrap_contract /

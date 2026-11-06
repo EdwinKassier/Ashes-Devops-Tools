@@ -22,7 +22,24 @@ locals {
     tfc_organization = try(tostring(local.lz.org.tfc.organization), null)
     enable_supabase  = try(tobool(local.lz.saas.supabase), null)
     enable_vercel    = try(tobool(local.lz.saas.vercel), null)
+    # Per-stack settings: saas.stacks.<name> over saas.defaults (no secrets:
+    # the database password stays a sensitive TFC variable).
+    stacks   = try({ for k, v in local.lz.saas.stacks : k => v }, {})
+    defaults = try(local.lz.saas.defaults, {})
   }
+
+  # The stack this workspace deploys: explicit var.stack (tfc-admin sets it on
+  # every saas-<name> workspace), else the workspace name without "saas-".
+  stack     = coalesce(var.stack, trimprefix(terraform.workspace, "saas-"))
+  stack_cfg = try(local.cfg.stacks[local.stack], {})
+
+  supabase_organization_id = var.supabase_organization_id != "" ? var.supabase_organization_id : try(tostring(local.stack_cfg.supabase.organization_id), tostring(local.cfg.defaults.supabase.organization_id), "")
+  supabase_project_name    = var.supabase_project_name != "" ? var.supabase_project_name : try(tostring(local.stack_cfg.supabase.project_name), "")
+  supabase_region          = coalesce(var.supabase_region, try(tostring(local.stack_cfg.supabase.region), null), try(tostring(local.cfg.defaults.supabase.region), null), "eu-west-2")
+  vercel_team_id           = var.vercel_team_id != "" ? var.vercel_team_id : try(tostring(local.stack_cfg.vercel.team_id), tostring(local.cfg.defaults.vercel.team_id), "")
+  vercel_project_name      = var.vercel_project_name != "" ? var.vercel_project_name : try(tostring(local.stack_cfg.vercel.project_name), "")
+  vercel_github_repo       = var.vercel_github_repo != "" ? var.vercel_github_repo : try(tostring(local.stack_cfg.vercel.github_repo), "")
+  vercel_production_branch = coalesce(var.vercel_production_branch, try(tostring(local.stack_cfg.vercel.production_branch), null), "main")
 
   tfc_organization = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
   enable_supabase  = var.enable_supabase != null ? var.enable_supabase : coalesce(local.cfg.enable_supabase, true)

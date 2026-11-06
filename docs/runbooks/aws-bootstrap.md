@@ -2,7 +2,7 @@
 
 **When to use:** You are standing up the AWS landing zone from zero — no AWS organization, no Terraform Cloud workspaces, no state. This is the AWS equivalent of the GCP [Quick Start](../guides/QUICK_START.md) bootstrap section, and it solves the same chicken-and-egg problem: the TFC workspace and AWS run credentials must exist **before** `terraform init` can store state.
 
-**Time:** 2–4 hours for the first stand-up (mostly waiting on AWS account creation and manual console gates).
+**Time:** about 1–2 weeks for a first production stand-up, mostly account creation, the Identity Center console gate, IAM propagation and reviewing each layer's first plan. A sandbox run-through with the shipped phase-0 template takes about a day.
 **Risk:** High for the management-account steps — you are operating with elevated, out-of-band credentials that bypass the guardrails the org root will later install. Every phase-0 action should be logged and the bootstrap identity revoked once CI takes over.
 **Prerequisites:** See the out-of-band list below. You are comfortable with the [provider-selection model](../architecture/provider-selection.md) (one cloud = one root = one workspace) and the [cross-root contract](../architecture/adding-a-cloud.md) (downstream roots assume roles whose ARNs the org root publishes).
 
@@ -50,7 +50,18 @@ Run #1 of `aws-organization` needs AWS credentials in the management account **b
 
 **Option A — Static admin credentials (simplest, least secure).** Create a temporary IAM admin user (or use root, discouraged) in the management account and generate an access key. Set it as workspace environment variables (Step 4). Delete the key immediately after run #1.
 
-**Option B — Hand-created OIDC / TFC dynamic-credentials roles (recommended).** In the **management account**, create:
+**Option B — OIDC / TFC dynamic-credentials roles (recommended).** Deploy the shipped template [`templates/aws/bootstrap/phase0-management.yaml`](../../templates/aws/bootstrap/phase0-management.yaml) as one CloudFormation stack in the management account. It creates exactly the resources below, plus the MFA-gated `OrganizationBreakGlass` role, and outputs the ARNs that `aws.terraform_run_role_arn` and `aws.break_glass_role_arn` need:
+
+```bash
+aws cloudformation deploy --stack-name ashes-phase0 \
+  --template-file templates/aws/bootstrap/phase0-management.yaml \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --parameter-overrides TfcOrganization=<tfc-org> TfcProject=<prefix>aws \
+    BreakGlassTrustedPrincipalArn=arn:aws:iam::<mgmt-account-id>:user/break-glass
+aws cloudformation describe-stacks --stack-name ashes-phase0 --query 'Stacks[0].Outputs'
+```
+
+After aws-organization has created the dedicated `aws-security` / `aws-backup` roles, update the stack with `TrustSecurityAndBackup=false`. Keep `create_break_glass = false` in aws-security: the break-glass role belongs to this phase-0 stack, and the aws-security management role is deliberately denied access to it. To create the resources by hand instead, in the **management account** create:
 
 1. An IAM OIDC identity provider for `https://app.terraform.io` with audience `aws.workload.identity`.
 2. A **plan** role, e.g. `tfc-mgmt-plan`, with `ReadOnlyAccess`, and an **apply** role, e.g. `tfc-mgmt-apply`, with an admin-scoped policy. Each trusts only the management-account workspaces, for its own run phase:
@@ -73,7 +84,9 @@ Run #1 of `aws-organization` needs AWS credentials in the management account **b
 }
 ```
 
-In the plan role, use `run_phase:plan` in place of `run_phase:apply`. Never wildcard the organization. Then drive the roles with TFC's native [dynamic credentials](https://developer.hashicorp.com/terraform/cloud-docs/workspaces/dynamic-provider-credentials/aws-configuration) by setting these **workspace environment variables**:
+In the plan role, use `run_phase:plan` in place of `run_phase:apply`. Never wildcard the organization.
+
+> **The shared role is temporary for `aws-security` / `aws-backup`.** The first `aws-organization` apply creates a dedicated least-privilege plan/apply pair for each of them in the management account: `tfc-mgmt-aws-security-*` and `tfc-mgmt-aws-backup-*`, from [`tfc-management-roles`](../../modules/aws/iam/tfc-management-roles/README.md), with `enable_tfc_management_roles` defaulting to true. With `aws_organization_outputs_from_tfc = true`, `tfc-admin` then binds each workspace to its own pair. Once both workspaces have run on their dedicated roles, remove their two `sub` entries from the phase-0 trust above, so only `aws-organization` can reach the management admin role. The dedicated apply roles cannot assume `OrganizationAccountAccessRole`, change accounts or OUs, or edit any `tfc-mgmt-*` role. Then drive the roles with TFC's native [dynamic credentials](https://developer.hashicorp.com/terraform/cloud-docs/workspaces/dynamic-provider-credentials/aws-configuration) by setting these **workspace environment variables**:
 
 ```text
 TFC_AWS_PROVIDER_AUTH  = true
@@ -132,7 +145,7 @@ Pass 1 sets `TFC_AWS_PROVIDER_AUTH` / `TFC_AWS_PLAN_ROLE_ARN` / `TFC_AWS_APPLY_R
 
 **Run #1 state note (the chicken-and-egg).** With Option B the first `aws-organization` run executes remotely in TFC. With Option A (or no TFC credentials yet) set tfc-admin `workspace_execution_modes = { "aws-organization" = "local" }`: the run then executes on your machine with the credentials in your shell while state still lands in the TFC workspace. Switch it back (remove the entry, re-apply tfc-admin) once the Option B roles exist. The `-backend=false` local-state-then-migrate route also works, but is rarely needed now that tfc-admin creates the workspace up front.
 
-Supply the TFC org to the backend the same way every root does — via a gitignored `backend.hcl` or `TF_CLI_ARGS_init` (see `envs/aws/organization/backend.tf` for the two forms).
+Supply the TFC org the same way every root does: `export TF_CLOUD_ORGANIZATION=<your-tfc-org>` before `terraform init` (see `envs/aws/organization/backend.tf`). The `cloud` block accepts no `-backend-config`.
 
 ---
 
@@ -142,9 +155,20 @@ Every AWS account is created with a default VPC in every Region. A single Terraf
 
 **This is a documented manual step, not something Terraform does for you:**
 
-1. In the management (or delegated CloudFormation) account, create a **service-managed StackSet** targeting the whole organization (or the OUs you care about), with **automatic deployment to new accounts enabled**.
-2. The stack template deletes the default VPC (and its subnets, IGW, route tables) in each enabled Region.
-3. Deploy it **after** the foundational accounts exist (i.e. after phase-1 apply), and leave auto-deployment on so future accounts are cleaned up when they join the org.
+1. In the management (or delegated CloudFormation) account, create a **service-managed StackSet** from the shipped template [`templates/aws/bootstrap/delete-default-vpcs.yaml`](../../templates/aws/bootstrap/delete-default-vpcs.yaml). Target the organization root, or the OUs you care about, with **automatic deployment to new accounts enabled**:
+
+   ```bash
+   aws cloudformation create-stack-set --stack-set-name delete-default-vpcs \
+     --template-body file://templates/aws/bootstrap/delete-default-vpcs.yaml \
+     --permission-model SERVICE_MANAGED --capabilities CAPABILITY_IAM \
+     --auto-deployment Enabled=true,RetainStacksOnAccountRemoval=false \
+     --parameters ParameterKey=Regions,ParameterValue=eu-west-2
+   aws cloudformation create-stack-instances --stack-set-name delete-default-vpcs \
+     --deployment-targets OrganizationalUnitIds=<root-id> --regions eu-west-2
+   ```
+
+2. The template's custom resource deletes the default VPC, with its default subnets and internet gateway, in each listed Region, or in every enabled Region when the list is empty. A default VPC that still has network interfaces is skipped and reported, never force-deleted.
+3. Deploy it **after** the foundational accounts exist (after the phase-1 apply), and leave auto-deployment on so future accounts are cleaned up when they join. List only the allowed Regions: the region-restriction SCP denies the others.
 
 This links to the account-baseline concept: per-account defaults the declarative EC2 policy does **not** cover (default-VPC deletion, EBS-encryption-by-default, account S3 Block Public Access, password policy). The Terraform-managed slice of that baseline is applied per layer via `modules/aws/governance/account-baseline`; the default-VPC deletion specifically stays a StackSet because it cannot be reliably done for every Region from one root.
 
@@ -263,7 +287,7 @@ Follow this order top to bottom. **Manual gates** are inline and must be complet
 
 Teardown is the **reverse** of the stand-up order (destroy workloads first, `aws-organization` last), and it carries a hard caveat: the Log Archive bucket uses **S3 Object Lock in COMPLIANCE mode**, which cannot be shortened or bypassed even by the root user — objects are immutable until their retention expires, so the bucket (and often the whole `log_archive` account) cannot be destroyed on demand.
 
-The full reverse-order destroy procedure and the Object-Lock caveat are covered in `docs/runbooks/aws-teardown.md` (a later task). Do not attempt a blind `terraform destroy` across roots before reading it.
+The full reverse-order destroy procedure and the Object-Lock caveat are covered in [`aws-teardown.md`](aws-teardown.md). Do not attempt a blind `terraform destroy` across roots before reading it.
 
 ---
 

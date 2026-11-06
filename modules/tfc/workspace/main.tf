@@ -2,7 +2,7 @@
 # attachments and notifications, so the workspace layer (names, working
 # directories, VCS wiring, triggers, remote-state sharing, health assessments,
 # dynamic-credential env vars) is versioned and reviewable instead of
-# hand-created in the UI (audit C3). Applied by the tfc-admin root.
+# hand-created in the UI. Applied by the tfc-admin root.
 
 resource "tfe_workspace" "this" {
   name         = var.name
@@ -19,7 +19,7 @@ resource "tfe_workspace" "this" {
   assessments_enabled = var.assessments_enabled
 
   # A control-plane workspace must not hand a privileged speculative plan to an
-  # arbitrary PR (audit C2): speculative_enabled = false there.
+  # arbitrary PR: speculative_enabled = false there.
   speculative_enabled = var.speculative_enabled
   allow_destroy_plan  = var.allow_destroy_plan
 
@@ -82,7 +82,7 @@ resource "tfe_workspace_variable_set" "this" {
   variable_set_id = each.value
 }
 
-# Optional run notifications (audit M-ops): alert on failed or attention-needing
+# Optional run notifications: alert on failed or attention-needing
 # runs for this workspace. Default empty, so this is opt-in per workspace.
 resource "tfe_notification_configuration" "this" {
   for_each = var.notifications

@@ -355,3 +355,71 @@ run "legacy_bootstrap_state_keeps_in_root_deny_policies" {
     error_message = "Without a bootstrap guardrail_owner_mode output the root must keep applying the deny policies."
   }
 }
+
+# Containment derives ON for a production estate, with the break-glass group
+# and alert emails taken from config/landing-zone.yaml.
+run "containment_derived_on_for_production_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path  = "tests/fixtures/landing-zone-prod-containment.yaml"
+    domain                    = null
+    project_prefix            = null
+    admin_email               = null
+    billing_account           = null
+    tfc_organization          = null
+    alert_notification_emails = []
+    organization_admin_groups = null
+    billing_admin_groups      = null
+    environments              = null
+  }
+
+  assert {
+    condition     = output.admin_containment_enabled == true && jsonencode(local.containment_exempt_principals) == jsonencode(["principalSet://goog/group/gcp-break-glass@acme.io"]) && jsonencode(local.alert_notification_emails) == jsonencode(["secops@acme.io"]) && length(module.organization.admin_containment_rules) > 0
+    error_message = "a production estate must turn containment on with the config break-glass group and alert emails."
+  }
+}
+
+# Production without a break-glass principal fails the plan instead of
+# silently shipping an unprotected audit store.
+run "production_without_break_glass_fails" {
+  command = plan
+
+  variables {
+    environments = {
+      prod = {
+        display_name            = "Production"
+        region                  = "europe-west1"
+        cidr_block              = "10.30.0.0/16"
+        budget_monthly_limit    = 1000
+        iam_group_role_bindings = {}
+        is_production           = true
+      }
+    }
+  }
+
+  expect_failures = [output.admin_containment_enabled]
+}
+
+run "production_containment_explicit_opt_out" {
+  command = plan
+
+  variables {
+    enable_admin_containment = false
+    environments = {
+      prod = {
+        display_name            = "Production"
+        region                  = "europe-west1"
+        cidr_block              = "10.30.0.0/16"
+        budget_monthly_limit    = 1000
+        iam_group_role_bindings = {}
+        is_production           = true
+      }
+    }
+  }
+
+  assert {
+    condition     = output.admin_containment_enabled == false
+    error_message = "an explicit enable_admin_containment = false must win over the production default."
+  }
+}

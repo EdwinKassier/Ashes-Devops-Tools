@@ -7,6 +7,7 @@ resource "google_pubsub_topic" "scc_notifications" {
   name         = var.pubsub_topic_name
   project      = var.project_id
   kms_key_name = var.kms_key_name
+  labels       = var.labels
 }
 
 resource "google_scc_notification_config" "notification_config" {
@@ -42,10 +43,10 @@ resource "google_pubsub_topic" "scc_notifications_multi" {
   project      = var.project_id
   kms_key_name = var.kms_key_name
 
-  labels = {
+  labels = merge(var.labels, {
     scc-config = each.key
     managed-by = "terraform"
-  }
+  })
 }
 
 # Create notification configs for severity-based routing

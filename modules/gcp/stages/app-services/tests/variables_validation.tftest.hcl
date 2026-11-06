@@ -117,3 +117,60 @@ run "rejects_blank_bootstrap_image" {
 
   expect_failures = [var.bootstrap_image]
 }
+
+run "rejects_error_ratio_above_one" {
+  command         = plan
+  expect_failures = [var.services]
+  variables {
+    services = { api = { alerts = { error_ratio_threshold = 5 } } }
+  }
+}
+
+run "rejects_bad_alert_duration" {
+  command         = plan
+  expect_failures = [var.services]
+  variables {
+    services = { api = { alerts = { duration = "5m" } } }
+  }
+}
+
+run "rejects_pubsub_ack_deadline_below_minimum" {
+  command         = plan
+  expect_failures = [var.services]
+  variables {
+    services = { api = { pubsub = { enabled = true, ack_deadline_seconds = 5 } } }
+  }
+}
+
+run "rejects_pubsub_max_delivery_attempts_below_minimum" {
+  command         = plan
+  expect_failures = [var.services]
+  variables {
+    services = { api = { pubsub = { enabled = true, max_delivery_attempts = 3 } } }
+  }
+}
+
+run "rejects_pubsub_without_project_number" {
+  command         = plan
+  expect_failures = [var.project_number]
+  variables {
+    project_number = null
+    services       = { api = { pubsub = { enabled = true } } }
+  }
+}
+
+run "rejects_bad_notification_channel_id" {
+  command         = plan
+  expect_failures = [var.alert_notification_channel_ids]
+  variables {
+    alert_notification_channel_ids = ["ops@example.com"]
+  }
+}
+
+run "rejects_bad_pubsub_kms_key" {
+  command         = plan
+  expect_failures = [var.pubsub_kms_key_name]
+  variables {
+    pubsub_kms_key_name = "pubsub-key"
+  }
+}

@@ -20,3 +20,10 @@ variable "security_tooling_account_id" {
     error_message = "security_tooling_account_id must be a 12-digit AWS account ID."
   }
 }
+
+variable "tags" {
+  description = "Tags applied to every taggable resource this module creates (merged after provider default_tags; resource-specific tags such as Name win)."
+  type        = map(string)
+  default     = {}
+  nullable    = false
+}

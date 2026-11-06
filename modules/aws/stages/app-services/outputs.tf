@@ -44,7 +44,7 @@ output "github_oidc_subjects" {
 }
 
 output "services" {
-  description = "Per-service deployment contract: everything a CI pipeline needs (ECR repo, deploy role, cluster/service, task-definition family, container name) plus the runtime roles, log group and optional database endpoint/secret."
+  description = "Per-service deployment contract: everything a CI pipeline needs (ECR repo, deploy role, cluster/service, task-definition family, container name) plus the runtime roles, log group, optional database endpoint/secret and optional queue/DLQ URL + ARN."
   value = {
     for k, s in var.services : k => {
       ecr_repository_url     = module.ecr[0].repository_urls[k]
@@ -62,6 +62,10 @@ output "services" {
       database_endpoint      = try(module.database[k].endpoint, null)
       database_secret_arn    = try(module.database[k].master_user_secret_arn, null)
       database_public        = try(module.database[k].publicly_accessible, null)
+      queue_url              = try(aws_sqs_queue.service[k].url, null)
+      queue_arn              = try(aws_sqs_queue.service[k].arn, null)
+      dlq_url                = try(aws_sqs_queue.dlq[k].url, null)
+      dlq_arn                = try(aws_sqs_queue.dlq[k].arn, null)
     }
   }
 }
@@ -69,4 +73,9 @@ output "services" {
 output "kms_key_arn" {
   description = "CMK encrypting every service's ECR repository, log group, Aurora cluster and RDS master secret, or null when services is empty."
   value       = local.enabled ? var.kms_key_arn : null
+}
+
+output "alarm_topic_arn" {
+  description = "SNS topic the service alarms notify (created here, or alarm_sns_topic_arn), or null when alarms have no action. Subscribe on-call endpoints to it."
+  value       = length(local.alarm_services) > 0 && local.alarm_has_action ? local.alarm_topic_arn : null
 }

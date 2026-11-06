@@ -90,3 +90,31 @@ run "disabled_creates_nothing" {
     error_message = "No quota requests must be created when the module is disabled"
   }
 }
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    enable_service_quotas = true
+    quota_increases = {
+      ec2-standard-vcpus = {
+        service_code = "ec2"
+        quota_code   = "L-1216C47A"
+        value        = 256
+        usage_metric = {
+          service  = "EC2"
+          class    = "Standard/OnDemand"
+          type     = "Resource"
+          resource = "vCPU"
+        }
+      }
+    }
+    notifications_topic_arn = "arn:aws:sns:eu-west-2:111111111111:sec"
+    tags                    = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.usage["ec2-standard-vcpus"].tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_cloudwatch_metric_alarm.usage"
+  }
+}

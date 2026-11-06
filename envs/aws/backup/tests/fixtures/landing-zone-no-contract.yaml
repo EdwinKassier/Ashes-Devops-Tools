@@ -1,0 +1,9 @@
+# Test fixture: config file WITHOUT aws.contracts.organization, so the aws-backup
+# root still reads the aws-organization remote state (contract.tftest.hcl).
+version: 1
+org:
+  name: cfgco
+  tfc:
+    organization: cfg-tfc
+aws:
+  management_account_id: "012345678901"

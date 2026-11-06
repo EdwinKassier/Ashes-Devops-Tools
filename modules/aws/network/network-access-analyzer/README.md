@@ -62,6 +62,7 @@ The following resources are created:
 | <a name="input_enable_network_access_analyzer"></a> [enable\_network\_access\_analyzer](#input\_enable\_network\_access\_analyzer) | Whether to create the Network Access Analyzer scope. Off by default; the scope is optional. | `bool` | `false` | no |
 | <a name="input_exclude_paths"></a> [exclude\_paths](#input\_exclude\_paths) | Paths excluded from the scope, expressed as source/destination AWS resource types. Excluded paths are ignored even if they would otherwise match. | <pre>list(object({<br/>    source_resource_types      = list(string)<br/>    destination_resource_types = list(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_match_paths"></a> [match\_paths](#input\_match\_paths) | Paths the scope matches, expressed as source/destination AWS resource types. A matched path in an out-of-band analysis is a segmentation-intent violation. Defaults to a single internet-gateway -> instance path. | <pre>list(object({<br/>    source_resource_types      = list(string)<br/>    destination_resource_types = list(string)<br/>  }))</pre> | <pre>[<br/>  {<br/>    "destination_resource_types": [<br/>      "AWS::EC2::Instance"<br/>    ],<br/>    "source_resource_types": [<br/>      "AWS::EC2::InternetGateway"<br/>    ]<br/>  }<br/>]</pre> | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 
 ## Outputs
 

@@ -128,3 +128,78 @@ run "organization_contract_skips_remote_state" {
     error_message = "a supplied organization_contract must skip the aws-organization read and feed the root"
   }
 }
+
+# File-level remote-state override for the profile runs below (run-level
+# overrides above still take precedence).
+override_data {
+  target = data.terraform_remote_state.aws_organization
+  values = {
+    outputs = {
+      organization_id       = "o-abcdefghij"
+      organization_root_id  = "r-abcd"
+      management_account_id = "111111111111"
+      account_ids = {
+        security_tooling = "222222222222"
+        log_archive      = "333333333333"
+        shared_services  = "444444444444"
+        forensics        = "555555555555"
+      }
+      account_role_arns = {
+        security_tooling = "arn:aws:iam::222222222222:role/cross-account"
+        log_archive      = "arn:aws:iam::333333333333:role/cross-account"
+        forensics        = "arn:aws:iam::555555555555:role/cross-account"
+      }
+    }
+  }
+}
+
+
+# profile = starter keeps the core detective controls and drops the
+# usage-scaling extras.
+run "starter_profile_trims_cost_scaling_services" {
+  command = plan
+
+  variables {
+    profile              = "starter"
+    enable_security_lake = null
+  }
+
+  assert {
+    condition = (
+      local.enable_security_lake == false &&
+      local.enabled_security_services == toset(["inspector"]) &&
+      local.config_record_all_supported == false &&
+      local.guardduty_enable_ebs_malware_protection == false
+    )
+    error_message = "starter must turn off Security Lake, Macie, record-all Config and EBS malware scanning."
+  }
+}
+
+run "production_profile_keeps_full_stack" {
+  command = plan
+
+  variables {
+    enable_security_lake        = null
+    meta_store_manager_role_arn = "arn:aws:iam::222222222222:role/AmazonSecurityLakeMetaStoreManager"
+  }
+
+  assert {
+    condition     = local.enable_security_lake == true && local.enabled_security_services == toset(["macie", "inspector"]) && local.config_record_all_supported == true
+    error_message = "the default (production) profile must keep Security Lake, Macie and record-all Config."
+  }
+}
+
+# The untouched default (production profile, no hand-made metastore role)
+# must plan.
+run "production_default_plans_without_meta_store_role" {
+  command = plan
+
+  variables {
+    enable_security_lake = null
+  }
+
+  assert {
+    condition     = local.enable_security_lake == true
+    error_message = "the default production profile must plan with Security Lake on and no hand-made metastore role."
+  }
+}

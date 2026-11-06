@@ -88,15 +88,15 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_compute_backend_service.default (modules/gcp/network/cdn/main.tf#L31)
+- resource.google_compute_backend_service.default (modules/gcp/network/cdn/main.tf#L32)
 - resource.google_compute_global_address.default (modules/gcp/network/cdn/main.tf#L12)
-- resource.google_compute_global_forwarding_rule.default (modules/gcp/network/cdn/main.tf#L82)
-- resource.google_compute_global_forwarding_rule.http_redirect (modules/gcp/network/cdn/main.tf#L120)
-- resource.google_compute_managed_ssl_certificate.default (modules/gcp/network/cdn/main.tf#L19)
-- resource.google_compute_target_http_proxy.redirect (modules/gcp/network/cdn/main.tf#L111)
-- resource.google_compute_target_https_proxy.default (modules/gcp/network/cdn/main.tf#L73)
-- resource.google_compute_url_map.default (modules/gcp/network/cdn/main.tf#L65)
-- resource.google_compute_url_map.redirect (modules/gcp/network/cdn/main.tf#L97)
+- resource.google_compute_global_forwarding_rule.default (modules/gcp/network/cdn/main.tf#L83)
+- resource.google_compute_global_forwarding_rule.http_redirect (modules/gcp/network/cdn/main.tf#L122)
+- resource.google_compute_managed_ssl_certificate.default (modules/gcp/network/cdn/main.tf#L20)
+- resource.google_compute_target_http_proxy.redirect (modules/gcp/network/cdn/main.tf#L113)
+- resource.google_compute_target_https_proxy.default (modules/gcp/network/cdn/main.tf#L74)
+- resource.google_compute_url_map.default (modules/gcp/network/cdn/main.tf#L66)
+- resource.google_compute_url_map.redirect (modules/gcp/network/cdn/main.tf#L99)
 
 
 ## Inputs
@@ -110,6 +110,7 @@ The following resources are created:
 | <a name="input_domains"></a> [domains](#input\_domains) | List of domains for the managed SSL certificate. At least one is required (the module always creates an HTTPS proxy backed by a managed SSL certificate). | `list(string)` | `[]` | no |
 | <a name="input_enable_cdn"></a> [enable\_cdn](#input\_enable\_cdn) | Enable Cloud CDN for this Global Load Balancer | `bool` | `true` | no |
 | <a name="input_enable_http_redirect"></a> [enable\_http\_redirect](#input\_enable\_http\_redirect) | Enable HTTP to HTTPS redirect (recommended for production) | `bool` | `true` | no |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels applied to every labelable resource this module creates (merged with the provider default\_labels; resource-specific labels win). | `map(string)` | `{}` | no |
 | <a name="input_security_policy"></a> [security\_policy](#input\_security\_policy) | Self link of a Cloud Armor security policy to attach to the backend service | `string` | `null` | no |
 
 ## Outputs

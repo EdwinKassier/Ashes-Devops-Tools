@@ -137,10 +137,10 @@ The following resources are created:
 
 
 - resource.google_compute_interconnect_attachment.dedicated (modules/gcp/network/interconnect/main.tf#L45)
-- resource.google_compute_interconnect_attachment.partner (modules/gcp/network/interconnect/main.tf#L69)
+- resource.google_compute_interconnect_attachment.partner (modules/gcp/network/interconnect/main.tf#L70)
 - resource.google_compute_router.router (modules/gcp/network/interconnect/main.tf#L18)
-- resource.google_compute_router_interface.interface (modules/gcp/network/interconnect/main.tf#L100)
-- resource.google_compute_router_peer.peer (modules/gcp/network/interconnect/main.tf#L115)
+- resource.google_compute_router_interface.interface (modules/gcp/network/interconnect/main.tf#L102)
+- resource.google_compute_router_peer.peer (modules/gcp/network/interconnect/main.tf#L117)
 
 
 ## Inputs
@@ -171,6 +171,7 @@ The following resources are created:
 | <a name="input_interconnect_self_link"></a> [interconnect\_self\_link](#input\_interconnect\_self\_link) | Self-link of the Dedicated Interconnect (required for DEDICATED type) | `string` | `null` | no |
 | <a name="input_interconnect_type"></a> [interconnect\_type](#input\_interconnect\_type) | Type of interconnect: DEDICATED or PARTNER | `string` | `"PARTNER"` | no |
 | <a name="input_interface_ip_range"></a> [interface\_ip\_range](#input\_interface\_ip\_range) | IP range for the router interface (CIDR format, /29 or /30) | `string` | `null` | no |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels applied to every labelable resource this module creates (merged with the provider default\_labels; resource-specific labels win). | `map(string)` | `{}` | no |
 | <a name="input_mtu"></a> [mtu](#input\_mtu) | Maximum Transmission Unit (MTU) for the attachment | `number` | `1440` | no |
 | <a name="input_peer_asn"></a> [peer\_asn](#input\_peer\_asn) | BGP ASN of the on-premises router | `number` | `65000` | no |
 | <a name="input_peer_ip_address"></a> [peer\_ip\_address](#input\_peer\_ip\_address) | IP address of the on-premises BGP peer | `string` | `null` | no |

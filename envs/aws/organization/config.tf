@@ -19,11 +19,17 @@ locals {
   lz = try(local.lz_documents[0], {})
 
   cfg = {
-    landing_zone_name       = try(tostring(local.lz.org.name), null)
-    cost_center             = try(tostring(local.lz.org.cost_center), null)
-    owner                   = try(tostring(local.lz.org.owner), null)
-    aws_region              = try(tostring(local.lz.org.regions.aws), null)
-    tfc_organization        = try(tostring(local.lz.org.tfc.organization), null)
+    landing_zone_name        = try(tostring(local.lz.org.name), null)
+    cost_center              = try(tostring(local.lz.org.cost_center), null)
+    owner                    = try(tostring(local.lz.org.owner), null)
+    aws_region               = try(tostring(local.lz.org.regions.aws), null)
+    tfc_organization         = try(tostring(local.lz.org.tfc.organization), null)
+    github_federation_owners = try([for o in local.lz.aws.github_federation_owners : tostring(o)], null)
+    adopt = try(local.lz.aws.adopt, null) == null ? null : {
+      organization_id = try(tostring(local.lz.aws.adopt.organization_id), null)
+      ou_ids          = { for k, v in try(local.lz.aws.adopt.ou_ids, {}) : k => tostring(v) }
+      account_ids     = { for k, v in try(local.lz.aws.adopt.account_ids, {}) : k => tostring(v) }
+    }
     management_account_id   = try(tostring(local.lz.aws.management_account_id), null)
     log_archive_bucket_name = try(tostring(local.lz.aws.log_archive_bucket_name), null)
     allowed_regions         = try([for r in local.lz.aws.allowed_regions : tostring(r)], null)
@@ -31,6 +37,10 @@ locals {
     break_glass_role_arn    = try(tostring(local.lz.aws.break_glass_role_arn), null)
     # tfc-admin puts the aws-* workspaces in <project_name_prefix>aws.
     tfc_project = try(tostring(local.lz.org.tfc.aws_project), "${try(tostring(local.lz.org.tfc.project_name_prefix), "landing-zone-")}aws")
+    # With org.tfc.split_workload_projects, tfc-admin puts aws-workload-<env> in
+    # <prefix>aws-workloads; the workload accounts' OIDC trust must name it.
+    split_workload_projects = try(tobool(local.lz.org.tfc.split_workload_projects), false)
+    tfc_workloads_project   = try(tostring(local.lz.org.tfc.aws_workloads_project), "${try(tostring(local.lz.org.tfc.project_name_prefix), "landing-zone-")}aws-workloads")
     # Accounts normalised to the attribute types of var.accounts.
     accounts          = { for k, a in try({ for k, a in local.lz.aws.accounts : k => a }, {}) : k => local.normalise_account[k] }
     workload_accounts = { for k, a in try({ for k, a in local.lz.aws.workload_accounts : k => a }, {}) : k => local.normalise_account[k] }
@@ -51,6 +61,7 @@ locals {
     for k, a in local.raw_accounts : k => {
       email = tostring(try(a.email, ""))
       ou    = tostring(try(a.ou, ""))
+      name  = try(tostring(a.name), null)
       alternate_contacts = try({
         for ck, c in a.alternate_contacts : ck => {
           contact_type  = tostring(c.contact_type)
@@ -75,7 +86,7 @@ locals {
       shared_services  = { email = "aws+shared-services@example.com", ou = "Infrastructure" }
       backup           = { email = "aws+backup@example.com", ou = "Infrastructure" }
       forensics        = { email = "aws+forensics@example.com", ou = "Security" }
-    } : k => merge(a, { alternate_contacts = {}, tags = {} })
+    } : k => merge(a, { name = null, alternate_contacts = {}, tags = {} })
   }
   # Indexed tuple (not a conditional): the two objects have different keys.
   cfg_or_default_accounts = [local.cfg.accounts, local.default_accounts][length(local.cfg.accounts) > 0 ? 0 : 1]
@@ -91,11 +102,17 @@ locals {
 
   # Required values fall back to an inert sentinel only so static tools (tflint)
   # can evaluate the root; the variable validations reject the unset case first.
-  landing_zone_name       = coalesce(var.landing_zone_name, local.cfg.landing_zone_name, "unset")
-  cost_center             = var.cost_center != null ? var.cost_center : coalesce(local.cfg.cost_center, "platform")
-  owner                   = var.owner != null ? var.owner : coalesce(local.cfg.owner, "platform-team")
-  aws_region              = coalesce(var.aws_region, local.cfg.aws_region, "eu-west-2")
-  tfc_organization        = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
+  landing_zone_name        = coalesce(var.landing_zone_name, local.cfg.landing_zone_name, "unset")
+  cost_center              = var.cost_center != null ? var.cost_center : coalesce(local.cfg.cost_center, "platform")
+  owner                    = var.owner != null ? var.owner : coalesce(local.cfg.owner, "platform-team")
+  aws_region               = coalesce(var.aws_region, local.cfg.aws_region, "eu-west-2")
+  tfc_organization         = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
+  github_federation_owners = coalesce(var.github_federation_owners, local.cfg.github_federation_owners, [])
+  adopt_existing = (
+    var.adopt_existing != null ? var.adopt_existing :
+    local.cfg.adopt != null ? local.cfg.adopt :
+    { organization_id = null, ou_ids = {}, account_ids = {} }
+  )
   management_account_id   = coalesce(var.management_account_id, local.cfg.management_account_id, "000000000000")
   log_archive_bucket_name = coalesce(var.log_archive_bucket_name, local.cfg.log_archive_bucket_name, "unset")
 
@@ -110,7 +127,11 @@ locals {
   tfc_workspace_bindings = var.tfc_workspace_bindings != null ? var.tfc_workspace_bindings : {
     for acct in distinct(concat(keys(local.default_workspace_bindings), keys(local.cfg.workload_bindings))) : acct => {
       workspaces = distinct(concat(lookup(local.default_workspace_bindings, acct, []), lookup(local.cfg.workload_bindings, acct, [])))
-      project    = null
+      # Workload-only accounts trust the workloads project when it is split out.
+      project = (
+        local.cfg.split_workload_projects && length(lookup(local.default_workspace_bindings, acct, [])) == 0
+        ? local.cfg.tfc_workloads_project : null
+      )
     }
   }
 }

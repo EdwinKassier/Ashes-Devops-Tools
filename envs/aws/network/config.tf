@@ -20,6 +20,7 @@ locals {
 
   cfg = {
     landing_zone_name       = try(tostring(local.lz.org.name), null)
+    profile                 = try(tostring(local.lz.org.profile), null)
     cost_center             = try(tostring(local.lz.org.cost_center), null)
     owner                   = try(tostring(local.lz.org.owner), null)
     aws_region              = try(tostring(local.lz.org.regions.aws), null)
@@ -44,4 +45,9 @@ locals {
   tfc_organization        = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
   log_archive_bucket_name = coalesce(var.log_archive_bucket_name, local.cfg.log_archive_bucket_name, "unset")
   aws_enabled_regions     = var.aws_enabled_regions != null ? var.aws_enabled_regions : coalesce(local.cfg.aws_enabled_regions, ["eu-west-2"])
+
+  # Profile-driven defaults (explicit variable > profile). starter drops the
+  # Network Firewall endpoints (~$577/month idle at 2 AZs).
+  profile                 = coalesce(var.profile, local.cfg.profile, "production")
+  enable_network_firewall = coalesce(var.enable_network_firewall, local.profile == "production")
 }

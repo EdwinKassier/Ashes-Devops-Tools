@@ -115,20 +115,20 @@ run "plan_role_is_read_only_and_roles_are_account_scoped" {
   command = plan
 
   assert {
-    condition     = jsondecode(output.template_body).Resources.TfcPlanRoleNetwork.Properties.ManagedPolicyArns == ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
+    condition     = jsonencode(jsondecode(output.template_body).Resources.TfcPlanRoleNetwork.Properties.ManagedPolicyArns) == jsonencode([{ "Fn::Sub" = "arn:$${AWS::Partition}:iam::aws:policy/ReadOnlyAccess" }])
     error_message = "the plan role must carry only ReadOnlyAccess"
   }
 
   assert {
     condition = alltrue([
       for name, r in jsondecode(output.template_body).Resources :
-      !startswith(name, "TfcPlanRole") || alltrue([for a in r.Properties.ManagedPolicyArns : !strcontains(a, "AdministratorAccess") && !strcontains(a, "PowerUserAccess")])
+      !startswith(name, "TfcPlanRole") || alltrue([for a in r.Properties.ManagedPolicyArns : !strcontains(a["Fn::Sub"], "AdministratorAccess") && !strcontains(a["Fn::Sub"], "PowerUserAccess")])
     ])
     error_message = "no plan role may carry a write policy"
   }
 
   assert {
-    condition     = jsondecode(output.template_body).Resources.TfcApplyRoleNetwork.Properties.ManagedPolicyArns == ["arn:aws:iam::aws:policy/AdministratorAccess"]
+    condition     = jsonencode(jsondecode(output.template_body).Resources.TfcApplyRoleNetwork.Properties.ManagedPolicyArns) == jsonencode([{ "Fn::Sub" = "arn:$${AWS::Partition}:iam::aws:policy/AdministratorAccess" }])
     error_message = "the apply role defaults to AdministratorAccess"
   }
 
@@ -177,7 +177,7 @@ run "workspace_wildcards_use_string_like_when_enabled" {
   }
 }
 
-run "no_bindings_deploys_only_the_oidc_provider" {
+run "no_bindings_deploys_only_the_oidc_providers" {
   command = plan
 
   variables {
@@ -185,8 +185,8 @@ run "no_bindings_deploys_only_the_oidc_provider" {
   }
 
   assert {
-    condition     = keys(jsondecode(output.template_body).Resources) == ["TfcOidcProvider"] && !contains(keys(jsondecode(output.template_body)), "Conditions")
-    error_message = "with no bindings the template must contain only the OIDC provider and no empty Conditions section"
+    condition     = toset(keys(jsondecode(output.template_body).Resources)) == toset(["TfcOidcProvider", "GithubOidcProvider"]) && !contains(keys(jsondecode(output.template_body)), "Conditions")
+    error_message = "with no bindings the template must contain only the TFC and GitHub OIDC providers and no empty Conditions section"
   }
 }
 
@@ -299,7 +299,7 @@ run "boundary_can_be_disabled" {
 }
 
 run "apply_boundary_propagates_to_created_roles" {
-  # M2: the apply identity must not escape its boundary by creating an
+  # The apply identity must not escape its boundary by creating an
   # unbounded role (or granting to one) and assuming it.
   command = plan
 
@@ -344,7 +344,7 @@ run "boundary_propagation_can_be_disabled" {
 }
 
 run "plan_role_denies_data_plane_reads" {
-  # M4: ReadOnlyAccess grants data reads; the plan role gets an inline deny.
+  # ReadOnlyAccess grants data reads; the plan role gets an inline deny.
   command = plan
 
   assert {
@@ -461,7 +461,7 @@ run "apply_boundary_blocks_privileged_role_squatting_and_security_teardown" {
 }
 
 run "plan_role_denies_secret_bearing_reads_not_needed_for_refresh" {
-  # N5: actions that leak secrets and are never used by Terraform refresh.
+  # Actions that leak secrets and are never used by Terraform refresh.
   command = plan
 
   assert {
@@ -558,4 +558,42 @@ run "member_break_glass_requires_a_trusted_principal" {
   }
 
   expect_failures = [aws_cloudformation_stack_set.break_glass]
+}
+
+# The pipeline may not register trust anchors: a new OIDC/SAML provider plus a
+# role (carrying the boundary, granted admin) trusting it is a persistence path.
+run "boundary_denies_new_identity_providers" {
+  command = plan
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+      s.Sid == "DenyNewIdentityProviders" && s.Effect == "Deny" && s.Resource == "*" &&
+      contains(s.Action, "iam:CreateOpenIDConnectProvider") && contains(s.Action, "iam:CreateSAMLProvider") &&
+      contains(s.Action, "iam:AddClientIDToOpenIDConnectProvider")
+    ])
+    error_message = "the apply boundary must deny creating OIDC/SAML providers and adding audiences, on every resource."
+  }
+
+  # The GitHub provider app-services relies on is owned by the StackSet instead.
+  assert {
+    condition = (
+      jsondecode(output.template_body).Resources.GithubOidcProvider.Properties.Url == "https://token.actions.githubusercontent.com" &&
+      jsondecode(output.template_body).Resources.GithubOidcProvider.Properties.ClientIdList == ["sts.amazonaws.com"]
+    )
+    error_message = "the StackSet must create the account-wide GitHub OIDC provider (aud sts.amazonaws.com) by default."
+  }
+}
+
+run "github_provider_opt_out" {
+  command = plan
+
+  variables {
+    create_github_oidc_provider = false
+  }
+
+  assert {
+    condition     = !contains(keys(jsondecode(output.template_body).Resources), "GithubOidcProvider")
+    error_message = "create_github_oidc_provider = false must omit the GitHub provider."
+  }
 }

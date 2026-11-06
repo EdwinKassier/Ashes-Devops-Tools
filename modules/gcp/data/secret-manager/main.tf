@@ -40,7 +40,7 @@ resource "google_secret_manager_secret" "this" {
 
   project   = var.project_id
   secret_id = each.key
-  labels    = each.value.labels
+  labels    = merge(var.labels, each.value.labels)
 
   replication {
     # Automatic (multi-region) replication unless explicit regions are supplied.

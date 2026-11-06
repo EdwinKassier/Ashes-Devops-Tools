@@ -1,4 +1,4 @@
-# Plan assertions for the bootstrap stage — audit C2 identity model.
+# Plan assertions for the bootstrap stage identity model.
 #
 # * The shared terraform-admin SA keeps ONLY what the gcp-bootstrap apply needs
 #   (org IAM admin + org viewer); the old org-wide orgpolicy/ACM/logging/SCC/xpn/
@@ -90,7 +90,7 @@ run "workload_sas_have_no_org_level_iam" {
       for k in concat(keys(google_organization_iam_member.stage_org_roles), keys(google_organization_iam_member.stage_org_security_admin)) :
       k if startswith(k, "wl-")
     ]) == 0
-    error_message = "Workload SAs must not hold ANY org-level IAM binding (C2)."
+    error_message = "Workload SAs must not hold ANY org-level IAM binding."
   }
 
   assert {
@@ -235,7 +235,8 @@ run "production_workspaces_must_be_bound_by_id" {
   command = plan
 
   variables {
-    production_workload_environments = ["prod"]
+    production_workload_environments      = ["prod"]
+    phase0_admin_impersonation_expires_at = "2026-12-31T00:00:00Z"
   }
 
   # Hard failure (precondition), not a warning: a production org must not plan
@@ -247,7 +248,8 @@ run "production_workspaces_bound_by_id_pass" {
   command = plan
 
   variables {
-    production_workload_environments = ["prod"]
+    production_workload_environments      = ["prod"]
+    phase0_admin_impersonation_expires_at = "2026-12-31T00:00:00Z"
     tfc_workspace_ids = {
       "gcp-bootstrap"     = "ws-Boot1"
       "gcp-organization"  = "ws-Org1"
@@ -366,7 +368,7 @@ run "admin_project_uses_project_primitive" {
   }
 }
 
-# N2/H3: by default the organization apply SA does NOT hold roles/iam.denyAdmin;
+# By default the organization apply SA does NOT hold roles/iam.denyAdmin;
 # a dedicated guardrails SA does, impersonable only by guardrail_owner_members.
 run "guardrail_owner_is_separate_by_default" {
   command = plan
@@ -419,7 +421,7 @@ run "guardrail_owner_legacy_organization_mode" {
   }
 }
 
-# N6: the phase-0 human impersonation of terraform-admin is switchable.
+# The phase-0 human impersonation of terraform-admin is switchable.
 run "phase0_admin_impersonation_can_be_revoked" {
   command = plan
 
@@ -458,4 +460,22 @@ run "principal_access_boundary_grants_are_opt_in" {
     condition     = contains(keys(google_organization_iam_member.stage_org_roles), "organization-plan|roles/iam.principalAccessBoundaryViewer")
     error_message = "enable_principal_access_boundary must grant organization-plan the PAB viewer role."
   }
+}
+
+# A production estate must not keep an open-ended human path to terraform-admin.
+run "production_phase0_impersonation_without_expiry_warns" {
+  command = plan
+
+  variables {
+    production_workload_environments = ["prod"]
+    tfc_workspace_ids = {
+      "gcp-bootstrap"     = "ws-Boot1"
+      "gcp-organization"  = "ws-Org1"
+      "gcp-projects"      = "ws-Proj1"
+      "gcp-network-hub"   = "ws-Hub1"
+      "gcp-workload-prod" = "ws-Prod1"
+    }
+  }
+
+  expect_failures = [check.phase0_impersonation_is_time_boxed]
 }

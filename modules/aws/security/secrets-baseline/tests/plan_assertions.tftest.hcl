@@ -72,3 +72,24 @@ run "disabled_creates_nothing" {
     error_message = "No secret policies must be created when the module is disabled"
   }
 }
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    enable_secrets_baseline = true
+    org_id                  = "o-exampleorgid"
+    secrets = {
+      "app/api-key" = {
+        rotation_lambda_arn = "arn:aws:lambda:us-east-1:111122223333:function:rotate"
+        rotation_days       = 30
+      }
+    }
+    tags = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_secretsmanager_secret.this["app/api-key"].tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_secretsmanager_secret.this"
+  }
+}

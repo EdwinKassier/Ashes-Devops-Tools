@@ -60,10 +60,10 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_ssm_association.inventory (modules/aws/ops/systems-manager/main.tf#L68)
-- resource.aws_ssm_default_patch_baseline.this (modules/aws/ops/systems-manager/main.tf#L62)
+- resource.aws_ssm_association.inventory (modules/aws/ops/systems-manager/main.tf#L72)
+- resource.aws_ssm_default_patch_baseline.this (modules/aws/ops/systems-manager/main.tf#L66)
 - resource.aws_ssm_document.session_preferences (modules/aws/ops/systems-manager/main.tf#L19)
-- resource.aws_ssm_patch_baseline.this (modules/aws/ops/systems-manager/main.tf#L39)
+- resource.aws_ssm_patch_baseline.this (modules/aws/ops/systems-manager/main.tf#L41)
 
 
 ## Inputs
@@ -79,6 +79,7 @@ The following resources are created:
 | <a name="input_patch_baseline_name"></a> [patch\_baseline\_name](#input\_patch\_baseline\_name) | Name of the SSM patch baseline. | `string` | `"org-patch-baseline"` | no |
 | <a name="input_patch_operating_system"></a> [patch\_operating\_system](#input\_patch\_operating\_system) | Operating system the patch baseline targets. Also used to set the account default patch baseline for that OS. | `string` | `"AMAZON_LINUX_2"` | no |
 | <a name="input_session_document_name"></a> [session\_document\_name](#input\_session\_document\_name) | Name of the custom Session Manager preferences document. A custom name (not the reserved SSM-SessionManagerRunShell) keeps preferences under Terraform control per account. | `string` | `"SessionManagerPreferences"` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 
 ## Outputs
 

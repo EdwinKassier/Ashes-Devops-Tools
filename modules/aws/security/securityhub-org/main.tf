@@ -29,9 +29,9 @@ locals {
   # enabled_standard_arns list. CIS v3.0.0 is the current AWS Foundations
   # Benchmark (region-scoped standards ARN); all three are region-scoped.
   default_standards = [
-    "arn:aws:securityhub:${var.home_region}::standards/aws-foundational-security-best-practices/v/1.0.0",
-    "arn:aws:securityhub:${var.home_region}::standards/cis-aws-foundations-benchmark/v/3.0.0",
-    "arn:aws:securityhub:${var.home_region}::standards/nist-800-53/v/5.0.0",
+    "arn:${local.partition}:securityhub:${var.home_region}::standards/aws-foundational-security-best-practices/v/1.0.0",
+    "arn:${local.partition}:securityhub:${var.home_region}::standards/cis-aws-foundations-benchmark/v/3.0.0",
+    "arn:${local.partition}:securityhub:${var.home_region}::standards/nist-800-53/v/5.0.0",
   ]
 
   enabled_standard_arns = length(var.enabled_standard_arns) > 0 ? var.enabled_standard_arns : local.default_standards

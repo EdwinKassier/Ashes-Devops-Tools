@@ -67,7 +67,7 @@ resource "aws_cloudtrail" "org" {
 
   # Near-real-time CIS control-plane alarms (CIS AWS section 4) read this group.
   cloud_watch_logs_group_arn = var.enable_cloudwatch_logs ? "${aws_cloudwatch_log_group.trail[0].arn}:*" : null
-  cloud_watch_logs_role_arn  = var.enable_cloudwatch_logs ? aws_iam_role.cloudtrail_cw[0].arn : null
+  cloud_watch_logs_role_arn  = var.enable_cloudwatch_logs ? local.cloudwatch_delivery_role_arn : null
 
   # When advanced selectors are used, management events must be selected
   # explicitly or the trail stops recording them.
@@ -209,8 +209,17 @@ resource "aws_cloudwatch_log_group" "trail" {
   tags              = var.tags
 }
 
+# The delivery role is created here only when no existing one is passed in.
+# The landing zone passes the role aws-organization creates, so the
+# least-privilege aws-security role needs no IAM write at all: in the
+# management account (outside every SCP) any role write is an escalation path.
+locals {
+  create_cloudwatch_delivery_role = var.enable_cloudwatch_logs && var.cloudwatch_logs_role_arn == null
+  cloudwatch_delivery_role_arn    = local.create_cloudwatch_delivery_role ? try(aws_iam_role.cloudtrail_cw[0].arn, null) : var.cloudwatch_logs_role_arn
+}
+
 resource "aws_iam_role" "cloudtrail_cw" {
-  count = var.enable_cloudwatch_logs ? 1 : 0
+  count = local.create_cloudwatch_delivery_role ? 1 : 0
   name  = "${var.trail_name}-cloudwatch-delivery"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -227,7 +236,7 @@ resource "aws_iam_role" "cloudtrail_cw" {
 }
 
 resource "aws_iam_role_policy" "cloudtrail_cw" {
-  count = var.enable_cloudwatch_logs ? 1 : 0
+  count = local.create_cloudwatch_delivery_role ? 1 : 0
   name  = "cloudwatch-logs-delivery"
   role  = aws_iam_role.cloudtrail_cw[0].id
   policy = jsonencode({

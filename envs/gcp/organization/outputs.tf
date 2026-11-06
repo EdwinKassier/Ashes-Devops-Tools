@@ -40,7 +40,7 @@ output "folders" {
 }
 
 # Projects, environment_config and hub_network moved to the gcp-projects and
-# gcp-network-hub roots when those stages were split out (audit H3). Downstream
+# gcp-network-hub roots when those stages were split out. Downstream
 # gcp-workload reads environment_config from gcp-projects and hub_network from
 # gcp-network-hub.
 
@@ -165,4 +165,22 @@ output "log_analytics_bucket_id" {
 output "principal_access_boundary_policy" {
   description = "Automation principal access boundary policy name (null when disabled)."
   value       = module.organization.principal_access_boundary_policy
+}
+
+# Containment defaults ON for a production estate; the derived settings are
+# validated here (a variable validation cannot read the derived locals without
+# a cycle). A failed precondition fails the plan.
+output "admin_containment_enabled" {
+  description = "Whether the admin-containment deny policy is on (explicit enable_admin_containment, else gcp.admin_containment, else on when any environment is_production)."
+  value       = local.enable_admin_containment
+
+  precondition {
+    condition     = !local.enable_admin_containment || length(local.containment_exempt_principals) > 0
+    error_message = "Admin containment is on (it defaults on when an environment is_production) but no break-glass principal is set, so the deny would lock out everyone. Set gcp.break_glass_group in config/landing-zone.yaml (or containment_exempt_principals), or set enable_admin_containment = false explicitly to run production without it."
+  }
+
+  precondition {
+    condition     = !anytrue([for p in local.containment_exempt_principals : can(regex("(?i)(replace-me|your-domain|example\\.(com|org|net)|\\.invalid$|changeme)", p))])
+    error_message = "The break-glass principal (gcp.break_glass_group / containment_exempt_principals) is still a placeholder. Set your real break-glass group."
+  }
 }

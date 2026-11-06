@@ -44,3 +44,18 @@ run "disabled_creates_nothing" {
     error_message = "No RAM share must be created when the module is disabled"
   }
 }
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    enable_private_ca = true
+    org_arn           = "arn:aws:organizations::111122223333:organization/o-exampleorgid"
+    tags              = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_acmpca_certificate_authority.this[0].tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_acmpca_certificate_authority.this"
+  }
+}

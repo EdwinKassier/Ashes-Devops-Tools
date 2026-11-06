@@ -1,7 +1,7 @@
 # Resource-assertion tests for the network/cdn module.
 # Asserts that var.enable_cdn actually toggles both the backend service's
 # enable_cdn attribute AND the presence of the cdn_policy dynamic block — prior
-# tests only validated inputs (audit round-3 §D8 / finding #10).
+# tests only validated inputs.
 
 mock_provider "google" {}
 
@@ -44,5 +44,19 @@ run "enable_cdn_false_omits_cdn_policy" {
   assert {
     condition     = length(google_compute_backend_service.default.cdn_policy) == 0
     error_message = "The cdn_policy block must be omitted when enable_cdn = false."
+  }
+}
+
+run "module_labels_applied" {
+  command = plan
+
+  variables {
+    labels = { owner = "test" }
+
+  }
+
+  assert {
+    condition     = google_compute_global_address.default.labels["owner"] == "test" && google_compute_global_forwarding_rule.default.labels["owner"] == "test"
+    error_message = "var.labels must land on the global address and forwarding rule."
   }
 }

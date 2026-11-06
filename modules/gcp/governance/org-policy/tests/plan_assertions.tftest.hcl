@@ -103,3 +103,55 @@ run "explicit_managed_policy_with_parameters" {
     error_message = "managed_policies parameters must be passed through to the policy rule."
   }
 }
+
+# A custom constraint does nothing unless a policy enforces it: each one gets
+# a google_org_policy_policy (spec for enforce, dry_run_spec for dry_run).
+run "custom_constraints_are_enforced" {
+  command = plan
+
+  variables {
+    custom_constraints = [
+      {
+        name           = "custom.enforced"
+        display_name   = "Enforced"
+        description    = "d"
+        action_type    = "DENY"
+        condition      = "true"
+        method_types   = ["CREATE"]
+        resource_types = ["container.googleapis.com/NodePool"]
+      },
+      {
+        name           = "custom.staged"
+        display_name   = "Staged"
+        description    = "d"
+        action_type    = "DENY"
+        condition      = "true"
+        method_types   = ["CREATE"]
+        resource_types = ["container.googleapis.com/NodePool"]
+        enforcement    = "dry_run"
+      },
+      {
+        name           = "custom.defined"
+        display_name   = "Defined only"
+        description    = "d"
+        action_type    = "DENY"
+        condition      = "true"
+        method_types   = ["CREATE"]
+        resource_types = ["container.googleapis.com/NodePool"]
+        enforcement    = "off"
+      },
+    ]
+  }
+
+  assert {
+    condition = (
+      google_org_policy_policy.custom_constraints["custom.enforced"].spec[0].rules[0].enforce == "TRUE" &&
+      length(google_org_policy_policy.custom_constraints["custom.enforced"].dry_run_spec) == 0 &&
+      google_org_policy_policy.custom_constraints["custom.staged"].dry_run_spec[0].rules[0].enforce == "TRUE" &&
+      length(google_org_policy_policy.custom_constraints["custom.staged"].spec) == 0 &&
+      !contains(keys(google_org_policy_policy.custom_constraints), "custom.defined") &&
+      length(google_org_policy_custom_constraint.custom_constraints) == 3
+    )
+    error_message = "enforce must add a spec, dry_run a dry_run_spec, and off no policy; every constraint is still defined."
+  }
+}

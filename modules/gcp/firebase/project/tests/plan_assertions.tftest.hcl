@@ -1,7 +1,7 @@
 # Resource-assertion tests for the firebase/project module.
 # Prior tests only planned; nothing asserted that the web-config bucket is
 # private/encrypted or that the Apple API key is bundle-restricted
-# (audit round-3 §D8 / finding #10). These attributes are config-derived and
+#. These attributes are config-derived and
 # plan-knowable under mock_provider.
 
 mock_provider "google" {}
@@ -46,5 +46,19 @@ run "kms_key_encrypts_web_config_bucket" {
   assert {
     condition     = google_storage_bucket.firebase_web_config[0].encryption[0].default_kms_key_name == var.kms_key_name
     error_message = "When kms_key_name is set, the web-config bucket must use it as the default CMEK."
+  }
+}
+
+run "module_labels_applied" {
+  command = plan
+
+  variables {
+    labels           = { owner = "test" }
+    web_display_name = "My Web App"
+  }
+
+  assert {
+    condition     = google_storage_bucket.firebase_web_config[0].labels["owner"] == "test" && google_storage_bucket.firebase_web_config[0].labels["purpose"] == "firebase-web-config"
+    error_message = "var.labels must merge into the web-config bucket labels (module labels kept)."
   }
 }

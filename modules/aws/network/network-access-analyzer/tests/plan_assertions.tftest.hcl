@@ -30,3 +30,21 @@ run "no_scope_when_disabled" {
     error_message = "No access scope must be created when the analyzer is disabled (default)."
   }
 }
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    enable_network_access_analyzer = true
+    match_paths = [{
+      source_resource_types      = ["AWS::EC2::InternetGateway"]
+      destination_resource_types = ["AWS::EC2::Instance"]
+    }]
+    tags = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_ec2_network_insights_access_scope.this[0].tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_ec2_network_insights_access_scope.this"
+  }
+}

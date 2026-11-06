@@ -250,6 +250,14 @@ locals {
           "secretsmanager:CreateSecret",
           "secretsmanager:TagResource",
           "secretsmanager:UntagResource",
+          "ecr:CreateRepository",
+          "ecr:TagResource",
+          "ecr:UntagResource",
+          "logs:CreateLogGroup",
+          "logs:TagResource",
+          "logs:TagLogGroup",
+          "logs:UntagResource",
+          "logs:UntagLogGroup",
         ]
         Resource  = "*"
         Condition = { "ForAnyValue:StringLike" = { "aws:TagKeys" = "dp:*" } }
@@ -285,6 +293,25 @@ locals {
           "iam:UntagOpenIDConnectProvider",
         ]
         Resource = [for a in local.baseline_protected_arns : { "Fn::Sub" = a }]
+      },
+      {
+        # No new trust anchors from the pipeline. A role carrying this
+        # boundary may still be granted AdministratorAccess; if the pipeline
+        # could also register a NEW OIDC/SAML provider (an issuer it controls)
+        # and point that role's trust at it, it would mint itself an
+        # MFA-less, rotation-proof external door. Identity providers are
+        # owned by this StackSet (TFC, and GitHub with create_github_oidc_provider)
+        # and Identity Center; add-ons go through break-glass.
+        Sid    = "DenyNewIdentityProviders"
+        Effect = "Deny"
+        Action = [
+          "iam:CreateOpenIDConnectProvider",
+          "iam:AddClientIDToOpenIDConnectProvider",
+          "iam:UpdateOpenIDConnectProviderThumbprint",
+          "iam:CreateSAMLProvider",
+          "iam:UpdateSAMLProvider",
+        ]
+        Resource = "*"
       },
       {
         # No long-lived static credentials from the pipeline: identities come
@@ -400,6 +427,22 @@ locals {
     }
   }
 
+  # The account-wide GitHub Actions OIDC provider (one per account per URL).
+  # Owned here, not by app-services, because the apply boundary forbids the
+  # pipeline from registering identity providers (DenyNewIdentityProviders).
+  github_oidc_provider = var.create_github_oidc_provider ? {
+    GithubOidcProvider = {
+      Type = "AWS::IAM::OIDCProvider"
+      Properties = merge(
+        {
+          Url          = "https://token.actions.githubusercontent.com"
+          ClientIdList = ["sts.amazonaws.com"]
+        },
+        { for _ in(length(var.oidc_thumbprints) > 0 ? [1] : []) : "ThumbprintList" => var.oidc_thumbprints }
+      )
+    }
+  } : {}
+
   role_resources = merge([
     for k, b in var.account_bindings : {
       "TfcPlanRole${local.logical_suffix[k]}" = {
@@ -410,7 +453,7 @@ locals {
             RoleName                 = var.plan_role_name
             Description              = "Terraform Cloud PLAN phase (read-only) for ${k}"
             AssumeRolePolicyDocument = local.trust_policies[k]["plan"]
-            ManagedPolicyArns        = var.plan_role_policy_arns
+            ManagedPolicyArns        = local.partitioned_plan_role_policy_arns
             MaxSessionDuration       = var.max_session_duration
           },
           local.plan_role_policies_property,
@@ -424,7 +467,7 @@ locals {
             RoleName                 = var.apply_role_name
             Description              = "Terraform Cloud APPLY phase for ${k}"
             AssumeRolePolicyDocument = local.trust_policies[k]["apply"]
-            ManagedPolicyArns        = var.apply_role_policy_arns
+            ManagedPolicyArns        = local.partitioned_apply_role_policy_arns
             MaxSessionDuration       = var.max_session_duration
           },
           local.apply_boundary_property,
@@ -443,7 +486,7 @@ locals {
     {
       AWSTemplateFormatVersion = "2010-09-09"
       Description              = "Terraform Cloud OIDC workload-identity baseline (managed by Terraform: modules/aws/iam/tfc-oidc-baseline)"
-      Resources                = merge(local.oidc_provider, local.apply_boundary_resource, local.role_resources)
+      Resources                = merge(local.oidc_provider, local.github_oidc_provider, local.apply_boundary_resource, local.role_resources)
       Outputs = {
         OidcProviderArn = { Value = { Ref = "TfcOidcProvider" } }
       }
@@ -486,7 +529,7 @@ resource "aws_cloudformation_stack_set" "this" {
 
     precondition {
       # Inline template_body limit is 51,200 bytes; beyond that a template_url
-      # (S3) would be required.
+      # would be required.
       condition     = length(local.template_body) <= 51200
       error_message = "The generated StackSet template exceeds CloudFormation's 51,200-byte inline limit — reduce account_bindings or split the baseline."
     }
@@ -559,7 +602,7 @@ locals {
           Path                     = local.break_glass_role_path
           Description              = "Emergency break-glass access; assumable only from the management-account break-glass principal with MFA"
           AssumeRolePolicyDocument = local.member_break_glass_trust
-          ManagedPolicyArns        = var.member_break_glass_policy_arns
+          ManagedPolicyArns        = local.partitioned_member_break_glass_policy_arns
           MaxSessionDuration       = 3600
         }
       }
@@ -624,4 +667,13 @@ resource "aws_cloudformation_stack_set_instance" "break_glass" {
     failure_tolerance_count = 0
     max_concurrent_count    = 10
   }
+}
+
+# Commercial-partition ARNs in the policy-ARN inputs (their defaults name
+# arn:aws:iam::aws:policy/...) are rewritten to the partition the stack is
+# deployed in, so GovCloud / China accounts get valid ARNs without overrides.
+locals {
+  partitioned_plan_role_policy_arns          = [for a in var.plan_role_policy_arns : { "Fn::Sub" = replace(a, "/^arn:aws:/", "arn:$${AWS::Partition}:") }]
+  partitioned_apply_role_policy_arns         = [for a in var.apply_role_policy_arns : { "Fn::Sub" = replace(a, "/^arn:aws:/", "arn:$${AWS::Partition}:") }]
+  partitioned_member_break_glass_policy_arns = [for a in var.member_break_glass_policy_arns : { "Fn::Sub" = replace(a, "/^arn:aws:/", "arn:$${AWS::Partition}:") }]
 }

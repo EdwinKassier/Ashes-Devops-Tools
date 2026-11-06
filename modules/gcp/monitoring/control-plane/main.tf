@@ -1,4 +1,4 @@
-# Control-plane observability for the landing zone itself (audit M-ops).
+# Control-plane observability for the landing zone itself.
 #
 # Alerts on changes to the guardrails that protect the org: organization policy,
 # org/folder IAM, VPC Service Controls, audit-logging config, and logging sinks.

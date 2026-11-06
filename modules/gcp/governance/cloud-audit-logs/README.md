@@ -92,22 +92,22 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_bigquery_dataset.audit_logs_analytics (modules/gcp/governance/cloud-audit-logs/main.tf#L216)
-- resource.google_bigquery_dataset_iam_member.bq_sink_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L264)
-- resource.google_logging_linked_dataset.audit_analytics (modules/gcp/governance/cloud-audit-logs/main.tf#L333)
-- resource.google_logging_organization_sink.org_audit_analytics_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L307)
-- resource.google_logging_organization_sink.org_audit_bq_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L242)
-- resource.google_logging_organization_sink.org_audit_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L186)
-- resource.google_logging_project_bucket_config.audit_analytics (modules/gcp/governance/cloud-audit-logs/main.tf#L286)
-- resource.google_logging_project_sink.audit_logs_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L128)
-- resource.google_organization_iam_audit_config.org_audit_config (modules/gcp/governance/cloud-audit-logs/main.tf#L166)
-- resource.google_project_iam_audit_config.project_audit_logs (modules/gcp/governance/cloud-audit-logs/main.tf#L146)
-- resource.google_project_iam_member.audit_analytics_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L319)
-- resource.google_storage_bucket.audit_logs (modules/gcp/governance/cloud-audit-logs/main.tf#L46)
+- resource.google_bigquery_dataset.audit_logs_analytics (modules/gcp/governance/cloud-audit-logs/main.tf#L218)
+- resource.google_bigquery_dataset_iam_member.bq_sink_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L266)
+- resource.google_logging_linked_dataset.audit_analytics (modules/gcp/governance/cloud-audit-logs/main.tf#L335)
+- resource.google_logging_organization_sink.org_audit_analytics_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L309)
+- resource.google_logging_organization_sink.org_audit_bq_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L244)
+- resource.google_logging_organization_sink.org_audit_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L188)
+- resource.google_logging_project_bucket_config.audit_analytics (modules/gcp/governance/cloud-audit-logs/main.tf#L288)
+- resource.google_logging_project_sink.audit_logs_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L130)
+- resource.google_organization_iam_audit_config.org_audit_config (modules/gcp/governance/cloud-audit-logs/main.tf#L168)
+- resource.google_project_iam_audit_config.project_audit_logs (modules/gcp/governance/cloud-audit-logs/main.tf#L148)
+- resource.google_project_iam_member.audit_analytics_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L321)
+- resource.google_storage_bucket.audit_logs (modules/gcp/governance/cloud-audit-logs/main.tf#L47)
 - resource.google_storage_bucket.audit_logs_access (modules/gcp/governance/cloud-audit-logs/main.tf#L2)
-- resource.google_storage_bucket_iam_member.audit_logs_access_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L39)
-- resource.google_storage_bucket_iam_member.log_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L138)
-- resource.google_storage_bucket_iam_member.org_log_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L203)
+- resource.google_storage_bucket_iam_member.audit_logs_access_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L40)
+- resource.google_storage_bucket_iam_member.log_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L140)
+- resource.google_storage_bucket_iam_member.org_log_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L205)
 
 
 ## Inputs
@@ -125,6 +125,7 @@ The following resources are created:
 | <a name="input_enable_log_analytics_linked_dataset"></a> [enable\_log\_analytics\_linked\_dataset](#input\_enable\_log\_analytics\_linked\_dataset) | Create the linked BigQuery dataset on the Log Analytics bucket (query audit logs from BigQuery without copying them). Default true. | `bool` | `true` | no |
 | <a name="input_force_destroy_bucket"></a> [force\_destroy\_bucket](#input\_force\_destroy\_bucket) | When deleting the bucket, automatically delete all objects | `bool` | `false` | no |
 | <a name="input_kms_key_name"></a> [kms\_key\_name](#input\_kms\_key\_name) | The KMS key name to encrypt the audit logs bucket (optional). Format: projects/{project}/locations/{location}/keyRings/{keyring}/cryptoKeys/{key} | `string` | `null` | no |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels applied to every labelable resource this module creates (merged with the provider default\_labels; resource-specific labels win). | `map(string)` | `{}` | no |
 | <a name="input_log_analytics_bucket_id"></a> [log\_analytics\_bucket\_id](#input\_log\_analytics\_bucket\_id) | ID of the Log Analytics log bucket. | `string` | `"org-audit-analytics"` | no |
 | <a name="input_log_analytics_kms_key_name"></a> [log\_analytics\_kms\_key\_name](#input\_log\_analytics\_kms\_key\_name) | Optional CMEK for the Log Analytics bucket. The key must be in the bucket's location and the project's Cloud Logging service account (google\_logging\_project\_settings / gcloud logging settings describe) needs roles/cloudkms.cryptoKeyEncrypterDecrypter on it before apply. Null = Google-managed encryption. | `string` | `null` | no |
 | <a name="input_log_analytics_link_id"></a> [log\_analytics\_link\_id](#input\_log\_analytics\_link\_id) | ID of the linked BigQuery dataset (letters, digits and underscores only; it becomes the BigQuery dataset ID). | `string` | `"org_audit_analytics"` | no |

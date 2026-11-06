@@ -84,3 +84,23 @@ run "permissions_boundary_propagated" {
     error_message = "The break-glass role must carry permissions_boundary_arn."
   }
 }
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    roles = {
+      x = {
+        trust_policy         = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":\"arn:aws:iam::111111111111:root\"},\"Action\":\"sts:AssumeRole\"}]}"
+        max_session_duration = 7200
+      }
+    }
+    break_glass_trusted_principals = ["arn:aws:iam::222222222222:role/admin"]
+    tags                           = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_iam_role.this["x"].tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_iam_role.this"
+  }
+}

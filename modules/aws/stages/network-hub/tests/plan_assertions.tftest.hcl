@@ -194,7 +194,7 @@ run "composes_network_hub" {
     error_message = "stage must create one NAT gateway per egress public subnet"
   }
 
-  # Per-AZ HA egress (F3): one default route per AZ, each written into the
+  # Per-AZ HA egress: one default route per AZ, each written into the
   # vpc-module-owned private route table of the SAME AZ (no stage-owned tables).
   assert {
     condition     = length(aws_route.egress_default) == 2

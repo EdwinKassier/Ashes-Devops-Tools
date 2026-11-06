@@ -76,7 +76,14 @@ variable "org_arn" {
   # Audit D6: with enabled + share_org (both default-relevant) but no org_arn,
   # the RAM principal association gets principal = "" and fails at apply.
   validation {
-    condition     = !(var.enable_private_ca && var.share_org) || can(regex("^arn:aws:organizations::", var.org_arn))
+    condition     = !(var.enable_private_ca && var.share_org) || can(regex("^arn:aws(-us-gov|-cn)?:organizations::", var.org_arn))
     error_message = "org_arn must be a valid AWS Organizations ARN (arn:aws:organizations::...) when enable_private_ca and share_org are both true."
   }
+}
+
+variable "tags" {
+  description = "Tags applied to every taggable resource this module creates (merged after provider default_tags; resource-specific tags such as Name win)."
+  type        = map(string)
+  default     = {}
+  nullable    = false
 }

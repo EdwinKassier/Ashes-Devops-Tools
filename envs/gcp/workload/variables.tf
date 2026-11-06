@@ -256,7 +256,7 @@ variable "vpc_sc_enable_dry_run" {
     API traffic on a bad rule. Validate the violation logs (Cloud Logging / the VPC-SC violations dashboard),
     then PROMOTE to enforcement by setting this false.
     NOTE: dry-run provides NO data-exfiltration protection — do not leave a production perimeter in dry-run.
-    See docs/architecture/network-topology.md and docs/known-gaps.md (G11).
+    See docs/architecture/network-topology.md and docs/known-gaps.md.
     Null = a configured preset (e.g. prod-gcp-workload sets false), else true.
   EOT
   type        = bool
@@ -336,7 +336,7 @@ variable "vpc_sc_egress_policies" {
 }
 
 # -----------------------------------------------------------------------------
-# SERVICE TEAM REGISTRY (audit H10)
+# SERVICE TEAM REGISTRY
 #
 # Data-driven onboarding: a service team is a map entry, not a new module block.
 # Default empty, so no service projects are created unless an admin declares them.
@@ -397,7 +397,7 @@ variable "service_teams" {
 }
 
 # -----------------------------------------------------------------------------
-# SaaS secret bridge (audit H9, hybrid option C — first increment)
+# SaaS secret bridge
 #
 # Opt-in. When enabled, this workload reads the Supabase outputs from a saas-<name>
 # workspace and writes them into a GCP Secret Manager secret in the host project,
@@ -412,7 +412,7 @@ variable "service_teams" {
 # -----------------------------------------------------------------------------
 
 variable "enable_saas_secret_bridge" {
-  description = "Bridge Supabase connection details from a saas-<name> workspace into a GCP Secret Manager secret in the host project (opt-in, audit H9). Default false."
+  description = "Bridge Supabase connection details from a saas-<name> workspace into a GCP Secret Manager secret in the host project (opt-in). Default false."
   type        = bool
   default     = false
 
@@ -598,4 +598,28 @@ variable "public_ingress_services" {
     ])
     error_message = "Every public_ingress_services (or gcp.workload.public_ingress.<environment>) key must be an app_services entry."
   }
+}
+
+variable "private_service_connect_target" {
+  description = "PSC endpoint bundle for Google APIs: all-apis or vpc-sc. Null (default) derives it: vpc-sc once the environment's VPC-SC perimeter is enforced, else all-apis."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.private_service_connect_target == null || contains(["all-apis", "vpc-sc"], coalesce(var.private_service_connect_target, "all-apis"))
+    error_message = "private_service_connect_target must be all-apis or vpc-sc."
+  }
+}
+
+variable "enable_app_alerts" {
+  description = "Per-service Cloud Monitoring alert policies (5xx ratio, p99 latency) for app_services. Per-service thresholds go in app_services[*].alerts."
+  type        = bool
+  default     = true
+}
+
+variable "app_alert_notification_channel_ids" {
+  description = "Cloud Monitoring notification channel IDs (projects/<p>/notificationChannels/<id>) the app alert policies notify. Empty = alerts fire without notifying anyone."
+  type        = list(string)
+  default     = []
+  nullable    = false
 }

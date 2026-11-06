@@ -2,7 +2,7 @@
 # Provider region (management account)
 #
 # NB: the Terraform Cloud organization for this phase-1 producer root's backend
-# is supplied to `terraform init` via backend.hcl / TF_CLI_ARGS_init (see
+# is supplied to `terraform init` via the TF_CLOUD_ORGANIZATION environment variable (see
 # backend.tf) — a backend block cannot reference variables, so there is no
 # tfc_organization variable here (unlike the consumer roots, which reference it
 # inside a terraform_remote_state data source).
@@ -15,7 +15,7 @@ variable "landing_zone_config_path" {
 }
 
 variable "management_account_id" {
-  description = "12-digit AWS management (payer) account ID. The default provider sets allowed_account_ids to this, so Terraform fails fast if the resolved credentials are a different account (audit C4). Null = aws.management_account_id from config/landing-zone.yaml (quote it there); no built-in default."
+  description = "12-digit AWS management (payer) account ID. The default provider sets allowed_account_ids to this, so Terraform fails fast if the resolved credentials are a different account. Null = aws.management_account_id from config/landing-zone.yaml (quote it there); no built-in default."
   type        = string
   default     = null
 
@@ -50,6 +50,9 @@ variable "accounts" {
   type = map(object({
     email = string
     ou    = string
+    # Display name of the account. Null = the map key. Set it when adopting an
+    # existing account whose name differs from the key (adopt_existing).
+    name = optional(string)
     alternate_contacts = optional(map(object({
       contact_type  = string
       name          = string
@@ -66,7 +69,7 @@ variable "accounts" {
     error_message = "Every accounts entry (var.accounts or aws.accounts in config/landing-zone.yaml) must have a valid root email address."
   }
 
-  # L2: the default emails are placeholders. Reject them so an unmodified apply
+  # The default emails are placeholders. Reject them so an unmodified apply
   # fails fast instead of trying to create real AWS accounts with example.com
   # addresses (each account needs a unique, deliverable root email).
   validation {
@@ -81,6 +84,9 @@ variable "workload_accounts" {
   type = map(object({
     email = string
     ou    = string
+    # Display name of the account. Null = the map key. Set it when adopting an
+    # existing account whose name differs from the key (adopt_existing).
+    name = optional(string)
     alternate_contacts = optional(map(object({
       contact_type  = string
       name          = string
@@ -124,7 +130,7 @@ variable "terraform_run_role_arn" {
   default     = null
 
   validation {
-    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/.+$", coalesce(var.terraform_run_role_arn, local.cfg.terraform_run_role_arn, "!unset")))
+    condition     = can(regex("^arn:aws(-us-gov|-cn)?:iam::[0-9]{12}:role/.+$", coalesce(var.terraform_run_role_arn, local.cfg.terraform_run_role_arn, "!unset")))
     error_message = "terraform_run_role_arn is unset or invalid: set var.terraform_run_role_arn or aws.terraform_run_role_arn in config/landing-zone.yaml to an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/...)."
   }
 }
@@ -135,7 +141,7 @@ variable "break_glass_role_arn" {
   default     = null
 
   validation {
-    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/.+$", coalesce(var.break_glass_role_arn, local.cfg.break_glass_role_arn, "!unset")))
+    condition     = can(regex("^arn:aws(-us-gov|-cn)?:iam::[0-9]{12}:role/.+$", coalesce(var.break_glass_role_arn, local.cfg.break_glass_role_arn, "!unset")))
     error_message = "break_glass_role_arn is unset or invalid: set var.break_glass_role_arn or aws.break_glass_role_arn in config/landing-zone.yaml to an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/...)."
   }
 }
@@ -282,7 +288,7 @@ variable "enable_tfc_oidc_baseline" {
 }
 
 variable "tfc_organization" {
-  description = "Terraform Cloud organization whose workspaces the member-account roles trust. Matched literally (no wildcards). Required when enable_tfc_oidc_baseline is true. Not the same mechanism as the backend organization (backend.hcl), but normally the same value. Null = org.tfc.organization from config/landing-zone.yaml."
+  description = "Terraform Cloud organization whose workspaces the member-account roles trust. Matched literally (no wildcards). Required when enable_tfc_oidc_baseline is true. Not the same mechanism as the cloud-block organization (TF_CLOUD_ORGANIZATION), but normally the same value. Null = org.tfc.organization from config/landing-zone.yaml."
   type        = string
   default     = null
 
@@ -364,4 +370,94 @@ variable "allow_vpc_bpa_exclusions" {
   description = "Allow member accounts to create VPC Block Public Access exclusions under the org declarative EC2 policy. Default false (no VPC can bypass the org-wide internet-gateway ingress block). Set true only if an aws-workload environment uses app_ingress_mode = \"public_alb\"; that root then excludes only its own spoke VPC. cloudfront_vpc_origin needs no exclusion."
   type        = bool
   default     = false
+}
+
+variable "pin_tfc_federation_to_org" {
+  description = "RCP: accept app.terraform.io (tfc_hostname) web-identity tokens org-wide only from tfc_organization, so no pipeline can make a role trust another TFC org. Default true."
+  type        = bool
+  default     = true
+}
+
+variable "github_federation_owners" {
+  description = "GitHub users/orgs whose Actions OIDC tokens may assume roles in the organization (RCP pin repo:<owner>/*). Null = aws.github_federation_owners from config/landing-zone.yaml, else empty (GitHub federation unpinned)."
+  type        = list(string)
+  default     = null
+}
+
+variable "enable_tfc_management_roles" {
+  description = "Create dedicated least-privilege management-account roles for aws-security and aws-backup (tfc-management-roles), bound by tfc-admin instead of the shared phase-0 management role. Default true."
+  type        = bool
+  default     = true
+}
+
+variable "adopt_existing" {
+  description = "Brownfield adoption: existing AWS Organizations resources to IMPORT instead of create. organization_id (o-...), ou_ids keyed by OU name or \"<parent>/<child>\" path (ou-...), account_ids keyed by the account key in accounts / workload_accounts (12-digit IDs). Null = aws.adopt from config/landing-zone.yaml, else nothing is imported (greenfield). See docs/runbooks/aws-brownfield-adoption.md."
+  type = object({
+    organization_id = optional(string)
+    ou_ids          = optional(map(string), {})
+    account_ids     = optional(map(string), {})
+  })
+  default = null
+
+  validation {
+    condition     = var.adopt_existing == null || try(var.adopt_existing.organization_id, null) == null || can(regex("^o-[a-z0-9]{10,32}$", coalesce(try(var.adopt_existing.organization_id, null), "o-0000000000")))
+    error_message = "adopt_existing.organization_id must be an organization ID like o-abcd123456."
+  }
+
+  validation {
+    condition     = var.adopt_existing == null || alltrue([for id in values(try(var.adopt_existing.ou_ids, {})) : can(regex("^ou-[a-z0-9]{4,32}-[a-z0-9]{8,32}$", id))])
+    error_message = "adopt_existing.ou_ids values must be OU IDs like ou-abcd-12345678."
+  }
+
+  validation {
+    condition     = var.adopt_existing == null || alltrue([for id in values(try(var.adopt_existing.account_ids, {})) : can(regex("^[0-9]{12}$", id))])
+    error_message = "adopt_existing.account_ids values must be 12-digit account IDs."
+  }
+}
+
+variable "org_policy_overrides" {
+  description = "Organization policies merged over the built-in guardrail set: an existing key (e.g. scp-region-restriction) replaces its content, a new key adds a policy (attach it with org_policy_attachments)."
+  type = map(object({
+    type    = string
+    content = string
+  }))
+  default  = {}
+  nullable = false
+}
+
+variable "disabled_org_policies" {
+  description = "Built-in policy keys not to create (their default attachments are dropped). Default backup-policy: aws-backup owns the attached BACKUP_POLICY."
+  type        = list(string)
+  default     = ["backup-policy"]
+  nullable    = false
+}
+
+variable "org_policy_attachments" {
+  description = "Extra policy attachments (key => {policy_key, target_id}) for policies added through org_policy_overrides."
+  type = map(object({
+    policy_key = string
+    target_id  = string
+  }))
+  default  = {}
+  nullable = false
+}
+
+variable "github_federation_owner_ids" {
+  description = "Numeric GitHub owner IDs allowed by the GitHub federation pin (repository_owner_id:<id>:*), for immutable-ID deploy-role subjects."
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
+
+variable "allowed_builtin_web_identity_providers" {
+  description = "Built-in web-identity providers (cognito-identity.amazonaws.com, accounts.google.com, graph.facebook.com, www.amazon.com) roles may trust. Default none (RCP deny)."
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
+
+variable "partition" {
+  description = "AWS partition the organization policies are rendered for (aws, aws-us-gov, aws-cn)."
+  type        = string
+  default     = "aws"
 }

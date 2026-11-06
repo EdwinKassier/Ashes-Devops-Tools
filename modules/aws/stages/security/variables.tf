@@ -206,13 +206,13 @@ variable "aggregator_role_arn" {
 }
 
 variable "meta_store_manager_role_arn" {
-  description = "ARN of the AmazonSecurityLakeMetaStoreManager IAM role Security Lake uses to manage the Lake Formation metastore. Required when enable_security_lake is true."
+  description = "ARN of an existing AmazonSecurityLakeMetaStoreManager role. Empty (default) with enable_security_lake: the stage creates AmazonSecurityLakeMetaStoreManagerV2 in the security-tooling account (with the tfc-apply boundary)."
   type        = string
   default     = ""
 
   validation {
-    condition     = !var.enable_security_lake || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", var.meta_store_manager_role_arn))
-    error_message = "meta_store_manager_role_arn must be a valid IAM role ARN when enable_security_lake is true."
+    condition     = var.meta_store_manager_role_arn == "" || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", var.meta_store_manager_role_arn))
+    error_message = "meta_store_manager_role_arn must be empty (create the role) or a valid IAM role ARN."
   }
 }
 
@@ -313,7 +313,7 @@ variable "notification_subscribers" {
   }
 }
 
-# --- Audit finding A3: dedicated IAM Identity Center account (opt-in, default = unchanged) ---
+# --- Dedicated IAM Identity Center account (opt-in, default = unchanged) ---
 variable "identity_account_id" {
   description = "Dedicated identity account for IAM Identity Center delegated administration. Default null = the shared-services account (unchanged). Set to a dedicated identity account to tighten the delegated-admin blast radius. PREVIEW: opt-in (default off), not yet validated against a real apply."
   type        = string
@@ -384,7 +384,7 @@ variable "cloudtrail_lambda_data_events" {
 }
 
 # -----------------------------------------------------------------------------
-# Managed break-glass role (audit M3)
+# Managed break-glass role
 #
 # When create_break_glass is true, the stage creates the emergency-access role
 # itself (MFA-gated trust, deny-all standing policy, AdministratorAccess only
@@ -453,4 +453,28 @@ variable "tfc_apply_boundary_policy_name" {
     condition     = var.tfc_apply_boundary_policy_name == null || can(regex("^[A-Za-z0-9+=,.@_-]{1,128}$", var.tfc_apply_boundary_policy_name))
     error_message = "tfc_apply_boundary_policy_name must be null or a valid IAM policy name (1-128 chars of [A-Za-z0-9+=,.@_-])."
   }
+}
+
+variable "create_organization_trail" {
+  description = "Create the organization CloudTrail (management account) with its CloudWatch Logs, CIS alarms and KMS wiring. Set false when another owner already runs the org trail, e.g. AWS Control Tower (docs/runbooks/aws-brownfield-adoption.md); two org trails double the cost and the noise. Default true."
+  type        = bool
+  default     = true
+}
+
+variable "cloudtrail_cloudwatch_role_arn" {
+  description = "Existing CloudTrail -> CloudWatch Logs delivery role (created by aws-organization, create_org_trail_delivery_role). Null = the cloudtrail-org module creates it, which needs IAM write in the management account."
+  type        = string
+  default     = null
+}
+
+variable "partition" {
+  description = "AWS partition (aws, aws-us-gov, aws-cn) for the ARNs this stage builds when the security-tooling partition is not read."
+  type        = string
+  default     = "aws"
+}
+
+variable "backup_account_id" {
+  description = "Dedicated backup account, registered as the AWS Backup delegated administrator. Null = the security-tooling account."
+  type        = string
+  default     = null
 }

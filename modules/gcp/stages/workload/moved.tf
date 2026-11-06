@@ -1,5 +1,5 @@
 # State migration: upstream terraform-google-modules/project-factory (~> 18.2,
-# resolved 18.4.0) -> the shared project primitive (audit Modularity-H).
+# resolved 18.4.0) -> the shared project primitive.
 #
 # Internal upstream addresses (module "project" -> module "project-factory" =
 # ./modules/core_project_factory) were read from the resolved module source in

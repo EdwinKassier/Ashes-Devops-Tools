@@ -126,3 +126,34 @@ run "wildcard_stackset_managed_role_rejected" {
 
   expect_failures = [var.stackset_managed_role_names]
 }
+
+run "federation_pin_rejects_wildcard_org" {
+  command = plan
+
+  variables {
+    federation_tenant_pins = { tfc_organization = "acme*" }
+  }
+
+  expect_failures = [var.federation_tenant_pins]
+}
+
+run "federation_pin_rejects_owner_with_slash" {
+  command = plan
+
+  variables {
+    federation_tenant_pins = { github_owners = ["acme/repo"] }
+  }
+
+  expect_failures = [var.federation_tenant_pins]
+}
+
+run "disabled_and_overridden_key_rejected" {
+  command = plan
+
+  variables {
+    disabled_policies = ["tag-policy"]
+    policy_overrides  = { "tag-policy" = { type = "TAG_POLICY", content = "{}" } }
+  }
+
+  expect_failures = [var.disabled_policies]
+}

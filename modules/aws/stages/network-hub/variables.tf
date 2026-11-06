@@ -13,7 +13,7 @@ variable "org_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:organizations::", var.org_arn))
+    condition     = can(regex("^arn:aws(-us-gov|-cn)?:organizations::", var.org_arn))
     error_message = "org_arn must be an AWS Organizations ARN beginning with arn:aws:organizations::."
   }
 }
@@ -101,8 +101,8 @@ variable "az_count" {
   default     = 2
 
   validation {
-    condition     = var.az_count >= 1 && var.az_count <= 3
-    error_message = "az_count must be between 1 and 3."
+    condition     = var.az_count >= 2 && var.az_count <= 3
+    error_message = "az_count must be between 2 and 3 (the Route 53 Resolver endpoints need subnets in at least two AZs)."
   }
 
   validation {
@@ -116,7 +116,7 @@ variable "flow_log_destination_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws:s3:::", var.flow_log_destination_arn))
+    condition     = can(regex("^arn:aws(-us-gov|-cn)?:s3:::", var.flow_log_destination_arn))
     error_message = "flow_log_destination_arn must be an S3 bucket ARN beginning with arn:aws:s3:::."
   }
 }
@@ -178,7 +178,7 @@ variable "enable_network_access_analyzer" {
 }
 
 variable "tags" {
-  description = "Tags applied to the stage's own taggable resources (NAT gateways, EIPs) and passed to the hub VPCs. Org-wide tags normally come from the provider default_tags; use this for stage-specific additions."
+  description = "Tags applied to the stage's own taggable resources (NAT gateways, EIPs) and passed to every child module (hub VPCs, IPAM, TGW, Network Firewall, endpoints, Resolver, Network Access Analyzer). Org-wide tags normally come from the provider default_tags; use this for stage-specific additions."
   type        = map(string)
   default     = {}
 }

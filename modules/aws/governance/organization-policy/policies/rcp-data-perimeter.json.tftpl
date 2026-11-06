@@ -17,7 +17,9 @@
         "sts:TagSession",
         "kms:*",
         "sqs:*",
-        "secretsmanager:*"
+        "secretsmanager:*",
+        "ecr:*",
+        "logs:*"
       ],
       "Resource": "*",
       "Condition": {
@@ -49,7 +51,9 @@
         "sts:TagSession",
         "kms:*",
         "sqs:*",
-        "secretsmanager:*"
+        "secretsmanager:*",
+        "ecr:*",
+        "logs:*"
       ],
       "Resource": "*",
       "Condition": {
@@ -68,6 +72,54 @@
         }
       }
     },
+%{ if tfc_organization != null ~}
+    {
+      "Sid": "PinTfcFederationToOrg",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Resource": "*",
+      "Condition": {
+        "Null": {
+          "${tfc_hostname}:sub": "false"
+        },
+        "StringNotLike": {
+          "${tfc_hostname}:sub": "organization:${tfc_organization}:*"
+        }
+      }
+    },
+%{ endif ~}
+%{ if length(github_owners) + length(github_owner_ids) > 0 ~}
+    {
+      "Sid": "PinGithubFederationToOwners",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Resource": "*",
+      "Condition": {
+        "Null": {
+          "token.actions.githubusercontent.com:sub": "false"
+        },
+        "StringNotLike": {
+          "token.actions.githubusercontent.com:sub": ${jsonencode(concat([for o in github_owners : "repo:${o}/*"], [for i in github_owner_ids : "repository_owner_id:${i}:*"]))}
+        }
+      }
+    },
+%{ endif ~}
+%{ for p in setsubtract(["cognito-identity.amazonaws.com", "accounts.google.com", "graph.facebook.com", "www.amazon.com"], allowed_builtin) ~}
+    {
+      "Sid": "DenyBuiltinIdp${replace(title(replace(split(".", p)[0], "-", " ")), " ", "")}",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Resource": "*",
+      "Condition": {
+        "Null": {
+          "${p}:${contains(["graph.facebook.com", "www.amazon.com"], p) ? "app_id" : "aud"}": "false"
+        }
+      }
+    },
+%{ endfor ~}
     {
       "Sid": "RequireSecureTransport",
       "Effect": "Deny",

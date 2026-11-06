@@ -23,6 +23,8 @@ resource "aws_route53_resolver_endpoint" "inbound" {
       subnet_id = ip_address.value
     }
   }
+
+  tags = var.tags
 }
 
 resource "aws_route53_resolver_endpoint" "outbound" {
@@ -36,6 +38,8 @@ resource "aws_route53_resolver_endpoint" "outbound" {
       subnet_id = ip_address.value
     }
   }
+
+  tags = var.tags
 }
 
 # --- Forward rules -----------------------------------------------------------
@@ -56,6 +60,8 @@ resource "aws_route53_resolver_rule" "fwd" {
       ip = target_ip.value
     }
   }
+
+  tags = var.tags
 }
 
 resource "aws_route53_resolver_rule_association" "fwd" {
@@ -72,12 +78,13 @@ resource "aws_route53_resolver_rule_association" "fwd" {
 
 resource "aws_route53profiles_profile" "this" {
   name = "${var.name_prefix}-profile"
+  tags = var.tags
 }
 
 resource "aws_route53profiles_resource_association" "vpc" {
   name         = "${var.name_prefix}-profile-vpc"
   profile_id   = aws_route53profiles_profile.this.id
-  resource_arn = "arn:aws:ec2:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:vpc/${var.vpc_id}"
+  resource_arn = "arn:${local.partition}:ec2:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:vpc/${var.vpc_id}"
 }
 
 data "aws_region" "current" {}
@@ -87,6 +94,7 @@ data "aws_caller_identity" "current" {}
 resource "aws_ram_resource_share" "profile" {
   name                      = "${var.name_prefix}-profile-share"
   allow_external_principals = false
+  tags                      = var.tags
 }
 
 resource "aws_ram_resource_association" "profile" {
@@ -109,12 +117,14 @@ resource "aws_route53_resolver_firewall_domain_list" "blocked" {
 
   name    = "${var.name_prefix}-blocked"
   domains = var.blocked_domains
+  tags    = var.tags
 }
 
 resource "aws_route53_resolver_firewall_rule_group" "this" {
   count = var.enable_dns_firewall ? 1 : 0
 
   name = "${var.name_prefix}-fw-rg"
+  tags = var.tags
 }
 
 resource "aws_route53_resolver_firewall_rule" "block" {
@@ -135,6 +145,7 @@ resource "aws_route53_resolver_firewall_rule_group_association" "this" {
   firewall_rule_group_id = aws_route53_resolver_firewall_rule_group.this[0].id
   priority               = 101
   vpc_id                 = var.vpc_id
+  tags                   = var.tags
 }
 
 resource "aws_route53_resolver_firewall_config" "this" {
@@ -151,6 +162,7 @@ resource "aws_route53_resolver_query_log_config" "this" {
 
   name            = "${var.name_prefix}-qlog"
   destination_arn = var.query_log_destination_arn
+  tags            = var.tags
 }
 
 resource "aws_route53_resolver_query_log_config_association" "this" {

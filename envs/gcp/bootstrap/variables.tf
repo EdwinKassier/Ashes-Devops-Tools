@@ -245,3 +245,15 @@ variable "terraform_admin_email" {
     error_message = "terraform_admin_email must be a GCP service account email (ends in .iam.gserviceaccount.com) or null."
   }
 }
+
+variable "tfc_hostname" {
+  description = "HCP Terraform / Terraform Enterprise hostname issuing the dynamic-credential tokens the TFC WIF pool trusts (app.terraform.io, app.eu.terraform.io or a TFE host)."
+  type        = string
+  default     = "app.terraform.io"
+}
+
+variable "phase0_admin_impersonation_expires_at" {
+  description = "RFC 3339 UTC timestamp after which the phase-0 human impersonation of terraform-admin stops working. Set it to the end of your bootstrap window (e.g. two weeks out); disable the grant entirely after the TFC handover."
+  type        = string
+  default     = null
+}

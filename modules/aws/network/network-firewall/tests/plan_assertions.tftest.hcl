@@ -186,3 +186,16 @@ run "firewall_disabled" {
     error_message = "No firewall resources of any kind must be created when disabled."
   }
 }
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    tags = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_networkfirewall_firewall.this[0].tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_networkfirewall_firewall.this"
+  }
+}

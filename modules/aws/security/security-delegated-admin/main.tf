@@ -21,8 +21,10 @@ locals {
   # account, plus IAM Identity Center (sso) which is delegated to the Identity
   # account.
   default_registrations = {
-    "access-analyzer.amazonaws.com"          = var.security_tooling_account_id
-    "backup.amazonaws.com"                   = var.security_tooling_account_id
+    "access-analyzer.amazonaws.com" = var.security_tooling_account_id
+    # AWS Backup is administered from the dedicated backup account (SRA), the
+    # same account that owns the vault and the restore testing.
+    "backup.amazonaws.com"                   = coalesce(var.backup_account_id, var.security_tooling_account_id)
     "config.amazonaws.com"                   = var.security_tooling_account_id
     "config-multiaccountsetup.amazonaws.com" = var.security_tooling_account_id
     "cloudtrail.amazonaws.com"               = var.security_tooling_account_id
@@ -30,10 +32,14 @@ locals {
     "ssm.amazonaws.com"                      = var.security_tooling_account_id
     "resource-explorer-2.amazonaws.com"      = var.security_tooling_account_id
     "securitylake.amazonaws.com"             = var.security_tooling_account_id
-    "sso.amazonaws.com"                      = var.identity_account_id
   }
+  # IAM Identity Center delegation is identity control over every account.
+  # Off by default here: aws-organization registers it as the phase-0 role
+  # (identity_center_admin_account_key), so the least-privilege aws-security
+  # management role never needs sso.amazonaws.com.
+  sso_registration = var.register_identity_center_admin ? { "sso.amazonaws.com" = var.identity_account_id } : {}
 
-  effective_registrations = length(var.registrations) > 0 ? var.registrations : local.default_registrations
+  effective_registrations = length(var.registrations) > 0 ? var.registrations : merge(local.default_registrations, local.sso_registration)
 }
 
 resource "aws_organizations_delegated_administrator" "this" {

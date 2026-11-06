@@ -39,6 +39,16 @@ mock_provider "aws" {
   mock_resource "aws_security_group" {
     defaults = { id = "sg-0123456789abcdef0" }
   }
+  mock_resource "aws_sns_topic" {
+    defaults = { arn = "arn:aws:sns:eu-west-2:111111111111:dev-apps-alarms" }
+  }
+  mock_resource "aws_sqs_queue" {
+    defaults = {
+      arn = "arn:aws:sqs:eu-west-2:111111111111:dev-orders"
+      id  = "https://sqs.eu-west-2.amazonaws.com/111111111111/dev-orders"
+      url = "https://sqs.eu-west-2.amazonaws.com/111111111111/dev-orders"
+    }
+  }
   mock_resource "aws_cloudwatch_log_group" {
     defaults = { arn = "arn:aws:logs:eu-west-2:111111111111:log-group:/ecs/dev/orders" }
   }
@@ -131,8 +141,8 @@ run "one_service_golden_path" {
   }
 
   assert {
-    condition     = length(aws_iam_openid_connect_provider.github) == 1 && aws_iam_openid_connect_provider.github[0].url == "https://token.actions.githubusercontent.com" && length(aws_iam_openid_connect_provider.github[0].client_id_list) == 1 && contains(aws_iam_openid_connect_provider.github[0].client_id_list, "sts.amazonaws.com")
-    error_message = "enable_github_oidc must create the GitHub OIDC provider with audience sts.amazonaws.com."
+    condition     = length(aws_iam_openid_connect_provider.github) == 0 && output.github_oidc_provider_arn == "arn:aws:iam::111111111111:oidc-provider/token.actions.githubusercontent.com"
+    error_message = "enable_github_oidc must reuse the baseline-created GitHub OIDC provider (derived ARN), not create one."
   }
 
   # Trust: exact aud AND exact sub, federated to the GitHub provider, nothing else.
@@ -394,7 +404,7 @@ run "boundary_disabled_with_null_name" {
   }
 
   assert {
-    condition     = aws_iam_role.execution["orders"].permissions_boundary == null && aws_iam_role.task["orders"].permissions_boundary == null && length(data.aws_partition.current) == 0
+    condition     = aws_iam_role.execution["orders"].permissions_boundary == null && aws_iam_role.task["orders"].permissions_boundary == null
     error_message = "tfc_apply_boundary_policy_name = null must create the roles without a permissions boundary."
   }
 }
@@ -413,5 +423,278 @@ run "explicit_container_image_wins_over_placeholder" {
   assert {
     condition     = output.services["orders"].initial_image == "111111111111.dkr.ecr.eu-west-2.amazonaws.com/orders:v1"
     error_message = "An explicit container_image must be the first revision's image."
+  }
+}
+
+# An account outside the tfc-oidc-baseline can still have the module create it.
+run "module_creates_provider_outside_baseline" {
+  command = plan
+
+  variables {
+    enable_github_oidc          = true
+    create_github_oidc_provider = true
+    services = {
+      orders = { github = { repository = "acme/orders" } }
+    }
+  }
+
+  assert {
+    condition     = length(aws_iam_openid_connect_provider.github) == 1 && aws_iam_openid_connect_provider.github[0].url == "https://token.actions.githubusercontent.com" && contains(aws_iam_openid_connect_provider.github[0].client_id_list, "sts.amazonaws.com")
+    error_message = "create_github_oidc_provider = true must create the GitHub OIDC provider with audience sts.amazonaws.com."
+  }
+}
+
+# ── Per-service observability ────────────────────────────────────────────────
+
+run "alarms_default_create_encrypted_topic_and_p99" {
+  command = plan
+
+  variables {
+    services = { orders = {} }
+  }
+
+  assert {
+    condition = (
+      length(aws_sns_topic.alarms) == 1 &&
+      aws_sns_topic.alarms[0].name == "dev-apps-alarms" &&
+      aws_sns_topic.alarms[0].kms_master_key_id == var.kms_key_arn &&
+      output.alarm_topic_arn == "arn:aws:sns:eu-west-2:111111111111:dev-apps-alarms"
+    )
+    error_message = "with no alarm_sns_topic_arn, the stage must create a CMK-encrypted <env>-apps-alarms topic."
+  }
+
+  # Only CloudWatch acting for THIS account's <env>-apps-* alarms may publish.
+  assert {
+    condition = (
+      [for st in jsondecode(aws_sns_topic_policy.alarms[0].policy).Statement : st.Principal.Service if st.Sid == "CloudWatchAlarmsPublish"][0] == "cloudwatch.amazonaws.com" &&
+      [for st in jsondecode(aws_sns_topic_policy.alarms[0].policy).Statement : st.Condition.StringEquals["aws:SourceAccount"] if st.Sid == "CloudWatchAlarmsPublish"][0] == "111111111111" &&
+      [for st in jsondecode(aws_sns_topic_policy.alarms[0].policy).Statement : st.Condition.ArnLike["aws:SourceArn"] if st.Sid == "CloudWatchAlarmsPublish"][0] == "arn:aws:cloudwatch:eu-west-2:111111111111:alarm:dev-apps-*" &&
+      [for st in jsondecode(aws_sns_topic_policy.alarms[0].policy).Statement : st.Principal.AWS if st.Sid == "AccountOwnerManage"][0] == "arn:aws:iam::111111111111:root" &&
+      length(jsondecode(aws_sns_topic_policy.alarms[0].policy).Statement) == 2
+    )
+    error_message = "the alarm topic policy must admit only this account and its own CloudWatch alarms."
+  }
+
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.latency_p99["orders"].extended_statistic == "p99" &&
+      aws_cloudwatch_metric_alarm.latency_p99["orders"].metric_name == "TargetResponseTime" &&
+      aws_cloudwatch_metric_alarm.latency_p99["orders"].threshold == 2 &&
+      aws_cloudwatch_metric_alarm.latency_p99["orders"].dimensions["TargetGroup"] == "targetgroup/dev-orders/0123456789abcdef" &&
+      aws_cloudwatch_metric_alarm.latency_p99["orders"].alarm_actions == toset(["arn:aws:sns:eu-west-2:111111111111:dev-apps-alarms"]) &&
+      aws_cloudwatch_metric_alarm.latency_p99["orders"].ok_actions == toset(["arn:aws:sns:eu-west-2:111111111111:dev-apps-alarms"])
+    )
+    error_message = "each service must get a TargetResponseTime p99 > 2s alarm on its own target group, wired to the alarm topic."
+  }
+
+  assert {
+    condition = (
+      toset(keys(module.alarms[0].alarm_arns)) == toset(["orders-cpu-high", "orders-memory-high", "orders-unhealthy-targets", "orders-target-5xx"]) &&
+      module.alarms[0].sns_topic_arn == "arn:aws:sns:eu-west-2:111111111111:dev-apps-alarms"
+    )
+    error_message = "the CPU / memory / unhealthy / 5xx alarms must exist (no DLQ alarm without a queue) and notify the created topic."
+  }
+}
+
+run "alarms_existing_topic_and_custom_thresholds" {
+  command = plan
+
+  variables {
+    alarm_sns_topic_arn = "arn:aws:sns:eu-west-2:111111111111:oncall"
+    services = {
+      orders = { alarms = { p99_latency_seconds = 0.5, cpu_threshold = 70 } }
+    }
+  }
+
+  assert {
+    condition     = length(aws_sns_topic.alarms) == 0 && length(aws_sns_topic_policy.alarms) == 0 && output.alarm_topic_arn == "arn:aws:sns:eu-west-2:111111111111:oncall"
+    error_message = "an explicit alarm_sns_topic_arn must be used instead of creating a topic."
+  }
+
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.latency_p99["orders"].threshold == 0.5 &&
+      aws_cloudwatch_metric_alarm.latency_p99["orders"].alarm_actions == toset(["arn:aws:sns:eu-west-2:111111111111:oncall"]) &&
+      module.alarms[0].sns_topic_arn == "arn:aws:sns:eu-west-2:111111111111:oncall"
+    )
+    error_message = "custom thresholds and the existing topic must reach the alarms."
+  }
+}
+
+run "alarms_per_service_opt_out_and_no_topic" {
+  command = plan
+
+  variables {
+    create_alarm_topic = false
+    services = {
+      orders = { alarms = { enabled = false } }
+      api    = {}
+    }
+  }
+
+  assert {
+    condition = (
+      keys(aws_cloudwatch_metric_alarm.latency_p99) == ["api"] &&
+      length([for k in keys(module.alarms[0].alarm_arns) : k if startswith(k, "orders-")]) == 0 &&
+      length([for k in keys(module.alarms[0].alarm_arns) : k if startswith(k, "api-")]) == 4
+    )
+    error_message = "alarms.enabled = false must drop every alarm of that service and keep the others."
+  }
+
+  assert {
+    condition     = length(aws_sns_topic.alarms) == 0 && output.alarm_topic_arn == null && length(aws_cloudwatch_metric_alarm.latency_p99["api"].alarm_actions) == 0
+    error_message = "create_alarm_topic = false with no alarm_sns_topic_arn must create alarms without actions and no topic."
+  }
+}
+
+run "alarms_disabled_stage_wide" {
+  command = plan
+
+  variables {
+    enable_alarms = false
+    services      = { orders = {} }
+  }
+
+  assert {
+    condition     = length(module.alarms) == 0 && length(aws_cloudwatch_metric_alarm.latency_p99) == 0 && length(aws_sns_topic.alarms) == 0 && output.alarm_topic_arn == null
+    error_message = "enable_alarms = false must create no alarms and no topic."
+  }
+}
+
+# ── Per-service queue ────────────────────────────────────────────────────────
+
+run "queue_off_by_default" {
+  command = plan
+
+  variables {
+    services = { orders = {} }
+  }
+
+  assert {
+    condition = (
+      length(aws_sqs_queue.service) == 0 && length(aws_sqs_queue.dlq) == 0 &&
+      length(aws_iam_role_policy.task_queue) == 0 && length(aws_sqs_queue_policy.tls_only) == 0 &&
+      output.services["orders"].queue_url == null && output.services["orders"].dlq_arn == null
+    )
+    error_message = "no queue (and no queue grant) unless the service enables one."
+  }
+}
+
+run "queue_enabled_least_privilege" {
+  command = plan
+
+  # Distinct DLQ identity so the grant scope is actually proven.
+  override_resource {
+    target          = aws_sqs_queue.dlq
+    override_during = plan
+    values = {
+      arn = "arn:aws:sqs:eu-west-2:111111111111:dev-orders-dlq"
+      id  = "https://sqs.eu-west-2.amazonaws.com/111111111111/dev-orders-dlq"
+      url = "https://sqs.eu-west-2.amazonaws.com/111111111111/dev-orders-dlq"
+    }
+  }
+
+  variables {
+    services = {
+      orders = { queue = { enabled = true, visibility_timeout_seconds = 120, max_receive_count = 3 } }
+      api    = {}
+    }
+  }
+
+  assert {
+    condition = (
+      keys(aws_sqs_queue.service) == ["orders"] &&
+      aws_sqs_queue.service["orders"].name == "dev-orders" &&
+      aws_sqs_queue.dlq["orders"].name == "dev-orders-dlq" &&
+      aws_sqs_queue.service["orders"].visibility_timeout_seconds == 120 &&
+      aws_sqs_queue.dlq["orders"].message_retention_seconds == 1209600
+    )
+    error_message = "queue.enabled must create <env>-<service> and its <env>-<service>-dlq."
+  }
+
+  assert {
+    condition = (
+      aws_sqs_queue.service["orders"].sqs_managed_sse_enabled == true &&
+      aws_sqs_queue.dlq["orders"].sqs_managed_sse_enabled == true &&
+      aws_sqs_queue.service["orders"].kms_master_key_id == null
+    )
+    error_message = "with no queue_kms_key_arn both queues must use SQS-managed SSE."
+  }
+
+  assert {
+    condition = (
+      jsondecode(aws_sqs_queue.service["orders"].redrive_policy).deadLetterTargetArn == "arn:aws:sqs:eu-west-2:111111111111:dev-orders-dlq" &&
+      jsondecode(aws_sqs_queue.service["orders"].redrive_policy).maxReceiveCount == 3 &&
+      jsondecode(aws_sqs_queue_redrive_allow_policy.dlq["orders"].redrive_allow_policy).redrivePermission == "byQueue" &&
+      jsondecode(aws_sqs_queue_redrive_allow_policy.dlq["orders"].redrive_allow_policy).sourceQueueArns == ["arn:aws:sqs:eu-west-2:111111111111:dev-orders"]
+    )
+    error_message = "the queue must redrive to its own DLQ after max_receive_count, and only it may redrive there."
+  }
+
+  assert {
+    condition = alltrue([
+      for k in ["orders|queue", "orders|dlq"] : (
+        jsondecode(aws_sqs_queue_policy.tls_only[k].policy).Statement[0].Effect == "Deny" &&
+        jsondecode(aws_sqs_queue_policy.tls_only[k].policy).Statement[0].Condition.Bool["aws:SecureTransport"] == "false" &&
+        length(jsondecode(aws_sqs_queue_policy.tls_only[k].policy).Statement) == 1
+      )
+    ]) && length(aws_sqs_queue_policy.tls_only) == 2
+    error_message = "both queues must carry a policy that only denies non-TLS access."
+  }
+
+  # Task role: its own queue only — not the DLQ, not another service.
+  assert {
+    condition = (
+      keys(aws_iam_role_policy.task_queue) == ["orders"] &&
+      length(jsondecode(aws_iam_role_policy.task_queue["orders"].policy).Statement) == 1 &&
+      jsondecode(aws_iam_role_policy.task_queue["orders"].policy).Statement[0].Resource == "arn:aws:sqs:eu-west-2:111111111111:dev-orders" &&
+      contains(jsondecode(aws_iam_role_policy.task_queue["orders"].policy).Statement[0].Action, "sqs:SendMessage") &&
+      contains(jsondecode(aws_iam_role_policy.task_queue["orders"].policy).Statement[0].Action, "sqs:ReceiveMessage") &&
+      contains(jsondecode(aws_iam_role_policy.task_queue["orders"].policy).Statement[0].Action, "sqs:DeleteMessage") &&
+      !contains(jsondecode(aws_iam_role_policy.task_queue["orders"].policy).Statement[0].Action, "sqs:*") &&
+      !contains(jsondecode(aws_iam_role_policy.task_queue["orders"].policy).Statement[0].Action, "sqs:PurgeQueue")
+    )
+    error_message = "the task role must get send/receive/delete on its own queue only (no DLQ, no wildcard, no purge)."
+  }
+
+  assert {
+    condition = (
+      output.services["orders"].queue_url == "https://sqs.eu-west-2.amazonaws.com/111111111111/dev-orders" &&
+      output.services["orders"].queue_arn == "arn:aws:sqs:eu-west-2:111111111111:dev-orders" &&
+      output.services["orders"].dlq_arn == "arn:aws:sqs:eu-west-2:111111111111:dev-orders-dlq" &&
+      output.services["api"].queue_url == null
+    )
+    error_message = "the services output must expose the queue and DLQ URL/ARN."
+  }
+
+  assert {
+    condition     = contains(keys(module.alarms[0].alarm_arns), "orders-dlq-messages") && !contains(keys(module.alarms[0].alarm_arns), "api-dlq-messages")
+    error_message = "a service with a queue must get a DLQ-depth alarm."
+  }
+}
+
+run "queue_with_cmk" {
+  command = plan
+
+  variables {
+    queue_kms_key_arn = "arn:aws:kms:eu-west-2:111111111111:key/queue-5678"
+    services          = { orders = { queue = { enabled = true } } }
+  }
+
+  assert {
+    condition = (
+      aws_sqs_queue.service["orders"].kms_master_key_id == "arn:aws:kms:eu-west-2:111111111111:key/queue-5678" &&
+      aws_sqs_queue.dlq["orders"].kms_master_key_id == "arn:aws:kms:eu-west-2:111111111111:key/queue-5678" &&
+      aws_sqs_queue.service["orders"].sqs_managed_sse_enabled != true
+    )
+    error_message = "queue_kms_key_arn must switch both queues to SSE-KMS with that key."
+  }
+
+  assert {
+    condition = (
+      [for st in jsondecode(aws_iam_role_policy.task_queue["orders"].policy).Statement : st.Resource if st.Sid == "QueueKms"][0] == "arn:aws:kms:eu-west-2:111111111111:key/queue-5678" &&
+      [for st in jsondecode(aws_iam_role_policy.task_queue["orders"].policy).Statement : st.Condition.StringEquals["kms:ViaService"] if st.Sid == "QueueKms"][0] == "sqs.eu-west-2.amazonaws.com"
+    )
+    error_message = "with a queue CMK the task role must get kms:Decrypt/GenerateDataKey on that key via SQS only."
   }
 }

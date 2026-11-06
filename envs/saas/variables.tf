@@ -4,7 +4,7 @@ variable "landing_zone_config_path" {
   default     = null
 }
 
-# ── Terraform Cloud / cross-cloud wiring (audit H9, option C) ────────────────
+# ── Terraform Cloud / cross-cloud wiring ────────────────
 
 variable "tfc_organization" {
   description = "Terraform Cloud organization name. Required only when cross_cloud_references is non-empty (it reads upstream workspace state). Leave null for a standalone SaaS deployment. Null = org.tfc.organization from config/landing-zone.yaml."
@@ -71,13 +71,13 @@ variable "enable_vault_secrets" {
 # ── Supabase pass-through (required when enable_supabase = true) ────────────────
 
 variable "supabase_organization_id" {
-  description = "Supabase organisation ID. Required when enable_supabase = true; at least 8 lowercase alphanumeric characters."
+  description = "Supabase organisation ID. Required when enable_supabase = true; at least 8 lowercase alphanumeric characters. Empty = saas.stacks.<stack>.supabase.organization_id, else saas.defaults.supabase.organization_id, from config/landing-zone.yaml."
   type        = string
   default     = ""
 }
 
 variable "supabase_project_name" {
-  description = "Display name for the Supabase project (3–64 chars). Required when enable_supabase = true."
+  description = "Display name for the Supabase project (3–64 chars). Required when enable_supabase = true. Empty = saas.stacks.<stack>.supabase.project_name from config/landing-zone.yaml."
   type        = string
   default     = ""
 }
@@ -90,9 +90,9 @@ variable "supabase_database_password" {
 }
 
 variable "supabase_region" {
-  description = "Supabase deployment region slug (e.g. 'eu-west-2')."
+  description = "Supabase deployment region slug (e.g. 'eu-west-2'). Null = saas.stacks.<stack>.supabase.region, else saas.defaults.supabase.region, else eu-west-2."
   type        = string
-  default     = "eu-west-2"
+  default     = null
 }
 
 variable "supabase_disable_signup" {
@@ -173,27 +173,27 @@ variable "vault_secrets" {
 # ── Vercel pass-through (required when enable_vercel = true) ────────────────────
 
 variable "vercel_project_name" {
-  description = "Vercel project name. Required when enable_vercel = true."
+  description = "Vercel project name. Required when enable_vercel = true. Empty = saas.stacks.<stack>.vercel.project_name from config/landing-zone.yaml."
   type        = string
   default     = ""
 }
 
 variable "vercel_team_id" {
-  description = "Vercel team ID. Required when enable_vercel = true."
+  description = "Vercel team ID. Required when enable_vercel = true. Empty = saas.stacks.<stack>.vercel.team_id, else saas.defaults.vercel.team_id."
   type        = string
   default     = ""
 }
 
 variable "vercel_github_repo" {
-  description = "GitHub repository in 'org/repo' format. Required when enable_vercel = true."
+  description = "GitHub repository in 'org/repo' format. Required when enable_vercel = true. Empty = saas.stacks.<stack>.vercel.github_repo from config/landing-zone.yaml."
   type        = string
   default     = ""
 }
 
 variable "vercel_production_branch" {
-  description = "Git branch for the Vercel production environment. Must be an existing branch."
+  description = "Git branch for the Vercel production environment. Must be an existing branch. Null = saas.stacks.<stack>.vercel.production_branch, else main."
   type        = string
-  default     = "main"
+  default     = null
 }
 
 variable "vercel_root_directory" {
@@ -267,4 +267,10 @@ variable "vercel_shared_env_vars" {
     sensitive = optional(bool, true)
   }))
   default = []
+}
+
+variable "stack" {
+  description = "SaaS stack key in saas.stacks (config/landing-zone.yaml) this workspace deploys. Null = the workspace name without the saas- prefix (tfc-admin sets it explicitly on every saas-<name> workspace)."
+  type        = string
+  default     = null
 }

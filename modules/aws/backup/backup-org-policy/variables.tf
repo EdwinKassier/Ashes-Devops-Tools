@@ -11,7 +11,7 @@ variable "content" {
 }
 
 variable "default_region" {
-  description = "AWS region the org backup plan writes recovery points to (single region). Rendered into the templated policy's regions @@assign. No cross-region copy_action is configured — see docs/known-gaps.md (A5)."
+  description = "AWS region the org backup plan writes recovery points to (single region). Rendered into the templated policy's regions @@assign. No cross-region copy_action is configured — see docs/known-gaps.md."
   type        = string
   default     = "eu-west-2"
 }
@@ -37,4 +37,11 @@ variable "target_ou_id" {
     condition     = can(regex("^(r|ou)-[a-z0-9-]+$", var.target_ou_id))
     error_message = "target_ou_id must be an Organizations OU id (ou-xxxx-yyyy) or root id (r-xxxx)."
   }
+}
+
+variable "tags" {
+  description = "Tags applied to every taggable resource this module creates (merged after provider default_tags; resource-specific tags such as Name win)."
+  type        = map(string)
+  default     = {}
+  nullable    = false
 }

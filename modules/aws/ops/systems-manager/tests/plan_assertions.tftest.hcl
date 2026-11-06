@@ -39,3 +39,16 @@ run "session_document_carries_logging_and_kms" {
     error_message = "Inventory association must use the AWS-managed GatherSoftwareInventory document"
   }
 }
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    tags = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_ssm_document.session_preferences.tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_ssm_document.session_preferences"
+  }
+}

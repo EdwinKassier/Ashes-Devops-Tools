@@ -41,7 +41,10 @@ locals {
   # validator rejects, so a malformed identity yields no boundary rather than
   # failing every mocked plan downstream (tests override the data sources).
   boundary_partition = try(data.aws_partition.security_tooling[0].partition, null)
-  boundary_account   = try(data.aws_caller_identity.security_tooling[0].account_id, null)
+  # ARN partition for the key-admin principals: the security-tooling
+  # provider's partition when it is read, else var.partition.
+  partition        = can(regex("^aws(-[a-z]+)*$", local.boundary_partition)) ? local.boundary_partition : var.partition
+  boundary_account = try(data.aws_caller_identity.security_tooling[0].account_id, null)
   security_tooling_boundary_arn = (
     var.tfc_apply_boundary_policy_name != null && can(regex("^aws(-[a-z]+)*$", local.boundary_partition)) && can(regex("^[0-9]{12}$", local.boundary_account))
     ? "arn:${local.boundary_partition}:iam::${local.boundary_account}:policy/${var.tfc_apply_boundary_policy_name}"
@@ -50,16 +53,16 @@ locals {
 
   # The ARN the assumption alarm watches: the role this stage creates when
   # create_break_glass is true, otherwise the externally-managed ARN the caller
-  # passes. So "managed here" and "monitored here" stay in lockstep (audit M3).
+  # passes. So "managed here" and "monitored here" stay in lockstep.
   effective_break_glass_role_arn = var.create_break_glass ? module.break_glass[0].break_glass_role_arn : var.break_glass_role_arn
 
   # Key administrator per CMK: the explicit key_admin_arn, else the key's own
   # account role key_admin_role_name (tfc-apply by default — the principal that
   # applies the key, so the key can never be created un-administrable).
   key_admin_arns = {
-    log_archive      = coalesce(var.key_admin_arn, "arn:aws:iam::${var.log_archive_account_id}:role/${var.key_admin_role_name}")
-    forensics        = coalesce(var.key_admin_arn, "arn:aws:iam::${var.forensics_account_id}:role/${var.key_admin_role_name}")
-    security_tooling = coalesce(var.key_admin_arn, "arn:aws:iam::${var.security_tooling_account_id}:role/${var.key_admin_role_name}")
+    log_archive      = coalesce(var.key_admin_arn, "arn:${local.partition}:iam::${var.log_archive_account_id}:role/${var.key_admin_role_name}")
+    forensics        = coalesce(var.key_admin_arn, "arn:${local.partition}:iam::${var.forensics_account_id}:role/${var.key_admin_role_name}")
+    security_tooling = coalesce(var.key_admin_arn, "arn:${local.partition}:iam::${var.security_tooling_account_id}:role/${var.key_admin_role_name}")
   }
 
   # kms:PutKeyPolicy holder per CMK: the member-account break-glass role in the
@@ -76,13 +79,13 @@ locals {
   }
   key_policy_admin_arns = {
     for k, acct in local.key_account_ids : k => (
-      var.key_policy_admin_role_name == null ? [] : ["arn:aws:iam::${acct}:role/${var.key_policy_admin_role_name}"]
+      var.key_policy_admin_role_name == null ? [] : ["arn:${local.partition}:iam::${acct}:role/${var.key_policy_admin_role_name}"]
     )
   }
 }
 
 # ---------------------------------------------------------------------------
-# Managed break-glass role (management account) — audit M3
+# Managed break-glass role (management account)
 #
 # Opt-in. Deny-all by default; AdministratorAccess only while break_glass_active.
 # MFA-required trust scoped to break_glass_trusted_principals. Its assumption is
@@ -195,6 +198,8 @@ module "log_archive_bucket" {
 
 module "cloudtrail" {
   source = "../../security/cloudtrail-org"
+  # false when another owner (e.g. AWS Control Tower) already runs the org trail.
+  count = var.create_organization_trail ? 1 : 0
   providers = {
     aws = aws.management
   }
@@ -212,6 +217,7 @@ module "cloudtrail" {
   # module creates its own logs-granted CMK and KMS-encrypted SNS topic in the
   # management account unless existing ones are supplied.
   enable_cloudwatch_logs         = var.enable_cloudwatch_logs
+  cloudwatch_logs_role_arn       = var.cloudtrail_cloudwatch_role_arn
   cloudwatch_logs_retention_days = var.cloudwatch_logs_retention_days
   cloudwatch_logs_kms_key_arn    = var.cloudwatch_logs_kms_key_arn
   alarm_sns_topic_arn            = var.cloudtrail_alarm_sns_topic_arn
@@ -242,7 +248,7 @@ module "config" {
   recorder_only              = false
   # Record global resource types in the home Region only, not once per Region.
   home_region = var.aws_region
-  # F5: record ALL supported resource types (default true, the full-coverage but
+  # Record ALL supported resource types (default true, the full-coverage but
   # most expensive Config mode). Set false for cost-sensitive non-prod.
   record_all_supported = var.config_record_all_supported
   # The org aggregator role is created in the security-tooling account.
@@ -262,7 +268,7 @@ module "guardduty" {
 
   aws_enabled_regions         = var.aws_enabled_regions
   security_tooling_account_id = var.security_tooling_account_id
-  # F5: agentless EBS malware scanning (default true, billed per GB scanned). Set
+  # Agentless EBS malware scanning (default true, billed per GB scanned). Set
   # false for non-prod where it is not required.
   enable_ebs_malware_protection = var.guardduty_enable_ebs_malware_protection
 }
@@ -305,7 +311,8 @@ module "delegated_admin" {
   }
 
   security_tooling_account_id = var.security_tooling_account_id
-  # Audit finding A3: IAM Identity Center delegated admin should live in a dedicated
+  backup_account_id           = var.backup_account_id
+  # IAM Identity Center delegated admin should live in a dedicated
   # identity account, not shared-services (delegated admin can assign access into the
   # management account — keep its blast radius tight). Default null keeps the previous
   # shared-services target (unchanged); set identity_account_id to a dedicated account.
@@ -339,7 +346,7 @@ module "securitylake" {
   }
 
   enable_security_lake        = var.enable_security_lake
-  meta_store_manager_role_arn = var.meta_store_manager_role_arn
+  meta_store_manager_role_arn = local.meta_store_manager_role_arn
   kms_key_id                  = module.log_cmk.key_arn
   aws_enabled_regions         = var.aws_enabled_regions
 }

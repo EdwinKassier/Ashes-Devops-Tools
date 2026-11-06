@@ -40,6 +40,7 @@ data "aws_caller_identity" "current" {
 resource "aws_iam_service_linked_role" "config" {
   count            = local.create_service_linked_role ? 1 : 0
   aws_service_name = "config.amazonaws.com"
+  tags             = var.tags
 }
 
 # Organization aggregator role: trusted by config.amazonaws.com, with the AWS
@@ -57,6 +58,8 @@ resource "aws_iam_role" "aggregator" {
       Action    = "sts:AssumeRole"
     }]
   })
+
+  tags = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "aggregator" {
@@ -122,6 +125,8 @@ resource "aws_config_configuration_aggregator" "org" {
 
   # IAM is eventually consistent: the managed policy must be attached before the
   # aggregator first assumes the role.
+  tags = var.tags
+
   depends_on = [aws_iam_role_policy_attachment.aggregator]
 }
 

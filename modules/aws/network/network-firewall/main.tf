@@ -84,6 +84,8 @@ resource "aws_networkfirewall_rule_group" "stateful" {
       key_id = var.kms_key_arn
     }
   }
+
+  tags = var.tags
 }
 
 #checkov:skip=CKV_AWS_345:CMK encryption is opt-in via var.kms_key_arn (set by the network-hub stage that owns the KMS key); default falls back to an AWS-owned key.
@@ -117,6 +119,8 @@ resource "aws_networkfirewall_rule_group" "domain_allowlist" {
       key_id = var.kms_key_arn
     }
   }
+
+  tags = var.tags
 }
 
 #checkov:skip=CKV_AWS_346:CMK encryption is opt-in via var.kms_key_arn (set by the network-hub stage that owns the KMS key); default falls back to an AWS-owned key.
@@ -165,6 +169,8 @@ resource "aws_networkfirewall_firewall_policy" "this" {
       key_id = var.kms_key_arn
     }
   }
+
+  tags = var.tags
 }
 
 #checkov:skip=CKV_AWS_345:CMK encryption is opt-in via var.kms_key_arn (set by the network-hub stage that owns the KMS key); default falls back to an AWS-owned key.
@@ -194,6 +200,8 @@ resource "aws_networkfirewall_firewall" "this" {
       key_id = var.kms_key_arn
     }
   }
+
+  tags = var.tags
 }
 
 resource "aws_networkfirewall_logging_configuration" "this" {

@@ -1,4 +1,4 @@
-.PHONY: help install fmt fmt-check validate validate-all lint consistency security security-low security-report docs docs-check count count-check links required-checks shellcheck test test-scripts ci clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
+.PHONY: help install fmt fmt-check validate validate-all lint consistency security security-low security-report docs docs-check count count-check links required-checks required-checks-live backend-check cfn-lint shellcheck test test-scripts ci clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
 
 TERRAFORM := terraform
 TFLINT := tflint
@@ -17,6 +17,14 @@ CHECKOV := $(shell if command -v uvx >/dev/null 2>&1; then echo "uvx --python 3.
 TERRAFORM_DOCS := terraform-docs
 PRE_COMMIT := pre-commit
 ROOT_DISCOVERY := ./scripts/terraform-roots.sh
+
+# One shared provider cache for every `init` this Makefile runs. Without it each
+# of the ~240 roots/modules/examples downloads its own copy of hashicorp/aws
+# (~700 MB) and google, and `make ci` on a fresh clone can exhaust the disk.
+# Override with your own TF_PLUGIN_CACHE_DIR; set it to "" to disable.
+TF_PLUGIN_CACHE_DIR ?= $(HOME)/.terraform.d/plugin-cache
+export TF_PLUGIN_CACHE_DIR
+$(if $(TF_PLUGIN_CACHE_DIR),$(shell mkdir -p "$(TF_PLUGIN_CACHE_DIR)"))
 
 APP_ENV ?= dev
 APP_WORKSPACE ?= gcp-workload-$(APP_ENV)
@@ -125,6 +133,15 @@ count-check: ## Fail if README.md / CLAUDE.md counts drifted from the tree (CI: 
 links: ## Fail on broken repo-relative links in any Markdown file (offline; CI: meta-lint)
 	@python3 scripts/check-md-links.py
 
+required-checks-live: ## Diff BRANCH_PROTECTION.md against the LIVE branch protection (needs gh auth with repo admin)
+	@./scripts/check-required-checks.sh --live
+
+cfn-lint: ## Lint the shipped CloudFormation templates (templates/aws/bootstrap) with cfn-lint via uvx
+	@uvx --python 3.12 cfn-lint templates/aws/bootstrap/*.yaml && echo "cfn-lint: templates OK"
+
+backend-check: ## Real (credential-less) terraform init of every envs/** root — catches invalid backend/cloud blocks (CI: Terraform Format)
+	@./scripts/check-backends.sh
+
 required-checks: ## Fail if BRANCH_PROTECTION.md requires a status-check context no workflow job reports (CI: meta-lint)
 	@./scripts/check-required-checks.sh
 
@@ -180,6 +197,7 @@ ci: ## Run the local CI pipeline (fmt → consistency → counts → links → s
 	@$(MAKE) count-check
 	@$(MAKE) links
 	@$(MAKE) required-checks
+	@$(MAKE) backend-check
 	@$(MAKE) shellcheck
 	@$(MAKE) test-scripts
 	@$(MAKE) docs-check

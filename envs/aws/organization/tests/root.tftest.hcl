@@ -4,7 +4,7 @@
 # management_account_id / ou_ids / account_ids[*] / account_role_arns[*] from
 # this root via terraform_remote_state, and they configure their providers from
 # account_role_arns at init time. Renaming or dropping any of these keys breaks
-# every downstream root at provider-init and leaves them un-destroyable (audit
+# every downstream root at provider-init and leaves them un-destroyable
 # H4). This test fails if a contract output is removed, renamed, or loses a
 # foundational account key, so a refactor cannot silently break the contract.
 #
@@ -85,6 +85,18 @@ override_module {
       backup           = ["aws-backup"]
     }
   }
+}
+
+# tfc-management-roles reads the partition / caller identity; mocks return
+# random strings the provider's ARN validators reject, so pin real shapes.
+override_data {
+  target = module.aws_organization.module.tfc_management_roles[0].data.aws_partition.current
+  values = { partition = "aws" }
+}
+
+override_data {
+  target = module.aws_organization.module.tfc_management_roles[0].data.aws_caller_identity.current
+  values = { account_id = "111111111111" }
 }
 
 run "output_contract_is_stable" {
@@ -195,4 +207,29 @@ run "rejects_placeholder_landing_zone_name" {
   }
 
   expect_failures = [var.landing_zone_name]
+}
+
+# Brownfield adoption inputs are validated before any import is attempted (the
+# import itself needs a real provider: mock providers cannot import).
+run "adopt_existing_rejects_bad_ids" {
+  command = plan
+
+  variables {
+    adopt_existing = {
+      organization_id = "org-123"
+      ou_ids          = { Security = "Security" }
+      account_ids     = { log_archive = "12345" }
+    }
+  }
+
+  expect_failures = [var.adopt_existing]
+}
+
+run "greenfield_imports_nothing" {
+  command = plan
+
+  assert {
+    condition     = local.adopt_existing.organization_id == null && length(local.adopt_existing.ou_ids) == 0 && length(local.adopt_existing.account_ids) == 0
+    error_message = "with no adopt_existing / aws.adopt, nothing is imported."
+  }
 }

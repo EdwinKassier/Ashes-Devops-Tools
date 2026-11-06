@@ -44,7 +44,7 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_monitoring_alert_policy.burn_rate (modules/gcp/monitoring/slo/main.tf#L34)
+- resource.google_monitoring_alert_policy.burn_rate (modules/gcp/monitoring/slo/main.tf#L35)
 - resource.google_monitoring_slo.this (modules/gcp/monitoring/slo/main.tf#L6)
 
 
@@ -60,6 +60,7 @@ The following resources are created:
 | <a name="input_burn_rate_threshold"></a> [burn\_rate\_threshold](#input\_burn\_rate\_threshold) | Burn-rate multiple that triggers the alert (e.g. 10 = burning 10x the sustainable rate). | `number` | `10` | no |
 | <a name="input_enable_burn_rate_alert"></a> [enable\_burn\_rate\_alert](#input\_enable\_burn\_rate\_alert) | Create an alert policy on fast error-budget burn. Default false; set notification\_channels when enabling. | `bool` | `false` | no |
 | <a name="input_goal"></a> [goal](#input\_goal) | SLO target as a fraction, e.g. 0.999 for 99.9%. | `number` | `0.99` | no |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels applied to every labelable resource this module creates (merged with the provider default\_labels; resource-specific labels win). | `map(string)` | `{}` | no |
 | <a name="input_latency_threshold"></a> [latency\_threshold](#input\_latency\_threshold) | Latency threshold (e.g. '1s') for a latency SLI. Required when sli\_type = latency. | `string` | `"1s"` | no |
 | <a name="input_notification_channels"></a> [notification\_channels](#input\_notification\_channels) | Monitoring notification channel IDs for the burn-rate alert. | `list(string)` | `[]` | no |
 | <a name="input_rolling_period_days"></a> [rolling\_period\_days](#input\_rolling\_period\_days) | Rolling compliance window in days (e.g. 28). | `number` | `28` | no |

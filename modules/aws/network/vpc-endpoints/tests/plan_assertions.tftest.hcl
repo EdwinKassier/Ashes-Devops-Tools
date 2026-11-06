@@ -70,3 +70,19 @@ run "shared_phz_created_when_named" {
     error_message = "Private hosted zone name must match private_hosted_zone_name."
   }
 }
+
+run "module_tags_applied" {
+  command = plan
+
+  variables {
+    vpc_id = "vpc-0123456789abcdef0"
+    region = "eu-west-2"
+    org_id = "o-abcde12345"
+    tags   = { Owner = "test" }
+  }
+
+  assert {
+    condition     = aws_vpc_endpoint.interface["ssm"].tags["Owner"] == "test"
+    error_message = "module-level tags must land on aws_vpc_endpoint.interface"
+  }
+}

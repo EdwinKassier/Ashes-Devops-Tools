@@ -60,6 +60,7 @@ resource "google_compute_interconnect_attachment" "dedicated" {
   encryption        = var.encryption
 
   description = var.description
+  labels      = var.labels
 }
 
 # -----------------------------------------------------------------------------
@@ -81,6 +82,7 @@ resource "google_compute_interconnect_attachment" "partner" {
   encryption               = var.encryption
 
   description = var.description
+  labels      = var.labels
 }
 
 locals {

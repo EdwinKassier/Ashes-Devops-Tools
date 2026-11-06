@@ -68,7 +68,7 @@ resource "google_monitoring_monitored_project" "projects" {
   name = "locations/global/metricsScopes/${var.admin_project_id}/projects/${each.value.project_id}"
 }
 
-# ─── Automation identity grants (audit C2) ──────────────────────────────────
+# ─── Automation identity grants ──────────────────────────────────
 # The per-environment workload SAs created by gcp-bootstrap hold NO org-level
 # role. Their rights live here, scoped to their OWN environment folder (FAST
 # stage-3 pattern): the apply SA gets the write roles, the plan SA read-only

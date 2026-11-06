@@ -106,3 +106,15 @@ variable "tfc_apply_boundary_policy_name" {
     error_message = "tfc_apply_boundary_policy_name must be null or a valid IAM policy name (1-128 chars of [A-Za-z0-9+=,.@_-])."
   }
 }
+
+variable "create_backup_role_stack_set" {
+  description = "Deploy the member-account Backup service role (backup_role_name) from THIS stage through a service-managed StackSet. Default false: aws-organization deploys it (create_backup_service_role there), so the least-privilege aws-backup management role needs no CloudFormation rights. Set true only when aws-backup applies as the phase-0 management role."
+  type        = bool
+  default     = false
+}
+
+variable "partition" {
+  description = "AWS partition (aws, aws-us-gov, aws-cn) for the member Backup role ARN rendered into the BACKUP_POLICY."
+  type        = string
+  default     = "aws"
+}

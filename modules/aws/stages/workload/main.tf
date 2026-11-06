@@ -164,6 +164,8 @@ module "iam_role" {
   # Break-glass is an org-level emergency-access construct owned by the
   # security/management layer, not replicated into every workload account.
   enable_break_glass = false
+
+  tags = var.tags
 }
 
 # ---------------------------------------------------------------------------
@@ -207,6 +209,8 @@ module "config_recorder" {
   create_service_linked_role = var.create_config_service_linked_role
   aggregator_role_arn        = "" # unused in recorder_only mode
   log_archive_bucket         = var.log_archive_bucket_name
+
+  tags = var.tags
 }
 
 # ---------------------------------------------------------------------------
@@ -227,6 +231,8 @@ module "systems_manager" {
 
   log_bucket_name = var.log_archive_bucket_name
   kms_key_id      = var.kms_key_arn
+
+  tags = var.tags
 }
 
 # ---------------------------------------------------------------------------
@@ -245,6 +251,8 @@ module "edge_security" {
   enable_edge        = true
   name_prefix        = var.edge_name_prefix
   origin_domain_name = var.edge_origin_domain_name
+
+  tags = var.tags
 }
 
 # ---------------------------------------------------------------------------

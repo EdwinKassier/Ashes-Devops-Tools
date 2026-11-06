@@ -21,12 +21,12 @@ admin_email = "admin@example.com"
 tfc_organization = "your-tfc-org-name"
 enable_tfc_oidc  = true
 
-# Optional hardening of the TFC trust (audit C2): pin immutable IDs.
+# Immutable workspace IDs: REQUIRED once any environment is_production. Do not
+# hand-type them; generate them from tfc-admin (remote runs get them automatically):
+#   terraform -chdir=envs/tfc-admin output -raw gcp_bootstrap_tfvars > envs/gcp/bootstrap/tfc-workspaces.auto.tfvars
+# Optional further pins:
 # tfc_organization_id = "org-XXXXXXXXXXXXXXXX"
 # tfc_project_ids     = ["prj-XXXXXXXXXXXXXXXX"]
-# tfc_workspace_ids = {           # once envs/tfc-admin has created the workspaces
-#   "gcp-organization" = "ws-XXXXXXXXXXXXXXXX"
-# }
 
 # GitHub OIDC — OFF by default (no workflow uses it). When enabled it is bound to
 # the read-only organization plan SA only, on immutable numeric IDs.

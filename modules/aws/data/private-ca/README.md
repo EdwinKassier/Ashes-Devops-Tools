@@ -62,9 +62,9 @@ The following resources are created:
 
 
 - resource.aws_acmpca_certificate_authority.this (modules/aws/data/private-ca/main.tf#L13)
-- resource.aws_ram_principal_association.org (modules/aws/data/private-ca/main.tf#L46)
-- resource.aws_ram_resource_association.ca (modules/aws/data/private-ca/main.tf#L40)
-- resource.aws_ram_resource_share.this (modules/aws/data/private-ca/main.tf#L34)
+- resource.aws_ram_principal_association.org (modules/aws/data/private-ca/main.tf#L48)
+- resource.aws_ram_resource_association.ca (modules/aws/data/private-ca/main.tf#L42)
+- resource.aws_ram_resource_share.this (modules/aws/data/private-ca/main.tf#L35)
 
 
 ## Inputs
@@ -80,6 +80,7 @@ The following resources are created:
 | <a name="input_share_name"></a> [share\_name](#input\_share\_name) | Name of the RAM resource share created when share\_org is true. | `string` | `"private-ca-share"` | no |
 | <a name="input_share_org"></a> [share\_org](#input\_share\_org) | Whether to share the CA across the AWS organization via RAM so member accounts can issue certificates from it. | `bool` | `true` | no |
 | <a name="input_signing_algorithm"></a> [signing\_algorithm](#input\_signing\_algorithm) | Algorithm the CA uses to sign certificates it issues (e.g. SHA512WITHRSA). | `string` | `"SHA512WITHRSA"` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 
 ## Outputs
 

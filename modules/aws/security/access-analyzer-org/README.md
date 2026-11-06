@@ -47,7 +47,7 @@ The following resources are created:
 
 
 - resource.aws_accessanalyzer_analyzer.external (modules/aws/security/access-analyzer-org/main.tf#L14)
-- resource.aws_accessanalyzer_analyzer.unused (modules/aws/security/access-analyzer-org/main.tf#L19)
+- resource.aws_accessanalyzer_analyzer.unused (modules/aws/security/access-analyzer-org/main.tf#L20)
 
 
 ## Inputs
@@ -55,6 +55,7 @@ The following resources are created:
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_external_analyzer_name"></a> [external\_analyzer\_name](#input\_external\_analyzer\_name) | Name of the organization-scoped external-access analyzer. | `string` | `"org-external-access"` | no |
+| <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 | <a name="input_unused_access_age"></a> [unused\_access\_age](#input\_unused\_access\_age) | Number of days without use after which IAM access is flagged as unused by the unused-access analyzer. | `number` | `90` | no |
 | <a name="input_unused_analyzer_name"></a> [unused\_analyzer\_name](#input\_unused\_analyzer\_name) | Name of the organization-scoped unused-access analyzer. | `string` | `"org-unused-access"` | no |
 
