@@ -50,3 +50,8 @@ output "gcp_bootstrap_tfvars" {
   description = "tfvars line for the LOCAL phase-0 gcp-bootstrap apply (local execution mode ignores workspace variables): terraform -chdir=envs/tfc-admin output -raw gcp_bootstrap_tfvars > envs/gcp/bootstrap/tfc-workspaces.auto.tfvars"
   value       = "tfc_workspace_ids = ${jsonencode(local.gcp_bootstrap_workspace_ids)}\n"
 }
+
+output "run_triggers" {
+  description = "Run-trigger edges created (\"<source>-><downstream>\")."
+  value       = sort(keys(tfe_run_trigger.dag))
+}

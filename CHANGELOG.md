@@ -129,6 +129,9 @@ release metadata for a Terraform Cloud run.
   Workloads-scoped.
 - **New `aiservices-opt-out` policy** (`AISERVICES_OPT_OUT_POLICY`, enabled by default). Policy
   types are shape-validated instead of fixed-listed, so new AWS policy types are accepted.
+- **TFC run triggers along the dependency DAG** (`enable_run_triggers`, default true). An upstream
+  apply queues the downstream plan, direct edges only. Apply order is no longer left to the
+  runbooks alone.
 - **Audit provenance codes are stripped** from 117 code comments and descriptions.
 
 #### Boilerplate (Wave C)

@@ -505,3 +505,9 @@ variable "set_gcp_bootstrap_workspace_ids" {
   type        = bool
   default     = true
 }
+
+variable "enable_run_triggers" {
+  description = "Create TFC run triggers along the root dependency DAG (bootstrap -> organization -> projects -> network-hub -> workloads; aws-organization -> security/network/identity/shared-services/backup -> workloads), so an upstream apply queues a downstream plan. auto_apply stays off. Default true."
+  type        = bool
+  default     = true
+}

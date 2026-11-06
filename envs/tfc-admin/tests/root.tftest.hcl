@@ -902,3 +902,32 @@ run "gcp_bootstrap_workspace_ids_opt_out" {
     error_message = "set_gcp_bootstrap_workspace_ids = false must not write the variable."
   }
 }
+
+# Run triggers follow the dependency DAG's direct edges only.
+run "run_triggers_follow_the_dag" {
+  command = plan
+
+  assert {
+    condition = (
+      contains(output.run_triggers, "gcp-projects->gcp-network-hub") &&
+      contains(output.run_triggers, "gcp-network-hub->gcp-workload-dev") &&
+      contains(output.run_triggers, "aws-network->aws-workload-prod") &&
+      contains(output.run_triggers, "aws-organization->aws-security") &&
+      !contains(output.run_triggers, "gcp-organization->gcp-workload-dev")
+    )
+    error_message = "run triggers must chain each root to its direct upstream, without transitive edges."
+  }
+}
+
+run "run_triggers_opt_out" {
+  command = plan
+
+  variables {
+    enable_run_triggers = false
+  }
+
+  assert {
+    condition     = length(output.run_triggers) == 0
+    error_message = "enable_run_triggers = false must create no run triggers."
+  }
+}

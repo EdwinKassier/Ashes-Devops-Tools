@@ -716,3 +716,48 @@ resource "tfe_variable" "gcp_bootstrap_workspace_ids" {
   hcl          = true
   description  = "TFC workspace name -> immutable ID for every gcp-* workspace (set by tfc-admin), so gcp-bootstrap binds WIF by ID, never by squattable name."
 }
+
+# ── Run triggers along the dependency DAG ───────────────────────────────────
+# A successful apply upstream queues a run downstream, so a change to
+# gcp-projects (say) is followed by a plan of gcp-network-hub and every
+# gcp-workload-<env> instead of waiting for someone to remember. Downstream
+# auto_apply stays false: the triggered run is a plan awaiting confirmation.
+# Only the direct edges (the DAG's transitive reduction), so a workload is
+# queued once per upstream change, not once per ancestor.
+locals {
+  run_trigger_edges = {
+    "gcp-organization"    = ["gcp-bootstrap"]
+    "gcp-projects"        = ["gcp-organization"]
+    "gcp-network-hub"     = ["gcp-projects"]
+    "aws-security"        = ["aws-organization"]
+    "aws-network"         = ["aws-organization"]
+    "aws-identity"        = ["aws-organization"]
+    "aws-shared-services" = ["aws-organization"]
+    "aws-backup"          = ["aws-organization"]
+  }
+  run_trigger_pairs = var.enable_run_triggers ? merge(
+    merge([
+      for downstream, sources in local.run_trigger_edges : {
+        for src in sources : "${src}->${downstream}" => { source = src, downstream = downstream }
+        if contains(keys(local.workspaces), src) && contains(keys(local.workspaces), downstream)
+      }
+    ]...),
+    {
+      for ws in local.gcp_workload_names : "gcp-network-hub->${ws}" => { source = "gcp-network-hub", downstream = ws }
+      if contains(keys(local.workspaces), "gcp-network-hub")
+    },
+    merge([
+      for ws in local.aws_workload_names : {
+        for src in ["aws-network", "aws-security"] : "${src}->${ws}" => { source = src, downstream = ws }
+        if contains(keys(local.workspaces), src)
+      }
+    ]...),
+  ) : {}
+}
+
+resource "tfe_run_trigger" "dag" {
+  for_each = local.run_trigger_pairs
+
+  workspace_id  = module.workspace[each.value.downstream].id
+  sourceable_id = module.workspace[each.value.source].id
+}
