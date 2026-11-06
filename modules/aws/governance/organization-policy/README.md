@@ -93,8 +93,8 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_organizations_policy.policy (modules/aws/governance/organization-policy/main.tf#L218)
-- resource.aws_organizations_policy_attachment.attach (modules/aws/governance/organization-policy/main.tf#L226)
+- resource.aws_organizations_policy.policy (modules/aws/governance/organization-policy/main.tf#L219)
+- resource.aws_organizations_policy_attachment.attach (modules/aws/governance/organization-policy/main.tf#L227)
 
 
 ## Inputs
@@ -104,7 +104,7 @@ The following resources are created:
 | <a name="input_break_glass_role_arn"></a> [break\_glass\_role\_arn](#input\_break\_glass\_role\_arn) | Account-qualified exact ARN of the emergency break-glass role. Carved out of every deny statement. | `string` | n/a | yes |
 | <a name="input_log_archive_bucket_name"></a> [log\_archive\_bucket\_name](#input\_log\_archive\_bucket\_name) | Name of the central log-archive S3 bucket protected from Object Lock / governance-retention tampering by the deny-tamper SCP. | `string` | n/a | yes |
 | <a name="input_org_id"></a> [org\_id](#input\_org\_id) | AWS Organizations organization ID (o-xxxxxxxxxx). Used as the org-identity anchor in the RCP data-perimeter policy. | `string` | n/a | yes |
-| <a name="input_terraform_run_role_arn"></a> [terraform\_run\_role\_arn](#input\_terraform\_run\_role\_arn) | Account-qualified exact ARN of the Terraform Cloud run role. Carved out of every deny statement so automation is not locked out. | `string` | n/a | yes |
+| <a name="input_terraform_run_role_arn"></a> [terraform\_run\_role\_arn](#input\_terraform\_run\_role\_arn) | Account-qualified exact ARN of the Terraform Cloud run role. Exempt from the baseline SCP's own deny statements where the pipeline must act (never from the tamper denies or the region restriction). | `string` | n/a | yes |
 | <a name="input_allow_vpc_bpa_exclusions"></a> [allow\_vpc\_bpa\_exclusions](#input\_allow\_vpc\_bpa\_exclusions) | Whether member accounts may create VPC Block Public Access exclusions under the declarative EC2 policy. Default false (exclusions\_allowed = disabled) so a member-account admin cannot exempt a VPC from the org-wide internet-gateway ingress block. | `bool` | `false` | no |
 | <a name="input_allowed_regions"></a> [allowed\_regions](#input\_allowed\_regions) | Regions permitted by the region-restriction SCP. Requests to any other region are denied (global services are carved out). | `list(string)` | <pre>[<br/>  "eu-west-2",<br/>  "eu-west-1"<br/>]</pre> | no |
 | <a name="input_attachments"></a> [attachments](#input\_attachments) | Policy attachments binding a policy\_key (name in the effective policy set) to a target OU root/OU/account ID. Keyed by a stable caller-chosen string so for\_each stays known at plan time even when target\_id is a computed root/OU ID. | <pre>map(object({<br/>    policy_key = string<br/>    target_id  = string<br/>  }))</pre> | `{}` | no |

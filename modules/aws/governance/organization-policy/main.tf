@@ -122,8 +122,9 @@ locals {
         # CloudFront certificates (ACM) and their keys must live in us-east-1,
         # so edge deployments (enable_edge) work without allowing the region.
         allowed_regions_with_us_east_1 = jsonencode(distinct(concat(var.allowed_regions, ["us-east-1"])))
-        terraform_run_role_arn         = var.terraform_run_role_arn
-        break_glass_role_arn           = var.break_glass_role_arn
+        # Break-glass is the only exemption. The run role is not: global-service
+        # calls are in the template's NotAction, so it needs no carve-out.
+        break_glass_role_arn = var.break_glass_role_arn
       })
     }
     # Baseline also carries two org-wide break-glass-only denies (kept here so

@@ -601,6 +601,32 @@ run "region_restriction_allows_edge_and_global_sts" {
   }
 }
 
+# The Terraform run role is NOT exempt from the region deny: it earned no
+# carve-out (global services are already in NotAction), and an exempt pipeline
+# role could deploy into regions the guardrail exists to keep empty. Break-glass
+# stays the only exemption. Decoded and asserted, not substring-matched.
+run "region_restriction_does_not_exempt_the_run_role" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for s in jsondecode(aws_organizations_policy.policy["scp-region-restriction"].content).Statement :
+      !contains(s.Condition.ArnNotLike["aws:PrincipalArn"], var.terraform_run_role_arn) &&
+      contains(s.Condition.ArnNotLike["aws:PrincipalArn"], var.break_glass_role_arn)
+    ])
+    error_message = "the region SCP must exempt break-glass only, never the Terraform run role."
+  }
+
+  # Global-endpoint services the pipeline still reaches stay outside the deny.
+  assert {
+    condition = alltrue([
+      for a in ["iam:*", "organizations:*", "sts:*", "route53:*", "cloudfront:*", "wafv2:*", "networkmanager:*", "notifications:*"] :
+      contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-region-restriction"].content).Statement : s if s.Sid == "DenyOutsideAllowedRegions"]).NotAction, a)
+    ])
+    error_message = "global-service actions must be in the region deny's NotAction."
+  }
+}
+
 run "module_tags_applied" {
   command = plan
 

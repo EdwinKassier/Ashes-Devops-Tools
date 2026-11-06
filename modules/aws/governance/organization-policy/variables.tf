@@ -28,7 +28,7 @@ variable "allowed_regions" {
 # -----------------------------------------------------------------------------
 
 variable "terraform_run_role_arn" {
-  description = "Account-qualified exact ARN of the Terraform Cloud run role. Carved out of every deny statement so automation is not locked out."
+  description = "Account-qualified exact ARN of the Terraform Cloud run role. Exempt from the baseline SCP's own deny statements where the pipeline must act (never from the tamper denies or the region restriction)."
   type        = string
 
   validation {
