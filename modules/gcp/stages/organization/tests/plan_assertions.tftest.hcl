@@ -1046,3 +1046,34 @@ run "scc_api_version_v2_creates_v2_config" {
     error_message = "scc_api_version = v2 must create the v2 notification config."
   }
 }
+
+run "disable_default_sink_is_a_variable_default_false" {
+  command = plan
+
+  variables {
+    gcp = merge(var.gcp, {
+      enable_logging_organization_settings = true
+    })
+  }
+
+  assert {
+    condition     = google_logging_organization_settings.this[0].disable_default_sink == false
+    error_message = "disable_default_sink must default to false (existing estates unchanged)."
+  }
+}
+
+run "disable_default_sink_true_is_honoured" {
+  command = plan
+
+  variables {
+    gcp = merge(var.gcp, {
+      enable_logging_organization_settings = true
+      disable_default_sink                 = true
+    })
+  }
+
+  assert {
+    condition     = google_logging_organization_settings.this[0].disable_default_sink == true
+    error_message = "gcp.disable_default_sink = true must disable the default sink."
+  }
+}

@@ -245,6 +245,11 @@ variable "gcp" {
     # SCC API generation for the notification stream: v1 (default, unchanged), both (add the v2 twin
     # next to v1 to verify), or v2 (flip; v1 configs destroyed). See docs/runbooks/scc-v2-migration.md.
     scc_api_version = optional(string, "v1")
+    # With enable_logging_organization_settings: disable the organization's _Default log sink, so new
+    # projects stop routing org-level logs into the _Default bucket. Default false (unchanged). Only
+    # the audit-log sinks (cloudaudit) are routed centrally, so enable it only after confirming the
+    # non-audit org logs you need are covered by another sink.
+    disable_default_sink = optional(bool, false)
     # Optional CMEK for the _Default/_Required buckets of new projects. Grant the org Cloud Logging
     # service account (gcloud logging settings describe --organization=<id>)
     # roles/cloudkms.cryptoKeyEncrypterDecrypter on the key first. Null = Google-managed encryption.

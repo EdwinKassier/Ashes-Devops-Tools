@@ -664,7 +664,7 @@ resource "google_logging_organization_settings" "this" {
   organization         = var.org_id
   storage_location     = coalesce(var.logging_settings_storage_location, var.default_region)
   kms_key_name         = var.gcp.logging_settings_kms_key_name
-  disable_default_sink = false
+  disable_default_sink = var.gcp.disable_default_sink
 }
 
 # Principal access boundary (opt-in): the automation service accounts in the
