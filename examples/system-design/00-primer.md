@@ -90,9 +90,10 @@ relying on** any single figure.
 | Compress 1 KB (fast codec) | ~3 µs |
 | Send 2 KB over a 1 Gbps link | ~20 µs |
 | Read 1 MB sequentially from memory | ~250 µs |
+| SSD random 4 KB read | ~100 µs (**verify before relying on**; not in the 2009 table, NVMe is often faster) |
 | Round trip within one datacenter | ~500 µs |
-| Disk seek (spinning disk) | ~10 ms |
-| Read 1 MB sequentially from disk | ~20 ms |
+| Round trip between availability zones in one region | ~1 ms (**verify before relying on**; vendors document it only loosely) |
+| Read 1 MB sequentially from spinning disk (legacy) | ~20 ms |
 | Packet round trip, California to Netherlands and back | ~150 ms |
 
 Rules of thumb that follow from the table:
@@ -154,7 +155,9 @@ Concurrency by Little's law: **concurrency = arrival rate × time in system**.
 | 10 Gbps | 1.25 GB/s |
 | 1 MB/s sustained for a day | ~86 GB/day |
 | 1 MB/s sustained for a year | ~31.5 TB/year |
-| ASCII character / UUID / int64 | 1 byte / 16 bytes (binary) or 36 (text) / 8 bytes |
+| ASCII character | 1 byte |
+| UUID | 16 bytes binary, 36 bytes as text |
+| int64 | 8 bytes |
 
 Decimal (KB = 1,000 bytes) is fine for estimates. Some services bill and limit
 in binary units, where 1 KB = 1,024 bytes; DynamoDB says so explicitly in its
@@ -205,8 +208,9 @@ That is 10⁹ requests a day, about 12,000 per second on average, and about
 ## AWS-GCP service map
 
 One primary managed service per cell. Every external link goes to the vendor's
-official product page (the NAT gateway row links its documentation page, which
-has no product page), and every link was checked 2026-11.
+official product page, except the NAT gateway and data-perimeter rows, which
+link documentation pages because those features have no product page. Every
+link was checked 2026-11.
 
 | Capability | AWS | Google Cloud |
 |---|---|---|
@@ -237,8 +241,7 @@ has no product page), and every link was checked 2026-11.
 | Search | [Amazon OpenSearch Service](https://aws.amazon.com/opensearch-service/) | [Vertex AI Search](https://cloud.google.com/enterprise-search) (no first-party OpenSearch service; see below) |
 | Vector search | [Amazon S3 Vectors](https://aws.amazon.com/s3/features/vectors/) (or OpenSearch vector engine) | [Vertex AI Vector Search](https://cloud.google.com/vertex-ai/docs/vector-search/overview) |
 | Model serving and foundation models | [Amazon Bedrock](https://aws.amazon.com/bedrock/), [Amazon SageMaker AI](https://aws.amazon.com/sagemaker-ai/) | [Vertex AI](https://cloud.google.com/vertex-ai) |
-| Metrics and alarms | [Amazon CloudWatch](https://aws.amazon.com/cloudwatch/) | [Cloud Monitoring](https://cloud.google.com/monitoring) |
-| Logs | [Amazon CloudWatch](https://aws.amazon.com/cloudwatch/) Logs | [Cloud Logging](https://cloud.google.com/logging) |
+| Metrics, alarms and logs | [Amazon CloudWatch](https://aws.amazon.com/cloudwatch/) (metrics, alarms, Logs) | [Cloud Monitoring](https://cloud.google.com/monitoring), [Cloud Logging](https://cloud.google.com/logging) |
 | Traces | [AWS X-Ray](https://aws.amazon.com/xray/) | [Cloud Trace](https://cloud.google.com/trace) |
 | Key management | [AWS KMS](https://aws.amazon.com/kms/) | [Cloud KMS](https://cloud.google.com/security/products/security-key-management) |
 | Secrets | [AWS Secrets Manager](https://aws.amazon.com/secrets-manager/) | [Secret Manager](https://cloud.google.com/security/products/secret-manager) |
@@ -249,9 +252,8 @@ has no product page), and every link was checked 2026-11.
 | Network inspection | [AWS Network Firewall](https://aws.amazon.com/network-firewall/) | [Cloud NGFW](https://cloud.google.com/firewall) |
 | Internet egress (NAT) | [NAT gateway](https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html) | [Cloud NAT](https://cloud.google.com/nat) |
 | Private access to services | [AWS PrivateLink](https://aws.amazon.com/privatelink/) | [Private Service Connect](https://cloud.google.com/vpc/docs/private-service-connect) |
-| Data perimeter | Resource control policies and SCPs (in [`modules/aws/governance/organization-policy`](../../modules/aws/governance/organization-policy/)) | [VPC Service Controls](https://cloud.google.com/vpc-service-controls) |
-| Backup | [AWS Backup](https://aws.amazon.com/backup/) | [Backup and DR Service](https://cloud.google.com/backup-disaster-recovery) |
-| Disaster recovery for servers | [AWS Elastic Disaster Recovery](https://aws.amazon.com/disaster-recovery/) | [Backup and DR Service](https://cloud.google.com/backup-disaster-recovery) |
+| Data perimeter | [Service control policies](https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_scps.html) and [resource control policies](https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_rcps.html) | [VPC Service Controls](https://cloud.google.com/vpc-service-controls) |
+| Backup and DR | [AWS Backup](https://aws.amazon.com/backup/) (or [AWS Elastic Disaster Recovery](https://aws.amazon.com/disaster-recovery/) for server replication) | [Backup and DR Service](https://cloud.google.com/backup-disaster-recovery) |
 
 ### Differences that change a design
 
@@ -294,13 +296,14 @@ graph TB
     end
     subgraph gcp["GCP: projects"]
         gorg["gcp-organization<br/>folders + org CMEK"]
+        gproj["gcp-projects<br/>host projects"]
         ghub["gcp-network-hub<br/>hub VPC + DNS"]
         gwl["gcp-workload-env<br/>host VPC + NAT"]
     end
     cfg --> aorg
     cfg --> gorg
     aorg --> anet --> awl
-    gorg --> ghub --> gwl
+    gorg --> gproj --> ghub --> gwl
 ```
 
 ### Accounts and projects
@@ -488,6 +491,11 @@ component key.
   ([`policies/opa/policies.hcl:83`](../../policies/opa/policies.hcl)). The
   default tags and labels, not the policy, are what put the keys on every
   resource.
+- **AWS tag casing.** The org tag policy
+  [`modules/aws/governance/organization-policy/policies/tag-policy.json`](../../modules/aws/governance/organization-policy/policies/tag-policy.json)
+  standardises the key casing of `CostCenter`, `Environment` and `Owner`. A raw
+  resource that sets any of these keys must use exactly that casing, never
+  `costcenter` or `environment`.
 - GCP labels are lowercase, at most 63 characters, and at most 64 per resource
   ([Google Cloud docs](https://docs.cloud.google.com/resource-manager/docs/labels-overview),
   checked 2026-11). AWS tag keys and values are case-sensitive
@@ -608,6 +616,20 @@ zones and #12 governs them. Both use these names and do not redefine them.
 | **curated** | Cleaned, deduplicated, conformed, schema-checked tables, usually in a table format such as Iceberg, keyed by business entity. | Versioned, not immutable: tables change by atomic commits, and old snapshots expire on a schedule. It can be rebuilt from raw, so keep it shorter than raw. |
 | **serving** | Aggregates, marts, features and indexes shaped for one consumer: dashboards, APIs, models, search. | Disposable and rebuildable from curated. Keep it shortest. Overwrite or refresh it freely, and keep only what its consumers need. |
 
+Naming and keys:
+
+- **AWS:** one bucket or Glue database per dataset and zone, named
+  `<env>-<dataset>-<zone>`, for example `dev-orders-raw`, following the
+  `<env>-<component>` pattern of [Naming](#naming). S3 bucket names are
+  global, so prefix with `<prefix>-` when a name collides.
+- **GCP:** in the environment's project, `<dataset>-<zone>` for buckets
+  (prefix with `<prefix>-<env>-` because bucket names are global) and
+  `<dataset>_<zone>` for BigQuery datasets, whose IDs allow underscores but not
+  hyphens.
+- **Keys:** every zone is encrypted with the workload CMEK from
+  [CMEK source](#cmek-source): `workload_kms_key_arn` on AWS, the per-environment
+  `workload_cmek` key on GCP.
+
 How long each zone is kept is a per-dataset policy, often set by regulation. The
 rule is the ordering, raw ≥ curated ≥ serving, and that each zone can be
 rebuilt from the one before it.
@@ -664,9 +686,15 @@ owns the component. Never share one identity between components.
   - a `<component>-run` service account per component;
   - grants on the narrowest resource rather than the project, for example
     `secretAccessor` on its own secrets
-    ([`:254`](../../modules/gcp/stages/app-services/main.tf)) and Cloud SQL
-    client on its own instance
-    ([`:438`](../../modules/gcp/stages/app-services/main.tf));
+    ([`:254`](../../modules/gcp/stages/app-services/main.tf));
+  - where a service has no resource-level IAM, a project grant narrowed by an
+    IAM condition. Cloud SQL is the example: it has no instance-level IAM, so
+    `roles/cloudsql.client` and `roles/cloudsql.instanceUser` are granted on the
+    project with a condition on `resource.name` that matches only the service's
+    own instance
+    ([`:433`](../../modules/gcp/stages/app-services/main.tf)). This makes a good
+    interview point: least privilege sometimes means a conditional grant at a
+    wider scope, not a grant on the resource;
   - project-level roles only when listed explicitly
     (`runtime_project_roles`).
 - **Deploy identities** are separate again: `<env>-<component>-deploy` on AWS
@@ -776,8 +804,13 @@ Notes:
 #### GCP canonical snippet
 
 It lives in `envs/gcp/workload` (workspace `gcp-workload-<env>`) and uses that
-root's existing `local.env_config`, `local.project_prefix`, `local.region`,
-`local.labels`, `var.environment` and `module.environment`.
+root's existing `local.env_config`, `local.project_prefix`, `local.labels`,
+`var.environment` and `module.environment`. The region is
+`local.env_config.region`, the region the root builds the environment's
+subnets in ([`envs/gcp/workload/main.tf:192`](../../envs/gcp/workload/main.tf)).
+`local.region` only sets the provider default, so do not use it here: Direct VPC
+egress needs a subnet in the service's region, and Cloud Run CMEK needs the key
+in that region too.
 
 ```hcl
 # Gap: no per-environment workload CMEK exists yet (see CMEK source);
@@ -787,7 +820,7 @@ module "workload_cmek" {
 
   project_id   = local.env_config.host_project_id
   keyring_name = "${local.project_prefix}-${var.environment}-cmek"
-  location     = local.region # same region as the resources it encrypts
+  location     = local.env_config.region # same region as the resources it encrypts
   labels       = local.labels
   keys = {
     "ingest" = {
@@ -808,7 +841,7 @@ resource "google_service_account" "ingest" {
 resource "google_cloud_run_v2_service" "ingest" {
   project             = local.env_config.host_project_id
   name                = "ingest"
-  location            = local.region
+  location            = local.env_config.region # the subnet's region
   ingress             = "INGRESS_TRAFFIC_INTERNAL_ONLY"
   deletion_protection = true
   labels              = merge(local.labels, { service = "ingest" }) # default_labels add the rest
