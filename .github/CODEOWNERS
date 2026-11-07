@@ -86,11 +86,18 @@ CHANGELOG.md   @your-org/platform-team
 /modules/aws/governance/  @your-org/platform-team @your-org/security-team
 /modules/aws/iam/         @your-org/platform-team @your-org/security-team
 /modules/aws/security/    @your-org/platform-team @your-org/security-team
+# The AWS stages that wire the SCPs/RCPs, guard alerts, the org trail, the
+# security baseline and the backup policy - the AWS twins of the GCP stages above.
+/modules/aws/stages/organization/  @your-org/platform-team @your-org/security-team
+/modules/aws/stages/security/      @your-org/platform-team @your-org/security-team
+/modules/aws/stages/backup/        @your-org/platform-team @your-org/security-team
 
 # ── Policy-as-code and the configuration file ────────────────────────────────
-# The OPA guardrails decide what a plan may do; landing-zone.yaml feeds every root.
-/policies/                 @your-org/platform-team @your-org/security-team
-/config/landing-zone.yaml  @your-org/platform-team @your-org/security-team
+# The OPA guardrails decide what a plan may do; landing-zone.yaml feeds every root;
+# tfc-workspaces.yaml sets per-workspace variables (credential env vars included).
+/policies/                   @your-org/platform-team @your-org/security-team
+/config/landing-zone.yaml    @your-org/platform-team @your-org/security-team
+/config/tfc-workspaces.yaml  @your-org/platform-team @your-org/security-team
 
 # ── This file ────────────────────────────────────────────────────────────────
 # Changing ownership itself needs both teams.

@@ -62,11 +62,16 @@ CHANGELOG.md   ${platform_team}
 /modules/aws/governance/            ${platform_team} ${security_team}
 /modules/aws/iam/                   ${platform_team} ${security_team}
 /modules/aws/security/              ${platform_team} ${security_team}
+/modules/aws/stages/organization/   ${platform_team} ${security_team}
+/modules/aws/stages/security/       ${platform_team} ${security_team}
+/modules/aws/stages/backup/         ${platform_team} ${security_team}
 
 # ── Policy-as-code and the configuration file ────────────────────────────────
-# The OPA guardrails decide what a plan may do; landing-zone.yaml feeds every root.
-/policies/                 ${platform_team} ${security_team}
-/config/landing-zone.yaml  ${platform_team} ${security_team}
+# The OPA guardrails decide what a plan may do; landing-zone.yaml feeds every root;
+# tfc-workspaces.yaml sets per-workspace variables (credential env vars included).
+/policies/                   ${platform_team} ${security_team}
+/config/landing-zone.yaml    ${platform_team} ${security_team}
+/config/tfc-workspaces.yaml  ${platform_team} ${security_team}
 
 # ── This file ────────────────────────────────────────────────────────────────
 /.github/CODEOWNERS  ${platform_team} ${security_team}

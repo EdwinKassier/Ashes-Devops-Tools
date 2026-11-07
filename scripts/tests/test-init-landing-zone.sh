@@ -315,6 +315,8 @@ if bash "${SCRIPT}" --non-interactive --output "${workdir}/co.yaml" --org-name a
   # Every security-sensitive path routes to platform + security (last match wins).
   for path in /modules/aws/iam/ /modules/aws/governance/ /modules/gcp/iam/ \
     /modules/gcp/stages/organization/ /modules/gcp/stages/bootstrap/ /modules/gcp/stages/guardrails/ \
+    /modules/aws/stages/organization/ /modules/aws/stages/security/ /modules/aws/stages/backup/ \
+    /config/tfc-workspaces.yaml \
     /envs/tfc-admin/ /envs/gcp/guardrails/ /policies/ /.github/; do
     assert_line "${co}" "^${path} +@acme-gh/platform-team @acme-gh/sec\$" "${path} needs platform + security"
   done
