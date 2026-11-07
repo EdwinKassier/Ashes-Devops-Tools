@@ -336,6 +336,18 @@ in-place key-policy update. Where the key policy is protected against pipeline
 edits, apply it with break-glass. After the apply, check that a test alert
 arrives.
 
+#### aws-organization: EC2 Allowed AMIs in the declarative EC2 policy (audit mode)
+
+The `declarative-ec2-baseline` declarative policy, attached at the org root, now
+carries `allowed_images_settings` through the new `ec2_allowed_images` input
+(default: `state = "audit_mode"`, providers `["amazon"]`). The first apply updates
+that policy in place. Audit mode blocks nothing: it only flags AMIs outside the
+allowed providers. The root policy does take over Allowed AMIs from the member
+accounts, though. Any account-level settings are overridden, and the
+Enable/Replace/Disable API calls are locked out in member accounts. Review the
+audit findings before you set `state = "enabled"`. Set `state = "unmanaged"` to
+leave the setting out of the policy.
+
 ### GCP
 
 #### GCP deny policies move to the security-team `gcp-guardrails` workspace
@@ -559,7 +571,30 @@ and 0 to destroy. Root variables and outputs are unchanged.
   instead of passing through as `null`. Unset inputs behave as before.
 - The moved blocks are kept until v1.0.
 
+#### gcp-organization: SCC v2 behind `scc_api_version` (opt-in)
+
+`gcp_overrides.scc_api_version` (default `v1`, no change on upgrade) takes `v1`,
+`both` or `v2`. In `both` mode the v2 notification and mute configs are created
+next to the v1 ones, so subscribers receive every finding twice in two formats
+until you finish. `v2` **destroys the v1 configs**. v1 and v2 cannot see each
+other's configs. The Pub/Sub topics are shared and never replaced. Follow
+[scc-v2-migration](docs/runbooks/scc-v2-migration.md).
+
+#### gcp-organization: `disable_default_sink` is configurable
+
+`gcp.disable_default_sink` (default `false`) is no longer hard-coded. It only takes
+effect when `enable_logging_organization_settings` is on. Don't disable the
+`_Default` sink unless a catch-all sink exists: the central Log Analytics sink
+routes only Cloud Audit Logs.
+
 ### SaaS and cross-cloud
+
+#### saas / vercel: function regions through `resource_config`
+
+`vercel_project` now sets `resource_config.function_default_regions` and no longer
+writes the deprecated `serverless_function_region`. A new
+`function_default_regions` list overrides the old single-region input, which
+stays as the fallback. Expect one in-place update to each `vercel_project`.
 
 #### SaaS secret bridge writes its secret write-only
 
