@@ -45,3 +45,5 @@ Task 2: fix round 1 committed f342691; scoped re-review dispatched
 Task 2: re-review Approved (all 8 addressed; anchors intact)
 Task 2: complete (commits 4aae741, f342691)
 Task 2: minor (deferred): data-zones bullet calls workload_cmek "the per-environment key on GCP" — should note it is a convention/gap (see CMEK source)
+Task 4: implemented d842499 (5959 words, 13 headings, gates green; ~164 snippet lines); review dispatched (opus)
+REPO GAPS (out of scope, for known-gaps / follow-up): envs/aws/workload doesn't pass queue_kms_key_arn (SQS-managed encryption); AWS workload CMK key policy lacks events.amazonaws.com; GCP environment stage doesn't pass pubsub_kms_key_name; GCP app-services pubsub option creates only a pull subscription (request-billed Cloud Run can't drain)
