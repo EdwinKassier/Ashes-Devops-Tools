@@ -125,3 +125,28 @@ run "shipped_example_is_rejected" {
 
   expect_failures = [var.project_prefix]
 }
+
+# Scaffold matrix: committed scaffolder output (make scaffold-fixtures) must plan.
+run "scaffold_gcp_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp.yaml"
+  }
+}
+
+run "scaffold_gcp_aws_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws.yaml"
+  }
+}
+
+run "scaffold_gcp_aws_saas_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
+  }
+}

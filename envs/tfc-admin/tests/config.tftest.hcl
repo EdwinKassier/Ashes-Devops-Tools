@@ -268,3 +268,44 @@ run "placeholder_hcp_user_id_rejected" {
 
   expect_failures = [var.control_plane_notifications]
 }
+
+# Scaffold matrix: committed scaffolder output (make scaffold-fixtures) must plan.
+run "scaffold_gcp_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../tests/fixtures/scaffold/landing-zone.gcp.yaml"
+  }
+}
+
+run "scaffold_aws_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../tests/fixtures/scaffold/landing-zone.aws.yaml"
+  }
+}
+
+run "scaffold_saas_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../tests/fixtures/scaffold/landing-zone.saas.yaml"
+  }
+}
+
+run "scaffold_gcp_aws_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../tests/fixtures/scaffold/landing-zone.gcp-aws.yaml"
+  }
+}
+
+run "scaffold_gcp_aws_saas_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
+  }
+}

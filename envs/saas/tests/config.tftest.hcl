@@ -93,3 +93,22 @@ run "bridge_rotation_must_be_a_positive_whole_number" {
 
   expect_failures = [var.bridge_rotation]
 }
+
+# Scaffold matrix: committed scaffolder output (make scaffold-fixtures) must plan.
+run "scaffold_saas_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../tests/fixtures/scaffold/landing-zone.saas.yaml"
+    stack                    = "web"
+  }
+}
+
+run "scaffold_gcp_aws_saas_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
+    stack                    = "web"
+  }
+}

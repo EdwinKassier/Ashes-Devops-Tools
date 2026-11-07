@@ -117,3 +117,64 @@ run "variable_overrides_config" {
     error_message = "an explicit services variable must win over the config file."
   }
 }
+
+# Scaffold matrix: committed scaffolder output (make scaffold-fixtures) must plan.
+run "scaffold_aws_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.aws.yaml"
+    environment              = "dev"
+  }
+
+  # The scaffold names its workload accounts workload_dev / workload_prod.
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = {
+      outputs = {
+        account_ids       = { workload_dev = "222222222222", workload_prod = "333333333333" }
+        account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account", workload_prod = "arn:aws:iam::333333333333:role/cross-account" }
+      }
+    }
+  }
+}
+
+run "scaffold_gcp_aws_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws.yaml"
+    environment              = "dev"
+  }
+
+  # The scaffold names its workload accounts workload_dev / workload_prod.
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = {
+      outputs = {
+        account_ids       = { workload_dev = "222222222222", workload_prod = "333333333333" }
+        account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account", workload_prod = "arn:aws:iam::333333333333:role/cross-account" }
+      }
+    }
+  }
+}
+
+run "scaffold_gcp_aws_saas_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
+    environment              = "dev"
+  }
+
+  # The scaffold names its workload accounts workload_dev / workload_prod.
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = {
+      outputs = {
+        account_ids       = { workload_dev = "222222222222", workload_prod = "333333333333" }
+        account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account", workload_prod = "arn:aws:iam::333333333333:role/cross-account" }
+      }
+    }
+  }
+}

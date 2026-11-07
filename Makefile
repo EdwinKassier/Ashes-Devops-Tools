@@ -310,13 +310,19 @@ e2e-aws: ## REAL apply: run tests/e2e/aws in the ambient (sandbox!) AWS account,
 # ---------------------------------------------------------------------------
 # Single-source configuration (config/landing-zone.yaml)
 # ---------------------------------------------------------------------------
-.PHONY: init bootstrap-ids config-check
+.PHONY: init bootstrap-ids config-check scaffold-fixtures scaffold-fixtures-check
 
 init: ## Scaffold config/landing-zone.yaml: make init ARGS="--org-name acme --clouds gcp,aws ..."
 	@./scripts/init-landing-zone.sh $(ARGS)
 
 bootstrap-ids: ## Write the tfc-admin workspace IDs for the local phase-0 gcp-bootstrap apply (gitignored)
 	terraform -chdir=envs/tfc-admin output -raw gcp_bootstrap_tfvars > envs/gcp/bootstrap/tfc-workspaces.auto.tfvars
+
+scaffold-fixtures: ## Regenerate tests/fixtures/scaffold/*.yaml from the scaffolder (one per cloud combination)
+	./scripts/scaffold-fixtures.sh
+
+scaffold-fixtures-check: ## Fail if tests/fixtures/scaffold/ differs from fresh scaffolder output (CI: meta-lint)
+	./scripts/scaffold-fixtures.sh --check
 
 config-check: ## Validate config/*.example.yaml, config/sandbox/ and every test fixture against config/landing-zone.schema.json (needs check-jsonschema)
 	@command -v check-jsonschema >/dev/null || { echo "check-jsonschema not found: pipx install check-jsonschema (see .tool-versions)"; exit 1; }
