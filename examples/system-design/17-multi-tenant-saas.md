@@ -89,7 +89,8 @@ for 4,200 ÷ ⅔ = **6,300/s: 42 tasks, 14 per zone**. After a zone loss, 28
 tasks × 150 = 4,200/s, exactly the peak.
 
 **Noisy neighbour.** A Basic tenant normally sends about 2% of pool traffic
-(84/s). A 20× import is 1,700/s: 40% of pool capacity, which is the outage.
+(84/s). A 20× import is 1,700/s: 40% of the 4,200/s peak and 27% of the
+6,300/s capacity, enough to push the pool past its headroom.
 A per-tenant limit of **100/s sustained, 200/s burst** caps one tenant at
 200 ÷ 4,200 ≈ 5% of peak.
 
@@ -121,17 +122,23 @@ checked 2026-11). Requests AWS services make on your behalf count too. The
 pool's per-object tenant condition needs S3 Bucket Keys off, so each of about
 200 object reads and writes a second is one KMS call: comfortable for the
 quota, but 518 million requests a month at $0.03 per 10,000 is about
-**$1,550 a month**. Cloud KMS allows 60,000 cryptographic requests a minute
-per calling project, and CMEK use by Google services does not count against
-it ([Google Cloud docs](https://docs.cloud.google.com/kms/quotas), checked
-2026-11).
+**$1,550 a month**. Since 16 February 2026, Cloud KMS meters "Software
+usage": 6,000,000 tokens a minute at 100 tokens per software-key operation,
+so 60,000 operations a minute (1,000 a second). It applies to the project that
+**contains** the key, and Google services' CMEK use now counts, with soft
+enforcement ([Google Cloud docs](https://docs.cloud.google.com/kms/quotas),
+checked 2026-11). Every bridge tenant's key sits in the host project's key
+ring, so all their CMEK traffic shares one 1,000-a-second budget. That is
+ample for 95 buckets, but alarm on `software_usage`, and move a heavy tenant's
+key into its own project before it becomes a key-level noisy neighbour.
 
 **Accounts and projects.** An AWS organization defaults to **10 accounts**,
 creates at most 5 at a time, and can be raised to 50,000
 ([AWS docs](https://docs.aws.amazon.com/organizations/latest/userguide/orgs_reference_limits.html),
-checked 2026-11). This repo's baseline already uses 6 foundational accounts
-plus dev and prod workload accounts, so the third silo tenant needs a quota
-increase first. On GCP a folder holds at most 300 child folders and project
+checked 2026-11). The default counts the management account. This repo's
+baseline is the management account, 6 foundational accounts and dev and prod
+workload accounts: 9. The second silo tenant is the 11th account, so raise the
+quota before the first silo onboards. On GCP a folder holds at most 300 child folders and project
 creation is quota-limited per user and organization
 ([Google Cloud docs](https://docs.cloud.google.com/resource-manager/docs/limits),
 checked 2026-11).
@@ -482,7 +489,7 @@ tenants, with a fleet manager for upgrades across hundreds of workspaces.
 | Per-tenant key | KMS key per tenant; encryption context in the pool | Cloud KMS key per tenant; app-layer envelope in the pool |
 | Bridge unit | Store and key in the shared workload account | Service project per tenant on the Shared VPC |
 | Silo unit | Workload account | Environment: folder, host project, VPC |
-| Quota boundary | Account and Region (KMS rate is per account) | Project (KMS rate is per calling project) |
+| Quota boundary | Account and Region (KMS rate is per calling account) | Project (KMS software usage is charged to the key's project) |
 
 Differences that change the design:
 
@@ -520,7 +527,7 @@ aws:
     acme-prod: {account_key: tenant_acme_prod, vpc_cidr: 10.60.0.0/16, is_production: true}
   network:
     spoke_attachments:
-      acme-prod: {attachment_id: tgw-attach-REPLACE_ME, segment: prod}
+      acme-prod: {attachment_id: tgw-attach-0123456789abcdef0, segment: prod}
 gcp:
   environments:
     prod:
@@ -566,6 +573,7 @@ checked 2026-11).
 locals {
   bridge_tenants = toset(["globex", "initech"]) # exported from the tenant registry; slugs, never names
   arn_prefix     = "arn:${data.aws_partition.current.partition}"
+  boundary_name  = "tfc-apply-boundary" # app-services' tfc_apply_boundary_policy_name; null = no boundary
 }
 
 resource "aws_kms_key" "tenant" {
@@ -601,8 +609,9 @@ resource "aws_iam_role" "tenant_access" {
       Condition = { StringLike = { "aws:RequestTag/tenant_id" = "?*" } } # no tag, no session
     }]
   })
-  permissions_boundary = "${local.arn_prefix}:iam::${local.workload_account_id}:policy/tfc-apply-boundary"
+  permissions_boundary = local.boundary_name == null ? null : "${local.arn_prefix}:iam::${local.workload_account_id}:policy/${local.boundary_name}"
   tags                 = { Service = "api" }
+  depends_on           = [module.app_services] # IAM rejects a trust policy naming a role that does not exist yet
 }
 
 resource "aws_iam_role_policy" "tenant_access" {
@@ -770,8 +779,8 @@ enabled and forced.
 | AWS KMS key | $1/month, plus $1 for each of the first two rotations |
 | AWS KMS symmetric quota | 20,000/s in eu-west-2; 100,000/s in us-east-1; shared by all keys |
 | AWS KMS deletion wait | 7–30 days, default 30 |
-| Cloud KMS | 60,000 crypto requests/min per calling project; 30-day default destroy schedule |
-| AWS Organizations | 10 accounts default; 5 concurrent creations |
+| Cloud KMS | 6,000,000 tokens/min (60,000 ops) per key-holding project, CMEK included; 30-day default destroy schedule |
+| AWS Organizations | 10 accounts default, management included; 5 concurrent creations |
 | GCP folders | 300 children per parent; 10 levels deep |
 | Session tags | At most 50; trust policy needs `sts:TagSession` |
 | Shuffle sharding | 8 workers, pairs: 28 shards, 1/28 blast radius |
