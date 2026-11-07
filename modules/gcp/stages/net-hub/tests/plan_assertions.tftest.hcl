@@ -134,6 +134,42 @@ run "ncc_with_vpn_makes_a_hybrid_spoke" {
   }
 }
 
+run "hybrid_spoke_joins_center_group_on_star" {
+  command = plan
+
+  variables {
+    ncc = { enabled = true, preset_topology = "STAR" }
+    vpn = {
+      enabled          = true
+      peer_gateway_ips = ["203.0.113.1", "203.0.113.2"]
+    }
+    vpn_shared_secret_wo = "mock-psk-not-a-secret"
+  }
+
+  assert {
+    condition     = output.hybrid_connectivity.ncc_vpn_spoke_group == "center"
+    error_message = "On a STAR hub the VPN hybrid spoke must join the center group (edge spokes reach only the center)."
+  }
+}
+
+run "hybrid_spoke_joins_default_group_on_mesh" {
+  command = plan
+
+  variables {
+    ncc = { enabled = true, preset_topology = "MESH" }
+    vpn = {
+      enabled          = true
+      peer_gateway_ips = ["203.0.113.1", "203.0.113.2"]
+    }
+    vpn_shared_secret_wo = "mock-psk-not-a-secret"
+  }
+
+  assert {
+    condition     = output.hybrid_connectivity.ncc_vpn_spoke_group == "default"
+    error_message = "On a MESH hub the VPN hybrid spoke must join the default group."
+  }
+}
+
 run "vpn_without_ncc_has_no_hybrid_spoke" {
   command = plan
 

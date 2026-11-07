@@ -190,7 +190,7 @@ variable "vpn" {
     tunnel_count is 2 for HA (production) or 1 for testing. peer_gateway_ips
     lists the peer interface IPv4 addresses (one per tunnel). local_ips and
     peer_ips are the BGP link-local addresses. The pre-shared key is the separate
-    separate vpn_shared_secret_wo (write-only) or legacy vpn_shared_secret input. With ncc.enabled, the tunnels also join the NCC hub as a hybrid spoke.
+    vpn_shared_secret_wo (write-only) or legacy vpn_shared_secret input. With ncc.enabled, the tunnels also join the NCC hub as a hybrid spoke.
   EOT
   type = object({
     enabled          = optional(bool, false)

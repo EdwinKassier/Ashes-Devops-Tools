@@ -215,7 +215,7 @@ variable "ipam_new_vpcs" {
 }
 
 variable "enable_vpn" {
-  description = "Attach an on-premises Site-to-Site VPN to the transit gateway (network/vpn). Off by default. Requires vpn.customer_gateway_ip. AWS generates the tunnel pre-shared keys (see docs/known-gaps.md for their state exposure)."
+  description = "Attach an on-premises Site-to-Site VPN to the transit gateway (network/vpn). Off by default. Requires vpn.customer_gateway_ip. Traffic from on-premises is default-routed to the inspection VPC (a dedicated hybrid TGW route table), and the on-premises routes propagate only into the inspection route table, so spoke return traffic is inspected too. See docs/architecture/aws-landing-zone.md."
   type        = bool
   default     = false
   nullable    = false
@@ -223,16 +223,16 @@ variable "enable_vpn" {
 
 variable "vpn" {
   description = <<-EOT
-    Site-to-Site VPN settings, used only when enable_vpn is true. customer_gateway_ip is the public IPv4 of the on-premises device; customer_gateway_bgp_asn its BGP ASN. static_routes_only = true uses static routing instead of BGP. tunnel_inside_cidrs is empty (AWS-assigned) or two /30s in 169.254.0.0/16. route_table is the TGW segment the VPN attachment is associated with; propagate_to lists the segments that learn the on-premises routes.
+    Site-to-Site VPN settings, used only when enable_vpn is true. customer_gateway_ip is the public IPv4 of the on-premises device; customer_gateway_bgp_asn its BGP ASN (not the transit gateway's 64512). static_routes_only = true uses static routing: then onprem_cidrs (the on-premises prefixes) is required and becomes static routes to the VPN in the inspection route table; with BGP the routes propagate and onprem_cidrs is ignored. tunnel_inside_cidrs is empty (AWS-assigned) or two /30s in 169.254.0.0/16. preshared_key_storage is SecretsManager (default; the keys stay out of state and the stage outputs the secret ARN) or Standard (keys in state).
   EOT
   type = object({
     customer_gateway_ip      = optional(string)
     customer_gateway_bgp_asn = optional(number, 65000)
     static_routes_only       = optional(bool, false)
+    onprem_cidrs             = optional(list(string), [])
     tunnel_inside_cidrs      = optional(list(string), [])
     enable_acceleration      = optional(bool, false)
-    route_table              = optional(string, "shared")
-    propagate_to             = optional(list(string), ["prod", "nonprod"])
+    preshared_key_storage    = optional(string, "SecretsManager")
   })
   default  = {}
   nullable = false
@@ -243,7 +243,22 @@ variable "vpn" {
   }
 
   validation {
-    condition     = contains(["prod", "nonprod", "inspection", "shared"], var.vpn.route_table) && alltrue([for r in var.vpn.propagate_to : contains(["prod", "nonprod", "inspection", "shared"], r)])
-    error_message = "vpn.route_table and vpn.propagate_to entries must be transit gateway segments: prod, nonprod, inspection or shared."
+    condition     = var.vpn.customer_gateway_bgp_asn >= 1 && var.vpn.customer_gateway_bgp_asn <= 4294967294 && var.vpn.customer_gateway_bgp_asn != 64512
+    error_message = "vpn.customer_gateway_bgp_asn must be 1 to 4294967294 and differ from the transit gateway's Amazon-side ASN (64512)."
+  }
+
+  validation {
+    condition     = !var.vpn.static_routes_only || length(var.vpn.onprem_cidrs) > 0
+    error_message = "vpn.static_routes_only = true needs vpn.onprem_cidrs (the on-premises prefixes to route to the VPN)."
+  }
+
+  validation {
+    condition     = alltrue([for c in var.vpn.onprem_cidrs : can(cidrnetmask(c))])
+    error_message = "vpn.onprem_cidrs entries must be IPv4 CIDR blocks."
+  }
+
+  validation {
+    condition     = contains(["SecretsManager", "Standard"], var.vpn.preshared_key_storage)
+    error_message = "vpn.preshared_key_storage must be SecretsManager or Standard."
   }
 }

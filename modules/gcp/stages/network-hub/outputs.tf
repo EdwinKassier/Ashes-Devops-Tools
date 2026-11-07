@@ -60,5 +60,5 @@ output "ncc_vpn_spoke_id" {
 
 output "hybrid_connectivity" {
   description = "Which hybrid connectivity is planned for the hub: vpn (HA VPN on), ncc_vpn_spoke (tunnels linked to the NCC hub) and the Cloud Interconnect attachment names."
-  value       = try(module.hub.hybrid_connectivity, { vpn = false, ncc_vpn_spoke = false, interconnects = [] })
+  value       = try(module.hub.hybrid_connectivity, { vpn = false, ncc_vpn_spoke = false, ncc_vpn_spoke_group = null, interconnects = [] })
 }

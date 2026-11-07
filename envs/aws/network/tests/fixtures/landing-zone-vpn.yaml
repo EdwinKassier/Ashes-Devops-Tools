@@ -25,5 +25,5 @@ aws:
       enabled: true
       customer_gateway_ip: 203.0.113.10
       customer_gateway_bgp_asn: 65010
-      route_table: shared
-      propagate_to: [prod]
+      static_routes_only: true
+      onprem_cidrs: [192.168.0.0/16]

@@ -46,7 +46,7 @@ run "aws_vpn_reaches_network_hub_from_config" {
   }
 
   assert {
-    condition     = local.enable_vpn == true && local.vpn.customer_gateway_ip == "203.0.113.10" && local.vpn.customer_gateway_bgp_asn == 65010 && join(",", local.vpn.propagate_to) == "prod"
+    condition     = local.enable_vpn == true && local.vpn.customer_gateway_ip == "203.0.113.10" && local.vpn.customer_gateway_bgp_asn == 65010 && local.vpn.static_routes_only == true && join(",", local.vpn.onprem_cidrs) == "192.168.0.0/16"
     error_message = "aws.network.vpn must reach the network-hub stage as enable_vpn and vpn."
   }
 }

@@ -22,3 +22,8 @@ output "transit_gateway_attachment_id" {
   description = "ID of the transit gateway attachment the VPN connection creates (null when attach_to = vpn_gateway). Associate it with a TGW route table to route through it."
   value       = aws_vpn_connection.this.transit_gateway_attachment_id
 }
+
+output "preshared_key_arn" {
+  description = "ARN of the Secrets Manager secret holding the tunnel pre-shared keys (null when preshared_key_storage = Standard). Read the keys from there to configure the on-premises device."
+  value       = aws_vpn_connection.this.preshared_key_arn
+}

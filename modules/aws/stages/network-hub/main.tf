@@ -53,10 +53,14 @@ locals {
     "egress->shared"      = { attachment = "egress", route_table = "shared" }
   }
 
-  tgw_routes = {
-    "prod:default"    = { route_table = "prod", cidr = "0.0.0.0/0", attachment = "inspection" }
-    "nonprod:default" = { route_table = "nonprod", cidr = "0.0.0.0/0", attachment = "inspection" }
-  }
+  tgw_routes = merge(
+    {
+      "prod:default"    = { route_table = "prod", cidr = "0.0.0.0/0", attachment = "inspection" }
+      "nonprod:default" = { route_table = "nonprod", cidr = "0.0.0.0/0", attachment = "inspection" }
+    },
+    # On-premises traffic is default-routed to inspection too (hybrid table).
+    var.enable_vpn ? { "hybrid:default" = { route_table = "hybrid", cidr = "0.0.0.0/0", attachment = "inspection" } } : {},
+  )
 }
 
 # ---------------------------------------------------------------------------
@@ -283,7 +287,7 @@ module "transit_gateway" {
 
   org_arn = var.org_arn
 
-  route_tables = ["prod", "nonprod", "inspection", "shared"]
+  route_tables = concat(["prod", "nonprod", "inspection", "shared"], var.enable_vpn ? ["hybrid"] : [])
 
   attachments = {
     inspection = {
@@ -313,9 +317,16 @@ module "transit_gateway" {
 # ---------------------------------------------------------------------------
 # Site-to-Site VPN — opt-in hybrid connectivity terminating on the TGW
 #
-# The TGW has default association/propagation disabled (segmentation), so the
-# VPN attachment is associated with one segment and propagates its on-premises
-# routes into the listed segments explicitly.
+# Routing model (centralized inspection is preserved in both directions):
+#   - The VPN attachment is associated with a dedicated "hybrid" TGW route table
+#     whose only route is 0.0.0.0/0 -> inspection attachment, so traffic from
+#     on-premises is inspected before it reaches any spoke.
+#   - The on-premises prefixes propagate (BGP) into the "inspection" route table
+#     ONLY, or are added there as static routes. Spokes (prod/nonprod) never learn
+#     them, so a spoke's reply to on-premises follows its 0.0.0.0/0 -> inspection
+#     route, is inspected, and the inspection VPC's attachment (inspection table)
+#     forwards it to the VPN. No on-premises prefix is more specific than the
+#     spoke default, so inspection cannot be bypassed.
 # ---------------------------------------------------------------------------
 
 module "vpn" {
@@ -330,6 +341,7 @@ module "vpn" {
   static_routes_only       = var.vpn.static_routes_only
   tunnel_inside_cidrs      = var.vpn.tunnel_inside_cidrs
   enable_acceleration      = var.vpn.enable_acceleration
+  preshared_key_storage    = var.vpn.preshared_key_storage
   tags                     = var.tags
 }
 
@@ -337,14 +349,24 @@ resource "aws_ec2_transit_gateway_route_table_association" "vpn" {
   count = var.enable_vpn ? 1 : 0
 
   transit_gateway_attachment_id  = module.vpn[0].transit_gateway_attachment_id
-  transit_gateway_route_table_id = module.transit_gateway.route_table_ids[var.vpn.route_table]
+  transit_gateway_route_table_id = module.transit_gateway.route_table_ids["hybrid"]
 }
 
+# BGP: the on-premises routes are learned by the inspection route table only.
 resource "aws_ec2_transit_gateway_route_table_propagation" "vpn" {
-  for_each = var.enable_vpn ? toset(var.vpn.propagate_to) : toset([])
+  count = var.enable_vpn ? 1 : 0
 
   transit_gateway_attachment_id  = module.vpn[0].transit_gateway_attachment_id
-  transit_gateway_route_table_id = module.transit_gateway.route_table_ids[each.key]
+  transit_gateway_route_table_id = module.transit_gateway.route_table_ids["inspection"]
+}
+
+# Static routing: the same on-premises prefixes, pinned to the VPN attachment.
+resource "aws_ec2_transit_gateway_route" "vpn_onprem" {
+  for_each = var.enable_vpn && var.vpn.static_routes_only ? toset(var.vpn.onprem_cidrs) : toset([])
+
+  destination_cidr_block         = each.value
+  transit_gateway_route_table_id = module.transit_gateway.route_table_ids["inspection"]
+  transit_gateway_attachment_id  = module.vpn[0].transit_gateway_attachment_id
 }
 
 # ---------------------------------------------------------------------------

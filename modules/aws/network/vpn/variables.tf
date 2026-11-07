@@ -9,19 +9,33 @@ variable "name" {
 }
 
 variable "customer_gateway_ip" {
-  description = "Public IP address of the on-premises (customer) VPN device."
+  description = "Public IPv4 address of the on-premises (customer) VPN device. Private, loopback, link-local and carrier-grade NAT ranges are rejected."
   type        = string
 
   validation {
-    condition     = can(regex("^([0-9]{1,3}\\.){3}[0-9]{1,3}$", var.customer_gateway_ip))
-    error_message = "customer_gateway_ip must be a valid IPv4 address."
+    condition = can(regex("^([0-9]{1,3}\\.){3}[0-9]{1,3}$", var.customer_gateway_ip)) && try(alltrue([
+      for o in [[for x in split(".", var.customer_gateway_ip) : tonumber(x)]] :
+      alltrue([for n in o : n <= 255]) && !(
+        contains([0, 10, 127], o[0]) || o[0] >= 224 ||
+        (o[0] == 100 && o[1] >= 64 && o[1] <= 127) ||
+        (o[0] == 169 && o[1] == 254) ||
+        (o[0] == 172 && o[1] >= 16 && o[1] <= 31) ||
+        (o[0] == 192 && (o[1] == 168 || (o[1] == 0 && o[2] == 0)))
+      )
+    ]), false)
+    error_message = "customer_gateway_ip must be a valid public IPv4 address (not private, loopback, link-local, CGNAT or multicast)."
   }
 }
 
 variable "customer_gateway_bgp_asn" {
-  description = "BGP ASN of the customer gateway (used for dynamic routing)."
+  description = "BGP ASN of the customer gateway (used for dynamic routing). 1 to 4294967294."
   type        = number
   default     = 65000
+
+  validation {
+    condition     = var.customer_gateway_bgp_asn >= 1 && var.customer_gateway_bgp_asn <= 4294967294 && floor(var.customer_gateway_bgp_asn) == var.customer_gateway_bgp_asn
+    error_message = "customer_gateway_bgp_asn must be an integer between 1 and 4294967294."
+  }
 }
 
 variable "attach_to" {
@@ -80,4 +94,16 @@ variable "tags" {
   description = "Tags applied to the VPN resources."
   type        = map(string)
   default     = {}
+}
+
+variable "preshared_key_storage" {
+  description = "Where AWS keeps the tunnel pre-shared keys: SecretsManager (default; the keys live in an AWS-managed Secrets Manager secret and the connection exposes only its ARN) or Standard (the keys are generated into Terraform state)."
+  type        = string
+  default     = "SecretsManager"
+  nullable    = false
+
+  validation {
+    condition     = contains(["SecretsManager", "Standard"], var.preshared_key_storage)
+    error_message = "preshared_key_storage must be SecretsManager or Standard."
+  }
 }

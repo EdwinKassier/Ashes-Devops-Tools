@@ -75,11 +75,13 @@ output "ncc_vpn_spoke_id" {
 }
 
 output "hybrid_connectivity" {
-  description = "Which hybrid connectivity is planned: vpn (HA VPN on), ncc_vpn_spoke (tunnels linked to the NCC hub) and the interconnect attachment names."
+  description = "Which hybrid connectivity is planned: vpn (HA VPN on), ncc_vpn_spoke (tunnels linked to the NCC hub), ncc_vpn_spoke_group and the interconnect attachment names."
   value = {
     vpn           = length(module.vpn) > 0
     ncc_vpn_spoke = length(module.ncc_vpn_spoke) > 0
-    interconnects = sort(keys(module.interconnects))
+    # The NCC group the hybrid spoke joins: center (STAR) or default (MESH).
+    ncc_vpn_spoke_group = length(module.ncc_vpn_spoke) > 0 ? local.ncc_vpn_spoke_group : null
+    interconnects       = sort(keys(module.interconnects))
   }
 }
 

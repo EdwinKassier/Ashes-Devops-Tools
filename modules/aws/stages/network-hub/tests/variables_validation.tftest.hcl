@@ -39,11 +39,22 @@ run "rejects_enable_vpn_without_customer_gateway_ip" {
   expect_failures = [var.vpn]
 }
 
-run "rejects_unknown_vpn_segment" {
+run "rejects_vpn_asn_equal_to_tgw_asn" {
   command = plan
 
   variables {
-    vpn = { route_table = "dmz" }
+    vpn = { customer_gateway_bgp_asn = 64512 }
+  }
+
+  expect_failures = [var.vpn]
+}
+
+run "rejects_static_routing_without_onprem_cidrs" {
+  command = plan
+
+  variables {
+    enable_vpn = true
+    vpn        = { customer_gateway_ip = "203.0.113.10", static_routes_only = true }
   }
 
   expect_failures = [var.vpn]

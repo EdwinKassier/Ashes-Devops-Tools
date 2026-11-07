@@ -1331,26 +1331,18 @@
                 "enable_acceleration": {
                   "type": "boolean"
                 },
-                "route_table": {
-                  "type": "string",
-                  "enum": [
-                    "prod",
-                    "nonprod",
-                    "inspection",
-                    "shared"
-                  ]
-                },
-                "propagate_to": {
+                "onprem_cidrs": {
                   "type": "array",
                   "items": {
-                    "type": "string",
-                    "enum": [
-                      "prod",
-                      "nonprod",
-                      "inspection",
-                      "shared"
-                    ]
+                    "type": "string"
                   }
+                },
+                "preshared_key_storage": {
+                  "type": "string",
+                  "enum": [
+                    "SecretsManager",
+                    "Standard"
+                  ]
                 }
               },
               "additionalProperties": false

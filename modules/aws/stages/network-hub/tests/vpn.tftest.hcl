@@ -56,6 +56,7 @@ override_module {
       nonprod    = "tgw-rtb-nonprod00000"
       inspection = "tgw-rtb-inspection00"
       shared     = "tgw-rtb-shared000000"
+      hybrid     = "tgw-rtb-hybrid000000"
     }
     attachment_ids = {
       inspection = "tgw-attach-insp00000"
@@ -92,17 +93,6 @@ override_module {
 }
 override_module { target = module.network_access_analyzer }
 
-override_module {
-  target = module.vpn
-  outputs = {
-    vpn_connection_id             = "vpn-0123456789abcdef0"
-    customer_gateway_id           = "cgw-0123456789abcdef0"
-    tunnel1_address               = "198.51.100.10"
-    tunnel2_address               = "198.51.100.11"
-    transit_gateway_attachment_id = "tgw-attach-vpn0000000"
-  }
-}
-
 run "vpn_off_by_default" {
   command = apply
 
@@ -120,36 +110,62 @@ run "aws_vpn_attaches_to_tgw" {
     vpn        = { customer_gateway_ip = "203.0.113.10" }
   }
 
+  # module.vpn is planned for real (not overridden): the stage hands it the hub
+  # TGW id; the module's own suite asserts attach_to = transit_gateway.
   assert {
-    condition     = length(module.vpn) == 1 && output.vpn_connection_id == "vpn-0123456789abcdef0" && length(output.vpn_tunnel_addresses) == 2
-    error_message = "enable_vpn must plan the Site-to-Site VPN and expose its connection id and tunnel addresses."
+    condition     = length(module.vpn) == 1 && length(output.vpn_tunnel_addresses) == 2
+    error_message = "enable_vpn must plan the Site-to-Site VPN and expose its tunnel addresses."
   }
 
   assert {
-    condition     = aws_ec2_transit_gateway_route_table_association.vpn[0].transit_gateway_attachment_id == "tgw-attach-vpn0000000" && aws_ec2_transit_gateway_route_table_association.vpn[0].transit_gateway_route_table_id == "tgw-rtb-shared000000"
-    error_message = "The VPN attachment must be associated with the shared TGW route table by default."
+    condition     = aws_ec2_transit_gateway_route_table_association.vpn[0].transit_gateway_route_table_id == "tgw-rtb-hybrid000000"
+    error_message = "The VPN attachment must be associated with the dedicated hybrid TGW route table."
   }
 
   assert {
-    condition     = join(",", sort(keys(aws_ec2_transit_gateway_route_table_propagation.vpn))) == "nonprod,prod"
-    error_message = "On-premises routes must propagate into prod and nonprod by default."
+    condition     = aws_ec2_transit_gateway_route_table_propagation.vpn[0].transit_gateway_route_table_id == "tgw-rtb-inspection00"
+    error_message = "On-premises routes must propagate into the inspection route table only (never prod or nonprod)."
+  }
+
+  assert {
+    condition     = output.tgw_inspection_routes["hybrid:default"].attachment == "inspection" && output.tgw_inspection_routes["hybrid:default"].cidr == "0.0.0.0/0" && output.tgw_inspection_routes["hybrid:default"].route_table == "hybrid"
+    error_message = "The hybrid route table must default-route to the inspection attachment."
+  }
+
+  assert {
+    condition     = length(aws_ec2_transit_gateway_route.vpn_onprem) == 0
+    error_message = "BGP routing creates no static on-premises routes."
   }
 }
 
-run "vpn_segments_are_configurable" {
+run "static_routing_pins_onprem_cidrs_to_the_vpn" {
   command = apply
 
   variables {
     enable_vpn = true
     vpn = {
       customer_gateway_ip = "203.0.113.10"
-      route_table         = "prod"
-      propagate_to        = ["shared"]
+      static_routes_only  = true
+      onprem_cidrs        = ["192.168.0.0/16", "172.20.0.0/14"]
     }
   }
 
   assert {
-    condition     = aws_ec2_transit_gateway_route_table_association.vpn[0].transit_gateway_route_table_id == "tgw-rtb-prod00000000" && join(",", keys(aws_ec2_transit_gateway_route_table_propagation.vpn)) == "shared"
-    error_message = "vpn.route_table and vpn.propagate_to must select the TGW segments."
+    condition     = length(aws_ec2_transit_gateway_route.vpn_onprem) == 2 && alltrue([for r in aws_ec2_transit_gateway_route.vpn_onprem : r.transit_gateway_route_table_id == "tgw-rtb-inspection00"])
+    error_message = "Static on-premises prefixes must be routes in the inspection route table."
+  }
+}
+
+run "spoke_routes_stay_default_to_inspection" {
+  command = apply
+
+  variables {
+    enable_vpn = true
+    vpn        = { customer_gateway_ip = "203.0.113.10" }
+  }
+
+  assert {
+    condition     = output.tgw_inspection_routes["prod:default"].attachment == "inspection" && output.tgw_inspection_routes["nonprod:default"].attachment == "inspection"
+    error_message = "Spoke segments must keep default-routing to inspection so return traffic to on-premises is inspected."
   }
 }

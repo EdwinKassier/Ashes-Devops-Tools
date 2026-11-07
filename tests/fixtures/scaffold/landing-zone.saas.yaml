@@ -343,6 +343,19 @@ aws:
     stateful_default_actions:
       - aws:drop_established
       - aws:alert_established
+    # Opt-in Site-to-Site VPN from the transit gateway to an on-premises device
+    # (aws-network). The tunnel pre-shared keys are not config: AWS keeps them in
+    # a Secrets Manager secret (preshared_key_storage: SecretsManager, default;
+    # the aws-network output vpn_preshared_key_arn names it). On-premises traffic
+    # is inspected: it default-routes to the inspection VPC. With
+    # static_routes_only, onprem_cidrs lists the on-premises prefixes (BGP learns
+    # them otherwise). The BGP ASN must differ from the transit gateway's 64512.
+    # vpn:
+    #   enabled: false
+    #   customer_gateway_ip: 203.0.113.10
+    #   customer_gateway_bgp_asn: 65000
+    #   static_routes_only: false
+    #   onprem_cidrs: [192.168.0.0/16]
 
   # Application golden path (aws-workload-<env>). All optional.
   # internal (default) | public_alb (internet-facing ALB + regional WAF; needs

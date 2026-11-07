@@ -135,6 +135,7 @@ graph TB
 
 - **Segmentation.** Prod and NonProd spokes attach to the same TGW but use **separate route tables**, so prod↔nonprod lateral traffic is not routable by default; both send egress/inter-VPC traffic through the inspection VPC.
 - **Centralized inspection.** All north-south (and configurable east-west) traffic is default-routed to the inspection VPC, where **AWS Network Firewall** (`modules/aws/network/network-firewall`) inspects it before it reaches the NAT gateway.
+- **Hybrid (Site-to-Site VPN).** Opt-in (`enable_vpn`). The VPN attachment is associated with a dedicated `hybrid` TGW route table whose only route is `0.0.0.0/0` to the inspection attachment, so traffic from on-premises is inspected before it reaches a spoke. The on-premises prefixes propagate (BGP) or are static routes into the `inspection` route table **only**; prod and nonprod never learn them. A spoke's reply therefore follows its own `0.0.0.0/0` to inspection, passes the firewall, and the inspection VPC's attachment forwards it to the VPN. Nothing is more specific than a spoke default route, so inspection cannot be bypassed.
 - **Centralized egress.** NAT lives once in the Network account, not per spoke — spokes have no NAT of their own.
 - **IPAM.** `modules/aws/network/ipam` owns the address plan; spoke CIDRs are allocated from IPAM pools to prevent overlap.
 - **Centralized endpoints.** Interface VPC endpoints (`modules/aws/network/vpc-endpoints`) are created once and shared over the TGW, so spokes reach AWS APIs privately without per-VPC endpoint sprawl.

@@ -52,3 +52,8 @@ output "vpn_tunnel_addresses" {
   description = "AWS-side public IPs of the two VPN tunnels (configure these on the on-premises device), or an empty list when enable_vpn = false."
   value       = var.enable_vpn ? [module.vpn[0].tunnel1_address, module.vpn[0].tunnel2_address] : []
 }
+
+output "vpn_preshared_key_arn" {
+  description = "ARN of the Secrets Manager secret holding the VPN tunnel pre-shared keys (read it to configure the on-premises device), or null when enable_vpn = false or vpn.preshared_key_storage = Standard."
+  value       = try(module.vpn[0].preshared_key_arn, null)
+}

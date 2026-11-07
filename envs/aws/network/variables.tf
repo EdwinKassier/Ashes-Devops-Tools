@@ -294,7 +294,7 @@ variable "enable_vpn" {
 }
 
 variable "vpn" {
-  description = "Site-to-Site VPN settings (customer_gateway_ip, customer_gateway_bgp_asn, static_routes_only, tunnel_inside_cidrs, enable_acceleration, route_table, propagate_to), used only when the VPN is enabled. Null = aws.network.vpn from config/landing-zone.yaml. AWS generates the tunnel pre-shared keys: none are set here."
+  description = "Site-to-Site VPN settings (customer_gateway_ip, customer_gateway_bgp_asn, static_routes_only, onprem_cidrs, tunnel_inside_cidrs, enable_acceleration, preshared_key_storage), used only when the VPN is enabled. Null = aws.network.vpn from config/landing-zone.yaml. The tunnel pre-shared keys are never set here: AWS stores them in Secrets Manager."
   type        = any
   default     = null
 }

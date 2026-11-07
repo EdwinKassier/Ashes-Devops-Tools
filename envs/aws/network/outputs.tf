@@ -57,3 +57,8 @@ output "vpn_tunnel_addresses" {
   description = "AWS-side public IPs of the Site-to-Site VPN tunnels (configure them on the on-premises device); empty unless the VPN is enabled."
   value       = module.aws_network_hub.vpn_tunnel_addresses
 }
+
+output "vpn_preshared_key_arn" {
+  description = "ARN of the Secrets Manager secret holding the VPN tunnel pre-shared keys, or null unless the VPN is enabled with preshared_key_storage = SecretsManager."
+  value       = module.aws_network_hub.vpn_preshared_key_arn
+}

@@ -63,3 +63,12 @@ run "vgw_termination" {
     error_message = "one static route must be planned for a VGW static-routing VPN"
   }
 }
+
+run "pre_shared_keys_default_to_secrets_manager" {
+  command = plan
+
+  assert {
+    condition     = aws_vpn_connection.this.preshared_key_storage == "SecretsManager"
+    error_message = "Tunnel pre-shared keys must default to Secrets Manager storage, not state."
+  }
+}

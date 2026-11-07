@@ -63,18 +63,19 @@ The following resources are created:
 
 - resource.aws_customer_gateway.this (modules/aws/network/vpn/main.tf#L6)
 - resource.aws_vpn_connection.this (modules/aws/network/vpn/main.tf#L13)
-- resource.aws_vpn_connection_route.this (modules/aws/network/vpn/main.tf#L46)
+- resource.aws_vpn_connection_route.this (modules/aws/network/vpn/main.tf#L47)
 
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_customer_gateway_ip"></a> [customer\_gateway\_ip](#input\_customer\_gateway\_ip) | Public IP address of the on-premises (customer) VPN device. | `string` | n/a | yes |
+| <a name="input_customer_gateway_ip"></a> [customer\_gateway\_ip](#input\_customer\_gateway\_ip) | Public IPv4 address of the on-premises (customer) VPN device. Private, loopback, link-local and carrier-grade NAT ranges are rejected. | `string` | n/a | yes |
 | <a name="input_name"></a> [name](#input\_name) | Name prefix for the VPN resources (customer gateway, connection). | `string` | n/a | yes |
 | <a name="input_attach_to"></a> [attach\_to](#input\_attach\_to) | Where to terminate the VPN on the AWS side: 'transit\_gateway' (set transit\_gateway\_id) or 'vpn\_gateway' (set vpn\_gateway\_id). | `string` | `"transit_gateway"` | no |
-| <a name="input_customer_gateway_bgp_asn"></a> [customer\_gateway\_bgp\_asn](#input\_customer\_gateway\_bgp\_asn) | BGP ASN of the customer gateway (used for dynamic routing). | `number` | `65000` | no |
+| <a name="input_customer_gateway_bgp_asn"></a> [customer\_gateway\_bgp\_asn](#input\_customer\_gateway\_bgp\_asn) | BGP ASN of the customer gateway (used for dynamic routing). 1 to 4294967294. | `number` | `65000` | no |
 | <a name="input_enable_acceleration"></a> [enable\_acceleration](#input\_enable\_acceleration) | Enable AWS Global Accelerator for the VPN connection (requires a Transit Gateway attachment). | `bool` | `false` | no |
+| <a name="input_preshared_key_storage"></a> [preshared\_key\_storage](#input\_preshared\_key\_storage) | Where AWS keeps the tunnel pre-shared keys: SecretsManager (default; the keys live in an AWS-managed Secrets Manager secret and the connection exposes only its ARN) or Standard (the keys are generated into Terraform state). | `string` | `"SecretsManager"` | no |
 | <a name="input_static_routes"></a> [static\_routes](#input\_static\_routes) | Destination CIDR blocks for static routes (only used when static\_routes\_only = true). | `list(string)` | `[]` | no |
 | <a name="input_static_routes_only"></a> [static\_routes\_only](#input\_static\_routes\_only) | Use static routing (true) instead of BGP dynamic routing (false). Dynamic (BGP) is preferred where the customer device supports it. | `bool` | `false` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to the VPN resources. | `map(string)` | `{}` | no |
@@ -87,6 +88,7 @@ The following resources are created:
 | Name | Description |
 |------|-------------|
 | <a name="output_customer_gateway_id"></a> [customer\_gateway\_id](#output\_customer\_gateway\_id) | ID of the customer gateway. |
+| <a name="output_preshared_key_arn"></a> [preshared\_key\_arn](#output\_preshared\_key\_arn) | ARN of the Secrets Manager secret holding the tunnel pre-shared keys (null when preshared\_key\_storage = Standard). Read the keys from there to configure the on-premises device. |
 | <a name="output_transit_gateway_attachment_id"></a> [transit\_gateway\_attachment\_id](#output\_transit\_gateway\_attachment\_id) | ID of the transit gateway attachment the VPN connection creates (null when attach\_to = vpn\_gateway). Associate it with a TGW route table to route through it. |
 | <a name="output_tunnel1_address"></a> [tunnel1\_address](#output\_tunnel1\_address) | Public IP address of the first VPN tunnel (AWS side). |
 | <a name="output_tunnel2_address"></a> [tunnel2\_address](#output\_tunnel2\_address) | Public IP address of the second VPN tunnel (AWS side). |

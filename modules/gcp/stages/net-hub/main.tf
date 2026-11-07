@@ -220,6 +220,10 @@ module "ncc_hub_spoke" {
 
 # Under NCC the hub's HA VPN tunnels become a hybrid spoke, so on-premises
 # routes reach the other spokes through the hub instead of only the hub VPC.
+locals {
+  ncc_vpn_spoke_group = var.ncc.enabled ? module.ncc_hub[0].center_group : null
+}
+
 module "ncc_vpn_spoke" {
   source = "../../network/ncc-spoke"
   count  = var.ncc.enabled && var.vpn.enabled ? 1 : 0
@@ -229,8 +233,11 @@ module "ncc_vpn_spoke" {
   description = "NCC hybrid spoke for the hub HA VPN tunnels"
   labels      = var.labels
   hub_id      = module.ncc_hub[0].id
-  group       = module.ncc_hub[0].spoke_group
-  location    = var.region
+  # Hybrid spokes join the CENTER group (default on MESH): on a STAR hub, edge
+  # spokes reach only the center, so on-premises would otherwise see just the
+  # hub VPC and not the environment spokes.
+  group    = local.ncc_vpn_spoke_group
+  location = var.region
 
   linked_vpn_tunnels = {
     uris                       = module.vpn[0].tunnel_self_links
