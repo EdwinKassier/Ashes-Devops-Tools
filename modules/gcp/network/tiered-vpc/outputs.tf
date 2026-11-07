@@ -47,3 +47,17 @@ output "firewall_policy_name" {
   description = "Name of the tier network firewall policy (pass to network/internal-lb firewall_policy), or null in firewall_mode = legacy."
   value       = local.create_firewall_policy ? google_compute_network_firewall_policy.tier[0].name : null
 }
+
+output "firewall_policy_rules" {
+  description = "The tier network firewall policy rules keyed by rule key (priority, direction, action, source/destination ranges, egress target service accounts); empty in firewall_mode = legacy."
+  value = {
+    for k, r in local.firewall_policy_rules : k => {
+      priority                = r.priority
+      direction               = r.direction
+      action                  = r.action
+      src_ip_ranges           = r.src_ip_ranges
+      dest_ip_ranges          = r.dest_ip_ranges
+      target_service_accounts = r.target_service_accounts
+    }
+  }
+}

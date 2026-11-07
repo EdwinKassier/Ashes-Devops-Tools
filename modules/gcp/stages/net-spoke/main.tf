@@ -59,6 +59,9 @@ module "network" {
     enable_iap_access  = var.firewall.enable_iap_access
     compute_tier_ports = var.firewall.compute_tier_ports
     database_ports     = var.firewall.database_ports
+
+    api_gateway_source_ranges               = var.firewall.api_gateway_source_ranges
+    database_egress_target_service_accounts = var.firewall.database_egress_target_service_accounts
   }
 }
 

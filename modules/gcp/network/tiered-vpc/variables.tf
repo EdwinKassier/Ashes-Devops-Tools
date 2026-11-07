@@ -145,7 +145,7 @@ variable "firewall_mode" {
 }
 
 variable "firewall_policy_enforcement_order" {
-  description = "Network firewall policy enforcement order on the VPC: BEFORE_CLASSIC_FIREWALL or AFTER_CLASSIC_FIREWALL. null derives it from firewall_mode: policy sets BEFORE_CLASSIC_FIREWALL; legacy and both leave it unset (API default AFTER_CLASSIC_FIREWALL). Updates the network in place."
+  description = "Network firewall policy enforcement order on the VPC: BEFORE_CLASSIC_FIREWALL or AFTER_CLASSIC_FIREWALL. null derives it from firewall_mode: policy sets BEFORE_CLASSIC_FIREWALL; legacy and both leave it unset (API default AFTER_CLASSIC_FIREWALL). Updates the network in place. WARNING: switching from both to policy with this unset flips the order in the same apply that deletes the legacy rules; set it explicitly (a check warns when it is unset in policy mode)."
   type        = string
   default     = null
 

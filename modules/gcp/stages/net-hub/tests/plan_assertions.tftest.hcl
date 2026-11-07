@@ -145,11 +145,43 @@ run "firewall_mode_policy_passes_through" {
   command = plan
 
   variables {
-    firewall_mode = "policy"
+    firewall_mode                     = "policy"
+    firewall_policy_enforcement_order = "BEFORE_CLASSIC_FIREWALL"
   }
 
   assert {
     condition     = output.firewall_policy_name == "hub-vpc-core-tier-policy"
     error_message = "firewall_mode must reach network/tiered-vpc, which then plans the <name>-tier-policy network firewall policy."
+  }
+}
+
+run "firewall_policy_fields_pass_through" {
+  command = plan
+
+  variables {
+    firewall_mode                     = "both"
+    firewall_policy_enforcement_order = "AFTER_CLASSIC_FIREWALL"
+    firewall = {
+      api_gateway_source_ranges               = ["10.200.0.0/24"]
+      database_egress_target_service_accounts = ["db@mock-project.iam.gserviceaccount.com"]
+    }
+  }
+
+  assert {
+    condition     = module.network.firewall_policy_rules["apigateway-to-public"].src_ip_ranges == tolist(["10.200.0.0/24"]) && module.network.firewall_policy_rules["database-deny-egress"].target_service_accounts == tolist(["db@mock-project.iam.gserviceaccount.com"])
+    error_message = "firewall.api_gateway_source_ranges and firewall.database_egress_target_service_accounts must reach network/tiered-vpc."
+  }
+}
+
+run "firewall_policy_fields_default_to_current_behaviour" {
+  command = plan
+
+  variables {
+    firewall_mode = "both"
+  }
+
+  assert {
+    condition     = !contains(keys(module.network.firewall_policy_rules), "apigateway-to-public") && module.network.firewall_policy_rules["database-deny-egress"].target_service_accounts == null
+    error_message = "Unset, the new firewall fields must keep the defaults: no API Gateway policy rule and no egress target service accounts."
   }
 }

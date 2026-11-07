@@ -432,6 +432,19 @@ locals {
   }
 }
 
+# Terraform cannot read the previous firewall_mode, so it cannot tell a
+# greenfield policy network from one moving off `both`. This check warns
+# whenever policy mode derives the enforcement order implicitly: moving from
+# `both` with the override unset would delete the legacy rules AND flip the
+# order to BEFORE_CLASSIC_FIREWALL in one apply. Setting the order explicitly
+# silences it.
+check "firewall_policy_enforcement_order_explicit" {
+  assert {
+    condition     = var.firewall_mode != "policy" || var.firewall_policy_enforcement_order != null
+    error_message = "firewall_mode = \"policy\" with firewall_policy_enforcement_order unset derives BEFORE_CLASSIC_FIREWALL. If this network is moving from \"both\", this one apply both deletes the legacy VPC rules and flips the enforcement order. Set firewall_policy_enforcement_order explicitly: AFTER_CLASSIC_FIREWALL for runbook step 3, BEFORE_CLASSIC_FIREWALL for step 4 (docs/runbooks/gcp-firewall-policy-migration.md)."
+  }
+}
+
 resource "google_compute_network_firewall_policy" "tier" {
   count = local.create_firewall_policy ? 1 : 0
 

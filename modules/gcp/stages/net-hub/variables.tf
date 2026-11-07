@@ -89,12 +89,15 @@ variable "network" {
 }
 
 variable "firewall" {
-  description = "Baseline tier firewall: rule logging, the IAP SSH/RDP allow rule, and the ports opened public to compute and compute to database."
+  description = "Baseline tier firewall: rule logging, the IAP SSH/RDP allow rule, and the ports opened public to compute and compute to database. api_gateway_source_ranges and database_egress_target_service_accounts apply only to the network firewall policy (firewall_mode both / policy)."
   type = object({
     enable_logging     = optional(bool, true)
     enable_iap_access  = optional(bool, true)
     compute_tier_ports = optional(list(string), ["8080", "8443", "3000"])
     database_ports     = optional(list(string), ["3306", "5432", "6379"])
+    # Network firewall policy only (firewall_mode both / policy).
+    api_gateway_source_ranges               = optional(list(string), [])
+    database_egress_target_service_accounts = optional(list(string), [])
   })
   default  = {}
   nullable = false
@@ -369,7 +372,7 @@ variable "firewall_mode" {
 }
 
 variable "firewall_policy_enforcement_order" {
-  description = "Network firewall policy enforcement order on the VPC: BEFORE_CLASSIC_FIREWALL or AFTER_CLASSIC_FIREWALL. null derives it from firewall_mode (policy sets BEFORE_CLASSIC_FIREWALL; legacy and both leave the API default AFTER_CLASSIC_FIREWALL). Updates the network in place."
+  description = "Network firewall policy enforcement order on the VPC: BEFORE_CLASSIC_FIREWALL or AFTER_CLASSIC_FIREWALL. null derives it from firewall_mode (policy sets BEFORE_CLASSIC_FIREWALL; legacy and both leave the API default AFTER_CLASSIC_FIREWALL). Updates the network in place. WARNING: switching from both to policy with this unset flips the order in the same apply that deletes the legacy rules; set it explicitly."
   type        = string
   default     = null
 

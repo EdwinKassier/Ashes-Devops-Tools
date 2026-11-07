@@ -103,9 +103,9 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_compute_network_firewall_policy.tier (modules/gcp/network/tiered-vpc/main.tf#L435)
-- resource.google_compute_network_firewall_policy_association.tier (modules/gcp/network/tiered-vpc/main.tf#L443)
-- resource.google_compute_network_firewall_policy_rule.tier (modules/gcp/network/tiered-vpc/main.tf#L452)
+- resource.google_compute_network_firewall_policy.tier (modules/gcp/network/tiered-vpc/main.tf#L448)
+- resource.google_compute_network_firewall_policy_association.tier (modules/gcp/network/tiered-vpc/main.tf#L456)
+- resource.google_compute_network_firewall_policy_rule.tier (modules/gcp/network/tiered-vpc/main.tf#L465)
 - resource.terraform_data.deletion_protection_guard (modules/gcp/network/tiered-vpc/main.tf#L56)
 - resource.terraform_data.subnet_cidr_count_guard (modules/gcp/network/tiered-vpc/main.tf#L68)
 
@@ -122,7 +122,7 @@ The following resources are created:
 | <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Create a prevent\_destroy guard that blocks any plan destroying the VPC and subnet stack, and enable VPC deletion protection. | `bool` | `false` | no |
 | <a name="input_firewall"></a> [firewall](#input\_firewall) | Baseline tier firewall settings: rule logging, the IAP SSH/RDP allow rule, and the ports opened public to compute and compute to database. api\_gateway\_source\_ranges (the CIDRs API Gateway traffic arrives from) and database\_egress\_target\_service\_accounts apply only to the network firewall policy (firewall\_mode both / policy); the API Gateway policy rule is created only when api\_gateway\_source\_ranges is non-empty. | <pre>object({<br/>    enable_logging                          = optional(bool, true)<br/>    enable_iap_access                       = optional(bool, true)<br/>    compute_tier_ports                      = optional(list(string), ["8080", "8443", "3000"])<br/>    database_ports                          = optional(list(string), ["3306", "5432", "6379"])<br/>    api_gateway_source_ranges               = optional(list(string), [])<br/>    database_egress_target_service_accounts = optional(list(string), [])<br/>  })</pre> | `{}` | no |
 | <a name="input_firewall_mode"></a> [firewall\_mode](#input\_firewall\_mode) | How the baseline tier firewall is enforced. legacy: tag-based VPC firewall rules (default). both: the VPC rules plus one global network firewall policy whose rules select tiers by subnet CIDR (the migration step). policy: the network firewall policy only; the VPC rules are removed. See docs/runbooks/gcp-firewall-policy-migration.md. | `string` | `"legacy"` | no |
-| <a name="input_firewall_policy_enforcement_order"></a> [firewall\_policy\_enforcement\_order](#input\_firewall\_policy\_enforcement\_order) | Network firewall policy enforcement order on the VPC: BEFORE\_CLASSIC\_FIREWALL or AFTER\_CLASSIC\_FIREWALL. null derives it from firewall\_mode: policy sets BEFORE\_CLASSIC\_FIREWALL; legacy and both leave it unset (API default AFTER\_CLASSIC\_FIREWALL). Updates the network in place. | `string` | `null` | no |
+| <a name="input_firewall_policy_enforcement_order"></a> [firewall\_policy\_enforcement\_order](#input\_firewall\_policy\_enforcement\_order) | Network firewall policy enforcement order on the VPC: BEFORE\_CLASSIC\_FIREWALL or AFTER\_CLASSIC\_FIREWALL. null derives it from firewall\_mode: policy sets BEFORE\_CLASSIC\_FIREWALL; legacy and both leave it unset (API default AFTER\_CLASSIC\_FIREWALL). Updates the network in place. WARNING: switching from both to policy with this unset flips the order in the same apply that deletes the legacy rules; set it explicitly (a check warns when it is unset in policy mode). | `string` | `null` | no |
 | <a name="input_flow_logs"></a> [flow\_logs](#input\_flow\_logs) | Subnet VPC flow-log settings applied to every tier (flow logs are always on). | <pre>object({<br/>    aggregation_interval = optional(string, "INTERVAL_5_SEC")<br/>    sampling             = optional(number, 0.5)<br/>  })</pre> | `{}` | no |
 | <a name="input_secondary_ranges"></a> [secondary\_ranges](#input\_secondary\_ranges) | Secondary IP ranges for the private (compute) subnets, keyed by zone name (GKE Pods and Services). | <pre>map(list(object({<br/>    range_name    = string<br/>    ip_cidr_range = string<br/>  })))</pre> | `{}` | no |
 | <a name="input_shared_vpc_host"></a> [shared\_vpc\_host](#input\_shared\_vpc\_host) | Enable the owning project as a Shared VPC host. | `bool` | `false` | no |
@@ -134,6 +134,7 @@ The following resources are created:
 |------|-------------|
 | <a name="output_firewall_policy_id"></a> [firewall\_policy\_id](#output\_firewall\_policy\_id) | ID of the tier network firewall policy, or null in firewall\_mode = legacy. |
 | <a name="output_firewall_policy_name"></a> [firewall\_policy\_name](#output\_firewall\_policy\_name) | Name of the tier network firewall policy (pass to network/internal-lb firewall\_policy), or null in firewall\_mode = legacy. |
+| <a name="output_firewall_policy_rules"></a> [firewall\_policy\_rules](#output\_firewall\_policy\_rules) | The tier network firewall policy rules keyed by rule key (priority, direction, action, source/destination ranges, egress target service accounts); empty in firewall\_mode = legacy. |
 | <a name="output_network_id"></a> [network\_id](#output\_network\_id) | The VPC network ID. |
 | <a name="output_network_name"></a> [network\_name](#output\_network\_name) | The VPC network name. |
 | <a name="output_network_self_link"></a> [network\_self\_link](#output\_network\_self\_link) | The VPC network self link. |

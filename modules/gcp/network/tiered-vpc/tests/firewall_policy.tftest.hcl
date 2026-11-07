@@ -126,6 +126,9 @@ run "policy_mode_no_vpc_rules" {
     firewall_mode = "policy"
   }
 
+  # Implicit enforcement order in policy mode raises the flip warning.
+  expect_failures = [check.firewall_policy_enforcement_order_explicit]
+
   assert {
     condition = alltrue([
       length(module.firewall_apigateway_to_public) == 0,
@@ -168,7 +171,8 @@ run "no_trailing_deny_all" {
   command = plan
 
   variables {
-    firewall_mode = "policy"
+    firewall_mode                     = "policy"
+    firewall_policy_enforcement_order = "BEFORE_CLASSIC_FIREWALL"
     firewall = {
       api_gateway_source_ranges = ["10.10.0.0/24"]
     }
@@ -197,7 +201,8 @@ run "policy_mode_without_apigw_ranges_or_iap" {
   command = plan
 
   variables {
-    firewall_mode = "policy"
+    firewall_mode                     = "policy"
+    firewall_policy_enforcement_order = "BEFORE_CLASSIC_FIREWALL"
     firewall = {
       enable_iap_access = false
     }
@@ -206,5 +211,20 @@ run "policy_mode_without_apigw_ranges_or_iap" {
   assert {
     condition     = !contains(keys(google_compute_network_firewall_policy_rule.tier), "apigateway-to-public") && !contains(keys(google_compute_network_firewall_policy_rule.tier), "iap-ssh-rdp")
     error_message = "The API gateway rule needs explicit source ranges and the IAP rule follows firewall.enable_iap_access."
+  }
+}
+
+run "explicit_enforcement_order_silences_flip_warning" {
+  command = plan
+
+  variables {
+    firewall_mode                     = "policy"
+    firewall_policy_enforcement_order = "BEFORE_CLASSIC_FIREWALL"
+  }
+
+  # No expect_failures: the check must pass once the order is explicit.
+  assert {
+    condition     = module.vpc.network.network_firewall_policy_enforcement_order == "BEFORE_CLASSIC_FIREWALL"
+    error_message = "An explicit BEFORE_CLASSIC_FIREWALL must reach the network."
   }
 }

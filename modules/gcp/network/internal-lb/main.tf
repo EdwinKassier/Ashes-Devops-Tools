@@ -239,6 +239,18 @@ resource "google_compute_firewall" "allow_proxy" { #tfsec:ignore:google-compute-
   target_tags   = var.backend_target_tags
 }
 
+# Policy rule priorities must be unique within the policy, and several ILBs
+# usually share one VPC policy. Unless firewall_policy_rule_priority is set,
+# derive a stable priority from the ILB name: 1000 + (first 7 hex digits of
+# sha256(name) mod 63000), i.e. 1000-63999, which avoids the 64000-64999 block
+# reserved for the network/tiered-vpc tier rules.
+locals {
+  firewall_policy_rule_priority = coalesce(
+    var.firewall_policy_rule_priority,
+    1000 + parseint(substr(sha256(var.name), 0, 7), 16) % 63000,
+  )
+}
+
 # Network firewall policy rules cannot select network tags, so the policy rule
 # has no target: it admits the proxy-only subnet ranges on backend_port to
 # every instance in the VPC. The source stays the internal proxy-only CIDRs.
@@ -249,7 +261,7 @@ resource "google_compute_network_firewall_policy_rule" "allow_proxy" {
   firewall_policy = var.firewall_policy
   rule_name       = "${var.name}-allow-proxy"
   description     = "Allow the proxy-only subnet to reach ${var.name} backends"
-  priority        = var.firewall_priority
+  priority        = local.firewall_policy_rule_priority
   direction       = "INGRESS"
   action          = "allow"
 
@@ -268,8 +280,8 @@ resource "google_compute_network_firewall_policy_rule" "allow_proxy" {
       error_message = "firewall_policy (the network firewall policy name, e.g. the tiered-vpc firewall_policy_name output) is required when firewall_mode is both or policy and create_firewall_rule is true."
     }
     precondition {
-      condition     = var.firewall_priority < 64000 || var.firewall_priority > 64999
-      error_message = "firewall_priority must lie outside 64000-64999 in firewall_mode both / policy: that block is reserved for the network/tiered-vpc tier rules in the same policy."
+      condition     = local.firewall_policy_rule_priority < 64000 || local.firewall_policy_rule_priority > 64999
+      error_message = "firewall_policy_rule_priority must lie outside 64000-64999: that block is reserved for the network/tiered-vpc tier rules in the same policy."
     }
   }
 }
