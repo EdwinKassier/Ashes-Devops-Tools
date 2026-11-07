@@ -472,9 +472,33 @@ variable "app_services" {
     docs/guides/deploying-a-service.md for a worked entry. Null (default) =
     gcp.environments.<environment>.services from config/landing-zone.yaml, else
     none; an explicit value replaces the config.
+
+    `service_team = "<key>"` (a key of service_teams) deploys the service into
+    that team's service project instead of the host project; the project is
+    resolved from the team and its Cloud Run service agent is granted Shared VPC
+    subnet access. Without it the service stays in the host project.
   EOT
   type        = any
   default     = null
+
+  validation {
+    condition = alltrue([
+      for k, s in merge({ for k, s in coalesce(var.app_services, {}) : k => s }, { for k, s in try(local.cfg.app_services[var.environment], {}) : k => s if var.app_services == null }) :
+      try(s.service_team, null) == null || contains(
+        keys(merge({ for k, v in coalesce(var.service_teams, {}) : k => v }, { for k, v in try(local.cfg.service_teams[var.environment], {}) : k => v if var.service_teams == null })),
+        s.service_team
+      )
+    ])
+    error_message = "An app service sets service_team to a key that is not declared in service_teams (gcp.environments.<env>.service_teams or the service_teams variable). Declare the team first, or remove service_team to deploy into the host project."
+  }
+
+  validation {
+    condition = alltrue([
+      for k, s in merge({ for k, s in coalesce(var.app_services, {}) : k => s }, { for k, s in try(local.cfg.app_services[var.environment], {}) : k => s if var.app_services == null }) :
+      try(s.service_team, null) == null || (try(s.project_id, null) == null && try(s.project_number, null) == null)
+    ])
+    error_message = "An app service sets both service_team and project_id/project_number. Use service_team (the project is resolved from the team) or an explicit project_id, not both."
+  }
 }
 
 variable "app_subnetwork_id" {

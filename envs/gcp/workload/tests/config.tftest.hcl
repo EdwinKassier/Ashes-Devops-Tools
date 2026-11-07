@@ -92,3 +92,69 @@ run "variable_overrides_config" {
     error_message = "an explicit app_services / service_teams variable must win over the config file."
   }
 }
+
+# service_team = "<key>" resolves the service's project from the team module;
+# a service without it stays in the host project.
+run "service_team_resolves_service_project" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.team-service.yaml"
+  }
+
+  assert {
+    condition     = local.app_services["api"].grant_network_access == true && !contains(keys(local.app_services["worker"]), "grant_network_access")
+    error_message = "a service with service_team must be deployed into the team project (Shared VPC grants on); a service without must not."
+  }
+
+  assert {
+    condition     = contains(local.team_service_apis["payments"], "run.googleapis.com") && contains(local.team_service_apis["payments"], "artifactregistry.googleapis.com")
+    error_message = "a team that hosts a service must have the Cloud Run and Artifact Registry APIs activated."
+  }
+}
+
+run "service_without_team_stays_in_host_project" {
+  command = plan
+
+  assert {
+    condition     = alltrue([for k, s in local.app_services : !contains(keys(s), "project_id")])
+    error_message = "services without service_team must not carry a project_id (they deploy into the host project)."
+  }
+
+  assert {
+    condition     = length(local.team_service_apis["payments"]) == 0
+    error_message = "a team that hosts no service must not get extra APIs."
+  }
+}
+
+run "unknown_service_team_is_rejected" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.unknown-team.yaml"
+  }
+
+  expect_failures = [var.app_services]
+}
+
+run "unknown_service_team_in_variable_is_rejected" {
+  command = plan
+
+  variables {
+    app_services  = { api = { service_team = "ghost" } }
+    service_teams = {}
+  }
+
+  expect_failures = [var.app_services]
+}
+
+run "service_team_and_project_id_are_exclusive" {
+  command = plan
+
+  variables {
+    app_services  = { api = { service_team = "payments", project_id = "x-12345" } }
+    service_teams = { payments = { project_admin_group_email = "p@cfg.example", shared_vpc_subnets = { a = { region = "europe-west1", subnet_name = "s" } } } }
+  }
+
+  expect_failures = [var.app_services]
+}

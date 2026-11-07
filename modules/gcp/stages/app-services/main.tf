@@ -20,18 +20,42 @@ locals {
   services_with_alerts = var.enable_alerts ? { for k, s in var.services : k => s if s.alerts.enabled } : {}
   services_with_pubsub = { for k, s in var.services : k => s if s.pubsub.enabled }
 
+  # Where each service lives: its own project_id (a team service project), else
+  # the environment host project. The WIF pool and GKE stay in var.project_id.
+  service_project = { for k, s in var.services : k => coalesce(s.project_id, var.project_id) }
+  service_project_number = {
+    for k, s in var.services : k => s.project_id != null ? s.project_number : var.project_number
+  }
+
   # Deterministic Pub/Sub names (env vars + outputs without read-back).
-  pubsub_topic        = { for k, s in local.services_with_pubsub : k => "projects/${var.project_id}/topics/${k}" }
-  pubsub_subscription = { for k, s in local.services_with_pubsub : k => "projects/${var.project_id}/subscriptions/${k}-sub" }
-  pubsub_dlq_topic    = { for k, s in local.services_with_pubsub : k => "projects/${var.project_id}/topics/${k}-dlq" }
-  pubsub_agent        = var.project_number == null ? null : "serviceAccount:service-${var.project_number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+  pubsub_topic        = { for k, s in local.services_with_pubsub : k => "projects/${local.service_project[k]}/topics/${k}" }
+  pubsub_subscription = { for k, s in local.services_with_pubsub : k => "projects/${local.service_project[k]}/subscriptions/${k}-sub" }
+  pubsub_dlq_topic    = { for k, s in local.services_with_pubsub : k => "projects/${local.service_project[k]}/topics/${k}-dlq" }
+  pubsub_agent = {
+    for k, s in local.services_with_pubsub : k => local.service_project_number[k] == null ? null : "serviceAccount:service-${local.service_project_number[k]}@gcp-sa-pubsub.iam.gserviceaccount.com"
+  }
 
   # Deterministic names (known at plan time; no read-back of computed attributes).
-  runtime_sa_email = { for k, s in var.services : k => "${k}-run@${var.project_id}.iam.gserviceaccount.com" }
-  deploy_sa_email  = { for k, s in local.services_with_github : k => "${k}-deploy@${var.project_id}.iam.gserviceaccount.com" }
+  runtime_sa_email = { for k, s in var.services : k => "${k}-run@${local.service_project[k]}.iam.gserviceaccount.com" }
+  deploy_sa_email  = { for k, s in local.services_with_github : k => "${k}-deploy@${local.service_project[k]}.iam.gserviceaccount.com" }
   db_instance_name = { for k, s in local.services_with_db : k => "${k}-db" }
 
-  image_repository = { for k, s in var.services : k => "${var.region}-docker.pkg.dev/${var.project_id}/${k}/${k}" }
+  image_repository = { for k, s in var.services : k => "${var.region}-docker.pkg.dev/${local.service_project[k]}/${k}/${k}" }
+
+  # Services in a team (Shared VPC service) project. The caller sets
+  # grant_network_access explicitly when project_id is not yet known (a project
+  # created in the same plan); otherwise it is derived from project_id.
+  services_in_team_project = {
+    for k, s in var.services : k => s
+    if s.grant_network_access != null ? s.grant_network_access : (s.project_id != null && s.project_id != var.project_id)
+  }
+  # Shared VPC subnet of each such service: projects/<host>/regions/<r>/subnetworks/<n>.
+  team_service_subnet = {
+    for k, s in local.services_in_team_project : k => regex(
+      "^projects/(?P<project>[^/]+)/regions/(?P<region>[^/]+)/subnetworks/(?P<name>[^/]+)$",
+      coalesce(s.subnetwork_id, var.subnetwork_id)
+    )
+  }
 
   # The image the first revision runs: the service's own, else the placeholder.
   initial_image = { for k, s in var.services : k => coalesce(s.image, var.bootstrap_image) }
@@ -115,7 +139,7 @@ module "registry" {
   source   = "../../artifact-registry"
   for_each = var.services
 
-  project_id   = var.project_id
+  project_id   = local.service_project[each.key]
   region       = var.region
   kms_key_name = var.artifact_registry_kms_key_name
   labels       = merge(var.labels, { service = each.key })
@@ -165,7 +189,7 @@ module "registry" {
 resource "google_service_account" "runtime" {
   for_each = var.services
 
-  project      = var.project_id
+  project      = local.service_project[each.key]
   account_id   = "${each.key}-run"
   display_name = "${each.key} runtime (${var.environment})"
   description  = "Cloud Run runtime identity for ${each.key}. Grants: secretAccessor on its own secrets, Cloud SQL client/instanceUser on its own instance."
@@ -176,7 +200,7 @@ resource "google_service_account" "runtime" {
 resource "google_secret_manager_secret_iam_member" "runtime" {
   for_each = local.secret_grants
 
-  project   = var.project_id
+  project   = local.service_project[each.value.service]
   secret_id = each.value.secret
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${local.runtime_sa_email[each.value.service]}"
@@ -187,7 +211,7 @@ resource "google_secret_manager_secret_iam_member" "runtime" {
 resource "google_project_iam_member" "runtime_extra" {
   for_each = local.runtime_role_grants
 
-  project = var.project_id
+  project = local.service_project[each.value.service]
   role    = each.value.role
   member  = "serviceAccount:${local.runtime_sa_email[each.value.service]}"
 
@@ -202,7 +226,7 @@ module "service" {
   source   = "../../compute/cloud-run"
   for_each = var.services
 
-  project_id            = var.project_id
+  project_id            = local.service_project[each.key]
   location              = var.region
   name                  = each.key
   image                 = local.initial_image[each.key]
@@ -221,7 +245,7 @@ module "service" {
   env_vars = merge(
     each.value.env_vars,
     each.value.database == null ? {} : {
-      DB_INSTANCE_CONNECTION_NAME = "${var.project_id}:${var.region}:${local.db_instance_name[each.key]}"
+      DB_INSTANCE_CONNECTION_NAME = "${local.service_project[each.key]}:${var.region}:${local.db_instance_name[each.key]}"
       DB_IAM_USER                 = trimsuffix(local.runtime_sa_email[each.key], ".gserviceaccount.com")
       DB_NAME                     = try(each.value.database.databases[0], "")
     },
@@ -251,13 +275,16 @@ module "service" {
     google_service_account.runtime,
     google_secret_manager_secret_iam_member.runtime,
     google_project_service.this,
+    # Direct VPC egress needs the service agent's Shared VPC access first.
+    google_compute_subnetwork_iam_member.serverless_network_user,
+    google_project_iam_member.serverless_network_viewer,
   ]
 }
 
 resource "google_cloud_run_v2_service_iam_member" "invoker" {
   for_each = local.invoker_grants
 
-  project  = var.project_id
+  project  = local.service_project[each.value.service]
   location = var.region
   name     = module.service[each.value.service].name
   role     = "roles/run.invoker"
@@ -272,7 +299,7 @@ module "database" {
   source   = "../../data/cloud-sql"
   for_each = local.services_with_db
 
-  project_id       = var.project_id
+  project_id       = local.service_project[each.key]
   region           = var.region
   name             = local.db_instance_name[each.key]
   database_version = each.value.database.database_version
@@ -313,17 +340,46 @@ resource "google_project_iam_member" "runtime_sql" {
     }
   ]...)
 
-  project = var.project_id
+  project = local.service_project[each.value.service]
   role    = each.value.role
   member  = "serviceAccount:${local.runtime_sa_email[each.value.service]}"
 
   condition {
     title       = "${each.value.service}-db-only"
     description = "Only the ${local.db_instance_name[each.value.service]} instance."
-    expression  = "resource.name == \"projects/${var.project_id}/instances/${local.db_instance_name[each.value.service]}\""
+    expression  = "resource.name == \"projects/${local.service_project[each.value.service]}/instances/${local.db_instance_name[each.value.service]}\""
   }
 
   depends_on = [google_service_account.runtime]
+}
+
+# =============================================================================
+# SHARED VPC ACCESS — services running in a team service project
+# =============================================================================
+#
+# Cloud Run Direct VPC egress attaches the revision to the host project's subnet
+# on behalf of the Cloud Run service agent of the SERVICE's project
+# (service-<number>@serverless-robot-prod). That agent needs
+# roles/compute.networkUser on the subnet (not project-wide) and
+# roles/compute.networkViewer on the host project. A service in the host project
+# needs neither: this creates nothing for it.
+
+resource "google_compute_subnetwork_iam_member" "serverless_network_user" {
+  for_each = local.services_in_team_project
+
+  project    = local.team_service_subnet[each.key].project
+  region     = local.team_service_subnet[each.key].region
+  subnetwork = local.team_service_subnet[each.key].name
+  role       = "roles/compute.networkUser"
+  member     = "serviceAccount:service-${local.service_project_number[each.key]}@serverless-robot-prod.iam.gserviceaccount.com"
+}
+
+resource "google_project_iam_member" "serverless_network_viewer" {
+  for_each = local.services_in_team_project
+
+  project = var.project_id
+  role    = "roles/compute.networkViewer"
+  member  = "serviceAccount:service-${local.service_project_number[each.key]}@serverless-robot-prod.iam.gserviceaccount.com"
 }
 
 # =============================================================================
@@ -379,7 +435,7 @@ resource "google_iam_workload_identity_pool_provider" "github" {
 resource "google_service_account" "deploy" {
   for_each = local.services_with_github
 
-  project      = var.project_id
+  project      = local.service_project[each.key]
   account_id   = "${each.key}-deploy"
   display_name = "${each.key} deploy (${var.environment})"
   description  = "GitHub Actions deploy identity for ${each.key} (repository_id ${each.value.github.repository_id}). run.developer on the service, artifactregistry.writer on the repo, serviceAccountUser on the runtime SA only."
@@ -402,7 +458,7 @@ resource "google_service_account_iam_member" "deploy_wif" {
 resource "google_cloud_run_v2_service_iam_member" "deploy" {
   for_each = local.services_with_github
 
-  project  = var.project_id
+  project  = local.service_project[each.key]
   location = var.region
   name     = module.service[each.key].name
   role     = "roles/run.developer"
@@ -414,7 +470,7 @@ resource "google_cloud_run_v2_service_iam_member" "deploy" {
 resource "google_artifact_registry_repository_iam_member" "deploy" {
   for_each = local.services_with_github
 
-  project    = var.project_id
+  project    = local.service_project[each.key]
   location   = var.region
   repository = module.registry[each.key].repository_ids[each.key]
   role       = "roles/artifactregistry.writer"
@@ -446,7 +502,7 @@ resource "google_service_account_iam_member" "deploy_act_as_runtime" {
 resource "google_monitoring_alert_policy" "error_ratio" {
   for_each = local.services_with_alerts
 
-  project      = var.project_id
+  project      = local.service_project[each.key]
   display_name = "${var.environment}/${each.key}: 5xx ratio > ${format("%.3g", each.value.alerts.error_ratio_threshold * 100)}%"
   combiner     = "OR"
   severity     = "ERROR"
@@ -498,7 +554,7 @@ resource "google_monitoring_alert_policy" "error_ratio" {
 resource "google_monitoring_alert_policy" "latency_p99" {
   for_each = local.services_with_alerts
 
-  project      = var.project_id
+  project      = local.service_project[each.key]
   display_name = "${var.environment}/${each.key}: p99 latency > ${each.value.alerts.p99_latency_ms}ms"
   combiner     = "OR"
   severity     = "WARNING"
@@ -547,7 +603,7 @@ resource "google_monitoring_alert_policy" "latency_p99" {
 resource "google_pubsub_topic" "service" {
   for_each = local.services_with_pubsub
 
-  project      = var.project_id
+  project      = local.service_project[each.key]
   name         = each.key
   kms_key_name = var.pubsub_kms_key_name
   labels       = merge(var.labels, { service = each.key })
@@ -558,7 +614,7 @@ resource "google_pubsub_topic" "service" {
 resource "google_pubsub_topic" "dead_letter" {
   for_each = local.services_with_pubsub
 
-  project      = var.project_id
+  project      = local.service_project[each.key]
   name         = "${each.key}-dlq"
   kms_key_name = var.pubsub_kms_key_name
   labels       = merge(var.labels, { service = each.key })
@@ -569,7 +625,7 @@ resource "google_pubsub_topic" "dead_letter" {
 resource "google_pubsub_subscription" "service" {
   for_each = local.services_with_pubsub
 
-  project                    = var.project_id
+  project                    = local.service_project[each.key]
   name                       = "${each.key}-sub"
   topic                      = google_pubsub_topic.service[each.key].id
   ack_deadline_seconds       = each.value.pubsub.ack_deadline_seconds
@@ -597,7 +653,7 @@ resource "google_pubsub_subscription" "service" {
 resource "google_pubsub_subscription" "dead_letter" {
   for_each = local.services_with_pubsub
 
-  project                    = var.project_id
+  project                    = local.service_project[each.key]
   name                       = "${each.key}-dlq-sub"
   topic                      = google_pubsub_topic.dead_letter[each.key].id
   ack_deadline_seconds       = 60
@@ -614,7 +670,7 @@ resource "google_pubsub_subscription" "dead_letter" {
 resource "google_pubsub_topic_iam_member" "runtime_publisher" {
   for_each = local.services_with_pubsub
 
-  project = var.project_id
+  project = local.service_project[each.key]
   topic   = google_pubsub_topic.service[each.key].name
   role    = "roles/pubsub.publisher"
   member  = "serviceAccount:${local.runtime_sa_email[each.key]}"
@@ -625,7 +681,7 @@ resource "google_pubsub_topic_iam_member" "runtime_publisher" {
 resource "google_pubsub_subscription_iam_member" "runtime_subscriber" {
   for_each = local.services_with_pubsub
 
-  project      = var.project_id
+  project      = local.service_project[each.key]
   subscription = google_pubsub_subscription.service[each.key].name
   role         = "roles/pubsub.subscriber"
   member       = "serviceAccount:${local.runtime_sa_email[each.key]}"
@@ -638,19 +694,19 @@ resource "google_pubsub_subscription_iam_member" "runtime_subscriber" {
 resource "google_pubsub_topic_iam_member" "agent_dead_letter_publisher" {
   for_each = local.services_with_pubsub
 
-  project = var.project_id
+  project = local.service_project[each.key]
   topic   = google_pubsub_topic.dead_letter[each.key].name
   role    = "roles/pubsub.publisher"
-  member  = local.pubsub_agent
+  member  = local.pubsub_agent[each.key]
 }
 
 resource "google_pubsub_subscription_iam_member" "agent_source_subscriber" {
   for_each = local.services_with_pubsub
 
-  project      = var.project_id
+  project      = local.service_project[each.key]
   subscription = google_pubsub_subscription.service[each.key].name
   role         = "roles/pubsub.subscriber"
-  member       = local.pubsub_agent
+  member       = local.pubsub_agent[each.key]
 }
 
 # =============================================================================

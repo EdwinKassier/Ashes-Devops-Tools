@@ -1,0 +1,21 @@
+# Test fixture: a service deployed into a service team's project (service_team).
+version: 1
+org:
+  prefix: cfgco
+  regions:
+    gcp: europe-west1
+  tfc:
+    organization: cfg-tfc
+gcp:
+  environments:
+    dev:
+      cidr_block: 10.10.0.0/16
+      services:
+        api:
+          service_team: payments
+        worker: {}
+      service_teams:
+        payments:
+          project_admin_group_email: payments-admins@cfg.example
+          shared_vpc_subnets:
+            primary: {region: europe-west1, subnet_name: cfgco-dev-private}

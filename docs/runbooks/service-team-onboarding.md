@@ -16,7 +16,7 @@ Each service team gets:
 2. Shared VPC attachment (the team's VMs use the existing host network)
 3. IAM bindings for their admin Google Group
 
-> **App deploys (WIF):** to deploy an application from a team's GitHub repository, do not touch the bootstrap (infrastructure) WIF pool. Add a `services` entry under `gcp.environments.<env>` in `config/landing-zone.yaml` (the `app_services` input) with `github = { repository_id = "<numeric id>" }` in the `gcp-workload-<env>` workspace. It creates a per-service deploy SA bound to an app-only WIF pool in the env host project. See [`../guides/deploying-a-service.md`](../guides/deploying-a-service.md). The service-project path in this runbook is for teams that need their own project.
+> **App deploys (WIF):** to deploy an application from a team's GitHub repository, do not touch the bootstrap (infrastructure) WIF pool. Add a `services` entry under `gcp.environments.<env>` in `config/landing-zone.yaml` (the `app_services` input) with `github = { repository_id = "<numeric id>" }` in the `gcp-workload-<env>` workspace. It creates a per-service deploy SA bound to an app-only WIF pool in the env host project. See [`../guides/deploying-a-service.md`](../guides/deploying-a-service.md). To run the service in the team's own project, set `service_team` on it (Step 3a).
 
 ---
 
@@ -77,6 +77,35 @@ gcp:
 The schema (`config/landing-zone.schema.json`) validates the entry in your editor and in CI. The root wires `org_id`, `folder_id`, `billing_account`, and the Shared VPC host project from remote state and the host stage, so you set only the team-specific fields. `folder_id` and `billing_account` are normalised with `trimprefix`, so either the bare ID or the full resource name works. An explicit `service_teams` workspace variable replaces the config entry for that workspace.
 
 > **IAM binding note:** the workload module grants these roles with additive `google_project_iam_member` (`modules/gcp/stages/workload/main.tf`), not authoritative `google_project_iam_binding`. Each apply only adds the specified group/role pairs — it does not evict any other member already bound to the same role, so pre-existing manual bindings on the project are preserved.
+
+### Step 3a — Deploy a service into the team project (optional)
+
+By default a service runs in the environment host project. To run it in the team's project, point it at the team by key:
+
+```yaml
+gcp:
+  environments:
+    dev:
+      services:
+        api:
+          service_team: payments      # a key of service_teams above
+          github: {repository_id: "123456789"}
+```
+
+The root resolves the project ID and number from `module.service_team["payments"]`, so there is no project ID to copy. The service's Artifact Registry repo, runtime and deploy service accounts, Cloud Run service, Cloud SQL, alert policies and Pub/Sub then live in the team project. The app-deploy WIF pool stays in the host project; the deploy SA in the team project is bound to it.
+
+What the apply adds for such a service, beyond the per-service resources:
+
+- the team project gets `run.googleapis.com`, `artifactregistry.googleapis.com` and `iam.googleapis.com` (plus `sqladmin`, `secretmanager`, `pubsub` when the service uses them), merged into the team's `activate_apis`;
+- the team project's Cloud Run service agent (`service-<project number>@serverless-robot-prod.iam.gserviceaccount.com`) gets `roles/compute.networkUser` on the Shared VPC subnet the service attaches to (the environment's first private subnet, or the service's `subnetwork_id`) and `roles/compute.networkViewer` on the host project. Direct VPC egress fails without both.
+
+Rules:
+
+- `service_team` must name a declared team. An unknown key fails the plan with an error naming the key. Declare the team first.
+- Do not combine `service_team` with an explicit `project_id` / `project_number`; use one or the other.
+- The first apply creates the team project and then the service in one run. If a revision fails to roll out because the service agent does not exist yet, re-run the apply once the Cloud Run API is enabled in the team project.
+- Moving an existing service between the host project and a team project recreates its project-scoped resources (service accounts, Cloud Run, registry). Plan the move; do not edit an applied service in place without reading the plan.
+- New scaffolds (`make init`) start with a `platform` team and an example `api` service pointing at it. Replace the placeholder admin group and `subnet_name` before the first apply.
 
 ### Step 4 — Open a PR and review the plan
 

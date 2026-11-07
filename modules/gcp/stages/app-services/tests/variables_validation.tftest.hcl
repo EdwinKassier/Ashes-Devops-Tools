@@ -234,3 +234,23 @@ run "rejects_bad_pubsub_kms_key" {
     pubsub_kms_key_name = "pubsub-key"
   }
 }
+
+run "rejects_team_project_without_number" {
+  command = plan
+
+  variables {
+    services = { api = { project_id = "payments-1a2b" } }
+  }
+
+  expect_failures = [var.services]
+}
+
+run "rejects_malformed_team_project_number" {
+  command = plan
+
+  variables {
+    services = { api = { project_id = "payments-1a2b", project_number = "abc" } }
+  }
+
+  expect_failures = [var.services]
+}

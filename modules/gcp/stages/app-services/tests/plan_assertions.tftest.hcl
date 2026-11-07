@@ -560,3 +560,96 @@ run "pubsub_with_cmek" {
     error_message = "pubsub_kms_key_name must encrypt both the topic and the dead-letter topic."
   }
 }
+
+# A service with its own project_id lives in that (team service) project and its
+# Cloud Run service agent gets subnet-level networkUser + host networkViewer.
+run "service_in_team_project_gets_subnet_network_user" {
+  command = plan
+
+  variables {
+    services = {
+      api = {
+        project_id     = "payments-1a2b"
+        project_number = "333333333333"
+        database       = {}
+        pubsub         = { enabled = true }
+      }
+    }
+  }
+
+  assert {
+    condition     = google_service_account.runtime["api"].project == "payments-1a2b" && google_service_account.runtime["api"].account_id == "api-run"
+    error_message = "the runtime SA must be created in the team project."
+  }
+
+  assert {
+    condition     = output.services["api"].runtime_service_account == "api-run@payments-1a2b.iam.gserviceaccount.com" && output.services["api"].image_repository == "europe-west1-docker.pkg.dev/payments-1a2b/api/api"
+    error_message = "SA emails and the image repository must use the team project."
+  }
+
+  assert {
+    condition = (
+      google_compute_subnetwork_iam_member.serverless_network_user["api"].role == "roles/compute.networkUser" &&
+      google_compute_subnetwork_iam_member.serverless_network_user["api"].member == "serviceAccount:service-333333333333@serverless-robot-prod.iam.gserviceaccount.com" &&
+      google_compute_subnetwork_iam_member.serverless_network_user["api"].project == "acme-dev-host-abcd" &&
+      google_compute_subnetwork_iam_member.serverless_network_user["api"].region == "europe-west1" &&
+      google_compute_subnetwork_iam_member.serverless_network_user["api"].subnetwork == "acme-dev-vpc-private-europe-west1-b"
+    )
+    error_message = "the team project's serverless robot must get roles/compute.networkUser on the Shared VPC subnet in the host project."
+  }
+
+  assert {
+    condition = (
+      google_project_iam_member.serverless_network_viewer["api"].project == "acme-dev-host-abcd" &&
+      google_project_iam_member.serverless_network_viewer["api"].role == "roles/compute.networkViewer" &&
+      google_project_iam_member.serverless_network_viewer["api"].member == "serviceAccount:service-333333333333@serverless-robot-prod.iam.gserviceaccount.com"
+    )
+    error_message = "the team project's serverless robot must get roles/compute.networkViewer on the host project."
+  }
+
+  assert {
+    condition     = google_pubsub_topic.service["api"].project == "payments-1a2b" && google_pubsub_topic_iam_member.agent_dead_letter_publisher["api"].member == "serviceAccount:service-333333333333@gcp-sa-pubsub.iam.gserviceaccount.com"
+    error_message = "Pub/Sub lives in the team project and its service agent uses the team project number."
+  }
+}
+
+run "service_without_team_uses_host_project" {
+  command = plan
+
+  variables {
+    services = {
+      api = {}
+    }
+  }
+
+  assert {
+    condition     = length(google_compute_subnetwork_iam_member.serverless_network_user) == 0 && length(google_project_iam_member.serverless_network_viewer) == 0
+    error_message = "a host-project service needs no Shared VPC grants."
+  }
+
+  assert {
+    condition     = google_service_account.runtime["api"].project == "acme-dev-host-abcd" && output.services["api"].runtime_service_account == "api-run@acme-dev-host-abcd.iam.gserviceaccount.com"
+    error_message = "a service without project_id stays in the host project."
+  }
+}
+
+# A project created in the same plan has an unknown id; the explicit flag keeps
+# the for_each keys known.
+run "explicit_network_access_flag_overrides_derivation" {
+  command = plan
+
+  variables {
+    services = {
+      api = {
+        project_id           = "payments-1a2b"
+        project_number       = "333333333333"
+        grant_network_access = false
+      }
+    }
+  }
+
+  assert {
+    condition     = length(google_compute_subnetwork_iam_member.serverless_network_user) == 0
+    error_message = "grant_network_access = false must suppress the Shared VPC grants."
+  }
+}

@@ -279,6 +279,16 @@ if [[ -n "${GITHUB_OWNER}" ]]; then
     -e "s|^  #   - my-github-org\$|    - $(esc "${GITHUB_OWNER}")|"
   )
 fi
+# GCP: new scaffolds start with a `platform` service team and an example `api`
+# service deployed into it (gcp.environments.dev). The commented block in the
+# example is uncommented; the github deploy identity stays commented (it needs
+# a numeric repository_id, enable_app_deploy_wif and github_repository_owner_id).
+if has_cloud gcp; then
+  sed_args+=(
+    -e "/^      # Application services (Cloud Run/,/^    prod:\$/{/^      #     github: /d;s|^      # \(services:\)\$|      \1|;s|^      # \(service_teams:\)\$|      \1|;s|^      #   |        |;}"
+    -e "s|subnet_name: my-org-dev-vpc-private-|subnet_name: $(esc "${PREFIX}")-dev-vpc-private-|"
+  )
+fi
 # SaaS: uncomment and fill saas.defaults / saas.stacks.web when values are given.
 if has_cloud saas && [[ -n "${SUPABASE_ORG}${VERCEL_TEAM}${GITHUB_REPO}" ]]; then
   sed_args+=(

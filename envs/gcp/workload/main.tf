@@ -301,7 +301,7 @@ module "service_team" {
   folder_id       = trimprefix(local.env_config.folder_id, "folders/")
   billing_account = trimprefix(local.billing_account, "billingAccounts/")
 
-  activate_apis = each.value.activate_apis
+  activate_apis = distinct(concat(each.value.activate_apis, local.team_service_apis[each.key]))
 
   enable_shared_vpc_attachment = each.value.enable_shared_vpc_attachment
   shared_vpc_host_project_id   = local.env_config.host_project_id
@@ -474,7 +474,7 @@ module "app_services" {
   gke_services_secondary_range_name = var.gke_services_secondary_range_name
 
   # PSA (for Cloud SQL), subnets and the bridged SaaS secret must exist first.
-  depends_on = [module.host, module.saas_secret_bridge]
+  depends_on = [module.host, module.saas_secret_bridge, module.service_team]
 }
 
 # =============================================================================
@@ -497,11 +497,36 @@ locals {
   # Exposed services default to LB-only ingress + public invocation; the rest
   # keep the stage defaults (internal only, authenticated). An explicit value in
   # the app_services entry always wins.
+  #
+  # A service with `service_team = "<key>"` deploys into that team's service
+  # project: its project_id / project_number come from module.service_team[<key>]
+  # (try() keeps an unknown key inert here; var.app_services rejects it).
+  # grant_network_access is set explicitly because the project id is unknown
+  # until apply when the team project is created in the same run.
   app_services = {
     for k, s in local.app_services_input : k => merge({
       ingress                = contains(keys(local.public_ingress), k) ? "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER" : "INGRESS_TRAFFIC_INTERNAL_ONLY"
       enable_unauthenticated = contains(keys(local.public_ingress), k)
-    }, s)
+      }, s,
+      { for a, v in {
+        project_id           = try(module.service_team[s.service_team].project_id, null)
+        project_number       = try(module.service_team[s.service_team].project_number, null)
+        grant_network_access = true
+      } : a => v if try(s.service_team, null) != null }
+    )
+  }
+
+  # APIs a team project needs to host the services pointed at it (merged into
+  # the team's own activate_apis). Derived from the inputs, not module outputs.
+  team_service_apis = {
+    for team, _ in local.service_teams : team => (
+      length([for k, s in local.app_services_input : k if try(s.service_team, null) == team]) == 0 ? [] : distinct(concat(
+        ["run.googleapis.com", "artifactregistry.googleapis.com", "iam.googleapis.com"],
+        anytrue([for k, s in local.app_services_input : try(s.database, null) != null if try(s.service_team, null) == team]) ? ["sqladmin.googleapis.com"] : [],
+        anytrue([for k, s in local.app_services_input : length(try(s.secrets, {})) > 0 if try(s.service_team, null) == team]) ? ["secretmanager.googleapis.com"] : [],
+        anytrue([for k, s in local.app_services_input : try(s.pubsub.enabled, false) == true if try(s.service_team, null) == team]) ? ["pubsub.googleapis.com"] : [],
+      ))
+    )
   }
 
   app_bootstrap_image = coalesce(var.app_bootstrap_image, local.cfg.app_bootstrap_image, "us-docker.pkg.dev/cloudrun/container/hello")

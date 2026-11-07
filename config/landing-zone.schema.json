@@ -325,6 +325,16 @@
                         "type": "string"
                       }
                     },
+                    "service_team": {
+                      "type": "string",
+                      "description": "Key of a gcp.environments.<env>.service_teams entry: deploy this service into that team's service project instead of the host project."
+                    },
+                    "project_id": {
+                      "type": "string"
+                    },
+                    "project_number": {
+                      "type": "string"
+                    },
                     "artifact_registry": {
                       "type": "object",
                       "properties": {

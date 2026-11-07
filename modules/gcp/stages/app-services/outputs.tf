@@ -40,7 +40,7 @@ output "github_actions" {
     for k, s in local.services_with_github : k => {
       GCP_WIF_PROVIDER  = local.wif_provider_name
       GCP_DEPLOY_SA     = local.deploy_sa_email[k]
-      GCP_PROJECT_ID    = var.project_id
+      GCP_PROJECT_ID    = local.service_project[k]
       GCP_REGION        = var.region
       CLOUD_RUN_SERVICE = k
       IMAGE_REPOSITORY  = local.image_repository[k]

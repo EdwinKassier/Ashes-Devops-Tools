@@ -36,8 +36,8 @@ variable "project_number" {
   validation {
     # The Pub/Sub service agent (service-<number>@gcp-sa-pubsub) is granted
     # dead-letter forwarding, so its email needs the project number.
-    condition     = alltrue([for k, s in var.services : !s.pubsub.enabled]) || var.project_number != null
-    error_message = "project_number is required when any service sets pubsub.enabled = true (dead-letter forwarding grants the Pub/Sub service agent)."
+    condition     = alltrue([for k, s in var.services : !s.pubsub.enabled || (s.project_id != null ? s.project_number : var.project_number) != null])
+    error_message = "project_number (or, for a service with its own project_id, that service's project_number) is required when a service sets pubsub.enabled = true (dead-letter forwarding grants the Pub/Sub service agent)."
   }
 }
 
@@ -182,6 +182,10 @@ variable "services" {
     Optional per entry:
       database = {...}  -> private-IP Cloud SQL Postgres `<name>-db` with IAM auth;
                            the runtime SA is its IAM database user.
+      project_id / project_number
+                        -> deploy this service into a team service project
+                           (Shared VPC subnet access is granted to its Cloud Run
+                           service agent). Default: the host project.
       github   = {...}  -> deploy SA `<name>-deploy` bound via WIF to the GitHub
                            repo's IMMUTABLE numeric repository_id (optionally a
                            ref and/or GitHub environment). Needs enable_app_deploy_wif.
@@ -210,6 +214,20 @@ variable "services" {
     runtime_project_roles       = optional(list(string), [])
     enable_deletion_protection  = optional(bool)
     labels                      = optional(map(string), {})
+
+    # Team service project. Null = the environment host project (var.project_id).
+    # When set, the service's registry, runtime/deploy SAs, Cloud Run, Cloud SQL,
+    # alerts and Pub/Sub live in that project (it must be a Shared VPC service
+    # project with the run, artifactregistry and iam APIs enabled); the WIF pool
+    # stays in var.project_id. project_number is then required: it names the
+    # project's Cloud Run service agent, which is granted compute.networkUser on
+    # the service's subnet and compute.networkViewer on the host project.
+    project_id     = optional(string)
+    project_number = optional(string)
+    # Explicit override of the Shared VPC grants above. Null derives it from
+    # project_id; callers whose project_id is unknown until apply (a project
+    # created in the same run) set it to true so for_each keys stay plan-time known.
+    grant_network_access = optional(bool)
 
     artifact_registry = optional(object({
       immutable_tags             = optional(bool, true)
@@ -257,6 +275,20 @@ variable "services" {
     }), {})
   }))
   default = {}
+
+  validation {
+    # Unknown values (a project created in the same plan) defer these to apply.
+    condition = alltrue([for k, s in var.services : (
+      (s.project_id == null || can(regex("^[a-z][a-z0-9-]{4,28}[a-z0-9]$", s.project_id))) &&
+      (s.project_number == null || can(regex("^[0-9]+$", s.project_number)))
+    )])
+    error_message = "services[*].project_id must be a valid GCP project ID and services[*].project_number the numeric project number."
+  }
+
+  validation {
+    condition     = alltrue([for k, s in var.services : s.project_id == null || s.project_id == var.project_id || s.project_number != null])
+    error_message = "a service with its own project_id (a team service project) must also set project_number: the Cloud Run service agent that needs Shared VPC subnet access is derived from it."
+  }
 
   validation {
     condition     = alltrue([for k, s in var.services : can(regex("^[a-z][a-z0-9-]{0,20}[a-z0-9]$", k))])
