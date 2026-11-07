@@ -4,7 +4,7 @@ The GCP roots normally **create** the environment folders, projects and org-leve
 organization that already has them, a greenfield apply fails with `alreadyExists` errors (folders
 and projects) or tries to recreate resources you are running workloads in. This runbook imports
 what exists instead, using `import` blocks with `for_each` (Terraform 1.7 or later; this repo
-requires `~> 1.11`).
+requires `>= 1.17, < 2.0`).
 
 > **Status: not yet validated against a live organization.** Mock providers cannot import. The
 > resource addresses below are taken from the modules, but run the first plan against a

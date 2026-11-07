@@ -32,7 +32,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.17, < 2.0 |
 | <a name="requirement_tfe"></a> [tfe](#requirement\_tfe) | >= 0.83.0, < 1.0.0 |
 
 ## Providers
@@ -78,7 +78,7 @@ The following resources are created:
 | <a name="input_remote_state_consumer_ids"></a> [remote\_state\_consumer\_ids](#input\_remote\_state\_consumer\_ids) | Workspace IDs (ws-...) allowed to read this workspace's state via terraform\_remote\_state / tfe\_outputs. Only used when global\_remote\_state = false. | `set(string)` | `[]` | no |
 | <a name="input_speculative_enabled"></a> [speculative\_enabled](#input\_speculative\_enabled) | Allow automatic speculative plans on pull requests. Set false for control-plane workspaces so an untrusted PR cannot obtain a plan run with privileged credentials. | `bool` | `true` | no |
 | <a name="input_tag_names"></a> [tag\_names](#input\_tag\_names) | TFC workspace tags (e.g. cloud:gcp, layer:control-plane). | `list(string)` | `[]` | no |
-| <a name="input_terraform_version"></a> [terraform\_version](#input\_terraform\_version) | Terraform version constraint for the workspace, e.g. ~> 1.9. Null uses the TFC default. | `string` | `null` | no |
+| <a name="input_terraform_version"></a> [terraform\_version](#input\_terraform\_version) | Terraform version constraint for the workspace, e.g. ~> 1.17. Null uses the TFC default. | `string` | `null` | no |
 | <a name="input_trigger_patterns"></a> [trigger\_patterns](#input\_trigger\_patterns) | Glob patterns that trigger a run. When non-empty they REPLACE the working\_directory default, so include "<working\_directory>/**" plus every module path the root consumes (e.g. modules/gcp/**). Empty = working\_directory only. | `list(string)` | `[]` | no |
 | <a name="input_variable_set_ids"></a> [variable\_set\_ids](#input\_variable\_set\_ids) | Variable sets to attach to this workspace, keyed by a stable label (the label keeps for\_each plan-known while the set ID is unknown): {label = "varset-..."}. | `map(string)` | `{}` | no |
 | <a name="input_variables"></a> [variables](#input\_variables) | Workspace variables keyed by name: {value, category (terraform\|env), hcl?, sensitive?, description?, version?}. Sensitive values are written write-only (never stored in state); increment `version` to rotate one. | <pre>map(object({<br/>    value       = string<br/>    category    = string<br/>    hcl         = optional(bool, false)<br/>    sensitive   = optional(bool, false)<br/>    description = optional(string)<br/>    version     = optional(number, 1)<br/>  }))</pre> | `{}` | no |

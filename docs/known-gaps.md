@@ -688,7 +688,7 @@ side (all mock-tested, secure defaults):
   does not yet expose `sb_publishable_`/`sb_secret_` on `supabase_apikeys`; the
   module uses the legacy JWT keys, which Supabase deprecates end-2026. Expose the
   new keys as outputs once the provider supports them.
-- **S4 — RESOLVED (2026-11-05).** The Terraform floor is now `~> 1.11` and secrets use
+- **S4 — RESOLVED (2026-11-05).** The Terraform floor is now `>= 1.17, < 2.0` (raised from `~> 1.11`) and secrets use
   write-only arguments, so they never enter plan or state: GCP Secret Manager
   (`secret_data_wo`), Cloud SQL users (`password_wo`), Aurora master password
   (`master_password_wo`), sensitive TFC variables (`value_wo`) and sensitive Vercel env

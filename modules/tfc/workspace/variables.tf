@@ -48,7 +48,7 @@ variable "auto_apply_run_trigger" {
 }
 
 variable "terraform_version" {
-  description = "Terraform version constraint for the workspace, e.g. ~> 1.9. Null uses the TFC default."
+  description = "Terraform version constraint for the workspace, e.g. ~> 1.17. Null uses the TFC default."
   type        = string
   default     = null
 }

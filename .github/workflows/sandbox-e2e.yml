@@ -57,7 +57,7 @@ on:
 permissions: {}
 
 env:
-  TERRAFORM_VERSION: "1.14.3"
+  TERRAFORM_VERSION: "1.17.1"
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   TF_PLUGIN_CACHE_DIR: /home/runner/.terraform.d/plugin-cache

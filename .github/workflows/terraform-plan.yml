@@ -36,7 +36,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  TERRAFORM_VERSION: "1.14.3"
+  TERRAFORM_VERSION: "1.17.1"
   # Shared provider plugin cache: each provider version is downloaded once per
   # cache key and reused by every `terraform init` in the job (validate shards,
   # lint, test), instead of re-fetching the ~500MB AWS provider per root. The

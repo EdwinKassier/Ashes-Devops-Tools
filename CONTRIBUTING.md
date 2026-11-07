@@ -34,7 +34,7 @@ ones CI uses. Those versions are recorded in `.tool-versions` and mirrored in
 
 | Tool | Required version |
 |------|-------------------|
-| terraform | 1.14.3 |
+| terraform | 1.17.1 |
 | tflint | 0.62.0 |
 | trivy | 0.70.0 |
 | shellcheck | 0.11.0 |

@@ -24,6 +24,26 @@ badgcp=$(grep -rl 'hashicorp/google' --include='versions.tf' --exclude-dir='.ter
   | while read -r f; do grep -q '"~> 7.0"' "$f" || echo "$f"; done)
 [ -z "$badgcp" ] || { echo "$badgcp" | while read -r f; do note "google pin not '~> 7.0': $f"; done; fail=1; }
 
+echo "==> Terraform required_version is the canonical range in every versions.tf"
+# Canonical: ">= 1.17, < 2.0" (mock_ephemeral, deprecated attributes, typed outputs).
+badtf=$(find modules envs examples templates tests -name versions.tf -not -path '*/.terraform/*' 2>/dev/null \
+  | while read -r f; do grep -q 'required_version = ">= 1.17, < 2.0"' "$f" || echo "$f"; done)
+[ -z "$badtf" ] || { echo "$badtf" | while read -r f; do note "required_version not '>= 1.17, < 2.0': $f"; done; fail=1; }
+
+echo "==> Terraform CLI pin agrees across .tool-versions, .terraform-version and CI"
+tv=$(awk '$1 == "terraform" {print $2; exit}' .tool-versions 2>/dev/null)
+case "$tv" in 1.1[7-9].* | 1.[2-9][0-9].*) ;; *) note ".tool-versions terraform '$tv' is below the 1.17 floor" ;; esac
+[ "$(tr -d '[:space:]' <.terraform-version 2>/dev/null)" = "$tv" ] || note ".terraform-version differs from .tool-versions terraform $tv"
+for wf in .github/workflows/*.yml; do
+  grep -E '^[[:space:]]*TERRAFORM_VERSION:' "$wf" | grep -vq "\"$tv\"" && note "$wf: TERRAFORM_VERSION differs from .tool-versions terraform $tv"
+done
+
+echo "==> No import blocks in reusable modules (adoption lives in the roots)"
+# A module-level import block is inherited by every caller and fails their plan
+# once the resource is managed. import blocks belong in an envs/** adoption file.
+imports=$(grep -rlE '^[[:space:]]*import[[:space:]]*\{' --include='*.tf' --exclude-dir='.terraform' modules templates 2>/dev/null)
+[ -z "$imports" ] || { echo "$imports" | while read -r f; do note "import block in a reusable module (move it to the root's adoption file): $f"; done; fail=1; }
+
 echo "==> OPA lib_helpers.rego copies are byte-identical"
 # A VCS policy set loads only its own policies_path, so policies/opa-destructive
 # carries a copy of the shared terraform.lib helpers.

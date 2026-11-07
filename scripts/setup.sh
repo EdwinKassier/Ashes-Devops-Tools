@@ -10,7 +10,7 @@ _tool_version() {
   v="$(awk -v t="$1" '$1 == t {print $2; exit}' "${_TOOL_VERSIONS_FILE}" 2>/dev/null || true)"
   printf '%s' "${v:-$2}"
 }
-REQUIRED_TERRAFORM_VERSION="$(_tool_version terraform 1.14.3)"
+REQUIRED_TERRAFORM_VERSION="$(_tool_version terraform 1.17.1)"
 REQUIRED_TFLINT_VERSION="$(_tool_version tflint 0.62.0)"
 REQUIRED_TRIVY_VERSION="$(_tool_version trivy 0.70.0)"
 REQUIRED_TERRAFORM_DOCS_VERSION="$(_tool_version terraform-docs 0.19.0)"

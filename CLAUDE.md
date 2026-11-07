@@ -86,7 +86,7 @@ One committed file, `config/landing-zone.yaml` (schema and placeholders: `config
 
 | Tool | Required version |
 |------|-----------------|
-| Terraform | `~> 1.11` (CI pins 1.14.3; uses `mock_provider`, `override_module`, `terraform_data`, and write-only `*_wo` arguments so secrets never enter state) |
+| Terraform | `>= 1.17, < 2.0` (CI pins 1.17.1; uses `mock_provider` (including `mock_ephemeral`), `override_module`, `terraform_data`, write-only `*_wo` arguments and ephemeral resources so secrets never enter state, and `deprecated` on compatibility inputs) |
 | google / google-beta | `~> 7.0` (6→7 migration complete; locks on 7.x, CI green — audit L4) |
 | hashicorp/aws | `>= 6.46.0, < 7.0.0` (floored pin — deliberate, not `~> 6.0`) |
 | supabase/supabase | `~> 1.0` |

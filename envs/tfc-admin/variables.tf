@@ -521,9 +521,9 @@ variable "opa_version" {
 }
 
 variable "terraform_version" {
-  description = "Terraform version constraint applied to every managed workspace, e.g. ~> 1.9. Null uses the TFC default."
+  description = "Terraform version constraint applied to every managed workspace (the repo requires >= 1.17, < 2.0). Null uses the TFC default."
   type        = string
-  default     = "~> 1.9"
+  default     = "~> 1.17"
 }
 
 variable "vcs_repo" {

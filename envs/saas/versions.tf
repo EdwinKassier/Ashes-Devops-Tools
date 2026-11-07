@@ -1,5 +1,5 @@
 terraform {
-  required_version = "~> 1.11"
+  required_version = ">= 1.17, < 2.0"
 
   # SaaS-only root: NO aws / google providers by design. A user who only wants
   # Supabase and/or Vercel needs no cloud credentials to plan or apply this root.

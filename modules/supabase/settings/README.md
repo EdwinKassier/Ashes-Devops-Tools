@@ -26,7 +26,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.17, < 2.0 |
 | <a name="requirement_supabase"></a> [supabase](#requirement\_supabase) | ~> 1.0 |
 
 ## Providers
