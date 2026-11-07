@@ -374,6 +374,7 @@ jobs:
         env:
           CONFIGURED: ${{ needs.check-credentials.outputs.configured }}
           RESULT: ${{ needs.detect-drift.result }}
+          OPT_OUT: ${{ vars.REAL_CLOUD_CHECKS_OPT_OUT }}
           # yamllint disable-line rule:line-length
           WORKSPACES: ${{ vars.TFC_DRIFT_WORKSPACES || '["gcp-bootstrap","gcp-organization","gcp-projects","gcp-network-hub","gcp-workload-dev","aws-organization","aws-security","aws-network"]' }}
         run: |
@@ -385,6 +386,12 @@ jobs:
               echo ""
               echo "Drift is unmonitored. Set the \`TFC_TOKEN_DRIFT\` repository secret and"
               echo "\`TFC_ORGANIZATION\` repository variable (docs/guides/CI_SECRETS.md)."
+            elif [ "$RESULT" = "success" ] && [ "$OPT_OUT" = "true" ]; then
+              echo "⚠️ **No drift in the workspaces that were checked, but coverage may be partial.**"
+              echo ""
+              echo "\`REAL_CLOUD_CHECKS_OPT_OUT=true\`: any listed workspace that does not exist was"
+              echo "skipped with a warning, not checked. Look for \"did NOT run\" warnings on the"
+              echo "matrix jobs; those workspaces are unmonitored."
             elif [ "$RESULT" = "success" ]; then
               echo "✅ **All workspace plans completed — no drift detected.**"
             else

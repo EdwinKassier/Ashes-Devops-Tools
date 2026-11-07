@@ -11,6 +11,16 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
 
 ## OPEN — validate before relying on
 
+- **Essentials-plan support for VCS policy sets is unverified.** tfc-admin
+  turns the policy sets on by default only for `org.tfc.plan` `standard` or
+  `premium` (`envs/tfc-admin/config.tf`, `local.enable_policy_sets`). Whether
+  HCP Terraform Essentials allows VCS-sourced OPA policy sets, and how many
+  policies it allows per set, has not been checked against the current HCP
+  pricing and limits. **Validate:** on an Essentials organization, create both
+  sets; if they work, add `essentials` to the default list. Until then an
+  Essentials estate sets `enable_policy_sets = true` itself, or runs without
+  the destroy guard (the `destructive_changes_guarded` check warns).
+
 - **Region SCP no longer exempts the run role.** `scp-region-restriction`
   now exempts break-glass only; global-endpoint services stay in `NotAction`
   (plus `networkmanager:*` and `notifications:*`). Mock-tested only.

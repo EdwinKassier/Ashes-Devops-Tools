@@ -35,7 +35,10 @@ variables. It also sees what a run is about to destroy.
   sets on when `vcs_repo` (`org.tfc.vcs_repo`) is set **and** `org.tfc.plan`
   (tfc-admin `tfc_plan`) is `standard` or `premium`. HCP Terraform Free allows
   one policy set of up to five policies, so `free` and `essentials` stay off
-  unless you set `enable_policy_sets = true` yourself. While the sets are off,
+  unless you set `enable_policy_sets = true` yourself. On Free that explicit
+  `true` exceeds the limit (two sets, 14 policies): HCP Terraform rejects the
+  second set or the extra policies, so do not set it there. Essentials support
+  is unverified ([known gaps](../known-gaps.md)). While the sets are off,
   the `destructive_changes_guarded` check warns on every tfc-admin plan that
   destructive changes are unguarded. Drift on tiers without health assessments
   is caught by `.github/workflows/drift-detection.yml`, which fails rather than

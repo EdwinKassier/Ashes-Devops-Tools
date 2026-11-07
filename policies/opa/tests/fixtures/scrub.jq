@@ -6,8 +6,11 @@
 #
 # Kept: resource_changes[].{address, module_address, mode, type, name} and
 # change.{actions, after, after_unknown} (the attributes the policies read).
-# Dropped: change.before, change.after_sensitive, before_sensitive, prior
-# state, configuration, variables and outputs; and, at any depth of after /
+# change.after holds sensitive values in PLAINTEXT (after_sensitive is only the
+# mask), so every path the mask marks true is replaced by "(sensitive)" first
+# (a mask of true on the whole object replaces the whole object).
+# Dropped: change.before, before_sensitive, after_sensitive (after masking),
+# prior state, configuration, variables and outputs; and, at any depth of after /
 # after_unknown, every identifier key (id, arn, *_id, *_arn, *_ids,
 # self_link, etag, number, unique_id, owner_id). Review every fixture by eye
 # before committing: free-text attributes (policies, labels, descriptions)
@@ -17,6 +20,19 @@
 
 def id_key:
   test("^(id|arn|etag|self_link|number|unique_id|owner_id)$|(_id|_ids|_arn|_arns)$");
+
+# Replace every value the sensitivity mask marks true. Walks the value and the
+# mask together: objects by key, lists by index.
+def mask($m):
+  if $m == true then
+    "(sensitive)"
+  elif type == "object" and ($m | type) == "object" then
+    with_entries(.key as $k | .value |= mask($m[$k]))
+  elif type == "array" and ($m | type) == "array" then
+    [to_entries[] | .key as $i | .value | mask($m[$i])]
+  else
+    .
+  end;
 
 def drop_ids:
   if type == "object" then
@@ -40,7 +56,7 @@ def drop_ids:
           name,
           change: {
             actions: .change.actions,
-            after: (.change.after | drop_ids),
+            after: ((.change.after_sensitive // false) as $m | .change.after | mask($m) | drop_ids),
             after_unknown: (.change.after_unknown | drop_ids)
           }
         }
