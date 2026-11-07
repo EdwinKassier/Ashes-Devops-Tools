@@ -122,11 +122,15 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   selector change (for example, dropping management events) is caught only
   by the `org-guard-alerts` EventBridge rule. That rule is in us-east-1 plus
   forwarders in every other enabled region, and it is owned by
-  `aws-organization`. The CIS 4.5 alarm does not match selector calls. This
-  stays detect-only until an estate turns on
-  `aws.enable_cloudtrail_delegated_admin`, which moves trail management to
-  security tooling, where the SCP applies (see the CloudTrail delegated-admin
-  item under PREVIEW). The rules and forwarding are mock-tested
+  `aws-organization`. The CIS 4.5 alarm does not match selector calls. With
+  `aws.enable_cloudtrail_delegated_admin` the management role loses every
+  trail write and the trail is managed from security tooling, where the SCP
+  denies selector and trail updates to every principal except the pipeline
+  roles (`tfc-apply`, `OrganizationAccountAccessRole`, `stacksets-exec-*`) and
+  break-glass. Those exempt principals can still change selectors: that stays
+  detect-only, through the `sec-notify-org-trail-tamper` rule in security
+  tooling (see the CloudTrail delegated-admin item under PREVIEW). The rules
+  and forwarding are mock-tested
   only. **Validate in the sandbox:** a `PutEventSelectors` call and a
   GuardDuty admin call made from a non-us-east-1 region must both email the
   topic.
@@ -549,13 +553,37 @@ Enable only after validating in a real/test org. Each defaults to prior behaviou
     `kms:CreateKey`.
 
   Residuals:
-  - The security-tooling `tfc-apply` is exempt from `DenyWeakenSecurityServices`
-    and `DenyCentralDetectionOutsideSecurityAccounts` (it must create the
-    trail), so it can still change the trail's selectors; SCPs, the boundary
-    and CODEOWNERS cover it. Stop and delete stay break-glass only.
-  - The `org-guard-alerts` rule (management account) matches the old trail's
-    name and only management-account API calls; it does not watch the new
-    trail, whose changes are prevented by the SCP instead.
+  - The SCP stops `StopLogging` / `DeleteTrail` on the new trail for everyone
+    but break-glass (`DenyDisableSecurityServices`). `UpdateTrail`,
+    `PutEventSelectors` and `PutInsightSelectors` are denied to member
+    principals except the pipeline roles (`tfc-apply`, which must create the
+    trail, `OrganizationAccountAccessRole`, `stacksets-exec-*`) and break-glass
+    (`DenyWeakenSecurityServices`), and only from the security accounts
+    (`DenyCentralDetectionOutsideSecurityAccounts`). `RemoveTags` and the
+    trail resource policy are not in the SCP. What is exempt is detected, not
+    prevented: `sec-notify-org-trail-tamper` (security tooling, the trail's
+    home Region, the only Region where these calls succeed) alerts on every one
+    of those calls on the new trail, to the security-notifications topic.
+    Assumed: the organization trail delivers security tooling's own API calls
+    to that account's default event bus. With the flag on, `org-guard-alerts`
+    (management account) also alerts on any trail change made from the
+    management account (phase-0 or break-glass; SCPs never apply there), on
+    any trail.
+  - The security-notifications topic is encrypted with the security-tooling
+    CMK, whose key policy grants `sns`, `ssm` and `cloudwatch` but not
+    `events.amazonaws.com`. This affects every `sec-notify-*` rule, and it is
+    not new. If EventBridge cannot use the key, delivery to the topic fails.
+    **Validate in the sandbox**, then add `events.amazonaws.com` to the key's
+    service principals (a key-policy change: break-glass apply).
+  - The new trail's log group, CIS alarms, alarm topic and CloudWatch CMK in
+    security tooling lack the management role's explicit denies
+    (`DenyTrailAndKeyDestruction*`). The CMK's key policy grants the account
+    root `kms:*`, so IAM in security tooling governs it. The security-tooling
+    `tfc-apply` (StackSet-managed, under the tfc-apply boundary) could delete
+    the log group or alarms, or schedule key deletion. That is not denied per
+    ARN: an inline deny would need a change to the tfc-oidc-baseline StackSet
+    role. Deleting the log group stops CloudWatch delivery only; S3 delivery
+    and log-file validation continue.
   - `aws-security` forgets its generic registration with a manual
     `terraform state rm` (runbook step 1.3). A skipped step fails closed: the
     plan shows a destroy and the apply is denied.

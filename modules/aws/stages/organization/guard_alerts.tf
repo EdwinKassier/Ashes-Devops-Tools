@@ -36,7 +36,7 @@ locals {
   guard_event_pattern = jsonencode({
     "detail-type" = ["AWS API Call via CloudTrail"]
     detail = {
-      "$or" = [
+      "$or" = concat([
         {
           eventSource = ["organizations.amazonaws.com"]
           eventName   = ["DisableAWSServiceAccess", "DeregisterDelegatedAdministrator"]
@@ -109,7 +109,17 @@ locals {
           eventName         = ["PutMetricFilter", "DeleteMetricFilter", "DeleteLogStream"]
           requestParameters = { logGroupName = [local.guard_trail_log_group] }
         },
-      ]
+        ],
+        # With the CloudTrail delegated admin, the organization trail is managed
+        # from security tooling (alerted there by aws-security) and nothing in
+        # the management account has a trail write left except the phase-0 and
+        # break-glass roles, which SCPs never constrain. Any trail change made
+        # here, on any trail name, is then an alert.
+        [for c in [{
+          eventSource = ["cloudtrail.amazonaws.com"]
+          eventName   = ["StopLogging", "DeleteTrail", "UpdateTrail", "PutEventSelectors", "PutInsightSelectors", "RemoveTags", "PutResourcePolicy", "DeleteResourcePolicy"]
+        }] : c if var.enable_cloudtrail_delegated_admin],
+      )
     }
   })
 }

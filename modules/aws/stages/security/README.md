@@ -198,6 +198,8 @@ module "example" {
 The following resources are created:
 
 
+- resource.aws_cloudwatch_event_rule.delegated_admin_trail_tamper (modules/aws/stages/security/trail_tamper_alerts.tf#L52)
+- resource.aws_cloudwatch_event_target.delegated_admin_trail_tamper (modules/aws/stages/security/trail_tamper_alerts.tf#L61)
 - resource.aws_iam_role.securitylake_meta_store (modules/aws/stages/security/securitylake_role.tf#L16)
 - resource.aws_iam_role_policy_attachment.securitylake_meta_store (modules/aws/stages/security/securitylake_role.tf#L35)
 - data source.aws_caller_identity.security_tooling (modules/aws/stages/security/main.tf#L28)

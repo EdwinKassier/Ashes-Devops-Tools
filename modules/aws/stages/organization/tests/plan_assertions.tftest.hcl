@@ -675,3 +675,48 @@ run "scp_denies_trail_tamper_except_exempt" {
     error_message = "The CloudTrail delegated admin must add no SCP statement: the three existing ones cover trail tampering."
   }
 }
+
+# With the delegated admin, any trail change made from the management account
+# (phase-0 or break-glass: SCPs never apply there) alerts, whatever the trail
+# name; the default pattern is unchanged.
+run "guard_alerts_any_management_trail_change_with_delegated_admin" {
+  command = plan
+
+  variables {
+    enable_cloudtrail_delegated_admin = true
+  }
+
+  override_module {
+    target = module.account
+    outputs = {
+      account_id             = "222222222222"
+      account_arn            = "arn:aws:organizations::111111111111:account/o-abc1234567/222222222222"
+      cross_account_role_arn = "arn:aws:iam::222222222222:role/OrganizationAccountAccessRole"
+    }
+  }
+
+  assert {
+    condition = anytrue([
+      for c in jsondecode(aws_cloudwatch_event_rule.guard_alerts.event_pattern).detail["$or"] :
+      c.eventSource == ["cloudtrail.amazonaws.com"] && !can(c.requestParameters) && length(setsubtract(["StopLogging", "DeleteTrail", "UpdateTrail", "PutEventSelectors"], c.eventName)) == 0
+    ])
+    error_message = "With the delegated admin the guard rule must alert on any management-account trail change, on any trail."
+  }
+
+  assert {
+    condition     = length(aws_cloudwatch_event_rule.guard_alerts.event_pattern) <= 4096
+    error_message = "The extended guard event pattern must stay within the EventBridge event-pattern size."
+  }
+}
+
+run "guard_alerts_trail_scoped_by_default" {
+  command = plan
+
+  assert {
+    condition = !anytrue([
+      for c in jsondecode(aws_cloudwatch_event_rule.guard_alerts.event_pattern).detail["$or"] :
+      c.eventSource == ["cloudtrail.amazonaws.com"] && !can(c.requestParameters)
+    ])
+    error_message = "By default every guard-rule CloudTrail clause stays scoped to the org trail."
+  }
+}

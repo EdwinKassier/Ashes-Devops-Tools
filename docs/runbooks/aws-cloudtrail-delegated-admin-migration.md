@@ -43,7 +43,8 @@ sandbox.
 | `aws-security` creates `org-trail` with the management provider (`module.cloudtrail[0]`). | It creates `org-trail-delegated` with the security-tooling provider (`module.cloudtrail_delegated_admin[0]`). The management account still owns the trail: its ARN is `arn:aws:cloudtrail:<home>:<management>:trail/org-trail-delegated`. |
 | The trail's CloudWatch Logs group, delivery role, CMK, CIS alarms and alarm topic are in the management account. | They are in security tooling. CloudTrail requires the log group and role in the calling account. The delivery role carries the `tfc-apply` permissions boundary. |
 | `aws-security` registers `cloudtrail.amazonaws.com` through the generic Organizations API (`security-delegated-admin`). | `aws-organization` registers it through CloudTrail (`aws_cloudtrail_organization_delegated_admin_account`), which also creates the CloudTrail service-linked roles. |
-| The `tfc-mgmt-aws-security-apply` role holds `cloudtrail:*` on `org-trail` (`OrganizationTrailOnly`) and may pass the delivery role. | It holds no trail write, and may neither register nor deregister `cloudtrail.amazonaws.com`. Its trail and key denies stay. |
+| The `tfc-mgmt-aws-security-apply` role holds `cloudtrail:*` on `org-trail` (`OrganizationTrailOnly`), may pass the delivery role, and may create the trail's log group, topic and CMK (`TrailWiringCreate`, `CreateOwnedKeysOnly`). | It holds no trail write and no create in the management account, and may neither register nor deregister `cloudtrail.amazonaws.com`. Its trail and key denies stay. The old trail's wiring is only refreshed until step 3. |
+| `org-guard-alerts` (management account) alerts on selector and tag changes to `org-trail`. | It also alerts on any trail change made in the management account, on any trail. `sec-notify-org-trail-tamper` (security tooling, home Region) alerts on stop, delete, update, selector, tag and resource-policy calls on `org-trail-delegated`. |
 | SCPs never apply: the trail is managed from the management account. | `DenyDisableSecurityServices` (stop/delete: break-glass only), `DenyWeakenSecurityServices` (selectors/updates: pipeline roles and break-glass) and `DenyCentralDetectionOutsideSecurityAccounts` (only from the security accounts) apply. No new SCP statement. |
 
 Facts the order depends on:
@@ -99,7 +100,10 @@ Facts the order depends on:
    No destroy. Apply.
 
 3. Before `aws-security` applies, remove its copy of the registration from its
-   state. Lock the workspace in HCP Terraform, then:
+   state. The config commit in 1.2 also queues an `aws-security` run (directly
+   or by run trigger after 1.2's apply): **discard that run** and every other
+   `aws-security` run until this state step is done. Lock the workspace in HCP
+   Terraform, then:
 
    ```bash
    cd envs/aws/security
@@ -108,14 +112,17 @@ Facts the order depends on:
      'module.aws_security.module.delegated_admin.aws_organizations_delegated_administrator.this["cloudtrail.amazonaws.com"]'
    ```
 
-   Nothing changes in AWS. Unlock the workspace.
+   Nothing changes in AWS. Unlock the workspace and start a new run.
 
 4. Plan `aws-security`. Expect only creates, all in security tooling, under
    `module.aws_security.module.cloudtrail_delegated_admin[0]`: the trail
    `org-trail-delegated`, its log group, delivery role and policy, CMK and
    alias, CIS alarm topic and subscriptions, and the CIS metric filters and
-   alarms. If `break_glass_role_arn` is set, the security-notifications
-   break-glass metric alarm on the new log group is also created.
+   alarms; and the EventBridge rule `sec-notify-org-trail-tamper` with its
+   target (the security-notifications topic). If `break_glass_role_arn` is
+   set, the security-notifications break-glass metric alarm on the new log
+   group is also created. In `aws-organization` (1.2) the `org-guard-alerts`
+   pattern also gained a clause for any trail change in the management account.
 
    `module.aws_security.module.cloudtrail[0]` must show **no change**. Any
    destroy, of the old trail or of the registration, means a step was skipped:
@@ -144,6 +151,10 @@ aws cloudtrail get-trail-status --name "$TRAIL" --region <home>
   test the path: `aws cloudwatch set-alarm-state --alarm-name
   org-trail-delegated-cloudtrail-config-changes --state-value ALARM
   --state-reason test`.
+- Tamper alerting: `aws cloudtrail add-tags --resource-id "$TRAIL" --tags-list
+  Key=migration-test,Value=1` then `remove-tags` with the same key, from the
+  security-tooling pipeline or break-glass role: the `RemoveTags` call must
+  email the security-notifications topic.
 - Optional, while the old trail still logs: from a non-exempt admin role in
   security tooling, `aws cloudtrail stop-logging --name "$TRAIL"` must fail
   with an explicit SCP deny. If it succeeds, run `start-logging` at once and

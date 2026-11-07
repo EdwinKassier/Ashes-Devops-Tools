@@ -170,8 +170,33 @@ run "default_is_unchanged" {
       length(module.cloudtrail_delegated_admin) == 0 &&
       length(module.cloudtrail) == 1 &&
       output.delegated_admin_trail_arn == null &&
+      length(aws_cloudwatch_event_rule.delegated_admin_trail_tamper) == 0 &&
       contains(module.delegated_admin.registered_services, "cloudtrail.amazonaws.com")
     )
     error_message = "With the flag off the management trail and the cloudtrail registration must be unchanged (create_management_trail is ignored)."
+  }
+}
+
+# The delegated-admin trail's changes are made from security tooling, outside
+# the management-account guard rule: a rule there alerts on each of them.
+run "delegated_admin_trail_tamper_alerted_in_security_tooling" {
+  command = plan
+
+  assert {
+    condition = (
+      aws_cloudwatch_event_target.delegated_admin_trail_tamper[0].arn == "arn:aws:sns:eu-west-2:222222222222:security-notifications" &&
+      toset(flatten([for c in jsondecode(aws_cloudwatch_event_rule.delegated_admin_trail_tamper[0].event_pattern).detail["$or"] : c.eventName])) == toset([
+        "StopLogging", "DeleteTrail", "UpdateTrail", "PutEventSelectors", "PutInsightSelectors", "RemoveTags", "PutResourcePolicy", "DeleteResourcePolicy",
+      ]) &&
+      contains(jsondecode(aws_cloudwatch_event_rule.delegated_admin_trail_tamper[0].event_pattern).detail["$or"][0].requestParameters.name, "org-trail-delegated") &&
+      strcontains(aws_cloudwatch_event_rule.delegated_admin_trail_tamper[0].event_pattern, "arn:*:cloudtrail:*:111111111111:trail/org-trail-delegated")
+    )
+    error_message = "With the delegated admin, security tooling must alert on stop/delete/update/selector/tag/policy changes to the new trail via the security-notifications topic."
+  }
+  # EventBridge caps an event pattern at 4,096 characters, with the longest
+  # trail name allowed.
+  assert {
+    condition     = length(aws_cloudwatch_event_rule.delegated_admin_trail_tamper[0].event_pattern) + 4 * (128 - length("org-trail-delegated")) <= 4096
+    error_message = "The trail tamper pattern must stay within the EventBridge event-pattern size."
   }
 }

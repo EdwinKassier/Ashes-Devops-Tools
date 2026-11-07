@@ -414,10 +414,11 @@ run "management_role_has_no_trail_write" {
   assert {
     condition = (
       !anytrue([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s.Effect == "Allow" && anytrue([for a in flatten([s.Action]) : startswith(a, "cloudtrail:") || a == "iam:PassRole"])]) &&
-      length([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if contains(["OrganizationTrailOnly", "PassTrailDeliveryRoleToCloudTrail"], s.Sid)]) == 0 &&
+      length([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if contains(["OrganizationTrailOnly", "PassTrailDeliveryRoleToCloudTrail", "TrailWiringCreate", "CreateOwnedKeysOnly"], s.Sid)]) == 0 &&
+      !anytrue([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s.Effect == "Allow" && anytrue([for a in flatten([s.Action]) : contains(["kms:CreateKey", "logs:CreateLogGroup", "sns:CreateTopic"], a)])]) &&
       contains(one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "DenyTrailAndKeyDestruction"]).Action, "cloudtrail:DeleteTrail")
     )
-    error_message = "With the CloudTrail delegated admin, the aws-security role must allow no cloudtrail action and no PassRole, and keep the trail denies."
+    error_message = "With the CloudTrail delegated admin, the aws-security role must allow no cloudtrail action, no PassRole and no trail-wiring create in the management account, and keep the trail denies."
   }
 
   assert {

@@ -32,6 +32,11 @@ locals {
   # With the CloudTrail delegated administrator, aws-organization owns the
   # cloudtrail.amazonaws.com registration: aws-security may neither register
   # nor deregister it.
+  # Statements the aws-security role loses with the CloudTrail delegated
+  # admin. Only cloudtrail-org (the management trail) creates log groups,
+  # topics and keys in the management account from aws-security.
+  delegated_admin_dropped_sids = ["TrailWiringCreate", "CreateOwnedKeysOnly", "OrganizationTrailOnly", "PassTrailDeliveryRoleToCloudTrail"]
+
   security_service_principals = [
     for p in var.security_service_principals : p if !(var.enable_cloudtrail_delegated_admin && p == "cloudtrail.amazonaws.com")
   ]
@@ -124,7 +129,13 @@ locals {
   # Built-in apply permissions per known workspace. A workspace not listed
   # here must supply apply_policy_json.
   builtin_apply_statements = {
-    "aws-security" = concat([
+    # Once the trail is managed by the CloudTrail delegated administrator
+    # (security tooling), the management role keeps no trail write and no
+    # create in the management account (delegated_admin_dropped_sids): the new
+    # trail and its wiring are created from a member account, under the
+    # deny-tamper SCP, and the old trail is retired with break-glass. The old
+    # trail's remaining wiring is only refreshed (ReadOnlyAccess).
+    "aws-security" = [for s in [
       {
         Sid    = "DelegatedAdminRegistration"
         Effect = "Allow"
@@ -230,67 +241,59 @@ locals {
           "arn:${local.partition}:kms:*:${local.account_id}:alias/${var.security_trail_name}-*",
         ]
       },
-      ],
-      # Once the trail is managed by the CloudTrail delegated administrator
-      # (security tooling), the management role keeps no trail write at all:
-      # the new trail is created and changed from a member account, under the
-      # deny-tamper SCP, and the old trail is retired with break-glass.
-      [for s in [
-        {
-          # Trail writes only on THE organization trail: no second trail, no
-          # repointing another trail. Reads come from ReadOnlyAccess.
-          Sid      = "OrganizationTrailOnly"
-          Effect   = "Allow"
-          Action   = ["cloudtrail:*"]
-          Resource = ["arn:${local.partition}:cloudtrail:*:${local.account_id}:trail/${var.security_trail_name}"]
-        },
-        {
-          Sid       = "PassTrailDeliveryRoleToCloudTrail"
-          Effect    = "Allow"
-          Action    = "iam:PassRole"
-          Resource  = ["arn:${local.partition}:iam::${local.account_id}:role/${var.security_trail_role_pattern}"]
-          Condition = { StringEquals = { "iam:PassedToService" = "cloudtrail.amazonaws.com" } }
-        },
-      ] : s if !var.enable_cloudtrail_delegated_admin],
-      [
-        {
-          # Stopping or deleting the org trail, or destroying its keys, blinds the
-          # whole organization: break-glass only.
-          # Repointing the trail (UpdateTrail: bucket, KMS key, org / multi-region
-          # flags) or rewriting a key's policy / grants / rotation is as good as
-          # stopping it. The key policy is set at CreateKey and the trail's
-          # settings at CreateTrail, so routine applies never need these.
-          # Untagging the trail or rewriting its resource policy is the same.
-          # PutEventSelectors stays allowed (aws_cloudtrail calls it on create);
-          # selector changes are DETECTED by the aws-organization guard-alerts
-          # EventBridge rule (the CIS 4.5 alarm does not match selector calls).
-          Sid    = "DenyTrailAndKeyDestruction"
-          Effect = "Deny"
-          Action = [
-            "cloudtrail:StopLogging", "cloudtrail:DeleteTrail", "cloudtrail:UpdateTrail",
-            "cloudtrail:RemoveTags", "cloudtrail:PutResourcePolicy", "cloudtrail:DeleteResourcePolicy",
-            "kms:ScheduleKeyDeletion", "kms:DisableKey", "kms:DeleteImportedKeyMaterial",
-            "kms:PutKeyPolicy", "kms:CreateGrant", "kms:DisableKeyRotation",
-          ]
-          Resource = "*"
-        },
-        {
-          # Deleting or silencing a CIS alarm blinds the trail's alerting.
-          Sid      = "DenyTrailAndKeyDestructionAlarms"
-          Effect   = "Deny"
-          Action   = ["cloudwatch:DeleteAlarms", "cloudwatch:DisableAlarmActions"]
-          Resource = ["arn:${local.partition}:cloudwatch:*:${local.account_id}:alarm:${var.security_trail_name}-*"]
-        },
-        {
-          # The trail log group, its metric filters (the CIS alarms' inputs) and
-          # its retention and log streams survive the pipeline. PutRetentionPolicy
-          # stays allowed; PutMetricFilter overwrites are detected, not denied.
-          Sid      = "DenyTrailAndKeyDestructionLogs"
-          Effect   = "Deny"
-          Action   = ["logs:DeleteLogGroup", "logs:DeleteLogStream", "logs:DeleteRetentionPolicy", "logs:DeleteSubscriptionFilter", "logs:DeleteMetricFilter"]
-          Resource = local.trail_log_group_arns
-        },
-    ])
+      {
+        # Trail writes only on THE organization trail: no second trail, no
+        # repointing another trail. Reads come from ReadOnlyAccess.
+        Sid      = "OrganizationTrailOnly"
+        Effect   = "Allow"
+        Action   = ["cloudtrail:*"]
+        Resource = ["arn:${local.partition}:cloudtrail:*:${local.account_id}:trail/${var.security_trail_name}"]
+      },
+      {
+        Sid       = "PassTrailDeliveryRoleToCloudTrail"
+        Effect    = "Allow"
+        Action    = "iam:PassRole"
+        Resource  = ["arn:${local.partition}:iam::${local.account_id}:role/${var.security_trail_role_pattern}"]
+        Condition = { StringEquals = { "iam:PassedToService" = "cloudtrail.amazonaws.com" } }
+      },
+      {
+        # Stopping or deleting the org trail, or destroying its keys, blinds the
+        # whole organization: break-glass only.
+        # Repointing the trail (UpdateTrail: bucket, KMS key, org / multi-region
+        # flags) or rewriting a key's policy / grants / rotation is as good as
+        # stopping it. The key policy is set at CreateKey and the trail's
+        # settings at CreateTrail, so routine applies never need these.
+        # Untagging the trail or rewriting its resource policy is the same.
+        # PutEventSelectors stays allowed (aws_cloudtrail calls it on create);
+        # selector changes are DETECTED by the aws-organization guard-alerts
+        # EventBridge rule (the CIS 4.5 alarm does not match selector calls).
+        Sid    = "DenyTrailAndKeyDestruction"
+        Effect = "Deny"
+        Action = [
+          "cloudtrail:StopLogging", "cloudtrail:DeleteTrail", "cloudtrail:UpdateTrail",
+          "cloudtrail:RemoveTags", "cloudtrail:PutResourcePolicy", "cloudtrail:DeleteResourcePolicy",
+          "kms:ScheduleKeyDeletion", "kms:DisableKey", "kms:DeleteImportedKeyMaterial",
+          "kms:PutKeyPolicy", "kms:CreateGrant", "kms:DisableKeyRotation",
+        ]
+        Resource = "*"
+      },
+      {
+        # Deleting or silencing a CIS alarm blinds the trail's alerting.
+        Sid      = "DenyTrailAndKeyDestructionAlarms"
+        Effect   = "Deny"
+        Action   = ["cloudwatch:DeleteAlarms", "cloudwatch:DisableAlarmActions"]
+        Resource = ["arn:${local.partition}:cloudwatch:*:${local.account_id}:alarm:${var.security_trail_name}-*"]
+      },
+      {
+        # The trail log group, its metric filters (the CIS alarms' inputs) and
+        # its retention and log streams survive the pipeline. PutRetentionPolicy
+        # stays allowed; PutMetricFilter overwrites are detected, not denied.
+        Sid      = "DenyTrailAndKeyDestructionLogs"
+        Effect   = "Deny"
+        Action   = ["logs:DeleteLogGroup", "logs:DeleteLogStream", "logs:DeleteRetentionPolicy", "logs:DeleteSubscriptionFilter", "logs:DeleteMetricFilter"]
+        Resource = local.trail_log_group_arns
+      },
+    ] : s if !(var.enable_cloudtrail_delegated_admin && contains(local.delegated_admin_dropped_sids, s.Sid))]
     "aws-backup" = [
       {
         Sid      = "OrgRead"
