@@ -154,3 +154,14 @@ scrubbed_plan := {"plan": {
 test_scrubbed_real_plan_has_no_denies if {
 	count(p.deny) == 0 with input as scrubbed_plan
 }
+
+# ── Admin containment (deny policies and the tags they match) ──────────────
+test_google_iam_deny_policy_delete_denied if denied_delete("google_iam_deny_policy")
+
+test_google_tags_tag_key_delete_denied if denied_delete("google_tags_tag_key")
+
+test_google_tags_tag_value_delete_denied if denied_delete("google_tags_tag_value")
+
+test_google_iam_deny_policy_replace_denied if count(p.deny) == 1 with input as one("google_iam_deny_policy", ["delete", "create"])
+
+test_google_tags_tag_value_update_allowed if count(p.deny) == 0 with input as one("google_tags_tag_value", ["update"])

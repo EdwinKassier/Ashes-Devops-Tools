@@ -51,6 +51,11 @@ protected_types := {
 	"aws_organizations_policy",
 	"aws_organizations_policy_attachment",
 	"aws_organizations_organization",
+	# Admin containment: deleting a deny policy, or the containment tag key or
+	# value its conditions match, silently lifts the containment.
+	"google_iam_deny_policy",
+	"google_tags_tag_key",
+	"google_tags_tag_value",
 }
 
 action_verb(rc) := "replaces" if lib.creates(rc)
