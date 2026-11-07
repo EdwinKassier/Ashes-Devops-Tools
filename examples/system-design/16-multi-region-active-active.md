@@ -68,9 +68,9 @@ regions of Spanner's `eur3` and `nam3`. This repo's default home region,
 
 ## Back-of-envelope estimates
 
-**Requests.** 60 a day per daily active
-([QPS conversions](00-primer.md#qps-conversions)), peak 3× average because each
-geography peaks in its own daytime:
+**Requests.** Assume 60 a day per daily active and a peak of 3× average,
+because each geography peaks in its own daytime (conversions from
+[QPS conversions](00-primer.md#qps-conversions)):
 
 - North America: 15 million × 60 = 9 × 10⁸ a day, about 10,400 a second, so a
   **31,000 a second** peak.
@@ -96,10 +96,13 @@ by replication: 1,900 write units a second per region. Reads of items under 4
 KB, eventually consistent: 17,100 a second, about 8,550 read units, all in one
 region after a failover. Both sit well inside the default 40,000 per table
 ([AWS docs](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ServiceQuotas.html),
-checked 2026-11). The trap is failover itself: on-demand absorbs up to double
-the previous peak instantly and can throttle beyond that within 30 minutes
+checked 2026-11). The trap is failover itself. On-demand instantly
+accommodates up to double the previous peak, and a new table starts at 4,000
+writes and 12,000 reads a second
 ([AWS docs](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/on-demand-capacity-mode.html),
-checked 2026-11). Failover is exactly a doubling, so pre-warm each replica.
+checked 2026-11). A replica whose recorded peak is below half the failover
+load can throttle, so set warm throughput to the full-cell rate rather than
+trusting history.
 
 **Cell store, GCP (`eu1`).** In a multi-region configuration, 1,000 Spanner
 processing units serve about 15,000 reads a second per region and 2,700
@@ -113,13 +116,15 @@ processing units**.
 
 **Storage and replication.** 60 million accounts × 1 MB = 60 TB, held in two
 regions: 44 TB in the EU, 76 TB in North America. Replication is writes ×
-1 KB: 1.9 MB/s at the EU peak, about 56 GB a day on average. Cross-region
+1 KB: 1.9 MB/s at the EU peak; at the EU average of 625 writes a second,
+625 × 1 KB × 86,400 ≈ 54 GB a day. Cross-region
 transfer is charged on both sides, and DynamoDB bills each replicated write in
 every replica region
 ([AWS pricing](https://aws.amazon.com/dynamodb/pricing/on-demand/), checked 2026-11).
 
-**Directory.** 60 million rows × 200 bytes = 12 GB; 2–3 signup writes and
-about 1,400 login reads a second. Tiny, so strong consistency across
+**Directory.** 60 million rows × 200 bytes = 12 GB; 2–3 signup writes a
+second. Reads: 24 million daily actives × an assumed 5 logins or token
+refreshes a day = 1.2 × 10⁸ a day, about 1,400 a second. Tiny, so strong consistency across
 continents is affordable.
 
 **Failover time on AWS DNS.** Route 53 flips after the failure threshold
@@ -259,15 +264,17 @@ checked 2026-11). That suits residency.
 
 **Health check design.** Check what a request in that region needs (the local
 replica and queues), never a global dependency such as the directory. A blip
-there fails every region at once, and DNS then fails open (documented for Cloud
-DNS; **verify before relying on** it for Route 53).
+there fails every region at once, and DNS then fails open: Cloud DNS returns
+all endpoints, and Route 53 treats every record in the group as healthy
+([AWS docs](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/health-checks-how-route-53-chooses-records.html),
+checked 2026-11).
 
 ### Data placement and residency
 
 | Data | Where | Why |
 |---|---|---|
 | Items, lists, profile | Home cell only: two regions of one geography | Personal data |
-| Directory | Global: `login_hash`, `user_id`, `cell` only | Needed before the cell is known. A keyed hash is still pseudonymous personal data: **verify with counsel**; the fallback is per-geography login domains |
+| Directory | Global: `login_hash`, `user_id`, `cell` only | Needed before the cell is known. A keyed hash is still pseudonymous personal data, and GCP's `nam-eur-asia1` also keeps a read-only replica in Taiwan (`asia-east1`): **verify with counsel**; the fallback is per-geography login domains |
 | Logs, traces | The cell's regions; no bodies or emails | The classic leak |
 | Backups, analytics | A vault and warehouse inside the geography; only aggregates cross | The second classic leak |
 
@@ -418,7 +425,7 @@ visible, and cross-region transfer becomes a top-five cost line.
 | Region failover inside a cell | Route 53 latency records with health checks | Global external ALB, a serverless NEG per region | GCP is anycast: no TTL wait. AWS is DNS: 90–150 s. |
 | Compute | ECS on Fargate, a workspace per Region | Cloud Run in each region | The GCP second region is raw today (see below). |
 | Cell data | DynamoDB global table, MREC | Spanner `eur3` / `nam3` | Asynchronous, last writer wins, versus a synchronous quorum. |
-| Directory | DynamoDB global table, MRSC (3 Regions) | Spanner `nam-eur-asia1` | Both strong; both make you retry on contention. |
+| Directory | DynamoDB global table, MRSC (3 Regions) | Spanner `nam-eur-asia1` | Both strong; both retry on contention. Spanner adds read-only replicas in Belgium and Taiwan. |
 | Residency guardrail | Region SCP (`aws:RequestedRegion`) | `gcp.resourceLocations` | Neither governs processing or cross-region side effects. |
 | Keys | One CMK per Region (or multi-Region keys) | One key ring per region | Spanner multi-region CMEK takes one regional key per replica location. |
 | Images | ECR, replicated per Region | Artifact Registry, multi-region | A regional repository is a hidden single-region dependency. |
@@ -534,6 +541,9 @@ resource "aws_dynamodb_table" "items" {
   warm_throughput {
     read_units_per_second  = 20000 # carry the whole cell's reads after a failover
     write_units_per_second = 4000
+  }
+  lifecycle {
+    ignore_changes = [replica] # -b owns its replica through aws_dynamodb_table_replica
   }
   tags = { Service = "api" } # default_tags add the rest
 }
