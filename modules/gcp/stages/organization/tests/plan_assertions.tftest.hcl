@@ -1023,7 +1023,7 @@ run "budget_channels_opt_in" {
   }
 }
 
-run "scc_api_version_defaults_to_v1_and_flips_to_v2" {
+run "scc_api_version_defaults_to_v1" {
   command = plan
 
   assert {

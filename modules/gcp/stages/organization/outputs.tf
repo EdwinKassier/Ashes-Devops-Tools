@@ -33,6 +33,11 @@ output "scc_pubsub_topic_id" {
   value       = module.scc_notifications.topic_id
 }
 
+output "scc_v2_notification_configs" {
+  description = "SCC v2 notification configs (name and service account per config; empty unless gcp.scc_api_version is both or v2). Used to verify the v2 publisher binding during the v1 to v2 migration."
+  value       = module.scc_notifications.v2_notification_configs
+}
+
 output "cmek_key_names" {
   description = "Map of KMS key short names to fully qualified key resource IDs created by the CMEK modules (org keyring plus, when logging_project_id is set, the audit keyring in the logging project)"
   value       = merge(module.cmek.key_names, local.separate_logging_project ? module.audit_cmek[0].key_names : {})

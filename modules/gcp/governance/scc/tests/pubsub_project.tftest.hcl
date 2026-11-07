@@ -162,7 +162,15 @@ run "both_adds_v2_twin_and_mute_configs" {
 }
 
 run "v2_flip_drops_v1_configs_keeps_topic" {
-  command = plan
+  command = apply
+
+  # The topic id is computed; pin it so the v2 config's pubsub_topic is known.
+  override_resource {
+    target = google_pubsub_topic.scc_notifications[0]
+    values = {
+      id = "projects/mock-project/topics/scc-notifications"
+    }
+  }
 
   variables {
     scc_api_version = "v2"
@@ -171,6 +179,16 @@ run "v2_flip_drops_v1_configs_keeps_topic" {
   assert {
     condition     = length(google_scc_notification_config.notification_config) == 0 && length(google_pubsub_topic_iam_member.scc_publisher) == 0 && length(google_scc_v2_organization_notification_config.this) == 1
     error_message = "v2 must drop the v1 configs and keep only the v2 notification config."
+  }
+
+  assert {
+    condition     = google_scc_v2_organization_notification_config.this["scc-notification-config"].pubsub_topic == "projects/mock-project/topics/scc-notifications"
+    error_message = "The v2 notification config must publish to the shared topic."
+  }
+
+  assert {
+    condition     = google_scc_v2_organization_notification_config.this["scc-notification-config"].streaming_config[0].filter == "state=\"ACTIVE\""
+    error_message = "The v2 notification config must pass the filter through."
   }
 
   assert {

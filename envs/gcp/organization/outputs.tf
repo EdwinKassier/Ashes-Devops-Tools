@@ -172,6 +172,12 @@ output "scc_pubsub_topic_id" {
   value       = local.contract.scc_pubsub_topic_id
 }
 
+# Plain (non-contract) output: only the SCC v1 to v2 migration reads it.
+output "scc_v2_notification_configs" {
+  description = "SCC v2 notification configs (name and service account per config; empty unless gcp_overrides.scc_api_version is both or v2)."
+  value       = module.organization.scc_v2_notification_configs
+}
+
 output "cmek_key_names" {
   description = "Deprecated: read contract.cmek_key_names (removed in v1.0). Map of CMEK key short-name to key ID created by the organization stage. Lets downstream roots (e.g. gcp/workload) encrypt resources with org-managed keys via remote state. Re-exports modules/gcp/stages/organization output cmek_key_names."
   value       = local.contract.cmek_key_names
