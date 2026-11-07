@@ -46,6 +46,9 @@ org:
   # CloudTrail / Config / GuardDuty / Security Hub / Inspector. Use starter for
   # sandboxes and early non-prod only. An explicit toggle always wins.
   profile: production
+  # Monthly budget in USD for the whole estate (required with profile starter,
+  # which the scaffolder enforces; optional with production).
+  # monthly_budget_usd: 500
   # Owner / CostCenter tags (aws-* roots).
   owner: platform-team
   cost_center: platform
@@ -252,6 +255,7 @@ aws:
   # Workload accounts, same shape (merged with accounts).
   workload_accounts:
     workload_dev: {email: aws+workload-dev@example.com, ou: Workloads}
+    workload_prod: {email: aws+workload-prod@example.com, ou: Workloads}
   # Workload environments => the account key they deploy into. tfc-admin
   # declares one aws-workload-<env> workspace per key and sets its
   # workload_account_key; aws-organization adds the matching OIDC trust binding
@@ -260,6 +264,7 @@ aws:
     dev:
       account_key: workload_dev
       vpc_cidr: 10.20.0.0/16
+      is_production: false
       # Services deployed to this environment (ECS Fargate behind the shared
       # ALB, optional Aurora and GitHub deploy role). Fields:
       # envs/aws/workload (variable services).
@@ -267,6 +272,10 @@ aws:
       #   api:
       #     desired_count: 2
       #     health_check_path: /healthz
+    prod:
+      account_key: workload_prod
+      vpc_cidr: 10.40.0.0/16
+      is_production: true
 
   # IAM Identity Center access by name (aws-identity): Identity Store group
   # DISPLAY NAME => list of {permission_set, accounts}. Accounts are keys of the

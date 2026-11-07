@@ -134,7 +134,8 @@ expect_reject "rejects a malformed AWS account ID" --output "${workdir}/e.yaml" 
 if [[ -e "${workdir}/a.yaml" ]]; then fail "a rejected run writes no file"; else pass "a rejected run writes no file"; fi
 
 echo "==> --force overwrites; saas-only leaves gcp/aws disabled"
-if bash "${SCRIPT}" --non-interactive --force --output "${out}" --org-name beta --clouds saas </dev/null >"${log}" 2>&1; then
+if bash "${SCRIPT}" --non-interactive --force --output "${out}" --org-name beta --clouds saas \
+  --supabase-org abcdefgh1234 --vercel-team team_x --github-repo beta/web </dev/null >"${log}" 2>&1; then
   pass "--force overwrites an existing file"
   assert_eq "$(section_value "${out}" org name)" "beta" "overwritten org.name"
   assert_eq "$(section_value "${out}" gcp enabled)" "false" "saas-only: gcp.enabled false"
@@ -180,6 +181,148 @@ expect_reject "rejects an email pattern without {key}" --output "${workdir}/f.ya
   --aws-email-pattern 'aws@acme.io'
 expect_reject "rejects an example.com email pattern" --output "${workdir}/g.yaml" --org-name acme --clouds aws \
   --aws-email-pattern 'aws+{key}@example.com'
+
+SCHEMA="${REPO_ROOT}/config/landing-zone.schema.json"
+schema_check() {
+  if command -v check-jsonschema >/dev/null 2>&1; then
+    if check-jsonschema --schemafile "${SCHEMA}" "$1" >/dev/null 2>&1; then pass "$2 validates against the schema"; else fail "$2 validates against the schema"; fi
+  else
+    fail "$2 validates against the schema (check-jsonschema not installed)"
+  fi
+}
+
+echo "==> task 2.7: expiry literal, audit-lock default, AWS workload dev + prod"
+out5="${workdir}/aws.yaml"
+if bash "${SCRIPT}" --non-interactive --output "${out5}" --org-name acme --clouds gcp,aws --domain acme.com \
+  --aws-management-account 123456789012 </dev/null >"${log}" 2>&1; then
+  assert_line "${out5}" '^  phase0_admin_impersonation_expires_at: "20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z"$' "expiry written as an RFC 3339 literal"
+  assert_eq "$(section_value "${out5}" gcp enable_audit_bucket_lock)" "false" "audit lock defaults to false"
+  assert_line "${out5}" '^    workload_dev: ' "AWS scaffold has the workload_dev account"
+  assert_line "${out5}" '^    workload_prod: ' "AWS scaffold has the workload_prod account"
+  assert_line "${out5}" '^      account_key: workload_prod$' "AWS scaffold has a prod workload environment"
+  assert_eq "$(section_value "${out5}" org profile)" "production" "profile defaults to production"
+  assert_no_line "${out5}" '^  monthly_budget_usd' "no budget written when none given"
+  schema_check "${out5}" "default scaffold"
+  if yamllint_cmd -s -d "${YAMLLINT_RULES}" "${out5}"; then pass "aws scaffold is yamllint-clean"; else fail "aws scaffold is yamllint-clean"; fi
+else
+  fail "aws scaffold exits 0"; cat "${log}" >&2
+fi
+if bash "${SCRIPT}" --non-interactive --force --output "${out5}" --org-name acme --clouds gcp --domain acme.com \
+  --audit-bucket-lock true </dev/null >"${log}" 2>&1; then
+  assert_eq "$(section_value "${out5}" gcp enable_audit_bucket_lock)" "true" "explicit --audit-bucket-lock true is honoured"
+else
+  fail "audit-lock run exits 0"; cat "${log}" >&2
+fi
+
+echo "==> task 2.7: --vcs-repo"
+out6="${workdir}/vcs.yaml"
+if bash "${SCRIPT}" --non-interactive --output "${out6}" --org-name acme --clouds aws --aws-management-account 123456789012 \
+  --vcs-repo acme/landing-zone --vcs-github-app-installation-id ghain-abc123 </dev/null >"${log}" 2>&1; then
+  assert_line "${out6}" '^    vcs_repo:$' "org.tfc.vcs_repo uncommented"
+  assert_line "${out6}" '^      identifier: acme/landing-zone$' "vcs_repo.identifier"
+  assert_line "${out6}" '^      branch: main$' "vcs_repo.branch"
+  assert_line "${out6}" '^      github_app_installation_id: ghain-abc123$' "vcs_repo.github_app_installation_id"
+  schema_check "${out6}" "vcs-repo scaffold"
+  if yamllint_cmd -s -d "${YAMLLINT_RULES}" "${out6}"; then pass "vcs-repo scaffold is yamllint-clean"; else fail "vcs-repo scaffold is yamllint-clean"; fi
+else
+  fail "vcs-repo run exits 0"; cat "${log}" >&2
+fi
+expect_reject "rejects a malformed --vcs-repo" --output "${workdir}/v.yaml" --org-name acme --clouds aws --vcs-repo notarepo
+
+echo "==> task 2.7: --profile starter / production"
+out7="${workdir}/starter.yaml"
+expect_reject "starter without a budget is refused" --output "${out7}" --org-name acme --clouds aws --profile starter
+expect_reject "rejects an unknown profile" --output "${out7}" --org-name acme --clouds aws --profile gold
+expect_reject "rejects a non-positive budget" --output "${out7}" --org-name acme --clouds aws --profile starter --monthly-budget 0
+if bash "${SCRIPT}" --non-interactive --output "${out7}" --org-name acme --clouds aws --profile starter --monthly-budget 750 \
+  </dev/null >"${log}" 2>&1; then
+  assert_eq "$(section_value "${out7}" org profile)" "starter" "org.profile starter"
+  assert_eq "$(section_value "${out7}" org monthly_budget_usd)" "750" "org.monthly_budget_usd"
+  schema_check "${out7}" "starter scaffold"
+  if yamllint_cmd -s -d "${YAMLLINT_RULES}" "${out7}"; then pass "starter scaffold is yamllint-clean"; else fail "starter scaffold is yamllint-clean"; fi
+else
+  fail "starter run exits 0"; cat "${log}" >&2
+fi
+
+echo "==> task 2.7: interactive production shows the idle cost and asks for confirmation"
+pty_run() { # pty_run ANSWERS_STRING ARGS... : runs the scaffolder on a pty, prints output, returns its exit status
+  python3 - "$@" <<'PY'
+import os, pty, sys, select, time
+answers, argv = sys.argv[1], sys.argv[2:]
+pid, fd = pty.fork()
+if pid == 0:
+    os.execvp("bash", ["bash"] + argv)
+buf = b""
+pos = 0
+while True:
+    r, _, _ = select.select([fd], [], [], 5)
+    if not r:
+        break
+    try:
+        d = os.read(fd, 4096)
+    except OSError:
+        break
+    if not d:
+        break
+    buf += d
+    tail = buf[pos:].rstrip()
+    if tail.endswith(b"[y/N]:"):
+        os.write(fd, answers.encode()); pos = len(buf)
+    elif tail.endswith(b"]:") or tail.endswith(b"):"):
+        os.write(fd, b"\r"); pos = len(buf)
+_, st = os.waitpid(pid, 0)
+sys.stdout.write(buf.decode(errors="replace"))
+sys.exit(os.WEXITSTATUS(st) if os.WIFEXITED(st) else 1)
+PY
+}
+out8="${workdir}/interactive.yaml"
+if command -v python3 >/dev/null 2>&1; then
+  if pty_run $'n\r' "${SCRIPT}" --output "${out8}" --org-name acme --clouds aws --aws-management-account 123456789012 \
+    --profile production >"${log}" 2>&1; then
+    fail "declining the production cost confirmation aborts"
+  else
+    pass "declining the production cost confirmation aborts"
+  fi
+  assert_line "${log}" '1\.4-1\.9k' "production confirmation shows the idle cost"
+  if [[ -e "${out8}" ]]; then fail "an aborted run writes no file"; else pass "an aborted run writes no file"; fi
+  if pty_run $'y\r' "${SCRIPT}" --output "${out8}" --org-name acme --clouds aws --aws-management-account 123456789012 \
+    --profile production >"${log}" 2>&1; then
+    pass "accepting the production cost confirmation proceeds"
+  else
+    fail "accepting the production cost confirmation proceeds"; cat "${log}" >&2
+  fi
+fi
+
+echo "==> task 2.7: saas without IDs reports MISSING and exits 2"
+set +e
+bash "${SCRIPT}" --non-interactive --output "${workdir}/s.yaml" --org-name acme --clouds saas </dev/null >"${log}" 2>&1
+rc=$?
+set -e
+assert_eq "${rc}" "2" "missing SaaS IDs exit 2"
+assert_line "${log}" '^MISSING: .*--supabase-org' "MISSING names --supabase-org"
+assert_line "${log}" '^MISSING: .*--vercel-team' "MISSING names --vercel-team"
+assert_line "${log}" '^MISSING: .*--github-repo' "MISSING names --github-repo"
+if [[ -e "${workdir}/s.yaml" ]]; then fail "missing-ID run writes no file"; else pass "missing-ID run writes no file"; fi
+
+echo "==> task 2.7: --codeowners renders templates/CODEOWNERS.tftpl"
+co="${workdir}/CODEOWNERS"
+if bash "${SCRIPT}" --non-interactive --output "${workdir}/co.yaml" --org-name acme --clouds aws \
+  --aws-management-account 123456789012 --github-owner acme-gh --codeowners --codeowners-output "${co}" \
+  --security-team '@acme-gh/sec' </dev/null >"${log}" 2>&1; then
+  assert_line "${co}" '^\* @acme-gh/platform-team$' "default owner is the platform team"
+  assert_line "${co}" '^/envs/tfc-admin/ +@acme-gh/platform-team @acme-gh/sec$' "tfc-admin needs platform + security"
+  assert_line "${co}" '^/config/landing-zone.yaml +@acme-gh/platform-team @acme-gh/sec$' "landing-zone.yaml is security-owned"
+  assert_line "${co}" '^/policies/ ' "policies are owned"
+  assert_line "${co}" '^/modules/gcp/stages/guardrails/ ' "guardrails stage is owned"
+  assert_no_line "${co}" '\$\{|your-org' "no unrendered variables or placeholders"
+  assert_no_line "${co}" '^[^#]*@acme-gh/(sec|platform-team|app-platform-team|docs-team)@' "no malformed owners"
+else
+  fail "codeowners run exits 0"; cat "${log}" >&2
+fi
+expect_reject "--codeowners needs a GitHub owner" --output "${workdir}/co2.yaml" --org-name acme --clouds aws \
+  --codeowners --codeowners-output "${workdir}/CODEOWNERS2"
+expect_reject "--codeowners refuses to overwrite without --force" --output "${workdir}/co3.yaml" --org-name acme --clouds aws \
+  --github-owner acme-gh --codeowners --codeowners-output "${co}"
 
 echo "==> a gcp-only run does not report AWS placeholders"
 out3="${workdir}/gcp-only.yaml"
