@@ -587,6 +587,29 @@ effect when `enable_logging_organization_settings` is on. Don't disable the
 `_Default` sink unless a catch-all sink exists: the central Log Analytics sink
 routes only Cloud Audit Logs.
 
+#### gcp-network-hub / gcp-workload: additional regions (opt-in)
+
+`additional_regions` is new on `network/tiered-vpc`, `stages/net-hub` and
+`stages/net-spoke`. The stages expose it as `hub_additional_regions`
+(`stages/network-hub`) and `network.additional_regions` (`stages/environment`).
+In config it is `gcp.network.additional_regions` for the hub and
+`gcp.environments.<env>.additional_regions` for a spoke. The default is `{}`, so
+nothing changes on upgrade. Existing subnets and `integrated_nat[0]` keep their
+addresses.
+
+Adding a region creates three regional subnets (`<vpc>-{public,private,db}-<region>`).
+Unless the region sets `nat: false`, it also creates a Cloud Router
+`<vpc>-router-<region>` with Cloud NAT `<vpc>-nat-<region>`. Nothing is replaced
+or destroyed.
+
+- The new CIDRs must not overlap the primary subnets or each other.
+- In `firewall_mode` `both`/`policy`, the tier policy rules update in place to
+  include the new CIDRs.
+- Under NCC with a non-empty `ncc.include_export_ranges`, add the new CIDRs
+  there too.
+- Shared VPC subnet grants are explicit: add the new subnet names to
+  `service_teams.*.shared_vpc_subnets` for teams that deploy there.
+
 ### SaaS and cross-cloud
 
 #### saas / vercel: function regions through `resource_config`
