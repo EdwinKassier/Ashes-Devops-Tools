@@ -485,6 +485,24 @@ With `gcp.network.ncc_hub.enabled` and `gcp.network.vpn.enabled` both set, the
 tunnels also join the NCC hub's center group (`default` on MESH) as a hybrid
 spoke. This is a new resource.
 
+#### gcp-workload: composition moved into `modules/gcp/stages/environment`
+
+`envs/gcp/workload` now calls one module, `module "environment"`
+(`modules/gcp/stages/environment`). Every resource keeps its identity through
+`envs/gcp/workload/moved.tf`. `module.host`, `module.budget`,
+`module.service_team`, `module.vm_backup_policy`, `google_project_service.osconfig`,
+`module.os_patch_management`, `module.saas_secret_bridge`, `module.app_services`
+and `module.app_ingress` each move to `module.environment.<same>`, and the older
+`module.host.*` network-core moves chain into them. There is no manual step: the
+first plan of each `gcp-workload-<env>` workspace shows only "has moved" entries
+and 0 to destroy. Root variables and outputs are unchanged.
+
+- If you script against state addresses (`terraform state`, `-target`, imports),
+  prefix them with `module.environment.`. The runbooks are updated.
+- An input you set explicitly to `null` in tfvars now takes the stage's default
+  instead of passing through as `null`. Unset inputs behave as before.
+- The moved blocks are kept until v1.0.
+
 ### SaaS and cross-cloud
 
 #### SaaS secret bridge writes its secret write-only
