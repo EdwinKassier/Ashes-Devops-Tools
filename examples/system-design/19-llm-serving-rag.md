@@ -107,18 +107,25 @@ keep `max_tokens` near the real answer length.
 
 - KV cache per token, for a model with 32 layers, 8 KV heads and head size 128
   (an assumed Llama-class shape): 2 × 32 × 8 × 128 × 2 bytes = **128 KiB**.
-- One NVIDIA L4 has 24 GB
-  ([Google Cloud docs](https://docs.cloud.google.com/compute/docs/gpus), checked
-  2026-11). FP8 weights take about 8 GB and runtime overhead about 2 GB, leaving
-  about 14 GB, or roughly 107,000 tokens of KV cache: **16 concurrent
-  sequences** of 6,500 tokens.
-- Each request occupies a slot for about 11 s (1 s prefill, 400 tokens at
-  about 40 tokens a second per stream under batching; **verify by
-  benchmark**). Little's law: 40 × 11 = 440 sequences in flight, so 28 GPUs at
-  full cache.
-- Spread across three zones, losing one must still carry peak: 28 ÷ ⅔ = **42
-  GPUs at peak**, 14 per zone, running at 67% of cache in normal operation. At
-  the trough (one third of peak) the same rule floors it at 14.
+- **Decode is bandwidth-bound.** Each step reads all weights (FP8: about 8
+  GB) plus the KV cache of every active sequence (6,300 tokens × 128 KiB ≈
+  0.83 GB each). Steps a second ≤ bandwidth ÷ bytes per step, and each step
+  gives every sequence one token.
+- **An L4 fails the SLO.** It has 24 GB at 300 GB/s
+  ([Google Cloud docs](https://docs.cloud.google.com/compute/docs/gpus),
+  checked 2026-11). Filling it with 16 sequences reads 8 + 13 = 21 GB a step:
+  at most 14 tokens a second per stream, so 400 tokens take 29 s. Even 4
+  sequences with an FP8 KV cache reach only 31 tokens a second at the ceiling.
+- **An H100** has 80 GB at 3.35 TB/s (same source). Capped at **48
+  sequences**: 8 + 48 × 0.83 = 48 GB a step, a ceiling of 70 steps a second;
+  at an assumed 60% of peak bandwidth, about 42 tokens a second per stream
+  (**verify by benchmark**). Memory used: about 50 GB of 80.
+- A request then holds a slot about 11 s (1 s prefill, 400 tokens in 9.5 s),
+  inside the 15 s SLO. Little's law: 40 × 11 = 440 sequences in flight ÷ 48 =
+  10 GPUs.
+- Spread across three zones, losing one must still carry peak: 10 ÷ ⅔ = **15
+  H100s at peak**, 5 per zone, at 67% of capacity normally. At the trough
+  (one third of peak, 4 GPUs of load) the same rule floors it at 6.
 
 **Vector store.** 1 billion corpus tokens in 512-token chunks with 64-token
 overlap (stride 448) is **2.2 million chunks**. At 1,024 dimensions of float32,
@@ -131,7 +138,7 @@ queries a second plus a few writes: small for one primary.
 Re-embedding all 2.2 million after a model change is a batch job.
 
 What these numbers decide: Postgres rather than a vector database at this
-size; managed models by default, because 42 GPUs held for a 3× peak sit
+size; managed models by default, because 15 H100s held for a 3× peak sit
 largely idle; and context trimming as the first cost control.
 
 ## API and data model
@@ -153,29 +160,31 @@ The final stream event carries `citations`, `model` and token counts
 CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE TABLE document (
-  doc_id         text PRIMARY KEY,
   tenant_id      text NOT NULL,
+  doc_id         text NOT NULL,
   version        bigint NOT NULL,
   content_sha256 text NOT NULL,
-  indexed_at     timestamptz NOT NULL DEFAULT now()
+  indexed_at     timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (tenant_id, doc_id)
 );
 
 CREATE TABLE chunk (
   chunk_id    bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  doc_id      text NOT NULL REFERENCES document (doc_id) ON DELETE CASCADE,
   tenant_id   text NOT NULL,
+  doc_id      text NOT NULL,
   acl_groups  text[] NOT NULL,
   ordinal     int NOT NULL,
   content     text NOT NULL,
   embedding   vector(1024) NOT NULL,
-  embed_model text NOT NULL
+  embed_model text NOT NULL,
+  FOREIGN KEY (tenant_id, doc_id) REFERENCES document (tenant_id, doc_id) ON DELETE CASCADE
 );
 
 CREATE INDEX chunk_embedding_hnsw ON chunk
   USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
 CREATE INDEX chunk_tenant ON chunk (tenant_id);
 CREATE INDEX chunk_acl ON chunk USING gin (acl_groups);
-CREATE INDEX chunk_doc ON chunk (doc_id);
+CREATE INDEX chunk_doc ON chunk (tenant_id, doc_id);
 CREATE INDEX chunk_fts ON chunk USING gin (to_tsvector('english', content));
 ```
 
@@ -253,22 +262,23 @@ in blocks instead of reserving the maximum length. vLLM does both, plus prefix
 caching, behind an OpenAI-compatible API
 ([vLLM docs](https://docs.vllm.ai/en/latest/), checked 2026-11).
 
-**What limits a GPU** is KV cache, not compute: 16 long sequences on an L4.
-Levers, in order: fewer chunks, prefix caching, FP8 KV cache, a bigger GPU. An
-H100 has 80 GB ([Google Cloud docs](https://docs.cloud.google.com/compute/docs/gpus),
-checked 2026-11), so a 70B model in FP8 (about 70 GB) needs tensor parallelism
-across two to four of them to leave room for cache.
+**What limits a GPU** is memory: capacity bounds how many sequences fit, and
+bandwidth bounds tokens a second per stream, because every step re-reads the
+weights and all their KV cache (the estimates rule out an L4 for 6,000-token
+prompts). Levers, in order: fewer chunks, prefix caching, FP8 KV cache, a
+capped batch, a GPU with more bandwidth. A 70B model in FP8 (about 70 GB)
+needs tensor parallelism across two to four H100s to leave room for cache.
 
 **Requesting GPUs.**
 
 - **GKE Autopilot** takes a `cloud.google.com/gke-accelerator` node selector
-  (for example `nvidia-l4`) and an `nvidia.com/gpu` limit; an L4 Pod may ask
-  for 1, 2, 4 or 8, and Autopilot rejects a Pod without both
+  (for example `nvidia-h100-80gb`) and an `nvidia.com/gpu` limit; an H100 Pod
+  may ask for 1, 2, 4 or 8, and Autopilot rejects a Pod without both
   ([Google Cloud docs](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/autopilot-gpus),
   checked 2026-11).
 - **AWS:** Fargate does not accept the `gpu` task parameter
   ([AWS docs](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-tasks-services.html),
-  checked 2026-11). Use ECS on GPU EC2 instances such as g6 or g6e
+  checked 2026-11). Use ECS on GPU EC2 instances such as p5 (eight H100s)
   ([AWS docs](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-gpu.html),
   checked 2026-11), or **EKS Auto Mode**, which manages the NVIDIA drivers and
   device plugin and provisions nodes from a NodePool
@@ -360,7 +370,7 @@ WITH candidates AS MATERIALIZED (
   ORDER BY distance
   LIMIT 20
 )
-SELECT * FROM candidates ORDER BY distance;  -- relaxed_order may be slightly out of order
+SELECT * FROM candidates ORDER BY distance + 0;  -- re-sort; "+ 0" stops PG17+ dropping it
 COMMIT;
 ```
 
@@ -372,16 +382,16 @@ B-tree and sort exactly, which is correct.
 
 ```sql
 BEGIN;
-INSERT INTO document (doc_id, tenant_id, version, content_sha256)
+INSERT INTO document (tenant_id, doc_id, version, content_sha256)
 VALUES ($1, $2, $3, $4)
-ON CONFLICT (doc_id) DO UPDATE
+ON CONFLICT (tenant_id, doc_id) DO UPDATE
   SET version = EXCLUDED.version,
       content_sha256 = EXCLUDED.content_sha256,
       indexed_at = now()
   WHERE document.version < EXCLUDED.version
 RETURNING doc_id;
 -- No row returned: a stale or duplicate event. ROLLBACK and acknowledge it.
-DELETE FROM chunk WHERE doc_id = $1;
+DELETE FROM chunk WHERE tenant_id = $1 AND doc_id = $2;
 -- INSERT the new chunks (multi-row INSERT or COPY), then:
 COMMIT;
 ```
@@ -468,7 +478,7 @@ provider's invocation log as the audit copy.
 
 | Decision | Chosen | Rejected | Why | What would change the answer |
 |---|---|---|---|---|
-| Model hosting | Managed by default; self-host one high-volume small model | Self-host everything | 42 GPUs sized for a 3× peak sit largely idle; managed bills per token | Steady volume above break-even, a fine-tuned open model, strict residency |
+| Model hosting | Managed by default; self-host one high-volume small model | Self-host everything | 15 H100s sized for a 3× peak sit largely idle; managed bills per token | Steady volume above break-even, a fine-tuned open model, strict residency |
 | Vector store | pgvector in Postgres | Dedicated vector database | 25 GB fits one instance; ACLs, versions and vectors commit together | 10× corpus |
 | Chunking | Structure-aware, 512 tokens with heading path | Fixed windows; semantic splitting | Keeps tables and steps whole; reproducible | Long unstructured prose: semantic splitting |
 | Retrieval | Hybrid (vector + keyword) with rerank | Vector only | Exact identifiers matter in support | A pure-prose corpus with no codes |
@@ -487,7 +497,7 @@ provider's invocation log as the audit copy.
   capacity; trim context.
 - **The vector store** scales with the corpus, not traffic: 400 searches a
   second fit a primary plus read replicas.
-- **Self-hosted** needs about 420 L4s; regional GPU quota and stock become
+- **Self-hosted** needs about 150 H100s; regional GPU quota and stock become
   the constraint.
 
 ### At 100×
@@ -558,6 +568,7 @@ aws:
           autoscaling_max_capacity: 20
           database:
             engine_version: "16.9"    # module default 16.6 ships pgvector 0.7.4
+            enable_serverless_v2: false  # default true forces db.serverless at 4 ACU max
             instance_class: db.r6g.2xlarge  # 64 GiB keeps the HNSW index cached
             instance_count: 2
           task_role_policy_json: >-
@@ -647,6 +658,10 @@ resource "aws_bedrock_guardrail" "rag" {
   tags = { Service = "rag-api" } # default_tags add the rest
 }
 
+locals {
+  bedrock_boundary_name = "tfc-apply-boundary" # as app-services' tfc_apply_boundary_policy_name; null = none
+}
+
 resource "aws_cloudwatch_log_group" "bedrock_invocations" {
   name              = "/bedrock/${local.environment}/invocations"
   retention_in_days = 30
@@ -663,7 +678,7 @@ resource "aws_iam_role" "bedrock_logs" {
       ArnLike      = { "aws:SourceArn" = "arn:${data.aws_partition.current.partition}:bedrock:${local.aws_region}:${local.workload_account_id}:*" }
     }
   }] })
-  permissions_boundary = "arn:${data.aws_partition.current.partition}:iam::${local.workload_account_id}:policy/tfc-apply-boundary"
+  permissions_boundary = local.bedrock_boundary_name == null ? null : "arn:${data.aws_partition.current.partition}:iam::${local.workload_account_id}:policy/${local.bedrock_boundary_name}"
   tags                 = { Service = "rag-api" }
 }
 
@@ -678,10 +693,7 @@ resource "aws_iam_role_policy" "bedrock_logs" {
 # One configuration per account and Region: the workload account is per environment.
 resource "aws_bedrock_model_invocation_logging_configuration" "this" {
   logging_config {
-    text_data_delivery_enabled      = true
-    embedding_data_delivery_enabled = false
-    image_data_delivery_enabled     = false
-    video_data_delivery_enabled     = false
+    text_data_delivery_enabled = true
     cloudwatch_config {
       log_group_name = aws_cloudwatch_log_group.bedrock_invocations.name
       role_arn       = aws_iam_role.bedrock_logs.arn
@@ -801,7 +813,7 @@ review the warm share on the second backend.
 **Detection signal.** Ingestion lag (oldest unprocessed change) above 5
 minutes, or a user report of a deleted document cited. **Triage.** Check queue
 depth and worker errors; find the document's `version` in `document`.
-**Mitigation.** For an exposure, `DELETE FROM document WHERE doc_id = ...`
+**Mitigation.** For an exposure, `DELETE FROM document WHERE tenant_id = ... AND doc_id = ...`
 now (chunks cascade), then fix the connector. **Verification.** The query in
 deep dive 2 no longer returns its chunks. **Follow-up.** Run reconciliation
 for that source; add the case to the evaluation set.
@@ -816,7 +828,7 @@ for that source; add the case to the evaluation set.
 | Context share of spend | About 75% at a 5× output price | Estimates above |
 | Bedrock output burndown | 5×, 10× or 15× for Anthropic models; 1× default | [AWS](https://docs.aws.amazon.com/bedrock/latest/userguide/quotas-token-burndown.html) (checked 2026-11) |
 | KV cache, 8B GQA model | About 128 KiB per token in FP16 | Arithmetic above |
-| L4 / H100 memory | 24 GB / 80 GB | [Google Cloud](https://docs.cloud.google.com/compute/docs/gpus) (checked 2026-11) |
+| L4 / H100 memory and bandwidth | 24 GB, 300 GB/s / 80 GB, 3.35 TB/s | [Google Cloud](https://docs.cloud.google.com/compute/docs/gpus) (checked 2026-11) |
 | pgvector HNSW limits | 2,000 dims (`vector`), 4,000 (`halfvec`); `ef_search` default 40 | [pgvector](https://github.com/pgvector/pgvector) (checked 2026-11) |
 | Grounding check limits | 100,000 / 1,000 / 5,000 characters (source / query / response) | [AWS](https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails-contextual-grounding-check.html) (checked 2026-11) |
 | Batch and Flex discount | About 50% on Vertex AI | [Google Cloud](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/deploy/consumption-options) (checked 2026-11) |
