@@ -119,13 +119,38 @@ variable "flow_logs" {
 }
 
 variable "firewall" {
-  description = "Baseline tier firewall settings: rule logging, the IAP SSH/RDP allow rule, and the ports opened public to compute and compute to database."
+  description = "Baseline tier firewall settings: rule logging, the IAP SSH/RDP allow rule, and the ports opened public to compute and compute to database. api_gateway_source_ranges (the CIDRs API Gateway traffic arrives from) and database_egress_target_service_accounts apply only to the network firewall policy (firewall_mode both / policy); the API Gateway policy rule is created only when api_gateway_source_ranges is non-empty."
   type = object({
-    enable_logging     = optional(bool, true)
-    enable_iap_access  = optional(bool, true)
-    compute_tier_ports = optional(list(string), ["8080", "8443", "3000"])
-    database_ports     = optional(list(string), ["3306", "5432", "6379"])
+    enable_logging                          = optional(bool, true)
+    enable_iap_access                       = optional(bool, true)
+    compute_tier_ports                      = optional(list(string), ["8080", "8443", "3000"])
+    database_ports                          = optional(list(string), ["3306", "5432", "6379"])
+    api_gateway_source_ranges               = optional(list(string), [])
+    database_egress_target_service_accounts = optional(list(string), [])
   })
   default  = {}
   nullable = false
+}
+
+variable "firewall_mode" {
+  description = "How the baseline tier firewall is enforced. legacy: tag-based VPC firewall rules (default). both: the VPC rules plus one global network firewall policy whose rules select tiers by subnet CIDR (the migration step). policy: the network firewall policy only; the VPC rules are removed. See docs/runbooks/gcp-firewall-policy-migration.md."
+  type        = string
+  default     = "legacy"
+  nullable    = false
+
+  validation {
+    condition     = contains(["legacy", "both", "policy"], var.firewall_mode)
+    error_message = "firewall_mode must be one of legacy, both or policy."
+  }
+}
+
+variable "firewall_policy_enforcement_order" {
+  description = "Network firewall policy enforcement order on the VPC: BEFORE_CLASSIC_FIREWALL or AFTER_CLASSIC_FIREWALL. null derives it from firewall_mode: policy sets BEFORE_CLASSIC_FIREWALL; legacy and both leave it unset (API default AFTER_CLASSIC_FIREWALL). Updates the network in place."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.firewall_policy_enforcement_order == null ? true : contains(["BEFORE_CLASSIC_FIREWALL", "AFTER_CLASSIC_FIREWALL"], var.firewall_policy_enforcement_order)
+    error_message = "firewall_policy_enforcement_order must be null, BEFORE_CLASSIC_FIREWALL or AFTER_CLASSIC_FIREWALL."
+  }
 }

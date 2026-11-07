@@ -167,3 +167,25 @@ run "optional_services_can_be_disabled" {
     error_message = "Disabling services must not touch the network core."
   }
 }
+
+run "firewall_mode_defaults_to_legacy" {
+  command = plan
+
+  assert {
+    condition     = output.firewall_policy_name == null && length(module.network.vpc) > 0
+    error_message = "firewall_mode must default to legacy: no network firewall policy, unchanged plan."
+  }
+}
+
+run "firewall_mode_policy_passes_through" {
+  command = plan
+
+  variables {
+    firewall_mode = "policy"
+  }
+
+  assert {
+    condition     = output.firewall_policy_name == "mock-dev-vpc-tier-policy"
+    error_message = "firewall_mode must reach network/tiered-vpc, which then plans the <name>-tier-policy network firewall policy."
+  }
+}

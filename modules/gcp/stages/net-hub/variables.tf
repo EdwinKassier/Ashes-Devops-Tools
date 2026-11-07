@@ -355,3 +355,26 @@ variable "vpc_service_controls" {
   default  = {}
   nullable = false
 }
+
+variable "firewall_mode" {
+  description = "How the baseline tier firewall is enforced (network/tiered-vpc firewall_mode). legacy: tag-based VPC firewall rules (default). both: the VPC rules plus a global network firewall policy keyed on tier subnet CIDRs. policy: the network firewall policy only. See docs/runbooks/gcp-firewall-policy-migration.md."
+  type        = string
+  default     = "legacy"
+  nullable    = false
+
+  validation {
+    condition     = contains(["legacy", "both", "policy"], var.firewall_mode)
+    error_message = "firewall_mode must be one of legacy, both or policy."
+  }
+}
+
+variable "firewall_policy_enforcement_order" {
+  description = "Network firewall policy enforcement order on the VPC: BEFORE_CLASSIC_FIREWALL or AFTER_CLASSIC_FIREWALL. null derives it from firewall_mode (policy sets BEFORE_CLASSIC_FIREWALL; legacy and both leave the API default AFTER_CLASSIC_FIREWALL). Updates the network in place."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.firewall_policy_enforcement_order == null ? true : contains(["BEFORE_CLASSIC_FIREWALL", "AFTER_CLASSIC_FIREWALL"], var.firewall_policy_enforcement_order)
+    error_message = "firewall_policy_enforcement_order must be null, BEFORE_CLASSIC_FIREWALL or AFTER_CLASSIC_FIREWALL."
+  }
+}

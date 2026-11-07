@@ -159,9 +159,10 @@ The following resources are created:
 
 
 - resource.google_compute_address.internal_ip (modules/gcp/network/internal-lb/main.tf#L14)
-- resource.google_compute_firewall.allow_proxy (modules/gcp/network/internal-lb/main.tf#L217)
+- resource.google_compute_firewall.allow_proxy (modules/gcp/network/internal-lb/main.tf#L221)
 - resource.google_compute_forwarding_rule.forwarding_rule (modules/gcp/network/internal-lb/main.tf#L187)
 - resource.google_compute_health_check.health_check (modules/gcp/network/internal-lb/main.tf#L34)
+- resource.google_compute_network_firewall_policy_rule.allow_proxy (modules/gcp/network/internal-lb/main.tf#L245)
 - resource.google_compute_region_backend_service.backend (modules/gcp/network/internal-lb/main.tf#L85)
 - resource.google_compute_region_target_http_proxy.http_proxy (modules/gcp/network/internal-lb/main.tf#L164)
 - resource.google_compute_region_target_https_proxy.https_proxy (modules/gcp/network/internal-lb/main.tf#L173)
@@ -188,7 +189,9 @@ The following resources are created:
 | <a name="input_create_static_ip"></a> [create\_static\_ip](#input\_create\_static\_ip) | Whether to create a static internal IP address | `bool` | `true` | no |
 | <a name="input_enable_logging"></a> [enable\_logging](#input\_enable\_logging) | Enable access logging | `bool` | `true` | no |
 | <a name="input_enable_ssl"></a> [enable\_ssl](#input\_enable\_ssl) | Enable HTTPS for the load balancer | `bool` | `false` | no |
-| <a name="input_firewall_priority"></a> [firewall\_priority](#input\_firewall\_priority) | Priority for the proxy-only subnet firewall rule | `number` | `1000` | no |
+| <a name="input_firewall_mode"></a> [firewall\_mode](#input\_firewall\_mode) | How the proxy-only subnet allow rule is enforced, matching the VPC's network/tiered-vpc firewall\_mode. legacy: a VPC firewall rule targeting backend\_target\_tags (default). both: the VPC rule plus a rule in firewall\_policy. policy: the firewall\_policy rule only (no target tags: it applies to every instance in the VPC). | `string` | `"legacy"` | no |
+| <a name="input_firewall_policy"></a> [firewall\_policy](#input\_firewall\_policy) | Name of the global network firewall policy attached to the VPC (the network/tiered-vpc firewall\_policy\_name output). Required when firewall\_mode is both or policy and create\_firewall\_rule is true. | `string` | `null` | no |
+| <a name="input_firewall_priority"></a> [firewall\_priority](#input\_firewall\_priority) | Priority for the proxy-only subnet firewall rule (the VPC rule, and the network firewall policy rule in firewall\_mode both / policy, where it must be unique within the policy and outside 64000-64999) | `number` | `1000` | no |
 | <a name="input_grpc_service_name"></a> [grpc\_service\_name](#input\_grpc\_service\_name) | Service name for gRPC health checks | `string` | `null` | no |
 | <a name="input_health_check_healthy_threshold"></a> [health\_check\_healthy\_threshold](#input\_health\_check\_healthy\_threshold) | Number of successful checks before marking healthy | `number` | `2` | no |
 | <a name="input_health_check_interval_sec"></a> [health\_check\_interval\_sec](#input\_health\_check\_interval\_sec) | Health check interval in seconds | `number` | `5` | no |

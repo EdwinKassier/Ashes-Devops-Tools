@@ -61,3 +61,13 @@ run "rejects_invalid_nat_allocation" {
   }
   expect_failures = [var.nat]
 }
+
+run "rejects_invalid_firewall_mode" {
+  command = plan
+
+  variables {
+    firewall_mode = "tags"
+  }
+
+  expect_failures = [var.firewall_mode]
+}

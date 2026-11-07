@@ -99,7 +99,7 @@ The following resources are created:
 
 
 - resource.google_compute_network.vpc (modules/gcp/network/vpc/main.tf#L26)
-- resource.google_compute_shared_vpc_host_project.host (modules/gcp/network/vpc/main.tf#L38)
+- resource.google_compute_shared_vpc_host_project.host (modules/gcp/network/vpc/main.tf#L40)
 - resource.terraform_data.deletion_protection_guard (modules/gcp/network/vpc/main.tf#L15)
 
 
@@ -113,6 +113,7 @@ The following resources are created:
 | <a name="input_description"></a> [description](#input\_description) | An optional description of this resource | `string` | `"Managed by Terraform"` | no |
 | <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | Prevent accidental destruction of the VPC network.<br/><br/>When true, a terraform\_data guard resource is created with prevent\_destroy = true.<br/>Terraform refuses to destroy this module while the guard exists. To intentionally<br/>remove a protected VPC, first run:<br/>  terraform state rm 'module.<name>.terraform\_data.deletion\_protection\_guard' | `bool` | `false` | no |
 | <a name="input_enable_shared_vpc_host"></a> [enable\_shared\_vpc\_host](#input\_enable\_shared\_vpc\_host) | Enable this project as a Shared VPC Host Project | `bool` | `false` | no |
+| <a name="input_network_firewall_policy_enforcement_order"></a> [network\_firewall\_policy\_enforcement\_order](#input\_network\_firewall\_policy\_enforcement\_order) | Order in which network firewall policies and VPC firewall rules are evaluated: BEFORE\_CLASSIC\_FIREWALL or AFTER\_CLASSIC\_FIREWALL. null leaves it unset, which is the API default (AFTER\_CLASSIC\_FIREWALL). Changes update the network in place. | `string` | `null` | no |
 | <a name="input_routing_mode"></a> [routing\_mode](#input\_routing\_mode) | The network routing mode (default 'GLOBAL') | `string` | `"GLOBAL"` | no |
 | <a name="input_vpc_name"></a> [vpc\_name](#input\_vpc\_name) | Name of the VPC network. Required — no default to prevent name collisions when calling this module multiple times. | `string` | `null` | no |
 

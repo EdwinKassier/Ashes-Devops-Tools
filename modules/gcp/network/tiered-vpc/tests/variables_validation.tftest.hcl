@@ -91,3 +91,23 @@ run "rejects_cidr_list_shorter_than_zones" {
 
   expect_failures = [var.subnet_cidrs]
 }
+
+run "invalid_firewall_mode" {
+  command = plan
+
+  variables {
+    firewall_mode = "tags"
+  }
+
+  expect_failures = [var.firewall_mode]
+}
+
+run "invalid_firewall_policy_enforcement_order" {
+  command = plan
+
+  variables {
+    firewall_policy_enforcement_order = "FIRST"
+  }
+
+  expect_failures = [var.firewall_policy_enforcement_order]
+}

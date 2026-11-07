@@ -37,3 +37,13 @@ output "network_tags" {
   description = "Network tags that select the security tiers in the baseline firewall rules."
   value       = local.network_tags
 }
+
+output "firewall_policy_id" {
+  description = "ID of the tier network firewall policy, or null in firewall_mode = legacy."
+  value       = local.create_firewall_policy ? google_compute_network_firewall_policy.tier[0].id : null
+}
+
+output "firewall_policy_name" {
+  description = "Name of the tier network firewall policy (pass to network/internal-lb firewall_policy), or null in firewall_mode = legacy."
+  value       = local.create_firewall_policy ? google_compute_network_firewall_policy.tier[0].name : null
+}

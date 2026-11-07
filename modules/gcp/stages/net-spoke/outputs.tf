@@ -113,3 +113,8 @@ output "shared_vpc_service_project_ids" {
   description = "The IDs of the Shared VPC service project attachments, keyed by service project."
   value       = { for k, v in module.shared_vpc_service_projects : k => v.id }
 }
+
+output "firewall_policy_name" {
+  description = "Name of the tier network firewall policy (pass to network/internal-lb firewall_policy), or null in firewall_mode = legacy."
+  value       = module.network.firewall_policy_name
+}

@@ -81,13 +81,13 @@ run "firewall_baseline" {
 
   assert {
     condition = toset([
-      module.firewall_apigateway_to_public.name,
-      module.firewall_public_to_compute.name,
-      module.firewall_compute_to_database.name,
-      module.firewall_health_checks.name,
+      module.firewall_apigateway_to_public[0].name,
+      module.firewall_public_to_compute[0].name,
+      module.firewall_compute_to_database[0].name,
+      module.firewall_health_checks[0].name,
       module.firewall_iap_ssh_rdp[0].name,
-      module.firewall_database_deny_egress.name,
-      module.firewall_deny_all.name,
+      module.firewall_database_deny_egress[0].name,
+      module.firewall_deny_all[0].name,
       ]) == toset([
       "mock-vpc-allow-apigw-public",
       "mock-vpc-allow-public-compute",

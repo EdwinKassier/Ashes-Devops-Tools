@@ -51,6 +51,9 @@ module "network" {
   deletion_protection = var.deletion_protection
   flow_logs           = var.network.flow_logs
 
+  firewall_mode                     = var.firewall_mode
+  firewall_policy_enforcement_order = var.firewall_policy_enforcement_order
+
   firewall = {
     enable_logging     = var.firewall.enable_logging
     enable_iap_access  = var.firewall.enable_iap_access

@@ -47,7 +47,10 @@ module "network" {
   shared_vpc_host     = var.network.shared_vpc_host
   deletion_protection = var.deletion_protection
   flow_logs           = var.network.flow_logs
-  firewall            = var.firewall
+
+  firewall_mode                     = var.firewall_mode
+  firewall_policy_enforcement_order = var.firewall_policy_enforcement_order
+  firewall                          = var.firewall
 }
 
 # Folder- or organization-level firewall policies owned by the hub.

@@ -86,3 +86,13 @@ run "rejects_flow_log_export_without_destination" {
   }
   expect_failures = [var.flow_logs_export]
 }
+
+run "rejects_invalid_firewall_mode" {
+  command = plan
+
+  variables {
+    firewall_mode = "tags"
+  }
+
+  expect_failures = [var.firewall_mode]
+}

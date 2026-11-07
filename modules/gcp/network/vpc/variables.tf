@@ -73,3 +73,14 @@ variable "enable_deletion_protection" {
   type        = bool
   default     = false
 }
+
+variable "network_firewall_policy_enforcement_order" {
+  description = "Order in which network firewall policies and VPC firewall rules are evaluated: BEFORE_CLASSIC_FIREWALL or AFTER_CLASSIC_FIREWALL. null leaves it unset, which is the API default (AFTER_CLASSIC_FIREWALL). Changes update the network in place."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.network_firewall_policy_enforcement_order == null ? true : contains(["BEFORE_CLASSIC_FIREWALL", "AFTER_CLASSIC_FIREWALL"], var.network_firewall_policy_enforcement_order)
+    error_message = "network_firewall_policy_enforcement_order must be null, BEFORE_CLASSIC_FIREWALL or AFTER_CLASSIC_FIREWALL."
+  }
+}

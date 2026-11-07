@@ -307,7 +307,25 @@ variable "proxy_only_subnet_ranges" {
 }
 
 variable "firewall_priority" {
-  description = "Priority for the proxy-only subnet firewall rule"
+  description = "Priority for the proxy-only subnet firewall rule (the VPC rule, and the network firewall policy rule in firewall_mode both / policy, where it must be unique within the policy and outside 64000-64999)"
   type        = number
   default     = 1000
+}
+
+variable "firewall_mode" {
+  description = "How the proxy-only subnet allow rule is enforced, matching the VPC's network/tiered-vpc firewall_mode. legacy: a VPC firewall rule targeting backend_target_tags (default). both: the VPC rule plus a rule in firewall_policy. policy: the firewall_policy rule only (no target tags: it applies to every instance in the VPC)."
+  type        = string
+  default     = "legacy"
+  nullable    = false
+
+  validation {
+    condition     = contains(["legacy", "both", "policy"], var.firewall_mode)
+    error_message = "firewall_mode must be one of legacy, both or policy."
+  }
+}
+
+variable "firewall_policy" {
+  description = "Name of the global network firewall policy attached to the VPC (the network/tiered-vpc firewall_policy_name output). Required when firewall_mode is both or policy and create_firewall_rule is true."
+  type        = string
+  default     = null
 }

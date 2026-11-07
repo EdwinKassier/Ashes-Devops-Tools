@@ -79,3 +79,8 @@ output "interconnect_pairing_keys" {
   sensitive   = true
   value       = { for k, v in module.interconnects : k => v.pairing_key }
 }
+
+output "firewall_policy_name" {
+  description = "Name of the tier network firewall policy (pass to network/internal-lb firewall_policy), or null in firewall_mode = legacy."
+  value       = module.network.firewall_policy_name
+}

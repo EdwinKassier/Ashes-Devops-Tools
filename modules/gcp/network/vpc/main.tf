@@ -32,6 +32,8 @@ resource "google_compute_network" "vpc" {
 
   delete_default_routes_on_create = var.delete_default_routes_on_create
 
+  # null leaves the attribute unset (the API default, AFTER_CLASSIC_FIREWALL).
+  network_firewall_policy_enforcement_order = var.network_firewall_policy_enforcement_order
 }
 
 # Shared VPC Host Project
