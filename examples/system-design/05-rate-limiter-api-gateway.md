@@ -122,8 +122,8 @@ Every response carries the current limit state. A limited request gets:
 ```http
 HTTP/1.1 429 Too Many Requests
 Retry-After: 2
-RateLimit-Policy: "burst";q=200;w=1, "daily";q=1000000;w=86400
-RateLimit: "burst";r=0;t=2
+RateLimit-Policy: "rate";q=100;w=1, "daily";q=1000000;w=86400
+RateLimit: "rate";r=0;t=2
 Content-Type: application/problem+json
 
 {"type": "https://api.example.com/errors/rate-limited", "title": "Rate limit exceeded",
@@ -241,7 +241,10 @@ local cost, daily = tonumber(ARGV[3]), tonumber(ARGV[4])
 local b = server.call('HMGET', KEYS[1], 'tokens', 'ts')
 local tokens = math.min(burst, (tonumber(b[1]) or burst) + (now - (tonumber(b[2]) or now)) * rate / 1000)
 local used = tonumber(server.call('GET', KEYS[2]) or '0')
-if tokens < cost or used + cost > daily then
+if used + cost > daily then
+  return {-1, daily - used, 0} -- quota spent: the gateway sets Retry-After to the reset
+end
+if tokens < cost then
   return {0, math.floor(tokens), math.ceil((cost - tokens) * 1000 / rate)}
 end
 server.call('HSET', KEYS[1], 'tokens', tokens - cost, 'ts', now)
@@ -264,6 +267,9 @@ Why it is shaped like this:
   `redis.call` remains as a compatible alias (same source).
 - **Self-cleaning.** The TTL is a full refill time; an expired bucket comes back
   full, which is the same answer.
+- **Two kinds of denial.** `0` is a rate denial with the milliseconds until
+  enough tokens refill. `-1` is a spent daily quota: the gateway computes
+  `Retry-After` as the seconds to the next UTC midnight, never 0.
 - **Where it breaks:** every request for a key hits one slot (next deep dive).
 
 ### Distributed counters and their consistency
@@ -407,7 +413,7 @@ ranges with a higher-priority allow rule.
 - **Hot slots fail first.** The 5,000 req/s tenant becomes 50,000 req/s =
   150,000 ECPU/s on one slot, five times the 30,000 ceiling. Leasing (C) and
   split buckets must already be in place.
-- **The store total** reaches 1.8 million ECPU/s, about $5,000 a month for
+- **The store total** reaches 1.8 million ECPU/s, about $5,300 a month for
   compute; leasing for every key above 100 req/s cuts it sharply.
 - **The gateway fleet** grows to ~450 vCPU; pool store connections per instance.
 - **The edge** is unaffected; it scales with the CDN or global load balancer.
