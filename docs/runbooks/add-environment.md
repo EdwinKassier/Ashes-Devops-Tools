@@ -160,10 +160,10 @@ step 3).
 
 ```text
 Expected new resources:
-  + module.host.module.vpc.google_compute_network.vpc
-  + module.host.module.private_subnets.*
-  + module.host.module.database_subnets.*
-  + module.host.module.nat.*
+  + module.environment.module.host.module.network.module.vpc.google_compute_network.vpc
+  + module.environment.module.host.module.network.module.private_subnets.*
+  + module.environment.module.host.module.network.module.database_subnets.*
+  + module.environment.module.host.module.integrated_nat.*
   (etc.)
 ```
 

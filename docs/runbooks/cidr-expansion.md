@@ -36,10 +36,10 @@ gcloud compute networks subnets describe SUBNET_NAME \
 
 ### Step 2 — Update the secondary range in Terraform
 
-In `envs/gcp/workload/main.tf`, update the `secondary_ranges` argument on `module "host"`. The key is the **zone name** (matching the availability zone the private subnet is created in — not the subnet's tier name like `"private"`); the value is the list of secondary ranges for that zone's private subnet:
+In `modules/gcp/stages/environment/main.tf` (the composition `envs/gcp/workload` calls as `module "environment"`), update the `secondary_ranges` argument on `module "host"`. The key is the **zone name** (matching the availability zone the private subnet is created in — not the subnet's tier name like `"private"`); the value is the list of secondary ranges for that zone's private subnet:
 
 ```hcl
-# In envs/gcp/workload/main.tf — module "host" block
+# In modules/gcp/stages/environment/main.tf — module "host" block
 secondary_ranges = {
   "europe-west1-a" = [
     {
@@ -67,7 +67,7 @@ The plan must show `~ update in-place` for the subnet, not `- destroy` + `+ crea
 ### Step 4 — Apply
 
 ```bash
-terraform -chdir=envs/gcp/workload apply -target=module.host.module.private_subnets -var-file=../../../examples/dev.tfvars.example
+terraform -chdir=envs/gcp/workload apply -target=module.environment.module.host.module.network.module.private_subnets -var-file=../../../examples/dev.tfvars.example
 ```
 
 ---
@@ -100,7 +100,7 @@ If `enable_deletion_protection = true`, the plan will be blocked by the guard re
 terraform -chdir=envs/gcp/workload state list | grep deletion_protection_guard
 
 # Remove from state (this does NOT destroy the resource, just removes Terraform's tracking)
-terraform -chdir=envs/gcp/workload state rm 'module.host.terraform_data.deletion_protection_guard[0]'
+terraform -chdir=envs/gcp/workload state rm 'module.environment.module.host.module.network.terraform_data.deletion_protection_guard'
 ```
 
 After the CIDR change is applied, re-enable deletion protection by setting `enable_deletion_protection = true` and applying again.
@@ -170,5 +170,5 @@ enable_deletion_protection = true
 ```
 
 ```bash
-terraform -chdir=envs/gcp/workload apply -target=module.host.terraform_data.deletion_protection_guard -var-file=../../../examples/dev.tfvars.example
+terraform -chdir=envs/gcp/workload apply -target=module.environment.module.host.module.network.terraform_data.deletion_protection_guard -var-file=../../../examples/dev.tfvars.example
 ```

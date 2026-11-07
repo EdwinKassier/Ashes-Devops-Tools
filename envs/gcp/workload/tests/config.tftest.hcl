@@ -1,7 +1,8 @@
 # Services and service teams from config/landing-zone.yaml
 # (gcp.environments.<env>.services / .service_teams). Precedence: explicit
 # variable > config file > built-in default (empty). Remote-state reads are
-# overridden; the host stage runs against mocks.
+# overridden; the environment stage runs against mocks. How the stage resolves
+# team projects and APIs is asserted in modules/gcp/stages/environment/tests.
 
 mock_provider "google" {}
 mock_provider "google-beta" {}
@@ -50,7 +51,7 @@ override_data {
 }
 
 override_data {
-  target = module.host.data.google_compute_zones.available
+  target = module.environment.module.host.data.google_compute_zones.available
   values = {
     names = ["europe-west1-b", "europe-west1-c", "europe-west1-d"]
   }
@@ -60,12 +61,12 @@ run "services_from_config" {
   command = plan
 
   assert {
-    condition     = join(",", sort(keys(local.app_services))) == "api,worker" && local.app_services["api"].min_instances == 1
+    condition     = join(",", sort(keys(local.app_services_input))) == "api,worker" && local.app_services_input["api"].min_instances == 1 && join(",", sort(keys(output.app_services))) == "api,worker"
     error_message = "gcp.environments.dev.services must populate the app services."
   }
 
   assert {
-    condition     = join(",", keys(module.service_team)) == "payments" && local.service_teams["payments"].project_admin_group_email == "payments-admins@cfg.example" && local.service_teams["payments"].enable_shared_vpc_attachment
+    condition     = join(",", module.environment.components.service_teams) == "payments" && local.service_teams["payments"].project_admin_group_email == "payments-admins@cfg.example" && local.service_teams["payments"].enable_shared_vpc_attachment
     error_message = "gcp.environments.dev.service_teams must create the team project, with the typed defaults applied."
   }
 }
@@ -78,7 +79,7 @@ run "empty_services_section_is_noop" {
   }
 
   assert {
-    condition     = length(local.app_services) == 0 && length(module.service_team) == 0
+    condition     = length(local.app_services_input) == 0 && length(module.environment.components.service_teams) == 0
     error_message = "empty services / service_teams sections must create nothing."
   }
 }
@@ -92,13 +93,13 @@ run "variable_overrides_config" {
   }
 
   assert {
-    condition     = join(",", keys(local.app_services)) == "only" && length(module.service_team) == 0
+    condition     = join(",", keys(local.app_services_input)) == "only" && length(module.environment.components.service_teams) == 0
     error_message = "an explicit app_services / service_teams variable must win over the config file."
   }
 }
 
-# service_team = "<key>" resolves the service's project from the team module;
-# a service without it stays in the host project.
+# service_team = "<key>" in the config file reaches the environment stage, which
+# resolves the service's project from the team module (asserted there).
 run "service_team_resolves_service_project" {
   command = plan
 
@@ -107,7 +108,7 @@ run "service_team_resolves_service_project" {
   }
 
   override_module {
-    target = module.service_team["payments"]
+    target = module.environment.module.service_team["payments"]
     outputs = {
       project_id            = "payments-1a2b"
       project_number        = "333333333333"
@@ -118,18 +119,13 @@ run "service_team_resolves_service_project" {
   }
 
   assert {
-    condition     = local.app_services["api"].project_id == "payments-1a2b" && local.app_services["api"].project_number == "333333333333" && local.app_services["api"].network_access_group == "payments"
-    error_message = "service_team must resolve project_id / project_number from module.service_team and group the Shared VPC grants by team."
+    condition     = local.app_services_input["api"].service_team == "payments" && !contains(keys(local.app_services_input["worker"]), "service_team") && module.environment.components.service_teams == ["payments"]
+    error_message = "the config file's service_team must reach the environment stage, with the team declared."
   }
 
   assert {
-    condition     = local.app_services["api"].grant_network_access == true && !contains(keys(local.app_services["worker"]), "grant_network_access")
-    error_message = "a service with service_team must be deployed into the team project (Shared VPC grants on); a service without must not."
-  }
-
-  assert {
-    condition     = contains(local.team_service_apis["payments"], "run.googleapis.com") && contains(local.team_service_apis["payments"], "artifactregistry.googleapis.com") && contains(local.team_service_apis["payments"], "containerscanning.googleapis.com") && contains(local.team_service_apis["payments"], "monitoring.googleapis.com")
-    error_message = "a team that hosts a service must have the Cloud Run and Artifact Registry APIs activated."
+    condition     = output.service_team_project_ids["payments"] == "payments-1a2b"
+    error_message = "the team project must be the one the service_team module creates."
   }
 }
 
@@ -137,13 +133,8 @@ run "service_without_team_stays_in_host_project" {
   command = plan
 
   assert {
-    condition     = alltrue([for k, s in local.app_services : !contains(keys(s), "project_id")])
+    condition     = alltrue([for k, s in local.app_services_input : !contains(keys(s), "project_id") && !contains(keys(s), "service_team")])
     error_message = "services without service_team must not carry a project_id (they deploy into the host project)."
-  }
-
-  assert {
-    condition     = length(local.team_service_apis["payments"]) == 0
-    error_message = "a team that hosts no service must not get extra APIs."
   }
 }
 
@@ -224,7 +215,7 @@ run "scaffold_gcp_plans" {
   }
 
   assert {
-    condition     = length(module.budget) == 1 && local.read_network_hub
+    condition     = module.environment.components.budget && local.read_network_hub
     error_message = "the scaffold runs must plan the budget module and read the network-hub remote state."
   }
 }
@@ -273,7 +264,7 @@ run "scaffold_gcp_aws_plans" {
   }
 
   assert {
-    condition     = length(module.budget) == 1 && local.read_network_hub
+    condition     = module.environment.components.budget && local.read_network_hub
     error_message = "the scaffold runs must plan the budget module and read the network-hub remote state."
   }
 }
@@ -322,7 +313,7 @@ run "scaffold_gcp_aws_saas_plans" {
   }
 
   assert {
-    condition     = length(module.budget) == 1 && local.read_network_hub
+    condition     = module.environment.components.budget && local.read_network_hub
     error_message = "the scaffold runs must plan the budget module and read the network-hub remote state."
   }
 }

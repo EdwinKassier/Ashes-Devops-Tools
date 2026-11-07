@@ -1,6 +1,6 @@
 # CLAUDE.md — Agent Onboarding
 
-Terraform GCP + AWS landing zone. 123 modules, 15 deployable roots, remote state via Terraform Cloud.
+Terraform GCP + AWS landing zone. 124 modules, 15 deployable roots, remote state via Terraform Cloud.
 
 ---
 
@@ -28,7 +28,7 @@ envs/                   # deployable roots, nested by cloud (workspace names kee
 
 modules/               # grouped by owning cloud (domain)
   gcp/                  # GCP-native modules
-    stages/             # Orchestration wrappers: bootstrap, organization, guardrails (org IAM deny policies), projects, network-hub, workload, app-services (Cloud Run/SQL/GKE golden path); network compositions net-hub, net-spoke, dns-anchor
+    stages/             # Orchestration wrappers: bootstrap, organization, guardrails (org IAM deny policies), projects, network-hub, environment (the gcp-workload-<env> composition), workload, app-services (Cloud Run/SQL/GKE golden path); network compositions net-hub, net-spoke, dns-anchor
     project/            # THE project primitive — every stage creates GCP projects through it (no naming scheme inside)
     network/            # ~24 primitives: tiered-vpc (shared VPC + 3-tier subnets + baseline firewall core), vpc, subnet, ncc-hub, ncc-spoke, dns, vpn, vpc-sc, cloud-armor, internal-lb, api-gateway, cdn, app-ingress, …
     governance/         # billing, kms, org-policy, scc, tags, cloud-audit-logs, private-ca
@@ -241,7 +241,7 @@ Gotchas the AWS landing-zone build surfaced — each one bit us in CI:
 | Org-level GCP resources | `envs/gcp/organization/` |
 | Org IAM deny policies (admin containment) | `envs/gcp/guardrails/` + `modules/gcp/stages/guardrails/` (security-team workspace) |
 | Per-env app infra | `envs/gcp/workload/` (set `TF_WORKSPACE=gcp-workload-<env>`) |
-| Full end-to-end workload | `modules/gcp/stages/workload/` or `modules/saas/stages/saas-workload/` |
+| Full end-to-end workload | `modules/gcp/stages/environment/` (composes `stages/workload`, `net-spoke`, `app-services`) or `modules/saas/stages/saas-workload/` |
 | VPC / networking | `modules/gcp/network/` |
 | IAM / service accounts | `modules/gcp/iam/` |
 | KMS / billing / org policy | `modules/gcp/governance/` |

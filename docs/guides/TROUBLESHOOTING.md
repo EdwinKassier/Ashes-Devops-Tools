@@ -231,7 +231,7 @@ vpc_sc_ingress_policies = [
 ]
 ```
 
-`envs/gcp/workload` itself already resolves and protects its own host project number automatically (`data.google_project.host_project.number` in `envs/gcp/workload/main.tf`) — you only need to supply numbers manually when referencing **other** (spoke) projects in custom ingress/egress policies.
+`envs/gcp/workload` itself already resolves and protects its own host project number automatically (`data.google_project.host_project.number` in `modules/gcp/stages/environment/main.tf`) — you only need to supply numbers manually when referencing **other** (spoke) projects in custom ingress/egress policies.
 
 ---
 

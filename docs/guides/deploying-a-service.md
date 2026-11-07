@@ -5,7 +5,7 @@ shows how a service team runs an application on it. On GCP the golden path is
 **implemented in code**: you add one entry under `gcp.environments.<env>.services`
 in `config/landing-zone.yaml`, open a PR, and after merge Terraform Cloud applies
 the `gcp-workload-<env>` workspace. `modules/gcp/stages/app-services` (called once
-from `envs/gcp/workload/main.tf`) creates everything below. With no entry (and
+from `modules/gcp/stages/environment`, which `envs/gcp/workload` deploys) creates everything below. With no entry (and
 every flag off) nothing is created.
 
 **One flow for every change:** edit `config/landing-zone.yaml` -> PR (CI plus a

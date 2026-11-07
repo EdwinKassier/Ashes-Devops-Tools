@@ -160,8 +160,8 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   (e.g. the log archive bucket, audit M7) — keep it in sync or prefer the
   read. Standalone `aws-workload` (`enable_network_hub = false`) has no egress
   and still plans the (unused) `tgw` subnet tier; attaching later replaces the
-  VPC if it then moves to an IPAM pool. `gcp-workload`'s `module "host"` must
-  consume `local.hub_vpc_peerings` / `local.hub_dns_zones` / `local.org_id`.
+  VPC if it then moves to an IPAM pool. `gcp-workload`'s `module "environment"`
+  must consume `local.hub_vpc_peerings` / `local.hub_dns_zones` / `local.org_id`.
   **Validate** a contract-only plan against a real estate before relying on it.
 
 - **C2 — per-stage GCP automation identities (supersedes G3).** Shipped

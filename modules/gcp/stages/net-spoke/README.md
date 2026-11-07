@@ -7,7 +7,7 @@ private or peering DNS zones, an opt-in Cloud Armor edge policy, opt-in VPC
 flow-log export (CMEK), Shared VPC service-project attachments and the
 environment VPC Service Controls perimeter.
 
-Called by [`envs/gcp/workload`](../../../../envs/gcp/workload/). It replaces the
+Called by [`stages/environment`](../environment/) (the `envs/gcp/workload` composition). It replaces the
 spoke use of the removed `stages/host` module.
 
 ## Interface
@@ -27,7 +27,7 @@ Related inputs are grouped into typed objects, each with secure defaults:
 ## Migrating from stages/host
 
 Module and resource names match `stages/host`, so a caller that keeps its
-module label (as `envs/gcp/workload` does with `module "host"`) only moves the
+module label (as `stages/environment` does with `module "host"`) only moves the
 network core into the `network` building block. Services (NAT, PSA, PSC, Cloud
 Armor, peering, DNS, flow-log export, VPC-SC, Shared VPC attachments,
 additional firewall rules) keep their addresses.

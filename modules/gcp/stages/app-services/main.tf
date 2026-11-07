@@ -408,7 +408,7 @@ module "database" {
 
   # Private Service Access on the env VPC is created by the host stage
   # (enable_private_service_access defaults to true); the caller orders this
-  # module after it (depends_on = [module.host] in envs/gcp/workload).
+  # module after it (depends_on = [module.host] in stages/environment).
   private_network = var.network_id
 
   enable_iam_authentication     = true

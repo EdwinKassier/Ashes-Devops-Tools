@@ -1,9 +1,10 @@
-# Default-plan test for the gcp-workload root WITHOUT overriding the host stage.
+# Default-plan test for the gcp-workload root WITHOUT overriding the spoke network.
 #
-# root.tftest.hcl overrides module.host, which hid a bug: with the default
-# vpc_sc_access_policy_name = null the root still passed a perimeter to the host
-# stage and the vpc-sc module's validation failed the plan. This suite runs the
-# real host stage against mocks so a broken default plan cannot hide again.
+# root.tftest.hcl overrides module.environment.module.host, which hid a bug: with
+# the default vpc_sc_access_policy_name = null the root still passed a perimeter
+# to the spoke and the vpc-sc module's validation failed the plan. This suite runs
+# the real environment stage against mocks so a broken default plan cannot hide
+# again.
 
 mock_provider "google" {}
 mock_provider "google-beta" {}
@@ -69,9 +70,9 @@ override_data {
   }
 }
 
-# The mock provider returns no zones, which trips the host stage's postcondition.
+# The mock provider returns no zones, which trips the spoke network's postcondition.
 override_data {
-  target = module.host.data.google_compute_zones.available
+  target = module.environment.module.host.data.google_compute_zones.available
   values = {
     names = ["europe-west1-b", "europe-west1-c", "europe-west1-d"]
   }
@@ -81,7 +82,7 @@ run "default_plan_succeeds_without_vpc_sc" {
   command = plan
 
   assert {
-    condition     = length(module.host.vpc_service_controls) == 0
+    condition     = length(module.environment.components.vpc_sc_perimeters) == 0 && output.vpc_sc_perimeter_names == {}
     error_message = "with vpc_sc_access_policy_name = null the workload root must not create an environment perimeter"
   }
 }
@@ -94,13 +95,13 @@ run "perimeter_created_when_access_policy_set" {
   }
 
   assert {
-    condition     = length(module.host.vpc_service_controls) == 1
+    condition     = module.environment.components.vpc_sc_perimeters == ["dev_perimeter"]
     error_message = "setting vpc_sc_access_policy_name must create the environment perimeter"
   }
 
   # Dry-run perimeter: keep all-apis until the perimeter is enforced.
   assert {
-    condition     = local.psc_target == "all-apis"
+    condition     = module.environment.components.psc_target == "all-apis"
     error_message = "a dry-run perimeter must keep the all-apis PSC bundle."
   }
 }
@@ -115,14 +116,9 @@ run "enforced_perimeter_stages_dry_run_delta" {
     vpc_sc_dry_run_restricted_services = ["storage.googleapis.com", "bigquery.googleapis.com", "logging.googleapis.com"]
   }
 
-  assert {
-    condition     = module.host.vpc_service_controls["dev_perimeter"].enforced && module.host.vpc_service_controls["dev_perimeter"].dry_run_spec_staged
-    error_message = "vpc_sc_dry_run_restricted_services on an enforced perimeter must keep status enforced AND stage a dry-run spec"
-  }
-
   # Enforced perimeter: Google APIs through the restricted (vpc-sc) bundle.
   assert {
-    condition     = local.psc_target == "vpc-sc"
+    condition     = module.environment.components.psc_target == "vpc-sc"
     error_message = "an enforced perimeter must switch the PSC endpoint to the vpc-sc bundle."
   }
 }
@@ -161,9 +157,9 @@ run "prod_without_enforced_perimeter_warns" {
   expect_failures = [check.vpc_sc_enforced_in_prod]
 }
 
-# Application golden path against the REAL host stage: one app service lands on
-# the env VPC's first private subnet, and Cloud SQL peers into the env VPC (where
-# the host stage creates Private Service Access by default), not the hub.
+# Application golden path against the REAL environment stage: the app service
+# lands in the env host project (the Private Service Access and subnet wiring is
+# asserted in the environment stage's plan suite).
 run "app_service_on_real_host_stage" {
   command = plan
 
@@ -176,11 +172,6 @@ run "app_service_on_real_host_stage" {
         github   = { repository_id = "123456789" }
       }
     }
-  }
-
-  assert {
-    condition     = module.host.private_service_access_range_name == "google-managed-services"
-    error_message = "the host stage must create Private Service Access on the env VPC by default (Cloud SQL private IP depends on it)."
   }
 
   assert {

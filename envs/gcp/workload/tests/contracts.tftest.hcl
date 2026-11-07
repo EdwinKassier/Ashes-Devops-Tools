@@ -2,7 +2,7 @@
 # gcp.contracts.<layer> in config/landing-zone.yaml) replaces the upstream
 # terraform_remote_state read entirely. NO remote-state override_data here —
 # every run proves the root plans without the upstream workspaces
-# (length(data...) == 0). The host stage is overridden: its own tests cover it.
+# (length(data...) == 0). The spoke network is overridden: its own tests cover it.
 
 mock_provider "google" {}
 mock_provider "google-beta" {}
@@ -33,7 +33,7 @@ variables {
 }
 
 override_module {
-  target = module.host
+  target = module.environment.module.host
   outputs = {
     dns_zones            = {}
     nat_ip               = "34.1.2.3"
@@ -68,7 +68,7 @@ run "contracts_replace_remote_state" {
 
   assert {
     condition = (
-      data.google_project.host_project.project_id == "acme-dev-host-abcd" &&
+      output.host_project_id == "acme-dev-host-abcd" &&
       local.org_id == "123456789012" &&
       local.hub_vpc_peerings["hub-peering"].peer_network == "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc" &&
       local.hub_dns_zones["internal-peering"].dns_name == "hub.internal."
@@ -137,7 +137,7 @@ run "contracts_from_config_file" {
       length(data.terraform_remote_state.organization) == 0 &&
       length(data.terraform_remote_state.projects) == 0 &&
       length(data.terraform_remote_state.network_hub) == 0 &&
-      data.google_project.host_project.project_id == "cfgco-dev-host" &&
+      output.host_project_id == "cfgco-dev-host" &&
       local.billing_account == "billingAccounts/000000-111111-222222" &&
       local.hub_network.dns_domain == "hub.internal."
     )

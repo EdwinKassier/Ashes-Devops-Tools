@@ -16,8 +16,8 @@ One `services` map entry gives a service team, in the environment host project:
 An optional environment-level GKE Autopilot cluster is behind `enable_gke_autopilot`.
 The default (`services = {}`, every flag off) creates nothing.
 
-It is called once from [`envs/gcp/workload`](../../../../envs/gcp/workload/main.tf)
-(`module "app_services"`). Walkthrough:
+It is called once from [`stages/environment`](../environment/main.tf)
+(`module "app_services"`), the composition `envs/gcp/workload` deploys. Walkthrough:
 [`docs/guides/deploying-a-service.md`](../../../../docs/guides/deploying-a-service.md).
 
 ## Usage

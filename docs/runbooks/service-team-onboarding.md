@@ -92,7 +92,7 @@ gcp:
           github: {repository_id: "123456789"}
 ```
 
-The root resolves the project ID and number from `module.service_team["payments"]`, so there is no project ID to copy. The service's Artifact Registry repo, runtime and deploy service accounts, Cloud Run service, Cloud SQL, alert policies and Pub/Sub then live in the team project. The app-deploy WIF pool stays in the host project; the deploy SA in the team project is bound to it.
+The environment stage resolves the project ID and number from `module.environment.module.service_team["payments"]`, so there is no project ID to copy. The service's Artifact Registry repo, runtime and deploy service accounts, Cloud Run service, Cloud SQL, alert policies and Pub/Sub then live in the team project. The app-deploy WIF pool stays in the host project; the deploy SA in the team project is bound to it.
 
 What the apply adds for such a service, beyond the per-service resources:
 
@@ -121,7 +121,7 @@ Commit the YAML change on a branch and open a pull request. CI runs the format, 
 make plan-gcp-workload APP_ENV=dev 2>&1 | grep -A5 'service_team\["payments"\]'
 ```
 
-Confirm the plan shows only new resource creation under `module.service_team["payments"]` — no modifications to existing teams.
+Confirm the plan shows only new resource creation under `module.environment.module.service_team["payments"]` — no modifications to existing teams.
 
 ### Step 5 — Merge and apply in Terraform Cloud
 
@@ -156,7 +156,7 @@ gcloud projects get-iam-policy PAYMENTS_PROJECT_ID \
 To remove a team's access:
 
 1. Delete the team's entry from `gcp.environments.<env>.service_teams` in `config/landing-zone.yaml` and open a PR
-2. Read the speculative plan on the PR and confirm only that team's `module.service_team["<team>"]` resources are in the destroy list
+2. Read the speculative plan on the PR and confirm only that team's `module.environment.module.service_team["<team>"]` resources are in the destroy list
 3. Merge, then approve the apply in Terraform Cloud
 
 Before destroying, list all state resources to confirm scope:

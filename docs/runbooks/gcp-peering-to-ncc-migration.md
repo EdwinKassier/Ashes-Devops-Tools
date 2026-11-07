@@ -153,8 +153,8 @@ acceptable.
          network_connectivity: ncc
    ```
 
-2. Plan gcp-workload-dev. Expect the hub peering (`module.host.module.vpc_peering["hub-peering"]`,
-   both directions) to be destroyed, and `module.host.module.ncc_spoke[0]` with its `psa`
+2. Plan gcp-workload-dev. Expect the hub peering (`module.environment.module.host.module.vpc_peering["hub-peering"]`,
+   both directions) to be destroyed, and `module.environment.module.host.module.ncc_spoke[0]` with its `psa`
    producer spoke to be created. Nothing else should change.
 3. Apply. **Expect minutes of connectivity loss on that spoke** between the peering deletion and
    the spoke becoming `ACTIVE`.

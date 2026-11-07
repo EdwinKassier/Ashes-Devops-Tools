@@ -1,5 +1,7 @@
 # Public ingress (modules/gcp/network/app-ingress) and the first-revision image
-# for app services. Real host stage against mocks (zones overridden).
+# for app services, as the root wires them into the environment stage (real stage
+# against mocks, zones overridden). The load-balancer internals and the per-service
+# ingress defaults are asserted in modules/gcp/stages/environment/tests.
 
 mock_provider "google" {}
 mock_provider "google-beta" {}
@@ -34,7 +36,7 @@ variables {
 }
 
 override_data {
-  target = module.host.data.google_compute_zones.available
+  target = module.environment.module.host.data.google_compute_zones.available
   values = {
     names = ["europe-west2-a", "europe-west2-b", "europe-west2-c"]
   }
@@ -44,17 +46,17 @@ run "default_has_no_public_ingress" {
   command = plan
 
   assert {
-    condition     = length(module.app_ingress) == 0 && length(output.public_ingress) == 0
+    condition     = length(module.environment.components.public_ingress) == 0 && length(output.public_ingress) == 0
     error_message = "Public ingress must be off by default."
   }
 
   assert {
-    condition     = module.app_services.services["api"].initial_image == "us-docker.pkg.dev/cloudrun/container/hello"
+    condition     = output.app_services["api"].initial_image == "us-docker.pkg.dev/cloudrun/container/hello"
     error_message = "The first revision defaults to the public Cloud Run sample."
   }
 
   assert {
-    condition     = module.host.cloud_armor == null
+    condition     = !module.environment.components.cloud_armor
     error_message = "No Cloud Armor policy without public ingress or enable_cloud_armor."
   }
 }
@@ -69,28 +71,18 @@ run "public_ingress_creates_lb_neg_armor_and_cert" {
   }
 
   assert {
-    condition     = length(module.app_ingress) == 1 && contains(keys(module.app_ingress), "api")
+    condition     = module.environment.components.public_ingress == ["api"]
     error_message = "Only the listed service is exposed."
   }
 
   assert {
-    condition     = one(module.app_ingress["api"].managed_domains) == "api.dev.acme.example"
+    condition     = one(output.public_ingress["api"].domains) == "api.dev.acme.example"
     error_message = "The managed certificate must cover the configured domains."
   }
 
   assert {
-    condition     = module.host.cloud_armor != null
+    condition     = module.environment.components.cloud_armor
     error_message = "Public ingress must create the environment Cloud Armor policy (attached to the backend)."
-  }
-
-  assert {
-    condition = (
-      local.app_services["api"].ingress == "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER" &&
-      local.app_services["api"].enable_unauthenticated &&
-      local.app_services["worker"].ingress == "INGRESS_TRAFFIC_INTERNAL_ONLY" &&
-      !local.app_services["worker"].enable_unauthenticated
-    )
-    error_message = "Exposed services switch to LB-only ingress; the rest stay internal."
   }
 }
 
@@ -110,7 +102,7 @@ run "public_ingress_backend_and_neg_exist" {
   # Isolate the load balancer: the host stage and app services are covered by
   # the plan runs above; their mocked applies trip unrelated provider checks.
   override_module {
-    target = module.host
+    target = module.environment.module.host
     outputs = {
       dns_zones                 = {}
       nat_ip                    = "34.1.2.3"
@@ -126,7 +118,7 @@ run "public_ingress_backend_and_neg_exist" {
   }
 
   override_module {
-    target = module.app_services
+    target = module.environment.module.app_services
     outputs = {
       services = {
         api    = { service_name = "api", initial_image = "us-docker.pkg.dev/cloudrun/container/hello" }
@@ -136,11 +128,6 @@ run "public_ingress_backend_and_neg_exist" {
       github_actions             = {}
       gke_cluster_name           = null
     }
-  }
-
-  assert {
-    condition     = module.app_ingress["api"].backend_service_id != null && module.app_ingress["api"].https_forwarding_rule_id != null
-    error_message = "Public ingress must create the backend service and HTTPS forwarding rule."
   }
 
   assert {
@@ -157,12 +144,12 @@ run "public_ingress_from_config_and_bootstrap_image" {
   }
 
   assert {
-    condition     = length(module.app_ingress) == 1 && one(module.app_ingress["api"].managed_domains) == "api.dev.cfg.example"
+    condition     = module.environment.components.public_ingress == ["api"] && one(output.public_ingress["api"].domains) == "api.dev.cfg.example"
     error_message = "gcp.workload.public_ingress.<env> must drive public ingress."
   }
 
   assert {
-    condition     = module.app_services.services["api"].initial_image == "europe-west2-docker.pkg.dev/acme-dev-host-abcd/mirror/hello:bootstrap"
+    condition     = output.app_services["api"].initial_image == "europe-west2-docker.pkg.dev/acme-dev-host-abcd/mirror/hello:bootstrap"
     error_message = "gcp.workload.bootstrap_image must override the first-revision image."
   }
 }
@@ -176,7 +163,7 @@ run "public_ingress_can_be_switched_off" {
   }
 
   assert {
-    condition     = length(module.app_ingress) == 0
+    condition     = length(module.environment.components.public_ingress) == 0
     error_message = "enable_public_ingress = false must create no load balancer."
   }
 }
