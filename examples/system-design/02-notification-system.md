@@ -16,11 +16,8 @@ and the build on the [conventions](00-primer.md#conventions).
 Common variants:
 
 - "Design a bulk email or campaign system".
-- "Design an alerting fan-out for an on-call product" (few recipients, very
-  high priority, escalation across channels).
+- "Design an alerting fan-out for an on-call product".
 - "How do you make sure a user never gets the same notification twice?"
-
-The variant changes the weight of the deep dives, not the skeleton.
 
 ## The two-minute answer
 
@@ -71,7 +68,7 @@ Questions to ask, with the assumptions this walkthrough uses.
 
 ### Non-functional
 
-- **Scale.** 100 million registered users, 50 million daily active.
+- **Scale.** 100 million users, 50 million daily active.
 - **Latency.** Critical: p99 under 5 seconds from API call to provider
   acceptance. Transactional: under 30 seconds. Bulk: minutes to an hour is fine.
 - **Delivery semantics.** At-least-once into the system; *effectively once* to
@@ -83,8 +80,7 @@ Questions to ask, with the assumptions this walkthrough uses.
 - **Compliance.** Marketing honours unsubscribe and consent rules; personal
   data (phone, email) is encrypted at rest with CMEK.
 
-Stated assumption: the providers, not our queues, are the bottleneck, so the
-design is about pacing and protecting provider quotas.
+Assumption: providers, not our queues, are the bottleneck.
 
 ## Back-of-envelope estimates
 
@@ -135,17 +131,14 @@ Every number below is an assumption; the arithmetic uses the
 - **Delivery log.** ~500 bytes per notification and channel: 500 million ×
   500 B = **250 GB a day**, ~7.5 TB for 30 days hot. **Decision:** key-value
   with TTL, archive to object storage.
-- **Dedup keys.** ~100 bytes each, held for 24 hours: 500 million × 100 B =
-  **50 GB**, written at up to ~17,000/s. That fits a key-value store with
-  on-demand capacity; DynamoDB's default table quota is 40,000 write units per
-  second ([primer](00-primer.md#throughput-per-instance-and-per-partition)).
+- **State writes.** Each job writes three times (dedup marker, `sent` update,
+  delivery-log upsert): 3 × ~17,000 = **~51,000 writes/s** at peak, plus 50 GB
+  of 24-hour dedup keys. That exceeds DynamoDB's default table quota of 40,000
+  write units per second, which is adjustable
+  ([primer](00-primer.md#throughput-per-instance-and-per-partition)).
+  **Decision:** request a quota increase before launch, at 1× scale.
 - **Preferences.** 100 million × ~1 KB = **100 GB**, ~17,000 reads/s at peak.
   **Decision:** cache it.
-
-### Concurrency
-
-By Little's law, at ~100 ms per provider call (**verify before relying on**),
-14,000 push sends/s is **1,400 requests in flight**.
 
 ## API and data model
 
@@ -192,12 +185,14 @@ Two fields carry the design:
   "rendered": {"title": "Your order shipped", "body": "A-77 is on its way"},
   "collapse_key": "order:A-77",
   "attempt": 0,
-  "expires_at": 1793955600
+  "expires_at": 1794045600
 }
 ```
 
 The `job_id` is deterministic, so every retry of a job has the same dedup key
-and task name.
+and task name. `expires_at` is epoch seconds here and in DynamoDB; Firestore
+stores it as a Timestamp, because its TTL policy only acts on a timestamp
+field.
 
 ### Entities and access patterns
 
@@ -290,11 +285,9 @@ transactional 6,000/s) and give bulk the remainder. The limiter is a token
 bucket per (provider, lane) in a shared counter store, in front of the
 provider, not our API; the rate limiter walkthrough covers the algorithms.
 
-**Two-stage fan-out.** The expander turns a segment into chunks; the router
-turns chunks into per-user jobs. That gives three controls: the campaign
-budget, the chunk size and the lane's provider rate. A slow provider backs up
-its lane, and the expander slows down when it sees lane depth rise, instead of
-piling 50 million jobs into a queue.
+**Two-stage fan-out.** The expander turns a segment into chunks and the
+router turns chunks into jobs. The expander slows when lane depth rises,
+instead of piling 50 million jobs into a queue.
 
 **Noisy producers.** One producer can still crowd out another in a lane. SQS
 **fair queues** fix that: set a `MessageGroupId` per tenant and SQS favours
@@ -469,10 +462,9 @@ increments a second.
 
 - **First to fail: provider quotas** (FCM 10,000/s per project, ~100 parts/s
   per short code). Only negotiated quotas and more sending numbers help.
-- **The dedup and log store.** ~170,000 conditional writes a second passes the
-  DynamoDB default table quota of 40,000 write units, which is adjustable
-  ([primer](00-primer.md#throughput-per-instance-and-per-partition)); request
-  the increase.
+- **The state table.** ~510,000 writes a second (three per job) is far past
+  the default 40,000; split dedup and the delivery log into separate tables
+  and raise each quota.
 - **Delivery log.** 2.5 TB a day: keep only final state hot and stream the
   rest to object storage.
 
@@ -487,7 +479,6 @@ increments a second.
 | Component | If it fails | Blast radius | Containment |
 |---|---|---|---|
 | `notify-api` | Producers cannot hand off | All new notifications | Multiple tasks across zones; producers retry with the same idempotency key |
-| `notify-route` | Lanes stop filling | All channels | Stateless; scale on route queue depth |
 | One lane | That channel and priority backs up | One channel, one priority | Lanes are separate queues and consumer pools |
 | State store | Dedup, preferences and idempotency unavailable | Everything | Fail closed for SMS, open for critical push; on-demand capacity; PITR |
 | One provider | That channel stops | One channel | Failover to a second SMS or email provider; push has no alternative to APNs and FCM |
@@ -557,9 +548,11 @@ aws:
           health_check_path: /healthz
           enable_autoscaling: true
           task_role_policy_json: |
-            {"Version":"2012-10-17","Statement":[{"Effect":"Allow",
-             "Action":"sqs:SendMessage",
-             "Resource":"arn:aws:sqs:<region>:<workload-account-id>:prod-notify-route"}]}
+            {"Version":"2012-10-17","Statement":[
+             {"Effect":"Allow","Action":"sqs:SendMessage",
+              "Resource":"arn:aws:sqs:<region>:<workload-account-id>:prod-notify-route"},
+             {"Effect":"Allow","Action":["kms:GenerateDataKey","kms:Decrypt"],
+              "Resource":"<workload_kms_key_arn>"}]}
         notify-route:
           enable_autoscaling: true
           autoscaling_max_capacity: 40
@@ -592,14 +585,21 @@ Notes:
 - On GCP this design does **not** set `pubsub.enabled`. The app-services
   Pub/Sub option creates a *pull* subscription, which a request-billed Cloud
   Run service cannot drain. Push lanes need raw push subscriptions (gap: no
-  module option); SMS and email use Cloud Tasks below. Whether both can reach
-  an `INGRESS_TRAFFIC_INTERNAL_ONLY` service is **verify before relying on**.
+  module option); SMS and email use Cloud Tasks below. Both count as internal
+  sources for an `INGRESS_TRAFFIC_INTERNAL_ONLY` service only when they are in
+  the same project or VPC-SC perimeter and call the default `run.app` URL
+  ([Google Cloud docs](https://docs.cloud.google.com/run/docs/securing/ingress),
+  checked 2026-11).
 
 ### AWS: queue encryption and the state table
 
 The app-services module supports CMK encryption of its queues through
 `queue_kms_key_arn`, but `envs/aws/workload` does not pass it, so service
-queues get SQS-managed encryption today.
+queues get SQS-managed encryption today. Once it is set, the module grants
+`kms:GenerateDataKey` and `kms:Decrypt` only to services with their own queue;
+every cross-queue producer (`notify-api`, `notify-route`) needs them on the
+workload key in its `task_role_policy_json`, as `notify-api` shows, or its
+sends fail with KMS access denied.
 
 ```hcl
 # Gap: envs/aws/workload does not wire queue CMEK; add one input to the existing call.
@@ -720,9 +720,10 @@ resource "google_firestore_field" "dedup_ttl" {
   project    = local.env_config.host_project_id
   database   = google_firestore_database.notify.name
   collection = "dedup"
-  field      = "expires_at"
+  field      = "expires_at" # must hold a Timestamp, not epoch seconds
 
   ttl_config {}
+  index_config {} # an indexed timestamp field can hotspot
 }
 
 # Gap: the repo has no Cloud Tasks module; raw resources in the landing zone's conventions.
@@ -759,14 +760,16 @@ Notes:
   behind an allow-list
   ([release notes](https://docs.cloud.google.com/firestore/docs/release-notes),
   checked 2026-11). Request access before the first apply.
-- **Ramp new collections:** start at 500 operations a second and grow 50%
-  every 5 minutes
+- **Ramp new collections** from 500 operations a second, +50% every 5 minutes
   ([Google Cloud docs](https://docs.cloud.google.com/firestore/native/docs/best-practices),
-  checked 2026-11), so load-test before the first campaign.
-- **Pub/Sub CMEK:** app-services takes `pubsub_kms_key_name`, but the
-  environment stage does not pass it; raw push lanes should set `kms_key_name`
-  on their topics to a `workload_cmek` key, with the Pub/Sub service agent
-  granted on it.
+  checked 2026-11).
+- **Pub/Sub CMEK:** the environment stage does not pass app-services'
+  `pubsub_kms_key_name`; raw push-lane topics set `kms_key_name` to a
+  `workload_cmek` key instead.
+- **Dispatch identity.** `notify-route` creates each task with an
+  `oidc_token` for a dispatch service account, which needs
+  `roles/run.invoker` on the SMS worker and `notify-route-run` needs
+  `iam.serviceAccounts.actAs` on it (not shown).
 - **Credentials** (APNs key, vendor API keys) live in the secrets service and
   reach workers through the app-services `secrets` map, never the config file.
   `notify-route-run` is the runtime account app-services creates.
@@ -833,8 +836,8 @@ checked 2026-11).
 configuration set's events; a stale or bought list is the usual cause.
 
 **Mitigation.** Stop that campaign. Confirm the feedback path suppresses
-addresses: the account-level suppression list adds hard bounces only, and
-Gmail sends no complaint data to SES
+addresses. The suppression list (bounces and complaints here) never sees
+Gmail spam reports, because Gmail sends no complaint data to SES
 ([AWS docs](https://docs.aws.amazon.com/ses/latest/dg/sending-email-suppression-list.html),
 checked 2026-11). If SES pauses sending, move transactional email to a second
 provider until it is restored.
