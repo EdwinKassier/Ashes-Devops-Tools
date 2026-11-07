@@ -123,7 +123,7 @@ The following resources are created:
 |------|-------------|
 | <a name="output_id"></a> [id](#output\_id) | The ID of the VPC |
 | <a name="output_name"></a> [name](#output\_name) | The name of the VPC |
-| <a name="output_network"></a> [network](#output\_network) | The created VPC resource |
+| <a name="output_network"></a> [network](#output\_network) | The created VPC resource (every attribute except the provider-deprecated numeric\_id; read network.network\_id instead) |
 | <a name="output_network_id"></a> [network\_id](#output\_network\_id) | Deprecated alias for the VPC ID |
 | <a name="output_network_name"></a> [network\_name](#output\_network\_name) | Deprecated alias for the VPC name |
 | <a name="output_network_self_link"></a> [network\_self\_link](#output\_network\_self\_link) | Deprecated alias for the VPC self link |

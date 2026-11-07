@@ -5,8 +5,10 @@
  */
 
 output "subnet" {
-  description = "The created subnet resource"
-  value       = google_compute_subnetwork.subnet
+  description = "The created subnet resource (every attribute except the provider-deprecated fingerprint)"
+  # The google provider deprecates fingerprint; filtering it out keeps the
+  # warning off every caller's plan. Read the attributes you need by name.
+  value = { for k, v in google_compute_subnetwork.subnet : k => v if k != "fingerprint" }
 }
 
 output "id" {
