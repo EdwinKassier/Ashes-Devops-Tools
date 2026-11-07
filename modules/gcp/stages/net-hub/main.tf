@@ -9,6 +9,9 @@
  * perimeter, opt-in hybrid connectivity (HA VPN, Cloud Interconnect) and an
  * opt-in Network Connectivity Center hub (the alternative to spoke peering).
  *
+ * Opt-in additional_regions add regional subnets (and a Cloud Router and NAT
+ * per region) to the same VPC; empty keeps the single-region layout.
+ *
  * Replaces the hub use of the deprecated stages/host module (see the README
  * migration table for the moved blocks).
  */
@@ -48,6 +51,7 @@ module "network" {
   shared_vpc_host     = var.network.shared_vpc_host
   deletion_protection = var.deletion_protection
   flow_logs           = var.network.flow_logs
+  additional_regions  = var.additional_regions
 
   firewall_mode                     = var.firewall_mode
   firewall_policy_enforcement_order = var.firewall_policy_enforcement_order
@@ -91,6 +95,33 @@ module "integrated_nat" {
     [for s in module.network.subnets.private : { name = s.self_link, source_ip_ranges_to_nat = ["ALL_IP_RANGES"] }],
     [for s in module.network.subnets.database : { name = s.self_link, source_ip_ranges_to_nat = ["ALL_IP_RANGES"] }]
   )
+
+  enable_logging = true
+  log_filter     = var.nat.log_filter
+}
+
+# One Cloud Router and Cloud NAT per additional region with nat = true, same
+# settings as the primary. Separate block keyed by region: the primary
+# integrated_nat[0] address is unchanged.
+module "additional_region_nat" {
+  source   = "../../network/nat"
+  for_each = var.nat.enabled ? { for region, r in var.additional_regions : region => r if r.nat } : {}
+
+  project_id = var.project_id
+  name       = "${var.network.name}-nat-${each.key}"
+  region     = each.key
+  network    = module.network.network_id
+
+  create_router = true
+  router_name   = "${var.network.name}-router-${each.key}"
+
+  nat_ip_allocate_option             = var.nat.ip_allocate_option
+  source_subnetwork_ip_ranges_to_nat = "LIST_OF_SUBNETWORKS"
+
+  subnetworks = [
+    { name = module.network.additional_region_subnets[each.key].private.self_link, source_ip_ranges_to_nat = ["ALL_IP_RANGES"] },
+    { name = module.network.additional_region_subnets[each.key].database.self_link, source_ip_ranges_to_nat = ["ALL_IP_RANGES"] },
+  ]
 
   enable_logging = true
   log_filter     = var.nat.log_filter

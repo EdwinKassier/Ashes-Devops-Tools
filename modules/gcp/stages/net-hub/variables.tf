@@ -25,6 +25,24 @@ variable "region" {
   }
 }
 
+variable "additional_regions" {
+  description = "Opt-in extra regions of this VPC, keyed by region name (passed to network/tiered-vpc): subnet_cidrs (public, private, database; one regional subnet per tier, no overlap with the primary subnets or another region), optional secondary_ranges for the region's private subnet, and nat (default true): a Cloud Router <network.name>-router-<region> and Cloud NAT <network.name>-nat-<region> for the region's private and database subnets, with the primary nat settings (created only when nat.enabled). PSA, PSC, VPN, DNS and VPC-SC stay single-region or global. Empty (default) = single-region, nothing changes."
+  type = map(object({
+    subnet_cidrs = object({
+      public   = string
+      private  = string
+      database = string
+    })
+    secondary_ranges = optional(list(object({
+      range_name    = string
+      ip_cidr_range = string
+    })), [])
+    nat = optional(bool, true)
+  }))
+  default  = {}
+  nullable = false
+}
+
 variable "labels" {
   description = "Labels applied to every labelable resource."
   type        = map(string)

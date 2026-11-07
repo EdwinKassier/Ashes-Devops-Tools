@@ -198,6 +198,7 @@ module "environment" {
     }
     flow_logs_retention_days       = var.vpc_flow_logs_retention_days
     private_service_connect_target = var.private_service_connect_target
+    additional_regions             = local.additional_regions
   }
 
   hub = {

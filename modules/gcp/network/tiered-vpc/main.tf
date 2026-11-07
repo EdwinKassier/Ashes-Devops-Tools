@@ -10,6 +10,10 @@
  * `stages/host` module resource-for-resource (same names, same CIDR maths),
  * so callers can migrate onto it with `moved` blocks and no replacement.
  *
+ * Opt-in additional_regions add one regional subnet per tier in each extra
+ * region of the same (global) VPC. They live in separate region-keyed module
+ * blocks, so the primary layout keeps its addresses when the map is empty.
+ *
  * Zones are an explicit, required input: zone discovery stays with the
  * composing stage so the subnet `for_each` keys never depend on a data source
  * read inside this module.
@@ -31,6 +35,19 @@ locals {
   database_cidrs = length(var.subnet_cidrs.database) > 0 ? var.subnet_cidrs.database : [for i, z in var.zones : cidrsubnet(var.cidr_block, 8, 32 + i)]
 
   zone_index = { for i, z in var.zones : z => i }
+
+  # Additional regions (opt-in). Each tier list below is the primary list with
+  # the additional-region CIDRs appended, so with additional_regions = {} it is
+  # exactly the primary list and the firewall policy rules plan unchanged.
+  tier_public_cidrs   = concat(local.public_cidrs, [for r in values(var.additional_regions) : r.subnet_cidrs.public])
+  tier_private_cidrs  = concat(local.private_cidrs, [for r in values(var.additional_regions) : r.subnet_cidrs.private])
+  tier_database_cidrs = concat(local.database_cidrs, [for r in values(var.additional_regions) : r.subnet_cidrs.database])
+
+  # The primary zonal subnet CIDRs, for the additional_regions overlap
+  # validation (it must not depend on var.additional_regions).
+  primary_subnet_cidr_list = flatten([
+    for i, z in var.zones : [local.public_cidrs[i], local.private_cidrs[i], local.database_cidrs[i]]
+  ])
 
   # firewall_mode: legacy = tag-based VPC rules only; both = VPC rules plus the
   # network firewall policy (migration step); policy = network firewall policy only.
@@ -139,6 +156,64 @@ module "database_subnets" {
   subnet_name   = "${var.name}-db-${each.key}"
   ip_cidr_range = local.database_cidrs[each.value]
   region        = var.region
+  network       = module.vpc.id
+
+  enable_flow_logs                = true
+  log_config_aggregation_interval = var.flow_logs.aggregation_interval
+  log_config_flow_sampling        = var.flow_logs.sampling
+
+  private_ip_google_access = true
+}
+
+# =============================================================================
+# ADDITIONAL REGIONS (opt-in; one regional subnet per tier per region)
+# =============================================================================
+#
+# Separate module blocks keyed by region so the primary zonal subnets keep
+# their unkeyed-by-region addresses. Names are <name>-<tier>-<region>; a region
+# name never equals a zone name, so they cannot collide with the primary ones.
+
+module "additional_public_subnets" {
+  source   = "../subnet"
+  for_each = var.additional_regions
+
+  project_id    = var.project_id
+  subnet_name   = "${var.name}-public-${each.key}"
+  ip_cidr_range = each.value.subnet_cidrs.public
+  region        = each.key
+  network       = module.vpc.id
+
+  enable_flow_logs                = true
+  log_config_aggregation_interval = var.flow_logs.aggregation_interval
+  log_config_flow_sampling        = var.flow_logs.sampling
+}
+
+module "additional_private_subnets" {
+  source   = "../subnet"
+  for_each = var.additional_regions
+
+  project_id    = var.project_id
+  subnet_name   = "${var.name}-private-${each.key}"
+  ip_cidr_range = each.value.subnet_cidrs.private
+  region        = each.key
+  network       = module.vpc.id
+
+  enable_flow_logs                = true
+  log_config_aggregation_interval = var.flow_logs.aggregation_interval
+  log_config_flow_sampling        = var.flow_logs.sampling
+
+  private_ip_google_access = true
+  secondary_ip_ranges      = each.value.secondary_ranges
+}
+
+module "additional_database_subnets" {
+  source   = "../subnet"
+  for_each = var.additional_regions
+
+  project_id    = var.project_id
+  subnet_name   = "${var.name}-db-${each.key}"
+  ip_cidr_range = each.value.subnet_cidrs.database
+  region        = each.key
   network       = module.vpc.id
 
   enable_flow_logs                = true
@@ -341,7 +416,8 @@ module "firewall_deny_all" {
 # One global network firewall policy and one association per VPC (a VPC takes
 # only one). Rules mirror the tag-based baseline above but select tiers by
 # subnet CIDR (src_ip_ranges / dest_ip_ranges), so a principal that can set
-# network tags on an instance cannot move it into a more trusted tier.
+# network tags on an instance cannot move it into a more trusted tier. Tier
+# ranges include every additional region's subnets (local.tier_*_cidrs).
 #
 # There is deliberately no trailing deny-all: traffic no policy rule matches
 # goes to the next stage (VPC rules, then the implied deny), so GKE's
@@ -360,7 +436,7 @@ locals {
       direction               = "INGRESS"
       action                  = "allow"
       src_ip_ranges           = var.firewall.api_gateway_source_ranges
-      dest_ip_ranges          = local.public_cidrs
+      dest_ip_ranges          = local.tier_public_cidrs
       ip_protocol             = "tcp"
       ports                   = ["443", "80"]
       target_service_accounts = null
@@ -371,8 +447,8 @@ locals {
       description             = "Allow traffic from public tier to compute tier"
       direction               = "INGRESS"
       action                  = "allow"
-      src_ip_ranges           = local.public_cidrs
-      dest_ip_ranges          = local.private_cidrs
+      src_ip_ranges           = local.tier_public_cidrs
+      dest_ip_ranges          = local.tier_private_cidrs
       ip_protocol             = "tcp"
       ports                   = var.firewall.compute_tier_ports
       target_service_accounts = null
@@ -383,8 +459,8 @@ locals {
       description             = "Allow traffic from compute tier to database tier"
       direction               = "INGRESS"
       action                  = "allow"
-      src_ip_ranges           = local.private_cidrs
-      dest_ip_ranges          = local.database_cidrs
+      src_ip_ranges           = local.tier_private_cidrs
+      dest_ip_ranges          = local.tier_database_cidrs
       ip_protocol             = "tcp"
       ports                   = var.firewall.database_ports
       target_service_accounts = null
@@ -419,7 +495,7 @@ locals {
       description             = "Deny direct egress from database tier for security"
       direction               = "EGRESS"
       action                  = "deny"
-      src_ip_ranges           = local.database_cidrs
+      src_ip_ranges           = local.tier_database_cidrs
       dest_ip_ranges          = ["0.0.0.0/0"]
       ip_protocol             = "all"
       ports                   = null

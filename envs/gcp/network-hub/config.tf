@@ -40,6 +40,8 @@ locals {
     # No secret lives here: the VPN pre-shared key is a write-only variable.
     vpn          = try(jsonencode(local.lz.gcp.network.vpn), null)
     interconnect = try(jsonencode(local.lz.gcp.network.interconnect), null)
+    # Opt-in extra hub regions (JSON text, same reason as vpn above).
+    additional_regions = try(jsonencode(local.lz.gcp.network.additional_regions), null)
     # Normalised to the attribute types of var.environments (region defaults to
     # org.regions.gcp, display_name to the key). A malformed entry is caught by
     # the var.environments validations, which also read local.cfg.
@@ -100,4 +102,6 @@ locals {
   # Opt-in hybrid connectivity (default off: no VPN, no Interconnect).
   vpn           = jsondecode(var.vpn != null ? jsonencode(var.vpn) : coalesce(local.cfg.vpn, "{}"))
   interconnects = jsondecode(var.interconnects != null ? jsonencode(var.interconnects) : coalesce(local.cfg.interconnect, "{}"))
+  # Opt-in extra hub regions (default none: single-region hub).
+  hub_additional_regions = jsondecode(var.hub_additional_regions != null ? jsonencode(var.hub_additional_regions) : coalesce(local.cfg.additional_regions, "{}"))
 }

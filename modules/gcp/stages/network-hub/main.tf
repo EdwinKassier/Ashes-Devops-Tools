@@ -44,6 +44,7 @@ module "hub" {
   project_prefix      = var.project_prefix
   region              = var.default_region
   deletion_protection = var.enable_deletion_protection
+  additional_regions  = var.hub_additional_regions
 
   network = {
     name            = "hub-vpc-core"

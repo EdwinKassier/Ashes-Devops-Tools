@@ -25,6 +25,24 @@ variable "region" {
   }
 }
 
+variable "additional_regions" {
+  description = "Opt-in extra regions of this VPC, keyed by region name (passed to network/tiered-vpc): subnet_cidrs (public, private, database; one regional subnet per tier, no overlap with the primary subnets or another region), optional secondary_ranges for the region's private subnet, and nat (default true): a Cloud Router <network.name>-router-<region> and Cloud NAT <network.name>-nat-<region> for the region's private and database subnets, with the primary nat settings (created only when nat.enabled). PSA, PSC, VPN, DNS and VPC-SC stay single-region or global. Empty (default) = single-region, nothing changes."
+  type = map(object({
+    subnet_cidrs = object({
+      public   = string
+      private  = string
+      database = string
+    })
+    secondary_ranges = optional(list(object({
+      range_name    = string
+      ip_cidr_range = string
+    })), [])
+    nat = optional(bool, true)
+  }))
+  default  = {}
+  nullable = false
+}
+
 variable "labels" {
   description = "Labels applied to every labelable resource."
   type        = map(string)
@@ -195,7 +213,7 @@ variable "connectivity" {
 }
 
 variable "ncc" {
-  description = "NCC spoke settings, used when connectivity = ncc. hub_id: the network/ncc-hub id. group: edge (STAR hub) or default (MESH hub). Export ranges filter the subnet ranges the hub learns. export_private_service_access adds a producer VPC spoke for the PSA peering (when PSA is enabled)."
+  description = "NCC spoke settings, used when connectivity = ncc. hub_id: the network/ncc-hub id. group: edge (STAR hub) or default (MESH hub). Export ranges filter the subnet ranges the hub learns (empty = every subnet, additional_regions included; a non-empty include_export_ranges must also cover the additional-region CIDRs or the hub will not learn them). export_private_service_access adds a producer VPC spoke for the PSA peering (when PSA is enabled)."
   type = object({
     hub_id                        = optional(string)
     group                         = optional(string, "edge")

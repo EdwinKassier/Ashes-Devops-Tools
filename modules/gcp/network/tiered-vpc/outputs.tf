@@ -33,6 +33,17 @@ output "subnets" {
   }
 }
 
+output "additional_region_subnets" {
+  description = "Subnet module outputs of the additional regions, keyed by region, each with public, private and database; empty when additional_regions is empty."
+  value = {
+    for region in keys(var.additional_regions) : region => {
+      public   = module.additional_public_subnets[region]
+      private  = module.additional_private_subnets[region]
+      database = module.additional_database_subnets[region]
+    }
+  }
+}
+
 output "network_tags" {
   description = "Network tags that select the security tiers in the baseline firewall rules."
   value       = local.network_tags

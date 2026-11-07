@@ -173,6 +173,15 @@ gcp:
     #     region: europe-west2
     #     router_name: hub-ic-router
     #     interconnect_type: PARTNER    # PARTNER | DEDICATED
+    # Extra regions of the hub VPC, keyed by region (off by default: the hub
+    # is single-region in org.regions.gcp). Each gets one regional subnet per
+    # tier; the CIDRs must not overlap the primary hub subnets or each other.
+    # nat (default true) adds a Cloud Router and Cloud NAT in the region. The
+    # DNS anchor VPC, PSA, PSC and the VPN stay in the primary region.
+    # additional_regions:
+    #   europe-west4:
+    #     subnet_cidrs: {public: 10.2.0.0/24, private: 10.2.16.0/24, database: 10.2.32.0/24}
+    #     nat: true
   # Application environments, consumed by gcp-bootstrap, gcp-organization,
   # gcp-projects, gcp-network-hub, gcp-workload-<env> and tfc-admin (one
   # gcp-workload-<env> workspace per key). Keys: ^[a-z][a-z0-9-]{0,14}$, not
@@ -185,6 +194,12 @@ gcp:
       is_production: false
       labels:
         tier: non-production
+      # Extra regions of this environment's spoke VPC (gcp-workload-<env>),
+      # same shape as gcp.network.additional_regions; off by default. Under
+      # network_connectivity: ncc the NCC spoke exports every subnet range.
+      # additional_regions:
+      #   europe-west4:
+      #     subnet_cidrs: {public: 10.11.0.0/24, private: 10.11.16.0/24, database: 10.11.32.0/24}
       # Application services (Cloud Run, optional Cloud SQL, GitHub deploy
       # identity). Same fields as the modules/gcp/stages/app-services `services`
       # variable; the key is the service name. A service runs in the host project

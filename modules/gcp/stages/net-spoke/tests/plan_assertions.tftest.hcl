@@ -221,3 +221,76 @@ run "firewall_policy_fields_default_to_current_behaviour" {
     error_message = "Unset, the new firewall fields must keep the defaults: no API Gateway policy rule and no egress target service accounts."
   }
 }
+
+run "no_additional_regions_unchanged" {
+  command = plan
+
+  assert {
+    condition     = length(module.additional_region_nat) == 0 && output.additional_region_subnets == {} && output.additional_region_routers == {}
+    error_message = "additional_regions = {} (default) must plan no additional-region subnets, routers or NAT."
+  }
+
+  assert {
+    condition     = length(module.integrated_nat) == 1 && module.integrated_nat[0].router_name == "mock-dev-vpc-router" && module.integrated_nat[0].region == "europe-west1"
+    error_message = "The primary router and NAT must keep their unkeyed address, name and region."
+  }
+}
+
+run "second_region_subnets_router_nat" {
+  command = plan
+
+  variables {
+    nat = {
+      log_filter = "ALL"
+    }
+    additional_regions = {
+      "us-east4" = {
+        subnet_cidrs = { public = "10.200.0.0/24", private = "10.200.16.0/24", database = "10.200.32.0/24" }
+      }
+      "us-west1" = {
+        subnet_cidrs = { public = "10.201.0.0/24", private = "10.201.16.0/24", database = "10.201.32.0/24" }
+        nat          = false
+      }
+    }
+  }
+
+  assert {
+    condition     = toset(keys(output.additional_region_subnets)) == toset(["us-east4", "us-west1"]) && output.additional_region_subnets["us-east4"].private.subnet.region == "us-east4" && output.additional_region_subnets["us-east4"].private.subnet.name == "mock-dev-vpc-private-us-east4"
+    error_message = "Each additional region must get its own regional tier subnets."
+  }
+
+  assert {
+    condition     = toset(keys(module.additional_region_nat)) == toset(["us-east4"]) && output.additional_region_routers == { "us-east4" = "mock-dev-vpc-router-us-east4" }
+    error_message = "A router and NAT must be planned only for additional regions with nat = true, named <network>-router-<region>."
+  }
+
+  assert {
+    condition     = module.additional_region_nat["us-east4"].region == "us-east4" && module.additional_region_nat["us-east4"].nat.name == "mock-dev-vpc-nat-us-east4" && module.additional_region_nat["us-east4"].nat.log_config[0].filter == "ALL" && module.additional_region_nat["us-east4"].nat.source_subnetwork_ip_ranges_to_nat == "LIST_OF_SUBNETWORKS"
+    error_message = "The additional-region NAT must be in its region, named <network>-nat-<region>, with the primary nat settings and a subnet list (private and database tiers only)."
+  }
+
+  assert {
+    condition     = length(module.integrated_nat) == 1 && module.integrated_nat[0].router_name == "mock-dev-vpc-router" && module.integrated_nat[0].region == "europe-west1"
+    error_message = "The primary router and NAT must be unchanged by additional regions."
+  }
+}
+
+run "additional_region_nat_off_when_nat_disabled" {
+  command = plan
+
+  variables {
+    nat = {
+      enabled = false
+    }
+    additional_regions = {
+      "us-east4" = {
+        subnet_cidrs = { public = "10.200.0.0/24", private = "10.200.16.0/24", database = "10.200.32.0/24" }
+      }
+    }
+  }
+
+  assert {
+    condition     = length(module.additional_region_nat) == 0 && length(module.integrated_nat) == 0 && length(output.additional_region_subnets) == 1
+    error_message = "nat.enabled = false must suppress every NAT, additional regions included."
+  }
+}

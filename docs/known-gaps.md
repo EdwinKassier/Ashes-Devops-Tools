@@ -11,6 +11,11 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
 
 ## OPEN — validate before relying on
 
+- **Vercel `resource_config` first apply is unproven.** `modules/vercel/project` now sets
+  `resource_config.function_default_regions` instead of the deprecated
+  `serverless_function_region`. Confirm in the sandbox that the update is in place and that the
+  first-time `resource_config` does not reset `fluid`, `function_default_cpu_type` or
+  `function_default_timeout` on an existing project.
 - **Upstream applies auto-apply non-prod workloads.** Workload
   `gcp-workload-<env>` / `aws-workload-<env>` workspaces whose environment sets
   `is_production: false` explicitly (an omitted flag never qualifies) get
@@ -632,6 +637,27 @@ Enable only after validating in a real/test org. Each defaults to prior behaviou
     Secrets Manager (`preshared_key_storage = SecretsManager`; the stage outputs
     `vpn_preshared_key_arn`, not the keys). Setting `Standard` puts the AWS
     keys in state.
+
+- **GCP additional regions in hub and spoke VPCs** (`gcp.network.additional_regions`,
+  `gcp.environments.<env>.additional_regions`; `additional_regions` on
+  `network/tiered-vpc`, `stages/net-hub`, `stages/net-spoke`). Mock-tested only.
+  Each extra region adds one regional subnet per tier to the same global VPC
+  and, with `nat` (default true), a Cloud Router and Cloud NAT. The existing
+  single-region addresses are unchanged when the map is empty. Still
+  single-region (primary region only):
+  - Private Service Connect endpoint, HA VPN and its NCC hybrid spoke, the flow
+    log export KMS key ring and the `dns-anchor` VPC. Private Service Access and
+    VPC-SC are not regional. Interconnect attachments already take a per-entry
+    `region`.
+  - Workload placement: `stages/environment` still deploys app services
+    (Cloud Run, Cloud SQL, GKE Autopilot) and the VM backup policy in the
+    primary region. The extra-region subnets exist and can be shared with
+    service projects, but no app-services input places a workload there yet.
+  - Overlap validation covers subnet primary ranges only, not `secondary_ranges`
+    or the PSA range.
+  - Under NCC a spoke exports every subnet range; a non-empty
+    `ncc.include_export_ranges` on `stages/net-spoke` must list the
+    additional-region CIDRs too. AWS multi-region stays at ADR 0009.
 
 ## Capability parity (2026 review)
 

@@ -43,6 +43,7 @@ module "network_hub" {
   vpn_shared_secret_wo         = var.vpn_shared_secret_wo
   vpn_shared_secret_wo_version = var.vpn_shared_secret_wo_version
   interconnects                = local.interconnects
+  hub_additional_regions       = local.hub_additional_regions
 
   vpc_sc_access_policy_name = local.vpc_sc_access_policy_name
   vpc_sc_enable_dry_run     = var.vpc_sc_enable_dry_run

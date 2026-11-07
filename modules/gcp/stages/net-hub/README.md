@@ -42,6 +42,9 @@ Connect, hierarchical (folder or org) firewall policies, the hub VPC-SC
 perimeter, opt-in hybrid connectivity (HA VPN, Cloud Interconnect) and an
 opt-in Network Connectivity Center hub (the alternative to spoke peering).
 
+Opt-in additional\_regions add regional subnets (and a Cloud Router and NAT
+per region) to the same VPC; empty keeps the single-region layout.
+
 Replaces the hub use of the deprecated stages/host module (see the README
 migration table for the moved blocks).
 
@@ -77,6 +80,7 @@ module "example" {
 ## Modules
 
 
+- additional_region_nat - ../../network/nat
 - hierarchical_firewall_policies - ../../network/hierarchical-firewall
 - integrated_nat - ../../network/nat
 - interconnects - ../../network/interconnect
@@ -95,7 +99,7 @@ module "example" {
 The following resources are created:
 
 
-- data source.google_compute_zones.available (modules/gcp/stages/net-hub/main.tf#L22)
+- data source.google_compute_zones.available (modules/gcp/stages/net-hub/main.tf#L25)
 
 
 ## Inputs
@@ -105,6 +109,7 @@ The following resources are created:
 | <a name="input_network"></a> [network](#input\_network) | The VPC and its three-tier zonal subnet layout.<br/>name and cidr\_block are required. Pin explicit\_zones for production: when<br/>empty, zones are discovered from GCP and a change in the returned zone set<br/>re-derives the subnet CIDRs (replacing subnets). subnet\_cidrs lists are<br/>index-aligned with the zones; an empty list derives that tier from<br/>cidr\_block. secondary\_ranges (GKE Pods and Services) attach to the private<br/>tier, keyed by zone. shared\_vpc\_host makes the hub project a<br/>Shared VPC host (default true). flow\_logs sets the subnet flow-log sampling. | <pre>object({<br/>    name           = string<br/>    cidr_block     = string<br/>    explicit_zones = optional(list(string), [])<br/>    subnet_cidrs = optional(object({<br/>      public   = optional(list(string), [])<br/>      private  = optional(list(string), [])<br/>      database = optional(list(string), [])<br/>    }), {})<br/>    secondary_ranges = optional(map(list(object({<br/>      range_name    = string<br/>      ip_cidr_range = string<br/>    }))), {})<br/>    shared_vpc_host = optional(bool, true)<br/>    flow_logs = optional(object({<br/>      aggregation_interval = optional(string, "INTERVAL_5_SEC")<br/>      sampling             = optional(number, 0.5)<br/>    }), {})<br/>  })</pre> | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The GCP project ID that owns the network (6-30 characters, lowercase alphanumeric and hyphens, must start with a letter). | `string` | n/a | yes |
 | <a name="input_project_prefix"></a> [project\_prefix](#input\_project\_prefix) | Prefix for derived resource names (e.g. 'ashes-dev'). Must start with a letter and contain only lowercase letters, digits, and hyphens. | `string` | n/a | yes |
+| <a name="input_additional_regions"></a> [additional\_regions](#input\_additional\_regions) | Opt-in extra regions of this VPC, keyed by region name (passed to network/tiered-vpc): subnet\_cidrs (public, private, database; one regional subnet per tier, no overlap with the primary subnets or another region), optional secondary\_ranges for the region's private subnet, and nat (default true): a Cloud Router <network.name>-router-<region> and Cloud NAT <network.name>-nat-<region> for the region's private and database subnets, with the primary nat settings (created only when nat.enabled). PSA, PSC, VPN, DNS and VPC-SC stay single-region or global. Empty (default) = single-region, nothing changes. | <pre>map(object({<br/>    subnet_cidrs = object({<br/>      public   = string<br/>      private  = string<br/>      database = string<br/>    })<br/>    secondary_ranges = optional(list(object({<br/>      range_name    = string<br/>      ip_cidr_range = string<br/>    })), [])<br/>    nat = optional(bool, true)<br/>  }))</pre> | `{}` | no |
 | <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Guard the VPC and subnet stack with a prevent\_destroy terraform\_data resource and enable VPC deletion protection. To deprovision deliberately, first run terraform state rm on the network module guard. | `bool` | `false` | no |
 | <a name="input_firewall"></a> [firewall](#input\_firewall) | Baseline tier firewall: rule logging, the IAP SSH/RDP allow rule, and the ports opened public to compute and compute to database. api\_gateway\_source\_ranges and database\_egress\_target\_service\_accounts apply only to the network firewall policy (firewall\_mode both / policy). | <pre>object({<br/>    enable_logging     = optional(bool, true)<br/>    enable_iap_access  = optional(bool, true)<br/>    compute_tier_ports = optional(list(string), ["8080", "8443", "3000"])<br/>    database_ports     = optional(list(string), ["3306", "5432", "6379"])<br/>    # Network firewall policy only (firewall_mode both / policy).<br/>    api_gateway_source_ranges               = optional(list(string), [])<br/>    database_egress_target_service_accounts = optional(list(string), [])<br/>  })</pre> | `{}` | no |
 | <a name="input_firewall_mode"></a> [firewall\_mode](#input\_firewall\_mode) | How the baseline tier firewall is enforced (network/tiered-vpc firewall\_mode). legacy: tag-based VPC firewall rules (default). both: the VPC rules plus a global network firewall policy keyed on tier subnet CIDRs. policy: the network firewall policy only. See docs/runbooks/gcp-firewall-policy-migration.md. | `string` | `"legacy"` | no |
@@ -127,6 +132,8 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
+| <a name="output_additional_region_routers"></a> [additional\_region\_routers](#output\_additional\_region\_routers) | Cloud Router name per additional region that has Cloud NAT, keyed by region; empty when there is none. |
+| <a name="output_additional_region_subnets"></a> [additional\_region\_subnets](#output\_additional\_region\_subnets) | Subnet module outputs of the additional regions, keyed by region, each with public, private and database; empty when additional\_regions is empty. |
 | <a name="output_firewall_policy_name"></a> [firewall\_policy\_name](#output\_firewall\_policy\_name) | Name of the tier network firewall policy (pass to network/internal-lb firewall\_policy), or null in firewall\_mode = legacy. |
 | <a name="output_hierarchical_firewall_policy_ids"></a> [hierarchical\_firewall\_policy\_ids](#output\_hierarchical\_firewall\_policy\_ids) | The IDs of the hierarchical firewall policies, keyed by policy name. |
 | <a name="output_hybrid_connectivity"></a> [hybrid\_connectivity](#output\_hybrid\_connectivity) | Which hybrid connectivity is planned: vpn (HA VPN on), ncc\_vpn\_spoke (tunnels linked to the NCC hub), ncc\_vpn\_spoke\_group and the interconnect attachment names. |

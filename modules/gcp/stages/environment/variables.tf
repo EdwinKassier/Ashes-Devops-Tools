@@ -79,7 +79,7 @@ variable "deletion_protection" {
 # --- Network --------------------------------------------------------------------
 
 variable "network" {
-  description = "Spoke VPC settings: flow_logs (aggregation_interval, sampling 0.0-1.0), flow_logs_retention_days for the BigQuery export, and private_service_connect_target (all-apis | vpc-sc; null derives vpc-sc once the perimeter is enforced, else all-apis)."
+  description = "Spoke VPC settings: flow_logs (aggregation_interval, sampling 0.0-1.0), flow_logs_retention_days for the BigQuery export, private_service_connect_target (all-apis | vpc-sc; null derives vpc-sc once the perimeter is enforced, else all-apis), and additional_regions: opt-in extra regions of the spoke VPC keyed by region name (subnet_cidrs public/private/database, optional secondary_ranges, nat default true for a Cloud Router and NAT in the region; empty = single-region)."
   type = object({
     flow_logs = optional(object({
       aggregation_interval = optional(string, "INTERVAL_5_SEC")
@@ -87,6 +87,18 @@ variable "network" {
     }), {})
     flow_logs_retention_days       = optional(number, 30)
     private_service_connect_target = optional(string)
+    additional_regions = optional(map(object({
+      subnet_cidrs = object({
+        public   = string
+        private  = string
+        database = string
+      })
+      secondary_ranges = optional(list(object({
+        range_name    = string
+        ip_cidr_range = string
+      })), [])
+      nat = optional(bool, true)
+    })), {})
   })
   default  = {}
   nullable = false

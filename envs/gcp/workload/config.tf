@@ -128,6 +128,12 @@ locals {
       for env, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : env => tostring(e.network_connectivity)
       if try(e.network_connectivity, null) != null
     }
+    # gcp.environments.<env>.additional_regions as JSON text (no type
+    # unification across environments); the stage's variable type validates it.
+    environment_additional_regions = {
+      for env, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : env => jsonencode(e.additional_regions)
+      if try(e.additional_regions, null) != null
+    }
   }
 
   # Effective values. Required ones fall back to an inert sentinel only so
@@ -138,6 +144,8 @@ locals {
   # This environment's region: gcp.environments[<env>].region, else
   # org.regions.gcp, else europe-west2 (the same default gcp-projects applies).
   region = coalesce(var.region, try(local.cfg.environments[var.environment].region, null), local.cfg.default_region, "europe-west2")
+  # Opt-in extra spoke regions (default none: single-region spoke).
+  additional_regions = jsondecode(var.additional_regions != null ? jsonencode(var.additional_regions) : lookup(local.cfg.environment_additional_regions, var.environment, "{}"))
 
   # Service teams / app services: explicit variable > gcp.environments.<env> in
   # the config file > none. Built with for-expressions (not a conditional) so

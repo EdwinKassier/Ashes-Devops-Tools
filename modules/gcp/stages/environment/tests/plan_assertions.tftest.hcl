@@ -402,3 +402,36 @@ run "vm_operations_can_be_disabled" {
     error_message = "Disabled VM operations must create no snapshot policy, patch deployment or osconfig enablement."
   }
 }
+
+run "no_additional_regions_unchanged" {
+  command = plan
+
+  assert {
+    condition     = module.host.additional_region_subnets == {} && module.host.additional_region_routers == {}
+    error_message = "network.additional_regions = {} (default) must keep the spoke single-region."
+  }
+}
+
+run "spoke_additional_region_router_nat" {
+  command = plan
+
+  variables {
+    network = {
+      additional_regions = {
+        "europe-west4" = {
+          subnet_cidrs = { public = "10.11.0.0/24", private = "10.11.16.0/24", database = "10.11.32.0/24" }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = keys(module.host.additional_region_subnets) == ["europe-west4"] && module.host.additional_region_subnets["europe-west4"].private.subnet.name == "acme-dev-vpc-private-europe-west4"
+    error_message = "network.additional_regions must reach net-spoke and plan the region's subnets."
+  }
+
+  assert {
+    condition     = module.host.additional_region_routers == { "europe-west4" = "acme-dev-vpc-router-europe-west4" }
+    error_message = "An additional spoke region with nat = true must get its own Cloud Router and NAT."
+  }
+}

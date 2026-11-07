@@ -108,3 +108,48 @@ run "vpn_becomes_ncc_hybrid_spoke" {
     error_message = "With NCC and VPN both enabled the tunnels must join the hub as a hybrid spoke."
   }
 }
+
+# Additional hub regions are also planned through the real module.hub (only
+# its tiered VPC core is stubbed), so the per-region router and NAT show up.
+run "no_hub_additional_regions_unchanged" {
+  command = plan
+
+  assert {
+    condition     = module.hub.additional_region_routers == {}
+    error_message = "hub_additional_regions = {} (default) must plan no additional-region router or NAT."
+  }
+}
+
+run "hub_additional_region_router_nat" {
+  command = plan
+
+  variables {
+    hub_additional_regions = {
+      "us-east4" = {
+        subnet_cidrs = { public = "10.2.0.0/24", private = "10.2.16.0/24", database = "10.2.32.0/24" }
+      }
+    }
+  }
+
+  override_module {
+    target = module.hub.module.network
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_id        = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      additional_region_subnets = {
+        "us-east4" = {
+          public   = { self_link = "projects/mock-hub-project/regions/us-east4/subnetworks/hub-vpc-core-public-us-east4" }
+          private  = { self_link = "projects/mock-hub-project/regions/us-east4/subnetworks/hub-vpc-core-private-us-east4" }
+          database = { self_link = "projects/mock-hub-project/regions/us-east4/subnetworks/hub-vpc-core-db-us-east4" }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = module.hub.additional_region_routers == { "us-east4" = "hub-vpc-core-router-us-east4" }
+    error_message = "hub_additional_regions must reach net-hub and plan a router and NAT in the extra region."
+  }
+}

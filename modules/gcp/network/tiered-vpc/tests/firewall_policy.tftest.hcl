@@ -228,3 +228,48 @@ run "explicit_enforcement_order_silences_flip_warning" {
     error_message = "An explicit BEFORE_CLASSIC_FIREWALL must reach the network."
   }
 }
+
+run "additional_region_cidrs_join_tier_rules" {
+  command = plan
+
+  variables {
+    firewall_mode = "both"
+    additional_regions = {
+      "us-east1" = {
+        subnet_cidrs = {
+          public   = "10.1.0.0/24"
+          private  = "10.1.16.0/24"
+          database = "10.1.32.0/24"
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = toset(google_compute_network_firewall_policy_rule.tier["compute-to-database"].match[0].src_ip_ranges) == toset(["10.0.16.0/24", "10.0.17.0/24", "10.1.16.0/24"]) && toset(google_compute_network_firewall_policy_rule.tier["compute-to-database"].match[0].dest_ip_ranges) == toset(["10.0.32.0/24", "10.0.33.0/24", "10.1.32.0/24"])
+    error_message = "The compute-to-database rule must include the additional region's private and database CIDRs."
+  }
+
+  assert {
+    condition     = toset(google_compute_network_firewall_policy_rule.tier["public-to-compute"].match[0].src_ip_ranges) == toset(["10.0.0.0/24", "10.0.1.0/24", "10.1.0.0/24"])
+    error_message = "The public-to-compute rule must include the additional region's public CIDR."
+  }
+
+  assert {
+    condition     = toset(google_compute_network_firewall_policy_rule.tier["database-deny-egress"].match[0].src_ip_ranges) == toset(["10.0.32.0/24", "10.0.33.0/24", "10.1.32.0/24"])
+    error_message = "The database egress deny must cover the additional region's database CIDR."
+  }
+}
+
+run "no_additional_regions_policy_ranges_unchanged" {
+  command = plan
+
+  variables {
+    firewall_mode = "both"
+  }
+
+  assert {
+    condition     = google_compute_network_firewall_policy_rule.tier["public-to-compute"].match[0].src_ip_ranges == tolist(["10.0.0.0/24", "10.0.1.0/24"]) && google_compute_network_firewall_policy_rule.tier["database-deny-egress"].match[0].src_ip_ranges == tolist(["10.0.32.0/24", "10.0.33.0/24"])
+    error_message = "With additional_regions = {} the tier rule ranges must be exactly the primary subnet CIDRs."
+  }
+}

@@ -149,6 +149,12 @@ variable "network_hub_contract" {
   }
 }
 
+variable "additional_regions" {
+  description = "Opt-in extra regions of this environment's spoke VPC, keyed by region name: subnet_cidrs (public, private, database; one regional subnet per tier, no overlap with the primary spoke subnets or another region), optional secondary_ranges for the private subnet, and nat (default true: a Cloud Router and Cloud NAT in the region). Null = gcp.environments[<environment>].additional_regions from config/landing-zone.yaml, else none (single-region spoke)."
+  type        = any
+  default     = null
+}
+
 variable "network_connectivity" {
   description = "How the environment VPC reaches the hub: peering (VPC peering) or ncc (a Network Connectivity Center spoke on the gcp-network-hub NCC hub, which must be enabled there first). Switching an existing environment deletes its hub peering; see docs/runbooks/gcp-peering-to-ncc-migration.md. Null = gcp.environments[<environment>].network_connectivity, else gcp.network.connectivity from config/landing-zone.yaml, else peering. Ignored when enable_network_hub = false."
   type        = string

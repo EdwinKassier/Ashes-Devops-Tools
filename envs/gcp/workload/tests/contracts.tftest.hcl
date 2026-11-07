@@ -269,6 +269,42 @@ run "connectivity_per_environment_from_config_file" {
   }
 }
 
+# gcp.environments.<env>.additional_regions reaches the environment stage.
+run "additional_regions_per_environment_from_config_file" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regions.yaml"
+    project_prefix           = null
+    tfc_organization         = null
+    organization_contract    = null
+    projects_contract        = null
+  }
+
+  assert {
+    condition     = keys(local.additional_regions) == ["europe-west4"] && local.additional_regions["europe-west4"].subnet_cidrs.private == "10.11.16.0/24"
+    error_message = "gcp.environments.dev.additional_regions must reach the environment stage from the config file."
+  }
+}
+
+run "no_additional_regions_by_default" {
+  command = plan
+
+  # Same contracts, no additional_regions entry.
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-ncc.yaml"
+    project_prefix           = null
+    tfc_organization         = null
+    organization_contract    = null
+    projects_contract        = null
+  }
+
+  assert {
+    condition     = length(local.additional_regions) == 0
+    error_message = "With no config entry and no variable the spoke must stay single-region."
+  }
+}
+
 run "standalone_forces_peering" {
   command = plan
 

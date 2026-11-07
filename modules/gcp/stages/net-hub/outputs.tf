@@ -29,6 +29,16 @@ output "subnets" {
   value       = module.network.subnets
 }
 
+output "additional_region_subnets" {
+  description = "Subnet module outputs of the additional regions, keyed by region, each with public, private and database; empty when additional_regions is empty."
+  value       = module.network.additional_region_subnets
+}
+
+output "additional_region_routers" {
+  description = "Cloud Router name per additional region that has Cloud NAT, keyed by region; empty when there is none."
+  value       = { for region, n in module.additional_region_nat : region => n.router_name }
+}
+
 output "network_tags" {
   description = "Network tags that select the security tiers in the baseline firewall rules."
   value       = module.network.network_tags

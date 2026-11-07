@@ -177,6 +177,63 @@
             "dns_hub_cidr_block": {
               "type": "string"
             },
+            "additional_regions": {
+              "type": "object",
+              "propertyNames": {
+                "pattern": "^[a-z]+-[a-z]+[0-9]+$"
+              },
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "subnet_cidrs": {
+                    "type": "object",
+                    "properties": {
+                      "public": {
+                        "type": "string"
+                      },
+                      "private": {
+                        "type": "string"
+                      },
+                      "database": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "public",
+                      "private",
+                      "database"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "secondary_ranges": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "range_name": {
+                          "type": "string"
+                        },
+                        "ip_cidr_range": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "range_name",
+                        "ip_cidr_range"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "nat": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "subnet_cidrs"
+                ],
+                "additionalProperties": false
+              }
+            },
             "vpc_sc_access_policy": {
               "type": [
                 "string",
@@ -386,6 +443,63 @@
                   "peering",
                   "ncc"
                 ]
+              },
+              "additional_regions": {
+                "type": "object",
+                "propertyNames": {
+                  "pattern": "^[a-z]+-[a-z]+[0-9]+$"
+                },
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "subnet_cidrs": {
+                      "type": "object",
+                      "properties": {
+                        "public": {
+                          "type": "string"
+                        },
+                        "private": {
+                          "type": "string"
+                        },
+                        "database": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "public",
+                        "private",
+                        "database"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "secondary_ranges": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "range_name": {
+                            "type": "string"
+                          },
+                          "ip_cidr_range": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "range_name",
+                          "ip_cidr_range"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "nat": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "subnet_cidrs"
+                  ],
+                  "additionalProperties": false
+                }
               },
               "labels": {
                 "type": "object",

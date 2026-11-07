@@ -260,3 +260,21 @@ variable "interconnects" {
   default  = {}
   nullable = false
 }
+
+variable "hub_additional_regions" {
+  description = "Opt-in extra regions of the hub VPC (gcp.network.additional_regions in config), keyed by region name: subnet_cidrs (public, private, database; one regional subnet per tier, no overlap with the primary hub subnets or another region), optional secondary_ranges for the private subnet, and nat (default true: a Cloud Router and Cloud NAT in the region). The DNS anchor VPC stays single-region. Empty (default) = single-region hub."
+  type = map(object({
+    subnet_cidrs = object({
+      public   = string
+      private  = string
+      database = string
+    })
+    secondary_ranges = optional(list(object({
+      range_name    = string
+      ip_cidr_range = string
+    })), [])
+    nat = optional(bool, true)
+  }))
+  default  = {}
+  nullable = false
+}

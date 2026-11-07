@@ -1,4 +1,4 @@
-# Hybrid connectivity (gcp.network.vpn / gcp.network.interconnect) reaches the
+# Hybrid connectivity (gcp.network.vpn / gcp.network.interconnect) and extra hub regions (gcp.network.additional_regions) reach the
 # network-hub stage from the config file, and stays off when absent. The stage
 # is overridden: the root's job is to hand it the effective values, which the
 # locals expose. The stage's own suites assert what it plans from them.
@@ -99,5 +99,47 @@ run "explicit_variable_beats_config" {
   assert {
     condition     = local.vpn.enabled == false && length(local.interconnects) == 0
     error_message = "An explicit vpn / interconnects variable must replace the config value."
+  }
+}
+
+# Additional hub regions (gcp.network.additional_regions) take the same path:
+# config text -> local.hub_additional_regions -> the stage.
+run "no_hub_additional_regions_by_default" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = ""
+  }
+
+  assert {
+    condition     = length(local.hub_additional_regions) == 0
+    error_message = "With no config and no variable, the hub must stay single-region (empty hub_additional_regions)."
+  }
+}
+
+run "hub_additional_regions_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regions.yaml"
+  }
+
+  assert {
+    condition     = keys(local.hub_additional_regions) == ["europe-west4"] && local.hub_additional_regions["europe-west4"].subnet_cidrs.private == "10.2.16.0/24" && local.hub_additional_regions["europe-west4"].nat == false
+    error_message = "gcp.network.additional_regions must reach the stage from the config file."
+  }
+}
+
+run "hub_additional_regions_variable_wins" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regions.yaml"
+    hub_additional_regions   = {}
+  }
+
+  assert {
+    condition     = length(local.hub_additional_regions) == 0
+    error_message = "An explicit hub_additional_regions variable must win over the config file."
   }
 }

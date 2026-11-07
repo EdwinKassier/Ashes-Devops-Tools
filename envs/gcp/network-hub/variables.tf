@@ -131,6 +131,12 @@ variable "interconnects" {
   default     = null
 }
 
+variable "hub_additional_regions" {
+  description = "Opt-in extra regions of the hub VPC, keyed by region name (same shape as the network-hub stage hub_additional_regions input): subnet_cidrs (public, private, database), optional secondary_ranges and nat (default true: a Cloud Router and Cloud NAT in the region). CIDRs must not overlap the primary hub subnets or each other. Null = gcp.network.additional_regions from config/landing-zone.yaml, else none (single-region hub)."
+  type        = any
+  default     = null
+}
+
 variable "vpc_sc_access_policy_name" {
   description = "Bare numeric ID of the org-level Access Context Manager access policy for the hub VPC-SC perimeter (e.g. '1234567890'). Optional — if null, no hub perimeter is created. Do NOT include the 'accessPolicies/' prefix. Null = gcp.network.vpc_sc_access_policy from config/landing-zone.yaml."
   type        = string

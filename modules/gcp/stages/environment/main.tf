@@ -82,6 +82,7 @@ module "host" {
   region              = var.host_project.region
   deletion_protection = var.deletion_protection
   labels              = var.labels
+  additional_regions  = var.network.additional_regions
 
   network = {
     name            = "${var.project_prefix}-${var.environment}-vpc"

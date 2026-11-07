@@ -1,0 +1,18 @@
+# Test fixture: an additional hub region from the config file
+# (hybrid.tftest.hcl, additional-region runs).
+version: 1
+org:
+  prefix: acme
+  regions:
+    gcp: europe-west1
+gcp:
+  network:
+    hub_cidr_block: 10.0.0.0/16
+    dns_hub_cidr_block: 10.1.0.0/16
+    additional_regions:
+      europe-west4:
+        subnet_cidrs:
+          public: 10.2.0.0/24
+          private: 10.2.16.0/24
+          database: 10.2.32.0/24
+        nat: false

@@ -127,3 +127,64 @@ run "toggles_and_guards" {
     error_message = "The module must expose the VPC name and the tier network tags."
   }
 }
+
+run "no_additional_regions_unchanged" {
+  command = plan
+
+  assert {
+    condition     = length(module.additional_public_subnets) == 0 && length(module.additional_private_subnets) == 0 && length(module.additional_database_subnets) == 0 && output.additional_region_subnets == {}
+    error_message = "additional_regions = {} (default) must plan no additional-region subnets."
+  }
+
+  assert {
+    condition     = length(module.public_subnets) == 2 && length(module.private_subnets) == 2 && length(module.database_subnets) == 2
+    error_message = "The primary zonal layout must be unchanged with no additional regions."
+  }
+}
+
+run "second_region_subnets" {
+  command = plan
+
+  variables {
+    additional_regions = {
+      "us-east1" = {
+        subnet_cidrs = {
+          public   = "10.1.0.0/24"
+          private  = "10.1.16.0/24"
+          database = "10.1.32.0/24"
+        }
+        secondary_ranges = [{ range_name = "pods-us-east1", ip_cidr_range = "10.9.0.0/16" }]
+      }
+    }
+  }
+
+  assert {
+    condition     = module.additional_public_subnets["us-east1"].subnet.name == "mock-vpc-public-us-east1" && module.additional_private_subnets["us-east1"].subnet.name == "mock-vpc-private-us-east1" && module.additional_database_subnets["us-east1"].subnet.name == "mock-vpc-db-us-east1"
+    error_message = "Additional-region subnets must be named <name>-<tier>-<region>."
+  }
+
+  assert {
+    condition     = alltrue([for m in [module.additional_public_subnets, module.additional_private_subnets, module.additional_database_subnets] : m["us-east1"].subnet.region == "us-east1"])
+    error_message = "Additional-region subnets must be created in their region."
+  }
+
+  assert {
+    condition     = module.additional_public_subnets["us-east1"].subnet.ip_cidr_range == "10.1.0.0/24" && module.additional_private_subnets["us-east1"].subnet.ip_cidr_range == "10.1.16.0/24" && module.additional_database_subnets["us-east1"].subnet.ip_cidr_range == "10.1.32.0/24"
+    error_message = "Additional-region subnets must take their subnet_cidrs."
+  }
+
+  assert {
+    condition     = module.additional_private_subnets["us-east1"].subnet.private_ip_google_access && module.additional_database_subnets["us-east1"].subnet.private_ip_google_access && length(module.additional_private_subnets["us-east1"].subnet.secondary_ip_range) == 1
+    error_message = "The additional private and database subnets must have Private Google Access; secondary ranges attach to the private subnet."
+  }
+
+  assert {
+    condition     = length(module.additional_public_subnets["us-east1"].subnet.log_config) == 1 && module.additional_public_subnets["us-east1"].subnet.log_config[0].flow_sampling == 0.5
+    error_message = "Additional-region subnets must use the primary flow-log settings."
+  }
+
+  assert {
+    condition     = length(module.public_subnets) == 2 && module.public_subnets["europe-west1-b"].subnet.region == "europe-west1"
+    error_message = "The primary zonal layout must be unchanged by an additional region."
+  }
+}
