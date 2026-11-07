@@ -1,0 +1,31 @@
+# Test fixture: notifications.emails for the aws-security root (contract.tftest.hcl).
+version: 1
+org:
+  name: cfgco
+  profile: starter
+  owner: cfg-platform
+  cost_center: cc-1234
+  regions:
+    aws: eu-west-1
+  tfc:
+    organization: cfg-tfc
+aws:
+  management_account_id: "012345678901"
+  log_archive_bucket_name: cfgco-org-log-archive
+  enabled_regions: [eu-west-1, eu-west-2]
+  contracts:
+    organization:
+      organization_id: o-cfgcfgcfg0
+      organization_root_id: r-cfg0
+      management_account_id: "012345678901"
+      account_ids:
+        security_tooling: "022222222222"
+        log_archive: "033333333333"
+        shared_services: "044444444444"
+        forensics: "055555555555"
+      account_role_arns:
+        security_tooling: arn:aws:iam::022222222222:role/cross-account
+        log_archive: arn:aws:iam::033333333333:role/cross-account
+        forensics: arn:aws:iam::055555555555:role/cross-account
+notifications:
+  emails: [alerts@cfg.test, oncall@cfg.test]

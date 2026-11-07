@@ -93,7 +93,7 @@ variable "secondary_cidrs" {
 }
 ```
 
-Subnets in the new range are declared as ordinary tiers, but their `cidrsubnet()` math must operate on the **secondary** block, not the primary `cidr_block`. Add the new tiers with a `base` field (or a parallel `subnets_secondary` map keyed to the association) so the module carves them from `var.secondary_cidrs[<key>].cidr_block` rather than the primary. Keep every `for_each` key a plan-known string so the module still passes its `mock_provider` tests (see the `#tfsec`/mock notes throughout the module).
+Subnets in the new range are declared as ordinary tiers, but their `cidrsubnet()` math must operate on the **secondary** block, not the primary `cidr_block`. Add the new tiers with a `base` field (or a parallel `subnets_secondary` map keyed to the association) so the module carves them from `var.secondary_cidrs[<key>].cidr_block` rather than the primary. Keep every `for_each` key a plan-known string so the module still passes its `mock_provider` tests (see the mock-provider notes in the module's tests).
 
 > This is a genuine module change: run `make docs && make test` on the vpc module and ship it as its own PR (per [CLAUDE.md → Updating an existing module](../../CLAUDE.md)) before the workload apply below.
 
@@ -217,7 +217,7 @@ A clean no-op plan is the final proof: the associated secondary CIDR, its subnet
 ## Known gaps / flags
 
 - **Secondary-CIDR resource is not in the module yet.** `modules/aws/network/vpc` has no `aws_vpc_ipv4_cidr_block_association`; Option A requires the module enhancement in Step 2 (shipped as its own PR with `make docs && make test`). Until then the only code-native expansion is Option B (a larger/new VPC block).
-- **Spoke → Prod/NonProd route-table association is not visibly wired in the composed stages.** The workload stage creates the spoke attachment with both default-route-table flags `false` and states association/propagation are "managed in the network account", but the `network-hub` stage's `attachments` map only contains the `inspection` and `egress` attachments — it does not enumerate per-workload spoke attachments. Confirm with the network account owner exactly where each spoke's `prod`/`nonprod` route-table association is created before relying on cross-segment reachability or inspection for a newly-expanded spoke.
+- **Spoke routing is wired from `aws.network.spoke_attachments`.** aws-network accepts each listed spoke attachment, associates it with its `prod`/`nonprod` table and propagates it into the inspection table. A propagated route follows the attachment's VPC CIDRs, so an added secondary CIDR propagates once it is associated; a spoke missing from `spoke_attachments` has no routing at all. The routing is mock-tested only, not yet proven in the sandbox ([known gaps](../known-gaps.md#open--validate-before-relying-on)).
 - **No `aws_vpc_ipam_pool_cidr_allocation` reservation resource.** The module provisions pool CIDRs (`aws_vpc_ipam_pool_cidr`) but allocations happen implicitly when a VPC requests from the pool. Utilization and overlap must be checked with the AWS CLI (above), not from Terraform state.
 
 ---

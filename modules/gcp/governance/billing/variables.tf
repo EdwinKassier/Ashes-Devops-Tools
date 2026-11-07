@@ -67,6 +67,20 @@ variable "alert_threshold_percent" {
   }
 }
 
+variable "threshold_rules" {
+  description = "Explicit budget threshold rules (percent is a fraction: 0.5 = 50%; spend_basis CURRENT_SPEND or FORECASTED_SPEND). Null (default) = 50% (alert_threshold_percent) / 90% / 100% forecasted / 100% actual."
+  type = list(object({
+    percent     = number
+    spend_basis = optional(string, "CURRENT_SPEND")
+  }))
+  default = null
+
+  validation {
+    condition     = var.threshold_rules == null || (length(coalesce(var.threshold_rules, [])) > 0 && alltrue([for r in coalesce(var.threshold_rules, []) : r.percent > 0 && contains(["CURRENT_SPEND", "FORECASTED_SPEND"], r.spend_basis)]))
+    error_message = "threshold_rules must be non-empty, every percent greater than 0, and spend_basis CURRENT_SPEND or FORECASTED_SPEND."
+  }
+}
+
 variable "label_filters" {
   description = "Map of label keys to values for filtering budget scope (single value per key)"
   type        = map(string)

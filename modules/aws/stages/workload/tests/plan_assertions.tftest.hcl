@@ -14,7 +14,6 @@ variables {
   tgw_id                   = "tgw-000000000000abcd"
   flow_log_destination_arn = "arn:aws:s3:::ashes-org-log-archive"
   log_archive_bucket_name  = "ashes-org-log-archive"
-  config_role_arn          = "arn:aws:iam::222222222222:role/config-recorder"
   kms_key_arn              = "arn:aws:kms:eu-west-2:222222222222:key/abcd-1234"
 }
 
@@ -135,23 +134,18 @@ run "composes_workload_edge_enabled" {
   }
 }
 
-# config_role_arn = null: the recorder uses the account's Config service-linked
-# role, created by config-org (no hand-made recorder role needed).
-run "config_recorder_defaults_to_service_linked_role" {
-  command = apply
-
-  variables {
-    config_role_arn = null
-  }
-
-  override_data {
-    target = module.config_recorder.data.aws_caller_identity.current[0]
-    values = { account_id = "222222222222" }
-  }
+# The workload account's Config recorder is deployed by aws-organization's
+# org-wide recorder StackSet. This stage no longer plans one: the old
+# module.config_recorder leaves state through a removed block (destroy = false),
+# so the live recorder keeps recording until the migration replaces it. A test
+# cannot name an absent module, so the deprecated output proves it: it was the
+# recorder's role ARN and is now always null.
+run "no_workload_recorder_resource" {
+  command = plan
 
   assert {
-    condition     = output.config_role_arn == "arn:aws:iam::222222222222:role/aws-service-role/config.amazonaws.com/AWSServiceRoleForConfig"
-    error_message = "With config_role_arn = null the recorder must resolve to the service-linked role."
+    condition     = output.config_role_arn == null
+    error_message = "the workload stage must not plan a Config recorder (aws-organization's StackSet owns it)"
   }
 }
 

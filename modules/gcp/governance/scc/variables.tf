@@ -101,3 +101,38 @@ variable "labels" {
     error_message = "labels keys/values must be lowercase GCP label syntax (keys start with a letter, <= 63 chars)."
   }
 }
+
+variable "scc_api_version" {
+  description = "SCC API generation for notification and mute configs: v1 (default, unchanged), both (create the v2 twins next to v1 to verify), or v2 (flip; the v1 configs are destroyed). v1 and v2 cannot see each other's configs; see docs/runbooks/scc-v2-migration.md."
+  type        = string
+  default     = "v1"
+  nullable    = false
+
+  validation {
+    condition     = contains(["v1", "both", "v2"], var.scc_api_version)
+    error_message = "scc_api_version must be one of: v1, both, v2."
+  }
+}
+
+variable "scc_location" {
+  description = "Location of the SCC v2 configs (global or a data-residency region). Ignored for v1."
+  type        = string
+  default     = "global"
+  nullable    = false
+}
+
+variable "mute_configs" {
+  description = "Map of SCC mute configs keyed by mute_config_id (created with the API generation(s) selected by scc_api_version). type is STATIC or DYNAMIC."
+  type = map(object({
+    description = optional(string, "Managed by Terraform")
+    filter      = string
+    type        = optional(string, "STATIC")
+  }))
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = alltrue([for k, v in var.mute_configs : contains(["STATIC", "DYNAMIC"], v.type)])
+    error_message = "mute_configs[*].type must be STATIC or DYNAMIC."
+  }
+}

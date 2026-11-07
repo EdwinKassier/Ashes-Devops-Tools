@@ -124,6 +124,62 @@ variable "allowed_regions" {
   }
 }
 
+variable "aws_enabled_regions" {
+  description = "Regions the regional security services run in (the aws-security root's aws_enabled_regions). Each one except us-east-1 forwards org-detection guard events to us-east-1. Null = aws.enabled_regions from config/landing-zone.yaml, else [\"eu-west-2\"]."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = length(var.aws_enabled_regions != null ? var.aws_enabled_regions : coalesce(local.cfg.aws_enabled_regions, ["eu-west-2"])) > 0
+    error_message = "aws_enabled_regions (or aws.enabled_regions in config/landing-zone.yaml) must contain at least one region."
+  }
+}
+
+variable "guard_alert_emails" {
+  description = "Email addresses subscribed to the org-guard-alerts SNS topic (us-east-1, management account): alerts when org-wide detection is disabled or the organization trail's selectors / tags change. Null = aws.guard_alert_emails from config/landing-zone.yaml, else none."
+  type        = list(string)
+  default     = null
+}
+
+variable "enable_org_config_recorders" {
+  description = "Deploy AWS Config recorders org-wide: a StackSet to every member account except security tooling, plus a direct recorder in the management account. Turn on only after aws-security has applied (it owns the delivery bucket), or at step 3 of docs/runbooks/aws-config-recorder-migration.md. Null = aws.enable_org_config_recorders from config/landing-zone.yaml, else false."
+  type        = bool
+  default     = null
+}
+
+variable "org_config_recorders_failure_tolerance_percentage" {
+  description = "Failure tolerance of the recorder StackSet operations: 0 (default) routinely, 100 for the migration pass while legacy recorders still block some accounts."
+  type        = number
+  default     = 0
+  nullable    = false
+}
+
+variable "create_management_config_service_linked_role" {
+  description = "With org-wide recorders on, create the AWSServiceRoleForConfig service-linked role in the management account. Set false when Config was enabled there before."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
+variable "enable_cloudtrail_delegated_admin" {
+  description = "Register security tooling as the CloudTrail delegated administrator so aws-security creates and manages the organization trail from there (under the deny-tamper SCP), and strip every trail write from the aws-security management role. Set the same value in aws-security (the shared aws.enable_cloudtrail_delegated_admin key does both). An existing registration (aws-security registered cloudtrail.amazonaws.com before) is imported via adopt_existing.cloudtrail_delegated_admin_account_id. Follow docs/runbooks/aws-cloudtrail-delegated-admin-migration.md. Null = aws.enable_cloudtrail_delegated_admin from config/landing-zone.yaml, else false."
+  type        = bool
+  default     = null
+}
+
+variable "enable_config_recorder_scp" {
+  description = "Deny Config recorder changes to every member principal except the StackSet execution role, break-glass and security tooling's tfc-apply. Turn on only at the last step of docs/runbooks/aws-config-recorder-migration.md. Null = aws.enable_config_recorder_scp from config/landing-zone.yaml, else false."
+  type        = bool
+  default     = null
+}
+
+variable "enable_security_service_teardown" {
+  description = "Teardown gate: let the aws-security management apply role disable the security services' delegated admins and trusted access. Default false; set true only for a reviewed aws-security destroy (docs/runbooks/aws-teardown.md), then back to false."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "terraform_run_role_arn" {
   description = "Account-qualified exact ARN of the MANAGEMENT-account Terraform Cloud apply role (the phase-0, hand-created role from the aws-bootstrap runbook Step 2, e.g. arn:aws:iam::<mgmt>:role/tfc-mgmt-apply; the same ARN tfc-admin sets as TFC_AWS_APPLY_ROLE_ARN via aws_management_apply_role_arn). Carved out of every guardrail deny statement so automation is not locked out. Not created by this root: StackSets never deploy to the management account. Null = aws.terraform_run_role_arn from config/landing-zone.yaml."
   type        = string
@@ -172,11 +228,12 @@ variable "enable_cost_governance" {
 }
 
 variable "budgets" {
-  description = "Monthly COST budgets keyed by budget name. limit_amount is the USD limit; threshold_percent triggers an ACTUAL-spend notification; emails receive the notification."
+  description = "Monthly COST budgets keyed by budget name. limit_amount is the USD limit; threshold_percent triggers an ACTUAL-spend notification; emails receive the notification (empty = notifications.emails from config/landing-zone.yaml)."
   type = map(object({
     limit_amount      = string
     threshold_percent = number
     emails            = optional(list(string), [])
+    alert_percents    = optional(list(number), [])
   }))
   # Default limit sized above the landing-zone idle baseline (the AWS security +
   # network hub is ~USD 1,500/month before any workload) so the alert is not
@@ -186,6 +243,28 @@ variable "budgets" {
       limit_amount      = "3000"
       threshold_percent = 80
     }
+  }
+}
+
+variable "profile" {
+  description = "Cost/assurance profile: production (default) or starter. starter replaces var.budgets with one org-monthly budget sized from monthly_budget_usd that alerts at 50/80/100%, and fails the plan when no budget amount resolves. Null = org.profile from config/landing-zone.yaml, else production."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.profile == null || contains(["production", "starter"], coalesce(var.profile, "production"))
+    error_message = "profile must be production or starter."
+  }
+}
+
+variable "monthly_budget_usd" {
+  description = "Monthly budget in USD for the starter profile. Null = org.monthly_budget_usd from config/landing-zone.yaml. Ignored for the production profile (use budgets)."
+  type        = number
+  default     = null
+
+  validation {
+    condition     = var.monthly_budget_usd == null || coalesce(var.monthly_budget_usd, 1) > 0
+    error_message = "monthly_budget_usd must be greater than 0."
   }
 }
 
@@ -202,9 +281,9 @@ variable "cost_notifications_topic_arn" {
 }
 
 variable "cost_anomaly_email" {
-  description = "Email address that receives Cost Anomaly Detection alerts."
+  description = "Email address that receives Cost Anomaly Detection alerts. Null (default) = the first notifications.emails entry from config/landing-zone.yaml (the cost-governance module takes a single subscriber; the remaining addresses are not subscribed), else finops@example.com."
   type        = string
-  default     = "finops@example.com"
+  default     = null
 }
 
 # -----------------------------------------------------------------------------
@@ -372,6 +451,31 @@ variable "allow_vpc_bpa_exclusions" {
   default     = false
 }
 
+variable "ec2_allowed_images" {
+  description = "Declarative EC2 Allowed AMIs setting, in the root-attached baseline declarative policy (every account, every region). state: audit_mode (default; records non-compliant AMIs, blocks nothing), enabled (blocks launches from other AMIs), disabled, or unmanaged (the policy carries no allowed-images setting). allowed_image_providers: amazon, aws_marketplace, aws_backup_vault or 12-digit account IDs. Move to enabled only after reviewing the audit-mode findings."
+  type = object({
+    state                   = optional(string, "audit_mode")
+    allowed_image_providers = optional(list(string), ["amazon"])
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = contains(["audit_mode", "enabled", "disabled", "unmanaged"], var.ec2_allowed_images.state)
+    error_message = "ec2_allowed_images.state must be audit_mode, enabled, disabled or unmanaged."
+  }
+
+  validation {
+    condition     = alltrue([for p in var.ec2_allowed_images.allowed_image_providers : contains(["amazon", "aws_marketplace", "aws_backup_vault"], p) || can(regex("^[0-9]{12}$", p))])
+    error_message = "ec2_allowed_images.allowed_image_providers entries must be amazon, aws_marketplace, aws_backup_vault or a 12-digit account ID."
+  }
+
+  validation {
+    condition     = var.ec2_allowed_images.state == "unmanaged" || length(var.ec2_allowed_images.allowed_image_providers) > 0
+    error_message = "ec2_allowed_images.allowed_image_providers must not be empty unless state is unmanaged."
+  }
+}
+
 variable "pin_tfc_federation_to_org" {
   description = "RCP: accept app.terraform.io (tfc_hostname) web-identity tokens org-wide only from tfc_organization, so no pipeline can make a role trust another TFC org. Default true."
   type        = bool
@@ -396,6 +500,10 @@ variable "adopt_existing" {
     organization_id = optional(string)
     ou_ids          = optional(map(string), {})
     account_ids     = optional(map(string), {})
+    # The security-tooling account ID, when cloudtrail.amazonaws.com is already
+    # delegated to it (aws-security registered it before
+    # enable_cloudtrail_delegated_admin): imported, not re-registered.
+    cloudtrail_delegated_admin_account_id = optional(string)
   })
   default = null
 
@@ -412,6 +520,11 @@ variable "adopt_existing" {
   validation {
     condition     = var.adopt_existing == null || alltrue([for id in values(try(var.adopt_existing.account_ids, {})) : can(regex("^[0-9]{12}$", id))])
     error_message = "adopt_existing.account_ids values must be 12-digit account IDs."
+  }
+
+  validation {
+    condition     = var.adopt_existing == null || try(var.adopt_existing.cloudtrail_delegated_admin_account_id, null) == null || can(regex("^[0-9]{12}$", coalesce(try(var.adopt_existing.cloudtrail_delegated_admin_account_id, null), "x")))
+    error_message = "adopt_existing.cloudtrail_delegated_admin_account_id must be a 12-digit account ID."
   }
 }
 

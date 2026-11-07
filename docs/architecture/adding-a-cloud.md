@@ -61,25 +61,52 @@ data "terraform_remote_state" "aws_organization" {
 
 ---
 
-## 4. Stable output keys are the cross-root contract
+## 4. One `contract` output is the cross-root API
 
-A root's `outputs.tf` re-exports its stage module's outputs. Those keys are the **API** that downstream roots consume via `terraform_remote_state`:
+A producer root publishes **one** output, `contract`: a non-sensitive object
+holding every key downstream roots may consume. Downstream roots read
+`terraform_remote_state` `.outputs.contract` and nothing else:
 
 ```hcl
 # aws-organization root
-output "account_role_arns" {
-  value = module.organization.account_role_arns  # map: account name -> assume-role ARN
+locals {
+  contract = {
+    account_ids       = module.aws_organization.account_ids
+    account_role_arns = module.aws_organization.account_role_arns # account key -> assume-role ARN
+  }
+}
+
+output "contract" {
+  # Exact shape (Terraform >= 1.15 output types). The conversion drops any key
+  # the type does not name; scripts/check-contracts.sh compares the two key sets.
+  type = object({
+    account_ids       = map(string)
+    account_role_arns = map(string)
+  })
+  value = local.contract
 }
 ```
 
 ```hcl
-# aws-security root reads it back
-assume_role {
-  role_arn = data.terraform_remote_state.aws_organization.outputs.account_role_arns["security_tooling"]
-}
+# a downstream aws root reads it back
+account_ids = data.terraform_remote_state.aws_organization[0].outputs.contract.account_ids
 ```
 
-Keep these keys **stable**. Renaming a key breaks every root that reads it. `outputs.tf` must never be empty in a live root.
+The rules:
+
+- **Never put a sensitive value in `contract`.** One sensitive attribute moves
+  the whole object into `tfe_outputs`' `sensitive_values`, out of tfc-admin's
+  reach.
+- **Keep the keys stable.** Renaming a key breaks every root that reads it.
+- **Use one override type per upstream.** Each consumer's `<layer>_contract`
+  variable has the same type as every other consumer of that upstream. A field
+  that only some consumers need is `optional`, and those consumers check it in
+  a validation.
+
+`scripts/check-contracts.sh` (`make consistency`) checks that every producer
+has a non-sensitive `contract`, that consumers read only `contract`, and that
+the override types match. Add a new producer root to its `PRODUCERS` list. `outputs.tf` must never be empty in a
+live root.
 
 ---
 
@@ -102,12 +129,111 @@ Within a root, `enable_*` variables toggle **features** (a Cloud Armor policy, a
 
 ---
 
+## 7. Register the workspace in the tfc-admin catalog
+
+`envs/tfc-admin` builds the whole TFC workspace layer from **one** local,
+`local.catalog` in `envs/tfc-admin/main.tf`. The workspace set, the run-trigger
+DAG, the remote-state consumer graph, the multi-account alias env vars and the
+management-default list are all derived from it, so a new root is one entry.
+The per-environment prefixes (`gcp-workload`, `aws-workload`, `saas`) also
+come from the catalog keys (`local.catalog_family`).
+
+A few literals stay, on purpose. Each names a specific phase-0 root whose
+outputs or behaviour tfc-admin depends on, so a new catalog entry never needs
+to touch them:
+
+- `main.tf`, `local.tfc_admin_reads` and the two `data "tfe_outputs"` blocks
+  name `gcp-bootstrap` and `aws-organization`. tfc-admin reads those two
+  workspaces' `contract` outputs (credentials, admin project ID, account
+  roles). A different upstream would need a new read, not a catalog field.
+- `main.tf`, the `gcp_bootstrap_workspace_ids` locals and
+  `tfe_variable.gcp_bootstrap_workspace_ids` name `gcp-bootstrap` and select
+  `gcp-*` workspaces. They write the workspace-ID map onto gcp-bootstrap for
+  its WIF bindings, and every GCP workspace is bound there.
+- `main.tf`, `check "gcp_bootstrap_remote_after_handover"` names
+  `gcp-bootstrap`, the only workspace with a local-execution phase 0.
+- `variables.tf`: the `workspace_execution_modes` default
+  (`{ gcp-bootstrap = "local" }`) and its validation (`local` only for
+  `gcp-bootstrap` / `aws-organization`), and the
+  `speculative_disabled_workspaces` default. These are user-facing defaults,
+  and a variable cannot read the catalog: the catalog reads
+  `var.tfc_admin_workspace_name`. Add a new control-plane root to
+  `speculative_disabled_workspaces` by hand.
+
+```hcl
+# envs/tfc-admin/main.tf, inside local.catalog
+"aws-observability" = {
+  dir       = "envs/aws/observability"
+  cloud     = "aws" # must be a key of module_paths / catalog_cloud_enabled
+  desc      = "AWS central observability"
+  tags      = ["cloud:aws", "layer:control-plane"] # layer:control-plane|bootstrap|workload
+  upstreams = ["aws-organization"]                 # run triggers: direct edges only
+  reads     = ["aws-organization"]                 # every terraform_remote_state it reads
+  # Optional:
+  # aws_member_aliases     = ["log_archive"] # one TFC_AWS_*_<alias> set per provider alias
+  # aws_management_account = true            # default provider is the management account
+  # per_environment        = true            # expand to <key>-<env> per environment;
+  #                                          # use "{env}" in desc / tags
+}
+```
+
+- `upstreams` are run-trigger sources. List only the direct parents (the DAG's
+  transitive reduction), or a downstream run is queued once per ancestor. The
+  tfc-admin workspace name (`var.tfc_admin_workspace_name`) as an upstream marks
+  a phase-0 DAG root.
+- `reads` must match the root's `data "terraform_remote_state"` blocks. A read
+  that is not listed is denied, because `global_remote_state` is false.
+- The keys pinned by `envs/tfc-admin/tests/catalog.tftest.hcl` must not change
+  for existing entries: a renamed key moves every `tfe_workspace`, run trigger
+  and grant. Extend the literal lists there for the new name.
+
+A **new cloud** (not only a new root) also needs these in `envs/tfc-admin`: a
+`module_paths` entry (the module domains it consumes), a `catalog_cloud_enabled`
+entry (its `enable_<cloud>` gate), a `catalog_environments` entry (`[]` without
+per-environment workspaces), and a `project_name_keys` entry in `config.tf`.
+
+### AWS: add the workspace to the OIDC trust in the same change
+
+Each member account's `tfc-plan` / `tfc-apply` role, created by
+`modules/aws/iam/tfc-oidc-baseline`, trusts a literal list of workspace names
+(`organization:<org>:project:<project>:workspace:<ws>:run_phase:<phase>`). A new
+AWS workspace that is not in that list is denied at
+`AssumeRoleWithWebIdentity`. The names come from `aws-organization`:
+
+- **Foundational root in a member account:** add it to
+  `local.default_workspace_bindings` in `envs/aws/organization/config.tf`
+  (account key => workspace names), e.g.
+  `log_archive = ["aws-security", "aws-observability"]`.
+- **Per-environment workload:** nothing to edit. Each
+  `aws.workload_environments.<env>.account_key` in `config/landing-zone.yaml`
+  binds `aws-workload-<env>` to that account (`local.cfg.workload_bindings`).
+  This is the same source tfc-admin expands `aws-workload` from, **but only
+  while tfc-admin's `var.environments` is unset**. An explicit
+  `environments` map in tfc-admin replaces `aws.workload_environments` there
+  but not in `aws-organization`. In that case keep the two in step by hand, or
+  set `tfc_workspace_bindings` explicitly.
+- **Explicit override:** an `aws-organization` that sets
+  `var.tfc_workspace_bindings` replaces both derivations, so add the new name
+  there too.
+- **Management-default root** (`aws_management_account = true`): add it to
+  `tfc_management_workspaces` in `modules/aws/stages/organization/variables.tf`
+  (with an `apply_policy_json`; only aws-security and aws-backup have built-in
+  policies), and add its `sub` to the phase-0 management-role trust
+  (`docs/runbooks/aws-bootstrap.md`, Step 2) until its dedicated role exists.
+- **Member aliases** (`aws_member_aliases`): each alias is an account key, so
+  that account's binding must list the workspace as well.
+
+Apply `aws-organization` (the StackSet updates the trusts) before the new
+workspace's first run.
+
+---
+
 ## Checklist for a new cloud root
 
 1. Clone `templates/aws/root/` (or `templates/shared/cloud-root/` for a non-AWS cloud) to `envs/<cloud>/<layer>/`.
 2. Set the workspace `name` (or `prefix`) in `backend.tf`.
 3. Fill in `versions.tf` (floored + capped provider pin) and `providers.tf` (one default provider, aliased-per-foundational-account if cross-account).
 4. Uncomment and wire the `terraform_remote_state` block(s) and the stage `module` call in `main.tf`.
-5. Re-export the stage contract in `outputs.tf` (stable keys).
+5. Re-export the stage contract in `outputs.tf` as one non-sensitive `contract` output (stable keys).
 6. Copy `terraform.tfvars.example` to `terraform.tfvars` and set `tfc_organization`.
 7. `terraform -chdir=envs/<cloud>/<layer> init -backend=false && terraform ... validate` — must be green with no cloud credentials.

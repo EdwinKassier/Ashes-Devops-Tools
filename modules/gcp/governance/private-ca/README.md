@@ -1,5 +1,9 @@
 # Private CA (Certificate Authority Service) Module
 
+> Status: experimental
+>
+> No root composes this module; Private CA is opt-in and no root needs internal certificates by default.
+
 Creates a Cloud Certificate Authority Service (CAS) CA pool and a single
 certificate authority (ROOT or SUBORDINATE) for issuing private/internal
 certificates. This is the GCP parity counterpart to the AWS ACM Private CA
@@ -75,14 +79,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.17, < 2.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | 8.10.0 |
 
 
 

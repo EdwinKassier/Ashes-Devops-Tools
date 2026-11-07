@@ -1,5 +1,9 @@
 # api-gateway (AWS)
 
+> Status: experimental
+>
+> No root composes this module; it is an opt-in API edge you call from your own stage.
+
 API Gateway v2 (HTTP API) primitive for the SRA landing zone — the AWS parity
 counterpart to `modules/gcp/network/api-gateway`. Creates an HTTP API with an
 auto-deployed stage, structured JSON access logging to CloudWatch (retention +
@@ -25,14 +29,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.17, < 2.0 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.46.0, < 7.0.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.54.0 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.72.0 |
 
 
 

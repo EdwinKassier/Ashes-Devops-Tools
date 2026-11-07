@@ -29,6 +29,28 @@ locals {
 
   phases = ["plan", "apply"]
 
+  # With the CloudTrail delegated administrator, aws-organization owns the
+  # cloudtrail.amazonaws.com registration: aws-security may neither register
+  # nor deregister it.
+  # Statements the aws-security role loses with the CloudTrail delegated
+  # admin. Only cloudtrail-org (the management trail) creates log groups,
+  # topics and keys in the management account from aws-security.
+  delegated_admin_dropped_sids = ["TrailWiringCreate", "CreateOwnedKeysOnly", "OrganizationTrailOnly", "PassTrailDeliveryRoleToCloudTrail"]
+
+  security_service_principals = [
+    for p in var.security_service_principals : p if !(var.enable_cloudtrail_delegated_admin && p == "cloudtrail.amazonaws.com")
+  ]
+
+  # Delegated-admin account resources; fails closed with no account given.
+  delegated_admin_resources = length(var.delegated_admin_account_ids) == 0 ? ["arn:${local.partition}:organizations::${local.account_id}:account/o-*/none"] : [
+    for id in var.delegated_admin_account_ids : "arn:${local.partition}:organizations::${local.account_id}:account/o-*/${id}"
+  ]
+
+  trail_log_group_arns = [
+    "arn:${local.partition}:logs:*:${local.account_id}:log-group:/aws/cloudtrail/${var.security_trail_name}",
+    "arn:${local.partition}:logs:*:${local.account_id}:log-group:/aws/cloudtrail/${var.security_trail_name}:*",
+  ]
+
   roles = {
     for pair in setproduct(keys(var.workspaces), local.phases) : "${pair[0]}:${pair[1]}" => {
       workspace = pair[0]
@@ -107,7 +129,13 @@ locals {
   # Built-in apply permissions per known workspace. A workspace not listed
   # here must supply apply_policy_json.
   builtin_apply_statements = {
-    "aws-security" = [
+    # Once the trail is managed by the CloudTrail delegated administrator
+    # (security tooling), the management role keeps no trail write and no
+    # create in the management account (delegated_admin_dropped_sids): the new
+    # trail and its wiring are created from a member account, under the
+    # deny-tamper SCP, and the old trail is retired with break-glass. The old
+    # trail's remaining wiring is only refreshed (ReadOnlyAccess).
+    "aws-security" = [for s in [
       {
         Sid    = "DelegatedAdminRegistration"
         Effect = "Allow"
@@ -116,22 +144,16 @@ locals {
           "organizations:List*",
 
           "guardduty:EnableOrganizationAdminAccount",
-          "guardduty:DisableOrganizationAdminAccount",
           "guardduty:ListOrganizationAdminAccounts",
           "securityhub:EnableOrganizationAdminAccount",
-          "securityhub:DisableOrganizationAdminAccount",
           "securityhub:ListOrganizationAdminAccounts",
           "macie2:EnableOrganizationAdminAccount",
-          "macie2:DisableOrganizationAdminAccount",
           "macie2:ListOrganizationAdminAccounts",
           "inspector2:EnableDelegatedAdminAccount",
-          "inspector2:DisableDelegatedAdminAccount",
           "inspector2:ListDelegatedAdminAccounts",
           "detective:EnableOrganizationAdminAccount",
-          "detective:DisableOrganizationAdminAccount",
           "detective:ListOrganizationAdminAccount",
           "fms:AssociateAdminAccount",
-          "fms:DisassociateAdminAccount",
           "fms:GetAdminAccount",
           "iam:CreateServiceLinkedRole",
         ]
@@ -143,12 +165,10 @@ locals {
         # would hand it org-wide role deployment / identity control.
         Sid    = "SecurityServicesDelegationOnly"
         Effect = "Allow"
-        Action = [
-          "organizations:EnableAWSServiceAccess",
-          "organizations:DisableAWSServiceAccess",
-        ]
+        # Enable only: turning org-wide detection OFF is SecurityServiceTeardown.
+        Action    = ["organizations:EnableAWSServiceAccess"]
         Resource  = "*"
-        Condition = { StringEquals = { "organizations:ServicePrincipal" = var.security_service_principals } }
+        Condition = { StringEquals = { "organizations:ServicePrincipal" = local.security_service_principals } }
       },
       {
         # Registration is pinned to the TARGET account too (the account ARN is
@@ -156,16 +176,11 @@ locals {
         # account a delegated admin, never an arbitrary member.
         Sid    = "DelegateOnlyToSecurityAccounts"
         Effect = "Allow"
-        Action = [
-          "organizations:RegisterDelegatedAdministrator",
-          "organizations:DeregisterDelegatedAdministrator",
-        ]
+        Action = ["organizations:RegisterDelegatedAdministrator"]
         # Fails closed: with no security account given, the statement grants
         # nothing (a resource no account ARN can match) rather than every account.
-        Resource = length(var.delegated_admin_account_ids) == 0 ? ["arn:${local.partition}:organizations::${local.account_id}:account/o-*/none"] : [
-          for id in var.delegated_admin_account_ids : "arn:${local.partition}:organizations::${local.account_id}:account/o-*/${id}"
-        ]
-        Condition = { StringEquals = { "organizations:ServicePrincipal" = var.security_service_principals } }
+        Resource  = local.delegated_admin_resources
+        Condition = { StringEquals = { "organizations:ServicePrincipal" = local.security_service_principals } }
       },
       {
         # The organization trail's own wiring only. No IAM writes at all (the
@@ -186,19 +201,17 @@ locals {
       {
         # The CIS alarms are named <trail>-<check>: no other alarm in the
         # management account can be changed or deleted.
-        Sid      = "TrailAlarmsOnly"
-        Effect   = "Allow"
-        Action   = ["cloudwatch:PutMetricAlarm", "cloudwatch:DeleteAlarms", "cloudwatch:TagResource", "cloudwatch:UntagResource"]
+        Sid    = "TrailAlarmsOnly"
+        Effect = "Allow"
+        # No DeleteAlarms: deleting (or silencing) a CIS alarm is denied below.
+        Action   = ["cloudwatch:PutMetricAlarm", "cloudwatch:TagResource", "cloudwatch:UntagResource"]
         Resource = ["arn:${local.partition}:cloudwatch:*:${local.account_id}:alarm:${var.security_trail_name}-*"]
       },
       {
-        Sid    = "TrailLogGroupOnly"
-        Effect = "Allow"
-        Action = ["logs:*"]
-        Resource = [
-          "arn:${local.partition}:logs:*:${local.account_id}:log-group:/aws/cloudtrail/${var.security_trail_name}",
-          "arn:${local.partition}:logs:*:${local.account_id}:log-group:/aws/cloudtrail/${var.security_trail_name}:*",
-        ]
+        Sid      = "TrailLogGroupOnly"
+        Effect   = "Allow"
+        Action   = ["logs:*"]
+        Resource = local.trail_log_group_arns
       },
       {
         Sid      = "TrailTopicsOnly"
@@ -207,21 +220,18 @@ locals {
         Resource = ["arn:${local.partition}:sns:*:${local.account_id}:${var.security_trail_name}-*"]
       },
       {
-        # New keys only with the owner tag; every other key operation only on
-        # keys carrying it. TagResource on someone else's key is itself a key
-        # operation on an untagged key, so the tag cannot be planted.
+        # Keys may be created (and tagged at creation) only with the owner tag.
+        # Deliberately NO aws:TagKeys allow-list: the aws-security provider's
+        # default_tags (ManagedBy, LandingZone, Environment, ...) are applied to
+        # every key it creates, so an allow-list would deny CreateKey itself.
+        # Tags grant NOTHING afterwards: day-2 management of the key is by its
+        # own key policy (PipelineKeyManagement in cloudtrail-org), so a tag
+        # cannot be planted on someone else's key to gain kms:* on it.
         Sid       = "CreateOwnedKeysOnly"
         Effect    = "Allow"
         Action    = ["kms:CreateKey", "kms:TagResource"]
         Resource  = "*"
         Condition = { StringEquals = { "aws:RequestTag/${var.security_owner_tag.key}" = var.security_owner_tag.value } }
-      },
-      {
-        Sid       = "OwnedKeysOnly"
-        Effect    = "Allow"
-        Action    = ["kms:*"]
-        Resource  = "*"
-        Condition = { StringEquals = { "aws:ResourceTag/${var.security_owner_tag.key}" = var.security_owner_tag.value } }
       },
       {
         Sid    = "TrailKeyAliasesOnly"
@@ -253,18 +263,37 @@ locals {
         # flags) or rewriting a key's policy / grants / rotation is as good as
         # stopping it. The key policy is set at CreateKey and the trail's
         # settings at CreateTrail, so routine applies never need these.
+        # Untagging the trail or rewriting its resource policy is the same.
         # PutEventSelectors stays allowed (aws_cloudtrail calls it on create);
-        # selector changes are caught by the CIS CloudTrail-configuration alarm.
+        # selector changes are DETECTED by the aws-organization guard-alerts
+        # EventBridge rule (the CIS 4.5 alarm does not match selector calls).
         Sid    = "DenyTrailAndKeyDestruction"
         Effect = "Deny"
         Action = [
           "cloudtrail:StopLogging", "cloudtrail:DeleteTrail", "cloudtrail:UpdateTrail",
+          "cloudtrail:RemoveTags", "cloudtrail:PutResourcePolicy", "cloudtrail:DeleteResourcePolicy",
           "kms:ScheduleKeyDeletion", "kms:DisableKey", "kms:DeleteImportedKeyMaterial",
           "kms:PutKeyPolicy", "kms:CreateGrant", "kms:DisableKeyRotation",
         ]
         Resource = "*"
       },
-    ]
+      {
+        # Deleting or silencing a CIS alarm blinds the trail's alerting.
+        Sid      = "DenyTrailAndKeyDestructionAlarms"
+        Effect   = "Deny"
+        Action   = ["cloudwatch:DeleteAlarms", "cloudwatch:DisableAlarmActions"]
+        Resource = ["arn:${local.partition}:cloudwatch:*:${local.account_id}:alarm:${var.security_trail_name}-*"]
+      },
+      {
+        # The trail log group, its metric filters (the CIS alarms' inputs) and
+        # its retention and log streams survive the pipeline. PutRetentionPolicy
+        # stays allowed; PutMetricFilter overwrites are detected, not denied.
+        Sid      = "DenyTrailAndKeyDestructionLogs"
+        Effect   = "Deny"
+        Action   = ["logs:DeleteLogGroup", "logs:DeleteLogStream", "logs:DeleteRetentionPolicy", "logs:DeleteSubscriptionFilter", "logs:DeleteMetricFilter"]
+        Resource = local.trail_log_group_arns
+      },
+    ] : s if !(var.enable_cloudtrail_delegated_admin && contains(local.delegated_admin_dropped_sids, s.Sid))]
     "aws-backup" = [
       {
         Sid      = "OrgRead"
@@ -307,6 +336,44 @@ locals {
     ]
   }
 
+  # Teardown gate (enable_security_service_teardown): switching org-wide
+  # detection OFF. A separate inline policy on the aws-security apply role, so
+  # it exists only while the gate is on and is removed when it is turned off.
+  security_teardown_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        # Teardown gate (enable_security_service_teardown): switching org-wide
+        # detection OFF. Never on for routine applies.
+        Sid    = "SecurityServiceTeardown"
+        Effect = "Allow"
+        Action = [
+          "guardduty:DisableOrganizationAdminAccount",
+          "securityhub:DisableOrganizationAdminAccount",
+          "macie2:DisableOrganizationAdminAccount",
+          "inspector2:DisableDelegatedAdminAccount",
+          "detective:DisableOrganizationAdminAccount",
+          "fms:DisassociateAdminAccount",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid       = "SecurityServiceTeardownTrustedAccess"
+        Effect    = "Allow"
+        Action    = ["organizations:DisableAWSServiceAccess"]
+        Resource  = "*"
+        Condition = { StringEquals = { "organizations:ServicePrincipal" = local.security_service_principals } }
+      },
+      {
+        Sid       = "SecurityServiceTeardownDelegation"
+        Effect    = "Allow"
+        Action    = ["organizations:DeregisterDelegatedAdministrator"]
+        Resource  = local.delegated_admin_resources
+        Condition = { StringEquals = { "organizations:ServicePrincipal" = local.security_service_principals } }
+      },
+    ]
+  })
+
   apply_policies = {
     for ws, w in var.workspaces : ws => w.apply_policy_json != null ? w.apply_policy_json : jsonencode({
       Version = "2012-10-17"
@@ -327,7 +394,9 @@ locals {
       "ssm:GetParameters", "ssm:GetParametersByPath", "kms:Decrypt", "logs:GetLogEvents",
       "logs:FilterLogEvents", "logs:StartQuery", "cloudtrail:LookupEvents", "dynamodb:GetItem",
       "dynamodb:Query", "dynamodb:Scan", "dynamodb:BatchGetItem", "dynamodb:PartiQLSelect",
-      "ssm:GetParameterHistory", "sqs:ReceiveMessage",
+      "ssm:GetParameterHistory", "sqs:ReceiveMessage", "s3:GetObject*", "secretsmanager:BatchGetSecretValue",
+      "kms:GenerateDataKey*", "ssm:GetCommandInvocation", "logs:GetLogRecord", "rds:DownloadDBLogFilePortion",
+      "es:ESHttpGet", "cassandra:Select", "codecommit:GitPull", "codecommit:GetFile",
     ]
     Resource = "*"
   }
@@ -389,4 +458,17 @@ resource "aws_iam_role_policy" "apply" {
   name   = "tfc-apply-least-privilege"
   role   = aws_iam_role.this[each.key].id
   policy = local.apply_policies[each.value.workspace]
+}
+
+# Only while the teardown gate is on, and only for a built-in aws-security
+# policy (a custom apply_policy_json owns its own teardown permissions).
+resource "aws_iam_role_policy" "security_teardown" {
+  for_each = {
+    for k, r in local.roles : k => r
+    if r.phase == "apply" && r.workspace == "aws-security" && var.enable_security_service_teardown && var.workspaces[r.workspace].apply_policy_json == null
+  }
+
+  name   = "tfc-apply-security-teardown"
+  role   = aws_iam_role.this[each.key].id
+  policy = local.security_teardown_policy
 }

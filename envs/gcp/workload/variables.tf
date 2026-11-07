@@ -88,11 +88,18 @@ variable "network_hub_workspace_name" {
 # -----------------------------------------------------------------------------
 
 variable "organization_contract" {
-  description = "gcp-organization stage contract: org_id (numeric), billing_account (billingAccounts/XXXXXX-XXXXXX-XXXXXX or bare ID) and admin_project_number. Null = gcp.contracts.organization from config/landing-zone.yaml, else read from the gcp-organization workspace's remote state."
+  description = "gcp-organization stage contract, the same type in every gcp root: org_id (numeric), billing_account (billingAccounts/XXXXXX-XXXXXX-XXXXXX or bare ID), admin_project_number, folders (key => {id, name, display_name}), tag_values (key => tag value ID) and scoped_access_policy_ids (env => policy ID). This root needs: org_id, billing_account, admin_project_number. Null = gcp.contracts.organization from config/landing-zone.yaml, else the contract output of the gcp-organization workspace."
   type = object({
-    org_id               = string
-    billing_account      = string
-    admin_project_number = string
+    org_id               = optional(string)
+    billing_account      = optional(string)
+    admin_project_number = optional(string)
+    folders = optional(map(object({
+      id           = string
+      name         = string
+      display_name = string
+    })), {})
+    tag_values               = optional(map(string), {})
+    scoped_access_policy_ids = optional(map(string), {})
   })
   default = null
 
@@ -100,12 +107,19 @@ variable "organization_contract" {
     condition     = var.organization_contract == null || (can(regex("^[0-9]+$", try(var.organization_contract.org_id, ""))) && can(regex("^[0-9]+$", try(var.organization_contract.admin_project_number, ""))))
     error_message = "organization_contract.org_id and admin_project_number must be numeric."
   }
+
+  validation {
+    condition     = var.organization_contract == null || alltrue([for k in ["billing_account"] : try(length(trimspace(var.organization_contract[k])) > 0, false)])
+    error_message = "organization_contract must set billing_account for this root."
+  }
 }
 
 variable "projects_contract" {
-  description = "gcp-projects stage contract: environment_config (environment => folder_id, host_project_id, host_project_number, region, cidr_block, labels, is_production, vpc_sc_access_policy_id); must contain var.environment. Null = gcp.contracts.projects from config/landing-zone.yaml, else read from the gcp-projects workspace's remote state."
+  description = "gcp-projects stage contract, the same type in every gcp root: project_ids and project_numbers (project key => value, e.g. shared-hub, shared-dns, <env>-host) and environment_config (environment => folder_id, host_project_id, host_project_number, region, cidr_block, labels, is_production, vpc_sc_access_policy_id). This root needs: environment_config, which must contain var.environment. Null = gcp.contracts.projects from config/landing-zone.yaml, else the contract output of the gcp-projects workspace."
   type = object({
-    environment_config = map(object({
+    project_ids     = optional(map(string), {})
+    project_numbers = optional(map(string), {})
+    environment_config = optional(map(object({
       folder_id               = string
       host_project_id         = string
       host_project_number     = string
@@ -114,22 +128,46 @@ variable "projects_contract" {
       labels                  = optional(map(string), {})
       is_production           = optional(bool)
       vpc_sc_access_policy_id = optional(string)
-    }))
+    })), {})
   })
   default = null
 }
 
 variable "network_hub_contract" {
-  description = "gcp-network-hub stage contract: hub_network {vpc_self_link, dns_domain} the env VPC peers with and forwards DNS to. Null = gcp.contracts.network_hub from config/landing-zone.yaml, else read from the gcp-network-hub workspace's remote state. Ignored when enable_network_hub = false."
+  description = "gcp-network-hub stage contract: hub_network {vpc_self_link, dns_domain} the env VPC peers with and forwards DNS to, plus the optional NCC hub {ncc_hub_id, ncc_spoke_group} it joins when network_connectivity = ncc. Null = gcp.contracts.network_hub from config/landing-zone.yaml, else read from the gcp-network-hub workspace's remote state. Ignored when enable_network_hub = false."
   type = object({
-    vpc_self_link = string
-    dns_domain    = string
+    vpc_self_link   = string
+    dns_domain      = string
+    ncc_hub_id      = optional(string)
+    ncc_spoke_group = optional(string)
   })
   default = null
 
   validation {
     condition     = var.network_hub_contract == null || endswith(try(var.network_hub_contract.dns_domain, ""), ".")
     error_message = "network_hub_contract.dns_domain must be a fully-qualified DNS name ending in a dot (e.g. hub.internal.)."
+  }
+}
+
+variable "additional_regions" {
+  description = "Opt-in extra regions of this environment's spoke VPC, keyed by region name: subnet_cidrs (public, private, database; one regional subnet per tier, no overlap with the primary spoke subnets or another region), optional secondary_ranges for the private subnet, and nat (default true: a Cloud Router and Cloud NAT in the region). Null = gcp.environments[<environment>].additional_regions from config/landing-zone.yaml, else none (single-region spoke)."
+  type        = any
+  default     = null
+}
+
+variable "network_connectivity" {
+  description = "How the environment VPC reaches the hub: peering (VPC peering) or ncc (a Network Connectivity Center spoke on the gcp-network-hub NCC hub, which must be enabled there first). Switching an existing environment deletes its hub peering; see docs/runbooks/gcp-peering-to-ncc-migration.md. Null = gcp.environments[<environment>].network_connectivity, else gcp.network.connectivity from config/landing-zone.yaml, else peering. Ignored when enable_network_hub = false."
+  type        = string
+  default     = null
+
+  validation {
+    condition = contains(["peering", "ncc"], coalesce(
+      var.network_connectivity,
+      try(local.cfg.environment_connectivity[var.environment], null),
+      local.cfg.network_connectivity,
+      "peering",
+    ))
+    error_message = "network_connectivity (or gcp.environments.<env>.network_connectivity / gcp.network.connectivity in config/landing-zone.yaml) must be peering or ncc."
   }
 }
 
@@ -349,8 +387,10 @@ variable "service_teams" {
     VPC, and grants the team's admin Google Group least-privilege roles. Adding or
     removing a team is a change to this map (config), not a code change to main.tf.
 
-    Promote a team from one environment to the next by adding the same entry to the
-    next environment's tfvars. See docs/runbooks/promotion.md.
+    Null (default) = gcp.environments.<environment>.service_teams from
+    config/landing-zone.yaml, else none. An explicit value replaces the config.
+    Promote a team by adding the same entry under the next environment in the
+    config file. See docs/runbooks/promotion.md.
 
     Fields per team (keyed by the team/project short name):
       project_admin_group_email    (required) admin Google Group for the project.
@@ -378,20 +418,22 @@ variable "service_teams" {
     })), {})
     labels = optional(map(string), {})
   }))
-  default = {}
+  default = null
 
+  # Validations cover the variable and the config-file entries for this
+  # environment (they cannot read local.service_teams: it depends on this variable).
   validation {
-    condition     = alltrue([for k in keys(var.service_teams) : can(regex("^[a-z][a-z0-9-]{0,24}$", k))])
+    condition     = alltrue([for k in keys(merge(coalesce(var.service_teams, {}), try(local.cfg.service_teams[var.environment], {}))) : can(regex("^[a-z][a-z0-9-]{0,24}$", k))])
     error_message = "Each service team key must be a project-name-safe slug: start with a lowercase letter, then lowercase letters, digits, or hyphens, 25 characters or fewer."
   }
 
   validation {
-    condition     = alltrue([for t in values(var.service_teams) : can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", t.project_admin_group_email))])
+    condition     = alltrue([for t in values(merge(coalesce(var.service_teams, {}), try(local.cfg.service_teams[var.environment], {}))) : can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", t.project_admin_group_email))])
     error_message = "Each service team must set a valid project_admin_group_email."
   }
 
   validation {
-    condition     = alltrue([for t in values(var.service_teams) : !t.enable_shared_vpc_attachment || length(t.shared_vpc_subnets) > 0])
+    condition     = alltrue([for t in values(merge(coalesce(var.service_teams, {}), try(local.cfg.service_teams[var.environment], {}))) : !t.enable_shared_vpc_attachment || length(t.shared_vpc_subnets) > 0])
     error_message = "A service team with enable_shared_vpc_attachment = true (the default) must grant at least one entry in shared_vpc_subnets."
   }
 }
@@ -402,13 +444,11 @@ variable "service_teams" {
 # Opt-in. When enabled, this workload reads the Supabase outputs from a saas-<name>
 # workspace and writes them into a GCP Secret Manager secret in the host project,
 # so a GCP runtime can use Supabase as a managed datastore by secret reference.
-# Default off: no SaaS coupling, and the workload reads no saas state.
+# Default off: no SaaS coupling, and the workload reads no saas outputs.
 #
-# NOTE: the bridged values (service role key, database password) are sensitive and
-# will be stored as a secret version, so they are persisted in THIS root's state as
-# well as the saas root's. Teams that require zero secret duplication should instead
-# create the secret container with modules/gcp/data/secret-manager and set the value
-# out of band, leaving this bridge disabled.
+# The values are read with ephemeral "tfe_outputs" and written with the
+# write-only secret_data_wo, so they are in neither this root's plan nor its
+# state. They stay in the saas root's state (docs/known-gaps.md).
 # -----------------------------------------------------------------------------
 
 variable "enable_saas_secret_bridge" {
@@ -419,6 +459,17 @@ variable "enable_saas_secret_bridge" {
   validation {
     condition     = !var.enable_saas_secret_bridge || (var.saas_workspace_name != null && length(var.saas_secret_accessor_members) > 0)
     error_message = "enable_saas_secret_bridge = true requires saas_workspace_name and at least one saas_secret_accessor_members entry (the runtime that reads the secret)."
+  }
+}
+
+variable "saas_bridge_version" {
+  description = "Write-only version of the bridged secret (the secret-manager value version): a new value re-pushes it. Must equal the bridge_version the saas workspace publishes, or the plan fails. Null = saas.bridge_rotation from config/landing-zone.yaml, else 1."
+  type        = number
+  default     = null
+
+  validation {
+    condition     = var.saas_bridge_version == null || try(var.saas_bridge_version >= 1 && floor(var.saas_bridge_version) == var.saas_bridge_version, false)
+    error_message = "saas_bridge_version must be a whole number >= 1 (or null)."
   }
 }
 
@@ -465,10 +516,36 @@ variable "app_services" {
     adds a WIF-bound deploy SA (needs enable_app_deploy_wif = true). The full,
     typed shape (and every default) is the `services` variable of
     modules/gcp/stages/app-services, which validates it; see
-    docs/guides/deploying-a-service.md for a worked entry.
+    docs/guides/deploying-a-service.md for a worked entry. Null (default) =
+    gcp.environments.<environment>.services from config/landing-zone.yaml, else
+    none; an explicit value replaces the config.
+
+    `service_team = "<key>"` (a key of service_teams) deploys the service into
+    that team's service project instead of the host project; the project is
+    resolved from the team and its Cloud Run service agent is granted Shared VPC
+    subnet access. Without it the service stays in the host project.
   EOT
   type        = any
-  default     = {}
+  default     = null
+
+  validation {
+    condition = alltrue([
+      for k, s in merge({ for k, s in coalesce(var.app_services, {}) : k => s }, { for k, s in try(local.cfg.app_services[var.environment], {}) : k => s if var.app_services == null }) :
+      try(s.service_team, null) == null || contains(
+        keys(merge({ for k, v in coalesce(var.service_teams, {}) : k => v }, { for k, v in try(local.cfg.service_teams[var.environment], {}) : k => v if var.service_teams == null })),
+        s.service_team
+      )
+    ])
+    error_message = "An app service sets service_team to a key that is not declared in service_teams (gcp.environments.<env>.service_teams or the service_teams variable). Declare the team first, or remove service_team to deploy into the host project."
+  }
+
+  validation {
+    condition = alltrue([
+      for k, s in merge({ for k, s in coalesce(var.app_services, {}) : k => s }, { for k, s in try(local.cfg.app_services[var.environment], {}) : k => s if var.app_services == null }) :
+      try(s.service_team, null) == null || (try(s.project_id, null) == null && try(s.project_number, null) == null)
+    ])
+    error_message = "An app service sets both service_team and project_id/project_number. Use service_team (the project is resolved from the team) or an explicit project_id, not both."
+  }
 }
 
 variable "app_subnetwork_id" {
@@ -496,7 +573,7 @@ variable "app_deploy_wif_pool_id" {
 }
 
 variable "github_repository_owner_id" {
-  description = "Optional numeric GitHub owner (org) ID; when set the app-deploy WIF provider also requires repository_owner_id to match."
+  description = "Numeric GitHub owner (org) ID (gh api orgs/<org> --jq .id). Required once an app_services entry sets `github`: the app-deploy WIF provider condition is exactly assertion.repository_owner_id == \"<id>\"."
   type        = string
   default     = null
 }
@@ -594,7 +671,7 @@ variable "public_ingress_services" {
   validation {
     condition = alltrue([
       for k in keys(var.public_ingress_services != null ? var.public_ingress_services : try(local.cfg.public_ingress[var.environment], {})) :
-      contains(keys(var.app_services), k)
+      contains(keys(merge(coalesce(var.app_services, {}), try(local.cfg.app_services[var.environment], {}))), k)
     ])
     error_message = "Every public_ingress_services (or gcp.workload.public_ingress.<environment>) key must be an app_services entry."
   }

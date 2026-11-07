@@ -90,14 +90,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.17, < 2.0 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.46.0, < 7.0.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.54.0 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.72.0 |
 
 
 
@@ -106,10 +106,10 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_cloudformation_stack_set.break_glass (modules/aws/iam/tfc-oidc-baseline/main.tf#L618)
-- resource.aws_cloudformation_stack_set.this (modules/aws/iam/tfc-oidc-baseline/main.tf#L501)
-- resource.aws_cloudformation_stack_set_instance.break_glass (modules/aws/iam/tfc-oidc-baseline/main.tf#L654)
-- resource.aws_cloudformation_stack_set_instance.this (modules/aws/iam/tfc-oidc-baseline/main.tf#L541)
+- resource.aws_cloudformation_stack_set.break_glass (modules/aws/iam/tfc-oidc-baseline/main.tf#L646)
+- resource.aws_cloudformation_stack_set.this (modules/aws/iam/tfc-oidc-baseline/main.tf#L529)
+- resource.aws_cloudformation_stack_set_instance.break_glass (modules/aws/iam/tfc-oidc-baseline/main.tf#L682)
+- resource.aws_cloudformation_stack_set_instance.this (modules/aws/iam/tfc-oidc-baseline/main.tf#L569)
 
 
 ## Inputs
@@ -120,7 +120,7 @@ The following resources are created:
 | <a name="input_account_bindings"></a> [account\_bindings](#input\_account\_bindings) | Map of account key -> binding. Each binding names the member account (account\_id), the TFC workspaces allowed to assume its tfc-plan/tfc-apply roles, and an optional TFC project override. Workspace names are matched exactly unless allow\_workspace\_wildcards is true. Accounts in a targeted OU without a binding receive only the OIDC provider (no roles). | <pre>map(object({<br/>    account_id = string<br/>    workspaces = list(string)<br/>    project    = optional(string)<br/>  }))</pre> | `{}` | no |
 | <a name="input_allow_workspace_wildcards"></a> [allow\_workspace\_wildcards](#input\_allow\_workspace\_wildcards) | Allow '*' inside workspace names in account\_bindings (e.g. aws-workload-*), switching the sub condition from StringEquals to StringLike. The organization and project are always matched literally. Default false: exact workspace names only. | `bool` | `false` | no |
 | <a name="input_apply_boundary_policy_name"></a> [apply\_boundary\_policy\_name](#input\_apply\_boundary\_policy\_name) | Name of the embedded permissions-boundary managed policy created in each targeted account. | `string` | `"tfc-apply-boundary"` | no |
-| <a name="input_apply_permissions_boundary_arn"></a> [apply\_permissions\_boundary\_arn](#input\_apply\_permissions\_boundary\_arn) | Optional existing permissions-boundary policy ARN to use instead of the embedded one. The policy must already exist in every bound account (an AWS-managed policy, or a same-named customer policy deployed by another StackSet). Null (default) = the embedded boundary. Ignored when enable\_apply\_permissions\_boundary = false. | `string` | `null` | no |
+| <a name="input_apply_permissions_boundary_arn"></a> [apply\_permissions\_boundary\_arn](#input\_apply\_permissions\_boundary\_arn) | Optional existing permissions-boundary policy ARN to use instead of the embedded one. The policy must already exist in every bound account (an AWS-managed policy, or a same-named customer policy deployed by another StackSet). Null (default) = the embedded boundary. With an external boundary the embedded tamper-deny does not exist, so the same deny (plan role, apply role, OIDC provider and this boundary) is attached to the apply role as an inline policy. Ignored when enable\_apply\_permissions\_boundary = false. | `string` | `null` | no |
 | <a name="input_apply_role_name"></a> [apply\_role\_name](#input\_apply\_role\_name) | Name of the role TFC assumes during the apply phase (TFC\_AWS\_APPLY\_ROLE\_ARN). | `string` | `"tfc-apply"` | no |
 | <a name="input_apply_role_policy_arns"></a> [apply\_role\_policy\_arns](#input\_apply\_role\_policy\_arns) | Managed policy ARNs attached to the apply role. Defaults to AdministratorAccess (the apply role provisions arbitrary landing-zone resources), capped by the apply permissions boundary (enable\_apply\_permissions\_boundary); narrow it per organization if your layers allow. | `list(string)` | <pre>[<br/>  "arn:aws:iam::aws:policy/AdministratorAccess"<br/>]</pre> | no |
 | <a name="input_break_glass_role_name"></a> [break\_glass\_role\_name](#input\_break\_glass\_role\_name) | Name (optionally path-prefixed, e.g. emergency/break-glass) of the break-glass role in MEMBER accounts — must match the org deny-tamper SCP's break-glass exemption. The tfc-apply boundary denies creating, modifying, deleting, tagging or passing it, and enable\_member\_break\_glass\_role deploys it. | `string` | `"break-glass"` | no |

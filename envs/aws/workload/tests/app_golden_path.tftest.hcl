@@ -7,12 +7,14 @@
 
 mock_provider "aws" {}
 mock_provider "aws" { alias = "us_east_1" }
+# tfe serves only the SaaS secret bridge (ephemeral "tfe_outputs"); mocked so
+# no run contacts HCP Terraform.
+mock_provider "tfe" {}
 
 variables {
   landing_zone_config_path = ""
   landing_zone_name        = "acme"
   workload_account_key     = "workload_dev"
-  config_role_arn          = "arn:aws:iam::222222222222:role/config-recorder"
   organization_contract    = { account_ids = { workload_dev = "222222222222" } }
   network_contract         = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } }
   security_contract        = { log_archive_bucket_name = "acme-org-log-archive" }
@@ -53,9 +55,9 @@ run "workload_cmk_created_and_used_by_default" {
   assert {
     condition = (
       length([for st in jsondecode(aws_kms_key.workload[0].policy).Statement : st if try(st.Condition.StringEquals["kms:ViaService"], "") == "ecr.eu-west-2.amazonaws.com"]) == 1 &&
-      length([for st in jsondecode(aws_kms_key.workload[0].policy).Statement : st if try(st.Condition.ArnLike["aws:PrincipalArn"], "") == "arn:${data.aws_partition.current.partition}:iam::222222222222:role/dev-*-exec"]) == 1
+      length([for st in jsondecode(aws_kms_key.workload[0].policy).Statement : st if try(st.Condition.ArnEquals["aws:PrincipalArn"], []) == ["arn:${data.aws_partition.current.partition}:iam::222222222222:role/dev-orders-exec"]]) == 1
     )
-    error_message = "The key policy must admit ECR (via service) and the dev-*-exec task execution roles."
+    error_message = "The key policy must admit ECR (via service) and the dev-orders-exec task execution role."
   }
 
   assert {
@@ -84,6 +86,47 @@ run "workload_cmk_created_and_used_by_default" {
       length(module.app_edge) == 0
     )
     error_message = "The default app ingress must stay internal with no public subnets or edge."
+  }
+}
+
+# The task execution roles are named exactly, one ARN per service key, with
+# the name modules/aws/stages/app-services gives them (aws_iam_role.execution:
+# "<environment>-<service>-exec"); no wildcard remains.
+run "kms_policy_lists_exact_exec_role_arns" {
+  command = plan
+
+  variables {
+    services = { orders = {}, billing = {} }
+  }
+
+  assert {
+    condition = one([
+      for st in jsondecode(aws_kms_key.workload[0].policy).Statement : st.Condition.ArnEquals["aws:PrincipalArn"]
+      if try(st.Sid, "") == "AppTaskExecutionRolesDecrypt"
+      ]) == [
+      "arn:${data.aws_partition.current.partition}:iam::222222222222:role/dev-billing-exec",
+      "arn:${data.aws_partition.current.partition}:iam::222222222222:role/dev-orders-exec",
+    ]
+    error_message = "The exec-role statement must list exactly arn:<partition>:iam::<account>:role/<env>-<service>-exec for every service."
+  }
+
+  assert {
+    condition     = !strcontains(aws_kms_key.workload[0].policy, "-*-exec") && !strcontains(aws_kms_key.workload[0].policy, "ArnLike\":{\"aws:PrincipalArn")
+    error_message = "The key policy must not keep the <env>-*-exec wildcard."
+  }
+}
+
+# No services: no exec-role statement at all (never an empty principal list).
+run "kms_policy_omits_exec_statement_without_services" {
+  command = plan
+
+  variables {
+    services = {}
+  }
+
+  assert {
+    condition     = length([for st in jsondecode(aws_kms_key.workload[0].policy).Statement : st if try(st.Sid, "") == "AppTaskExecutionRolesDecrypt"]) == 0 && length(jsondecode(aws_kms_key.workload[0].policy).Statement) == 4
+    error_message = "With no services the key policy must omit the exec-role statement and keep the other four."
   }
 }
 

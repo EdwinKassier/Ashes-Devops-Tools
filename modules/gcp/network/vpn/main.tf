@@ -69,6 +69,8 @@ resource "google_compute_vpn_tunnel" "tunnels" {
   peer_external_gateway           = google_compute_external_vpn_gateway.peer.id
   peer_external_gateway_interface = count.index
   shared_secret                   = var.shared_secret
+  shared_secret_wo                = var.shared_secret_wo
+  shared_secret_wo_version        = var.shared_secret == null ? var.shared_secret_wo_version : null
   router                          = google_compute_router.router.id
   ike_version                     = 2
 

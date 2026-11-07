@@ -11,9 +11,16 @@ resource "google_iam_workload_identity_pool" "pool" {
 }
 
 # GitHub Actions OIDC Provider
+#
+# The attribute_condition is ONLY the tenant pin, in its canonical form:
+#   assertion.repository_owner_id == "<id>"
+# The org-policy constraint custom.wifProviderTenantPinned compares the stored
+# condition to that exact string, so nothing can be appended to it. Repository,
+# ref and environment are pinned by the principalSet each SA is bound to, via
+# the immutable composite attributes below.
 resource "google_iam_workload_identity_pool_provider" "github" {
   count = var.enable_github_provider ? 1 : 0
-  # checkov:skip=CKV_GCP_125:The GitHub provider is constrained by repo-specific service account bindings and explicit subject/ref conditions, but Checkov does not fully resolve the composed module expression.
+  # checkov:skip=CKV_GCP_125:The condition pins the immutable repository_owner_id; repository and ref are pinned by the per-SA principalSet bindings (attribute.repository_id / attribute.repo_ref), which Checkov does not resolve.
 
   project                            = var.project_id
   workload_identity_pool_id          = google_iam_workload_identity_pool.pool.workload_identity_pool_id
@@ -28,51 +35,56 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "attribute.repository_owner" = "assertion.repository_owner"
     "attribute.ref"              = "assertion.ref"
     # Immutable numeric IDs: repository / owner NAMES can be renamed and then
-    # re-registered by someone else, so bindings should key on these instead.
+    # re-registered by someone else, so bindings key on these instead.
     "attribute.repository_id"       = "assertion.repository_id"
     "attribute.repository_owner_id" = "assertion.repository_owner_id"
+    # Composite attributes: a principalSet can test only ONE attribute, so the
+    # repository is joined with the ref and/or environment. A token without
+    # an environment claim maps to "-".
+    "attribute.repo_ref"     = "assertion.repository_id + '/' + assertion.ref"
+    "attribute.repo_env"     = "assertion.repository_id + '/' + (has(assertion.environment) ? assertion.environment : '-')"
+    "attribute.repo_ref_env" = "assertion.repository_id + '/' + assertion.ref + '/' + (has(assertion.environment) ? assertion.environment : '-')"
   }
 
-  # Build attribute condition based on configuration:
-  # 1. Use custom override if provided
-  # 2. Otherwise, combine organization filter with ref restrictions
-  attribute_condition = var.github_attribute_condition_override != null ? var.github_attribute_condition_override : local.github_computed_condition
+  attribute_condition = local.github_attribute_condition
 
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
   }
-
-  # A null attribute_condition trusts the ENTIRE GitHub issuer (every repo on
-  # token.actions.githubusercontent.com). When this provider is enabled it must be
-  # scoped. Repository SA bindings are branch-agnostic, so scope the ref here too.
-  lifecycle {
-    precondition {
-      condition     = var.github_attribute_condition_override != null || local.github_computed_condition != null
-      error_message = "enable_github_provider requires a scoped attribute_condition: set github_attribute_condition_override, or github_organization and/or github_sa_bindings. A null condition would trust every GitHub repository."
-    }
-  }
 }
 
 locals {
-  github_effective_refs = length(var.github_allowed_refs) > 0 ? var.github_allowed_refs : ["refs/heads/main"]
-  github_subjects = distinct(flatten([
-    for binding in var.github_sa_bindings : [
-      for ref in local.github_effective_refs : "repo:${binding.repository}:ref:${ref}"
-    ]
-  ]))
-  github_sub_condition = length(local.github_subjects) > 0 ? join(" || ", [
-    for subject in local.github_subjects : "assertion.sub == '${subject}'"
-  ]) : null
-  github_org_condition = var.github_organization != null ? "assertion.repository_owner == '${var.github_organization}'" : null
-  # Immutable owner pin: survives an org rename / name squat.
-  github_owner_id_condition = var.github_repository_owner_id != null ? "assertion.repository_owner_id == '${var.github_repository_owner_id}'" : null
+  # Canonical tenant pin. github_repository_owner_id is required (and numeric)
+  # whenever the provider is enabled; see variables.tf.
+  github_attribute_condition = var.github_repository_owner_id == null ? null : "assertion.repository_owner_id == \"${var.github_repository_owner_id}\""
 
-  github_condition_parts = compact([
-    local.github_sub_condition != null ? "(${local.github_sub_condition})" : "",
-    local.github_org_condition != null ? local.github_org_condition : "",
-    local.github_owner_id_condition != null ? local.github_owner_id_condition : "",
-  ])
-  github_computed_condition = length(local.github_condition_parts) > 0 ? join(" && ", local.github_condition_parts) : null
+  github_principal_set_prefix = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.pool.name}"
+
+  # One binding per (SA binding, allowed ref). With github_allowed_refs the
+  # member is attribute.repo_ref/<repository_id>/<ref>, so the branch pin the
+  # condition used to carry survives. Without it the member stays on the
+  # immutable repository_id (or, when the caller has not supplied one, the
+  # repository name). A single allowed ref keeps the binding's own key, so a
+  # caller with one ref keeps its state address.
+  github_binding_refs = length(var.github_allowed_refs) > 0 ? var.github_allowed_refs : [null]
+  github_bindings = merge([
+    for b in var.github_sa_bindings : {
+      for ref in local.github_binding_refs :
+      (length(var.github_allowed_refs) > 1
+        ? "${b.key != null ? b.key : "${b.repository}-${b.service_account_email}"}:${ref}"
+        : (b.key != null ? b.key : "${b.repository}-${b.service_account_email}")
+        ) => {
+        service_account_email = b.service_account_email
+        member = (
+          ref != null
+          ? "${local.github_principal_set_prefix}/attribute.repo_ref/${b.repository_id}/${ref}"
+          : b.repository_id != null
+          ? "${local.github_principal_set_prefix}/attribute.repository_id/${b.repository_id}"
+          : "${local.github_principal_set_prefix}/attribute.repository/${b.repository}"
+        )
+      }
+    }
+  ]...)
 }
 
 # GitLab CI OIDC Provider
@@ -141,19 +153,13 @@ resource "google_iam_workload_identity_pool_provider" "aws" {
   }
 }
 
-# Service Account IAM bindings for GitHub repos
+# Service Account IAM bindings for GitHub repos (see local.github_bindings).
 resource "google_service_account_iam_member" "github_workload_identity" {
-  for_each = { for binding in var.github_sa_bindings : (binding.key != null ? binding.key : "${binding.repository}-${binding.service_account_email}") => binding }
+  for_each = local.github_bindings
 
   service_account_id = "projects/${var.project_id}/serviceAccounts/${each.value.service_account_email}"
   role               = "roles/iam.workloadIdentityUser"
-  # Prefer the immutable numeric repository_id when supplied; the name-based
-  # principalSet is kept only as a fallback for callers that have not set it.
-  member = (
-    each.value.repository_id != null
-    ? "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.pool.name}/attribute.repository_id/${each.value.repository_id}"
-    : "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.pool.name}/attribute.repository/${each.value.repository}"
-  )
+  member             = each.value.member
 }
 
 # Service Account IAM bindings for GitLab projects

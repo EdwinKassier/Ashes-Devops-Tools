@@ -211,3 +211,19 @@ run "rejects_empty_default_tag_value" {
 
   expect_failures = [var.default_tags]
 }
+
+# A contract without the Workloads OU fails on the named guard (the backup
+# policy attaches there), not on a bare lookup.
+run "organization_contract_without_workloads_ou_fails" {
+  command = plan
+
+  variables {
+    organization_contract = {
+      account_ids       = { backup = "444444444444" }
+      account_role_arns = { backup = "arn:aws:iam::444444444444:role/cross-account" }
+      ou_ids            = { Security = "ou-abcd-security00" }
+    }
+  }
+
+  expect_failures = [terraform_data.organization_contract_guard]
+}

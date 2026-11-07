@@ -8,8 +8,12 @@ locals {
   # Remote state when read (count = 1), else the supplied contract. try() only
   # selects the source — it does not unify the two object types — and a failed
   # read still errors at plan time.
-  org       = try(data.terraform_remote_state.gcp_organization[0].outputs, local.organization_contract)
-  bootstrap = try(data.terraform_remote_state.gcp_bootstrap[0].outputs, local.bootstrap_contract)
+  # Each upstream is read through its single `contract` output. A producer
+  # state from before that output existed (N-1, not yet re-applied) exposes the
+  # same keys as individual outputs, so the read falls back to them; that
+  # fallback goes at v1.0 with the individual outputs (UPGRADING.md).
+  org       = try(data.terraform_remote_state.gcp_organization[0].outputs.contract, data.terraform_remote_state.gcp_organization[0].outputs, local.organization_contract)
+  bootstrap = try(data.terraform_remote_state.gcp_bootstrap[0].outputs.contract, data.terraform_remote_state.gcp_bootstrap[0].outputs, local.bootstrap_contract)
 
   project_environments = merge(
     {
@@ -58,6 +62,16 @@ locals {
   )
 }
 
+locals {
+  # Network Connectivity Center: the hub project owns the hub, and each host
+  # project its environment spoke, so both need the API before gcp-network-hub
+  # / gcp-workload-<env> create them. Empty (no change) while NCC is off.
+  ncc_project_services = !local.enable_network_connectivity_center ? {} : merge(
+    { "shared-hub" = ["networkconnectivity.googleapis.com"] },
+    { for env_key in keys(local.environments) : "${env_key}-host" => ["networkconnectivity.googleapis.com"] },
+  )
+}
+
 module "projects" {
   source = "../../../modules/gcp/stages/projects"
 
@@ -65,9 +79,12 @@ module "projects" {
   organization_name       = local.organization_name
   default_billing_account = local.org.billing_account
   admin_project_id        = local.bootstrap.admin_project_id
-  folders                 = local.org.folders
-  environments            = local.project_environments
-  project_services        = var.project_services
+  # A missing environment folder is filled with an inert placeholder so that
+  # terraform_data.organization_contract_guard reports the gap.
+  folders                     = merge({ for k in keys(local.environments) : k => { id = "", name = "", display_name = "" } }, local.org.folders)
+  environments                = local.project_environments
+  project_services            = var.project_services
+  additional_project_services = local.ncc_project_services
 
   # Suffix comes from the gcp-bootstrap root for project-ID consistency.
   suffix = local.bootstrap.suffix
@@ -84,4 +101,21 @@ module "projects" {
   workload_folder_roles    = try(local.bootstrap.workload_folder_roles, { plan = [], apply = [] })
   network_service_accounts = try(local.bootstrap.stage_service_accounts["network-hub"], null)
   network_folder_roles     = try(local.bootstrap.network_folder_roles, { plan = [], apply = [] })
+}
+
+# Fail early, naming the contract field, when the effective gcp-organization contract
+# (variable, config file or the upstream workspace's contract output) lacks a
+# key this root reads. The reads below tolerate the gap so that this
+# precondition, not a bare "key not in collection", is the plan error.
+resource "terraform_data" "organization_contract_guard" {
+  lifecycle {
+    precondition {
+      condition     = length(setsubtract(keys(local.environments), keys(local.org.folders))) == 0
+      error_message = "The gcp-organization contract folders lack ${join(", ", sort(setsubtract(keys(local.environments), keys(local.org.folders))))} (organization_contract / gcp.contracts.organization, else the ${var.organization_workspace_name} workspace's contract output); every environment needs its folder."
+    }
+    precondition {
+      condition     = length(setsubtract([for e in keys(local.environments) : "environment-${e}"], keys(local.org.tag_values))) == 0
+      error_message = "The gcp-organization contract tag_values lack ${join(", ", sort(setsubtract([for e in keys(local.environments) : "environment-${e}"], keys(local.org.tag_values))))} (organization_contract / gcp.contracts.organization, else the ${var.organization_workspace_name} workspace's contract output)."
+    }
+  }
 }

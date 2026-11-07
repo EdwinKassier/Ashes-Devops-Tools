@@ -33,9 +33,14 @@ variable "network_workspace_name" {
 # -----------------------------------------------------------------------------
 
 variable "organization_contract" {
-  description = "aws-organization stage contract: account_ids (account key => 12-digit account ID; must contain workload_account_key). Null = aws.contracts.organization from config/landing-zone.yaml, else read from the aws-organization workspace's remote state."
+  description = "aws-organization stage contract (FAST-style override), the same type in every aws root: organization_id (o-xxxxxxxxxx), organization_root_id (r-xxxx), management_account_id, ou_ids (OU name => OU ID), account_ids (account key => 12-digit ID), account_role_arns (account key => cross-account role ARN). This root needs: account_ids. When set, the aws-organization remote state is NOT read. Null = aws.contracts.organization from config/landing-zone.yaml, else the contract output of the organization_workspace_name workspace."
   type = object({
-    account_ids = map(string)
+    organization_id       = optional(string)
+    organization_root_id  = optional(string)
+    management_account_id = optional(string)
+    ou_ids                = optional(map(string), {})
+    account_ids           = map(string)
+    account_role_arns     = optional(map(string), {})
   })
   default = null
 
@@ -57,6 +62,13 @@ variable "network_contract" {
     condition     = try(var.network_contract.tgw_id, null) == null || can(regex("^tgw-", try(var.network_contract.tgw_id, "")))
     error_message = "network_contract.tgw_id must be null or a transit gateway id (tgw-xxxxxxxx)."
   }
+}
+
+variable "ipam_explicit_cidr" {
+  description = "Opt a NEW spoke VPC into requesting vpc_cidr explicitly from the IPAM pool (pool + cidr_block). Default false keeps the legacy pool + netmask_length shape; enabling it on an existing VPC replaces it."
+  type        = bool
+  default     = false
+  nullable    = false
 }
 
 variable "enable_network_hub" {
@@ -147,8 +159,10 @@ variable "security_workspace_name" {
   default     = "aws-security"
 }
 
+# tflint-ignore: terraform_unused_declarations # deprecated and ignored, kept so a set value warns until v1.0
 variable "config_role_arn" {
-  description = "ARN of the IAM role AWS Config assumes to record resource configurations in this account/Region. Null (default) uses the account's AWSServiceRoleForConfig service-linked role (created unless create_config_service_linked_role = false)."
+  deprecated  = "Ignored: the Config recorder is deployed by aws-organization's recorder StackSet (enable_org_config_recorders). Remove this input; it is deleted in v1.0."
+  description = "Deprecated and ignored: the account's Config recorder is deployed by aws-organization's recorder StackSet (enable_org_config_recorders). Removed in v1.0."
   type        = string
   default     = null
 
@@ -158,8 +172,10 @@ variable "config_role_arn" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations # deprecated and ignored, kept so a set value warns until v1.0
 variable "create_config_service_linked_role" {
-  description = "With config_role_arn = null, create the AWSServiceRoleForConfig service-linked role in the workload account. Set false if Config was ever enabled in the account (the SLR already exists)."
+  deprecated  = "Ignored: the Config recorder is deployed by aws-organization's recorder StackSet (enable_org_config_recorders). Remove this input; it is deleted in v1.0."
+  description = "Deprecated and ignored: the account's Config recorder is deployed by aws-organization's recorder StackSet (enable_org_config_recorders). Removed in v1.0."
   type        = bool
   default     = true
 }
@@ -199,12 +215,11 @@ variable "workload_roles" {
 # Opt-in. When enabled, this workload reads the Supabase outputs from a saas-<name>
 # workspace and writes them into an AWS Secrets Manager secret, so an ECS/Fargate
 # task can consume Supabase as a managed datastore via the container secrets
-# valueFrom. Default off: no SaaS coupling, and the workload reads no saas state.
+# valueFrom. Default off: no SaaS coupling, and the workload reads no saas outputs.
 #
-# NOTE: the bridged values (service role key, database password) are stored as a
-# secret version, so they persist in THIS root's state as well as the saas root's.
-# Teams that require zero secret duplication should create the secret out of band
-# and leave this bridge disabled.
+# The values are read with ephemeral "tfe_outputs" and written with the
+# write-only secret_string_wo, so they are in neither this root's plan nor its
+# state. They stay in the saas root's state (docs/known-gaps.md).
 # -----------------------------------------------------------------------------
 
 variable "enable_saas_secret_bridge" {
@@ -215,6 +230,17 @@ variable "enable_saas_secret_bridge" {
   validation {
     condition     = !var.enable_saas_secret_bridge || (var.saas_workspace_name != null && length(var.saas_secret_reader_arns) > 0)
     error_message = "enable_saas_secret_bridge = true requires saas_workspace_name and at least one saas_secret_reader_arns entry (the task role that reads the secret)."
+  }
+}
+
+variable "saas_bridge_version" {
+  description = "Write-only version of the bridged secret (secret_string_wo_version): a new value re-pushes it. Must equal the bridge_version the saas workspace publishes, or the plan fails. Null = saas.bridge_rotation from config/landing-zone.yaml, else 1."
+  type        = number
+  default     = null
+
+  validation {
+    condition     = var.saas_bridge_version == null || try(var.saas_bridge_version >= 1 && floor(var.saas_bridge_version) == var.saas_bridge_version, false)
+    error_message = "saas_bridge_version must be a whole number >= 1 (or null)."
   }
 }
 
@@ -356,7 +382,7 @@ variable "assume_role_arn" {
 # -----------------------------------------------------------------------------
 
 variable "services" {
-  description = "Services to run in this environment, keyed by service name. Full field reference: modules/aws/stages/app-services (variable services). Empty (default) creates nothing."
+  description = "Services to run in this environment, keyed by service name. Full field reference: modules/aws/stages/app-services (variable services). Null (default) = aws.workload_environments.<environment>.services from config/landing-zone.yaml, else nothing; an explicit value replaces the config."
   type = map(object({
     # Image the FIRST task-definition revision runs. null => the public
     # placeholder bootstrap_image (listens on 8080); the first CI deploy
@@ -431,7 +457,7 @@ variable "services" {
       message_retention_seconds  = optional(number, 345600)
     }), {})
   }))
-  default = {}
+  default = null
 }
 
 variable "enable_github_oidc" {

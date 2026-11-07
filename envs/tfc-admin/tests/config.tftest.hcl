@@ -11,15 +11,21 @@ variables {
   # The fixture sets vcs_repo, so tfc-admin is self-managed (the default).
   # Mock providers cannot import; the import block runs in the adopting apply.
   import_tfc_admin_workspace = false
+  # gcp-guardrails is security-team only; without a team a check warns.
+  security_team_id = "team-security1"
+  # Policy sets are off in most runs; the policy_sets_* runs turn the
+  # unguarded-destroy warning back on and expect it.
+  enable_unguarded_destroy_warning = false
 }
 
 run "workspaces_derived_from_config" {
   command = plan
 
-  # 4 GCP control plane + gcp-workload-{dev,prod} + 6 AWS control plane +
-  # aws-workload-{dev,staging} + saas-{web,admin} + tfc-admin (self-managed) = 17.
+  # 5 GCP control plane (incl. gcp-guardrails) + gcp-workload-{dev,prod} + 6 AWS
+  # control plane + aws-workload-{dev,staging} + saas-{web,admin} + tfc-admin
+  # (self-managed) = 18.
   assert {
-    condition     = length(output.workspace_names) == 17
+    condition     = length(output.workspace_names) == 18
     error_message = "the workspace set must come from gcp/aws/saas .enabled, gcp.environments, aws.workload_environments and saas.workspaces."
   }
 
@@ -109,7 +115,7 @@ run "explicit_variables_win_over_config" {
   }
 
   assert {
-    condition     = toset(output.workspace_names) == toset(["gcp-bootstrap", "gcp-organization", "gcp-projects", "gcp-network-hub", "gcp-workload-qa", "tfc-admin"]) && local.tfc_organization == "acme"
+    condition     = toset(output.workspace_names) == toset(["gcp-bootstrap", "gcp-organization", "gcp-projects", "gcp-network-hub", "gcp-guardrails", "gcp-workload-qa", "tfc-admin"]) && local.tfc_organization == "acme"
     error_message = "explicit enable_* / environments / tfc_organization must override the config file."
   }
 
@@ -150,4 +156,156 @@ run "shipped_example_is_rejected" {
 
   # Placeholder TFC org, and every cloud disabled until the adopter opts in.
   expect_failures = [var.tfc_organization, var.enable_gcp]
+}
+
+# enable_policy_sets = null: the fixture sets org.tfc.vcs_repo and
+# org.tfc.plan = standard, so both policy sets turn on by themselves.
+run "policy_sets_on_with_vcs_and_paid_plan" {
+  command = plan
+
+  assert {
+    condition     = length(tfe_policy_set.opa) == 1 && length(tfe_policy_set.destructive) == 1
+    error_message = "a vcs_repo plus a plan with VCS policy sets must turn both policy sets on."
+  }
+
+  assert {
+    condition     = tfe_policy_set.destructive[0].overridable == true && tfe_policy_set.opa[0].overridable == false
+    error_message = "only the destructive-change guard is overridable."
+  }
+}
+
+run "policy_sets_off_on_free_plan" {
+  command = plan
+
+  variables {
+    tfc_plan                         = "free"
+    enable_unguarded_destroy_warning = true
+  }
+
+  assert {
+    condition     = length(tfe_policy_set.opa) == 0 && length(tfe_policy_set.destructive) == 0
+    error_message = "the free plan does not get the policy sets by default."
+  }
+
+  expect_failures = [check.destructive_changes_guarded]
+}
+
+run "explicit_enable_policy_sets_false_wins" {
+  command = plan
+
+  variables {
+    enable_policy_sets               = false
+    enable_unguarded_destroy_warning = true
+  }
+
+  assert {
+    condition     = length(tfe_policy_set.opa) == 0 && length(tfe_policy_set.destructive) == 0
+    error_message = "an explicit enable_policy_sets = false must override the derived default."
+  }
+
+  expect_failures = [check.destructive_changes_guarded]
+}
+
+# notifications.hcp_email_user_ids becomes an email notification (user IDs, not
+# addresses) on failed runs and every health-assessment event.
+run "hcp_assessment_notifications_use_user_ids" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+  }
+
+  assert {
+    condition = (
+      local.control_plane_notifications["notify-email"].destination_type == "email" &&
+      toset(local.control_plane_notifications["notify-email"].email_user_ids) == toset(["user-aaa", "user-bbb"]) &&
+      contains(local.control_plane_notifications["notify-email"].triggers, "assessment:drifted") &&
+      contains(local.control_plane_notifications["notify-email"].triggers, "assessment:check_failure") &&
+      contains(local.control_plane_notifications["notify-email"].triggers, "assessment:failed") &&
+      contains(local.control_plane_notifications["notify-email"].triggers, "run:errored")
+    )
+    error_message = "hcp_email_user_ids must produce an email notification with run:errored and the three assessment triggers."
+  }
+
+  assert {
+    condition     = contains(keys(local.workload_notifications), "notify-email")
+    error_message = "workload workspaces must receive the assessment email notification too."
+  }
+}
+
+# Explicitly configured notifications are kept; the section only adds its entry.
+run "explicit_notifications_are_kept" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+    control_plane_notifications = {
+      ops = { destination_type = "generic", url = "https://hooks.example.com/x" }
+    }
+  }
+
+  assert {
+    condition     = contains(keys(local.control_plane_notifications), "ops") && contains(keys(local.control_plane_notifications), "notify-email")
+    error_message = "an explicit notification must be kept alongside the config-derived email entry."
+  }
+}
+
+run "no_section_is_noop" {
+  command = plan
+
+  assert {
+    condition     = length(local.control_plane_notifications) == 0 && length(local.workload_notifications) == 0
+    error_message = "without a notifications section no notification is created."
+  }
+}
+
+run "placeholder_hcp_user_id_rejected" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications-placeholder.yaml"
+  }
+
+  expect_failures = [var.control_plane_notifications]
+}
+
+# Scaffold matrix: committed scaffolder output (make scaffold-fixtures) must plan.
+run "scaffold_gcp_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../tests/fixtures/scaffold/landing-zone.gcp.yaml"
+  }
+}
+
+run "scaffold_aws_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../tests/fixtures/scaffold/landing-zone.aws.yaml"
+  }
+}
+
+run "scaffold_saas_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../tests/fixtures/scaffold/landing-zone.saas.yaml"
+  }
+}
+
+run "scaffold_gcp_aws_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../tests/fixtures/scaffold/landing-zone.gcp-aws.yaml"
+  }
+}
+
+run "scaffold_gcp_aws_saas_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
+  }
 }

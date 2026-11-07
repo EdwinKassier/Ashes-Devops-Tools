@@ -10,6 +10,10 @@ suites close that gap. The 2026-11-05 audit flagged it as Maintainability (Criti
 | [`tests/e2e/gcp`](../../tests/e2e/gcp/) | `gcp/governance/kms` (keyring) + CMEK key → `gcp/cloud-storage`; `gcp/network/vpc` → `gcp/network/subnet`; `gcp/data/secret-manager` | Bucket default encryption equals the created key; PAP enforced, UBLA, versioning, access logging; subnet CIDR, VPC attachment, Private Google Access; secret version round-trips |
 | [`tests/e2e/aws`](../../tests/e2e/aws/) | `aws/data/kms-key` → `aws/data/log-archive-bucket` (Object Lock); `aws/network/vpc` (1 AZ, no NAT/IGW) | A canary object written with no encryption arguments comes back SSE-KMS with the created CMK, a bucket key, and GOVERNANCE retention; VPC/subnet CIDRs; S3 gateway endpoint is available; `default_tags` reach module resources |
 
+These suites test single modules. The upgrade path of a whole estate, where every merge
+is applied on top of the previous `main`, is covered by the
+[sandbox estate](sandbox-estate.md) instead.
+
 Each suite is a small Terraform root (`main.tf`) and one `e2e.tftest.hcl` with
 `command = apply`. Assertions read data sources that query the real API after apply, so
 they are not echoes of the inputs. `terraform test` destroys everything at the end of the
@@ -115,10 +119,13 @@ attempt.
 - Create the **`e2e-sandbox`** environment. The OIDC subject above depends on it.
   - Leave its deployment-branch policy unrestricted. Otherwise label-gated PR runs, which
     deploy from `refs/pull/<n>/merge`, are rejected.
-  - Optionally add required reviewers. Note that nightly runs would then wait for approval.
+  - **Require reviewers** (at least one, with "Prevent self-review" on). The runner
+    roles can create real resources, so a human approves each run before the job
+    gets cloud credentials. Nightly runs then wait for approval as well.
 - Set the **repository** variables listed in [CI Secrets & Variables](CI_SECRETS.md#sandbox-e2e).
   The preflight job has no environment and reads repository-level variables only.
-- Create the `e2e` label.
+- Create the `e2e` label. A new push to a labelled PR removes the label and does not run
+  the suites (job `revoke-label`), so re-apply the label to run the new head.
 
 No secrets are needed, because both clouds are keyless.
 

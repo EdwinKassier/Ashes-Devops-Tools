@@ -41,8 +41,14 @@ variable "auto_apply" {
   default     = false
 }
 
+variable "auto_apply_run_trigger" {
+  description = "Apply automatically after a successful plan that a run trigger (an upstream workspace's apply) queued. Independent of auto_apply. Default false."
+  type        = bool
+  default     = false
+}
+
 variable "terraform_version" {
-  description = "Terraform version constraint for the workspace, e.g. ~> 1.9. Null uses the TFC default."
+  description = "Terraform version constraint for the workspace, e.g. ~> 1.17. Null uses the TFC default."
   type        = string
   default     = null
 }
@@ -171,7 +177,9 @@ variable "notifications" {
       token             optional HMAC token for a generic webhook.
       email_user_ids    TFC user IDs to email (email destination only).
       triggers          run events to notify on; default is a failed run plus a
-                        run that needs attention (manual apply waiting).
+                        run that needs attention (manual apply waiting). Health
+                        assessment events assessment:drifted, assessment:check_failure
+                        and assessment:failed are also accepted.
       enabled           default true.
   EOT
   type = map(object({
@@ -197,9 +205,9 @@ variable "notifications" {
   validation {
     condition = alltrue([
       for n in values(var.notifications) : alltrue([
-        for t in n.triggers : contains(["run:created", "run:planning", "run:needs_attention", "run:applying", "run:completed", "run:errored"], t)
+        for t in n.triggers : contains(["run:created", "run:planning", "run:needs_attention", "run:applying", "run:completed", "run:errored", "assessment:drifted", "assessment:check_failure", "assessment:failed"], t)
       ])
     ])
-    error_message = "Each trigger must be a valid TFC run trigger (run:created, run:planning, run:needs_attention, run:applying, run:completed, run:errored)."
+    error_message = "Each trigger must be a valid TFC run trigger (run:created, run:planning, run:needs_attention, run:applying, run:completed, run:errored, assessment:drifted, assessment:check_failure, assessment:failed)."
   }
 }

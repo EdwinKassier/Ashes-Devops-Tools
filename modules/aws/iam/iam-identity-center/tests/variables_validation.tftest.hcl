@@ -9,6 +9,9 @@ mock_provider "aws" {
       identity_store_ids = ["d-0000000000"]
     }
   }
+  mock_data "aws_identitystore_group" {
+    defaults = { group_id = "11111111-2222-3333-4444-555555555555" }
+  }
 }
 
 run "defaults_accepted" {
@@ -44,6 +47,43 @@ run "bad_principal_type_rejected" {
         principal_id   = "00000000-0000-0000-0000-000000000000"
         account_id     = "111111111111"
       }
+    }
+  }
+
+  expect_failures = [var.assignments]
+}
+
+run "rejects_unknown_account_key" {
+  command = plan
+
+  variables {
+    account_ids = { network = "333333333333" }
+    assignments = {
+      x = { permission_set = "ReadOnly", group_display_name = "g", account_key = "nope" }
+    }
+  }
+
+  expect_failures = [var.assignments]
+}
+
+run "rejects_both_principal_forms" {
+  command = plan
+
+  variables {
+    assignments = {
+      x = { permission_set = "ReadOnly", principal_id = "id", group_display_name = "g", account_id = "111111111111" }
+    }
+  }
+
+  expect_failures = [var.assignments]
+}
+
+run "rejects_neither_account_form" {
+  command = plan
+
+  variables {
+    assignments = {
+      x = { permission_set = "ReadOnly", principal_id = "id" }
     }
   }
 

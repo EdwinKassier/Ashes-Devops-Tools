@@ -71,3 +71,28 @@ run "module_tags_applied" {
     error_message = "module-level tags must land on aws_budgets_budget.this"
   }
 }
+
+run "starter_budget_alerts_wired" {
+  command = plan
+
+  variables {
+    budgets = {
+      org-monthly = {
+        limit_amount      = "300"
+        threshold_percent = 100
+        alert_percents    = [50, 80, 100]
+        emails            = ["alerts@acme.io"]
+      }
+    }
+  }
+
+  assert {
+    condition     = toset([for n in aws_budgets_budget.this["org-monthly"].notification : "${n.notification_type}/${n.threshold}"]) == toset(["ACTUAL/50", "ACTUAL/80", "ACTUAL/100", "FORECASTED/100"])
+    error_message = "alert_percents must produce ACTUAL notifications at 50/80/100 plus a FORECASTED one at 100."
+  }
+
+  assert {
+    condition     = alltrue([for n in aws_budgets_budget.this["org-monthly"].notification : n.subscriber_email_addresses == toset(["alerts@acme.io"])])
+    error_message = "every notification must reach the configured emails."
+  }
+}

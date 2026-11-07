@@ -10,6 +10,8 @@ variables {
   environment    = "dev"
   network_id     = "projects/acme-dev-host-abcd/global/networks/acme-dev-vpc"
   subnetwork_id  = "projects/acme-dev-host-abcd/regions/europe-west1/subnetworks/acme-dev-vpc-private-europe-west1-b"
+
+  github_repository_owner_id = "42"
 }
 
 # The default (services = {}, every flag off) must create nothing at all.
@@ -89,8 +91,8 @@ run "one_service_full_golden_path" {
   }
 
   assert {
-    condition     = google_iam_workload_identity_pool_provider.github[0].attribute_condition == "((assertion.repository_id == \"123456789\"))"
-    error_message = "the provider must fail closed on the declared repository_id."
+    condition     = google_iam_workload_identity_pool_provider.github[0].attribute_condition == "assertion.repository_owner_id == \"42\""
+    error_message = "the provider condition must be exactly the canonical owner pin; repo/ref/env pins live in the bindings."
   }
 
   assert {
@@ -131,23 +133,100 @@ run "one_service_full_golden_path" {
   }
 }
 
-# Ref / environment constraints narrow the provider condition.
-run "github_ref_and_environment_constrain_condition" {
+# The provider condition is the owner pin only, whatever the services declare;
+# each service's ref / environment pin is enforced by the attribute its deploy
+# SA is bound to. The composite attributes are mapped for every service.
+run "condition_is_owner_only_with_mixed_services" {
   command = plan
 
   variables {
-    enable_app_deploy_wif      = true
-    github_repository_owner_id = "42"
+    enable_app_deploy_wif = true
     services = {
-      api = {
-        github = { repository_id = "123", ref = "refs/heads/main", environment = "dev" }
-      }
+      api = { github = { repository_id = "123", ref = "refs/heads/main", environment = "dev" } }
+      web = { github = { repository_id = "456" } }
     }
   }
 
   assert {
-    condition     = google_iam_workload_identity_pool_provider.github[0].attribute_condition == "assertion.repository_owner_id == \"42\" && ((assertion.repository_id == \"123\" && assertion.ref == \"refs/heads/main\" && (has(assertion.environment) && assertion.environment == \"dev\")))"
-    error_message = "owner, ref and environment constraints must all be ANDed into the provider condition."
+    condition     = google_iam_workload_identity_pool_provider.github[0].attribute_condition == "assertion.repository_owner_id == \"42\""
+    error_message = "the provider condition must be exactly assertion.repository_owner_id == \"<id>\"."
+  }
+
+  assert {
+    condition = (
+      google_iam_workload_identity_pool_provider.github[0].attribute_mapping["attribute.repo_ref"] == "assertion.repository_id + '/' + assertion.ref" &&
+      google_iam_workload_identity_pool_provider.github[0].attribute_mapping["attribute.repo_env"] == "assertion.repository_id + '/' + (has(assertion.environment) ? assertion.environment : '-')" &&
+      google_iam_workload_identity_pool_provider.github[0].attribute_mapping["attribute.repo_ref_env"] == "assertion.repository_id + '/' + assertion.ref + '/' + (has(assertion.environment) ? assertion.environment : '-')"
+    )
+    error_message = "the provider must map the repo_ref, repo_env and repo_ref_env composite attributes."
+  }
+}
+
+# Declares ref + environment -> bound on attribute.repo_ref_env.
+run "ref_and_env_service_binds_repo_ref_env" {
+  command = plan
+
+  variables {
+    enable_app_deploy_wif = true
+    services = {
+      api = { github = { repository_id = "123", ref = "refs/heads/main", environment = "prod" } }
+    }
+  }
+
+  assert {
+    condition     = google_service_account_iam_member.deploy_wif["api"].member == "principalSet://iam.googleapis.com/projects/222222222222/locations/global/workloadIdentityPools/apps-dev/attribute.repo_ref_env/123/refs/heads/main/prod"
+    error_message = "a service declaring ref and environment must bind attribute.repo_ref_env/<repo>/<ref>/<env>."
+  }
+}
+
+# Declares ref only -> bound on attribute.repo_ref.
+run "ref_only_service_binds_repo_ref" {
+  command = plan
+
+  variables {
+    enable_app_deploy_wif = true
+    services = {
+      api = { github = { repository_id = "123", ref = "refs/tags/v1.2.3" } }
+    }
+  }
+
+  assert {
+    condition     = google_service_account_iam_member.deploy_wif["api"].member == "principalSet://iam.googleapis.com/projects/222222222222/locations/global/workloadIdentityPools/apps-dev/attribute.repo_ref/123/refs/tags/v1.2.3"
+    error_message = "a service declaring only ref must bind attribute.repo_ref/<repo>/<ref>."
+  }
+}
+
+# Declares environment only -> bound on attribute.repo_env.
+run "env_only_service_binds_repo_env" {
+  command = plan
+
+  variables {
+    enable_app_deploy_wif = true
+    services = {
+      api = { github = { repository_id = "123", environment = "prod" } }
+    }
+  }
+
+  assert {
+    condition     = google_service_account_iam_member.deploy_wif["api"].member == "principalSet://iam.googleapis.com/projects/222222222222/locations/global/workloadIdentityPools/apps-dev/attribute.repo_env/123/prod"
+    error_message = "a service declaring only environment must bind attribute.repo_env/<repo>/<env>."
+  }
+}
+
+# Declares neither -> bound on attribute.repository_id (any ref, any env).
+run "bare_service_binds_repository_id" {
+  command = plan
+
+  variables {
+    enable_app_deploy_wif = true
+    services = {
+      api = { github = { repository_id = "123" } }
+    }
+  }
+
+  assert {
+    condition     = google_service_account_iam_member.deploy_wif["api"].member == "principalSet://iam.googleapis.com/projects/222222222222/locations/global/workloadIdentityPools/apps-dev/attribute.repository_id/123"
+    error_message = "a service declaring neither ref nor environment must bind attribute.repository_id/<repo>."
   }
 }
 
@@ -479,5 +558,326 @@ run "pubsub_with_cmek" {
       google_pubsub_topic.dead_letter["api"].kms_key_name == var.pubsub_kms_key_name
     )
     error_message = "pubsub_kms_key_name must encrypt both the topic and the dead-letter topic."
+  }
+}
+
+# A service with its own project_id lives in that (team service) project and its
+# Cloud Run service agent gets subnet-level networkUser + host networkViewer.
+run "service_in_team_project_gets_subnet_network_user" {
+  command = plan
+
+  variables {
+    services = {
+      api = {
+        project_id     = "payments-1a2b"
+        project_number = "333333333333"
+        database       = {}
+        pubsub         = { enabled = true }
+      }
+    }
+  }
+
+  assert {
+    condition     = google_service_account.runtime["api"].project == "payments-1a2b" && google_service_account.runtime["api"].account_id == "api-run"
+    error_message = "the runtime SA must be created in the team project."
+  }
+
+  assert {
+    condition     = output.services["api"].runtime_service_account == "api-run@payments-1a2b.iam.gserviceaccount.com" && output.services["api"].image_repository == "europe-west1-docker.pkg.dev/payments-1a2b/api/api"
+    error_message = "SA emails and the image repository must use the team project."
+  }
+
+  assert {
+    condition = (
+      google_compute_subnetwork_iam_member.serverless_network_user["api/default"].role == "roles/compute.networkUser" &&
+      google_compute_subnetwork_iam_member.serverless_network_user["api/default"].member == "serviceAccount:service-333333333333@serverless-robot-prod.iam.gserviceaccount.com" &&
+      google_compute_subnetwork_iam_member.serverless_network_user["api/default"].project == "acme-dev-host-abcd" &&
+      google_compute_subnetwork_iam_member.serverless_network_user["api/default"].region == "europe-west1" &&
+      google_compute_subnetwork_iam_member.serverless_network_user["api/default"].subnetwork == "acme-dev-vpc-private-europe-west1-b"
+    )
+    error_message = "the team project's serverless robot must get roles/compute.networkUser on the Shared VPC subnet in the host project."
+  }
+
+  assert {
+    condition = (
+      google_project_iam_member.serverless_network_viewer["api"].project == "acme-dev-host-abcd" &&
+      google_project_iam_member.serverless_network_viewer["api"].role == "roles/compute.networkViewer" &&
+      google_project_iam_member.serverless_network_viewer["api"].member == "serviceAccount:service-333333333333@serverless-robot-prod.iam.gserviceaccount.com"
+    )
+    error_message = "the team project's serverless robot must get roles/compute.networkViewer on the host project."
+  }
+
+  assert {
+    condition     = google_pubsub_topic.service["api"].project == "payments-1a2b" && google_pubsub_topic_iam_member.agent_dead_letter_publisher["api"].member == "serviceAccount:service-333333333333@gcp-sa-pubsub.iam.gserviceaccount.com"
+    error_message = "Pub/Sub lives in the team project and its service agent uses the team project number."
+  }
+}
+
+run "service_without_team_uses_host_project" {
+  command = plan
+
+  variables {
+    services = {
+      api = {}
+    }
+  }
+
+  assert {
+    condition     = length(google_compute_subnetwork_iam_member.serverless_network_user) == 0 && length(google_project_iam_member.serverless_network_viewer) == 0
+    error_message = "a host-project service needs no Shared VPC grants."
+  }
+
+  assert {
+    condition     = google_service_account.runtime["api"].project == "acme-dev-host-abcd" && output.services["api"].runtime_service_account == "api-run@acme-dev-host-abcd.iam.gserviceaccount.com"
+    error_message = "a service without project_id stays in the host project."
+  }
+}
+
+# Two services of one team share ONE viewer and ONE subnet binding, so removing
+# one service never revokes the other's grant.
+run "two_services_in_one_team_share_network_grants" {
+  command = plan
+
+  variables {
+    services = {
+      api = {
+        project_id           = "payments-1a2b"
+        project_number       = "333333333333"
+        network_access_group = "payments"
+      }
+      worker = {
+        project_id           = "payments-1a2b"
+        project_number       = "333333333333"
+        network_access_group = "payments"
+      }
+      other = {
+        project_id           = "orders-3c4d"
+        project_number       = "444444444444"
+        network_access_group = "orders"
+      }
+    }
+  }
+
+  assert {
+    condition     = length(google_project_iam_member.serverless_network_viewer) == 2 && length(google_compute_subnetwork_iam_member.serverless_network_user) == 2
+    error_message = "one viewer and one subnet binding per team, not per service."
+  }
+
+  assert {
+    condition     = contains(keys(google_project_iam_member.serverless_network_viewer), "payments") && contains(keys(google_compute_subnetwork_iam_member.serverless_network_user), "payments/default")
+    error_message = "grants are keyed by network_access_group (and subnet), never by project numbers."
+  }
+}
+
+# A secret ref may name a secret in another project (the host's SaaS bridge secret).
+run "team_service_secret_in_host_project" {
+  command = plan
+
+  variables {
+    services = {
+      api = {
+        project_id     = "payments-1a2b"
+        project_number = "333333333333"
+        secrets = {
+          LOCAL = { secret = "local-secret" }
+          SAAS  = { secret = "projects/acme-dev-host-abcd/secrets/supabase-connection" }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = google_secret_manager_secret_iam_member.runtime["api/LOCAL"].project == "payments-1a2b" && google_secret_manager_secret_iam_member.runtime["api/LOCAL"].secret_id == "local-secret"
+    error_message = "a short secret id resolves in the service's project."
+  }
+
+  assert {
+    condition     = google_secret_manager_secret_iam_member.runtime["api/SAAS"].project == "acme-dev-host-abcd" && google_secret_manager_secret_iam_member.runtime["api/SAAS"].secret_id == "supabase-connection" && google_secret_manager_secret_iam_member.runtime["api/SAAS"].member == "serviceAccount:api-run@payments-1a2b.iam.gserviceaccount.com"
+    error_message = "a projects/<p>/secrets/<s> ref grants the runtime SA on that exact secret."
+  }
+}
+
+# -----------------------------------------------------------------------------
+# Runtimes: the default stays a Cloud Run service at the same address.
+# -----------------------------------------------------------------------------
+
+# A service that does not set runtime plans exactly as before: module.service
+# keyed by the service name, no job, and the request alerts.
+run "default_runtime_service_address_present" {
+  command = plan
+
+  variables {
+    enable_app_deploy_wif = true
+    services = {
+      api = {
+        invoker_members = ["serviceAccount:caller@acme-dev-host-abcd.iam.gserviceaccount.com"]
+        github          = { repository_id = "123456789" }
+      }
+    }
+  }
+
+  assert {
+    condition     = keys(module.service) == ["api"] && length(module.job) == 0
+    error_message = "the default runtime must keep module.service[\"api\"] and create no job."
+  }
+
+  assert {
+    condition = (
+      keys(google_cloud_run_v2_service_iam_member.invoker) == ["api/serviceAccount:caller@acme-dev-host-abcd.iam.gserviceaccount.com"] &&
+      keys(google_cloud_run_v2_service_iam_member.deploy) == ["api"] &&
+      length(google_cloud_run_v2_job_iam_member.invoker) == 0 &&
+      length(google_cloud_run_v2_job_iam_member.deploy) == 0
+    )
+    error_message = "invoker and deploy grants of a default-runtime service must stay on the Cloud Run service at the same keys."
+  }
+
+  assert {
+    condition     = keys(google_monitoring_alert_policy.error_ratio) == ["api"] && keys(google_monitoring_alert_policy.latency_p99) == ["api"]
+    error_message = "request alerts of a default-runtime service must keep their keys."
+  }
+
+  assert {
+    condition     = output.services["api"].runtime == "cloud-run" && output.services["api"].job_name == null && output.services["api"].slo_name == null
+    error_message = "the default runtime is cloud-run, with no job and no SLO."
+  }
+
+  assert {
+    condition     = output.github_actions["api"].CLOUD_RUN_SERVICE == "api" && output.github_actions["api"].CLOUD_RUN_JOB == null
+    error_message = "github_actions must name the Cloud Run service for a default-runtime service."
+  }
+
+  assert {
+    condition     = length(google_monitoring_service.slo) == 0 && length(module.slo) == 0
+    error_message = "no SLO may be created unless a service declares one."
+  }
+}
+
+run "job_runtime_creates_job" {
+  command = plan
+
+  variables {
+    enable_app_deploy_wif = true
+    services = {
+      api = {}
+      nightly = {
+        runtime         = "cloud-run-job"
+        timeout         = "3600s"
+        job             = { task_count = 3, parallelism = 1, max_retries = 1 }
+        database        = {}
+        secrets         = { API_KEY = { secret = "api-key" } }
+        invoker_members = ["serviceAccount:scheduler@acme-dev-host-abcd.iam.gserviceaccount.com"]
+        github          = { repository_id = "987654321" }
+      }
+    }
+  }
+
+  assert {
+    condition     = keys(module.service) == ["api"] && keys(module.job) == ["nightly"]
+    error_message = "a cloud-run-job entry must create module.job[<key>] and no Cloud Run service; the other entry stays a service."
+  }
+
+  assert {
+    condition     = google_service_account.runtime["nightly"].account_id == "nightly-run" && keys(module.registry) == ["api", "nightly"]
+    error_message = "a job still gets its runtime SA and its Artifact Registry repo."
+  }
+
+  assert {
+    condition     = keys(google_cloud_run_v2_job_iam_member.invoker) == ["nightly/serviceAccount:scheduler@acme-dev-host-abcd.iam.gserviceaccount.com"] && length(google_cloud_run_v2_service_iam_member.invoker) == 0
+    error_message = "a job's invoker_members must be granted run.invoker on the job, not on a service."
+  }
+
+  assert {
+    condition     = google_cloud_run_v2_job_iam_member.deploy["nightly"].role == "roles/run.developer" && google_cloud_run_v2_job_iam_member.deploy["nightly"].member == "serviceAccount:nightly-deploy@acme-dev-host-abcd.iam.gserviceaccount.com" && !contains(keys(google_cloud_run_v2_service_iam_member.deploy), "nightly")
+    error_message = "the job's deploy SA must get run.developer on the job."
+  }
+
+  assert {
+    condition     = keys(google_monitoring_alert_policy.error_ratio) == ["api"]
+    error_message = "request alerts must not be created for a job."
+  }
+
+  assert {
+    condition     = google_secret_manager_secret_iam_member.runtime["nightly/API_KEY"].member == "serviceAccount:nightly-run@acme-dev-host-abcd.iam.gserviceaccount.com" && keys(module.database) == ["nightly"]
+    error_message = "a job keeps its secret grants and database."
+  }
+
+  assert {
+    condition = (
+      output.services["nightly"].runtime == "cloud-run-job" &&
+      output.services["nightly"].service_name == null &&
+      output.services["nightly"].url == null &&
+      output.github_actions["nightly"].CLOUD_RUN_JOB == "nightly" &&
+      output.github_actions["nightly"].CLOUD_RUN_SERVICE == null
+    )
+    error_message = "a job's outputs must carry its runtime and job name, with no service name or URL."
+  }
+
+  assert {
+    condition = (
+      keys(output.urls) == ["api"] &&
+      output.runtime_service_account_emails["nightly"] == "nightly-run@acme-dev-host-abcd.iam.gserviceaccount.com" &&
+      output.image_repositories["nightly"] == "europe-west1-docker.pkg.dev/acme-dev-host-abcd/nightly/nightly" &&
+      keys(output.sql_connection_names) == ["nightly"]
+    )
+    error_message = "per-service output maps: URLs for services only; SA email, repo and SQL connection name per declared key."
+  }
+}
+
+run "slo_created_when_declared" {
+  command = plan
+
+  override_resource {
+    target          = module.slo["api"].google_monitoring_slo.this
+    override_during = plan
+    values          = { name = "projects/acme-dev-host-abcd/services/cloud-run-api/serviceLevelObjectives/api-availability" }
+  }
+
+  override_resource {
+    target          = module.slo["api"].google_monitoring_alert_policy.burn_rate
+    override_during = plan
+    values          = { id = "projects/acme-dev-host-abcd/alertPolicies/burn" }
+  }
+
+  variables {
+    alert_notification_channel_ids = ["projects/acme-dev-host-abcd/notificationChannels/123"]
+    services = {
+      api = {
+        slo = { goal = 0.999, enable_burn_rate_alert = true }
+      }
+      web = {
+        slo = { sli_type = "latency", latency_threshold = "0.5s" }
+      }
+      batch = {}
+    }
+  }
+
+  assert {
+    condition     = keys(module.slo) == ["api", "web"] && keys(google_monitoring_service.slo) == ["api", "web"]
+    error_message = "an SLO (and its monitored service) must be created exactly for the services that declare one."
+  }
+
+  assert {
+    condition = (
+      google_monitoring_service.slo["api"].service_id == "cloud-run-api" &&
+      google_monitoring_service.slo["api"].basic_service[0].service_type == "CLOUD_RUN" &&
+      google_monitoring_service.slo["api"].basic_service[0].service_labels["service_name"] == "api" &&
+      google_monitoring_service.slo["api"].basic_service[0].service_labels["location"] == "europe-west1"
+    )
+    error_message = "the SLO's monitored service must be a basic CLOUD_RUN service on the Cloud Run service name and region."
+  }
+
+  assert {
+    condition     = module.slo["api"].burn_rate_alert_policy_id != null && module.slo["web"].burn_rate_alert_policy_id == null
+    error_message = "the burn-rate alert must follow slo.enable_burn_rate_alert."
+  }
+
+  assert {
+    condition     = contains(keys(google_project_service.this), "monitoring.googleapis.com")
+    error_message = "an SLO must enable monitoring.googleapis.com."
+  }
+
+  assert {
+    condition     = output.services["api"].slo_name == module.slo["api"].slo_name && output.services["batch"].slo_name == null
+    error_message = "output.services must expose the SLO name, null without one."
   }
 }

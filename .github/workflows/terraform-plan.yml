@@ -36,7 +36,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  TERRAFORM_VERSION: "1.14.3"
+  TERRAFORM_VERSION: "1.17.1"
   # Shared provider plugin cache: each provider version is downloaded once per
   # cache key and reused by every `terraform init` in the job (validate shards,
   # lint, test), instead of re-fetching the ~500MB AWS provider per root. The
@@ -342,6 +342,19 @@ jobs:
         with:
           extra_args: markdownlint --all-files
 
+      # The upstream repository ships placeholder owners on purpose; a fork must
+      # replace them (scripts/init-landing-zone.sh --codeowners) or code-owner
+      # review is silently inert.
+      - name: Fail on placeholder CODEOWNERS (forks only)
+        if: github.repository != 'EdwinKassier/Ashes-Devops-Tools'
+        run: |
+          if grep -n 'your-org' .github/CODEOWNERS; then
+            msg="CODEOWNERS contains your-org placeholders;"
+            msg+=" render real owners with scripts/init-landing-zone.sh --codeowners."
+            echo "::error file=.github/CODEOWNERS::${msg}"
+            exit 1
+          fi
+
       - name: Check conventional commit messages
         # commitizen's pre-commit hook is stage-restricted to `commit-msg` and
         # validates a single message, so it cannot run via `pre-commit run
@@ -368,8 +381,42 @@ jobs:
             cz check --rev-range "HEAD~1..HEAD"
           fi
 
+      - name: Breaking-change commits must update UPGRADING.md
+        # A commit whose subject has a `!:` type marker or whose body has a
+        # `BREAKING CHANGE` footer needs a manual-steps entry in UPGRADING.md
+        # somewhere in the PR. Uses the full-history checkout above and the
+        # same merge-base range as the commit check.
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags origin "${{ github.base_ref }}"
+          base_sha="$(git merge-base "origin/${{ github.base_ref }}" HEAD)"
+          if git log --format=%B "${base_sha}..HEAD" \
+              | grep -Eq '^[a-z]+(\([^)]*\))?!:|^BREAKING[ -]CHANGE'; then
+            if ! git diff --name-only "${base_sha}..HEAD" | grep -qx 'UPGRADING.md'; then
+              msg="A commit in this PR is marked breaking (!: or BREAKING CHANGE)"
+              msg+=" but UPGRADING.md is not in the diff. Add an entry under 'Unreleased'."
+              echo "::error::${msg}"
+              exit 1
+            fi
+          fi
+
       - name: Consistency guards (canonical region regex + provider pins)
         run: ./scripts/check-consistency.sh
+
+      # One non-sensitive `contract` output per producer root; consumers read
+      # only .outputs.contract; contract variable types identical per upstream.
+      - name: Cross-root contracts
+        run: ./scripts/check-contracts.sh
+
+      - name: Scaffold fixtures match the scaffolder output
+        run: make scaffold-fixtures-check
+
+      - name: Config schema (landing-zone.yaml examples and fixtures)
+        # Accepted risk: version-pinned lint tool installed without hashes
+        # (dev-only, read-only job; no secrets in scope).
+        run: |
+          python -m pip install check-jsonschema==0.39.0
+          make config-check
 
       - name: README / CLAUDE.md counts match the tree
         run: ./scripts/check-docs-counts.sh
@@ -393,8 +440,8 @@ jobs:
           python -m pip install --no-deps --require-hashes -r .github/requirements/yamllint.txt
           make test-scripts
 
-      - name: Library-only modules (informational)
-        run: python3 scripts/check-module-usage.py
+      - name: Library-only modules (fails on unmarked unreferenced)
+        run: python3 scripts/check-module-usage.py --check
 
   security:
     name: Security
@@ -531,7 +578,7 @@ jobs:
 
       # Pinned static release binary, sha256-verified (digest from the GitHub
       # release asset) before it is made executable. No conftest: the rego unit
-      # tests in policies/opa are the contract.
+      # tests in policies/opa and policies/opa-destructive are the contract.
       - name: Install OPA
         env:
           OPA_VERSION: "1.22.2"
@@ -545,10 +592,10 @@ jobs:
           opa version
 
       - name: Check policies (strict)
-        run: opa check --strict policies/opa
+        run: opa check --strict policies/opa policies/opa-destructive
 
       - name: Run policy unit tests
-        run: opa test policies/opa -v
+        run: opa test policies/opa policies/opa-destructive -v
 
   codeowners:
     name: CODEOWNERS placeholders

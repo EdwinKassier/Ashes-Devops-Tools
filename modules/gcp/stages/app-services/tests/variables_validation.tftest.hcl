@@ -10,6 +10,8 @@ variables {
   environment    = "dev"
   network_id     = "projects/acme-dev-host-abcd/global/networks/acme-dev-vpc"
   subnetwork_id  = "projects/acme-dev-host-abcd/regions/europe-west1/subnetworks/private"
+
+  github_repository_owner_id = "42"
 }
 
 run "rejects_repository_name_instead_of_id" {
@@ -39,6 +41,77 @@ run "rejects_short_ref" {
   variables {
     enable_app_deploy_wif = true
     services              = { api = { github = { repository_id = "123", ref = "main" } } }
+  }
+
+  expect_failures = [var.services]
+}
+
+# The provider condition is the owner pin, so a deploy identity needs the ID.
+run "rejects_github_service_without_owner_id" {
+  command = plan
+
+  variables {
+    enable_app_deploy_wif      = true
+    github_repository_owner_id = null
+    services                   = { api = { github = { repository_id = "123" } } }
+  }
+
+  expect_failures = [var.github_repository_owner_id]
+}
+
+run "rejects_non_numeric_owner_id" {
+  command = plan
+
+  variables {
+    github_repository_owner_id = "acme"
+  }
+
+  expect_failures = [var.github_repository_owner_id]
+}
+
+# ref / environment become principalSet values: no quote, space or wildcard.
+run "rejects_ref_with_quote" {
+  command = plan
+
+  variables {
+    enable_app_deploy_wif = true
+    services              = { api = { github = { repository_id = "123", ref = "refs/heads/main\" || true" } } }
+  }
+
+  expect_failures = [var.services]
+}
+
+run "rejects_environment_with_space" {
+  command = plan
+
+  variables {
+    enable_app_deploy_wif = true
+    services              = { api = { github = { repository_id = "123", environment = "prod env" } } }
+  }
+
+  expect_failures = [var.services]
+}
+
+# environment is the last '/'-joined part of repo_ref_env: a '/' would let
+# ref "refs/heads/a" + env "b/c" collide with ref "refs/heads/a/b" + env "c".
+run "rejects_environment_with_slash" {
+  command = plan
+
+  variables {
+    enable_app_deploy_wif = true
+    services              = { api = { github = { repository_id = "123", environment = "prod/eu" } } }
+  }
+
+  expect_failures = [var.services]
+}
+
+# "-" is the mapped value of a token WITHOUT an environment claim.
+run "rejects_environment_sentinel" {
+  command = plan
+
+  variables {
+    enable_app_deploy_wif = true
+    services              = { api = { github = { repository_id = "123", environment = "-" } } }
   }
 
   expect_failures = [var.services]
@@ -172,5 +245,93 @@ run "rejects_bad_pubsub_kms_key" {
   expect_failures = [var.pubsub_kms_key_name]
   variables {
     pubsub_kms_key_name = "pubsub-key"
+  }
+}
+
+run "rejects_team_project_without_number" {
+  command = plan
+
+  variables {
+    services = { api = { project_id = "payments-1a2b" } }
+  }
+
+  expect_failures = [var.services]
+}
+
+run "rejects_malformed_team_project_number" {
+  command = plan
+
+  variables {
+    services = { api = { project_id = "payments-1a2b", project_number = "abc" } }
+  }
+
+  expect_failures = [var.services]
+}
+
+run "rejects_network_access_true_without_foreign_project" {
+  command = plan
+
+  variables {
+    services = { api = { grant_network_access = true } }
+  }
+
+  expect_failures = [var.services]
+}
+
+run "rejects_network_access_false_with_foreign_project" {
+  command = plan
+
+  variables {
+    services = { api = { project_id = "payments-1a2b", project_number = "333333333333", grant_network_access = false } }
+  }
+
+  expect_failures = [var.services]
+}
+
+run "rejects_unknown_runtime" {
+  command         = plan
+  expect_failures = [var.services]
+  variables {
+    services = { api = { runtime = "lambda" } }
+  }
+}
+
+run "rejects_unauthenticated_job" {
+  command         = plan
+  expect_failures = [var.services]
+  variables {
+    services = { api = { runtime = "cloud-run-job", enable_unauthenticated = true, ingress = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER" } }
+  }
+}
+
+run "rejects_slo_on_job" {
+  command         = plan
+  expect_failures = [var.services]
+  variables {
+    services = { api = { runtime = "cloud-run-job", slo = {} } }
+  }
+}
+
+run "rejects_zero_job_task_count" {
+  command         = plan
+  expect_failures = [var.services]
+  variables {
+    services = { api = { runtime = "cloud-run-job", job = { task_count = 0 } } }
+  }
+}
+
+run "rejects_slo_goal_of_one" {
+  command         = plan
+  expect_failures = [var.services]
+  variables {
+    services = { api = { slo = { goal = 1 } } }
+  }
+}
+
+run "rejects_unknown_sli_type" {
+  command         = plan
+  expect_failures = [var.services]
+  variables {
+    services = { api = { slo = { sli_type = "throughput" } } }
   }
 }

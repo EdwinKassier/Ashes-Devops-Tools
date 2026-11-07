@@ -55,14 +55,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.17, < 2.0 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.46.0, < 7.0.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.54.0 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.72.0 |
 
 
 
@@ -71,11 +71,13 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_ssoadmin_account_assignment.this (modules/aws/iam/iam-identity-center/main.tf#L59)
-- resource.aws_ssoadmin_instance_access_control_attributes.this (modules/aws/iam/iam-identity-center/main.tf#L72)
-- resource.aws_ssoadmin_managed_policy_attachment.this (modules/aws/iam/iam-identity-center/main.tf#L43)
-- resource.aws_ssoadmin_permission_set.this (modules/aws/iam/iam-identity-center/main.tf#L33)
-- resource.aws_ssoadmin_permission_set_inline_policy.this (modules/aws/iam/iam-identity-center/main.tf#L51)
+- resource.aws_ssoadmin_account_assignment.this (modules/aws/iam/iam-identity-center/main.tf#L106)
+- resource.aws_ssoadmin_customer_managed_policy_attachment.this (modules/aws/iam/iam-identity-center/main.tf#L73)
+- resource.aws_ssoadmin_instance_access_control_attributes.this (modules/aws/iam/iam-identity-center/main.tf#L119)
+- resource.aws_ssoadmin_managed_policy_attachment.this (modules/aws/iam/iam-identity-center/main.tf#L65)
+- resource.aws_ssoadmin_permission_set.this (modules/aws/iam/iam-identity-center/main.tf#L55)
+- resource.aws_ssoadmin_permission_set_inline_policy.this (modules/aws/iam/iam-identity-center/main.tf#L85)
+- data source.aws_identitystore_group.this (modules/aws/iam/iam-identity-center/main.tf#L93)
 - data source.aws_partition.current (modules/aws/iam/iam-identity-center/partition.tf#L3)
 - data source.aws_ssoadmin_instances.this (modules/aws/iam/iam-identity-center/main.tf#L12)
 
@@ -85,9 +87,10 @@ The following resources are created:
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_abac_attributes"></a> [abac\_attributes](#input\_abac\_attributes) | Map of ABAC attribute key to the list of attribute sources (identity-store or IdP attribute paths) that populate it. Only used when enable\_abac is true. | `map(list(string))` | `{}` | no |
-| <a name="input_assignments"></a> [assignments](#input\_assignments) | Map of assignment key to an assignment binding a permission set to a principal (GROUP or USER) in a target AWS account. permission\_set must be a key in permission\_sets. Prefer GROUP principals; reserve USER for the management account only. | <pre>map(object({<br/>    permission_set = string<br/>    principal_type = string # one of: GROUP, USER<br/>    principal_id   = string # Identity Store group or user ID<br/>    account_id     = string # Target AWS account ID<br/>  }))</pre> | `{}` | no |
+| <a name="input_account_ids"></a> [account\_ids](#input\_account\_ids) | Map of account key (e.g. shared\_services) to 12-digit AWS account ID, used to resolve assignments that set account\_key. | `map(string)` | `{}` | no |
+| <a name="input_assignments"></a> [assignments](#input\_assignments) | Map of assignment key to an assignment binding a permission set to a principal in a target AWS account. permission\_set must be a key in permission\_sets. Principal: set exactly one of principal\_id (Identity Store group or user ID) or group\_display\_name (looked up in the Identity Store by DisplayName; implies a GROUP). Account: set exactly one of account\_id or account\_key (resolved through account\_ids). Prefer GROUP principals; reserve USER for the management account only. | <pre>map(object({<br/>    permission_set     = string<br/>    principal_type     = optional(string, "GROUP") # one of: GROUP, USER<br/>    principal_id       = optional(string)          # Identity Store group or user ID<br/>    group_display_name = optional(string)          # Identity Store group DisplayName<br/>    account_id         = optional(string)          # Target AWS account ID<br/>    account_key        = optional(string)          # Key into account_ids<br/>  }))</pre> | `{}` | no |
 | <a name="input_enable_abac"></a> [enable\_abac](#input\_enable\_abac) | Whether to enable attribute-based access control on the Identity Center instance, allowing session/IdP attributes to be referenced in permission-set policies via aws:PrincipalTag. | `bool` | `false` | no |
-| <a name="input_permission_sets"></a> [permission\_sets](#input\_permission\_sets) | Map of permission set name to its definition. session\_duration is an ISO-8601 duration (e.g. PT1H). managed\_policy\_arns are AWS-managed policy ARNs attached to the set; inline\_policy is an optional inline IAM policy JSON document. | <pre>map(object({<br/>    description         = string<br/>    session_duration    = string<br/>    managed_policy_arns = optional(list(string), [])<br/>    inline_policy       = optional(string, "")<br/>  }))</pre> | <pre>{<br/>  "AdministratorAccess": {<br/>    "description": "Full administrative access. Assign only to break-glass groups.",<br/>    "managed_policy_arns": [<br/>      "arn:aws:iam::aws:policy/AdministratorAccess"<br/>    ],<br/>    "session_duration": "PT1H"<br/>  },<br/>  "ReadOnly": {<br/>    "description": "Organization-wide read-only access for auditors and viewers.",<br/>    "managed_policy_arns": [<br/>      "arn:aws:iam::aws:policy/ReadOnlyAccess"<br/>    ],<br/>    "session_duration": "PT1H"<br/>  }<br/>}</pre> | no |
+| <a name="input_permission_sets"></a> [permission\_sets](#input\_permission\_sets) | Map of permission set name to its definition. session\_duration is an ISO-8601 duration (e.g. PT1H). managed\_policy\_names are AWS-managed policy names (the ARN is built for the running partition: aws, aws-us-gov or aws-cn) and managed\_policy\_arns are full policy ARNs (AWS-managed written out); customer\_managed\_policies reference policies by name and path that already exist in the target accounts; all three attach to the set; inline\_policy is an optional inline IAM policy JSON document. | <pre>map(object({<br/>    description         = string<br/>    session_duration    = string<br/>    managed_policy_arns = optional(list(string), [])<br/>    # AWS-managed policy names (e.g. "ReadOnlyAccess"); the ARN is built for the running partition.<br/>    managed_policy_names = optional(list(string), [])<br/>    inline_policy        = optional(string, "")<br/>    # Customer-managed policies (must already exist in every target account); path defaults to "/".<br/>    customer_managed_policies = optional(list(object({<br/>      name = string<br/>      path = optional(string, "/")<br/>    })), [])<br/>  }))</pre> | <pre>{<br/>  "AdministratorAccess": {<br/>    "description": "Full administrative access. Assign only to break-glass groups.",<br/>    "managed_policy_names": [<br/>      "AdministratorAccess"<br/>    ],<br/>    "session_duration": "PT1H"<br/>  },<br/>  "ReadOnly": {<br/>    "description": "Organization-wide read-only access for auditors and viewers.",<br/>    "managed_policy_names": [<br/>      "ReadOnlyAccess"<br/>    ],<br/>    "session_duration": "PT1H"<br/>  }<br/>}</pre> | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 
 ## Outputs

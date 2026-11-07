@@ -430,6 +430,13 @@ variable "enable_pam" {
   default     = false
 }
 
+variable "enable_network_connectivity_center" {
+  description = "Add the Network Connectivity Center roles to the folder-scoped stage roles: network-hub SAs (shared folder) get roles/networkconnectivity.hubAdmin + spokeAdmin (plan: hubViewer); each workload SA (its own environment folder) gets roles/networkconnectivity.spokeAdmin (plan: hubViewer). Needed before the opt-in NCC hub or any NCC spoke is applied. Default false."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "enable_phase0_admin_impersonation" {
   description = "Let user:<admin_email> impersonate the terraform-admin (gcp-bootstrap apply) SA. Needed for the documented phase-0 first apply, which runs as a human admin. Set false on pass 2, once gcp-bootstrap applies through TFC dynamic credentials, so no standing human path to the bootstrap apply identity remains."
   type        = bool
@@ -447,8 +454,19 @@ variable "guardrail_owner_mode" {
   }
 }
 
+variable "guardrails_workspace" {
+  description = "TFC workspace (envs/gcp/guardrails) that applies the org deny policies as the guardrails SA when guardrail_owner_mode = \"separate\". Its plan phase is bound to <prefix>-guardrails-plan and its apply phase to <prefix>-guardrails-apply, by the immutable ID in tfc_workspace_ids only (never by name); a production estate fails the plan without that ID. Null = no workspace identity, only the guardrail_owner_members break-glass path."
+  type        = string
+  default     = "gcp-guardrails"
+
+  validation {
+    condition     = var.guardrails_workspace == null || can(regex("^[A-Za-z0-9_-]+$", coalesce(var.guardrails_workspace, "x")))
+    error_message = "guardrails_workspace must be a TFC workspace name (letters, digits, - and _) or null."
+  }
+}
+
 variable "guardrail_owner_members" {
-  description = "Principals allowed to impersonate the guardrails SA (roles/iam.serviceAccountTokenCreator) when guardrail_owner_mode = \"separate\". Use a group whose membership is granted just in time (PAM) and is disjoint from the people who can change the gcp-organization workspace. Empty = nobody can use the SA until set."
+  description = "Break-glass principals allowed to impersonate the guardrails SA (roles/iam.serviceAccountTokenCreator) when guardrail_owner_mode = \"separate\"; routine changes go through the guardrails_workspace. Use a group whose membership is granted just in time (PAM) and is disjoint from the people who can change the gcp-organization workspace. Empty = nobody can use the SA until set."
   type        = list(string)
   default     = []
 

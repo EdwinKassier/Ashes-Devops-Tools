@@ -10,12 +10,13 @@
 # extend it to attach a quarantine SG and drive snapshot forensics.
 
 # Package the Lambda source. The archive provider runs locally at plan time and
-# writes files/isolate.zip; that artifact is a build output and is not tracked.
+# writes the zip under the calling root's .terraform/tmp (git-ignored, and
+# writable even when the module itself is vendored read-only by a git:: source).
 data "archive_file" "isolate" {
   count       = var.enable_incident_response ? 1 : 0
   type        = "zip"
   source_file = "${path.module}/files/isolate.py"
-  output_path = "${path.module}/files/isolate.zip"
+  output_path = "${path.root}/.terraform/tmp/incident-response-isolate.zip"
 }
 
 # Execution role for the isolation Lambda.

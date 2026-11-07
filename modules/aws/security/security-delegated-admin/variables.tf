@@ -40,6 +40,13 @@ variable "register_identity_center_admin" {
   default     = false
 }
 
+variable "register_cloudtrail_admin" {
+  description = "Register security_tooling_account_id as the cloudtrail.amazonaws.com delegated administrator here, through the generic Organizations API (default set only). Set false when aws-organization registers it through CloudTrail (enable_cloudtrail_delegated_admin). Default true: unchanged."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
 variable "backup_account_id" {
   description = "12-digit account ID of the dedicated backup account, registered as the AWS Backup delegated administrator. Null = security_tooling_account_id."
   type        = string

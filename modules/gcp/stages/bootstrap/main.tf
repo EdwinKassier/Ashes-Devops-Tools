@@ -72,11 +72,14 @@ module "terraform_admin_sa" {
 
 # The phase-0 human path reaches the org-level security-admin identity. On a
 # production estate it must not be open-ended: disable it after the TFC
-# handover, or at least time-box it.
-check "phase0_impersonation_is_time_boxed" {
-  assert {
-    condition     = !var.enable_phase0_admin_impersonation || length(var.production_workload_environments) == 0 || var.phase0_admin_impersonation_expires_at != null
-    error_message = "Production environments exist and ${var.admin_email} can impersonate terraform-admin (org security admin) with no expiry. After the TFC handover set enable_phase0_admin_impersonation = false, or set phase0_admin_impersonation_expires_at (RFC 3339) to time-box it."
+# handover, or time-box it. A precondition (not a check) so the plan fails; it
+# only tests that an expiry is set and never compares it with the current time.
+resource "terraform_data" "phase0_impersonation_is_time_boxed" {
+  lifecycle {
+    precondition {
+      condition     = !var.enable_phase0_admin_impersonation || length(var.production_workload_environments) == 0 || var.phase0_admin_impersonation_expires_at != null
+      error_message = "Production environments exist and ${var.admin_email} can impersonate terraform-admin (org security admin) with no expiry. After the TFC handover set enable_phase0_admin_impersonation = false, or set phase0_admin_impersonation_expires_at (RFC 3339; gcp.phase0_admin_impersonation_expires_at in config) to time-box it."
+    }
   }
 }
 
@@ -88,10 +91,11 @@ locals {
 # ─── Workload Identity Federation ────────────────────────────────────────────
 
 # GitHub Actions WIF: OFF by default — no workflow in this repo requests
-# `id-token: write`, so a standing trust was unused privilege. When enabled it
-# trusts ONE repository by its immutable numeric IDs (repository_id +
-# repository_owner_id, never the renameable names), only from refs/heads/main,
-# and binds it to the READ-ONLY organization PLAN SA — never an apply/admin SA.
+# `id-token: write`, so a standing trust was unused privilege. When enabled the
+# provider condition is the canonical owner pin (repository_owner_id, the form
+# custom.wifProviderTenantPinned accepts), and ONE repository is bound by its
+# immutable repository_id on refs/heads/main only (attribute.repo_ref), to the
+# READ-ONLY organization PLAN SA — never an apply/admin SA.
 module "gh_oidc" {
   source = "../../iam/workload-identity"
   count  = var.enable_github_wif ? 1 : 0
@@ -101,15 +105,8 @@ module "gh_oidc" {
   display_name = "GitHub Actions Pool"
 
   enable_github_provider     = true
-  github_organization        = var.github_org
   github_repository_owner_id = var.github_repository_owner_id
-
-  github_allowed_refs = ["refs/heads/main"]
-  github_attribute_condition_override = join(" && ", [
-    "assertion.repository_owner_id == '${coalesce(var.github_repository_owner_id, "unset")}'",
-    "assertion.repository_id == '${coalesce(var.github_repository_id, "unset")}'",
-    "assertion.ref == 'refs/heads/main'",
-  ])
+  github_allowed_refs        = ["refs/heads/main"]
 
   github_sa_bindings = [
     {
@@ -140,12 +137,14 @@ module "tfc_oidc" {
   tfc_organization_id = var.tfc_organization_id
   tfc_project_ids     = var.tfc_project_ids
 
-  tfc_sa_bindings = [
+  # gcp-guardrails is appended only when its workspace ID is known (by ID only,
+  # never by name; service_accounts.tf).
+  tfc_sa_bindings = concat([
     for key, sa in local.tfc_identities : {
       workspace_name        = sa.workspace
       workspace_id          = lookup(var.tfc_workspace_ids, sa.workspace, null)
       run_phase             = sa.phase
       service_account_email = local.stage_sa_email[key]
     }
-  ]
+  ], local.guardrails_tfc_bindings)
 }

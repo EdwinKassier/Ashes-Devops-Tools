@@ -46,6 +46,24 @@ run "secure_defaults" {
     condition     = length(terraform_data.deletion_protection_guard) == 0
     error_message = "Deletion-protection guard must be absent by default."
   }
+
+  assert {
+    condition     = google_compute_network.vpc.network_firewall_policy_enforcement_order == null
+    error_message = "The firewall policy enforcement order must stay unset by default (API default AFTER_CLASSIC_FIREWALL)."
+  }
+}
+
+run "enforcement_order_before_classic" {
+  command = plan
+
+  variables {
+    network_firewall_policy_enforcement_order = "BEFORE_CLASSIC_FIREWALL"
+  }
+
+  assert {
+    condition     = google_compute_network.vpc.network_firewall_policy_enforcement_order == "BEFORE_CLASSIC_FIREWALL"
+    error_message = "An explicit enforcement order must reach the network."
+  }
 }
 
 run "shared_vpc_host_and_guard_enabled" {

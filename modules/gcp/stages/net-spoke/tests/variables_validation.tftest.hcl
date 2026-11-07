@@ -86,3 +86,49 @@ run "rejects_flow_log_export_without_destination" {
   }
   expect_failures = [var.flow_logs_export]
 }
+
+run "rejects_invalid_firewall_mode" {
+  command = plan
+
+  variables {
+    firewall_mode = "tags"
+  }
+
+  expect_failures = [var.firewall_mode]
+}
+
+# ── connectivity / ncc ─────────────────────────────────────────────────────────
+
+run "rejects_unknown_connectivity" {
+  command = plan
+
+  variables {
+    connectivity = "transit"
+  }
+
+  expect_failures = [var.connectivity]
+}
+
+run "rejects_ncc_without_hub_id" {
+  command = plan
+
+  variables {
+    connectivity = "ncc"
+  }
+
+  expect_failures = [var.ncc]
+}
+
+run "rejects_center_group_for_spoke" {
+  command = plan
+
+  variables {
+    connectivity = "ncc"
+    ncc = {
+      hub_id = "projects/mock-hub-project/locations/global/hubs/mock-hub"
+      group  = "center"
+    }
+  }
+
+  expect_failures = [var.ncc]
+}

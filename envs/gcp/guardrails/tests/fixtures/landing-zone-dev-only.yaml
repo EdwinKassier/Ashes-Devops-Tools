@@ -1,0 +1,9 @@
+# Fixture: no production environment, so no containment deny policy.
+org:
+  prefix: acme
+  domain: acme.io
+gcp:
+  break_glass_group: gcp-break-glass@acme.io
+  environments:
+    dev:
+      display_name: Development

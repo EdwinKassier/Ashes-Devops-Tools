@@ -22,6 +22,9 @@ locals {
     tfc_organization = try(tostring(local.lz.org.tfc.organization), null)
     enable_supabase  = try(tobool(local.lz.saas.supabase), null)
     enable_vercel    = try(tobool(local.lz.saas.vercel), null)
+    # Bridge rotation counter: published as the non-sensitive bridge_version
+    # output that a workload's write-only *_wo_version reads.
+    bridge_rotation = try(tonumber(local.lz.saas.bridge_rotation), null)
     # Per-stack settings: saas.stacks.<name> over saas.defaults (no secrets:
     # the database password stays a sensitive TFC variable).
     stacks   = try({ for k, v in local.lz.saas.stacks : k => v }, {})
@@ -44,4 +47,5 @@ locals {
   tfc_organization = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
   enable_supabase  = var.enable_supabase != null ? var.enable_supabase : coalesce(local.cfg.enable_supabase, true)
   enable_vercel    = var.enable_vercel != null ? var.enable_vercel : coalesce(local.cfg.enable_vercel, true)
+  bridge_rotation  = coalesce(var.bridge_rotation, local.cfg.bridge_rotation, 1)
 }

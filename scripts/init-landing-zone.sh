@@ -34,6 +34,17 @@ GITHUB_OWNER=""
 SUPABASE_ORG=""
 VERCEL_TEAM=""
 GITHUB_REPO=""
+AUDIT_BUCKET_LOCK=""
+AWS_CONFIG_RECORDERS=""
+PROFILE=""
+MONTHLY_BUDGET=""
+VCS_REPO=""
+VCS_APP_ID=""
+CODEOWNERS=false
+CODEOWNERS_OUTPUT="${REPO_ROOT}/.github/CODEOWNERS"
+PLATFORM_TEAM=""
+SECURITY_TEAM=""
+ASSUME_YES=false
 REBRAND=false
 FORCE=false
 INTERACTIVE=true
@@ -68,6 +79,33 @@ Options:
   --supabase-org ID             Supabase organization ID (saas.defaults.supabase.organization_id).
   --vercel-team ID              Vercel team ID (saas.defaults.vercel.team_id).
   --github-repo OWNER/REPO      Repository of the first SaaS stack, "web" (saas.stacks.web).
+  --audit-bucket-lock BOOL      true|false: irreversible WORM lock on the org audit-log bucket
+                                (gcp.enable_audit_bucket_lock). Default false; prompted for
+                                explicitly when interactive.
+  --aws-config-recorders BOOL   true|false: greenfield second pass. true sets
+                                aws.enable_org_config_recorders and
+                                aws.enable_config_recorder_scp (org-wide Config recorders
+                                plus the recorder SCP). Use it only once aws-security has
+                                applied and no legacy recorders exist; an existing estate
+                                follows docs/runbooks/aws-config-recorder-migration.md.
+                                Default false.
+  --profile production|starter  Cost/assurance profile (org.profile). Default production, about
+                                $1.4-1.9k/month idle on AWS; interactive runs show that figure
+                                and ask for confirmation. starter requires --monthly-budget.
+  --monthly-budget USD          Monthly budget in USD (org.monthly_budget_usd); required with
+                                --profile starter.
+  --yes                         Skip the production-profile cost confirmation.
+  --vcs-repo OWNER/REPO         Connect every tfc-admin workspace to this repository
+                                (org.tfc.vcs_repo.identifier, branch main).
+  --vcs-github-app-installation-id ID
+                                GitHub App installation ID for vcs_repo (ghain-...). Without it
+                                the placeholder stays and is reported as still to fill in.
+  --codeowners                  Also render templates/CODEOWNERS.tftpl to .github/CODEOWNERS.
+                                Needs --github-owner (or the team flags below).
+  --codeowners-output PATH      Where to write it. Default .github/CODEOWNERS (needs --force
+                                when the file exists).
+  --platform-team @ORG/TEAM     Platform owners. Default @<github-owner>/platform-team.
+  --security-team @ORG/TEAM     Security owners. Default @<github-owner>/security-team.
   --output PATH                 Output file. Default config/landing-zone.yaml.
   --rebrand                     Also replace the "Ashes DevOps Tools" title in README.md.
   --force                       Overwrite an existing output file.
@@ -104,6 +142,17 @@ while [[ $# -gt 0 ]]; do
     --supabase-org) need_arg "$@"; SUPABASE_ORG="$2"; shift 2 ;;
     --vercel-team) need_arg "$@"; VERCEL_TEAM="$2"; shift 2 ;;
     --github-repo) need_arg "$@"; GITHUB_REPO="$2"; shift 2 ;;
+    --audit-bucket-lock) need_arg "$@"; AUDIT_BUCKET_LOCK="$2"; shift 2 ;;
+    --aws-config-recorders) need_arg "$@"; AWS_CONFIG_RECORDERS="$2"; shift 2 ;;
+    --profile) need_arg "$@"; PROFILE="$2"; shift 2 ;;
+    --monthly-budget) need_arg "$@"; MONTHLY_BUDGET="$2"; shift 2 ;;
+    --vcs-repo) need_arg "$@"; VCS_REPO="$2"; shift 2 ;;
+    --vcs-github-app-installation-id) need_arg "$@"; VCS_APP_ID="$2"; shift 2 ;;
+    --codeowners) CODEOWNERS=true; shift ;;
+    --codeowners-output) need_arg "$@"; CODEOWNERS_OUTPUT="$2"; shift 2 ;;
+    --platform-team) need_arg "$@"; PLATFORM_TEAM="$2"; shift 2 ;;
+    --security-team) need_arg "$@"; SECURITY_TEAM="$2"; shift 2 ;;
+    --yes) ASSUME_YES=true; shift ;;
     --output) need_arg "$@"; OUTPUT="$2"; shift 2 ;;
     --rebrand) REBRAND=true; shift ;;
     --force) FORCE=true; shift ;;
@@ -117,6 +166,13 @@ done
 [[ -f "${EXAMPLE}" ]] || die "schema not found: ${EXAMPLE}"
 if [[ -e "${OUTPUT}" && "${FORCE}" != true ]]; then
   die "${OUTPUT} already exists (use --force to overwrite)"
+fi
+CODEOWNERS_TEMPLATE="${REPO_ROOT}/templates/CODEOWNERS.tftpl"
+if [[ "${CODEOWNERS}" == true ]]; then
+  [[ -f "${CODEOWNERS_TEMPLATE}" ]] || die "template not found: ${CODEOWNERS_TEMPLATE}"
+  if [[ -e "${CODEOWNERS_OUTPUT}" && "${FORCE}" != true ]]; then
+    die "${CODEOWNERS_OUTPUT} already exists (use --force to overwrite)"
+  fi
 fi
 
 # prompt VAR "Question" [default]: only asks when interactive and VAR is empty.
@@ -153,6 +209,8 @@ default_prefix=""
 [[ "${ORG_NAME}" =~ ^[a-z][a-z0-9-]{0,9}$ ]] && default_prefix="${ORG_NAME}"
 prompt PREFIX "GCP project-ID prefix (<= 10 chars)" "${default_prefix}"
 PREFIX="${PREFIX:-${default_prefix}}"
+prompt PROFILE "Cost/assurance profile (production|starter)" "production"
+PROFILE="${PROFILE:-production}"
 prompt DISPLAY_NAME "Organization display name" "${ORG_NAME}"
 DISPLAY_NAME="${DISPLAY_NAME:-${ORG_NAME}}"
 prompt TFC_ORG "Terraform Cloud organization" "${ORG_NAME}"
@@ -163,6 +221,16 @@ if has_cloud gcp; then
   prompt BILLING_ACCOUNT "GCP billing account ID (blank to fill in later)"
   prompt GCP_ADMIN_EMAIL "GCP organization admin email (blank to fill in later)"
   prompt GCP_REGION "Default GCP region" "europe-west2"
+  prompt AUDIT_BUCKET_LOCK "Lock the org audit-log bucket (WORM, IRREVERSIBLE; true/false)" "false"
+fi
+AUDIT_BUCKET_LOCK="${AUDIT_BUCKET_LOCK:-false}"
+if has_cloud saas; then
+  prompt SUPABASE_ORG "Supabase organization ID"
+  prompt VERCEL_TEAM "Vercel team ID"
+  prompt GITHUB_REPO "GitHub repository of the first SaaS stack (OWNER/REPO)"
+fi
+if [[ "${PROFILE}" == starter ]]; then
+  prompt MONTHLY_BUDGET "Monthly budget in USD (required for the starter profile)"
 fi
 if has_cloud aws; then
   prompt AWS_MGMT_ACCOUNT "AWS management account ID (12 digits, blank to fill in later)"
@@ -170,6 +238,15 @@ if has_cloud aws; then
 fi
 GCP_REGION="${GCP_REGION:-europe-west2}"
 AWS_REGION="${AWS_REGION:-eu-west-2}"
+
+# Missing SaaS identifiers: report every one, then exit 2 (before any file is written).
+if has_cloud saas; then
+  missing=0
+  [[ -n "${SUPABASE_ORG}" ]] || { printf 'MISSING: --supabase-org (saas.defaults.supabase.organization_id)\n' >&2; missing=1; }
+  [[ -n "${VERCEL_TEAM}" ]] || { printf 'MISSING: --vercel-team (saas.defaults.vercel.team_id)\n' >&2; missing=1; }
+  [[ -n "${GITHUB_REPO}" ]] || { printf 'MISSING: --github-repo (saas.stacks.web.vercel.github_repo)\n' >&2; missing=1; }
+  [[ "${missing}" -eq 0 ]] || exit 2
+fi
 
 # ── Validation (mirrors the Terraform variable validations) ─────────────────
 [[ "${ORG_NAME}" =~ ^[a-z][a-z0-9-]{1,30}$ ]] ||
@@ -219,8 +296,58 @@ fi
 if [[ -n "${GITHUB_REPO}" ]]; then
   [[ "${GITHUB_REPO}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die "--github-repo must be OWNER/REPO"
 fi
+case "${PROFILE}" in production | starter) ;; *) die "--profile must be production or starter" ;; esac
+if [[ "${PROFILE}" == starter && -z "${MONTHLY_BUDGET}" ]]; then
+  die "--monthly-budget is required with --profile starter (org.monthly_budget_usd)"
+fi
+if [[ -n "${MONTHLY_BUDGET}" ]]; then
+  [[ "${MONTHLY_BUDGET}" =~ ^[0-9]+(\.[0-9]+)?$ ]] || die "--monthly-budget must be a positive number (USD)"
+  [[ "${MONTHLY_BUDGET}" =~ [1-9] ]] || die "--monthly-budget must be greater than zero"
+fi
+if [[ -n "${VCS_REPO}" ]]; then
+  [[ "${VCS_REPO}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die "--vcs-repo must be OWNER/REPO"
+fi
+if [[ -n "${VCS_APP_ID}" ]]; then
+  [[ "${VCS_APP_ID}" =~ ^[A-Za-z0-9_-]+$ ]] || die "--vcs-github-app-installation-id is not a valid ID"
+fi
+if [[ "${CODEOWNERS}" == true ]]; then
+  [[ -n "${PLATFORM_TEAM}" && -n "${SECURITY_TEAM}" || -n "${GITHUB_OWNER}" ]] ||
+    die "--codeowners needs --github-owner (or both --platform-team and --security-team)"
+  PLATFORM_TEAM="${PLATFORM_TEAM:-@${GITHUB_OWNER}/platform-team}"
+  SECURITY_TEAM="${SECURITY_TEAM:-@${GITHUB_OWNER}/security-team}"
+  for t in "${PLATFORM_TEAM}" "${SECURITY_TEAM}"; do
+    [[ "${t}" =~ ^@[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_.-]+$ ]] || die "owner '${t}' must look like @org/team"
+  done
+fi
 [[ "${GCP_REGION}" =~ ^[a-z]+-[a-z]+[0-9]+$ ]] || die "--gcp-region '${GCP_REGION}' is not a GCP region name"
 [[ "${AWS_REGION}" =~ ^[a-z]{2}-[a-z]+-[1-9][0-9]?$ ]] || die "--aws-region '${AWS_REGION}' is not an AWS region name"
+
+[[ "${AUDIT_BUCKET_LOCK}" == true || "${AUDIT_BUCKET_LOCK}" == false ]] ||
+  die "--audit-bucket-lock must be true or false"
+AWS_CONFIG_RECORDERS="${AWS_CONFIG_RECORDERS:-false}"
+[[ "${AWS_CONFIG_RECORDERS}" == true || "${AWS_CONFIG_RECORDERS}" == false ]] ||
+  die "--aws-config-recorders must be true or false"
+
+# Production profile: show the idle cost and ask before committing to it.
+if [[ "${PROFILE}" == production && "${INTERACTIVE}" == true && "${ASSUME_YES}" != true ]] && has_cloud aws; then
+  printf 'Profile "production" is the full inspection and detection stack: about $1.4-1.9k/month idle on AWS\n'
+  printf '(Network Firewall, Security Lake, Macie, record-all Config). "starter" drops those for sandboxes.\n'
+  read -r -p "Continue with the production profile? [y/N]: " confirm
+  [[ "${confirm}" =~ ^[Yy] ]] || die "aborted: re-run with --profile starter, or confirm production"
+fi
+
+# Phase-0 impersonation expiry: now + 7 days (RFC 3339 UTC). BSD date takes
+# -v+7d, GNU date takes -d '+7 days'.
+# LZ_INIT_FIXED_DATE=YYYY-MM-DD pins both the expiry (that day, 00:00:00Z) and
+# the header date, for reproducible output (make scaffold-fixtures).
+if [[ -n "${LZ_INIT_FIXED_DATE:-}" ]]; then
+  [[ "${LZ_INIT_FIXED_DATE}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || die "LZ_INIT_FIXED_DATE must be YYYY-MM-DD"
+  PHASE0_EXPIRES_AT="${LZ_INIT_FIXED_DATE}T00:00:00Z"
+elif PHASE0_EXPIRES_AT="$(date -u -v+7d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"; then
+  :
+else
+  PHASE0_EXPIRES_AT="$(date -u -d '+7 days' +%Y-%m-%dT%H:%M:%SZ)"
+fi
 
 # ── Render ───────────────────────────────────────────────────────────────────
 # All values are validated above to contain no sed metacharacters except '.',
@@ -237,6 +364,10 @@ sed_args=(
   -e "s|my-org-org-log-archive|$(esc "${PREFIX}")-org-log-archive|"
   -e "s|europe-west2|$(esc "${GCP_REGION}")|g"
   -e "s|eu-west-2|$(esc "${AWS_REGION}")|g"
+  -e "s|^  # phase0_admin_impersonation_expires_at: .*\$|  phase0_admin_impersonation_expires_at: \"${PHASE0_EXPIRES_AT}\"|"
+  -e "s|^  # enable_audit_bucket_lock: false\$|  enable_audit_bucket_lock: ${AUDIT_BUCKET_LOCK}|"
+  -e "s|^  enable_org_config_recorders: false\$|  enable_org_config_recorders: ${AWS_CONFIG_RECORDERS}|"
+  -e "s|^  enable_config_recorder_scp: false\$|  enable_config_recorder_scp: ${AWS_CONFIG_RECORDERS}|"
 )
 if [[ -n "${DOMAIN}" ]]; then
   sed_args+=(
@@ -253,10 +384,28 @@ if [[ -n "${AWS_EMAIL_PATTERN}" ]]; then
   email_rhs="${AWS_EMAIL_PATTERN#*\{key\}}"
   sed_args+=(-e "s|aws+\([a-z0-9-]*\)@example\.com|$(esc "${email_lhs}")\1$(esc "${email_rhs}")|g")
 fi
+sed_args+=(-e "s|^  profile: production\$|  profile: ${PROFILE}|")
+if [[ -n "${VCS_REPO}" ]]; then
+  sed_args+=(
+    -e "/^    # vcs_repo:\$/,/^    #   github_app_installation_id:/{s|^    #   |      |;s|^    # vcs_repo:|    vcs_repo:|;}"
+    -e "s|identifier: my-org/landing-zone|identifier: $(esc "${VCS_REPO}")|"
+  )
+  [[ -z "${VCS_APP_ID}" ]] || sed_args+=(-e "s|ghain-REPLACE_ME|$(esc "${VCS_APP_ID}")|")
+fi
 if [[ -n "${GITHUB_OWNER}" ]]; then
   sed_args+=(
     -e "s|^  # github_federation_owners:\$|  github_federation_owners:|"
     -e "s|^  #   - my-github-org\$|    - $(esc "${GITHUB_OWNER}")|"
+  )
+fi
+# GCP: new scaffolds start with a `platform` service team and an example `api`
+# service deployed into it (gcp.environments.dev). The commented block in the
+# example is uncommented; the github deploy identity stays commented (it needs
+# a numeric repository_id, enable_app_deploy_wif and github_repository_owner_id).
+if has_cloud gcp; then
+  sed_args+=(
+    -e "/^      # Application services (Cloud Run/,/^      iam_group_role_bindings:\$/{/^      #     github: /d;s|^      # \(services:\)\$|      \1|;s|^      # \(service_teams:\)\$|      \1|;s|^      #   |        |;}"
+    -e "s|subnet_name: my-org-dev-vpc-private-|subnet_name: $(esc "${PREFIX}")-dev-vpc-private-|"
   )
 fi
 # SaaS: uncomment and fill saas.defaults / saas.stacks.web when values are given.
@@ -276,14 +425,18 @@ trap 'rm -f "${tmp}"' EXIT
 # Header note, then the example with values substituted and the per-cloud
 # `enabled:` flags set (tracked by the current top-level section).
 {
-  printf '# Generated by scripts/init-landing-zone.sh on %s from\n' "$(date -u +%Y-%m-%d)"
+  printf '# Generated by scripts/init-landing-zone.sh on %s from\n' "${LZ_INIT_FIXED_DATE:-$(date -u +%Y-%m-%d)}"
   printf '# config/landing-zone.example.yaml. Review every value, then commit this file.\n'
   sed "${sed_args[@]}" "${EXAMPLE}"
 } | awk -v gcp="$(has_cloud gcp && echo true || echo false)" \
   -v aws="$(has_cloud aws && echo true || echo false)" \
   -v saas="$(has_cloud saas && echo true || echo false)" \
-  -v org_id="${GCP_ORG_ID}" '
+  -v org_id="${GCP_ORG_ID}" -v budget="${MONTHLY_BUDGET}" '
   /^[a-z_]+:/ { section = $1; sub(":", "", section) }
+  section == "org" && /^  # monthly_budget_usd: / {
+    if (budget != "") print "  monthly_budget_usd: " budget; else print
+    next
+  }
   section == "gcp" && /^  enabled: / { print "  enabled: " gcp; next }
   section == "aws" && /^  enabled: / { print "  enabled: " aws; next }
   section == "saas" && /^  enabled: / { print "  enabled: " saas; next }
@@ -297,6 +450,31 @@ mkdir -p "$(dirname "${OUTPUT}")"
 mv "${tmp}" "${OUTPUT}"
 trap - EXIT
 printf 'Wrote %s\n' "${OUTPUT}"
+
+# Validate against the schema when the tool is available (optional dev tool).
+if command -v check-jsonschema >/dev/null 2>&1; then
+  check-jsonschema --schemafile "${REPO_ROOT}/config/landing-zone.schema.json" "${OUTPUT}" ||
+    {
+      printf 'ERROR: %s does not match config/landing-zone.schema.json\n' "${OUTPUT}" >&2
+      exit 1
+    }
+fi
+
+if [[ "${CODEOWNERS}" == true ]]; then
+  # templatefile-style ${var} placeholders; the same file feeds Terraform-side rendering.
+  owner_org="${PLATFORM_TEAM#@}"
+  owner_org="${owner_org%%/*}"
+  app_team="${APP_PLATFORM_TEAM:-@${owner_org}/app-platform-team}"
+  docs_team="${DOCS_TEAM:-@${owner_org}/docs-team}"
+  mkdir -p "$(dirname "${CODEOWNERS_OUTPUT}")"
+  sed -e "s|\${org_name}|$(esc "${ORG_NAME}")|g" \
+    -e "s|\${platform_team}|$(esc "${PLATFORM_TEAM}")|g" \
+    -e "s|\${security_team}|$(esc "${SECURITY_TEAM}")|g" \
+    -e "s|\${app_platform_team}|$(esc "${app_team}")|g" \
+    -e "s|\${docs_team}|$(esc "${docs_team}")|g" \
+    "${CODEOWNERS_TEMPLATE}" >"${CODEOWNERS_OUTPUT}"
+  printf 'Wrote %s (teams must exist and be enabled in branch protection: docs/guides/BRANCH_PROTECTION.md)\n' "${CODEOWNERS_OUTPUT}"
+fi
 
 if [[ "${REBRAND}" == true ]]; then
   readme="${REPO_ROOT}/README.md"
@@ -317,7 +495,7 @@ remaining="$(awk -v gcp="$(has_cloud gcp && echo 1 || echo 0)" -v aws="$(has_clo
   -v saas="$(has_cloud saas && echo 1 || echo 0)" '
   /^[a-z_]+:/ { section = $1; sub(":", "", section) }
   /^[[:space:]]*#/ { next }
-  /REPLACE_WITH_|@example\.com/ {
+  /REPLACE_WITH_|REPLACE_ME|@example\.com/ {
     if (section == "gcp" && !gcp) next
     if (section == "aws" && !aws) next
     if (section == "saas" && !saas) next

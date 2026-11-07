@@ -29,6 +29,16 @@ output "subnets" {
   value       = module.network.subnets
 }
 
+output "additional_region_subnets" {
+  description = "Subnet module outputs of the additional regions, keyed by region, each with public, private and database; empty when additional_regions is empty."
+  value       = module.network.additional_region_subnets
+}
+
+output "additional_region_routers" {
+  description = "Cloud Router name per additional region that has Cloud NAT, keyed by region; empty when there is none."
+  value       = { for region, n in module.additional_region_nat : region => n.router_name }
+}
+
 output "network_tags" {
   description = "Network tags that select the security tiers in the baseline firewall rules."
   value       = module.network.network_tags
@@ -112,4 +122,19 @@ output "vpc_flow_logs_kms_key_name" {
 output "shared_vpc_service_project_ids" {
   description = "The IDs of the Shared VPC service project attachments, keyed by service project."
   value       = { for k, v in module.shared_vpc_service_projects : k => v.id }
+}
+
+output "firewall_policy_name" {
+  description = "Name of the tier network firewall policy (pass to network/internal-lb firewall_policy), or null in firewall_mode = legacy."
+  value       = module.network.firewall_policy_name
+}
+
+output "ncc_spoke_id" {
+  description = "The NCC spoke ID, or null when connectivity = peering."
+  value       = try(module.ncc_spoke[0].id, null)
+}
+
+output "ncc_producer_spoke_ids" {
+  description = "NCC producer VPC spoke IDs (Private Service Access), keyed by name; empty when connectivity = peering."
+  value       = try(module.ncc_spoke[0].producer_spoke_ids, {})
 }

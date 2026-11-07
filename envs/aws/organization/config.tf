@@ -29,12 +29,25 @@ locals {
       organization_id = try(tostring(local.lz.aws.adopt.organization_id), null)
       ou_ids          = { for k, v in try(local.lz.aws.adopt.ou_ids, {}) : k => tostring(v) }
       account_ids     = { for k, v in try(local.lz.aws.adopt.account_ids, {}) : k => tostring(v) }
+      # Existing cloudtrail.amazonaws.com delegated admin (the security-tooling
+      # account ID) to import when enable_cloudtrail_delegated_admin turns on.
+      cloudtrail_delegated_admin_account_id = try(tostring(local.lz.aws.adopt.cloudtrail_delegated_admin_account_id), null)
     }
     management_account_id   = try(tostring(local.lz.aws.management_account_id), null)
     log_archive_bucket_name = try(tostring(local.lz.aws.log_archive_bucket_name), null)
     allowed_regions         = try([for r in local.lz.aws.allowed_regions : tostring(r)], null)
-    terraform_run_role_arn  = try(tostring(local.lz.aws.terraform_run_role_arn), null)
-    break_glass_role_arn    = try(tostring(local.lz.aws.break_glass_role_arn), null)
+    aws_enabled_regions     = try([for r in local.lz.aws.enabled_regions : tostring(r)], null)
+    guard_alert_emails      = try([for e in local.lz.aws.guard_alert_emails : tostring(e)], null)
+    profile                 = try(tostring(local.lz.org.profile), null)
+    monthly_budget_usd      = try(tonumber(local.lz.org.monthly_budget_usd), null)
+    notification_emails     = try([for e in local.lz.notifications.emails : tostring(e)], null)
+    # Config recorder migration flags (docs/runbooks/aws-config-recorder-migration.md).
+    enable_org_config_recorders = try(tobool(local.lz.aws.enable_org_config_recorders), null)
+    enable_config_recorder_scp  = try(tobool(local.lz.aws.enable_config_recorder_scp), null)
+    # Org trail managed by the CloudTrail delegated admin (docs/runbooks/aws-cloudtrail-delegated-admin-migration.md).
+    enable_cloudtrail_delegated_admin = try(tobool(local.lz.aws.enable_cloudtrail_delegated_admin), null)
+    terraform_run_role_arn            = try(tostring(local.lz.aws.terraform_run_role_arn), null)
+    break_glass_role_arn              = try(tostring(local.lz.aws.break_glass_role_arn), null)
     # tfc-admin puts the aws-* workspaces in <project_name_prefix>aws.
     tfc_project = try(tostring(local.lz.org.tfc.aws_project), "${try(tostring(local.lz.org.tfc.project_name_prefix), "landing-zone-")}aws")
     # With org.tfc.split_workload_projects, tfc-admin puts aws-workload-<env> in
@@ -111,17 +124,50 @@ locals {
   adopt_existing = (
     var.adopt_existing != null ? var.adopt_existing :
     local.cfg.adopt != null ? local.cfg.adopt :
-    { organization_id = null, ou_ids = {}, account_ids = {} }
+    { organization_id = null, ou_ids = {}, account_ids = {}, cloudtrail_delegated_admin_account_id = null }
   )
   management_account_id   = coalesce(var.management_account_id, local.cfg.management_account_id, "000000000000")
   log_archive_bucket_name = coalesce(var.log_archive_bucket_name, local.cfg.log_archive_bucket_name, "unset")
 
-  accounts               = var.accounts != null ? var.accounts : local.cfg_or_default_accounts
-  workload_accounts      = var.workload_accounts != null ? var.workload_accounts : local.cfg.workload_accounts
-  allowed_regions        = var.allowed_regions != null ? var.allowed_regions : coalesce(local.cfg.allowed_regions, ["eu-west-2"])
-  terraform_run_role_arn = coalesce(var.terraform_run_role_arn, local.cfg.terraform_run_role_arn, "arn:aws:iam::000000000000:role/unset")
-  break_glass_role_arn   = coalesce(var.break_glass_role_arn, local.cfg.break_glass_role_arn, "arn:aws:iam::000000000000:role/unset")
-  tfc_project            = coalesce(var.tfc_project, local.cfg.tfc_project)
+  accounts          = var.accounts != null ? var.accounts : local.cfg_or_default_accounts
+  workload_accounts = var.workload_accounts != null ? var.workload_accounts : local.cfg.workload_accounts
+  allowed_regions   = var.allowed_regions != null ? var.allowed_regions : coalesce(local.cfg.allowed_regions, ["eu-west-2"])
+  # Same precedence and fallback as the aws-security root: the guard alerts
+  # forward from every region the security services run in.
+  aws_enabled_regions = var.aws_enabled_regions != null ? var.aws_enabled_regions : coalesce(local.cfg.aws_enabled_regions, ["eu-west-2"])
+  # variable > aws.guard_alert_emails > notifications.emails > none.
+  notification_emails = coalesce(local.cfg.notification_emails, [])
+  guard_alert_emails = var.guard_alert_emails != null ? var.guard_alert_emails : (
+    length(coalesce(local.cfg.guard_alert_emails, [])) > 0 ? local.cfg.guard_alert_emails : local.notification_emails
+  )
+  # Budgets without their own recipients, and the single anomaly address, follow
+  # notifications.emails (default: today's values).
+  profile            = coalesce(var.profile, local.cfg.profile, "production")
+  monthly_budget_usd = var.monthly_budget_usd != null ? var.monthly_budget_usd : local.cfg.monthly_budget_usd
+  # The starter profile replaces the budget set with one budget sized from
+  # org.monthly_budget_usd that alerts at 50/80/100% of actual spend (plus a
+  # forecast at 100%). Requires the amount (terraform_data.starter_requires_budget).
+  effective_budgets = local.profile == "starter" ? {
+    org-monthly = {
+      limit_amount      = tostring(coalesce(local.monthly_budget_usd, 0))
+      threshold_percent = 100
+      emails            = []
+      alert_percents    = [50, 80, 100]
+    }
+  } : var.budgets
+  budgets = {
+    for k, b in local.effective_budgets : k => merge(b, { emails = length(b.emails) > 0 ? b.emails : local.notification_emails })
+  }
+  cost_anomaly_email = var.cost_anomaly_email != null ? var.cost_anomaly_email : (
+    length(local.notification_emails) > 0 ? local.notification_emails[0] : "finops@example.com"
+  )
+  enable_org_config_recorders = var.enable_org_config_recorders != null ? var.enable_org_config_recorders : coalesce(local.cfg.enable_org_config_recorders, false)
+  enable_config_recorder_scp  = var.enable_config_recorder_scp != null ? var.enable_config_recorder_scp : coalesce(local.cfg.enable_config_recorder_scp, false)
+  # Same key, same value in the aws-security root.
+  enable_cloudtrail_delegated_admin = var.enable_cloudtrail_delegated_admin != null ? var.enable_cloudtrail_delegated_admin : coalesce(local.cfg.enable_cloudtrail_delegated_admin, false)
+  terraform_run_role_arn            = coalesce(var.terraform_run_role_arn, local.cfg.terraform_run_role_arn, "arn:aws:iam::000000000000:role/unset")
+  break_glass_role_arn              = coalesce(var.break_glass_role_arn, local.cfg.break_glass_role_arn, "arn:aws:iam::000000000000:role/unset")
+  tfc_project                       = coalesce(var.tfc_project, local.cfg.tfc_project)
   # Foundational bindings + the workload bindings derived from the config file;
   # an explicit var.tfc_workspace_bindings replaces both.
   tfc_workspace_bindings = var.tfc_workspace_bindings != null ? var.tfc_workspace_bindings : {

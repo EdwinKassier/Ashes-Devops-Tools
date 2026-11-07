@@ -28,7 +28,7 @@ $(if $(TF_PLUGIN_CACHE_DIR),$(shell mkdir -p "$(TF_PLUGIN_CACHE_DIR)"))
 
 APP_ENV ?= dev
 APP_WORKSPACE ?= gcp-workload-$(APP_ENV)
-APP_VARS ?= examples/dev.tfvars
+APP_VARS ?= examples/dev.tfvars.example
 
 BLUE := \033[0;34m
 GREEN := \033[0;32m
@@ -129,6 +129,7 @@ count: ## Print the live module/root/test-suite counts (the figures README.md an
 
 count-check: ## Fail if README.md / CLAUDE.md counts drifted from the tree (CI: meta-lint)
 	@./scripts/check-docs-counts.sh
+	@python3 scripts/check-module-usage.py --check
 
 links: ## Fail on broken repo-relative links in any Markdown file (offline; CI: meta-lint)
 	@python3 scripts/check-md-links.py
@@ -188,12 +189,14 @@ pre-commit-run: ## Run pre-commit across the repository
 pre-commit-update: ## Update pinned pre-commit hooks
 	@$(PRE_COMMIT) autoupdate
 
-consistency: ## Assert canonical strings (region regex, provider pins) haven't drifted across copies
+consistency: ## Assert canonical strings (region regex, provider pins) haven't drifted across copies, and cross-root contracts (scripts/check-contracts.sh)
 	@./scripts/check-consistency.sh
+	@./scripts/check-contracts.sh
 
 ci: ## Run the local CI pipeline (fmt → consistency → counts → links → shellcheck → docs → validate → lint → test → security)
 	@$(MAKE) fmt-check
 	@$(MAKE) consistency
+	@$(MAKE) config-check
 	@$(MAKE) count-check
 	@$(MAKE) links
 	@$(MAKE) required-checks
@@ -309,7 +312,26 @@ e2e-aws: ## REAL apply: run tests/e2e/aws in the ambient (sandbox!) AWS account,
 # ---------------------------------------------------------------------------
 # Single-source configuration (config/landing-zone.yaml)
 # ---------------------------------------------------------------------------
-.PHONY: init
+.PHONY: init bootstrap-ids config-check scaffold-fixtures scaffold-fixtures-check
 
 init: ## Scaffold config/landing-zone.yaml: make init ARGS="--org-name acme --clouds gcp,aws ..."
 	@./scripts/init-landing-zone.sh $(ARGS)
+
+bootstrap-ids: ## Write the tfc-admin workspace IDs for the local phase-0 gcp-bootstrap apply (gitignored)
+	terraform -chdir=envs/tfc-admin output -raw gcp_bootstrap_tfvars > envs/gcp/bootstrap/tfc-workspaces.auto.tfvars
+
+scaffold-fixtures: ## Regenerate tests/fixtures/scaffold/*.yaml from the scaffolder (one per cloud combination)
+	./scripts/scaffold-fixtures.sh
+
+scaffold-fixtures-check: ## Fail if tests/fixtures/scaffold/ differs from fresh scaffolder output (CI: meta-lint)
+	./scripts/scaffold-fixtures.sh --check
+
+config-check: ## Validate config/*.example.yaml, config/sandbox/ and every test fixture and tests/fixtures/scaffold against config/landing-zone.schema.json (needs check-jsonschema)
+	@command -v check-jsonschema >/dev/null || { echo "check-jsonschema not found: pipx install check-jsonschema (see .tool-versions)"; exit 1; }
+	@{ echo config/landing-zone.example.yaml; find config/sandbox -name 'landing-zone*.yaml' 2>/dev/null; find envs modules -name 'landing-zone*.yaml' -path '*/tests/fixtures/*'; find tests/fixtures/scaffold -name 'landing-zone*.yaml'; } | sort | \
+		xargs check-jsonschema --schemafile config/landing-zone.schema.json
+	@./scripts/check-config-schema-coverage.sh
+	@for f in config/tests/*.yaml; do \
+		if check-jsonschema --schemafile config/landing-zone.schema.json "$$f" >/dev/null 2>&1; then \
+			echo "config-check: $$f should FAIL schema validation but passed"; exit 1; fi; \
+	done; echo "config-check: negative fixtures rejected as expected"

@@ -19,6 +19,7 @@ variables {
   # Isolate the suite from any committed config/landing-zone.yaml.
   landing_zone_config_path = ""
   landing_zone_name        = "acme"
+  guard_alert_emails       = ["secops@acme.test"]
   management_account_id    = "111111111111" # C4 account guard
   accounts = {                              # L2: non-placeholder emails
     log_archive      = { email = "aws+log-archive@acme.test", ou = "Security" }
@@ -146,6 +147,23 @@ run "output_contract_is_stable" {
     condition     = contains(output.tfc_workspace_bindings["shared_services"], "aws-identity")
     error_message = "tfc_workspace_bindings must be re-exported."
   }
+
+  # Downstream roots and tfc-admin read ONLY output.contract; it must carry
+  # every key the deprecated individual outputs carry, with the same values.
+  assert {
+    condition = (
+      jsonencode(output.contract.organization_id) == jsonencode(output.organization_id) &&
+      jsonencode(output.contract.organization_root_id) == jsonencode(output.organization_root_id) &&
+      jsonencode(output.contract.management_account_id) == jsonencode(output.management_account_id) &&
+      jsonencode(output.contract.account_ids) == jsonencode(output.account_ids) &&
+      jsonencode(output.contract.account_role_arns) == jsonencode(output.account_role_arns) &&
+      jsonencode(output.contract.ou_ids) == jsonencode(output.ou_ids) &&
+      jsonencode(output.contract.tfc_plan_role_arns) == jsonencode(output.tfc_plan_role_arns) &&
+      jsonencode(output.contract.tfc_apply_role_arns) == jsonencode(output.tfc_apply_role_arns) &&
+      jsonencode(output.contract.tfc_workspace_bindings) == jsonencode(output.tfc_workspace_bindings)
+    )
+    error_message = "output.contract must carry every cross-root key with the same value as its deprecated alias."
+  }
 }
 
 run "tfc_organization_required_when_baseline_enabled" {
@@ -225,11 +243,21 @@ run "adopt_existing_rejects_bad_ids" {
   expect_failures = [var.adopt_existing]
 }
 
+run "adopt_existing_rejects_bad_cloudtrail_delegated_admin_id" {
+  command = plan
+
+  variables {
+    adopt_existing = { cloudtrail_delegated_admin_account_id = "security-tooling" }
+  }
+
+  expect_failures = [var.adopt_existing]
+}
+
 run "greenfield_imports_nothing" {
   command = plan
 
   assert {
-    condition     = local.adopt_existing.organization_id == null && length(local.adopt_existing.ou_ids) == 0 && length(local.adopt_existing.account_ids) == 0
+    condition     = local.adopt_existing.organization_id == null && length(local.adopt_existing.ou_ids) == 0 && length(local.adopt_existing.account_ids) == 0 && local.adopt_existing.cloudtrail_delegated_admin_account_id == null
     error_message = "with no adopt_existing / aws.adopt, nothing is imported."
   }
 }

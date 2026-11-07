@@ -29,9 +29,11 @@ override_data {
   target = data.terraform_remote_state.gcp_organization
   values = {
     outputs = {
-      org_id = "123456789012"
-      folders = {
-        dev = { id = "folders/111", display_name = "Development" }
+      contract = {
+        org_id = "123456789012"
+        folders = {
+          dev = { id = "folders/111", display_name = "Development" }
+        }
       }
     }
   }
@@ -41,15 +43,17 @@ override_data {
   target = data.terraform_remote_state.gcp_projects
   values = {
     outputs = {
-      project_ids = {
-        "shared-hub" = "acme-hub-abcd"
-        "shared-dns" = "acme-dns-abcd"
-        "dev-host"   = "acme-dev-host-abcd"
-      }
-      project_numbers = {
-        "shared-hub" = "111111111111"
-        "shared-dns" = "222222222222"
-        "dev-host"   = "333333333333"
+      contract = {
+        project_ids = {
+          "shared-hub" = "acme-hub-abcd"
+          "shared-dns" = "acme-dns-abcd"
+          "dev-host"   = "acme-dev-host-abcd"
+        }
+        project_numbers = {
+          "shared-hub" = "111111111111"
+          "shared-dns" = "222222222222"
+          "dev-host"   = "333333333333"
+        }
       }
     }
   }
@@ -102,8 +106,10 @@ run "prod_env_with_dry_run_hub_perimeter_warns" {
     target = data.terraform_remote_state.gcp_projects
     values = {
       outputs = {
-        project_ids     = { "shared-hub" = "acme-hub-abcd", "shared-dns" = "acme-dns-abcd", "prod-host" = "acme-prod-host-abcd" }
-        project_numbers = { "shared-hub" = "111111111111", "shared-dns" = "222222222222", "prod-host" = "333333333333" }
+        contract = {
+          project_ids     = { "shared-hub" = "acme-hub-abcd", "shared-dns" = "acme-dns-abcd", "prod-host" = "acme-prod-host-abcd" }
+          project_numbers = { "shared-hub" = "111111111111", "shared-dns" = "222222222222", "prod-host" = "333333333333" }
+        }
       }
     }
   }
@@ -132,8 +138,10 @@ run "prod_named_env_without_flag_does_not_warn" {
     target = data.terraform_remote_state.gcp_projects
     values = {
       outputs = {
-        project_ids     = { "shared-hub" = "acme-hub-abcd", "shared-dns" = "acme-dns-abcd", "prod-host" = "acme-prod-host-abcd" }
-        project_numbers = { "shared-hub" = "111111111111", "shared-dns" = "222222222222", "prod-host" = "333333333333" }
+        contract = {
+          project_ids     = { "shared-hub" = "acme-hub-abcd", "shared-dns" = "acme-dns-abcd", "prod-host" = "acme-prod-host-abcd" }
+          project_numbers = { "shared-hub" = "111111111111", "shared-dns" = "222222222222", "prod-host" = "333333333333" }
+        }
       }
     }
   }
@@ -164,4 +172,113 @@ run "contracts_skip_remote_state" {
     )
     error_message = "supplied contracts must skip the gcp-organization / gcp-projects reads and feed the root"
   }
+}
+
+# The single `contract` output carries the same hub_network (what gcp-workload
+# reads), and the deprecated alias still matches it.
+run "contract_output_carries_hub_network" {
+  command = plan
+
+  assert {
+    condition     = output.contract.hub_network.dns_domain == "hub.internal." && jsonencode(output.contract.hub_network) == jsonencode(output.hub_network)
+    error_message = "output.contract must carry hub_network, identical to the deprecated hub_network alias."
+  }
+}
+
+# N-1 upgrade: upstream states written before the `contract` output existed
+# (individual outputs only) still plan. The fallback goes at v1.0 (UPGRADING.md).
+run "pre_contract_upstream_states_still_plan" {
+  command = plan
+
+  override_data {
+    target = data.terraform_remote_state.gcp_organization
+    values = {
+      outputs = {
+        org_id  = "999999999999"
+        folders = { dev = { id = "folders/111", display_name = "Development" } }
+      }
+    }
+  }
+
+  override_data {
+    target = data.terraform_remote_state.gcp_projects
+    values = {
+      outputs = {
+        project_ids     = { "shared-hub" = "acme-hub-abcd", "shared-dns" = "acme-dns-abcd", "dev-host" = "acme-dev-host-abcd" }
+        project_numbers = { "shared-hub" = "111111111111", "shared-dns" = "222222222222", "dev-host" = "333333333333" }
+      }
+    }
+  }
+
+  assert {
+    condition     = local.org.org_id == "999999999999" && local.projects.project_ids["shared-hub"] == "acme-hub-abcd"
+    error_message = "a pre-contract upstream state (individual outputs only) must still resolve the org and projects contracts."
+  }
+}
+
+# A supplied projects contract without the hub/DNS projects or an env host
+# number fails on the named guard, not on a bare lookup.
+run "projects_contract_missing_hub_keys_fails" {
+  command = plan
+
+  variables {
+    projects_contract = {
+      project_ids     = { "shared-hub" = "acme-hub-abcd" }
+      project_numbers = { "shared-hub" = "111111111111" }
+    }
+  }
+
+  expect_failures = [terraform_data.upstream_contract_guard]
+}
+
+# The opt-in NCC hub: off by default, so the contract carries a null hub ID and
+# gcp-workload keeps peering.
+run "contract_ncc_hub_null_by_default" {
+  command = plan
+
+  assert {
+    condition     = local.enable_ncc_hub == false && output.contract.hub_network.ncc_hub_id == null && output.contract.hub_network.ncc_spoke_group == null
+    error_message = "The NCC hub must be off by default, with a null ncc_hub_id / ncc_spoke_group in the contract."
+  }
+}
+
+run "contract_carries_ncc_hub_when_enabled" {
+  command = plan
+
+  variables {
+    enable_ncc_hub      = true
+    ncc_preset_topology = "MESH"
+  }
+
+  override_module {
+    target = module.network_hub
+    outputs = {
+      hub_vpc_self_link = "https://www.googleapis.com/compute/v1/projects/acme-hub-abcd/global/networks/acme-hub-vpc"
+      hub_vpc_name      = "acme-hub-vpc"
+      dns_zone_name     = "hub-dns"
+      hub_dns_domain    = "hub.internal."
+      ncc_hub_id        = "projects/acme-hub-abcd/locations/global/hubs/acme-ncc-hub"
+      ncc_spoke_group   = "default"
+    }
+  }
+
+  assert {
+    condition     = local.enable_ncc_hub && local.ncc_preset_topology == "MESH"
+    error_message = "enable_ncc_hub / ncc_preset_topology must take effect."
+  }
+
+  assert {
+    condition     = output.contract.hub_network.ncc_hub_id == "projects/acme-hub-abcd/locations/global/hubs/acme-ncc-hub" && output.contract.hub_network.ncc_spoke_group == "default"
+    error_message = "contract.hub_network must carry the NCC hub ID and spoke group for gcp-workload."
+  }
+}
+
+run "rejects_unknown_ncc_preset_topology" {
+  command = plan
+
+  variables {
+    ncc_preset_topology = "RING"
+  }
+
+  expect_failures = [var.ncc_preset_topology]
 }

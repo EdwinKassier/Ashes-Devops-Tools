@@ -171,3 +171,17 @@ run "module_tags_applied" {
     error_message = "module-level tags must land on aws_iam_role.forensics_snapshot"
   }
 }
+
+run "archive_written_under_root" {
+  command = plan
+
+  assert {
+    condition     = data.archive_file.isolate[0].output_path == "${path.root}/.terraform/tmp/incident-response-isolate.zip"
+    error_message = "The Lambda archive must be written under path.root/.terraform/tmp, not into the module directory"
+  }
+
+  assert {
+    condition     = aws_lambda_function.isolate[0].filename == data.archive_file.isolate[0].output_path
+    error_message = "The Lambda must deploy the archive written under path.root"
+  }
+}

@@ -16,8 +16,10 @@ override_data {
   target = data.terraform_remote_state.gcp_bootstrap
   values = {
     outputs = {
-      admin_project_id = "cfgco-admin-abcd"
-      suffix           = "abcd"
+      contract = {
+        admin_project_id = "cfgco-admin-abcd"
+        suffix           = "abcd"
+      }
     }
   }
 }
@@ -26,12 +28,14 @@ override_data {
   target = data.terraform_remote_state.gcp_organization
   values = {
     outputs = {
-      billing_account = "billingAccounts/000000-111111-222222"
-      folders = {
-        dev  = { id = "folders/111", display_name = "dev" }
-        prod = { id = "folders/222", display_name = "Production" }
+      contract = {
+        billing_account = "billingAccounts/000000-111111-222222"
+        folders = {
+          dev  = { id = "folders/111", display_name = "dev" }
+          prod = { id = "folders/222", display_name = "Production" }
+        }
+        tag_values = { "environment-dev" = "tagValues/1", "environment-prod" = "tagValues/2" }
       }
-      tag_values = { "environment-dev" = "tagValues/1", "environment-prod" = "tagValues/2" }
     }
   }
 }
@@ -124,4 +128,53 @@ run "shipped_example_is_rejected" {
   }
 
   expect_failures = [var.project_prefix]
+}
+
+# Scaffold matrix: committed scaffolder output (make scaffold-fixtures) must plan.
+run "scaffold_gcp_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp.yaml"
+  }
+}
+
+run "scaffold_gcp_aws_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws.yaml"
+  }
+}
+
+run "scaffold_gcp_aws_saas_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
+  }
+}
+
+# One environment on NCC (gcp.environments.<env>.network_connectivity) turns the
+# NCC API on for the hub and every host project; the default fixture does not.
+run "ncc_api_follows_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-ncc.yaml"
+  }
+
+  assert {
+    condition     = local.enable_network_connectivity_center && toset(keys(local.ncc_project_services)) == toset(["shared-hub", "dev-host", "prod-host"])
+    error_message = "Any environment with network_connectivity = ncc must enable the NCC API on shared-hub and every host project."
+  }
+}
+
+run "ncc_api_off_without_ncc_config" {
+  command = plan
+
+  assert {
+    condition     = !local.enable_network_connectivity_center && length(local.ncc_project_services) == 0
+    error_message = "Without any NCC key in the config the NCC API must stay off."
+  }
 }

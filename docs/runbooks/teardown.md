@@ -67,7 +67,7 @@ Newer network modules implement the same protection through a conditional `terra
 |------------------|--------------|----------|
 | VPC-SC perimeters | `enable_deletion_protection = true` | [`modules/gcp/network/vpc-sc`](../../modules/gcp/network/vpc-sc/main.tf#L20) |
 | Network hub + DNS VPC | `enable_deletion_protection = true` | [`modules/gcp/stages/network-hub`](../../modules/gcp/stages/network-hub/main.tf) |
-| Host-project VPC/subnet stack | `enable_deletion_protection = false` | [`modules/gcp/stages/host`](../../modules/gcp/stages/host/main.tf#L55) |
+| Spoke VPC/subnet stack | `deletion_protection` input (`variables.tf`) | [`modules/gcp/stages/net-spoke`](../../modules/gcp/stages/net-spoke/main.tf) |
 | Standalone VPC module | `enable_deletion_protection = false` | [`modules/gcp/network/vpc`](../../modules/gcp/network/vpc/main.tf#L15) |
 
 Teardown sequence for these:
@@ -148,6 +148,7 @@ The Cloud Audit Logs module ([`modules/gcp/governance/cloud-audit-logs`](../../m
 - **Confirm no cross-environment dependents.** Verify no other workload workspace still reads the organization root or peers with the hub before you touch shared resources.
 - **Always `plan -destroy` and review before applying.** Run the destroy through Terraform Cloud, read the full plan, and confirm the resource list matches your intent — especially that you are not about to schedule a KMS key you still need or force-destroy a compliance log bucket.
 - **Relax guards deliberately, one at a time.** Flip `enable_deletion_protection`/`deletion_policy` (or remove `prevent_destroy`) as its own reviewed change, apply, and only then destroy. Do not batch guard-removal with the destroy in a single blind run.
+- **Override `destroy_guard` once per run, per workspace.** With the policy sets on, every delete or replace of a stateful resource (buckets, databases, KMS keys, projects/folders/accounts, networks, secrets, log sinks, CloudTrail, StackSet instances) fails the mandatory `destroy_guard` policy in the `<project_name_prefix>destructive-change-guard` policy set. That set is overridable; the `<project_name_prefix>opa-guardrails` set is not, so guardrail failures must be fixed, not overridden. Only a user holding **Manage Policy Overrides** can override: the security team (`security_team_id` in tfc-admin), granted that permission by an organization owner in the HCP UI (organization owners can always override). For each destroy run, the security team reads the plan, confirms every `destroy_guard` message names a resource the teardown intends to remove, and chooses **Override & Continue** on that run. The override covers that one run in that one workspace only: a re-plan or the next workspace needs a new override. Never set `enable_policy_sets = false` to get a teardown through.
 - **Prefer close-over-delete for projects** so they sit in the ~30-day pending-deletion window (restorable) rather than being lost.
 
 ---

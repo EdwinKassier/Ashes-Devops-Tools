@@ -21,6 +21,20 @@
 # Everything is gated behind enable_cost_governance so a non-management root (or
 # a plan that must stay credential-free) can compose the module as a no-op.
 
+locals {
+  budget_notifications = {
+    for k, b in var.budgets : k => (
+      length(b.alert_percents) > 0 ? concat(
+        [for p in b.alert_percents : { threshold = p, type = "ACTUAL" }],
+        [{ threshold = max(b.alert_percents...), type = "FORECASTED" }]
+        ) : [
+        { threshold = b.threshold_percent, type = "ACTUAL" },
+        { threshold = b.threshold_percent, type = "FORECASTED" },
+      ]
+    )
+  }
+}
+
 resource "aws_budgets_budget" "this" {
   for_each = var.enable_cost_governance ? var.budgets : {}
 
@@ -30,24 +44,19 @@ resource "aws_budgets_budget" "this" {
   limit_unit   = "USD"
   time_unit    = "MONTHLY"
 
-  notification {
-    comparison_operator        = "GREATER_THAN"
-    threshold                  = each.value.threshold_percent
-    threshold_type             = "PERCENTAGE"
-    notification_type          = "ACTUAL"
-    subscriber_sns_topic_arns  = var.notifications_topic_arn != "" ? [var.notifications_topic_arn] : []
-    subscriber_email_addresses = try(each.value.emails, [])
-  }
-
-  # FORECASTED alert: warns before the overspend happens, not only after actual
-  # spend has already crossed the threshold (FinOps F7).
-  notification {
-    comparison_operator        = "GREATER_THAN"
-    threshold                  = each.value.threshold_percent
-    threshold_type             = "PERCENTAGE"
-    notification_type          = "FORECASTED"
-    subscriber_sns_topic_arns  = var.notifications_topic_arn != "" ? [var.notifications_topic_arn] : []
-    subscriber_email_addresses = try(each.value.emails, [])
+  # Default: one ACTUAL and one FORECASTED notification at threshold_percent.
+  # With alert_percents set, each listed percent notifies on ACTUAL spend and
+  # the highest one also notifies on FORECASTED spend (early warning).
+  dynamic "notification" {
+    for_each = local.budget_notifications[each.key]
+    content {
+      comparison_operator        = "GREATER_THAN"
+      threshold                  = notification.value.threshold
+      threshold_type             = "PERCENTAGE"
+      notification_type          = notification.value.type
+      subscriber_sns_topic_arns  = var.notifications_topic_arn != "" ? [var.notifications_topic_arn] : []
+      subscriber_email_addresses = try(each.value.emails, [])
+    }
   }
 
   tags = var.tags

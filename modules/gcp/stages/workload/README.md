@@ -170,15 +170,15 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.17, < 2.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 8.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.6 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | 8.10.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | 3.9.1 |
 
 ## Modules

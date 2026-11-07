@@ -57,22 +57,30 @@ data "terraform_remote_state" "aws_security" {
 }
 
 locals {
+  # The upstream contract outputs. A producer state from before the contract
+  # output existed (N-1, not yet re-applied) exposes the same keys as individual
+  # outputs, so each read falls back to them; that fallback goes at v1.0 with the
+  # individual outputs (UPGRADING.md).
+  org_remote      = local.read_organization ? try(data.terraform_remote_state.aws_organization[0].outputs.contract, data.terraform_remote_state.aws_organization[0].outputs) : null
+  network_remote  = local.read_network ? try(data.terraform_remote_state.aws_network[0].outputs.contract, data.terraform_remote_state.aws_network[0].outputs) : null
+  security_remote = local.read_security ? try(data.terraform_remote_state.aws_security[0].outputs.contract, data.terraform_remote_state.aws_security[0].outputs) : null
+
   # Wrong-account guard for both providers. No try(): a missing account_ids key
   # fails the plan loudly instead of silently dropping the guard.
   workload_account_id = (
     local.read_organization
-    ? data.terraform_remote_state.aws_organization[0].outputs.account_ids[local.workload_account_key]
+    ? local.org_remote.account_ids[local.workload_account_key]
     : local.organization_contract.account_ids[local.workload_account_key]
   )
 
   # Network contract; null / "" in standalone mode (enable_network_hub = false).
   tgw_id = (
     !var.enable_network_hub ? null :
-    local.read_network ? data.terraform_remote_state.aws_network[0].outputs.tgw_id : local.network_contract.tgw_id
+    local.read_network ? local.network_remote.tgw_id : local.network_contract.tgw_id
   )
   ipam_pool_id = (
     !var.enable_network_hub ? "" :
-    local.read_network ? data.terraform_remote_state.aws_network[0].outputs.ipam_pool_ids[local.aws_region] : lookup(local.network_contract.ipam_pool_ids, local.aws_region, "")
+    local.read_network ? local.network_remote.ipam_pool_ids[local.aws_region] : lookup(local.network_contract.ipam_pool_ids, local.aws_region, "")
   )
 
   # The central log-archive bucket name comes from aws-security (its owner) unless
@@ -80,7 +88,7 @@ locals {
   # workload writing to a stale bucket.
   log_archive_bucket_name = (
     local.read_security
-    ? data.terraform_remote_state.aws_security[0].outputs.log_archive_bucket_name
+    ? local.security_remote.log_archive_bucket_name
     : local.security_contract.log_archive_bucket_name
   )
 }
@@ -109,13 +117,13 @@ module "aws_workload" {
   tgw_id       = local.tgw_id
   ipam_pool_id = local.ipam_pool_id
 
+  ipam_explicit_cidr = var.ipam_explicit_cidr
+
   # Flow logs + Config snapshots + Session Manager logs all land in the central
   # log-archive bucket (cross-root naming contract).
-  flow_log_destination_arn          = "arn:${local.partition}:s3:::${local.log_archive_bucket_name}"
-  log_archive_bucket_name           = local.log_archive_bucket_name
-  config_role_arn                   = var.config_role_arn
-  create_config_service_linked_role = var.create_config_service_linked_role
-  kms_key_arn                       = local.kms_key_arn # kms.tf: created unless supplied
+  flow_log_destination_arn = "arn:${local.partition}:s3:::${local.log_archive_bucket_name}"
+  log_archive_bucket_name  = local.log_archive_bucket_name
+  kms_key_arn              = local.kms_key_arn # kms.tf: created unless supplied
   # A CMK created in this plan has an unknown ARN: let the stage set the
   # default EBS key with a plan-safe count (home region, where the key lives).
   enable_ebs_default_kms_key = local.create_kms_key ? true : null
@@ -139,7 +147,7 @@ locals {
   app_ingress_mode = coalesce(var.app_ingress_mode, local.cfg.app_ingress_mode, "internal")
   app_public_alb   = local.app_ingress_mode == "public_alb"
   app_vpc_origin   = local.app_ingress_mode == "cloudfront_vpc_origin"
-  apps_enabled     = length(var.services) > 0
+  apps_enabled     = length(local.services) > 0
 
   # Internet-facing ALB: public tier, open listeners (WAF in front). Otherwise
   # the private tier and the spoke CIDR (CloudFront VPC-origin ENIs live there).
@@ -153,7 +161,7 @@ locals {
 # =============================================================================
 # APP SERVICES — the application golden path 
 #
-# One entry in var.services = an ECR repo, a Fargate service in the spoke's
+# One entry in local.services (var.services, else aws.workload_environments.<env>.services) = an ECR repo, a Fargate service in the spoke's
 # private subnets behind the shared internal ALB, least-privilege task roles, a
 # KMS-encrypted log group, and optionally a GitHub Actions OIDC deploy role and
 # an Aurora PostgreSQL cluster. Default services = {} creates nothing. See
@@ -177,7 +185,7 @@ module "app_services" {
   kms_key_arn         = local.kms_key_arn
   bootstrap_image     = local.app_bootstrap_image
 
-  services = var.services
+  services = local.services
 
   enable_github_oidc          = var.enable_github_oidc
   create_github_oidc_provider = var.create_github_oidc_provider
@@ -243,15 +251,28 @@ module "app_edge" {
 # Opt-in. Reads the Supabase outputs from a saas-<name> workspace and writes them
 # into an AWS Secrets Manager secret, so an ECS/Fargate task can consume Supabase
 # as a managed datastore via its container-secret valueFrom. Default off: no saas
-# state is read and nothing is created. See docs/architecture/saas-integration.md.
+# outputs are read and nothing is created. See docs/architecture/saas-integration.md.
+#
+# The read is ephemeral: the values exist only during the run and flow into the
+# write-only secret_string_wo, so neither the data nor the secret version holds
+# them in this root's plan or state. Authenticated with the saas-outputs-reader
+# team token (TFE_TOKEN on the bridging workspaces, docs/runbooks/saas-bootstrap.md).
 # =============================================================================
 
-data "terraform_remote_state" "saas" {
-  count   = var.enable_saas_secret_bridge ? 1 : 0
-  backend = "cloud"
-  config = {
-    organization = local.tfc_organization
-    workspaces   = { name = var.saas_workspace_name }
+ephemeral "tfe_outputs" "saas" {
+  count        = var.enable_saas_secret_bridge ? 1 : 0
+  organization = local.tfc_organization
+  workspace    = var.saas_workspace_name
+
+  lifecycle {
+    # The write-only version is non-ephemeral, so it comes from the config file
+    # (saas.bridge_rotation), not from this read. Refuse to push while the saas
+    # workspace has not yet published the same counter: pushing then would write
+    # the old values under the new version, and nothing would re-push them.
+    postcondition {
+      condition     = try(tonumber(self.nonsensitive_values.bridge_version), 1) == local.saas_bridge_version
+      error_message = "saas bridge_version (published by ${coalesce(var.saas_workspace_name, "the saas workspace")}) differs from this workload's saas_bridge_version / saas.bridge_rotation. Apply the saas workspace first, then re-run this workload."
+    }
   }
 }
 
@@ -265,14 +286,18 @@ resource "aws_secretsmanager_secret" "saas_bridge" {
   kms_key_id  = local.kms_key_arn
 }
 
+# Write-only (aws >= 6.45 switches from secret_string in place): the secret
+# version keeps no plaintext in plan or state. Write-only values are not diffed,
+# so local.saas_bridge_version (saas.bridge_rotation) is the re-push signal.
 resource "aws_secretsmanager_secret_version" "saas_bridge" {
   count     = var.enable_saas_secret_bridge ? 1 : 0
   secret_id = aws_secretsmanager_secret.saas_bridge[0].id
-  secret_string = jsonencode({
-    api_url           = data.terraform_remote_state.saas[0].outputs.supabase_api_url
-    service_role_key  = data.terraform_remote_state.saas[0].outputs.supabase_service_role_key
-    database_password = data.terraform_remote_state.saas[0].outputs.supabase_database_password
+  secret_string_wo = jsonencode({
+    api_url           = ephemeral.tfe_outputs.saas[0].values.supabase_api_url
+    service_role_key  = ephemeral.tfe_outputs.saas[0].values.supabase_service_role_key
+    database_password = ephemeral.tfe_outputs.saas[0].values.supabase_database_password
   })
+  secret_string_wo_version = local.saas_bridge_version
 }
 
 # Grant only the named task roles GetSecretValue on the bridged secret.

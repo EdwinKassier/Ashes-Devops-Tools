@@ -1,0 +1,4 @@
+# Fixture: only the shared gcp.principal_access_boundary key (the suite sets
+# every other input explicitly).
+gcp:
+  principal_access_boundary: true

@@ -76,14 +76,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.17, < 2.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | 8.10.0 |
 
 
 
@@ -122,5 +122,5 @@ The following resources are created:
 | <a name="output_ip_cidr_range"></a> [ip\_cidr\_range](#output\_ip\_cidr\_range) | The IP CIDR range of the subnet |
 | <a name="output_name"></a> [name](#output\_name) | The name of the subnet |
 | <a name="output_self_link"></a> [self\_link](#output\_self\_link) | The URI of the subnet |
-| <a name="output_subnet"></a> [subnet](#output\_subnet) | The created subnet resource |
+| <a name="output_subnet"></a> [subnet](#output\_subnet) | The created subnet resource (every attribute except the provider-deprecated fingerprint) |
 <!-- END_TF_DOCS -->

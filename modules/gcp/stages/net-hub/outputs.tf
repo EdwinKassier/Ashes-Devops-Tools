@@ -29,6 +29,16 @@ output "subnets" {
   value       = module.network.subnets
 }
 
+output "additional_region_subnets" {
+  description = "Subnet module outputs of the additional regions, keyed by region, each with public, private and database; empty when additional_regions is empty."
+  value       = module.network.additional_region_subnets
+}
+
+output "additional_region_routers" {
+  description = "Cloud Router name per additional region that has Cloud NAT, keyed by region; empty when there is none."
+  value       = { for region, n in module.additional_region_nat : region => n.router_name }
+}
+
 output "network_tags" {
   description = "Network tags that select the security tiers in the baseline firewall rules."
   value       = module.network.network_tags
@@ -69,6 +79,22 @@ output "vpn_tunnel_statuses" {
   value       = var.vpn.enabled ? module.vpn[0].tunnel_statuses : null
 }
 
+output "ncc_vpn_spoke_id" {
+  description = "ID of the NCC hybrid spoke for the HA VPN tunnels, or null unless both ncc.enabled and vpn.enabled."
+  value       = try(module.ncc_vpn_spoke[0].id, null)
+}
+
+output "hybrid_connectivity" {
+  description = "Which hybrid connectivity is planned: vpn (HA VPN on), ncc_vpn_spoke (tunnels linked to the NCC hub), ncc_vpn_spoke_group and the interconnect attachment names."
+  value = {
+    vpn           = length(module.vpn) > 0
+    ncc_vpn_spoke = length(module.ncc_vpn_spoke) > 0
+    # The NCC group the hybrid spoke joins: center (STAR) or default (MESH).
+    ncc_vpn_spoke_group = length(module.ncc_vpn_spoke) > 0 ? local.ncc_vpn_spoke_group : null
+    interconnects       = sort(keys(module.interconnects))
+  }
+}
+
 output "interconnect_states" {
   description = "The state of each interconnect attachment."
   value       = { for k, v in module.interconnects : k => v.state }
@@ -78,4 +104,19 @@ output "interconnect_pairing_keys" {
   description = "Pairing keys for partner interconnects (share with the provider)."
   sensitive   = true
   value       = { for k, v in module.interconnects : k => v.pairing_key }
+}
+
+output "firewall_policy_name" {
+  description = "Name of the tier network firewall policy (pass to network/internal-lb firewall_policy), or null in firewall_mode = legacy."
+  value       = module.network.firewall_policy_name
+}
+
+output "ncc_hub_id" {
+  description = "The NCC hub ID that environment spokes attach to (stages/net-spoke ncc.hub_id), or null when ncc.enabled = false."
+  value       = try(module.ncc_hub[0].id, null)
+}
+
+output "ncc_spoke_group" {
+  description = "The NCC group environment spokes join (edge for STAR, default for MESH), or null when ncc.enabled = false."
+  value       = try(module.ncc_hub[0].spoke_group, null)
 }

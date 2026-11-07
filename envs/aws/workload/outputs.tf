@@ -6,6 +6,11 @@ output "vpc_id" {
   value       = module.aws_workload.vpc_id
 }
 
+output "tgw_attachment_id" {
+  description = "ID of the spoke VPC's transit-gateway attachment (null without a hub). Add it to aws.network.spoke_attachments.<env> in config/landing-zone.yaml so aws-network accepts it and wires its routing."
+  value       = module.aws_workload.tgw_attachment_id
+}
+
 output "workload_role_arns" {
   description = "Map of workload IAM role name to role ARN."
   value       = module.aws_workload.workload_role_arns

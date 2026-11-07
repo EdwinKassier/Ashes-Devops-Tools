@@ -214,13 +214,26 @@ locals {
 
   # Effective folder role lists: the plan viewer custom role is appended to the
   # workload plan roles (env folders) and the network plan roles (shared folder).
+  # With Network Connectivity Center on, the network SAs (shared folder: the
+  # hub project) manage the hub and its center spoke, and each workload SA (its
+  # own env folder: the host project) its environment spoke. Folder-scoped like
+  # every other stage role; nothing at the org node.
+  ncc_workload_folder_roles = var.enable_network_connectivity_center ? {
+    plan  = ["roles/networkconnectivity.hubViewer"]
+    apply = ["roles/networkconnectivity.spokeAdmin"]
+  } : { plan = [], apply = [] }
+  ncc_network_folder_roles = var.enable_network_connectivity_center ? {
+    plan  = ["roles/networkconnectivity.hubViewer"]
+    apply = ["roles/networkconnectivity.hubAdmin", "roles/networkconnectivity.spokeAdmin"]
+  } : { plan = [], apply = [] }
+
   effective_workload_folder_roles = {
-    plan  = distinct(concat(var.workload_folder_roles.plan, local.plan_viewer_roles))
-    apply = var.workload_folder_roles.apply
+    plan  = distinct(concat(var.workload_folder_roles.plan, local.plan_viewer_roles, local.ncc_workload_folder_roles.plan))
+    apply = distinct(concat(var.workload_folder_roles.apply, local.ncc_workload_folder_roles.apply))
   }
   effective_network_folder_roles = {
-    plan  = distinct(concat(var.network_folder_roles.plan, local.plan_viewer_roles))
-    apply = var.network_folder_roles.apply
+    plan  = distinct(concat(var.network_folder_roles.plan, local.plan_viewer_roles, local.ncc_network_folder_roles.plan))
+    apply = distinct(concat(var.network_folder_roles.apply, local.ncc_network_folder_roles.apply))
   }
 
   # Roles the projects-apply SA may hand out on folders (IAM delegated role
@@ -344,22 +357,57 @@ resource "terraform_data" "production_workspaces_bound_by_id" {
 # delete that policy (iam.denypolicies.* is not deny-supported, so a deny policy
 # cannot protect itself). In the default "separate" mode a dedicated
 # <prefix>-guardrails-apply SA is the ONLY automation identity with denyAdmin.
-# It has no WIF binding: guardrail_owner_members (a PAM-gated group, ideally)
-# impersonate it to apply the deny-policy spec gcp-organization outputs
-# (docs/runbooks/production-hardening.md). Residual: iam.securityAdmin on the
-# organization apply SA could still grant itself denyAdmin; the control-plane
-# watch "guardrail_role_grant" alerts on exactly that grant.
+#
+# Routine path: the security-team gcp-guardrails workspace (envs/gcp/guardrails,
+# its own HCP project, security team only) plans as <prefix>-guardrails-plan
+# and applies as <prefix>-guardrails-apply. Both are WIF-bound to that
+# workspace by its immutable ID ONLY, never by its squattable name: without a
+# tfc_workspace_ids entry there is no binding at all (and a production estate
+# fails the plan).
+#
+# Break-glass path: guardrail_owner_members (a PAM-gated group, ideally)
+# impersonate the apply SA and apply the deny_policy_specs output of
+# gcp-guardrails by hand (docs/runbooks/break-glass.md). Residual:
+# iam.securityAdmin on the organization apply SA could still grant itself
+# denyAdmin; the control-plane watch "guardrail_role_grant" alerts on exactly
+# that grant.
+locals {
+  guardrails_separate = var.guardrail_owner_mode == "separate"
+  # The workspace identity exists whenever a guardrails workspace is declared;
+  # its WIF binding additionally needs TFC OIDC and the workspace ID.
+  guardrails_workspace_identity = local.guardrails_separate && var.guardrails_workspace != null
+  guardrails_wif_wanted         = local.guardrails_workspace_identity && var.enable_tfc_oidc && var.tfc_organization != null
+  guardrails_workspace_id       = local.guardrails_workspace_identity ? lookup(var.tfc_workspace_ids, var.guardrails_workspace, null) : null
+  guardrails_wif_bound          = local.guardrails_wif_wanted && local.guardrails_workspace_id != null
+
+  guardrails_tfc_bindings = local.guardrails_wif_bound ? [
+    {
+      workspace_name        = var.guardrails_workspace
+      workspace_id          = local.guardrails_workspace_id
+      run_phase             = "plan"
+      service_account_email = google_service_account.guardrails_plan[0].email
+    },
+    {
+      workspace_name        = var.guardrails_workspace
+      workspace_id          = local.guardrails_workspace_id
+      run_phase             = "apply"
+      service_account_email = google_service_account.guardrails[0].email
+    },
+  ] : []
+}
+
 resource "google_service_account" "guardrails" {
-  count = var.guardrail_owner_mode == "separate" ? 1 : 0
+  count = local.guardrails_separate ? 1 : 0
 
   project      = module.admin_project.project_id
   account_id   = "${var.project_prefix}-guardrails-apply"
   display_name = "Terraform guardrail owner (deny policies)"
-  description  = "Sole automation holder of roles/iam.denyAdmin. Applies the gcp-organization deny-policy spec; impersonated only by guardrail_owner_members. Managed by gcp-bootstrap."
+  description  = "Sole automation holder of roles/iam.denyAdmin. Applies the org deny policies from the gcp-guardrails workspace; break-glass impersonation only by guardrail_owner_members. Managed by gcp-bootstrap."
 }
 
+# resourcemanager.tagViewer: gcp-guardrails looks up the containment tag.
 resource "google_organization_iam_member" "guardrails" {
-  for_each = var.guardrail_owner_mode == "separate" ? toset(["roles/iam.denyAdmin", "roles/resourcemanager.organizationViewer"]) : toset([])
+  for_each = local.guardrails_separate ? toset(["roles/iam.denyAdmin", "roles/resourcemanager.organizationViewer", "roles/resourcemanager.tagViewer"]) : toset([])
 
   org_id = var.org_id
   role   = each.value
@@ -367,9 +415,43 @@ resource "google_organization_iam_member" "guardrails" {
 }
 
 resource "google_service_account_iam_member" "guardrails_impersonation" {
-  for_each = var.guardrail_owner_mode == "separate" ? toset(var.guardrail_owner_members) : toset([])
+  for_each = local.guardrails_separate ? toset(var.guardrail_owner_members) : toset([])
 
   service_account_id = google_service_account.guardrails[0].name
   role               = "roles/iam.serviceAccountTokenCreator"
   member             = each.value
+}
+
+# Read-only plan identity of the gcp-guardrails workspace.
+resource "google_service_account" "guardrails_plan" {
+  count = local.guardrails_workspace_identity ? 1 : 0
+
+  project      = module.admin_project.project_id
+  account_id   = "${var.project_prefix}-guardrails-plan"
+  display_name = "Terraform guardrails plan (read-only)"
+  description  = "Plan-phase identity of the gcp-guardrails workspace: reads deny policies and tags, changes nothing. Managed by gcp-bootstrap."
+}
+
+resource "google_organization_iam_member" "guardrails_plan" {
+  for_each = local.guardrails_workspace_identity ? toset(["roles/iam.denyReviewer", "roles/resourcemanager.organizationViewer", "roles/resourcemanager.tagViewer"]) : toset([])
+
+  org_id = var.org_id
+  role   = each.value
+  member = "serviceAccount:${google_service_account.guardrails_plan[0].email}"
+}
+
+# By ID only: a production estate fails the plan until tfc_workspace_ids holds
+# the gcp-guardrails ID (tfc-admin writes it onto gcp-bootstrap; output
+# gcp_bootstrap_tfvars for the local phase-0 apply). Outside production the
+# workspace simply cannot authenticate until then (output
+# guardrails_workspace_bound_by_id = false); it is never bound by name.
+resource "terraform_data" "guardrails_workspace_bound_by_id" {
+  input = local.guardrails_workspace_id
+
+  lifecycle {
+    precondition {
+      condition     = !local.guardrails_wif_wanted || local.guardrails_workspace_id != null || length(var.production_workload_environments) == 0
+      error_message = "Production environments exist but tfc_workspace_ids has no entry for ${coalesce(var.guardrails_workspace, "the guardrails workspace")}: its WIF binding is by immutable workspace ID only, so the security-team guardrails workspace could not authenticate. Add its ws-... ID (tfc-admin output workspace_ids) to tfc_workspace_ids and re-plan gcp-bootstrap, or set guardrails_workspace = null to keep only the PAM break-glass path."
+    }
+  }
 }

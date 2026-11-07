@@ -36,8 +36,8 @@ variable "project_number" {
   validation {
     # The Pub/Sub service agent (service-<number>@gcp-sa-pubsub) is granted
     # dead-letter forwarding, so its email needs the project number.
-    condition     = alltrue([for k, s in var.services : !s.pubsub.enabled]) || var.project_number != null
-    error_message = "project_number is required when any service sets pubsub.enabled = true (dead-letter forwarding grants the Pub/Sub service agent)."
+    condition     = alltrue([for k, s in var.services : !s.pubsub.enabled || (s.project_id != null ? s.project_number : var.project_number) != null])
+    error_message = "project_number (or, for a service with its own project_id, that service's project_number) is required when a service sets pubsub.enabled = true (dead-letter forwarding grants the Pub/Sub service agent)."
   }
 }
 
@@ -143,13 +143,18 @@ variable "app_deploy_wif_pool_id" {
 }
 
 variable "github_repository_owner_id" {
-  description = "Optional IMMUTABLE numeric GitHub organization/user ID. When set, the provider additionally rejects any token whose repository_owner_id differs (defence in depth on top of the per-repository_id condition)."
+  description = "IMMUTABLE numeric GitHub organization/user ID (gh api orgs/<org> --jq .id). Required once a service declares `github`: the provider attribute_condition is exactly assertion.repository_owner_id == \"<id>\", the form the org-policy constraint custom.wifProviderTenantPinned accepts."
   type        = string
   default     = null
 
   validation {
     condition     = var.github_repository_owner_id == null || can(regex("^[0-9]+$", var.github_repository_owner_id))
     error_message = "github_repository_owner_id must be the numeric GitHub owner ID (not the org name)."
+  }
+
+  validation {
+    condition     = var.github_repository_owner_id != null || !var.enable_app_deploy_wif || alltrue([for k, s in var.services : s.github == null])
+    error_message = "a service sets `github` but github_repository_owner_id is null. The GitHub provider condition is the owner pin; set the numeric owner ID (gh api orgs/<org> --jq .id)."
   }
 }
 
@@ -177,16 +182,30 @@ variable "services" {
     Optional per entry:
       database = {...}  -> private-IP Cloud SQL Postgres `<name>-db` with IAM auth;
                            the runtime SA is its IAM database user.
+      project_id / project_number
+                        -> deploy this service into a team service project
+                           (Shared VPC subnet access is granted to its Cloud Run
+                           service agent). Default: the host project.
       github   = {...}  -> deploy SA `<name>-deploy` bound via WIF to the GitHub
                            repo's IMMUTABLE numeric repository_id (optionally a
                            ref and/or GitHub environment). Needs enable_app_deploy_wif.
-      secrets  = { ENV_VAR = { secret = "<secret id in the host project>" } }
+      secrets  = { ENV_VAR = { secret = "<secret id in the service project, or projects/<p>/secrets/<s>>" } }
                            -> env vars from Secret Manager; the runtime SA gets
                            secretAccessor on exactly those secrets.
+      runtime  = "cloud-run-job"
+                        -> a Cloud Run v2 job `<name>` (run to completion, no
+                           URL; `job` sets task_count / parallelism / max_retries,
+                           `timeout` is the task timeout) instead of a service.
+                           Default "cloud-run". Request alerts and SLOs apply to
+                           services only; a job cannot be unauthenticated.
+      slo      = {...}  -> an availability or latency SLO on the Cloud Run
+                           service (modules/gcp/monitoring/slo), optionally with
+                           an error-budget burn-rate alert.
     The default `{}` creates nothing.
   EOT
   type = map(object({
-    image                       = optional(string) # null => var.bootstrap_image
+    runtime                     = optional(string, "cloud-run") # cloud-run | cloud-run-job
+    image                       = optional(string)              # null => var.bootstrap_image
     ingress                     = optional(string, "INGRESS_TRAFFIC_INTERNAL_ONLY")
     cpu                         = optional(string, "1000m")
     memory                      = optional(string, "512Mi")
@@ -205,6 +224,25 @@ variable "services" {
     runtime_project_roles       = optional(list(string), [])
     enable_deletion_protection  = optional(bool)
     labels                      = optional(map(string), {})
+
+    # Team service project. Null = the environment host project (var.project_id).
+    # When set, the service's registry, runtime/deploy SAs, Cloud Run, Cloud SQL,
+    # alerts and Pub/Sub live in that project (it must be a Shared VPC service
+    # project with the run, artifactregistry and iam APIs enabled); the WIF pool
+    # stays in var.project_id. project_number is then required: it names the
+    # project's Cloud Run service agent, which is granted compute.networkUser on
+    # the service's subnet and compute.networkViewer on the host project.
+    project_id     = optional(string)
+    project_number = optional(string)
+    # Explicit override of the Shared VPC grants above. Null derives it from
+    # project_id; callers whose project_id is unknown until apply (a project
+    # created in the same run) set it to true so for_each keys stay plan-time known.
+    # Must be true with a project_id of another project, false only without one.
+    grant_network_access = optional(bool)
+    # Services sharing a value share ONE networkViewer and one networkUser per
+    # subnet (so removing a service never revokes a sibling's grant). Null = the
+    # service key. Set it to the team name for services of the same project.
+    network_access_group = optional(string)
 
     artifact_registry = optional(object({
       immutable_tags             = optional(bool, true)
@@ -240,6 +278,25 @@ variable "services" {
       duration              = optional(string, "300s") # sustained before it fires
     }), {})
 
+    # Cloud Run job settings (runtime = "cloud-run-job" only; ignored otherwise).
+    job = optional(object({
+      task_count  = optional(number, 1)
+      parallelism = optional(number) # null = as many as possible
+      max_retries = optional(number, 3)
+    }), {})
+
+    # Service-level objective on the Cloud Run service (runtime = "cloud-run"
+    # only). Null (default) creates none.
+    slo = optional(object({
+      sli_type               = optional(string, "availability") # availability | latency
+      goal                   = optional(number, 0.99)           # (0, 1)
+      rolling_period_days    = optional(number, 28)
+      latency_threshold      = optional(string, "1s") # latency SLI only
+      enable_burn_rate_alert = optional(bool, false)
+      burn_rate_threshold    = optional(number, 10)
+      burn_rate_lookback     = optional(string, "3600s")
+    }))
+
     # Pub/Sub topic `<name>` + pull subscription `<name>-sub` with a dead-letter
     # topic `<name>-dlq` (+ `<name>-dlq-sub` so dead letters are retained). The
     # runtime SA may publish to ITS topic and consume ITS subscription only;
@@ -254,8 +311,68 @@ variable "services" {
   default = {}
 
   validation {
+    # Unknown values (a project created in the same plan) defer these to apply.
+    condition = alltrue([for k, s in var.services : (
+      (s.project_id == null || can(regex("^[a-z][a-z0-9-]{4,28}[a-z0-9]$", s.project_id))) &&
+      (s.project_number == null || can(regex("^[0-9]+$", s.project_number)))
+    )])
+    error_message = "services[*].project_id must be a valid GCP project ID and services[*].project_number the numeric project number."
+  }
+
+  validation {
+    condition     = alltrue([for k, s in var.services : s.project_id == null || s.project_id == var.project_id || s.project_number != null])
+    error_message = "a service with its own project_id (a team service project) must also set project_number: the Cloud Run service agent that needs Shared VPC subnet access is derived from it."
+  }
+
+  validation {
+    # Unknown project ids (created in the same plan) defer these to apply.
+    condition = alltrue([for k, s in var.services : (
+      s.grant_network_access == null ? true :
+      s.grant_network_access ? (s.project_id != null && s.project_id != var.project_id) : (s.project_id == null || s.project_id == var.project_id)
+    )])
+    error_message = "services[*].grant_network_access = true requires a project_id other than the host project; false with such a project_id is rejected (the service agent would have no Shared VPC access). Leave it null to derive it."
+  }
+
+  validation {
+    condition     = alltrue([for k, s in var.services : s.network_access_group == null || can(regex("^[a-z][a-z0-9-]{0,40}$", s.network_access_group))])
+    error_message = "services[*].network_access_group must be a lowercase slug (the service_team name)."
+  }
+
+  validation {
     condition     = alltrue([for k, s in var.services : can(regex("^[a-z][a-z0-9-]{0,20}[a-z0-9]$", k))])
     error_message = "service keys must be 2-22 characters: lowercase letters, digits and hyphens, starting with a letter (the key prefixes the <name>-run / <name>-deploy service account IDs)."
+  }
+
+  validation {
+    condition     = alltrue([for k, s in var.services : contains(["cloud-run", "cloud-run-job"], s.runtime)])
+    error_message = "services[*].runtime must be \"cloud-run\" (a Cloud Run service, the default) or \"cloud-run-job\" (a Cloud Run job)."
+  }
+
+  validation {
+    # A job has no URL: nothing to expose, no request metrics to alert on.
+    condition     = alltrue([for k, s in var.services : s.runtime == "cloud-run" || (!s.enable_unauthenticated && s.slo == null)])
+    error_message = "a service with runtime = \"cloud-run-job\" cannot set enable_unauthenticated = true (or be exposed through public ingress) or declare an slo: a job serves no requests."
+  }
+
+  validation {
+    condition = alltrue([for k, s in var.services : (
+      (s.job.task_count >= 1 && s.job.task_count <= 10000) &&
+      (s.job.parallelism == null || try(s.job.parallelism >= 1, false)) &&
+      (s.job.max_retries >= 0 && s.job.max_retries <= 10)
+    )])
+    error_message = "services[*].job: task_count must be 1-10000, parallelism null or at least 1, max_retries 0-10."
+  }
+
+  validation {
+    condition = alltrue([for k, s in var.services : s.slo == null || (
+      contains(["availability", "latency"], try(s.slo.sli_type, "")) &&
+      try(s.slo.goal > 0 && s.slo.goal < 1, false) &&
+      try(s.slo.rolling_period_days >= 1 && s.slo.rolling_period_days <= 30, false) &&
+      can(regex("^[0-9]+(\\.[0-9]+)?s$", s.slo.latency_threshold)) &&
+      can(regex("^[0-9]+s$", s.slo.burn_rate_lookback)) &&
+      try(s.slo.burn_rate_threshold > 0, false)
+    )])
+    error_message = "services[*].slo: sli_type must be availability or latency, goal strictly between 0 and 1 (e.g. 0.999), rolling_period_days 1-30, latency_threshold and burn_rate_lookback seconds strings (\"1s\", \"3600s\"), burn_rate_threshold > 0."
   }
 
   validation {
@@ -278,6 +395,17 @@ variable "services" {
   validation {
     condition     = alltrue([for k, s in var.services : s.github == null || try(s.github.ref, null) == null || can(regex("^refs/(heads|tags)/", s.github.ref))])
     error_message = "services[*].github.ref must be a full git ref (refs/heads/<branch> or refs/tags/<tag>)."
+  }
+
+  validation {
+    # ref / environment become exact principalSet attribute values. environment
+    # is the last '/'-joined part of repo_ref_env, so a '/' in it would make
+    # two different (ref, environment) pairs map to the same value.
+    condition = alltrue([for k, s in var.services : s.github == null || (
+      (try(s.github.ref, null) == null || can(regex("^[A-Za-z0-9_./-]+$", s.github.ref))) &&
+      (try(s.github.environment, null) == null || (can(regex("^[A-Za-z0-9_.-]+$", s.github.environment)) && try(s.github.environment, null) != "-"))
+    )])
+    error_message = "services[*].github.ref may contain only letters, digits, '_', '.', '/' and '-', and .environment only letters, digits, '_', '.' and '-' (no '/', wildcards, quotes or spaces); environment may not be \"-\" (the value a token without an environment claim maps to)."
   }
 
   validation {

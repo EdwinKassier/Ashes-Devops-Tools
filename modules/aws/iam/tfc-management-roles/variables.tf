@@ -148,3 +148,17 @@ variable "security_owner_tag" {
     value = "aws-security"
   }
 }
+
+variable "enable_security_service_teardown" {
+  description = "Teardown gate: let the aws-security apply role switch org-wide detection OFF (Disable*AdminAccount, DisableAWSServiceAccess, DeregisterDelegatedAdministrator for the security services). Default false: a routine aws-security apply can enable and register, never disable. Set true only for a reviewed aws-security destroy (docs/runbooks/aws-teardown.md), then back to false."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "enable_cloudtrail_delegated_admin" {
+  description = "The organization trail is managed by the CloudTrail delegated administrator (security tooling) rather than from the management account. When true the aws-security apply role loses every trail write and create in the management account (OrganizationTrailOnly cloudtrail:*, the delivery-role PassRole, TrailWiringCreate and CreateOwnedKeysOnly; the old trail's wiring is only refreshed) and may no longer register or deregister the cloudtrail.amazonaws.com delegated admin (aws-organization owns that registration). Default false: unchanged."
+  type        = bool
+  default     = false
+  nullable    = false
+}

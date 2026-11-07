@@ -91,3 +91,108 @@ run "rejects_cidr_list_shorter_than_zones" {
 
   expect_failures = [var.subnet_cidrs]
 }
+
+run "invalid_firewall_mode" {
+  command = plan
+
+  variables {
+    firewall_mode = "tags"
+  }
+
+  expect_failures = [var.firewall_mode]
+}
+
+run "invalid_firewall_policy_enforcement_order" {
+  command = plan
+
+  variables {
+    firewall_policy_enforcement_order = "FIRST"
+  }
+
+  expect_failures = [var.firewall_policy_enforcement_order]
+}
+
+run "accepts_additional_region" {
+  command = plan
+
+  variables {
+    additional_regions = {
+      "us-east1" = { subnet_cidrs = { public = "10.1.0.0/24", private = "10.1.1.0/24", database = "10.1.2.0/24" } }
+      "us-west1" = { subnet_cidrs = { public = "10.2.0.0/24", private = "10.2.1.0/24", database = "10.2.2.0/24" }, nat = false }
+    }
+  }
+}
+
+run "rejects_additional_region_equal_to_primary" {
+  command = plan
+
+  variables {
+    additional_regions = {
+      "us-central1" = { subnet_cidrs = { public = "10.1.0.0/24", private = "10.1.1.0/24", database = "10.1.2.0/24" } }
+    }
+  }
+
+  expect_failures = [var.additional_regions]
+}
+
+run "rejects_invalid_additional_region_name" {
+  command = plan
+
+  variables {
+    additional_regions = {
+      "us-east1-b" = { subnet_cidrs = { public = "10.1.0.0/24", private = "10.1.1.0/24", database = "10.1.2.0/24" } }
+    }
+  }
+
+  expect_failures = [var.additional_regions]
+}
+
+run "rejects_invalid_additional_region_cidr" {
+  command = plan
+
+  variables {
+    additional_regions = {
+      "us-east1" = { subnet_cidrs = { public = "10.1.0.1/24", private = "10.1.1.0/24", database = "not-a-cidr" } }
+    }
+  }
+
+  expect_failures = [var.additional_regions]
+}
+
+run "rejects_additional_region_overlapping_primary" {
+  command = plan
+
+  variables {
+    # 10.0.16.0/20 contains the primary private subnet 10.0.16.0/24.
+    additional_regions = {
+      "us-east1" = { subnet_cidrs = { public = "10.1.0.0/24", private = "10.0.16.0/20", database = "10.1.2.0/24" } }
+    }
+  }
+
+  expect_failures = [var.additional_regions]
+}
+
+run "rejects_additional_regions_overlapping_each_other" {
+  command = plan
+
+  variables {
+    additional_regions = {
+      "us-east1" = { subnet_cidrs = { public = "10.1.0.0/24", private = "10.1.1.0/24", database = "10.1.2.0/24" } }
+      "us-west1" = { subnet_cidrs = { public = "10.2.0.0/24", private = "10.1.1.128/25", database = "10.2.2.0/24" } }
+    }
+  }
+
+  expect_failures = [var.additional_regions]
+}
+
+run "rejects_overlap_within_one_additional_region" {
+  command = plan
+
+  variables {
+    additional_regions = {
+      "us-east1" = { subnet_cidrs = { public = "10.1.0.0/24", private = "10.1.0.0/24", database = "10.1.2.0/24" } }
+    }
+  }
+
+  expect_failures = [var.additional_regions]
+}

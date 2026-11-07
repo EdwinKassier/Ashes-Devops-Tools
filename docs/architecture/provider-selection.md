@@ -47,6 +47,7 @@ One root per cloud + layer, named `envs/<cloud>/<layer>`. Each root declares exa
 |---|---|---|---|
 | `envs/gcp/bootstrap` | `gcp-bootstrap` | GCP (phase-0 automation foundation) | existing |
 | `envs/gcp/organization` | `gcp-organization` | GCP (org policy, KMS, audit, billing) | existing |
+| `envs/gcp/guardrails` | `gcp-guardrails` | GCP (org IAM deny policies; security team only) | GCP |
 | `envs/gcp/projects` | `gcp-projects` | GCP (host/spoke projects) | existing |
 | `envs/gcp/network-hub` | `gcp-network-hub` | GCP (hub VPC, DNS, VPC-SC) | existing |
 | `envs/gcp/workload` | `gcp-workload-<env>` | GCP (per-env app infra) | existing |
@@ -78,6 +79,7 @@ Cloud selection is additive *across* clouds (next section). *Within* a cloud eac
 |---|---|---|---|
 | `gcp-bootstrap` | — | — | — |
 | `gcp-organization` | `gcp-bootstrap` | — | — |
+| `gcp-guardrails` | — (config file only; looks up the org and the containment tag directly) | — | — |
 | `gcp-projects` | `gcp-bootstrap` (`bootstrap_contract`), `gcp-organization` (`organization_contract`) | — | — |
 | `gcp-network-hub` | `gcp-organization` (`organization_contract`), `gcp-projects` (`projects_contract`) | — | — |
 | `gcp-workload-<env>` | `gcp-organization` (`organization_contract`), `gcp-projects` (`projects_contract`), `gcp-network-hub` (`network_hub_contract`) | `gcp-network-hub` (`enable_network_hub = false`: no hub peering, no DNS peering zone) | `saas-<name>` (`enable_saas_secret_bridge`) |
@@ -143,7 +145,7 @@ Pick what you want; apply exactly those workspaces. Credentials come from the ro
 
 | You want… | Apply these workspaces | Credentials required |
 |---|---|---|
-| GCP only | `gcp-bootstrap`, `gcp-organization`, `gcp-projects`, `gcp-network-hub`, `gcp-workload-<env>` | GCP ADC |
+| GCP only | `gcp-bootstrap`, `gcp-organization`, `gcp-guardrails`, `gcp-projects`, `gcp-network-hub`, `gcp-workload-<env>` | GCP ADC |
 | AWS only (baseline) | `aws-organization`, `aws-security` (+ `aws-identity`/`aws-shared-services`/`aws-backup`/`aws-network` as needed; `aws-workload-<env>` without `aws-network` is a standalone VPC) | AWS (management + assume-role) |
 | Supabase only | `saas-<name>` with `enable_supabase=true, enable_vercel=false` | `SUPABASE_ACCESS_TOKEN` only (no aws/google provider in the root) |
 | Vercel only | `saas-<name>` with `enable_vercel=true, enable_supabase=false` | `VERCEL_API_TOKEN` only (no aws/google provider in the root) |

@@ -4,8 +4,7 @@
 delivered: the secret bridge on both clouds (`enable_saas_secret_bridge` on
 `envs/gcp/workload` and `envs/aws/workload`), the frontend-URL seam
 (`cross_cloud_references` on `envs/saas`), and DNS unification
-(`modules/gcp/network/dns-records`). Each is opt-in and off by default, and the DNS records module ships for both
-Cloud DNS and Route 53.
+(`modules/aws/network/dns-records` for Route 53; the Cloud DNS module was removed in favour of `network/dns`). Each is opt-in and off by default.
 
 **Audit finding (H9):** the SaaS tier (Supabase and Vercel) is a disconnected
 island. `modules/saas/stages/saas-workload` composes the SaaS modules, but no
@@ -101,8 +100,10 @@ config.
 
 - **Build, incrementally:**
   1. **Secret bridge (opt-in) — DELIVERED for GCP and AWS.**
-     `enable_saas_secret_bridge` reads the `saas-<name>` remote state and writes
-     the Supabase connection details into the cloud's secret store: GCP Secret
+     `enable_saas_secret_bridge` reads the `saas-<name>` outputs ephemerally
+     (`ephemeral "tfe_outputs"`, so they never enter the workload's plan or
+     state) and writes the Supabase connection details, write-only, into the
+     cloud's secret store: GCP Secret
      Manager on `envs/gcp/workload` (reusing `modules/gcp/data/secret-manager`),
      and AWS Secrets Manager on `envs/aws/workload` (granting named task roles
      GetSecretValue). Default off on both.
@@ -111,11 +112,11 @@ config.
      endpoint) from remote state and injects it as a Vercel shared env var, so the
      frontend learns the backend URL. No cloud credentials, only tfc_organization.
      Default empty: the root stays standalone.
-  3. **DNS unification — DELIVERED for Cloud DNS.** `modules/gcp/network/dns-records`
-     writes SaaS custom-domain records (Vercel, Supabase) into an existing Cloud
-     DNS managed zone, so they live in the org's zone instead of a separate
-     registrar. Opt-in (empty records map creates nothing). The AWS Route 53
-     counterpart ships as `modules/aws/network/dns-records`.
+  3. **DNS unification — DELIVERED for Route 53.** `modules/aws/network/dns-records`
+     writes SaaS custom-domain records (Vercel, Supabase) into an existing Route
+     53 zone, so they live in the org's zone instead of a separate registrar.
+     Opt-in (empty records map creates nothing). The standalone Cloud DNS
+     `dns-records` module was removed; declare records through `network/dns`.
 - **Pro:** matches the repo's provider-selection philosophy (deploy any
   combination, opt in per feature); keeps the SaaS root credential-free; each
   seam is independently testable and reversible.

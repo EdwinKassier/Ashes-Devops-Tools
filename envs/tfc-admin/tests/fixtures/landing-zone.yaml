@@ -5,6 +5,7 @@ org:
     organization: cfg-tfc
     project_name_prefix: lz-
     aws_project: aws-landing-zone
+    plan: standard
     vcs_repo:
       identifier: cfg/landing-zone
       github_app_installation_id: ghain-123

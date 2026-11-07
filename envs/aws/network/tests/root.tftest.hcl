@@ -25,23 +25,25 @@ run "consumes_remote_state_contract" {
     target = data.terraform_remote_state.aws_organization
     values = {
       outputs = {
-        organization_id       = "o-abcdefghij"
-        management_account_id = "111111111111"
-        account_ids           = { network = "666666666666" }
-        account_role_arns = {
-          network = "arn:aws:iam::666666666666:role/cross-account"
+        contract = {
+          organization_id       = "o-abcdefghij"
+          management_account_id = "111111111111"
+          account_ids           = { network = "666666666666" }
+          account_role_arns = {
+            network = "arn:aws:iam::666666666666:role/cross-account"
+          }
         }
       }
     }
   }
 
   assert {
-    condition     = data.terraform_remote_state.aws_organization[0].outputs.organization_id == "o-abcdefghij"
+    condition     = local.org.organization_id == "o-abcdefghij"
     error_message = "remote-state organization_id contract key must be readable by the root"
   }
 
   assert {
-    condition     = data.terraform_remote_state.aws_organization[0].outputs.account_role_arns["network"] != ""
+    condition     = local.org.account_role_arns["network"] != ""
     error_message = "remote-state account_role_arns must expose the network role the provider assumes"
   }
 
@@ -79,11 +81,13 @@ run "rejects_placeholder_landing_zone_name" {
     target = data.terraform_remote_state.aws_organization
     values = {
       outputs = {
-        organization_id       = "o-abcdefghij"
-        management_account_id = "111111111111"
-        account_ids           = { network = "666666666666" }
-        account_role_arns = {
-          network = "arn:aws:iam::666666666666:role/cross-account"
+        contract = {
+          organization_id       = "o-abcdefghij"
+          management_account_id = "111111111111"
+          account_ids           = { network = "666666666666" }
+          account_role_arns = {
+            network = "arn:aws:iam::666666666666:role/cross-account"
+          }
         }
       }
     }
@@ -117,11 +121,13 @@ override_data {
   target = data.terraform_remote_state.aws_organization
   values = {
     outputs = {
-      organization_id       = "o-abcdefghij"
-      management_account_id = "111111111111"
-      account_ids           = { network = "666666666666" }
-      account_role_arns = {
-        network = "arn:aws:iam::666666666666:role/cross-account"
+      contract = {
+        organization_id       = "o-abcdefghij"
+        management_account_id = "111111111111"
+        account_ids           = { network = "666666666666" }
+        account_role_arns = {
+          network = "arn:aws:iam::666666666666:role/cross-account"
+        }
       }
     }
   }
@@ -162,5 +168,48 @@ run "production_profile_is_the_default" {
   assert {
     condition     = local.profile == "production" && local.enable_network_firewall == true
     error_message = "with no profile set the production stack (Network Firewall on) must be the default."
+  }
+}
+
+# Production egress fails closed. The alert-only failure is proven in the
+# stage's production_egress tests (expect_failures cannot name a child-module
+# object); the root runs below prove the gate wiring and that it plans when
+# satisfied.
+run "production_profile_with_seeded_allowlist_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-production-allowlist.yaml"
+  }
+
+  assert {
+    condition     = local.enforce_egress_allowlist == true && length(local.network_firewall_egress_domain_allowlist) == 4
+    error_message = "production must enforce the allowlist and read it from config."
+  }
+}
+
+run "starter_profile_unaffected" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-starter-prod-env.yaml"
+  }
+
+  assert {
+    condition     = local.enforce_egress_allowlist == false
+    error_message = "the starter profile must not enforce the egress gate."
+  }
+}
+
+run "waiver_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-production-waived.yaml"
+  }
+
+  assert {
+    condition     = local.enforce_egress_allowlist == true && local.egress_alert_only_waived == true
+    error_message = "the waiver must plan with the gate still on."
   }
 }

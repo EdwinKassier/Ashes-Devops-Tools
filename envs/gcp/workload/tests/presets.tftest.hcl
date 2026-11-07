@@ -3,6 +3,9 @@
 
 mock_provider "google" {}
 mock_provider "google-beta" {}
+# tfe serves only the SaaS secret bridge (ephemeral "tfe_outputs"); mocked so
+# no run contacts HCP Terraform.
+mock_provider "tfe" {}
 
 variables {
   project_prefix       = "acme"
@@ -30,9 +33,9 @@ variables {
   enable_network_hub = false
 }
 
-# The mock provider returns no zones, which trips the host stage's postcondition.
+# The mock provider returns no zones, which trips the spoke network's postcondition.
 override_data {
-  target = module.host.data.google_compute_zones.available
+  target = module.environment.module.host.data.google_compute_zones.available
   values = {
     names = ["europe-west2-a", "europe-west2-b", "europe-west2-c"]
   }
@@ -64,8 +67,8 @@ run "per_environment_preset_applies" {
   }
 
   assert {
-    condition     = module.host.cloud_armor != null
-    error_message = "The preset's enable_cloud_armor must reach the host stage."
+    condition     = module.environment.components.cloud_armor
+    error_message = "The preset's enable_cloud_armor must reach the spoke network."
   }
 }
 

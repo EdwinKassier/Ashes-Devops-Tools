@@ -25,6 +25,24 @@ variable "region" {
   }
 }
 
+variable "additional_regions" {
+  description = "Opt-in extra regions of this VPC, keyed by region name (passed to network/tiered-vpc): subnet_cidrs (public, private, database; one regional subnet per tier, no overlap with the primary subnets or another region), optional secondary_ranges for the region's private subnet, and nat (default true): a Cloud Router <network.name>-router-<region> and Cloud NAT <network.name>-nat-<region> for the region's private and database subnets, with the primary nat settings (created only when nat.enabled). PSA, PSC, VPN, DNS and VPC-SC stay single-region or global. Empty (default) = single-region, nothing changes."
+  type = map(object({
+    subnet_cidrs = object({
+      public   = string
+      private  = string
+      database = string
+    })
+    secondary_ranges = optional(list(object({
+      range_name    = string
+      ip_cidr_range = string
+    })), [])
+    nat = optional(bool, true)
+  }))
+  default  = {}
+  nullable = false
+}
+
 variable "labels" {
   description = "Labels applied to every labelable resource."
   type        = map(string)
@@ -89,12 +107,15 @@ variable "network" {
 }
 
 variable "firewall" {
-  description = "Baseline tier firewall: rule logging, the IAP SSH/RDP allow rule, and the ports opened public to compute and compute to database."
+  description = "Baseline tier firewall: rule logging, the IAP SSH/RDP allow rule, and the ports opened public to compute and compute to database. api_gateway_source_ranges and database_egress_target_service_accounts apply only to the network firewall policy (firewall_mode both / policy)."
   type = object({
     enable_logging     = optional(bool, true)
     enable_iap_access  = optional(bool, true)
     compute_tier_ports = optional(list(string), ["8080", "8443", "3000"])
     database_ports     = optional(list(string), ["3306", "5432", "6379"])
+    # Network firewall policy only (firewall_mode both / policy).
+    api_gateway_source_ranges               = optional(list(string), [])
+    database_egress_target_service_accounts = optional(list(string), [])
   })
   default  = {}
   nullable = false
@@ -187,7 +208,7 @@ variable "vpn" {
     tunnel_count is 2 for HA (production) or 1 for testing. peer_gateway_ips
     lists the peer interface IPv4 addresses (one per tunnel). local_ips and
     peer_ips are the BGP link-local addresses. The pre-shared key is the separate
-    sensitive vpn_shared_secret input.
+    vpn_shared_secret_wo (write-only) or legacy vpn_shared_secret input. With ncc.enabled, the tunnels also join the NCC hub as a hybrid spoke.
   EOT
   type = object({
     enabled          = optional(bool, false)
@@ -211,16 +232,52 @@ variable "vpn" {
   }
 }
 
+variable "ncc" {
+  description = "Network Connectivity Center hub, off by default (spokes then use VPC peering). preset_topology: STAR (edge spokes reach the center only; the peering-equivalent) or MESH. Immutable once created. name defaults to <project_prefix>-ncc-hub. export_private_service_access adds a producer VPC spoke for the hub PSA peering (when PSA is enabled). auto_accept_projects (project IDs or numbers) adopts the spoke group to auto-accept spokes from those projects; empty = spokes from other projects wait for a manual accept. vpn_site_to_site_data_transfer lets on-premises sites exchange traffic through the VPN hybrid spoke (only when vpn.enabled; the region must support it)."
+  type = object({
+    enabled                        = optional(bool, false)
+    name                           = optional(string)
+    preset_topology                = optional(string, "STAR")
+    export_psc                     = optional(bool, false)
+    export_private_service_access  = optional(bool, true)
+    auto_accept_projects           = optional(list(string), [])
+    vpn_site_to_site_data_transfer = optional(bool, false)
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = contains(["STAR", "MESH"], var.ncc.preset_topology)
+    error_message = "ncc.preset_topology must be STAR or MESH."
+  }
+}
+
 variable "vpn_shared_secret" {
-  description = "HA VPN pre-shared key. Required when vpn.enabled is true; inject it from Secret Manager or a sensitive workspace variable, not a plaintext tfvars file."
+  deprecated  = "Stored in state. Set vpn_shared_secret_wo (write-only; bump vpn_shared_secret_wo_version to rotate) instead; this input is removed in v1.0."
+  description = "HA VPN pre-shared key, stored in state (legacy). Prefer vpn_shared_secret_wo, which never enters state. Set exactly one of the two when vpn.enabled is true."
   type        = string
   default     = null
   sensitive   = true
+}
+
+variable "vpn_shared_secret_wo" {
+  description = "Write-only HA VPN pre-shared key: sent to the API at apply time, never stored in state or plan. Supply it from an ephemeral source (an ephemeral resource, or a TFC variable). Set exactly one of vpn_shared_secret or vpn_shared_secret_wo when vpn.enabled is true."
+  type        = string
+  default     = null
+  sensitive   = true
+  ephemeral   = true
 
   validation {
-    condition     = !var.vpn.enabled || (var.vpn_shared_secret != null && var.vpn_shared_secret != "")
-    error_message = "vpn_shared_secret must be set (non-null, non-empty) when vpn.enabled is true."
+    condition     = !var.vpn.enabled || ((var.vpn_shared_secret != null && var.vpn_shared_secret != "") != (var.vpn_shared_secret_wo != null && var.vpn_shared_secret_wo != ""))
+    error_message = "When vpn.enabled is true, set exactly one non-empty pre-shared key: vpn_shared_secret_wo (preferred, write-only) or vpn_shared_secret (legacy)."
   }
+}
+
+variable "vpn_shared_secret_wo_version" {
+  description = "Rotation counter for vpn_shared_secret_wo. Write-only values are not diffed: increment this to push a changed key."
+  type        = number
+  default     = 1
+  nullable    = false
 }
 
 variable "interconnects" {
@@ -354,4 +411,27 @@ variable "vpc_service_controls" {
   }))
   default  = {}
   nullable = false
+}
+
+variable "firewall_mode" {
+  description = "How the baseline tier firewall is enforced (network/tiered-vpc firewall_mode). legacy: tag-based VPC firewall rules (default). both: the VPC rules plus a global network firewall policy keyed on tier subnet CIDRs. policy: the network firewall policy only. See docs/runbooks/gcp-firewall-policy-migration.md."
+  type        = string
+  default     = "legacy"
+  nullable    = false
+
+  validation {
+    condition     = contains(["legacy", "both", "policy"], var.firewall_mode)
+    error_message = "firewall_mode must be one of legacy, both or policy."
+  }
+}
+
+variable "firewall_policy_enforcement_order" {
+  description = "Network firewall policy enforcement order on the VPC: BEFORE_CLASSIC_FIREWALL or AFTER_CLASSIC_FIREWALL. null derives it from firewall_mode (policy sets BEFORE_CLASSIC_FIREWALL; legacy and both leave the API default AFTER_CLASSIC_FIREWALL). Updates the network in place. WARNING: switching from both to policy with this unset flips the order in the same apply that deletes the legacy rules; set it explicitly."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.firewall_policy_enforcement_order == null ? true : contains(["BEFORE_CLASSIC_FIREWALL", "AFTER_CLASSIC_FIREWALL"], var.firewall_policy_enforcement_order)
+    error_message = "firewall_policy_enforcement_order must be null, BEFORE_CLASSIC_FIREWALL or AFTER_CLASSIC_FIREWALL."
+  }
 }

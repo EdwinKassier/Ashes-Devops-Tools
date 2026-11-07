@@ -1,6 +1,6 @@
 # CLAUDE.md — Agent Onboarding
 
-Terraform GCP + AWS landing zone. 120 modules, 14 deployable roots, remote state via Terraform Cloud.
+Terraform GCP + AWS landing zone. 124 modules, 15 deployable roots, remote state via Terraform Cloud.
 
 ---
 
@@ -11,6 +11,7 @@ envs/                   # deployable roots, nested by cloud (workspace names kee
   gcp/
     bootstrap/          # GCP phase-0: admin project, Terraform admin SA, WIF pools — TF_WORKSPACE=gcp-bootstrap (apply first)
     organization/       # GCP control plane: folders, org policies, KMS, audit, billing (reads gcp-bootstrap)
+    guardrails/         # GCP org IAM deny policies (admin containment), security team only — TF_WORKSPACE=gcp-guardrails (reads no state)
     projects/           # GCP host/spoke projects + environment_config — TF_WORKSPACE=gcp-projects (reads gcp-organization)
     network-hub/        # GCP hub VPC, DNS anchor, hub VPC-SC — TF_WORKSPACE=gcp-network-hub (reads gcp-projects)
     workload/           # GCP per-environment app infra — TF_WORKSPACE=gcp-workload-<env>
@@ -27,15 +28,15 @@ envs/                   # deployable roots, nested by cloud (workspace names kee
 
 modules/               # grouped by owning cloud (domain)
   gcp/                  # GCP-native modules
-    stages/             # Orchestration wrappers: bootstrap, organization, projects, network-hub, workload, app-services (Cloud Run/SQL/GKE golden path); network compositions net-hub, net-spoke, dns-anchor; host (DEPRECATED facade, no in-repo callers)
+    stages/             # Orchestration wrappers: bootstrap, organization, guardrails (org IAM deny policies), projects, network-hub, environment (the gcp-workload-<env> composition), workload, app-services (Cloud Run/SQL/GKE golden path); network compositions net-hub, net-spoke, dns-anchor
     project/            # THE project primitive — every stage creates GCP projects through it (no naming scheme inside)
-    network/            # ~24 primitives: tiered-vpc (shared VPC + 3-tier subnets + baseline firewall core), vpc, subnet, dns, dns-records, vpn, vpc-sc, cloud-armor, internal-lb, api-gateway, cdn, app-ingress, …
+    network/            # ~24 primitives: tiered-vpc (shared VPC + 3-tier subnets + baseline firewall core), vpc, subnet, ncc-hub, ncc-spoke, dns, vpn, vpc-sc, cloud-armor, internal-lb, api-gateway, cdn, app-ingress, …
     governance/         # billing, kms, org-policy, scc, tags, cloud-audit-logs, private-ca
     iam/                # organization, role, service-account, workload-identity, identity-group*, deny-policy, principal-access-boundary
     monitoring/         # alert-policy, compute-dashboard, slo, control-plane (landing-zone self-observability)
     ops/                # os-config (VM Manager patch deployments)
     backup/             # backup-plan (snapshot schedules)
-    compute/            # cloud-run, gke-autopilot (application runtimes)
+    compute/            # cloud-run, cloud-run-job, gke-autopilot (application runtimes)
     data/               # cloud-sql, secret-manager
     firebase/           # project
     cloud-storage/
@@ -85,12 +86,13 @@ One committed file, `config/landing-zone.yaml` (schema and placeholders: `config
 
 | Tool | Required version |
 |------|-----------------|
-| Terraform | `~> 1.11` (CI pins 1.14.3; uses `mock_provider`, `override_module`, `terraform_data`, and write-only `*_wo` arguments so secrets never enter state) |
-| google / google-beta | `~> 7.0` (6→7 migration complete; locks on 7.x, CI green — audit L4) |
+| Terraform | `>= 1.17, < 2.0` (CI pins 1.17.1; uses `mock_provider` (including `mock_ephemeral`), `override_module`, `terraform_data`, write-only `*_wo` arguments and ephemeral resources so secrets never enter state, and `deprecated` on compatibility inputs) |
+| google / google-beta | `~> 8.0` (7→8 migration complete; one 8.x lock version repo-wide — see `UPGRADING.md`) |
 | hashicorp/aws | `>= 6.46.0, < 7.0.0` (floored pin — deliberate, not `~> 6.0`) |
 | supabase/supabase | `~> 1.0` |
-| vercel/vercel | `~> 4.0` |
-| hashicorp/null | `~> 3.0` |
+| vercel/vercel | `>= 4.8.2, < 5.0.0` |
+| hashicorp/random | `~> 3.6` (GCP roots and stages) |
+| hashicorp/null | `~> 3.0` — declared only in `envs/saas` (migration-only: the `null_resource` → `terraform_data` `moved` blocks) |
 
 ---
 
@@ -123,7 +125,7 @@ make ci             # fmt-check + consistency + count-check + links + shellcheck
 ## State & Apply Rules
 
 - State backend: **Terraform Cloud** (remote).
-- **Never run `terraform apply` locally** against any GCP root — `envs/gcp/bootstrap`, `envs/gcp/organization`, `envs/gcp/projects`, `envs/gcp/network-hub` or `envs/gcp/workload` (except the documented phase-0 `gcp-bootstrap` first apply, which runs as a human admin by design). The Makefile `apply-gcp-*` targets deliberately refuse.
+- **Never run `terraform apply` locally** against any GCP root — `envs/gcp/bootstrap`, `envs/gcp/organization`, `envs/gcp/guardrails`, `envs/gcp/projects`, `envs/gcp/network-hub` or `envs/gcp/workload` (except the documented phase-0 `gcp-bootstrap` first apply, which runs as a human admin by design). The Makefile `apply-gcp-*` targets deliberately refuse.
 - CI (GitHub Actions) runs `fmt`, `docs-check`, `validate` (10 shards), `lint`, Trivy, `checkov`, `test` and meta-lint (yaml/markdown/commits, counts, links) on PR; `Validation Summary` is the single required check.
 - Terraform Cloud executes the actual apply.
 
@@ -135,7 +137,7 @@ Only the roots you apply pull in credentials — an unapplied workspace needs no
 
 | Variable | Purpose |
 |----------|---------|
-| `GOOGLE_CLOUD_PROJECT` / GCP ADC | google provider — GCP roots (`gcp-bootstrap`, `gcp-organization`, `gcp-projects`, `gcp-network-hub`, `gcp-workload-<env>`) only |
+| `GOOGLE_CLOUD_PROJECT` / GCP ADC | google provider — GCP roots (`gcp-bootstrap`, `gcp-organization`, `gcp-guardrails`, `gcp-projects`, `gcp-network-hub`, `gcp-workload-<env>`) only |
 | `TFC_AWS_PROVIDER_AUTH` + `TFC_AWS_PLAN_ROLE_ARN` / `TFC_AWS_APPLY_ROLE_ARN` | AWS via TFC dynamic (OIDC) credentials, per-account `tfc-plan`/`tfc-apply` roles from `modules/aws/iam/tfc-oidc-baseline` (set per workspace by `envs/tfc-admin`; multi-account roots `aws-security`/`aws-backup` also get `TFC_AWS_*_<alias>` per member account) — AWS roots only |
 | `TFC_GCP_PROVIDER_AUTH` + `TFC_GCP_WORKLOAD_PROVIDER_NAME` + `TFC_GCP_PLAN/APPLY_SERVICE_ACCOUNT_EMAIL` | GCP via TFC dynamic credentials, per-stage plan/apply SAs from `gcp-bootstrap` (set per workspace by `envs/tfc-admin`) — GCP roots only |
 | `AWS_PROFILE` | AWS local/OIDC fallback when not using TFC dynamic credentials — AWS roots only |
@@ -228,7 +230,7 @@ Gotchas the AWS landing-zone build surfaced — each one bit us in CI:
 3. **Build policy JSON with `jsonencode()` / `templatefile()`**, NOT `data "aws_iam_policy_document"`. `mock_provider` mocks data sources, which breaks content assertions in tests.
 4. **`regex()` interval repeats cap at 1000** (RE2 engine) — a larger `{n,m}` repeat count is a plan-time error.
 5. **Log-service KMS grants must use per-service-principal statements**, NOT `kms:ViaService` — `kms:ViaService` would deny CloudTrail. (The CloudTrail grant's `aws:SourceOrgID`-vs-`aws:SourceArn` condition is an open, unvalidated item — tracked in [`docs/known-gaps.md`](docs/known-gaps.md#open--validate-before-relying-on), not here.)
-6. **Commit multi-platform `.terraform.lock.hcl`** so CI (Linux) and local macOS resolve the same provider hashes: `terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64`. Note: many committed lockfiles currently hold only the `darwin_arm64` `h1:` hash (written by a local `terraform init`); `scripts/check-consistency.sh` reports how many (informational, `LOCK_VERBOSE=1` lists them). Regenerate with the command above when you touch one.
+6. **Lockfiles are multi-platform and owned by Renovate** (`renovate.json`: weekly `lockFileMaintenance`, one `hashicorp/*` provider group, provider majors disabled so they are deliberate). Every `.terraform.lock.hcl` must carry `linux_amd64`, `darwin_arm64` and `darwin_amd64` `h1:` hashes and each provider must sit at one version repo-wide; `scripts/check-consistency.sh` fails otherwise. If you touch one by hand: `terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64`.
 
 ---
 
@@ -237,8 +239,9 @@ Gotchas the AWS landing-zone build surfaced — each one bit us in CI:
 | Goal | Where to look |
 |------|--------------|
 | Org-level GCP resources | `envs/gcp/organization/` |
+| Org IAM deny policies (admin containment) | `envs/gcp/guardrails/` + `modules/gcp/stages/guardrails/` (security-team workspace) |
 | Per-env app infra | `envs/gcp/workload/` (set `TF_WORKSPACE=gcp-workload-<env>`) |
-| Full end-to-end workload | `modules/gcp/stages/workload/` or `modules/saas/stages/saas-workload/` |
+| Full end-to-end workload | `modules/gcp/stages/environment/` (composes `stages/workload`, `net-spoke`, `app-services`) or `modules/saas/stages/saas-workload/` |
 | VPC / networking | `modules/gcp/network/` |
 | IAM / service accounts | `modules/gcp/iam/` |
 | KMS / billing / org policy | `modules/gcp/governance/` |

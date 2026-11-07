@@ -92,7 +92,7 @@ make plan-gcp-organization        # expect: no changes
 
 # Each workload environment
 TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload init -reconfigure
-make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars   # expect: no changes
+make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example   # expect: no changes
 ```
 
 A **clean plan (no changes)** on every renamed workspace confirms the migration:

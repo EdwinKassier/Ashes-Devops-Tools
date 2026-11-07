@@ -97,57 +97,268 @@ variable "aws_region" {
   }
 }
 
-variable "aws_enabled_regions" {
-  description = "Regions in which the regional security services (Config, GuardDuty, Security Lake) are enabled. One set of per-Region resources is created for each entry."
-  type        = list(string)
-  default     = ["eu-west-2"]
+variable "aws" {
+  description = "The aws section of the security stage: every tuning input the aws-security root takes from config/landing-zone.yaml (aws.*) or from its aws_overrides variable, in one object. Each attribute is documented in the type; an unset (or null) attribute takes the default shown there. log_archive_bucket_name is required. The root fills notification_subscribers, the profile-driven toggles and cloudtrail_cloudwatch_role_arn from its own derivations."
+  type = object({
+    # Regions in which the regional security services (Config, GuardDuty, Security Lake) are enabled.
+    # One set of per-Region resources is created for each entry.
+    aws_enabled_regions = optional(list(string), ["eu-west-2"])
+    # Deterministic name of the central log-archive bucket. Cross-root naming contract: it must match
+    # the name the log-tamper SCP references.
+    log_archive_bucket_name = optional(string)
+    # Account-qualified ARN of the principal granted key ADMINISTRATION (management actions only: no
+    # Encrypt/Decrypt/GenerateDataKey/ReEncrypt, no CreateGrant) on the log-archive, forensics and
+    # security-tooling CMKs. Null (default) grants each key's OWN account role key_admin_role_name
+    # (the TFC OIDC baseline tfc-apply role that applies this stage), e.g. arn:aws:iam::<log-archive
+    # id>:role/tfc-apply, so the keys can never be locked out of management. Grant key usage
+    # separately via kms_key_user_arns.
+    key_admin_arn = optional(string)
+    # With key_admin_arn = null, the role name (in each CMK's own account) granted key administration.
+    # Default tfc-apply: the role the TFC OIDC baseline creates and this stage applies as, so it must
+    # already exist. Set to your own per-account admin role if you run with
+    # OrganizationAccountAccessRole instead.
+    key_admin_role_name = optional(string, "tfc-apply")
+    # Principals granted key USAGE (Encrypt/Decrypt/ReEncrypt/GenerateDataKey/DescribeKey) per CMK,
+    # keyed by log_archive / forensics / security_tooling. Separate from key_admin_arn (administration
+    # only). Missing keys mean no general-usage grant beyond the built-in service-principal grants.
+    kms_key_user_arns = optional(map(list(string)), {})
+    # Tag the log-archive, forensics and security-tooling CMKs protected = "true" so the organization
+    # deny-tamper SCP blocks key deletion/disablement and protection-tag removal except via break-
+    # glass. Default true.
+    enable_kms_protection_tag = optional(bool, true)
+    # ARN of the IAM role AWS Config assumes to record resource configurations in the security-tooling
+    # account. Null (default) uses the AWSServiceRoleForConfig service-linked role (created unless
+    # create_config_service_linked_role = false).
+    config_role_arn = optional(string)
+    # With config_role_arn = null, create the AWSServiceRoleForConfig service-linked role in the
+    # security-tooling account. Set false if Config was ever enabled there (the SLR already exists).
+    create_config_service_linked_role = optional(bool, true)
+    # ARN of an existing IAM role the Config organization aggregator assumes. Null (default) creates
+    # aws-config-org-aggregator in the security-tooling account with the AWSConfigRoleForOrganizations
+    # managed policy.
+    aggregator_role_arn = optional(string)
+    # ARN of an existing AmazonSecurityLakeMetaStoreManager role. Empty (default) with
+    # enable_security_lake: the stage creates AmazonSecurityLakeMetaStoreManagerV2 in the security-
+    # tooling account (with the tfc-apply boundary).
+    meta_store_manager_role_arn = optional(string, "")
+    # ARN of an EXTERNALLY-managed break-glass role to watch for assumption. Ignored when
+    # create_break_glass is true (the stage then creates and watches its own role). Any AssumeRole
+    # against the effective ARN raises a notification.
+    break_glass_role_arn = optional(string, "")
+    # Set of org-security services (org-security-service module) to enable: any of macie, inspector,
+    # detective, resource-explorer. Detective defaults OFF per SRA.
+    enabled_security_services = optional(set(string), ["macie", "inspector"])
+    # Master COST toggle for Amazon Security Lake. Security Lake incurs ingestion, storage, and
+    # normalization charges.
+    enable_security_lake = optional(bool, true)
+    # AWS Config records ALL supported resource types (default true — the full-coverage but most
+    # expensive Config mode). Set false for cost-sensitive non-prod (FinOps F5).
+    config_record_all_supported = optional(bool, true)
+    # GuardDuty agentless EBS malware scanning (default true; billed per GB scanned). Set false for
+    # non-prod where it is not required (FinOps F5).
+    guardduty_enable_ebs_malware_protection = optional(bool, true)
+    # Master switch for the incident-response automation (isolation Lambda, GuardDuty EventBridge
+    # rule, forensics snapshot-sharing role).
+    enable_incident_response = optional(bool, true)
+    # Master switch for service-quota management (opt-in). When false, no quota requests or usage
+    # alarms are created.
+    enable_service_quotas = optional(bool, false)
+    # Create the ORGANIZATION_INTERNAL_ACCESS analyzer (alongside the external one) in the home region
+    # and every enabled region. External analyzers are always created in every enabled region.
+    enable_internal_access_analyzer = optional(bool, true)
+    # Subscribers attached to the security-notifications SNS topic, keyed by an arbitrary name. At
+    # least one is required (findings would otherwise fire into a void). Defaults to a placeholder
+    # SecOps email the root is expected to override.
+    notification_subscribers = optional(map(object({
+      protocol = string # one of: email, https, sms, sqs, lambda, etc.
+      endpoint = string # e.g. an email address or HTTPS URL
+      })), {
+      secops = { protocol = "email", endpoint = "secops@example.com" }
+    })
+    # Dedicated identity account for IAM Identity Center delegated administration. Default null = the
+    # shared-services account (unchanged). Set to a dedicated identity account to tighten the
+    # delegated-admin blast radius. PREVIEW: opt-in (default off), not yet validated against a real
+    # apply.
+    identity_account_id = optional(string)
+    # Attach a CloudWatch Logs group to the org trail and create the full CIS AWS section-4 metric-
+    # filter alarm set (4.1-4.15) with a KMS-encrypted SNS topic, all in the management account. Self-
+    # sufficient: a logs-granted CMK is created when cloudwatch_logs_kms_key_arn is null. Default
+    # true; set false for S3-only delivery.
+    enable_cloudwatch_logs = optional(bool, true)
+    # Retention (days) for the CloudTrail CloudWatch Logs group when enable_cloudwatch_logs = true.
+    cloudwatch_logs_retention_days = optional(number, 365)
+    # Optional existing CMK ARN (management account) for the CloudTrail CloudWatch Logs group and CIS
+    # alarm topic; its policy must grant logs.<region>.amazonaws.com and cloudwatch.amazonaws.com.
+    # Null (default) = a dedicated CMK is created.
+    cloudwatch_logs_kms_key_arn = optional(string)
+    # Optional existing SNS topic ARN for the CIS alarms. Null (default) = a KMS-encrypted topic is
+    # created and subscribed with cloudtrail_alarm_subscribers.
+    cloudtrail_alarm_sns_topic_arn = optional(string)
+    # Subscribers of the CIS alarm topic. Null (default) = reuse notification_subscribers.
+    cloudtrail_alarm_subscribers = optional(map(object({
+      protocol = string
+      endpoint = string
+    })))
+    # CIS alarm keys to skip (see modules/aws/security/cloudtrail-org cis_alarms_excluded), e.g.
+    # ["unauthorized-api-calls"] if too noisy org-wide.
+    cloudtrail_cis_alarms_excluded = optional(list(string), [])
+    # S3 object-level data events on the org trail: none, write (CIS 3.8, default), read (CIS 3.9) or
+    # all. COST: billed per event across every org account.
+    cloudtrail_s3_data_events = optional(string, "write")
+    # Extra S3 bucket ARNs excluded from data events (the log-archive bucket is always excluded).
+    cloudtrail_s3_data_events_excluded_bucket_arns = optional(list(string), [])
+    # Record Lambda Invoke data events on the org trail (default false; per-invocation cost).
+    cloudtrail_lambda_data_events = optional(bool, false)
+    # Create and manage the break-glass role in the management account (opt-in), instead of
+    # referencing an external one. When true the role's ARN is wired into the assumption alarm
+    # automatically and exported.
+    create_break_glass = optional(bool, false)
+    # Name of the managed break-glass role (used only when create_break_glass is true). Its ARN is
+    # arn:aws:iam::<management-account>:role/<this name> — set the org SCP exemptions to match.
+    break_glass_role_name = optional(string, "OrganizationBreakGlass")
+    # Account-qualified ARNs permitted to assume the managed break-glass role (used only when
+    # create_break_glass is true). Keep this to a small set of senior responders. MFA is always
+    # required.
+    break_glass_trusted_principals = optional(list(string), [])
+    # Maximum age in seconds of the MFA session allowed to assume the managed break-glass role (used
+    # only when create_break_glass is true).
+    break_glass_mfa_max_age = optional(number, 3600)
+    # Set true ONLY during a declared incident to attach AdministratorAccess to the managed break-
+    # glass role. False (default) keeps the deny-all standing policy. Flipping this to true should
+    # itself be a reviewed, alarmed change.
+    break_glass_active = optional(bool, false)
+    # Create the organization CloudTrail (management account) with its CloudWatch Logs, CIS alarms and
+    # KMS wiring. Set false when another owner already runs the org trail, e.g. AWS Control Tower
+    # (docs/runbooks/aws-brownfield-adoption.md); two org trails double the cost and the noise.
+    # Default true.
+    create_organization_trail = optional(bool, true)
+    # Existing CloudTrail -> CloudWatch Logs delivery role (created by aws-organization,
+    # create_org_trail_delivery_role). Null = the cloudtrail-org module creates it, which needs IAM
+    # write in the management account.
+    cloudtrail_cloudwatch_role_arn = optional(string)
+    # Create the organization trail from the security-tooling account, the CloudTrail delegated
+    # administrator that aws-organization registers (its enable_cloudtrail_delegated_admin, set to
+    # the same value). The trail is still owned by the management account, but a member account
+    # manages it, so the deny-tamper SCP applies. Its CloudWatch Logs group, delivery role, CMK, CIS
+    # alarms and topic are created in security tooling. Needs create_organization_trail. Default
+    # false: the management account manages the trail, unchanged. Migration:
+    # docs/runbooks/aws-cloudtrail-delegated-admin-migration.md.
+    enable_cloudtrail_delegated_admin = optional(bool, false)
+    # Name of the trail created from security tooling. It must differ from the management-account
+    # trail (org-trail), so both can log during the migration.
+    cloudtrail_delegated_admin_trail_name = optional(string, "org-trail-delegated")
+    # While enable_cloudtrail_delegated_admin is true, keep the original management-account trail
+    # (and its log group, CMK, topic and alarms) in this stage's configuration so Terraform never
+    # destroys it. Set false only after the runbook's break-glass step deleted that trail and removed
+    # it from state. A greenfield estate that starts with the delegated admin sets it false: there is
+    # no management trail to keep, and the management role can no longer create one. Ignored while
+    # enable_cloudtrail_delegated_admin is false. Default true.
+    create_management_trail = optional(bool, true)
+  })
+  default  = {}
+  nullable = false
 
   validation {
-    condition     = length(var.aws_enabled_regions) > 0
-    error_message = "aws_enabled_regions must contain at least one Region."
+    condition     = length(var.aws.aws_enabled_regions) > 0
+    error_message = "aws_overrides.aws_enabled_regions (aws.enabled_regions in config/landing-zone.yaml) must contain at least one Region."
   }
 
   validation {
-    condition     = length(var.aws_enabled_regions) == length(distinct(var.aws_enabled_regions))
-    error_message = "aws_enabled_regions must not contain duplicate Regions."
+    condition     = length(var.aws.aws_enabled_regions) == length(distinct(var.aws.aws_enabled_regions))
+    error_message = "aws_overrides.aws_enabled_regions (aws.enabled_regions in config/landing-zone.yaml) must not contain duplicate Regions."
+  }
+
+  validation {
+    condition     = length(trimspace(coalesce(var.aws.log_archive_bucket_name, " "))) > 0
+    error_message = "log_archive_bucket_name is unset: set aws.log_archive_bucket_name in config/landing-zone.yaml (or aws_overrides.log_archive_bucket_name in the aws-security root) to a non-empty S3 bucket name."
+  }
+
+  validation {
+    condition     = var.aws.key_admin_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:(role|user)/.+$", coalesce(var.aws.key_admin_arn, "x")))
+    error_message = "aws_overrides.key_admin_arn must be null or an account-qualified IAM role/user ARN."
+  }
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9+=,.@_/-]{1,64}$", var.aws.key_admin_role_name))
+    error_message = "aws_overrides.key_admin_role_name must be a valid IAM role name."
+  }
+
+  validation {
+    condition     = alltrue([for k in keys(var.aws.kms_key_user_arns) : contains(["log_archive", "forensics", "security_tooling"], k)])
+    error_message = "aws_overrides.kms_key_user_arns keys must be one of log_archive, forensics, security_tooling."
+  }
+
+  validation {
+    condition     = var.aws.config_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", coalesce(var.aws.config_role_arn, "x")))
+    error_message = "aws_overrides.config_role_arn must be null or an account-qualified IAM role ARN."
+  }
+
+  validation {
+    condition     = var.aws.aggregator_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", coalesce(var.aws.aggregator_role_arn, "x")))
+    error_message = "aws_overrides.aggregator_role_arn must be null or an account-qualified IAM role ARN."
+  }
+
+  validation {
+    condition     = var.aws.meta_store_manager_role_arn == "" || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", var.aws.meta_store_manager_role_arn))
+    error_message = "aws_overrides.meta_store_manager_role_arn must be empty (create the role) or a valid IAM role ARN."
+  }
+
+  validation {
+    condition     = var.aws.break_glass_role_arn == "" || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", var.aws.break_glass_role_arn))
+    error_message = "aws_overrides.break_glass_role_arn must be empty or an account-qualified IAM role ARN."
+  }
+
+  validation {
+    condition = alltrue([
+      for s in var.aws.enabled_security_services : contains(["macie", "inspector", "detective", "resource-explorer"], s)
+    ])
+    error_message = "aws_overrides.enabled_security_services entries must be one of: macie, inspector, detective, resource-explorer."
+  }
+
+  validation {
+    condition     = length(var.aws.notification_subscribers) > 0
+    error_message = "aws_overrides.notification_subscribers must contain at least one subscriber."
+  }
+
+  validation {
+    condition     = contains(["none", "write", "read", "all"], var.aws.cloudtrail_s3_data_events)
+    error_message = "aws_overrides.cloudtrail_s3_data_events must be one of: none, write, read, all."
+  }
+
+  validation {
+    condition     = !var.aws.create_break_glass || length(var.aws.break_glass_trusted_principals) > 0
+    error_message = "aws_overrides.create_break_glass = true requires at least one aws_overrides.break_glass_trusted_principals entry (an empty trust policy is rejected by AWS)."
+  }
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9+=,.@_-]{1,64}$", var.aws.break_glass_role_name))
+    error_message = "aws_overrides.break_glass_role_name must be a valid IAM role name (1-64 chars of A-Z a-z 0-9 +=,.@_-)."
+  }
+
+  validation {
+    condition     = alltrue([for p in var.aws.break_glass_trusted_principals : can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:", p))])
+    error_message = "Each aws_overrides.break_glass_trusted_principals entry must be an account-qualified IAM ARN (arn:aws:iam::<12-digit>:...)."
+  }
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9._-]{3,128}$", var.aws.cloudtrail_delegated_admin_trail_name)) && var.aws.cloudtrail_delegated_admin_trail_name != "org-trail"
+    error_message = "aws_overrides.cloudtrail_delegated_admin_trail_name must be a valid trail name (3-128 of A-Z a-z 0-9 . _ -) and differ from the management-account trail (org-trail)."
+  }
+
+  validation {
+    condition     = !var.aws.enable_cloudtrail_delegated_admin || var.aws.create_organization_trail
+    error_message = "aws.enable_cloudtrail_delegated_admin needs create_organization_trail = true: it moves the trail this stage owns."
+  }
+
+  validation {
+    condition     = var.aws.break_glass_mfa_max_age >= 300 && var.aws.break_glass_mfa_max_age <= 43200
+    error_message = "aws_overrides.break_glass_mfa_max_age must be between 300 and 43200 seconds."
   }
 }
 
 # -----------------------------------------------------------------------------
 # Naming + IAM carve-out ARNs
 # -----------------------------------------------------------------------------
-
-variable "log_archive_bucket_name" {
-  description = "Deterministic name of the central log-archive bucket. Cross-root naming contract: it must match the name the log-tamper SCP references."
-  type        = string
-
-  validation {
-    condition     = length(trimspace(var.log_archive_bucket_name)) > 0
-    error_message = "log_archive_bucket_name must be a non-empty S3 bucket name."
-  }
-}
-
-variable "key_admin_arn" {
-  description = "Account-qualified ARN of the principal granted key ADMINISTRATION (management actions only: no Encrypt/Decrypt/GenerateDataKey/ReEncrypt, no CreateGrant) on the log-archive, forensics and security-tooling CMKs. Null (default) grants each key's OWN account role key_admin_role_name (the TFC OIDC baseline tfc-apply role that applies this stage), e.g. arn:aws:iam::<log-archive id>:role/tfc-apply, so the keys can never be locked out of management. Grant key usage separately via kms_key_user_arns."
-  type        = string
-  default     = null
-
-  validation {
-    condition     = var.key_admin_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:(role|user)/.+$", coalesce(var.key_admin_arn, "x")))
-    error_message = "key_admin_arn must be null or an account-qualified IAM role/user ARN."
-  }
-}
-
-variable "key_admin_role_name" {
-  description = "With key_admin_arn = null, the role name (in each CMK's own account) granted key administration. Default tfc-apply: the role the TFC OIDC baseline creates and this stage applies as, so it must already exist. Set to your own per-account admin role if you run with OrganizationAccountAccessRole instead."
-  type        = string
-  default     = "tfc-apply"
-
-  validation {
-    condition     = can(regex("^[A-Za-z0-9+=,.@_/-]{1,64}$", var.key_admin_role_name))
-    error_message = "key_admin_role_name must be a valid IAM role name."
-  }
-}
 
 variable "key_policy_admin_role_name" {
   description = "Role name (optionally path-prefixed), in each CMK's OWN account, granted kms:PutKeyPolicy — and nothing else — on the log-archive, forensics and security-tooling CMKs. Default break-glass: the member break-glass role the aws-organization stage deploys to every member account (enable_member_break_glass_role), so the pipeline key admin cannot rewrite a key policy to grant itself kms:Decrypt. The role must exist before this stage creates the keys (KMS rejects unknown principals), and later key-policy changes must be applied as it. Null = legacy: key admin also holds PutKeyPolicy."
@@ -157,73 +368,6 @@ variable "key_policy_admin_role_name" {
   validation {
     condition     = var.key_policy_admin_role_name == null || can(regex("^([A-Za-z0-9+=,.@_-]+/)*[A-Za-z0-9+=,.@_-]{1,64}$", coalesce(var.key_policy_admin_role_name, "x")))
     error_message = "key_policy_admin_role_name must be null or an IAM role name without wildcards (optionally path-prefixed)."
-  }
-}
-
-variable "kms_key_user_arns" {
-  description = "Principals granted key USAGE (Encrypt/Decrypt/ReEncrypt/GenerateDataKey/DescribeKey) per CMK, keyed by log_archive / forensics / security_tooling. Separate from key_admin_arn (administration only). Missing keys mean no general-usage grant beyond the built-in service-principal grants."
-  type        = map(list(string))
-  default     = {}
-
-  validation {
-    condition     = alltrue([for k in keys(var.kms_key_user_arns) : contains(["log_archive", "forensics", "security_tooling"], k)])
-    error_message = "kms_key_user_arns keys must be one of log_archive, forensics, security_tooling."
-  }
-}
-
-variable "enable_kms_protection_tag" {
-  description = "Tag the log-archive, forensics and security-tooling CMKs protected = \"true\" so the organization deny-tamper SCP blocks key deletion/disablement and protection-tag removal except via break-glass. Default true."
-  type        = bool
-  default     = true
-}
-
-variable "config_role_arn" {
-  description = "ARN of the IAM role AWS Config assumes to record resource configurations in the security-tooling account. Null (default) uses the AWSServiceRoleForConfig service-linked role (created unless create_config_service_linked_role = false)."
-  type        = string
-  default     = null
-
-  validation {
-    condition     = var.config_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", coalesce(var.config_role_arn, "x")))
-    error_message = "config_role_arn must be null or an account-qualified IAM role ARN."
-  }
-}
-
-variable "create_config_service_linked_role" {
-  description = "With config_role_arn = null, create the AWSServiceRoleForConfig service-linked role in the security-tooling account. Set false if Config was ever enabled there (the SLR already exists)."
-  type        = bool
-  default     = true
-}
-
-variable "aggregator_role_arn" {
-  description = "ARN of an existing IAM role the Config organization aggregator assumes. Null (default) creates aws-config-org-aggregator in the security-tooling account with the AWSConfigRoleForOrganizations managed policy."
-  type        = string
-  default     = null
-
-  validation {
-    condition     = var.aggregator_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", coalesce(var.aggregator_role_arn, "x")))
-    error_message = "aggregator_role_arn must be null or an account-qualified IAM role ARN."
-  }
-}
-
-variable "meta_store_manager_role_arn" {
-  description = "ARN of an existing AmazonSecurityLakeMetaStoreManager role. Empty (default) with enable_security_lake: the stage creates AmazonSecurityLakeMetaStoreManagerV2 in the security-tooling account (with the tfc-apply boundary)."
-  type        = string
-  default     = ""
-
-  validation {
-    condition     = var.meta_store_manager_role_arn == "" || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", var.meta_store_manager_role_arn))
-    error_message = "meta_store_manager_role_arn must be empty (create the role) or a valid IAM role ARN."
-  }
-}
-
-variable "break_glass_role_arn" {
-  description = "ARN of an EXTERNALLY-managed break-glass role to watch for assumption. Ignored when create_break_glass is true (the stage then creates and watches its own role). Any AssumeRole against the effective ARN raises a notification."
-  type        = string
-  default     = ""
-
-  validation {
-    condition     = var.break_glass_role_arn == "" || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", var.break_glass_role_arn))
-    error_message = "break_glass_role_arn must be empty or an account-qualified IAM role ARN."
   }
 }
 
@@ -237,43 +381,6 @@ variable "cloudtrail_log_group_name" {
 # Service toggles + notification config
 # -----------------------------------------------------------------------------
 
-variable "enabled_security_services" {
-  description = "Set of org-security services (org-security-service module) to enable: any of macie, inspector, detective, resource-explorer. Detective defaults OFF per SRA."
-  type        = set(string)
-  default     = ["macie", "inspector"]
-
-  validation {
-    condition = alltrue([
-      for s in var.enabled_security_services : contains(["macie", "inspector", "detective", "resource-explorer"], s)
-    ])
-    error_message = "enabled_security_services entries must be one of: macie, inspector, detective, resource-explorer."
-  }
-}
-
-variable "enable_security_lake" {
-  description = "Master COST toggle for Amazon Security Lake. Security Lake incurs ingestion, storage, and normalization charges."
-  type        = bool
-  default     = true
-}
-
-variable "config_record_all_supported" {
-  description = "AWS Config records ALL supported resource types (default true — the full-coverage but most expensive Config mode). Set false for cost-sensitive non-prod (FinOps F5)."
-  type        = bool
-  default     = true
-}
-
-variable "guardduty_enable_ebs_malware_protection" {
-  description = "GuardDuty agentless EBS malware scanning (default true; billed per GB scanned). Set false for non-prod where it is not required (FinOps F5)."
-  type        = bool
-  default     = true
-}
-
-variable "enable_incident_response" {
-  description = "Master switch for the incident-response automation (isolation Lambda, GuardDuty EventBridge rule, forensics snapshot-sharing role)."
-  type        = bool
-  default     = true
-}
-
 variable "quarantine_vpc_id" {
   description = "VPC ID in which the incident-response deny-all quarantine security group is created. Empty (default) skips the SG. Supply the VPC holding the workloads the isolation Lambda may need to quarantine."
   type        = string
@@ -285,102 +392,26 @@ variable "quarantine_vpc_id" {
   }
 }
 
-variable "enable_service_quotas" {
-  description = "Master switch for service-quota management (opt-in). When false, no quota requests or usage alarms are created."
-  type        = bool
-  default     = false
-}
-
 variable "enable_firewall_manager" {
   description = "Master switch for AWS Firewall Manager composition. Default false: registering the FMS administrator is an explicit, one-time decision, and the firewall-manager-org module ships a placeholder security-group policy that must be overridden before enabling. When true, the Security Tooling account is registered as FMS admin from the management account."
   type        = bool
   default     = false
 }
 
-variable "notification_subscribers" {
-  description = "Subscribers attached to the security-notifications SNS topic, keyed by an arbitrary name. At least one is required (findings would otherwise fire into a void). Defaults to a placeholder SecOps email the root is expected to override."
-  type = map(object({
-    protocol = string # one of: email, https, sms, sqs, lambda, etc.
-    endpoint = string # e.g. an email address or HTTPS URL
-  }))
-  default = {
-    secops = { protocol = "email", endpoint = "secops@example.com" }
-  }
-
-  validation {
-    condition     = length(var.notification_subscribers) > 0
-    error_message = "notification_subscribers must contain at least one subscriber."
-  }
-}
-
 # --- Dedicated IAM Identity Center account (opt-in, default = unchanged) ---
-variable "identity_account_id" {
-  description = "Dedicated identity account for IAM Identity Center delegated administration. Default null = the shared-services account (unchanged). Set to a dedicated identity account to tighten the delegated-admin blast radius. PREVIEW: opt-in (default off), not yet validated against a real apply."
-  type        = string
-  default     = null
-}
 
 # --- CloudTrail: CloudWatch Logs + CIS section-4 alarms, data events (CIS 3.8/3.9) ---
-variable "enable_cloudwatch_logs" {
-  description = "Attach a CloudWatch Logs group to the org trail and create the full CIS AWS section-4 metric-filter alarm set (4.1-4.15) with a KMS-encrypted SNS topic, all in the management account. Self-sufficient: a logs-granted CMK is created when cloudwatch_logs_kms_key_arn is null. Default true; set false for S3-only delivery."
-  type        = bool
-  default     = true
-}
 
-variable "cloudwatch_logs_retention_days" {
-  description = "Retention (days) for the CloudTrail CloudWatch Logs group when enable_cloudwatch_logs = true."
-  type        = number
-  default     = 365
-}
-
-variable "cloudwatch_logs_kms_key_arn" {
-  description = "Optional existing CMK ARN (management account) for the CloudTrail CloudWatch Logs group and CIS alarm topic; its policy must grant logs.<region>.amazonaws.com and cloudwatch.amazonaws.com. Null (default) = a dedicated CMK is created."
-  type        = string
+variable "cloudwatch_logs_kms_key_manager_arns" {
+  description = "IAM role ARNs granted day-2 management (refresh, rotation, tags, aliases) of the module-created CloudWatch Logs CMK by its key policy. Null (default) = the aws-security management apply role (<management_role_name_prefix>aws-security-apply) in the management account. [] = none."
+  type        = list(string)
   default     = null
 }
 
-variable "cloudtrail_alarm_sns_topic_arn" {
-  description = "Optional existing SNS topic ARN for the CIS alarms. Null (default) = a KMS-encrypted topic is created and subscribed with cloudtrail_alarm_subscribers."
+variable "management_role_name_prefix" {
+  description = "Prefix of the management-account tfc-management-roles role names, used to derive the aws-security apply role ARN when cloudwatch_logs_kms_key_manager_arns is null. Must match the aws-organization tfc_management_roles role_name_prefix."
   type        = string
-  default     = null
-}
-
-variable "cloudtrail_alarm_subscribers" {
-  description = "Subscribers of the CIS alarm topic. Null (default) = reuse notification_subscribers."
-  type = map(object({
-    protocol = string
-    endpoint = string
-  }))
-  default = null
-}
-
-variable "cloudtrail_cis_alarms_excluded" {
-  description = "CIS alarm keys to skip (see modules/aws/security/cloudtrail-org cis_alarms_excluded), e.g. [\"unauthorized-api-calls\"] if too noisy org-wide."
-  type        = list(string)
-  default     = []
-}
-
-variable "cloudtrail_s3_data_events" {
-  description = "S3 object-level data events on the org trail: none, write (CIS 3.8, default), read (CIS 3.9) or all. COST: billed per event across every org account."
-  type        = string
-  default     = "write"
-
-  validation {
-    condition     = contains(["none", "write", "read", "all"], var.cloudtrail_s3_data_events)
-    error_message = "cloudtrail_s3_data_events must be one of: none, write, read, all."
-  }
-}
-
-variable "cloudtrail_s3_data_events_excluded_bucket_arns" {
-  description = "Extra S3 bucket ARNs excluded from data events (the log-archive bucket is always excluded)."
-  type        = list(string)
-  default     = []
-}
-
-variable "cloudtrail_lambda_data_events" {
-  description = "Record Lambda Invoke data events on the org trail (default false; per-invocation cost)."
-  type        = bool
-  default     = false
+  default     = "tfc-mgmt-"
 }
 
 # -----------------------------------------------------------------------------
@@ -394,56 +425,6 @@ variable "cloudtrail_lambda_data_events" {
 # previous behaviour: pass an externally-managed break_glass_role_arn.
 # -----------------------------------------------------------------------------
 
-variable "create_break_glass" {
-  description = "Create and manage the break-glass role in the management account (opt-in), instead of referencing an external one. When true the role's ARN is wired into the assumption alarm automatically and exported."
-  type        = bool
-  default     = false
-
-  validation {
-    condition     = !var.create_break_glass || length(var.break_glass_trusted_principals) > 0
-    error_message = "create_break_glass = true requires at least one break_glass_trusted_principals entry (an empty trust policy is rejected by AWS)."
-  }
-}
-
-variable "break_glass_role_name" {
-  description = "Name of the managed break-glass role (used only when create_break_glass is true). Its ARN is arn:aws:iam::<management-account>:role/<this name> — set the org SCP exemptions to match."
-  type        = string
-  default     = "OrganizationBreakGlass"
-
-  validation {
-    condition     = can(regex("^[a-zA-Z0-9+=,.@_-]{1,64}$", var.break_glass_role_name))
-    error_message = "break_glass_role_name must be a valid IAM role name (1-64 chars of A-Z a-z 0-9 +=,.@_-)."
-  }
-}
-
-variable "break_glass_trusted_principals" {
-  description = "Account-qualified ARNs permitted to assume the managed break-glass role (used only when create_break_glass is true). Keep this to a small set of senior responders. MFA is always required."
-  type        = list(string)
-  default     = []
-
-  validation {
-    condition     = alltrue([for p in var.break_glass_trusted_principals : can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:", p))])
-    error_message = "Each break_glass_trusted_principals entry must be an account-qualified IAM ARN (arn:aws:iam::<12-digit>:...)."
-  }
-}
-
-variable "break_glass_mfa_max_age" {
-  description = "Maximum age in seconds of the MFA session allowed to assume the managed break-glass role (used only when create_break_glass is true)."
-  type        = number
-  default     = 3600
-
-  validation {
-    condition     = var.break_glass_mfa_max_age >= 300 && var.break_glass_mfa_max_age <= 43200
-    error_message = "break_glass_mfa_max_age must be between 300 and 43200 seconds."
-  }
-}
-
-variable "break_glass_active" {
-  description = "Set true ONLY during a declared incident to attach AdministratorAccess to the managed break-glass role. False (default) keeps the deny-all standing policy. Flipping this to true should itself be a reviewed, alarmed change."
-  type        = bool
-  default     = false
-}
-
 variable "tfc_apply_boundary_policy_name" {
   description = "Name of the tfc-apply permissions-boundary managed policy (tfc-oidc-baseline apply_boundary_policy_name). Every IAM role this stage creates in the security-tooling account (Config aggregator, incident-response roles; management-account roles are unaffected) gets permissions_boundary = arn:PARTITION:iam::ACCOUNT_ID:policy/NAME, derived from that account's provider, which the member-account tfc-apply role requires when boundary propagation is on. Null = create roles without a boundary."
   type        = string
@@ -453,18 +434,6 @@ variable "tfc_apply_boundary_policy_name" {
     condition     = var.tfc_apply_boundary_policy_name == null || can(regex("^[A-Za-z0-9+=,.@_-]{1,128}$", var.tfc_apply_boundary_policy_name))
     error_message = "tfc_apply_boundary_policy_name must be null or a valid IAM policy name (1-128 chars of [A-Za-z0-9+=,.@_-])."
   }
-}
-
-variable "create_organization_trail" {
-  description = "Create the organization CloudTrail (management account) with its CloudWatch Logs, CIS alarms and KMS wiring. Set false when another owner already runs the org trail, e.g. AWS Control Tower (docs/runbooks/aws-brownfield-adoption.md); two org trails double the cost and the noise. Default true."
-  type        = bool
-  default     = true
-}
-
-variable "cloudtrail_cloudwatch_role_arn" {
-  description = "Existing CloudTrail -> CloudWatch Logs delivery role (created by aws-organization, create_org_trail_delivery_role). Null = the cloudtrail-org module creates it, which needs IAM write in the management account."
-  type        = string
-  default     = null
 }
 
 variable "partition" {

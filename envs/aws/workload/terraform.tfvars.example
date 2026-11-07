@@ -39,11 +39,9 @@ vpc_cidr = "10.20.0.0/16"
 # aws-organization and aws-network roots use (cross-root naming contract).
 log_archive_bucket_name = "acme-org-log-archive"
 
-# Optional — IAM role AWS Config assumes to record resources in this account.
-# Default null: the account's AWS Config service-linked role
-# (AWSServiceRoleForConfig) is used, created by this root unless
-# create_config_service_linked_role = false (set false if the account already has it).
-# config_role_arn = "arn:aws:iam::222222222222:role/config-recorder"
+# The account's AWS Config recorder is deployed by aws-organization's org-wide
+# recorder StackSet (enable_org_config_recorders), not by this root.
+# config_role_arn / create_config_service_linked_role are deprecated and ignored.
 
 # Optional — bring your own CMK. Empty (default) creates a rotating workload CMK
 # (alias/workload-<env>) for default EBS encryption, Session Manager and every

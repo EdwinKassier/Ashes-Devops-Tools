@@ -17,11 +17,13 @@ variables {
   landing_zone_config_path = ""
   landing_zone_name        = "acme"
   management_account_id    = "111111111111" # C4 account guard
-  log_archive_bucket_name  = "ashes-org-log-archive"
   # key_admin_arn / config_role_arn / aggregator_role_arn omitted: the defaults
   # (own-account tfc-apply key admin, Config SLR, created aggregator role) must plan.
   # Security Lake off so meta_store_manager_role_arn is not required.
-  enable_security_lake = false
+  aws_overrides = {
+    log_archive_bucket_name = "ashes-org-log-archive"
+    enable_security_lake    = false
+  }
 }
 
 # The forensics CMK ARN flows through the stage into the incident-response
@@ -41,36 +43,38 @@ run "consumes_remote_state_contract" {
     target = data.terraform_remote_state.aws_organization
     values = {
       outputs = {
-        organization_id       = "o-abcdefghij"
-        organization_root_id  = "r-abcd"
-        management_account_id = "111111111111"
-        account_ids = {
-          security_tooling = "222222222222"
-          log_archive      = "333333333333"
-          shared_services  = "444444444444"
-          forensics        = "555555555555"
-        }
-        account_role_arns = {
-          security_tooling = "arn:aws:iam::222222222222:role/cross-account"
-          log_archive      = "arn:aws:iam::333333333333:role/cross-account"
-          forensics        = "arn:aws:iam::555555555555:role/cross-account"
+        contract = {
+          organization_id       = "o-abcdefghij"
+          organization_root_id  = "r-abcd"
+          management_account_id = "111111111111"
+          account_ids = {
+            security_tooling = "222222222222"
+            log_archive      = "333333333333"
+            shared_services  = "444444444444"
+            forensics        = "555555555555"
+          }
+          account_role_arns = {
+            security_tooling = "arn:aws:iam::222222222222:role/cross-account"
+            log_archive      = "arn:aws:iam::333333333333:role/cross-account"
+            forensics        = "arn:aws:iam::555555555555:role/cross-account"
+          }
         }
       }
     }
   }
 
   assert {
-    condition     = data.terraform_remote_state.aws_organization[0].outputs.organization_root_id == "r-abcd"
+    condition     = local.org.organization_root_id == "r-abcd"
     error_message = "remote-state organization_root_id contract key must be readable by the root"
   }
 
   assert {
-    condition     = data.terraform_remote_state.aws_organization[0].outputs.account_ids["forensics"] == "555555555555"
+    condition     = local.org.account_ids["forensics"] == "555555555555"
     error_message = "remote-state account_ids must expose the forensics account the root consumes"
   }
 
   assert {
-    condition     = data.terraform_remote_state.aws_organization[0].outputs.account_role_arns["security_tooling"] != ""
+    condition     = local.org.account_role_arns["security_tooling"] != ""
     error_message = "remote-state account_role_arns must expose the security_tooling role the provider assumes"
   }
 }
@@ -87,19 +91,21 @@ run "rejects_placeholder_landing_zone_name" {
     target = data.terraform_remote_state.aws_organization
     values = {
       outputs = {
-        organization_id       = "o-abcdefghij"
-        organization_root_id  = "r-abcd"
-        management_account_id = "111111111111"
-        account_ids = {
-          security_tooling = "222222222222"
-          log_archive      = "333333333333"
-          shared_services  = "444444444444"
-          forensics        = "555555555555"
-        }
-        account_role_arns = {
-          security_tooling = "arn:aws:iam::222222222222:role/cross-account"
-          log_archive      = "arn:aws:iam::333333333333:role/cross-account"
-          forensics        = "arn:aws:iam::555555555555:role/cross-account"
+        contract = {
+          organization_id       = "o-abcdefghij"
+          organization_root_id  = "r-abcd"
+          management_account_id = "111111111111"
+          account_ids = {
+            security_tooling = "222222222222"
+            log_archive      = "333333333333"
+            shared_services  = "444444444444"
+            forensics        = "555555555555"
+          }
+          account_role_arns = {
+            security_tooling = "arn:aws:iam::222222222222:role/cross-account"
+            log_archive      = "arn:aws:iam::333333333333:role/cross-account"
+            forensics        = "arn:aws:iam::555555555555:role/cross-account"
+          }
         }
       }
     }
@@ -135,19 +141,21 @@ override_data {
   target = data.terraform_remote_state.aws_organization
   values = {
     outputs = {
-      organization_id       = "o-abcdefghij"
-      organization_root_id  = "r-abcd"
-      management_account_id = "111111111111"
-      account_ids = {
-        security_tooling = "222222222222"
-        log_archive      = "333333333333"
-        shared_services  = "444444444444"
-        forensics        = "555555555555"
-      }
-      account_role_arns = {
-        security_tooling = "arn:aws:iam::222222222222:role/cross-account"
-        log_archive      = "arn:aws:iam::333333333333:role/cross-account"
-        forensics        = "arn:aws:iam::555555555555:role/cross-account"
+      contract = {
+        organization_id       = "o-abcdefghij"
+        organization_root_id  = "r-abcd"
+        management_account_id = "111111111111"
+        account_ids = {
+          security_tooling = "222222222222"
+          log_archive      = "333333333333"
+          shared_services  = "444444444444"
+          forensics        = "555555555555"
+        }
+        account_role_arns = {
+          security_tooling = "arn:aws:iam::222222222222:role/cross-account"
+          log_archive      = "arn:aws:iam::333333333333:role/cross-account"
+          forensics        = "arn:aws:iam::555555555555:role/cross-account"
+        }
       }
     }
   }
@@ -160,8 +168,10 @@ run "starter_profile_trims_cost_scaling_services" {
   command = plan
 
   variables {
-    profile              = "starter"
-    enable_security_lake = null
+    profile = "starter"
+    aws_overrides = merge(var.aws_overrides, {
+      enable_security_lake = null
+    })
   }
 
   assert {
@@ -179,8 +189,10 @@ run "production_profile_keeps_full_stack" {
   command = plan
 
   variables {
-    enable_security_lake        = null
-    meta_store_manager_role_arn = "arn:aws:iam::222222222222:role/AmazonSecurityLakeMetaStoreManager"
+    aws_overrides = merge(var.aws_overrides, {
+      enable_security_lake        = null
+      meta_store_manager_role_arn = "arn:aws:iam::222222222222:role/AmazonSecurityLakeMetaStoreManager"
+    })
   }
 
   assert {
@@ -195,11 +207,30 @@ run "production_default_plans_without_meta_store_role" {
   command = plan
 
   variables {
-    enable_security_lake = null
+    aws_overrides = merge(var.aws_overrides, {
+      enable_security_lake = null
+    })
   }
 
   assert {
     condition     = local.enable_security_lake == true
     error_message = "the default production profile must plan with Security Lake on and no hand-made metastore role."
+  }
+}
+
+# A removed variable that is still set (tfvars, TFC variable or TF_VAR_) fails
+# the plan, and the message names its aws_overrides replacement.
+run "removed_input_fails_with_replacement" {
+  command = plan
+
+  variables {
+    create_break_glass = true
+  }
+
+  expect_failures = [terraform_data.removed_inputs_guard]
+
+  assert {
+    condition     = local.removed_inputs_message == "Removed variables are set; move each into aws_overrides (UPGRADING.md): create_break_glass -> aws_overrides.create_break_glass."
+    error_message = "the guard must name the removed variable and its aws_overrides key."
   }
 }

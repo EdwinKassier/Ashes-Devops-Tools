@@ -1,16 +1,10 @@
-# Dependabot freshness signals. Every GitHub Action is SHA-pinned and every
-# Terraform provider is version-pinned, so these PRs are the automated bump path.
-#
-# Terraform provider bumps are GROUPED and labeled for REVIEW, never auto-merged:
-# a provider major bump can need compatibility work (google 6.x -> 7.x did). The
-# repo pins keep proposed bumps inside the current major (google ~> 7.0,
-# aws >= 6.46.0 < 7.0.0), so a breaking major is never proposed automatically.
-# This closes audit finding L1 (provider CVEs previously had no automated signal).
+# Dependabot covers GitHub Actions (SHA-pinned) and the hash-locked CI Python
+# tooling. Terraform providers and .terraform.lock.hcl files are owned by
+# Renovate (renovate.json), so there is deliberately no terraform ecosystem here.
 #
 # Required one-time repo setup (labels must exist or PR creation warns):
 #   gh label create dependencies --force
 #   gh label create github-actions --force
-#   gh label create terraform --force
 version: 2
 updates:
   - package-ecosystem: "github-actions"
@@ -25,21 +19,6 @@ updates:
     labels:
       - "dependencies"
       - "github-actions"
-
-  - package-ecosystem: "terraform"
-    directories:
-      - "/**"
-    schedule:
-      interval: "weekly"
-    groups:
-      terraform-providers:
-        patterns: ["*"]
-    commit-message:
-      prefix: "chore(deps)"
-    labels:
-      - "dependencies"
-      - "terraform"
-    open-pull-requests-limit: 5
 
   # Hash-locked CI tooling (commitizen for the conventional-commit check).
   # Dependabot regenerates the --generate-hashes lock from commitizen.in.

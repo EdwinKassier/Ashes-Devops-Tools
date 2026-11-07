@@ -12,6 +12,14 @@ name: Sandbox E2E (real apply)
 #   * Fork PRs never receive cloud credentials: PR runs need the `e2e` label AND
 #     a head repo equal to this repo. `pull_request` (never
 #     `pull_request_target`) is used, so fork code never runs with secrets.
+#   * A new push revokes the grant: a `synchronize` on a labelled PR removes the
+#     `e2e` label (job `revoke-label`) and does not run the suites, so a
+#     reviewer-approved label never carries over to code nobody has looked at.
+#     A maintainer re-applies the label to run the new head. `reopened` is not
+#     a trigger: commits can land while a PR is closed without a synchronize
+#     event, so a reopen must never run on a stale label.
+#   * Every cloud job waits for a required reviewer on the `e2e-sandbox`
+#     environment (docs/guides/sandbox-e2e.md).
 #   * Guaranteed teardown: `terraform test` destroys what it created, then an
 #     always() step deletes anything still tagged/labelled e2e-run-id=<run_id>.
 #   * Not configured => the run FAILS (a real-apply check that never ran must
@@ -44,13 +52,12 @@ on:
       - opened
       - labeled
       - synchronize
-      - reopened
 
 # Nothing by default; each job grants only what it needs.
 permissions: {}
 
 env:
-  TERRAFORM_VERSION: "1.14.3"
+  TERRAFORM_VERSION: "1.17.1"
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   TF_PLUGIN_CACHE_DIR: /home/runner/.terraform.d/plugin-cache
@@ -58,12 +65,14 @@ env:
 jobs:
   preflight:
     name: E2E Preflight
-    # PR runs: only with the `e2e` label, only from branches of THIS repo, and
-    # on `labeled` only when the label just added is `e2e` (adding any other
-    # label must not re-run a real apply).
+    # PR runs: only with the `e2e` label, only from branches of THIS repo, never
+    # on `synchronize` (a new push must be re-approved by re-labelling; see
+    # `revoke-label`), and on `labeled` only when the label just added is `e2e`
+    # (adding any other label must not re-run a real apply).
     if: >-
       github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository &&
+       github.event.action != 'synchronize' &&
        contains(github.event.pull_request.labels.*.name, 'e2e') &&
        (github.event.action != 'labeled' || github.event.label.name == 'e2e'))
     runs-on: ubuntu-latest
@@ -135,6 +144,38 @@ jobs:
               exit 1
             fi
           fi
+
+  # A push to a labelled PR withdraws the label: the label approved the code that
+  # existed when it was applied, not whatever is pushed next.
+  revoke-label:
+    name: Revoke e2e label on new push
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.action == 'synchronize' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(github.event.pull_request.labels.*.name, 'e2e')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write   # removeLabel is an issues API call
+    steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Remove the e2e label
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
+        with:
+          script: |
+            await github.rest.issues.removeLabel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              name: 'e2e',
+            });
+            core.notice('Removed the e2e label: new commits need a fresh approval (re-apply the label).');
 
   gcp:
     name: E2E GCP

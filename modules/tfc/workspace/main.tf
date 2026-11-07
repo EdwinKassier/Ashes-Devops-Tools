@@ -12,8 +12,11 @@ resource "tfe_workspace" "this" {
 
   working_directory = var.working_directory
   auto_apply        = var.auto_apply
-  terraform_version = var.terraform_version
-  tag_names         = var.tag_names
+  # Apply a run queued by a run trigger without confirmation (independent of
+  # auto_apply, which covers VCS- and API-queued runs).
+  auto_apply_run_trigger = var.auto_apply_run_trigger
+  terraform_version      = var.terraform_version
+  tag_names              = var.tag_names
 
   # Native drift detection + continuous validation (health assessments).
   assessments_enabled = var.assessments_enabled

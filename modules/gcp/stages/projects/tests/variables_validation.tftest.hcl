@@ -53,3 +53,13 @@ run "rejects_empty_environments" {
     environments = {}
   }
 }
+
+run "rejects_malformed_additional_project_service" {
+  command = plan
+
+  variables {
+    additional_project_services = { "dev-host" = ["networkconnectivity"] }
+  }
+
+  expect_failures = [var.additional_project_services]
+}

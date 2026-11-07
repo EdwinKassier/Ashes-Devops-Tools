@@ -43,16 +43,20 @@ module "bootstrap" {
   # Just-in-time org admin (PAM) managed by gcp-organization.
   enable_pam = var.enable_pam
 
+  # Network Connectivity Center roles on the network-hub (shared folder) and
+  # workload (env folder) SAs, when the opt-in NCC connectivity is in use.
+  enable_network_connectivity_center = local.enable_network_connectivity_center
+
   # Phase-0 human impersonation of terraform-admin (turn off on pass 2).
   enable_phase0_admin_impersonation     = var.enable_phase0_admin_impersonation
-  phase0_admin_impersonation_expires_at = var.phase0_admin_impersonation_expires_at
+  phase0_admin_impersonation_expires_at = local.phase0_admin_impersonation_expires_at
 
   # Deny-policy ownership: a separate guardrails SA holds roles/iam.denyAdmin.
   guardrail_owner_mode    = var.guardrail_owner_mode
   guardrail_owner_members = var.guardrail_owner_members
 
   # Principal access boundary for the automation SAs (gcp-organization).
-  enable_principal_access_boundary = var.enable_principal_access_boundary
+  enable_principal_access_boundary = local.enable_principal_access_boundary
 
   # GitHub WIF — off by default (unused); see variables.tf.
   enable_github_wif          = var.enable_github_wif

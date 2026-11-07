@@ -31,3 +31,14 @@ locals {
     environment  = var.environment
   }
 }
+
+# tfe serves only the opt-in SaaS secret bridge (ephemeral "tfe_outputs" "saas").
+# Terraform configures a declared provider even when nothing uses it, and tfe
+# refuses to configure without a token, so a workspace with the bridge off gets
+# an inert placeholder (NOT a secret, and it grants nothing: on configure the
+# provider only calls the host's discovery and ping endpoints, which need no
+# valid token). With the bridge on, token = null reads TFE_TOKEN: the
+# saas-outputs-reader team token.
+provider "tfe" {
+  token = var.enable_saas_secret_bridge ? null : "saas-bridge-disabled-placeholder"
+}

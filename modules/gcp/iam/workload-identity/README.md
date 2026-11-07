@@ -27,18 +27,30 @@ module "github_workload_identity" {
   pool_id      = "github-pool"
   display_name = "GitHub Actions Pool"
 
-  enable_github_provider = true
-  github_organization    = "my-org"  # Optional: restrict to org
+  enable_github_provider     = true
+  github_repository_owner_id = "12345678" # Required: gh api orgs/my-org --jq .id
 
-  # Bind specific repos to service accounts
+  # Bind specific repos (by immutable numeric ID) to service accounts
   github_sa_bindings = [
     {
       repository            = "my-org/my-repo"
+      repository_id         = "987654321" # gh api repos/my-org/my-repo --jq .id
       service_account_email = "github-deployer@my-project.iam.gserviceaccount.com"
     }
   ]
+
+  # Optional: only these exact refs may impersonate (attribute.repo_ref bindings)
+  github_allowed_refs = ["refs/heads/main"]
 }
 ```
+
+The GitHub provider's `attribute_condition` is exactly
+`assertion.repository_owner_id == "<id>"`, the form the org-policy constraint
+`custom.wifProviderTenantPinned` accepts. Repository, ref and environment are
+pinned by the principalSet each SA is bound to, through the composite attributes
+`attribute.repo_ref` (`<repository_id>/<ref>`), `attribute.repo_env`
+(`<repository_id>/<environment>`, `-` when the token has no environment claim)
+and `attribute.repo_ref_env` (`<repository_id>/<ref>/<environment>`).
 
 **GitHub Actions Workflow:**
 
@@ -103,7 +115,8 @@ module "aws_workload_identity" {
 | description | Pool description | string | "Workload Identity Pool..." | no |
 | disabled | Whether pool is disabled | bool | false | no |
 | enable_github_provider | Enable GitHub Actions OIDC | bool | false | no |
-| github_organization | Restrict to GitHub org | string | null | no |
+| github_repository_owner_id | Numeric GitHub owner ID (required with the GitHub provider) | string | null | no |
+| github_allowed_refs | Exact refs bound via attribute.repo_ref | list(string) | [] | no |
 | github_sa_bindings | Repo to SA bindings | list(object) | [] | no |
 | enable_gitlab_provider | Enable GitLab CI OIDC | bool | false | no |
 | gitlab_url | GitLab instance URL | string | "https://gitlab.com" | no |
@@ -126,7 +139,7 @@ module "aws_workload_identity" {
 
 ## Security Considerations
 
-1. **Restrict by organization/account**: Always set `github_organization`, `gitlab_namespace`, or `aws_account_id` to prevent unauthorized access
+1. **Restrict by organization/account**: Always set `github_repository_owner_id` (required for GitHub), `gitlab_namespace`, or `aws_account_id` to prevent unauthorized access
 2. **Least privilege**: Only grant necessary roles to service accounts
 3. **Audit logs**: Enable Cloud Audit Logs to monitor workload identity usage
 4. **Review bindings**: Regularly review which repositories have access to which service accounts
@@ -158,14 +171,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.17, < 2.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | 8.10.0 |
 
 
 
@@ -175,13 +188,13 @@ The following resources are created:
 
 
 - resource.google_iam_workload_identity_pool.pool (modules/gcp/iam/workload-identity/main.tf#L5)
-- resource.google_iam_workload_identity_pool_provider.aws (modules/gcp/iam/workload-identity/main.tf#L114)
-- resource.google_iam_workload_identity_pool_provider.github (modules/gcp/iam/workload-identity/main.tf#L14)
-- resource.google_iam_workload_identity_pool_provider.gitlab (modules/gcp/iam/workload-identity/main.tf#L79)
-- resource.google_iam_workload_identity_pool_provider.tfc (modules/gcp/iam/workload-identity/main.tf#L192)
-- resource.google_service_account_iam_member.github_workload_identity (modules/gcp/iam/workload-identity/main.tf#L145)
-- resource.google_service_account_iam_member.gitlab_workload_identity (modules/gcp/iam/workload-identity/main.tf#L160)
-- resource.google_service_account_iam_member.tfc_workload_identity (modules/gcp/iam/workload-identity/main.tf#L239)
+- resource.google_iam_workload_identity_pool_provider.aws (modules/gcp/iam/workload-identity/main.tf#L126)
+- resource.google_iam_workload_identity_pool_provider.github (modules/gcp/iam/workload-identity/main.tf#L21)
+- resource.google_iam_workload_identity_pool_provider.gitlab (modules/gcp/iam/workload-identity/main.tf#L91)
+- resource.google_iam_workload_identity_pool_provider.tfc (modules/gcp/iam/workload-identity/main.tf#L198)
+- resource.google_service_account_iam_member.github_workload_identity (modules/gcp/iam/workload-identity/main.tf#L157)
+- resource.google_service_account_iam_member.gitlab_workload_identity (modules/gcp/iam/workload-identity/main.tf#L166)
+- resource.google_service_account_iam_member.tfc_workload_identity (modules/gcp/iam/workload-identity/main.tf#L245)
 
 
 ## Inputs
@@ -198,11 +211,9 @@ The following resources are created:
 | <a name="input_enable_github_provider"></a> [enable\_github\_provider](#input\_enable\_github\_provider) | Enable GitHub Actions OIDC provider | `bool` | `false` | no |
 | <a name="input_enable_gitlab_provider"></a> [enable\_gitlab\_provider](#input\_enable\_gitlab\_provider) | Enable GitLab CI OIDC provider | `bool` | `false` | no |
 | <a name="input_enable_tfc_provider"></a> [enable\_tfc\_provider](#input\_enable\_tfc\_provider) | Enable Terraform Cloud OIDC provider for Dynamic Credentials | `bool` | `false` | no |
-| <a name="input_github_allowed_refs"></a> [github\_allowed\_refs](#input\_github\_allowed\_refs) | List of allowed git refs for GitHub Actions (e.g., ['refs/heads/main', 'refs/heads/release/*']). When set, only workflows triggered from these refs can authenticate. | `list(string)` | `[]` | no |
-| <a name="input_github_attribute_condition_override"></a> [github\_attribute\_condition\_override](#input\_github\_attribute\_condition\_override) | Full custom attribute condition for GitHub provider. When set, overrides the default condition based on organization and allowed\_refs. | `string` | `null` | no |
-| <a name="input_github_organization"></a> [github\_organization](#input\_github\_organization) | GitHub organization to restrict access to (optional). Must contain only alphanumeric characters and hyphens — value is interpolated into a CEL expression. | `string` | `null` | no |
-| <a name="input_github_repository_owner_id"></a> [github\_repository\_owner\_id](#input\_github\_repository\_owner\_id) | Immutable numeric GitHub owner (org/user) ID. When set, the GitHub provider attribute\_condition also requires assertion.repository\_owner\_id to match, so an org rename / name squat cannot satisfy the trust. | `string` | `null` | no |
-| <a name="input_github_sa_bindings"></a> [github\_sa\_bindings](#input\_github\_sa\_bindings) | List of GitHub repository to service account bindings. repository must be 'owner/repo' format — value is interpolated into a CEL expression. Set repository\_id (the immutable numeric GitHub repository ID) to bind on attribute.repository\_id instead of the mutable repository name. Set key when service\_account\_email is unknown until apply. | <pre>list(object({<br/>    repository            = string # Format: owner/repo<br/>    repository_id         = optional(string)<br/>    service_account_email = string<br/>    # Optional static for_each key. Set it when service_account_email is only<br/>    # known after apply (e.g. an SA created in the same plan); otherwise the key<br/>    # defaults to "<repository>-<service_account_email>".<br/>    key = optional(string)<br/>  }))</pre> | `[]` | no |
+| <a name="input_github_allowed_refs"></a> [github\_allowed\_refs](#input\_github\_allowed\_refs) | Exact git refs (e.g. ["refs/heads/main", "refs/tags/v1"]) a GitHub workflow must run from to impersonate a bound SA. When set, every github\_sa\_bindings entry is bound once per ref on attribute.repo\_ref ("<repository\_id>/<ref>"), so each entry needs repository\_id. Empty (default) binds on attribute.repository\_id: any ref of the repository. Wildcards are not supported (a principalSet value is an exact match). | `list(string)` | `[]` | no |
+| <a name="input_github_repository_owner_id"></a> [github\_repository\_owner\_id](#input\_github\_repository\_owner\_id) | Immutable numeric GitHub owner (org/user) ID (gh api repos/<owner>/<repo> --jq .owner.id). Required when enable\_github\_provider = true: the provider attribute\_condition is exactly assertion.repository\_owner\_id == "<id>", the form the org-policy constraint custom.wifProviderTenantPinned accepts. An org rename or name squat cannot satisfy it. | `string` | `null` | no |
+| <a name="input_github_sa_bindings"></a> [github\_sa\_bindings](#input\_github\_sa\_bindings) | List of GitHub repository to service account bindings. repository must be 'owner/repo' format. Set repository\_id (the immutable numeric GitHub repository ID) to bind on attribute.repository\_id (or attribute.repo\_ref with github\_allowed\_refs) instead of the mutable repository name. Set key when service\_account\_email is unknown until apply. | <pre>list(object({<br/>    repository            = string # Format: owner/repo<br/>    repository_id         = optional(string)<br/>    service_account_email = string<br/>    # Optional static for_each key. Set it when service_account_email is only<br/>    # known after apply (e.g. an SA created in the same plan); otherwise the key<br/>    # defaults to "<repository>-<service_account_email>".<br/>    key = optional(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_gitlab_namespace"></a> [gitlab\_namespace](#input\_gitlab\_namespace) | GitLab namespace (group path) to restrict access to. Matches the namespace itself or any sub-group under it (namespace\_path == X \|\| startsWith(X + '/')), never a sibling sharing the prefix. Interpolated into CEL, so it must not contain single quotes. | `string` | `null` | no |
 | <a name="input_gitlab_sa_bindings"></a> [gitlab\_sa\_bindings](#input\_gitlab\_sa\_bindings) | List of GitLab project to service account bindings | <pre>list(object({<br/>    project_path          = string # Format: group/project<br/>    service_account_email = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_gitlab_url"></a> [gitlab\_url](#input\_gitlab\_url) | GitLab instance URL (e.g., https://gitlab.com) | `string` | `"https://gitlab.com"` | no |
@@ -218,6 +229,7 @@ The following resources are created:
 |------|-------------|
 | <a name="output_aws_provider_name"></a> [aws\_provider\_name](#output\_aws\_provider\_name) | The fully-qualified name of the AWS provider |
 | <a name="output_github_attribute_condition"></a> [github\_attribute\_condition](#output\_github\_attribute\_condition) | The CEL attribute\_condition applied to the GitHub provider (null when the GitHub provider is disabled). |
+| <a name="output_github_binding_members"></a> [github\_binding\_members](#output\_github\_binding\_members) | Map of GitHub binding key ("<key>:<ref>" when more than one github\_allowed\_refs entry is set) to the principalSet member bound to roles/iam.workloadIdentityUser. |
 | <a name="output_github_binding_service_accounts"></a> [github\_binding\_service\_accounts](#output\_github\_binding\_service\_accounts) | Map of GitHub binding key to the service account email granted roles/iam.workloadIdentityUser. |
 | <a name="output_github_principal_set_prefix"></a> [github\_principal\_set\_prefix](#output\_github\_principal\_set\_prefix) | Prefix for GitHub principal set (append /attribute.repository/owner/repo) |
 | <a name="output_github_provider_name"></a> [github\_provider\_name](#output\_github\_provider\_name) | The fully-qualified name of the GitHub OIDC provider |

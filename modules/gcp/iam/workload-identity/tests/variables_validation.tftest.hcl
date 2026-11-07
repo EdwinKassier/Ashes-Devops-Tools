@@ -104,3 +104,64 @@ run "rejects_aws_account_id_with_letters" {
     aws_account_id = "12345678901a"
   }
 }
+
+# ── GitHub ─────────────────────────────────────────────────────────────────────
+
+# The condition is the owner pin, so an enabled GitHub provider needs the ID.
+run "rejects_github_provider_without_owner_id" {
+  command = plan
+
+  expect_failures = [var.github_repository_owner_id]
+
+  variables {
+    enable_github_provider = true
+  }
+}
+
+run "rejects_non_numeric_owner_id" {
+  command = plan
+
+  expect_failures = [var.github_repository_owner_id]
+
+  variables {
+    github_repository_owner_id = "acme"
+  }
+}
+
+# A ref is an exact principalSet value: no wildcard, quote or space.
+run "rejects_wildcard_allowed_ref" {
+  command = plan
+
+  expect_failures = [var.github_allowed_refs]
+
+  variables {
+    github_allowed_refs = ["refs/heads/release/*"]
+  }
+}
+
+run "rejects_quoted_allowed_ref" {
+  command = plan
+
+  expect_failures = [var.github_allowed_refs]
+
+  variables {
+    github_allowed_refs = ["refs/heads/main\" || true"]
+  }
+}
+
+# repo_ref is keyed on the immutable repository_id, so a ref pin needs it.
+run "rejects_allowed_refs_without_repository_id" {
+  command = plan
+
+  expect_failures = [var.github_allowed_refs]
+
+  variables {
+    github_allowed_refs = ["refs/heads/main"]
+    github_sa_bindings = [
+      {
+        repository            = "acme/infra"
+        service_account_email = "gh-deploy@mock-project.iam.gserviceaccount.com"
+      },
+    ]
+  }
+}

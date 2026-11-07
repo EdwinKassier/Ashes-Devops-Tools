@@ -101,7 +101,7 @@ run "ha_vpn_and_interconnect" {
       enabled          = true
       peer_gateway_ips = ["203.0.113.1", "203.0.113.2"]
     }
-    vpn_shared_secret = "mock-psk-not-a-secret"
+    vpn_shared_secret_wo = "mock-psk-not-a-secret"
     interconnects = {
       "ic-partner-1" = {
         region      = "us-central1"
@@ -113,6 +113,77 @@ run "ha_vpn_and_interconnect" {
   assert {
     condition     = length(module.vpn) == 1 && keys(module.interconnects) == ["ic-partner-1"]
     error_message = "Enabling VPN and declaring an interconnect must plan both."
+  }
+}
+
+run "ncc_with_vpn_makes_a_hybrid_spoke" {
+  command = plan
+
+  variables {
+    ncc = { enabled = true, vpn_site_to_site_data_transfer = true }
+    vpn = {
+      enabled          = true
+      peer_gateway_ips = ["203.0.113.1", "203.0.113.2"]
+    }
+    vpn_shared_secret_wo = "mock-psk-not-a-secret"
+  }
+
+  assert {
+    condition     = length(module.ncc_vpn_spoke) == 1
+    error_message = "NCC plus VPN must link the HA VPN tunnels to the hub as a hybrid spoke."
+  }
+}
+
+run "hybrid_spoke_joins_center_group_on_star" {
+  command = plan
+
+  variables {
+    ncc = { enabled = true, preset_topology = "STAR" }
+    vpn = {
+      enabled          = true
+      peer_gateway_ips = ["203.0.113.1", "203.0.113.2"]
+    }
+    vpn_shared_secret_wo = "mock-psk-not-a-secret"
+  }
+
+  assert {
+    condition     = output.hybrid_connectivity.ncc_vpn_spoke_group == "center"
+    error_message = "On a STAR hub the VPN hybrid spoke must join the center group (edge spokes reach only the center)."
+  }
+}
+
+run "hybrid_spoke_joins_default_group_on_mesh" {
+  command = plan
+
+  variables {
+    ncc = { enabled = true, preset_topology = "MESH" }
+    vpn = {
+      enabled          = true
+      peer_gateway_ips = ["203.0.113.1", "203.0.113.2"]
+    }
+    vpn_shared_secret_wo = "mock-psk-not-a-secret"
+  }
+
+  assert {
+    condition     = output.hybrid_connectivity.ncc_vpn_spoke_group == "default"
+    error_message = "On a MESH hub the VPN hybrid spoke must join the default group."
+  }
+}
+
+run "vpn_without_ncc_has_no_hybrid_spoke" {
+  command = plan
+
+  variables {
+    vpn = {
+      enabled          = true
+      peer_gateway_ips = ["203.0.113.1", "203.0.113.2"]
+    }
+    vpn_shared_secret_wo = "mock-psk-not-a-secret"
+  }
+
+  assert {
+    condition     = length(module.vpn) == 1 && length(module.ncc_vpn_spoke) == 0
+    error_message = "Without NCC the VPN is a plain hub VPN with no hybrid spoke."
   }
 }
 
@@ -129,5 +200,132 @@ run "optional_services_can_be_disabled" {
   assert {
     condition     = length(module.integrated_nat) == 0 && output.nat_ip == null && length(module.private_service_access) == 0 && length(module.private_service_connect) == 0
     error_message = "NAT, PSA and PSC must each be droppable."
+  }
+}
+
+run "firewall_mode_defaults_to_legacy" {
+  command = plan
+
+  assert {
+    condition     = output.firewall_policy_name == null && length(module.network.vpc) > 0
+    error_message = "firewall_mode must default to legacy: no network firewall policy, unchanged plan."
+  }
+}
+
+run "firewall_mode_policy_passes_through" {
+  command = plan
+
+  variables {
+    firewall_mode                     = "policy"
+    firewall_policy_enforcement_order = "BEFORE_CLASSIC_FIREWALL"
+  }
+
+  assert {
+    condition     = output.firewall_policy_name == "hub-vpc-core-tier-policy"
+    error_message = "firewall_mode must reach network/tiered-vpc, which then plans the <name>-tier-policy network firewall policy."
+  }
+}
+
+run "firewall_policy_fields_pass_through" {
+  command = plan
+
+  variables {
+    firewall_mode                     = "both"
+    firewall_policy_enforcement_order = "AFTER_CLASSIC_FIREWALL"
+    firewall = {
+      api_gateway_source_ranges               = ["10.200.0.0/24"]
+      database_egress_target_service_accounts = ["db@mock-project.iam.gserviceaccount.com"]
+    }
+  }
+
+  assert {
+    condition     = module.network.firewall_policy_rules["apigateway-to-public"].src_ip_ranges == tolist(["10.200.0.0/24"]) && module.network.firewall_policy_rules["database-deny-egress"].target_service_accounts == tolist(["db@mock-project.iam.gserviceaccount.com"])
+    error_message = "firewall.api_gateway_source_ranges and firewall.database_egress_target_service_accounts must reach network/tiered-vpc."
+  }
+}
+
+run "firewall_policy_fields_default_to_current_behaviour" {
+  command = plan
+
+  variables {
+    firewall_mode = "both"
+  }
+
+  assert {
+    condition     = !contains(keys(module.network.firewall_policy_rules), "apigateway-to-public") && module.network.firewall_policy_rules["database-deny-egress"].target_service_accounts == null
+    error_message = "Unset, the new firewall fields must keep the defaults: no API Gateway policy rule and no egress target service accounts."
+  }
+}
+
+run "no_additional_regions_unchanged" {
+  command = plan
+
+  assert {
+    condition     = length(module.additional_region_nat) == 0 && output.additional_region_subnets == {} && output.additional_region_routers == {}
+    error_message = "additional_regions = {} (default) must plan no additional-region subnets, routers or NAT."
+  }
+
+  assert {
+    condition     = length(module.integrated_nat) == 1 && module.integrated_nat[0].router_name == "hub-vpc-core-router" && module.integrated_nat[0].region == "us-central1"
+    error_message = "The primary router and NAT must keep their unkeyed address, name and region."
+  }
+}
+
+run "second_region_subnets_router_nat" {
+  command = plan
+
+  variables {
+    nat = {
+      log_filter = "ALL"
+    }
+    additional_regions = {
+      "us-east4" = {
+        subnet_cidrs = { public = "10.200.0.0/24", private = "10.200.16.0/24", database = "10.200.32.0/24" }
+      }
+      "us-west1" = {
+        subnet_cidrs = { public = "10.201.0.0/24", private = "10.201.16.0/24", database = "10.201.32.0/24" }
+        nat          = false
+      }
+    }
+  }
+
+  assert {
+    condition     = toset(keys(output.additional_region_subnets)) == toset(["us-east4", "us-west1"]) && output.additional_region_subnets["us-east4"].private.subnet.region == "us-east4" && output.additional_region_subnets["us-east4"].private.subnet.name == "hub-vpc-core-private-us-east4"
+    error_message = "Each additional region must get its own regional tier subnets."
+  }
+
+  assert {
+    condition     = toset(keys(module.additional_region_nat)) == toset(["us-east4"]) && output.additional_region_routers == { "us-east4" = "hub-vpc-core-router-us-east4" }
+    error_message = "A router and NAT must be planned only for additional regions with nat = true, named <network>-router-<region>."
+  }
+
+  assert {
+    condition     = module.additional_region_nat["us-east4"].region == "us-east4" && module.additional_region_nat["us-east4"].nat.name == "hub-vpc-core-nat-us-east4" && module.additional_region_nat["us-east4"].nat.log_config[0].filter == "ALL" && module.additional_region_nat["us-east4"].nat.source_subnetwork_ip_ranges_to_nat == "LIST_OF_SUBNETWORKS"
+    error_message = "The additional-region NAT must be in its region, named <network>-nat-<region>, with the primary nat settings and a subnet list (private and database tiers only)."
+  }
+
+  assert {
+    condition     = length(module.integrated_nat) == 1 && module.integrated_nat[0].router_name == "hub-vpc-core-router" && module.integrated_nat[0].region == "us-central1"
+    error_message = "The primary router and NAT must be unchanged by additional regions."
+  }
+}
+
+run "additional_region_nat_off_when_nat_disabled" {
+  command = plan
+
+  variables {
+    nat = {
+      enabled = false
+    }
+    additional_regions = {
+      "us-east4" = {
+        subnet_cidrs = { public = "10.200.0.0/24", private = "10.200.16.0/24", database = "10.200.32.0/24" }
+      }
+    }
+  }
+
+  assert {
+    condition     = length(module.additional_region_nat) == 0 && length(module.integrated_nat) == 0 && length(output.additional_region_subnets) == 1
+    error_message = "nat.enabled = false must suppress every NAT, additional regions included."
   }
 }

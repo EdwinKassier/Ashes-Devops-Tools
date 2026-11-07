@@ -29,7 +29,7 @@ output "interface_endpoint_phz_id" {
 }
 
 output "tgw_inspection_routes" {
-  description = "The centralized-inspection routing contract fed to the transit gateway: the segment default routes (0.0.0.0/0) pointed at the inspection attachment so prod and nonprod traffic is forced through the firewall."
+  description = "The centralized-inspection routing contract fed to the transit gateway: the segment default routes (0.0.0.0/0) pointed at the inspection attachment so prod and nonprod traffic is forced through the firewall, plus (with spoke_attachments) inspection 0.0.0.0/0 to egress and shared top_cidr to inspection."
   value       = local.tgw_routes
 }
 
@@ -41,4 +41,24 @@ output "egress_route_table_ids_by_tier" {
 output "inspection_route_table_ids_by_tier" {
   description = "Map of inspection VPC subnet tier to its per-AZ route table IDs (owned by the vpc module)."
   value       = module.inspection_vpc.route_table_ids_by_tier
+}
+
+output "vpn_connection_id" {
+  description = "ID of the Site-to-Site VPN connection, or null when enable_vpn = false."
+  value       = try(module.vpn[0].vpn_connection_id, null)
+}
+
+output "vpn_tunnel_addresses" {
+  description = "AWS-side public IPs of the two VPN tunnels (configure these on the on-premises device), or an empty list when enable_vpn = false."
+  value       = var.enable_vpn ? [module.vpn[0].tunnel1_address, module.vpn[0].tunnel2_address] : []
+}
+
+output "vpn_preshared_key_arn" {
+  description = "ARN of the Secrets Manager secret holding the VPN tunnel pre-shared keys (read it to configure the on-premises device), or null when enable_vpn = false or vpn.preshared_key_storage = Standard."
+  value       = try(module.vpn[0].preshared_key_arn, null)
+}
+
+output "spoke_attachment_route_tables" {
+  description = "Map of spoke_attachments key to the TGW route table its attachment is associated with (prod or nonprod segment); every listed spoke also propagates into the inspection route table."
+  value       = { for k, s in var.spoke_attachments : k => module.transit_gateway.route_table_ids[s.segment] }
 }

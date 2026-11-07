@@ -107,7 +107,7 @@ enable_gke_autopilot  = false # optional env-level GKE Autopilot cluster
 
 # Example (uncomment and adapt):
 # enable_app_deploy_wif      = true
-# github_repository_owner_id = "12345678"   # gh api orgs/<org> --jq .id
+# github_repository_owner_id = "12345678"   # required with github: gh api orgs/<org> --jq .id
 # app_services = {
 #   orders-api = {
 #     secrets  = { STRIPE_KEY = { secret = "orders-api-stripe-key" } } # secret must exist

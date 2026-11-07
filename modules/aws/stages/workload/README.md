@@ -61,20 +61,19 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.17, < 2.0 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.46.0, < 7.0.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.54.0 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.72.0 |
 
 ## Modules
 
 
 - account_baseline - ../../governance/account-baseline
-- config_recorder - ../../security/config-org
 - edge_security - ../../security/edge-security
 - iam_role - ../../iam/iam-role
 - systems_manager - ../../ops/systems-manager
@@ -86,11 +85,11 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_ebs_default_kms_key.home (modules/aws/stages/workload/main.tf#L188)
-- resource.aws_ec2_transit_gateway_vpc_attachment.spoke (modules/aws/stages/workload/main.tf#L133)
-- resource.aws_vpc_block_public_access_exclusion.public_ingress (modules/aws/stages/workload/main.tf#L267)
-- data source.aws_caller_identity.current (modules/aws/stages/workload/main.tf#L50)
-- data source.aws_partition.current (modules/aws/stages/workload/main.tf#L54)
+- resource.aws_ebs_default_kms_key.home (modules/aws/stages/workload/main.tf#L195)
+- resource.aws_ec2_transit_gateway_vpc_attachment.spoke (modules/aws/stages/workload/main.tf#L140)
+- resource.aws_vpc_block_public_access_exclusion.public_ingress (modules/aws/stages/workload/main.tf#L270)
+- data source.aws_caller_identity.current (modules/aws/stages/workload/main.tf#L48)
+- data source.aws_partition.current (modules/aws/stages/workload/main.tf#L52)
 
 
 ## Inputs
@@ -103,8 +102,8 @@ The following resources are created:
 | <a name="input_aws_enabled_regions"></a> [aws\_enabled\_regions](#input\_aws\_enabled\_regions) | Regions in which to enforce the account baseline (default EBS encryption) and deploy a Config recorder. Defaults to the single home Region. | `list(string)` | <pre>[<br/>  "eu-west-2"<br/>]</pre> | no |
 | <a name="input_aws_region"></a> [aws\_region](#input\_aws\_region) | AWS region the workload's spoke VPC is deployed in and the region the default provider operates in. Used for subnet math and gateway-endpoint service names. | `string` | `"eu-west-2"` | no |
 | <a name="input_az_count"></a> [az\_count](#input\_az\_count) | Number of availability zones to spread each subnet tier across. | `number` | `2` | no |
-| <a name="input_config_role_arn"></a> [config\_role\_arn](#input\_config\_role\_arn) | ARN of the IAM role AWS Config assumes to record resource configurations in this account/Region. Null (default) uses the account's AWSServiceRoleForConfig service-linked role (created unless create\_config\_service\_linked\_role = false). | `string` | `null` | no |
-| <a name="input_create_config_service_linked_role"></a> [create\_config\_service\_linked\_role](#input\_create\_config\_service\_linked\_role) | With config\_role\_arn = null, create the AWSServiceRoleForConfig service-linked role in the workload account. Set false if Config was ever enabled in the account (the SLR already exists). | `bool` | `true` | no |
+| <a name="input_config_role_arn"></a> [config\_role\_arn](#input\_config\_role\_arn) | Deprecated and ignored: the workload Config recorder is deployed by aws-organization's recorder StackSet, which uses the AWSServiceRoleForConfig service-linked role. Removed in v1.0. | `string` | `null` | no |
+| <a name="input_create_config_service_linked_role"></a> [create\_config\_service\_linked\_role](#input\_create\_config\_service\_linked\_role) | Deprecated and ignored: the workload Config recorder is deployed by aws-organization's recorder StackSet. Removed in v1.0. | `bool` | `true` | no |
 | <a name="input_create_internet_gateway"></a> [create\_internet\_gateway](#input\_create\_internet\_gateway) | Attach an internet gateway to the spoke VPC even without public subnets (no routes to it are added). CloudFront VPC origins require the origin VPC to have one. Implied by enable\_public\_subnets. | `bool` | `false` | no |
 | <a name="input_edge_name_prefix"></a> [edge\_name\_prefix](#input\_edge\_name\_prefix) | Prefix applied to the edge WAF Web ACL, CloudFront Shield protection, and metric names. Ignored when enable\_edge is false. | `string` | `"workload-edge"` | no |
 | <a name="input_edge_origin_domain_name"></a> [edge\_origin\_domain\_name](#input\_edge\_origin\_domain\_name) | DNS name of the origin the edge CloudFront distribution fetches from. Ignored when enable\_edge is false. | `string` | `"origin.example.com"` | no |
@@ -114,6 +113,7 @@ The following resources are created:
 | <a name="input_enable_ssm"></a> [enable\_ssm](#input\_enable\_ssm) | Deploy the Systems Manager baseline (Session Manager preferences, patch baseline, inventory). On by default. Requires a non-empty kms\_key\_arn (Session Manager sessions/logs are KMS-encrypted; an empty key would leave the session document's kmsKeyId blank). | `bool` | `true` | no |
 | <a name="input_enable_vpc_bpa_exclusion"></a> [enable\_vpc\_bpa\_exclusion](#input\_enable\_vpc\_bpa\_exclusion) | Create a VPC Block Public Access exclusion (allow-bidirectional) for this spoke VPC so an internet-facing ALB in its public tier can receive traffic. The org declarative EC2 policy blocks internet-gateway ingress for every VPC; an exclusion is only accepted when aws-organization sets allow\_vpc\_bpa\_exclusions = true. Scoped to this one VPC. Default false. | `bool` | `false` | no |
 | <a name="input_environment"></a> [environment](#input\_environment) | Environment this workload account serves (e.g. dev, staging, prod). Used to derive the default resource name workload-<environment>. null keeps the legacy name "workload". | `string` | `null` | no |
+| <a name="input_ipam_explicit_cidr"></a> [ipam\_explicit\_cidr](#input\_ipam\_explicit\_cidr) | When true and ipam\_pool\_id is set, the spoke VPC requests vpc\_cidr explicitly from the pool (pool + cidr\_block). Default false keeps the legacy pool + netmask\_length shape; switching an existing VPC replaces it, so enable for NEW workloads only. | `bool` | `false` | no |
 | <a name="input_ipam_pool_id"></a> [ipam\_pool\_id](#input\_ipam\_pool\_id) | IPAM pool ID to allocate the spoke VPC CIDR from (the network account's regional pool, shared over RAM). Empty string uses the literal vpc\_cidr instead. | `string` | `""` | no |
 | <a name="input_kms_key_arn"></a> [kms\_key\_arn](#input\_kms\_key\_arn) | ARN of the CMK used as the account default EBS encryption key and (when enable\_ssm is true) to encrypt Session Manager sessions/logs. Empty string leaves default EBS encryption on the AWS-managed key; must be a non-empty key when enable\_ssm is true. | `string` | `""` | no |
 | <a name="input_name"></a> [name](#input\_name) | Name of the spoke VPC (and prefix for its subnets, route tables and TGW attachment). null derives workload-<environment> (or "workload" when environment is null). | `string` | `null` | no |
@@ -130,7 +130,7 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
-| <a name="output_config_role_arn"></a> [config\_role\_arn](#output\_config\_role\_arn) | IAM role the workload account's Config recorders use (the AWSServiceRoleForConfig service-linked role unless config\_role\_arn was set). |
+| <a name="output_config_role_arn"></a> [config\_role\_arn](#output\_config\_role\_arn) | Deprecated, always null: the workload account's Config recorder is deployed by aws-organization's recorder StackSet (it uses the AWSServiceRoleForConfig service-linked role). Removed in v1.0. |
 | <a name="output_internet_gateway_id"></a> [internet\_gateway\_id](#output\_internet\_gateway\_id) | ID of the spoke's internet gateway, or null when neither enable\_public\_subnets nor create\_internet\_gateway is set. |
 | <a name="output_name"></a> [name](#output\_name) | The resolved spoke name (var.name, else workload-<environment>). |
 | <a name="output_route_table_ids_by_tier"></a> [route\_table\_ids\_by\_tier](#output\_route\_table\_ids\_by\_tier) | Map of spoke subnet tier to its per-AZ route table IDs (owned by the vpc module). |

@@ -127,7 +127,7 @@ Both clouds expose reusable primitives under the **same domain folders**, so a c
 | Application platform | `firebase/project` | *(Amplify / App Runner — no module)* |
 | Orchestration stages | `stages/*` — bootstrap, organization, projects, network-hub, workload, host | `stages/*` — organization, security, network-hub, shared-services, backup, workload |
 
-`modules/gcp/stages/host` is the Shared VPC host-project network stage used by `envs/gcp/workload`; the AWS equivalent per-account baseline lives in `modules/aws/stages/workload`.
+The Shared VPC networks are built by `modules/gcp/stages/net-hub` (via `network-hub`) and `modules/gcp/stages/net-spoke` (per environment, used by `envs/gcp/workload`); the AWS equivalent per-account baseline lives in `modules/aws/stages/workload`.
 
 ### SaaS Modules
 
@@ -224,7 +224,7 @@ The validation workflow runs:
 - `terraform init -backend=false`
 - `terraform validate`
 - `tflint`
-- `tfsec`
+- `trivy config`
 - `checkov`
 
 ### Tags
@@ -249,7 +249,7 @@ terraform -chdir=envs/gcp/organization plan
 
 ```bash
 TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload init
-TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=../../../examples/dev.tfvars
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=../../../examples/dev.tfvars.example
 ```
 
 ### Workload Projects

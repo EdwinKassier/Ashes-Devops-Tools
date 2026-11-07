@@ -157,3 +157,47 @@ run "disabled_and_overridden_key_rejected" {
 
   expect_failures = [var.disabled_policies]
 }
+
+run "config_recorder_pipeline_role_wildcard_account_rejected" {
+  command         = plan
+  expect_failures = [var.config_recorder_pipeline_role_arns]
+
+  variables {
+    config_recorder_pipeline_role_arns = ["arn:aws:iam::*:role/tfc-apply"]
+  }
+}
+
+run "sandbox_instance_types_must_not_be_empty" {
+  command = plan
+
+  variables {
+    org_id                         = "o-abc1234567"
+    allowed_regions                = ["eu-west-2"]
+    terraform_run_role_arn         = "arn:aws:iam::111111111111:role/tfc-run-role"
+    break_glass_role_arn           = "arn:aws:iam::111111111111:role/break-glass"
+    log_archive_bucket_name        = "sra-log-archive-111111111111"
+    sandbox_allowed_instance_types = []
+  }
+
+  expect_failures = [var.sandbox_allowed_instance_types]
+}
+
+run "rejects_bad_allowed_images_state" {
+  command = plan
+
+  variables {
+    ec2_allowed_images = { state = "block" }
+  }
+
+  expect_failures = [var.ec2_allowed_images]
+}
+
+run "rejects_bad_allowed_image_provider" {
+  command = plan
+
+  variables {
+    ec2_allowed_images = { allowed_image_providers = ["not-a-provider"] }
+  }
+
+  expect_failures = [var.ec2_allowed_images]
+}

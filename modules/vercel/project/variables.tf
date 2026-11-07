@@ -75,7 +75,7 @@ variable "root_directory" {
 }
 
 variable "serverless_function_region" {
-  description = "Region for serverless function execution. Must be a valid Vercel function region code."
+  description = "Region for function execution (feeds resource_config.function_default_regions unless function_default_regions is set). Must be a valid Vercel function region code."
   type        = string
   default     = "lhr1"
 
@@ -86,6 +86,23 @@ variable "serverless_function_region" {
       "dub1", "cpt1",
     ], var.serverless_function_region)
     error_message = "serverless_function_region must be a valid Vercel edge network region (e.g. 'lhr1', 'iad1')."
+  }
+}
+
+variable "function_default_regions" {
+  description = "Default regions for Vercel Functions (resource_config.function_default_regions). Null (default) uses [serverless_function_region]; set a list for multi-region functions (a Vercel plan limit applies)."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition = var.function_default_regions == null || (length(coalesce(var.function_default_regions, ["x"])) > 0 && alltrue([
+      for r in coalesce(var.function_default_regions, []) : contains([
+        "iad1", "sfo1", "pdx1", "sea1", "lhr1", "cdg1", "fra1",
+        "bom1", "sin1", "kix1", "cle1", "hnd1", "gru1", "icn1",
+        "dub1", "cpt1",
+      ], r)
+    ]))
+    error_message = "function_default_regions must be a non-empty list of valid Vercel region codes (e.g. 'lhr1', 'iad1')."
   }
 }
 

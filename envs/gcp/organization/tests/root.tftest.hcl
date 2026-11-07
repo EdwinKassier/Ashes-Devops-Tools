@@ -11,16 +11,11 @@ mock_provider "random" {}
 
 variables {
   # Isolate the suite from any committed config/landing-zone.yaml.
-  landing_zone_config_path  = ""
-  domain                    = "acme.io"
-  project_prefix            = "acme"
-  admin_email               = "admin@acme.io"
-  break_glass_user          = "break-glass@acme.io"
-  billing_account           = "ABCDEF-123456-789012"
-  tfc_organization          = "acme-tfc"
-  alert_notification_emails = ["secops@acme.io"]
-  organization_admin_groups = ["gcp-org-admins@acme.io"]
-  billing_admin_groups      = ["gcp-billing-admins@acme.io"]
+  landing_zone_config_path = ""
+  domain                   = "acme.io"
+  project_prefix           = "acme"
+  billing_account          = "ABCDEF-123456-789012"
+  tfc_organization         = "acme-tfc"
   environments = {
     dev = {
       display_name            = "Development"
@@ -37,28 +32,37 @@ variables {
       iam_group_role_bindings = {}
     }
   }
+  gcp_overrides = {
+    admin_email               = "admin@acme.io"
+    break_glass_user          = "break-glass@acme.io"
+    alert_notification_emails = ["secops@acme.io"]
+    organization_admin_groups = ["gcp-org-admins@acme.io"]
+    billing_admin_groups      = ["gcp-billing-admins@acme.io"]
+  }
 }
 
 override_data {
   target = data.terraform_remote_state.gcp_bootstrap
   values = {
     outputs = {
-      admin_project_id          = "acme-admin-abcd"
-      admin_project_number      = "123456789012"
-      terraform_admin_email     = "terraform-admin@acme-admin-abcd.iam.gserviceaccount.com"
-      github_oidc_pool_id       = "github-pool"
-      github_oidc_provider_name = "projects/123456789012/locations/global/workloadIdentityPools/github-pool/providers/github"
-      tfc_oidc_pool_id          = null
-      tfc_oidc_provider_name    = null
-      workload_service_accounts = {
-        dev  = { plan = "acme-wl-dev-plan@acme-admin-abcd.iam.gserviceaccount.com", apply = "acme-wl-dev-apply@acme-admin-abcd.iam.gserviceaccount.com" }
-        prod = { plan = "acme-wl-prod-plan@acme-admin-abcd.iam.gserviceaccount.com", apply = "acme-wl-prod-apply@acme-admin-abcd.iam.gserviceaccount.com" }
+      contract = {
+        admin_project_id          = "acme-admin-abcd"
+        admin_project_number      = "123456789012"
+        terraform_admin_email     = "terraform-admin@acme-admin-abcd.iam.gserviceaccount.com"
+        github_oidc_pool_id       = "github-pool"
+        github_oidc_provider_name = "projects/123456789012/locations/global/workloadIdentityPools/github-pool/providers/github"
+        tfc_oidc_pool_id          = null
+        tfc_oidc_provider_name    = null
+        workload_service_accounts = {
+          dev  = { plan = "acme-wl-dev-plan@acme-admin-abcd.iam.gserviceaccount.com", apply = "acme-wl-dev-apply@acme-admin-abcd.iam.gserviceaccount.com" }
+          prod = { plan = "acme-wl-prod-plan@acme-admin-abcd.iam.gserviceaccount.com", apply = "acme-wl-prod-apply@acme-admin-abcd.iam.gserviceaccount.com" }
+        }
+        stage_service_accounts = {
+          projects = { plan = "acme-projects-plan@acme-admin-abcd.iam.gserviceaccount.com", apply = "acme-projects-apply@acme-admin-abcd.iam.gserviceaccount.com" }
+        }
+        delegated_workload_folder_roles = ["roles/compute.admin", "roles/run.admin"]
+        delegated_network_folder_roles  = ["roles/compute.networkAdmin"]
       }
-      stage_service_accounts = {
-        projects = { plan = "acme-projects-plan@acme-admin-abcd.iam.gserviceaccount.com", apply = "acme-projects-apply@acme-admin-abcd.iam.gserviceaccount.com" }
-      }
-      delegated_workload_folder_roles = ["roles/compute.admin", "roles/run.admin"]
-      delegated_network_folder_roles  = ["roles/compute.networkAdmin"]
     }
   }
 }
@@ -204,8 +208,10 @@ run "containment_deny_policy_when_enabled" {
   command = plan
 
   variables {
-    enable_admin_containment      = true
-    containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
+    gcp_overrides = merge(var.gcp_overrides, {
+      enable_admin_containment      = true
+      containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
+    })
   }
 
   assert {
@@ -231,16 +237,10 @@ run "containment_deny_policy_when_enabled" {
   }
 }
 
-run "containment_rejects_preset_placeholder" {
-  command = plan
-
-  variables {
-    enable_admin_containment      = true
-    containment_exempt_principals = ["principalSet://goog/group/break-glass@REPLACE-ME.invalid"]
-  }
-
-  expect_failures = [var.containment_exempt_principals]
-}
+# A placeholder break-glass principal is rejected by the stage's gcp object
+# validation; a root test cannot expect a child-module failure, so that case is
+# modules/gcp/stages/organization tests/plan_assertions
+# containment_rejects_placeholder_break_glass.
 
 # Standing admin is group-only; the bootstrap admin user is not a standing org admin.
 run "standing_admin_is_group_only" {
@@ -274,8 +274,6 @@ run "production_environment_with_containment" {
   command = plan
 
   variables {
-    enable_admin_containment      = true
-    containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
     environments = {
       prod = {
         display_name            = "Production"
@@ -286,6 +284,10 @@ run "production_environment_with_containment" {
         is_production           = true
       }
     }
+    gcp_overrides = merge(var.gcp_overrides, {
+      enable_admin_containment      = true
+      containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
+    })
   }
 
   assert {
@@ -296,8 +298,8 @@ run "production_environment_with_containment" {
 
 # The bootstrap read is skippable (bootstrap_contract), mirroring gcp-projects:
 # no remote-state read, and the contract feeds the stage. Its default
-# guardrail_owner_mode = "separate" moves deny-policy application to the
-# guardrail owner (specs output, nothing applied here).
+# guardrail_owner_mode = "separate" moves the deny policies to the gcp-guardrails
+# root (nothing built or applied here).
 run "bootstrap_contract_skips_remote_state" {
   command = plan
 
@@ -307,8 +309,10 @@ run "bootstrap_contract_skips_remote_state" {
       admin_project_number  = "999988887777"
       terraform_admin_email = "terraform-admin@acme-admin-ctr1.iam.gserviceaccount.com"
     }
-    enable_admin_containment      = true
-    containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
+    gcp_overrides = merge(var.gcp_overrides, {
+      enable_admin_containment      = true
+      containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
+    })
   }
 
   assert {
@@ -317,8 +321,8 @@ run "bootstrap_contract_skips_remote_state" {
   }
 
   assert {
-    condition     = output.guardrail_owner_mode == "separate" && length(module.organization.iam_deny_policy_names) == 0 && contains(keys(output.guardrail_deny_policy_specs), "contain-admin-identity")
-    error_message = "In separate mode the containment deny policy must be output for the guardrail owner, not applied by gcp-organization."
+    condition     = output.guardrail_owner_mode == "separate" && length(module.organization.iam_deny_policy_names) == 0 && length(output.guardrail_deny_policy_specs) == 0 && length(module.organization.admin_containment_rules) == 0
+    error_message = "In separate mode gcp-organization must neither build nor apply the containment deny policy: the gcp-guardrails root owns it."
   }
 
   assert {
@@ -346,8 +350,10 @@ run "legacy_bootstrap_state_keeps_in_root_deny_policies" {
   command = plan
 
   variables {
-    enable_admin_containment      = true
-    containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
+    gcp_overrides = merge(var.gcp_overrides, {
+      enable_admin_containment      = true
+      containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
+    })
   }
 
   assert {
@@ -362,21 +368,39 @@ run "containment_derived_on_for_production_from_config" {
   command = plan
 
   variables {
-    landing_zone_config_path  = "tests/fixtures/landing-zone-prod-containment.yaml"
-    domain                    = null
-    project_prefix            = null
-    admin_email               = null
-    billing_account           = null
-    tfc_organization          = null
-    alert_notification_emails = []
-    organization_admin_groups = null
-    billing_admin_groups      = null
-    environments              = null
+    landing_zone_config_path = "tests/fixtures/landing-zone-prod-containment.yaml"
+    domain                   = null
+    project_prefix           = null
+    billing_account          = null
+    tfc_organization         = null
+    environments             = null
+    gcp_overrides            = {}
   }
 
   assert {
-    condition     = output.admin_containment_enabled == true && jsonencode(local.containment_exempt_principals) == jsonencode(["principalSet://goog/group/gcp-break-glass@acme.io"]) && jsonencode(local.alert_notification_emails) == jsonencode(["secops@acme.io"]) && length(module.organization.admin_containment_rules) > 0
+    condition     = output.admin_containment_enabled == true && jsonencode(local.containment_exempt_principals) == jsonencode(["principalSet://goog/group/gcp-break-glass@acme.io"]) && jsonencode(local.gcp.alert_notification_emails) == jsonencode(["secops@acme.io"]) && length(module.organization.admin_containment_rules) > 0
     error_message = "a production estate must turn containment on with the config break-glass group and alert emails."
+  }
+}
+
+# An explicit gcp.admin_containment: false in config waives the production
+# containment requirement (unset is not a waiver).
+run "config_false_waives_containment" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-prod-containment-waived.yaml"
+    domain                   = null
+    project_prefix           = null
+    billing_account          = null
+    tfc_organization         = null
+    environments             = null
+    gcp_overrides            = {}
+  }
+
+  assert {
+    condition     = output.admin_containment_enabled == false && length(module.organization.admin_containment_rules) == 0
+    error_message = "gcp.admin_containment: false must waive containment for a production estate and plan."
   }
 }
 
@@ -398,14 +422,13 @@ run "production_without_break_glass_fails" {
     }
   }
 
-  expect_failures = [output.admin_containment_enabled]
+  expect_failures = [output.contract]
 }
 
 run "production_containment_explicit_opt_out" {
   command = plan
 
   variables {
-    enable_admin_containment = false
     environments = {
       prod = {
         display_name            = "Production"
@@ -416,10 +439,300 @@ run "production_containment_explicit_opt_out" {
         is_production           = true
       }
     }
+    gcp_overrides = merge(var.gcp_overrides, {
+      enable_admin_containment = false
+    })
   }
 
   assert {
     condition     = output.admin_containment_enabled == false
-    error_message = "an explicit enable_admin_containment = false must win over the production default."
+    error_message = "an explicit gcp_overrides.enable_admin_containment = false must win over the production default."
+  }
+}
+
+# gcp.principal_access_boundary is shared with gcp-bootstrap and gcp-guardrails:
+# the boundary is bound here and (legacy organization mode) the containment
+# policy denies its update/delete/unbind.
+run "principal_access_boundary_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-prod-pab.yaml"
+    domain                   = null
+    project_prefix           = null
+    billing_account          = null
+    tfc_organization         = null
+    environments             = null
+    gcp_overrides            = {}
+  }
+
+  assert {
+    condition     = local.gcp.enable_principal_access_boundary && contains(flatten([for r in module.organization.admin_containment_rules : r.denied_permissions]), "iam.googleapis.com/principalaccessboundarypolicies.unbind")
+    error_message = "gcp.principal_access_boundary: true must turn the boundary (and its containment deny rules) on."
+  }
+}
+
+run "principal_access_boundary_variable_wins_over_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-prod-pab.yaml"
+    domain                   = null
+    project_prefix           = null
+    billing_account          = null
+    tfc_organization         = null
+    environments             = null
+    gcp_overrides = {
+      enable_principal_access_boundary = false
+    }
+  }
+
+  assert {
+    condition     = !local.gcp.enable_principal_access_boundary && output.principal_access_boundary_policy == null
+    error_message = "an explicit gcp_overrides.enable_principal_access_boundary = false must override the config key."
+  }
+}
+
+# notifications.emails feeds the control-plane alert channels when neither
+# gcp_overrides.alert_notification_emails nor gcp.alert_emails is set.
+run "emails_feed_gcp_channels" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+    domain                   = null
+    project_prefix           = null
+    billing_account          = null
+    tfc_organization         = null
+    environments             = null
+    gcp_overrides            = {}
+  }
+
+  assert {
+    condition     = join(",", local.gcp.alert_notification_emails) == "alerts@acme.io"
+    error_message = "notifications.emails must feed the GCP control-plane alert channels."
+  }
+}
+
+# Precedence: gcp_overrides > gcp.alert_emails > notifications.emails.
+run "gcp_alert_emails_beat_notifications_emails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications-both.yaml"
+    domain                   = null
+    project_prefix           = null
+    billing_account          = null
+    tfc_organization         = null
+    environments             = null
+    gcp_overrides            = {}
+  }
+
+  assert {
+    condition     = join(",", local.gcp.alert_notification_emails) == "secops@acme.io"
+    error_message = "gcp.alert_emails must win over notifications.emails."
+  }
+}
+
+run "explicit_variable_beats_notifications_emails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications-both.yaml"
+    domain                   = null
+    project_prefix           = null
+    billing_account          = null
+    tfc_organization         = null
+    environments             = null
+    gcp_overrides = {
+      alert_notification_emails = ["explicit@acme.io"]
+    }
+  }
+
+  assert {
+    condition     = join(",", local.gcp.alert_notification_emails) == "explicit@acme.io"
+    error_message = "the explicit override must win over every config key."
+  }
+}
+
+# No notifications section: the explicit override is used as-is and budgets get
+# no extra channels (today's behaviour).
+run "no_section_is_noop" {
+  command = plan
+
+  assert {
+    condition     = join(",", local.gcp.alert_notification_emails) == "secops@acme.io" && !local.notify_budget_channels
+    error_message = "without a notifications section the alert list is the override and budgets get no channels."
+  }
+}
+
+# starter: the budget comes from org.monthly_budget_usd and alerts at 50/80/100%
+# through the notifications.emails channels.
+run "starter_budget_alerts_wired" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-starter.yaml"
+    domain                   = null
+    project_prefix           = null
+    billing_account          = null
+    tfc_organization         = null
+    environments             = null
+    gcp_overrides            = {}
+  }
+
+  assert {
+    condition     = local.monthly_budget_amount == 300 && jsonencode([for r in local.budget_threshold_rules : r.percent]) == jsonencode([0.5, 0.8, 1])
+    error_message = "starter must budget org.monthly_budget_usd with 50/80/100% thresholds."
+  }
+
+  assert {
+    condition     = local.notify_budget_channels && join(",", local.gcp.alert_notification_emails) == "alerts@acme.io"
+    error_message = "starter budget alerts must reach notifications.emails."
+  }
+}
+
+# starter without a resolvable budget amount must fail the plan.
+run "starter_requires_budget" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-starter-nobudget.yaml"
+    domain                   = null
+    project_prefix           = null
+    billing_account          = null
+    tfc_organization         = null
+    environments             = null
+    gcp_overrides            = {}
+  }
+
+  expect_failures = [terraform_data.starter_requires_budget]
+}
+
+# Production keeps today's default budget and threshold set.
+run "production_budget_unchanged" {
+  command = plan
+
+  assert {
+    condition     = local.monthly_budget_amount == 1000 && local.budget_threshold_rules == null && length(terraform_data.starter_requires_budget) == 0
+    error_message = "production must keep the 1000 default budget and the module-default thresholds."
+  }
+}
+
+# org.monthly_budget_usd only applies to the starter profile; production keeps 1000.
+run "production_ignores_monthly_budget_usd" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-production-budget.yaml"
+    domain                   = null
+    project_prefix           = null
+    billing_account          = null
+    tfc_organization         = null
+    environments             = null
+    gcp_overrides            = {}
+  }
+
+  assert {
+    condition     = local.monthly_budget_amount == 1000
+    error_message = "a production estate must keep the 1000 default despite org.monthly_budget_usd."
+  }
+}
+
+# Object pass-through precedence: a set gcp_overrides key beats the config file
+# (config keys and override-only keys alike) ...
+run "override_wins_over_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-prod-pab.yaml"
+    domain                   = null
+    project_prefix           = null
+    billing_account          = null
+    tfc_organization         = null
+    environments             = null
+    gcp_overrides = {
+      admin_email                      = "override-admin@acme.io"
+      allowed_regions                  = ["europe-west2"]
+      enable_principal_access_boundary = false
+      enable_log_analytics             = false
+    }
+  }
+
+  assert {
+    condition     = local.gcp.admin_email == "override-admin@acme.io" && jsonencode(local.gcp.allowed_regions) == jsonencode(["europe-west2"])
+    error_message = "a set gcp_overrides key must win over gcp.* in config/landing-zone.yaml."
+  }
+
+  assert {
+    condition     = output.principal_access_boundary_policy == null && output.log_analytics_bucket_id == null
+    error_message = "the overridden values must reach the stage (boundary and Log Analytics off)."
+  }
+}
+
+# ... and an unset (or null) key keeps the config value, else the stage default.
+run "unset_override_keeps_config_value" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-prod-pab.yaml"
+    domain                   = null
+    project_prefix           = null
+    billing_account          = null
+    tfc_organization         = null
+    environments             = null
+    gcp_overrides = {
+      admin_email     = null
+      allowed_regions = null
+    }
+  }
+
+  assert {
+    condition     = local.gcp.admin_email == "admin@acme.io" && jsonencode(local.gcp.allowed_regions) == jsonencode(["europe-west1"]) && local.gcp.enable_principal_access_boundary == true
+    error_message = "an unset gcp_overrides key must keep the gcp.* config value."
+  }
+
+  assert {
+    condition     = contains(flatten([for r in module.organization.admin_containment_rules : r.denied_permissions]), "iam.googleapis.com/principalaccessboundarypolicies.unbind")
+    error_message = "the config value (boundary on) must reach the stage."
+  }
+}
+
+# A removed variable that is still set (tfvars, TFC variable or TF_VAR_) fails
+# the plan, and the message names its gcp_overrides replacement.
+run "removed_input_fails_with_replacement" {
+  command = plan
+
+  variables {
+    enable_pam = true
+  }
+
+  expect_failures = [terraform_data.removed_inputs_guard]
+
+  assert {
+    condition     = local.removed_inputs_message == "Removed variables are set; move each into gcp_overrides (UPGRADING.md): enable_pam -> gcp_overrides.enable_pam."
+    error_message = "the guard must name the removed variable and its gcp_overrides key."
+  }
+}
+
+# ... and a key unset in both the config file and gcp_overrides takes the stage
+# default (strict_folder_policy_environment_keys = ["prod"]; the fixture has no
+# such key and the schema has none).
+run "unset_everywhere_takes_stage_default" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-prod-pab.yaml"
+    domain                   = null
+    project_prefix           = null
+    billing_account          = null
+    tfc_organization         = null
+    environments             = null
+    gcp_overrides            = {}
+  }
+
+  assert {
+    condition     = try(local.gcp.strict_folder_policy_environment_keys, null) == null && module.organization.strict_folder_policy_environment_keys == tolist(["prod"])
+    error_message = "a key unset in config and gcp_overrides must reach the stage as its default (strict folder bundle on prod)."
   }
 }

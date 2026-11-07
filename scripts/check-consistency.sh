@@ -18,11 +18,52 @@ badaws=$(grep -rl 'source *= *"hashicorp/aws"' --include='versions.tf' --exclude
   | while read -r f; do grep -q '">= 6.46.0, < 7.0.0"' "$f" || echo "$f"; done)
 [ -z "$badaws" ] || { echo "$badaws" | while read -r f; do note "AWS pin not '>= 6.46.0, < 7.0.0': $f"; done; fail=1; }
 
-echo "==> GCP google provider pin is the canonical range in every GCP versions.tf"
-# Canonical: "~> 7.0" (6->7 migration complete; locks on 7.x, audit L4).
-badgcp=$(grep -rl 'hashicorp/google' --include='versions.tf' --exclude-dir='.terraform' modules/gcp envs/gcp 2>/dev/null \
-  | while read -r f; do grep -q '"~> 7.0"' "$f" || echo "$f"; done)
-[ -z "$badgcp" ] || { echo "$badgcp" | while read -r f; do note "google pin not '~> 7.0': $f"; done; fail=1; }
+echo "==> GCP google provider pin is the canonical range wherever google/google-beta is required"
+# Canonical: "~> 8.0" (7->8 migration complete; locks on 8.x). Checked per
+# provider entry (google and google-beta each need it, so one correct pin in a
+# file cannot hide a stale one), across modules, roots, examples, templates and
+# the e2e tests.
+badgcp=$(grep -rlE 'source *= *"hashicorp/google(-beta)?"' --include='*.tf' --exclude-dir='.terraform' \
+  modules envs examples templates tests 2>/dev/null \
+  | while read -r f; do
+      awk -v f="$f" '
+        /^[[:space:]]*[A-Za-z0-9_-]+[[:space:]]*=[[:space:]]*\{/ { inblk = 1; buf = "" }
+        inblk { buf = buf $0 "\n" }
+        inblk && /\}/ {
+          if (buf ~ /"hashicorp\/google(-beta)?"/) {
+            src = buf; sub(/.*"hashicorp\//, "", src); sub(/".*/, "", src)
+            if (buf !~ /version[[:space:]]*=[[:space:]]*"~> 8\.0"/) print f " (" src ")"
+          }
+          inblk = 0
+        }' "$f"
+    done)
+[ -z "$badgcp" ] || { echo "$badgcp" | while read -r f; do note "google pin not '~> 8.0': $f"; done; fail=1; }
+
+echo "==> Terraform required_version is the canonical range in every versions.tf"
+# Canonical: ">= 1.17, < 2.0" (mock_ephemeral, deprecated attributes, typed outputs).
+badtf=$(find modules envs examples templates tests -name versions.tf -not -path '*/.terraform/*' 2>/dev/null \
+  | while read -r f; do grep -q 'required_version = ">= 1.17, < 2.0"' "$f" || echo "$f"; done)
+[ -z "$badtf" ] || { echo "$badtf" | while read -r f; do note "required_version not '>= 1.17, < 2.0': $f"; done; fail=1; }
+
+echo "==> Terraform CLI pin agrees across .tool-versions, .terraform-version and CI"
+tv=$(awk '$1 == "terraform" {print $2; exit}' .tool-versions 2>/dev/null)
+case "$tv" in 1.1[7-9].* | 1.[2-9][0-9].*) ;; *) note ".tool-versions terraform '$tv' is below the 1.17 floor" ;; esac
+[ "$(tr -d '[:space:]' <.terraform-version 2>/dev/null)" = "$tv" ] || note ".terraform-version differs from .tool-versions terraform $tv"
+for wf in .github/workflows/*.yml; do
+  grep -E '^[[:space:]]*TERRAFORM_VERSION:' "$wf" | grep -vq "\"$tv\"" && note "$wf: TERRAFORM_VERSION differs from .tool-versions terraform $tv"
+done
+
+echo "==> No import blocks in reusable modules (adoption lives in the roots)"
+# A module-level import block is inherited by every caller and fails their plan
+# once the resource is managed. import blocks belong in an envs/** adoption file.
+imports=$(grep -rlE '^[[:space:]]*import[[:space:]]*\{' --include='*.tf' --exclude-dir='.terraform' modules templates 2>/dev/null)
+[ -z "$imports" ] || { echo "$imports" | while read -r f; do note "import block in a reusable module (move it to the root's adoption file): $f"; done; fail=1; }
+
+echo "==> OPA lib_helpers.rego copies are byte-identical"
+# A VCS policy set loads only its own policies_path, so policies/opa-destructive
+# carries a copy of the shared terraform.lib helpers.
+cmp -s policies/opa/lib_helpers.rego policies/opa-destructive/lib_helpers.rego \
+  || note "policies/opa-destructive/lib_helpers.rego differs from policies/opa/lib_helpers.rego (copy it)"
 
 echo "==> Every examples/presets/*.tfvars key is a variable of its target root"
 # Naming: <prod|nonprod>-<cloud>-<root>.tfvars  ->  envs/<cloud>/<root>/variables.tf
@@ -37,9 +78,29 @@ for preset in examples/presets/*.tfvars; do
     note "preset $preset targets missing root envs/$cloud/$root"
     continue
   fi
-  # Active (uncommented) and commented-out assignments must both name real variables.
-  for key in $(sed -nE 's/^#?[[:space:]]*([a-z][a-z0-9_]*)[[:space:]]+=.*/\1/p' "$preset"); do
+  # Active (uncommented) and commented-out assignments must both name real
+  # variables. Keys inside a top-level <section>_overrides = { ... } object are
+  # checked separately: each direct attribute (active or commented) must be an
+  # attribute of that root's <section>_overrides variable.
+  for key in $(awk '/^[a-z][a-z0-9_]*_overrides[[:space:]]*=[[:space:]]*\{/{skip=1; next} skip && /^\}/{skip=0; next} !skip' "$preset" \
+    | sed -nE 's/^#?[[:space:]]*([a-z][a-z0-9_]*)[[:space:]]+=.*/\1/p'); do
     grep -q "variable \"$key\"" "$vars" || note "preset $preset sets unknown variable '$key' (not in $vars)"
+  done
+  for obj in $(sed -nE 's/^([a-z][a-z0-9_]*_overrides)[[:space:]]*=[[:space:]]*\{.*/\1/p' "$preset"); do
+    attrs=$(awk -v v="variable \"$obj\" {" '$0 == v {inb=1; next} inb && /^\}/ {inb=0} inb' "$vars" \
+      | sed -nE 's/^    ([a-z][a-z0-9_]*)[[:space:]]+= optional\(.*/\1/p')
+    [ -n "$attrs" ] || { note "preset $preset sets '$obj', which is not an object variable of $vars"; continue; }
+    # Direct attributes only: brace depth 1 inside the object; comments keep the depth.
+    for key in $(awk -v o="$obj" '
+      $0 ~ "^" o "[[:space:]]*=[[:space:]]*\\{" {inb=1; d=1; next}
+      inb {
+        line=$0; c=line; sub(/^[[:space:]]*#[[:space:]]?/, "", c)
+        if (d == 1 && match(c, /^[[:space:]]*[a-z][a-z0-9_]*[[:space:]]+=/)) { k=c; sub(/^[[:space:]]*/, "", k); sub(/[[:space:]]+=.*/, "", k); print k }
+        if (line !~ /^[[:space:]]*#/) { n=gsub(/\{/, "{", line); m=gsub(/\}/, "}", line); d += n - m }
+        if (d <= 0) inb=0
+      }' "$preset"); do
+      printf '%s\n' "$attrs" | grep -qx "$key" || note "preset $preset sets unknown key '$obj.$key' (not an attribute of variable \"$obj\" in $vars)"
+    done
   done
 done
 
@@ -73,6 +134,24 @@ for pf in envs/gcp/*/providers.tf; do
   fi
 done
 
+echo "==> GitHub WIF tenant condition is the one canonical string wherever it is rendered or checked"
+# Canonical: assertion.repository_owner_id == "<id>" (double quotes, nothing
+# appended). custom.wifProviderTenantPinned (stages/organization) compares a
+# provider's stored condition to this exact string, so app-services and the
+# workload-identity primitive (which gcp-bootstrap calls) must render the same.
+wif_canon='"assertion.repository_owner_id == \"<id>\""'
+for f in modules/gcp/stages/app-services/main.tf modules/gcp/iam/workload-identity/main.tf modules/gcp/stages/organization/main.tf; do
+  forms=$(grep -oE '"assertion\.repository_owner_id == [^$]*\$\{[^}]*\}[^ ,)]*' "$f" 2>/dev/null | sed -E 's/\$\{[^}]*\}/<id>/' | sort -u)
+  [ -n "$forms" ] || { note "$f: renders no GitHub owner-pin condition"; continue; }
+  echo "$forms" | while read -r form; do
+    [ "$form" = "$wif_canon" ] || note "$f: GitHub owner-pin condition $form is not $wif_canon"
+  done
+  [ "$(echo "$forms" | grep -vcxF "$wif_canon")" -eq 0 ] || fail=1
+done
+sq=$(git grep -nE "repository_owner_id == '" -- 'modules/*.tf' 'envs/*.tf' 2>/dev/null || true)
+[ -z "$sq" ] || { echo "$sq" | while read -r l; do note "single-quoted GitHub owner pin (use the canonical double-quoted form): $l"; done; fail=1; }
+git grep -q 'repository_owner_id ==' -- modules/gcp/stages/bootstrap/main.tf && note "modules/gcp/stages/bootstrap/main.tf renders its own GitHub condition (it must come from modules/gcp/iam/workload-identity)"
+
 echo "==> No audit provenance codes in Terraform code (CLAUDE.md: they belong in docs/known-gaps.md)"
 # Comments and descriptions read as a remediation log when they carry finding
 # IDs ("audit C2", "(audit H9, option C)"). Point at docs instead.
@@ -83,30 +162,33 @@ if [ -n "$prov" ]; then
   fail=1
 fi
 
-echo "==> Multi-platform lockfiles (FATAL for deployable roots, informational for library modules)"
+echo "==> Lockfiles: multi-platform and one version per provider (Renovate owns them)"
 # A lockfile written by a plain local `terraform init` carries one h1: hash per
 # provider (the host platform). The canonical command writes one per platform:
 #   terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64
-# A provider block with fewer than 3 h1: hashes marks the file single-platform.
+# A provider block with fewer than 3 h1: hashes marks the file single-platform,
+# which fails `init -lockfile=readonly` on the other platform. Both that and a
+# provider locked at different versions in different lockfiles are fatal.
 nlocks=0
 nsingle=0
+verlist=$(mktemp)
 while IFS= read -r lf; do
   nlocks=$((nlocks + 1))
   if awk '/^provider /{ if (inblk && h < 3) bad=1; inblk=1; h=0 } /"h1:/{ h++ } END { if (inblk && h < 3) bad=1; exit bad ? 0 : 1 }' "$lf"; then
     nsingle=$((nsingle + 1))
-    case "$lf" in
-      # A deployable root's lockfile is what CI (linux) and operators (macOS)
-      # actually install from: a single-platform one fails `init -lockfile=readonly`
-      # on the other platform. Library-module lockfiles are ignored by consumers.
-      envs/* | tests/e2e/*)
-        echo "  ERROR single-platform root lockfile: $lf (terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64)" >&2
-        fail=1
-        ;;
-      *) [ -z "${LOCK_VERBOSE:-}" ] || echo "  single-platform: $lf" ;;
-    esac
+    echo "  ERROR single-platform lockfile: $lf (terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64)" >&2
+    fail=1
   fi
+  awk -v f="$lf" '/^provider "/{ gsub(/"/, "", $2); p=$2 } /^  version[[:space:]]*=/{ gsub(/"/, "", $3); print p, $3, f }' "$lf" >> "$verlist"
 done < <(git ls-files '*.terraform.lock.hcl' 2>/dev/null)
-echo "  ${nsingle}/${nlocks} committed lockfiles lack the linux_amd64/darwin_arm64/darwin_amd64 h1: hashes (LOCK_VERBOSE=1 lists them)"
+drift=$(awk '{ print $1, $2 }' "$verlist" | sort -u | awk '{ n[$1]++; s[$1]=s[$1] " " $2 } END { for (p in n) if (n[p] > 1) print p ":" s[p] }' | sort)
+if [ -n "$drift" ]; then
+  echo "$drift" | while read -r l; do echo "  ERROR provider locked at several versions: $l (LOCK_VERBOSE=1 lists files)" >&2; done
+  [ -z "${LOCK_VERBOSE:-}" ] || sort "$verlist" | sed 's/^/  /'
+  fail=1
+fi
+rm -f "$verlist"
+echo "  ${nsingle}/${nlocks} committed lockfiles lack the linux_amd64/darwin_arm64/darwin_amd64 h1: hashes"
 
 if [ "$fail" -eq 0 ]; then
   echo "OK: all consistency invariants hold."

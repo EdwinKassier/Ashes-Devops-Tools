@@ -30,6 +30,15 @@ output "supabase_database_password" {
   sensitive   = true
 }
 
+# Non-sensitive rotation signal for the workload secret bridge
+# (enable_saas_secret_bridge in envs/aws/workload and envs/gcp/workload). Write-only
+# arguments cannot be diffed, so the bridged secret is re-pushed only when this
+# number changes: bump saas.bridge_rotation after rotating a bridged secret.
+output "bridge_version" {
+  description = "Rotation counter for the workload secret bridge (saas.bridge_rotation, default 1). Non-sensitive: a bridging workload reads it as its write-only *_wo_version."
+  value       = local.bridge_rotation
+}
+
 # ── Vault ────────────────────────────────────────────────────────────────────
 
 output "vault_managed_secret_names" {

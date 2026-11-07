@@ -21,19 +21,25 @@ variable "organization_workspace_name" {
 }
 
 variable "organization_contract" {
-  description = "aws-organization stage contract (FAST-style override): organization_id (o-xxxxxxxxxx), organization_root_id (r-xxxx), management_account_id, account_ids (account key => 12-digit ID), account_role_arns (account key => cross-account role ARN). When set, the aws-organization remote state is NOT read. Null = aws.contracts.organization from config/landing-zone.yaml, else read from the organization_workspace_name workspace's remote state."
+  description = "aws-organization stage contract (FAST-style override), the same type in every aws root: organization_id (o-xxxxxxxxxx), organization_root_id (r-xxxx), management_account_id, ou_ids (OU name => OU ID), account_ids (account key => 12-digit ID), account_role_arns (account key => cross-account role ARN). This root needs: organization_id, organization_root_id, management_account_id, account_ids, account_role_arns. When set, the aws-organization remote state is NOT read. Null = aws.contracts.organization from config/landing-zone.yaml, else the contract output of the organization_workspace_name workspace."
   type = object({
-    organization_id       = string
-    organization_root_id  = string
-    management_account_id = string
+    organization_id       = optional(string)
+    organization_root_id  = optional(string)
+    management_account_id = optional(string)
+    ou_ids                = optional(map(string), {})
     account_ids           = map(string)
-    account_role_arns     = map(string)
+    account_role_arns     = optional(map(string), {})
   })
   default = null
 
   validation {
     condition     = var.organization_contract == null || alltrue([for id in values(try(var.organization_contract.account_ids, {})) : can(regex("^[0-9]{12}$", id))])
     error_message = "organization_contract.account_ids values must be 12-digit AWS account IDs."
+  }
+
+  validation {
+    condition     = var.organization_contract == null || alltrue([for k in ["organization_id", "organization_root_id", "management_account_id"] : try(length(trimspace(var.organization_contract[k])) > 0, false)])
+    error_message = "organization_contract must set organization_id, organization_root_id, management_account_id for this root."
   }
 }
 
@@ -63,287 +69,66 @@ variable "aws_region" {
   }
 }
 
-variable "aws_enabled_regions" {
-  description = "Regions in which the regional security services (Config, GuardDuty, Security Lake) are enabled. One set of per-region resources is created for each entry. Null = aws.enabled_regions from config/landing-zone.yaml, else [\"eu-west-2\"]."
-  type        = list(string)
-  default     = null
-
-  validation {
-    condition     = length(var.aws_enabled_regions != null ? var.aws_enabled_regions : coalesce(local.cfg.aws_enabled_regions, ["eu-west-2"])) > 0
-    error_message = "aws_enabled_regions (or aws.enabled_regions in config/landing-zone.yaml) must contain at least one region."
-  }
+variable "aws_overrides" {
+  description = "Explicit overrides of the aws section (config/landing-zone.yaml aws.*) fed to the security stage. Every key is optional and the type is the stage's aws object: a set (non-null) key wins over the config file, an unset or null key keeps the config value (or the profile-driven default), else the stage default. Keys that are not in the config schema (key_admin_arn, create_break_glass, ...) are set only here. Precedence: aws_overrides > config/landing-zone.yaml > built-in default. See UPGRADING.md for the old variable names."
+  type = object({
+    aws_enabled_regions                     = optional(list(string))
+    log_archive_bucket_name                 = optional(string)
+    key_admin_arn                           = optional(string)
+    key_admin_role_name                     = optional(string)
+    kms_key_user_arns                       = optional(map(list(string)))
+    enable_kms_protection_tag               = optional(bool)
+    config_role_arn                         = optional(string)
+    create_config_service_linked_role       = optional(bool)
+    aggregator_role_arn                     = optional(string)
+    meta_store_manager_role_arn             = optional(string)
+    break_glass_role_arn                    = optional(string)
+    enabled_security_services               = optional(set(string))
+    enable_security_lake                    = optional(bool)
+    config_record_all_supported             = optional(bool)
+    guardduty_enable_ebs_malware_protection = optional(bool)
+    enable_incident_response                = optional(bool)
+    enable_service_quotas                   = optional(bool)
+    enable_internal_access_analyzer         = optional(bool)
+    notification_subscribers = optional(map(object({
+      protocol = string # one of: email, https, sms, sqs, lambda, etc.
+      endpoint = string # e.g. an email address or HTTPS URL
+    })))
+    identity_account_id            = optional(string)
+    enable_cloudwatch_logs         = optional(bool)
+    cloudwatch_logs_retention_days = optional(number)
+    cloudwatch_logs_kms_key_arn    = optional(string)
+    cloudtrail_alarm_sns_topic_arn = optional(string)
+    cloudtrail_alarm_subscribers = optional(map(object({
+      protocol = string
+      endpoint = string
+    })))
+    cloudtrail_cis_alarms_excluded                 = optional(list(string))
+    cloudtrail_s3_data_events                      = optional(string)
+    cloudtrail_s3_data_events_excluded_bucket_arns = optional(list(string))
+    cloudtrail_lambda_data_events                  = optional(bool)
+    create_break_glass                             = optional(bool)
+    break_glass_role_name                          = optional(string)
+    break_glass_trusted_principals                 = optional(list(string))
+    break_glass_mfa_max_age                        = optional(number)
+    break_glass_active                             = optional(bool)
+    create_organization_trail                      = optional(bool)
+    cloudtrail_cloudwatch_role_arn                 = optional(string)
+    enable_cloudtrail_delegated_admin              = optional(bool)
+    cloudtrail_delegated_admin_trail_name          = optional(string)
+    create_management_trail                        = optional(bool)
+  })
+  default  = {}
+  nullable = false
 }
 
-# -----------------------------------------------------------------------------
-# Naming + IAM carve-out ARNs (operator-supplied)
-# -----------------------------------------------------------------------------
-
-variable "log_archive_bucket_name" {
-  description = "Deterministic name of the central log-archive bucket. Cross-root naming contract: it MUST match the name the log-tamper SCP references in the aws-organization root. Null = aws.log_archive_bucket_name from config/landing-zone.yaml."
-  type        = string
-  default     = null
-
-  validation {
-    condition     = length(trimspace(coalesce(var.log_archive_bucket_name, local.cfg.log_archive_bucket_name, " "))) > 0
-    error_message = "log_archive_bucket_name is unset: set var.log_archive_bucket_name or aws.log_archive_bucket_name in config/landing-zone.yaml to a non-empty S3 bucket name."
-  }
-}
-
-variable "key_admin_arn" {
-  description = "Account-qualified ARN of the principal granted key ADMINISTRATION (management actions only: no Encrypt/Decrypt/GenerateDataKey/ReEncrypt, no CreateGrant) on the log-archive, forensics and security-tooling CMKs. Null (default) grants each key's own account role key_admin_role_name (tfc-apply, the role this root applies as under TFC dynamic credentials). Grant key usage separately via kms_key_user_arns."
-  type        = string
-  default     = null
-
-  validation {
-    condition     = var.key_admin_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:(role|user)/.+$", coalesce(var.key_admin_arn, "x")))
-    error_message = "key_admin_arn must be null or an account-qualified IAM role/user ARN."
-  }
-}
-
-variable "key_admin_role_name" {
-  description = "With key_admin_arn = null, the role name in each CMK's own account granted key administration. Default tfc-apply (created by the aws-organization TFC OIDC baseline). Set it to an existing per-account admin role if you run the legacy OrganizationAccountAccessRole path with the baseline disabled."
-  type        = string
-  default     = "tfc-apply"
-}
-
+# key_policy_admin_role_name stays its own variable: null is a meaningful value
+# (legacy: the key admin also holds PutKeyPolicy), which the null-filtered
+# aws_overrides merge cannot express.
 variable "key_policy_admin_role_name" {
   description = "Role name, in each CMK's own account, granted kms:PutKeyPolicy (and nothing else) on the log-archive, forensics and security-tooling CMKs. Default break-glass: the member break-glass role aws-organization deploys to every member account, so the pipeline key admin cannot rewrite a key policy. It must exist before the keys are created; later key-policy changes must be applied as it. Null = legacy (key admin also holds PutKeyPolicy)."
   type        = string
   default     = "break-glass"
-}
-
-variable "kms_key_user_arns" {
-  description = "Principals granted key USAGE (Encrypt/Decrypt/ReEncrypt/GenerateDataKey/DescribeKey) per CMK, keyed by log_archive / forensics / security_tooling. Separate from key_admin_arn (administration only). Missing keys mean no general-usage grant beyond the built-in service-principal grants."
-  type        = map(list(string))
-  default     = {}
-
-  validation {
-    condition     = alltrue([for k in keys(var.kms_key_user_arns) : contains(["log_archive", "forensics", "security_tooling"], k)])
-    error_message = "kms_key_user_arns keys must be one of log_archive, forensics, security_tooling."
-  }
-}
-
-variable "enable_kms_protection_tag" {
-  description = "Tag the log-archive, forensics and security-tooling CMKs protected = \"true\" so the organization deny-tamper SCP blocks key deletion/disablement and protection-tag removal except via break-glass. Default true."
-  type        = bool
-  default     = true
-}
-
-variable "config_role_arn" {
-  description = "ARN of the IAM role AWS Config assumes to record resource configurations in the security-tooling account. Null (default) uses the AWSServiceRoleForConfig service-linked role, created by this root unless create_config_service_linked_role = false."
-  type        = string
-  default     = null
-
-  validation {
-    condition     = var.config_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", coalesce(var.config_role_arn, "x")))
-    error_message = "config_role_arn must be null or an account-qualified IAM role ARN."
-  }
-}
-
-variable "create_config_service_linked_role" {
-  description = "With config_role_arn = null, create AWSServiceRoleForConfig in the security-tooling account. Set false if Config was ever enabled there (the service-linked role already exists)."
-  type        = bool
-  default     = true
-}
-
-variable "aggregator_role_arn" {
-  description = "ARN of an existing IAM role the Config organization aggregator assumes. Null (default) creates aws-config-org-aggregator in the security-tooling account with the AWSConfigRoleForOrganizations managed policy."
-  type        = string
-  default     = null
-
-  validation {
-    condition     = var.aggregator_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", coalesce(var.aggregator_role_arn, "x")))
-    error_message = "aggregator_role_arn must be null or an account-qualified IAM role ARN."
-  }
-}
-
-variable "meta_store_manager_role_arn" {
-  description = "ARN of an existing AmazonSecurityLakeMetaStoreManager role. Empty (default): the security stage creates AmazonSecurityLakeMetaStoreManagerV2 in the security-tooling account when Security Lake is on."
-  type        = string
-  default     = ""
-
-  validation {
-    condition     = var.meta_store_manager_role_arn == "" || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", var.meta_store_manager_role_arn))
-    error_message = "meta_store_manager_role_arn must be empty (the stage creates the metastore role) or a valid IAM role ARN."
-  }
-}
-
-variable "break_glass_role_arn" {
-  description = "ARN of the break-glass IAM role the security-notifications control watches for assumption. Any AssumeRole against this ARN raises a notification. Empty disables the watch."
-  type        = string
-  default     = ""
-
-  validation {
-    condition     = var.break_glass_role_arn == "" || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", var.break_glass_role_arn))
-    error_message = "break_glass_role_arn must be empty or an account-qualified IAM role ARN."
-  }
-}
-
-# -----------------------------------------------------------------------------
-# Service toggles + notification config
-# -----------------------------------------------------------------------------
-
-variable "notification_subscribers" {
-  description = "Subscribers attached to the security-notifications SNS topic, keyed by an arbitrary name. At least one is required. Defaults to a placeholder SecOps email the root is expected to override."
-  type = map(object({
-    protocol = string # "email" | "https" | "sms" | "sqs" | "lambda" | ...
-    endpoint = string # e.g. an email address or HTTPS URL
-  }))
-  default = {
-    secops = { protocol = "email", endpoint = "secops@example.com" }
-  }
-
-  validation {
-    condition     = length(var.notification_subscribers) > 0
-    error_message = "notification_subscribers must contain at least one subscriber."
-  }
-}
-
-variable "enabled_security_services" {
-  description = "Set of org-security services to enable: any of macie, inspector, detective, resource-explorer. Detective defaults OFF per SRA. Null (default) follows profile: [macie, inspector] for production, [inspector] for starter."
-  type        = set(string)
-  default     = null
-
-  validation {
-    condition = alltrue([
-      for s in coalesce(var.enabled_security_services, toset([])) : contains(["macie", "inspector", "detective", "resource-explorer"], s)
-    ])
-    error_message = "enabled_security_services entries must be one of: macie, inspector, detective, resource-explorer."
-  }
-}
-
-variable "config_record_all_supported" {
-  description = "AWS Config records ALL supported resource types (the full-coverage but most expensive Config mode). Null (default) follows profile: true for production, false for starter. See examples/presets/nonprod-aws-security.tfvars."
-  type        = bool
-  default     = null
-}
-
-variable "guardduty_enable_ebs_malware_protection" {
-  description = "GuardDuty agentless EBS malware scanning (billed per GB scanned). Null (default) follows profile: true for production, false for starter."
-  type        = bool
-  default     = null
-}
-
-variable "enable_security_lake" {
-  description = "Master COST toggle for Amazon Security Lake (ingestion, storage and normalization charges). Null (default) follows profile: on for production, off for starter."
-  type        = bool
-  default     = null
-}
-
-variable "enable_incident_response" {
-  description = "Master switch for the incident-response automation (isolation Lambda, GuardDuty EventBridge rule, forensics snapshot-sharing role)."
-  type        = bool
-  default     = true
-}
-
-variable "enable_service_quotas" {
-  description = "Master switch for service-quota management (opt-in). When false, no quota requests or usage alarms are created."
-  type        = bool
-  default     = false
-}
-
-# --- Dedicated IAM Identity Center account (opt-in, default = unchanged) ---
-variable "identity_account_id" {
-  description = "Dedicated identity account for IAM Identity Center delegated admin. Default null = shared-services account (unchanged). PREVIEW (not yet validated against a real apply)."
-  type        = string
-  default     = null
-}
-
-# --- CloudTrail: CIS section-4 alarms (CloudWatch Logs) + S3 data events (CIS 3.8/3.9) ---
-variable "enable_cloudwatch_logs" {
-  description = "Attach a CloudWatch Logs group to the org trail and create the full CIS AWS section-4 metric-filter alarm set with a KMS-encrypted SNS topic (management account). Self-sufficient: a logs-granted CMK is created unless cloudwatch_logs_kms_key_arn is set. Default true; false = S3-only."
-  type        = bool
-  default     = true
-}
-
-variable "cloudwatch_logs_retention_days" {
-  description = "Retention (days) for the CloudTrail CloudWatch Logs group when enable_cloudwatch_logs = true."
-  type        = number
-  default     = 365
-}
-
-variable "cloudwatch_logs_kms_key_arn" {
-  description = "Optional existing CMK (management account) for the CloudTrail log group and CIS alarm topic; must grant logs.<region>.amazonaws.com and cloudwatch.amazonaws.com. Null (default) = a dedicated CMK is created."
-  type        = string
-  default     = null
-}
-
-variable "cloudtrail_alarm_sns_topic_arn" {
-  description = "Optional existing SNS topic ARN for the CIS alarms. Null (default) = a KMS-encrypted topic is created and subscribed with cloudtrail_alarm_subscribers."
-  type        = string
-  default     = null
-}
-
-variable "cloudtrail_alarm_subscribers" {
-  description = "Subscribers of the CIS alarm topic. Null (default) = reuse notification_subscribers."
-  type = map(object({
-    protocol = string
-    endpoint = string
-  }))
-  default = null
-}
-
-variable "cloudtrail_cis_alarms_excluded" {
-  description = "CIS alarm keys to skip, e.g. [\"unauthorized-api-calls\"] if too noisy org-wide."
-  type        = list(string)
-  default     = []
-}
-
-variable "cloudtrail_s3_data_events" {
-  description = "S3 object-level data events on the org trail: none, write (CIS 3.8, default), read (CIS 3.9) or all. COST: billed per event across every org account."
-  type        = string
-  default     = "write"
-
-  validation {
-    condition     = contains(["none", "write", "read", "all"], var.cloudtrail_s3_data_events)
-    error_message = "cloudtrail_s3_data_events must be one of: none, write, read, all."
-  }
-}
-
-variable "cloudtrail_s3_data_events_excluded_bucket_arns" {
-  description = "Extra S3 bucket ARNs excluded from data events (the log-archive bucket is always excluded)."
-  type        = list(string)
-  default     = []
-}
-
-variable "cloudtrail_lambda_data_events" {
-  description = "Record Lambda Invoke data events on the org trail (default false; per-invocation cost)."
-  type        = bool
-  default     = false
-}
-
-# -----------------------------------------------------------------------------
-# Managed break-glass role — opt-in passthrough to the security stage.
-# -----------------------------------------------------------------------------
-
-variable "create_break_glass" {
-  description = "Create and manage the break-glass role in the management account (opt-in). When true, break_glass_role_arn is ignored and the stage-created role's ARN is watched and exported."
-  type        = bool
-  default     = false
-}
-
-variable "break_glass_role_name" {
-  description = "Name of the managed break-glass role (used only when create_break_glass is true). Set the org SCP exemption to arn:aws:iam::<management-account>:role/<this name>."
-  type        = string
-  default     = "OrganizationBreakGlass"
-}
-
-variable "break_glass_trusted_principals" {
-  description = "Account-qualified ARNs permitted to assume the managed break-glass role (used only when create_break_glass is true). Keep small; MFA is always required."
-  type        = list(string)
-  default     = []
-}
-
-variable "break_glass_mfa_max_age" {
-  description = "Maximum MFA session age in seconds allowed to assume the managed break-glass role (used only when create_break_glass is true)."
-  type        = number
-  default     = 3600
-}
-
-variable "break_glass_active" {
-  description = "Set true ONLY during a declared incident to attach AdministratorAccess to the managed break-glass role. False keeps the deny-all standing policy."
-  type        = bool
-  default     = false
 }
 
 # -----------------------------------------------------------------------------
@@ -430,14 +215,3 @@ variable "profile" {
   }
 }
 
-variable "create_organization_trail" {
-  description = "Create the organization CloudTrail. Set false when AWS Control Tower (or another owner) already runs it. Default true."
-  type        = bool
-  default     = true
-}
-
-variable "cloudtrail_cloudwatch_role_arn" {
-  description = "CloudTrail -> CloudWatch Logs delivery role ARN. Null = arn:aws:iam::<management account>:role/org-trail-cloudwatch-delivery, the role aws-organization creates (create_org_trail_delivery_role)."
-  type        = string
-  default     = null
-}

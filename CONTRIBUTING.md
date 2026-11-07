@@ -34,7 +34,7 @@ ones CI uses. Those versions are recorded in `.tool-versions` and mirrored in
 
 | Tool | Required version |
 |------|-------------------|
-| terraform | 1.14.3 |
+| terraform | 1.17.1 |
 | tflint | 0.62.0 |
 | trivy | 0.70.0 |
 | shellcheck | 0.11.0 |
@@ -107,6 +107,10 @@ aliased `mock_provider "aws" { alias = ... }` per configuration alias), and buil
 JSON with `jsonencode()` rather than `data "aws_iam_policy_document"` (which `mock_provider`
 mocks away, breaking content assertions). Follow the full AWS authoring rules in
 [CLAUDE.md → AWS modules](CLAUDE.md#aws-modules) — the detailed gotchas live there.
+
+### Breaking changes need an UPGRADING entry
+
+A commit marked breaking (`feat!:` or a `BREAKING CHANGE` footer) must add its manual steps to [`UPGRADING.md`](UPGRADING.md) under `Unreleased`; the meta-lint job fails the PR otherwise.
 
 ### Validation blocks are required
 
@@ -245,7 +249,7 @@ make plan-gcp-organization
 ### App Environment
 
 ```bash
-make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
+make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
 ```
 
 ## Pull Requests
@@ -276,3 +280,24 @@ Additional guidelines:
 - Terraform Cloud remains the source of truth for live state and apply runs.
 - GitHub release tags such as `gcp-organization/vX.Y.Z` and `gcp-workload/<env>/vX.Y.Z` publish metadata after verifying a successful Terraform Cloud run.
 - Those tags do not perform a live apply.
+
+## Consuming modules
+
+Versions are repo-wide SemVer tags (`vX.Y.Z`, cut by release-please); there are no per-module tags. Two ways to consume a tagged release:
+
+- **Fork at a tag.** Fork the repository and branch from the tag you want; take upstream releases by merging later tags (see `UPGRADING.md`).
+- **Pin a module by git source:**
+
+  ```hcl
+  module "org" {
+    source = "git::https://github.com/EdwinKassier/Ashes-Devops-Tools.git//modules/gcp/stages/organization?ref=v0.1.0"
+  }
+  ```
+
+Three examples (`modules/gcp/stages/organization`, `modules/aws/stages/security`, `modules/saas/stages/saas-workload`, each under `examples/basic/`) use this form with an `# x-release-please-version` marker; the `extra-files` list in `release-please-config.json` bumps their `ref` on every release. Until the first tag is published they cannot `terraform init`, so `scripts/terraform-roots.sh` skips any example carrying that marker in the validate shards. After the first release tag is published, remove that skip so CI validates them against the published tag. Note that they then validate against the published tag, not the PR's module code, so a stage interface change must land and be released before the example's `ref` is bumped.
+
+The first release is forced to `v0.1.0` by a one-time `"release-as": "0.1.0"` in `release-please-config.json` (the manifest stays at `0.1.0`; with no tag yet, release-please would otherwise propose 0.1.1/0.2.0). Remove `release-as` in the commit right after the first release is published, or every later release PR will keep proposing 0.1.0.
+
+### Release gate: sandbox convergence
+
+A release PR should merge only with a green `Sandbox convergence` (HCP health assessment) check, so production forks consume only versions proven in the sandbox. This is a branch-protection requirement (see `docs/guides/BRANCH_PROTECTION.md`); the sandbox workflow that emits the check does not exist yet, so until it lands the gate is enforced by maintainer review.

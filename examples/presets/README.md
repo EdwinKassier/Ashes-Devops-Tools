@@ -1,8 +1,16 @@
 # Presets
 
-Ready-to-use `-var-file` overlays. Each preset sets only a handful of toggles and
-is applied IN ADDITION to your own tfvars, so you keep full control. In Terraform
-Cloud, set the same values as workspace variables instead of a local `-var-file`.
+Ready-to-use `-var-file` overlays. Each preset sets only a handful of toggles.
+In Terraform Cloud, set the same values as workspace variables instead of a
+local `-var-file`. How a preset combines with your own tfvars depends on its root:
+
+- **Most roots** take plain variables, so a preset is applied IN ADDITION to your
+  own tfvars (a later `-var-file` wins per variable).
+- **`envs/gcp/organization` and `envs/aws/security`** take their tuning inputs as
+  one object (`gcp_overrides` / `aws_overrides`). A `-var-file` sets the whole
+  object, so a preset's override object REPLACES yours: stacking it after your
+  own tfvars drops every key of yours it does not repeat. Do not stack these
+  presets. Copy their keys into your own `<section>_overrides` instead.
 
 There are two families: cost presets (cut the non-production idle baseline) and
 hardening presets (flip the safe production controls on together).
@@ -18,10 +26,10 @@ commented, deliberate opt-in. See [`docs/runbooks/production-hardening.md`](../.
 | Preset | Root | Turns on |
 |---|---|---|
 | `prod-gcp-bootstrap.tfvars` | `envs/gcp/bootstrap` | Keeps the GitHub WIF pool off (`enable_github_wif = false`); per-stage identities are default |
-| `prod-gcp-organization.tfvars` | `envs/gcp/organization` | `enable_cmek_org_policy`; WORM lock left commented |
+| `prod-gcp-organization.tfvars` | `envs/gcp/organization` | `gcp_overrides`: `enable_cmek_org_policy`; WORM lock left commented |
 | `prod-gcp-network-hub.tfvars` | `envs/gcp/network-hub` | VPC-SC enforced (`vpc_sc_enable_dry_run = false`) |
 | `prod-gcp-workload.tfvars` | `envs/gcp/workload` | Environment VPC-SC enforced, Cloud Armor + OWASP rules |
-| `prod-aws-security.tfvars` | `envs/aws/security` | CloudWatch Logs + CIS alarms, full Config/GuardDuty |
+| `prod-aws-security.tfvars` | `envs/aws/security` | `aws_overrides`: CloudWatch Logs + CIS alarms, full Config/GuardDuty |
 
 ```bash
 terraform -chdir=envs/gcp/network-hub plan \
@@ -54,8 +62,10 @@ other roots ignore it. A preset name with no `.yaml` twin fails the plan.
 |---|---|
 | `prod-gcp-workload.yaml` | `envs/gcp/workload` (top-level `presets` or `gcp.workload.presets_by_environment`) |
 
-The other presets have no YAML twin yet, so `envs/gcp/network-hub`, `envs/aws/security`
-and the rest still take them with `-var-file`. Each `.yaml` mirrors its `.tfvars`
+The other presets have no YAML twin yet. `envs/gcp/network-hub` and the other
+plain-variable roots still take them with `-var-file`. For `envs/gcp/organization`
+and `envs/aws/security`, copy the preset's keys into your own `gcp_overrides` /
+`aws_overrides` (see the top of this page): their override object replaces yours. Each `.yaml` mirrors its `.tfvars`
 exactly: `envs/gcp/workload/tests/presets.tftest.hcl` fails when the two disagree.
 Prefer `presets_by_environment` for hardening presets, so dev is not enforced
 along with prod.
@@ -68,12 +78,12 @@ logs-granted KMS key for CloudWatch Logs).
 
 Cut the always-on footprint for dev, sandbox, and throwaway environments (the
 default AWS footprint is about USD 1,500/month before any workload, see
-[`docs/audit/2026-11-04-finops-deep-dive.md`](../../docs/audit/2026-11-04-finops-deep-dive.md)).
+[`docs/audit/archive/2026-11-04-finops-deep-dive.md`](../../docs/audit/archive/2026-11-04-finops-deep-dive.md)).
 
 | Preset | Root | What it changes | Approx saving |
 |---|---|---|---|
 | `nonprod-aws-network.tfvars` | `envs/aws/network` | `az_count = 2` (the minimum), `enable_network_firewall = false` | ~USD 800/mo |
-| `nonprod-aws-security.tfvars` | `envs/aws/security` | `enable_security_lake = false`, `enabled_security_services = []`, `config_record_all_supported = false`, `guardduty_enable_ebs_malware_protection = false` | ~USD 70-300/mo |
+| `nonprod-aws-security.tfvars` | `envs/aws/security` | `aws_overrides`: `enable_security_lake = false`, `enabled_security_services = []`, `config_record_all_supported = false`, `guardduty_enable_ebs_malware_protection = false` | ~USD 70-300/mo |
 
 ```bash
 terraform -chdir=envs/aws/network plan \

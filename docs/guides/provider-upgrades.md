@@ -2,7 +2,7 @@
 
 This guide records the repo's current stance on the `google`/`google-beta`, `supabase`,
 `vercel`, and `aws` provider major versions, what was actually tested, and the procedure for
-re-testing when the question comes up again (it will — Dependabot or a contributor will
+re-testing when the question comes up again (it will — Renovate or a contributor will
 eventually try to bump past the current ceiling).
 
 ## Current constraint
@@ -13,16 +13,18 @@ All GCP modules and environments pin:
 required_providers {
   google = {
     source  = "hashicorp/google"
-    version = ">= 6.0, < 8.0"
+    version = "~> 8.0"
   }
   google-beta = {
     source  = "hashicorp/google-beta"
-    version = ">= 6.0, < 8.0"
+    version = "~> 8.0"
   }
 }
 ```
 
-i.e. both provider 6.x and 7.x satisfy the constraint today.
+Every lockfile resolves both to one 8.x version (8.10.0 at the 7-to-8 bump).
+`scripts/check-consistency.sh` fails on any GCP `versions.tf` that is not
+`~> 8.0`. The 7-to-8 migration is recorded below and in `UPGRADING.md`.
 
 The SaaS modules pin `supabase = "~> 1.0"` and `vercel = "~> 4.0"`.
 
@@ -43,16 +45,41 @@ This is a **floored** pin (`>= 6.46.0`), not a bare `~> 6.0`, and the floor is d
 landing zone uses resources and arguments added mid-6.x, so an older 6.x provider fails to
 plan. The `7.0` major is **gated behind a deliberate upgrade** (`< 7.0.0`) rather than left
 open — 7.0 has not been validated against this codebase, so it is not silently permitted the
-way google 7.x is.
+way google 8.x is after its own deliberate bump.
 
-The AWS `.terraform.lock.hcl` files are committed **dual-platform** (`linux_amd64` +
-`darwin_arm64`) so the CI Linux runners and local macOS machines resolve the identical provider
-hashes.
+All `.terraform.lock.hcl` files are committed **multi-platform** (`linux_amd64`,
+`darwin_arm64`, `darwin_amd64`) so the CI Linux runners and local macOS machines resolve the
+identical provider hashes. Renovate owns provider updates and lockfiles (`renovate.json`: weekly
+`lockFileMaintenance`, one `hashicorp/*` group, provider majors disabled so they stay deliberate);
+Dependabot no longer covers Terraform. `scripts/check-consistency.sh` fails on single-platform
+locks and on a provider locked at different versions in different lockfiles.
 
 The upgrade/testing procedure for `aws` is the **same as the other providers** (see "How to
 re-test this in the future" below): temporarily bump the constraint on a representative example
 root, re-lock, and run `make test` / `make validate-all` under the CI-pinned Terraform CLI. Only
 land a constraint change if the investigation concludes one is needed.
+
+## 2026-11-07: google / google-beta 7.x to 8.x
+
+google 8.0.0 shipped on 2026-08-26; 7.x gets patches only. The bump to `~> 8.0`
+(locks on 8.10.0) was checked against the
+[8.0 upgrade guide](https://registry.terraform.io/providers/hashicorp/google/latest/docs/guides/version_8_upgrade)
+and the 8.0.0 to 8.10.0 changelog. Of the guide's breaking changes, these touch
+resource types the repo uses:
+
+| Resource | 8.0 change | Effect here |
+|---|---|---|
+| `google_secret_manager_secret_version` | `secret_data_wo_version` Integer to String (state migrated `N` to `"N"`); RequiredWith `secret_data_wo`; `0` means unset | `modules/gcp/data/secret-manager` passes `tostring()` of its positive-integer counter. No plan diff. |
+| `google_compute_backend_service` | `load_balancing_scheme` default `EXTERNAL` to `EXTERNAL_MANAGED` | `modules/gcp/network/app-ingress` relied on the default; now explicit `EXTERNAL_MANAGED` to match its forwarding rules. `cdn` already sets `EXTERNAL`. |
+| `google_compute_global_forwarding_rule` | same default change | Every use sets the scheme explicitly. Not affected. |
+| `google_container_cluster` | `logging_config` / `monitoring_config` `enable_components` list to set | `gke-autopilot` sets neither. Not affected. |
+| `google_bigquery_dataset` | `default_collation` no longer computed | No dataset sets it. Not affected. |
+
+Everything else in the guide (BeyondCorp, IAP, Notebooks, ML Engine, Vertex
+schedule, worker pools, service attachments, reservations, DLP, workflows and
+others) names types the repo does not use. Verified with `make test`,
+`make validate-all` and `make lint` under Terraform 1.17.1. The operator still
+runs the sandbox re-plan for every GCP workspace (see `UPGRADING.md`).
 
 ## 2026-07-08 investigation: is provider 7.x actually compatible?
 
@@ -129,10 +156,10 @@ refresh, a CI runner cache miss) would have surfaced the same failures just as e
 - **The real, actionable defects are the two Terraform-1.9.8-specific bugs above.** These
   are tracked as separate follow-ups (see "Related defects" below) — they are unrelated
   to provider version and should be fixed independently of any future provider bump.
-- Re-enabling Dependabot for the `terraform` ecosystem is still **not** recommended until
-  those two bug classes are fixed repo-wide, since any lock-file-only bump (of any
-  provider, any version) will keep re-triggering them and generating red, confusing PRs
-  that look like provider incompatibilities but aren't.
+- Re-enabling Dependabot for the `terraform` ecosystem was **not** recommended until
+  those two bug classes were fixed repo-wide. **Superseded:** Renovate now owns provider
+  updates and lockfiles (`renovate.json`, see above), and Dependabot keeps only GitHub
+  Actions and the CI Python tooling (`.github/dependabot.yml`).
 
 ### Related defects (tracked separately, not fixed by this task)
 

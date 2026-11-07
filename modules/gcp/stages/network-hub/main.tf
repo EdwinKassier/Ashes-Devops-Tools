@@ -22,6 +22,10 @@ locals {
   # Staged dry-run delta for the hub perimeter (see network/vpc-sc): null =
   # no staged spec; a list = enforced status keeps the base set, the dry-run
   # spec trials base set + these.
+  # The NCC spoke group auto-accepts spokes from every environment host
+  # project (bare numbers; empty entries dropped).
+  ncc_auto_accept_projects = sort(distinct(compact([for n in values(var.spoke_project_numbers) : trimprefix(n, "projects/")])))
+
   hub_base_restricted_services = distinct(concat([
     "storage.googleapis.com",
     "bigquery.googleapis.com",
@@ -40,6 +44,7 @@ module "hub" {
   project_prefix      = var.project_prefix
   region              = var.default_region
   deletion_protection = var.enable_deletion_protection
+  additional_regions  = var.hub_additional_regions
 
   network = {
     name            = "hub-vpc-core"
@@ -51,6 +56,24 @@ module "hub" {
       sampling             = 0.5
     }
   }
+
+  # Opt-in Network Connectivity Center hub (the hub VPC joins as its center
+  # spoke). Off = environment spokes reach the hub through VPC peering only.
+  ncc = {
+    enabled         = var.enable_ncc_hub
+    preset_topology = var.ncc_preset_topology
+    # Environment host projects join without a manual accept.
+    auto_accept_projects = local.ncc_auto_accept_projects
+    # Hybrid spoke for the VPN tunnels (created only when vpn.enabled too).
+    vpn_site_to_site_data_transfer = var.vpn.site_to_site_data_transfer
+  }
+
+  # Opt-in hybrid connectivity: HA VPN (write-only pre-shared key) and Cloud
+  # Interconnect attachments. Both off by default.
+  vpn                          = var.vpn
+  vpn_shared_secret_wo         = var.vpn_shared_secret_wo
+  vpn_shared_secret_wo_version = var.vpn_shared_secret_wo_version
+  interconnects                = var.interconnects
 
   # Hierarchical Firewall Policy (Defense in Depth)
   hierarchical_firewall_policies = {

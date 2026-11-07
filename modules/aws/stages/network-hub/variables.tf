@@ -165,6 +165,18 @@ variable "network_firewall_egress_domain_allowlist" {
   default     = []
 }
 
+variable "enforce_egress_allowlist" {
+  description = "Production egress gate. When true (and egress_alert_only_waived is false) the plan fails unless network_firewall_stateful_default_actions contains aws:drop_established and network_firewall_egress_domain_allowlist is non-empty, so production never runs alert-only. The aws-network root sets it when org.profile is production and an AWS workload environment is_production."
+  type        = bool
+  default     = false
+}
+
+variable "egress_alert_only_waived" {
+  description = "Explicit, reviewable waiver of the production egress gate: accept alert-only (log-but-pass) egress inspection while allow rules are being built. Only meaningful when enforce_egress_allowlist is true."
+  type        = bool
+  default     = false
+}
+
 variable "network_firewall_suricata_rules" {
   description = "Optional custom Suricata rules (STRICT_ORDER semantics) evaluated after the managed threat groups. Empty (default) = none."
   type        = string
@@ -181,4 +193,105 @@ variable "tags" {
   description = "Tags applied to the stage's own taggable resources (NAT gateways, EIPs) and passed to every child module (hub VPCs, IPAM, TGW, Network Firewall, endpoints, Resolver, Network Access Analyzer). Org-wide tags normally come from the provider default_tags; use this for stage-specific additions."
   type        = map(string)
   default     = {}
+}
+
+variable "ipam_mode_for_new_vpcs_only" {
+  description = "When true (default), the hub VPCs allocate from the regional IPAM pool only if named in ipam_new_vpcs; all others keep their static CIDR attributes (adding a pool to an existing VPC forces replacement). Set false to move BOTH hub VPCs to the pool (replaces them; the destroy guard blocks it unless overridden)."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
+variable "ipam_new_vpcs" {
+  description = "Hub VPCs to create from the regional IPAM pool while ipam_mode_for_new_vpcs_only is true. Allowed: inspection, egress. List a VPC only when it is being created; listing an existing static VPC replaces it."
+  type        = set(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for v in var.ipam_new_vpcs : contains(["inspection", "egress"], v)])
+    error_message = "ipam_new_vpcs may only contain inspection and egress."
+  }
+}
+
+variable "enable_vpn" {
+  description = "Attach an on-premises Site-to-Site VPN to the transit gateway (network/vpn). Off by default. Requires vpn.customer_gateway_ip. Traffic from on-premises is default-routed to the inspection VPC (a dedicated hybrid TGW route table), and the on-premises routes propagate only into the inspection route table, so spoke return traffic is inspected too. See docs/architecture/aws-landing-zone.md."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "vpn" {
+  description = <<-EOT
+    Site-to-Site VPN settings, used only when enable_vpn is true. customer_gateway_ip is the public IPv4 of the on-premises device; customer_gateway_bgp_asn its BGP ASN (not the transit gateway's 64512). static_routes_only = true uses static routing: then onprem_cidrs (the on-premises prefixes) is required and becomes static routes to the VPN in the inspection route table; with BGP the routes propagate and onprem_cidrs is ignored. tunnel_inside_cidrs is empty (AWS-assigned) or two /30s in 169.254.0.0/16. preshared_key_storage is SecretsManager (default; the keys stay out of state and the stage outputs the secret ARN) or Standard (keys in state).
+  EOT
+  type = object({
+    customer_gateway_ip      = optional(string)
+    customer_gateway_bgp_asn = optional(number, 65000)
+    static_routes_only       = optional(bool, false)
+    onprem_cidrs             = optional(list(string), [])
+    tunnel_inside_cidrs      = optional(list(string), [])
+    enable_acceleration      = optional(bool, false)
+    preshared_key_storage    = optional(string, "SecretsManager")
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = !var.enable_vpn || (var.vpn.customer_gateway_ip != null && can(regex("^([0-9]{1,3}\\.){3}[0-9]{1,3}$", var.vpn.customer_gateway_ip)))
+    error_message = "vpn.customer_gateway_ip must be the on-premises device's public IPv4 address when enable_vpn is true."
+  }
+
+  validation {
+    condition     = var.vpn.customer_gateway_bgp_asn >= 1 && var.vpn.customer_gateway_bgp_asn <= 4294967294 && var.vpn.customer_gateway_bgp_asn != 64512
+    error_message = "vpn.customer_gateway_bgp_asn must be 1 to 4294967294 and differ from the transit gateway's Amazon-side ASN (64512)."
+  }
+
+  validation {
+    condition     = !var.vpn.static_routes_only || length(var.vpn.onprem_cidrs) > 0
+    error_message = "vpn.static_routes_only = true needs vpn.onprem_cidrs (the on-premises prefixes to route to the VPN)."
+  }
+
+  validation {
+    condition     = alltrue([for c in var.vpn.onprem_cidrs : can(cidrnetmask(c))])
+    error_message = "vpn.onprem_cidrs entries must be IPv4 CIDR blocks."
+  }
+
+  validation {
+    condition     = contains(["SecretsManager", "Standard"], var.vpn.preshared_key_storage)
+    error_message = "vpn.preshared_key_storage must be SecretsManager or Standard."
+  }
+}
+
+variable "spoke_attachments" {
+  description = <<-EOT
+    Workload spoke attachments to the shared transit gateway, keyed by a plan-known name (usually the environment). attachment_id is the aws-workload-<env> output tgw_attachment_id (created in the workload account, so the hub only learns it once that workload has applied). segment is prod or nonprod: the attachment is associated with that route table (whose 0.0.0.0/0 goes to inspection) and propagated into the inspection route table so inspected traffic, egress replies and on-premises traffic reach the spoke. accept = true (default) accepts the cross-account attachment (the TGW does not auto-accept shared attachments); set false for an attachment that is already accepted. A non-empty map also adds the hub routes the spokes need: inspection 0.0.0.0/0 to the egress attachment and shared top_cidr to the inspection attachment (egress replies are inspected too). Empty (default): no change.
+  EOT
+  type = map(object({
+    attachment_id = string
+    segment       = string
+    accept        = optional(bool, true)
+  }))
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = alltrue([for k, s in var.spoke_attachments : contains(["prod", "nonprod"], s.segment)])
+    error_message = "spoke_attachments[*].segment must be prod or nonprod."
+  }
+
+  validation {
+    condition     = alltrue([for k, s in var.spoke_attachments : can(regex("^tgw-attach-[0-9a-f]{8,17}$", s.attachment_id))])
+    error_message = "spoke_attachments[*].attachment_id must be a transit gateway attachment ID (tgw-attach-...), the aws-workload-<env> output tgw_attachment_id."
+  }
+
+  validation {
+    condition     = length(distinct([for s in values(var.spoke_attachments) : s.attachment_id])) == length(var.spoke_attachments)
+    error_message = "spoke_attachments must not list the same attachment_id twice (an attachment associates with exactly one route table)."
+  }
+
+  validation {
+    condition     = length(var.spoke_attachments) == 0 || var.enable_network_firewall
+    error_message = "spoke_attachments (config: aws.network.spoke_attachments) needs enable_network_firewall = true: spokes route 0.0.0.0/0 through the inspection VPC, which has no forwarding path without the firewall, so the spokes would have no egress."
+  }
 }

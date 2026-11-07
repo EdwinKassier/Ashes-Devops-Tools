@@ -36,6 +36,16 @@ run "rejects_invalid_routing_mode" {
   }
 }
 
+run "rejects_invalid_enforcement_order" {
+  command = plan
+
+  expect_failures = [var.network_firewall_policy_enforcement_order]
+
+  variables {
+    network_firewall_policy_enforcement_order = "FIRST"
+  }
+}
+
 # ── enable_deletion_protection ─────────────────────────────────────────────────
 
 run "deletion_protection_guard_created_when_enabled" {

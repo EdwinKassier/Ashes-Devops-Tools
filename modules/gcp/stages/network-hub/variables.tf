@@ -152,3 +152,129 @@ variable "vpc_sc_dry_run_additional_restricted_services" {
   type        = list(string)
   default     = null
 }
+
+variable "enable_ncc_hub" {
+  description = "Create a Network Connectivity Center hub in the hub project, with the hub VPC as its center spoke (and a producer spoke for its Private Service Access peering). Environment VPCs join it with connectivity = ncc. False (default) = VPC peering only."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "ncc_preset_topology" {
+  description = "NCC hub preset topology: STAR (environment spokes reach the hub VPC, not each other; the peering-equivalent) or MESH (every spoke reaches every other). Immutable once the hub exists."
+  type        = string
+  default     = "STAR"
+  nullable    = false
+
+  validation {
+    condition     = contains(["STAR", "MESH"], var.ncc_preset_topology)
+    error_message = "ncc_preset_topology must be STAR or MESH."
+  }
+}
+
+variable "vpn" {
+  description = <<-EOT
+    HA VPN to an on-premises or other-cloud peer gateway, off by default.
+    tunnel_count is 2 for HA (production) or 1 for testing. peer_gateway_ips
+    lists the peer interface IPv4 addresses (one per tunnel). local_ips and
+    peer_ips are the BGP link-local addresses. The pre-shared key is the separate
+    write-only vpn_shared_secret_wo input. site_to_site_data_transfer lets on-premises sites exchange traffic through the NCC hybrid spoke. With enable_ncc_hub, the tunnels also join the NCC hub as a hybrid spoke.
+  EOT
+  type = object({
+    enabled                    = optional(bool, false)
+    tunnel_count               = optional(number, 2)
+    router_asn                 = optional(number, 64512)
+    peer_asn                   = optional(number, 64513)
+    peer_gateway_ips           = optional(list(string), [])
+    local_ips                  = optional(list(string), ["169.254.0.1", "169.254.0.3"])
+    peer_ips                   = optional(list(string), ["169.254.0.2", "169.254.0.4"])
+    site_to_site_data_transfer = optional(bool, false)
+    advertised_ip_ranges = optional(list(object({
+      range       = string
+      description = string
+    })), [])
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = contains([1, 2], var.vpn.tunnel_count)
+    error_message = "vpn.tunnel_count must be 1 or 2."
+  }
+}
+
+variable "vpn_shared_secret_wo" {
+  description = "Write-only HA VPN pre-shared key: sent to the API at apply time, never stored in state or plan. Supply it from an ephemeral source (an ephemeral resource, or a TFC variable). Required when vpn.enabled is true."
+  type        = string
+  default     = null
+  sensitive   = true
+  ephemeral   = true
+
+  validation {
+    condition     = !var.vpn.enabled || (var.vpn_shared_secret_wo != null && var.vpn_shared_secret_wo != "")
+    error_message = "vpn_shared_secret_wo must be set (non-null, non-empty) when vpn.enabled is true."
+  }
+}
+
+variable "vpn_shared_secret_wo_version" {
+  description = "Rotation counter for vpn_shared_secret_wo. Write-only values are not diffed: increment this to push a changed key."
+  type        = number
+  default     = 1
+  nullable    = false
+}
+
+variable "interconnects" {
+  description = "Cloud Interconnect VLAN attachments on the hub network (gcp.network.interconnect in config), keyed by attachment name (Dedicated or Partner)."
+  type = map(object({
+    region            = string
+    interconnect_type = optional(string, "PARTNER")
+    router_name       = string
+    router_asn        = optional(number, 64512)
+    create_router     = optional(bool, true)
+
+    # Dedicated interconnect settings
+    interconnect_self_link = optional(string)
+    vlan_tag               = optional(number)
+    bandwidth              = optional(string, "BPS_10G")
+
+    # Partner interconnect settings
+    edge_availability_domain = optional(string, "AVAILABILITY_DOMAIN_1")
+
+    # Common settings
+    mtu           = optional(number, 1440)
+    admin_enabled = optional(bool, true)
+    encryption    = optional(string, "NONE")
+
+    # BGP settings
+    create_bgp_peer    = optional(bool, true)
+    interface_ip_range = optional(string)
+    peer_ip_address    = optional(string)
+    peer_asn           = optional(number, 65000)
+    enable_bfd         = optional(bool, false)
+
+    advertised_ip_ranges = optional(list(object({
+      range       = string
+      description = optional(string)
+    })), [])
+  }))
+  default  = {}
+  nullable = false
+}
+
+variable "hub_additional_regions" {
+  description = "Opt-in extra regions of the hub VPC (gcp.network.additional_regions in config), keyed by region name: subnet_cidrs (public, private, database; one regional subnet per tier, no overlap with the primary hub subnets or another region), optional secondary_ranges for the private subnet, and nat (default true: a Cloud Router and Cloud NAT in the region). The DNS anchor VPC stays single-region. Empty (default) = single-region hub."
+  type = map(object({
+    subnet_cidrs = object({
+      public   = string
+      private  = string
+      database = string
+    })
+    secondary_ranges = optional(list(object({
+      range_name    = string
+      ip_cidr_range = string
+    })), [])
+    nat = optional(bool, true)
+  }))
+  default  = {}
+  nullable = false
+}

@@ -28,7 +28,7 @@ variable "allowed_regions" {
 # -----------------------------------------------------------------------------
 
 variable "terraform_run_role_arn" {
-  description = "Account-qualified exact ARN of the Terraform Cloud run role. Carved out of every deny statement so automation is not locked out."
+  description = "Account-qualified exact ARN of the Terraform Cloud run role. Exempt from the baseline SCP's own deny statements where the pipeline must act (never from the tamper denies or the region restriction)."
   type        = string
 
   validation {
@@ -196,6 +196,31 @@ variable "allow_vpc_bpa_exclusions" {
   default     = false
 }
 
+variable "ec2_allowed_images" {
+  description = "Declarative EC2 Allowed AMIs setting, in the root-attached baseline declarative policy (every account, every region). state: audit_mode (default; records non-compliant AMIs, blocks nothing), enabled (blocks launches from other AMIs), disabled, or unmanaged (the policy carries no allowed-images setting). allowed_image_providers: amazon, aws_marketplace, aws_backup_vault or 12-digit account IDs. Move to enabled only after reviewing the audit-mode findings."
+  type = object({
+    state                   = optional(string, "audit_mode")
+    allowed_image_providers = optional(list(string), ["amazon"])
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = contains(["audit_mode", "enabled", "disabled", "unmanaged"], var.ec2_allowed_images.state)
+    error_message = "ec2_allowed_images.state must be audit_mode, enabled, disabled or unmanaged."
+  }
+
+  validation {
+    condition     = alltrue([for p in var.ec2_allowed_images.allowed_image_providers : contains(["amazon", "aws_marketplace", "aws_backup_vault"], p) || can(regex("^[0-9]{12}$", p))])
+    error_message = "ec2_allowed_images.allowed_image_providers entries must be amazon, aws_marketplace, aws_backup_vault or a 12-digit account ID."
+  }
+
+  validation {
+    condition     = var.ec2_allowed_images.state == "unmanaged" || length(var.ec2_allowed_images.allowed_image_providers) > 0
+    error_message = "ec2_allowed_images.allowed_image_providers must not be empty unless state is unmanaged."
+  }
+}
+
 variable "default_region" {
   description = "Region used by the backup policy's default plan."
   type        = string
@@ -237,6 +262,18 @@ variable "policy_overrides" {
   }
 }
 
+variable "sandbox_allowed_instance_types" {
+  description = "ec2:InstanceType patterns (StringNotLike) the Sandbox OU may launch; ec2:RunInstances for any other type is denied by scp-sandbox-guard (break-glass exempt)."
+  type        = list(string)
+  default     = ["t3.micro", "t3.small", "t3.medium", "t3.large", "t4g.micro", "t4g.small", "t4g.medium", "t4g.large"]
+  nullable    = false
+
+  validation {
+    condition     = length(var.sandbox_allowed_instance_types) > 0 && alltrue([for t in var.sandbox_allowed_instance_types : can(regex("^[a-z0-9*?.-]{1,40}$", t))])
+    error_message = "sandbox_allowed_instance_types must be a non-empty list of instance type patterns (e.g. t3.micro, t4g.*)."
+  }
+}
+
 variable "disabled_policies" {
   description = "Built-in policy keys NOT to create (e.g. backup-policy when the backup stage owns it, or aiservices-opt-out). Their attachments must be removed too. A key may not be both disabled and overridden."
   type        = list(string)
@@ -273,5 +310,28 @@ variable "partition" {
   validation {
     condition     = contains(["aws", "aws-us-gov", "aws-cn"], var.partition)
     error_message = "partition must be aws, aws-us-gov or aws-cn."
+  }
+}
+
+# -----------------------------------------------------------------------------
+# Config recorder SCP (after the org-wide recorder migration)
+# -----------------------------------------------------------------------------
+
+variable "enable_config_recorder_scp" {
+  description = "Move the Config recorder actions (Put/Delete/StopConfigurationRecorder, DeleteDeliveryChannel) from DenyWeakenSecurityServices, where every pipeline role is exempt, to DenyConfigRecorderChanges (which also denies PutDeliveryChannel, so delivery cannot be redirected), whose only exemptions are the StackSet execution role, break-glass and config_recorder_pipeline_role_arns. Default false. Turn it on only after the org-wide recorder StackSet has replaced the Terraform-managed member recorders (docs/runbooks/aws-config-recorder-migration.md)."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "config_recorder_pipeline_role_arns" {
+  description = "Account-qualified pipeline role ARNs exempt from DenyConfigRecorderChanges, e.g. the security-tooling tfc-apply that manages the aggregator recorder. Role ARNs only: a whole account is never exempt. Used only when enable_config_recorder_scp = true."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for a in var.config_recorder_pipeline_role_arns : can(regex("^arn:aws(-[a-z]+)*:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", a))])
+    error_message = "config_recorder_pipeline_role_arns entries must be account-qualified IAM role ARNs without wildcards."
   }
 }

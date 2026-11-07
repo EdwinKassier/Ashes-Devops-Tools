@@ -42,7 +42,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.17, < 2.0 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.46.0, < 7.0.0 |
 
 ## Providers
@@ -58,12 +58,13 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_iam_role.this (modules/aws/iam/tfc-management-roles/main.tf#L345)
-- resource.aws_iam_role_policy.apply (modules/aws/iam/tfc-management-roles/main.tf#L386)
-- resource.aws_iam_role_policy.plan_guard (modules/aws/iam/tfc-management-roles/main.tf#L378)
-- resource.aws_iam_role_policy_attachment.read_only (modules/aws/iam/tfc-management-roles/main.tf#L369)
-- data source.aws_caller_identity.current (modules/aws/iam/tfc-management-roles/main.tf#L343)
-- data source.aws_partition.current (modules/aws/iam/tfc-management-roles/main.tf#L341)
+- resource.aws_iam_role.this (modules/aws/iam/tfc-management-roles/main.tf#L414)
+- resource.aws_iam_role_policy.apply (modules/aws/iam/tfc-management-roles/main.tf#L455)
+- resource.aws_iam_role_policy.plan_guard (modules/aws/iam/tfc-management-roles/main.tf#L447)
+- resource.aws_iam_role_policy.security_teardown (modules/aws/iam/tfc-management-roles/main.tf#L465)
+- resource.aws_iam_role_policy_attachment.read_only (modules/aws/iam/tfc-management-roles/main.tf#L438)
+- data source.aws_caller_identity.current (modules/aws/iam/tfc-management-roles/main.tf#L412)
+- data source.aws_partition.current (modules/aws/iam/tfc-management-roles/main.tf#L410)
 
 
 ## Inputs
@@ -72,6 +73,8 @@ The following resources are created:
 |------|-------------|------|---------|:--------:|
 | <a name="input_tfc_organization"></a> [tfc\_organization](#input\_tfc\_organization) | Terraform Cloud organization of the trusted workspaces (matched literally in the trust sub). | `string` | n/a | yes |
 | <a name="input_delegated_admin_account_ids"></a> [delegated\_admin\_account\_ids](#input\_delegated\_admin\_account\_ids) | Accounts the aws-security role may register as delegated administrators (organizations account-ARN resources): the security-tooling account in the SRA layout. Empty = NO account (registration fails closed); the aws-organization stage sets the security-tooling account. | `list(string)` | `[]` | no |
+| <a name="input_enable_cloudtrail_delegated_admin"></a> [enable\_cloudtrail\_delegated\_admin](#input\_enable\_cloudtrail\_delegated\_admin) | The organization trail is managed by the CloudTrail delegated administrator (security tooling) rather than from the management account. When true the aws-security apply role loses every trail write and create in the management account (OrganizationTrailOnly cloudtrail:*, the delivery-role PassRole, TrailWiringCreate and CreateOwnedKeysOnly; the old trail's wiring is only refreshed) and may no longer register or deregister the cloudtrail.amazonaws.com delegated admin (aws-organization owns that registration). Default false: unchanged. | `bool` | `false` | no |
+| <a name="input_enable_security_service_teardown"></a> [enable\_security\_service\_teardown](#input\_enable\_security\_service\_teardown) | Teardown gate: let the aws-security apply role switch org-wide detection OFF (Disable*AdminAccount, DisableAWSServiceAccess, DeregisterDelegatedAdministrator for the security services). Default false: a routine aws-security apply can enable and register, never disable. Set true only for a reviewed aws-security destroy (docs/runbooks/aws-teardown.md), then back to false. | `bool` | `false` | no |
 | <a name="input_max_session_duration"></a> [max\_session\_duration](#input\_max\_session\_duration) | Maximum session duration in seconds (3600-43200). | `number` | `3600` | no |
 | <a name="input_member_pivot_role_names"></a> [member\_pivot\_role\_names](#input\_member\_pivot\_role\_names) | Member-account role names the management roles must never assume (OrganizationAccountAccessRole and the member tfc-* roles by default). | `list(string)` | <pre>[<br/>  "OrganizationAccountAccessRole",<br/>  "tfc-plan",<br/>  "tfc-apply",<br/>  "break-glass"<br/>]</pre> | no |
 | <a name="input_oidc_provider_arn"></a> [oidc\_provider\_arn](#input\_oidc\_provider\_arn) | ARN of the management account's TFC OIDC provider (created in phase 0). Null derives arn:<partition>:iam::<this account>:oidc-provider/<tfc\_hostname>. | `string` | `null` | no |
@@ -93,4 +96,5 @@ The following resources are created:
 | <a name="output_apply_policies"></a> [apply\_policies](#output\_apply\_policies) | Workspace name => rendered apply-role inline policy JSON (evidence and review). |
 | <a name="output_apply_role_arns"></a> [apply\_role\_arns](#output\_apply\_role\_arns) | Workspace name => management-account APPLY role ARN (TFC\_AWS\_APPLY\_ROLE\_ARN). |
 | <a name="output_plan_role_arns"></a> [plan\_role\_arns](#output\_plan\_role\_arns) | Workspace name => management-account PLAN role ARN (TFC\_AWS\_PLAN\_ROLE\_ARN). |
+| <a name="output_security_teardown_policy"></a> [security\_teardown\_policy](#output\_security\_teardown\_policy) | Rendered aws-security teardown inline policy JSON, attached only while enable\_security\_service\_teardown is true (null otherwise). |
 <!-- END_TF_DOCS -->

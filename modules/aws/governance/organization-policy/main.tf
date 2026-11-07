@@ -80,6 +80,16 @@ locals {
     local.break_glass_principal_arns,
     [for n in var.stackset_execution_role_names : "arn:${var.partition}:iam::*:role/${n}"],
   ))
+  # Recorder SCP (enable_config_recorder_scp): once the org-wide recorder
+  # StackSet owns every member recorder, only the StackSet execution role,
+  # break-glass and the listed account-qualified pipeline roles (security
+  # tooling's tfc-apply, which manages the aggregator recorder) may change
+  # recorders. Role ARNs only, never a whole account.
+  config_recorder_exempt_arns = distinct(concat(
+    [for n in var.stackset_execution_role_names : "arn:${var.partition}:iam::*:role/${n}"],
+    local.break_glass_principal_arns,
+    var.config_recorder_pipeline_role_arns,
+  ))
   role_tamper_actions = [
     "iam:CreateRole",
     "iam:DeleteRole",
@@ -94,7 +104,7 @@ locals {
   ]
 
   default_policies = {
-    # Minified (jsonencode(jsondecode(...))) so the 5,120-character SCP size
+    # Minified (jsonencode(jsondecode(...))) so the 10,240-character SCP size
     # quota is spent on content, not indentation.
     scp-deny-tamper = {
       type = "SERVICE_CONTROL_POLICY"
@@ -108,6 +118,10 @@ locals {
         role_tamper_actions     = jsonencode(local.role_tamper_actions)
         log_archive_bucket_name = var.log_archive_bucket_name
         kms_protection_tag_key  = var.kms_protection_tag_key
+        # Recorder actions: DenyWeakenSecurityServices (pipeline-wide exemption)
+        # until the migration, then DenyConfigRecorderChanges.
+        enable_config_recorder_scp  = var.enable_config_recorder_scp
+        config_recorder_exempt_arns = jsonencode(local.config_recorder_exempt_arns)
         # GuardDuty / CloudTrail / Security Hub settings are managed centrally
         # (delegated admin). Outside those accounts even the pipeline is denied,
         # so a compromised workload tfc-apply cannot add a suppression filter or
@@ -122,13 +136,33 @@ locals {
         # CloudFront certificates (ACM) and their keys must live in us-east-1,
         # so edge deployments (enable_edge) work without allowing the region.
         allowed_regions_with_us_east_1 = jsonencode(distinct(concat(var.allowed_regions, ["us-east-1"])))
-        terraform_run_role_arn         = var.terraform_run_role_arn
-        break_glass_role_arn           = var.break_glass_role_arn
+        # Break-glass is the only exemption. The run role is not: global-service
+        # calls are in the template's NotAction, so it needs no carve-out.
+        break_glass_role_arn = var.break_glass_role_arn
       })
     }
+    # Suspended OU: deny everything except break-glass and the StackSet execution
+    # role (so the org-wide StackSets can still reconcile the account). SCPs never
+    # touch the management account, so this cannot lock out the pipeline there.
+    scp-suspended-deny-all = {
+      type = "SERVICE_CONTROL_POLICY"
+      content = jsonencode(jsondecode(templatefile("${path.module}/policies/scp-deny-all.json.tftpl", {
+        exempt_arns = jsonencode(local.stackset_exempt_arns)
+      })))
+    }
+    # Sandbox OU: small instance types only, no Direct Connect, no VPC peering,
+    # no Organizations API. Break-glass is exempt.
+    scp-sandbox-guard = {
+      type = "SERVICE_CONTROL_POLICY"
+      content = jsonencode(jsondecode(templatefile("${path.module}/policies/scp-sandbox-guard.json.tftpl", {
+        partition              = var.partition
+        allowed_instance_types = jsonencode(var.sandbox_allowed_instance_types)
+        break_glass_arns       = jsonencode(local.break_glass_principal_arns)
+      })))
+    }
     # Baseline also carries two org-wide break-glass-only denies (kept here so
-    # deny-tamper stays under the 5,120-char quota and no extra SCP attachment
-    # is needed — a target allows at most 5 SCPs incl. FullAWSAccess):
+    # deny-tamper stays well under the 10,240-char quota and no extra SCP
+    # attachment is needed — a target allows at most 10 SCPs incl. FullAWSAccess):
     #   * DenyIamUserCredentials — no IAM users / access keys / console
     #     passwords (no module in this repo creates IAM users; identities come
     #     from Identity Center and OIDC federation).
@@ -184,8 +218,22 @@ locals {
     # VPC BPA) stays on the Workloads OU, where public ingress goes through
     # the edge layer only.
     declarative-ec2-baseline = {
-      type    = "DECLARATIVE_POLICY_EC2"
-      content = file("${path.module}/policies/declarative-ec2-baseline.json")
+      type = "DECLARATIVE_POLICY_EC2"
+      # Allowed AMIs ride on the baseline (root) so every account gets them;
+      # audit_mode by default, so nothing is blocked until state = enabled.
+      content = jsonencode(merge(jsondecode(file("${path.module}/policies/declarative-ec2-baseline.json")), {
+        ec2_attributes = merge(jsondecode(file("${path.module}/policies/declarative-ec2-baseline.json")).ec2_attributes,
+          var.ec2_allowed_images.state == "unmanaged" ? {} : {
+            allowed_images_settings = {
+              state = { "@@assign" = var.ec2_allowed_images.state }
+              image_criteria = {
+                criteria_1 = {
+                  allowed_image_providers = { "@@assign" = var.ec2_allowed_images.allowed_image_providers }
+                }
+              }
+            }
+        })
+      }))
     }
     # Opt every account out of AWS AI services using its content to improve
     # those services (data-residency / IP hygiene default).

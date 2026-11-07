@@ -1,0 +1,4 @@
+# Expected to FAIL schema validation: "orgg" is not a landing-zone key.
+version: 1
+orgg:
+  name: acme

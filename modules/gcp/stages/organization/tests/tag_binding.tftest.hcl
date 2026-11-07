@@ -9,31 +9,33 @@
 mock_provider "google" {}
 
 variables {
-  domain                                = "example.com"
-  org_id                                = "123456789"
-  admin_project_id                      = "mock-admin-project"
-  admin_project_number                  = "123456789012"
-  customer_id                           = "C01abc123"
-  admin_email                           = "admin@example.com"
-  terraform_admin_email                 = "terraform-admin@mock-admin-project.iam.gserviceaccount.com"
-  billing_account                       = "ABCDEF-123456-789012"
-  project_prefix                        = "my-org"
-  organization_admin_groups             = ["org-admins@example.com"]
-  billing_admin_groups                  = ["billing-admins@example.com"]
-  default_region                        = "europe-west1"
-  allowed_regions                       = ["europe-west1", "europe-west4"]
-  strict_folder_policy_environment_keys = ["prod"]
-  security_contact_email                = "security@example.com"
-  billing_contact_email                 = "billing@example.com"
-  monthly_budget_amount                 = 1000
-  budget_currency                       = "USD"
-  alert_notification_emails             = ["secops@example.com"]
+  domain                = "example.com"
+  org_id                = "123456789"
+  admin_project_id      = "mock-admin-project"
+  admin_project_number  = "123456789012"
+  customer_id           = "C01abc123"
+  terraform_admin_email = "terraform-admin@mock-admin-project.iam.gserviceaccount.com"
+  billing_account       = "ABCDEF-123456-789012"
+  project_prefix        = "my-org"
+  default_region        = "europe-west1"
+  monthly_budget_amount = 1000
   environments = {
     dev = {
       display_name            = "Development"
       description             = "Development environment"
       iam_group_role_bindings = {}
     }
+  }
+  gcp = {
+    admin_email                           = "admin@example.com"
+    organization_admin_groups             = ["org-admins@example.com"]
+    billing_admin_groups                  = ["billing-admins@example.com"]
+    allowed_regions                       = ["europe-west1", "europe-west4"]
+    strict_folder_policy_environment_keys = ["prod"]
+    security_contact_email                = "security@example.com"
+    billing_contact_email                 = "billing@example.com"
+    budget_currency                       = "USD"
+    alert_notification_emails             = ["secops@example.com"]
   }
 }
 

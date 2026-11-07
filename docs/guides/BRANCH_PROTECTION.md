@@ -49,6 +49,21 @@ Set via **Settings → Branches → main → Require status checks to pass befor
 > external checks, so `scripts/check-required-checks.sh` ignores contexts that start
 > with `Terraform Cloud/`.
 
+### TFC organization owners
+
+AWS OIDC trust can condition only on the token claims `aud`, `sub`, `amr`,
+`email` and `oaud`, so every `tfc-plan`/`tfc-apply` role trusts a **workspace
+name**. Whoever can create or rename a workspace can assume those roles. So:
+
+- Keep **at least 2** TFC organization owners (a lone owner is a lockout risk).
+- Owners are **never used day to day**. Work runs as the `platform` team, whose
+  custom access (`envs/tfc-admin/main.tf`) already forbids creating or renaming
+  workspaces.
+- Only owners may rename or create workspaces.
+- Control-plane workspaces, including `aws-network`, are in
+  `speculative_disabled_workspaces`, so a PR never gets a plan with their
+  credentials.
+
 ### Review Requirements
 
 - **Required approvals:** 1 (raise to 2 for teams larger than 4)
@@ -99,12 +114,18 @@ gh api repos/OWNER/REPO/rulesets \
 
 ---
 
+### Release gate: `Sandbox convergence`
+
+Once the sandbox workflow exists, add **`Sandbox convergence`** (HCP Terraform health-assessment result for the sandbox) as a required check on release-please PRs (head branch `release-please--*`), via a ruleset scoped to that branch pattern. It is not a required context on ordinary PRs. Until the workflow lands the check does not exist and the release PR is gated by maintainer review only; do not add it as a required context before it reports, or releases will block.
+
+---
+
 ## Dependabot Security Updates
 
 Ensure Dependabot auto-approves and merges **security** PRs only:
 
 1. **Settings → Code security and analysis → Dependabot security updates**: Enable
-2. **Settings → Code security and analysis → Dependabot version updates**: Review `.github/dependabot.yml`. It covers GitHub Actions and Terraform providers. Terraform provider bumps are grouped and labeled for REVIEW, never auto-merged; the version pins keep proposals inside the current major (see `docs/guides/provider-upgrades.md`)
+2. **Settings → Code security and analysis → Dependabot version updates**: Review `.github/dependabot.yml`. It covers GitHub Actions and the CI Python tooling only. Terraform providers and `.terraform.lock.hcl` files are owned by Renovate (`renovate.json`): one grouped weekly PR per provider family, labelled for REVIEW, never auto-merged, with provider majors disabled so they stay deliberate (see `docs/guides/provider-upgrades.md`)
 3. Create a branch protection rule that allows Dependabot to bypass review requirements for patch-level security updates
 
 ---

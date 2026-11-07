@@ -73,14 +73,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.17, < 2.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | 8.10.0 |
 
 
 
@@ -104,6 +104,6 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
-| <a name="output_tag_keys"></a> [tag\_keys](#output\_tag\_keys) | Map of Tag Key Short Names to their Resource Names (IDs) |
-| <a name="output_tag_values"></a> [tag\_values](#output\_tag\_values) | Map of Tag Value Short Names to their Resource Names (IDs) |
+| <a name="output_tag_keys"></a> [tag\_keys](#output\_tag\_keys) | Map of tag key short name to its namespaced ID (tagKeys/<n>), the form tag-value parents, tag bindings and IAM deny matchTagId take. |
+| <a name="output_tag_values"></a> [tag\_values](#output\_tag\_values) | Map of "<key>-<value>" to the tag value's namespaced ID (tagValues/<n>), the form tag bindings and IAM deny matchTagId take. |
 <!-- END_TF_DOCS -->

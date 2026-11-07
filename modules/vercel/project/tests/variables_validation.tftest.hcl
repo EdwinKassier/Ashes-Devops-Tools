@@ -186,3 +186,15 @@ run "invalid_framework_rejected" {
   expect_failures = [var.framework]
   variables { framework = "rails" }
 }
+
+run "invalid_function_default_regions_rejected" {
+  command         = plan
+  expect_failures = [var.function_default_regions]
+  variables { function_default_regions = ["mars-1"] }
+}
+
+run "empty_function_default_regions_rejected" {
+  command         = plan
+  expect_failures = [var.function_default_regions]
+  variables { function_default_regions = [] }
+}

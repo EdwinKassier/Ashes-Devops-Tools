@@ -18,7 +18,8 @@ resource "aws_vpn_connection" "this" {
   transit_gateway_id = var.attach_to == "transit_gateway" ? var.transit_gateway_id : null
   vpn_gateway_id     = var.attach_to == "vpn_gateway" ? var.vpn_gateway_id : null
 
-  static_routes_only = var.static_routes_only
+  static_routes_only    = var.static_routes_only
+  preshared_key_storage = var.preshared_key_storage
   # Global Accelerator is only valid on a Transit Gateway attachment; the provider
   # rejects the argument (even = false) alongside a VGW, so omit it unless TGW.
   enable_acceleration = var.attach_to == "transit_gateway" ? var.enable_acceleration : null

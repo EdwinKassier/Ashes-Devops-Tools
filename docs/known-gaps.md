@@ -11,6 +11,179 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
 
 ## OPEN — validate before relying on
 
+- **Vercel `resource_config` first apply is unproven.** `modules/vercel/project` now sets
+  `resource_config.function_default_regions` instead of the deprecated
+  `serverless_function_region`. Confirm in the sandbox that the update is in place and that the
+  first-time `resource_config` does not reset `fluid`, `function_default_cpu_type` or
+  `function_default_timeout` on an existing project.
+- **Upstream applies auto-apply non-prod workloads.** Workload
+  `gcp-workload-<env>` / `aws-workload-<env>` workspaces whose environment sets
+  `is_production: false` explicitly (an omitted flag never qualifies) get
+  `auto_apply_run_trigger` and `queue_all_runs`
+  (`enable_nonprod_workload_auto_apply`; the null default turns it on only while
+  the policy sets, and so `destroy_guard`, are attached). The trust change: a
+  human confirms the upstream apply (`gcp-network-hub`, `aws-network`,
+  `aws-security`), and the run it queues on each non-prod workload then applies
+  **without a second confirmation**. So whoever may confirm a shared
+  network/security apply can change non-prod workloads too. Production
+  workloads, the control plane, `gcp-guardrails` and `tfc-admin` still confirm.
+  Residuals, not yet run in the sandbox:
+  - the run `queue_all_runs` starts when tfc-admin creates the workspace is
+    **expected to fail**: it runs before `gcp-bootstrap` creates its SAs (or
+    `aws-organization` trusts its name). The setting exists so later VCS and
+    run-trigger runs queue without a manual first run; the workload builds from
+    the run trigger of the next upstream apply. If that apply is a no-op (no
+    trigger fires), queue the workload's run once by hand;
+  - the `tfc-admin -> gcp-bootstrap` / `aws-organization` triggers queue a plan
+    on both roots after **every** tfc-admin apply. A plan with no changes ends
+    as "planned and finished" and needs no action. `gcp-bootstrap` is a target
+    only once it runs remotely (`workspace_execution_modes = {}`);
+  - **a new AWS workload still needs a second tfc-admin pass.** Its
+    `TFC_AWS_*` role ARNs come from the `aws-organization` outputs
+    (`tfc_plan_role_arns` / `tfc_apply_role_arns`, keyed by account key), and a
+    new workload account's roles exist only after `aws-organization` applies.
+    Re-apply tfc-admin then. Only GCP workload SA emails are derived;
+  - with `auto_apply_on_merge` (sandbox only) a tfc-admin apply auto-applies
+    `gcp-bootstrap` and `aws-organization`.
+
+- **AWS spoke TGW routing is mock-tested only, and needs a manual hand-off.**
+  Until this release no spoke attachment was accepted, associated or
+  propagated, so workload spokes had no egress, no egress replies and no
+  on-premises path. aws-network now wires each spoke listed in
+  `aws.network.spoke_attachments` (accept, associate with `prod`/`nonprod`,
+  propagate into `inspection`, plus `inspection 0/0 → egress` and
+  `shared <top_cidr> → inspection`). Open:
+  - the hand-off is manual: copy each `aws-workload-<env>` output
+    `tgw_attachment_id` into the config and apply aws-network. A spoke not
+    listed has no routing (no run trigger or discovery closes the loop; the TGW
+    owner cannot read tags the workload account set on its attachment);
+  - **with `enable_network_firewall = false` (the `starter` profile) wired
+    spokes still have no egress:** prod/nonprod default to the inspection
+    attachment, and without the firewall the inspection VPC's tgw tier has no
+    forwarding route. Route those segments to egress (or keep the firewall) is a
+    design decision not yet made;
+  - prod↔nonprod flows are routable *through* inspection (the inspection
+    table knows every spoke); only the Network Firewall policy separates the
+    segments. Alert-only mode passes them. Separate per-segment inspection
+    tables would enforce it at the routing layer;
+  - **validate in the sandbox:** the accepter on a `pendingAcceptance`
+    attachment, the association of a cross-account attachment, end-to-end
+    egress and reply through the firewall (appliance mode), and on-premises →
+    spoke over the VPN.
+
+- **Org-wide Config recorders are mock-tested only.** The
+  `org-config-recorders` StackSet (`modules/aws/security/config-recorder-stackset`)
+  and the migration runbook
+  ([`aws-config-recorder-migration.md`](runbooks/aws-config-recorder-migration.md))
+  have not run in the sandbox. **Validate:**
+  - a fresh account's first `PutConfigurationRecorder` with the
+    `AWSServiceRoleForConfig` ARN creates the service-linked role, since the
+    template creates no IAM resources;
+  - the CloudFormation-created recorder starts recording without an explicit
+    `StartConfigurationRecorder`;
+  - the `DIFFERENCE` filter keeps security tooling out on auto-deployment too;
+  - SUSPENDED or closed accounts under the root (Suspended OU, accounts
+    pending closure) do not fail or block the StackSet operations, and the
+    tolerance-0 re-run still succeeds with them present;
+  - StackSets can re-run an instance whose earlier stack is `ROLLBACK_COMPLETE`
+    (runbook step 5);
+  - `SOFT_FAILURE_TOLERANCE` with tolerance 100 lets the migration pass apply;
+  - the recording gap between runbook steps 4 and 5. Record it in the runbook.
+
+- **Flow-log and log-archive bucket-policy changes by the owning pipeline are
+  detected, not prevented.** The deny-tamper SCP still exempts the pipeline
+  roles from `ec2:DeleteFlowLogs`, because flow-log replacement is routine, and
+  from the log-archive `s3:PutBucketPolicy` / `DeleteBucketPolicy`, because
+  aws-security owns that policy. A compromised owning pipeline can remove a flow
+  log or rewrite the bucket policy. The change is caught by Security Hub
+  `EC2.6`, which can no longer be disabled (`securityhub-org` validation), and
+  by the CIS 4.8 (bucket policy) alarm in `cloudtrail-org`. It is not blocked.
+
+- **The StackSet administrator can deploy to every account.** `aws-organization`
+  owns the service-managed StackSets (recorders, TFC OIDC baseline, member
+  break-glass, Backup role), and its `stacksets-exec-*` execution role is exempt
+  from the recorder SCP and the StackSet role-tamper deny. Whoever can apply
+  `aws-organization` can therefore run any template in any member account.
+  This is inherent to StackSets. The control is who can apply
+  `aws-organization` (phase-0 role, policy sets, workspace access), not an SCP.
+
+- **Essentials-plan support for VCS policy sets is unverified.** tfc-admin
+  turns the policy sets on by default only for `org.tfc.plan` `standard` or
+  `premium` (`envs/tfc-admin/config.tf`, `local.enable_policy_sets`). Whether
+  HCP Terraform Essentials allows VCS-sourced OPA policy sets, and how many
+  policies it allows per set, has not been checked against the current HCP
+  pricing and limits. **Validate:** on an Essentials organization, create both
+  sets; if they work, add `essentials` to the default list. Until then an
+  Essentials estate sets `enable_policy_sets = true` itself, or runs without
+  the destroy guard (the `destructive_changes_guarded` check warns).
+
+- **Region SCP no longer exempts the run role.** `scp-region-restriction`
+  now exempts break-glass only; global-endpoint services stay in `NotAction`
+  (plus `networkmanager:*` and `notifications:*`). Mock-tested only.
+  **Validate in the sandbox:** a routine plan and apply of every member-account
+  layer, run as `tfc-plan`/`tfc-apply`, makes no call that this SCP denies. A
+  global-endpoint API missing from `NotAction` would surface here.
+
+- **TFC organization owners are the root of AWS trust.** AWS OIDC trust can
+  condition only on the claims `aud`, `sub`, `amr`, `email` and `oaud`, so
+  trust is bound by **workspace name**. Anyone who can create or rename a
+  workspace in the TFC organization can mint a token that matches a trust
+  policy. Keep at least 2 organization owners, never use them day to day, and
+  let only owners rename or create workspaces. The `platform` team's custom
+  access already forbids both. `aws-network` is now in
+  `speculative_disabled_workspaces` with the other control-plane roots, so a
+  PR's code never runs with its plan identity. Not enforceable in code:
+  membership of the owners team is an operator control
+  ([`BRANCH_PROTECTION.md`](guides/BRANCH_PROTECTION.md#tfc-organization-owners)).
+
+- **tfc-admin team-token permissions are unvalidated.** tfc-admin runs on a
+  non-owner `tfc-admin` team token (`manage_workspaces`, `manage_projects`,
+  `manage_policies`, `manage_vcs_settings`; runbook
+  [`tfc-admin-token-rotation.md`](runbooks/tfc-admin-token-rotation.md)). No
+  real HCP access exists to prove that set covers every resource tfc-admin
+  manages, notably organization-level variable sets and policy sets. If the
+  first plan shows a permission error that only owners can clear, that resource
+  is a residual owner-only step: document it in the runbook rather than
+  widening the team to `manage_teams` or `manage_organization_access`. The
+  90-day token expiry and rotation are an operator control, not enforced in code.
+  The tfc-admin workspace's own access is limited to owners and the tfc-admin
+  team, but **any other team holding organization-level `manage_workspaces`
+  can still queue and apply tfc-admin** (that permission spans every
+  workspace). Keep that permission on the tfc-admin team alone.
+
+- **Org-trail selector changes are detected, not prevented.** The
+  aws-security management apply role keeps `cloudtrail:PutEventSelectors` /
+  `PutInsightSelectors`, because `aws_cloudtrail` calls them on create. A
+  selector change (for example, dropping management events) is caught only
+  by the `org-guard-alerts` EventBridge rule. That rule is in us-east-1 plus
+  forwarders in every other enabled region, and it is owned by
+  `aws-organization`. The CIS 4.5 alarm does not match selector calls. With
+  `aws.enable_cloudtrail_delegated_admin` the management role loses every
+  trail write and the trail is managed from security tooling, where the SCP
+  denies selector and trail updates to every principal except the pipeline
+  roles (`tfc-apply`, `OrganizationAccountAccessRole`, `stacksets-exec-*`) and
+  break-glass. Those exempt principals can still change selectors: that stays
+  detect-only, through the `sec-notify-org-trail-tamper` rule in security
+  tooling (see the CloudTrail delegated-admin item under PREVIEW). The rules
+  and forwarding are mock-tested
+  only. **Validate in the sandbox:** a `PutEventSelectors` call and a
+  GuardDuty admin call made from a non-us-east-1 region must both email the
+  topic.
+
+- **CIS-alarm silencing is detected, not prevented.** The aws-security role
+  needs `cloudwatch:PutMetricAlarm`, `logs:PutMetricFilter` and `sns:*` on
+  `<trail>-*` topics for routine applies. A call through one of them can
+  silence the CIS alerting:
+  - an alarm rewritten with `ActionsEnabled=false` or no alarm actions;
+  - a CIS metric filter overwritten;
+  - the `<trail>-cis-alarms` topic deleted, re-attributed or unsubscribed.
+
+  Each of these is matched by the `org-guard-alerts` rule, but none is
+  denied. Deleting or disabling alarms, and deleting log streams, metric
+  filters or the log group, are denied. Matching "no alarm actions" uses
+  `alarmActions: [{exists: false}]`, which may miss an explicitly empty list.
+  **Validate in the sandbox.**
+
 - **A1 — CloudTrail KMS grant condition.** `modules/aws/security/cloudtrail-org`
   scopes the log-service KMS grant with `aws:SourceOrgID`, but AWS documents
   `aws:SourceArn` (the trail ARN) as the CloudTrail KMS-key-policy condition
@@ -26,8 +199,8 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   (e.g. the log archive bucket, audit M7) — keep it in sync or prefer the
   read. Standalone `aws-workload` (`enable_network_hub = false`) has no egress
   and still plans the (unused) `tgw` subnet tier; attaching later replaces the
-  VPC if it then moves to an IPAM pool. `gcp-workload`'s `module "host"` must
-  consume `local.hub_vpc_peerings` / `local.hub_dns_zones` / `local.org_id`.
+  VPC if it then moves to an IPAM pool. `gcp-workload`'s `module "environment"`
+  must consume `local.hub_vpc_peerings` / `local.hub_dns_zones` / `local.org_id`.
   **Validate** a contract-only plan against a real estate before relying on it.
 
 - **C2 — per-stage GCP automation identities (supersedes G3).** Shipped
@@ -85,14 +258,24 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
 - **G14 — GCP guardrail-owner split and 2026 control refresh (2026-11-06),
   mock-tested only.** Validate on a real org:
   (1) **guardrail owner** (`guardrail_owner_mode = "separate"`, default): the
-  organization apply SA loses `roles/iam.denyAdmin`; gcp-organization outputs
-  `guardrail_deny_policy_specs` and the `<prefix>-guardrails-apply` SA
-  (impersonated by `guardrail_owner_members`) applies them with gcloud. Confirm
-  the rendered JSON is accepted by `gcloud iam policies create`. An existing
-  deployment must `terraform state rm` the in-root deny policy before switching
-  (production-hardening runbook). Residual: `iam.securityAdmin` on the
-  organization apply SA can still grant itself `denyAdmin`; alert-only
-  (`guardrail_role_grant`, `guardrail_identity_change`);
+  organization apply SA loses `roles/iam.denyAdmin`. The security-team
+  `gcp-guardrails` root (`envs/gcp/guardrails`) authors the deny policies from
+  config and applies them as the `<prefix>-guardrails-apply` SA, WIF-bound to
+  that workspace by ID only. Confirm a real plan/apply as the guardrails SA, the
+  containment tag lookup (`google_tags_tag_key` / `_value`), and that IAM
+  accepts the `resource.matchTagId('tagKeys/<n>', 'tagValues/<n>')` condition.
+  The PAM-gated `guardrail_owner_members` path (gcloud with
+  `deny_policy_specs`) stays for emergencies. Moving an existing policy into the
+  new root needs a `terraform import` (UPGRADING.md). Residuals:
+  `iam.securityAdmin` on the organization apply SA can still grant itself
+  `denyAdmin`; alert-only (`guardrail_role_grant`,
+  `guardrail_identity_change`). And **tfc-admin can still repoint
+  `gcp-guardrails`** (working directory, VCS branch, team access, variables):
+  whoever can apply tfc-admin can undo the security-team-only boundary, so the
+  separation of duties also rests on CODEOWNERS for `envs/tfc-admin/**` and
+  `config/tfc-workspaces.yaml` (both security co-owned; the committed file
+  cannot set `gcp-guardrails` variables) and on keeping tfc-admin's own
+  approvers apart from the platform team;
   (2) **containment additions** (all on the deny-supported list, re-verified
   2026-11): `accessLevels.update/delete/replaceAll`,
   `authorizedOrgsDescs.create/update/delete`, `policies.update/setIamPolicy`
@@ -133,7 +316,9 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   `cloudtrail_cis_alarms_excluded` if not). The security-notifications
   break-glass metric alarm (`cloudtrail_log_group_name`) still assumes a log
   group in the security-tooling account; the trail's group is in the management
-  account, so leave that input empty or point it at a copy.
+  account, so leave that input empty or point it at a copy. With
+  `aws.enable_cloudtrail_delegated_admin` the trail's group is in security
+  tooling and the alarm uses it by default.
 - **A8 — RESOLVED (2026-11-05): vended-log delivery to the log archive.** The
   log-archive bucket now grants `delivery.logs.amazonaws.com` AclCheck + Write
   (`AWSLogs/*`, `bucket-owner-full-control`), both scoped by `aws:SourceOrgID`, and
@@ -223,6 +408,27 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   `examples/presets/prod-gcp-workload.yaml`, consistency-tested). Other roots
   still need the `-var-file` overlays or TFC variables.
 
+## OPEN — operator actions and items carried from archived audits
+
+`docs/audit/archive/` holds superseded audits; this file is the single list of open items.
+
+- **Operator, GitHub and HCP side (cannot be done from code):**
+  - Create real GitHub teams with at least 2 humans between them, and render
+    `.github/CODEOWNERS` for the fork (`scripts/init-landing-zone.sh --codeowners`;
+    the upstream file keeps `your-org` placeholders, and the meta-lint job fails on
+    a fork while any remain).
+  - Enable required code-owner review and `enforce_admins` on the default branch,
+    and make `Validation Summary` a required check (`docs/guides/BRANCH_PROTECTION.md`;
+    `make required-checks-live` diffs the live settings).
+  - Set `RELEASE_PLEASE_TOKEN` (`release.yml` requires it) and cut the first release.
+- **No IAM policy-simulation harness.** SCP, RCP and boundary conditions are
+  asserted against rendered JSON only; nothing in `scripts/` or CI runs
+  `SimulatePrincipalPolicy`. Real-cloud proof comes from the sandbox (ADR 0006).
+- **Workload runtimes not yet modularised.** There are no modules for EKS, Lambda,
+  Cloud Functions, a cache tier (ElastiCache or Memorystore) or NoSQL (DynamoDB or
+  Firestore). The golden paths cover Cloud Run, GKE Autopilot, ECS Fargate,
+  Cloud SQL and Aurora only.
+
 ## MODERNIZATION — latest-best-practice gaps (2026 review)
 
 From a 2026 gap analysis of both landing zones against the current AWS SRA and
@@ -261,13 +467,26 @@ GCP:
   boolean/list constraints to the `*.managed.*` namespace and adding
   `gcp.restrictNonCmekServices` are still open. Ref:
   <https://docs.cloud.google.com/resource-manager/docs/custom-constraints>
-- **G7 — host firewall uses legacy VPC firewall rules, not network firewall
-  policies** (HIGH, BEHAVIOR-CHANGING). `modules/gcp/network/network-firewall`
-  creates `google_compute_firewall` (legacy per-VPC rules with network tags);
-  `stages/host` instantiates it for all tier-to-tier rules. Google directs new
-  builds to global/regional **network firewall policies** with IAM-governed
-  secure tags. Migration changes rule evaluation → real apply. Ref:
-  <https://docs.cloud.google.com/firewall/docs/firewall-policies-overview>
+- **G7 — host firewall defaults to legacy VPC firewall rules** (HIGH,
+  BEHAVIOR-CHANGING) — ⚠️ **module shipped opt-in, roots not wired.**
+  `tiered-vpc` (and the `net-hub` / `net-spoke` compositions) take
+  `firewall_mode = legacy | both | policy`: `both` adds one global **network
+  firewall policy** whose rules select tiers by subnet CIDR beside the legacy
+  tag-based rules; `policy` removes the legacy rules
+  ([`gcp-firewall-policy-migration.md`](runbooks/gcp-firewall-policy-migration.md)).
+  Default stays `legacy`, mock-tested only. Open:
+  - no deployable root (`gcp-network-hub`, `gcp-workload-<env>`) exposes
+    `firewall_mode` yet, so an estate cannot select it without a code change;
+  - in `policy` mode the legacy `deny_all` rule's logging is lost (the implied
+    deny is not logged);
+  - the internal-load-balancer policy rule is untargeted (no
+    `target_secure_tags`); Cloud Run direct VPC egress cannot carry secure tags;
+  - in `both` mode an explicit `firewall_priority` no longer sets the policy
+    rule's priority (undocumented);
+  - runbook wording: step 2 says "before step 1", and the `gcloud` filter
+    quoting (`~ -db-`) needs a check;
+  - the migration has not run in the sandbox.
+  Ref: <https://docs.cloud.google.com/firewall/docs/firewall-policies-overview>
 - **G8 — audit-log bucket WORM lock** — ✅ **SHIPPED opt-in**
   (`enable_audit_bucket_lock` on `envs/gcp/organization` → `stages/organization`
   → `cloud-audit-logs`, default `false`, mock-tested). When enabled it applies a
@@ -345,6 +564,84 @@ GCP:
 
 Enable only after validating in a real/test org. Each defaults to prior behaviour.
 
+- **Organization trail managed by the CloudTrail delegated administrator**
+  (`aws.enable_cloudtrail_delegated_admin`, ADR 0012,
+  [runbook](runbooks/aws-cloudtrail-delegated-admin-migration.md)). Mock-tested
+  only; not sandbox-proven, so the scaffolder leaves it off.
+  Verified against AWS documentation (2026-11-07):
+  - The management account owns a trail a delegated admin creates, and removing
+    the delegated admin deletes none of its trails.
+  - A delegated admin can attach a CloudWatch Logs group only through
+    `CreateTrail` / `UpdateTrail`, and the group and its role must exist in the
+    calling account.
+  - Only a CloudTrail-API registration creates the CloudTrail service-linked
+    roles; `RegisterOrganizationDelegatedAdmin` fails with
+    `AccountRegisteredException` on an account already registered.
+  - For an organization trail, `aws:SourceAccount` is the management account,
+    and the KMS encryption context is the trail ARN in the management account.
+    The log CMK's `kms:EncryptionContext:aws:cloudtrail:arn` pattern
+    (`<management>:trail/*`) and the log-archive bucket's `aws:SourceOrgID`
+    statements are name-agnostic, so they admit the new trail unchanged. The
+    open A1 item (`aws:SourceOrgID` on CloudTrail's KMS calls) applies to it
+    exactly as to the old trail.
+
+  Assumed, to prove in the sandbox:
+  - The provider's `aws_cloudtrail` creates, reads and updates an organization
+    trail from the delegated-admin account. Its docs still say the management
+    account; its ID is the trail ARN.
+  - The delivery role's trust (`aws:SourceAccount` = management or security
+    tooling) is what CloudTrail sends when it assumes a role in the
+    delegated-admin account. AWS does not document that case.
+  - Importing the existing Organizations registration into
+    `aws_cloudtrail_organization_delegated_admin_account` reads cleanly, and the
+    management account already has `AWSServiceRoleForCloudTrail` from the old
+    trail (the import does not create it, and the event-context role is not
+    needed for trails).
+  - The security-tooling `tfc-apply` role and its boundary allow `CreateTrail`,
+    `PutEventSelectors`, `StartLogging`, `iam:PassRole` of the delivery role and
+    `kms:CreateKey`.
+
+  Residuals:
+  - aws-organization and aws-security each read
+    `aws.enable_cloudtrail_delegated_admin` themselves (not through a
+    contract, ADR 0003). Set it in the config file, not as a variable on one
+    workspace: a value set on only one root makes them diverge (the plans fail
+    closed rather than leave a gap, but the estate is half-migrated until both
+    agree).
+  - The SCP stops `StopLogging` / `DeleteTrail` on the new trail for everyone
+    but break-glass (`DenyDisableSecurityServices`). `UpdateTrail`,
+    `PutEventSelectors` and `PutInsightSelectors` are denied to member
+    principals except the pipeline roles (`tfc-apply`, which must create the
+    trail, `OrganizationAccountAccessRole`, `stacksets-exec-*`) and break-glass
+    (`DenyWeakenSecurityServices`), and only from the security accounts
+    (`DenyCentralDetectionOutsideSecurityAccounts`). `RemoveTags` and the
+    trail resource policy are not in the SCP. What is exempt is detected, not
+    prevented: `sec-notify-org-trail-tamper` (security tooling, the trail's
+    home Region, the only Region where these calls succeed) alerts on every one
+    of those calls on the new trail, to the security-notifications topic.
+    Assumed: the organization trail delivers security tooling's own API calls
+    to that account's default event bus. With the flag on, `org-guard-alerts`
+    (management account) also alerts on any trail change made from the
+    management account (phase-0 or break-glass; SCPs never apply there), on
+    any trail.
+  - The security-tooling CMK now grants `events.amazonaws.com`, scoped by
+    `aws:SourceAccount`, so EventBridge can publish `sec-notify-*` alerts to
+    the encrypted security-notifications topic. **Validate in the sandbox**
+    that EventBridge's KMS calls carry `aws:SourceAccount`. If they don't, the
+    grant needs its own statement without that condition.
+  - The new trail's log group, CIS alarms, alarm topic and CloudWatch CMK in
+    security tooling lack the management role's explicit denies
+    (`DenyTrailAndKeyDestruction*`). The CMK's key policy grants the account
+    root `kms:*`, so IAM in security tooling governs it. The security-tooling
+    `tfc-apply` (StackSet-managed, under the tfc-apply boundary) could delete
+    the log group or alarms, or schedule key deletion. That is not denied per
+    ARN: an inline deny would need a change to the tfc-oidc-baseline StackSet
+    role. Deleting the log group stops CloudWatch delivery only; S3 delivery
+    and log-file validation continue.
+  - `aws-security` forgets its generic registration with a manual
+    `terraform state rm` (runbook step 1.3). A skipped step fails closed: the
+    plan shows a destroy and the apply is denied.
+
 - **G4 — dedicated logging project** (`logging_project_id` +
   `logging_project_number`, `modules/gcp/stages/organization`). The audit bucket,
   BigQuery dataset, audit CMEK keyring (`<prefix>-audit-cmek`, granted to the
@@ -356,6 +653,71 @@ Enable only after validating in a real/test org. Each defaults to prior behaviou
   identity BEFORE expanding services or an enforced apply is blocked.
 - **A3 — dedicated Identity Center account** (`identity_account_id`,
   `modules/aws/stages/security`). Point at a real dedicated identity account.
+- **NCC hub/spoke connectivity** (`gcp.network.ncc_hub`, `gcp.network.connectivity`,
+  `gcp.environments.<env>.network_connectivity`; `modules/gcp/network/ncc-hub`,
+  `modules/gcp/network/ncc-spoke`). Not yet sandbox-proven: run path (a) of
+  [the migration runbook](runbooks/gcp-peering-to-ncc-migration.md) on the sandbox
+  spoke, then re-plan to 0 changes, before adopting it or making `ncc` the
+  scaffolder default. Still to confirm against the real API: the producer spoke
+  passes the consumer VPC **name** as `linked_producer_vpc_network.network` (the
+  provider example's form); the NCC folder roles (hubAdmin / spokeAdmin /
+  hubViewer) are enough to create a cross-project spoke on an auto-accepting
+  group; adopting the service-created spoke group by name needs no import, and
+  deleting it with the hub succeeds; path (b) route precedence (NCC subnet routes
+  over the temporary VPN's dynamic routes).
+- **Smaller opt-ins from the 2026-11 remediation, mock-tested only.**
+  SCC v2 notification/mute configs (`gcp_overrides.scc_api_version = "v2"`);
+  `gcp_overrides.disable_default_sink`; IPAM explicit-CIDR allocation
+  (`ipam_mode_for_new_vpcs_only`, `ipam_new_vpcs`); the declarative EC2 Allowed
+  AMIs policy (`ec2_allowed_images`, `audit_mode` by default, so it only logs);
+  the Suspended deny-all and Sandbox guard SCPs (on by default where those OUs
+  exist). Apart from those two SCPs, each keeps today's behaviour until set
+  (UPGRADING.md); none has run against a real organization yet.
+- **Hybrid connectivity (HA VPN, Cloud Interconnect, Site-to-Site VPN)**
+  (`gcp.network.vpn`, `gcp.network.interconnect`, `aws.network.vpn`;
+  `modules/gcp/stages/net-hub`, `modules/aws/stages/network-hub`). Mock-tested
+  only; no on-premises peer was available. Still to confirm: the NCC hybrid
+  spoke (`ncc_vpn_spoke`, center group on STAR, default on MESH) accepts the HA
+  VPN tunnels and on-premises learns the environment spokes' routes through it;
+  on AWS, that on-premises traffic really traverses the Network Firewall in both
+  directions (VPN attachment in the `hybrid` TGW table defaulting to inspection;
+  routes propagated into the `inspection` table only). On AWS a spoke is
+  reachable from on-premises only once it is wired through
+  `aws.network.spoke_attachments` (see the spoke-routing entry above).
+  - **GCP tunnel secret changes replace the tunnel.** `google_compute_vpn_tunnel`
+    has no in-place update for its secret: switching `shared_secret` to
+    `shared_secret_wo`, or raising `vpn_shared_secret_wo_version`, is a
+    replacement (treat it as ForceNew; confirm in a sandbox plan). That is an
+    outage for the tunnel, and with NCC the replacement can be blocked while the
+    hybrid spoke still links the old tunnel. Plan rotations as a maintenance
+    window: [runbook](runbooks/gcp-hybrid-connectivity.md).
+  - **State exposure.** The GCP key is write-only (`vpn_shared_secret_wo`, never
+    in state); the legacy `vpn_shared_secret` of `stages/net-hub` is in state
+    until v1.0 removes it (UPGRADING.md). The AWS tunnel keys default to
+    Secrets Manager (`preshared_key_storage = SecretsManager`; the stage outputs
+    `vpn_preshared_key_arn`, not the keys). Setting `Standard` puts the AWS
+    keys in state.
+
+- **GCP additional regions in hub and spoke VPCs** (`gcp.network.additional_regions`,
+  `gcp.environments.<env>.additional_regions`; `additional_regions` on
+  `network/tiered-vpc`, `stages/net-hub`, `stages/net-spoke`). Mock-tested only.
+  Each extra region adds one regional subnet per tier to the same global VPC
+  and, with `nat` (default true), a Cloud Router and Cloud NAT. The existing
+  single-region addresses are unchanged when the map is empty. Still
+  single-region (primary region only):
+  - Private Service Connect endpoint, HA VPN and its NCC hybrid spoke, the flow
+    log export KMS key ring and the `dns-anchor` VPC. Private Service Access and
+    VPC-SC are not regional. Interconnect attachments already take a per-entry
+    `region`.
+  - Workload placement: `stages/environment` still deploys app services
+    (Cloud Run, Cloud SQL, GKE Autopilot) and the VM backup policy in the
+    primary region. The extra-region subnets exist and can be shared with
+    service projects, but no app-services input places a workload there yet.
+  - Overlap validation covers subnet primary ranges only, not `secondary_ranges`
+    or the PSA range.
+  - Under NCC a spoke exports every subnet range; a non-empty
+    `ncc.include_export_ranges` on `stages/net-spoke` must list the
+    additional-region CIDRs too. AWS multi-region stays at ADR 0009.
 
 ## Capability parity (2026 review)
 
@@ -386,7 +748,7 @@ side (all mock-tested, secure defaults):
   does not yet expose `sb_publishable_`/`sb_secret_` on `supabase_apikeys`; the
   module uses the legacy JWT keys, which Supabase deprecates end-2026. Expose the
   new keys as outputs once the provider supports them.
-- **S4 — RESOLVED (2026-11-05).** The Terraform floor is now `~> 1.11` and secrets use
+- **S4 — RESOLVED (2026-11-05).** The Terraform floor is now `>= 1.17, < 2.0` (raised from `~> 1.11`) and secrets use
   write-only arguments, so they never enter plan or state: GCP Secret Manager
   (`secret_data_wo`), Cloud SQL users (`password_wo`), Aurora master password
   (`master_password_wo`), sensitive TFC variables (`value_wo`) and sensitive Vercel env
@@ -401,16 +763,37 @@ side (all mock-tested, secure defaults):
   legacy sensitive inputs stay for backward compatibility. Vercel env-var inputs
   cannot be ephemeral: they also feed the `for_each` keys and the stored fingerprints.
 
+- **S-M3 — RESOLVED (2026-11-07): SaaS bridge values stay out of workload
+  state.** `envs/aws/workload` and `envs/gcp/workload` read the Supabase outputs
+  with `ephemeral "tfe_outputs" "saas"` (tfe 0.83) and write them with the
+  write-only `secret_string_wo` (AWS) / the secret-manager module's ephemeral
+  `secret_data_wo` path (GCP). No `terraform_remote_state` or `data "tfe_outputs"`
+  read remains: either would store every saas output, secrets included, in the
+  workload's state. The write-only version must be non-ephemeral, so it comes
+  from `saas.bridge_rotation` in the config file (or `saas_bridge_version`); a
+  postcondition on the ephemeral read fails the plan until the saas workspace
+  publishes the same `bridge_version`. Unit-tested with `mock_ephemeral`
+  (Terraform 1.17). **Residual (sandbox):** `terraform state pull` on a bridging
+  workload, showing no secret value, has not been run against a live workspace.
+- **SaaS secrets stay in `saas-*` state (provider limitation).**
+  `supabase_project` has no write-only `database_password`, so the creation-time
+  password is in the `saas-<name>` state and its `supabase_database_password`
+  output. The service-role key is in the same state as a data-source result and
+  an output. Access to that state is limited to the `saas-*` workspace's
+  writers, the listed `extra_remote_state_consumers` and the
+  `saas-outputs-reader` team (outputs only, read ephemerally by the bridging
+  workloads). Rotation: see
+  [saas-bootstrap](runbooks/saas-bootstrap.md#bridging-secrets-to-a-workload-and-rotating-them).
+
 ## DECISION — needs a human call
 
 - **Behaviour-changing security defaults** (not applied, would change posture):
   packet-mirroring default mirrors all traffic; vpc-peering exports public-IP
   subnet routes; the shared VPC-endpoint policy is `Action="*"`.
-- **`host` stage decomposition.** `modules/gcp/stages/host` (~2,000 LOC) is
-  large-but-cohesive; a targeted split (firewall / egress / advanced sub-stages)
-  is optional maintainability work, not a bug.
-- **Toolchain currency automation.** Dependabot covers both GitHub Actions and
-  the `terraform` ecosystem (`directories: ["/**"]`, one grouped weekly PR,
-  labelled for review, never auto-merged); the repo pins keep proposals inside
-  the current provider major. Open call: switch to Renovate only if grouped,
-  compatibility-aware *major* bumps or `required_version` bumps are wanted.
+- **Toolchain currency automation.** Renovate owns Terraform providers and
+  lockfiles (`renovate.json`: weekly `lockFileMaintenance`, one grouped
+  `hashicorp/*` PR, labelled for review, never auto-merged, provider majors
+  disabled); Dependabot keeps GitHub Actions and the CI Python tooling. The
+  Renovate GitHub App still has to be installed by an operator. Open calls:
+  `semanticCommits` is off (the `build(deps):` prefix is set by hand), and
+  `required_version` / provider-major bumps stay manual by design.

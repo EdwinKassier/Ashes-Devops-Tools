@@ -34,6 +34,59 @@ variable "region" {
   }
 }
 
+variable "additional_regions" {
+  description = "Opt-in extra regions of the same VPC, keyed by region name (e.g. us-east1). Each gets one regional subnet per tier, named <name>-<tier>-<region>, with the primary tier settings (flow logs, Private Google Access on private and database). subnet_cidrs sets the public, private and database CIDRs; they must be valid, host-bit-free and overlap neither the primary subnets nor another region. secondary_ranges (GKE Pods and Services) attach to the region's private subnet. nat (default true) is read by the net-hub and net-spoke compositions, which add a Cloud Router and Cloud NAT in the region; this module creates no router. In firewall_mode both / policy the region's CIDRs join the tier policy rules. Empty (default) = single-region, nothing changes."
+  type = map(object({
+    subnet_cidrs = object({
+      public   = string
+      private  = string
+      database = string
+    })
+    secondary_ranges = optional(list(object({
+      range_name    = string
+      ip_cidr_range = string
+    })), [])
+    nat = optional(bool, true)
+  }))
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = alltrue([for r in keys(var.additional_regions) : can(regex("^[a-z]+-[a-z]+[0-9]+$", r))])
+    error_message = "Each additional_regions key (config: gcp.network.additional_regions / gcp.environments.<env>.additional_regions) must be a valid GCP region name (e.g. 'us-east1')."
+  }
+  validation {
+    condition     = !contains(keys(var.additional_regions), var.region)
+    error_message = "additional_regions (config: gcp.network.additional_regions for the hub, gcp.environments.<env>.additional_regions for a spoke) must not contain the primary region (var.region); its subnets are the zonal layout."
+  }
+  validation {
+    condition = alltrue(flatten([
+      for r in values(var.additional_regions) : [
+        for c in [r.subnet_cidrs.public, r.subnet_cidrs.private, r.subnet_cidrs.database] :
+        can(cidrnetmask(c)) && try(cidrhost(c, 0) == split("/", c)[0], false)
+      ]
+    ]))
+    error_message = "Every additional_regions subnet_cidrs entry (config: gcp.network.additional_regions / gcp.environments.<env>.additional_regions) must be valid CIDR notation without host bits set (e.g. \"10.10.0.0/24\")."
+  }
+  validation {
+    # Two CIDRs overlap when their network addresses match at the shorter of
+    # the two prefix lengths. Compared: every additional-region subnet against
+    # every later one (all regions) and against the primary zonal subnets
+    # (local.primary_subnet_cidr_list). The additional list is built inline: a
+    # local derived from this variable would be a validation cycle.
+    condition = length(var.additional_regions) == 0 || try(alltrue(flatten([
+      for i, a in flatten([for r in values(var.additional_regions) : [r.subnet_cidrs.public, r.subnet_cidrs.private, r.subnet_cidrs.database]]) : [
+        for b in concat(
+          slice(flatten([for r in values(var.additional_regions) : [r.subnet_cidrs.public, r.subnet_cidrs.private, r.subnet_cidrs.database]]), i + 1, 3 * length(var.additional_regions)),
+          local.primary_subnet_cidr_list,
+        ) :
+        cidrhost("${split("/", a)[0]}/${min(tonumber(split("/", a)[1]), tonumber(split("/", b)[1]))}", 0) != cidrhost("${split("/", b)[0]}/${min(tonumber(split("/", a)[1]), tonumber(split("/", b)[1]))}", 0)
+      ]
+    ])), false)
+    error_message = "additional_regions subnet CIDRs (config: gcp.network.additional_regions for the hub, gcp.environments.<env>.additional_regions for a spoke) must not overlap each other (within or across regions) or the primary region's subnets, and must be valid CIDRs."
+  }
+}
+
 variable "cidr_block" {
   description = "The VPC CIDR block (e.g. 10.0.0.0/16). Per-tier subnets are carved from it unless subnet_cidrs is set."
   type        = string
@@ -119,13 +172,38 @@ variable "flow_logs" {
 }
 
 variable "firewall" {
-  description = "Baseline tier firewall settings: rule logging, the IAP SSH/RDP allow rule, and the ports opened public to compute and compute to database."
+  description = "Baseline tier firewall settings: rule logging, the IAP SSH/RDP allow rule, and the ports opened public to compute and compute to database. api_gateway_source_ranges (the CIDRs API Gateway traffic arrives from) and database_egress_target_service_accounts apply only to the network firewall policy (firewall_mode both / policy); the API Gateway policy rule is created only when api_gateway_source_ranges is non-empty."
   type = object({
-    enable_logging     = optional(bool, true)
-    enable_iap_access  = optional(bool, true)
-    compute_tier_ports = optional(list(string), ["8080", "8443", "3000"])
-    database_ports     = optional(list(string), ["3306", "5432", "6379"])
+    enable_logging                          = optional(bool, true)
+    enable_iap_access                       = optional(bool, true)
+    compute_tier_ports                      = optional(list(string), ["8080", "8443", "3000"])
+    database_ports                          = optional(list(string), ["3306", "5432", "6379"])
+    api_gateway_source_ranges               = optional(list(string), [])
+    database_egress_target_service_accounts = optional(list(string), [])
   })
   default  = {}
   nullable = false
+}
+
+variable "firewall_mode" {
+  description = "How the baseline tier firewall is enforced. legacy: tag-based VPC firewall rules (default). both: the VPC rules plus one global network firewall policy whose rules select tiers by subnet CIDR (the migration step). policy: the network firewall policy only; the VPC rules are removed. See docs/runbooks/gcp-firewall-policy-migration.md."
+  type        = string
+  default     = "legacy"
+  nullable    = false
+
+  validation {
+    condition     = contains(["legacy", "both", "policy"], var.firewall_mode)
+    error_message = "firewall_mode must be one of legacy, both or policy."
+  }
+}
+
+variable "firewall_policy_enforcement_order" {
+  description = "Network firewall policy enforcement order on the VPC: BEFORE_CLASSIC_FIREWALL or AFTER_CLASSIC_FIREWALL. null derives it from firewall_mode: policy sets BEFORE_CLASSIC_FIREWALL; legacy and both leave it unset (API default AFTER_CLASSIC_FIREWALL). Updates the network in place. WARNING: switching from both to policy with this unset flips the order in the same apply that deletes the legacy rules; set it explicitly (a check warns when it is unset in policy mode)."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.firewall_policy_enforcement_order == null ? true : contains(["BEFORE_CLASSIC_FIREWALL", "AFTER_CLASSIC_FIREWALL"], var.firewall_policy_enforcement_order)
+    error_message = "firewall_policy_enforcement_order must be null, BEFORE_CLASSIC_FIREWALL or AFTER_CLASSIC_FIREWALL."
+  }
 }

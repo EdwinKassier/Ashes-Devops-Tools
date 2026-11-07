@@ -5,8 +5,11 @@
 # them to the central Log-Archive bucket.
 #
 # This trail MUST be created via the management-account (or delegated-admin)
-# provider: organization trails can only be owned by the management or a
-# CloudTrail delegated-administrator account. The s3_bucket_name is the
+# provider: organization trails can only be created by the management or a
+# CloudTrail delegated-administrator account. Either way the management account
+# owns the trail (its ARN carries the management account ID); a delegated admin
+# keeps the CloudWatch Logs group, its role, CMK, topic and alarms in its own
+# account (set trail_owner_account_id). The s3_bucket_name is the
 # Log-Archive bucket, which lives in a DIFFERENT account; delivery to it is
 # authorized by that bucket's resource policy. The stage that composes this
 # module wires a depends_on from the trail to the bucket policy so the policy
@@ -146,7 +149,7 @@ locals {
 
   cw_kms_key_policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Sid       = "KeyAdministration"
         Effect    = "Allow"
@@ -182,7 +185,42 @@ locals {
           StringEquals = { "aws:SourceAccount" = local.account_id }
         }
       },
-    ]
+      ],
+      # The pipeline's day-2 access is by key policy, never by tag: refresh,
+      # rotation, description, tags and aliases only. No PutKeyPolicy, grants,
+      # disable or deletion; the root KeyAdministration statement above stays
+      # the break-glass path.
+      length(var.cloudwatch_logs_kms_key_manager_arns) == 0 ? [] : [
+        {
+          Sid       = "PipelineKeyManagement"
+          Effect    = "Allow"
+          Principal = { AWS = var.cloudwatch_logs_kms_key_manager_arns }
+          Action = [
+            "kms:Describe*", "kms:Get*", "kms:List*",
+            "kms:EnableKeyRotation", "kms:UpdateKeyDescription",
+            "kms:TagResource", "kms:UntagResource",
+            "kms:CreateAlias", "kms:UpdateAlias", "kms:DeleteAlias",
+          ]
+          Resource = "*"
+        },
+      ],
+      length(var.cloudwatch_logs_kms_key_manager_arns) == 0 ? [] : [
+        {
+          # The CMK encrypts the CIS alarm SNS topic and the trail log group;
+          # creating or updating them needs data-key access through those
+          # services only.
+          Sid       = "PipelineKeyUseViaServices"
+          Effect    = "Allow"
+          Principal = { AWS = var.cloudwatch_logs_kms_key_manager_arns }
+          Action    = ["kms:GenerateDataKey*", "kms:Decrypt"]
+          Resource  = "*"
+          Condition = {
+            StringEquals = {
+              "kms:ViaService" = ["sns.${local.region}.amazonaws.com", "logs.${local.region}.amazonaws.com"]
+            }
+          }
+        },
+    ])
   })
 }
 
@@ -213,26 +251,40 @@ resource "aws_cloudwatch_log_group" "trail" {
 # The landing zone passes the role aws-organization creates, so the
 # least-privilege aws-security role needs no IAM write at all: in the
 # management account (outside every SCP) any role write is an escalation path.
+#
+# A trail created by a CloudTrail delegated administrator is owned by the
+# management account (trail_owner_account_id), while its log group and this
+# role live in the calling account. AWS documents aws:SourceAccount as the
+# trail owner (the management account for organization trails), so the trust
+# accepts the owner as well as this account.
 locals {
   create_cloudwatch_delivery_role = var.enable_cloudwatch_logs && var.cloudwatch_logs_role_arn == null
   cloudwatch_delivery_role_arn    = local.create_cloudwatch_delivery_role ? try(aws_iam_role.cloudtrail_cw[0].arn, null) : var.cloudwatch_logs_role_arn
-}
 
-resource "aws_iam_role" "cloudtrail_cw" {
-  count = local.create_cloudwatch_delivery_role ? 1 : 0
-  name  = "${var.trail_name}-cloudwatch-delivery"
-  assume_role_policy = jsonencode({
+  delivery_source_accounts = distinct(compact([local.account_id, var.trail_owner_account_id]))
+  # A single account stays a string, so an existing role's trust is unchanged
+  # (round-tripped through JSON: the two branches have different types).
+  delivery_trust = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
       Principal = { Service = "cloudtrail.amazonaws.com" }
       Action    = "sts:AssumeRole"
       Condition = {
-        StringEquals = { "aws:SourceAccount" = local.account_id }
+        StringEquals = {
+          "aws:SourceAccount" = jsondecode(length(local.delivery_source_accounts) == 1 ? jsonencode(local.delivery_source_accounts[0]) : jsonencode(local.delivery_source_accounts))
+        }
       }
     }]
   })
-  tags = var.tags
+}
+
+resource "aws_iam_role" "cloudtrail_cw" {
+  count                = local.create_cloudwatch_delivery_role ? 1 : 0
+  name                 = "${var.trail_name}-cloudwatch-delivery"
+  permissions_boundary = var.cloudwatch_logs_role_permissions_boundary_arn
+  assume_role_policy   = local.delivery_trust
+  tags                 = var.tags
 }
 
 resource "aws_iam_role_policy" "cloudtrail_cw" {

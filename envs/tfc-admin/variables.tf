@@ -1,7 +1,16 @@
 variable "landing_zone_config_path" {
-  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values."
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values. Its directory also sets the estate's trigger patterns (config/ = production, any other dir = <dir>/**), so a relative path must stay inside the repository."
   type        = string
   default     = null
+
+  validation {
+    # Relative paths are cleaned first (dirname("./p/_") == clean(p)).
+    condition = startswith(coalesce(var.landing_zone_config_path, "/"), "/") || !(
+      dirname("./${coalesce(var.landing_zone_config_path, "x")}/_") == ".." || dirname("./${coalesce(var.landing_zone_config_path, "x")}/_") == "../../.." || startswith(dirname("./${coalesce(var.landing_zone_config_path, "x")}/_"), "../../../") ||
+      (startswith(dirname("./${coalesce(var.landing_zone_config_path, "x")}/_"), "../") && !startswith(dirname("./${coalesce(var.landing_zone_config_path, "x")}/_"), "../../"))
+    )
+    error_message = "landing_zone_config_path is relative but leaves the repository (e.g. ../../../x). Use ../../<dir>/<file> (repo-relative from envs/tfc-admin), a path below envs/tfc-admin, or an absolute path."
+  }
 }
 
 variable "tfc_organization" {
@@ -144,7 +153,7 @@ variable "speculative_disabled_workspaces" {
   type        = list(string)
   default = [
     "gcp-bootstrap", "gcp-organization", "gcp-projects", "gcp-network-hub",
-    "aws-organization", "aws-security", "aws-backup", "aws-identity",
+    "aws-organization", "aws-security", "aws-network", "aws-backup", "aws-identity", "aws-shared-services",
     "tfc-admin",
   ]
 }
@@ -217,6 +226,17 @@ variable "gcp_apply_service_accounts" {
   validation {
     condition     = toset(keys(var.gcp_plan_service_accounts)) == toset(keys(var.gcp_apply_service_accounts))
     error_message = "gcp_plan_service_accounts and gcp_apply_service_accounts must have the same workspace keys (a run phase without an SA would fail)."
+  }
+}
+
+variable "gcp_project_prefix" {
+  description = "Prefix gcp-bootstrap names its workload service accounts with (<prefix>-wl-<env>-{plan,apply}); null reads org.prefix from config/landing-zone.yaml, the key gcp-bootstrap reads. With gcp_bootstrap_outputs_from_tfc, tfc-admin derives each gcp-workload-<env>'s plan/apply SA emails from it and the gcp-bootstrap admin_project_id output, so a new environment needs no second tfc-admin pass."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.gcp_project_prefix == null || can(regex("^[a-z][a-z0-9-]{0,9}$", coalesce(var.gcp_project_prefix, "a")))
+    error_message = "gcp_project_prefix must start with a lowercase letter, contain only lowercase letters, digits and hyphens, and be 10 characters or fewer (the gcp-bootstrap project_prefix rule)."
   }
 }
 
@@ -347,9 +367,20 @@ variable "workspace_variables_file" {
           <key>: {value: ..., category: env, hcl: true, description: ...}
     Entries are merged under workspace_variables (which wins). sensitive = true is
     rejected: secrets never belong in a committed file. Null disables the lookup.
+    The file is also a trigger pattern on every workspace (see
+    landing_zone_config_path), so editing it queues plans.
   EOT
   type        = string
   default     = "../../config/tfc-workspaces.yaml"
+
+  validation {
+    # Relative paths are cleaned first (dirname("./p/_") == clean(p)).
+    condition = startswith(coalesce(var.workspace_variables_file, "/"), "/") || !(
+      dirname("./${coalesce(var.workspace_variables_file, "x")}/_") == ".." || dirname("./${coalesce(var.workspace_variables_file, "x")}/_") == "../../.." || startswith(dirname("./${coalesce(var.workspace_variables_file, "x")}/_"), "../../../") ||
+      (startswith(dirname("./${coalesce(var.workspace_variables_file, "x")}/_"), "../") && !startswith(dirname("./${coalesce(var.workspace_variables_file, "x")}/_"), "../../"))
+    )
+    error_message = "workspace_variables_file is relative but leaves the repository (e.g. ../../../x): it must stay inside the repo so it can be a trigger pattern. Use ../../<dir>/<file>, a path below envs/tfc-admin, or an absolute path."
+  }
 }
 
 # ── Projects, teams, policy ──────────────────────────────────────────────────
@@ -388,6 +419,17 @@ variable "control_plane_approvers_team_id" {
   }
 }
 
+variable "security_team_id" {
+  description = "TFC team ID (team-...) of the security team: custom access on the guardrails project holding gcp-guardrails (the org IAM deny policies) with runs = apply (queue plans, confirm and discard applies), locking, and variables/state read-only. No other team gets any access there. Must differ from platform_team_id and control_plane_approvers_team_id. Null = no grant (only organization owners can run gcp-guardrails; a check warns)."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.security_team_id == null || can(regex("^team-[A-Za-z0-9]+$", var.security_team_id))
+    error_message = "security_team_id must be a TFC team ID (team-...)."
+  }
+}
+
 variable "platform_team_control_plane_runs" {
   description = "Runs permission of platform_team_id on projects holding control-plane workspaces (custom access; variables read-only, no locking, workspace create/delete/move, run tasks or policy overrides). plan (default) = queue plans only, applies are confirmed by control_plane_approvers_team_id; read = view runs only; apply = may also confirm applies (variables stay read-only). Workload workspaces keep fixed write access."
   type        = string
@@ -405,6 +447,28 @@ variable "split_workload_projects" {
   default     = null
 }
 
+variable "tfc_admin_team_id" {
+  description = "TFC team ID (team-...) of the tfc-admin team whose token is tfc-admin's TFE_TOKEN (docs/runbooks/tfc-admin-token-rotation.md). With manage_tfc_admin_workspace it gets explicit write (apply) on the tfc-admin workspace; together with organization owners it is the only apply path (the approvers team gets no grant on the project holding tfc-admin and the platform team is capped at plan there). Null = no explicit grant."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.tfc_admin_team_id == null || can(regex("^team-[A-Za-z0-9]+$", var.tfc_admin_team_id))
+    error_message = "tfc_admin_team_id must be a TFC team ID (team-...)."
+  }
+}
+
+variable "saas_outputs_reader_team_id" {
+  description = "TFC team ID (team-...) of the hand-created saas-outputs-reader team. It gets custom access on every saas-<name> workspace with state_versions = read-outputs (no state download, no variables, runs read-only) and nothing else. Its team token, created by an owner with an expiry and stored as a sensitive TFE_TOKEN only on workload workspaces that set enable_saas_secret_bridge, lets the workload secret bridge read saas outputs; tfc-admin never creates that token, so it is in no state. Must differ from every other team input. Null = no grant."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.saas_outputs_reader_team_id == null || can(regex("^team-[A-Za-z0-9]+$", var.saas_outputs_reader_team_id))
+    error_message = "saas_outputs_reader_team_id must be a TFC team ID (team-...)."
+  }
+}
+
 variable "viewer_team_ids" {
   description = "TFC team IDs (team-...) granted READ on every landing-zone project."
   type        = list(string)
@@ -417,13 +481,30 @@ variable "viewer_team_ids" {
 }
 
 variable "enable_policy_sets" {
-  description = "Create an OPA policy set sourced from policies/opa in the VCS repo, attached to every managed workspace. Enforcement is mixed: 10 mandatory + 4 advisory policies (policies/opa/policies.hcl); mandatory failures are not overridable unless policy_set_overridable = true. Requires vcs_repo and a PAID HCP Terraform tier with policy enforcement. Default false."
+  description = "Create the two OPA policy sets, both sourced from the VCS repo and attached to every managed workspace: <prefix>opa-guardrails from policies/opa (mixed mandatory/advisory, not overridable unless policy_set_overridable = true) and <prefix>destructive-change-guard from policies/opa-destructive (the mandatory destroy_guard, overridable by a user with Manage Policy Overrides). Null = on when vcs_repo is set and tfc_plan (org.tfc.plan) is standard or premium, else off (a check then warns that destructive changes are unguarded)."
   type        = bool
-  default     = false
+  default     = null
+}
+
+variable "enable_unguarded_destroy_warning" {
+  description = "Warn on every plan (check destructive_changes_guarded) while the policy sets are off, because no destroy_guard then stops a delete or replace of a stateful resource. Set false only to acknowledge running without policy sets (for example on the free plan)."
+  type        = bool
+  default     = true
+}
+
+variable "tfc_plan" {
+  description = "HCP Terraform plan of the organization: free, essentials, standard or premium. Decides the enable_policy_sets default (VCS-sourced policy sets on standard and premium). Null = org.tfc.plan from config/landing-zone.yaml, else unknown (policy sets off unless enable_policy_sets = true)."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = contains(["free", "essentials", "standard", "premium"], coalesce(var.tfc_plan, local.cfg.tfc_plan, "free"))
+    error_message = "tfc_plan (or org.tfc.plan in config/landing-zone.yaml) must be free, essentials, standard or premium."
+  }
 }
 
 variable "policy_set_overridable" {
-  description = "Whether a failed MANDATORY policy in the OPA set can be overridden by a user with Manage Policy Overrides. Default false: mandatory policies are hard gates (advisory policies never block anyway). Set true only as a documented, time-boxed break-glass."
+  description = "Whether a failed MANDATORY policy in the <prefix>opa-guardrails set can be overridden by a user with Manage Policy Overrides. Default false: mandatory policies are hard gates (advisory policies never block anyway). Set true only as a documented, time-boxed break-glass. The <prefix>destructive-change-guard set is always overridable."
   type        = bool
   default     = false
 }
@@ -440,9 +521,9 @@ variable "opa_version" {
 }
 
 variable "terraform_version" {
-  description = "Terraform version constraint applied to every managed workspace, e.g. ~> 1.9. Null uses the TFC default."
+  description = "Terraform version constraint applied to every managed workspace (the repo requires >= 1.17, < 2.0). Null uses the TFC default."
   type        = string
-  default     = "~> 1.9"
+  default     = "~> 1.17"
 }
 
 variable "vcs_repo" {
@@ -457,7 +538,7 @@ variable "vcs_repo" {
 }
 
 variable "common_workspace_variables" {
-  description = "Org-wide variables placed in the shared <prefix>common variable set (alongside tfc_organization) attached to EVERY managed workspace. Keyed by name: {value, category (terraform|env), hcl?, sensitive?, description?, version?}. Sensitive values are written write-only (never stored in state); increment `version` to rotate. Per-workspace credentials belong in the dynamic-credential maps, not here."
+  description = "Org-wide variables placed in the shared <prefix>common variable set (alongside tfc_organization) attached to every managed workspace except gcp-guardrails (the security team's workspace takes no platform-controlled inputs). Keyed by name: {value, category (terraform|env), hcl?, sensitive?, description?, version?}. Sensitive values are written write-only (never stored in state); increment `version` to rotate. Per-workspace credentials belong in the dynamic-credential maps, not here."
   type = map(object({
     value       = string
     category    = string
@@ -485,6 +566,11 @@ variable "control_plane_notifications" {
     enabled          = optional(bool, true)
   }))
   default = {}
+
+  validation {
+    condition     = var.control_plane_notifications != null && !anytrue([for u in local.cfg.hcp_email_user_ids : strcontains(u, "REPLACE")])
+    error_message = "notifications.hcp_email_user_ids still holds the REPLACE_WITH_HCP_USER_ID placeholder from config/landing-zone.example.yaml; set real HCP Terraform user IDs (user-...) or remove the key."
+  }
 }
 
 variable "workload_notifications" {
@@ -507,7 +593,19 @@ variable "set_gcp_bootstrap_workspace_ids" {
 }
 
 variable "enable_run_triggers" {
-  description = "Create TFC run triggers along the root dependency DAG (bootstrap -> organization -> projects -> network-hub -> workloads; aws-organization -> security/network/identity/shared-services/backup -> workloads), so an upstream apply queues a downstream plan. auto_apply stays off. Default true."
+  description = "Create TFC run triggers along the root dependency DAG (bootstrap -> organization -> projects -> network-hub -> workloads; aws-organization -> security/network/identity/shared-services/backup -> workloads), so an upstream apply queues a downstream plan. The plan waits for confirmation unless auto_apply_on_merge. Default true."
   type        = bool
   default     = true
+}
+
+variable "auto_apply_on_merge" {
+  description = "Apply every merge without confirmation: auto_apply and auto_apply_run_trigger on every workspace except tfc-admin and gcp-guardrails, so a merge applies the changed roots and the run triggers carry it down the DAG. Path-filtered VCS triggers stay on. Meant for the sandbox estate (docs/guides/sandbox-estate.md); default false keeps manual apply everywhere."
+  type        = bool
+  default     = false
+}
+
+variable "enable_nonprod_workload_auto_apply" {
+  description = "Workload workspaces whose environment sets is_production = false EXPLICITLY get auto_apply_run_trigger (a run queued by a confirmed upstream apply applies without a second confirmation) and queue_all_runs. The run queue_all_runs starts at creation is expected to fail (the workspace's identity and variables do not exist yet); the setting exists so later VCS and run-trigger runs queue without a manual first run. An omitted is_production, production workloads and every shared workspace keep manual confirmation. Null (default) = on only while the policy sets (and so the mandatory destroy_guard) are attached, so an unguarded estate never auto-applies; true forces it on, false confirms every run."
+  type        = bool
+  default     = null
 }

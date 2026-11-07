@@ -57,7 +57,7 @@ make lint
 
 ```bash
 make plan-gcp-organization
-make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
+make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
 ```
 
 ## Runbooks
@@ -66,6 +66,8 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
 - [Add Environment](runbooks/add-environment.md): provision a new dev/staging/prod environment
 - [Service Team Onboarding](runbooks/service-team-onboarding.md): create a service project with Shared VPC attachment
 - [KMS Rotation](runbooks/kms-rotation.md): rotate CMEK keys automatically or manually
+- [ADR 0011: Temporary elevated access](adr/0011-temporary-elevated-access.md): IdP-native access requests over SCIM for Identity Center groups
+- [Architecture decision records](adr/README.md): ADRs 0001-0014 (cloud selection, config, contracts, identities, backend, sandbox, boundary, tags and more)
 - [CIDR Expansion](runbooks/cidr-expansion.md): expand subnet ranges without downtime
 - [Break Glass](runbooks/break-glass.md): emergency access when Workload Identity Federation fails
 - [GCP Workspace Rename](runbooks/gcp-workspace-rename.md): migrate live TFC workspaces to the `gcp-organization` / `gcp-workload-<env>` names
@@ -80,6 +82,7 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
 - [Deploying a Service](guides/deploying-a-service.md): the golden path to run an application on the landing zone
 - [SaaS Integration](architecture/saas-integration.md): options and decision for integrating Supabase/Vercel with the clouds
 - [CI Secrets & Variables](guides/CI_SECRETS.md): repository secrets and variables the workflows expect
+- [Self-Managed State](guides/self-managed-state.md): run the roots on a GCS or S3 backend instead of HCP Terraform
 - [Sandbox E2E](guides/sandbox-e2e.md): real-apply `terraform test` suites against disposable GCP/AWS sandboxes (keyless auth, guaranteed teardown)
 
 ## GCP Landing Zone
@@ -110,6 +113,7 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
 - [AWS Incident Response](runbooks/aws-incident-response.md): quarantine and forensics flow
 - [AWS Teardown](runbooks/aws-teardown.md): reverse-order destroy, WORM/Vault Lock caveats
 - [AWS Brownfield Adoption](runbooks/aws-brownfield-adoption.md): import an existing organization, OUs and accounts; Control Tower coexistence
+- [GCP Brownfield Adoption](runbooks/gcp-brownfield-adoption.md): import existing folders, projects and org IAM with `import` + `for_each`
 
 ## SaaS Modules
 
@@ -129,13 +133,15 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
 
 ## Audits
 
-Point-in-time reviews; later audits supersede earlier "resolved" claims.
+Point-in-time reviews; later audits supersede earlier "resolved" claims. Only the latest audit lives here; older ones are in `audit/archive/` and every still-open item is tracked in [Known Gaps](known-gaps.md).
 
-- [2026-11-05 Enterprise Boilerplate Audit](audit/2026-11-05-enterprise-boilerplate-audit.md): five-dimension review (best practice, capability, maintainability, security, modularity) and remediation roadmap
-- [2026-11-05 Deep Audit](audit/2026-11-05-deep-audit.md)
-- [2026-11-04 Best-Practice Audit](audit/2026-11-04-best-practice-audit.md)
-- [2026-11-04 FinOps Deep-Dive](audit/2026-11-04-finops-deep-dive.md): recurring cost of the default configuration
-- [2026-09-09 Due-Diligence Audit](audit/2026-09-09-due-diligence-audit.md)
+- [2026-11-06 Five-Dimension Audit](audit/2026-11-06-five-dimension-audit.md): latest independent audit
+- [2026-11-06 Enterprise Boilerplate Audit](audit/archive/2026-11-06-enterprise-boilerplate-audit.md)
+- [2026-11-05 Enterprise Boilerplate Audit](audit/archive/2026-11-05-enterprise-boilerplate-audit.md): five-dimension review (best practice, capability, maintainability, security, modularity) and remediation roadmap
+- [2026-11-05 Deep Audit](audit/archive/2026-11-05-deep-audit.md)
+- [2026-11-04 Best-Practice Audit](audit/archive/2026-11-04-best-practice-audit.md)
+- [2026-11-04 FinOps Deep-Dive](audit/archive/2026-11-04-finops-deep-dive.md): recurring cost of the default configuration
+- [2026-09-09 Due-Diligence Audit](audit/archive/2026-09-09-due-diligence-audit.md)
 
 ## Architecture
 

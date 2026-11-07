@@ -104,8 +104,8 @@ run "guardrail_policies_render_correctly" {
   }
 
   assert {
-    condition     = length(keys(aws_organizations_policy.policy)) == 9
-    error_message = "the built-in guardrail set must produce all nine policies"
+    condition     = length(keys(aws_organizations_policy.policy)) == 11
+    error_message = "the built-in guardrail set must produce all eleven policies"
   }
 }
 
@@ -162,8 +162,8 @@ run "deny_tamper_scp_hardened" {
 
   # SCP size quota (5,120 characters).
   assert {
-    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 5120
-    error_message = "deny-tamper SCP must stay under the 5,120-character SCP size quota"
+    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 10240
+    error_message = "deny-tamper SCP must stay under the 10,240-character SCP size quota"
   }
 }
 
@@ -210,8 +210,8 @@ run "privileged_role_tamper_never_exempts_the_pipeline" {
   }
 
   assert {
-    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 5120
-    error_message = "deny-tamper SCP must stay under the 5,120-character SCP size quota"
+    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 10240
+    error_message = "deny-tamper SCP must stay under the 10,240-character SCP size quota"
   }
 }
 
@@ -266,16 +266,16 @@ run "baseline_scp_identity_and_perimeter_guards" {
     error_message = "DenyDataPerimeterTagTampering must cover every dp:* tagging path for the RCP services, break-glass only"
   }
 
-  # Every SCP stays under the 5,120-character quota.
+  # Every SCP stays under the 10,240-character quota.
   assert {
-    condition     = alltrue([for k, p in aws_organizations_policy.policy : length(p.content) < 5120 if p.type == "SERVICE_CONTROL_POLICY"])
-    error_message = "every SCP must stay under the 5,120-character SCP size quota"
+    condition     = alltrue([for k, p in aws_organizations_policy.policy : length(p.content) < 10240 if p.type == "SERVICE_CONTROL_POLICY"])
+    error_message = "every SCP must stay under the 10,240-character SCP size quota"
   }
 }
 
 run "deny_tamper_scp_size_with_custom_names" {
   # Realistic worst case: several path-prefixed pipeline roles plus a separate
-  # member-account break-glass name must still fit the 5,120-character quota.
+  # member-account break-glass name must still fit the 10,240-character quota.
   command = plan
 
   variables {
@@ -284,13 +284,13 @@ run "deny_tamper_scp_size_with_custom_names" {
   }
 
   assert {
-    condition     = alltrue([for k, p in aws_organizations_policy.policy : length(p.content) < 5120 if p.type == "SERVICE_CONTROL_POLICY"])
-    error_message = "every SCP (incl. baseline with the identity/perimeter guards) must stay under the 5,120-character quota"
+    condition     = alltrue([for k, p in aws_organizations_policy.policy : length(p.content) < 10240 if p.type == "SERVICE_CONTROL_POLICY"])
+    error_message = "every SCP (incl. baseline with the identity/perimeter guards) must stay under the 10,240-character quota"
   }
 
   assert {
-    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 5120
-    error_message = "deny-tamper SCP must stay under the 5,120-character SCP size quota"
+    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 10240
+    error_message = "deny-tamper SCP must stay under the 10,240-character SCP size quota"
   }
 
   assert {
@@ -471,8 +471,8 @@ run "federation_tenant_pins_render" {
   }
 
   assert {
-    condition     = length(aws_organizations_policy.policy["rcp-data-perimeter"].content) < 5120
-    error_message = "the RCP with every pin and all built-in IdP denies must stay under the 5,120-character quota."
+    condition     = length(aws_organizations_policy.policy["rcp-data-perimeter"].content) < 10240
+    error_message = "the RCP with every pin and all built-in IdP denies must stay under the 10,240-character quota."
   }
 }
 
@@ -495,8 +495,8 @@ run "central_detection_scoped_to_security_accounts" {
   }
 
   assert {
-    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 5120
-    error_message = "deny-tamper SCP must stay under the 5,120-character SCP size quota with the central-detection statement."
+    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 10240
+    error_message = "deny-tamper SCP must stay under the 10,240-character SCP size quota with the central-detection statement."
   }
 }
 
@@ -580,10 +580,10 @@ run "federation_completeness" {
     condition = (
       contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-baseline"].content).Statement : s if s.Sid == "DenyIdentityProviderChanges"]).Action, "iam:CreateOpenIDConnectProvider") &&
       contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-baseline"].content).Statement : s if s.Sid == "DenyDataPerimeterTagTampering"]).Action, "ecr:TagResource") &&
-      length(aws_organizations_policy.policy["scp-baseline"].content) < 5120 &&
-      length(aws_organizations_policy.policy["rcp-data-perimeter"].content) < 5120
+      length(aws_organizations_policy.policy["scp-baseline"].content) < 10240 &&
+      length(aws_organizations_policy.policy["rcp-data-perimeter"].content) < 10240
     )
-    error_message = "the baseline SCP must deny IdP changes and ECR/Logs dp:* tagging, and both policies must fit the 5,120-character quota."
+    error_message = "the baseline SCP must deny IdP changes and ECR/Logs dp:* tagging, and both policies must fit the 10,240-character quota."
   }
 }
 
@@ -598,6 +598,32 @@ run "region_restriction_allows_edge_and_global_sts" {
       contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-region-restriction"].content).Statement : s if s.Sid == "EdgeCertificatesAndKeysOnlyInAllowedRegionsOrUsEast1"]).Condition.StringNotEquals["aws:RequestedRegion"], "us-east-1")
     )
     error_message = "sts must be exempt from the region deny, and ACM/KMS must be confined to the allowed regions plus us-east-1."
+  }
+}
+
+# The Terraform run role is NOT exempt from the region deny: it earned no
+# carve-out (global services are already in NotAction), and an exempt pipeline
+# role could deploy into regions the guardrail exists to keep empty. Break-glass
+# stays the only exemption. Decoded and asserted, not substring-matched.
+run "region_restriction_does_not_exempt_the_run_role" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for s in jsondecode(aws_organizations_policy.policy["scp-region-restriction"].content).Statement :
+      !contains(s.Condition.ArnNotLike["aws:PrincipalArn"], var.terraform_run_role_arn) &&
+      contains(s.Condition.ArnNotLike["aws:PrincipalArn"], var.break_glass_role_arn)
+    ])
+    error_message = "the region SCP must exempt break-glass only, never the Terraform run role."
+  }
+
+  # Global-endpoint services the pipeline still reaches stay outside the deny.
+  assert {
+    condition = alltrue([
+      for a in ["iam:*", "organizations:*", "sts:*", "route53:*", "cloudfront:*", "wafv2:*", "networkmanager:*", "notifications:*"] :
+      contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-region-restriction"].content).Statement : s if s.Sid == "DenyOutsideAllowedRegions"]).NotAction, a)
+    ])
+    error_message = "global-service actions must be in the region deny's NotAction."
   }
 }
 
@@ -631,5 +657,149 @@ run "policies_follow_the_partition" {
       strcontains(aws_organizations_policy.policy["scp-baseline"].content, "arn:aws-us-gov:iam::*:root")
     )
     error_message = "with partition = aws-us-gov no SCP may contain an arn:aws: ARN."
+  }
+}
+
+# Recorder SCP (after the Config recorder migration): the four recorder actions
+# move from DenyWeakenSecurityServices (pipeline-wide exemption) into
+# DenyConfigRecorderChanges, whose only exemptions are role ARNs: the StackSet
+# execution role, break-glass, and the account-qualified recorder pipeline roles.
+run "config_recorder_scp_off_keeps_todays_statement" {
+  command = plan
+
+  assert {
+    condition = (
+      length([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyConfigRecorderChanges"]) == 0 &&
+      contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyWeakenSecurityServices"]).Action, "config:PutConfigurationRecorder")
+    )
+    error_message = "with enable_config_recorder_scp = false the recorder actions stay in DenyWeakenSecurityServices"
+  }
+}
+
+run "config_recorder_scp_exempts_role_arns_only" {
+  command = plan
+
+  variables {
+    enable_config_recorder_scp         = true
+    config_recorder_pipeline_role_arns = ["arn:aws:iam::222222222222:role/tfc-apply"]
+  }
+
+  assert {
+    condition = (
+      toset(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyConfigRecorderChanges"]).Condition.ArnNotLike["aws:PrincipalArn"]) ==
+      toset(["arn:aws:iam::*:role/stacksets-exec-*", "arn:aws:iam::*:role/break-glass", "arn:aws:iam::222222222222:role/tfc-apply"])
+    )
+    error_message = "DenyConfigRecorderChanges must exempt exactly stacksets-exec-*, break-glass and the listed role ARNs"
+  }
+
+  assert {
+    condition     = keys(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyConfigRecorderChanges"]).Condition) == ["ArnNotLike"]
+    error_message = "DenyConfigRecorderChanges must never exempt a whole account (ArnNotLike on role ARNs only)"
+  }
+
+  assert {
+    condition = (
+      !contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyWeakenSecurityServices"]).Action, "config:PutConfigurationRecorder") &&
+      contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyWeakenSecurityServices"]).Action, "ec2:DeleteFlowLogs")
+    )
+    error_message = "the recorder actions leave DenyWeakenSecurityServices; flow-log deletion stays there"
+  }
+
+  assert {
+    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) <= 10240
+    error_message = "deny-tamper SCP must stay within the 10,240-character SCP quota"
+  }
+}
+
+run "suspended_deny_all_exempts_stacksets_and_breakglass" {
+  command = plan
+
+  assert {
+    condition     = jsondecode(aws_organizations_policy.policy["scp-suspended-deny-all"].content).Statement[0].Action == "*" && jsondecode(aws_organizations_policy.policy["scp-suspended-deny-all"].content).Statement[0].Effect == "Deny"
+    error_message = "the Suspended SCP must be an unconditional-action Deny *"
+  }
+
+  assert {
+    condition     = toset(jsondecode(aws_organizations_policy.policy["scp-suspended-deny-all"].content).Statement[0].Condition.ArnNotLike["aws:PrincipalArn"]) == toset(["arn:aws:iam::*:role/break-glass", "arn:aws:iam::*:role/stacksets-exec-*"])
+    error_message = "deny-all must exempt exactly break-glass and the StackSet execution role"
+  }
+
+  assert {
+    condition     = length(aws_organizations_policy.policy["scp-suspended-deny-all"].content) < 10240
+    error_message = "SCPs are limited to 10,240 characters"
+  }
+}
+
+run "sandbox_has_guard" {
+  command = plan
+
+  variables {
+    sandbox_allowed_instance_types = ["t3.micro", "t4g.*"]
+  }
+
+  assert {
+    condition     = jsondecode(aws_organizations_policy.policy["scp-sandbox-guard"].content).Statement[0].Condition.StringNotLike["ec2:InstanceType"] == ["t3.micro", "t4g.*"]
+    error_message = "the instance-type allowlist must render into the StringNotLike condition"
+  }
+
+  assert {
+    condition = (
+      contains(jsondecode(aws_organizations_policy.policy["scp-sandbox-guard"].content).Statement[1].Action, "directconnect:*") &&
+      contains(jsondecode(aws_organizations_policy.policy["scp-sandbox-guard"].content).Statement[1].Action, "ec2:CreateVpcPeeringConnection") &&
+      contains(jsondecode(aws_organizations_policy.policy["scp-sandbox-guard"].content).Statement[1].Action, "organizations:*")
+    )
+    error_message = "the sandbox guard must deny Direct Connect, VPC peering and Organizations"
+  }
+
+  assert {
+    condition     = length(aws_organizations_policy.policy["scp-sandbox-guard"].content) < 10240
+    error_message = "SCPs are limited to 10,240 characters"
+  }
+}
+
+# Declarative EC2 Allowed AMIs: audit mode with amazon-only by default.
+run "allowed_images_audit_mode_default" {
+  command = plan
+
+  assert {
+    condition = (
+      jsondecode(aws_organizations_policy.policy["declarative-ec2-baseline"].content).ec2_attributes.allowed_images_settings.state["@@assign"] == "audit_mode" &&
+      jsondecode(aws_organizations_policy.policy["declarative-ec2-baseline"].content).ec2_attributes.allowed_images_settings.image_criteria.criteria_1.allowed_image_providers["@@assign"][0] == "amazon" &&
+      jsondecode(aws_organizations_policy.policy["declarative-ec2-baseline"].content).ec2_attributes.instance_metadata_defaults.http_tokens["@@assign"] == "required" &&
+      length(aws_organizations_policy.policy["declarative-ec2-baseline"].content) < 10000
+    )
+    error_message = "declarative-ec2-baseline must carry allowed_images_settings in audit_mode for amazon only, keep IMDSv2, and stay under the 10,000-char declarative policy limit."
+  }
+}
+
+run "allowed_images_enabled_with_account_provider" {
+  command = plan
+
+  variables {
+    ec2_allowed_images = {
+      state                   = "enabled"
+      allowed_image_providers = ["amazon", "123456789012"]
+    }
+  }
+
+  assert {
+    condition = (
+      jsondecode(aws_organizations_policy.policy["declarative-ec2-baseline"].content).ec2_attributes.allowed_images_settings.state["@@assign"] == "enabled" &&
+      length(jsondecode(aws_organizations_policy.policy["declarative-ec2-baseline"].content).ec2_attributes.allowed_images_settings.image_criteria.criteria_1.allowed_image_providers["@@assign"]) == 2
+    )
+    error_message = "ec2_allowed_images must flow into the baseline declarative policy."
+  }
+}
+
+run "allowed_images_unmanaged_omits_setting" {
+  command = plan
+
+  variables {
+    ec2_allowed_images = { state = "unmanaged" }
+  }
+
+  assert {
+    condition     = !contains(keys(jsondecode(aws_organizations_policy.policy["declarative-ec2-baseline"].content).ec2_attributes), "allowed_images_settings")
+    error_message = "state = unmanaged must leave the baseline policy without an allowed-images setting."
   }
 }

@@ -5,9 +5,13 @@
  *
  * The Shared VPC host network of one application environment: a three-tier
  * VPC (network/tiered-vpc) plus Cloud NAT, Private Service Access, Private
- * Service Connect, hub peering, private or peering DNS zones, an opt-in Cloud
+ * Service Connect, hub connectivity (VPC peering, or an opt-in Network
+ * Connectivity Center spoke), private or peering DNS zones, an opt-in Cloud
  * Armor edge policy, opt-in VPC flow-log export, Shared VPC service-project
  * attachments and the environment VPC-SC perimeter.
+ *
+ * Opt-in additional_regions add regional subnets (and a Cloud Router and NAT
+ * per region) to the same VPC; empty keeps the single-region layout.
  *
  * Replaces the spoke use of the deprecated stages/host module. Module and
  * resource names deliberately match stages/host so a caller that keeps its
@@ -50,12 +54,19 @@ module "network" {
   shared_vpc_host     = var.network.shared_vpc_host
   deletion_protection = var.deletion_protection
   flow_logs           = var.network.flow_logs
+  additional_regions  = var.additional_regions
+
+  firewall_mode                     = var.firewall_mode
+  firewall_policy_enforcement_order = var.firewall_policy_enforcement_order
 
   firewall = {
     enable_logging     = var.firewall.enable_logging
     enable_iap_access  = var.firewall.enable_iap_access
     compute_tier_ports = var.firewall.compute_tier_ports
     database_ports     = var.firewall.database_ports
+
+    api_gateway_source_ranges               = var.firewall.api_gateway_source_ranges
+    database_egress_target_service_accounts = var.firewall.database_egress_target_service_accounts
   }
 }
 
@@ -106,6 +117,33 @@ module "integrated_nat" {
   log_filter     = var.nat.log_filter
 }
 
+# One Cloud Router and Cloud NAT per additional region with nat = true, same
+# settings as the primary. Separate block keyed by region: the primary
+# integrated_nat[0] address is unchanged.
+module "additional_region_nat" {
+  source   = "../../network/nat"
+  for_each = var.nat.enabled ? { for region, r in var.additional_regions : region => r if r.nat } : {}
+
+  project_id = var.project_id
+  name       = "${var.network.name}-nat-${each.key}"
+  region     = each.key
+  network    = module.network.network_id
+
+  create_router = true
+  router_name   = "${var.network.name}-router-${each.key}"
+
+  nat_ip_allocate_option             = var.nat.ip_allocate_option
+  source_subnetwork_ip_ranges_to_nat = "LIST_OF_SUBNETWORKS"
+
+  subnetworks = [
+    { name = module.network.additional_region_subnets[each.key].private.self_link, source_ip_ranges_to_nat = ["ALL_IP_RANGES"] },
+    { name = module.network.additional_region_subnets[each.key].database.self_link, source_ip_ranges_to_nat = ["ALL_IP_RANGES"] },
+  ]
+
+  enable_logging = true
+  log_filter     = var.nat.log_filter
+}
+
 module "private_service_access" {
   source = "../../network/private-service-access"
   count  = var.private_service_access.enabled ? 1 : 0
@@ -130,9 +168,13 @@ module "private_service_connect" {
 # HUB CONNECTIVITY AND DNS
 # =============================================================================
 
+# connectivity = "peering" (default): one VPC peering per var.peerings entry.
+# connectivity = "ncc": no peerings; the VPC joins the hub as an NCC spoke
+# instead (NCC rejects a VPC spoke that is still peered with a hub VPC).
+# The for_each keys, and so the state addresses, are unchanged in peering mode.
 module "vpc_peering" {
   source   = "../../network/vpc-peering"
-  for_each = var.peerings
+  for_each = var.connectivity == "peering" ? var.peerings : {}
 
   peering_name           = each.key
   network                = module.network.network_self_link
@@ -140,6 +182,37 @@ module "vpc_peering" {
   create_reverse_peering = each.value.create_reverse_peering
   export_custom_routes   = each.value.export_custom_routes
   import_custom_routes   = each.value.import_custom_routes
+}
+
+# NCC spoke for this VPC (edge group of a STAR hub by default), plus a producer
+# VPC spoke for the Private Service Access peering so the hub learns the PSA
+# range. depends_on orders the spoke after the peering deletion when an
+# existing spoke switches from peering to ncc in one apply.
+module "ncc_spoke" {
+  source = "../../network/ncc-spoke"
+  count  = var.connectivity == "ncc" ? 1 : 0
+
+  project_id  = var.project_id
+  name        = var.network.name
+  description = "NCC spoke for ${var.network.name}"
+  labels      = var.labels
+  hub_id      = var.ncc.hub_id
+  group       = var.ncc.group
+
+  linked_vpc_network = {
+    uri                   = module.network.network_self_link
+    include_export_ranges = var.ncc.include_export_ranges
+    exclude_export_ranges = var.ncc.exclude_export_ranges
+  }
+
+  producer_vpc_networks = var.private_service_access.enabled && var.ncc.export_private_service_access ? {
+    psa = {
+      network = module.network.network_name
+      peering = module.private_service_access[0].peering.peering
+    }
+  } : {}
+
+  depends_on = [module.vpc_peering]
 }
 
 module "dns" {

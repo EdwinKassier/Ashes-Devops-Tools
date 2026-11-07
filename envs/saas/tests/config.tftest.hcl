@@ -58,3 +58,57 @@ run "missing_stack_config_names_the_keys" {
 
   expect_failures = [output.stack]
 }
+
+# The non-sensitive bridge_version signal comes from saas.bridge_rotation; a
+# workload's write-only *_wo_version reads it, so bumping it re-pushes the
+# bridged secret.
+run "bridge_version_comes_from_config" {
+  command = plan
+
+  assert {
+    condition     = output.bridge_version == 3
+    error_message = "bridge_version must come from saas.bridge_rotation in config/landing-zone.yaml."
+  }
+}
+
+run "bridge_rotation_variable_wins" {
+  command = plan
+
+  variables {
+    bridge_rotation = 7
+  }
+
+  assert {
+    condition     = output.bridge_version == 7
+    error_message = "an explicit bridge_rotation variable must win over saas.bridge_rotation."
+  }
+}
+
+run "bridge_rotation_must_be_a_positive_whole_number" {
+  command = plan
+
+  variables {
+    bridge_rotation = 0
+  }
+
+  expect_failures = [var.bridge_rotation]
+}
+
+# Scaffold matrix: committed scaffolder output (make scaffold-fixtures) must plan.
+run "scaffold_saas_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../tests/fixtures/scaffold/landing-zone.saas.yaml"
+    stack                    = "web"
+  }
+}
+
+run "scaffold_gcp_aws_saas_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
+    stack                    = "web"
+  }
+}

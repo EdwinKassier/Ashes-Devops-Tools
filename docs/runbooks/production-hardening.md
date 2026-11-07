@@ -84,10 +84,10 @@ apply or a human decision. Enable them per environment, highest-value first.
 
 | Control | Enable with | File | Apply-time risk |
 |---|---|---|---|
-| IAM Deny policies (GCP) | populate `iam_deny_policies` | `envs/gcp/organization` → `modules/gcp/iam/deny-policy` | Ships empty (inert). Define deny rules carefully: a deny applies before allow and can block legitimate automation. Test in a non-prod org first. |
+| IAM Deny policies (GCP) | populate `gcp_overrides.iam_deny_policies` | `envs/gcp/organization` → `modules/gcp/iam/deny-policy` | Ships empty (inert). Define deny rules carefully: a deny applies before allow and can block legitimate automation. Test in a non-prod org first. |
 | Config conformance packs (AWS) | supply a pack to `config-org` | `modules/aws/security/config-org` | Adds per-evaluation cost and may surface many findings at once. Start with one AWS-managed Operational-Best-Practices pack. |
 | CMEK (AWS/GCP) | pass a key ARN/name at the module boundary | per module (e.g. `ecr`, `network-firewall`, `cloud-storage`) | Without a key, encryption falls back to an AWS-owned key or GMEK. Supplying a CMK is safe; requiring it can break a module that is not given one. |
-| **Audit-log WORM lock (GCP)** | `enable_audit_bucket_lock = true` | `envs/gcp/organization` → `cloud-audit-logs` | **IRREVERSIBLE.** A locked retention policy cannot be shortened or removed. Enable only for a compliance regime that requires tamper-proof retention, and only once the retention period is final. This is why it is **not** default-on. |
+| **Audit-log WORM lock (GCP)** | `gcp.enable_audit_bucket_lock: true` (or `gcp_overrides.enable_audit_bucket_lock = true`) | `envs/gcp/organization` → `cloud-audit-logs` | **IRREVERSIBLE.** A locked retention policy cannot be shortened or removed. Enable only for a compliance regime that requires tamper-proof retention, and only once the retention period is final. This is why it is **not** default-on. |
 | AWS CloudTrail → CloudWatch Logs + CIS 4.x alarms | **on by default** (`enable_cloudwatch_logs`) | `modules/aws/stages/security` | The module creates its own rotated, `logs.*`-granted CMK and a KMS-encrypted SNS topic unless you pass `cloudwatch_logs_kms_key_arn`. Subscribe your on-call address. See audit A1/A4. |
 
 The WORM lock is the one item that must stay opt-in: an irreversible default in a
@@ -102,7 +102,7 @@ presets in [`examples/presets/`](../../examples/presets/):
 - Network: `nonprod-aws-network.tfvars` (`az_count = 1`, `enable_network_firewall = false`).
 - Security: `nonprod-aws-security.tfvars` (`enable_security_lake = false`, `enabled_security_services = []`).
 
-Deeper cuts, now exposed as `envs/aws/security` root variables (FinOps F5):
+Deeper cuts, exposed as `envs/aws/security` `aws_overrides` keys (FinOps F5):
 
 - `config_record_all_supported = false` — Config is most expensive in record-all mode.
 - `guardduty_enable_ebs_malware_protection = false` — agentless EBS malware scanning.
@@ -110,7 +110,7 @@ Deeper cuts, now exposed as `envs/aws/security` root variables (FinOps F5):
 Both are in `examples/presets/nonprod-aws-security.tfvars`.
 
 Keep the full posture for production. See the cost model in
-[`docs/audit/2026-11-04-finops-deep-dive.md`](../audit/2026-11-04-finops-deep-dive.md).
+[`docs/audit/archive/2026-11-04-finops-deep-dive.md`](../audit/archive/2026-11-04-finops-deep-dive.md).
 
 ## Contain the automation identity (audit C2)
 
@@ -172,7 +172,7 @@ Three refinements close the remaining paths:
 
 ### 2. Deny-policy backstop (audit C2/C3)
 
-`enable_admin_containment = true` (gcp-organization; **on** in
+`gcp_overrides.enable_admin_containment = true` (gcp-organization; **on** in
 `examples/presets/prod-gcp-organization.tfvars`) adds an org-node IAM deny policy
 `contain-admin-identity` with two rules. Both deny `principalSet://goog/public:all`
 and exempt only `containment_exempt_principals` (your break-glass group).
@@ -212,9 +212,9 @@ include them. Each one has an alert instead:
   deleted anyway, and the bucket bindings are denied above).
 
 **Production default.** Containment stays opt-in (it changes how every sink and
-perimeter change is applied), but gcp-organization warns (check
+perimeter change is applied), but gcp-organization fails the plan (precondition
 `production_requires_admin_containment`) when any environment is
-`is_production = true` and `enable_admin_containment = false`. The WORM lock
+`is_production = true` and `gcp.admin_containment: false` / `gcp_overrides.enable_admin_containment = false` (the explicit waiver). The WORM lock
 (`enable_audit_bucket_lock`) stays a separate opt-in because it is irreversible.
 
 **Operational consequence.** Terraform legitimately calls `sinks.update` and
@@ -228,36 +228,58 @@ still allowed.
 **Guardrail owner (who applies the deny policy).** `iam.denypolicies.*` can't
 be denied, so whoever holds `roles/iam.denyAdmin` can delete the containment
 policy. By default (`guardrail_owner_mode = "separate"`, gcp-bootstrap and
-gcp-organization) the organization apply SA **does not** hold it. A dedicated
-`<prefix>-guardrails-apply` SA is the only automation identity with
-`denyAdmin`; it has no WIF binding and is impersonable only by
-`guardrail_owner_members` (use one group whose membership is granted just in
-time through PAM, disjoint from the people who can change the gcp-organization
-workspace). gcp-organization no longer applies deny policies itself: it outputs
-`guardrail_deny_policy_specs`, a gcloud policy file per policy (containment plus
-`iam_deny_policies`). After each gcp-organization apply that changes them, the
-guardrail owner applies them:
+gcp-organization) the organization apply SA **does not** hold it. The
+containment policy and every `iam_deny_policies` entry are owned by the
+**`gcp-guardrails`** root (`envs/gcp/guardrails`). The approval for a change is
+a security-team apply of that workspace:
 
-```sh
-terraform output -json guardrail_deny_policy_specs \
-  | jq -r '.["contain-admin-identity"]' > contain-admin-identity.json
-gcloud iam policies create contain-admin-identity \
-  --attachment-point="cloudresourcemanager.googleapis.com/organizations/${ORG_ID}" \
-  --kind=denypolicies --policy-file=contain-admin-identity.json \
-  --impersonate-service-account="${PREFIX}-guardrails-apply@${ADMIN_PROJECT}.iam.gserviceaccount.com"
-# later changes: gcloud iam policies update ... --etag=<current etag>
-```
+- **Who.** tfc-admin puts `gcp-guardrails` in its own HCP project
+  (`<prefix>guardrails`). The security team (`security_team_id`) has write access
+  there and no other team has any: no platform, approvers or viewer grant.
+  Speculative plans, auto-apply and UI destroy plans are off.
+- **As what.** The workspace plans as `<prefix>-guardrails-plan` (read-only:
+  `iam.denyReviewer`, `tagViewer`) and applies as `<prefix>-guardrails-apply`,
+  the only automation identity with `denyAdmin`. gcp-bootstrap binds both to the
+  workspace by its immutable ID only, never by name. A production estate fails
+  the gcp-bootstrap plan until `tfc_workspace_ids` holds the `gcp-guardrails`
+  ID (tfc-admin writes it).
+- **From what.** The root authors containment from `config/landing-zone.yaml`
+  (`gcp.environments[*].is_production`, `gcp.admin_containment`,
+  `gcp.break_glass_group`, `gcp.principal_access_boundary`). These are the same
+  keys gcp-organization reads to create and bind the `containment/protected`
+  tag and the principal access boundary. Extra deny policies
+  (`iam_deny_policies`) are authored in the committed
+  `envs/gcp/guardrails/guardrails.auto.tfvars`, which CODEOWNERS assigns to the
+  platform and security teams, so a change is a PR the security team approves
+  and then applies. They are never workspace variables: the security team's
+  grant has variables read-only, and tfc-admin attaches no shared variable set
+  to `gcp-guardrails`. The root never reads gcp-organization state; it looks
+  up the org and the tag directly.
+- **Order.** Apply gcp-organization first, since it creates the tag, then
+  queue a run on `gcp-guardrails` and have the security team confirm it.
+
+gcp-organization neither builds nor applies deny policies in this mode. Its
+`guardrail_deny_policy_specs` output is empty (deprecated, removed in v1.0),
+and a check warns if `iam_deny_policies` is still set there.
+
+**Emergencies (PAM).** `guardrail_owner_members` (one group whose membership is
+granted just in time through PAM, disjoint from the people who can change the
+gcp-organization workspace) can still impersonate the guardrails apply SA.
+That is the break-glass path, for when the workspace itself is unavailable. It
+applies the `deny_policy_specs` output of gcp-guardrails with gcloud
+([break-glass runbook](break-glass.md#guardrails-deny-policy-emergency-change)),
+and the next security-team apply reconciles the state.
 
 Residual: the organization apply SA still holds `iam.securityAdmin` (it manages
 org IAM), so it could grant itself `denyAdmin` or impersonation on the
 guardrails SA. IAM deny can't condition on the role being granted, so the
 CRITICAL `guardrail_role_grant` and `guardrail_identity_change` watches alert
-on both. `guardrail_owner_mode = "organization"` restores the legacy in-stage
-apply (and `denyAdmin` on the organization apply SA). Migrating an existing
-deployment to `separate`: re-apply gcp-bootstrap, then
-`terraform state rm 'module.organization.module.iam_deny.google_iam_deny_policy.this'`
-in gcp-organization before its next apply (the apply SA can no longer delete the
-policy, which is the point), and let the guardrail owner `update` it from then on.
+on both. tfc-admin can also repoint `gcp-guardrails` (working directory, VCS
+branch, team access), so separation of duties also rests on CODEOWNERS for
+`envs/tfc-admin/**` ([known gaps](../known-gaps.md)).
+`guardrail_owner_mode = "organization"` restores the legacy in-stage apply
+(and `denyAdmin` on the organization apply SA); do not apply `gcp-guardrails`
+then. Migrating an existing deployment: see [UPGRADING.md](../../UPGRADING.md).
 
 The preset ships the placeholder
 `principalSet://goog/group/break-glass@REPLACE-ME.invalid`. Variable validation
@@ -268,7 +290,7 @@ denied for the SA, then promote.
 
 ### 3. Dedicated logging project (audit G4/C3)
 
-Set `logging_project_id` and `logging_project_number` (gcp-organization). The
+Set `gcp_overrides.logging_project_id` and `gcp_overrides.logging_project_number` (gcp-organization). The
 following then move out of the admin project into that project:
 
 - the org audit bucket
@@ -364,6 +386,6 @@ and `break_glass_user` are granted as `user:` principals only with
 watched by the break-glass alert either way. For human elevation prefer the
 just-in-time Privileged Access Manager entitlement: `enable_pam = true` in both
 gcp-bootstrap (gives organization-apply `privilegedaccessmanager.admin`) and
-gcp-organization, with `pam_eligible_groups` (requesters) and a disjoint
+gcp-organization (`gcp_overrides.enable_pam`), with `pam_eligible_groups` (requesters) and a disjoint
 `pam_approver_groups`. A grant lasts at most `pam_max_request_duration` (default
 1h) and needs a justification and an approval.

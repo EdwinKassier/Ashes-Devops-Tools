@@ -7,26 +7,41 @@
 module "aws_organization" {
   source = "../../../modules/aws/stages/organization"
 
-  accounts                = local.accounts
-  workload_accounts       = local.workload_accounts
-  allowed_regions         = local.allowed_regions
+  accounts            = local.accounts
+  workload_accounts   = local.workload_accounts
+  allowed_regions     = local.allowed_regions
+  aws_enabled_regions = local.aws_enabled_regions
+  # The org trail lives in the aws-security root's home region (org.regions.aws).
+  org_trail_home_region   = local.aws_region
   terraform_run_role_arn  = local.terraform_run_role_arn
   break_glass_role_arn    = local.break_glass_role_arn
   log_archive_bucket_name = local.log_archive_bucket_name
 
   # Cost governance (management-account-scoped).
   enable_cost_governance       = var.enable_cost_governance
-  budgets                      = var.budgets
+  budgets                      = local.budgets
   cost_allocation_tags         = var.cost_allocation_tags
   cost_notifications_topic_arn = var.cost_notifications_topic_arn
-  cost_anomaly_email           = var.cost_anomaly_email
+  cost_anomaly_email           = local.cost_anomaly_email
 
   # Member-account TFC workload identity (OIDC provider + tfc-plan / tfc-apply).
-  enable_tfc_oidc_baseline               = var.enable_tfc_oidc_baseline
-  tfc_organization                       = local.tfc_organization
-  tfc_hostname                           = var.tfc_hostname
-  pin_tfc_federation_to_org              = var.pin_tfc_federation_to_org
-  enable_tfc_management_roles            = var.enable_tfc_management_roles
+  enable_tfc_oidc_baseline         = var.enable_tfc_oidc_baseline
+  tfc_organization                 = local.tfc_organization
+  tfc_hostname                     = var.tfc_hostname
+  pin_tfc_federation_to_org        = var.pin_tfc_federation_to_org
+  enable_tfc_management_roles      = var.enable_tfc_management_roles
+  enable_security_service_teardown = var.enable_security_service_teardown
+  guard_alert_emails               = local.guard_alert_emails
+
+  # Org-wide Config recorders, then the recorder SCP (migration runbook).
+  enable_org_config_recorders                       = local.enable_org_config_recorders
+  org_config_recorders_failure_tolerance_percentage = var.org_config_recorders_failure_tolerance_percentage
+  create_management_config_service_linked_role      = var.create_management_config_service_linked_role
+  enable_config_recorder_scp                        = local.enable_config_recorder_scp
+
+  # Org trail managed by the CloudTrail delegated admin (security tooling).
+  enable_cloudtrail_delegated_admin = local.enable_cloudtrail_delegated_admin
+
   backup_service_role_region             = local.aws_region
   org_policy_overrides                   = var.org_policy_overrides
   partition                              = var.partition
@@ -51,4 +66,19 @@ module "aws_organization" {
   # VPC Block Public Access exclusions: required only for aws-workload
   # app_ingress_mode = "public_alb" (internet-facing ALB). Off by default.
   allow_vpc_bpa_exclusions = var.allow_vpc_bpa_exclusions
+
+  ec2_allowed_images = var.ec2_allowed_images
+}
+
+# The starter profile must have a budget: an unmetered sandbox is the failure
+# mode this profile exists to prevent.
+resource "terraform_data" "starter_requires_budget" {
+  count = local.profile == "starter" ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = coalesce(local.monthly_budget_usd, 0) > 0 && var.enable_cost_governance
+      error_message = "org.profile is starter but no budget resolves: set org.monthly_budget_usd in config/landing-zone.yaml (or var.monthly_budget_usd) above 0 and keep enable_cost_governance = true."
+    }
+  }
 }

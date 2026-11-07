@@ -10,31 +10,33 @@
 mock_provider "google" {}
 
 variables {
-  domain                                = "example.com"
-  org_id                                = "123456789"
-  admin_project_id                      = "mock-admin-project"
-  admin_project_number                  = "123456789012"
-  customer_id                           = "C01abc123"
-  admin_email                           = "admin@example.com"
-  terraform_admin_email                 = "terraform-admin@mock-admin-project.iam.gserviceaccount.com"
-  billing_account                       = "ABCDEF-123456-789012"
-  project_prefix                        = "my-org"
-  organization_admin_groups             = ["org-admins@example.com"]
-  billing_admin_groups                  = ["billing-admins@example.com"]
-  default_region                        = "europe-west1"
-  allowed_regions                       = ["europe-west1", "europe-west4"]
-  strict_folder_policy_environment_keys = ["prod"]
-  security_contact_email                = "security@example.com"
-  billing_contact_email                 = "billing@example.com"
-  monthly_budget_amount                 = 1000
-  budget_currency                       = "USD"
-  alert_notification_emails             = ["secops@example.com"]
+  domain                = "example.com"
+  org_id                = "123456789"
+  admin_project_id      = "mock-admin-project"
+  admin_project_number  = "123456789012"
+  customer_id           = "C01abc123"
+  terraform_admin_email = "terraform-admin@mock-admin-project.iam.gserviceaccount.com"
+  billing_account       = "ABCDEF-123456-789012"
+  project_prefix        = "my-org"
+  default_region        = "europe-west1"
+  monthly_budget_amount = 1000
   environments = {
     dev = {
       display_name            = "Development"
       description             = "Development environment"
       iam_group_role_bindings = {}
     }
+  }
+  gcp = {
+    admin_email                           = "admin@example.com"
+    organization_admin_groups             = ["org-admins@example.com"]
+    billing_admin_groups                  = ["billing-admins@example.com"]
+    allowed_regions                       = ["europe-west1", "europe-west4"]
+    strict_folder_policy_environment_keys = ["prod"]
+    security_contact_email                = "security@example.com"
+    billing_contact_email                 = "billing@example.com"
+    budget_currency                       = "USD"
+    alert_notification_emails             = ["secops@example.com"]
   }
 }
 
@@ -72,7 +74,9 @@ run "accepts_zero_budget" {
     target  = module.organization
     outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
   }
-  variables { monthly_budget_amount = 0 }
+  variables {
+    monthly_budget_amount = 0
+  }
 }
 
 run "rejects_negative_budget" {
@@ -86,12 +90,14 @@ run "rejects_negative_budget" {
     target  = module.organization
     outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
   }
-  variables { monthly_budget_amount = -100 }
+  variables {
+    monthly_budget_amount = -100
+  }
 }
 
 run "rejects_lowercase_currency" {
   command         = plan
-  expect_failures = [var.budget_currency]
+  expect_failures = [var.gcp]
   override_module {
     target  = module.cmek
     outputs = { keyring_id = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek", keyring_name = "my-org-org-cmek", key_ids = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" }, key_names = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" } }
@@ -100,12 +106,16 @@ run "rejects_lowercase_currency" {
     target  = module.organization
     outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
   }
-  variables { budget_currency = "usd" }
+  variables {
+    gcp = merge(var.gcp, {
+      budget_currency = "usd"
+    })
+  }
 }
 
 run "rejects_invalid_currency_length" {
   command         = plan
-  expect_failures = [var.budget_currency]
+  expect_failures = [var.gcp]
   override_module {
     target  = module.cmek
     outputs = { keyring_id = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek", keyring_name = "my-org-org-cmek", key_ids = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" }, key_names = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" } }
@@ -114,7 +124,11 @@ run "rejects_invalid_currency_length" {
     target  = module.organization
     outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
   }
-  variables { budget_currency = "US" }
+  variables {
+    gcp = merge(var.gcp, {
+      budget_currency = "US"
+    })
+  }
 }
 
 run "rejects_empty_environments" {
@@ -135,7 +149,7 @@ run "rejects_empty_environments" {
 
 run "rejects_empty_allowed_regions" {
   command         = plan
-  expect_failures = [var.allowed_regions]
+  expect_failures = [var.gcp]
   override_module {
     target  = module.cmek
     outputs = { keyring_id = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek", keyring_name = "my-org-org-cmek", key_ids = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" }, key_names = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" } }
@@ -145,13 +159,15 @@ run "rejects_empty_allowed_regions" {
     outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
-    allowed_regions = []
+    gcp = merge(var.gcp, {
+      allowed_regions = []
+    })
   }
 }
 
 run "rejects_invalid_security_email" {
   command         = plan
-  expect_failures = [var.security_contact_email]
+  expect_failures = [var.gcp]
   override_module {
     target  = module.cmek
     outputs = { keyring_id = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek", keyring_name = "my-org-org-cmek", key_ids = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" }, key_names = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" } }
@@ -161,13 +177,35 @@ run "rejects_invalid_security_email" {
     outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
-    security_contact_email = "not-an-email"
+    gcp = merge(var.gcp, {
+      security_contact_email = "not-an-email"
+    })
+  }
+}
+
+# admin_email has no default: unset in both gcp_overrides and gcp.admin_email
+# (config/landing-zone.yaml) fails the plan.
+run "rejects_unset_admin_email" {
+  command         = plan
+  expect_failures = [var.gcp]
+  override_module {
+    target  = module.cmek
+    outputs = { keyring_id = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek", keyring_name = "my-org-org-cmek", key_ids = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" }, key_names = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" } }
+  }
+  override_module {
+    target  = module.organization
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+  }
+  variables {
+    gcp = merge(var.gcp, {
+      admin_email = null
+    })
   }
 }
 
 run "rejects_invalid_billing_email" {
   command         = plan
-  expect_failures = [var.billing_contact_email]
+  expect_failures = [var.gcp]
   override_module {
     target  = module.cmek
     outputs = { keyring_id = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek", keyring_name = "my-org-org-cmek", key_ids = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" }, key_names = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" } }
@@ -177,7 +215,9 @@ run "rejects_invalid_billing_email" {
     outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
-    billing_contact_email = "missing-at-sign"
+    gcp = merge(var.gcp, {
+      billing_contact_email = "missing-at-sign"
+    })
   }
 }
 
@@ -192,9 +232,11 @@ run "rejects_os_login_exemption_of_strict_folder" {
     outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
-    os_login_exempt_environment_keys = ["prod"]
+    gcp = merge(var.gcp, {
+      os_login_exempt_environment_keys = ["prod"]
+    })
   }
-  expect_failures = [var.os_login_exempt_environment_keys]
+  expect_failures = [var.gcp]
 }
 
 run "rejects_prefixed_org_admin_group" {
@@ -208,9 +250,11 @@ run "rejects_prefixed_org_admin_group" {
     outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
-    organization_admin_groups = ["user:alice@example.com"]
+    gcp = merge(var.gcp, {
+      organization_admin_groups = ["user:alice@example.com"]
+    })
   }
-  expect_failures = [var.organization_admin_groups]
+  expect_failures = [var.gcp]
 }
 
 run "rejects_empty_org_admin_groups_without_escape" {
@@ -224,9 +268,11 @@ run "rejects_empty_org_admin_groups_without_escape" {
     outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
-    organization_admin_groups = []
+    gcp = merge(var.gcp, {
+      organization_admin_groups = []
+    })
   }
-  expect_failures = [var.organization_admin_groups]
+  expect_failures = [var.gcp]
 }
 
 run "rejects_admin_user_listed_as_group" {
@@ -240,9 +286,11 @@ run "rejects_admin_user_listed_as_group" {
     outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
-    organization_admin_groups = ["admin@example.com"]
+    gcp = merge(var.gcp, {
+      organization_admin_groups = ["admin@example.com"]
+    })
   }
-  expect_failures = [var.organization_admin_groups]
+  expect_failures = [var.gcp]
 }
 
 run "rejects_pam_without_approvers" {
@@ -256,10 +304,12 @@ run "rejects_pam_without_approvers" {
     outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
-    enable_pam          = true
-    pam_eligible_groups = ["requesters@example.com"]
+    gcp = merge(var.gcp, {
+      enable_pam          = true
+      pam_eligible_groups = ["requesters@example.com"]
+    })
   }
-  expect_failures = [var.pam_approver_groups]
+  expect_failures = [var.gcp]
 }
 
 run "rejects_pam_self_approval" {
@@ -273,11 +323,13 @@ run "rejects_pam_self_approval" {
     outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
-    enable_pam          = true
-    pam_eligible_groups = ["admins@example.com"]
-    pam_approver_groups = ["admins@example.com"]
+    gcp = merge(var.gcp, {
+      enable_pam          = true
+      pam_eligible_groups = ["admins@example.com"]
+      pam_approver_groups = ["admins@example.com"]
+    })
   }
-  expect_failures = [var.pam_approver_groups]
+  expect_failures = [var.gcp]
 }
 
 run "rejects_owner_in_delegated_folder_roles" {
@@ -298,7 +350,7 @@ run "rejects_owner_in_delegated_folder_roles" {
 
 run "rejects_unknown_guardrail_owner_mode" {
   command         = plan
-  expect_failures = [var.guardrail_owner_mode]
+  expect_failures = [var.gcp]
   override_module {
     target  = module.cmek
     outputs = { keyring_id = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek", keyring_name = "my-org-org-cmek", key_ids = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" }, key_names = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" } }
@@ -307,12 +359,16 @@ run "rejects_unknown_guardrail_owner_mode" {
     target  = module.organization
     outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
   }
-  variables { guardrail_owner_mode = "nobody" }
+  variables {
+    gcp = merge(var.gcp, {
+      guardrail_owner_mode = "nobody"
+    })
+  }
 }
 
 run "rejects_short_log_analytics_retention" {
   command         = plan
-  expect_failures = [var.log_analytics_retention_days]
+  expect_failures = [var.gcp]
   override_module {
     target  = module.cmek
     outputs = { keyring_id = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek", keyring_name = "my-org-org-cmek", key_ids = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" }, key_names = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" } }
@@ -321,12 +377,16 @@ run "rejects_short_log_analytics_retention" {
     target  = module.organization
     outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
   }
-  variables { log_analytics_retention_days = 30 }
+  variables {
+    gcp = merge(var.gcp, {
+      log_analytics_retention_days = 30
+    })
+  }
 }
 
 run "rejects_malformed_logging_settings_kms_key" {
   command         = plan
-  expect_failures = [var.logging_settings_kms_key_name]
+  expect_failures = [var.gcp]
   override_module {
     target  = module.cmek
     outputs = { keyring_id = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek", keyring_name = "my-org-org-cmek", key_ids = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" }, key_names = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" } }
@@ -335,17 +395,23 @@ run "rejects_malformed_logging_settings_kms_key" {
     target  = module.organization
     outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
   }
-  variables { logging_settings_kms_key_name = "not-a-key" }
+  variables {
+    gcp = merge(var.gcp, {
+      logging_settings_kms_key_name = "not-a-key"
+    })
+  }
 }
 
 run "override_key_with_prefix_rejected" {
   command = plan
 
   variables {
-    org_policy_overrides = { "constraints/compute.requireOsLogin" = { enforce = false } }
+    gcp = merge(var.gcp, {
+      org_policy_overrides = { "constraints/compute.requireOsLogin" = { enforce = false } }
+    })
   }
 
-  expect_failures = [var.org_policy_overrides]
+  expect_failures = [var.gcp]
   override_module {
     target  = module.cmek
     outputs = { keyring_id = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek", keyring_name = "my-org-org-cmek", key_ids = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" }, key_names = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" } }
@@ -360,10 +426,12 @@ run "non_https_issuer_rejected" {
   command = plan
 
   variables {
-    allowed_workload_identity_issuers = ["http://evil.example"]
+    gcp = merge(var.gcp, {
+      allowed_workload_identity_issuers = ["http://evil.example"]
+    })
   }
 
-  expect_failures = [var.allowed_workload_identity_issuers]
+  expect_failures = [var.gcp]
   override_module {
     target  = module.cmek
     outputs = { keyring_id = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek", keyring_name = "my-org-org-cmek", key_ids = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" }, key_names = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" } }

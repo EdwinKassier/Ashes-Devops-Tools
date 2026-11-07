@@ -18,7 +18,51 @@ release metadata for a Terraform Cloud run.
 
 ## [Unreleased]
 
-### Wave A of the [2026-11-06 enterprise boilerplate audit](docs/audit/2026-11-06-enterprise-boilerplate-audit.md)
+### Score-8 remediation ([2026-11-06 five-dimension audit](docs/audit/2026-11-06-five-dimension-audit.md))
+
+#### Security
+
+- **Mandatory destroy guard in its own overridable set (T-H4).** `destroy_guard` moves to
+  `policies/opa-destructive/` as a mandatory policy that denies every delete or replace of a
+  stateful type (GCP, AWS and `supabase_project`). tfc-admin attaches it as
+  `<prefix>destructive-change-guard` with `overridable = true`, so the hand-created security team
+  (`security_team_id`, granted Manage Policy Overrides by an owner) overrides an intended destroy;
+  the guardrails set stays non-overridable. `enable_policy_sets` defaults to on when `vcs_repo` is
+  set and the new `org.tfc.plan` is `standard` or `premium`, else a check warns that destructive
+  changes are unguarded. `drift-detection.yml` fails a leg whose workspace does not exist instead
+  of skipping it, unless `REAL_CLOUD_CHECKS_OPT_OUT=true`. Upgrade steps: `UPGRADING.md`.
+- **GitHub WIF tenant pin is an exact match (S-H2).** `custom.wifProviderTenantPinned` no longer
+  runs a structural regex over a GitHub provider's condition (a `)` inside a string literal could
+  close the "one parenthesised group" early and OR a `true` beside the owner pin). The condition
+  must now equal `assertion.repository_owner_id == "<id>"` for an allowed owner ID. app-services,
+  gcp-bootstrap and `modules/gcp/iam/workload-identity` render exactly that string
+  (`make consistency` asserts it), and pin repository, ref and environment in the principalSet
+  bindings through the new mapped attributes `repo_ref`, `repo_env` and `repo_ref_env`. This also
+  fixes app-services services that share a repository with different ref/environment pins: each
+  deploy SA is now reachable only by its own tuple. **Breaking:** see [UPGRADING.md](UPGRADING.md).
+
+#### Toolchain
+
+- **Terraform 1.17.** Every `versions.tf` requires `>= 1.17, < 2.0`, and CI pins 1.17.1.
+  tfc-admin's workspace `terraform_version` default is `~> 1.17`. Compatibility inputs carry
+  `deprecated`. Producer `contract` outputs are typed, and `check-contracts.sh` compares their
+  type keys with `local.contract`. `check-consistency.sh` guards the version pins and rejects
+  `import` blocks in modules. **Breaking:** see [UPGRADING.md](UPGRADING.md).
+- **SaaS bridge secrets never reach workload state (S-M3).** The workload roots read the saas
+  outputs with `ephemeral "tfe_outputs"`. The write-only version comes from `saas.bridge_rotation`
+  (or the new `saas_bridge_version`), and a postcondition fails the plan until the saas workspace
+  publishes the same `bridge_version`. Upgrade steps: `UPGRADING.md`.
+
+### Wave A of the [2026-11-06 enterprise boilerplate audit](docs/audit/archive/2026-11-06-enterprise-boilerplate-audit.md)
+
+- **The management aws-security role cannot disable org detection (S-H1).** Disabling delegated
+  admins or trusted access and deregistering delegated admins now need the off-by-default
+  `enable_security_service_teardown` gate, which is a separate inline policy. The role is
+  also denied trail untagging and resource-policy edits, CIS-alarm deletion and disabling,
+  and trail log-group, log-stream, metric-filter and retention deletion. `aws-organization` owns the new
+  `org-guard-alerts` topic (us-east-1, CMK-encrypted, `aws.guard_alert_emails`). Its EventBridge
+  rule covers those calls and org-trail selector and tag changes, with forwarding from every
+  other enabled region.
 
 #### Fixed
 
@@ -330,7 +374,7 @@ release metadata for a Terraform Cloud run.
   the import block, which now sets its VCS triggers and turns speculative plans off. If the
   workspace is deliberately CLI-only, set `manage_tfc_admin_workspace = false`.
 
-Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/2026-11-05-enterprise-boilerplate-audit.md).
+Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/2026-11-05-enterprise-boilerplate-audit.md).
 
 ### Added
 

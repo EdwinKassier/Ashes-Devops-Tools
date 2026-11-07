@@ -37,19 +37,8 @@ variable "enable_github_provider" {
   default     = false
 }
 
-variable "github_organization" {
-  description = "GitHub organization to restrict access to (optional). Must contain only alphanumeric characters and hyphens — value is interpolated into a CEL expression."
-  type        = string
-  default     = null
-
-  validation {
-    condition     = var.github_organization == null || can(regex("^[a-zA-Z0-9][a-zA-Z0-9-]*$", var.github_organization))
-    error_message = "github_organization must contain only alphanumeric characters and hyphens (no single quotes or special characters — this value is embedded in a CEL condition)."
-  }
-}
-
 variable "github_sa_bindings" {
-  description = "List of GitHub repository to service account bindings. repository must be 'owner/repo' format — value is interpolated into a CEL expression. Set repository_id (the immutable numeric GitHub repository ID) to bind on attribute.repository_id instead of the mutable repository name. Set key when service_account_email is unknown until apply."
+  description = "List of GitHub repository to service account bindings. repository must be 'owner/repo' format. Set repository_id (the immutable numeric GitHub repository ID) to bind on attribute.repository_id (or attribute.repo_ref with github_allowed_refs) instead of the mutable repository name. Set key when service_account_email is unknown until apply."
   type = list(object({
     repository            = string # Format: owner/repo
     repository_id         = optional(string)
@@ -63,7 +52,7 @@ variable "github_sa_bindings" {
 
   validation {
     condition     = alltrue([for b in var.github_sa_bindings : can(regex("^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$", b.repository))])
-    error_message = "Each repository must be in 'owner/repo' format using only alphanumeric characters, hyphens, underscores, and dots (no single quotes — this value is embedded in a CEL condition)."
+    error_message = "Each repository must be in 'owner/repo' format using only alphanumeric characters, hyphens, underscores, and dots (it is embedded in a principalSet URI)."
   }
 
   validation {
@@ -73,7 +62,7 @@ variable "github_sa_bindings" {
 }
 
 variable "github_repository_owner_id" {
-  description = "Immutable numeric GitHub owner (org/user) ID. When set, the GitHub provider attribute_condition also requires assertion.repository_owner_id to match, so an org rename / name squat cannot satisfy the trust."
+  description = "Immutable numeric GitHub owner (org/user) ID (gh api repos/<owner>/<repo> --jq .owner.id). Required when enable_github_provider = true: the provider attribute_condition is exactly assertion.repository_owner_id == \"<id>\", the form the org-policy constraint custom.wifProviderTenantPinned accepts. An org rename or name squat cannot satisfy it."
   type        = string
   default     = null
 
@@ -81,18 +70,27 @@ variable "github_repository_owner_id" {
     condition     = var.github_repository_owner_id == null || can(regex("^[0-9]+$", var.github_repository_owner_id))
     error_message = "github_repository_owner_id must be the numeric GitHub owner ID (digits only)."
   }
+
+  validation {
+    condition     = !var.enable_github_provider || var.github_repository_owner_id != null
+    error_message = "enable_github_provider requires github_repository_owner_id: the provider condition is the owner pin, and a provider without one would trust every GitHub repository."
+  }
 }
 
 variable "github_allowed_refs" {
-  description = "List of allowed git refs for GitHub Actions (e.g., ['refs/heads/main', 'refs/heads/release/*']). When set, only workflows triggered from these refs can authenticate."
+  description = "Exact git refs (e.g. [\"refs/heads/main\", \"refs/tags/v1\"]) a GitHub workflow must run from to impersonate a bound SA. When set, every github_sa_bindings entry is bound once per ref on attribute.repo_ref (\"<repository_id>/<ref>\"), so each entry needs repository_id. Empty (default) binds on attribute.repository_id: any ref of the repository. Wildcards are not supported (a principalSet value is an exact match)."
   type        = list(string)
   default     = []
-}
 
-variable "github_attribute_condition_override" {
-  description = "Full custom attribute condition for GitHub provider. When set, overrides the default condition based on organization and allowed_refs."
-  type        = string
-  default     = null
+  validation {
+    condition     = alltrue([for r in var.github_allowed_refs : can(regex("^[A-Za-z0-9_./-]+$", r))])
+    error_message = "github_allowed_refs entries may contain only letters, digits, '_', '.', '/' and '-' (no wildcards, quotes or spaces: each is an exact principalSet value)."
+  }
+
+  validation {
+    condition     = length(var.github_allowed_refs) == 0 || alltrue([for b in var.github_sa_bindings : b.repository_id != null])
+    error_message = "github_allowed_refs binds on attribute.repo_ref (\"<repository_id>/<ref>\"), so every github_sa_bindings entry needs repository_id."
+  }
 }
 
 # GitLab Provider Configuration

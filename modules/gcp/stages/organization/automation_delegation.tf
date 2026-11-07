@@ -15,7 +15,7 @@
 locals {
   # Environment folders get a scoped policy; the shared (hub/DNS) folder stays in
   # the org-wide policy managed by gcp-network-hub.
-  scoped_policy_environment_keys = var.enable_scoped_access_policies ? sort([
+  scoped_policy_environment_keys = var.gcp.enable_scoped_access_policies ? sort([
     for k in keys(var.environments) : k if k != var.shared_folder_key
   ]) : []
 

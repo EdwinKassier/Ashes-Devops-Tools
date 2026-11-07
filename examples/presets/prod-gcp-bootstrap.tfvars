@@ -40,8 +40,10 @@ enable_pam = true
 # Pass 2 onwards: no standing human impersonation of the bootstrap apply SA.
 enable_phase0_admin_impersonation = false
 
-# Guardrail owner (separate mode is the default): only this PAM-gated group may
-# impersonate the guardrails SA that owns the IAM deny policies. The placeholder
-# is rejected by validation until you replace it.
+# Guardrail owner (separate mode is the default): the security-team
+# gcp-guardrails workspace applies the IAM deny policies as the guardrails SA
+# (WIF-bound by its tfc_workspace_ids entry, which tfc-admin writes). This
+# PAM-gated group is the break-glass path: only it may impersonate that SA. The
+# placeholder is rejected by validation until you replace it.
 guardrail_owner_mode    = "separate"
 guardrail_owner_members = ["group:REPLACE-guardrail-owners@your-domain.invalid"]

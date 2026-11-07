@@ -24,10 +24,22 @@ locals {
     owner             = try(tostring(local.lz.org.owner), null)
     aws_region        = try(tostring(local.lz.org.regions.aws), null)
     tfc_organization  = try(tostring(local.lz.org.tfc.organization), null)
-    # aws.contracts.organization: stage contract override (same shape as
-    # var.organization_contract). Present => the aws-organization read is skipped.
+    # aws.identity.groups: group display name => [{permission_set, accounts}]
+    identity_groups = try(local.lz.aws.identity.groups, null) == null ? null : {
+      for g, entries in local.lz.aws.identity.groups : g => [
+        for e in entries : { permission_set = tostring(e.permission_set), accounts = [for a in e.accounts : tostring(a)] }
+      ]
+    }
+    # aws.contracts.organization: stage contract override (same type as
+    # var.organization_contract, identical in every aws root). Present => the
+    # aws-organization read is skipped.
     organization_contract = try(local.lz.aws.contracts.organization, null) == null ? null : {
-      account_ids = { for k, v in try(local.lz.aws.contracts.organization.account_ids, {}) : k => tostring(v) }
+      organization_id       = try(tostring(local.lz.aws.contracts.organization.organization_id), null)
+      organization_root_id  = try(tostring(local.lz.aws.contracts.organization.organization_root_id), null)
+      management_account_id = try(tostring(local.lz.aws.contracts.organization.management_account_id), null)
+      ou_ids                = { for k, v in try(local.lz.aws.contracts.organization.ou_ids, {}) : k => tostring(v) }
+      account_ids           = { for k, v in try(local.lz.aws.contracts.organization.account_ids, {}) : k => tostring(v) }
+      account_role_arns     = { for k, v in try(local.lz.aws.contracts.organization.account_role_arns, {}) : k => tostring(v) }
     }
   }
 

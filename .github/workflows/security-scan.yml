@@ -8,7 +8,7 @@ on:
     paths:
       - '**.tf'
       - '**.tfvars'
-      - '.tfsec.yml'
+      - '.checkov.yaml'
       - '.github/workflows/security-scan.yml'
   schedule:
     - cron: '0 0 * * 0'  # Weekly on Sunday at midnight

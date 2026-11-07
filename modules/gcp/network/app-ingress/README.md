@@ -75,14 +75,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.17, < 2.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | 8.10.0 |
 
 
 
@@ -93,15 +93,15 @@ The following resources are created:
 
 - resource.google_compute_backend_service.this (modules/gcp/network/app-ingress/main.tf#L25)
 - resource.google_compute_global_address.this (modules/gcp/network/app-ingress/main.tf#L7)
-- resource.google_compute_global_forwarding_rule.http (modules/gcp/network/app-ingress/main.tf#L97)
-- resource.google_compute_global_forwarding_rule.https (modules/gcp/network/app-ingress/main.tf#L69)
-- resource.google_compute_managed_ssl_certificate.this (modules/gcp/network/app-ingress/main.tf#L50)
+- resource.google_compute_global_forwarding_rule.http (modules/gcp/network/app-ingress/main.tf#L102)
+- resource.google_compute_global_forwarding_rule.https (modules/gcp/network/app-ingress/main.tf#L74)
+- resource.google_compute_managed_ssl_certificate.this (modules/gcp/network/app-ingress/main.tf#L55)
 - resource.google_compute_region_network_endpoint_group.this (modules/gcp/network/app-ingress/main.tf#L14)
-- resource.google_compute_target_http_proxy.redirect (modules/gcp/network/app-ingress/main.tf#L91)
-- resource.google_compute_target_https_proxy.this (modules/gcp/network/app-ingress/main.tf#L59)
-- resource.google_compute_url_map.redirect (modules/gcp/network/app-ingress/main.tf#L80)
-- resource.google_compute_url_map.this (modules/gcp/network/app-ingress/main.tf#L44)
-- resource.google_dns_record_set.this (modules/gcp/network/app-ingress/main.tf#L108)
+- resource.google_compute_target_http_proxy.redirect (modules/gcp/network/app-ingress/main.tf#L96)
+- resource.google_compute_target_https_proxy.this (modules/gcp/network/app-ingress/main.tf#L64)
+- resource.google_compute_url_map.redirect (modules/gcp/network/app-ingress/main.tf#L85)
+- resource.google_compute_url_map.this (modules/gcp/network/app-ingress/main.tf#L49)
+- resource.google_dns_record_set.this (modules/gcp/network/app-ingress/main.tf#L113)
 
 
 ## Inputs

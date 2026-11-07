@@ -1,0 +1,78 @@
+# CODEOWNERS for the ${org_name} landing zone, rendered by
+# scripts/init-landing-zone.sh --codeowners from templates/CODEOWNERS.tftpl.
+#
+# This file only protects anything when:
+#   1. ${platform_team}, ${security_team}, ${app_platform_team} and ${docs_team} exist and each has at least one member.
+#   2. Branch protection on the default branch has "Require review from Code
+#      Owners" enabled (docs/guides/BRANCH_PROTECTION.md).
+#   3. The required teams together have at least two people, so a guardrail
+#      change cannot be self-approved.
+#
+# PRECEDENCE: GitHub applies the LAST matching line only, and every owner on that
+# line is required. General areas come first; security-sensitive paths come
+# LATER so they win and require BOTH the platform and the security team. Keep that
+# order when editing.
+
+# ── Default ──────────────────────────────────────────────────────────────────
+* ${platform_team}
+
+# ── CI/CD, supply-chain, and security gates ──────────────────────────────────
+/.github/                 ${platform_team} ${security_team}
+/scripts/                 ${platform_team}
+/Makefile                 ${platform_team}
+/.terraform-docs.yml      ${platform_team}
+/.tflint.hcl              ${platform_team}
+/.checkov.yaml            ${platform_team} ${security_team}
+/.pre-commit-config.yaml  ${platform_team} ${security_team}
+
+# ── Deployable roots ─────────────────────────────────────────────────────────
+/envs/           ${platform_team}
+/envs/saas/      ${app_platform_team}
+
+# ── Modules ──────────────────────────────────────────────────────────────────
+/modules/gcp/        ${platform_team}
+/modules/aws/        ${platform_team}
+/modules/tfc/        ${platform_team}
+/modules/supabase/   ${app_platform_team}
+/modules/vercel/     ${app_platform_team}
+/modules/saas/       ${app_platform_team}
+
+# ── Examples and docs ────────────────────────────────────────────────────────
+/examples/     ${platform_team}
+/docs/         ${docs_team}
+SECURITY.md    ${security_team}
+CHANGELOG.md   ${platform_team}
+
+# ── Control-plane and security roots (platform + security REQUIRED) ──────────
+/envs/gcp/bootstrap/      ${platform_team} ${security_team}
+/envs/gcp/organization/   ${platform_team} ${security_team}
+/envs/gcp/guardrails/     ${platform_team} ${security_team}
+/envs/aws/organization/   ${platform_team} ${security_team}
+/envs/aws/security/       ${platform_team} ${security_team}
+/envs/aws/identity/       ${platform_team} ${security_team}
+/envs/aws/backup/         ${platform_team} ${security_team}
+/envs/tfc-admin/          ${platform_team} ${security_team}
+
+# ── Security-sensitive modules (platform + security REQUIRED) ────────────────
+/modules/gcp/governance/            ${platform_team} ${security_team}
+/modules/gcp/iam/                   ${platform_team} ${security_team}
+/modules/gcp/stages/organization/   ${platform_team} ${security_team}
+/modules/gcp/stages/bootstrap/      ${platform_team} ${security_team}
+/modules/gcp/stages/guardrails/     ${platform_team} ${security_team}
+/modules/aws/governance/            ${platform_team} ${security_team}
+/modules/aws/iam/                   ${platform_team} ${security_team}
+/modules/aws/security/              ${platform_team} ${security_team}
+/modules/aws/stages/organization/   ${platform_team} ${security_team}
+/modules/aws/stages/security/       ${platform_team} ${security_team}
+/modules/aws/stages/backup/         ${platform_team} ${security_team}
+
+# ── Policy-as-code and the configuration file ────────────────────────────────
+# The OPA guardrails decide what a plan may do; landing-zone.yaml feeds every root;
+# tfc-workspaces.yaml sets per-workspace variables (credential env vars included).
+/policies/                   ${platform_team} ${security_team}
+/config/landing-zone.yaml    ${platform_team} ${security_team}
+/config/tfc-workspaces.yaml  ${platform_team} ${security_team}
+/config/sandbox/             ${platform_team} ${security_team}
+
+# ── This file ────────────────────────────────────────────────────────────────
+/.github/CODEOWNERS  ${platform_team} ${security_team}

@@ -2,12 +2,19 @@
 
 The landing zone gives you a governed, networked, secured environment. This guide
 shows how a service team runs an application on it. On GCP the golden path is
-**implemented in code**: you add one entry to the `app_services` map in the
-`gcp-workload-<env>` workspace, and `modules/gcp/stages/app-services` (called
-once from `envs/gcp/workload/main.tf`) creates everything below. The default
-(`app_services = {}`, every flag off) creates nothing.
+**implemented in code**: you add one entry under `gcp.environments.<env>.services`
+in `config/landing-zone.yaml`, open a PR, and after merge Terraform Cloud applies
+the `gcp-workload-<env>` workspace. `modules/gcp/stages/app-services` (called once
+from `modules/gcp/stages/environment`, which `envs/gcp/workload` deploys) creates everything below. With no entry (and
+every flag off) nothing is created.
 
-## What one `app_services` entry creates (GCP)
+**One flow for every change:** edit `config/landing-zone.yaml` -> PR (CI plus a
+Terraform Cloud speculative plan) -> merge -> the `config/**` trigger queues a
+run -> approve the apply in Terraform Cloud. Never `terraform apply` locally. An
+explicit `app_services` workspace variable still works and replaces the config
+entry for that workspace.
+
+## What one `services` entry creates (GCP)
 
 All resources land in the **environment host project** (`environment_config[<env>].host_project_id`
 from `gcp-projects`), on the **environment Shared VPC**, not the hub.
@@ -17,6 +24,8 @@ from `gcp-projects`), on the **environment Shared VPC**, not the hub.
 | Artifact Registry docker repo | `<region>-docker.pkg.dev/<host>/<svc>` | Immutable tags; cleanup policies (keep the 20 most recent versions, delete untagged after 7 days); optional CMEK via `artifact_registry_kms_key_name`. |
 | Runtime service account | `<svc>-run@<host>.iam.gserviceaccount.com` | No project roles. It gets `secretmanager.secretAccessor` on the secrets it references only, plus Cloud SQL client/instanceUser conditioned to its own instance when it has a database. |
 | Cloud Run v2 service | `<svc>` | `INGRESS_TRAFFIC_INTERNAL_ONLY` by default, Direct VPC egress (`PRIVATE_RANGES_ONLY`) to the env VPC's first private subnet, min 0 / max 10 instances, secrets from Secret Manager, optional Binary Authorization, deletion protection follows `enable_deletion_protection`. |
+| Cloud Run v2 job (instead, with `runtime = "cloud-run-job"`) | `<svc>` | Run to completion, no URL: `job = { task_count, parallelism, max_retries }`, `timeout` is the task timeout. Same runtime SA, secrets, database and Direct VPC egress as a service; `invoker_members` get `run.invoker` on the job (start executions) and the deploy SA `run.developer`. No request alerts or SLO; `enable_unauthenticated` is rejected. |
+| SLO (optional `slo`) | `<svc>-<availability\|latency>` | `modules/gcp/monitoring/slo` on a basic `CLOUD_RUN` monitored service `cloud-run-<svc>`: `slo = { goal = 0.999 }` (availability) or `slo = { sli_type = "latency", latency_threshold = "0.5s" }`; `enable_burn_rate_alert = true` pages the `app_alert_notification_channel_ids`. Cloud Run services only. |
 | Cloud SQL Postgres (optional `database`) | `<svc>-db` | Private IP only through the env VPC's Private Service Access (the host stage creates it by default: `enable_private_service_access = true`). TLS-only, backups + PITR, IAM database auth. The runtime SA is the IAM database user. Edition `ENTERPRISE` with `db-custom-1-3840`. |
 | Deploy identity (optional `github`) | `<svc>-deploy@<host>.iam.gserviceaccount.com` | Impersonable only through the app-deploy WIF pool, by the GitHub repo's **immutable numeric `repository_id`** (optionally a ref and/or a GitHub environment). Roles: `run.developer` on the service, `artifactregistry.writer` on the repo, `iam.serviceAccountUser` on the runtime SA only. |
 
@@ -36,7 +45,7 @@ creates. Turn it on with `enable_app_deploy_wif = true`. Optionally set
 
    ```bash
    gh api repos/acme/orders-api --jq .id   # repository_id, e.g. 987654321
-   gh api orgs/acme --jq .id               # optional github_repository_owner_id
+   gh api orgs/acme --jq .id               # github_repository_owner_id (required)
    ```
 
 3. Create any runtime secrets the service reads in the host project, and set the
@@ -49,30 +58,39 @@ creates. Turn it on with `enable_app_deploy_wif = true`. Optionally set
 
    (Or declare the secret container with `modules/gcp/data/secret-manager`.)
 
-## Step 2: add the entry (tfvars)
+## Step 2: add the entry (config/landing-zone.yaml)
 
-In the `gcp-workload-<env>` workspace variables (or your tfvars):
+Add the service under its environment and open a PR:
 
-```hcl
-enable_app_deploy_wif      = true
-github_repository_owner_id = "12345678" # optional, numeric org ID
-
-app_services = {
-  orders-api = {
-    env_vars = { LOG_LEVEL = "info" }
-    secrets  = { STRIPE_API_KEY = { secret = "orders-api-stripe-key" } }
-    database = { databases = ["orders"] }
-    github = {
-      repository_id = "987654321"        # immutable numeric ID
-      repository    = "acme/orders-api"  # informational only
-      ref           = "refs/heads/main"  # optional: only this ref may deploy
-      # environment = "dev"              # optional: only this GitHub environment
-    }
-  }
-}
+```yaml
+gcp:
+  environments:
+    dev:
+      services:
+        orders-api:
+          env_vars: {LOG_LEVEL: info}
+          secrets:
+            STRIPE_API_KEY: {secret: orders-api-stripe-key}
+          database: {databases: [orders]}
+          github:
+            repository_id: "987654321"        # immutable numeric ID
+            repository: acme/orders-api       # informational only
+            ref: refs/heads/main              # optional: only this ref may deploy
+            # environment: dev                # optional: only this GitHub environment
 ```
 
-A fully commented version is in
+The deploy identity also needs two workspace-level settings, which are not
+service entries: `enable_app_deploy_wif = true` and
+`github_repository_owner_id = "12345678"` (numeric org ID), set as variables on
+the `gcp-workload-<env>` workspace.
+
+`config/landing-zone.schema.json` checks the entry's fields (it mirrors the
+stage's typed `services` variable). Promoting to the next environment is the same
+entry under that environment (see
+[`../runbooks/promotion.md`](../runbooks/promotion.md)).
+
+A fully commented version, in tfvars form (the same fields; for a workspace
+variable override), is in
 [`examples/app-services/dev.app-services.tfvars`](../../examples/app-services/dev.app-services.tfvars).
 The typed shape, with every default, is the `services` variable of
 [`modules/gcp/stages/app-services`](../../modules/gcp/stages/app-services/README.md).
@@ -84,8 +102,8 @@ root's `app_bootstrap_image` / `gcp.workload.bootstrap_image`, else
 `runtime_project_roles` (an escape hatch, empty by default), `artifact_registry`
 (cleanup tuning) and `database.{tier,edition,enable_high_availability,encryption_key_name}`.
 
-Terraform Cloud plans and applies the change. The first apply creates the service
-with the bootstrap image.
+After merge, Terraform Cloud plans the change and a person approves the apply.
+The first apply creates the service with the bootstrap image.
 
 When a database is declared, the service receives `DB_INSTANCE_CONNECTION_NAME`,
 `DB_IAM_USER` and `DB_NAME`. Connect with the Cloud SQL language connector (or the
@@ -137,7 +155,7 @@ action is an equivalent replacement for the `gcloud run deploy` step.
 **Who owns what:** Terraform owns the service *configuration* (ingress, VPC egress,
 secrets, runtime SA, scaling). The pipeline owns the *image*. The Cloud Run module
 ignores image and client changes, so Terraform runs never roll back a deploy.
-Change configuration in `app_services`, not with `gcloud run deploy --set-*` flags.
+Change configuration in `services` in the YAML, not with `gcloud run deploy --set-*` flags.
 Terraform would revert those flags on its next apply.
 
 ## Exposing the service (front door)
@@ -187,8 +205,8 @@ with a deploy SA that you grant `roles/container.developer` yourself.
 
 ## AWS golden path (containers)
 
-Implemented in code: add an entry to `services` in `aws-workload-<env>`. See
-[AWS](#aws) at the end of this guide.
+Implemented in code: add an entry under `aws.workload_environments.<env>.services`
+in `config/landing-zone.yaml`. See [AWS](#aws) at the end of this guide.
 
 ## What is still your responsibility
 
@@ -196,9 +214,10 @@ Implemented in code: add an entry to `services` in `aws-workload-<env>`. See
 - Any extra runtime roles (`runtime_project_roles` is empty by default, so keep it
   minimal).
 - The content of your domain's DNS zone.
-- Service objectives: attach `modules/gcp/monitoring/slo` to the service.
-- Promotion: add the same entry to the next environment's tfvars (a new deploy SA
-  and provider are created per environment). See
+- Choosing service objectives: `slo` creates one per service; pick a goal your error budget can carry.
+- Promotion: add the same entry under the next environment in
+  `config/landing-zone.yaml` (a new deploy SA and provider are created per
+  environment). See
   [`../runbooks/promotion.md`](../runbooks/promotion.md).
 
 ## Caveats to validate on real GCP
@@ -214,20 +233,26 @@ These items are verified by mocked plan tests only:
   `app_bootstrap_image`) once for every service, or `image` per service.
 - **Binary Authorization.** The first-revision image must satisfy the policy, or
   the first apply fails. Use an attested image as `bootstrap_image`.
-- **Shared repos.** If two services share one GitHub repository with *different*
-  `ref`/`environment` constraints, the provider condition is the union of both. A
-  token that satisfies either constraint can impersonate both deploy SAs. Give each
-  constraint its own repository, or use the same constraint for both.
+- **Shared repos.** Two services may share one GitHub repository with *different*
+  `ref`/`environment` constraints. The provider condition only pins the owner
+  (`assertion.repository_owner_id == "<id>"`); each deploy SA is bound to the
+  principalSet of its own `(repository_id, ref, environment)` tuple
+  (`attribute.repo_ref_env`, `repo_ref`, `repo_env` or `repository_id`), so a
+  token reaches only the deploy SA whose constraint it satisfies. A service that
+  declares neither `ref` nor `environment` accepts any ref of the repository.
 - **Pool IDs.** A WIF pool ID stays reserved for 30 days after deletion. Set
   `app_deploy_wif_pool_id` if you need to re-create a pool sooner.
 
 ## AWS
 
-On AWS the golden path is also **implemented in code**: add one entry to the
-`services` map in the `aws-workload-<env>` workspace, and
+On AWS the golden path is also **implemented in code**, with the same flow: add
+one entry under `aws.workload_environments.<env>.services` in
+`config/landing-zone.yaml`, open a PR, merge, and approve the apply that
+Terraform Cloud queues for `aws-workload-<env>`.
 `modules/aws/stages/app-services` (called once from `envs/aws/workload/main.tf`)
-creates everything below in that environment's workload account. The default
-(`services = {}`, `enable_github_oidc = false`) creates nothing.
+creates everything below in that environment's workload account. With no entry
+(and `enable_github_oidc = false`) nothing is created. An explicit `services`
+workspace variable replaces the config entry.
 
 ### What one `services` entry creates (AWS)
 
@@ -277,28 +302,29 @@ Shared per environment, created only when `services` is non-empty:
   required reviewers for `prod`, become part of the trust: the deploy role only
   accepts tokens from jobs that run in that environment.
 
-### Step 2: add the entry (AWS tfvars)
+### Step 2: add the entry (AWS, config/landing-zone.yaml)
 
-```hcl
-# envs/aws/workload — TF_WORKSPACE=aws-workload-dev
-enable_github_oidc = true
-
-services = {
-  orders = {
-    container_port    = 8080
-    cpu               = 512
-    memory            = 1024
-    health_check_path = "/healthz"
-    environment       = { LOG_LEVEL = "info" }
-    secrets           = { STRIPE_KEY = "arn:aws:secretsmanager:eu-west-2:222222222222:secret:orders/stripe-AbCdEf" }
-
-    # Deploy role trusts ONLY: repo:acme/orders:environment:dev
-    github = { repository = "acme/orders" }
-
-    database = {} # optional Aurora PostgreSQL
-  }
-}
+```yaml
+aws:
+  workload_environments:
+    dev:
+      account_key: workload_dev
+      services:
+        orders:
+          container_port: 8080
+          cpu: 512
+          memory: 1024
+          health_check_path: /healthz
+          environment: {LOG_LEVEL: info}
+          secrets:
+            STRIPE_KEY: arn:aws:secretsmanager:eu-west-2:222222222222:secret:orders/stripe-AbCdEf
+          # Deploy role trusts ONLY: repo:acme/orders:environment:dev
+          github: {repository: acme/orders}
+          database: {}   # optional Aurora PostgreSQL
 ```
+
+`enable_github_oidc = true` (needed for the `github` deploy role) is a
+workspace-level variable on `aws-workload-<env>`, not a service field.
 
 OIDC subject options, in order of precedence:
 

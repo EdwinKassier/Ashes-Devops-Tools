@@ -4,11 +4,13 @@
 
 mock_provider "aws" {}
 mock_provider "aws" { alias = "us_east_1" }
+# tfe serves only the SaaS secret bridge (ephemeral "tfe_outputs"); mocked so
+# no run contacts HCP Terraform.
+mock_provider "tfe" {}
 
 variables {
   landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
   environment              = "dev"
-  config_role_arn          = "arn:aws:iam::222222222222:role/config-recorder"
   kms_key_arn              = "arn:aws:kms:eu-west-2:222222222222:key/abcd-1234"
 }
 
@@ -16,8 +18,10 @@ override_data {
   target = data.terraform_remote_state.aws_organization
   values = {
     outputs = {
-      account_ids       = { workload_nonprod = "222222222222", workload_prod = "333333333333" }
-      account_role_arns = { workload_nonprod = "arn:aws:iam::222222222222:role/cross-account", workload_prod = "arn:aws:iam::333333333333:role/cross-account" }
+      contract = {
+        account_ids       = { workload_nonprod = "222222222222", workload_prod = "333333333333" }
+        account_role_arns = { workload_nonprod = "arn:aws:iam::222222222222:role/cross-account", workload_prod = "arn:aws:iam::333333333333:role/cross-account" }
+      }
     }
   }
 }
@@ -26,8 +30,10 @@ override_data {
   target = data.terraform_remote_state.aws_network
   values = {
     outputs = {
-      tgw_id        = "tgw-000000000000abcd"
-      ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" }
+      contract = {
+        tgw_id        = "tgw-000000000000abcd"
+        ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" }
+      }
     }
   }
 }
@@ -36,7 +42,9 @@ override_data {
   target = data.terraform_remote_state.aws_security
   values = {
     outputs = {
-      log_archive_bucket_name = "cfgco-org-log-archive"
+      contract = {
+        log_archive_bucket_name = "cfgco-org-log-archive"
+      }
     }
   }
 }
@@ -76,4 +84,112 @@ run "unknown_environment_fails" {
   }
 
   expect_failures = [var.workload_account_key]
+}
+
+run "services_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.services.yaml"
+  }
+
+  assert {
+    condition     = join(",", sort(keys(local.services))) == "api,worker" && local.services["api"].cpu == 512 && local.apps_enabled
+    error_message = "aws.workload_environments.dev.services must populate the services."
+  }
+}
+
+run "empty_services_section_is_noop" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.services.yaml"
+    environment              = "prod"
+  }
+
+  assert {
+    condition     = length(local.services) == 0 && !local.apps_enabled
+    error_message = "an empty services section must create nothing."
+  }
+}
+
+run "variable_overrides_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.services.yaml"
+    services                 = { only = {} }
+  }
+
+  assert {
+    condition     = join(",", keys(local.services)) == "only"
+    error_message = "an explicit services variable must win over the config file."
+  }
+}
+
+# Scaffold matrix: committed scaffolder output (make scaffold-fixtures) must plan.
+run "scaffold_aws_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.aws.yaml"
+    environment              = "dev"
+  }
+
+  # The scaffold names its workload accounts workload_dev / workload_prod.
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = {
+      outputs = {
+        contract = {
+          account_ids       = { workload_dev = "222222222222", workload_prod = "333333333333" }
+          account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account", workload_prod = "arn:aws:iam::333333333333:role/cross-account" }
+        }
+      }
+    }
+  }
+}
+
+run "scaffold_gcp_aws_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws.yaml"
+    environment              = "dev"
+  }
+
+  # The scaffold names its workload accounts workload_dev / workload_prod.
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = {
+      outputs = {
+        contract = {
+          account_ids       = { workload_dev = "222222222222", workload_prod = "333333333333" }
+          account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account", workload_prod = "arn:aws:iam::333333333333:role/cross-account" }
+        }
+      }
+    }
+  }
+}
+
+run "scaffold_gcp_aws_saas_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
+    environment              = "dev"
+  }
+
+  # The scaffold names its workload accounts workload_dev / workload_prod.
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = {
+      outputs = {
+        contract = {
+          account_ids       = { workload_dev = "222222222222", workload_prod = "333333333333" }
+          account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account", workload_prod = "arn:aws:iam::333333333333:role/cross-account" }
+        }
+      }
+    }
+  }
 }

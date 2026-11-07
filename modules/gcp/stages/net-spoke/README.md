@@ -7,8 +7,8 @@ private or peering DNS zones, an opt-in Cloud Armor edge policy, opt-in VPC
 flow-log export (CMEK), Shared VPC service-project attachments and the
 environment VPC Service Controls perimeter.
 
-Called by [`envs/gcp/workload`](../../../../envs/gcp/workload/). It replaces the
-spoke use of the deprecated [`stages/host`](../host/) module.
+Called by [`stages/environment`](../environment/) (the `envs/gcp/workload` composition). It replaces the
+spoke use of the removed `stages/host` module.
 
 ## Interface
 
@@ -27,7 +27,7 @@ Related inputs are grouped into typed objects, each with secure defaults:
 ## Migrating from stages/host
 
 Module and resource names match `stages/host`, so a caller that keeps its
-module label (as `envs/gcp/workload` does with `module "host"`) only moves the
+module label (as `stages/environment` does with `module "host"`) only moves the
 network core into the `network` building block. Services (NAT, PSA, PSC, Cloud
 Armor, peering, DNS, flow-log export, VPC-SC, Shared VPC attachments,
 additional firewall rules) keep their addresses.
@@ -58,9 +58,13 @@ net-spoke - per-environment spoke network composition
 
 The Shared VPC host network of one application environment: a three-tier
 VPC (network/tiered-vpc) plus Cloud NAT, Private Service Access, Private
-Service Connect, hub peering, private or peering DNS zones, an opt-in Cloud
+Service Connect, hub connectivity (VPC peering, or an opt-in Network
+Connectivity Center spoke), private or peering DNS zones, an opt-in Cloud
 Armor edge policy, opt-in VPC flow-log export, Shared VPC service-project
 attachments and the environment VPC-SC perimeter.
+
+Opt-in additional\_regions add regional subnets (and a Cloud Router and NAT
+per region) to the same VPC; empty keeps the single-region layout.
 
 Replaces the spoke use of the deprecated stages/host module. Module and
 resource names deliberately match stages/host so a caller that keeps its
@@ -86,24 +90,26 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | ~> 7.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.17, < 2.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 8.0 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | ~> 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 7.46.2 |
+| <a name="provider_google"></a> [google](#provider\_google) | 8.10.0 |
 
 ## Modules
 
 
 - additional_firewall_rules - ../../network/network-firewall
+- additional_region_nat - ../../network/nat
 - cloud_armor - ../../network/cloud-armor
 - dns - ../../network/dns
 - flow_logs_kms - ../../governance/kms
 - integrated_nat - ../../network/nat
+- ncc_spoke - ../../network/ncc-spoke
 - network - ../../network/tiered-vpc
 - private_service_access - ../../network/private-service-access
 - private_service_connect - ../../network/private-service-connect
@@ -118,8 +124,8 @@ module "example" {
 The following resources are created:
 
 
-- data source.google_compute_zones.available (modules/gcp/stages/net-spoke/main.tf#L24)
-- data source.google_project.current (modules/gcp/stages/net-spoke/main.tf#L187)
+- data source.google_compute_zones.available (modules/gcp/stages/net-spoke/main.tf#L28)
+- data source.google_project.current (modules/gcp/stages/net-spoke/main.tf#L260)
 
 
 ## Inputs
@@ -129,13 +135,18 @@ The following resources are created:
 | <a name="input_network"></a> [network](#input\_network) | The VPC and its three-tier zonal subnet layout.<br/>name and cidr\_block are required. Pin explicit\_zones for production: when<br/>empty, zones are discovered from GCP and a change in the returned zone set<br/>re-derives the subnet CIDRs (replacing subnets). subnet\_cidrs lists are<br/>index-aligned with the zones; an empty list derives that tier from<br/>cidr\_block. secondary\_ranges (GKE Pods and Services) attach to the private<br/>tier, keyed by zone. shared\_vpc\_host makes the project a<br/>Shared VPC host (default true). flow\_logs sets the subnet flow-log sampling. | <pre>object({<br/>    name           = string<br/>    cidr_block     = string<br/>    explicit_zones = optional(list(string), [])<br/>    subnet_cidrs = optional(object({<br/>      public   = optional(list(string), [])<br/>      private  = optional(list(string), [])<br/>      database = optional(list(string), [])<br/>    }), {})<br/>    secondary_ranges = optional(map(list(object({<br/>      range_name    = string<br/>      ip_cidr_range = string<br/>    }))), {})<br/>    shared_vpc_host = optional(bool, true)<br/>    flow_logs = optional(object({<br/>      aggregation_interval = optional(string, "INTERVAL_5_SEC")<br/>      sampling             = optional(number, 0.5)<br/>    }), {})<br/>  })</pre> | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The GCP project ID that owns the network (6-30 characters, lowercase alphanumeric and hyphens, must start with a letter). | `string` | n/a | yes |
 | <a name="input_project_prefix"></a> [project\_prefix](#input\_project\_prefix) | Prefix for derived resource names (e.g. 'ashes-dev'). Must start with a letter and contain only lowercase letters, digits, and hyphens. | `string` | n/a | yes |
+| <a name="input_additional_regions"></a> [additional\_regions](#input\_additional\_regions) | Opt-in extra regions of this VPC, keyed by region name (passed to network/tiered-vpc): subnet\_cidrs (public, private, database; one regional subnet per tier, no overlap with the primary subnets or another region), optional secondary\_ranges for the region's private subnet, and nat (default true): a Cloud Router <network.name>-router-<region> and Cloud NAT <network.name>-nat-<region> for the region's private and database subnets, with the primary nat settings (created only when nat.enabled). PSA, PSC, VPN, DNS and VPC-SC stay single-region or global. Empty (default) = single-region, nothing changes. | <pre>map(object({<br/>    subnet_cidrs = object({<br/>      public   = string<br/>      private  = string<br/>      database = string<br/>    })<br/>    secondary_ranges = optional(list(object({<br/>      range_name    = string<br/>      ip_cidr_range = string<br/>    })), [])<br/>    nat = optional(bool, true)<br/>  }))</pre> | `{}` | no |
+| <a name="input_connectivity"></a> [connectivity](#input\_connectivity) | How the VPC reaches the hub. peering (default): VPC peering per peerings entry. ncc: a Network Connectivity Center spoke on ncc.hub\_id, with peerings ignored. Switching an existing spoke deletes its peering; see docs/runbooks/gcp-peering-to-ncc-migration.md. | `string` | `"peering"` | no |
 | <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Guard the VPC and subnet stack with a prevent\_destroy terraform\_data resource and enable VPC deletion protection. To deprovision deliberately, first run terraform state rm on the network module guard. | `bool` | `false` | no |
 | <a name="input_dns_zones"></a> [dns\_zones](#input\_dns\_zones) | Cloud DNS zones hosted in this project, keyed by zone name. Private zones bind to this VPC; set peering\_network for a peering zone that resolves through another VPC (for example the hub DNS anchor). Query logging is always on. | <pre>map(object({<br/>    dns_name        = string<br/>    visibility      = string<br/>    description     = optional(string)<br/>    dnssec_enabled  = optional(bool, false)<br/>    peering_network = optional(string)<br/>    records = optional(list(object({<br/>      name    = string<br/>      type    = string<br/>      ttl     = number<br/>      rrdatas = list(string)<br/>    })), [])<br/>  }))</pre> | `{}` | no |
 | <a name="input_edge"></a> [edge](#input\_edge) | Edge security for the environment. cloud\_armor is the project-level Cloud<br/>Armor WAF policy named <project\_prefix>-security-policy (OWASP, Log4Shell<br/>and adaptive DDoS protection). custom\_rules entries use either an IP match<br/>(versioned\_expr SRC\_IPS\_V1 plus config.src\_ip\_ranges) or a CEL expr, never<br/>both. Attach the policy to load balancers via the security\_policy\_self\_link<br/>output. | <pre>object({<br/>    cloud_armor = optional(object({<br/>      enabled             = optional(bool, true)<br/>      owasp_rules         = optional(bool, true)<br/>      adaptive_protection = optional(bool, true)<br/>      log4j_protection    = optional(bool, true)<br/>      owasp_sensitivity   = optional(number, 2)<br/>      custom_rules = optional(map(object({<br/>        action      = string<br/>        priority    = number<br/>        description = optional(string)<br/>        match_conditions = object({<br/>          # IP-based match. Set versioned_expr AND config, or set expr — never both.<br/>          versioned_expr = optional(string)<br/>          config = optional(object({<br/>            src_ip_ranges = list(string)<br/>          }))<br/>          # CEL expression match. Mutually exclusive with versioned_expr + config.<br/>          expr = optional(string)<br/>        })<br/>        rate_limit_options = optional(object({<br/>          threshold_count     = number<br/>          interval_sec        = number<br/>          conform_action      = optional(string)<br/>          exceed_action       = optional(string)<br/>          enforce_on_key      = optional(string)<br/>          enforce_on_key_type = optional(string)<br/>        }))<br/>      })), {})<br/>    }), {})<br/>  })</pre> | `{}` | no |
-| <a name="input_firewall"></a> [firewall](#input\_firewall) | Baseline tier firewall: rule logging, the IAP SSH/RDP allow rule, and the ports opened public to compute and compute to database, plus additional\_rules (VPC firewall rules keyed by rule name). | <pre>object({<br/>    enable_logging     = optional(bool, true)<br/>    enable_iap_access  = optional(bool, true)<br/>    compute_tier_ports = optional(list(string), ["8080", "8443", "3000"])<br/>    database_ports     = optional(list(string), ["3306", "5432", "6379"])<br/>    additional_rules = optional(map(object({<br/>      direction   = optional(string, "INGRESS")<br/>      description = optional(string)<br/>      priority    = optional(number, 1000)<br/>      allow_rules = optional(list(object({<br/>        protocol = string<br/>        ports    = optional(list(string))<br/>      })), [])<br/>      deny_rules = optional(list(object({<br/>        protocol = string<br/>        ports    = optional(list(string))<br/>      })), [])<br/>      source_ranges = optional(list(string))<br/>      target_tags   = optional(list(string))<br/>      source_tags   = optional(list(string))<br/>    })), {})<br/>  })</pre> | `{}` | no |
+| <a name="input_firewall"></a> [firewall](#input\_firewall) | Baseline tier firewall: rule logging, the IAP SSH/RDP allow rule, and the ports opened public to compute and compute to database, plus additional\_rules (VPC firewall rules keyed by rule name). api\_gateway\_source\_ranges and database\_egress\_target\_service\_accounts apply only to the network firewall policy (firewall\_mode both / policy). | <pre>object({<br/>    enable_logging     = optional(bool, true)<br/>    enable_iap_access  = optional(bool, true)<br/>    compute_tier_ports = optional(list(string), ["8080", "8443", "3000"])<br/>    database_ports     = optional(list(string), ["3306", "5432", "6379"])<br/>    # Network firewall policy only (firewall_mode both / policy).<br/>    api_gateway_source_ranges               = optional(list(string), [])<br/>    database_egress_target_service_accounts = optional(list(string), [])<br/>    additional_rules = optional(map(object({<br/>      direction   = optional(string, "INGRESS")<br/>      description = optional(string)<br/>      priority    = optional(number, 1000)<br/>      allow_rules = optional(list(object({<br/>        protocol = string<br/>        ports    = optional(list(string))<br/>      })), [])<br/>      deny_rules = optional(list(object({<br/>        protocol = string<br/>        ports    = optional(list(string))<br/>      })), [])<br/>      source_ranges = optional(list(string))<br/>      target_tags   = optional(list(string))<br/>      source_tags   = optional(list(string))<br/>    })), {})<br/>  })</pre> | `{}` | no |
+| <a name="input_firewall_mode"></a> [firewall\_mode](#input\_firewall\_mode) | How the baseline tier firewall is enforced (network/tiered-vpc firewall\_mode). legacy: tag-based VPC firewall rules (default). both: the VPC rules plus a global network firewall policy keyed on tier subnet CIDRs. policy: the network firewall policy only. See docs/runbooks/gcp-firewall-policy-migration.md. | `string` | `"legacy"` | no |
+| <a name="input_firewall_policy_enforcement_order"></a> [firewall\_policy\_enforcement\_order](#input\_firewall\_policy\_enforcement\_order) | Network firewall policy enforcement order on the VPC: BEFORE\_CLASSIC\_FIREWALL or AFTER\_CLASSIC\_FIREWALL. null derives it from firewall\_mode (policy sets BEFORE\_CLASSIC\_FIREWALL; legacy and both leave the API default AFTER\_CLASSIC\_FIREWALL). Updates the network in place. WARNING: switching from both to policy with this unset flips the order in the same apply that deletes the legacy rules; set it explicitly. | `string` | `null` | no |
 | <a name="input_flow_logs_export"></a> [flow\_logs\_export](#input\_flow\_logs\_export) | Export of VPC flow logs to BigQuery and/or Cloud Storage through a log sink,<br/>encrypted with a dedicated CMEK key. Off by default. When enabled, either set<br/>create\_bigquery\_dataset = true (the sink destination is then derived from<br/>bigquery\_dataset\_id) or give an explicit destination URI. | <pre>object({<br/>    enabled                 = optional(bool, false)<br/>    sink_name               = optional(string, "vpc-flow-logs-sink")<br/>    destination             = optional(string, "")<br/>    create_bigquery_dataset = optional(bool, false)<br/>    bigquery_dataset_id     = optional(string, "vpc_flow_logs")<br/>    bigquery_location       = optional(string, "US")<br/>    create_storage_bucket   = optional(bool, false)<br/>    storage_bucket_name     = optional(string, "")<br/>    storage_location        = optional(string, "US")<br/>    retention_days          = optional(number, 90)<br/>  })</pre> | `{}` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels applied to every labelable resource. | `map(string)` | `{}` | no |
 | <a name="input_nat"></a> [nat](#input\_nat) | Cloud NAT (and its Cloud Router) for the private and database tiers. Set enabled = false for a network with no egress need. | <pre>object({<br/>    enabled            = optional(bool, true)<br/>    ip_allocate_option = optional(string, "AUTO_ONLY")<br/>    log_filter         = optional(string, "ERRORS_ONLY")<br/>  })</pre> | `{}` | no |
+| <a name="input_ncc"></a> [ncc](#input\_ncc) | NCC spoke settings, used when connectivity = ncc. hub\_id: the network/ncc-hub id. group: edge (STAR hub) or default (MESH hub). Export ranges filter the subnet ranges the hub learns (empty = every subnet, additional\_regions included; a non-empty include\_export\_ranges must also cover the additional-region CIDRs or the hub will not learn them). export\_private\_service\_access adds a producer VPC spoke for the PSA peering (when PSA is enabled). | <pre>object({<br/>    hub_id                        = optional(string)<br/>    group                         = optional(string, "edge")<br/>    include_export_ranges         = optional(list(string), [])<br/>    exclude_export_ranges         = optional(list(string), [])<br/>    export_private_service_access = optional(bool, true)<br/>  })</pre> | `{}` | no |
 | <a name="input_peerings"></a> [peerings](#input\_peerings) | VPC peerings from this network, keyed by peering name (for example the spoke-to-hub peering). | <pre>map(object({<br/>    peer_network           = string<br/>    create_reverse_peering = optional(bool, true)<br/>    export_custom_routes   = optional(bool, false)<br/>    import_custom_routes   = optional(bool, false)<br/>  }))</pre> | `{}` | no |
 | <a name="input_private_service_access"></a> [private\_service\_access](#input\_private\_service\_access) | Private Service Access range (private-IP Cloud SQL, Memorystore and other Google-managed services peer through it). | <pre>object({<br/>    enabled       = optional(bool, true)<br/>    name          = optional(string, "google-managed-services")<br/>    prefix_length = optional(number, 16)<br/>  })</pre> | `{}` | no |
 | <a name="input_private_service_connect"></a> [private\_service\_connect](#input\_private\_service\_connect) | Private Service Connect endpoint for Google APIs; target is 'all-apis' or 'vpc-sc'. | <pre>object({<br/>    enabled = optional(bool, true)<br/>    target  = optional(string, "all-apis")<br/>  })</pre> | `{}` | no |
@@ -148,10 +159,15 @@ The following resources are created:
 | Name | Description |
 |------|-------------|
 | <a name="output_additional_firewall_rule_ids"></a> [additional\_firewall\_rule\_ids](#output\_additional\_firewall\_rule\_ids) | IDs of the additional firewall rules, keyed by rule name. |
+| <a name="output_additional_region_routers"></a> [additional\_region\_routers](#output\_additional\_region\_routers) | Cloud Router name per additional region that has Cloud NAT, keyed by region; empty when there is none. |
+| <a name="output_additional_region_subnets"></a> [additional\_region\_subnets](#output\_additional\_region\_subnets) | Subnet module outputs of the additional regions, keyed by region, each with public, private and database; empty when additional\_regions is empty. |
 | <a name="output_cloud_armor"></a> [cloud\_armor](#output\_cloud\_armor) | The Cloud Armor security policy module outputs, or null when disabled. |
 | <a name="output_dns_name_servers"></a> [dns\_name\_servers](#output\_dns\_name\_servers) | Name servers for each DNS zone. |
 | <a name="output_dns_zones"></a> [dns\_zones](#output\_dns\_zones) | All DNS zone outputs, keyed by zone name. |
+| <a name="output_firewall_policy_name"></a> [firewall\_policy\_name](#output\_firewall\_policy\_name) | Name of the tier network firewall policy (pass to network/internal-lb firewall\_policy), or null in firewall\_mode = legacy. |
 | <a name="output_nat_ip"></a> [nat\_ip](#output\_nat\_ip) | The Cloud NAT IP addresses, or null when NAT is disabled. |
+| <a name="output_ncc_producer_spoke_ids"></a> [ncc\_producer\_spoke\_ids](#output\_ncc\_producer\_spoke\_ids) | NCC producer VPC spoke IDs (Private Service Access), keyed by name; empty when connectivity = peering. |
+| <a name="output_ncc_spoke_id"></a> [ncc\_spoke\_id](#output\_ncc\_spoke\_id) | The NCC spoke ID, or null when connectivity = peering. |
 | <a name="output_network_id"></a> [network\_id](#output\_network\_id) | The VPC network ID. |
 | <a name="output_network_name"></a> [network\_name](#output\_network\_name) | The VPC network name. |
 | <a name="output_network_self_link"></a> [network\_self\_link](#output\_network\_self\_link) | The VPC network self link. |

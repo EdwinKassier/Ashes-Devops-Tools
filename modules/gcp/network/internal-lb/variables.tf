@@ -307,7 +307,36 @@ variable "proxy_only_subnet_ranges" {
 }
 
 variable "firewall_priority" {
-  description = "Priority for the proxy-only subnet firewall rule"
+  description = "Priority for the proxy-only subnet VPC firewall rule (firewall_mode legacy / both). The network firewall policy rule uses firewall_policy_rule_priority instead."
   type        = number
   default     = 1000
+}
+
+variable "firewall_mode" {
+  description = "How the proxy-only subnet allow rule is enforced, matching the VPC's network/tiered-vpc firewall_mode. legacy: a VPC firewall rule targeting backend_target_tags (default). both: the VPC rule plus a rule in firewall_policy. policy: the firewall_policy rule only (no target tags: it applies to every instance in the VPC)."
+  type        = string
+  default     = "legacy"
+  nullable    = false
+
+  validation {
+    condition     = contains(["legacy", "both", "policy"], var.firewall_mode)
+    error_message = "firewall_mode must be one of legacy, both or policy."
+  }
+}
+
+variable "firewall_policy" {
+  description = "Name of the global network firewall policy attached to the VPC (the network/tiered-vpc firewall_policy_name output). Required when firewall_mode is both or policy and create_firewall_rule is true."
+  type        = string
+  default     = null
+}
+
+variable "firewall_policy_rule_priority" {
+  description = "Priority of the proxy-only allow rule in firewall_policy (firewall_mode both / policy). It must be unique within the policy and outside 64000-64999 (reserved for the network/tiered-vpc tier rules). null derives a stable priority in 1000-63999 from a hash of name, so ILBs with different names normally get different priorities; set it explicitly if two names collide."
+  type        = number
+  default     = null
+
+  validation {
+    condition     = var.firewall_policy_rule_priority == null ? true : (var.firewall_policy_rule_priority >= 0 && var.firewall_policy_rule_priority <= 2147483547 && floor(var.firewall_policy_rule_priority) == var.firewall_policy_rule_priority)
+    error_message = "firewall_policy_rule_priority must be null or an integer between 0 and 2147483547."
+  }
 }

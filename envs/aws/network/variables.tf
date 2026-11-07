@@ -21,17 +21,25 @@ variable "organization_workspace_name" {
 }
 
 variable "organization_contract" {
-  description = "aws-organization stage contract (FAST-style override): organization_id (o-xxxxxxxxxx), management_account_id, account_ids (account key => 12-digit ID). When set, the aws-organization remote state is NOT read. Null = aws.contracts.organization from config/landing-zone.yaml, else read from the organization_workspace_name workspace's remote state."
+  description = "aws-organization stage contract (FAST-style override), the same type in every aws root: organization_id (o-xxxxxxxxxx), organization_root_id (r-xxxx), management_account_id, ou_ids (OU name => OU ID), account_ids (account key => 12-digit ID), account_role_arns (account key => cross-account role ARN). This root needs: organization_id, management_account_id, account_ids. When set, the aws-organization remote state is NOT read. Null = aws.contracts.organization from config/landing-zone.yaml, else the contract output of the organization_workspace_name workspace."
   type = object({
-    organization_id       = string
-    management_account_id = string
+    organization_id       = optional(string)
+    organization_root_id  = optional(string)
+    management_account_id = optional(string)
+    ou_ids                = optional(map(string), {})
     account_ids           = map(string)
+    account_role_arns     = optional(map(string), {})
   })
   default = null
 
   validation {
     condition     = var.organization_contract == null || alltrue([for id in values(try(var.organization_contract.account_ids, {})) : can(regex("^[0-9]{12}$", id))])
     error_message = "organization_contract.account_ids values must be 12-digit AWS account IDs."
+  }
+
+  validation {
+    condition     = var.organization_contract == null || alltrue([for k in ["organization_id", "management_account_id"] : try(length(trimspace(var.organization_contract[k])) > 0, false)])
+    error_message = "organization_contract must set organization_id, management_account_id for this root."
   }
 }
 
@@ -253,4 +261,50 @@ variable "profile" {
     condition     = var.profile == null || contains(["production", "starter"], coalesce(var.profile, "production"))
     error_message = "profile must be production or starter."
   }
+}
+
+variable "enforce_egress_allowlist" {
+  description = "Fail the plan unless the firewall drops unmatched egress and carries a domain allowlist (or the waiver is set). Null = on when the profile is production and an aws.workload_environments entry is_production (unset = keys prod / production)."
+  type        = bool
+  default     = null
+}
+
+variable "network_firewall_egress_domain_allowlist" {
+  description = "Egress domain allowlist matched on HTTP Host / TLS SNI; a leading dot matches subdomains. Null = aws.network.egress_domain_allowlist from config, else empty (no domain filtering)."
+  type        = list(string)
+  default     = null
+}
+
+variable "network_firewall_stateful_default_actions" {
+  description = "STRICT_ORDER default actions for unmatched traffic. Null = aws.network.stateful_default_actions from config, else [\"aws:alert_established\"] (log-but-pass). Production needs aws:drop_established."
+  type        = list(string)
+  default     = null
+}
+
+variable "egress_alert_only_waived" {
+  description = "Explicitly waive the production fail-closed egress gate (alert-only inspection). Null = aws.network.egress_alert_only_waived from config, else false."
+  type        = bool
+  default     = null
+}
+
+variable "enable_vpn" {
+  description = "Attach an on-premises Site-to-Site VPN to the transit gateway. Null = aws.network.vpn.enabled from config/landing-zone.yaml, else false. Needs vpn.customer_gateway_ip."
+  type        = bool
+  default     = null
+}
+
+variable "vpn" {
+  description = "Site-to-Site VPN settings (customer_gateway_ip, customer_gateway_bgp_asn, static_routes_only, onprem_cidrs, tunnel_inside_cidrs, enable_acceleration, preshared_key_storage), used only when the VPN is enabled. Null = aws.network.vpn from config/landing-zone.yaml. The tunnel pre-shared keys are never set here: AWS stores them in Secrets Manager."
+  type        = any
+  default     = null
+}
+
+variable "spoke_attachments" {
+  description = "Workload spoke attachments the hub accepts, associates with their segment table (prod or nonprod) and propagates into the inspection table: map of name to {attachment_id, segment, accept (default true)}. attachment_id is the aws-workload-<env> output tgw_attachment_id. Null = aws.network.spoke_attachments from config/landing-zone.yaml, else none. See docs/architecture/aws-landing-zone.md."
+  type = map(object({
+    attachment_id = string
+    segment       = string
+    accept        = optional(bool, true)
+  }))
+  default = null
 }

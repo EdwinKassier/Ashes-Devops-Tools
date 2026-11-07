@@ -6,6 +6,8 @@ crash.log
 crash.*.log
 *.tfvars
 *.tfvars.json
+# Written by `make bootstrap-ids` (immutable TFC workspace IDs; already covered by *.tfvars)
+envs/gcp/bootstrap/tfc-workspaces.auto.tfvars
 override.tf
 override.tf.json
 *_override.tf
@@ -35,6 +37,9 @@ tfplan
 *.auto.tfvars.json
 !examples/*.tfvars
 !examples/**/*.tfvars
+# The security team's committed gcp-guardrails inputs (iam_deny_policies; no
+# secrets). CODEOWNERS: platform + security.
+!envs/gcp/guardrails/guardrails.auto.tfvars
 
 # The single-source landing-zone configuration is COMMITTED (it holds no
 # secrets) so VCS-driven Terraform Cloud runs read it. Never ignore it.

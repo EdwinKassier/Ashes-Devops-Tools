@@ -213,9 +213,13 @@ resource "google_compute_forwarding_rule" "forwarding_rule" {
 # -----------------------------------------------------------------------------
 # FIREWALL RULE (for proxy-only subnet)
 # -----------------------------------------------------------------------------
+#
+# firewall_mode mirrors network/tiered-vpc: legacy = tag-targeted VPC rule
+# (default), both = VPC rule plus a rule in the VPC's network firewall policy,
+# policy = the policy rule only.
 
 resource "google_compute_firewall" "allow_proxy" { #tfsec:ignore:google-compute-no-public-ingress
-  count = var.create_firewall_rule ? 1 : 0
+  count = var.create_firewall_rule && var.firewall_mode != "policy" ? 1 : 0
 
   project = var.project_id
   name    = "${var.name}-allow-proxy"
@@ -233,4 +237,51 @@ resource "google_compute_firewall" "allow_proxy" { #tfsec:ignore:google-compute-
   # subnet, supplied by the caller (see the resource-level tfsec:ignore above).
   source_ranges = var.proxy_only_subnet_ranges
   target_tags   = var.backend_target_tags
+}
+
+# Policy rule priorities must be unique within the policy, and several ILBs
+# usually share one VPC policy. Unless firewall_policy_rule_priority is set,
+# derive a stable priority from the ILB name: 1000 + (first 7 hex digits of
+# sha256(name) mod 63000), i.e. 1000-63999, which avoids the 64000-64999 block
+# reserved for the network/tiered-vpc tier rules.
+locals {
+  firewall_policy_rule_priority = coalesce(
+    var.firewall_policy_rule_priority,
+    1000 + parseint(substr(sha256(var.name), 0, 7), 16) % 63000,
+  )
+}
+
+# Network firewall policy rules cannot select network tags, so the policy rule
+# has no target: it admits the proxy-only subnet ranges on backend_port to
+# every instance in the VPC. The source stays the internal proxy-only CIDRs.
+resource "google_compute_network_firewall_policy_rule" "allow_proxy" {
+  count = var.create_firewall_rule && var.firewall_mode != "legacy" ? 1 : 0
+
+  project         = var.project_id
+  firewall_policy = var.firewall_policy
+  rule_name       = "${var.name}-allow-proxy"
+  description     = "Allow the proxy-only subnet to reach ${var.name} backends"
+  priority        = local.firewall_policy_rule_priority
+  direction       = "INGRESS"
+  action          = "allow"
+
+  match {
+    src_ip_ranges = var.proxy_only_subnet_ranges
+
+    layer4_configs {
+      ip_protocol = "tcp"
+      ports       = [tostring(var.backend_port)]
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.firewall_policy != null && var.firewall_policy != ""
+      error_message = "firewall_policy (the network firewall policy name, e.g. the tiered-vpc firewall_policy_name output) is required when firewall_mode is both or policy and create_firewall_rule is true."
+    }
+    precondition {
+      condition     = local.firewall_policy_rule_priority < 64000 || local.firewall_policy_rule_priority > 64999
+      error_message = "firewall_policy_rule_priority must lie outside 64000-64999: that block is reserved for the network/tiered-vpc tier rules in the same policy."
+    }
+  }
 }

@@ -33,6 +33,11 @@ output "scc_pubsub_topic_id" {
   value       = module.scc_notifications.topic_id
 }
 
+output "scc_v2_notification_configs" {
+  description = "SCC v2 notification configs (name and service account per config; empty unless gcp.scc_api_version is both or v2). Used to verify the v2 publisher binding during the v1 to v2 migration."
+  value       = module.scc_notifications.v2_notification_configs
+}
+
 output "cmek_key_names" {
   description = "Map of KMS key short names to fully qualified key resource IDs created by the CMEK modules (org keyring plus, when logging_project_id is set, the audit keyring in the logging project)"
   value       = merge(module.cmek.key_names, local.separate_logging_project ? module.audit_cmek[0].key_names : {})
@@ -49,17 +54,18 @@ output "control_plane_alert_policy_ids" {
 }
 
 output "admin_containment_rules" {
-  description = "Rules of the admin-containment IAM deny policy (empty when enable_admin_containment = false): denied permissions, exempt principals and whether the rule is tag-scoped to the audit store."
-  value = flatten([
-    for p in local.containment_deny_policy : [
-      for r in p.rules : {
-        description          = r.description
-        denied_permissions   = r.denied_permissions
-        exception_principals = r.exception_principals
-        tag_scoped           = r.denial_condition != null
-      }
-    ]
-  ])
+  description = "Rules of the admin-containment IAM deny policy this stage applies (legacy guardrail_owner_mode = \"organization\" only; empty in separate mode, where the gcp-guardrails root owns the policy, and when enable_admin_containment = false): denied permissions, exempt principals and whether the rule is tag-scoped to the audit store."
+  value       = var.gcp.guardrail_owner_mode == "organization" ? module.guardrails[0].admin_containment_rules : []
+}
+
+output "containment_tag" {
+  description = "The containment/protected tag that scopes the audit-store rule of the containment deny policy (null IDs when enable_admin_containment = false). The gcp-guardrails root looks it up by these short names under the organization."
+  value = {
+    key_short_name   = "containment"
+    value_short_name = "protected"
+    key_id           = try(module.tags.tag_keys["containment"], null)
+    value_id         = try(module.tags.tag_values["containment-protected"], null)
+  }
 }
 
 output "audit_org_sink_name" {
@@ -129,7 +135,7 @@ output "billing_admin_members" {
 
 output "pam_entitlement_name" {
   description = "Resource name of the just-in-time org-admin PAM entitlement (null when enable_pam = false)."
-  value       = var.enable_pam ? google_privileged_access_manager_entitlement.org_admin[0].name : null
+  value       = var.gcp.enable_pam ? google_privileged_access_manager_entitlement.org_admin[0].name : null
 }
 
 output "production_environment_keys" {
@@ -138,13 +144,13 @@ output "production_environment_keys" {
 }
 
 output "guardrail_owner_mode" {
-  description = "Deny-policy ownership mode: \"separate\" (deny policies applied by the guardrail owner from guardrail_deny_policy_specs) or \"organization\" (applied by this stage)."
-  value       = var.guardrail_owner_mode
+  description = "Deny-policy ownership mode: \"separate\" (deny policies authored and applied by the gcp-guardrails root) or \"organization\" (legacy: applied by this stage)."
+  value       = var.gcp.guardrail_owner_mode
 }
 
 output "guardrail_deny_policy_specs" {
-  description = "Map of deny-policy ID => gcloud policy-file JSON for every org deny policy (containment + iam_deny_policies). In separate mode the guardrail owner applies them: gcloud iam policies create|update <id> --attachment-point=cloudresourcemanager.googleapis.com/organizations/<org> --kind=denypolicies --policy-file=<file>."
-  value       = local.guardrail_deny_policy_specs
+  description = "DEPRECATED (removed in v1.0). Map of deny-policy ID => gcloud policy-file JSON for the deny policies this stage applies in the legacy organization mode. Always empty in separate mode: the gcp-guardrails root owns the policies and exposes the break-glass specs as its deny_policy_specs output."
+  value       = var.gcp.guardrail_owner_mode == "organization" ? module.guardrails[0].deny_policy_specs : {}
 }
 
 output "managed_org_policy_constraints" {
@@ -164,10 +170,10 @@ output "log_analytics_linked_dataset" {
 
 output "logging_organization_service_account" {
   description = "The org's Cloud Logging service account (grant it the CMEK key before setting logging_settings_kms_key_name); null when enable_logging_organization_settings = false."
-  value       = var.enable_logging_organization_settings ? google_logging_organization_settings.this[0].kms_service_account_id : null
+  value       = var.gcp.enable_logging_organization_settings ? google_logging_organization_settings.this[0].kms_service_account_id : null
 }
 
 output "principal_access_boundary_policy" {
   description = "Name of the automation principal access boundary policy (null when disabled)."
-  value       = var.enable_principal_access_boundary ? module.automation_boundary[0].policy_name : null
+  value       = var.gcp.enable_principal_access_boundary ? module.automation_boundary[0].policy_name : null
 }

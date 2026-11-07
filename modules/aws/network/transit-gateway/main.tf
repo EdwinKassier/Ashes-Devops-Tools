@@ -11,7 +11,9 @@
 #     (var.propagations). prod<->nonprod isolation is enforced by OMITTING any
 #     prod->nonprod or nonprod->prod propagation: prod and nonprod each only
 #     propagate to/from shared, never to each other. There is no default route
-#     table to leak reachability, so "absent propagation" == "no route".
+#     table to leak reachability, so "absent propagation" == "no direct route".
+#     (When spokes route 0/0 via inspection, prod<->nonprod can still transit
+#     the inspection VPC; the firewall policy then decides.)
 #   - Default routes (var.routes) steer segment traffic to the inspection
 #     attachment or blackhole it, driven by plan-known string keys.
 #
@@ -60,7 +62,8 @@ resource "aws_ec2_transit_gateway_route_table_association" "this" {
 
 # Explicit propagations only. The map is keyed by plan-known strings such as
 # "prod:shared" so the graph is static. prod<->nonprod pairings are deliberately
-# absent, which is what enforces prod/nonprod isolation (no default table).
+# absent, so prod and nonprod have no direct route (no default table); traffic
+# that transits the inspection VPC is governed by the firewall policy.
 resource "aws_ec2_transit_gateway_route_table_propagation" "this" {
   for_each = var.propagations
 

@@ -16,8 +16,8 @@
 
 Understand the design before you rely on it:
 
-- **Created by the phase-0 stack (default).** [`templates/aws/bootstrap/phase0-management.yaml`](../../templates/aws/bootstrap/phase0-management.yaml) creates `OrganizationBreakGlass` in the **management account**. Pass its ARN in as `aws.break_glass_role_arn` / `break_glass_role_arn`, and keep `create_break_glass = false` on `aws-security`. The least-privilege `aws-security` management role is deliberately **denied** any access to the break-glass role, which every member break-glass role trusts. A pipeline that could edit it could promote itself to break-glass.
-- **In-repo alternative (`create_break_glass = true`).** This works only when `aws-security` applies as the phase-0 management role. The dedicated `tfc-mgmt-aws-security-*` role has no IAM write permissions, so the apply fails with AccessDenied.
+- **Created by the phase-0 stack (default).** [`templates/aws/bootstrap/phase0-management.yaml`](../../templates/aws/bootstrap/phase0-management.yaml) creates `OrganizationBreakGlass` in the **management account**. Pass its ARN in as `aws.break_glass_role_arn` / `break_glass_role_arn`, and keep `aws_overrides.create_break_glass` unset (false) on `aws-security`. The least-privilege `aws-security` management role is deliberately **denied** any access to the break-glass role, which every member break-glass role trusts. A pipeline that could edit it could promote itself to break-glass.
+- **In-repo alternative (`aws_overrides.create_break_glass = true`).** This works only when `aws-security` applies as the phase-0 management role. The dedicated `tfc-mgmt-aws-security-*` role has no IAM write permissions, so the apply fails with AccessDenied.
 - **Disabled by default.** The break-glass role carries a **deny-all standing policy**. In normal operation it can do nothing — it is inert until activated (Step 2).
 - **MFA-required.** Its trust policy requires MFA and bounds the MFA session age, so a leaked credential alone cannot use it. Trust is scoped to `break_glass_trusted_principals` (a small set of senior responders).
 - **Monitored.** Every assumption of the role is alarmed by `modules/aws/security/security-notifications`: an always-on EventBridge rule, plus a CloudWatch metric alarm when the org CloudTrail log group is set. The alarm watches the **effective** ARN (the stage-created role when `create_break_glass` is true), so management and monitoring never drift apart.
@@ -55,7 +55,7 @@ Break-glass is off until you deliberately turn it on. Activation means **replaci
   ```
 
   If CloudFormation itself is unavailable, delete the `standby-deny-all` inline policy by hand and record it. Step 4 restores it.
-- **In-repo role (`create_break_glass = true`, applied as the phase-0 role):** set `break_glass_active = true` on the `aws-security` stage and apply as the phase-0 role. Flip it back in Step 4. The dedicated aws-security pipeline role cannot do this.
+- **In-repo role (`aws_overrides.create_break_glass = true`, applied as the phase-0 role):** set `aws_overrides.break_glass_active = true` on `aws-security` and apply as the phase-0 role. Flip it back in Step 4. The dedicated aws-security pipeline role cannot do this.
 
 Then:
 
@@ -103,10 +103,11 @@ If an SCP change has locked out **all** member-account principals (including the
 
 1. **Re-disable the break-glass role**, so the role is inert again:
    - **Phase-0 stack role:** update the stack with `BreakGlassActive=false`. If you deleted the inline policy by hand, the same update restores it.
-   - **In-repo role:** set `break_glass_active = false` and apply as the phase-0 role.
+   - **In-repo role:** set `aws_overrides.break_glass_active = false` and apply as the phase-0 role.
 2. **Re-attach any detached SCP** (Step 3) and confirm the guardrail is back via a fresh `aws-organization` apply.
-3. **Pull the audit trail** from the org CloudTrail in the Log Archive account for the break-glass session window; verify only authorized actions were taken.
-4. File the post-incident review within 24 hours. If unauthorized actions are found, escalate as a security incident (see [`aws-incident-response.md`](aws-incident-response.md)).
+3. **Check the `org-guard-alerts` emails** for the session window. That topic is in us-east-1 of the management account and is owned by `aws-organization`. Account for every alert: disabled delegated admins or trusted access, deregistered delegated admins, and org-trail selector or tag changes. Re-enable anything that was turned off by re-applying `aws-security`. Confirm `enable_security_service_teardown` is `false` on `aws-organization`. Removing a tag key from the org trail is a legitimate break-glass task: the pipeline is denied `cloudtrail:RemoveTags`. Expect an alert for it.
+4. **Pull the audit trail** from the org CloudTrail in the Log Archive account for the break-glass session window; verify only authorized actions were taken.
+5. File the post-incident review within 24 hours. If unauthorized actions are found, escalate as a security incident (see [`aws-incident-response.md`](aws-incident-response.md)).
 
 ---
 

@@ -23,16 +23,16 @@ variables {
   log_archive_account_id      = "333333333333"
   shared_services_account_id  = "555555555555"
   forensics_account_id        = "444444444444"
-
-  log_archive_bucket_name     = "ashes-org-log-archive"
-  key_admin_arn               = "arn:aws:iam::333333333333:role/kms-admin"
-  config_role_arn             = "arn:aws:iam::222222222222:role/aws-config-role"
-  aggregator_role_arn         = "arn:aws:iam::222222222222:role/aws-config-aggregator"
-  meta_store_manager_role_arn = "arn:aws:iam::222222222222:role/AmazonSecurityLakeMetaStoreManager"
-  break_glass_role_arn        = "arn:aws:iam::111111111111:role/break-glass"
-
-  notification_subscribers = {
-    secops = { protocol = "email", endpoint = "secops@example.com" }
+  aws = {
+    log_archive_bucket_name     = "ashes-org-log-archive"
+    key_admin_arn               = "arn:aws:iam::333333333333:role/kms-admin"
+    config_role_arn             = "arn:aws:iam::222222222222:role/aws-config-role"
+    aggregator_role_arn         = "arn:aws:iam::222222222222:role/aws-config-aggregator"
+    meta_store_manager_role_arn = "arn:aws:iam::222222222222:role/AmazonSecurityLakeMetaStoreManager"
+    break_glass_role_arn        = "arn:aws:iam::111111111111:role/break-glass"
+    notification_subscribers = {
+      secops = { protocol = "email", endpoint = "secops@example.com" }
+    }
   }
 }
 
@@ -112,7 +112,7 @@ run "composes_security_baseline" {
   }
 
   assert {
-    condition     = var.enable_cloudwatch_logs == true && var.cloudtrail_s3_data_events == "write"
+    condition     = var.aws.enable_cloudwatch_logs == true && var.aws.cloudtrail_s3_data_events == "write"
     error_message = "CIS 4.x alarms and S3 write data events (CIS 3.8) must be on by default"
   }
 
@@ -190,9 +190,11 @@ run "managed_break_glass_is_created_and_watched" {
   command = plan
 
   variables {
-    create_break_glass             = true
-    break_glass_trusted_principals = ["arn:aws:iam::111111111111:role/IncidentCommander"]
-    break_glass_role_arn           = "" # not used when creating
+    aws = merge(var.aws, {
+      create_break_glass             = true
+      break_glass_trusted_principals = ["arn:aws:iam::111111111111:role/IncidentCommander"]
+      break_glass_role_arn           = "" # not used when creating
+    })
   }
 
   # Make the created role's ARN known at plan so the wiring assertion is non-vacuous.
@@ -225,9 +227,11 @@ run "default_operator_roles" {
   command = plan
 
   variables {
-    key_admin_arn       = null
-    config_role_arn     = null
-    aggregator_role_arn = null
+    aws = merge(var.aws, {
+      key_admin_arn       = null
+      config_role_arn     = null
+      aggregator_role_arn = null
+    })
   }
 
   assert {
@@ -247,7 +251,9 @@ run "key_policy_admin_defaults_to_member_break_glass" {
   command = plan
 
   variables {
-    key_admin_arn = null
+    aws = merge(var.aws, {
+      key_admin_arn = null
+    })
   }
 
   assert {
@@ -294,7 +300,9 @@ run "security_tooling_roles_carry_tfc_apply_boundary" {
   command = plan
 
   variables {
-    aggregator_role_arn = null
+    aws = merge(var.aws, {
+      aggregator_role_arn = null
+    })
   }
 
   override_data {
@@ -331,7 +339,9 @@ run "organization_trail_can_be_owned_elsewhere" {
   command = plan
 
   variables {
-    create_organization_trail = false
+    aws = merge(var.aws, {
+      create_organization_trail = false
+    })
   }
 
   assert {
@@ -346,7 +356,9 @@ run "security_lake_creates_meta_store_role" {
   command = plan
 
   variables {
-    meta_store_manager_role_arn = ""
+    aws = merge(var.aws, {
+      meta_store_manager_role_arn = ""
+    })
   }
 
   assert {
@@ -356,5 +368,14 @@ run "security_lake_creates_meta_store_role" {
       endswith(aws_iam_role_policy_attachment.securitylake_meta_store[0].policy_arn, ":policy/service-role/AmazonSecurityLakeMetastoreManager")
     )
     error_message = "an empty meta_store_manager_role_arn must create the Security Lake metastore role."
+  }
+}
+
+run "sectool_cmk_allows_eventbridge_to_publish_alerts" {
+  command = plan
+
+  assert {
+    condition     = contains(local.sectool_cmk_service_principals, "events.amazonaws.com")
+    error_message = "The security-tooling CMK must grant events.amazonaws.com, or EventBridge cannot publish sec-notify-* alerts to the encrypted security-notifications topic."
   }
 }

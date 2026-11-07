@@ -30,12 +30,10 @@
 #                            workload.
 #   - account_baseline     — per-account guardrails (default EBS encryption, IAM
 #                            password policy).
-#   - config_recorder      — the config-org module in recorder_only mode. This is
-#                            the workload half of the org Config topology: a local
-#                            recorder + delivery channel only; the org aggregator
-#                            and conformance packs live in the home account's
-#                            aws-config stage. Same module, recorder-only mode —
-#                            NOT a separate module.
+#   - (no Config recorder) — the workload account's recorder is deployed by
+#                            aws-organization's org-wide recorder StackSet. The
+#                            former module.config_recorder leaves state through
+#                            the removed block below (destroy = false).
 #   - systems_manager      — optional (enable_ssm, default true): Session Manager
 #                            preferences, patch baseline, inventory.
 #   - edge_security         — optional (enable_edge, default false): per-workload
@@ -100,6 +98,12 @@ locals {
   }
 }
 
+locals {
+  # Legacy shape (pool + netmask_length) unless the caller opts a NEW workload
+  # into the explicit-CIDR allocation; switching an existing VPC replaces it.
+  ipam_allocation = var.ipam_explicit_cidr ? "explicit_cidr" : "netmask"
+}
+
 module "vpc" {
   source = "../../network/vpc"
 
@@ -112,6 +116,7 @@ module "vpc" {
   create_internet_gateway  = local.create_internet_gateway
   flow_log_destination_arn = var.flow_log_destination_arn
   ipam_pool_id             = var.ipam_pool_id
+  ipam_allocation          = local.ipam_allocation
   gateway_endpoints        = ["s3", "dynamodb"]
   routes                   = local.spoke_routes
   tags                     = var.tags
@@ -123,9 +128,11 @@ module "vpc" {
 # Attaches the spoke VPC to the SHARED transit gateway (var.tgw_id) that the
 # network account shared into this account over RAM. This attachment resource is
 # created IN THE WORKLOAD ACCOUNT (that is where the VPC and its tgw-tier subnets
-# live); the network account owns the TGW and manages its route-table
-# association/propagation. So both default-route-table flags are false here —
-# the workload never touches the hub's segment routing.
+# live); the network account owns the TGW, so only it can accept the attachment
+# and associate/propagate it: aws-network does that from
+# aws.network.spoke_attachments.<env> (fed from this root's tgw_attachment_id
+# output; until then the spoke has no routing). So both default-route-table
+# flags are false here — the workload never touches the hub's segment routing.
 #
 # Skipped entirely when tgw_id = null (standalone spoke, no aws-network layer).
 # ---------------------------------------------------------------------------
@@ -191,26 +198,22 @@ resource "aws_ebs_default_kms_key" "home" {
 }
 
 # ---------------------------------------------------------------------------
-# Config recorder — the org Config topology's workload half (recorder-only)
+# Config recorder — moved to aws-organization
 #
-# The SAME config-org module the home-account aws-config stage uses, invoked in
-# recorder_only mode: a per-Region recorder + delivery channel + recorder status
-# only. The org aggregator and conformance packs are skipped (they belong to the
-# home account), so aggregator_role_arn is unused and left empty.
+# The recorder, delivery channel and recorder status are now deployed to every
+# member account by aws-organization's org-wide recorder StackSet
+# (modules/aws/security/config-recorder-stackset). Upgrading drops the old
+# module from state WITHOUT deleting the live recorder (the tfc-apply boundary
+# denies recorder deletion anyway), so recording continues until the migration
+# replaces it: docs/runbooks/aws-config-recorder-migration.md.
 # ---------------------------------------------------------------------------
 
-module "config_recorder" {
-  source = "../../security/config-org"
+removed {
+  from = module.config_recorder
 
-  recorder_only = true
-
-  aws_enabled_regions        = var.aws_enabled_regions
-  config_role_arn            = var.config_role_arn
-  create_service_linked_role = var.create_config_service_linked_role
-  aggregator_role_arn        = "" # unused in recorder_only mode
-  log_archive_bucket         = var.log_archive_bucket_name
-
-  tags = var.tags
+  lifecycle {
+    destroy = false
+  }
 }
 
 # ---------------------------------------------------------------------------

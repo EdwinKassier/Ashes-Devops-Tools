@@ -1,6 +1,7 @@
 # Policy as code (HCP Terraform OPA)
 
-`policies/opa/` is an HCP Terraform **OPA policy set**. It checks every plan
+`policies/opa/` and `policies/opa-destructive/` are HCP Terraform **OPA policy
+sets**. They check every plan
 against landing-zone guardrails before apply. It runs alongside the static scanners
 (Trivy, Checkov), not instead of them. The scanners read HCL. The policy set reads
 the rendered plan, so it sees values that come out of modules, `for_each` and
@@ -8,20 +9,40 @@ variables. It also sees what a run is about to destroy.
 
 ## How it is wired
 
-`envs/tfc-admin` creates `tfe_policy_set.opa` when `enable_policy_sets = true`:
+`envs/tfc-admin` creates two sets, both `kind = "opa"`, sourced from `vcs_repo`
+(required) and attached to every workspace that `tfc-admin` manages:
 
-- `kind = "opa"`, `policies_path = "policies/opa"`, sourced from `var.vcs_repo`
-  (required). The set is attached to every workspace that `tfc-admin` manages.
-- `overridable = true`: users with **Manage Policy Overrides** can override a
-  failed mandatory policy on a run.
-- `policy_tool_version = var.opa_version` (null = the HCP Terraform default).
-  The policies use Rego v1 syntax and keep `import rego.v1`, so they parse on
-  OPA 0.59+ and on 1.x. Pin `opa_version` to the version you test with.
-- HCP Terraform Free allows one policy set of up to five policies. This set
-  declares ten, so it needs Standard or Premium.
+| Set | `policies_path` | Overridable | Contents |
+|---|---|---|---|
+| `tfe_policy_set.opa` (`<prefix>opa-guardrails`) | `policies/opa` | no (`policy_set_overridable`, default false) | 10 mandatory + 3 advisory guardrails |
+| `tfe_policy_set.destructive` (`<prefix>destructive-change-guard`) | `policies/opa-destructive` | **yes**, always | the mandatory `destroy_guard` |
 
-To enable it, set `enable_policy_sets = true` and `vcs_repo` in the `tfc-admin`
-workspace, then apply `tfc-admin` (through HCP Terraform, as for every root).
+- A VCS policy set reads the `policies.hcl` in its own `policies_path`, so the
+  destroy guard needs its own directory to be overridable while the guardrails
+  stay hard gates. `policies/opa-destructive/lib_helpers.rego` is a copy of
+  `policies/opa/lib_helpers.rego`; `make consistency` fails if they differ.
+- **Overrides.** An intended destroy (decommissioning, a reviewed replace) is
+  overridden on the run by the security team. An organization owner creates
+  that team by hand, passes its ID to tfc-admin as `security_team_id` (as for
+  `platform_team_id` and `control_plane_approvers_team_id`) and grants it
+  **Manage Policy Overrides** in the HCP UI. That permission is org-wide.
+  tfc-admin creates no teams and sets no organization access, so it still runs
+  on a non-owner token; a check warns while the sets are on and
+  `security_team_id` is null.
+- `policy_tool_version = var.opa_version` (pinned). The policies use Rego v1
+  syntax and keep `import rego.v1`, so they parse on OPA 0.59+ and on 1.x.
+- **When they are on.** `enable_policy_sets = null` (the default) turns both
+  sets on when `vcs_repo` (`org.tfc.vcs_repo`) is set **and** `org.tfc.plan`
+  (tfc-admin `tfc_plan`) is `standard` or `premium`. HCP Terraform Free allows
+  one policy set of up to five policies, so `free` and `essentials` stay off
+  unless you set `enable_policy_sets = true` yourself. On Free that explicit
+  `true` exceeds the limit (two sets, 14 policies): HCP Terraform rejects the
+  second set or the extra policies, so do not set it there. Essentials support
+  is unverified ([known gaps](../known-gaps.md)). While the sets are off,
+  the `destructive_changes_guarded` check warns on every tfc-admin plan that
+  destructive changes are unguarded. Drift on tiers without health assessments
+  is caught by `.github/workflows/drift-detection.yml`, which fails rather than
+  skips.
 
 ## Input document
 
@@ -64,7 +85,7 @@ returns a set of messages, and an empty set means the policy passed.
 | `database_private_encrypted` | mandatory | `google_sql_database_instance` sets `ipv4_enabled = false`, and a missing `ip_configuration` block counts as public. `aws_db_instance` / `aws_rds_cluster` set `storage_encrypted = true`. `aws_db_instance` / `aws_rds_cluster_instance` are not `publicly_accessible`. |
 | `aws_s3_bucket_public_access_block_present` | advisory | A new `aws_s3_bucket` has a public access block created in the same module instance, or an account-level block is in the plan. The pairing goes by module and count, because the bucket id is unknown at plan time. |
 | `require_labels` | advisory | Listed GCP types carry at least one label (or `effective_labels`). Listed AWS types carry at least one tag (or `tags_all` from provider `default_tags`). |
-| `destroy_guard` | advisory | Flags any delete or replace of KMS keys and key rings, log buckets, log sinks, CloudTrail, organisation policies, VPC-SC perimeters, and S3/GCS buckets whose name marks them as log or audit archives. |
+| `destroy_guard` | mandatory, **overridable** set (`policies/opa-destructive`) | Denies any delete or replace (either order) of a stateful type. GCP: `google_sql_database_instance`, `google_storage_bucket`, `google_kms_crypto_key`, `google_project`, `google_folder`, `google_compute_network`, `google_logging_organization_sink`, `google_logging_project_bucket_config`, `google_secret_manager_secret`. AWS: `aws_s3_bucket`, `aws_rds_cluster`, `aws_db_instance`, `aws_kms_key`, `aws_organizations_account`, `aws_dynamodb_table`, `aws_vpc`, `aws_cloudtrail`, `aws_secretsmanager_secret`, `aws_cloudformation_stack_set_instance` (a replace removes the recorders org-wide). Supabase: `supabase_project`. Plus key rings, the other log buckets/sinks, CloudTrail Lake, organisation policies and VPC-SC perimeters. The security team overrides an intended destroy. |
 
 The mandatory rules only encode controls that this repo's modules already meet
 by default: hardened GCS buckets, private Cloud SQL, KMS rotation, private and
@@ -103,9 +124,9 @@ curl -sSLO "https://github.com/open-policy-agent/opa/releases/download/$V/opa_da
 curl -sSLO "https://github.com/open-policy-agent/opa/releases/download/$V/opa_darwin_arm64_static.sha256"
 shasum -a 256 -c opa_darwin_arm64_static.sha256 && chmod +x opa_darwin_arm64_static
 
-./opa_darwin_arm64_static check --strict policies/opa     # parse + strict lint
-./opa_darwin_arm64_static fmt --fail -l policies/opa      # formatting
-./opa_darwin_arm64_static test policies/opa -v            # unit tests
+./opa_darwin_arm64_static check --strict policies/opa policies/opa-destructive
+./opa_darwin_arm64_static fmt --fail -l policies/opa policies/opa-destructive
+./opa_darwin_arm64_static test policies/opa policies/opa-destructive -v
 ```
 
 Or use Docker:
@@ -116,7 +137,12 @@ To run a policy against a real plan:
 ```bash
 terraform plan -out=plan.bin && terraform show -json plan.bin > plan.json
 jq '{plan: .}' plan.json > input.json
-opa eval -d policies/opa -i input.json 'data.terraform.policies.destroy_guard.deny'
+opa eval -d policies/opa-destructive -i input.json 'data.terraform.policies.destroy_guard.deny'
 ```
 
 Keep `plan.json` and `input.json` out of git, because they hold planned values.
+A committed fixture must be scrubbed first:
+`jq -f policies/opa/tests/fixtures/scrub.jq plan.json` keeps the resource
+addresses, types, actions and the planned attributes the policies read, and
+drops `before`, `after_sensitive` and identifiers. Review the output by eye
+before committing it.

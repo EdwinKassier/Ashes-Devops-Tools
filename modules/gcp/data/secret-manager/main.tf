@@ -94,8 +94,11 @@ resource "google_secret_manager_secret_version" "this" {
   # Write-only (Terraform >= 1.11): the plaintext is sent to the API but NEVER
   # persisted in plan or state. Bump secret_value_versions[<name>] to push a new
   # value (write-only attributes cannot be diffed).
+  # google 8.x types secret_data_wo_version as a String (state migrates N to
+  # "N") and requires it alongside secret_data_wo; a "0" counts as unset and
+  # forces replacement, so the counter stays a positive integer, stringified.
   secret_data_wo         = var.secrets[each.key].ephemeral_value ? var.ephemeral_secret_values[each.key] : var.secret_values[each.key]
-  secret_data_wo_version = lookup(var.secret_value_versions, each.key, 1)
+  secret_data_wo_version = tostring(lookup(var.secret_value_versions, each.key, 1))
 }
 
 # Per-secret accessor bindings (roles/secretmanager.secretAccessor).

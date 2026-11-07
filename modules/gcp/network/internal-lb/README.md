@@ -142,14 +142,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.17, < 2.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | 8.10.0 |
 
 
 
@@ -159,9 +159,10 @@ The following resources are created:
 
 
 - resource.google_compute_address.internal_ip (modules/gcp/network/internal-lb/main.tf#L14)
-- resource.google_compute_firewall.allow_proxy (modules/gcp/network/internal-lb/main.tf#L217)
+- resource.google_compute_firewall.allow_proxy (modules/gcp/network/internal-lb/main.tf#L221)
 - resource.google_compute_forwarding_rule.forwarding_rule (modules/gcp/network/internal-lb/main.tf#L187)
 - resource.google_compute_health_check.health_check (modules/gcp/network/internal-lb/main.tf#L34)
+- resource.google_compute_network_firewall_policy_rule.allow_proxy (modules/gcp/network/internal-lb/main.tf#L257)
 - resource.google_compute_region_backend_service.backend (modules/gcp/network/internal-lb/main.tf#L85)
 - resource.google_compute_region_target_http_proxy.http_proxy (modules/gcp/network/internal-lb/main.tf#L164)
 - resource.google_compute_region_target_https_proxy.https_proxy (modules/gcp/network/internal-lb/main.tf#L173)
@@ -188,7 +189,10 @@ The following resources are created:
 | <a name="input_create_static_ip"></a> [create\_static\_ip](#input\_create\_static\_ip) | Whether to create a static internal IP address | `bool` | `true` | no |
 | <a name="input_enable_logging"></a> [enable\_logging](#input\_enable\_logging) | Enable access logging | `bool` | `true` | no |
 | <a name="input_enable_ssl"></a> [enable\_ssl](#input\_enable\_ssl) | Enable HTTPS for the load balancer | `bool` | `false` | no |
-| <a name="input_firewall_priority"></a> [firewall\_priority](#input\_firewall\_priority) | Priority for the proxy-only subnet firewall rule | `number` | `1000` | no |
+| <a name="input_firewall_mode"></a> [firewall\_mode](#input\_firewall\_mode) | How the proxy-only subnet allow rule is enforced, matching the VPC's network/tiered-vpc firewall\_mode. legacy: a VPC firewall rule targeting backend\_target\_tags (default). both: the VPC rule plus a rule in firewall\_policy. policy: the firewall\_policy rule only (no target tags: it applies to every instance in the VPC). | `string` | `"legacy"` | no |
+| <a name="input_firewall_policy"></a> [firewall\_policy](#input\_firewall\_policy) | Name of the global network firewall policy attached to the VPC (the network/tiered-vpc firewall\_policy\_name output). Required when firewall\_mode is both or policy and create\_firewall\_rule is true. | `string` | `null` | no |
+| <a name="input_firewall_policy_rule_priority"></a> [firewall\_policy\_rule\_priority](#input\_firewall\_policy\_rule\_priority) | Priority of the proxy-only allow rule in firewall\_policy (firewall\_mode both / policy). It must be unique within the policy and outside 64000-64999 (reserved for the network/tiered-vpc tier rules). null derives a stable priority in 1000-63999 from a hash of name, so ILBs with different names normally get different priorities; set it explicitly if two names collide. | `number` | `null` | no |
+| <a name="input_firewall_priority"></a> [firewall\_priority](#input\_firewall\_priority) | Priority for the proxy-only subnet VPC firewall rule (firewall\_mode legacy / both). The network firewall policy rule uses firewall\_policy\_rule\_priority instead. | `number` | `1000` | no |
 | <a name="input_grpc_service_name"></a> [grpc\_service\_name](#input\_grpc\_service\_name) | Service name for gRPC health checks | `string` | `null` | no |
 | <a name="input_health_check_healthy_threshold"></a> [health\_check\_healthy\_threshold](#input\_health\_check\_healthy\_threshold) | Number of successful checks before marking healthy | `number` | `2` | no |
 | <a name="input_health_check_interval_sec"></a> [health\_check\_interval\_sec](#input\_health\_check\_interval\_sec) | Health check interval in seconds | `number` | `5` | no |
@@ -217,6 +221,7 @@ The following resources are created:
 | <a name="output_backend_service"></a> [backend\_service](#output\_backend\_service) | The backend service resource |
 | <a name="output_backend_service_id"></a> [backend\_service\_id](#output\_backend\_service\_id) | The ID of the backend service |
 | <a name="output_backend_service_self_link"></a> [backend\_service\_self\_link](#output\_backend\_service\_self\_link) | The self\_link of the backend service |
+| <a name="output_firewall_policy_rule_priority"></a> [firewall\_policy\_rule\_priority](#output\_firewall\_policy\_rule\_priority) | Priority of the proxy-only allow rule in the network firewall policy, or null when no policy rule is created (firewall\_mode = legacy or create\_firewall\_rule = false). |
 | <a name="output_forwarding_rule"></a> [forwarding\_rule](#output\_forwarding\_rule) | The full forwarding rule resource |
 | <a name="output_health_check"></a> [health\_check](#output\_health\_check) | The health check resource (if created) |
 | <a name="output_id"></a> [id](#output\_id) | The ID of the forwarding rule |

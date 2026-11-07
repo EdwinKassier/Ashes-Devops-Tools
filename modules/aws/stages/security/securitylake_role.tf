@@ -7,9 +7,9 @@
 # every other role it creates in this account.
 
 locals {
-  create_meta_store_role = var.enable_security_lake && var.meta_store_manager_role_arn == ""
+  create_meta_store_role = var.aws.enable_security_lake && var.aws.meta_store_manager_role_arn == ""
   meta_store_manager_role_arn = (
-    local.create_meta_store_role ? aws_iam_role.securitylake_meta_store[0].arn : var.meta_store_manager_role_arn
+    local.create_meta_store_role ? aws_iam_role.securitylake_meta_store[0].arn : var.aws.meta_store_manager_role_arn
   )
 }
 

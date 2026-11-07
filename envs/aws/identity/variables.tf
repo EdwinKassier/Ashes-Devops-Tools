@@ -21,9 +21,14 @@ variable "organization_workspace_name" {
 }
 
 variable "organization_contract" {
-  description = "aws-organization stage contract (FAST-style override): account_ids (account key => 12-digit ID). When set, the aws-organization remote state is NOT read. Null = aws.contracts.organization from config/landing-zone.yaml, else read from the organization_workspace_name workspace's remote state."
+  description = "aws-organization stage contract (FAST-style override), the same type in every aws root: organization_id (o-xxxxxxxxxx), organization_root_id (r-xxxx), management_account_id, ou_ids (OU name => OU ID), account_ids (account key => 12-digit ID), account_role_arns (account key => cross-account role ARN). This root needs: account_ids. When set, the aws-organization remote state is NOT read. Null = aws.contracts.organization from config/landing-zone.yaml, else the contract output of the organization_workspace_name workspace."
   type = object({
-    account_ids = map(string)
+    organization_id       = optional(string)
+    organization_root_id  = optional(string)
+    management_account_id = optional(string)
+    ou_ids                = optional(map(string), {})
+    account_ids           = map(string)
+    account_role_arns     = optional(map(string), {})
   })
   default = null
 
@@ -53,36 +58,88 @@ variable "aws_region" {
 # -----------------------------------------------------------------------------
 
 variable "permission_sets" {
-  description = "Map of permission set name to definition, passed to the iam-identity-center module. Defaults to a small AdministratorAccess + ReadOnly set; override to add finer-grained sets."
+  description = "Map of permission set name to definition, passed to the iam-identity-center module. Defaults: AdministratorAccess (break-glass), PlatformAdmin, Developer (PowerUserAccess), SecurityAudit and ReadOnly; override to add finer-grained sets."
   type = map(object({
     description         = string
     session_duration    = string
     managed_policy_arns = optional(list(string), [])
-    inline_policy       = optional(string, "")
+    # AWS-managed policy names (e.g. "ReadOnlyAccess"); the ARN is built for the running partition.
+    managed_policy_names = optional(list(string), [])
+    inline_policy        = optional(string, "")
+    customer_managed_policies = optional(list(object({
+      name = string
+      path = optional(string, "/")
+    })), [])
   }))
   default = {
     AdministratorAccess = {
-      description         = "Full administrative access. Assign only to break-glass groups."
-      session_duration    = "PT1H"
-      managed_policy_arns = ["arn:aws:iam::aws:policy/AdministratorAccess"]
+      description          = "Full administrative access. Assign only to break-glass groups."
+      session_duration     = "PT1H"
+      managed_policy_names = ["AdministratorAccess"]
+    }
+    PlatformAdmin = {
+      description          = "Platform engineering administrative access (AdministratorAccess, time-boxed)."
+      session_duration     = "PT4H"
+      managed_policy_names = ["AdministratorAccess"]
+    }
+    Developer = {
+      description          = "Application developer access: everything except IAM and Organizations administration (PowerUserAccess)."
+      session_duration     = "PT8H"
+      managed_policy_names = ["PowerUserAccess"]
+    }
+    SecurityAudit = {
+      description          = "Read-only security audit access (SecurityAudit)."
+      session_duration     = "PT4H"
+      managed_policy_names = ["SecurityAudit"]
     }
     ReadOnly = {
-      description         = "Organization-wide read-only access for auditors and viewers."
-      session_duration    = "PT1H"
-      managed_policy_arns = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
+      description          = "Organization-wide read-only access for auditors and viewers."
+      session_duration     = "PT1H"
+      managed_policy_names = ["ReadOnlyAccess"]
     }
   }
 }
 
 variable "assignments" {
-  description = "Map of assignment key to a binding of a permission set to a principal (GROUP or USER) in a target AWS account. account_id may be set directly or, in tfvars, resolved from the org remote state via the account_ids map."
+  description = "Explicit assignments (merged with those derived from aws.identity.groups): map of assignment key to a binding of a permission set to a principal in a target account. Set exactly one of principal_id / group_display_name and exactly one of account_id / account_key (a key of the org contract account_ids)."
   type = map(object({
-    permission_set = string
-    principal_type = string
-    principal_id   = string
-    account_id     = string
+    permission_set     = string
+    principal_type     = optional(string, "GROUP")
+    principal_id       = optional(string)
+    group_display_name = optional(string)
+    account_id         = optional(string)
+    account_key        = optional(string)
   }))
   default = {}
+}
+
+variable "identity_groups" {
+  description = "Name-based assignments: Identity Store group display name => list of {permission_set, accounts} where accounts are keys of the org contract account_ids. Null = aws.identity.groups from config/landing-zone.yaml (absent = none)."
+  type = map(list(object({
+    permission_set = string
+    accounts       = list(string)
+  })))
+  default = null
+
+  validation {
+    condition = alltrue(flatten([
+      for g, entries in coalesce(var.identity_groups, local.cfg.identity_groups, {}) : [
+        for e in entries : [
+          for a in e.accounts : contains(keys(local.org.account_ids), a)
+        ]
+      ]
+    ]))
+    error_message = "identity groups (var.identity_groups or aws.identity.groups) name an account key that is not in the organization contract account_ids."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for g, entries in coalesce(var.identity_groups, local.cfg.identity_groups, {}) : [
+        for e in entries : contains(keys(var.permission_sets), e.permission_set)
+      ]
+    ]))
+    error_message = "identity groups (var.identity_groups or aws.identity.groups) name a permission_set that is not in permission_sets."
+  }
 }
 
 # -----------------------------------------------------------------------------

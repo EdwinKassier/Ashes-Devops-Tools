@@ -53,10 +53,25 @@ locals {
     "egress->shared"      = { attachment = "egress", route_table = "shared" }
   }
 
-  tgw_routes = {
-    "prod:default"    = { route_table = "prod", cidr = "0.0.0.0/0", attachment = "inspection" }
-    "nonprod:default" = { route_table = "nonprod", cidr = "0.0.0.0/0", attachment = "inspection" }
-  }
+  tgw_routes = merge(
+    {
+      "prod:default"    = { route_table = "prod", cidr = "0.0.0.0/0", attachment = "inspection" }
+      "nonprod:default" = { route_table = "nonprod", cidr = "0.0.0.0/0", attachment = "inspection" }
+    },
+    # On-premises traffic is default-routed to inspection too (hybrid table).
+    var.enable_vpn ? { "hybrid:default" = { route_table = "hybrid", cidr = "0.0.0.0/0", attachment = "inspection" } } : {},
+    local.spoke_hub_routes,
+  )
+
+  # Hub routes the workload spokes need (spokes.tf); added only once a spoke is
+  # wired so an estate without spoke_attachments plans no change.
+  spoke_hub_routes = length(var.spoke_attachments) > 0 ? {
+    # Inspected internet-bound traffic leaves through the egress VPC (NAT).
+    "inspection:default" = { route_table = "inspection", cidr = "0.0.0.0/0", attachment = "egress" }
+    # NAT replies to the spokes (egress sits in the shared segment) go back
+    # through inspection, so egress is inspected in both directions.
+    "shared:spokes" = { route_table = "shared", cidr = var.top_cidr, attachment = "inspection" }
+  } : {}
 }
 
 # ---------------------------------------------------------------------------
@@ -74,6 +89,18 @@ module "ipam" {
   tags = var.tags
 }
 
+locals {
+  # Hub VPCs allocate their (explicit) CIDR from the regional IPAM pool only when
+  # opted in. Adding ipv4_ipam_pool_id to an existing static VPC forces
+  # replacement, so with ipam_mode_for_new_vpcs_only (default) only the VPCs named
+  # in ipam_new_vpcs move; every other keeps today's static attributes.
+  hub_regional_pool_id = try(module.ipam.regional_pool_ids[var.aws_region], "")
+  hub_vpc_ipam_pool_ids = {
+    for name in ["inspection", "egress"] :
+    name => (!var.ipam_mode_for_new_vpcs_only || contains(var.ipam_new_vpcs, name)) ? local.hub_regional_pool_id : ""
+  }
+}
+
 # ---------------------------------------------------------------------------
 # Inspection VPC — hosts the Network Firewall + its TGW attachment
 # ---------------------------------------------------------------------------
@@ -83,6 +110,8 @@ module "inspection_vpc" {
 
   name                     = "inspection"
   cidr_block               = var.inspection_cidr
+  ipam_pool_id             = local.hub_vpc_ipam_pool_ids["inspection"]
+  ipam_allocation          = "explicit_cidr"
   region                   = var.aws_region
   availability_zones       = var.availability_zones
   az_count                 = var.az_count
@@ -101,6 +130,8 @@ module "egress_vpc" {
 
   name                     = "egress"
   cidr_block               = var.egress_cidr
+  ipam_pool_id             = local.hub_vpc_ipam_pool_ids["egress"]
+  ipam_allocation          = "explicit_cidr"
   region                   = var.aws_region
   availability_zones       = var.availability_zones
   az_count                 = var.az_count
@@ -267,7 +298,7 @@ module "transit_gateway" {
 
   org_arn = var.org_arn
 
-  route_tables = ["prod", "nonprod", "inspection", "shared"]
+  route_tables = concat(["prod", "nonprod", "inspection", "shared"], var.enable_vpn ? ["hybrid"] : [])
 
   attachments = {
     inspection = {
@@ -295,6 +326,61 @@ module "transit_gateway" {
 }
 
 # ---------------------------------------------------------------------------
+# Site-to-Site VPN — opt-in hybrid connectivity terminating on the TGW
+#
+# Routing model (centralized inspection is preserved in both directions):
+#   - The VPN attachment is associated with a dedicated "hybrid" TGW route table
+#     whose only route is 0.0.0.0/0 -> inspection attachment, so traffic from
+#     on-premises is inspected before it reaches any spoke.
+#   - The on-premises prefixes propagate (BGP) into the "inspection" route table
+#     ONLY, or are added there as static routes. Spokes (prod/nonprod) never learn
+#     them, so a spoke's reply to on-premises follows its 0.0.0.0/0 -> inspection
+#     route, is inspected, and the inspection VPC's attachment (inspection table)
+#     forwards it to the VPN. No on-premises prefix is more specific than the
+#     spoke default, so inspection cannot be bypassed.
+# ---------------------------------------------------------------------------
+
+module "vpn" {
+  source = "../../network/vpn"
+  count  = var.enable_vpn ? 1 : 0
+
+  name                     = "hub"
+  customer_gateway_ip      = var.vpn.customer_gateway_ip
+  customer_gateway_bgp_asn = var.vpn.customer_gateway_bgp_asn
+  attach_to                = "transit_gateway"
+  transit_gateway_id       = module.transit_gateway.tgw_id
+  static_routes_only       = var.vpn.static_routes_only
+  tunnel_inside_cidrs      = var.vpn.tunnel_inside_cidrs
+  enable_acceleration      = var.vpn.enable_acceleration
+  preshared_key_storage    = var.vpn.preshared_key_storage
+  tags                     = var.tags
+}
+
+resource "aws_ec2_transit_gateway_route_table_association" "vpn" {
+  count = var.enable_vpn ? 1 : 0
+
+  transit_gateway_attachment_id  = module.vpn[0].transit_gateway_attachment_id
+  transit_gateway_route_table_id = module.transit_gateway.route_table_ids["hybrid"]
+}
+
+# BGP: the on-premises routes are learned by the inspection route table only.
+resource "aws_ec2_transit_gateway_route_table_propagation" "vpn" {
+  count = var.enable_vpn ? 1 : 0
+
+  transit_gateway_attachment_id  = module.vpn[0].transit_gateway_attachment_id
+  transit_gateway_route_table_id = module.transit_gateway.route_table_ids["inspection"]
+}
+
+# Static routing: the same on-premises prefixes, pinned to the VPN attachment.
+resource "aws_ec2_transit_gateway_route" "vpn_onprem" {
+  for_each = var.enable_vpn && var.vpn.static_routes_only ? toset(var.vpn.onprem_cidrs) : toset([])
+
+  destination_cidr_block         = each.value
+  transit_gateway_route_table_id = module.transit_gateway.route_table_ids["inspection"]
+  transit_gateway_attachment_id  = module.vpn[0].transit_gateway_attachment_id
+}
+
+# ---------------------------------------------------------------------------
 # Network Firewall — stateful inspection in the inspection VPC
 # ---------------------------------------------------------------------------
 
@@ -318,6 +404,23 @@ module "network_firewall" {
   home_net_cidrs           = [var.top_cidr]
 
   tags = var.tags
+}
+
+# Production egress fails closed: an enforced estate must drop unmatched
+# established traffic and carry a domain allowlist, or carry the waiver.
+resource "terraform_data" "production_egress_enforced" {
+  input = var.enforce_egress_allowlist
+
+  lifecycle {
+    precondition {
+      condition = (
+        !var.enforce_egress_allowlist || var.egress_alert_only_waived ||
+        (contains(var.network_firewall_stateful_default_actions, "aws:drop_established") &&
+        length(var.network_firewall_egress_domain_allowlist) > 0)
+      )
+      error_message = "Production egress must fail closed: set network_firewall_stateful_default_actions to include aws:drop_established AND a non-empty network_firewall_egress_domain_allowlist (config aws.network.stateful_default_actions / aws.network.egress_domain_allowlist), or explicitly waive with egress_alert_only_waived (config aws.network.egress_alert_only_waived: true)."
+    }
+  }
 }
 
 # ---------------------------------------------------------------------------

@@ -19,13 +19,15 @@ override_data {
   target = data.terraform_remote_state.aws_organization
   values = {
     outputs = {
-      organization_id       = "o-abcdefghij"
-      organization_root_id  = "r-abcd"
-      management_account_id = "111111111111"
-      ou_ids                = { Workloads = "ou-abcd-workloads0" }
-      account_ids           = { shared_services = "777777777777", network = "666666666666" }
-      account_role_arns = {
-        shared_services = "arn:aws:iam::777777777777:role/cross-account"
+      contract = {
+        organization_id       = "o-abcdefghij"
+        organization_root_id  = "r-abcd"
+        management_account_id = "111111111111"
+        ou_ids                = { Workloads = "ou-abcd-workloads0" }
+        account_ids           = { shared_services = "777777777777", network = "666666666666" }
+        account_role_arns = {
+          shared_services = "arn:aws:iam::777777777777:role/cross-account"
+        }
       }
     }
   }
@@ -40,8 +42,8 @@ run "remote_state_is_projected_onto_the_contract" {
   }
 
   assert {
-    condition     = toset(keys(local.org)) == toset(["organization_id", "management_account_id", "account_ids"])
-    error_message = "local.org must project the remote state onto exactly organization_id / management_account_id / account_ids."
+    condition     = toset(keys(local.org)) == toset(["organization_id", "organization_root_id", "management_account_id", "ou_ids", "account_ids", "account_role_arns"])
+    error_message = "local.org must project the remote contract onto the shared aws organization_contract type (all six fields)."
   }
 
   assert {

@@ -2,7 +2,9 @@
 # aws_region, owner/cost_center, account IDs, role ARNs, accounts, workload
 # environments) are read from config/landing-zone.yaml when it exists, so a
 # VCS-driven TFC run needs no tfvars; any variable set here (or in TFC) wins
-# over the config file.
+# over the config file. The aws.* keys and every other tuning input go in ONE
+# object, aws_overrides: set only the keys you override, unset keys keep the
+# config value (or the profile-driven default).
 #
 # Copy to terraform.tfvars and fill in. Inputs marked REQUIRED have no usable
 # default — you MUST supply them (landing_zone_name and the log-archive bucket
@@ -22,48 +24,51 @@ landing_zone_name = "acme"
 # Optional — workspace holding the phase-1 aws-organization root state.
 organization_workspace_name = "aws-organization"
 
-# Optional — home (aggregation) region and the regions the regional security
-# services are enabled in.
-aws_region          = "eu-west-2"
-aws_enabled_regions = ["eu-west-2"]
+# Optional — home (aggregation) region.
+aws_region = "eu-west-2"
 
-# REQUIRED — central log-archive bucket name. MUST match the name the log-tamper
-# SCP references in the aws-organization root (cross-root naming contract).
-log_archive_bucket_name = "ashes-org-log-archive"
+aws_overrides = {
+  # Optional — the regions the regional security services are enabled in.
+  aws_enabled_regions = ["eu-west-2"]
 
-# Optional — KMS key administrator (management actions only) on the log,
-# forensics and security-tooling CMKs. Default null: each key's own account
-# tfc-apply role (key_admin_role_name) administers it.
-# key_admin_arn = "arn:aws:iam::111111111111:role/key-admin"
+  # REQUIRED — central log-archive bucket name. MUST match the name the log-tamper
+  # SCP references in the aws-organization root (cross-root naming contract).
+  log_archive_bucket_name = "ashes-org-log-archive"
 
-# Optional — Config recorder role. Default null: the AWSServiceRoleForConfig
-# service-linked role, created here (set create_config_service_linked_role =
-# false if Config was already enabled in the security-tooling account).
-# config_role_arn = "arn:aws:iam::222222222222:role/aws-config-recorder"
+  # Optional — KMS key administrator (management actions only) on the log,
+  # forensics and security-tooling CMKs. Default null: each key's own account
+  # tfc-apply role (key_admin_role_name) administers it.
+  # key_admin_arn = "arn:aws:iam::111111111111:role/key-admin"
 
-# Optional — Config org aggregator role. Default null: created here
-# (aws-config-org-aggregator + AWSConfigRoleForOrganizations).
-# aggregator_role_arn = "arn:aws:iam::222222222222:role/aws-config-aggregator"
+  # Optional — Config recorder role. Default null: the AWSServiceRoleForConfig
+  # service-linked role, created here (set create_config_service_linked_role =
+  # false if Config was already enabled in the security-tooling account).
+  # config_role_arn = "arn:aws:iam::222222222222:role/aws-config-recorder"
 
-# Optional (REQUIRED when enable_security_lake = true) — the
-# AmazonSecurityLakeMetaStoreManager role ARN.
-meta_store_manager_role_arn = "arn:aws:iam::222222222222:role/AmazonSecurityLakeMetaStoreManager"
+  # Optional — Config org aggregator role. Default null: created here
+  # (aws-config-org-aggregator + AWSConfigRoleForOrganizations).
+  # aggregator_role_arn = "arn:aws:iam::222222222222:role/aws-config-aggregator"
 
-# Optional — break-glass role ARN the security-notifications control watches for
-# assumption. Leave empty to disable the watch.
-# break_glass_role_arn = "arn:aws:iam::111111111111:role/break-glass"
+  # Optional (REQUIRED when enable_security_lake = true) — the
+  # AmazonSecurityLakeMetaStoreManager role ARN.
+  meta_store_manager_role_arn = "arn:aws:iam::222222222222:role/AmazonSecurityLakeMetaStoreManager"
 
-# Optional — SNS subscribers for security notifications. Override the placeholder
-# SecOps email with a real endpoint.
-notification_subscribers = {
-  secops = { protocol = "email", endpoint = "secops@ashes.example.com" }
+  # Optional — break-glass role ARN the security-notifications control watches for
+  # assumption. Leave empty to disable the watch.
+  # break_glass_role_arn = "arn:aws:iam::111111111111:role/break-glass"
+
+  # Optional — SNS subscribers for security notifications. Override the placeholder
+  # SecOps email with a real endpoint.
+  notification_subscribers = {
+    secops = { protocol = "email", endpoint = "secops@ashes.example.com" }
+  }
+
+  # Optional — org-security services to enable (detective/resource-explorer also
+  # available; detective defaults off per SRA).
+  enabled_security_services = ["macie", "inspector"]
+
+  # Optional — cost / feature toggles.
+  enable_security_lake     = true
+  enable_incident_response = true
+  enable_service_quotas    = false
 }
-
-# Optional — org-security services to enable (detective/resource-explorer also
-# available; detective defaults off per SRA).
-enabled_security_services = ["macie", "inspector"]
-
-# Optional — cost / feature toggles.
-enable_security_lake     = true
-enable_incident_response = true
-enable_service_quotas    = false

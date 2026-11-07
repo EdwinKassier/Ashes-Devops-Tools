@@ -55,6 +55,14 @@ locals {
       "declarative-baseline@root" = { policy_key = "declarative-ec2-baseline", target_id = module.organization.roots_id }
       "aiservices-opt-out@root"   = { policy_key = "aiservices-opt-out", target_id = module.organization.roots_id }
     },
+    # Suspended deny-all and Sandbox guard, attached only when the OU exists
+    # (the OU list is overridable in the organization module).
+    contains(keys(module.organization.ou_ids), "Suspended") ? {
+      "suspended-deny-all@suspended" = { policy_key = "scp-suspended-deny-all", target_id = module.organization.ou_ids["Suspended"] }
+    } : {},
+    contains(keys(module.organization.ou_ids), "Sandbox") ? {
+      "sandbox-guard@sandbox" = { policy_key = "scp-sandbox-guard", target_id = module.organization.ou_ids["Sandbox"] }
+    } : {},
   )
   # Attachments of disabled built-in policies are dropped with them.
   effective_attachments = merge(
@@ -87,11 +95,20 @@ module "policies" {
   partition               = var.partition
   disabled_policies       = var.disabled_org_policies
 
+  sandbox_allowed_instance_types = var.sandbox_allowed_instance_types
+
   # Member-account carve-outs + perimeter tuning (validated in the policy module).
   pipeline_role_names                = var.pipeline_role_names
   break_glass_role_names             = var.break_glass_role_names
   data_perimeter_trusted_account_ids = var.data_perimeter_trusted_account_ids
   allow_vpc_bpa_exclusions           = var.allow_vpc_bpa_exclusions
+  ec2_allowed_images                 = var.ec2_allowed_images
+
+  # Recorder SCP: after the recorder migration only the StackSet execution
+  # role, break-glass and security tooling's tfc-apply (its aggregator
+  # recorder) may change recorders.
+  enable_config_recorder_scp         = var.enable_config_recorder_scp
+  config_recorder_pipeline_role_arns = var.enable_config_recorder_scp ? ["arn:${var.partition}:iam::${local.security_tooling_account_id}:role/${var.security_tooling_apply_role_name}"] : []
 
   # Detection settings are reachable only from the security accounts' pipeline.
   central_detection_account_ids = [for k in var.central_detection_account_keys : module.account[k].account_id]
@@ -201,6 +218,16 @@ module "tfc_management_roles" {
 
   # aws-security may delegate the security services only to security tooling.
   delegated_admin_account_ids = [for k in ["security_tooling", "backup"] : module.account[k].account_id if contains(keys(local.all_accounts), k)]
+
+  # The role's trail scope, the guard rule and the trail delivery role agree.
+  security_trail_name         = var.org_trail_name
+  security_trail_role_pattern = "${var.org_trail_name}-cloudwatch-delivery"
+
+  # Turning org-wide detection off is a gated, reviewed teardown step.
+  enable_security_service_teardown = var.enable_security_service_teardown
+
+  # With the CloudTrail delegated admin the role keeps no trail write.
+  enable_cloudtrail_delegated_admin = var.enable_cloudtrail_delegated_admin
 }
 
 # GitHub deploy roles need a pinned owner: without github_federation_owners the

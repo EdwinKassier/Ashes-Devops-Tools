@@ -74,14 +74,15 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.17, < 2.0 |
 | <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.46.0, < 7.0.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.54.0 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.72.0 |
+| <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
 
@@ -94,6 +95,7 @@ module "example" {
 - route53_resolver - ../../network/route53-resolver
 - transit_gateway - ../../network/transit-gateway
 - vpc_endpoints - ../../network/vpc-endpoints
+- vpn - ../../network/vpn
 
 
 ## Resources
@@ -101,12 +103,19 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_eip.nat (modules/aws/stages/network-hub/main.tf#L162)
-- resource.aws_nat_gateway.this (modules/aws/stages/network-hub/main.tf#L170)
-- resource.aws_route.egress_default (modules/aws/stages/network-hub/main.tf#L185)
-- resource.aws_route.egress_tgw_default (modules/aws/stages/network-hub/main.tf#L195)
-- resource.aws_route.hub_to_tgw (modules/aws/stages/network-hub/main.tf#L217)
-- resource.aws_route.inspection_tgw_to_firewall (modules/aws/stages/network-hub/main.tf#L209)
+- resource.aws_ec2_transit_gateway_route.vpn_onprem (modules/aws/stages/network-hub/main.tf#L375)
+- resource.aws_ec2_transit_gateway_route_table_association.spoke (modules/aws/stages/network-hub/spokes.tf#L42)
+- resource.aws_ec2_transit_gateway_route_table_association.vpn (modules/aws/stages/network-hub/main.tf#L359)
+- resource.aws_ec2_transit_gateway_route_table_propagation.spoke (modules/aws/stages/network-hub/spokes.tf#L51)
+- resource.aws_ec2_transit_gateway_route_table_propagation.vpn (modules/aws/stages/network-hub/main.tf#L367)
+- resource.aws_ec2_transit_gateway_vpc_attachment_accepter.spoke (modules/aws/stages/network-hub/spokes.tf#L30)
+- resource.aws_eip.nat (modules/aws/stages/network-hub/main.tf#L193)
+- resource.aws_nat_gateway.this (modules/aws/stages/network-hub/main.tf#L201)
+- resource.aws_route.egress_default (modules/aws/stages/network-hub/main.tf#L216)
+- resource.aws_route.egress_tgw_default (modules/aws/stages/network-hub/main.tf#L226)
+- resource.aws_route.hub_to_tgw (modules/aws/stages/network-hub/main.tf#L248)
+- resource.aws_route.inspection_tgw_to_firewall (modules/aws/stages/network-hub/main.tf#L240)
+- resource.terraform_data.production_egress_enforced (modules/aws/stages/network-hub/main.tf#L411)
 
 
 ## Inputs
@@ -121,18 +130,25 @@ The following resources are created:
 | <a name="input_aws_enabled_regions"></a> [aws\_enabled\_regions](#input\_aws\_enabled\_regions) | Regions IPAM operates in. Each becomes an operating region on the IPAM and gets its own regional pool. | `list(string)` | <pre>[<br/>  "eu-west-2"<br/>]</pre> | no |
 | <a name="input_aws_region"></a> [aws\_region](#input\_aws\_region) | AWS region the network hub is deployed in. Used for the inspection/egress VPCs, gateway/interface endpoint service names, and NAT placement. | `string` | `"eu-west-2"` | no |
 | <a name="input_az_count"></a> [az\_count](#input\_az\_count) | Number of availability zones to spread each subnet tier across. | `number` | `2` | no |
+| <a name="input_egress_alert_only_waived"></a> [egress\_alert\_only\_waived](#input\_egress\_alert\_only\_waived) | Explicit, reviewable waiver of the production egress gate: accept alert-only (log-but-pass) egress inspection while allow rules are being built. Only meaningful when enforce\_egress\_allowlist is true. | `bool` | `false` | no |
 | <a name="input_egress_cidr"></a> [egress\_cidr](#input\_egress\_cidr) | IPv4 CIDR of the centralized egress VPC that hosts the NAT gateways, interface endpoints, and Route 53 resolver endpoints. | `string` | `"10.1.0.0/16"` | no |
 | <a name="input_enable_network_access_analyzer"></a> [enable\_network\_access\_analyzer](#input\_enable\_network\_access\_analyzer) | Whether to create the Network Access Analyzer scope that flags segmentation-intent violations. Off by default. | `bool` | `false` | no |
 | <a name="input_enable_network_firewall"></a> [enable\_network\_firewall](#input\_enable\_network\_firewall) | Whether to deploy the Network Firewall in the inspection VPC. COST TOGGLE: bills per endpoint-hour plus per-GB processed. | `bool` | `true` | no |
+| <a name="input_enable_vpn"></a> [enable\_vpn](#input\_enable\_vpn) | Attach an on-premises Site-to-Site VPN to the transit gateway (network/vpn). Off by default. Requires vpn.customer\_gateway\_ip. Traffic from on-premises is default-routed to the inspection VPC (a dedicated hybrid TGW route table), and the on-premises routes propagate only into the inspection route table, so spoke return traffic is inspected too. See docs/architecture/aws-landing-zone.md. | `bool` | `false` | no |
+| <a name="input_enforce_egress_allowlist"></a> [enforce\_egress\_allowlist](#input\_enforce\_egress\_allowlist) | Production egress gate. When true (and egress\_alert\_only\_waived is false) the plan fails unless network\_firewall\_stateful\_default\_actions contains aws:drop\_established and network\_firewall\_egress\_domain\_allowlist is non-empty, so production never runs alert-only. The aws-network root sets it when org.profile is production and an AWS workload environment is\_production. | `bool` | `false` | no |
 | <a name="input_inspection_cidr"></a> [inspection\_cidr](#input\_inspection\_cidr) | IPv4 CIDR of the inspection VPC that hosts the Network Firewall endpoints and its transit-gateway attachment. | `string` | `"10.0.0.0/16"` | no |
+| <a name="input_ipam_mode_for_new_vpcs_only"></a> [ipam\_mode\_for\_new\_vpcs\_only](#input\_ipam\_mode\_for\_new\_vpcs\_only) | When true (default), the hub VPCs allocate from the regional IPAM pool only if named in ipam\_new\_vpcs; all others keep their static CIDR attributes (adding a pool to an existing VPC forces replacement). Set false to move BOTH hub VPCs to the pool (replaces them; the destroy guard blocks it unless overridden). | `bool` | `true` | no |
+| <a name="input_ipam_new_vpcs"></a> [ipam\_new\_vpcs](#input\_ipam\_new\_vpcs) | Hub VPCs to create from the regional IPAM pool while ipam\_mode\_for\_new\_vpcs\_only is true. Allowed: inspection, egress. List a VPC only when it is being created; listing an existing static VPC replaces it. | `set(string)` | `[]` | no |
 | <a name="input_network_firewall_egress_domain_allowlist"></a> [network\_firewall\_egress\_domain\_allowlist](#input\_network\_firewall\_egress\_domain\_allowlist) | Optional HTTP\_HOST/TLS\_SNI egress domain allowlist. Non-empty DROPS all other HTTP/TLS egress from the org supernet (top\_cidr). Empty (default) = no domain filtering. | `list(string)` | `[]` | no |
 | <a name="input_network_firewall_managed_rule_groups"></a> [network\_firewall\_managed\_rule\_groups](#input\_network\_firewall\_managed\_rule\_groups) | AWS-managed StrictOrder stateful rule group names attached to the inspection firewall policy (see modules/aws/network/network-firewall managed\_rule\_groups). | `list(string)` | <pre>[<br/>  "AttackInfrastructureStrictOrder",<br/>  "MalwareDomainsStrictOrder",<br/>  "BotNetCommandAndControlDomainsStrictOrder"<br/>]</pre> | no |
 | <a name="input_network_firewall_stateful_default_actions"></a> [network\_firewall\_stateful\_default\_actions](#input\_network\_firewall\_stateful\_default\_actions) | STRICT\_ORDER default actions for unmatched traffic. Default ["aws:alert\_established"] = log-but-pass (no day-one blackhole); move to ["aws:drop\_established", "aws:alert\_established"] once allow rules cover legitimate egress. | `list(string)` | <pre>[<br/>  "aws:alert_established"<br/>]</pre> | no |
 | <a name="input_network_firewall_suricata_rules"></a> [network\_firewall\_suricata\_rules](#input\_network\_firewall\_suricata\_rules) | Optional custom Suricata rules (STRICT\_ORDER semantics) evaluated after the managed threat groups. Empty (default) = none. | `string` | `""` | no |
 | <a name="input_private_hosted_zone_name"></a> [private\_hosted\_zone\_name](#input\_private\_hosted\_zone\_name) | Name of the shared Route 53 private hosted zone for split-horizon DNS in the egress VPC. Empty string skips creating the zone. | `string` | `""` | no |
 | <a name="input_regional_cidrs"></a> [regional\_cidrs](#input\_regional\_cidrs) | Map of region to the CIDR each regional IPAM pool provisions. Every CIDR should fall within top\_cidr. | `map(string)` | <pre>{<br/>  "eu-west-2": "10.0.0.0/12"<br/>}</pre> | no |
+| <a name="input_spoke_attachments"></a> [spoke\_attachments](#input\_spoke\_attachments) | Workload spoke attachments to the shared transit gateway, keyed by a plan-known name (usually the environment). attachment\_id is the aws-workload-<env> output tgw\_attachment\_id (created in the workload account, so the hub only learns it once that workload has applied). segment is prod or nonprod: the attachment is associated with that route table (whose 0.0.0.0/0 goes to inspection) and propagated into the inspection route table so inspected traffic, egress replies and on-premises traffic reach the spoke. accept = true (default) accepts the cross-account attachment (the TGW does not auto-accept shared attachments); set false for an attachment that is already accepted. A non-empty map also adds the hub routes the spokes need: inspection 0.0.0.0/0 to the egress attachment and shared top\_cidr to the inspection attachment (egress replies are inspected too). Empty (default): no change. | <pre>map(object({<br/>    attachment_id = string<br/>    segment       = string<br/>    accept        = optional(bool, true)<br/>  }))</pre> | `{}` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to the stage's own taggable resources (NAT gateways, EIPs) and passed to every child module (hub VPCs, IPAM, TGW, Network Firewall, endpoints, Resolver, Network Access Analyzer). Org-wide tags normally come from the provider default\_tags; use this for stage-specific additions. | `map(string)` | `{}` | no |
 | <a name="input_top_cidr"></a> [top\_cidr](#input\_top\_cidr) | CIDR of the top-level supernet owned by the top IPAM pool. | `string` | `"10.0.0.0/8"` | no |
+| <a name="input_vpn"></a> [vpn](#input\_vpn) | Site-to-Site VPN settings, used only when enable\_vpn is true. customer\_gateway\_ip is the public IPv4 of the on-premises device; customer\_gateway\_bgp\_asn its BGP ASN (not the transit gateway's 64512). static\_routes\_only = true uses static routing: then onprem\_cidrs (the on-premises prefixes) is required and becomes static routes to the VPN in the inspection route table; with BGP the routes propagate and onprem\_cidrs is ignored. tunnel\_inside\_cidrs is empty (AWS-assigned) or two /30s in 169.254.0.0/16. preshared\_key\_storage is SecretsManager (default; the keys stay out of state and the stage outputs the secret ARN) or Standard (keys in state). | <pre>object({<br/>    customer_gateway_ip      = optional(string)<br/>    customer_gateway_bgp_asn = optional(number, 65000)<br/>    static_routes_only       = optional(bool, false)<br/>    onprem_cidrs             = optional(list(string), [])<br/>    tunnel_inside_cidrs      = optional(list(string), [])<br/>    enable_acceleration      = optional(bool, false)<br/>    preshared_key_storage    = optional(string, "SecretsManager")<br/>  })</pre> | `{}` | no |
 
 ## Outputs
 
@@ -145,6 +161,10 @@ The following resources are created:
 | <a name="output_interface_endpoint_phz_id"></a> [interface\_endpoint\_phz\_id](#output\_interface\_endpoint\_phz\_id) | Zone ID of the shared private hosted zone fronting the interface endpoints, or null when no zone was created. |
 | <a name="output_ipam_pool_ids"></a> [ipam\_pool\_ids](#output\_ipam\_pool\_ids) | Map of region to the ID of its regional IPAM pool, consumed by app roots to allocate VPC CIDRs. |
 | <a name="output_resolver_profile_id"></a> [resolver\_profile\_id](#output\_resolver\_profile\_id) | The ID of the Route 53 Profile shared org-wide over RAM. |
+| <a name="output_spoke_attachment_route_tables"></a> [spoke\_attachment\_route\_tables](#output\_spoke\_attachment\_route\_tables) | Map of spoke\_attachments key to the TGW route table its attachment is associated with (prod or nonprod segment); every listed spoke also propagates into the inspection route table. |
 | <a name="output_tgw_id"></a> [tgw\_id](#output\_tgw\_id) | The ID of the transit gateway (the network cross-root routing contract). |
-| <a name="output_tgw_inspection_routes"></a> [tgw\_inspection\_routes](#output\_tgw\_inspection\_routes) | The centralized-inspection routing contract fed to the transit gateway: the segment default routes (0.0.0.0/0) pointed at the inspection attachment so prod and nonprod traffic is forced through the firewall. |
+| <a name="output_tgw_inspection_routes"></a> [tgw\_inspection\_routes](#output\_tgw\_inspection\_routes) | The centralized-inspection routing contract fed to the transit gateway: the segment default routes (0.0.0.0/0) pointed at the inspection attachment so prod and nonprod traffic is forced through the firewall, plus (with spoke\_attachments) inspection 0.0.0.0/0 to egress and shared top\_cidr to inspection. |
+| <a name="output_vpn_connection_id"></a> [vpn\_connection\_id](#output\_vpn\_connection\_id) | ID of the Site-to-Site VPN connection, or null when enable\_vpn = false. |
+| <a name="output_vpn_preshared_key_arn"></a> [vpn\_preshared\_key\_arn](#output\_vpn\_preshared\_key\_arn) | ARN of the Secrets Manager secret holding the VPN tunnel pre-shared keys (read it to configure the on-premises device), or null when enable\_vpn = false or vpn.preshared\_key\_storage = Standard. |
+| <a name="output_vpn_tunnel_addresses"></a> [vpn\_tunnel\_addresses](#output\_vpn\_tunnel\_addresses) | AWS-side public IPs of the two VPN tunnels (configure these on the on-premises device), or an empty list when enable\_vpn = false. |
 <!-- END_TF_DOCS -->

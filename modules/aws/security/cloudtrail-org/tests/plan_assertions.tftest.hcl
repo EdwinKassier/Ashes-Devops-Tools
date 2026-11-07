@@ -317,3 +317,99 @@ run "cloudwatch_disabled_is_s3_only" {
     error_message = "Disabling CloudWatch Logs must remove the log group, CMK, topic and alarms"
   }
 }
+
+run "root_key_administration_kept" {
+  command = plan
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_kms_key.cloudwatch[0].policy).Statement :
+      s.Sid == "KeyAdministration" && s.Action == "kms:*" && endswith(s.Principal.AWS, ":root")
+    ])
+    error_message = "The account-root kms:* KeyAdministration statement must stay (break-glass path, no orphaned key)."
+  }
+
+  assert {
+    condition     = !anytrue([for s in jsondecode(aws_kms_key.cloudwatch[0].policy).Statement : s.Sid == "PipelineKeyManagement"])
+    error_message = "With no managers supplied there must be no PipelineKeyManagement statement."
+  }
+}
+
+run "pipeline_manager_statement_grants_refresh_and_rotation" {
+  command = plan
+
+  variables {
+    cloudwatch_logs_kms_key_manager_arns = ["arn:aws:iam::111111111111:role/tfc-mgmt-aws-security-apply"]
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_kms_key.cloudwatch[0].policy).Statement :
+      s.Sid == "PipelineKeyManagement" && s.Effect == "Allow" &&
+      toset(flatten([s.Principal.AWS])) == toset(["arn:aws:iam::111111111111:role/tfc-mgmt-aws-security-apply"]) &&
+      toset(s.Action) == toset([
+        "kms:Describe*", "kms:Get*", "kms:List*", "kms:EnableKeyRotation", "kms:UpdateKeyDescription",
+        "kms:TagResource", "kms:UntagResource", "kms:CreateAlias", "kms:UpdateAlias", "kms:DeleteAlias",
+      ])
+    ])
+    error_message = "PipelineKeyManagement must grant exactly the refresh/rotation/tag/alias actions to the supplied roles."
+  }
+
+  assert {
+    condition = !anytrue([
+      for s in jsondecode(aws_kms_key.cloudwatch[0].policy).Statement :
+      s.Sid == "PipelineKeyManagement" && (contains(s.Action, "kms:*") || contains(s.Action, "kms:PutKeyPolicy") || contains(s.Action, "kms:ScheduleKeyDeletion"))
+    ])
+    error_message = "PipelineKeyManagement must not grant kms:*, PutKeyPolicy or ScheduleKeyDeletion."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_kms_key.cloudwatch[0].policy).Statement :
+      s.Sid == "PipelineKeyUseViaServices" && s.Effect == "Allow" &&
+      toset(s.Action) == toset(["kms:GenerateDataKey*", "kms:Decrypt"]) &&
+      toset(s.Condition.StringEquals["kms:ViaService"]) == toset(["sns.us-east-1.amazonaws.com", "logs.us-east-1.amazonaws.com"])
+    ])
+    error_message = "Pipeline data-key use must be limited to SNS and Logs via kms:ViaService."
+  }
+
+  assert {
+    condition     = anytrue([for s in jsondecode(aws_kms_key.cloudwatch[0].policy).Statement : s.Sid == "KeyAdministration"])
+    error_message = "KeyAdministration must remain alongside the pipeline statement."
+  }
+}
+
+# Default: the delivery role trusts only its own account, as a plain string, so
+# an existing role's trust policy is unchanged.
+run "delivery_role_trusts_own_account_by_default" {
+  command = plan
+
+  assert {
+    condition = (
+      jsondecode(aws_iam_role.cloudtrail_cw[0].assume_role_policy).Statement[0].Condition.StringEquals["aws:SourceAccount"] == "111111111111" &&
+      aws_iam_role.cloudtrail_cw[0].permissions_boundary == null
+    )
+    error_message = "By default the delivery role must trust only this account, with no boundary."
+  }
+}
+
+# Delegated admin: the management account owns the trail, so the delivery role
+# in this (delegated-admin) account also trusts it, and carries the boundary.
+run "delegated_admin_trail_owner_trusted_and_bounded" {
+  command = plan
+
+  variables {
+    trail_name                                    = "org-trail-delegated"
+    trail_owner_account_id                        = "999999999999"
+    cloudwatch_logs_role_permissions_boundary_arn = "arn:aws:iam::111111111111:policy/tfc-apply-boundary"
+  }
+
+  assert {
+    condition = (
+      toset(jsondecode(aws_iam_role.cloudtrail_cw[0].assume_role_policy).Statement[0].Condition.StringEquals["aws:SourceAccount"]) == toset(["111111111111", "999999999999"]) &&
+      aws_iam_role.cloudtrail_cw[0].permissions_boundary == "arn:aws:iam::111111111111:policy/tfc-apply-boundary" &&
+      aws_cloudwatch_log_group.trail[0].name == "/aws/cloudtrail/org-trail-delegated"
+    )
+    error_message = "A delegated-admin trail's delivery role must trust the owner and this account, and carry the boundary."
+  }
+}

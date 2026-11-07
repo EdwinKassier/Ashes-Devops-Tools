@@ -5,12 +5,14 @@
 
 mock_provider "aws" {}
 mock_provider "aws" { alias = "us_east_1" }
+# tfe serves only the SaaS secret bridge (ephemeral "tfe_outputs"); mocked so
+# no run contacts HCP Terraform.
+mock_provider "tfe" {}
 
 variables {
   landing_zone_config_path = ""
   landing_zone_name        = "acme"
   workload_account_key     = "workload_dev"
-  config_role_arn          = "arn:aws:iam::222222222222:role/config-recorder"
   kms_key_arn              = "arn:aws:kms:eu-west-2:222222222222:key/abcd-1234"
 
   organization_contract = { account_ids = { workload_dev = "222222222222" } }
@@ -77,11 +79,11 @@ run "remote_state_read_without_contract" {
 
   override_data {
     target = data.terraform_remote_state.aws_network
-    values = { outputs = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } }
+    values = { outputs = { contract = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } } }
   }
   override_data {
     target = data.terraform_remote_state.aws_security
-    values = { outputs = { log_archive_bucket_name = "remote-org-log-archive" } }
+    values = { outputs = { contract = { log_archive_bucket_name = "remote-org-log-archive" } } }
   }
 
   assert {

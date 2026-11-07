@@ -82,6 +82,7 @@ run "production_environment_bound_by_workspace_ids" {
       "gcp-projects"      = "ws-Proj1"
       "gcp-network-hub"   = "ws-Hub1"
       "gcp-workload-prod" = "ws-Prod1"
+      "gcp-guardrails"    = "ws-Guard1"
     }
     environments = {
       prod = {
@@ -96,8 +97,8 @@ run "production_environment_bound_by_workspace_ids" {
   }
 
   assert {
-    condition     = length(output.production_workspaces_bound_by_name) == 0 && contains(keys(module.bootstrap.tfc_apply_service_accounts), "gcp-workload-prod")
-    error_message = "with IDs for every production / control-plane workspace nothing may be reported as name-bound."
+    condition     = length(output.production_workspaces_bound_by_name) == 0 && contains(keys(module.bootstrap.tfc_apply_service_accounts), "gcp-workload-prod") && contains(keys(output.tfc_apply_service_accounts), "gcp-guardrails")
+    error_message = "with IDs for every production / control-plane workspace (gcp-guardrails included) nothing may be reported as name-bound."
   }
 }
 
@@ -139,4 +140,47 @@ run "rejects_placeholder_guardrail_owner" {
   }
 
   expect_failures = [var.guardrail_owner_members]
+}
+
+# gcp.principal_access_boundary is shared with gcp-organization (which binds the
+# boundary) and gcp-guardrails (which denies its update/delete/unbind).
+run "principal_access_boundary_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-pab.yaml"
+  }
+
+  assert {
+    condition     = local.enable_principal_access_boundary && contains(module.bootstrap.org_role_grants["organization-plan"], "roles/iam.principalAccessBoundaryViewer")
+    error_message = "gcp.principal_access_boundary: true must grant the organization SAs the boundary roles."
+  }
+}
+
+# The opt-in NCC connectivity needs NCC roles on the network-hub and workload
+# SAs: off by default, on when config/landing-zone.yaml turns NCC on.
+run "ncc_roles_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = !local.enable_network_connectivity_center && !contains(module.bootstrap.network_folder_roles.apply, "roles/networkconnectivity.hubAdmin")
+    error_message = "NCC roles must be opt-in."
+  }
+}
+
+run "ncc_roles_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-ncc.yaml"
+  }
+
+  assert {
+    condition = (
+      local.enable_network_connectivity_center &&
+      contains(module.bootstrap.network_folder_roles.apply, "roles/networkconnectivity.hubAdmin") &&
+      contains(module.bootstrap.workload_folder_roles.apply, "roles/networkconnectivity.spokeAdmin")
+    )
+    error_message = "gcp.network.ncc_hub.enabled: true must grant the network-hub SAs hubAdmin and the workload SAs spokeAdmin."
+  }
 }

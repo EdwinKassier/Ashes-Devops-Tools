@@ -240,8 +240,8 @@ run "production_workspaces_must_be_bound_by_id" {
   }
 
   # Hard failure (precondition), not a warning: a production org must not plan
-  # with name-bound WIF trusts.
-  expect_failures = [terraform_data.production_workspaces_bound_by_id]
+  # with name-bound WIF trusts (nor with an unbound gcp-guardrails workspace).
+  expect_failures = [terraform_data.production_workspaces_bound_by_id, terraform_data.guardrails_workspace_bound_by_id]
 }
 
 run "production_workspaces_bound_by_id_pass" {
@@ -256,6 +256,7 @@ run "production_workspaces_bound_by_id_pass" {
       "gcp-projects"      = "ws-Proj1"
       "gcp-network-hub"   = "ws-Hub1"
       "gcp-workload-prod" = "ws-Prod1"
+      "gcp-guardrails"    = "ws-Guard1"
     }
   }
 
@@ -323,6 +324,14 @@ run "github_wif_disabled_by_default" {
 run "github_wif_pins_immutable_ids_and_readonly_sa" {
   command = plan
 
+  override_resource {
+    target          = module.gh_oidc[0].google_iam_workload_identity_pool.pool
+    override_during = plan
+    values = {
+      name = "projects/1/locations/global/workloadIdentityPools/github-pool"
+    }
+  }
+
   variables {
     enable_github_wif          = true
     github_org                 = "my-org"
@@ -332,8 +341,13 @@ run "github_wif_pins_immutable_ids_and_readonly_sa" {
   }
 
   assert {
-    condition     = strcontains(module.gh_oidc[0].github_attribute_condition, "assertion.repository_id == '424242'") && strcontains(module.gh_oidc[0].github_attribute_condition, "assertion.repository_owner_id == '777'") && strcontains(module.gh_oidc[0].github_attribute_condition, "refs/heads/main")
-    error_message = "GitHub trust must be pinned to the immutable repository_id + repository_owner_id on main."
+    condition     = module.gh_oidc[0].github_attribute_condition == "assertion.repository_owner_id == \"777\""
+    error_message = "the GitHub provider condition must be exactly the canonical owner pin (what custom.wifProviderTenantPinned accepts)."
+  }
+
+  assert {
+    condition     = keys(module.gh_oidc[0].github_binding_members) == ["organization-plan"] && endswith(module.gh_oidc[0].github_binding_members["organization-plan"], "/attribute.repo_ref/424242/refs/heads/main")
+    error_message = "the plan SA must be bound to the immutable repository_id on refs/heads/main only (attribute.repo_ref)."
   }
 
   assert {
@@ -403,6 +417,90 @@ run "guardrail_owner_is_separate_by_default" {
   }
 }
 
+# The security-team gcp-guardrails workspace authenticates as the guardrails
+# SAs, bound by its immutable workspace ID only: plan to the read-only
+# guardrails-plan SA, apply to the denyAdmin guardrails-apply SA.
+run "guardrails_wif_bound_by_workspace_id" {
+  command = plan
+
+  variables {
+    tfc_workspace_ids = { "gcp-guardrails" = "ws-Guard1" }
+  }
+
+  override_resource {
+    target          = module.tfc_oidc[0].google_iam_workload_identity_pool.pool
+    override_during = plan
+    values = {
+      name = "projects/1/locations/global/workloadIdentityPools/tfc-pool"
+    }
+  }
+
+  assert {
+    condition     = module.tfc_oidc[0].tfc_binding_members["gcp-guardrails:apply"] == "principalSet://iam.googleapis.com/projects/1/locations/global/workloadIdentityPools/tfc-pool/attribute.workspace_id_phase/ws-Guard1:apply" && module.tfc_oidc[0].tfc_binding_members["gcp-guardrails:plan"] == "principalSet://iam.googleapis.com/projects/1/locations/global/workloadIdentityPools/tfc-pool/attribute.workspace_id_phase/ws-Guard1:plan"
+    error_message = "gcp-guardrails must be WIF-bound by its workspace ID, per run phase."
+  }
+
+  assert {
+    condition     = google_service_account.guardrails_plan[0].account_id == "mock-org-guardrails-plan" && contains(keys(google_organization_iam_member.guardrails_plan), "roles/iam.denyReviewer") && !contains(keys(google_organization_iam_member.guardrails_plan), "roles/iam.denyAdmin")
+    error_message = "the guardrails plan SA must be read-only (denyReviewer, no denyAdmin)."
+  }
+
+  assert {
+    condition     = output.guardrails_workspace_bound_by_id && contains(keys(output.tfc_apply_service_accounts), "gcp-guardrails") && contains(keys(output.tfc_plan_service_accounts), "gcp-guardrails")
+    error_message = "tfc-admin needs the gcp-guardrails plan/apply SA emails for its dynamic credentials."
+  }
+
+  # The PAM-gated break-glass path is kept.
+  assert {
+    condition     = length(google_service_account_iam_member.guardrails_impersonation) == 0 && contains(keys(google_organization_iam_member.guardrails), "roles/iam.denyAdmin")
+    error_message = "the guardrails SA keeps denyAdmin; impersonation stays limited to guardrail_owner_members."
+  }
+}
+
+# Never by name: without the ID there is no binding at all, and a production
+# estate fails the plan.
+run "guardrails_wif_never_bound_by_name" {
+  command = plan
+
+  assert {
+    condition     = !contains(keys(module.tfc_oidc[0].tfc_binding_members), "gcp-guardrails:apply") && !contains(keys(module.tfc_oidc[0].tfc_binding_members), "gcp-guardrails:plan")
+    error_message = "gcp-guardrails must never be WIF-bound by its (squattable) name."
+  }
+
+  assert {
+    condition     = output.guardrails_workspace_bound_by_id == false && !contains(keys(output.tfc_apply_service_accounts), "gcp-guardrails")
+    error_message = "an unbound gcp-guardrails workspace must be reported and get no dynamic credentials."
+  }
+}
+
+run "guardrails_workspace_id_required_in_production" {
+  command = plan
+
+  variables {
+    production_workload_environments      = ["prod"]
+    phase0_admin_impersonation_expires_at = "2026-12-31T00:00:00Z"
+    tfc_workspace_ids                     = { "gcp-bootstrap" = "ws-Boot1", "gcp-organization" = "ws-Org1", "gcp-projects" = "ws-Proj1", "gcp-network-hub" = "ws-Hub1", "gcp-workload-prod" = "ws-Prod1" }
+  }
+
+  expect_failures = [terraform_data.guardrails_workspace_bound_by_id]
+}
+
+run "guardrails_workspace_wif_can_be_disabled" {
+  command = plan
+
+  variables {
+    guardrails_workspace                  = null
+    production_workload_environments      = ["prod"]
+    phase0_admin_impersonation_expires_at = "2026-12-31T00:00:00Z"
+    tfc_workspace_ids                     = { "gcp-bootstrap" = "ws-Boot1", "gcp-organization" = "ws-Org1", "gcp-projects" = "ws-Proj1", "gcp-network-hub" = "ws-Hub1", "gcp-workload-prod" = "ws-Prod1" }
+  }
+
+  assert {
+    condition     = length(google_service_account.guardrails_plan) == 0 && !contains(keys(output.tfc_apply_service_accounts), "gcp-guardrails")
+    error_message = "guardrails_workspace = null must keep the PAM-only path (no workspace identity)."
+  }
+}
+
 run "guardrail_owner_legacy_organization_mode" {
   command = plan
 
@@ -416,8 +514,8 @@ run "guardrail_owner_legacy_organization_mode" {
   }
 
   assert {
-    condition     = length(google_service_account.guardrails) == 0 && length(google_organization_iam_member.guardrails) == 0
-    error_message = "Legacy organization mode must not create the guardrails SA."
+    condition     = length(google_service_account.guardrails) == 0 && length(google_organization_iam_member.guardrails) == 0 && length(google_service_account.guardrails_plan) == 0 && !contains(keys(output.tfc_apply_service_accounts), "gcp-guardrails")
+    error_message = "Legacy organization mode must not create the guardrails SAs or bind gcp-guardrails."
   }
 }
 
@@ -462,20 +560,186 @@ run "principal_access_boundary_grants_are_opt_in" {
   }
 }
 
-# A production estate must not keep an open-ended human path to terraform-admin.
-run "production_phase0_impersonation_without_expiry_warns" {
+# A production estate must not keep an open-ended human path to terraform-admin:
+# the plan fails (precondition), it does not merely warn.
+run "production_without_expiry_fails" {
   command = plan
 
   variables {
     production_workload_environments = ["prod"]
+    tfc_workspace_ids                = { "gcp-bootstrap" = "ws-Boot1", "gcp-organization" = "ws-Org1", "gcp-projects" = "ws-Proj1", "gcp-network-hub" = "ws-Hub1", "gcp-workload-prod" = "ws-Prod1", "gcp-guardrails" = "ws-Guard1" }
+  }
+
+  expect_failures = [terraform_data.phase0_impersonation_is_time_boxed]
+}
+
+run "production_with_expiry_plans" {
+  command = plan
+
+  variables {
+    production_workload_environments      = ["prod"]
+    phase0_admin_impersonation_expires_at = "2026-12-31T00:00:00Z"
+    tfc_workspace_ids                     = { "gcp-bootstrap" = "ws-Boot1", "gcp-organization" = "ws-Org1", "gcp-projects" = "ws-Proj1", "gcp-network-hub" = "ws-Hub1", "gcp-workload-prod" = "ws-Prod1", "gcp-guardrails" = "ws-Guard1" }
+  }
+
+  assert {
+    condition     = length(output.production_workspaces_bound_by_name) == 0
+    error_message = "a time-boxed production estate must plan."
+  }
+}
+
+# ─── Scaffolded-config path (QUICK_START GCP) ────────────────────────────────
+# tests/fixtures/landing-zone.scaffolded.yaml is the output of
+# scripts/init-landing-zone.sh (org.profile production, a prod environment),
+# with the 7-day phase-0 expiry replaced by a fixed far-future literal. The
+# stage does not read YAML; these runs feed it the scaffolded VALUES, the way
+# envs/gcp/bootstrap/config.tf would.
+
+run "scaffolded_values_without_ids_fail_with_hint" {
+  command = plan
+
+  variables {
+    project_prefix                        = yamldecode(file("tests/fixtures/landing-zone.scaffolded.yaml")).org.prefix
+    admin_email                           = yamldecode(file("tests/fixtures/landing-zone.scaffolded.yaml")).gcp.admin_email
+    tfc_organization                      = yamldecode(file("tests/fixtures/landing-zone.scaffolded.yaml")).org.tfc.organization
+    workload_environments                 = keys(yamldecode(file("tests/fixtures/landing-zone.scaffolded.yaml")).gcp.environments)
+    production_workload_environments      = [for k, e in yamldecode(file("tests/fixtures/landing-zone.scaffolded.yaml")).gcp.environments : k if e.is_production]
+    phase0_admin_impersonation_expires_at = yamldecode(file("tests/fixtures/landing-zone.scaffolded.yaml")).gcp.phase0_admin_impersonation_expires_at
+  }
+
+  # No tfc_workspace_ids (a fresh scaffold before `make bootstrap-ids`): the
+  # production precondition must fail (its message names the tfc-admin
+  # workspace_ids hint). The unbound gcp-guardrails workspace trips its sibling
+  # precondition in the same plan, so both are expected.
+  expect_failures = [terraform_data.production_workspaces_bound_by_id, terraform_data.guardrails_workspace_bound_by_id]
+}
+
+run "scaffolded_values_with_ids_plan" {
+  command = plan
+
+  variables {
+    project_prefix                        = yamldecode(file("tests/fixtures/landing-zone.scaffolded.yaml")).org.prefix
+    admin_email                           = yamldecode(file("tests/fixtures/landing-zone.scaffolded.yaml")).gcp.admin_email
+    tfc_organization                      = yamldecode(file("tests/fixtures/landing-zone.scaffolded.yaml")).org.tfc.organization
+    workload_environments                 = keys(yamldecode(file("tests/fixtures/landing-zone.scaffolded.yaml")).gcp.environments)
+    production_workload_environments      = [for k, e in yamldecode(file("tests/fixtures/landing-zone.scaffolded.yaml")).gcp.environments : k if e.is_production]
+    phase0_admin_impersonation_expires_at = yamldecode(file("tests/fixtures/landing-zone.scaffolded.yaml")).gcp.phase0_admin_impersonation_expires_at
+    # What `make bootstrap-ids` writes (tfc-admin output gcp_bootstrap_tfvars).
     tfc_workspace_ids = {
       "gcp-bootstrap"     = "ws-Boot1"
       "gcp-organization"  = "ws-Org1"
       "gcp-projects"      = "ws-Proj1"
       "gcp-network-hub"   = "ws-Hub1"
       "gcp-workload-prod" = "ws-Prod1"
+      "gcp-guardrails"    = "ws-Guard1"
     }
   }
 
-  expect_failures = [check.phase0_impersonation_is_time_boxed]
+  assert {
+    condition     = length(output.production_workspaces_bound_by_name) == 0
+    error_message = "the scaffolded production config plans cleanly once every workspace ID is supplied."
+  }
+}
+
+# ─── Shared scaffold-matrix fixture (make scaffold-fixtures) ─────────────────
+# envs/gcp/bootstrap overrides this stage, so its scaffold runs never reach the
+# production precondition. These runs evaluate it against the committed
+# scaffolder output; tfc_workspace_ids (written by `make bootstrap-ids` after
+# tfc-admin applies) is the operator-supplied input and is never defaulted.
+
+run "scaffold_matrix_without_ids_fails" {
+  command = plan
+
+  variables {
+    project_prefix                        = yamldecode(file("../../../../tests/fixtures/scaffold/landing-zone.gcp.yaml")).org.prefix
+    admin_email                           = yamldecode(file("../../../../tests/fixtures/scaffold/landing-zone.gcp.yaml")).gcp.admin_email
+    tfc_organization                      = yamldecode(file("../../../../tests/fixtures/scaffold/landing-zone.gcp.yaml")).org.tfc.organization
+    workload_environments                 = keys(yamldecode(file("../../../../tests/fixtures/scaffold/landing-zone.gcp.yaml")).gcp.environments)
+    production_workload_environments      = [for k, e in yamldecode(file("../../../../tests/fixtures/scaffold/landing-zone.gcp.yaml")).gcp.environments : k if e.is_production]
+    phase0_admin_impersonation_expires_at = yamldecode(file("../../../../tests/fixtures/scaffold/landing-zone.gcp.yaml")).gcp.phase0_admin_impersonation_expires_at
+  }
+
+  expect_failures = [terraform_data.production_workspaces_bound_by_id, terraform_data.guardrails_workspace_bound_by_id]
+}
+
+run "scaffold_matrix_with_ids_plans" {
+  command = plan
+
+  variables {
+    project_prefix                        = yamldecode(file("../../../../tests/fixtures/scaffold/landing-zone.gcp.yaml")).org.prefix
+    admin_email                           = yamldecode(file("../../../../tests/fixtures/scaffold/landing-zone.gcp.yaml")).gcp.admin_email
+    tfc_organization                      = yamldecode(file("../../../../tests/fixtures/scaffold/landing-zone.gcp.yaml")).org.tfc.organization
+    workload_environments                 = keys(yamldecode(file("../../../../tests/fixtures/scaffold/landing-zone.gcp.yaml")).gcp.environments)
+    production_workload_environments      = [for k, e in yamldecode(file("../../../../tests/fixtures/scaffold/landing-zone.gcp.yaml")).gcp.environments : k if e.is_production]
+    phase0_admin_impersonation_expires_at = yamldecode(file("../../../../tests/fixtures/scaffold/landing-zone.gcp.yaml")).gcp.phase0_admin_impersonation_expires_at
+    tfc_workspace_ids = {
+      "gcp-bootstrap"     = "ws-Boot1"
+      "gcp-organization"  = "ws-Org1"
+      "gcp-projects"      = "ws-Proj1"
+      "gcp-network-hub"   = "ws-Hub1"
+      "gcp-workload-prod" = "ws-Prod1"
+      "gcp-guardrails"    = "ws-Guard1"
+    }
+  }
+
+  assert {
+    condition     = length(output.production_workspaces_bound_by_name) == 0
+    error_message = "the scaffold's production config plans cleanly once every workspace ID is supplied."
+  }
+}
+
+# Network Connectivity Center roles are opt-in and folder-scoped: the network
+# SAs (shared folder) manage the hub, each workload SA (its env folder) its
+# spoke. None reaches the org node.
+run "ncc_roles_off_by_default" {
+  command = plan
+
+  assert {
+    condition = !anytrue([
+      for r in concat(output.workload_folder_roles.plan, output.workload_folder_roles.apply, output.network_folder_roles.plan, output.network_folder_roles.apply) :
+      startswith(r, "roles/networkconnectivity.")
+    ])
+    error_message = "No NCC role may be granted unless enable_network_connectivity_center = true."
+  }
+}
+
+run "ncc_roles_are_folder_scoped_when_enabled" {
+  command = plan
+
+  variables {
+    enable_network_connectivity_center = true
+  }
+
+  assert {
+    condition = (
+      contains(output.network_folder_roles.apply, "roles/networkconnectivity.hubAdmin") &&
+      contains(output.network_folder_roles.apply, "roles/networkconnectivity.spokeAdmin") &&
+      contains(output.network_folder_roles.plan, "roles/networkconnectivity.hubViewer")
+    )
+    error_message = "The network-hub SAs must get hubAdmin + spokeAdmin (plan: hubViewer) on the shared folder."
+  }
+
+  assert {
+    condition = (
+      contains(output.workload_folder_roles.apply, "roles/networkconnectivity.spokeAdmin") &&
+      !contains(output.workload_folder_roles.apply, "roles/networkconnectivity.hubAdmin") &&
+      contains(output.workload_folder_roles.plan, "roles/networkconnectivity.hubViewer")
+    )
+    error_message = "Each workload SA must get spokeAdmin only (plan: hubViewer) on its environment folder."
+  }
+
+  assert {
+    condition     = contains(output.delegated_network_folder_roles, "roles/networkconnectivity.hubAdmin") && !contains(output.delegated_workload_folder_roles, "roles/networkconnectivity.hubAdmin")
+    error_message = "The delegation allow-lists must carry the NCC roles to the matching folders only."
+  }
+
+  assert {
+    condition     = !anytrue([for k, m in google_organization_iam_member.stage_org_roles : startswith(m.role, "roles/networkconnectivity.")])
+    error_message = "No NCC role may be granted at the org node."
+  }
+
+  assert {
+    condition     = !anytrue([for r in output.network_folder_roles.plan : endswith(r, "Admin")]) && !anytrue([for r in output.workload_folder_roles.plan : endswith(r, "Admin")])
+    error_message = "Plan SAs must get only the NCC viewer role."
+  }
 }

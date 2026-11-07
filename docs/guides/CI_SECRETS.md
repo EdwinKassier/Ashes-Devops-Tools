@@ -24,6 +24,25 @@ a GitHub Release when the run applied and its commit matches the tag. (The workf
 runs `terraform validate` and the mock tests, and likewise never produces a real plan - that is
 the TFC speculative plan.)
 
+## DOCS_BOT_PAT
+
+`documentation.yml` opens a PR with regenerated module READMEs. A PR authored by `GITHUB_TOKEN`
+does not trigger other workflows, so it would skip validation; a PAT-authored PR does. Use a
+**fine-grained** personal access token of a dedicated machine account, never a classic `repo`
+token:
+
+- **Resource owner / repository access:** this repository only.
+- **Repository permissions:** Contents: read and write; Pull requests: read and write;
+  Metadata: read (implicit). Nothing else, and no `workflow` scope.
+- **Expiry:** at most 90 days. Rotate it, or replace it with a GitHub App installation token.
+- **Storage:** as an *environment* secret in `docs-bot` (deployment branch `main` only), not at
+  repository level.
+
+The workflow passes it only to `peter-evans/create-pull-request`. The checkout step uses
+`persist-credentials: false` and the default read-only clone, so `make docs` never runs next to
+a stored credential. If the secret is unset the workflow falls back to `GITHUB_TOKEN` and the
+docs PR will not trigger CI.
+
 ## RELEASE_PLEASE_TOKEN
 
 `release.yml` runs on every push to `main` and **fails on its first step** with
@@ -111,7 +130,7 @@ the ones it manages at its next apply).
 | Name | Kind | Used by | Purpose | Default when unset |
 |------|------|---------|---------|---------------------|
 | `TFC_DRIFT_WORKSPACES` | Variable | `drift-detection.yml` | JSON array of TFC workspace names to check for drift, e.g. `["gcp-organization","gcp-workload-dev","gcp-workload-prod"]`. | `["gcp-organization","gcp-workload-dev"]` |
-| `DOCS_BOT_PAT` | Secret | `documentation.yml` | Machine-account PAT (repo scope) used to open auto-generated docs PRs so they trigger downstream CI. `GITHUB_TOKEN`-authored PRs do not trigger other workflows. | Falls back to `secrets.GITHUB_TOKEN` (docs PRs will not trigger CI checks). |
+| `DOCS_BOT_PAT` | Secret | `documentation.yml` | Fine-grained PAT (see [below](#docs_bot_pat)) used to open auto-generated docs PRs so they trigger downstream CI. `GITHUB_TOKEN`-authored PRs do not trigger other workflows. | Falls back to `secrets.GITHUB_TOKEN` (docs PRs will not trigger CI checks). |
 | `DOCS_REVIEWER` | Variable | `documentation.yml` | GitHub username to request as reviewer on auto-generated docs PRs. | No reviewer requested. |
 | `CODEOWNERS_ENFORCE` | Variable | `terraform-plan.yml` (CODEOWNERS placeholders job) | Set to `true` once `.github/CODEOWNERS` names real teams: any remaining `@your-org/` placeholder then fails the build. | Placeholders produce a warning only, so forks stay green. |
 
@@ -151,7 +170,7 @@ environment, not at repository level, and restrict the environment's deployment 
 | `release` | `RELEASE_PLEASE_TOKEN` | `main` only | `release.yml` |
 | `docs-bot` | `DOCS_BOT_PAT` (optional) | `main` only | `documentation.yml` |
 | `tfc-readonly` | `TFC_TOKEN` | tags `gcp-*/v*`, `aws-*/v*`, `saas/*/v*`, `tfc-admin/v*` | `terraform-apply.yml` |
-| `e2e-sandbox` | none (OIDC only) | `main`, plus PR branches if you use the `e2e` label | `sandbox-e2e.yml` |
+| `e2e-sandbox` | none (OIDC only) | `main`, plus PR branches if you use the `e2e` label. **Required reviewers: yes** (at least one, prevent self-review) | `sandbox-e2e.yml` |
 
 ```bash
 repo=OWNER/REPO

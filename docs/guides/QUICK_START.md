@@ -48,7 +48,7 @@ gcloud services enable cloudresourcemanager.googleapis.com \
 
 ### Tooling
 
-- [ ] `terraform version` reports `>= 1.11` (CI pins the version in `.terraform-version`)
+- [ ] `terraform version` reports `>= 1.17` (CI pins the version in `.terraform-version`)
 - [ ] `gcloud version` reports `>= 450.0.0`
 - [ ] `jq` installed (used by CI scripts)
 - [ ] Node.js >= 18 installed (required only if using `enable_vault_secrets = true` in any `saas-workload` call)
@@ -175,6 +175,16 @@ cp envs/gcp/bootstrap/terraform.tfvars.example envs/gcp/bootstrap/local.auto.tfv
 # ...). Delete the rest: an explicit variable overrides the config.
 ```
 
+**Step 3b — Write the workspace IDs (production estates):**
+
+The scaffolded config is `org.profile: production` with a `prod` environment, so `gcp-bootstrap` refuses to bind WIF by workspace name and needs the immutable IDs. The local phase-0 run ignores workspace variables, so write them from tfc-admin (applied in pass 1) into a gitignored file:
+
+```bash
+make bootstrap-ids   # terraform -chdir=envs/tfc-admin output -raw gcp_bootstrap_tfvars > envs/gcp/bootstrap/tfc-workspaces.auto.tfvars
+```
+
+Skip it only for a non-production estate. Without it the plan fails naming `production_workspaces_bound_by_id`.
+
 **Step 4 — Apply the bootstrap root first (two-phase, as the human admin):**
 
 The GCP control plane is four roots applied in order: `gcp-bootstrap` →
@@ -215,7 +225,6 @@ In your GitHub repo → Settings → Secrets and variables → Actions:
 
 | Name | Type | Value |
 |------|------|-------|
-| `GOOGLE_PROJECT_ID` | Variable | Admin project ID from the bootstrap output |
 | `TFC_ORGANIZATION` | Variable | Your Terraform Cloud org name |
 | `TFC_TOKEN` | Secret | A TFC team token scoped to "Read runs" on the GCP workspaces |
 
@@ -278,7 +287,7 @@ To plan a change to the gcp-workload environment:
 ```bash
 # Set TF_WORKSPACE to the full TFC workspace name (TF_CLOUD_ORGANIZATION exported as above)
 TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload init
-TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=../../../examples/dev.tfvars
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=../../../examples/dev.tfvars.example
 ```
 
 ---
@@ -352,7 +361,7 @@ Any variable below that maps to a `config/landing-zone.yaml` key (shown in brack
 | `enable_deletion_protection` | `true` | Guard against accidental destruction of the VPC/subnets/DNS zones |
 | `vpc_sc_ingress_policies` / `vpc_sc_egress_policies` | `[]` | Optional VPC Service Controls ingress/egress policies for the perimeter |
 
-> **Host-level networking (Dedicated Interconnect, HA-VPN, explicit zone pinning):** `envs/gcp/workload` does not expose `enable_interconnect`, `enable_vpn`, or `explicit_zones` as its own variables — those are variables of the underlying `modules/gcp/stages/host` module (`interconnects`, `enable_vpn`, `explicit_zones`). To use them, either call `modules/gcp/stages/host` directly from a custom root, or extend `envs/gcp/workload/main.tf`'s `module "host"` call to pass them through.
+> **Hybrid connectivity (HA-VPN, Dedicated/Partner Interconnect):** `modules/gcp/stages/net-hub` already wires `network/vpn` (`var.vpn.enabled`) and `network/interconnect`. `modules/gcp/stages/network-hub` does not pass them through yet, so they are not configurable from `config/landing-zone.yaml` or `envs/gcp/network-hub`; exposing them is planned work (see [`known-gaps.md`](../known-gaps.md)).
 
 ---
 
@@ -385,14 +394,14 @@ make plan-gcp-organization
 ### App Environment
 
 ```bash
-make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
+make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
 ```
 
 ---
 
 ## Verification Checklist
 
-- [ ] `terraform version` reports `>= 1.11`
+- [ ] `terraform version` reports `>= 1.17`
 - [ ] `make help` prints supported commands
 - [ ] `make fmt-check`, `make docs-check`, and `make security` succeed
 - [ ] `make test` reports `X passed, 0 failed`
@@ -412,7 +421,7 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars
 | `make lint` | Run TFLint across all roots |
 | `make test` | Run all .tftest.hcl suites |
 | `make plan-gcp-organization` | Plan control-plane changes |
-| `make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars` | Plan an app environment |
+| `make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example` | Plan an app environment |
 | `make ci` | Full local pipeline (fmt-check + consistency + count-check + links + shellcheck + docs-check + validate-all + lint + test + security) |
 
 ---

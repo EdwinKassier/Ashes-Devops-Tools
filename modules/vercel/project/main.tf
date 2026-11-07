@@ -138,10 +138,16 @@ resource "vercel_project" "this" {
   name    = var.project_name
   team_id = var.team_id != "" ? var.team_id : null
 
-  framework                  = var.framework
-  root_directory             = local.root_directory_normalized
-  ignore_command             = local.ignore_command
-  serverless_function_region = var.serverless_function_region
+  framework      = var.framework
+  root_directory = local.root_directory_normalized
+  ignore_command = local.ignore_command
+
+  # resource_config replaces the deprecated serverless_function_region (same
+  # setting, in-place update; setting both would conflict). The single-region
+  # variable stays as the default so existing callers are unchanged.
+  resource_config = {
+    function_default_regions = toset(coalesce(var.function_default_regions, [var.serverless_function_region]))
+  }
 
   # git_repository is a Single Nested Attribute in the Vercel provider v4 schema
   # — it requires = { } assignment syntax, NOT block syntax (without =).

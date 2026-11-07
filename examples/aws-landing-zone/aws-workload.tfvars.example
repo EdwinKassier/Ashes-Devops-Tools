@@ -12,8 +12,8 @@ workload_account_key = "workload_dev"
 # aws-organization / aws-network roots (cross-root naming contract).
 log_archive_bucket_name = "acme-org-log-archive"
 
-# REQUIRED — IAM role AWS Config assumes to record resources in this account.
-config_role_arn = "arn:aws:iam::222222222222:role/config-recorder"
+# The account's AWS Config recorder is deployed by aws-organization's org-wide
+# recorder StackSet; config_role_arn is deprecated and ignored (removed in v1.0).
 
 # Optional — bring your own CMK. Empty (default) creates a rotating workload CMK
 # (alias/workload-<env>) for EBS, Session Manager and the app services.

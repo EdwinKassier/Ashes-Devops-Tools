@@ -87,6 +87,56 @@ variable "dns_hub_vpc_cidr_block" {
   }
 }
 
+variable "enable_ncc_hub" {
+  description = "Create a Network Connectivity Center hub (hub VPC as its center spoke) that environment VPCs can join instead of peering (gcp-workload network_connectivity = ncc). Null = gcp.network.ncc_hub.enabled from config/landing-zone.yaml, else false. See docs/runbooks/gcp-peering-to-ncc-migration.md."
+  type        = bool
+  default     = null
+}
+
+variable "ncc_preset_topology" {
+  description = "NCC hub preset topology, STAR or MESH. Immutable once the hub exists. Null = gcp.network.ncc_hub.preset_topology from config/landing-zone.yaml, else STAR."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = contains(["STAR", "MESH"], coalesce(var.ncc_preset_topology, local.cfg.ncc_preset_topology, "STAR"))
+    error_message = "ncc_preset_topology (or gcp.network.ncc_hub.preset_topology in config/landing-zone.yaml) must be STAR or MESH."
+  }
+}
+
+variable "vpn" {
+  description = "HA VPN from the hub VPC to an on-premises or other-cloud gateway, off by default. Same shape as the net-hub vpn input: enabled, tunnel_count (1 or 2), router_asn, peer_asn, peer_gateway_ips, local_ips, peer_ips, advertised_ip_ranges, site_to_site_data_transfer. With enable_ncc_hub the tunnels also join the NCC hub as a hybrid spoke. Null = gcp.network.vpn from config/landing-zone.yaml, else off. The pre-shared key is never config: set vpn_shared_secret_wo."
+  type        = any
+  default     = null
+}
+
+variable "vpn_shared_secret_wo" {
+  description = "Write-only HA VPN pre-shared key (required when the effective vpn.enabled is true): sent to the API at apply time and never stored in state or plan. Supply it as a sensitive TFC workspace variable, not in config or tfvars files."
+  type        = string
+  default     = null
+  sensitive   = true
+  ephemeral   = true
+}
+
+variable "vpn_shared_secret_wo_version" {
+  description = "Rotation counter for vpn_shared_secret_wo: write-only values are not diffed, so increment this to push a changed pre-shared key."
+  type        = number
+  default     = 1
+  nullable    = false
+}
+
+variable "interconnects" {
+  description = "Cloud Interconnect VLAN attachments on the hub VPC, keyed by attachment name (same shape as the net-hub interconnects input; region and router_name required). Null = gcp.network.interconnect from config/landing-zone.yaml, else none."
+  type        = any
+  default     = null
+}
+
+variable "hub_additional_regions" {
+  description = "Opt-in extra regions of the hub VPC, keyed by region name (same shape as the network-hub stage hub_additional_regions input): subnet_cidrs (public, private, database), optional secondary_ranges and nat (default true: a Cloud Router and Cloud NAT in the region). CIDRs must not overlap the primary hub subnets or each other. Null = gcp.network.additional_regions from config/landing-zone.yaml, else none (single-region hub)."
+  type        = any
+  default     = null
+}
+
 variable "vpc_sc_access_policy_name" {
   description = "Bare numeric ID of the org-level Access Context Manager access policy for the hub VPC-SC perimeter (e.g. '1234567890'). Optional — if null, no hub perimeter is created. Do NOT include the 'accessPolicies/' prefix. Null = gcp.network.vpc_sc_access_policy from config/landing-zone.yaml."
   type        = string
@@ -154,23 +204,42 @@ variable "projects_workspace_name" {
 # Stage contract overrides (FAST-style): when set (here or as gcp.contracts.<layer>
 # in config/landing-zone.yaml) the matching remote-state read is skipped.
 variable "organization_contract" {
-  description = "gcp-organization stage contract: org_id and folders (key => {id, name, display_name}). Null = gcp.contracts.organization from config/landing-zone.yaml, else read from the gcp-organization workspace's remote state."
+  description = "gcp-organization stage contract, the same type in every gcp root: org_id (numeric), billing_account (billingAccounts/XXXXXX-XXXXXX-XXXXXX or bare ID), admin_project_number, folders (key => {id, name, display_name}), tag_values (key => tag value ID) and scoped_access_policy_ids (env => policy ID). This root needs: org_id, folders. Null = gcp.contracts.organization from config/landing-zone.yaml, else the contract output of the gcp-organization workspace."
   type = object({
-    org_id = string
-    folders = map(object({
+    org_id               = optional(string)
+    billing_account      = optional(string)
+    admin_project_number = optional(string)
+    folders = optional(map(object({
       id           = string
       name         = string
       display_name = string
-    }))
+    })), {})
+    tag_values               = optional(map(string), {})
+    scoped_access_policy_ids = optional(map(string), {})
   })
   default = null
+
+  validation {
+    condition     = var.organization_contract == null || alltrue([for k in ["org_id"] : try(length(trimspace(var.organization_contract[k])) > 0, false)])
+    error_message = "organization_contract must set org_id for this root."
+  }
 }
 
 variable "projects_contract" {
-  description = "gcp-projects stage contract: project_ids and project_numbers (project key => value; needs shared-hub, shared-dns and every <env>-host). Null = gcp.contracts.projects from config/landing-zone.yaml, else read from the gcp-projects workspace's remote state."
+  description = "gcp-projects stage contract, the same type in every gcp root: project_ids and project_numbers (project key => value, e.g. shared-hub, shared-dns, <env>-host) and environment_config (environment => folder_id, host_project_id, host_project_number, region, cidr_block, labels, is_production, vpc_sc_access_policy_id). This root needs: project_ids and project_numbers (shared-hub, shared-dns and every <env>-host). Null = gcp.contracts.projects from config/landing-zone.yaml, else the contract output of the gcp-projects workspace."
   type = object({
-    project_ids     = map(string)
-    project_numbers = map(string)
+    project_ids     = optional(map(string), {})
+    project_numbers = optional(map(string), {})
+    environment_config = optional(map(object({
+      folder_id               = string
+      host_project_id         = string
+      host_project_number     = string
+      region                  = string
+      cidr_block              = string
+      labels                  = optional(map(string), {})
+      is_production           = optional(bool)
+      vpc_sc_access_policy_id = optional(string)
+    })), {})
   })
   default = null
 }

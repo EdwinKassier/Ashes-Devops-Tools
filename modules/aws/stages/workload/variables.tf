@@ -73,6 +73,13 @@ variable "ipam_pool_id" {
   default     = ""
 }
 
+variable "ipam_explicit_cidr" {
+  description = "When true and ipam_pool_id is set, the spoke VPC requests vpc_cidr explicitly from the pool (pool + cidr_block). Default false keeps the legacy pool + netmask_length shape; switching an existing VPC replaces it, so enable for NEW workloads only."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "availability_zones" {
   description = "Availability zones to spread each subnet tier across. Only the first az_count entries are used."
   type        = list(string)
@@ -197,8 +204,10 @@ variable "log_archive_bucket_name" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations # deprecated and ignored, kept so a set value warns until v1.0
 variable "config_role_arn" {
-  description = "ARN of the IAM role AWS Config assumes to record resource configurations in this account/Region. Null (default) uses the account's AWSServiceRoleForConfig service-linked role (created unless create_config_service_linked_role = false)."
+  deprecated  = "Ignored: the Config recorder is deployed by aws-organization's recorder StackSet (enable_org_config_recorders). Remove this input; it is deleted in v1.0."
+  description = "Deprecated and ignored: the workload Config recorder is deployed by aws-organization's recorder StackSet, which uses the AWSServiceRoleForConfig service-linked role. Removed in v1.0."
   type        = string
   default     = null
 
@@ -208,8 +217,10 @@ variable "config_role_arn" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations # deprecated and ignored, kept so a set value warns until v1.0
 variable "create_config_service_linked_role" {
-  description = "With config_role_arn = null, create the AWSServiceRoleForConfig service-linked role in the workload account. Set false if Config was ever enabled in the account (the SLR already exists)."
+  deprecated  = "Ignored: the Config recorder is deployed by aws-organization's recorder StackSet (enable_org_config_recorders). Remove this input; it is deleted in v1.0."
+  description = "Deprecated and ignored: the workload Config recorder is deployed by aws-organization's recorder StackSet. Removed in v1.0."
   type        = bool
   default     = true
 }

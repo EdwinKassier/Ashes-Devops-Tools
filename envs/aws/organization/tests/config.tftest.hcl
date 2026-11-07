@@ -78,6 +78,67 @@ run "values_come_from_config_file" {
   }
 }
 
+run "guard_alert_inputs_come_from_config_file" {
+  command = plan
+
+  assert {
+    condition     = join(",", local.aws_enabled_regions) == "eu-west-1,us-east-1" && join(",", local.guard_alert_emails) == "secops@cfg.test"
+    error_message = "aws_enabled_regions / guard_alert_emails must fall back to aws.enabled_regions / aws.guard_alert_emails."
+  }
+}
+
+run "guard_alert_inputs_variables_win" {
+  command = plan
+
+  variables {
+    aws_enabled_regions = ["eu-west-2"]
+    guard_alert_emails  = []
+  }
+
+  assert {
+    condition     = join(",", local.aws_enabled_regions) == "eu-west-2" && length(local.guard_alert_emails) == 0
+    error_message = "explicit aws_enabled_regions / guard_alert_emails must win over the config file."
+  }
+}
+
+# Config recorder migration flags: config fallback, explicit variables win, and
+# a config without the keys keeps both off (today's behaviour).
+run "recorder_flags_come_from_config_file" {
+  command = plan
+
+  assert {
+    condition     = local.enable_org_config_recorders && local.enable_config_recorder_scp
+    error_message = "enable_org_config_recorders / enable_config_recorder_scp must fall back to aws.enable_org_config_recorders / aws.enable_config_recorder_scp."
+  }
+}
+
+run "recorder_flags_variables_win" {
+  command = plan
+
+  variables {
+    enable_org_config_recorders = false
+    enable_config_recorder_scp  = false
+  }
+
+  assert {
+    condition     = !local.enable_org_config_recorders && !local.enable_config_recorder_scp
+    error_message = "explicit enable_org_config_recorders / enable_config_recorder_scp must win over the config file."
+  }
+}
+
+run "recorder_flags_absent_are_off" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-split.yaml"
+  }
+
+  assert {
+    condition     = !local.enable_org_config_recorders && !local.enable_config_recorder_scp
+    error_message = "with the keys absent both recorder flags must default to false."
+  }
+}
+
 run "tfc_project_default_without_config_prefix" {
   command = plan
 
@@ -170,5 +231,167 @@ run "split_workload_projects_trust_the_workloads_project" {
       local.tfc_workspace_bindings["security_tooling"].project == null
     )
     error_message = "with split_workload_projects, workload accounts must trust <prefix>aws-workloads and foundational ones the default project."
+  }
+}
+
+# notifications.emails feeds the org-guard-alerts topic, the budget emails and
+# the Cost Anomaly Detection address.
+run "emails_feed_org_guard_topic" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+  }
+
+  assert {
+    condition     = join(",", local.guard_alert_emails) == "alerts@cfg.test,oncall@cfg.test"
+    error_message = "notifications.emails must feed the org-guard-alerts subscriptions when aws.guard_alert_emails is unset."
+  }
+
+  assert {
+    condition     = local.cost_anomaly_email == "alerts@cfg.test" && join(",", local.budgets["org-monthly"].emails) == "alerts@cfg.test,oncall@cfg.test"
+    error_message = "notifications.emails must feed the default budget emails and the anomaly address."
+  }
+}
+
+# The specific key beats the shared section; the variable beats both.
+run "guard_key_beats_notifications_emails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
+  }
+
+  assert {
+    condition     = join(",", local.guard_alert_emails) == "secops@cfg.test"
+    error_message = "aws.guard_alert_emails must win over notifications.emails."
+  }
+}
+
+# No section: budgets, the anomaly address and the guard topic keep today's values.
+run "no_section_is_noop" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-split.yaml"
+  }
+
+  assert {
+    condition     = local.cost_anomaly_email == "finops@example.com" && length(local.budgets["org-monthly"].emails) == 0 && length(local.guard_alert_emails) == 0
+    error_message = "without a notifications section the FinOps defaults and an empty guard list must be unchanged."
+  }
+}
+
+# starter: one budget from org.monthly_budget_usd, alerting at 50/80/100% to
+# notifications.emails.
+run "starter_budget_alerts_wired" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-starter.yaml"
+  }
+
+  assert {
+    condition     = length(local.budgets) == 1 && local.budgets["org-monthly"].limit_amount == "300" && jsonencode(local.budgets["org-monthly"].alert_percents) == jsonencode([50, 80, 100])
+    error_message = "starter must plan one org-monthly budget of org.monthly_budget_usd alerting at 50/80/100%."
+  }
+
+  assert {
+    condition     = join(",", local.budgets["org-monthly"].emails) == "alerts@cfg.test,oncall@cfg.test"
+    error_message = "starter budget alerts must reach notifications.emails."
+  }
+}
+
+# starter without a resolvable budget amount must fail the plan.
+run "starter_requires_budget" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-starter-nobudget.yaml"
+  }
+
+  expect_failures = [terraform_data.starter_requires_budget]
+}
+
+# Production keeps the variable-driven budgets untouched.
+run "production_budgets_unchanged" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+  }
+
+  assert {
+    condition     = local.budgets["org-monthly"].limit_amount == "3000" && length(local.budgets["org-monthly"].alert_percents) == 0 && length(terraform_data.starter_requires_budget) == 0
+    error_message = "the production profile must keep the default budget and no starter guard."
+  }
+}
+
+# Scaffold matrix: committed scaffolder output (make scaffold-fixtures) must plan.
+run "scaffold_aws_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.aws.yaml"
+  }
+}
+
+run "scaffold_gcp_aws_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws.yaml"
+  }
+}
+
+run "scaffold_gcp_aws_saas_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
+  }
+}
+
+# CloudTrail delegated admin: the shared aws.enable_cloudtrail_delegated_admin
+# key turns it on, and aws.adopt.cloudtrail_delegated_admin_account_id names the
+# existing registration to import; the variable wins; absent keys keep it off.
+#
+# module.aws_organization is overridden in this file, so each run keeps the
+# import inactive (it needs both keys): the flag run blanks the adoption, the
+# adoption run turns the flag off.
+run "cloudtrail_delegated_admin_comes_from_config_file" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-cloudtrail-da.yaml"
+    adopt_existing           = {}
+  }
+
+  assert {
+    condition     = local.enable_cloudtrail_delegated_admin
+    error_message = "enable_cloudtrail_delegated_admin must fall back to aws.enable_cloudtrail_delegated_admin."
+  }
+}
+
+run "cloudtrail_delegated_admin_variable_wins_and_adoption_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path          = "tests/fixtures/landing-zone-cloudtrail-da.yaml"
+    enable_cloudtrail_delegated_admin = false
+  }
+
+  assert {
+    condition     = !local.enable_cloudtrail_delegated_admin && local.adopt_existing.cloudtrail_delegated_admin_account_id == "022222222222"
+    error_message = "An explicit enable_cloudtrail_delegated_admin must win over the config file, and the registration to adopt must come from aws.adopt."
+  }
+}
+
+run "cloudtrail_delegated_admin_absent_is_off" {
+  command = plan
+
+  assert {
+    condition     = !local.enable_cloudtrail_delegated_admin && local.adopt_existing.cloudtrail_delegated_admin_account_id == null
+    error_message = "With the keys absent the CloudTrail delegated admin must stay off and nothing is imported."
   }
 }

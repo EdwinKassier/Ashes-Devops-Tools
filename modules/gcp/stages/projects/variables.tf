@@ -63,6 +63,18 @@ variable "project_services" {
   ]
 }
 
+variable "additional_project_services" {
+  description = "Extra APIs to enable on individual projects, keyed by project key (<environment key>-<project key>, e.g. shared-hub, dev-host), on top of project_services. Keys that match no project are ignored. Default {} = project_services only."
+  type        = map(list(string))
+  default     = {}
+  nullable    = false
+
+  validation {
+    condition     = alltrue(flatten([for k, v in var.additional_project_services : [for s in v : can(regex("^[a-z][a-z0-9.-]*\\.googleapis\\.com$", s))]]))
+    error_message = "Every additional_project_services entry must be an API name ending in .googleapis.com."
+  }
+}
+
 variable "suffix" {
   description = "Random suffix from bootstrap module appended to project IDs for uniqueness"
   type        = string

@@ -1,0 +1,12 @@
+# Test fixture: empty services / service_teams sections (config.tftest.hcl).
+version: 1
+org:
+  prefix: cfgco
+  tfc:
+    organization: cfg-tfc
+gcp:
+  environments:
+    dev:
+      cidr_block: 10.10.0.0/16
+      services: {}
+      service_teams: {}

@@ -26,32 +26,34 @@ override_data {
   target = data.terraform_remote_state.gcp_bootstrap
   values = {
     outputs = {
-      admin_project_id = "acme-admin-abcd"
-      suffix           = "abcd"
-      workload_service_accounts = {
-        dev = {
-          plan  = "acme-wl-dev-plan@acme-admin-abcd.iam.gserviceaccount.com"
-          apply = "acme-wl-dev-apply@acme-admin-abcd.iam.gserviceaccount.com"
+      contract = {
+        admin_project_id = "acme-admin-abcd"
+        suffix           = "abcd"
+        workload_service_accounts = {
+          dev = {
+            plan  = "acme-wl-dev-plan@acme-admin-abcd.iam.gserviceaccount.com"
+            apply = "acme-wl-dev-apply@acme-admin-abcd.iam.gserviceaccount.com"
+          }
+          # An env not in var.environments must be ignored, not granted.
+          stale = {
+            plan  = "acme-wl-stale-plan@acme-admin-abcd.iam.gserviceaccount.com"
+            apply = "acme-wl-stale-apply@acme-admin-abcd.iam.gserviceaccount.com"
+          }
         }
-        # An env not in var.environments must be ignored, not granted.
-        stale = {
-          plan  = "acme-wl-stale-plan@acme-admin-abcd.iam.gserviceaccount.com"
-          apply = "acme-wl-stale-apply@acme-admin-abcd.iam.gserviceaccount.com"
+        workload_folder_roles = {
+          plan  = ["organizations/123/roles/landingZonePlanViewer"]
+          apply = ["roles/compute.admin"]
         }
-      }
-      workload_folder_roles = {
-        plan  = ["organizations/123/roles/landingZonePlanViewer"]
-        apply = ["roles/compute.admin"]
-      }
-      stage_service_accounts = {
-        "network-hub" = {
-          plan  = "acme-network-hub-plan@acme-admin-abcd.iam.gserviceaccount.com"
-          apply = "acme-network-hub-apply@acme-admin-abcd.iam.gserviceaccount.com"
+        stage_service_accounts = {
+          "network-hub" = {
+            plan  = "acme-network-hub-plan@acme-admin-abcd.iam.gserviceaccount.com"
+            apply = "acme-network-hub-apply@acme-admin-abcd.iam.gserviceaccount.com"
+          }
         }
-      }
-      network_folder_roles = {
-        plan  = ["roles/compute.viewer"]
-        apply = ["roles/compute.networkAdmin"]
+        network_folder_roles = {
+          plan  = ["roles/compute.viewer"]
+          apply = ["roles/compute.networkAdmin"]
+        }
       }
     }
   }
@@ -61,13 +63,15 @@ override_data {
   target = data.terraform_remote_state.gcp_organization
   values = {
     outputs = {
-      billing_account = "000000-111111-222222"
-      folders = {
-        shared = { id = "folders/100", name = "folders/100", display_name = "Shared" }
-        dev    = { id = "folders/111", name = "folders/111", display_name = "Development" }
-      }
-      tag_values = {
-        "environment-dev" = "tagValues/123"
+      contract = {
+        billing_account = "000000-111111-222222"
+        folders = {
+          shared = { id = "folders/100", name = "folders/100", display_name = "Shared" }
+          dev    = { id = "folders/111", name = "folders/111", display_name = "Development" }
+        }
+        tag_values = {
+          "environment-dev" = "tagValues/123"
+        }
       }
     }
   }
@@ -94,8 +98,10 @@ run "pre_c2_bootstrap_state_plans_without_grants" {
     target = data.terraform_remote_state.gcp_bootstrap
     values = {
       outputs = {
-        admin_project_id = "acme-admin-abcd"
-        suffix           = "abcd"
+        contract = {
+          admin_project_id = "acme-admin-abcd"
+          suffix           = "abcd"
+        }
       }
     }
   }

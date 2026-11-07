@@ -144,6 +144,24 @@ run "plan_roles_deny_data_plane_reads" {
   }
 }
 
+run "plan_role_denies_data_plane_reads" {
+  command = plan
+
+  assert {
+    condition = (
+      alltrue([for a in [
+        "s3:GetObject*", "secretsmanager:BatchGetSecretValue", "kms:GenerateDataKey*", "ssm:GetCommandInvocation",
+        "logs:GetLogRecord", "logs:GetLogEvents", "logs:FilterLogEvents", "logs:StartQuery",
+        "rds:DownloadDBLogFilePortion", "es:ESHttpGet", "cassandra:Select", "codecommit:GitPull", "codecommit:GetFile",
+        ] : contains(one([for s in jsondecode(aws_iam_role_policy.plan_guard["aws-backup:plan"].policy).Statement : s if s.Sid == "DenyDataPlaneReads"]).Action, a)
+      ]) &&
+      !anytrue([for a in ["lambda:GetFunction", "ec2:GetLaunchTemplateData", "apigateway:GET"] : contains(one([for s in jsondecode(aws_iam_role_policy.plan_guard["aws-backup:plan"].policy).Statement : s if s.Sid == "DenyDataPlaneReads"]).Action, a)]) &&
+      length(aws_iam_role_policy.plan_guard["aws-backup:plan"].policy) < 6144
+    )
+    error_message = "management plan roles must deny the full data-plane read set (never refresh-needed reads) within the managed-policy size budget."
+  }
+}
+
 run "security_trail_permissions_scoped_to_org_trail" {
   command = plan
 
@@ -165,7 +183,7 @@ run "security_wiring_scoped_to_trail_resources" {
   assert {
     condition = (
       !anytrue([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s.Effect == "Allow" && contains(flatten([s.Resource]), "*") && anytrue([for a in flatten([s.Action]) : contains(["kms:*", "logs:*", "sns:*", "cloudtrail:*"], a)]) && !can(s.Condition)]) &&
-      one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "OwnedKeysOnly"]).Condition.StringEquals["aws:ResourceTag/Workspace"] == "aws-security" &&
+      one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "CreateOwnedKeysOnly"]).Condition.StringEquals["aws:RequestTag/Workspace"] == "aws-security" &&
       one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "DelegateOnlyToSecurityAccounts"]).Resource == ["arn:aws:organizations::111111111111:account/o-*/222222222222"] &&
       !contains(one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "SecurityServicesDelegationOnly"]).Condition.StringEquals["organizations:ServicePrincipal"], "account.amazonaws.com")
     )
@@ -186,5 +204,252 @@ run "security_role_cannot_quietly_defeat_audit" {
       one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "DelegateOnlyToSecurityAccounts"]).Resource == ["arn:aws:organizations::111111111111:account/o-*/none"]
     )
     error_message = "UpdateTrail / PutKeyPolicy / CreateGrant / DisableKeyRotation must be denied, alarms scoped to the trail, create-time tagging allowed, and delegation fail closed."
+  }
+}
+
+run "no_tag_based_kms_access" {
+  command = plan
+
+  variables {
+    tags = { Team = "platform" }
+  }
+
+  assert {
+    condition     = !anytrue([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s.Sid == "OwnedKeysOnly"])
+    error_message = "No statement may grant kms:* on keys by resource tag; tags must grant nothing."
+  }
+
+  assert {
+    condition = !anytrue([
+      for s in jsondecode(output.apply_policies["aws-security"]).Statement :
+      s.Effect == "Allow" && try(contains(flatten([s.Action]), "kms:*"), false)
+    ])
+    error_message = "The aws-security apply role must hold no Allow kms:*."
+  }
+
+  # No aws:TagKeys allow-list: the provider default_tags would deny CreateKey.
+  assert {
+    condition = anytrue([
+      for s in jsondecode(output.apply_policies["aws-security"]).Statement :
+      s.Sid == "CreateOwnedKeysOnly" && toset(keys(s.Condition)) == toset(["StringEquals"]) &&
+      !can(s.Condition.StringEquals["aws:TagKeys"]) && !can(s.Condition["ForAllValues:StringEquals"])
+    ])
+    error_message = "CreateOwnedKeysOnly must be conditioned only on the owner request tag, with no aws:TagKeys restriction."
+  }
+}
+
+# Org-wide detection (delegated admins, trusted access) can be switched off
+# only with the explicit teardown gate: a routine aws-security apply cannot.
+run "aws_security_cannot_disable_org_detection" {
+  command = plan
+
+  # Two delegated accounts, as the aws-organization stage passes
+  # (security_tooling + backup): the size assertion below is realistic.
+  variables {
+    delegated_admin_account_ids = ["222222222222", "333333333333"]
+  }
+
+  assert {
+    condition = !anytrue([
+      for s in jsondecode(output.apply_policies["aws-security"]).Statement :
+      s.Effect == "Allow" && anytrue([for a in flatten([s.Action]) : contains([
+        "organizations:DisableAWSServiceAccess", "organizations:DeregisterDelegatedAdministrator",
+        "guardduty:DisableOrganizationAdminAccount", "securityhub:DisableOrganizationAdminAccount",
+        "macie2:DisableOrganizationAdminAccount", "inspector2:DisableDelegatedAdminAccount",
+        "detective:DisableOrganizationAdminAccount", "fms:DisassociateAdminAccount",
+      ], a) || strcontains(a, "*") && !contains(["organizations:Describe*", "organizations:List*", "logs:Describe*", "logs:List*", "sns:List*", "cloudwatch:Describe*", "kms:List*", "kms:Describe*", "logs:*", "sns:*", "cloudtrail:*"], a)])
+    ])
+    error_message = "With the teardown gate off, no aws-security Allow may grant a disable / deregister / disassociate action (or an unexpected wildcard)."
+  }
+
+  assert {
+    condition = (
+      one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "SecurityServicesDelegationOnly"]).Action == ["organizations:EnableAWSServiceAccess"] &&
+      one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "DelegateOnlyToSecurityAccounts"]).Action == ["organizations:RegisterDelegatedAdministrator"] &&
+      length([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if startswith(s.Sid, "SecurityServiceTeardown")]) == 0 &&
+      length(aws_iam_role_policy.security_teardown) == 0 && output.security_teardown_policy == null
+    )
+    error_message = "Gate off: delegation statements allow only EnableAWSServiceAccess / RegisterDelegatedAdministrator, and no SecurityServiceTeardown statement exists."
+  }
+
+  # Selector, tag, resource-policy, alarm and log-group tampering is denied.
+  assert {
+    condition = (
+      length(setintersection(toset(flatten([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s.Action if s.Effect == "Deny" && startswith(s.Sid, "DenyTrailAndKeyDestruction")])), toset([
+        "cloudtrail:RemoveTags", "cloudtrail:PutResourcePolicy", "cloudtrail:DeleteResourcePolicy",
+        "cloudwatch:DeleteAlarms", "cloudwatch:DisableAlarmActions",
+        "logs:DeleteLogGroup", "logs:DeleteLogStream", "logs:DeleteRetentionPolicy", "logs:DeleteSubscriptionFilter", "logs:DeleteMetricFilter",
+      ]))) == 10 &&
+      !contains(flatten([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s.Action if s.Effect == "Deny"]), "logs:PutRetentionPolicy") &&
+      one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "DenyTrailAndKeyDestructionAlarms"]).Resource == ["arn:aws:cloudwatch:*:111111111111:alarm:org-trail-*"] &&
+      toset(one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "DenyTrailAndKeyDestructionLogs"]).Resource) == toset([
+        "arn:aws:logs:*:111111111111:log-group:/aws/cloudtrail/org-trail",
+        "arn:aws:logs:*:111111111111:log-group:/aws/cloudtrail/org-trail:*",
+      ]) &&
+      !contains(one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "TrailAlarmsOnly"]).Action, "cloudwatch:DeleteAlarms")
+    )
+    error_message = "DenyTrailAndKeyDestruction* must deny trail tag/resource-policy edits, alarm deletion/disable on the trail alarms and log-group destruction (not PutRetentionPolicy); TrailAlarmsOnly must not allow DeleteAlarms."
+  }
+
+  # Internal budget for the main inline policy at the default trail name and
+  # partition (the hard AWS limit is 10,240 aggregate per role, asserted below).
+  assert {
+    condition     = length(output.apply_policies["aws-security"]) <= 6144
+    error_message = "The aws-security apply policy must stay within its 6,144-character internal budget."
+  }
+}
+
+run "teardown_gate_adds_disable_actions" {
+  command = plan
+
+  variables {
+    delegated_admin_account_ids      = ["222222222222"]
+    enable_security_service_teardown = true
+  }
+
+  # The gate attaches a separate inline policy to the aws-security APPLY role only.
+  assert {
+    condition = (
+      toset(keys(aws_iam_role_policy.security_teardown)) == toset(["aws-security:apply"]) &&
+      aws_iam_role_policy.security_teardown["aws-security:apply"].policy == output.security_teardown_policy
+    )
+    error_message = "The teardown gate must attach tfc-apply-security-teardown to the aws-security apply role only."
+  }
+
+  assert {
+    condition = (
+      toset(flatten([for s in jsondecode(output.security_teardown_policy).Statement : s.Action if s.Effect == "Allow" && startswith(s.Sid, "SecurityServiceTeardown")])) == toset([
+        "organizations:DisableAWSServiceAccess", "organizations:DeregisterDelegatedAdministrator",
+        "guardduty:DisableOrganizationAdminAccount", "securityhub:DisableOrganizationAdminAccount",
+        "macie2:DisableOrganizationAdminAccount", "inspector2:DisableDelegatedAdminAccount",
+        "detective:DisableOrganizationAdminAccount", "fms:DisassociateAdminAccount",
+      ]) &&
+      # The disable/deregister actions appear nowhere in the routine policy.
+      !anytrue([for s in jsondecode(output.apply_policies["aws-security"]).Statement : anytrue([for a in flatten([s.Action]) : contains(["organizations:DisableAWSServiceAccess", "organizations:DeregisterDelegatedAdministrator", "guardduty:DisableOrganizationAdminAccount"], a)])])
+    )
+    error_message = "The teardown gate must add exactly the disable / deregister actions, only in SecurityServiceTeardown statements."
+  }
+
+  # Teardown stays pinned to the security services and the security accounts.
+  assert {
+    condition = (
+      one([for s in jsondecode(output.security_teardown_policy).Statement : s if s.Sid == "SecurityServiceTeardownDelegation"]).Resource == ["arn:aws:organizations::111111111111:account/o-*/222222222222"] &&
+      !contains(one([for s in jsondecode(output.security_teardown_policy).Statement : s if s.Sid == "SecurityServiceTeardownTrustedAccess"]).Condition.StringEquals["organizations:ServicePrincipal"], "sso.amazonaws.com")
+    )
+    error_message = "Teardown deregistration must be pinned to the security accounts and service-access disables to the security service principals."
+  }
+
+  # Inline role policies: AWS caps the aggregate of a role's inline policies at 10,240 characters.
+  assert {
+    condition     = length(output.apply_policies["aws-security"]) + length(output.security_teardown_policy) <= 10240
+    error_message = "The aws-security apply + teardown inline policies must stay within the 10,240-character per-role aggregate."
+  }
+}
+
+# Worst case: longest partition, a 20-character trail name, three delegated
+# accounts, teardown gate on.
+run "inline_policy_size_worst_case" {
+  command = plan
+
+  override_data {
+    target = data.aws_partition.current
+    values = { partition = "aws-us-gov" }
+  }
+
+  variables {
+    security_trail_name              = "org-trail-abcdefghij"
+    delegated_admin_account_ids      = ["222222222222", "333333333333", "444444444444"]
+    enable_security_service_teardown = true
+  }
+
+  assert {
+    condition     = length(output.apply_policies["aws-security"]) + length(output.security_teardown_policy) <= 10240
+    error_message = "Worst case: the aws-security apply + teardown inline policies must stay within the 10,240-character per-role aggregate."
+  }
+
+  assert {
+    condition     = strcontains(output.apply_policies["aws-security"], "arn:aws-us-gov:cloudtrail:*:111111111111:trail/org-trail-abcdefghij")
+    error_message = "The worst-case run must actually render the us-gov partition and long trail name."
+  }
+}
+
+run "routine_apply_still_allowed" {
+  command = plan
+
+  variables {
+    delegated_admin_account_ids = ["222222222222"]
+  }
+
+  assert {
+    condition = alltrue([
+      for a in [
+        "organizations:EnableAWSServiceAccess", "organizations:RegisterDelegatedAdministrator",
+        "cloudtrail:CreateTrail", "cloudtrail:PutEventSelectors", "cloudwatch:PutMetricAlarm",
+        "logs:CreateLogGroup", "logs:PutRetentionPolicy",
+        ] : anytrue([
+          for s in jsondecode(output.apply_policies["aws-security"]).Statement :
+          s.Effect == "Allow" && anytrue([for p in flatten([s.Action]) : p == a || (endswith(p, "*") && startswith(a, trimsuffix(p, "*")))])
+          ]) && !anytrue([
+          for s in jsondecode(output.apply_policies["aws-security"]).Statement :
+          s.Effect == "Deny" && anytrue([for p in flatten([s.Action]) : p == a || (endswith(p, "*") && startswith(a, trimsuffix(p, "*")))])
+      ])
+    ])
+    error_message = "Routine aws-security applies (trusted access, delegated-admin registration, trail, selectors, alarms, log group, retention) must stay allowed and undenied."
+  }
+}
+
+# With the CloudTrail delegated administrator the management role keeps no
+# trail write: no cloudtrail action is allowed (reads come from ReadOnlyAccess),
+# the delivery role cannot be passed, and the cloudtrail.amazonaws.com
+# delegation is aws-organization's alone. The trail denies stay.
+run "management_role_has_no_trail_write" {
+  command = plan
+
+  variables {
+    delegated_admin_account_ids       = ["222222222222"]
+    enable_cloudtrail_delegated_admin = true
+    enable_security_service_teardown  = true
+  }
+
+  assert {
+    condition = (
+      !anytrue([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s.Effect == "Allow" && anytrue([for a in flatten([s.Action]) : startswith(a, "cloudtrail:") || a == "iam:PassRole"])]) &&
+      length([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if contains(["OrganizationTrailOnly", "PassTrailDeliveryRoleToCloudTrail", "TrailWiringCreate", "CreateOwnedKeysOnly"], s.Sid)]) == 0 &&
+      !anytrue([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s.Effect == "Allow" && anytrue([for a in flatten([s.Action]) : contains(["kms:CreateKey", "logs:CreateLogGroup", "sns:CreateTopic"], a)])]) &&
+      contains(one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "DenyTrailAndKeyDestruction"]).Action, "cloudtrail:DeleteTrail")
+    )
+    error_message = "With the CloudTrail delegated admin, the aws-security role must allow no cloudtrail action, no PassRole and no trail-wiring create in the management account, and keep the trail denies."
+  }
+
+  assert {
+    condition = alltrue([
+      for s in concat(jsondecode(output.apply_policies["aws-security"]).Statement, jsondecode(output.security_teardown_policy).Statement) :
+      !contains(flatten([try(s.Condition.StringEquals["organizations:ServicePrincipal"], [])]), "cloudtrail.amazonaws.com")
+    ])
+    error_message = "With the CloudTrail delegated admin, aws-security must not register, enable or deregister cloudtrail.amazonaws.com."
+  }
+
+  # Routine applies of everything else stay allowed.
+  assert {
+    condition = alltrue([
+      for a in ["organizations:RegisterDelegatedAdministrator", "cloudwatch:PutMetricAlarm", "logs:PutRetentionPolicy"] : anytrue([
+        for s in jsondecode(output.apply_policies["aws-security"]).Statement :
+        s.Effect == "Allow" && anytrue([for p in flatten([s.Action]) : p == a || (endswith(p, "*") && startswith(a, trimsuffix(p, "*")))])
+      ])
+    ])
+    error_message = "The delegated-admin mode must keep the other routine aws-security applies allowed."
+  }
+}
+
+# Default: unchanged, the management role still manages the org trail.
+run "management_role_keeps_trail_write_by_default" {
+  command = plan
+
+  assert {
+    condition = (
+      length([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if contains(["OrganizationTrailOnly", "PassTrailDeliveryRoleToCloudTrail"], s.Sid)]) == 2 &&
+      contains(one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "DelegateOnlyToSecurityAccounts"]).Condition.StringEquals["organizations:ServicePrincipal"], "cloudtrail.amazonaws.com")
+    )
+    error_message = "By default the aws-security role keeps its trail grants and the cloudtrail delegation."
   }
 }

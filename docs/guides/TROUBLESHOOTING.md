@@ -53,12 +53,12 @@ If the file is still out of date, confirm the module has:
 
 ## `make security` fails
 
-The local security target runs TFSec and Checkov.
+The local security target runs Trivy (IaC config scan) and Checkov.
 
 Use the component commands while debugging:
 
 ```bash
-tfsec . --config-file .tfsec.yml --exclude-path examples
+trivy config . --skip-dirs examples
 checkov -d modules --framework terraform
 checkov -d envs --framework terraform
 ```
@@ -71,7 +71,7 @@ Always verify the workspace before planning:
 
 ```bash
 echo "$TF_WORKSPACE"
-TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=../../../examples/dev.tfvars
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=../../../examples/dev.tfvars.example
 ```
 
 ## `envs/gcp/workload` cannot find the organization remote state
@@ -116,7 +116,7 @@ make pre-commit-install
 
 ```bash
 export TF_LOG=DEBUG
-TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=../../../examples/dev.tfvars
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=../../../examples/dev.tfvars.example
 ```
 
 ## WIF / ADC authentication failures in CI
@@ -180,15 +180,15 @@ If an acceptance test fails due to data source postconditions in deeply nested m
   }
   ```
 
-## tfsec or Checkov reports a false positive
+## Trivy or Checkov reports a false positive
 
 Inline skips are the correct fix. Do not add findings to the global skip list in `security-scan.yml` — that silences the check for all future resources.
 
-**tfsec inline skip:**
+**Trivy inline skip:**
 
 ```hcl
 resource "google_storage_bucket" "example" {
-  #tfsec:ignore:google-storage-bucket-encryption-customer-key
+  #trivy:ignore:AVD-GCP-0066
   name = "example"
 }
 ```
@@ -203,65 +203,6 @@ resource "google_storage_bucket" "example" {
 ```
 
 Always include a justification after the colon. The CI Checkov run uses `.checkov.yaml` for repo-level exceptions; add an entry there only if the skip applies to every instance of that check across the entire codebase.
-
----
-
-## Plan-time precondition failures
-
-### `Error: Resource precondition failed — subnet CIDR count guard`
-
-```text
-╷
-│ Error: Resource precondition failed
-│ on modules/gcp/stages/host/main.tf: Each non-empty subnet_cidrs list must have at least
-│ as many entries as availability zones in the region. Detected 3 zones;
-│ provided public=0, private=2, database=0 CIDRs. Either add CIDRs or leave
-│ the list empty to use auto-generated values.
-```
-
-**Cause:** `modules/gcp/stages/host` takes subnet CIDRs as a single `subnet_cidrs` object with `public`/`private`/`database` list keys (not separate `private_subnet_cidrs`/`database_subnet_cidrs` variables). If you supply a non-empty list for one of those keys, it must have at least one CIDR per availability zone in the region.
-
-**Fix (option A — recommended for production):** Set `explicit_zones` to pin the exact zones you need:
-
-```hcl
-explicit_zones = ["us-central1-a", "us-central1-b", "us-central1-c"]
-```
-
-Then supply one CIDR per zone for each tier you override:
-
-```hcl
-subnet_cidrs = {
-  public   = []
-  private  = ["10.0.0.0/24", "10.0.1.0/24", "10.0.2.0/24"]
-  database = []
-}
-```
-
-**Fix (option B):** Add CIDRs until each non-empty list's count matches or exceeds the zone count returned by the region, or leave a tier's list empty (`[]`) to fall back to auto-generated CIDRs.
-
----
-
-### `Error: Resource precondition failed — deletion protection guard`
-
-```text
-╷
-│ Error: Resource precondition failed
-│ on modules/gcp/stages/host/main.tf: set enable_deletion_protection = false and re-apply
-│ before running terraform destroy.
-```
-
-**Cause:** `enable_deletion_protection = true` (the default) blocks `terraform destroy` of the hub network stack.
-
-**Fix:** Set `enable_deletion_protection = false` and apply once before destroying:
-
-```hcl
-enable_deletion_protection = false
-```
-
-```bash
-terraform apply   # lifts the guard
-terraform destroy # now succeeds
-```
 
 ---
 
@@ -290,7 +231,7 @@ vpc_sc_ingress_policies = [
 ]
 ```
 
-`envs/gcp/workload` itself already resolves and protects its own host project number automatically (`data.google_project.host_project.number` in `envs/gcp/workload/main.tf`) — you only need to supply numbers manually when referencing **other** (spoke) projects in custom ingress/egress policies.
+`envs/gcp/workload` itself already resolves and protects its own host project number automatically (`data.google_project.host_project.number` in `modules/gcp/stages/environment/main.tf`) — you only need to supply numbers manually when referencing **other** (spoke) projects in custom ingress/egress policies.
 
 ---
 

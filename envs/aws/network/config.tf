@@ -27,12 +27,33 @@ locals {
     tfc_organization        = try(tostring(local.lz.org.tfc.organization), null)
     log_archive_bucket_name = try(tostring(local.lz.aws.log_archive_bucket_name), null)
     aws_enabled_regions     = try([for r in local.lz.aws.enabled_regions : tostring(r)], null)
-    # aws.contracts.organization: stage contract override (same shape as
-    # var.organization_contract). Present => the aws-organization read is skipped.
+    # aws.network.*: Network Firewall egress posture.
+    egress_domain_allowlist  = try([for d in local.lz.aws.network.egress_domain_allowlist : tostring(d)], null)
+    stateful_default_actions = try([for a in local.lz.aws.network.stateful_default_actions : tostring(a)], null)
+    egress_alert_only_waived = try(tobool(local.lz.aws.network.egress_alert_only_waived), null)
+    # aws.network.vpn: opt-in Site-to-Site VPN on the TGW (no secret: AWS
+    # generates the tunnel keys). JSON text so the explicit-variable fallback
+    # is a plain conditional; the stage's variable type validates the shape.
+    enable_vpn = try(tobool(local.lz.aws.network.vpn.enabled), null)
+    vpn        = try(jsonencode(local.lz.aws.network.vpn), null)
+    # aws.network.spoke_attachments: workload spokes the hub accepts, associates
+    # and propagates (JSON text for the same reason as vpn).
+    spoke_attachments = try(jsonencode(local.lz.aws.network.spoke_attachments), null)
+    # aws.workload_environments production flags (unset = keys prod/production).
+    workload_production = try([
+      for k, e in local.lz.aws.workload_environments : k
+      if coalesce(try(tobool(e.is_production), null), can(regex("^prod(uction)?$", k)))
+    ], [])
+    # aws.contracts.organization: stage contract override (same type as
+    # var.organization_contract, identical in every aws root). Present => the
+    # aws-organization read is skipped.
     organization_contract = try(local.lz.aws.contracts.organization, null) == null ? null : {
       organization_id       = try(tostring(local.lz.aws.contracts.organization.organization_id), null)
+      organization_root_id  = try(tostring(local.lz.aws.contracts.organization.organization_root_id), null)
       management_account_id = try(tostring(local.lz.aws.contracts.organization.management_account_id), null)
+      ou_ids                = { for k, v in try(local.lz.aws.contracts.organization.ou_ids, {}) : k => tostring(v) }
       account_ids           = { for k, v in try(local.lz.aws.contracts.organization.account_ids, {}) : k => tostring(v) }
+      account_role_arns     = { for k, v in try(local.lz.aws.contracts.organization.account_role_arns, {}) : k => tostring(v) }
     }
   }
 
@@ -50,4 +71,16 @@ locals {
   # Network Firewall endpoints (~$577/month idle at 2 AZs).
   profile                 = coalesce(var.profile, local.cfg.profile, "production")
   enable_network_firewall = coalesce(var.enable_network_firewall, local.profile == "production")
+
+  # Production egress fails closed: on when the profile is production AND an
+  # AWS workload environment is production (explicit variable wins).
+  enforce_egress_allowlist                  = coalesce(var.enforce_egress_allowlist, local.profile == "production" && length(local.cfg.workload_production) > 0)
+  network_firewall_egress_domain_allowlist  = var.network_firewall_egress_domain_allowlist != null ? var.network_firewall_egress_domain_allowlist : coalesce(local.cfg.egress_domain_allowlist, [])
+  network_firewall_stateful_default_actions = var.network_firewall_stateful_default_actions != null ? var.network_firewall_stateful_default_actions : coalesce(local.cfg.stateful_default_actions, ["aws:alert_established"])
+  egress_alert_only_waived                  = coalesce(var.egress_alert_only_waived, local.cfg.egress_alert_only_waived, false)
+  # Opt-in hybrid connectivity (default off: no VPN).
+  enable_vpn = coalesce(var.enable_vpn, local.cfg.enable_vpn, false)
+  vpn        = jsondecode(var.vpn != null ? jsonencode(var.vpn) : coalesce(local.cfg.vpn, "{}"))
+  # Workload spoke routing (default none: no change).
+  spoke_attachments = jsondecode(var.spoke_attachments != null ? jsonencode(var.spoke_attachments) : coalesce(local.cfg.spoke_attachments, "{}"))
 }

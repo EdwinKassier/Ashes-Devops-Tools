@@ -1,0 +1,1850 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/landing-zone.schema.json",
+  "title": "landing-zone.yaml",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "org": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "prefix": {
+          "type": "string"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "profile": {
+          "enum": [
+            "production",
+            "starter"
+          ]
+        },
+        "owner": {
+          "type": "string"
+        },
+        "cost_center": {
+          "type": "string"
+        },
+        "monthly_budget_usd": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "regions": {
+          "type": "object",
+          "properties": {
+            "gcp": {
+              "type": "string"
+            },
+            "aws": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "tfc": {
+          "type": "object",
+          "properties": {
+            "organization": {
+              "type": "string"
+            },
+            "project_name_prefix": {
+              "type": "string"
+            },
+            "gcp_project": {
+              "type": "string"
+            },
+            "aws_project": {
+              "type": "string"
+            },
+            "saas_project": {
+              "type": "string"
+            },
+            "platform_project": {
+              "type": "string"
+            },
+            "guardrails_project": {
+              "type": "string"
+            },
+            "split_workload_projects": {
+              "type": "boolean"
+            },
+            "plan": {
+              "type": "string",
+              "enum": [
+                "free",
+                "essentials",
+                "standard",
+                "premium"
+              ]
+            },
+            "gcp_workloads_project": {
+              "type": "string"
+            },
+            "aws_workloads_project": {
+              "type": "string"
+            },
+            "vcs_repo": {
+              "type": "object",
+              "properties": {
+                "identifier": {
+                  "type": "string"
+                },
+                "branch": {
+                  "type": "string"
+                },
+                "github_app_installation_id": {
+                  "type": "string"
+                },
+                "oauth_token_id": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "gcp": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "billing_account": {
+          "type": "string"
+        },
+        "admin_email": {
+          "type": "string"
+        },
+        "organization_admin_groups": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "billing_admin_groups": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "break_glass_group": {
+          "type": "string"
+        },
+        "alert_emails": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "admin_containment": {
+          "type": "boolean"
+        },
+        "principal_access_boundary": {
+          "type": "boolean"
+        },
+        "phase0_admin_impersonation_expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "enable_audit_bucket_lock": {
+          "type": "boolean"
+        },
+        "allowed_regions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "network": {
+          "type": "object",
+          "properties": {
+            "hub_cidr_block": {
+              "type": "string"
+            },
+            "dns_hub_cidr_block": {
+              "type": "string"
+            },
+            "additional_regions": {
+              "type": "object",
+              "propertyNames": {
+                "pattern": "^[a-z]+-[a-z]+[0-9]+$"
+              },
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "subnet_cidrs": {
+                    "type": "object",
+                    "properties": {
+                      "public": {
+                        "type": "string"
+                      },
+                      "private": {
+                        "type": "string"
+                      },
+                      "database": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "public",
+                      "private",
+                      "database"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "secondary_ranges": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "range_name": {
+                          "type": "string"
+                        },
+                        "ip_cidr_range": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "range_name",
+                        "ip_cidr_range"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "nat": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "subnet_cidrs"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "vpc_sc_access_policy": {
+              "type": [
+                "string",
+                "integer"
+              ]
+            },
+            "connectivity": {
+              "type": "string",
+              "enum": [
+                "peering",
+                "ncc"
+              ]
+            },
+            "ncc_hub": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "preset_topology": {
+                  "type": "string",
+                  "enum": [
+                    "STAR",
+                    "MESH"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "vpn": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "tunnel_count": {
+                  "type": "integer",
+                  "enum": [
+                    1,
+                    2
+                  ]
+                },
+                "router_asn": {
+                  "type": "integer"
+                },
+                "peer_asn": {
+                  "type": "integer"
+                },
+                "peer_gateway_ips": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "local_ips": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "peer_ips": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "site_to_site_data_transfer": {
+                  "type": "boolean"
+                },
+                "advertised_ip_ranges": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "range": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "range",
+                      "description"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            "interconnect": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "region": {
+                    "type": "string"
+                  },
+                  "interconnect_type": {
+                    "type": "string",
+                    "enum": [
+                      "PARTNER",
+                      "DEDICATED"
+                    ]
+                  },
+                  "router_name": {
+                    "type": "string"
+                  },
+                  "router_asn": {
+                    "type": "integer"
+                  },
+                  "create_router": {
+                    "type": "boolean"
+                  },
+                  "interconnect_self_link": {
+                    "type": "string"
+                  },
+                  "vlan_tag": {
+                    "type": "integer"
+                  },
+                  "bandwidth": {
+                    "type": "string"
+                  },
+                  "edge_availability_domain": {
+                    "type": "string"
+                  },
+                  "mtu": {
+                    "type": "integer"
+                  },
+                  "admin_enabled": {
+                    "type": "boolean"
+                  },
+                  "encryption": {
+                    "type": "string"
+                  },
+                  "create_bgp_peer": {
+                    "type": "boolean"
+                  },
+                  "interface_ip_range": {
+                    "type": "string"
+                  },
+                  "peer_ip_address": {
+                    "type": "string"
+                  },
+                  "peer_asn": {
+                    "type": "integer"
+                  },
+                  "enable_bfd": {
+                    "type": "boolean"
+                  },
+                  "advertised_ip_ranges": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "range": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "range"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "region",
+                  "router_name"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "environments": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9-]{0,14}$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "display_name": {
+                "type": "string"
+              },
+              "region": {
+                "type": "string"
+              },
+              "cidr_block": {
+                "type": "string"
+              },
+              "budget_monthly_limit": {
+                "type": "number"
+              },
+              "is_production": {
+                "type": "boolean"
+              },
+              "network_connectivity": {
+                "type": "string",
+                "enum": [
+                  "peering",
+                  "ncc"
+                ]
+              },
+              "additional_regions": {
+                "type": "object",
+                "propertyNames": {
+                  "pattern": "^[a-z]+-[a-z]+[0-9]+$"
+                },
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "subnet_cidrs": {
+                      "type": "object",
+                      "properties": {
+                        "public": {
+                          "type": "string"
+                        },
+                        "private": {
+                          "type": "string"
+                        },
+                        "database": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "public",
+                        "private",
+                        "database"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "secondary_ranges": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "range_name": {
+                            "type": "string"
+                          },
+                          "ip_cidr_range": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "range_name",
+                          "ip_cidr_range"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "nat": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "subnet_cidrs"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "labels": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "iam_group_role_bindings": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "folder_id": {
+                "type": "string"
+              },
+              "host_project_id": {
+                "type": "string"
+              },
+              "host_project_number": {
+                "type": [
+                  "string",
+                  "integer"
+                ]
+              },
+              "services": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "runtime": {
+                      "type": "string",
+                      "enum": [
+                        "cloud-run",
+                        "cloud-run-job"
+                      ],
+                      "description": "cloud-run (default): a Cloud Run service. cloud-run-job: a Cloud Run job (run to completion, no URL)."
+                    },
+                    "image": {
+                      "type": "string"
+                    },
+                    "ingress": {
+                      "type": "string"
+                    },
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
+                    },
+                    "min_instances": {
+                      "type": "number"
+                    },
+                    "max_instances": {
+                      "type": "number"
+                    },
+                    "concurrency": {
+                      "type": "number"
+                    },
+                    "timeout": {
+                      "type": "string"
+                    },
+                    "env_vars": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "secrets": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "secret": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                          "secret"
+                        ]
+                      }
+                    },
+                    "subnetwork_id": {
+                      "type": "string"
+                    },
+                    "vpc_egress": {
+                      "type": "string"
+                    },
+                    "enable_binary_authorization": {
+                      "type": "boolean"
+                    },
+                    "binary_authorization_policy": {
+                      "type": "string"
+                    },
+                    "enable_unauthenticated": {
+                      "type": "boolean"
+                    },
+                    "invoker_members": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "runtime_project_roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "enable_deletion_protection": {
+                      "type": "boolean"
+                    },
+                    "labels": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "service_team": {
+                      "type": "string",
+                      "description": "Key of a gcp.environments.<env>.service_teams entry: deploy this service into that team's service project instead of the host project."
+                    },
+                    "project_id": {
+                      "type": "string"
+                    },
+                    "project_number": {
+                      "type": "string"
+                    },
+                    "artifact_registry": {
+                      "type": "object",
+                      "properties": {
+                        "immutable_tags": {
+                          "type": "boolean"
+                        },
+                        "keep_count": {
+                          "type": "number"
+                        },
+                        "delete_untagged_older_than": {
+                          "type": "string"
+                        },
+                        "cleanup_policy_dry_run": {
+                          "type": "boolean"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "database": {
+                      "type": "object",
+                      "properties": {
+                        "database_version": {
+                          "type": "string"
+                        },
+                        "edition": {
+                          "type": "string"
+                        },
+                        "tier": {
+                          "type": "string"
+                        },
+                        "databases": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "enable_high_availability": {
+                          "type": "boolean"
+                        },
+                        "enable_point_in_time_recovery": {
+                          "type": "boolean"
+                        },
+                        "encryption_key_name": {
+                          "type": "string"
+                        },
+                        "enable_deletion_protection": {
+                          "type": "boolean"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "github": {
+                      "type": "object",
+                      "properties": {
+                        "repository_id": {
+                          "type": [
+                            "string",
+                            "integer"
+                          ]
+                        },
+                        "repository": {
+                          "type": "string"
+                        },
+                        "ref": {
+                          "type": "string"
+                        },
+                        "environment": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "repository_id"
+                      ]
+                    },
+                    "alerts": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "error_ratio_threshold": {
+                          "type": "number"
+                        },
+                        "p99_latency_ms": {
+                          "type": "number"
+                        },
+                        "duration": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "pubsub": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "ack_deadline_seconds": {
+                          "type": "number"
+                        },
+                        "max_delivery_attempts": {
+                          "type": "number"
+                        },
+                        "message_retention_duration": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "job": {
+                      "type": "object",
+                      "description": "Cloud Run job settings (runtime = cloud-run-job only).",
+                      "properties": {
+                        "task_count": {
+                          "type": "number"
+                        },
+                        "parallelism": {
+                          "type": "number"
+                        },
+                        "max_retries": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "slo": {
+                      "type": "object",
+                      "description": "Service-level objective on the Cloud Run service (runtime = cloud-run only).",
+                      "properties": {
+                        "sli_type": {
+                          "type": "string",
+                          "enum": [
+                            "availability",
+                            "latency"
+                          ]
+                        },
+                        "goal": {
+                          "type": "number"
+                        },
+                        "rolling_period_days": {
+                          "type": "number"
+                        },
+                        "latency_threshold": {
+                          "type": "string"
+                        },
+                        "enable_burn_rate_alert": {
+                          "type": "boolean"
+                        },
+                        "burn_rate_threshold": {
+                          "type": "number"
+                        },
+                        "burn_rate_lookback": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "service_teams": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "project_admin_group_email": {
+                      "type": "string"
+                    },
+                    "activate_apis": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "project_admin_roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "enable_shared_vpc_attachment": {
+                      "type": "boolean"
+                    },
+                    "enable_gke_network_user": {
+                      "type": "boolean"
+                    },
+                    "shared_vpc_subnets": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "region": {
+                            "type": "string"
+                          },
+                          "subnet_name": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                          "region",
+                          "subnet_name"
+                        ]
+                      }
+                    },
+                    "labels": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "project_admin_group_email"
+                  ]
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "bootstrap_image": {
+          "type": "string"
+        },
+        "public_ingress": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "domains": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "presets_by_environment": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "workload": {
+          "type": "object",
+          "properties": {
+            "bootstrap_image": {
+              "type": "string"
+            },
+            "public_ingress": {
+              "type": "object"
+            },
+            "presets_by_environment": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "contracts": {
+          "type": "object",
+          "properties": {
+            "bootstrap": {
+              "type": "object",
+              "properties": {
+                "admin_project_id": {
+                  "type": "string"
+                },
+                "admin_project_number": {
+                  "type": [
+                    "string",
+                    "integer"
+                  ]
+                },
+                "terraform_admin_email": {
+                  "type": "string"
+                },
+                "suffix": {
+                  "type": "string"
+                },
+                "workload_service_accounts": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "plan": {
+                        "type": "string"
+                      },
+                      "apply": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "plan",
+                      "apply"
+                    ]
+                  }
+                },
+                "stage_service_accounts": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "plan": {
+                        "type": "string"
+                      },
+                      "apply": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "plan",
+                      "apply"
+                    ]
+                  }
+                },
+                "workload_folder_roles": {
+                  "type": "object",
+                  "properties": {
+                    "plan": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "apply": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "network_folder_roles": {
+                  "type": "object",
+                  "properties": {
+                    "plan": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "apply": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "delegated_workload_folder_roles": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "delegated_network_folder_roles": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "guardrail_owner_mode": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "organization": {
+              "type": "object",
+              "properties": {
+                "org_id": {
+                  "type": [
+                    "string",
+                    "integer"
+                  ]
+                },
+                "billing_account": {
+                  "type": "string"
+                },
+                "admin_project_number": {
+                  "type": [
+                    "string",
+                    "integer"
+                  ]
+                },
+                "folders": {
+                  "type": "object"
+                },
+                "tag_values": {
+                  "type": "object"
+                },
+                "scoped_access_policy_ids": {
+                  "type": "object"
+                }
+              },
+              "additionalProperties": false
+            },
+            "projects": {
+              "type": "object",
+              "properties": {
+                "project_ids": {
+                  "type": "object"
+                },
+                "project_numbers": {
+                  "type": "object"
+                },
+                "environment_config": {
+                  "type": "object"
+                }
+              },
+              "additionalProperties": false
+            },
+            "network_hub": {
+              "type": "object",
+              "properties": {
+                "dns_domain": {
+                  "type": "string"
+                },
+                "vpc_self_link": {
+                  "type": "string"
+                },
+                "ncc_hub_id": {
+                  "type": "string"
+                },
+                "ncc_spoke_group": {
+                  "type": "string",
+                  "enum": [
+                    "edge",
+                    "default"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "aws": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "management_account_id": {
+          "type": "string"
+        },
+        "allowed_regions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "enabled_regions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "guard_alert_emails": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "enable_org_config_recorders": {
+          "type": "boolean",
+          "description": "aws-organization: org-wide Config recorders (StackSet to every member account except security tooling, plus the management account). Turn on after aws-security has applied; see docs/runbooks/aws-config-recorder-migration.md."
+        },
+        "enable_config_recorder_scp": {
+          "type": "boolean",
+          "description": "aws-organization: deny-tamper DenyConfigRecorderChanges. Turn on only after the org-wide recorders replaced every legacy recorder (migration runbook, last step)."
+        },
+        "enable_cloudtrail_delegated_admin": {
+          "type": "boolean",
+          "description": "aws-organization + aws-security: the organization trail is created and managed from security tooling, the CloudTrail delegated administrator, so the deny-tamper SCP applies to it. Default false. Existing estates: docs/runbooks/aws-cloudtrail-delegated-admin-migration.md."
+        },
+        "create_management_trail": {
+          "type": "boolean",
+          "description": "aws-security, with enable_cloudtrail_delegated_admin: keep the original management-account trail in configuration (default true) until the migration runbook deleted it with break-glass and removed it from state. A greenfield estate that starts with the delegated admin sets it false."
+        },
+        "github_federation_owners": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "terraform_run_role_arn": {
+          "type": "string"
+        },
+        "break_glass_role_arn": {
+          "type": "string"
+        },
+        "log_archive_bucket_name": {
+          "type": "string"
+        },
+        "accounts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "email": {
+                "type": "string"
+              },
+              "ou": {
+                "type": "string"
+              },
+              "tags": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "email",
+              "ou"
+            ]
+          }
+        },
+        "workload_accounts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "email": {
+                "type": "string"
+              },
+              "ou": {
+                "type": "string"
+              },
+              "tags": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "email",
+              "ou"
+            ]
+          }
+        },
+        "workload_environments": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "account_key": {
+                "type": "string"
+              },
+              "vpc_cidr": {
+                "type": "string"
+              },
+              "is_production": {
+                "type": "boolean"
+              },
+              "services": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "container_image": {
+                      "type": "string"
+                    },
+                    "container_port": {
+                      "type": "number"
+                    },
+                    "cpu": {
+                      "type": "number"
+                    },
+                    "memory": {
+                      "type": "number"
+                    },
+                    "cpu_architecture": {
+                      "type": "string"
+                    },
+                    "desired_count": {
+                      "type": "number"
+                    },
+                    "host_headers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "path_patterns": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "priority": {
+                      "type": "number"
+                    },
+                    "health_check_path": {
+                      "type": "string"
+                    },
+                    "environment": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "secrets": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "task_role_policy_json": {
+                      "type": "string"
+                    },
+                    "task_role_managed_policy_arns": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "enable_execute_command": {
+                      "type": "boolean"
+                    },
+                    "enable_autoscaling": {
+                      "type": "boolean"
+                    },
+                    "autoscaling_min_capacity": {
+                      "type": "number"
+                    },
+                    "autoscaling_max_capacity": {
+                      "type": "number"
+                    },
+                    "github": {
+                      "type": "object",
+                      "properties": {
+                        "repository": {
+                          "type": "string"
+                        },
+                        "environment": {
+                          "type": "string"
+                        },
+                        "ref": {
+                          "type": "string"
+                        },
+                        "subject": {
+                          "type": "string"
+                        },
+                        "repository_id": {
+                          "type": "string"
+                        },
+                        "repository_owner_id": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "repository"
+                      ]
+                    },
+                    "database": {
+                      "type": "object",
+                      "properties": {
+                        "engine_version": {
+                          "type": "string"
+                        },
+                        "instance_class": {
+                          "type": "string"
+                        },
+                        "instance_count": {
+                          "type": "number"
+                        },
+                        "enable_serverless_v2": {
+                          "type": "boolean"
+                        },
+                        "serverless_min_capacity": {
+                          "type": "number"
+                        },
+                        "serverless_max_capacity": {
+                          "type": "number"
+                        },
+                        "database_name": {
+                          "type": "string"
+                        },
+                        "backup_retention_period": {
+                          "type": "number"
+                        },
+                        "deletion_protection": {
+                          "type": "boolean"
+                        },
+                        "skip_final_snapshot": {
+                          "type": "boolean"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "alarms": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "cpu_threshold": {
+                          "type": "number"
+                        },
+                        "memory_threshold": {
+                          "type": "number"
+                        },
+                        "error_5xx_threshold": {
+                          "type": "number"
+                        },
+                        "p99_latency_seconds": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "queue": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "visibility_timeout_seconds": {
+                          "type": "number"
+                        },
+                        "max_receive_count": {
+                          "type": "number"
+                        },
+                        "message_retention_seconds": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "network": {
+          "type": "object",
+          "properties": {
+            "egress_domain_allowlist": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "stateful_default_actions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "egress_alert_only_waived": {
+              "type": "boolean"
+            },
+            "spoke_attachments": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "attachment_id": {
+                    "type": "string",
+                    "pattern": "^tgw-attach-[0-9a-f]{8,17}$"
+                  },
+                  "segment": {
+                    "enum": [
+                      "prod",
+                      "nonprod"
+                    ]
+                  },
+                  "accept": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "attachment_id",
+                  "segment"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "vpn": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "customer_gateway_ip": {
+                  "type": "string"
+                },
+                "customer_gateway_bgp_asn": {
+                  "type": "integer"
+                },
+                "static_routes_only": {
+                  "type": "boolean"
+                },
+                "tunnel_inside_cidrs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "enable_acceleration": {
+                  "type": "boolean"
+                },
+                "onprem_cidrs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "preshared_key_storage": {
+                  "type": "string",
+                  "enum": [
+                    "SecretsManager",
+                    "Standard"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "app_ingress_mode": {
+          "enum": [
+            "internal",
+            "public_alb",
+            "cloudfront_vpc_origin"
+          ]
+        },
+        "bootstrap_image": {
+          "type": "string"
+        },
+        "workload": {
+          "type": "object",
+          "properties": {
+            "app_ingress_mode": {
+              "type": "string"
+            },
+            "bootstrap_image": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "identity": {
+          "type": "object",
+          "properties": {
+            "groups": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "permission_set": {
+                      "type": "string"
+                    },
+                    "accounts": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "permission_set",
+                    "accounts"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "contracts": {
+          "type": "object",
+          "properties": {
+            "organization": {
+              "type": "object",
+              "properties": {
+                "organization_id": {
+                  "type": "string"
+                },
+                "organization_root_id": {
+                  "type": "string"
+                },
+                "management_account_id": {
+                  "type": "string"
+                },
+                "account_ids": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "account_role_arns": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "ou_ids": {
+                  "type": "object"
+                }
+              },
+              "additionalProperties": false
+            },
+            "security": {
+              "type": "object",
+              "properties": {
+                "log_archive_bucket_name": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "network": {
+              "type": "object",
+              "properties": {
+                "tgw_id": {
+                  "type": "string"
+                },
+                "ipam_pool_ids": {
+                  "type": "object"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "adopt": {
+          "type": "object",
+          "properties": {
+            "organization_id": {
+              "type": [
+                "string",
+                "integer"
+              ]
+            },
+            "ou_ids": {
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "integer"
+                ]
+              }
+            },
+            "account_ids": {
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "integer"
+                ]
+              }
+            },
+            "cloudtrail_delegated_admin_account_id": {
+              "type": [
+                "string",
+                "integer"
+              ],
+              "description": "aws-organization: the security-tooling account ID when cloudtrail.amazonaws.com is already delegated to it; imported when enable_cloudtrail_delegated_admin turns on."
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "saas": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "workspaces": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "supabase": {
+          "type": "boolean"
+        },
+        "vercel": {
+          "type": "boolean"
+        },
+        "bridge_rotation": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "defaults": {
+          "type": "object",
+          "properties": {
+            "supabase": {
+              "type": "object",
+              "properties": {
+                "organization_id": {
+                  "type": "string"
+                },
+                "region": {
+                  "type": "string"
+                },
+                "project_name": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "vercel": {
+              "type": "object",
+              "properties": {
+                "team_id": {
+                  "type": "string"
+                },
+                "project_name": {
+                  "type": "string"
+                },
+                "github_repo": {
+                  "type": "string"
+                },
+                "production_branch": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "stacks": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "supabase": {
+                "type": "object",
+                "properties": {
+                  "organization_id": {
+                    "type": "string"
+                  },
+                  "region": {
+                    "type": "string"
+                  },
+                  "project_name": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "vercel": {
+                "type": "object",
+                "properties": {
+                  "team_id": {
+                    "type": "string"
+                  },
+                  "project_name": {
+                    "type": "string"
+                  },
+                  "github_repo": {
+                    "type": "string"
+                  },
+                  "production_branch": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "presets": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "notifications": {
+      "type": "object",
+      "properties": {
+        "emails": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "hcp_email_user_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "gcp": {
+            "properties": {
+              "enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "enabled"
+            ]
+          }
+        },
+        "required": [
+          "gcp"
+        ]
+      },
+      "then": {
+        "required": [
+          "org"
+        ]
+      },
+      "description": "Per-cloud conditionals only require org: fixtures and roots are intentionally partial, and each root's Terraform validations name the missing essential keys."
+    },
+    {
+      "if": {
+        "properties": {
+          "aws": {
+            "properties": {
+              "enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "enabled"
+            ]
+          }
+        },
+        "required": [
+          "aws"
+        ]
+      },
+      "then": {
+        "required": [
+          "org"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "saas": {
+            "properties": {
+              "enabled": {
+                "const": true
+              }
+            },
+            "required": [
+              "enabled"
+            ]
+          }
+        },
+        "required": [
+          "saas"
+        ]
+      },
+      "then": {
+        "required": [
+          "org"
+        ]
+      }
+    }
+  ]
+}

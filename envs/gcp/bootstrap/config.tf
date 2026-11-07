@@ -20,18 +20,27 @@ locals {
   lz = try(local.lz_documents[0], {})
 
   cfg = {
-    project_prefix            = try(tostring(local.lz.org.prefix), null)
-    organization_name         = try(tostring(local.lz.org.display_name), null)
-    domain                    = try(tostring(local.lz.org.domain), null)
-    default_region            = try(tostring(local.lz.org.regions.gcp), null)
-    tfc_organization          = try(tostring(local.lz.org.tfc.organization), null)
-    billing_account           = try(tostring(local.lz.gcp.billing_account), null)
-    admin_email               = try(tostring(local.lz.gcp.admin_email), null)
-    organization_admin_groups = try([for g in local.lz.gcp.organization_admin_groups : tostring(g)], null)
-    billing_admin_groups      = try([for g in local.lz.gcp.billing_admin_groups : tostring(g)], null)
-    allowed_regions           = try([for r in local.lz.gcp.allowed_regions : tostring(r)], null)
-    hub_vpc_cidr_block        = try(tostring(local.lz.gcp.network.hub_cidr_block), null)
-    dns_hub_vpc_cidr_block    = try(tostring(local.lz.gcp.network.dns_hub_cidr_block), null)
+    project_prefix                        = try(tostring(local.lz.org.prefix), null)
+    organization_name                     = try(tostring(local.lz.org.display_name), null)
+    domain                                = try(tostring(local.lz.org.domain), null)
+    default_region                        = try(tostring(local.lz.org.regions.gcp), null)
+    tfc_organization                      = try(tostring(local.lz.org.tfc.organization), null)
+    billing_account                       = try(tostring(local.lz.gcp.billing_account), null)
+    admin_email                           = try(tostring(local.lz.gcp.admin_email), null)
+    organization_admin_groups             = try([for g in local.lz.gcp.organization_admin_groups : tostring(g)], null)
+    billing_admin_groups                  = try([for g in local.lz.gcp.billing_admin_groups : tostring(g)], null)
+    allowed_regions                       = try([for r in local.lz.gcp.allowed_regions : tostring(r)], null)
+    phase0_admin_impersonation_expires_at = try(tostring(local.lz.gcp.phase0_admin_impersonation_expires_at), null)
+    hub_vpc_cidr_block                    = try(tostring(local.lz.gcp.network.hub_cidr_block), null)
+    dns_hub_vpc_cidr_block                = try(tostring(local.lz.gcp.network.dns_hub_cidr_block), null)
+    principal_access_boundary             = try(tobool(local.lz.gcp.principal_access_boundary), null)
+    # Network Connectivity Center is in use when the hub is on
+    # (gcp.network.ncc_hub.enabled) or any environment connects through it
+    # (gcp.network.connectivity / gcp.environments.<env>.network_connectivity).
+    enable_network_connectivity_center = anytrue(concat(
+      [try(tobool(local.lz.gcp.network.ncc_hub.enabled), false), try(tostring(local.lz.gcp.network.connectivity), "") == "ncc"],
+      [for k, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : try(tostring(e.network_connectivity), "") == "ncc"],
+    ))
     # Normalised to the attribute types of var.environments (region defaults to
     # org.regions.gcp, display_name to the key). A malformed entry is caught by
     # the var.environments validations, which also read local.cfg.
@@ -51,11 +60,15 @@ locals {
   # Effective values. Required ones fall back to an inert sentinel only so
   # static tools (tflint) can evaluate the root; the variable validations reject
   # the unset case first.
-  project_prefix   = coalesce(var.project_prefix, local.cfg.project_prefix, "unset")
-  domain           = coalesce(var.domain, local.cfg.domain, "unset.invalid")
-  billing_account  = try(coalesce(var.billing_account, local.cfg.billing_account), null)
-  admin_email      = coalesce(var.admin_email, local.cfg.admin_email, "unset@unset.invalid")
-  environments     = var.environments != null ? var.environments : local.cfg.environments
-  default_region   = coalesce(var.default_region, local.cfg.default_region, "europe-west2")
-  tfc_organization = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
+  project_prefix = coalesce(var.project_prefix, local.cfg.project_prefix, "unset")
+  # gcp.principal_access_boundary is shared with gcp-organization and gcp-guardrails.
+  enable_principal_access_boundary      = coalesce(var.enable_principal_access_boundary, local.cfg.principal_access_boundary, false)
+  domain                                = coalesce(var.domain, local.cfg.domain, "unset.invalid")
+  billing_account                       = try(coalesce(var.billing_account, local.cfg.billing_account), null)
+  admin_email                           = coalesce(var.admin_email, local.cfg.admin_email, "unset@unset.invalid")
+  environments                          = var.environments != null ? var.environments : local.cfg.environments
+  default_region                        = coalesce(var.default_region, local.cfg.default_region, "europe-west2")
+  tfc_organization                      = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
+  phase0_admin_impersonation_expires_at = try(coalesce(var.phase0_admin_impersonation_expires_at, local.cfg.phase0_admin_impersonation_expires_at), null)
+  enable_network_connectivity_center    = coalesce(var.enable_network_connectivity_center, local.cfg.enable_network_connectivity_center)
 }

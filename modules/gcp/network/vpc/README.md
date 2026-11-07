@@ -81,14 +81,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.17, < 2.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | 8.10.0 |
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 
@@ -99,7 +99,7 @@ The following resources are created:
 
 
 - resource.google_compute_network.vpc (modules/gcp/network/vpc/main.tf#L26)
-- resource.google_compute_shared_vpc_host_project.host (modules/gcp/network/vpc/main.tf#L38)
+- resource.google_compute_shared_vpc_host_project.host (modules/gcp/network/vpc/main.tf#L40)
 - resource.terraform_data.deletion_protection_guard (modules/gcp/network/vpc/main.tf#L15)
 
 
@@ -113,6 +113,7 @@ The following resources are created:
 | <a name="input_description"></a> [description](#input\_description) | An optional description of this resource | `string` | `"Managed by Terraform"` | no |
 | <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | Prevent accidental destruction of the VPC network.<br/><br/>When true, a terraform\_data guard resource is created with prevent\_destroy = true.<br/>Terraform refuses to destroy this module while the guard exists. To intentionally<br/>remove a protected VPC, first run:<br/>  terraform state rm 'module.<name>.terraform\_data.deletion\_protection\_guard' | `bool` | `false` | no |
 | <a name="input_enable_shared_vpc_host"></a> [enable\_shared\_vpc\_host](#input\_enable\_shared\_vpc\_host) | Enable this project as a Shared VPC Host Project | `bool` | `false` | no |
+| <a name="input_network_firewall_policy_enforcement_order"></a> [network\_firewall\_policy\_enforcement\_order](#input\_network\_firewall\_policy\_enforcement\_order) | Order in which network firewall policies and VPC firewall rules are evaluated: BEFORE\_CLASSIC\_FIREWALL or AFTER\_CLASSIC\_FIREWALL. null leaves it unset, which is the API default (AFTER\_CLASSIC\_FIREWALL). Changes update the network in place. | `string` | `null` | no |
 | <a name="input_routing_mode"></a> [routing\_mode](#input\_routing\_mode) | The network routing mode (default 'GLOBAL') | `string` | `"GLOBAL"` | no |
 | <a name="input_vpc_name"></a> [vpc\_name](#input\_vpc\_name) | Name of the VPC network. Required — no default to prevent name collisions when calling this module multiple times. | `string` | `null` | no |
 
@@ -122,7 +123,7 @@ The following resources are created:
 |------|-------------|
 | <a name="output_id"></a> [id](#output\_id) | The ID of the VPC |
 | <a name="output_name"></a> [name](#output\_name) | The name of the VPC |
-| <a name="output_network"></a> [network](#output\_network) | The created VPC resource |
+| <a name="output_network"></a> [network](#output\_network) | The created VPC resource (every attribute except the provider-deprecated numeric\_id; read network.network\_id instead) |
 | <a name="output_network_id"></a> [network\_id](#output\_network\_id) | Deprecated alias for the VPC ID |
 | <a name="output_network_name"></a> [network\_name](#output\_network\_name) | Deprecated alias for the VPC name |
 | <a name="output_network_self_link"></a> [network\_self\_link](#output\_network\_self\_link) | Deprecated alias for the VPC self link |

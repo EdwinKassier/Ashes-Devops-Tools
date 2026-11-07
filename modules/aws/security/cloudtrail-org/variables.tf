@@ -99,6 +99,17 @@ variable "cloudwatch_logs_kms_key_admin_arn" {
   default     = null
 }
 
+variable "cloudwatch_logs_kms_key_manager_arns" {
+  description = "IAM role ARNs (the pipeline role that applies this module) granted day-2 management of the module-created CloudWatch Logs CMK by key policy: describe/get/list, rotation, description, tags and aliases. No PutKeyPolicy, grants, disable or deletion. The account-root administration statement is always kept. Empty (default) = no pipeline statement."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for a in var.cloudwatch_logs_kms_key_manager_arns : can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", a))])
+    error_message = "cloudwatch_logs_kms_key_manager_arns entries must be IAM role ARNs (arn:<partition>:iam::<account>:role/<name>)."
+  }
+}
+
 variable "alarm_sns_topic_arn" {
   description = "Optional existing SNS topic ARN for CIS alarm notifications. Null (default) = the module creates a KMS-encrypted topic (<trail_name>-cis-alarms) and subscribes alarm_subscriptions to it."
   type        = string
@@ -155,5 +166,27 @@ variable "cloudwatch_logs_role_arn" {
   validation {
     condition     = var.cloudwatch_logs_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", coalesce(var.cloudwatch_logs_role_arn, "x")))
     error_message = "cloudwatch_logs_role_arn must be null or an IAM role ARN."
+  }
+}
+
+variable "trail_owner_account_id" {
+  description = "Account that owns the trail when it differs from the provider's account: the management account, for an organization trail created by a CloudTrail delegated administrator. The module-created CloudWatch Logs delivery role then trusts cloudtrail.amazonaws.com with aws:SourceAccount set to either account. Null = the provider's account only."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.trail_owner_account_id == null || can(regex("^[0-9]{12}$", coalesce(var.trail_owner_account_id, "x")))
+    error_message = "trail_owner_account_id must be null or a 12-digit account ID."
+  }
+}
+
+variable "cloudwatch_logs_role_permissions_boundary_arn" {
+  description = "Permissions boundary for the module-created CloudWatch Logs delivery role (when cloudwatch_logs_role_arn is null). Required in a member account whose pipeline role may only create bounded roles. Null = no boundary."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.cloudwatch_logs_role_permissions_boundary_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:policy/.+$", coalesce(var.cloudwatch_logs_role_permissions_boundary_arn, "x")))
+    error_message = "cloudwatch_logs_role_permissions_boundary_arn must be null or an IAM policy ARN."
   }
 }

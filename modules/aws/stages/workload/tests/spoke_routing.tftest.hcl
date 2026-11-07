@@ -11,7 +11,6 @@ variables {
   tgw_id                   = "tgw-000000000000abcd"
   flow_log_destination_arn = "arn:aws:s3:::ashes-org-log-archive"
   log_archive_bucket_name  = "ashes-org-log-archive"
-  config_role_arn          = "arn:aws:iam::222222222222:role/config-recorder"
   kms_key_arn              = "arn:aws:kms:eu-west-2:222222222222:key/abcd-1234"
 }
 
@@ -85,4 +84,31 @@ run "unknown_route_tier_rejected" {
   }
 
   expect_failures = [var.tgw_route_tiers]
+}
+
+run "ipam_default_plans_legacy_netmask_shape" {
+  command = plan
+
+  variables {
+    ipam_pool_id = "ipam-pool-0123456789abcdef0"
+  }
+
+  assert {
+    condition     = local.ipam_allocation == "netmask"
+    error_message = "the default must keep the legacy pool + netmask_length shape (explicit CIDR would replace existing VPCs)"
+  }
+}
+
+run "ipam_explicit_cidr_is_opt_in" {
+  command = plan
+
+  variables {
+    ipam_pool_id       = "ipam-pool-0123456789abcdef0"
+    ipam_explicit_cidr = true
+  }
+
+  assert {
+    condition     = local.ipam_allocation == "explicit_cidr"
+    error_message = "ipam_explicit_cidr must select the explicit-CIDR allocation"
+  }
 }

@@ -49,12 +49,12 @@ links to the minimal-input reference file in this directory.
 |---|------|---------|-------------------------|-------|
 | 1 | `aws-organization` | Org, OU tree, accounts, guardrails (the producer root) | `terraform_run_role_arn`, `break_glass_role_arn`, `log_archive_bucket_name` (+ real unique account emails) | [`aws-organization.tfvars.example`](./aws-organization.tfvars.example) |
 | — | **MANUAL GATE** | Enable IAM Identity Center in the mgmt account, delegate to shared-services | — | Console action; blocks step 4. See runbook. |
-| 2 | `aws-security` | Security tooling, log archive, CloudTrail, GuardDuty, Security Hub, Config aggregator | `log_archive_bucket_name`, `key_admin_arn`, `config_role_arn`, `aggregator_role_arn` | [`aws-security.tfvars.example`](./aws-security.tfvars.example) |
+| 2 | `aws-security` | Security tooling, log archive, CloudTrail, GuardDuty, Security Hub, Config aggregator | `aws_overrides`: `log_archive_bucket_name`, `key_admin_arn`, `config_role_arn`, `aggregator_role_arn` | [`aws-security.tfvars.example`](./aws-security.tfvars.example) |
 | 3 | `aws-network` | TGW hub-spoke, IPAM, inspection/egress VPCs, resolver | `log_archive_bucket_name` | [`aws-network.tfvars.example`](./aws-network.tfvars.example) |
 | 4 | `aws-identity` | Identity Center permission sets + assignments | *(none required)* — needs the gate above | [`aws-identity.tfvars.example`](./aws-identity.tfvars.example) |
 | 5 | `aws-shared-services` | ACM Private CA + Secrets baseline *(gated, off by default)* | *(none required)* | [`aws-shared-services.tfvars.example`](./aws-shared-services.tfvars.example) |
 | 6 | `aws-backup` | Centralized Backup vault + org plan + Vault Lock | `backup_role_arn`, `restore_testing_role_arn` | [`aws-backup.tfvars.example`](./aws-backup.tfvars.example) |
-| 7 | `aws-workload` | Per-env spoke VPC + workload roles + account baseline | `workload_account_key`, `log_archive_bucket_name`, `config_role_arn` | [`aws-workload.tfvars.example`](./aws-workload.tfvars.example) — one workspace per env (`TF_WORKSPACE=aws-workload-<env>`) |
+| 7 | `aws-workload` | Per-env spoke VPC + workload roles + account baseline | `workload_account_key`, `log_archive_bucket_name` | [`aws-workload.tfvars.example`](./aws-workload.tfvars.example) — one workspace per env (`TF_WORKSPACE=aws-workload-<env>`) |
 | 8 | `saas` | Supabase and/or Vercel only *(optional, no AWS)* | *(none unconditionally)* — inputs become required per enabled feature | [`saas.tfvars.example`](./saas.tfvars.example) |
 
 ## How to apply a root
@@ -87,8 +87,8 @@ is REQUIRED. Roots not listed have no unconditionally-required inputs.
 - **aws-identity** — none (needs the Identity Center gate first).
 - **aws-shared-services** — none (features off by default).
 - **aws-backup** — `backup_role_arn`, `restore_testing_role_arn`.
-- **aws-workload** — `workload_account_key`, `log_archive_bucket_name`,
-  `config_role_arn`. (`kms_key_arn` is optional: empty creates the workload
+- **aws-workload** — `workload_account_key`, `log_archive_bucket_name`.
+  (`kms_key_arn` is optional: empty creates the workload
   CMK that Session Manager, EBS and the app services use.)
 - **saas** — none unconditionally; each enabled feature (`enable_supabase` /
   `enable_vercel`) makes its own inputs required, and the matching API token

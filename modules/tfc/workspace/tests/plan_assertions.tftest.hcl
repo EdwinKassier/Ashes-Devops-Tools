@@ -171,3 +171,53 @@ run "speculative_plans_default_on" {
     error_message = "a plain workspace keeps speculative plans and the working-directory trigger default."
   }
 }
+
+# auto_apply_run_trigger is independent of auto_apply: off by default, and the
+# caller's value reaches the workspace unchanged.
+run "auto_apply_run_trigger_passed_through" {
+  command = plan
+
+  assert {
+    condition     = tfe_workspace.this.auto_apply_run_trigger == false && output.auto_apply_run_trigger == false
+    error_message = "auto_apply_run_trigger must default to false."
+  }
+}
+
+run "auto_apply_run_trigger_enabled" {
+  command = plan
+
+  variables {
+    auto_apply_run_trigger = true
+  }
+
+  assert {
+    condition     = tfe_workspace.this.auto_apply_run_trigger == true && output.auto_apply_run_trigger == true && tfe_workspace.this.auto_apply == false
+    error_message = "auto_apply_run_trigger = true must reach tfe_workspace without turning on auto_apply."
+  }
+}
+
+# Health-assessment triggers: HCP email notifications take user IDs (plain
+# addresses work only on Terraform Enterprise), and the three assessment
+# events are valid triggers.
+run "hcp_assessment_notifications_use_user_ids" {
+  command = plan
+  variables {
+    notifications = {
+      drift = {
+        destination_type = "email"
+        email_user_ids   = ["user-abc123"]
+        triggers         = ["run:errored", "assessment:drifted", "assessment:check_failure", "assessment:failed"]
+      }
+    }
+  }
+
+  assert {
+    condition     = tfe_notification_configuration.this["drift"].destination_type == "email" && contains(tfe_notification_configuration.this["drift"].email_user_ids, "user-abc123")
+    error_message = "an email notification must carry the HCP user IDs."
+  }
+
+  assert {
+    condition     = contains(tfe_notification_configuration.this["drift"].triggers, "assessment:drifted") && contains(tfe_notification_configuration.this["drift"].triggers, "assessment:check_failure") && contains(tfe_notification_configuration.this["drift"].triggers, "assessment:failed")
+    error_message = "the three assessment triggers must pass through."
+  }
+}

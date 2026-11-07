@@ -32,8 +32,13 @@ output "dynamic_credential_workspaces" {
 }
 
 output "policy_set_id" {
-  description = "ID of the OPA policy set, or null when enable_policy_sets = false."
+  description = "ID of the <prefix>opa-guardrails policy set (policies/opa), or null when the policy sets are off."
   value       = try(tfe_policy_set.opa[0].id, null)
+}
+
+output "destructive_policy_set_id" {
+  description = "ID of the overridable <prefix>destructive-change-guard policy set (policies/opa-destructive), or null when the policy sets are off."
+  value       = try(tfe_policy_set.destructive[0].id, null)
 }
 
 output "workspace_execution_modes" {
@@ -54,4 +59,28 @@ output "gcp_bootstrap_tfvars" {
 output "run_triggers" {
   description = "Run-trigger edges created (\"<source>-><downstream>\")."
   value       = sort(keys(tfe_run_trigger.dag))
+}
+
+output "never_auto_apply_workspaces" {
+  description = "Workspaces that always need a human apply confirmation, whatever any auto-apply setting does for the others (gcp-guardrails when GCP is enabled, and tfc-admin)."
+  value       = sort([for ws in local.never_auto_apply_workspaces : ws if contains(keys(local.workspaces), ws) || ws == var.tfc_admin_workspace_name])
+}
+
+output "estate_config_trigger_patterns" {
+  description = "Trigger patterns every workspace gets for this estate's own config: the landing-zone file + workspace_variables_file for production (config/landing-zone.yaml + config/tfc-workspaces.yaml by default), <dir>/** (plus an outside workspace_variables_file) for any other estate (e.g. config/sandbox/**)."
+  value       = local.estate_config_trigger_patterns
+}
+
+output "workspace_catalog" {
+  description = "The managed workspaces as derived from the workspace catalog (local.catalog): name => {dir, cloud, environment (per-environment family members only), upstreams (run-trigger sources), reads (remote-state producers), aws_member_aliases}."
+  value = {
+    for k, w in local.workspaces : k => {
+      dir                = w.dir
+      cloud              = w.cloud
+      environment        = w.environment
+      upstreams          = w.upstreams
+      reads              = w.reads
+      aws_member_aliases = w.aws_member_aliases
+    }
+  }
 }

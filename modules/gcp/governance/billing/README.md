@@ -78,14 +78,14 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.11 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.17, < 2.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 7.31.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | 8.10.0 |
 
 
 
@@ -94,11 +94,11 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_billing_budget.monthly_budget (modules/gcp/governance/billing/main.tf#L5)
-- resource.google_cloud_run_v2_service_iam_member.budget_notifier_invoker (modules/gcp/governance/billing/main.tf#L184)
-- resource.google_cloudfunctions2_function.budget_notifier (modules/gcp/governance/billing/main.tf#L113)
-- resource.google_pubsub_subscription.budget_alerts_sub (modules/gcp/governance/billing/main.tf#L75)
-- resource.google_pubsub_topic.budget_alerts (modules/gcp/governance/billing/main.tf#L60)
+- resource.google_billing_budget.monthly_budget (modules/gcp/governance/billing/main.tf#L14)
+- resource.google_cloud_run_v2_service_iam_member.budget_notifier_invoker (modules/gcp/governance/billing/main.tf#L179)
+- resource.google_cloudfunctions2_function.budget_notifier (modules/gcp/governance/billing/main.tf#L108)
+- resource.google_pubsub_subscription.budget_alerts_sub (modules/gcp/governance/billing/main.tf#L70)
+- resource.google_pubsub_topic.budget_alerts (modules/gcp/governance/billing/main.tf#L55)
 
 
 ## Inputs
@@ -124,6 +124,7 @@ The following resources are created:
 | <a name="input_pubsub_service_account"></a> [pubsub\_service\_account](#input\_pubsub\_service\_account) | The Pub/Sub service account that invokes the Cloud Function for budget notifications.<br/>Format: service-PROJECT\_NUMBER@gcp-sa-pubsub.iam.gserviceaccount.com<br/>Replace PROJECT\_NUMBER with the numeric project number of the billing notification project.<br/>Required when enable\_email\_notifications = true.<br/>Obtain: gcloud projects describe PROJECT\_ID --format='value(projectNumber)' | `string` | `null` | no |
 | <a name="input_sendgrid_api_key_secret_id"></a> [sendgrid\_api\_key\_secret\_id](#input\_sendgrid\_api\_key\_secret\_id) | Secret Manager secret ID for SendGrid API key (recommended to use Secret Manager) | `string` | `""` | no |
 | <a name="input_service_filters"></a> [service\_filters](#input\_service\_filters) | List of GCP service IDs to include in budget (empty = all services) | `list(string)` | `[]` | no |
+| <a name="input_threshold_rules"></a> [threshold\_rules](#input\_threshold\_rules) | Explicit budget threshold rules (percent is a fraction: 0.5 = 50%; spend\_basis CURRENT\_SPEND or FORECASTED\_SPEND). Null (default) = 50% (alert\_threshold\_percent) / 90% / 100% forecasted / 100% actual. | <pre>list(object({<br/>    percent     = number<br/>    spend_basis = optional(string, "CURRENT_SPEND")<br/>  }))</pre> | `null` | no |
 | <a name="input_vpc_connector"></a> [vpc\_connector](#input\_vpc\_connector) | Fully qualified VPC connector resource ID used by the Cloud Functions gen2 budget<br/>notifier. Required when the cloudfunctions.requireVPCConnector org policy is enforced.<br/>Format: projects/<project>/locations/<region>/connectors/<connector\_name><br/>Leave null to omit the connector (only valid in orgs without the policy). | `string` | `null` | no |
 | <a name="input_webhook_endpoint"></a> [webhook\_endpoint](#input\_webhook\_endpoint) | Optional webhook endpoint URL to receive budget alerts (must start with https://) | `string` | `""` | no |
 | <a name="input_webhook_service_account"></a> [webhook\_service\_account](#input\_webhook\_service\_account) | Service account email for authenticating webhook requests (format: name@project.iam.gserviceaccount.com) | `string` | `""` | no |

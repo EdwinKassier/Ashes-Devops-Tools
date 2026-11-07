@@ -33,6 +33,15 @@ locals {
     hub_vpc_cidr_block        = try(tostring(local.lz.gcp.network.hub_cidr_block), null)
     vpc_sc_access_policy      = try(tostring(local.lz.gcp.network.vpc_sc_access_policy), null)
     dns_hub_vpc_cidr_block    = try(tostring(local.lz.gcp.network.dns_hub_cidr_block), null)
+    enable_ncc_hub            = try(tobool(local.lz.gcp.network.ncc_hub.enabled), null)
+    ncc_preset_topology       = try(tostring(local.lz.gcp.network.ncc_hub.preset_topology), null)
+    # Hybrid connectivity as JSON text (so the explicit-variable fallback can
+    # be a plain conditional); the stage's variable types validate the shape.
+    # No secret lives here: the VPN pre-shared key is a write-only variable.
+    vpn          = try(jsonencode(local.lz.gcp.network.vpn), null)
+    interconnect = try(jsonencode(local.lz.gcp.network.interconnect), null)
+    # Opt-in extra hub regions (JSON text, same reason as vpn above).
+    additional_regions = try(jsonencode(local.lz.gcp.network.additional_regions), null)
     # Normalised to the attribute types of var.environments (region defaults to
     # org.regions.gcp, display_name to the key). A malformed entry is caught by
     # the var.environments validations, which also read local.cfg.
@@ -51,12 +60,28 @@ locals {
     # gcp.contracts.<layer>: stage contract overrides (same shape as the
     # <layer>_contract variables). Present => that remote-state read is skipped.
     organization_contract = try(local.lz.gcp.contracts.organization, null) == null ? null : {
-      org_id  = tostring(local.lz.gcp.contracts.organization.org_id)
-      folders = { for k, f in try({ for k, f in local.lz.gcp.contracts.organization.folders : k => f }, {}) : k => { id = tostring(f.id), name = tostring(try(f.name, f.id)), display_name = tostring(try(f.display_name, k)) } }
+      org_id                   = tostring(local.lz.gcp.contracts.organization.org_id)
+      billing_account          = try(tostring(local.lz.gcp.contracts.organization.billing_account), null)
+      admin_project_number     = try(tostring(local.lz.gcp.contracts.organization.admin_project_number), null)
+      tag_values               = { for k, v in try(local.lz.gcp.contracts.organization.tag_values, {}) : k => tostring(v) }
+      scoped_access_policy_ids = { for k, v in try(local.lz.gcp.contracts.organization.scoped_access_policy_ids, {}) : k => tostring(v) }
+      folders                  = { for k, f in try({ for k, f in local.lz.gcp.contracts.organization.folders : k => f }, {}) : k => { id = tostring(f.id), name = tostring(try(f.name, f.id)), display_name = tostring(try(f.display_name, k)) } }
     }
     projects_contract = try(local.lz.gcp.contracts.projects.project_ids, null) == null ? null : {
       project_ids     = { for k, v in local.lz.gcp.contracts.projects.project_ids : k => tostring(v) }
       project_numbers = { for k, v in try(local.lz.gcp.contracts.projects.project_numbers, {}) : k => tostring(v) }
+      environment_config = {
+        for k, e in try({ for k, e in local.lz.gcp.contracts.projects.environment_config : k => e }, {}) : k => {
+          folder_id               = tostring(e.folder_id)
+          host_project_id         = tostring(e.host_project_id)
+          host_project_number     = tostring(e.host_project_number)
+          region                  = tostring(e.region)
+          cidr_block              = tostring(e.cidr_block)
+          labels                  = try({ for lk, lv in e.labels : lk => tostring(lv) }, {})
+          is_production           = try(tobool(e.is_production), null)
+          vpc_sc_access_policy_id = try(tostring(e.vpc_sc_access_policy_id), null)
+        }
+      }
     }
   }
 
@@ -71,4 +96,12 @@ locals {
   vpc_sc_access_policy_name = var.vpc_sc_access_policy_name != null ? var.vpc_sc_access_policy_name : local.cfg.vpc_sc_access_policy
   dns_hub_vpc_cidr_block    = coalesce(var.dns_hub_vpc_cidr_block, local.cfg.dns_hub_vpc_cidr_block, "0.0.0.0/32")
   tfc_organization          = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
+  # Opt-in NCC hub (default off: environment VPCs peer with the hub VPC).
+  enable_ncc_hub      = coalesce(var.enable_ncc_hub, local.cfg.enable_ncc_hub, false)
+  ncc_preset_topology = coalesce(var.ncc_preset_topology, local.cfg.ncc_preset_topology, "STAR")
+  # Opt-in hybrid connectivity (default off: no VPN, no Interconnect).
+  vpn           = jsondecode(var.vpn != null ? jsonencode(var.vpn) : coalesce(local.cfg.vpn, "{}"))
+  interconnects = jsondecode(var.interconnects != null ? jsonencode(var.interconnects) : coalesce(local.cfg.interconnect, "{}"))
+  # Opt-in extra hub regions (default none: single-region hub).
+  hub_additional_regions = jsondecode(var.hub_additional_regions != null ? jsonencode(var.hub_additional_regions) : coalesce(local.cfg.additional_regions, "{}"))
 }

@@ -118,6 +118,31 @@ variable "allow_vpc_bpa_exclusions" {
   default     = false
 }
 
+variable "ec2_allowed_images" {
+  description = "Declarative EC2 Allowed AMIs setting, in the root-attached baseline declarative policy (every account, every region). state: audit_mode (default; records non-compliant AMIs, blocks nothing), enabled (blocks launches from other AMIs), disabled, or unmanaged (the policy carries no allowed-images setting). allowed_image_providers: amazon, aws_marketplace, aws_backup_vault or 12-digit account IDs. Move to enabled only after reviewing the audit-mode findings."
+  type = object({
+    state                   = optional(string, "audit_mode")
+    allowed_image_providers = optional(list(string), ["amazon"])
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = contains(["audit_mode", "enabled", "disabled", "unmanaged"], var.ec2_allowed_images.state)
+    error_message = "ec2_allowed_images.state must be audit_mode, enabled, disabled or unmanaged."
+  }
+
+  validation {
+    condition     = alltrue([for p in var.ec2_allowed_images.allowed_image_providers : contains(["amazon", "aws_marketplace", "aws_backup_vault"], p) || can(regex("^[0-9]{12}$", p))])
+    error_message = "ec2_allowed_images.allowed_image_providers entries must be amazon, aws_marketplace, aws_backup_vault or a 12-digit account ID."
+  }
+
+  validation {
+    condition     = var.ec2_allowed_images.state == "unmanaged" || length(var.ec2_allowed_images.allowed_image_providers) > 0
+    error_message = "ec2_allowed_images.allowed_image_providers must not be empty unless state is unmanaged."
+  }
+}
+
 variable "log_archive_bucket_name" {
   description = "Name of the central log-archive S3 bucket protected from Object Lock / governance-retention tampering by the deny-tamper SCP."
   type        = string
@@ -144,6 +169,7 @@ variable "budgets" {
     limit_amount      = string
     threshold_percent = number
     emails            = optional(list(string), [])
+    alert_percents    = optional(list(number), [])
   }))
   default = {
     org-monthly = {
@@ -355,6 +381,13 @@ variable "org_policy_overrides" {
   nullable = false
 }
 
+variable "sandbox_allowed_instance_types" {
+  description = "ec2:InstanceType patterns the Sandbox OU may launch (scp-sandbox-guard denies ec2:RunInstances for any other type)."
+  type        = list(string)
+  default     = ["t3.micro", "t3.small", "t3.medium", "t3.large", "t4g.micro", "t4g.small", "t4g.medium", "t4g.large"]
+  nullable    = false
+}
+
 variable "disabled_org_policies" {
   description = "Built-in policy keys not to create; their default attachments are dropped too. Default: backup-policy (the aws-backup stage owns the attached BACKUP_POLICY, so the built-in copy would sit unattached)."
   type        = list(string)
@@ -422,6 +455,18 @@ variable "org_trail_name" {
   default     = "org-trail"
 }
 
+variable "enable_cloudtrail_delegated_admin" {
+  description = "Register the security_tooling account as the CloudTrail delegated administrator (aws_cloudtrail_organization_delegated_admin_account, which also creates the CloudTrail service-linked roles), so aws-security creates and manages the organization trail from security tooling under the deny-tamper SCP. Also strips every trail write from the aws-security management role. Set the same value in aws-security. Default false: the management account manages the trail, unchanged. Migration: docs/runbooks/aws-cloudtrail-delegated-admin-migration.md."
+  type        = bool
+  default     = false
+  nullable    = false
+
+  validation {
+    condition     = !var.enable_cloudtrail_delegated_admin || contains(keys(merge(var.accounts, var.workload_accounts)), "security_tooling")
+    error_message = "enable_cloudtrail_delegated_admin needs a security_tooling account (accounts / workload_accounts): it becomes the CloudTrail delegated administrator."
+  }
+}
+
 variable "identity_center_admin_account_key" {
   description = "Account key (accounts / workload_accounts) to register as the IAM Identity Center delegated administrator. Default shared_services, the aws-identity account in the SRA layout. Null = do not register here."
   type        = string
@@ -437,4 +482,106 @@ variable "partition" {
   description = "AWS partition the organization policies are rendered for (aws, aws-us-gov, aws-cn)."
   type        = string
   default     = "aws"
+}
+
+variable "aws_enabled_regions" {
+  description = "Regions in which the regional security services run (the aws-security root's aws_enabled_regions). Every one except us-east-1 gets an EventBridge rule forwarding org-detection guard events to us-east-1."
+  type        = list(string)
+  default     = ["eu-west-2"]
+  nullable    = false
+
+  validation {
+    condition     = length(var.aws_enabled_regions) > 0
+    error_message = "aws_enabled_regions must contain at least one region."
+  }
+}
+
+variable "org_trail_home_region" {
+  description = "Home region of the organization trail (the aws-security root's aws_region): its log group, CIS alarms and alarm topic live there, so it always gets a guard-alert forwarding rule even if absent from aws_enabled_regions."
+  type        = string
+  default     = "eu-west-2"
+  nullable    = false
+}
+
+variable "guard_alert_emails" {
+  description = "Email addresses subscribed to the org-guard-alerts SNS topic (us-east-1, management account): alerts when org-wide detection is disabled or the organization trail's selectors / tags change. Each address must confirm its subscription. Empty = topic and rules only."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for e in var.guard_alert_emails : can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", e))])
+    error_message = "guard_alert_emails entries must be email addresses."
+  }
+}
+
+variable "enable_security_service_teardown" {
+  description = "Teardown gate for the aws-security management apply role: allow it to disable the security services' delegated admins and trusted access. Default false; set true only for a reviewed aws-security destroy (docs/runbooks/aws-teardown.md), then back to false."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+# -----------------------------------------------------------------------------
+# Org-wide Config recorders (docs/runbooks/aws-config-recorder-migration.md)
+# -----------------------------------------------------------------------------
+
+variable "enable_org_config_recorders" {
+  description = "Deploy AWS Config recorders org-wide: a service-managed StackSet to every member account except security_tooling (which keeps its aggregator recorder), plus a direct recorder in the management account. Default false: the delivery bucket comes from aws-security, which applies after aws-organization. Turn it on after aws-security has applied (greenfield) or at step 3 of the migration runbook."
+  type        = bool
+  default     = false
+  nullable    = false
+
+  validation {
+    condition     = !var.enable_org_config_recorders || contains(keys(merge(var.accounts, var.workload_accounts)), "security_tooling")
+    error_message = "enable_org_config_recorders needs a security_tooling account (accounts / workload_accounts): it is excluded from the StackSet and keeps the aggregator recorder."
+  }
+
+  validation {
+    condition     = !var.enable_org_config_recorders || contains(var.aws_enabled_regions, var.org_trail_home_region)
+    error_message = "enable_org_config_recorders needs org_trail_home_region (the aws-security home region, org.regions.aws) in aws_enabled_regions (aws.enabled_regions): only the home-region recorder records global resource types (IAM)."
+  }
+}
+
+variable "security_tooling_apply_role_name" {
+  description = "Name (optionally path-prefixed) of the security-tooling pipeline role that manages the aggregator recorder: the only pipeline role exempt from the recorder SCP, as arn:<partition>:iam::<security_tooling>:role/<name>. Default tfc-apply (tfc-oidc-baseline)."
+  type        = string
+  default     = "tfc-apply"
+  nullable    = false
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9+=,.@_/-]+$", var.security_tooling_apply_role_name))
+    error_message = "security_tooling_apply_role_name must be an IAM role name without wildcards."
+  }
+}
+
+variable "org_config_recorders_failure_tolerance_percentage" {
+  description = "Failure tolerance of the recorder StackSet operations. 0 (default) for routine runs. The migration pass sets 100 so the instances that fail in accounts still holding a legacy recorder do not fail the apply; set it back to 0 afterwards."
+  type        = number
+  default     = 0
+  nullable    = false
+
+  validation {
+    condition     = var.org_config_recorders_failure_tolerance_percentage >= 0 && var.org_config_recorders_failure_tolerance_percentage <= 100
+    error_message = "org_config_recorders_failure_tolerance_percentage must be from 0 to 100."
+  }
+}
+
+variable "create_management_config_service_linked_role" {
+  description = "With enable_org_config_recorders, create the AWSServiceRoleForConfig service-linked role in the management account. Set false when Config was enabled there before (the role already exists)."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
+variable "enable_config_recorder_scp" {
+  description = "Deny Config recorder changes (Put/Delete/StopConfigurationRecorder, DeleteDeliveryChannel) to every member principal except the StackSet execution role, break-glass and security tooling's tfc-apply (deny-tamper DenyConfigRecorderChanges). Default false: until the migration finishes, the workload pipelines still own recorders. Turn it on at the last step of the migration runbook."
+  type        = bool
+  default     = false
+  nullable    = false
+
+  validation {
+    condition     = !var.enable_config_recorder_scp || contains(keys(merge(var.accounts, var.workload_accounts)), "security_tooling")
+    error_message = "enable_config_recorder_scp needs a security_tooling account (accounts / workload_accounts): its tfc-apply keeps managing the aggregator recorder."
+  }
 }

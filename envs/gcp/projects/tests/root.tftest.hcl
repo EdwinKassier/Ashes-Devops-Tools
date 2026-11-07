@@ -30,8 +30,10 @@ override_data {
   target = data.terraform_remote_state.gcp_bootstrap
   values = {
     outputs = {
-      admin_project_id = "acme-admin-abcd"
-      suffix           = "abcd"
+      contract = {
+        admin_project_id = "acme-admin-abcd"
+        suffix           = "abcd"
+      }
     }
   }
 }
@@ -40,15 +42,17 @@ override_data {
   target = data.terraform_remote_state.gcp_organization
   values = {
     outputs = {
-      billing_account = "billingAccounts/000000-111111-222222"
-      folders = {
-        dev = { id = "folders/111", display_name = "Development" }
-      }
-      tag_values = {
-        "environment-dev" = "tagValues/123"
-      }
-      scoped_access_policy_ids = {
-        dev = "555555555"
+      contract = {
+        billing_account = "billingAccounts/000000-111111-222222"
+        folders = {
+          dev = { id = "folders/111", display_name = "Development" }
+        }
+        tag_values = {
+          "environment-dev" = "tagValues/123"
+        }
+        scoped_access_policy_ids = {
+          dev = "555555555"
+        }
       }
     }
   }
@@ -115,12 +119,14 @@ run "environment_config_tolerates_pre_scoped_org_state" {
     target = data.terraform_remote_state.gcp_organization
     values = {
       outputs = {
-        billing_account = "billingAccounts/000000-111111-222222"
-        folders = {
-          dev = { id = "folders/111", display_name = "Development" }
-        }
-        tag_values = {
-          "environment-dev" = "tagValues/123"
+        contract = {
+          billing_account = "billingAccounts/000000-111111-222222"
+          folders = {
+            dev = { id = "folders/111", display_name = "Development" }
+          }
+          tag_values = {
+            "environment-dev" = "tagValues/123"
+          }
         }
       }
     }
@@ -158,5 +164,49 @@ run "contracts_skip_remote_state" {
       output.environment_config["dev"].vpc_sc_access_policy_id == null
     )
     error_message = "supplied contracts must skip the gcp-bootstrap / gcp-organization reads and feed environment_config"
+  }
+}
+
+# A supplied organization contract that lacks an environment's folder or tag
+# value fails on the named guard, not on a bare lookup.
+run "organization_contract_missing_env_folder_fails" {
+  command = plan
+
+  variables {
+    organization_contract = {
+      billing_account = "billingAccounts/000000-111111-222222"
+      folders         = { shared = { id = "folders/100", name = "folders/100", display_name = "Shared" } }
+      tag_values      = {}
+    }
+    bootstrap_contract = { admin_project_id = "acme-admin-abcd", suffix = "abcd" }
+  }
+
+  expect_failures = [terraform_data.organization_contract_guard]
+}
+
+# Network Connectivity Center API: off by default (no project change); when on,
+# enabled on the hub project and every environment host project only.
+run "ncc_api_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = local.enable_network_connectivity_center == false && length(local.ncc_project_services) == 0
+    error_message = "The NCC API must not be added to any project unless NCC is in use."
+  }
+}
+
+run "ncc_api_on_hub_and_host_projects" {
+  command = plan
+
+  variables {
+    enable_network_connectivity_center = true
+  }
+
+  assert {
+    condition = (
+      toset(keys(local.ncc_project_services)) == toset(["shared-hub", "dev-host"]) &&
+      alltrue([for v in values(local.ncc_project_services) : v == ["networkconnectivity.googleapis.com"]])
+    )
+    error_message = "With NCC on, networkconnectivity.googleapis.com must be enabled on shared-hub and each <env>-host project only."
   }
 }

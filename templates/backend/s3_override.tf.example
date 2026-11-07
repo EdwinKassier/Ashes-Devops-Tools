@@ -1,0 +1,21 @@
+# Self-managed state on Amazon S3.
+#
+# Copy to the root you are applying as `backend_override.tf` (git-ignored by
+# the repo's `*_override.tf` rule) and set the bucket. An override `backend`
+# block REPLACES the root's `cloud {}` block, so no HCP Terraform workspace
+# is used.
+#
+#   cp templates/backend/s3_override.tf.example envs/aws/security/backend_override.tf
+#
+# Use a distinct `key` per root. `use_lockfile` takes an S3-native lock (no
+# DynamoDB table); versioning and default encryption on the bucket are expected.
+# See docs/guides/self-managed-state.md.
+terraform {
+  backend "s3" {
+    bucket       = "REPLACE-ME-tfstate"
+    key          = "aws-security/terraform.tfstate"
+    region       = "eu-west-1"
+    encrypt      = true
+    use_lockfile = true
+  }
+}

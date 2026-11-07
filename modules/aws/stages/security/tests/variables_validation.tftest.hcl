@@ -18,16 +18,16 @@ variables {
   log_archive_account_id      = "333333333333"
   shared_services_account_id  = "555555555555"
   forensics_account_id        = "444444444444"
-
-  log_archive_bucket_name     = "ashes-org-log-archive"
-  key_admin_arn               = "arn:aws:iam::333333333333:role/kms-admin"
-  config_role_arn             = "arn:aws:iam::222222222222:role/aws-config-role"
-  aggregator_role_arn         = "arn:aws:iam::222222222222:role/aws-config-aggregator"
-  meta_store_manager_role_arn = "arn:aws:iam::222222222222:role/AmazonSecurityLakeMetaStoreManager"
-  break_glass_role_arn        = "arn:aws:iam::111111111111:role/break-glass"
-
-  notification_subscribers = {
-    secops = { protocol = "email", endpoint = "secops@example.com" }
+  aws = {
+    log_archive_bucket_name     = "ashes-org-log-archive"
+    key_admin_arn               = "arn:aws:iam::333333333333:role/kms-admin"
+    config_role_arn             = "arn:aws:iam::222222222222:role/aws-config-role"
+    aggregator_role_arn         = "arn:aws:iam::222222222222:role/aws-config-aggregator"
+    meta_store_manager_role_arn = "arn:aws:iam::222222222222:role/AmazonSecurityLakeMetaStoreManager"
+    break_glass_role_arn        = "arn:aws:iam::111111111111:role/break-glass"
+    notification_subscribers = {
+      secops = { protocol = "email", endpoint = "secops@example.com" }
+    }
   }
 }
 
@@ -61,11 +61,13 @@ run "create_break_glass_without_principals_rejected" {
   command = plan
 
   variables {
-    create_break_glass             = true
-    break_glass_trusted_principals = []
+    aws = merge(var.aws, {
+      create_break_glass             = true
+      break_glass_trusted_principals = []
+    })
   }
 
-  expect_failures = [var.create_break_glass]
+  expect_failures = [var.aws]
 }
 
 run "unknown_kms_key_user_target_rejected" {
@@ -73,30 +75,36 @@ run "unknown_kms_key_user_target_rejected" {
   command = plan
 
   variables {
-    kms_key_user_arns = { audit = ["arn:aws:iam::333333333333:role/LogReader"] }
+    aws = merge(var.aws, {
+      kms_key_user_arns = { audit = ["arn:aws:iam::333333333333:role/LogReader"] }
+    })
   }
 
-  expect_failures = [var.kms_key_user_arns]
+  expect_failures = [var.aws]
 }
 
 run "invalid_cloudtrail_s3_data_events_rejected" {
   command = plan
 
   variables {
-    cloudtrail_s3_data_events = "objects"
+    aws = merge(var.aws, {
+      cloudtrail_s3_data_events = "objects"
+    })
   }
 
-  expect_failures = [var.cloudtrail_s3_data_events]
+  expect_failures = [var.aws]
 }
 
 run "rejects_malformed_key_admin_arn" {
   command = plan
 
   variables {
-    key_admin_arn = "kms-admin"
+    aws = merge(var.aws, {
+      key_admin_arn = "kms-admin"
+    })
   }
 
-  expect_failures = [var.key_admin_arn]
+  expect_failures = [var.aws]
 }
 
 run "rejects_wildcard_key_policy_admin_role_name" {
@@ -107,4 +115,147 @@ run "rejects_wildcard_key_policy_admin_role_name" {
   }
 
   expect_failures = [var.key_policy_admin_role_name]
+}
+
+# Validations the aws-security root used to run on its own variables; they now
+# live on the stage's aws object (aws_overrides in the root feeds it).
+
+run "rejects_empty_aws_enabled_regions" {
+  command = plan
+
+  variables {
+    aws = merge(var.aws, {
+      aws_enabled_regions = []
+    })
+  }
+
+  expect_failures = [var.aws]
+}
+
+run "rejects_unset_log_archive_bucket_name" {
+  command = plan
+
+  variables {
+    aws = merge(var.aws, {
+      log_archive_bucket_name = null
+    })
+  }
+
+  expect_failures = [var.aws]
+}
+
+run "rejects_blank_log_archive_bucket_name" {
+  command = plan
+
+  variables {
+    aws = merge(var.aws, {
+      log_archive_bucket_name = "   "
+    })
+  }
+
+  expect_failures = [var.aws]
+}
+
+run "rejects_group_arn_as_key_admin" {
+  command = plan
+
+  variables {
+    aws = merge(var.aws, {
+      key_admin_arn = "arn:aws:iam::111111111111:group/kms-admins"
+    })
+  }
+
+  expect_failures = [var.aws]
+}
+
+run "rejects_non_arn_config_role" {
+  command = plan
+
+  variables {
+    aws = merge(var.aws, {
+      config_role_arn = "AWSServiceRoleForConfig"
+    })
+  }
+
+  expect_failures = [var.aws]
+}
+
+run "rejects_non_arn_aggregator_role" {
+  command = plan
+
+  variables {
+    aws = merge(var.aws, {
+      aggregator_role_arn = "arn:aws:iam::222222222222:policy/aws-config-aggregator"
+    })
+  }
+
+  expect_failures = [var.aws]
+}
+
+run "rejects_non_arn_meta_store_manager_role" {
+  command = plan
+
+  variables {
+    aws = merge(var.aws, {
+      meta_store_manager_role_arn = "AmazonSecurityLakeMetaStoreManager"
+    })
+  }
+
+  expect_failures = [var.aws]
+}
+
+run "rejects_non_arn_break_glass_role" {
+  command = plan
+
+  variables {
+    aws = merge(var.aws, {
+      break_glass_role_arn = "arn:aws:iam::role/OrganizationBreakGlass"
+    })
+  }
+
+  expect_failures = [var.aws]
+}
+
+run "rejects_empty_notification_subscribers" {
+  command = plan
+
+  variables {
+    aws = merge(var.aws, {
+      notification_subscribers = {}
+    })
+  }
+
+  expect_failures = [var.aws]
+}
+
+run "rejects_unknown_security_service" {
+  command = plan
+
+  variables {
+    aws = merge(var.aws, {
+      enabled_security_services = ["inspector", "guardduty"]
+    })
+  }
+
+  expect_failures = [var.aws]
+}
+
+run "delegated_admin_trail_name_must_differ" {
+  command = plan
+
+  variables {
+    aws = merge(var.aws, { cloudtrail_delegated_admin_trail_name = "org-trail" })
+  }
+
+  expect_failures = [var.aws]
+}
+
+run "delegated_admin_needs_organization_trail" {
+  command = plan
+
+  variables {
+    aws = merge(var.aws, { enable_cloudtrail_delegated_admin = true, create_organization_trail = false })
+  }
+
+  expect_failures = [var.aws]
 }

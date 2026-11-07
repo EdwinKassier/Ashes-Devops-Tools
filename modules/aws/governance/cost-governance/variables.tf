@@ -13,17 +13,23 @@ variable "enable_cost_governance" {
 # -----------------------------------------------------------------------------
 
 variable "budgets" {
-  description = "Monthly COST budgets keyed by budget name. limit_amount is the USD limit; threshold_percent triggers an ACTUAL-spend notification when crossed; emails receive the notification alongside the optional SNS topic."
+  description = "Monthly COST budgets keyed by budget name. limit_amount is the USD limit; threshold_percent triggers an ACTUAL-spend notification when crossed (alert_percents, when non-empty, replaces it with one ACTUAL notification per percent plus a FORECASTED one at the highest); emails receive the notification alongside the optional SNS topic."
   type = map(object({
     limit_amount      = string
     threshold_percent = number
     emails            = optional(list(string), [])
+    alert_percents    = optional(list(number), [])
   }))
   default = {
     org-monthly = {
       limit_amount      = "1000"
       threshold_percent = 80
     }
+  }
+
+  validation {
+    condition     = alltrue([for b in values(var.budgets) : alltrue([for p in b.alert_percents : p > 0 && p <= 100])])
+    error_message = "Every alert_percents entry must be in the range (0, 100]."
   }
 
   validation {

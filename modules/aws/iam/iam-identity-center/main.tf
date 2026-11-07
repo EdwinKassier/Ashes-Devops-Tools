@@ -13,21 +13,43 @@ data "aws_ssoadmin_instances" "this" {}
 
 locals {
   # An organization has exactly one Identity Center instance; take the first
-  # (and only) entry of the ARN list the data source returns. (The parallel
-  # identity_store_ids list is not consumed here — this module takes principal
-  # IDs directly via var.assignments rather than resolving them against the
-  # identity store.)
+  # (and only) entry of the ARN list the data source returns. The parallel
+  # identity_store_ids list resolves group display names to group IDs.
   instance_arn = tolist(data.aws_ssoadmin_instances.this.arns)[0]
 
-  # Flatten permission_sets x their managed_policy_arns into a single map whose
-  # keys are plan-known strings ("<permission set>/<policy arn>"), so each
-  # attachment is an independent, statically-keyed for_each element.
-  managed_attachments = merge([
+  identity_store_id = tolist(data.aws_ssoadmin_instances.this.identity_store_ids)[0]
+
+  # Distinct group display names referenced by assignments (one lookup each).
+  group_names = toset([for a in values(var.assignments) : a.group_display_name if a.group_display_name != null])
+
+  customer_attachments = merge([
     for ps_name, ps in var.permission_sets : {
-      for arn in ps.managed_policy_arns :
-      "${ps_name}/${arn}" => { ps = ps_name, arn = replace(arn, "/^arn:aws:/", "arn:${local.partition}:") }
+      for p in ps.customer_managed_policies : "${ps_name}/${p.path}${p.name}" => { ps = ps_name, name = p.name, path = p.path }
     }
   ]...)
+
+  # Flatten permission_sets x their managed policies into a single map whose
+  # keys are plan-known strings ("<permission set>/<policy arn>"), so each
+  # attachment is an independent, statically-keyed for_each element.
+  #
+  # AWS-managed policies named in managed_policy_names get their ARN built from
+  # the running partition (aws, aws-us-gov, aws-cn). The map key keeps the
+  # canonical arn:aws form, so it is unchanged for sets that previously listed
+  # the same policy under managed_policy_arns (no attachment is replaced).
+  managed_attachments = merge(concat(
+    [
+      for ps_name, ps in var.permission_sets : {
+        for arn in ps.managed_policy_arns :
+        "${ps_name}/${arn}" => { ps = ps_name, arn = replace(arn, "/^arn:aws:/", "arn:${local.partition}:") }
+      }
+    ],
+    [
+      for ps_name, ps in var.permission_sets : {
+        for name in ps.managed_policy_names :
+        "${ps_name}/arn:aws:iam::aws:policy/${name}" => { ps = ps_name, arn = "arn:${local.partition}:iam::aws:policy/${name}" }
+      }
+    ],
+  )...)
 }
 
 resource "aws_ssoadmin_permission_set" "this" {
@@ -48,6 +70,18 @@ resource "aws_ssoadmin_managed_policy_attachment" "this" {
   managed_policy_arn = each.value.arn
 }
 
+resource "aws_ssoadmin_customer_managed_policy_attachment" "this" {
+  for_each = local.customer_attachments
+
+  instance_arn       = local.instance_arn
+  permission_set_arn = aws_ssoadmin_permission_set.this[each.value.ps].arn
+
+  customer_managed_policy_reference {
+    name = each.value.name
+    path = each.value.path
+  }
+}
+
 resource "aws_ssoadmin_permission_set_inline_policy" "this" {
   for_each = { for k, v in var.permission_sets : k => v if try(v.inline_policy, "") != "" }
 
@@ -56,14 +90,27 @@ resource "aws_ssoadmin_permission_set_inline_policy" "this" {
   inline_policy      = each.value.inline_policy
 }
 
+data "aws_identitystore_group" "this" {
+  for_each = local.group_names
+
+  identity_store_id = local.identity_store_id
+
+  alternate_identifier {
+    unique_attribute {
+      attribute_path  = "DisplayName"
+      attribute_value = each.value
+    }
+  }
+}
+
 resource "aws_ssoadmin_account_assignment" "this" {
   for_each = var.assignments
 
   instance_arn       = local.instance_arn
   permission_set_arn = aws_ssoadmin_permission_set.this[each.value.permission_set].arn
   principal_type     = each.value.principal_type # GROUP | USER
-  principal_id       = each.value.principal_id
-  target_id          = each.value.account_id
+  principal_id       = each.value.group_display_name != null ? data.aws_identitystore_group.this[each.value.group_display_name].group_id : each.value.principal_id
+  target_id          = each.value.account_key != null ? var.account_ids[each.value.account_key] : each.value.account_id
   target_type        = "AWS_ACCOUNT"
 }
 

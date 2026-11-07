@@ -53,3 +53,27 @@ run "rejects_partial_kms_key_name" {
     kms_key_name = "projects/my-project/locations/global/keyRings/scc-ring"
   }
 }
+
+run "scc_api_version_rejects_unknown" {
+  command = plan
+
+  variables {
+    org_id          = "123456789"
+    project_id      = "mock-project"
+    scc_api_version = "v3"
+  }
+
+  expect_failures = [var.scc_api_version]
+}
+
+run "mute_config_type_rejects_unknown" {
+  command = plan
+
+  variables {
+    org_id       = "123456789"
+    project_id   = "mock-project"
+    mute_configs = { x = { filter = "a", type = "BOGUS" } }
+  }
+
+  expect_failures = [var.mute_configs]
+}

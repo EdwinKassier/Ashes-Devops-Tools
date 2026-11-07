@@ -31,8 +31,13 @@ locals {
     billing_admin_groups      = try([for g in local.lz.gcp.billing_admin_groups : tostring(g)], null)
     allowed_regions           = try([for r in local.lz.gcp.allowed_regions : tostring(r)], null)
     break_glass_group         = try(tostring(local.lz.gcp.break_glass_group), null)
+    profile                   = try(tostring(local.lz.org.profile), null)
+    monthly_budget_usd        = try(tonumber(local.lz.org.monthly_budget_usd), null)
     alert_emails              = try([for e in local.lz.gcp.alert_emails : tostring(e)], null)
+    notification_emails       = try([for e in local.lz.notifications.emails : tostring(e)], null)
     admin_containment         = try(tobool(local.lz.gcp.admin_containment), null)
+    principal_access_boundary = try(tobool(local.lz.gcp.principal_access_boundary), null)
+    enable_audit_bucket_lock  = try(tobool(local.lz.gcp.enable_audit_bucket_lock), null)
     hub_vpc_cidr_block        = try(tostring(local.lz.gcp.network.hub_cidr_block), null)
     dns_hub_vpc_cidr_block    = try(tostring(local.lz.gcp.network.dns_hub_cidr_block), null)
     # gcp.contracts.bootstrap: stage contract override (same shape as the
@@ -41,6 +46,15 @@ locals {
       admin_project_id      = tostring(local.lz.gcp.contracts.bootstrap.admin_project_id)
       admin_project_number  = tostring(local.lz.gcp.contracts.bootstrap.admin_project_number)
       terraform_admin_email = tostring(local.lz.gcp.contracts.bootstrap.terraform_admin_email)
+      suffix                = try(tostring(local.lz.gcp.contracts.bootstrap.suffix), null)
+      workload_folder_roles = {
+        plan  = [for r in try(local.lz.gcp.contracts.bootstrap.workload_folder_roles.plan, []) : tostring(r)]
+        apply = [for r in try(local.lz.gcp.contracts.bootstrap.workload_folder_roles.apply, []) : tostring(r)]
+      }
+      network_folder_roles = {
+        plan  = [for r in try(local.lz.gcp.contracts.bootstrap.network_folder_roles.plan, []) : tostring(r)]
+        apply = [for r in try(local.lz.gcp.contracts.bootstrap.network_folder_roles.apply, []) : tostring(r)]
+      }
       workload_service_accounts = {
         for k, sa in try({ for k, sa in local.lz.gcp.contracts.bootstrap.workload_service_accounts : k => sa }, {}) : k => { plan = tostring(sa.plan), apply = tostring(sa.apply) }
       }
@@ -67,27 +81,57 @@ locals {
     }
   }
 
-  # Effective values. Required ones fall back to an inert sentinel only so
-  # static tools (tflint) can evaluate the root; the variable validations reject
-  # the unset case first.
-  domain                    = coalesce(var.domain, local.cfg.domain, "unset.invalid")
-  project_prefix            = coalesce(var.project_prefix, local.cfg.project_prefix, "unset")
-  organization_name         = coalesce(var.organization_name, local.cfg.organization_name, "My Organization")
-  billing_account           = try(coalesce(var.billing_account, local.cfg.billing_account), null)
-  tfc_organization          = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
-  environments              = var.environments != null ? var.environments : local.cfg.environments
-  default_region            = coalesce(var.default_region, local.cfg.default_region, "europe-west2")
-  allowed_regions           = var.allowed_regions != null ? var.allowed_regions : coalesce(local.cfg.allowed_regions, ["europe-west1", "europe-west2", "us-central1"])
-  admin_email               = coalesce(var.admin_email, local.cfg.admin_email, "unset@unset.invalid")
-  organization_admin_groups = var.organization_admin_groups != null ? var.organization_admin_groups : coalesce(local.cfg.organization_admin_groups, [])
-  billing_admin_groups      = var.billing_admin_groups != null ? var.billing_admin_groups : coalesce(local.cfg.billing_admin_groups, [])
+  # The gcp section as the stage's gcp object (config-backed keys only; every
+  # other key is unset here). Config fallbacks between keys are resolved here, so
+  # the effective object below keeps gcp_overrides > config file > stage default.
+  lz_gcp = {
+    admin_email                      = local.cfg.admin_email
+    organization_admin_groups        = local.cfg.organization_admin_groups
+    billing_admin_groups             = local.cfg.billing_admin_groups
+    allowed_regions                  = local.cfg.allowed_regions
+    enable_audit_bucket_lock         = local.cfg.enable_audit_bucket_lock
+    enable_admin_containment         = local.cfg.admin_containment
+    enable_principal_access_boundary = local.cfg.principal_access_boundary
+    # gcp.break_glass_group as an IAM v2 principal.
+    containment_exempt_principals = local.cfg.break_glass_group != null ? ["principalSet://goog/group/${local.cfg.break_glass_group}"] : null
+    # gcp.alert_emails > notifications.emails > unset.
+    alert_notification_emails = length(coalesce(local.cfg.alert_emails, [])) > 0 ? local.cfg.alert_emails : (
+      length(coalesce(local.cfg.notification_emails, [])) > 0 ? local.cfg.notification_emails : null
+    )
+  }
+  # A set (non-null) override key wins; an unset one keeps the config value.
+  gcp = merge(local.lz_gcp, { for k, v in var.gcp_overrides : k => v if v != null })
+
+  # Effective org-section values. Required ones fall back to an inert sentinel
+  # only so static tools (tflint) can evaluate the root; the variable
+  # validations reject the unset case first.
+  domain            = coalesce(var.domain, local.cfg.domain, "unset.invalid")
+  project_prefix    = coalesce(var.project_prefix, local.cfg.project_prefix, "unset")
+  organization_name = coalesce(var.organization_name, local.cfg.organization_name, "My Organization")
+  billing_account   = try(coalesce(var.billing_account, local.cfg.billing_account), null)
+  tfc_organization  = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
+  environments      = var.environments != null ? var.environments : local.cfg.environments
+  default_region    = coalesce(var.default_region, local.cfg.default_region, "europe-west2")
 
   # Admin containment follows the estate: on whenever a production environment
-  # exists, unless explicitly set (variable > gcp.admin_containment > derived).
-  production_environment_keys = sort([for k, e in coalesce(local.environments, {}) : k if e.is_production])
-  enable_admin_containment    = coalesce(var.enable_admin_containment, local.cfg.admin_containment, length(local.production_environment_keys) > 0)
-  containment_exempt_principals = length(var.containment_exempt_principals) > 0 ? var.containment_exempt_principals : (
-    local.cfg.break_glass_group != null ? ["principalSet://goog/group/${local.cfg.break_glass_group}"] : []
+  # exists, unless explicitly set (gcp_overrides > gcp.admin_containment > derived).
+  # gcp.principal_access_boundary is shared with gcp-bootstrap and gcp-guardrails,
+  # so the boundary and its containment deny rules cannot drift apart.
+  production_environment_keys   = sort([for k, e in coalesce(local.environments, {}) : k if e.is_production])
+  enable_admin_containment      = coalesce(local.gcp.enable_admin_containment, length(local.production_environment_keys) > 0)
+  containment_exempt_principals = local.gcp.containment_exempt_principals == null ? [] : tolist(local.gcp.containment_exempt_principals)
+  # Cost profile (variable > org.profile > production). The starter profile
+  # requires a budget (variable > org.monthly_budget_usd) and alerts at 50/80/100%.
+  profile = coalesce(var.profile, local.cfg.profile, "production")
+  monthly_budget_amount = coalesce(
+    var.monthly_budget_amount, local.profile == "starter" ? local.cfg.monthly_budget_usd : null, local.profile == "starter" ? 0 : 1000
   )
-  alert_notification_emails = length(var.alert_notification_emails) > 0 ? var.alert_notification_emails : coalesce(local.cfg.alert_emails, [])
+  budget_threshold_rules = local.profile == "starter" ? [
+    { percent = 0.5, spend_basis = "CURRENT_SPEND" },
+    { percent = 0.8, spend_basis = "CURRENT_SPEND" },
+    { percent = 1.0, spend_basis = "CURRENT_SPEND" },
+  ] : null
+  # Budgets notify the control-plane email channels only when the estate opted
+  # in through the notifications section (an existing estate's budget is untouched).
+  notify_budget_channels = length(coalesce(local.cfg.notification_emails, [])) > 0
 }

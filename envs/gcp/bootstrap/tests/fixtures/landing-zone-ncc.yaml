@@ -1,0 +1,6 @@
+# Fixture: only the gcp.network.ncc_hub key (the suite sets every other input
+# explicitly). Turning the NCC hub on must grant the NCC stage roles.
+gcp:
+  network:
+    ncc_hub:
+      enabled: true

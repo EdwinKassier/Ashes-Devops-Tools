@@ -45,10 +45,12 @@
         "guardduty:UpdateFilter",
         "guardduty:UpdateDetector",
         "securityhub:BatchDisableStandards",
+%{ if !enable_config_recorder_scp ~}
         "config:DeleteConfigurationRecorder",
         "config:StopConfigurationRecorder",
         "config:PutConfigurationRecorder",
         "config:DeleteDeliveryChannel",
+%{ endif ~}
         "ec2:DeleteFlowLogs"
       ],
       "Resource": "*",
@@ -58,6 +60,25 @@
         }
       }
     },
+%{ if enable_config_recorder_scp ~}
+    {
+      "Sid": "DenyConfigRecorderChanges",
+      "Effect": "Deny",
+      "Action": [
+        "config:DeleteConfigurationRecorder",
+        "config:StopConfigurationRecorder",
+        "config:PutConfigurationRecorder",
+        "config:DeleteDeliveryChannel",
+        "config:PutDeliveryChannel"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": ${config_recorder_exempt_arns}
+        }
+      }
+    },
+%{ endif ~}
 %{ if length(central_detection_account_ids) > 0 ~}
     {
       "Sid": "DenyCentralDetectionOutsideSecurityAccounts",

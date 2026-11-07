@@ -51,3 +51,33 @@ run "rejects_bad_name" {
     name = "bad name!"
   }
 }
+
+run "rejects_private_customer_gateway_ip" {
+  command = plan
+
+  variables {
+    customer_gateway_ip = "192.168.1.1"
+  }
+
+  expect_failures = [var.customer_gateway_ip]
+}
+
+run "rejects_out_of_range_bgp_asn" {
+  command = plan
+
+  variables {
+    customer_gateway_bgp_asn = 0
+  }
+
+  expect_failures = [var.customer_gateway_bgp_asn]
+}
+
+run "rejects_unknown_preshared_key_storage" {
+  command = plan
+
+  variables {
+    preshared_key_storage = "Vault"
+  }
+
+  expect_failures = [var.preshared_key_storage]
+}

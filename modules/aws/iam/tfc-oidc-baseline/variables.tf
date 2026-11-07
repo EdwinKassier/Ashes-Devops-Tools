@@ -145,7 +145,7 @@ variable "enable_apply_permissions_boundary" {
 }
 
 variable "apply_permissions_boundary_arn" {
-  description = "Optional existing permissions-boundary policy ARN to use instead of the embedded one. The policy must already exist in every bound account (an AWS-managed policy, or a same-named customer policy deployed by another StackSet). Null (default) = the embedded boundary. Ignored when enable_apply_permissions_boundary = false."
+  description = "Optional existing permissions-boundary policy ARN to use instead of the embedded one. The policy must already exist in every bound account (an AWS-managed policy, or a same-named customer policy deployed by another StackSet). Null (default) = the embedded boundary. With an external boundary the embedded tamper-deny does not exist, so the same deny (plan role, apply role, OIDC provider and this boundary) is attached to the apply role as an inline policy. Ignored when enable_apply_permissions_boundary = false."
   type        = string
   default     = null
 

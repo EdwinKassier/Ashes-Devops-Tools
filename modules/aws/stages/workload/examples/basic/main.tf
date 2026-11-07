@@ -29,6 +29,5 @@ module "aws_workload" {
   tgw_id                   = "tgw-000000000000abcd"
   flow_log_destination_arn = "arn:aws:s3:::ashes-org-log-archive"
   log_archive_bucket_name  = "ashes-org-log-archive"
-  config_role_arn          = "arn:aws:iam::222222222222:role/config-recorder"
   kms_key_arn              = "arn:aws:kms:eu-west-2:222222222222:key/abcd-1234"
 }

@@ -1,0 +1,29 @@
+# Single source: every value below is read from config/landing-zone.yaml when
+# left unset (org.domain, org.prefix, gcp.environments, gcp.admin_containment,
+# gcp.break_glass_group). Set it here only to OVERRIDE it
+# (explicit variable > config file > built-in default).
+
+# domain         = "acme.com"
+# project_prefix = "acme"
+
+# Break-glass principals exempt from the containment deny policy.
+# containment_exempt_principals = ["principalSet://goog/group/gcp-break-glass@acme.com"]
+
+# Prefer gcp.principal_access_boundary in config/landing-zone.yaml, which
+# gcp-organization reads for the boundary itself.
+# enable_principal_access_boundary = false
+
+# Extra org-node deny policies (applied next to the containment policy). Author
+# them in the committed envs/gcp/guardrails/guardrails.auto.tfvars (CODEOWNERS:
+# platform + security), not as workspace variables.
+# iam_deny_policies = [
+#   {
+#     name = "deny-sa-key-creation"
+#     rules = [
+#       {
+#         denied_principals  = ["principalSet://goog/public:all"]
+#         denied_permissions = ["iam.googleapis.com/serviceAccountKeys.create"]
+#       },
+#     ]
+#   },
+# ]

@@ -107,7 +107,18 @@ terraform -chdir=envs/aws/workload plan   # read-only local check; apply via TFC
 > (`AssumeRoleWithWebIdentity` access denied) before it can produce a plan. This is the same cross-root contract described in
 > the header note: publish from the org root first, then consume downstream.
 
-This stands up the env's spoke VPC (attached to the TGW with the correct Prod/NonProd route table — see [network topology](../architecture/aws-landing-zone.md#network-topology)), workload roles, and the per-account baseline.
+This stands up the env's spoke VPC, its TGW attachment, workload roles, and the per-account baseline. The attachment is created in the workload account and waits for the network account (state `pendingAcceptance`); **the spoke has no routing until the next step.**
+
+**Wire the spoke into the hub.** Only the TGW owner can accept the attachment and associate it with a route table. Copy the workspace's `tgw_attachment_id` output into `config/landing-zone.yaml`:
+
+```yaml
+aws:
+  network:
+    spoke_attachments:
+      payments_prod: {attachment_id: tgw-attach-0123456789abcdef0, segment: prod}   # segment: prod | nonprod
+```
+
+Then apply `aws-network`. It accepts the attachment, associates it with the `prod` / `nonprod` route table (whose `0.0.0.0/0` goes to inspection) and propagates the spoke CIDR into the inspection table, so egress replies and on-premises traffic reach it (see [network topology](../architecture/aws-landing-zone.md#network-topology)). Set `accept: false` for an attachment that is already accepted.
 
 > **New-account defaults not covered by Terraform.** A brand-new account still has a default VPC per Region and needs EBS-encryption-by-default, S3 Block Public Access, and a password policy. The default-VPC deletion is handled by the org-wide **auto-deploying StackSet** from [`aws-bootstrap.md`](aws-bootstrap.md#phase-05-org-wide-default-vpc-deletion-stackset-out-of-band); the rest is applied per layer via `modules/aws/governance/account-baseline`. Confirm the StackSet auto-deployed to the new account.
 
@@ -118,6 +129,7 @@ This stands up the env's spoke VPC (attached to the TGW with the correct Prod/No
 - The account appears in the correct OU (AWS Organizations console).
 - The `tfc-oidc-baseline` stack instance for the account is `CURRENT`, and the workspace's plan ran as `tfc-plan` (check the run's credential log line).
 - The layer apply succeeded and the workspace holds state.
+- The spoke's TGW attachment is `available` and associated with the `prod` / `nonprod` route table (`aws ec2 get-transit-gateway-attachment-propagations` / `describe-transit-gateway-attachments` in the network account).
 - GuardDuty / Config / Security Hub auto-enrolled the new account (delegated admin in Security Tooling — see [security services](../architecture/aws-landing-zone.md#security-services)).
 - The default VPC was removed by the StackSet.
 

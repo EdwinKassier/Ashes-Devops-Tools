@@ -22,8 +22,14 @@
   "packages": {
     ".": {
       "release-type": "simple",
+      "release-as": "0.1.0",
       "package-name": "ashes-devops-tools",
-      "changelog-path": "CHANGELOG.md"
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        "modules/gcp/stages/organization/examples/basic/main.tf",
+        "modules/aws/stages/security/examples/basic/main.tf",
+        "modules/saas/stages/saas-workload/examples/basic/main.tf"
+      ]
     }
   }
 }

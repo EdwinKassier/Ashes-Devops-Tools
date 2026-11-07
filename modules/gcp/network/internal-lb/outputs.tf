@@ -59,3 +59,8 @@ output "static_ip_address" {
   description = "The static IP address resource (if created)"
   value       = var.create_static_ip ? google_compute_address.internal_ip[0] : null
 }
+
+output "firewall_policy_rule_priority" {
+  description = "Priority of the proxy-only allow rule in the network firewall policy, or null when no policy rule is created (firewall_mode = legacy or create_firewall_rule = false)."
+  value       = length(google_compute_network_firewall_policy_rule.allow_proxy) > 0 ? local.firewall_policy_rule_priority : null
+}

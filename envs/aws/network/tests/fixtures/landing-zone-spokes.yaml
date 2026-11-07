@@ -1,0 +1,26 @@
+# Test fixture: aws.network.spoke_attachments from the config file
+# (spoke_routing.tftest.hcl). aws.contracts.organization replaces the
+# aws-organization remote-state read.
+version: 1
+org:
+  name: cfgco
+  profile: starter
+  owner: cfg-platform
+  cost_center: cc-1234
+  regions:
+    aws: eu-west-1
+  tfc:
+    organization: cfg-tfc
+aws:
+  log_archive_bucket_name: cfgco-org-log-archive
+  enabled_regions: [eu-west-1, eu-west-2]
+  contracts:
+    organization:
+      organization_id: o-cfgcfgcfg0
+      management_account_id: "012345678901"
+      account_ids:
+        network: "066666666666"
+  network:
+    spoke_attachments:
+      dev: {attachment_id: tgw-attach-0123456789abcdef0, segment: nonprod}
+      prod: {attachment_id: tgw-attach-0fedcba9876543210, segment: prod, accept: false}

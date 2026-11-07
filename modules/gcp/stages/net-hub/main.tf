@@ -6,7 +6,11 @@
  * The landing-zone hub: a Shared VPC host network with a three-tier VPC
  * (network/tiered-vpc), Cloud NAT, Private Service Access, Private Service
  * Connect, hierarchical (folder or org) firewall policies, the hub VPC-SC
- * perimeter, and opt-in hybrid connectivity (HA VPN, Cloud Interconnect).
+ * perimeter, opt-in hybrid connectivity (HA VPN, Cloud Interconnect) and an
+ * opt-in Network Connectivity Center hub (the alternative to spoke peering).
+ *
+ * Opt-in additional_regions add regional subnets (and a Cloud Router and NAT
+ * per region) to the same VPC; empty keeps the single-region layout.
  *
  * Replaces the hub use of the deprecated stages/host module (see the README
  * migration table for the moved blocks).
@@ -47,7 +51,11 @@ module "network" {
   shared_vpc_host     = var.network.shared_vpc_host
   deletion_protection = var.deletion_protection
   flow_logs           = var.network.flow_logs
-  firewall            = var.firewall
+  additional_regions  = var.additional_regions
+
+  firewall_mode                     = var.firewall_mode
+  firewall_policy_enforcement_order = var.firewall_policy_enforcement_order
+  firewall                          = var.firewall
 }
 
 # Folder- or organization-level firewall policies owned by the hub.
@@ -92,6 +100,33 @@ module "integrated_nat" {
   log_filter     = var.nat.log_filter
 }
 
+# One Cloud Router and Cloud NAT per additional region with nat = true, same
+# settings as the primary. Separate block keyed by region: the primary
+# integrated_nat[0] address is unchanged.
+module "additional_region_nat" {
+  source   = "../../network/nat"
+  for_each = var.nat.enabled ? { for region, r in var.additional_regions : region => r if r.nat } : {}
+
+  project_id = var.project_id
+  name       = "${var.network.name}-nat-${each.key}"
+  region     = each.key
+  network    = module.network.network_id
+
+  create_router = true
+  router_name   = "${var.network.name}-router-${each.key}"
+
+  nat_ip_allocate_option             = var.nat.ip_allocate_option
+  source_subnetwork_ip_ranges_to_nat = "LIST_OF_SUBNETWORKS"
+
+  subnetworks = [
+    { name = module.network.additional_region_subnets[each.key].private.self_link, source_ip_ranges_to_nat = ["ALL_IP_RANGES"] },
+    { name = module.network.additional_region_subnets[each.key].database.self_link, source_ip_ranges_to_nat = ["ALL_IP_RANGES"] },
+  ]
+
+  enable_logging = true
+  log_filter     = var.nat.log_filter
+}
+
 module "private_service_access" {
   source = "../../network/private-service-access"
   count  = var.private_service_access.enabled ? 1 : 0
@@ -129,6 +164,8 @@ module "vpn" {
   peer_asn                  = var.vpn.peer_asn
   peer_external_gateway_ips = var.vpn.peer_gateway_ips
   shared_secret             = var.vpn_shared_secret
+  shared_secret_wo          = var.vpn_shared_secret_wo
+  shared_secret_wo_version  = var.vpn_shared_secret_wo_version
   local_ip_addresses        = var.vpn.local_ips
   peer_ip_addresses         = var.vpn.peer_ips
   advertised_ip_ranges      = var.vpn.advertised_ip_ranges
@@ -164,6 +201,79 @@ module "interconnects" {
   peer_asn             = each.value.peer_asn
   enable_bfd           = each.value.enable_bfd
   advertised_ip_ranges = each.value.advertised_ip_ranges
+}
+
+# =============================================================================
+# NETWORK CONNECTIVITY CENTER (opt-in alternative to hub-and-spoke peering)
+# =============================================================================
+
+# The hub, and the hub VPC as its center-group spoke (default group on MESH).
+# Environment spokes join the edge group from stages/net-spoke (connectivity =
+# ncc). The hub VPC can join while environment VPCs are still peered with it;
+# each environment VPC must drop its peering before it becomes a spoke
+# (docs/runbooks/gcp-peering-to-ncc-migration.md).
+module "ncc_hub" {
+  source = "../../network/ncc-hub"
+  count  = var.ncc.enabled ? 1 : 0
+
+  project_id      = var.project_id
+  name            = coalesce(var.ncc.name, "${var.project_prefix}-ncc-hub")
+  description     = "Landing-zone NCC hub for ${var.project_prefix}"
+  preset_topology = var.ncc.preset_topology
+  export_psc      = var.ncc.export_psc
+  labels          = var.labels
+
+  auto_accept_projects = var.ncc.auto_accept_projects
+}
+
+module "ncc_hub_spoke" {
+  source = "../../network/ncc-spoke"
+  count  = var.ncc.enabled ? 1 : 0
+
+  project_id  = var.project_id
+  name        = var.network.name
+  description = "NCC center spoke for the hub VPC ${var.network.name}"
+  labels      = var.labels
+  hub_id      = module.ncc_hub[0].id
+  group       = module.ncc_hub[0].center_group
+
+  linked_vpc_network = {
+    uri = module.network.network_self_link
+  }
+
+  producer_vpc_networks = var.private_service_access.enabled && var.ncc.export_private_service_access ? {
+    psa = {
+      network = module.network.network_name
+      peering = module.private_service_access[0].peering.peering
+    }
+  } : {}
+}
+
+# Under NCC the hub's HA VPN tunnels become a hybrid spoke, so on-premises
+# routes reach the other spokes through the hub instead of only the hub VPC.
+locals {
+  ncc_vpn_spoke_group = var.ncc.enabled ? module.ncc_hub[0].center_group : null
+}
+
+module "ncc_vpn_spoke" {
+  source = "../../network/ncc-spoke"
+  count  = var.ncc.enabled && var.vpn.enabled ? 1 : 0
+
+  project_id  = var.project_id
+  name        = "${var.project_prefix}-vpn"
+  description = "NCC hybrid spoke for the hub HA VPN tunnels"
+  labels      = var.labels
+  hub_id      = module.ncc_hub[0].id
+  # Hybrid spokes join the CENTER group (default on MESH): on a STAR hub, edge
+  # spokes reach only the center, so on-premises would otherwise see just the
+  # hub VPC and not the environment spokes.
+  group    = local.ncc_vpn_spoke_group
+  location = var.region
+
+  linked_vpn_tunnels = {
+    uris                       = module.vpn[0].tunnel_self_links
+    site_to_site_data_transfer = var.ncc.vpn_site_to_site_data_transfer
+  }
 }
 
 # =============================================================================

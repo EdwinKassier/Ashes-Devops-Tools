@@ -11,15 +11,21 @@
 locals {
   organization_contract = var.organization_contract != null ? var.organization_contract : local.cfg.organization_contract
   read_organization     = local.organization_contract == null
-  # The organization contract this root consumes, whichever source supplied it
-  # (the remote state is projected onto the contract's fields so both branches
-  # share one type).
+  # The upstream contract output. A producer state from before the contract
+  # output existed (N-1, not yet re-applied) exposes the same keys as
+  # individual outputs, so the read falls back to them; that fallback goes at
+  # v1.0 with the individual outputs (UPGRADING.md).
+  org_remote = local.read_organization ? try(data.terraform_remote_state.aws_organization[0].outputs.contract, data.terraform_remote_state.aws_organization[0].outputs) : null
+  # The organization contract, whichever source supplied it, as one type (the
+  # variable's). Fields this root needs are read strictly (a missing key fails
+  # the plan); the rest default.
   org = local.read_organization ? {
-    organization_id       = data.terraform_remote_state.aws_organization[0].outputs.organization_id
-    organization_root_id  = data.terraform_remote_state.aws_organization[0].outputs.organization_root_id
-    management_account_id = data.terraform_remote_state.aws_organization[0].outputs.management_account_id
-    account_ids           = tomap(data.terraform_remote_state.aws_organization[0].outputs.account_ids)
-    account_role_arns     = tomap(data.terraform_remote_state.aws_organization[0].outputs.account_role_arns)
+    organization_id       = local.org_remote.organization_id
+    organization_root_id  = local.org_remote.organization_root_id
+    management_account_id = local.org_remote.management_account_id
+    ou_ids                = try(tomap(local.org_remote.ou_ids), {})
+    account_ids           = tomap(local.org_remote.account_ids)
+    account_role_arns     = tomap(local.org_remote.account_role_arns)
   } : local.organization_contract
 }
 
@@ -52,62 +58,32 @@ module "aws_security" {
   security_tooling_account_id = local.org.account_ids["security_tooling"]
   log_archive_account_id      = local.org.account_ids["log_archive"]
   shared_services_account_id  = local.org.account_ids["shared_services"]
-  identity_account_id         = var.identity_account_id
   forensics_account_id        = local.org.account_ids["forensics"]
   backup_account_id           = lookup(local.org.account_ids, "backup", null)
 
-  aws_region          = local.aws_region
-  aws_enabled_regions = local.aws_enabled_regions
+  aws_region = local.aws_region
+  partition  = local.partition
 
-  log_archive_bucket_name           = local.log_archive_bucket_name
-  key_admin_arn                     = var.key_admin_arn
-  key_admin_role_name               = var.key_admin_role_name
-  key_policy_admin_role_name        = var.key_policy_admin_role_name
-  kms_key_user_arns                 = var.kms_key_user_arns
-  enable_kms_protection_tag         = var.enable_kms_protection_tag
-  config_role_arn                   = var.config_role_arn
-  create_config_service_linked_role = var.create_config_service_linked_role
-  aggregator_role_arn               = var.aggregator_role_arn
-  meta_store_manager_role_arn       = var.meta_store_manager_role_arn
-  break_glass_role_arn              = var.break_glass_role_arn
+  # Kept apart from the aws object: null (legacy) is a meaningful value here.
+  key_policy_admin_role_name = var.key_policy_admin_role_name
 
-  # Managed break-glass role: opt-in. When create_break_glass is true
-  # the stage creates the role and watches it; otherwise break_glass_role_arn above
-  # points at an externally-managed role.
-  create_break_glass             = var.create_break_glass
-  break_glass_role_name          = var.break_glass_role_name
-  break_glass_trusted_principals = var.break_glass_trusted_principals
-  break_glass_mfa_max_age        = var.break_glass_mfa_max_age
-  break_glass_active             = var.break_glass_active
-
-  notification_subscribers  = var.notification_subscribers
-  enabled_security_services = local.enabled_security_services
-  enable_security_lake      = local.enable_security_lake
-  create_organization_trail = var.create_organization_trail
-  partition                 = local.partition
-  # aws-organization creates the trail's CloudWatch delivery role
-  # (create_org_trail_delivery_role), so this root needs no IAM writes in the
-  # management account.
-  cloudtrail_cloudwatch_role_arn = coalesce(var.cloudtrail_cloudwatch_role_arn, "arn:${local.partition}:iam::${local.management_account_id}:role/org-trail-cloudwatch-delivery")
-
-  # FinOps F5: cost toggles for the two most expensive always-on security
-  # services. Default true (full coverage); set false for non-prod.
-  config_record_all_supported             = local.config_record_all_supported
-  guardduty_enable_ebs_malware_protection = local.guardduty_enable_ebs_malware_protection
-  enable_incident_response                = var.enable_incident_response
-  enable_service_quotas                   = var.enable_service_quotas
-
-  # CloudTrail: CIS section-4 alarms (default on, self-sufficient CMK + SNS)
-  # and S3 object-level data events (CIS 3.8 write by default).
-  enable_cloudwatch_logs                         = var.enable_cloudwatch_logs
-  cloudwatch_logs_retention_days                 = var.cloudwatch_logs_retention_days
-  cloudwatch_logs_kms_key_arn                    = var.cloudwatch_logs_kms_key_arn
-  cloudtrail_alarm_sns_topic_arn                 = var.cloudtrail_alarm_sns_topic_arn
-  cloudtrail_alarm_subscribers                   = var.cloudtrail_alarm_subscribers
-  cloudtrail_cis_alarms_excluded                 = var.cloudtrail_cis_alarms_excluded
-  cloudtrail_s3_data_events                      = var.cloudtrail_s3_data_events
-  cloudtrail_s3_data_events_excluded_bucket_arns = var.cloudtrail_s3_data_events_excluded_bucket_arns
-  cloudtrail_lambda_data_events                  = var.cloudtrail_lambda_data_events
+  # Every tuning input: the aws section (config/landing-zone.yaml aws.* under
+  # var.aws_overrides), plus the values this root derives from the profile,
+  # notifications.emails and the management account.
+  aws = merge(local.aws, {
+    aws_enabled_regions      = local.aws_enabled_regions
+    notification_subscribers = local.notification_subscribers
+    # Cost toggles for the most expensive always-on security services follow
+    # the profile unless set explicitly.
+    enabled_security_services               = local.enabled_security_services
+    enable_security_lake                    = local.enable_security_lake
+    config_record_all_supported             = local.config_record_all_supported
+    guardduty_enable_ebs_malware_protection = local.guardduty_enable_ebs_malware_protection
+    # aws-organization creates the trail's CloudWatch delivery role
+    # (create_org_trail_delivery_role), so this root needs no IAM writes in the
+    # management account.
+    cloudtrail_cloudwatch_role_arn = coalesce(try(local.aws.cloudtrail_cloudwatch_role_arn, null), "arn:${local.partition}:iam::${local.management_account_id}:role/org-trail-cloudwatch-delivery")
+  })
 }
 
 # The dedicated least-privilege aws-security management role (tfc-management-
@@ -115,7 +91,7 @@ module "aws_security" {
 # only works when this workspace applies as the phase-0 management role.
 check "break_glass_created_by_phase0_stack" {
   assert {
-    condition     = !var.create_break_glass
-    error_message = "create_break_glass = true: the dedicated tfc-mgmt-aws-security role cannot create or edit the management break-glass role (AccessDenied). Use the OrganizationBreakGlass role from templates/aws/bootstrap/phase0-management.yaml and keep create_break_glass = false, or apply this workspace as the phase-0 role."
+    condition     = !coalesce(try(local.aws.create_break_glass, null), false)
+    error_message = "aws_overrides.create_break_glass = true: the dedicated tfc-mgmt-aws-security role cannot create or edit the management break-glass role (AccessDenied). Use the OrganizationBreakGlass role from templates/aws/bootstrap/phase0-management.yaml and keep aws_overrides.create_break_glass unset (false), or apply this workspace as the phase-0 role."
   }
 }

@@ -10,13 +10,21 @@
 locals {
   organization_contract = var.organization_contract != null ? var.organization_contract : local.cfg.organization_contract
   read_organization     = local.organization_contract == null
-  # The organization contract this root consumes, whichever source supplied it
-  # (the remote state is projected onto the contract's fields so both branches
-  # share one type).
+  # The upstream contract output. A producer state from before the contract
+  # output existed (N-1, not yet re-applied) exposes the same keys as
+  # individual outputs, so the read falls back to them; that fallback goes at
+  # v1.0 with the individual outputs (UPGRADING.md).
+  org_remote = local.read_organization ? try(data.terraform_remote_state.aws_organization[0].outputs.contract, data.terraform_remote_state.aws_organization[0].outputs) : null
+  # The organization contract, whichever source supplied it, as one type (the
+  # variable's). Fields this root needs are read strictly (a missing key fails
+  # the plan); the rest default.
   org = local.read_organization ? {
-    account_ids       = tomap(data.terraform_remote_state.aws_organization[0].outputs.account_ids)
-    account_role_arns = tomap(data.terraform_remote_state.aws_organization[0].outputs.account_role_arns)
-    ou_ids            = tomap(data.terraform_remote_state.aws_organization[0].outputs.ou_ids)
+    organization_id       = try(local.org_remote.organization_id, null)
+    organization_root_id  = try(local.org_remote.organization_root_id, null)
+    management_account_id = try(local.org_remote.management_account_id, null)
+    ou_ids                = tomap(local.org_remote.ou_ids)
+    account_ids           = tomap(local.org_remote.account_ids)
+    account_role_arns     = tomap(local.org_remote.account_role_arns)
   } : local.organization_contract
 }
 
@@ -45,7 +53,10 @@ module "aws_backup" {
 
   # Cross-root contract: the org policy attaches to the Workloads OU published by
   # the aws-organization root.
-  workloads_ou_id = local.org.ou_ids["Workloads"]
+  # The placeholder only keeps the stage's id validation quiet so that
+  # terraform_data.organization_contract_guard names the missing OU; it can
+  # never be applied (the guard fails the plan).
+  workloads_ou_id = lookup(local.org.ou_ids, "Workloads", "ou-missing-workloads")
 
   aws_region = local.aws_region
 
@@ -58,4 +69,17 @@ module "aws_backup" {
   backup_role_arn          = var.backup_role_arn
   backup_role_name         = var.backup_role_name
   restore_testing_role_arn = var.restore_testing_role_arn
+}
+
+# Fail early, naming the contract field, when the effective aws-organization contract
+# (variable, config file or the upstream workspace's contract output) lacks a
+# key this root reads. The reads below tolerate the gap so that this
+# precondition, not a bare "key not in collection", is the plan error.
+resource "terraform_data" "organization_contract_guard" {
+  lifecycle {
+    precondition {
+      condition     = contains(keys(local.org.ou_ids), "Workloads")
+      error_message = "The aws-organization contract has no ou_ids[\"Workloads\"] (organization_contract / aws.contracts.organization, else the ${var.organization_workspace_name} workspace's contract output); the org backup policy attaches to that OU."
+    }
+  }
 }

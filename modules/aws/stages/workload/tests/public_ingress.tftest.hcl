@@ -9,7 +9,6 @@ mock_provider "aws" { alias = "us_east_1" }
 variables {
   flow_log_destination_arn = "arn:aws:s3:::acme-org-log-archive"
   log_archive_bucket_name  = "acme-org-log-archive"
-  config_role_arn          = "arn:aws:iam::222222222222:role/config-recorder"
   kms_key_arn              = "arn:aws:kms:eu-west-2:222222222222:key/abcd-1234"
   # SSM is orthogonal here; its patch-baseline id fails provider validation
   # under apply with random mock values.

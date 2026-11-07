@@ -18,8 +18,10 @@ variables {
   landing_zone_config_path = ""
   landing_zone_name        = "acme"
   management_account_id    = "111111111111"
-  log_archive_bucket_name  = "acme-org-log-archive"
-  enable_security_lake     = false
+  aws_overrides = {
+    log_archive_bucket_name = "acme-org-log-archive"
+    enable_security_lake    = false
+  }
 }
 
 override_module {
@@ -33,23 +35,25 @@ override_data {
   target = data.terraform_remote_state.aws_organization
   values = {
     outputs = {
-      organization_id       = "o-abcdefghij"
-      organization_root_id  = "r-abcd"
-      management_account_id = "111111111111"
-      ou_ids                = { Security = "ou-abcd-security00" }
-      account_ids = {
-        security_tooling = "222222222222"
-        log_archive      = "333333333333"
-        shared_services  = "444444444444"
-        forensics        = "555555555555"
-        network          = "666666666666"
+      contract = {
+        organization_id       = "o-abcdefghij"
+        organization_root_id  = "r-abcd"
+        management_account_id = "111111111111"
+        ou_ids                = { Security = "ou-abcd-security00" }
+        account_ids = {
+          security_tooling = "222222222222"
+          log_archive      = "333333333333"
+          shared_services  = "444444444444"
+          forensics        = "555555555555"
+          network          = "666666666666"
+        }
+        account_role_arns = {
+          security_tooling = "arn:aws:iam::222222222222:role/cross-account"
+          log_archive      = "arn:aws:iam::333333333333:role/cross-account"
+          forensics        = "arn:aws:iam::555555555555:role/cross-account"
+        }
+        tfc_plan_role_arns = {}
       }
-      account_role_arns = {
-        security_tooling = "arn:aws:iam::222222222222:role/cross-account"
-        log_archive      = "arn:aws:iam::333333333333:role/cross-account"
-        forensics        = "arn:aws:iam::555555555555:role/cross-account"
-      }
-      tfc_plan_role_arns = {}
     }
   }
 }
@@ -63,8 +67,8 @@ run "remote_state_is_projected_onto_the_contract" {
   }
 
   assert {
-    condition     = toset(keys(local.org)) == toset(["organization_id", "organization_root_id", "management_account_id", "account_ids", "account_role_arns"])
-    error_message = "local.org must project the remote state onto exactly the five contract fields."
+    condition     = toset(keys(local.org)) == toset(["organization_id", "organization_root_id", "management_account_id", "ou_ids", "account_ids", "account_role_arns"])
+    error_message = "local.org must project the remote contract onto the shared aws organization_contract type (all six fields)."
   }
 
   assert {
@@ -91,7 +95,9 @@ run "config_without_contract_still_reads_remote_state" {
   variables {
     landing_zone_config_path = "tests/fixtures/landing-zone-no-contract.yaml"
     management_account_id    = null
-    log_archive_bucket_name  = null
+    aws_overrides = merge(var.aws_overrides, {
+      log_archive_bucket_name = null
+    })
   }
 
   assert {
@@ -100,7 +106,7 @@ run "config_without_contract_still_reads_remote_state" {
   }
 
   assert {
-    condition     = local.management_account_id == "012345678901" && local.log_archive_bucket_name == "cfgco-org-log-archive"
+    condition     = local.management_account_id == "012345678901" && local.aws.log_archive_bucket_name == "cfgco-org-log-archive"
     error_message = "management_account_id / log_archive_bucket_name must fall back to the config file."
   }
 }
@@ -112,8 +118,10 @@ run "config_contract_replaces_remote_state" {
     landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
     landing_zone_name        = null
     management_account_id    = null
-    log_archive_bucket_name  = null
-    enable_security_lake     = null
+    aws_overrides = merge(var.aws_overrides, {
+      log_archive_bucket_name = null
+      enable_security_lake    = null
+    })
   }
 
   assert {
@@ -135,7 +143,7 @@ run "config_contract_replaces_remote_state" {
       local.landing_zone_name == "cfgco" && local.aws_region == "eu-west-1" &&
       join(",", local.aws_enabled_regions) == "eu-west-1,eu-west-2" &&
       local.management_account_id == "012345678901" &&
-      local.log_archive_bucket_name == "cfgco-org-log-archive"
+      local.aws.log_archive_bucket_name == "cfgco-org-log-archive"
     )
     error_message = "name / region / enabled regions / management account / log-archive bucket must fall back to the config file."
   }
@@ -167,7 +175,168 @@ run "variable_contract_beats_config_contract" {
   }
 
   assert {
-    condition     = local.management_account_id == "111111111111" && local.log_archive_bucket_name == "acme-org-log-archive" && local.landing_zone_name == "acme"
+    condition     = local.management_account_id == "111111111111" && local.aws.log_archive_bucket_name == "acme-org-log-archive" && local.landing_zone_name == "acme"
     error_message = "explicit variables must win over the config file."
+  }
+}
+
+# notifications.emails becomes one email subscriber each on the
+# security-notifications topic (and, by reuse, the CIS alarm topic).
+run "emails_feed_security_topic" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    aws_overrides = merge(var.aws_overrides, {
+      log_archive_bucket_name = null
+      enable_security_lake    = null
+    })
+  }
+
+  assert {
+    condition = (
+      length(local.notification_subscribers) == 2 &&
+      alltrue([for s in values(local.notification_subscribers) : s.protocol == "email"]) &&
+      toset([for s in values(local.notification_subscribers) : s.endpoint]) == toset(["alerts@cfg.test", "oncall@cfg.test"])
+    )
+    error_message = "notifications.emails must become email subscribers of the security-notifications topic."
+  }
+}
+
+# An explicit variable beats the config section.
+run "explicit_subscribers_beat_notifications_emails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    aws_overrides = merge(var.aws_overrides, {
+      log_archive_bucket_name  = null
+      enable_security_lake     = null
+      notification_subscribers = { soc = { protocol = "https", endpoint = "https://soc.example.com/hook" } }
+    })
+  }
+
+  assert {
+    condition     = length(local.notification_subscribers) == 1 && contains(keys(local.notification_subscribers), "soc")
+    error_message = "an explicit notification_subscribers must win over notifications.emails."
+  }
+}
+
+# No section: the historical placeholder subscriber is kept.
+run "no_section_is_noop" {
+  command = plan
+
+  assert {
+    condition     = length(local.notification_subscribers) == 1 && local.notification_subscribers["secops"].endpoint == "secops@example.com"
+    error_message = "without a notifications section the default placeholder subscriber must be unchanged."
+  }
+}
+
+# Object pass-through precedence: a set aws_overrides key beats the config file
+# (config keys and override-only keys alike) ...
+run "override_wins_over_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    aws_overrides = {
+      log_archive_bucket_name   = "override-org-log-archive"
+      aws_enabled_regions       = ["us-east-1"]
+      enabled_security_services = ["macie"]
+      enable_incident_response  = false
+    }
+  }
+
+  assert {
+    condition     = local.aws.log_archive_bucket_name == "override-org-log-archive" && join(",", local.aws_enabled_regions) == "us-east-1" && local.enabled_security_services == toset(["macie"])
+    error_message = "a set aws_overrides key must win over aws.* in config/landing-zone.yaml and over the profile default."
+  }
+
+  assert {
+    condition     = output.contract.log_archive_bucket_name == "override-org-log-archive"
+    error_message = "the overridden bucket name must reach the stage."
+  }
+}
+
+# ... and an unset (or null) key keeps the config value (or the profile default).
+run "unset_override_keeps_config_value" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    aws_overrides = {
+      log_archive_bucket_name = null
+      aws_enabled_regions     = null
+    }
+  }
+
+  assert {
+    condition     = local.aws.log_archive_bucket_name == "cfgco-org-log-archive" && join(",", local.aws_enabled_regions) == "eu-west-1,eu-west-2" && local.enabled_security_services == toset(["inspector"])
+    error_message = "an unset aws_overrides key must keep the aws.* config value (and the starter profile default)."
+  }
+
+  assert {
+    condition     = output.contract.log_archive_bucket_name == "cfgco-org-log-archive"
+    error_message = "the config bucket name must reach the stage."
+  }
+}
+
+# ... and a key unset in both the config file and aws_overrides takes the stage
+# default (key_admin_role_name = "tfc-apply" administers every CMK).
+run "unset_everywhere_takes_stage_default" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    aws_overrides            = {}
+  }
+
+  assert {
+    condition     = try(local.aws.key_admin_role_name, null) == null && alltrue([for a in values(module.aws_security.key_admin_arns) : endswith(a, ":role/tfc-apply")])
+    error_message = "a key unset in config and aws_overrides must reach the stage as its default (tfc-apply key admin)."
+  }
+}
+
+# The shared aws.enable_cloudtrail_delegated_admin key moves the trail to
+# security tooling; absent, the management trail is unchanged.
+run "cloudtrail_delegated_admin_comes_from_config_file" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-cloudtrail-da.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    aws_overrides            = {}
+  }
+
+  assert {
+    condition     = local.aws.enable_cloudtrail_delegated_admin == true && module.aws_security.cloudtrail_log_group_name == "/aws/cloudtrail/org-trail-delegated"
+    error_message = "aws.enable_cloudtrail_delegated_admin must reach the stage and move the trail's log group to the delegated-admin trail."
+  }
+}
+
+run "cloudtrail_delegated_admin_absent_is_off" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    aws_overrides            = {}
+  }
+
+  assert {
+    condition     = local.aws.enable_cloudtrail_delegated_admin == null && module.aws_security.cloudtrail_log_group_name == "/aws/cloudtrail/org-trail"
+    error_message = "Without the key the management-account trail must be unchanged."
   }
 }

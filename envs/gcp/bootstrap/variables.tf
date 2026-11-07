@@ -125,7 +125,7 @@ variable "tfc_project_ids" {
 }
 
 variable "tfc_workspace_ids" {
-  description = "Optional map of TFC workspace name -> immutable workspace ID (ws-xxxxxxxx). Workspaces listed here are WIF-bound by ID instead of by (mutable, squattable) name. Populate from the tfc-admin root once the workspaces exist; a check warns when an is_production environment or a control-plane workspace has no entry."
+  description = "Optional map of TFC workspace name -> immutable workspace ID (ws-xxxxxxxx). Workspaces listed here are WIF-bound by ID instead of by (mutable, squattable) name. Populate from the tfc-admin root once the workspaces exist; a production estate fails the plan when a control-plane or production workspace has no entry. gcp-guardrails is bound by ID only: without its entry it gets no binding at all."
   type        = map(string)
   default     = {}
 }
@@ -160,6 +160,12 @@ variable "enable_pam" {
   default     = false
 }
 
+variable "enable_network_connectivity_center" {
+  description = "Grant the Network Connectivity Center roles (network-hub SAs on the shared folder: hubAdmin + spokeAdmin; workload SAs on their environment folder: spokeAdmin; plan SAs: hubViewer). Null = true when config/landing-zone.yaml turns NCC on (gcp.network.ncc_hub.enabled, gcp.network.connectivity = ncc, or any gcp.environments.<env>.network_connectivity = ncc), else false."
+  type        = bool
+  default     = null
+}
+
 variable "enable_phase0_admin_impersonation" {
   description = "Let user:<admin_email> impersonate the terraform-admin SA for the phase-0 first apply. Set false on pass 2 (once gcp-bootstrap runs through TFC dynamic credentials) so no standing human path to the bootstrap apply identity remains."
   type        = bool
@@ -184,9 +190,9 @@ variable "guardrail_owner_members" {
 }
 
 variable "enable_principal_access_boundary" {
-  description = "Grant the organization stage SAs the rights the gcp-organization principal access boundary policy needs (gcp-organization enable_principal_access_boundary). Default false."
+  description = "Grant the organization stage SAs the rights the gcp-organization principal access boundary policy needs. Null (default) = gcp.principal_access_boundary from config/landing-zone.yaml (shared with gcp-organization and gcp-guardrails), else false."
   type        = bool
-  default     = false
+  default     = null
 }
 
 variable "environments" {
@@ -253,7 +259,7 @@ variable "tfc_hostname" {
 }
 
 variable "phase0_admin_impersonation_expires_at" {
-  description = "RFC 3339 UTC timestamp after which the phase-0 human impersonation of terraform-admin stops working. Set it to the end of your bootstrap window (e.g. two weeks out); disable the grant entirely after the TFC handover."
+  description = "RFC 3339 UTC timestamp after which the phase-0 human impersonation of terraform-admin stops working. Null = gcp.phase0_admin_impersonation_expires_at from config. Required (by either) while the grant is enabled and an environment is_production. Set it to the end of your bootstrap window (e.g. two weeks out); disable the grant entirely after the TFC handover."
   type        = string
   default     = null
 }

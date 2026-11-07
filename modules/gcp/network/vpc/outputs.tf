@@ -35,6 +35,8 @@ output "network_name" {
 }
 
 output "network" {
-  value       = google_compute_network.vpc
-  description = "The created VPC resource"
+  # The google provider deprecates numeric_id (network_id carries the same
+  # number); filtering it out keeps the warning off every caller's plan.
+  value       = { for k, v in google_compute_network.vpc : k => v if k != "numeric_id" }
+  description = "The created VPC resource (every attribute except the provider-deprecated numeric_id; read network.network_id instead)"
 }

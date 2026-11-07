@@ -24,30 +24,37 @@ variables {
   # Mock providers cannot import, so the suite runs with an unmanaged
   # tfc-admin workspace; self_management_* runs cover the managed default.
   manage_tfc_admin_workspace = false
+  # gcp-guardrails is security-team only; without a team a check warns
+  # (guardrails_project_without_security_team_warns).
+  security_team_id = "team-security1"
+  # Policy sets are off in most runs; the policy_sets_* runs turn the
+  # unguarded-destroy warning back on and expect it.
+  enable_unguarded_destroy_warning = false
 }
 
 run "declares_every_workspace" {
   command = plan
 
-  # 4 GCP control plane + 2 gcp-workload + 6 AWS control plane + 2 aws-workload +
-  # 1 saas = 15.
+  # 5 GCP control plane (incl. gcp-guardrails) + 2 gcp-workload + 6 AWS control
+  # plane + 2 aws-workload + 1 saas = 16.
   assert {
-    condition     = length(output.workspace_names) == 15
+    condition     = length(output.workspace_names) == 16
     error_message = "tfc-admin must declare a workspace for each root, each per-env workload, and each saas entry."
   }
 
   assert {
     condition = alltrue([
-      for k in ["gcp-bootstrap", "gcp-organization", "gcp-projects", "gcp-network-hub",
+      for k in ["gcp-bootstrap", "gcp-organization", "gcp-projects", "gcp-network-hub", "gcp-guardrails",
       "gcp-workload-dev", "gcp-workload-prod", "aws-security", "aws-workload-prod", "saas-web"] :
       contains(output.workspace_names, k)
     ])
     error_message = "control-plane, per-env workload, and saas workspaces must all be declared."
   }
 
-  # One project per cloud in use; no platform project unless tfc-admin is self-managed.
+  # One project per cloud in use, plus the security-only guardrails project; no
+  # platform project unless tfc-admin is self-managed.
   assert {
-    condition     = toset(keys(tfe_project.this)) == toset(["gcp", "aws", "saas"])
+    condition     = toset(keys(tfe_project.this)) == toset(["gcp", "aws", "saas", "guardrails"])
     error_message = "one TFC project per enabled cloud must be created."
   }
 }
@@ -61,9 +68,10 @@ run "gcp_only" {
     saas_workspaces = []
   }
 
-  # 4 GCP control plane + 2 gcp-workload = 6; no AWS workspaces.
+  # 5 GCP control plane (incl. gcp-guardrails) + 2 gcp-workload = 7; no AWS
+  # workspaces.
   assert {
-    condition     = length(output.workspace_names) == 6 && !contains(output.workspace_names, "aws-organization")
+    condition     = length(output.workspace_names) == 7 && !contains(output.workspace_names, "aws-organization")
     error_message = "with enable_aws=false and no saas, only the GCP workspaces are declared."
   }
 }
@@ -97,23 +105,24 @@ run "saas_only" {
   }
 }
 
-# Module-only PRs must trigger plans: each workspace watches its own dir plus
-# the module domains its root consumes.
+# Module-only PRs must trigger plans: each workspace watches its own dir, the
+# module domains its root consumes, and its estate's config files
+# (sandbox.tftest.hcl covers the per-estate split).
 run "trigger_patterns_cover_module_domains" {
   command = plan
 
   assert {
-    condition     = module.workspace["gcp-organization"].trigger_patterns == tolist(["envs/gcp/organization/**", "modules/gcp/**"])
-    error_message = "GCP roots must trigger on their dir and modules/gcp/**."
+    condition     = toset(module.workspace["gcp-organization"].trigger_patterns) == toset(["envs/gcp/organization/**", "modules/gcp/**", "config/landing-zone.yaml"])
+    error_message = "GCP roots must trigger on their dir, modules/gcp/** and the estate config."
   }
 
   assert {
-    condition     = module.workspace["aws-workload-dev"].trigger_patterns == tolist(["envs/aws/workload/**", "modules/aws/**"])
-    error_message = "AWS roots must trigger on their dir and modules/aws/**."
+    condition     = toset(module.workspace["aws-workload-dev"].trigger_patterns) == toset(["envs/aws/workload/**", "modules/aws/**", "config/landing-zone.yaml"])
+    error_message = "AWS roots must trigger on their dir, modules/aws/** and the estate config."
   }
 
   assert {
-    condition     = toset(module.workspace["saas-web"].trigger_patterns) == toset(["envs/saas/**", "modules/saas/**", "modules/supabase/**", "modules/vercel/**"])
+    condition     = toset(module.workspace["saas-web"].trigger_patterns) == toset(["envs/saas/**", "modules/saas/**", "modules/supabase/**", "modules/vercel/**", "config/landing-zone.yaml"])
     error_message = "the saas root must trigger on envs/saas and the saas/supabase/vercel module domains."
   }
 }
@@ -124,7 +133,7 @@ run "speculative_plans_off_for_control_plane" {
 
   assert {
     condition = alltrue([
-      for k in ["gcp-bootstrap", "gcp-organization", "gcp-projects", "gcp-network-hub", "aws-organization", "aws-security", "aws-backup", "aws-identity"] :
+      for k in ["gcp-bootstrap", "gcp-organization", "gcp-projects", "gcp-network-hub", "aws-organization", "aws-security", "aws-network", "aws-backup", "aws-identity"] :
       module.workspace[k].speculative_enabled == false
     ])
     error_message = "control-plane workspaces must have speculative_enabled = false."
@@ -334,16 +343,20 @@ run "credentials_from_upstream_outputs" {
   variables {
     gcp_bootstrap_outputs_from_tfc    = true
     aws_organization_outputs_from_tfc = true
-    aws_workspace_account_keys        = { "aws-workload-prod" = "prod" }
+    # Pass 2 (bootstrap.md): gcp-bootstrap moves to remote execution.
+    workspace_execution_modes  = {}
+    aws_workspace_account_keys = { "aws-workload-prod" = "prod" }
   }
 
   override_data {
     target = data.tfe_outputs.gcp_bootstrap[0]
     values = {
       nonsensitive_values = {
-        tfc_workload_provider_name = "projects/123456789/locations/global/workloadIdentityPools/tfc-pool/providers/tfc-provider"
-        tfc_plan_service_accounts  = { "gcp-projects" = "tfc-plan-projects@admin-proj.iam.gserviceaccount.com" }
-        tfc_apply_service_accounts = { "gcp-projects" = "tfc-apply-projects@admin-proj.iam.gserviceaccount.com" }
+        contract = {
+          tfc_workload_provider_name = "projects/123456789/locations/global/workloadIdentityPools/tfc-pool/providers/tfc-provider"
+          tfc_plan_service_accounts  = { "gcp-projects" = "tfc-plan-projects@admin-proj.iam.gserviceaccount.com" }
+          tfc_apply_service_accounts = { "gcp-projects" = "tfc-apply-projects@admin-proj.iam.gserviceaccount.com" }
+        }
       }
     }
   }
@@ -352,9 +365,11 @@ run "credentials_from_upstream_outputs" {
     target = data.tfe_outputs.aws_organization[0]
     values = {
       nonsensitive_values = {
-        tfc_plan_role_arns     = { prod = "arn:aws:iam::222222222222:role/tfc-plan", network = "arn:aws:iam::444444444444:role/tfc-plan", security_tooling = "arn:aws:iam::333333333333:role/tfc-plan" }
-        tfc_apply_role_arns    = { prod = "arn:aws:iam::222222222222:role/tfc-apply", network = "arn:aws:iam::444444444444:role/tfc-apply", security_tooling = "arn:aws:iam::333333333333:role/tfc-apply" }
-        tfc_workspace_bindings = { security_tooling = ["aws-security"], network = ["aws-network"] }
+        contract = {
+          tfc_plan_role_arns     = { prod = "arn:aws:iam::222222222222:role/tfc-plan", network = "arn:aws:iam::444444444444:role/tfc-plan", security_tooling = "arn:aws:iam::333333333333:role/tfc-plan" }
+          tfc_apply_role_arns    = { prod = "arn:aws:iam::222222222222:role/tfc-apply", network = "arn:aws:iam::444444444444:role/tfc-apply", security_tooling = "arn:aws:iam::333333333333:role/tfc-apply" }
+          tfc_workspace_bindings = { security_tooling = ["aws-security"], network = ["aws-network"] }
+        }
       }
     }
   }
@@ -379,6 +394,52 @@ run "credentials_from_upstream_outputs" {
   }
 }
 
+# N-1 upgrade: upstream states written before the `contract` output existed
+# (individual outputs only) still resolve the same credentials. The fallback
+# goes at v1.0 (UPGRADING.md).
+run "credentials_from_pre_contract_upstream_outputs" {
+  command = plan
+
+  variables {
+    gcp_bootstrap_outputs_from_tfc    = true
+    aws_organization_outputs_from_tfc = true
+    workspace_execution_modes         = {}
+    aws_workspace_account_keys        = { "aws-workload-prod" = "prod" }
+  }
+
+  override_data {
+    target = data.tfe_outputs.gcp_bootstrap[0]
+    values = {
+      nonsensitive_values = {
+        tfc_workload_provider_name = "projects/123456789/locations/global/workloadIdentityPools/tfc-pool/providers/tfc-provider"
+        tfc_plan_service_accounts  = { "gcp-projects" = "tfc-plan-projects@admin-proj.iam.gserviceaccount.com" }
+        tfc_apply_service_accounts = { "gcp-projects" = "tfc-apply-projects@admin-proj.iam.gserviceaccount.com" }
+      }
+    }
+  }
+
+  override_data {
+    target = data.tfe_outputs.aws_organization[0]
+    values = {
+      nonsensitive_values = {
+        tfc_plan_role_arns     = { prod = "arn:aws:iam::222222222222:role/tfc-plan", network = "arn:aws:iam::444444444444:role/tfc-plan" }
+        tfc_apply_role_arns    = { prod = "arn:aws:iam::222222222222:role/tfc-apply", network = "arn:aws:iam::444444444444:role/tfc-apply" }
+        tfc_workspace_bindings = { network = ["aws-network"] }
+      }
+    }
+  }
+
+  override_data {
+    target = data.tfe_workspace.tfc_admin[0]
+    values = { id = "ws-tfcadmin" }
+  }
+
+  assert {
+    condition     = output.dynamic_credential_workspaces.gcp == tolist(["gcp-projects"]) && output.dynamic_credential_workspaces.aws == tolist(["aws-network", "aws-workload-prod"])
+    error_message = "pre-contract upstream outputs must still resolve the dynamic credentials."
+  }
+}
+
 # Multi-account roots: default = management account, one TFC configuration per
 # member-account alias derived from the aws-organization outputs.
 run "multi_account_alias_credentials" {
@@ -394,17 +455,19 @@ run "multi_account_alias_credentials" {
     target = data.tfe_outputs.aws_organization[0]
     values = {
       nonsensitive_values = {
-        tfc_plan_role_arns = {
-          security_tooling = "arn:aws:iam::333333333333:role/tfc-plan"
-          log_archive      = "arn:aws:iam::555555555555:role/tfc-plan"
-          forensics        = "arn:aws:iam::666666666666:role/tfc-plan"
+        contract = {
+          tfc_plan_role_arns = {
+            security_tooling = "arn:aws:iam::333333333333:role/tfc-plan"
+            log_archive      = "arn:aws:iam::555555555555:role/tfc-plan"
+            forensics        = "arn:aws:iam::666666666666:role/tfc-plan"
+          }
+          tfc_apply_role_arns = {
+            security_tooling = "arn:aws:iam::333333333333:role/tfc-apply"
+            log_archive      = "arn:aws:iam::555555555555:role/tfc-apply"
+            forensics        = "arn:aws:iam::666666666666:role/tfc-apply"
+          }
+          tfc_workspace_bindings = { security_tooling = ["aws-security"], log_archive = ["aws-security"], forensics = ["aws-security"] }
         }
-        tfc_apply_role_arns = {
-          security_tooling = "arn:aws:iam::333333333333:role/tfc-apply"
-          log_archive      = "arn:aws:iam::555555555555:role/tfc-apply"
-          forensics        = "arn:aws:iam::666666666666:role/tfc-apply"
-        }
-        tfc_workspace_bindings = { security_tooling = ["aws-security"], log_archive = ["aws-security"], forensics = ["aws-security"] }
       }
     }
   }
@@ -455,19 +518,21 @@ run "dedicated_management_roles_per_workspace" {
     target = data.tfe_outputs.aws_organization[0]
     values = {
       nonsensitive_values = {
-        tfc_plan_role_arns = {
-          security_tooling = "arn:aws:iam::333333333333:role/tfc-plan"
-          log_archive      = "arn:aws:iam::555555555555:role/tfc-plan"
-          forensics        = "arn:aws:iam::666666666666:role/tfc-plan"
+        contract = {
+          tfc_plan_role_arns = {
+            security_tooling = "arn:aws:iam::333333333333:role/tfc-plan"
+            log_archive      = "arn:aws:iam::555555555555:role/tfc-plan"
+            forensics        = "arn:aws:iam::666666666666:role/tfc-plan"
+          }
+          tfc_apply_role_arns = {
+            security_tooling = "arn:aws:iam::333333333333:role/tfc-apply"
+            log_archive      = "arn:aws:iam::555555555555:role/tfc-apply"
+            forensics        = "arn:aws:iam::666666666666:role/tfc-apply"
+          }
+          tfc_workspace_bindings         = { security_tooling = ["aws-security"], log_archive = ["aws-security"], forensics = ["aws-security"] }
+          tfc_management_plan_role_arns  = { "aws-security" = "arn:aws:iam::111111111111:role/tfc-mgmt-aws-security-plan" }
+          tfc_management_apply_role_arns = { "aws-security" = "arn:aws:iam::111111111111:role/tfc-mgmt-aws-security-apply" }
         }
-        tfc_apply_role_arns = {
-          security_tooling = "arn:aws:iam::333333333333:role/tfc-apply"
-          log_archive      = "arn:aws:iam::555555555555:role/tfc-apply"
-          forensics        = "arn:aws:iam::666666666666:role/tfc-apply"
-        }
-        tfc_workspace_bindings         = { security_tooling = ["aws-security"], log_archive = ["aws-security"], forensics = ["aws-security"] }
-        tfc_management_plan_role_arns  = { "aws-security" = "arn:aws:iam::111111111111:role/tfc-mgmt-aws-security-plan" }
-        tfc_management_apply_role_arns = { "aws-security" = "arn:aws:iam::111111111111:role/tfc-mgmt-aws-security-apply" }
       }
     }
   }
@@ -554,9 +619,11 @@ run "aws_workload_account_binding" {
     target = data.tfe_outputs.aws_organization[0]
     values = {
       nonsensitive_values = {
-        tfc_plan_role_arns     = { workload_dev = "arn:aws:iam::888888888888:role/tfc-plan" }
-        tfc_apply_role_arns    = { workload_dev = "arn:aws:iam::888888888888:role/tfc-apply" }
-        tfc_workspace_bindings = {}
+        contract = {
+          tfc_plan_role_arns     = { workload_dev = "arn:aws:iam::888888888888:role/tfc-plan" }
+          tfc_apply_role_arns    = { workload_dev = "arn:aws:iam::888888888888:role/tfc-apply" }
+          tfc_workspace_bindings = {}
+        }
       }
     }
   }
@@ -678,6 +745,18 @@ run "workspace_variables_file_rejects_reserved_env" {
   expect_failures = [terraform_data.input_contract]
 }
 
+# gcp-guardrails is security_only: the platform-editable committed file must
+# not reach it (its inputs live in its security-owned root).
+run "workspace_variables_file_rejects_security_only_workspace" {
+  command = plan
+
+  variables {
+    workspace_variables_file = "tests/fixtures/tfc-workspaces-security-only.yaml"
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
 # Control-plane run notifications: a configured control-plane
 # notification reaches foundational workspaces but not workload workspaces.
 run "control_plane_notifications_routed_by_tag" {
@@ -743,10 +822,11 @@ run "team_access_least_privilege" {
     error_message = "workload-only projects keep platform write; viewer teams get read on every project."
   }
 
-  # 3 projects x (platform + viewer) + 2 control-plane projects x approvers = 8.
+  # 3 projects x (platform + viewer) + 2 control-plane projects x approvers +
+  # the security team on the guardrails project = 9.
   assert {
-    condition     = length(tfe_team_project_access.this) == 8
-    error_message = "3 x (platform + viewer) + 2 approvers = 8 project grants."
+    condition     = length(tfe_team_project_access.this) == 9
+    error_message = "3 x (platform + viewer) + 2 approvers + 1 security = 9 project grants."
   }
 
   # Workload workspaces sharing a project with the control plane get write
@@ -755,6 +835,91 @@ run "team_access_least_privilege" {
     condition     = toset(keys(tfe_team_access.platform_workload)) == toset(["gcp-workload-dev", "gcp-workload-prod", "aws-workload-dev", "aws-workload-prod"]) && alltrue([for g in values(tfe_team_access.platform_workload) : g.access == "write" && g.team_id == "team-platform1"])
     error_message = "only the gcp/aws workload workspaces get a workspace-level platform write grant."
   }
+}
+
+# gcp-guardrails (the org IAM deny policies) lives in its own project where
+# only the security team has access: no platform, approvers or viewer grant,
+# no speculative plans, no auto-apply, no UI destroy plans.
+run "guardrails_project_security_team_only" {
+  command = plan
+
+  variables {
+    platform_team_id                = "team-platform1"
+    control_plane_approvers_team_id = "team-approvers1"
+    viewer_team_ids                 = ["team-viewers1"]
+    security_team_id                = "team-security1"
+  }
+
+  assert {
+    condition     = contains(keys(tfe_project.this), "guardrails") && tfe_project.this["guardrails"].name == "landing-zone-guardrails" && module.workspace["gcp-guardrails"].working_directory == "envs/gcp/guardrails"
+    error_message = "gcp-guardrails must live in its own <prefix>guardrails project."
+  }
+
+  assert {
+    condition     = jsonencode([for k, g in tfe_team_project_access.this : g.team_id if startswith(k, "guardrails/")]) == jsonencode(["team-security1"])
+    error_message = "the security team must be the only team with access to the guardrails project."
+  }
+
+  assert {
+    condition     = tfe_team_project_access.this["guardrails/security"].access == "custom" && tfe_team_project_access.this["guardrails/security"].workspace_access[0].runs == "apply" && tfe_team_project_access.this["guardrails/security"].workspace_access[0].variables == "read" && tfe_team_project_access.this["guardrails/security"].project_access[0].teams == "none"
+    error_message = "the security team must be able to queue and confirm applies on gcp-guardrails (runs = apply), with variables read-only and no team management."
+  }
+
+  assert {
+    condition     = length([for k, g in tfe_team_project_access.this : k if g.team_id == "team-security1"]) == 1
+    error_message = "the security team gets no grant on the other projects through this root."
+  }
+
+  assert {
+    condition     = module.workspace["gcp-guardrails"].speculative_enabled == false && module.workspace["gcp-guardrails"].auto_apply == false && module.workspace["gcp-guardrails"].allow_destroy_plan == false
+    error_message = "gcp-guardrails must run without speculative plans, auto-apply or UI destroy plans."
+  }
+
+  assert {
+    condition     = contains(output.never_auto_apply_workspaces, "gcp-guardrails") && !contains(keys(tfe_team_access.platform_workload), "gcp-guardrails")
+    error_message = "gcp-guardrails must be excluded from any auto-apply and from workspace-level platform grants."
+  }
+
+  # The platform-controlled common variable set must not reach the security
+  # team's workspace (it could inject containment_exempt_principals).
+  assert {
+    condition     = length(module.workspace["gcp-guardrails"].variable_set_labels) == 0 && module.workspace["gcp-organization"].variable_set_labels == tolist(["common"])
+    error_message = "gcp-guardrails must not have the common variable set attached."
+  }
+
+  assert {
+    condition     = length(lookup(output.remote_state_consumers, "gcp-guardrails", [])) == 0 && !contains(flatten(values(output.remote_state_consumers)), "gcp-guardrails")
+    error_message = "gcp-guardrails reads no other state and shares none."
+  }
+}
+
+# Without a security team the guardrails project has no team grant at all
+# (organization owners only), and the plan warns.
+run "guardrails_project_without_security_team_warns" {
+  command = plan
+
+  variables {
+    platform_team_id = "team-platform1"
+    security_team_id = null
+  }
+
+  assert {
+    condition     = length([for k, g in tfe_team_project_access.this : k if startswith(k, "guardrails/")]) == 0
+    error_message = "without security_team_id no team may get access to the guardrails project."
+  }
+
+  expect_failures = [check.guardrails_project_has_security_team]
+}
+
+run "security_team_must_differ_from_platform" {
+  command = plan
+
+  variables {
+    platform_team_id = "team-same1"
+    security_team_id = "team-same1"
+  }
+
+  expect_failures = [terraform_data.input_contract]
 }
 
 run "platform_team_runs_override" {
@@ -794,7 +959,7 @@ run "split_workload_projects" {
   }
 
   assert {
-    condition     = toset(keys(tfe_project.this)) == toset(["gcp", "aws", "saas", "gcp-workloads", "aws-workloads"]) && tfe_project.this["gcp-workloads"].name == "landing-zone-gcp-workloads" && tfe_project.this["aws"].name == "landing-zone-aws"
+    condition     = toset(keys(tfe_project.this)) == toset(["gcp", "aws", "saas", "gcp-workloads", "aws-workloads", "guardrails"]) && tfe_project.this["gcp-workloads"].name == "landing-zone-gcp-workloads" && tfe_project.this["aws"].name == "landing-zone-aws"
     error_message = "split mode adds <prefix>gcp-workloads / <prefix>aws-workloads and keeps the control-plane project names."
   }
 
@@ -843,13 +1008,71 @@ run "speculative_on_saas_opt_out" {
   }
 }
 
-run "policy_set_off_by_default" {
+# enable_policy_sets = null with no vcs_repo (and no org.tfc.plan): both sets
+# stay off and a check warns that destructive changes are unguarded.
+run "policy_sets_off_without_vcs_repo_warns" {
   command = plan
 
-  assert {
-    condition     = length(tfe_policy_set.opa) == 0
-    error_message = "enable_policy_sets defaults to false."
+  variables {
+    enable_unguarded_destroy_warning = true
   }
+
+  assert {
+    condition     = length(tfe_policy_set.opa) == 0 && length(tfe_policy_set.destructive) == 0
+    error_message = "without vcs_repo and a plan that supports VCS policy sets, no policy set is created."
+  }
+
+  expect_failures = [check.destructive_changes_guarded]
+}
+
+# The guardrails set stays a hard gate; the destroy guard is mandatory but
+# overridable (by the security team holding Manage Policy Overrides).
+run "destructive_set_overridable_main_set_not" {
+  command = plan
+
+  variables {
+    enable_policy_sets         = true
+    vcs_repo                   = { identifier = "acme/landing-zone", oauth_token_id = "ot-abc123" }
+    manage_tfc_admin_workspace = true
+    import_tfc_admin_workspace = false
+  }
+
+  assert {
+    condition     = tfe_policy_set.opa[0].overridable == false
+    error_message = "the guardrails set must not be overridable."
+  }
+
+  assert {
+    condition     = tfe_policy_set.destructive[0].overridable == true && tfe_policy_set.destructive[0].kind == "opa" && tfe_policy_set.destructive[0].policies_path == "policies/opa-destructive"
+    error_message = "the destructive-change guard must be an overridable OPA set sourced from policies/opa-destructive."
+  }
+
+  assert {
+    condition     = tfe_policy_set.destructive[0].name == "landing-zone-destructive-change-guard" && tfe_policy_set.destructive[0].vcs_repo[0].identifier == "acme/landing-zone" && tfe_policy_set.destructive[0].policy_tool_version == tfe_policy_set.opa[0].policy_tool_version
+    error_message = "the destructive set is <prefix>destructive-change-guard, from the same repo and OPA version as the guardrails set."
+  }
+
+  assert {
+    condition     = length(local.policy_set_workspace_ids) == length(module.workspace)
+    error_message = "both sets attach to every managed workspace (local.policy_set_workspace_ids; the IDs are unknown at plan)."
+  }
+}
+
+# Policy-set overrides are org-wide and granted by an owner in the HCP UI to
+# the hand-created security team; without security_team_id a check warns.
+run "destructive_set_without_security_team_warns" {
+  command = plan
+
+  variables {
+    enable_policy_sets         = true
+    vcs_repo                   = { identifier = "acme/landing-zone", oauth_token_id = "ot-abc123" }
+    manage_tfc_admin_workspace = true
+    import_tfc_admin_workspace = false
+    security_team_id           = null
+  }
+
+  # gcp-guardrails also loses its team, so that check warns too.
+  expect_failures = [check.destructive_override_team, check.guardrails_project_has_security_team]
 }
 
 # An unmanaged tfc-admin with a VCS connection keeps speculative plans on, so
@@ -875,13 +1098,50 @@ run "self_management_adopts_tfc_admin" {
   }
 
   assert {
-    condition     = module.workspace["tfc-admin"].speculative_enabled == false && module.workspace["tfc-admin"].trigger_patterns == tolist(["envs/tfc-admin/**", "modules/tfc/**"])
-    error_message = "a self-managed tfc-admin workspace is control plane: no speculative plans, triggers on its dir + modules/tfc."
+    condition     = module.workspace["tfc-admin"].speculative_enabled == false && toset(module.workspace["tfc-admin"].trigger_patterns) == toset(["envs/tfc-admin/**", "modules/tfc/**", "config/landing-zone.yaml"])
+    error_message = "a self-managed tfc-admin workspace is control plane: no speculative plans, triggers on its dir + modules/tfc + the estate config."
   }
 
   assert {
     condition     = contains(keys(tfe_project.this), "platform")
     error_message = "self-managed tfc-admin lands in the platform project."
+  }
+}
+
+# tfc-admin holds the TFE_TOKEN: its applies are confirmed by owners and the
+# tfc-admin team only. Never auto-applied, and neither the approvers team nor a
+# platform team that may apply control-plane roots gets apply on the platform
+# project (it holds only this workspace).
+run "tfc_admin_workspace_apply_restricted" {
+  command = plan
+
+  variables {
+    manage_tfc_admin_workspace       = true
+    import_tfc_admin_workspace       = false
+    tfc_admin_team_id                = "team-tfcadmin1"
+    platform_team_id                 = "team-platform1"
+    control_plane_approvers_team_id  = "team-approvers1"
+    platform_team_control_plane_runs = "apply"
+  }
+
+  assert {
+    condition     = module.workspace["tfc-admin"].auto_apply == false && module.workspace["tfc-admin"].auto_apply_run_trigger == false && module.workspace["tfc-admin"].speculative_enabled == false
+    error_message = "tfc-admin must never auto-apply and must not run speculative plans."
+  }
+
+  assert {
+    condition     = tfe_team_access.tfc_admin[0].team_id == "team-tfcadmin1" && tfe_team_access.tfc_admin[0].access == "write"
+    error_message = "the tfc-admin team gets explicit write (apply) on the tfc-admin workspace."
+  }
+
+  assert {
+    condition     = !contains(keys(tfe_team_project_access.this), "platform/approvers") && tfe_team_project_access.this["platform/platform"].workspace_access[0].runs == "plan"
+    error_message = "on the platform project (tfc-admin only) the approvers team gets no grant and the platform team is capped at plan."
+  }
+
+  assert {
+    condition     = contains(keys(tfe_team_project_access.this), "gcp/approvers") && tfe_team_project_access.this["gcp/platform"].workspace_access[0].runs == "apply"
+    error_message = "other control-plane projects are unchanged."
   }
 }
 
@@ -940,4 +1200,408 @@ run "run_triggers_opt_out" {
     condition     = length(output.run_triggers) == 0
     error_message = "enable_run_triggers = false must create no run triggers."
   }
+}
+
+# ── New environment = one PR + shared-workspace confirmations ───────────────
+# tfc-admin derives a new environment's workload SA emails from org.prefix
+# (gcp_project_prefix) and the static gcp-bootstrap outputs, so the new
+# gcp-workload-<env> gets its TFC_GCP_* env vars in the same tfc-admin apply
+# that creates it (no second tfc-admin pass).
+run "sa_emails_derived_from_prefix_and_bootstrap_outputs" {
+  command = plan
+
+  variables {
+    gcp_bootstrap_outputs_from_tfc = true
+    gcp_project_prefix             = "acme"
+    workspace_execution_modes      = {}
+  }
+
+  override_data {
+    target = data.tfe_outputs.gcp_bootstrap[0]
+    values = {
+      nonsensitive_values = {
+        contract = {
+          admin_project_id           = "acme-admin-1a2b"
+          tfc_workload_provider_name = "projects/123456789/locations/global/workloadIdentityPools/tfc-pool/providers/tfc-provider"
+          # Phase-0 outputs: only the control plane + dev existed when gcp-bootstrap last applied.
+          tfc_plan_service_accounts  = { "gcp-projects" = "acme-projects-plan@acme-admin-1a2b.iam.gserviceaccount.com", "gcp-workload-dev" = "acme-wl-dev-plan@acme-admin-1a2b.iam.gserviceaccount.com" }
+          tfc_apply_service_accounts = { "gcp-projects" = "acme-projects-apply@acme-admin-1a2b.iam.gserviceaccount.com", "gcp-workload-dev" = "acme-wl-dev-apply@acme-admin-1a2b.iam.gserviceaccount.com" }
+        }
+      }
+    }
+  }
+
+  override_data {
+    target = data.tfe_workspace.tfc_admin[0]
+    values = { id = "ws-tfcadmin" }
+  }
+
+  # gcp-workload-prod is not in the bootstrap outputs yet: its emails are derived.
+  assert {
+    condition = (
+      module.workspace["gcp-workload-prod"].variable_values["TFC_GCP_PLAN_SERVICE_ACCOUNT_EMAIL"] == "acme-wl-prod-plan@acme-admin-1a2b.iam.gserviceaccount.com" &&
+      module.workspace["gcp-workload-prod"].variable_values["TFC_GCP_APPLY_SERVICE_ACCOUNT_EMAIL"] == "acme-wl-prod-apply@acme-admin-1a2b.iam.gserviceaccount.com" &&
+      module.workspace["gcp-workload-prod"].variable_values["TFC_GCP_WORKLOAD_PROVIDER_NAME"] == "projects/123456789/locations/global/workloadIdentityPools/tfc-pool/providers/tfc-provider"
+    )
+    error_message = "a new gcp-workload-<env> must get <prefix>-wl-<env>-{plan,apply}@<admin_project_id>.iam.gserviceaccount.com and the bootstrap WIF provider in the same apply."
+  }
+
+  assert {
+    condition     = contains(output.dynamic_credential_workspaces.gcp, "gcp-workload-dev") && contains(output.dynamic_credential_workspaces.gcp, "gcp-workload-prod") && contains(output.dynamic_credential_workspaces.gcp, "gcp-projects")
+    error_message = "derived workload emails merge with the bootstrap outputs, never replace them."
+  }
+
+  # Only workload SAs are derived; control-plane SAs come from the outputs.
+  assert {
+    condition     = toset(keys(local.derived_gcp_plan_sas)) == toset(["gcp-workload-dev", "gcp-workload-prod"])
+    error_message = "tfc-admin derives the per-environment workload SAs only."
+  }
+}
+
+# No derivation without the prefix or the bootstrap outputs.
+run "sa_emails_not_derived_without_inputs" {
+  command = plan
+
+  assert {
+    condition     = length(local.derived_gcp_plan_sas) == 0 && length(output.dynamic_credential_workspaces.gcp) == 0
+    error_message = "without gcp_bootstrap_outputs_from_tfc and a prefix, nothing is derived (greenfield phase 0 is unchanged)."
+  }
+}
+
+# The derived email must match what gcp-bootstrap actually created.
+run "derived_email_check_matches_bootstrap_output" {
+  command = plan
+
+  variables {
+    gcp_bootstrap_outputs_from_tfc = true
+    gcp_project_prefix             = "acme"
+    workspace_execution_modes      = {}
+  }
+
+  override_data {
+    target = data.tfe_outputs.gcp_bootstrap[0]
+    values = {
+      nonsensitive_values = {
+        contract = {
+          admin_project_id           = "acme-admin-1a2b"
+          tfc_workload_provider_name = "projects/123456789/locations/global/workloadIdentityPools/tfc-pool/providers/tfc-provider"
+          tfc_plan_service_accounts  = { "gcp-workload-dev" = "other-wl-dev-plan@acme-admin-1a2b.iam.gserviceaccount.com" }
+          tfc_apply_service_accounts = { "gcp-workload-dev" = "acme-wl-dev-apply@acme-admin-1a2b.iam.gserviceaccount.com" }
+        }
+      }
+    }
+  }
+
+  override_data {
+    target = data.tfe_workspace.tfc_admin[0]
+    values = { id = "ws-tfcadmin" }
+  }
+
+  expect_failures = [check.derived_gcp_service_accounts_match_bootstrap]
+}
+
+# GCP SA account IDs are at most 30 characters: <prefix>-wl-<env>-apply must fit.
+run "derived_account_id_too_long_fails" {
+  command = plan
+
+  variables {
+    gcp_project_prefix = "acmecorp"
+    environments = {
+      dev                  = {}
+      integration-testing2 = {}
+    }
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+# tfc-admin is the DAG root: its apply queues gcp-bootstrap and aws-organization.
+run "tfc_admin_triggers_dag_roots" {
+  command = plan
+
+  variables {
+    # Post-handover: gcp-bootstrap runs remotely.
+    workspace_execution_modes = {}
+  }
+
+  override_data {
+    target = data.tfe_workspace.tfc_admin[0]
+    values = { id = "ws-tfcadmin" }
+  }
+
+  assert {
+    condition     = contains(output.run_triggers, "tfc-admin->gcp-bootstrap") && contains(output.run_triggers, "tfc-admin->aws-organization")
+    error_message = "tfc-admin must trigger gcp-bootstrap and aws-organization."
+  }
+
+  assert {
+    condition     = tfe_run_trigger.dag["tfc-admin->gcp-bootstrap"].sourceable_id == "ws-tfcadmin"
+    error_message = "an unmanaged tfc-admin is the trigger source through data.tfe_workspace.tfc_admin."
+  }
+
+  # tfc-admin is never a trigger target, and no other DAG root edge is added.
+  assert {
+    condition     = length([for t in output.run_triggers : t if startswith(t, "tfc-admin->")]) == 2 && length([for t in output.run_triggers : t if endswith(t, "->tfc-admin")]) == 0
+    error_message = "tfc-admin triggers exactly the two DAG roots and is never triggered."
+  }
+}
+
+# While gcp-bootstrap runs locally (phase 0) it is no trigger target.
+run "tfc_admin_skips_local_gcp_bootstrap" {
+  command = plan
+
+  override_data {
+    target = data.tfe_workspace.tfc_admin[0]
+    values = { id = "ws-tfcadmin" }
+  }
+
+  assert {
+    condition     = !contains(output.run_triggers, "tfc-admin->gcp-bootstrap") && contains(output.run_triggers, "tfc-admin->aws-organization")
+    error_message = "a local-execution gcp-bootstrap cannot run a triggered run, so tfc-admin must not target it."
+  }
+}
+
+# Non-prod workloads (is_production explicitly false): queued at creation, and
+# run-trigger runs apply.
+run "new_nonprod_workload_queues_all_runs_and_auto_applies_triggers" {
+  command = plan
+
+  variables {
+    enable_nonprod_workload_auto_apply = true
+    environments = {
+      dev  = { is_production = false }
+      prod = {}
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      for ws in ["gcp-workload-dev", "aws-workload-dev"] :
+      module.workspace[ws].queue_all_runs && module.workspace[ws].auto_apply_run_trigger && !module.workspace[ws].auto_apply
+    ])
+    error_message = "non-prod workloads must queue_all_runs and auto-apply run-trigger runs (merges to the workload itself still need confirmation)."
+  }
+}
+
+# Fail-closed: an environment that omits is_production (prd, live, prod-eu,
+# or even dev) never auto-applies.
+run "omitted_is_production_never_auto_applies" {
+  command = plan
+
+  variables {
+    environments = {
+      dev     = {}
+      prd     = {}
+      prod-eu = {}
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      for ws in output.workspace_names : !module.workspace[ws].queue_all_runs && !module.workspace[ws].auto_apply_run_trigger
+    ])
+    error_message = "only is_production = false (explicit) opts a workload into auto-apply; an omitted flag must keep manual confirmation."
+  }
+}
+
+# The default (null) follows the policy sets: off while destroy_guard is not
+# attached, on once it is.
+run "nonprod_workload_auto_apply_default_off_without_policy_sets" {
+  command = plan
+
+  variables {
+    environments = {
+      dev  = { is_production = false }
+      prod = {}
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      for ws in output.workspace_names : !module.workspace[ws].queue_all_runs && !module.workspace[ws].auto_apply_run_trigger
+    ])
+    error_message = "without policy sets (no destroy_guard) the default must keep manual confirmation everywhere."
+  }
+}
+
+run "nonprod_workload_auto_apply_default_on_with_policy_sets" {
+  command = plan
+
+  variables {
+    enable_policy_sets         = true
+    vcs_repo                   = { identifier = "acme/landing-zone", oauth_token_id = "ot-abc123" }
+    manage_tfc_admin_workspace = true
+    import_tfc_admin_workspace = false
+    environments = {
+      dev  = { is_production = false }
+      prod = {}
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      for ws in ["gcp-workload-dev", "aws-workload-dev"] :
+      module.workspace[ws].queue_all_runs && module.workspace[ws].auto_apply_run_trigger
+    ])
+    error_message = "with the policy sets (and destroy_guard) attached, the default auto-applies explicit non-prod workloads."
+  }
+
+  assert {
+    condition     = !module.workspace["gcp-workload-prod"].auto_apply_run_trigger && !module.workspace["aws-workload-prod"].auto_apply_run_trigger
+    error_message = "production workloads keep manual confirmation."
+  }
+}
+
+run "nonprod_workload_auto_apply_opt_out" {
+  command = plan
+
+  variables {
+    enable_nonprod_workload_auto_apply = false
+    environments = {
+      dev  = { is_production = false }
+      prod = {}
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      for ws in output.workspace_names : !module.workspace[ws].queue_all_runs && !module.workspace[ws].auto_apply_run_trigger
+    ])
+    error_message = "enable_nonprod_workload_auto_apply = false restores manual confirmation everywhere."
+  }
+}
+
+# Production workloads and every shared workspace keep manual confirmation.
+run "prod_and_shared_need_confirmation" {
+  command = plan
+
+  variables {
+    environments = {
+      dev  = { is_production = false }
+      prod = {}
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      for ws in output.workspace_names :
+      !module.workspace[ws].queue_all_runs && !module.workspace[ws].auto_apply_run_trigger && !module.workspace[ws].auto_apply
+      if !contains(["gcp-workload-dev", "aws-workload-dev"], ws)
+    ])
+    error_message = "production workloads, the control plane, saas, gcp-guardrails and tfc-admin must wait for confirmation."
+  }
+}
+
+# Once gcp-bootstrap's outputs are read (post-handover), gcp-bootstrap must run
+# remotely, or tfc-admin's run trigger has nothing to queue.
+run "gcp_bootstrap_local_after_handover_warns" {
+  command = plan
+
+  variables {
+    gcp_bootstrap_outputs_from_tfc = true
+  }
+
+  override_data {
+    target = data.tfe_outputs.gcp_bootstrap[0]
+    values = { nonsensitive_values = {} }
+  }
+
+  override_data {
+    target = data.tfe_workspace.tfc_admin[0]
+    values = { id = "ws-tfcadmin" }
+  }
+
+  expect_failures = [check.gcp_bootstrap_remote_after_handover]
+}
+
+# The effective prefix is validated, including one read from org.prefix.
+run "effective_prefix_format_validated" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-bad-prefix.yaml"
+    tfc_organization         = "acme"
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+# SaaS bridge reader: a hand-created team whose token (TFE_TOKEN on bridging
+# workload workspaces only) reads saas-* outputs and nothing else. tfc-admin
+# grants the access; it never creates the token.
+run "saas_outputs_reader_default_off" {
+  command = plan
+
+  assert {
+    condition     = length(tfe_team_access.saas_outputs_reader) == 0
+    error_message = "without saas_outputs_reader_team_id no saas outputs-reader grant may exist."
+  }
+}
+
+run "saas_outputs_reader_reads_saas_outputs_only" {
+  command = plan
+
+  variables {
+    saas_workspaces             = ["web", "admin"]
+    saas_outputs_reader_team_id = "team-saasreader1"
+  }
+
+  assert {
+    condition     = toset(keys(tfe_team_access.saas_outputs_reader)) == toset(["saas-web", "saas-admin"])
+    error_message = "the outputs-reader team gets one grant per saas-* workspace and no other workspace."
+  }
+
+  assert {
+    condition = alltrue([
+      for k, a in tfe_team_access.saas_outputs_reader :
+      a.team_id == "team-saasreader1" &&
+      a.permissions[0].state_versions == "read-outputs" &&
+      a.permissions[0].runs == "read" &&
+      a.permissions[0].variables == "none" &&
+      a.permissions[0].sentinel_mocks == "none" &&
+      !a.permissions[0].workspace_locking &&
+      !a.permissions[0].run_tasks
+    ])
+    error_message = "the outputs-reader grant is custom read-outputs: no state download, no variables, no runs beyond read, no locking or run tasks."
+  }
+
+  assert {
+    condition     = length([for k, g in tfe_team_project_access.this : k if g.team_id == "team-saasreader1"]) == 0
+    error_message = "the outputs-reader team must get no project-level grant."
+  }
+}
+
+run "saas_outputs_reader_needs_saas" {
+  command = plan
+
+  variables {
+    enable_saas                 = false
+    saas_outputs_reader_team_id = "team-saasreader1"
+  }
+
+  assert {
+    condition     = length(tfe_team_access.saas_outputs_reader) == 0
+    error_message = "with no saas-* workspaces the outputs-reader team gets nothing."
+  }
+}
+
+run "saas_outputs_reader_must_be_dedicated" {
+  command = plan
+
+  variables {
+    platform_team_id            = "team-same1"
+    saas_outputs_reader_team_id = "team-same1"
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+run "saas_outputs_reader_team_id_format" {
+  command = plan
+
+  variables {
+    saas_outputs_reader_team_id = "saas-reader"
+  }
+
+  expect_failures = [var.saas_outputs_reader_team_id]
 }

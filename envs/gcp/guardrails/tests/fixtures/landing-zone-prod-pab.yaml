@@ -1,0 +1,15 @@
+# Fixture: the production estate of landing-zone-prod.yaml plus the shared
+# gcp.principal_access_boundary key (gcp-organization binds the boundary).
+org:
+  prefix: acme
+  display_name: Acme
+  domain: acme.io
+gcp:
+  break_glass_group: gcp-break-glass@acme.io
+  principal_access_boundary: true
+  environments:
+    dev:
+      display_name: Development
+    prod:
+      display_name: Production
+      is_production: true

@@ -200,7 +200,7 @@ run "github_binds_on_immutable_repository_id" {
   }
 
   assert {
-    condition     = strcontains(google_iam_workload_identity_pool_provider.github[0].attribute_condition, "assertion.repository_owner_id == '1111'")
+    condition     = google_iam_workload_identity_pool_provider.github[0].attribute_condition == "assertion.repository_owner_id == \"1111\""
     error_message = "GitHub condition must pin the immutable owner ID when supplied."
   }
 

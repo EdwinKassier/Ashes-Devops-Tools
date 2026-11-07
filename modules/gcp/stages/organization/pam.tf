@@ -8,15 +8,15 @@
 # input (privilegedaccessmanager.admin for the organization apply SA).
 
 resource "google_privileged_access_manager_entitlement" "org_admin" {
-  count = var.enable_pam ? 1 : 0
+  count = var.gcp.enable_pam ? 1 : 0
 
   parent               = "organizations/${var.org_id}"
   location             = "global"
   entitlement_id       = var.pam_entitlement_id
-  max_request_duration = var.pam_max_request_duration
+  max_request_duration = var.gcp.pam_max_request_duration
 
   eligible_users {
-    principals = [for g in var.pam_eligible_groups : "group:${g}"]
+    principals = [for g in var.gcp.pam_eligible_groups : "group:${g}"]
   }
 
   privileged_access {
@@ -45,7 +45,7 @@ resource "google_privileged_access_manager_entitlement" "org_admin" {
         approvals_needed = 1
 
         approvers {
-          principals = [for g in var.pam_approver_groups : "group:${g}"]
+          principals = [for g in var.gcp.pam_approver_groups : "group:${g}"]
         }
       }
     }
