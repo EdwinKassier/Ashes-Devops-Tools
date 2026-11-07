@@ -355,9 +355,6 @@ aws:
     # Explicit waiver to run production alert-only (log-but-pass) while allow
     # rules are being built. Reviewable; remove once the allowlist is complete.
     # egress_alert_only_waived: true
-    stateful_default_actions:
-      - aws:drop_established
-      - aws:alert_established
     # Opt-in Site-to-Site VPN from the transit gateway to an on-premises device
     # (aws-network). The tunnel pre-shared keys are not config: AWS keeps them in
     # a Secrets Manager secret (preshared_key_storage: SecretsManager, default;
@@ -371,6 +368,9 @@ aws:
     #   customer_gateway_bgp_asn: 65000
     #   static_routes_only: false
     #   onprem_cidrs: [192.168.0.0/16]
+    stateful_default_actions:
+      - aws:drop_established
+      - aws:alert_established
 
   # Application golden path (aws-workload-<env>). All optional.
   # internal (default) | public_alb (internet-facing ALB + regional WAF; needs
