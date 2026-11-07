@@ -1,33 +1,49 @@
 # Upgrading
 
-Manual steps and behaviour changes to check when you merge a new release into a
-fork. Newest first.
+How a fork takes a new release of this landing zone, and what to check when it
+does. The newest release is first. Every release has one section of manual
+steps and one sandbox upgrade log.
+
+## What you own and what upstream owns
+
+A fork keeps upstream's code and adds its own configuration on top. Merges stay
+clean when you edit only the files below, which upstream never changes:
+
+| Fork-owned path | Holds |
+|---|---|
+| `config/*.yaml` (including `config/sandbox/`) | Your landing-zone configuration, TFC workspace overrides and sandbox config. Upstream ships only `*.example.yaml` and fixtures. |
+| `.github/CODEOWNERS` | Your review teams. The scaffolder writes it. |
+| `envs/**/backend_override.tf` | Your state backend choice for each root (self-managed state). |
+| `envs/gcp/guardrails/guardrails.auto.tfvars` | Your GCP IAM deny policies, owned by the security team. |
+
+Everything else (modules, stages, roots, policies, workflows, docs) is
+upstream's. If you need to change one of those, send it upstream or carry the
+patch knowingly and expect conflicts here.
+
+## Merging a release tag
+
+1. Read the section for each release between your current tag and the new one,
+   oldest first. Run every manual step marked as needed before the apply.
+2. `git fetch upstream --tags && git merge <tag>`. Conflicts mean a file outside
+   the table above was edited in your fork.
+3. Regenerate anything your fork pins: `make docs`, and the lockfiles for any
+   root you touched (`terraform providers lock -platform=linux_amd64
+   -platform=darwin_arm64 -platform=darwin_amd64`).
+4. Apply the new tag to your **sandbox** first. The sandbox runs the previous
+   release, so the apply is a real N-1 to N upgrade. Fill in the release's
+   sandbox upgrade log (template below).
+5. Promote layer by layer in apply order. Plans that delete or replace a
+   stateful resource stop on `destroy_guard` until the security team overrides
+   the run; record every override with its reason in the log.
 
 ## Unreleased
 
-### SaaS secret bridge writes its secret write-only
+Manual steps for the next release, grouped by area. A breaking change
+(`feat!:` or a `BREAKING CHANGE` footer) must add its entry here; CI enforces it.
 
-Applies to workloads with `enable_saas_secret_bridge = true`.
+### HCP Terraform and policy
 
-- **AWS (`aws-workload-<env>`).** `aws_secretsmanager_secret_version.saas_bridge`
-  moves from `secret_string` to the write-only `secret_string_wo`. The plan shows
-  an **in-place update**, not a replacement: aws 6.45 and later switch in place,
-  and the repo floor is 6.46. Afterwards the secret version holds no plaintext
-  in state. The secret's content does not change.
-- **GCP (`gcp-workload-<env>`).** The secret was already write-only. Its
-  version counter now comes from the saas `bridge_version` output. It stays 1
-  until you bump `saas.bridge_rotation`, so the upgrade re-writes nothing.
-- **Rotation.** A write-only value is not diffed. After rotating a bridged
-  Supabase secret, bump `saas.bridge_rotation`, apply `saas-<name>`, then apply
-  each bridging workload
-  ([saas-bootstrap](docs/runbooks/saas-bootstrap.md#bridging-secrets-to-a-workload-and-rotating-them)).
-  A `saas-<name>` that has not applied the new output yet counts as version 1.
-- **Still in workload state.** The values pass through
-  `data.terraform_remote_state.saas`, whose result is stored in the workload's
-  state. Task 3.6 moves this read to `ephemeral "tfe_outputs"` (see
-  `docs/known-gaps.md`).
-
-### Run triggers auto-apply explicitly non-prod workloads (tfc-admin)
+#### Run triggers auto-apply explicitly non-prod workloads (tfc-admin)
 
 **Trust change on the upgrade apply.** tfc-admin's new
 `enable_nonprod_workload_auto_apply` defaults to `true`. Every
@@ -56,7 +72,37 @@ Also in this release (no manual step):
 - A `check` warns while `gcp_bootstrap_outputs_from_tfc` is on and
   `gcp-bootstrap` still runs locally.
 
-### AWS Config recorders move to an aws-organization StackSet
+#### The destroy guard is mandatory, in its own overridable policy set
+
+`destroy_guard` moves from `policies/opa/` (advisory) to
+`policies/opa-destructive/` (mandatory), and tfc-admin attaches it as a second
+set, `<project_name_prefix>destructive-change-guard`, with `overridable = true`.
+It now denies every delete or replace of a stateful type (databases, buckets,
+KMS keys, projects/folders/accounts, networks, secrets, log sinks/buckets,
+CloudTrail, StackSet instances, `supabase_project`), not only log-named
+buckets. The `<prefix>opa-guardrails` set stays non-overridable.
+
+**Manual steps (estates with policy sets on):**
+
+1. An organization owner creates a `security` team in HCP Terraform (if it does
+   not exist), grants it **Manage Policy Overrides** in the organization
+   settings, and sets its ID as tfc-admin `security_team_id`. Without it only
+   owners can override an intended destroy (a check warns).
+2. Set `org.tfc.plan` in `config/landing-zone.yaml` (`free | essentials |
+   standard | premium`). `enable_policy_sets` now defaults to null: on with
+   `vcs_repo` and a `standard` or `premium` plan. An explicit
+   `enable_policy_sets` still wins. Without `org.tfc.plan` the sets stay off,
+   as before, and a `destructive_changes_guarded` check warns.
+3. Expect plans that delete or replace a stateful resource to stop on
+   `destroy_guard` until the security team overrides the run.
+
+`drift-detection.yml` now fails a leg whose workspace does not exist instead of
+skipping it. A single-cloud estate sets the `TFC_DRIFT_WORKSPACES` repository
+variable to its own workspaces (or `REAL_CLOUD_CHECKS_OPT_OUT=true`).
+
+### AWS
+
+#### AWS Config recorders move to an aws-organization StackSet
 
 The workload roots no longer manage a Config recorder. `aws-organization`
 deploys recorders org-wide: a service-managed StackSet, `org-config-recorders`,
@@ -98,35 +144,93 @@ log archive, forensics, management) have no recorder, as before.
 workload inputs and output, and the flag-off path of the recorder SCP (the
 recorder actions in `DenyWeakenSecurityServices`).
 
-### The destroy guard is mandatory, in its own overridable policy set
+#### AWS management KMS access by key policy, not tags
 
-`destroy_guard` moves from `policies/opa/` (advisory) to
-`policies/opa-destructive/` (mandatory), and tfc-admin attaches it as a second
-set, `<project_name_prefix>destructive-change-guard`, with `overridable = true`.
-It now denies every delete or replace of a stateful type (databases, buckets,
-KMS keys, projects/folders/accounts, networks, secrets, log sinks/buckets,
-CloudTrail, StackSet instances, `supabase_project`), not only log-named
-buckets. The `<prefix>opa-guardrails` set stays non-overridable.
+`tfc-management-roles` no longer grants the aws-security apply role `kms:*` on
+keys carrying `Workspace = aws-security` (a tag anyone with `kms:TagResource`
+could plant). `CreateOwnedKeysOnly` stays unchanged (owner request tag required). The org trail's CloudWatch Logs CMK is instead managed through
+its own key policy: a new `PipelineKeyManagement` statement
+(`cloudwatch_logs_kms_key_manager_arns`, defaulting to the
+`tfc-mgmt-aws-security-apply` role) grants describe/get/list, rotation,
+description, tags and aliases, plus data-key use (`PipelineKeyUseViaServices`,
+`kms:ViaService` SNS and Logs only). The account-root `kms:*` statement is kept.
 
-**Manual steps (estates with policy sets on):**
+**Manual step for existing estates (before applying the new
+`tfc-management-roles`):** the pipeline's `kms:PutKeyPolicy` is denied, so the
+new statement must be added once, by a break-glass principal (the account root
+or an administrator in the management account). Without it, the next
+aws-security plan/apply gets AccessDenied on the key. Substitute your values:
 
-1. An organization owner creates a `security` team in HCP Terraform (if it does
-   not exist), grants it **Manage Policy Overrides** in the organization
-   settings, and sets its ID as tfc-admin `security_team_id`. Without it only
-   owners can override an intended destroy (a check warns).
-2. Set `org.tfc.plan` in `config/landing-zone.yaml` (`free | essentials |
-   standard | premium`). `enable_policy_sets` now defaults to null: on with
-   `vcs_repo` and a `standard` or `premium` plan. An explicit
-   `enable_policy_sets` still wins. Without `org.tfc.plan` the sets stay off,
-   as before, and a `destructive_changes_guarded` check warns.
-3. Expect plans that delete or replace a stateful resource to stop on
-   `destroy_guard` until the security team overrides the run.
+```sh
+KEY_ID=$(aws kms describe-key --key-id alias/<trail_name>-cloudwatch --query KeyMetadata.KeyId --output text)
+aws kms get-key-policy --key-id "$KEY_ID" --policy-name default --query Policy --output text > policy.json
+# Edit policy.json: append these statements to "Statement" (keep the existing ones):
+#   {"Sid":"PipelineKeyManagement","Effect":"Allow",
+#    "Principal":{"AWS":"arn:aws:iam::<MGMT_ACCOUNT_ID>:role/tfc-mgmt-aws-security-apply"},
+#    "Action":["kms:Describe*","kms:Get*","kms:List*","kms:EnableKeyRotation",
+#              "kms:UpdateKeyDescription","kms:TagResource","kms:UntagResource",
+#              "kms:CreateAlias","kms:UpdateAlias","kms:DeleteAlias"],
+#    "Resource":"*"}
+#   {"Sid":"PipelineKeyUseViaServices","Effect":"Allow",
+#    "Principal":{"AWS":"arn:aws:iam::<MGMT_ACCOUNT_ID>:role/tfc-mgmt-aws-security-apply"},
+#    "Action":["kms:GenerateDataKey*","kms:Decrypt"],"Resource":"*",
+#    "Condition":{"StringEquals":{"kms:ViaService":
+#      ["sns.<REGION>.amazonaws.com","logs.<REGION>.amazonaws.com"]}}}
+aws kms put-key-policy --key-id "$KEY_ID" --policy-name default --policy file://policy.json
+```
 
-`drift-detection.yml` now fails a leg whose workspace does not exist instead of
-skipping it. A single-cloud estate sets the `TFC_DRIFT_WORKSPACES` repository
-variable to its own workspaces (or `REAL_CLOUD_CHECKS_OPT_OUT=true`).
+Then upgrade `tfc-management-roles`, and confirm aws-security plans with no
+changes to the key policy. Fresh estates need nothing.
 
-### GCP deny policies move to the security-team `gcp-guardrails` workspace
+#### aws-security cannot disable org detection; org-owned guard alerts
+
+`tfc-management-roles` drops these actions from the aws-security apply role:
+`Disable*AdminAccount`, `fms:DisassociateAdminAccount`,
+`organizations:DisableAWSServiceAccess`,
+`DeregisterDelegatedAdministrator` and `cloudwatch:DeleteAlarms`. It now
+denies trail untagging and resource-policy edits, CIS-alarm deletion and
+disabling, and trail log-group, log-stream, metric-filter and retention deletion.
+`aws-organization` creates `org-guard-alerts` in us-east-1 of the management
+account: a CMK, an SNS topic and an EventBridge rule. It also creates one
+forwarding rule per other `aws.enabled_regions` region, plus the
+`org-guard-alerts-forwarder` IAM role.
+
+- **No manual step for a routine upgrade.** Apply `aws-organization` first; it
+  only adds resources. Optionally set `aws.guard_alert_emails`, then confirm
+  each subscription email.
+- **A plan that now replaces a CIS alarm or metric filter fails** with
+  AccessDenied on the delete. Run that apply as break-glass or the phase-0
+  role.
+- **Removing a tag key from the org trail needs break-glass.**
+  `cloudtrail:RemoveTags` is denied, so a plan that drops a tag from the trail
+  (for example, a removed `default_tags` key) fails with AccessDenied. Changing
+  a tag's value still works.
+- **Destroying aws-security** (or removing a delegated admin) needs
+  `enable_security_service_teardown = true` on `aws-organization`. See
+  `docs/runbooks/aws-teardown.md`.
+
+#### Production egress fails closed (aws-network)
+
+`aws-network` now fails the plan when the profile is `production` and an AWS
+workload environment `is_production` (unset = keys `prod` / `production`) unless
+unmatched egress is dropped and a domain allowlist is set. Before upgrading,
+set in `config/landing-zone.yaml` (seed in `config/landing-zone.example.yaml`):
+
+```yaml
+aws:
+  network:
+    egress_domain_allowlist: [.amazonaws.com, .github.com, .githubusercontent.com, .terraform.io]
+    stateful_default_actions: [aws:drop_established, aws:alert_established]
+```
+
+Extend the allowlist with every domain your workloads reach first: all other
+HTTP/TLS egress is dropped once applied. To keep alert-only inspection while
+you build the list, set `aws.network.egress_alert_only_waived: true` (an
+explicit, reviewable waiver). Starter-profile estates are unaffected.
+
+### GCP
+
+#### GCP deny policies move to the security-team `gcp-guardrails` workspace
 
 In the default `guardrail_owner_mode = "separate"` the org IAM deny policies
 (admin containment `contain-admin-identity` plus `iam_deny_policies`) are now
@@ -225,7 +329,7 @@ manage the same policies.
 apply, and `roles/iam.denyAdmin` on the organization apply SA) and the
 `guardrail_deny_policy_specs` output are removed in v1.0.
 
-### GitHub workload identity: exact-match owner pin, ref/env pins in bindings
+#### GitHub workload identity: exact-match owner pin, ref/env pins in bindings
 
 Every GitHub Actions workload identity provider this repo creates now has the
 attribute condition `assertion.repository_owner_id == "<id>"` and nothing else.
@@ -275,86 +379,59 @@ workload and bootstrap roots first. A provider that still carries the old
 condition is denied on its next UPDATE (not on its existing state) until it is
 rewritten.
 
-### AWS management KMS access by key policy, not tags
+### SaaS and cross-cloud
 
-`tfc-management-roles` no longer grants the aws-security apply role `kms:*` on
-keys carrying `Workspace = aws-security` (a tag anyone with `kms:TagResource`
-could plant). `CreateOwnedKeysOnly` stays unchanged (owner request tag required). The org trail's CloudWatch Logs CMK is instead managed through
-its own key policy: a new `PipelineKeyManagement` statement
-(`cloudwatch_logs_kms_key_manager_arns`, defaulting to the
-`tfc-mgmt-aws-security-apply` role) grants describe/get/list, rotation,
-description, tags and aliases, plus data-key use (`PipelineKeyUseViaServices`,
-`kms:ViaService` SNS and Logs only). The account-root `kms:*` statement is kept.
+#### SaaS secret bridge writes its secret write-only
 
-**Manual step for existing estates (before applying the new
-`tfc-management-roles`):** the pipeline's `kms:PutKeyPolicy` is denied, so the
-new statement must be added once, by a break-glass principal (the account root
-or an administrator in the management account). Without it, the next
-aws-security plan/apply gets AccessDenied on the key. Substitute your values:
+Applies to workloads with `enable_saas_secret_bridge = true`.
 
-```sh
-KEY_ID=$(aws kms describe-key --key-id alias/<trail_name>-cloudwatch --query KeyMetadata.KeyId --output text)
-aws kms get-key-policy --key-id "$KEY_ID" --policy-name default --query Policy --output text > policy.json
-# Edit policy.json: append these statements to "Statement" (keep the existing ones):
-#   {"Sid":"PipelineKeyManagement","Effect":"Allow",
-#    "Principal":{"AWS":"arn:aws:iam::<MGMT_ACCOUNT_ID>:role/tfc-mgmt-aws-security-apply"},
-#    "Action":["kms:Describe*","kms:Get*","kms:List*","kms:EnableKeyRotation",
-#              "kms:UpdateKeyDescription","kms:TagResource","kms:UntagResource",
-#              "kms:CreateAlias","kms:UpdateAlias","kms:DeleteAlias"],
-#    "Resource":"*"}
-#   {"Sid":"PipelineKeyUseViaServices","Effect":"Allow",
-#    "Principal":{"AWS":"arn:aws:iam::<MGMT_ACCOUNT_ID>:role/tfc-mgmt-aws-security-apply"},
-#    "Action":["kms:GenerateDataKey*","kms:Decrypt"],"Resource":"*",
-#    "Condition":{"StringEquals":{"kms:ViaService":
-#      ["sns.<REGION>.amazonaws.com","logs.<REGION>.amazonaws.com"]}}}
-aws kms put-key-policy --key-id "$KEY_ID" --policy-name default --policy file://policy.json
+- **AWS (`aws-workload-<env>`).** `aws_secretsmanager_secret_version.saas_bridge`
+  moves from `secret_string` to the write-only `secret_string_wo`. The plan shows
+  an **in-place update**, not a replacement: aws 6.45 and later switch in place,
+  and the repo floor is 6.46. Afterwards the secret version holds no plaintext
+  in state. The secret's content does not change.
+- **GCP (`gcp-workload-<env>`).** The secret was already write-only. Its
+  version counter now comes from the saas `bridge_version` output. It stays 1
+  until you bump `saas.bridge_rotation`, so the upgrade re-writes nothing.
+- **Rotation.** A write-only value is not diffed. After rotating a bridged
+  Supabase secret, bump `saas.bridge_rotation`, apply `saas-<name>`, then apply
+  each bridging workload
+  ([saas-bootstrap](docs/runbooks/saas-bootstrap.md#bridging-secrets-to-a-workload-and-rotating-them)).
+  A `saas-<name>` that has not applied the new output yet counts as version 1.
+- **Still in workload state.** The values pass through
+  `data.terraform_remote_state.saas`, whose result is stored in the workload's
+  state. Task 3.6 moves this read to `ephemeral "tfe_outputs"` (see
+  `docs/known-gaps.md`).
+
+## Sandbox upgrade log
+
+Copy this block once per release, fill it in from the sandbox run, and commit it
+with the merge. An empty log means the release was not proven in the sandbox.
+
+```markdown
+### Sandbox upgrade log: <tag>
+
+- Previous release (N-1): <tag>
+- Sandbox applied on: <date>, by <name>
+
+| Workspace | N-1 to N apply result | Plan summary (add/change/destroy) | Notes |
+|---|---|---|---|
+| <workspace> | <success / failed / skipped> | <+a ~c -d> | <link to run> |
+
+`destroy_guard` overrides:
+
+| Workspace | Resource | Reason | Approved by |
+|---|---|---|---|
+| <workspace> | <address> | <why the delete or replace is intended> | <security team member> |
 ```
 
-Then upgrade `tfc-management-roles`, and confirm aws-security plans with no
-changes to the key policy. Fresh estates need nothing.
+## Legacy modes removed at v1.0
 
-### aws-security cannot disable org detection; org-owned guard alerts
+Each dual mode keeps both paths until v1.0. Migrate before then.
 
-`tfc-management-roles` drops these actions from the aws-security apply role:
-`Disable*AdminAccount`, `fms:DisassociateAdminAccount`,
-`organizations:DisableAWSServiceAccess`,
-`DeregisterDelegatedAdministrator` and `cloudwatch:DeleteAlarms`. It now
-denies trail untagging and resource-policy edits, CIS-alarm deletion and
-disabling, and trail log-group, log-stream, metric-filter and retention deletion.
-`aws-organization` creates `org-guard-alerts` in us-east-1 of the management
-account: a CMK, an SNS topic and an EventBridge rule. It also creates one
-forwarding rule per other `aws.enabled_regions` region, plus the
-`org-guard-alerts-forwarder` IAM role.
-
-- **No manual step for a routine upgrade.** Apply `aws-organization` first; it
-  only adds resources. Optionally set `aws.guard_alert_emails`, then confirm
-  each subscription email.
-- **A plan that now replaces a CIS alarm or metric filter fails** with
-  AccessDenied on the delete. Run that apply as break-glass or the phase-0
-  role.
-- **Removing a tag key from the org trail needs break-glass.**
-  `cloudtrail:RemoveTags` is denied, so a plan that drops a tag from the trail
-  (for example, a removed `default_tags` key) fails with AccessDenied. Changing
-  a tag's value still works.
-- **Destroying aws-security** (or removing a delegated admin) needs
-  `enable_security_service_teardown = true` on `aws-organization`. See
-  `docs/runbooks/aws-teardown.md`.
-
-## Production egress fails closed (aws-network)
-
-`aws-network` now fails the plan when the profile is `production` and an AWS
-workload environment `is_production` (unset = keys `prod` / `production`) unless
-unmatched egress is dropped and a domain allowlist is set. Before upgrading,
-set in `config/landing-zone.yaml` (seed in `config/landing-zone.example.yaml`):
-
-```yaml
-aws:
-  network:
-    egress_domain_allowlist: [.amazonaws.com, .github.com, .githubusercontent.com, .terraform.io]
-    stateful_default_actions: [aws:drop_established, aws:alert_established]
-```
-
-Extend the allowlist with every domain your workloads reach first: all other
-HTTP/TLS egress is dropped once applied. To keep alert-only inspection while
-you build the list, set `aws.network.egress_alert_only_waived: true` (an
-explicit, reviewable waiver). Starter-profile estates are unaffected.
+| Legacy mode | Replacement | Entry |
+|---|---|---|
+| `guardrail_deny_policy_specs` output on gcp-organization | Policies authored in `envs/gcp/guardrails` | GCP deny policies move to the security-team `gcp-guardrails` workspace |
+| `guardrail_owner_mode = "organization"` (in-stage apply, `roles/iam.denyAdmin` on the organization apply SA) | `guardrail_owner_mode = "separate"` | GCP deny policies move to the security-team `gcp-guardrails` workspace |
+| Workload `removed` block for `module.config_recorder`, the deprecated `config_role_arn` and `create_config_service_linked_role` inputs, and the `config_role_arn` output | The `org-config-recorders` StackSet in aws-organization | AWS Config recorders move to an aws-organization StackSet |
+| Flag-off recorder path of the SCP (recorder actions in `DenyWeakenSecurityServices`) | `enable_config_recorder_scp = true` | AWS Config recorders move to an aws-organization StackSet |

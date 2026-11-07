@@ -108,6 +108,10 @@ JSON with `jsonencode()` rather than `data "aws_iam_policy_document"` (which `mo
 mocks away, breaking content assertions). Follow the full AWS authoring rules in
 [CLAUDE.md → AWS modules](CLAUDE.md#aws-modules) — the detailed gotchas live there.
 
+### Breaking changes need an UPGRADING entry
+
+A commit marked breaking (`feat!:` or a `BREAKING CHANGE` footer) must add its manual steps to [`UPGRADING.md`](UPGRADING.md) under `Unreleased`; the meta-lint job fails the PR otherwise.
+
 ### Validation blocks are required
 
 Every variable that accepts a constrained value must have a `validation` block with an actionable error message. Examples:
