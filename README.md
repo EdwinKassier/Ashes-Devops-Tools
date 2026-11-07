@@ -354,6 +354,7 @@ git push origin gcp-organization/v1.2.0
 | [Branch Protection](docs/guides/BRANCH_PROTECTION.md) | GitHub ruleset configuration |
 | [Known Gaps](docs/known-gaps.md) | Open, preview and deferred items |
 | [Compliance Control Matrix](docs/compliance/control-matrix.md) | Controls mapped to SOC 2, ISO 27001:2022, NIST 800-53 r5, CIS; gaps and audit evidence |
+| [Examples](examples/README.md) | Index of the examples; [`examples/system-design/`](examples/system-design/) holds system design interview walkthroughs grounded in this landing zone |
 | [CLAUDE.md](CLAUDE.md) | Onboarding guide for AI agents |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development workflow and standards |
 | [CHANGELOG.md](CHANGELOG.md) | Release notes |
