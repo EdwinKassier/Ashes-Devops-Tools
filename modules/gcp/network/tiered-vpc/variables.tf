@@ -53,11 +53,11 @@ variable "additional_regions" {
 
   validation {
     condition     = alltrue([for r in keys(var.additional_regions) : can(regex("^[a-z]+-[a-z]+[0-9]+$", r))])
-    error_message = "Each additional_regions key must be a valid GCP region name (e.g. 'us-east1')."
+    error_message = "Each additional_regions key (config: gcp.network.additional_regions / gcp.environments.<env>.additional_regions) must be a valid GCP region name (e.g. 'us-east1')."
   }
   validation {
     condition     = !contains(keys(var.additional_regions), var.region)
-    error_message = "additional_regions must not contain the primary region (var.region); its subnets are the zonal layout."
+    error_message = "additional_regions (config: gcp.network.additional_regions for the hub, gcp.environments.<env>.additional_regions for a spoke) must not contain the primary region (var.region); its subnets are the zonal layout."
   }
   validation {
     condition = alltrue(flatten([
@@ -66,7 +66,7 @@ variable "additional_regions" {
         can(cidrnetmask(c)) && try(cidrhost(c, 0) == split("/", c)[0], false)
       ]
     ]))
-    error_message = "Every additional_regions subnet_cidrs entry must be valid CIDR notation without host bits set (e.g. \"10.10.0.0/24\")."
+    error_message = "Every additional_regions subnet_cidrs entry (config: gcp.network.additional_regions / gcp.environments.<env>.additional_regions) must be valid CIDR notation without host bits set (e.g. \"10.10.0.0/24\")."
   }
   validation {
     # Two CIDRs overlap when their network addresses match at the shorter of
@@ -82,8 +82,8 @@ variable "additional_regions" {
         ) :
         cidrhost("${split("/", a)[0]}/${min(tonumber(split("/", a)[1]), tonumber(split("/", b)[1]))}", 0) != cidrhost("${split("/", b)[0]}/${min(tonumber(split("/", a)[1]), tonumber(split("/", b)[1]))}", 0)
       ]
-    ])), true)
-    error_message = "additional_regions subnet CIDRs must not overlap each other (within or across regions) or the primary region's subnets."
+    ])), false)
+    error_message = "additional_regions subnet CIDRs (config: gcp.network.additional_regions for the hub, gcp.environments.<env>.additional_regions for a spoke) must not overlap each other (within or across regions) or the primary region's subnets, and must be valid CIDRs."
   }
 }
 

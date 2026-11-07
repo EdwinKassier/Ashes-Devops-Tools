@@ -80,20 +80,14 @@ resource "terraform_data" "deletion_protection_guard" {
   }
 }
 
-# Guard: each explicit CIDR list must cover every zone, otherwise the subnet
-# for_each would index past the end of the list with a cryptic error.
-resource "terraform_data" "subnet_cidr_count_guard" {
+# The subnet_cidrs-vs-zones count check is now a cross-variable validation on
+# var.subnet_cidrs. The old terraform_data guard held no infrastructure, so it
+# is dropped from state without destroy.
+removed {
+  from = terraform_data.subnet_cidr_count_guard
+
   lifecycle {
-    precondition {
-      condition = (
-        length(var.subnet_cidrs.public) == 0 || length(var.subnet_cidrs.public) >= length(var.zones)
-        ) && (
-        length(var.subnet_cidrs.private) == 0 || length(var.subnet_cidrs.private) >= length(var.zones)
-        ) && (
-        length(var.subnet_cidrs.database) == 0 || length(var.subnet_cidrs.database) >= length(var.zones)
-      )
-      error_message = "Each non-empty subnet_cidrs list must have at least as many entries as zones. Detected ${length(var.zones)} zones; provided public=${length(var.subnet_cidrs.public)}, private=${length(var.subnet_cidrs.private)}, database=${length(var.subnet_cidrs.database)} CIDRs. Either add CIDRs or leave the list empty to use auto-generated values."
-    }
+    destroy = false
   }
 }
 

@@ -129,11 +129,10 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_compute_network_firewall_policy.tier (modules/gcp/network/tiered-vpc/main.tf#L524)
-- resource.google_compute_network_firewall_policy_association.tier (modules/gcp/network/tiered-vpc/main.tf#L532)
-- resource.google_compute_network_firewall_policy_rule.tier (modules/gcp/network/tiered-vpc/main.tf#L541)
+- resource.google_compute_network_firewall_policy.tier (modules/gcp/network/tiered-vpc/main.tf#L518)
+- resource.google_compute_network_firewall_policy_association.tier (modules/gcp/network/tiered-vpc/main.tf#L526)
+- resource.google_compute_network_firewall_policy_rule.tier (modules/gcp/network/tiered-vpc/main.tf#L535)
 - resource.terraform_data.deletion_protection_guard (modules/gcp/network/tiered-vpc/main.tf#L73)
-- resource.terraform_data.subnet_cidr_count_guard (modules/gcp/network/tiered-vpc/main.tf#L85)
 
 
 ## Inputs
