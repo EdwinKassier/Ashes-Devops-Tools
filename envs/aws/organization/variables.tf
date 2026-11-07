@@ -141,6 +141,32 @@ variable "guard_alert_emails" {
   default     = null
 }
 
+variable "enable_org_config_recorders" {
+  description = "Deploy AWS Config recorders org-wide: a StackSet to every member account except security tooling, plus a direct recorder in the management account. Turn on only after aws-security has applied (it owns the delivery bucket), or at step 3 of docs/runbooks/aws-config-recorder-migration.md. Null = aws.enable_org_config_recorders from config/landing-zone.yaml, else false."
+  type        = bool
+  default     = null
+}
+
+variable "org_config_recorders_failure_tolerance_percentage" {
+  description = "Failure tolerance of the recorder StackSet operations: 0 (default) routinely, 100 for the migration pass while legacy recorders still block some accounts."
+  type        = number
+  default     = 0
+  nullable    = false
+}
+
+variable "create_management_config_service_linked_role" {
+  description = "With org-wide recorders on, create the AWSServiceRoleForConfig service-linked role in the management account. Set false when Config was enabled there before."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
+variable "enable_config_recorder_scp" {
+  description = "Deny Config recorder changes to every member principal except the StackSet execution role, break-glass and security tooling's tfc-apply. Turn on only at the last step of docs/runbooks/aws-config-recorder-migration.md. Null = aws.enable_config_recorder_scp from config/landing-zone.yaml, else false."
+  type        = bool
+  default     = null
+}
+
 variable "enable_security_service_teardown" {
   description = "Teardown gate: let the aws-security management apply role disable the security services' delegated admins and trusted access. Default false; set true only for a reviewed aws-security destroy (docs/runbooks/aws-teardown.md), then back to false."
   type        = bool

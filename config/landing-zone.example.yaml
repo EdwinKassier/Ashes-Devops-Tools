@@ -222,6 +222,14 @@ aws:
   # changed. Each address must confirm its subscription. Absent = no emails.
   # guard_alert_emails:
   #   - secops@example.com
+  # Org-wide AWS Config recorders (aws-organization): a StackSet to every
+  # member account except security tooling, plus the management account.
+  # Both stay false on the first pass: the delivery bucket comes from
+  # aws-security. Greenfield: set both true once aws-security has applied
+  # (scripts/init-landing-zone.sh --aws-config-recorders true). Existing estate:
+  # docs/runbooks/aws-config-recorder-migration.md.
+  enable_org_config_recorders: false
+  enable_config_recorder_scp: false
   # GitHub users/orgs whose Actions OIDC tokens may assume roles in any account
   # (RCP pin: sub must be repo:<owner>/*). List every owner whose repos deploy
   # here through app-services. Empty or absent leaves GitHub federation unpinned.

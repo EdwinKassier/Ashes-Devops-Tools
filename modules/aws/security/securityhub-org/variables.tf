@@ -47,7 +47,15 @@ variable "policy_name" {
 }
 
 variable "disabled_control_identifiers" {
-  description = "Security control identifiers disabled org-wide by the baseline policy. Security Hub enables all other controls (including newly released ones)."
+  description = "Security control identifiers disabled org-wide by the baseline policy. Security Hub enables all other controls (including newly released ones). EC2.6 (VPC flow logging) cannot be listed: it detects flow-log tampering by the workload pipelines."
   type        = list(string)
   default     = []
+
+  # EC2.6 is enabled through the CIS 3.0 and NIST standards. It is the detective
+  # control for flow-log removal, which the deny-tamper SCP leaves to the
+  # pipeline (flow-log replacement), so it must stay on.
+  validation {
+    condition     = !contains(var.disabled_control_identifiers, "EC2.6")
+    error_message = "disabled_control_identifiers must not contain EC2.6 (VPC flow logging enabled): it detects flow-log removal, which the pipelines are still allowed to perform."
+  }
 }

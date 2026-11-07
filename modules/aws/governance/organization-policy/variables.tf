@@ -275,3 +275,26 @@ variable "partition" {
     error_message = "partition must be aws, aws-us-gov or aws-cn."
   }
 }
+
+# -----------------------------------------------------------------------------
+# Config recorder SCP (after the org-wide recorder migration)
+# -----------------------------------------------------------------------------
+
+variable "enable_config_recorder_scp" {
+  description = "Move the Config recorder actions (Put/Delete/StopConfigurationRecorder, DeleteDeliveryChannel) from DenyWeakenSecurityServices, where every pipeline role is exempt, to DenyConfigRecorderChanges, whose only exemptions are the StackSet execution role, break-glass and config_recorder_pipeline_role_arns. Default false. Turn it on only after the org-wide recorder StackSet has replaced the Terraform-managed member recorders (docs/runbooks/aws-config-recorder-migration.md)."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "config_recorder_pipeline_role_arns" {
+  description = "Account-qualified pipeline role ARNs exempt from DenyConfigRecorderChanges, e.g. the security-tooling tfc-apply that manages the aggregator recorder. Role ARNs only: a whole account is never exempt. Used only when enable_config_recorder_scp = true."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for a in var.config_recorder_pipeline_role_arns : can(regex("^arn:aws(-[a-z]+)*:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", a))])
+    error_message = "config_recorder_pipeline_role_arns entries must be account-qualified IAM role ARNs without wildcards."
+  }
+}

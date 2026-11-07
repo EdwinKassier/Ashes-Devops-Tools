@@ -766,6 +766,14 @@
             "type": "string"
           }
         },
+        "enable_org_config_recorders": {
+          "type": "boolean",
+          "description": "aws-organization: org-wide Config recorders (StackSet to every member account except security tooling, plus the management account). Turn on after aws-security has applied; see docs/runbooks/aws-config-recorder-migration.md."
+        },
+        "enable_config_recorder_scp": {
+          "type": "boolean",
+          "description": "aws-organization: deny-tamper DenyConfigRecorderChanges. Turn on only after the org-wide recorders replaced every legacy recorder (migration runbook, last step)."
+        },
         "github_federation_owners": {
           "type": "array",
           "items": {

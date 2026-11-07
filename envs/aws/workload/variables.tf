@@ -148,7 +148,7 @@ variable "security_workspace_name" {
 }
 
 variable "config_role_arn" {
-  description = "ARN of the IAM role AWS Config assumes to record resource configurations in this account/Region. Null (default) uses the account's AWSServiceRoleForConfig service-linked role (created unless create_config_service_linked_role = false)."
+  description = "Deprecated and ignored: the account's Config recorder is deployed by aws-organization's recorder StackSet (enable_org_config_recorders). Removed in v1.0."
   type        = string
   default     = null
 
@@ -159,7 +159,7 @@ variable "config_role_arn" {
 }
 
 variable "create_config_service_linked_role" {
-  description = "With config_role_arn = null, create the AWSServiceRoleForConfig service-linked role in the workload account. Set false if Config was ever enabled in the account (the SLR already exists)."
+  description = "Deprecated and ignored: the account's Config recorder is deployed by aws-organization's recorder StackSet (enable_org_config_recorders). Removed in v1.0."
   type        = bool
   default     = true
 }

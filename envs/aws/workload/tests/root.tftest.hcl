@@ -16,7 +16,6 @@ variables {
   landing_zone_name        = "acme"
   workload_account_key     = "workload_dev"
   log_archive_bucket_name  = null # sourced from the aws-security remote state
-  config_role_arn          = "arn:aws:iam::222222222222:role/config-recorder"
   kms_key_arn              = "arn:aws:kms:eu-west-2:222222222222:key/abcd-1234"
 }
 

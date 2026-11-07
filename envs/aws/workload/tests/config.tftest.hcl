@@ -8,7 +8,6 @@ mock_provider "aws" { alias = "us_east_1" }
 variables {
   landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
   environment              = "dev"
-  config_role_arn          = "arn:aws:iam::222222222222:role/config-recorder"
   kms_key_arn              = "arn:aws:kms:eu-west-2:222222222222:key/abcd-1234"
 }
 

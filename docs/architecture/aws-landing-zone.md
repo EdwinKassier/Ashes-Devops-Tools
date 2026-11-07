@@ -151,6 +151,7 @@ The SRA security stack is delegated from the management account to the **Securit
 |---|---|---|
 | CloudTrail (org trail) | `modules/aws/security/cloudtrail-org` | Org-wide multi-Region trail → Log Archive bucket. |
 | AWS Config (org) | `modules/aws/security/config-org` | Recorder per Region + org aggregator in Security Tooling. |
+| AWS Config (member accounts) | `modules/aws/security/config-recorder-stackset` | aws-organization StackSet: recorder per Region in every member account except Security Tooling, plus a direct management-account recorder (`enable_org_config_recorders`; [migration runbook](../runbooks/aws-config-recorder-migration.md)). |
 | GuardDuty (org) | `modules/aws/security/guardduty-org` | Delegated admin; auto-enroll new accounts; EBS malware protection. |
 | Security Hub CSPM | `modules/aws/security/securityhub-org` | Central configuration policy associated at the org root. |
 | Access Analyzer (org) | `modules/aws/security/access-analyzer-org` | Org-scoped external/unused-access analyzers. |

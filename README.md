@@ -18,8 +18,8 @@
 [![Terraform Validation](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml)
 [![Security Scan](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml)
 [![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?style=flat-square&logo=pre-commit)](https://pre-commit.com)
-[![Modules](https://img.shields.io/badge/modules-121-blueviolet?style=flat-square)](modules/)
-[![Tests](https://img.shields.io/badge/test_suites-299-blue?style=flat-square)](modules/)
+[![Modules](https://img.shields.io/badge/modules-122-blueviolet?style=flat-square)](modules/)
+[![Tests](https://img.shields.io/badge/test_suites-302-blue?style=flat-square)](modules/)
 
 <sub>Module/test-suite counts are static badges, enforced in CI: <code>make count</code> prints the live figures and <code>scripts/check-docs-counts.sh</code> (meta-lint) fails when this README or CLAUDE.md disagrees with the tree.</sub>
 
@@ -116,7 +116,7 @@ Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives i
 
 ## Module Library
 
-121 modules — **62 GCP · 52 AWS · 6 SaaS · 1 TFC** — each with auto-generated docs and `mock_provider` tests.
+122 modules — **62 GCP · 53 AWS · 6 SaaS · 1 TFC** — each with auto-generated docs and `mock_provider` tests.
 
 Both clouds are organized into the **same conceptual domains** so you can map a capability across providers at a glance. Each table reads: **capability → Google Cloud module → Amazon Web Services module**. A `—` means the platform has no dedicated module for that capability (often because it is native, or lives in an adjacent domain — noted inline). Link text is the module's path under `modules/<cloud>/`.
 
@@ -181,7 +181,7 @@ GCP consolidates detection into Security Command Center plus audit logs; the AWS
 | Posture / findings management | [`governance/scc`](modules/gcp/governance/scc/) | [`security/securityhub-org`](modules/aws/security/securityhub-org/) |
 | Threat detection | *(SCC / Event Threat Detection)* | [`security/guardduty-org`](modules/aws/security/guardduty-org/) |
 | Audit &amp; activity logging | [`governance/cloud-audit-logs`](modules/gcp/governance/cloud-audit-logs/) | [`security/cloudtrail-org`](modules/aws/security/cloudtrail-org/) |
-| Config &amp; compliance recording | *(SCC posture)* | [`security/config-org`](modules/aws/security/config-org/) |
+| Config &amp; compliance recording | *(SCC posture)* | [`security/config-org`](modules/aws/security/config-org/), [`security/config-recorder-stackset`](modules/aws/security/config-recorder-stackset/) |
 | Security data lake | — | [`security/securitylake`](modules/aws/security/securitylake/) |
 | Delegated security administration | — | [`security/security-delegated-admin`](modules/aws/security/security-delegated-admin/), [`security/org-security-service`](modules/aws/security/org-security-service/) |
 | IAM access analysis | *(IAM Recommender / Policy Analyzer)* | [`security/access-analyzer-org`](modules/aws/security/access-analyzer-org/) |

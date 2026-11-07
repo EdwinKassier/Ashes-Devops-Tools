@@ -35,8 +35,11 @@ locals {
     allowed_regions         = try([for r in local.lz.aws.allowed_regions : tostring(r)], null)
     aws_enabled_regions     = try([for r in local.lz.aws.enabled_regions : tostring(r)], null)
     guard_alert_emails      = try([for e in local.lz.aws.guard_alert_emails : tostring(e)], null)
-    terraform_run_role_arn  = try(tostring(local.lz.aws.terraform_run_role_arn), null)
-    break_glass_role_arn    = try(tostring(local.lz.aws.break_glass_role_arn), null)
+    # Config recorder migration flags (docs/runbooks/aws-config-recorder-migration.md).
+    enable_org_config_recorders = try(tobool(local.lz.aws.enable_org_config_recorders), null)
+    enable_config_recorder_scp  = try(tobool(local.lz.aws.enable_config_recorder_scp), null)
+    terraform_run_role_arn      = try(tostring(local.lz.aws.terraform_run_role_arn), null)
+    break_glass_role_arn        = try(tostring(local.lz.aws.break_glass_role_arn), null)
     # tfc-admin puts the aws-* workspaces in <project_name_prefix>aws.
     tfc_project = try(tostring(local.lz.org.tfc.aws_project), "${try(tostring(local.lz.org.tfc.project_name_prefix), "landing-zone-")}aws")
     # With org.tfc.split_workload_projects, tfc-admin puts aws-workload-<env> in
@@ -123,11 +126,13 @@ locals {
   allowed_regions   = var.allowed_regions != null ? var.allowed_regions : coalesce(local.cfg.allowed_regions, ["eu-west-2"])
   # Same precedence and fallback as the aws-security root: the guard alerts
   # forward from every region the security services run in.
-  aws_enabled_regions    = var.aws_enabled_regions != null ? var.aws_enabled_regions : coalesce(local.cfg.aws_enabled_regions, ["eu-west-2"])
-  guard_alert_emails     = var.guard_alert_emails != null ? var.guard_alert_emails : coalesce(local.cfg.guard_alert_emails, [])
-  terraform_run_role_arn = coalesce(var.terraform_run_role_arn, local.cfg.terraform_run_role_arn, "arn:aws:iam::000000000000:role/unset")
-  break_glass_role_arn   = coalesce(var.break_glass_role_arn, local.cfg.break_glass_role_arn, "arn:aws:iam::000000000000:role/unset")
-  tfc_project            = coalesce(var.tfc_project, local.cfg.tfc_project)
+  aws_enabled_regions         = var.aws_enabled_regions != null ? var.aws_enabled_regions : coalesce(local.cfg.aws_enabled_regions, ["eu-west-2"])
+  guard_alert_emails          = var.guard_alert_emails != null ? var.guard_alert_emails : coalesce(local.cfg.guard_alert_emails, [])
+  enable_org_config_recorders = var.enable_org_config_recorders != null ? var.enable_org_config_recorders : coalesce(local.cfg.enable_org_config_recorders, false)
+  enable_config_recorder_scp  = var.enable_config_recorder_scp != null ? var.enable_config_recorder_scp : coalesce(local.cfg.enable_config_recorder_scp, false)
+  terraform_run_role_arn      = coalesce(var.terraform_run_role_arn, local.cfg.terraform_run_role_arn, "arn:aws:iam::000000000000:role/unset")
+  break_glass_role_arn        = coalesce(var.break_glass_role_arn, local.cfg.break_glass_role_arn, "arn:aws:iam::000000000000:role/unset")
+  tfc_project                 = coalesce(var.tfc_project, local.cfg.tfc_project)
   # Foundational bindings + the workload bindings derived from the config file;
   # an explicit var.tfc_workspace_bindings replaces both.
   tfc_workspace_bindings = var.tfc_workspace_bindings != null ? var.tfc_workspace_bindings : {

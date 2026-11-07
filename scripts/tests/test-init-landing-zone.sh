@@ -96,6 +96,8 @@ if [[ -s "${out}" ]]; then
   assert_line "${out}" '^          service_team: platform$' "gcp scaffold points the example service at the platform team"
   assert_line "${out}" 'subnet_name: acme-dev-vpc-private-us-central1-a' "platform team subnet uses the prefix and region"
   assert_no_line "${out}" '^          github: ' "gcp scaffold example service has no placeholder deploy identity"
+  assert_eq "$(section_value "${out}" aws enable_org_config_recorders)" "false" "first pass: org Config recorders off"
+  assert_eq "$(section_value "${out}" aws enable_config_recorder_scp)" "false" "first pass: recorder SCP off"
 
   if command -v python3 >/dev/null 2>&1 && python3 -c 'import yaml' 2>/dev/null; then
     if python3 - "${out}" <<'PY'
@@ -162,6 +164,18 @@ if bash "${SCRIPT}" --non-interactive --output "${out2}" --org-name acme --tfc-o
 else
   fail "flags run exits 0"; cat "${log}" >&2
 fi
+echo "==> greenfield second pass: --aws-config-recorders true"
+out4="${workdir}/second-pass.yaml"
+if bash "${SCRIPT}" --non-interactive --output "${out4}" --org-name acme --tfc-org acme-tfc --clouds aws \
+  --aws-management-account 123456789012 --aws-config-recorders true </dev/null >"${log}" 2>&1; then
+  assert_eq "$(section_value "${out4}" aws enable_org_config_recorders)" "true" "second pass: org Config recorders on"
+  assert_eq "$(section_value "${out4}" aws enable_config_recorder_scp)" "true" "second pass: recorder SCP on"
+  if yamllint_cmd -s -d "${YAMLLINT_RULES}" "${out4}"; then pass "second-pass output is yamllint-clean"; else fail "second-pass output is yamllint-clean"; fi
+else
+  fail "second-pass run exits 0"; cat "${log}" >&2
+fi
+expect_reject "rejects a non-boolean --aws-config-recorders" --output "${workdir}/h.yaml" --org-name acme --clouds aws \
+  --aws-config-recorders yes
 expect_reject "rejects an email pattern without {key}" --output "${workdir}/f.yaml" --org-name acme --clouds aws \
   --aws-email-pattern 'aws@acme.io'
 expect_reject "rejects an example.com email pattern" --output "${workdir}/g.yaml" --org-name acme --clouds aws \

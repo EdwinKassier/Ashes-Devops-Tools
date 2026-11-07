@@ -157,3 +157,12 @@ run "disabled_and_overridden_key_rejected" {
 
   expect_failures = [var.disabled_policies]
 }
+
+run "config_recorder_pipeline_role_wildcard_account_rejected" {
+  command         = plan
+  expect_failures = [var.config_recorder_pipeline_role_arns]
+
+  variables {
+    config_recorder_pipeline_role_arns = ["arn:aws:iam::*:role/tfc-apply"]
+  }
+}

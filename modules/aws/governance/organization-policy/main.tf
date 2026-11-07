@@ -80,6 +80,16 @@ locals {
     local.break_glass_principal_arns,
     [for n in var.stackset_execution_role_names : "arn:${var.partition}:iam::*:role/${n}"],
   ))
+  # Recorder SCP (enable_config_recorder_scp): once the org-wide recorder
+  # StackSet owns every member recorder, only the StackSet execution role,
+  # break-glass and the listed account-qualified pipeline roles (security
+  # tooling's tfc-apply, which manages the aggregator recorder) may change
+  # recorders. Role ARNs only, never a whole account.
+  config_recorder_exempt_arns = distinct(concat(
+    [for n in var.stackset_execution_role_names : "arn:${var.partition}:iam::*:role/${n}"],
+    local.break_glass_principal_arns,
+    var.config_recorder_pipeline_role_arns,
+  ))
   role_tamper_actions = [
     "iam:CreateRole",
     "iam:DeleteRole",
@@ -94,7 +104,7 @@ locals {
   ]
 
   default_policies = {
-    # Minified (jsonencode(jsondecode(...))) so the 5,120-character SCP size
+    # Minified (jsonencode(jsondecode(...))) so the 10,240-character SCP size
     # quota is spent on content, not indentation.
     scp-deny-tamper = {
       type = "SERVICE_CONTROL_POLICY"
@@ -108,6 +118,10 @@ locals {
         role_tamper_actions     = jsonencode(local.role_tamper_actions)
         log_archive_bucket_name = var.log_archive_bucket_name
         kms_protection_tag_key  = var.kms_protection_tag_key
+        # Recorder actions: DenyWeakenSecurityServices (pipeline-wide exemption)
+        # until the migration, then DenyConfigRecorderChanges.
+        enable_config_recorder_scp  = var.enable_config_recorder_scp
+        config_recorder_exempt_arns = jsonencode(local.config_recorder_exempt_arns)
         # GuardDuty / CloudTrail / Security Hub settings are managed centrally
         # (delegated admin). Outside those accounts even the pipeline is denied,
         # so a compromised workload tfc-apply cannot add a suppression filter or
@@ -128,8 +142,8 @@ locals {
       })
     }
     # Baseline also carries two org-wide break-glass-only denies (kept here so
-    # deny-tamper stays under the 5,120-char quota and no extra SCP attachment
-    # is needed — a target allows at most 5 SCPs incl. FullAWSAccess):
+    # deny-tamper stays well under the 10,240-char quota and no extra SCP
+    # attachment is needed — a target allows at most 10 SCPs incl. FullAWSAccess):
     #   * DenyIamUserCredentials — no IAM users / access keys / console
     #     passwords (no module in this repo creates IAM users; identities come
     #     from Identity Center and OIDC federation).

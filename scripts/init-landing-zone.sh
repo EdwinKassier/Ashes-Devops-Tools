@@ -35,6 +35,7 @@ SUPABASE_ORG=""
 VERCEL_TEAM=""
 GITHUB_REPO=""
 AUDIT_BUCKET_LOCK=""
+AWS_CONFIG_RECORDERS=""
 REBRAND=false
 FORCE=false
 INTERACTIVE=true
@@ -72,6 +73,13 @@ Options:
   --audit-bucket-lock BOOL      true|false: irreversible WORM lock on the org audit-log bucket
                                 (gcp.enable_audit_bucket_lock). Default false; prompted for
                                 explicitly when interactive.
+  --aws-config-recorders BOOL   true|false: greenfield second pass. true sets
+                                aws.enable_org_config_recorders and
+                                aws.enable_config_recorder_scp (org-wide Config recorders
+                                plus the recorder SCP). Use it only once aws-security has
+                                applied and no legacy recorders exist; an existing estate
+                                follows docs/runbooks/aws-config-recorder-migration.md.
+                                Default false.
   --output PATH                 Output file. Default config/landing-zone.yaml.
   --rebrand                     Also replace the "Ashes DevOps Tools" title in README.md.
   --force                       Overwrite an existing output file.
@@ -109,6 +117,7 @@ while [[ $# -gt 0 ]]; do
     --vercel-team) need_arg "$@"; VERCEL_TEAM="$2"; shift 2 ;;
     --github-repo) need_arg "$@"; GITHUB_REPO="$2"; shift 2 ;;
     --audit-bucket-lock) need_arg "$@"; AUDIT_BUCKET_LOCK="$2"; shift 2 ;;
+    --aws-config-recorders) need_arg "$@"; AWS_CONFIG_RECORDERS="$2"; shift 2 ;;
     --output) need_arg "$@"; OUTPUT="$2"; shift 2 ;;
     --rebrand) REBRAND=true; shift ;;
     --force) FORCE=true; shift ;;
@@ -231,6 +240,9 @@ fi
 
 [[ "${AUDIT_BUCKET_LOCK}" == true || "${AUDIT_BUCKET_LOCK}" == false ]] ||
   die "--audit-bucket-lock must be true or false"
+AWS_CONFIG_RECORDERS="${AWS_CONFIG_RECORDERS:-false}"
+[[ "${AWS_CONFIG_RECORDERS}" == true || "${AWS_CONFIG_RECORDERS}" == false ]] ||
+  die "--aws-config-recorders must be true or false"
 
 # Phase-0 impersonation expiry: now + 7 days (RFC 3339 UTC). BSD date takes
 # -v+7d, GNU date takes -d '+7 days'.
@@ -257,6 +269,8 @@ sed_args=(
   -e "s|eu-west-2|$(esc "${AWS_REGION}")|g"
   -e "s|^  # phase0_admin_impersonation_expires_at: .*\$|  phase0_admin_impersonation_expires_at: \"${PHASE0_EXPIRES_AT}\"|"
   -e "s|^  # enable_audit_bucket_lock: false\$|  enable_audit_bucket_lock: ${AUDIT_BUCKET_LOCK}|"
+  -e "s|^  enable_org_config_recorders: false\$|  enable_org_config_recorders: ${AWS_CONFIG_RECORDERS}|"
+  -e "s|^  enable_config_recorder_scp: false\$|  enable_config_recorder_scp: ${AWS_CONFIG_RECORDERS}|"
 )
 if [[ -n "${DOMAIN}" ]]; then
   sed_args+=(

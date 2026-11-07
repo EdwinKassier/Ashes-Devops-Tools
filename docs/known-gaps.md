@@ -11,6 +11,37 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
 
 ## OPEN — validate before relying on
 
+- **Org-wide Config recorders are mock-tested only.** The
+  `org-config-recorders` StackSet (`modules/aws/security/config-recorder-stackset`)
+  and the migration runbook
+  ([`aws-config-recorder-migration.md`](runbooks/aws-config-recorder-migration.md))
+  have not run in the sandbox. **Validate:**
+  - a fresh account's first `PutConfigurationRecorder` with the
+    `AWSServiceRoleForConfig` ARN creates the service-linked role, since the
+    template creates no IAM resources;
+  - the CloudFormation-created recorder starts recording without an explicit
+    `StartConfigurationRecorder`;
+  - the `DIFFERENCE` filter keeps security tooling out on auto-deployment too;
+  - `SOFT_FAILURE_TOLERANCE` with tolerance 100 lets the migration pass apply;
+  - the recording gap between runbook steps 4 and 5. Record it in the runbook.
+
+- **Flow-log and log-archive bucket-policy changes by the owning pipeline are
+  detected, not prevented.** The deny-tamper SCP still exempts the pipeline
+  roles from `ec2:DeleteFlowLogs`, because flow-log replacement is routine, and
+  from the log-archive `s3:PutBucketPolicy` / `DeleteBucketPolicy`, because
+  aws-security owns that policy. A compromised owning pipeline can remove a flow
+  log or rewrite the bucket policy. The change is caught by Security Hub
+  `EC2.6`, which can no longer be disabled (`securityhub-org` validation), and
+  by the CIS 4.8 (bucket policy) alarm in `cloudtrail-org`. It is not blocked.
+
+- **The StackSet administrator can deploy to every account.** `aws-organization`
+  owns the service-managed StackSets (recorders, TFC OIDC baseline, member
+  break-glass, Backup role), and its `stacksets-exec-*` execution role is exempt
+  from the recorder SCP and the StackSet role-tamper deny. Whoever can apply
+  `aws-organization` can therefore run any template in any member account.
+  This is inherent to StackSets. The control is who can apply
+  `aws-organization` (phase-0 role, policy sets, workspace access), not an SCP.
+
 - **Essentials-plan support for VCS policy sets is unverified.** tfc-admin
   turns the policy sets on by default only for `org.tfc.plan` `standard` or
   `premium` (`envs/tfc-admin/config.tf`, `local.enable_policy_sets`). Whether

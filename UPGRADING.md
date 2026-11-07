@@ -5,6 +5,48 @@ fork. Newest first.
 
 ## Unreleased
 
+### AWS Config recorders move to an aws-organization StackSet
+
+The workload roots no longer manage a Config recorder. `aws-organization`
+deploys recorders org-wide: a service-managed StackSet, `org-config-recorders`,
+covers every member account except security tooling, and the management account
+gets a direct recorder. A new recorder SCP then limits who can change them.
+Everything is behind flags that default to `false`, so nothing changes until
+you follow the runbook.
+
+**What changes on the next plan (no manual step):**
+
+- **aws-workload-<env>**: `module.config_recorder` leaves state through a
+  `removed` block with `destroy = false`. The live recorder, delivery channel
+  and service-linked role stay in the account and keep recording. The plan must
+  show no destroy.
+- `config_role_arn` and `create_config_service_linked_role` (workload stage and
+  root) are deprecated and ignored. A check warns while they are set. The
+  workload `config_role_arn` output is now always null. All three are removed
+  in v1.0.
+- **securityhub-org** rejects `EC2.6` in `disabled_control_identifiers`.
+
+**Manual steps (existing AWS estates):** follow
+[`docs/runbooks/aws-config-recorder-migration.md`](docs/runbooks/aws-config-recorder-migration.md).
+
+1. Upgrade the workload roots.
+2. Apply aws-security.
+3. Apply aws-organization with `enable_org_config_recorders = true` and
+   `org_config_recorders_failure_tolerance_percentage = 100`.
+4. Delete the legacy recorders with `scripts/aws-delete-legacy-recorders.sh`
+   (break-glass, dry-run first).
+5. Re-apply aws-organization with tolerance `0`.
+6. Apply aws-organization with `enable_config_recorder_scp = true`.
+
+A greenfield estate sets both flags to `true` once aws-security has applied
+(`scripts/init-landing-zone.sh --aws-config-recorders true`). Until you
+complete the migration, the accounts outside the workload roots (Infrastructure,
+log archive, forensics, management) have no recorder, as before.
+
+**Legacy removal in v1.0:** the workload `removed` block, the deprecated
+workload inputs and output, and the flag-off path of the recorder SCP (the
+recorder actions in `DenyWeakenSecurityServices`).
+
 ### The destroy guard is mandatory, in its own overridable policy set
 
 `destroy_guard` moves from `policies/opa/` (advisory) to

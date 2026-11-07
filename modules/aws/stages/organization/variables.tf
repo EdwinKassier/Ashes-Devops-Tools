@@ -476,3 +476,50 @@ variable "enable_security_service_teardown" {
   default     = false
   nullable    = false
 }
+
+# -----------------------------------------------------------------------------
+# Org-wide Config recorders (docs/runbooks/aws-config-recorder-migration.md)
+# -----------------------------------------------------------------------------
+
+variable "enable_org_config_recorders" {
+  description = "Deploy AWS Config recorders org-wide: a service-managed StackSet to every member account except security_tooling (which keeps its aggregator recorder), plus a direct recorder in the management account. Default false: the delivery bucket comes from aws-security, which applies after aws-organization. Turn it on after aws-security has applied (greenfield) or at step 3 of the migration runbook."
+  type        = bool
+  default     = false
+  nullable    = false
+
+  validation {
+    condition     = !var.enable_org_config_recorders || contains(keys(merge(var.accounts, var.workload_accounts)), "security_tooling")
+    error_message = "enable_org_config_recorders needs a security_tooling account (accounts / workload_accounts): it is excluded from the StackSet and keeps the aggregator recorder."
+  }
+}
+
+variable "org_config_recorders_failure_tolerance_percentage" {
+  description = "Failure tolerance of the recorder StackSet operations. 0 (default) for routine runs. The migration pass sets 100 so the instances that fail in accounts still holding a legacy recorder do not fail the apply; set it back to 0 afterwards."
+  type        = number
+  default     = 0
+  nullable    = false
+
+  validation {
+    condition     = var.org_config_recorders_failure_tolerance_percentage >= 0 && var.org_config_recorders_failure_tolerance_percentage <= 100
+    error_message = "org_config_recorders_failure_tolerance_percentage must be from 0 to 100."
+  }
+}
+
+variable "create_management_config_service_linked_role" {
+  description = "With enable_org_config_recorders, create the AWSServiceRoleForConfig service-linked role in the management account. Set false when Config was enabled there before (the role already exists)."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
+variable "enable_config_recorder_scp" {
+  description = "Deny Config recorder changes (Put/Delete/StopConfigurationRecorder, DeleteDeliveryChannel) to every member principal except the StackSet execution role, break-glass and security tooling's tfc-apply (deny-tamper DenyConfigRecorderChanges). Default false: until the migration finishes, the workload pipelines still own recorders. Turn it on at the last step of the migration runbook."
+  type        = bool
+  default     = false
+  nullable    = false
+
+  validation {
+    condition     = !var.enable_config_recorder_scp || contains(keys(merge(var.accounts, var.workload_accounts)), "security_tooling")
+    error_message = "enable_config_recorder_scp needs a security_tooling account (accounts / workload_accounts): its tfc-apply keeps managing the aggregator recorder."
+  }
+}

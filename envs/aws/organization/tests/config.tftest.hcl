@@ -101,6 +101,44 @@ run "guard_alert_inputs_variables_win" {
   }
 }
 
+# Config recorder migration flags: config fallback, explicit variables win, and
+# a config without the keys keeps both off (today's behaviour).
+run "recorder_flags_come_from_config_file" {
+  command = plan
+
+  assert {
+    condition     = local.enable_org_config_recorders && local.enable_config_recorder_scp
+    error_message = "enable_org_config_recorders / enable_config_recorder_scp must fall back to aws.enable_org_config_recorders / aws.enable_config_recorder_scp."
+  }
+}
+
+run "recorder_flags_variables_win" {
+  command = plan
+
+  variables {
+    enable_org_config_recorders = false
+    enable_config_recorder_scp  = false
+  }
+
+  assert {
+    condition     = !local.enable_org_config_recorders && !local.enable_config_recorder_scp
+    error_message = "explicit enable_org_config_recorders / enable_config_recorder_scp must win over the config file."
+  }
+}
+
+run "recorder_flags_absent_are_off" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-split.yaml"
+  }
+
+  assert {
+    condition     = !local.enable_org_config_recorders && !local.enable_config_recorder_scp
+    error_message = "with the keys absent both recorder flags must default to false."
+  }
+}
+
 run "tfc_project_default_without_config_prefix" {
   command = plan
 

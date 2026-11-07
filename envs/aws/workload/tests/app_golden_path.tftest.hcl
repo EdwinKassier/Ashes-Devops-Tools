@@ -12,7 +12,6 @@ variables {
   landing_zone_config_path = ""
   landing_zone_name        = "acme"
   workload_account_key     = "workload_dev"
-  config_role_arn          = "arn:aws:iam::222222222222:role/config-recorder"
   organization_contract    = { account_ids = { workload_dev = "222222222222" } }
   network_contract         = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } }
   security_contract        = { log_archive_bucket_name = "acme-org-log-archive" }

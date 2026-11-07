@@ -10,7 +10,6 @@ variables {
   landing_zone_config_path = ""
   landing_zone_name        = "acme"
   workload_account_key     = "workload_dev"
-  config_role_arn          = "arn:aws:iam::222222222222:role/config-recorder"
   kms_key_arn              = "arn:aws:kms:eu-west-2:222222222222:key/abcd-1234"
 
   organization_contract = { account_ids = { workload_dev = "222222222222" } }

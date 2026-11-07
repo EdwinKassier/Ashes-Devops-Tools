@@ -82,3 +82,8 @@ output "guard_alerts_topic_arn" {
   description = "ARN of the org-guard-alerts SNS topic (us-east-1, management account): org-detection teardown and organization-trail tampering alerts."
   value       = aws_sns_topic.guard_alerts.arn
 }
+
+output "org_config_recorder_stack_set_name" {
+  description = "Name of the org-wide Config recorder StackSet, or null when enable_org_config_recorders = false."
+  value       = try(module.org_config_recorders[0].stack_set_name, null)
+}

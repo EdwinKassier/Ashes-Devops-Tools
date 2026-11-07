@@ -30,12 +30,10 @@
 #                            workload.
 #   - account_baseline     — per-account guardrails (default EBS encryption, IAM
 #                            password policy).
-#   - config_recorder      — the config-org module in recorder_only mode. This is
-#                            the workload half of the org Config topology: a local
-#                            recorder + delivery channel only; the org aggregator
-#                            and conformance packs live in the home account's
-#                            aws-config stage. Same module, recorder-only mode —
-#                            NOT a separate module.
+#   - (no Config recorder) — the workload account's recorder is deployed by
+#                            aws-organization's org-wide recorder StackSet. The
+#                            former module.config_recorder leaves state through
+#                            the removed block below (destroy = false).
 #   - systems_manager      — optional (enable_ssm, default true): Session Manager
 #                            preferences, patch baseline, inventory.
 #   - edge_security         — optional (enable_edge, default false): per-workload
@@ -191,26 +189,31 @@ resource "aws_ebs_default_kms_key" "home" {
 }
 
 # ---------------------------------------------------------------------------
-# Config recorder — the org Config topology's workload half (recorder-only)
+# Config recorder — moved to aws-organization
 #
-# The SAME config-org module the home-account aws-config stage uses, invoked in
-# recorder_only mode: a per-Region recorder + delivery channel + recorder status
-# only. The org aggregator and conformance packs are skipped (they belong to the
-# home account), so aggregator_role_arn is unused and left empty.
+# The recorder, delivery channel and recorder status are now deployed to every
+# member account by aws-organization's org-wide recorder StackSet
+# (modules/aws/security/config-recorder-stackset). Upgrading drops the old
+# module from state WITHOUT deleting the live recorder (the tfc-apply boundary
+# denies recorder deletion anyway), so recording continues until the migration
+# replaces it: docs/runbooks/aws-config-recorder-migration.md.
 # ---------------------------------------------------------------------------
 
-module "config_recorder" {
-  source = "../../security/config-org"
+removed {
+  from = module.config_recorder
 
-  recorder_only = true
+  lifecycle {
+    destroy = false
+  }
+}
 
-  aws_enabled_regions        = var.aws_enabled_regions
-  config_role_arn            = var.config_role_arn
-  create_service_linked_role = var.create_config_service_linked_role
-  aggregator_role_arn        = "" # unused in recorder_only mode
-  log_archive_bucket         = var.log_archive_bucket_name
-
-  tags = var.tags
+# config_role_arn / create_config_service_linked_role are deprecated (no
+# recorder here any more) and removed in v1.0; warn when a caller still sets them.
+check "config_recorder_inputs_deprecated" {
+  assert {
+    condition     = var.config_role_arn == null && var.create_config_service_linked_role
+    error_message = "config_role_arn and create_config_service_linked_role are ignored: the workload Config recorder is deployed by aws-organization (enable_org_config_recorders). Remove them; they are deleted in v1.0."
+  }
 }
 
 # ---------------------------------------------------------------------------

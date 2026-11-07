@@ -34,8 +34,8 @@ output "name" {
 }
 
 output "config_role_arn" {
-  description = "IAM role the workload account's Config recorders use (the AWSServiceRoleForConfig service-linked role unless config_role_arn was set)."
-  value       = module.config_recorder.config_role_arn
+  description = "Deprecated, always null: the workload account's Config recorder is deployed by aws-organization's recorder StackSet (it uses the AWSServiceRoleForConfig service-linked role). Removed in v1.0."
+  value       = null
 }
 
 output "internet_gateway_id" {

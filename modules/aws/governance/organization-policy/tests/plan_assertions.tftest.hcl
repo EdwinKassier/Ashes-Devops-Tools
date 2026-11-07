@@ -659,3 +659,54 @@ run "policies_follow_the_partition" {
     error_message = "with partition = aws-us-gov no SCP may contain an arn:aws: ARN."
   }
 }
+
+# Recorder SCP (after the Config recorder migration): the four recorder actions
+# move from DenyWeakenSecurityServices (pipeline-wide exemption) into
+# DenyConfigRecorderChanges, whose only exemptions are role ARNs: the StackSet
+# execution role, break-glass, and the account-qualified recorder pipeline roles.
+run "config_recorder_scp_off_keeps_todays_statement" {
+  command = plan
+
+  assert {
+    condition = (
+      length([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyConfigRecorderChanges"]) == 0 &&
+      contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyWeakenSecurityServices"]).Action, "config:PutConfigurationRecorder")
+    )
+    error_message = "with enable_config_recorder_scp = false the recorder actions stay in DenyWeakenSecurityServices"
+  }
+}
+
+run "config_recorder_scp_exempts_role_arns_only" {
+  command = plan
+
+  variables {
+    enable_config_recorder_scp         = true
+    config_recorder_pipeline_role_arns = ["arn:aws:iam::222222222222:role/tfc-apply"]
+  }
+
+  assert {
+    condition = (
+      toset(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyConfigRecorderChanges"]).Condition.ArnNotLike["aws:PrincipalArn"]) ==
+      toset(["arn:aws:iam::*:role/stacksets-exec-*", "arn:aws:iam::*:role/break-glass", "arn:aws:iam::222222222222:role/tfc-apply"])
+    )
+    error_message = "DenyConfigRecorderChanges must exempt exactly stacksets-exec-*, break-glass and the listed role ARNs"
+  }
+
+  assert {
+    condition     = keys(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyConfigRecorderChanges"]).Condition) == ["ArnNotLike"]
+    error_message = "DenyConfigRecorderChanges must never exempt a whole account (ArnNotLike on role ARNs only)"
+  }
+
+  assert {
+    condition = (
+      !contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyWeakenSecurityServices"]).Action, "config:PutConfigurationRecorder") &&
+      contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyWeakenSecurityServices"]).Action, "ec2:DeleteFlowLogs")
+    )
+    error_message = "the recorder actions leave DenyWeakenSecurityServices; flow-log deletion stays there"
+  }
+
+  assert {
+    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) <= 10240
+    error_message = "deny-tamper SCP must stay within the 10,240-character SCP quota"
+  }
+}

@@ -25,13 +25,20 @@ module "aws_organization" {
   cost_anomaly_email           = var.cost_anomaly_email
 
   # Member-account TFC workload identity (OIDC provider + tfc-plan / tfc-apply).
-  enable_tfc_oidc_baseline               = var.enable_tfc_oidc_baseline
-  tfc_organization                       = local.tfc_organization
-  tfc_hostname                           = var.tfc_hostname
-  pin_tfc_federation_to_org              = var.pin_tfc_federation_to_org
-  enable_tfc_management_roles            = var.enable_tfc_management_roles
-  enable_security_service_teardown       = var.enable_security_service_teardown
-  guard_alert_emails                     = local.guard_alert_emails
+  enable_tfc_oidc_baseline         = var.enable_tfc_oidc_baseline
+  tfc_organization                 = local.tfc_organization
+  tfc_hostname                     = var.tfc_hostname
+  pin_tfc_federation_to_org        = var.pin_tfc_federation_to_org
+  enable_tfc_management_roles      = var.enable_tfc_management_roles
+  enable_security_service_teardown = var.enable_security_service_teardown
+  guard_alert_emails               = local.guard_alert_emails
+
+  # Org-wide Config recorders, then the recorder SCP (migration runbook).
+  enable_org_config_recorders                       = local.enable_org_config_recorders
+  org_config_recorders_failure_tolerance_percentage = var.org_config_recorders_failure_tolerance_percentage
+  create_management_config_service_linked_role      = var.create_management_config_service_linked_role
+  enable_config_recorder_scp                        = local.enable_config_recorder_scp
+
   backup_service_role_region             = local.aws_region
   org_policy_overrides                   = var.org_policy_overrides
   partition                              = var.partition
