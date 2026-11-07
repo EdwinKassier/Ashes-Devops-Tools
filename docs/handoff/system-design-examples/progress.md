@@ -48,3 +48,5 @@ Task 2: minor (deferred): data-zones bullet calls workload_cmek "the per-environ
 Task 4: implemented d842499 (5959 words, 13 headings, gates green; ~164 snippet lines); review dispatched (opus)
 REPO GAPS (out of scope, for known-gaps / follow-up): envs/aws/workload doesn't pass queue_kms_key_arn (SQS-managed encryption); AWS workload CMK key policy lacks events.amazonaws.com; GCP environment stage doesn't pass pubsub_kms_key_name; GCP app-services pubsub option creates only a pull subscription (request-billed Cloud Run can't drain)
 Task 6: dispatched (opus) — writers in flight: 3, 5, 6; reviewer: 4
+Task 3: implemented 50e9fb3 (5973 words; 157 snippet lines); review dispatched (opus)
+REPO GAPS: modules/aws/network/load-balancer has no idle_timeout input (ALB 60s default); app-services sets no ulimits (Fargate nofile 65535 caps ~60k sockets/task); no modules for ElastiCache, DynamoDB, Memorystore Valkey, GCP service connection policy
