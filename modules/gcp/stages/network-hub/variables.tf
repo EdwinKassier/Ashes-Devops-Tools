@@ -152,3 +152,22 @@ variable "vpc_sc_dry_run_additional_restricted_services" {
   type        = list(string)
   default     = null
 }
+
+variable "enable_ncc_hub" {
+  description = "Create a Network Connectivity Center hub in the hub project, with the hub VPC as its center spoke (and a producer spoke for its Private Service Access peering). Environment VPCs join it with connectivity = ncc. False (default) = VPC peering only."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "ncc_preset_topology" {
+  description = "NCC hub preset topology: STAR (environment spokes reach the hub VPC, not each other; the peering-equivalent) or MESH (every spoke reaches every other). Immutable once the hub exists."
+  type        = string
+  default     = "STAR"
+  nullable    = false
+
+  validation {
+    condition     = contains(["STAR", "MESH"], var.ncc_preset_topology)
+    error_message = "ncc_preset_topology must be STAR or MESH."
+  }
+}

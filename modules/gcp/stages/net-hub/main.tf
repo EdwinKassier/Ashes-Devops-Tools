@@ -6,7 +6,8 @@
  * The landing-zone hub: a Shared VPC host network with a three-tier VPC
  * (network/tiered-vpc), Cloud NAT, Private Service Access, Private Service
  * Connect, hierarchical (folder or org) firewall policies, the hub VPC-SC
- * perimeter, and opt-in hybrid connectivity (HA VPN, Cloud Interconnect).
+ * perimeter, opt-in hybrid connectivity (HA VPN, Cloud Interconnect) and an
+ * opt-in Network Connectivity Center hub (the alternative to spoke peering).
  *
  * Replaces the hub use of the deprecated stages/host module (see the README
  * migration table for the moved blocks).
@@ -167,6 +168,50 @@ module "interconnects" {
   peer_asn             = each.value.peer_asn
   enable_bfd           = each.value.enable_bfd
   advertised_ip_ranges = each.value.advertised_ip_ranges
+}
+
+# =============================================================================
+# NETWORK CONNECTIVITY CENTER (opt-in alternative to hub-and-spoke peering)
+# =============================================================================
+
+# The hub, and the hub VPC as its center-group spoke (default group on MESH).
+# Environment spokes join the edge group from stages/net-spoke (connectivity =
+# ncc). The hub VPC can join while environment VPCs are still peered with it;
+# each environment VPC must drop its peering before it becomes a spoke
+# (docs/runbooks/gcp-peering-to-ncc-migration.md).
+module "ncc_hub" {
+  source = "../../network/ncc-hub"
+  count  = var.ncc.enabled ? 1 : 0
+
+  project_id      = var.project_id
+  name            = coalesce(var.ncc.name, "${var.project_prefix}-ncc-hub")
+  description     = "Landing-zone NCC hub for ${var.project_prefix}"
+  preset_topology = var.ncc.preset_topology
+  export_psc      = var.ncc.export_psc
+  labels          = var.labels
+}
+
+module "ncc_hub_spoke" {
+  source = "../../network/ncc-spoke"
+  count  = var.ncc.enabled ? 1 : 0
+
+  project_id  = var.project_id
+  name        = var.network.name
+  description = "NCC center spoke for the hub VPC ${var.network.name}"
+  labels      = var.labels
+  hub_id      = module.ncc_hub[0].id
+  group       = module.ncc_hub[0].center_group
+
+  linked_vpc_network = {
+    uri = module.network.network_self_link
+  }
+
+  producer_vpc_networks = var.private_service_access.enabled && var.ncc.export_private_service_access ? {
+    psa = {
+      network = module.network.network_name
+      peering = module.private_service_access[0].peering.peering
+    }
+  } : {}
 }
 
 # =============================================================================

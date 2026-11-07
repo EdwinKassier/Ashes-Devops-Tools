@@ -84,3 +84,13 @@ output "firewall_policy_name" {
   description = "Name of the tier network firewall policy (pass to network/internal-lb firewall_policy), or null in firewall_mode = legacy."
   value       = module.network.firewall_policy_name
 }
+
+output "ncc_hub_id" {
+  description = "The NCC hub ID that environment spokes attach to (stages/net-spoke ncc.hub_id), or null when ncc.enabled = false."
+  value       = try(module.ncc_hub[0].id, null)
+}
+
+output "ncc_spoke_group" {
+  description = "The NCC group environment spokes join (edge for STAR, default for MESH), or null when ncc.enabled = false."
+  value       = try(module.ncc_hub[0].spoke_group, null)
+}

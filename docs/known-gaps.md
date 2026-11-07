@@ -518,6 +518,16 @@ Enable only after validating in a real/test org. Each defaults to prior behaviou
   identity BEFORE expanding services or an enforced apply is blocked.
 - **A3 — dedicated Identity Center account** (`identity_account_id`,
   `modules/aws/stages/security`). Point at a real dedicated identity account.
+- **NCC hub/spoke connectivity** (`gcp.network.ncc_hub`, `gcp.network.connectivity`,
+  `gcp.environments.<env>.network_connectivity`; `modules/gcp/network/ncc-hub`,
+  `modules/gcp/network/ncc-spoke`). Not yet sandbox-proven: run path (a) of
+  [the migration runbook](runbooks/gcp-peering-to-ncc-migration.md) on the sandbox
+  spoke, then re-plan to 0 changes, before adopting it or making `ncc` the
+  scaffolder default. Open with it: `networkconnectivity.googleapis.com` is not
+  enabled by any root; cross-project spokes may need manual acceptance (the hub's
+  groups, and so an auto-accept list, are not managed); the producer spoke passes
+  the consumer VPC **name** as `linked_producer_vpc_network.network` (the provider
+  example's form), to be confirmed against the API.
 
 ## Capability parity (2026 review)
 

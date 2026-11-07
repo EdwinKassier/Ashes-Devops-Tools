@@ -87,6 +87,23 @@ variable "dns_hub_vpc_cidr_block" {
   }
 }
 
+variable "enable_ncc_hub" {
+  description = "Create a Network Connectivity Center hub (hub VPC as its center spoke) that environment VPCs can join instead of peering (gcp-workload network_connectivity = ncc). Null = gcp.network.ncc_hub.enabled from config/landing-zone.yaml, else false. See docs/runbooks/gcp-peering-to-ncc-migration.md."
+  type        = bool
+  default     = null
+}
+
+variable "ncc_preset_topology" {
+  description = "NCC hub preset topology, STAR or MESH. Immutable once the hub exists. Null = gcp.network.ncc_hub.preset_topology from config/landing-zone.yaml, else STAR."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = contains(["STAR", "MESH"], coalesce(var.ncc_preset_topology, local.cfg.ncc_preset_topology, "STAR"))
+    error_message = "ncc_preset_topology (or gcp.network.ncc_hub.preset_topology in config/landing-zone.yaml) must be STAR or MESH."
+  }
+}
+
 variable "vpc_sc_access_policy_name" {
   description = "Bare numeric ID of the org-level Access Context Manager access policy for the hub VPC-SC perimeter (e.g. '1234567890'). Optional — if null, no hub perimeter is created. Do NOT include the 'accessPolicies/' prefix. Null = gcp.network.vpc_sc_access_policy from config/landing-zone.yaml."
   type        = string

@@ -154,3 +154,145 @@ run "rejects_malformed_network_hub_contract" {
 
   expect_failures = [var.network_hub_contract]
 }
+
+# Hub connectivity: peering by default; ncc joins the NCC hub named by the
+# gcp-network-hub contract (DNS peering zone kept, hub VPC peering dropped by
+# stages/net-spoke).
+run "connectivity_defaults_to_peering" {
+  command = plan
+
+  variables {
+    network_hub_contract = {
+      vpc_self_link = "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc"
+      dns_domain    = "hub.internal."
+    }
+  }
+
+  assert {
+    condition     = local.network_connectivity == "peering" && local.hub_ncc.hub_id == null && local.hub_ncc.group == "edge"
+    error_message = "With no connectivity setting the environment must keep VPC peering."
+  }
+}
+
+run "connectivity_ncc_from_contract" {
+  command = plan
+
+  variables {
+    network_connectivity = "ncc"
+    network_hub_contract = {
+      vpc_self_link   = "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc"
+      dns_domain      = "hub.internal."
+      ncc_hub_id      = "projects/acme-hub/locations/global/hubs/acme-ncc-hub"
+      ncc_spoke_group = "default"
+    }
+  }
+
+  assert {
+    condition     = local.network_connectivity == "ncc" && local.hub_ncc.hub_id == "projects/acme-hub/locations/global/hubs/acme-ncc-hub" && local.hub_ncc.group == "default"
+    error_message = "network_connectivity = ncc must pass the contract's NCC hub ID and spoke group to the host network."
+  }
+
+  assert {
+    condition     = local.hub_dns_zones["internal-peering"].dns_name == "hub.internal."
+    error_message = "The hub DNS peering zone must stay in ncc mode (DNS peering is not VPC peering)."
+  }
+}
+
+run "connectivity_ncc_from_remote_state" {
+  command = plan
+
+  variables {
+    network_connectivity = "ncc"
+  }
+
+  override_data {
+    target = data.terraform_remote_state.network_hub
+    values = {
+      outputs = {
+        contract = {
+          hub_network = {
+            vpc_self_link   = "https://www.googleapis.com/compute/v1/projects/remote-hub/global/networks/hub-vpc"
+            dns_domain      = "remote.internal."
+            ncc_hub_id      = "projects/remote-hub/locations/global/hubs/remote-ncc-hub"
+            ncc_spoke_group = "edge"
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = local.hub_ncc.hub_id == "projects/remote-hub/locations/global/hubs/remote-ncc-hub" && local.hub_ncc.group == "edge"
+    error_message = "The NCC hub ID must come from the gcp-network-hub remote-state contract."
+  }
+}
+
+# A producer state from before the NCC keys existed still plans (peering).
+run "pre_ncc_hub_contract_keeps_peering" {
+  command = plan
+
+  override_data {
+    target = data.terraform_remote_state.network_hub
+    values = {
+      outputs = {
+        contract = {
+          hub_network = {
+            vpc_self_link = "https://www.googleapis.com/compute/v1/projects/remote-hub/global/networks/hub-vpc"
+            dns_domain    = "remote.internal."
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = local.network_connectivity == "peering" && local.hub_ncc.hub_id == null
+    error_message = "A gcp-network-hub contract without the NCC keys must still plan, in peering mode."
+  }
+}
+
+# gcp.environments.<env>.network_connectivity overrides gcp.network.connectivity.
+run "connectivity_per_environment_from_config_file" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-ncc.yaml"
+    project_prefix           = null
+    tfc_organization         = null
+    organization_contract    = null
+    projects_contract        = null
+  }
+
+  assert {
+    condition     = local.network_connectivity == "ncc" && local.hub_ncc.hub_id == "projects/cfgco-hub/locations/global/hubs/cfgco-ncc-hub"
+    error_message = "gcp.environments.dev.network_connectivity = ncc must win over gcp.network.connectivity, with the hub ID from gcp.contracts.network_hub."
+  }
+}
+
+run "standalone_forces_peering" {
+  command = plan
+
+  variables {
+    enable_network_hub   = false
+    network_connectivity = "ncc"
+  }
+
+  assert {
+    condition     = local.network_connectivity == "peering" && length(local.hub_vpc_peerings) == 0
+    error_message = "Without the network hub there is nothing to join: connectivity stays peering with no peerings."
+  }
+}
+
+run "rejects_unknown_network_connectivity" {
+  command = plan
+
+  variables {
+    network_connectivity = "transit"
+    network_hub_contract = {
+      vpc_self_link = "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc"
+      dns_domain    = "hub.internal."
+    }
+  }
+
+  expect_failures = [var.network_connectivity]
+}

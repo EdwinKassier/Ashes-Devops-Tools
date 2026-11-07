@@ -142,6 +142,15 @@ gcp:
     # perimeter (gcloud access-context-manager policies list --organization=ID).
     # Unset, no hub perimeter is created and a production environment warns.
     # vpc_sc_access_policy: "1234567890"
+    # How environment VPCs reach the hub: peering (default) or ncc (Network
+    # Connectivity Center spokes). ncc needs ncc_hub.enabled applied in
+    # gcp-network-hub first; per environment, gcp.environments.<env>
+    # .network_connectivity wins. Prove the switch in a sandbox before adopting
+    # it: docs/runbooks/gcp-peering-to-ncc-migration.md.
+    # connectivity: peering
+    # ncc_hub:
+    #   enabled: false
+    #   preset_topology: STAR   # STAR | MESH, immutable once created
   # Application environments, consumed by gcp-bootstrap, gcp-organization,
   # gcp-projects, gcp-network-hub, gcp-workload-<env> and tfc-admin (one
   # gcp-workload-<env> workspace per key). Keys: ^[a-z][a-z0-9-]{0,14}$, not

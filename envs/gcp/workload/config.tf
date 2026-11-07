@@ -115,8 +115,18 @@ locals {
     }
 
     network_hub_contract = try(local.lz.gcp.contracts.network_hub, null) == null ? null : {
-      vpc_self_link = tostring(local.lz.gcp.contracts.network_hub.vpc_self_link)
-      dns_domain    = tostring(local.lz.gcp.contracts.network_hub.dns_domain)
+      vpc_self_link   = tostring(local.lz.gcp.contracts.network_hub.vpc_self_link)
+      dns_domain      = tostring(local.lz.gcp.contracts.network_hub.dns_domain)
+      ncc_hub_id      = try(tostring(local.lz.gcp.contracts.network_hub.ncc_hub_id), null)
+      ncc_spoke_group = try(tostring(local.lz.gcp.contracts.network_hub.ncc_spoke_group), null)
+    }
+
+    # Hub connectivity: gcp.environments.<env>.network_connectivity, else
+    # gcp.network.connectivity (peering | ncc).
+    network_connectivity = try(tostring(local.lz.gcp.network.connectivity), null)
+    environment_connectivity = {
+      for env, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : env => tostring(e.network_connectivity)
+      if try(e.network_connectivity, null) != null
     }
   }
 

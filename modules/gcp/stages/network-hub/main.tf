@@ -52,6 +52,13 @@ module "hub" {
     }
   }
 
+  # Opt-in Network Connectivity Center hub (the hub VPC joins as its center
+  # spoke). Off = environment spokes reach the hub through VPC peering only.
+  ncc = {
+    enabled         = var.enable_ncc_hub
+    preset_topology = var.ncc_preset_topology
+  }
+
   # Hierarchical Firewall Policy (Defense in Depth)
   hierarchical_firewall_policies = {
     "policy-hub-shared" = {

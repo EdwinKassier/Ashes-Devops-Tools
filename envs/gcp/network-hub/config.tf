@@ -33,6 +33,8 @@ locals {
     hub_vpc_cidr_block        = try(tostring(local.lz.gcp.network.hub_cidr_block), null)
     vpc_sc_access_policy      = try(tostring(local.lz.gcp.network.vpc_sc_access_policy), null)
     dns_hub_vpc_cidr_block    = try(tostring(local.lz.gcp.network.dns_hub_cidr_block), null)
+    enable_ncc_hub            = try(tobool(local.lz.gcp.network.ncc_hub.enabled), null)
+    ncc_preset_topology       = try(tostring(local.lz.gcp.network.ncc_hub.preset_topology), null)
     # Normalised to the attribute types of var.environments (region defaults to
     # org.regions.gcp, display_name to the key). A malformed entry is caught by
     # the var.environments validations, which also read local.cfg.
@@ -87,4 +89,7 @@ locals {
   vpc_sc_access_policy_name = var.vpc_sc_access_policy_name != null ? var.vpc_sc_access_policy_name : local.cfg.vpc_sc_access_policy
   dns_hub_vpc_cidr_block    = coalesce(var.dns_hub_vpc_cidr_block, local.cfg.dns_hub_vpc_cidr_block, "0.0.0.0/32")
   tfc_organization          = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
+  # Opt-in NCC hub (default off: environment VPCs peer with the hub VPC).
+  enable_ncc_hub      = coalesce(var.enable_ncc_hub, local.cfg.enable_ncc_hub, false)
+  ncc_preset_topology = coalesce(var.ncc_preset_topology, local.cfg.ncc_preset_topology, "STAR")
 }

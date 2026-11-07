@@ -36,6 +36,9 @@ module "network_hub" {
   hub_vpc_cidr_block     = local.hub_vpc_cidr_block
   dns_hub_vpc_cidr_block = local.dns_hub_vpc_cidr_block
 
+  enable_ncc_hub      = local.enable_ncc_hub
+  ncc_preset_topology = local.ncc_preset_topology
+
   vpc_sc_access_policy_name = local.vpc_sc_access_policy_name
   vpc_sc_enable_dry_run     = var.vpc_sc_enable_dry_run
 

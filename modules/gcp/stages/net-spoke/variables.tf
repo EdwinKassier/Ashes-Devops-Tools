@@ -182,6 +182,40 @@ variable "peerings" {
   nullable = false
 }
 
+variable "connectivity" {
+  description = "How the VPC reaches the hub. peering (default): VPC peering per peerings entry. ncc: a Network Connectivity Center spoke on ncc.hub_id, with peerings ignored. Switching an existing spoke deletes its peering; see docs/runbooks/gcp-peering-to-ncc-migration.md."
+  type        = string
+  default     = "peering"
+  nullable    = false
+
+  validation {
+    condition     = contains(["peering", "ncc"], var.connectivity)
+    error_message = "connectivity must be peering or ncc."
+  }
+}
+
+variable "ncc" {
+  description = "NCC spoke settings, used when connectivity = ncc. hub_id: the network/ncc-hub id. group: edge (STAR hub) or default (MESH hub). Export ranges filter the subnet ranges the hub learns. export_private_service_access adds a producer VPC spoke for the PSA peering (when PSA is enabled)."
+  type = object({
+    hub_id                        = optional(string)
+    group                         = optional(string, "edge")
+    include_export_ranges         = optional(list(string), [])
+    exclude_export_ranges         = optional(list(string), [])
+    export_private_service_access = optional(bool, true)
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = var.connectivity != "ncc" || var.ncc.hub_id != null
+    error_message = "ncc.hub_id is required when connectivity = ncc (the gcp-network-hub contract hub_network.ncc_hub_id)."
+  }
+  validation {
+    condition     = contains(["edge", "default"], var.ncc.group)
+    error_message = "ncc.group must be edge (STAR hub) or default (MESH hub); center is reserved for the hub VPC."
+  }
+}
+
 variable "dns_zones" {
   description = "Cloud DNS zones hosted in this project, keyed by zone name. Private zones bind to this VPC; set peering_network for a peering zone that resolves through another VPC (for example the hub DNS anchor). Query logging is always on."
   type = map(object({

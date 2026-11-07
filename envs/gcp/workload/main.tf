@@ -5,7 +5,8 @@
 # otherwise), so this root can plan without the upstream workspaces existing:
 #   - organization → org_id, billing_account, admin_project_number
 #   - projects     → environment_config[<env>] (host project, folder, region, ...)
-#   - network_hub  → contract.hub_network {vpc_self_link, dns_domain}. OPTIONAL: with
+#   - network_hub  → contract.hub_network {vpc_self_link, dns_domain, and the
+#     optional ncc_hub_id / ncc_spoke_group for network_connectivity = ncc}. OPTIONAL: with
 #     enable_network_hub = false there is no hub peering and no DNS peering zone
 #     (local.hub_vpc_peerings / local.hub_dns_zones are empty).
 # Consumers (incl. the host module block) must use the locals below, never
@@ -76,6 +77,19 @@ locals {
     !var.enable_network_hub ? null :
     local.read_network_hub ? local.network_hub_remote.hub_network : local.network_hub_contract
   )
+
+  # Hub connectivity: peering (default) or an NCC spoke on the hub's NCC hub.
+  # Standalone (no hub) stays peering with an empty peerings map.
+  network_connectivity = local.hub_network == null ? "peering" : coalesce(
+    var.network_connectivity,
+    try(local.cfg.environment_connectivity[var.environment], null),
+    local.cfg.network_connectivity,
+    "peering",
+  )
+  hub_ncc = {
+    hub_id = try(local.hub_network.ncc_hub_id, null)
+    group  = coalesce(try(local.hub_network.ncc_spoke_group, null), "edge")
+  }
 
   # Hub-dependent host inputs: empty maps in standalone mode (no hub peering, no
   # DNS peering zone). Built with a filtered for-expression so both modes share
@@ -231,9 +245,13 @@ module "host" {
     target = local.psc_target
   }
 
-  # Hub peering and the DNS peering zone (empty maps in standalone mode).
-  peerings  = local.hub_vpc_peerings
-  dns_zones = local.hub_dns_zones
+  # Hub peering (or, with network_connectivity = ncc, an NCC spoke on the hub's
+  # NCC hub instead) and the DNS peering zone (empty maps in standalone mode).
+  # DNS peering is not VPC peering, so the zone stays in both modes.
+  connectivity = local.network_connectivity
+  ncc          = local.hub_ncc
+  peerings     = local.hub_vpc_peerings
+  dns_zones    = local.hub_dns_zones
 
   flow_logs_export = {
     enabled                 = true

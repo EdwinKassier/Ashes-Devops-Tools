@@ -118,3 +118,13 @@ output "firewall_policy_name" {
   description = "Name of the tier network firewall policy (pass to network/internal-lb firewall_policy), or null in firewall_mode = legacy."
   value       = module.network.firewall_policy_name
 }
+
+output "ncc_spoke_id" {
+  description = "The NCC spoke ID, or null when connectivity = peering."
+  value       = try(module.ncc_spoke[0].id, null)
+}
+
+output "ncc_producer_spoke_ids" {
+  description = "NCC producer VPC spoke IDs (Private Service Access), keyed by name; empty when connectivity = peering."
+  value       = try(module.ncc_spoke[0].producer_spoke_ids, {})
+}

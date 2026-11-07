@@ -32,3 +32,13 @@ output "hierarchical_firewall_association_targets" {
   description = "Folders the hub SSH/RDP-from-internet deny policy is associated with (shared + every environment folder)."
   value       = local.firewall_association_targets
 }
+
+output "ncc_hub_id" {
+  description = "ID of the Network Connectivity Center hub environment spokes attach to, or null when enable_ncc_hub = false."
+  value       = module.hub.ncc_hub_id
+}
+
+output "ncc_spoke_group" {
+  description = "NCC group environment spokes join (edge for STAR, default for MESH), or null when enable_ncc_hub = false."
+  value       = module.hub.ncc_spoke_group
+}

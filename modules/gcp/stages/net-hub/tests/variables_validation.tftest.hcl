@@ -71,3 +71,16 @@ run "rejects_invalid_firewall_mode" {
 
   expect_failures = [var.firewall_mode]
 }
+
+run "rejects_unknown_ncc_topology" {
+  command = plan
+
+  variables {
+    ncc = {
+      enabled         = true
+      preset_topology = "RING"
+    }
+  }
+
+  expect_failures = [var.ncc]
+}

@@ -39,7 +39,8 @@ net-hub - hub network composition
 The landing-zone hub: a Shared VPC host network with a three-tier VPC
 (network/tiered-vpc), Cloud NAT, Private Service Access, Private Service
 Connect, hierarchical (folder or org) firewall policies, the hub VPC-SC
-perimeter, and opt-in hybrid connectivity (HA VPN, Cloud Interconnect).
+perimeter, opt-in hybrid connectivity (HA VPN, Cloud Interconnect) and an
+opt-in Network Connectivity Center hub (the alternative to spoke peering).
 
 Replaces the hub use of the deprecated stages/host module (see the README
 migration table for the moved blocks).
@@ -79,6 +80,8 @@ module "example" {
 - hierarchical_firewall_policies - ../../network/hierarchical-firewall
 - integrated_nat - ../../network/nat
 - interconnects - ../../network/interconnect
+- ncc_hub - ../../network/ncc-hub
+- ncc_hub_spoke - ../../network/ncc-spoke
 - network - ../../network/tiered-vpc
 - private_service_access - ../../network/private-service-access
 - private_service_connect - ../../network/private-service-connect
@@ -91,7 +94,7 @@ module "example" {
 The following resources are created:
 
 
-- data source.google_compute_zones.available (modules/gcp/stages/net-hub/main.tf#L21)
+- data source.google_compute_zones.available (modules/gcp/stages/net-hub/main.tf#L22)
 
 
 ## Inputs
@@ -109,6 +112,7 @@ The following resources are created:
 | <a name="input_interconnects"></a> [interconnects](#input\_interconnects) | Cloud Interconnect VLAN attachments on the hub network, keyed by attachment name (Dedicated or Partner). | <pre>map(object({<br/>    region            = string<br/>    interconnect_type = optional(string, "PARTNER")<br/>    router_name       = string<br/>    router_asn        = optional(number, 64512)<br/>    create_router     = optional(bool, true)<br/><br/>    # Dedicated interconnect settings<br/>    interconnect_self_link = optional(string)<br/>    vlan_tag               = optional(number)<br/>    bandwidth              = optional(string, "BPS_10G")<br/><br/>    # Partner interconnect settings<br/>    edge_availability_domain = optional(string, "AVAILABILITY_DOMAIN_1")<br/><br/>    # Common settings<br/>    mtu           = optional(number, 1440)<br/>    admin_enabled = optional(bool, true)<br/>    encryption    = optional(string, "NONE")<br/><br/>    # BGP settings<br/>    create_bgp_peer    = optional(bool, true)<br/>    interface_ip_range = optional(string)<br/>    peer_ip_address    = optional(string)<br/>    peer_asn           = optional(number, 65000)<br/>    enable_bfd         = optional(bool, false)<br/><br/>    advertised_ip_ranges = optional(list(object({<br/>      range       = string<br/>      description = optional(string)<br/>    })), [])<br/>  }))</pre> | `{}` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels applied to every labelable resource. | `map(string)` | `{}` | no |
 | <a name="input_nat"></a> [nat](#input\_nat) | Cloud NAT (and its Cloud Router) for the private and database tiers. Set enabled = false for a network with no egress need. | <pre>object({<br/>    enabled            = optional(bool, true)<br/>    ip_allocate_option = optional(string, "AUTO_ONLY")<br/>    log_filter         = optional(string, "ERRORS_ONLY")<br/>  })</pre> | `{}` | no |
+| <a name="input_ncc"></a> [ncc](#input\_ncc) | Network Connectivity Center hub, off by default (spokes then use VPC peering). preset\_topology: STAR (edge spokes reach the center only; the peering-equivalent) or MESH. Immutable once created. name defaults to <project\_prefix>-ncc-hub. export\_private\_service\_access adds a producer VPC spoke for the hub PSA peering (when PSA is enabled). | <pre>object({<br/>    enabled                       = optional(bool, false)<br/>    name                          = optional(string)<br/>    preset_topology               = optional(string, "STAR")<br/>    export_psc                    = optional(bool, false)<br/>    export_private_service_access = optional(bool, true)<br/>  })</pre> | `{}` | no |
 | <a name="input_private_service_access"></a> [private\_service\_access](#input\_private\_service\_access) | Private Service Access range (private-IP Cloud SQL, Memorystore and other Google-managed services peer through it). | <pre>object({<br/>    enabled       = optional(bool, true)<br/>    name          = optional(string, "google-managed-services")<br/>    prefix_length = optional(number, 16)<br/>  })</pre> | `{}` | no |
 | <a name="input_private_service_connect"></a> [private\_service\_connect](#input\_private\_service\_connect) | Private Service Connect endpoint for Google APIs; target is 'all-apis' or 'vpc-sc'. | <pre>object({<br/>    enabled = optional(bool, true)<br/>    target  = optional(string, "all-apis")<br/>  })</pre> | `{}` | no |
 | <a name="input_region"></a> [region](#input\_region) | The primary GCP region of the network (e.g., 'us-central1', 'europe-west1'). | `string` | `"us-central1"` | no |
@@ -125,6 +129,8 @@ The following resources are created:
 | <a name="output_interconnect_pairing_keys"></a> [interconnect\_pairing\_keys](#output\_interconnect\_pairing\_keys) | Pairing keys for partner interconnects (share with the provider). |
 | <a name="output_interconnect_states"></a> [interconnect\_states](#output\_interconnect\_states) | The state of each interconnect attachment. |
 | <a name="output_nat_ip"></a> [nat\_ip](#output\_nat\_ip) | The Cloud NAT IP addresses, or null when NAT is disabled. |
+| <a name="output_ncc_hub_id"></a> [ncc\_hub\_id](#output\_ncc\_hub\_id) | The NCC hub ID that environment spokes attach to (stages/net-spoke ncc.hub\_id), or null when ncc.enabled = false. |
+| <a name="output_ncc_spoke_group"></a> [ncc\_spoke\_group](#output\_ncc\_spoke\_group) | The NCC group environment spokes join (edge for STAR, default for MESH), or null when ncc.enabled = false. |
 | <a name="output_network_id"></a> [network\_id](#output\_network\_id) | The VPC network ID. |
 | <a name="output_network_name"></a> [network\_name](#output\_network\_name) | The VPC network name. |
 | <a name="output_network_self_link"></a> [network\_self\_link](#output\_network\_self\_link) | The VPC network self link. |

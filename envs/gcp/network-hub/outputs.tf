@@ -1,5 +1,5 @@
 # Cross-root contract (Convention 4). Consumed by gcp-workload for hub peering
-# and internal DNS resolution. Keep these keys stable.
+# (or the NCC hub) and internal DNS resolution. Keep these keys stable.
 
 locals {
   # The gcp-network-hub cross-root contract: ONE non-sensitive object that downstream
@@ -13,6 +13,10 @@ locals {
       vpc_name      = module.network_hub.hub_vpc_name
       dns_zone_name = module.network_hub.dns_zone_name
       dns_domain    = module.network_hub.hub_dns_domain
+      # Opt-in NCC hub that environment VPCs join with network_connectivity =
+      # ncc (and the group they join); null while the hub is off.
+      ncc_hub_id      = module.network_hub.ncc_hub_id
+      ncc_spoke_group = module.network_hub.ncc_spoke_group
     }
   }
 }

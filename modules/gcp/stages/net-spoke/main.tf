@@ -5,7 +5,8 @@
  *
  * The Shared VPC host network of one application environment: a three-tier
  * VPC (network/tiered-vpc) plus Cloud NAT, Private Service Access, Private
- * Service Connect, hub peering, private or peering DNS zones, an opt-in Cloud
+ * Service Connect, hub connectivity (VPC peering, or an opt-in Network
+ * Connectivity Center spoke), private or peering DNS zones, an opt-in Cloud
  * Armor edge policy, opt-in VPC flow-log export, Shared VPC service-project
  * attachments and the environment VPC-SC perimeter.
  *
@@ -136,9 +137,13 @@ module "private_service_connect" {
 # HUB CONNECTIVITY AND DNS
 # =============================================================================
 
+# connectivity = "peering" (default): one VPC peering per var.peerings entry.
+# connectivity = "ncc": no peerings; the VPC joins the hub as an NCC spoke
+# instead (NCC rejects a VPC spoke that is still peered with a hub VPC).
+# The for_each keys, and so the state addresses, are unchanged in peering mode.
 module "vpc_peering" {
   source   = "../../network/vpc-peering"
-  for_each = var.peerings
+  for_each = var.connectivity == "peering" ? var.peerings : {}
 
   peering_name           = each.key
   network                = module.network.network_self_link
@@ -146,6 +151,37 @@ module "vpc_peering" {
   create_reverse_peering = each.value.create_reverse_peering
   export_custom_routes   = each.value.export_custom_routes
   import_custom_routes   = each.value.import_custom_routes
+}
+
+# NCC spoke for this VPC (edge group of a STAR hub by default), plus a producer
+# VPC spoke for the Private Service Access peering so the hub learns the PSA
+# range. depends_on orders the spoke after the peering deletion when an
+# existing spoke switches from peering to ncc in one apply.
+module "ncc_spoke" {
+  source = "../../network/ncc-spoke"
+  count  = var.connectivity == "ncc" ? 1 : 0
+
+  project_id  = var.project_id
+  name        = var.network.name
+  description = "NCC spoke for ${var.network.name}"
+  labels      = var.labels
+  hub_id      = var.ncc.hub_id
+  group       = var.ncc.group
+
+  linked_vpc_network = {
+    uri                   = module.network.network_self_link
+    include_export_ranges = var.ncc.include_export_ranges
+    exclude_export_ranges = var.ncc.exclude_export_ranges
+  }
+
+  producer_vpc_networks = var.private_service_access.enabled && var.ncc.export_private_service_access ? {
+    psa = {
+      network = module.network.network_name
+      peering = module.private_service_access[0].peering.peering
+    }
+  } : {}
+
+  depends_on = [module.vpc_peering]
 }
 
 module "dns" {

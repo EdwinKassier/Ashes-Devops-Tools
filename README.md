@@ -18,8 +18,8 @@
 [![Terraform Validation](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml)
 [![Security Scan](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml)
 [![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?style=flat-square&logo=pre-commit)](https://pre-commit.com)
-[![Modules](https://img.shields.io/badge/modules-120-blueviolet?style=flat-square)](modules/)
-[![Tests](https://img.shields.io/badge/test_suites-307-blue?style=flat-square)](modules/)
+[![Modules](https://img.shields.io/badge/modules-122-blueviolet?style=flat-square)](modules/)
+[![Tests](https://img.shields.io/badge/test_suites-315-blue?style=flat-square)](modules/)
 
 <sub>Module/test-suite counts are static badges, enforced in CI: <code>make count</code> prints the live figures and <code>scripts/check-docs-counts.sh</code> (meta-lint) fails when this README or CLAUDE.md disagrees with the tree.</sub>
 
@@ -116,7 +116,7 @@ Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives i
 
 ## Module Library
 
-120 modules — **60 GCP · 53 AWS · 6 SaaS · 1 TFC** — each with auto-generated docs and `mock_provider` tests.
+122 modules — **62 GCP · 53 AWS · 6 SaaS · 1 TFC** — each with auto-generated docs and `mock_provider` tests.
 
 Both clouds are organized into the **same conceptual domains** so you can map a capability across providers at a glance. Each table reads: **capability → Google Cloud module → Amazon Web Services module**. A `—` means the platform has no dedicated module for that capability (often because it is native, or lives in an adjacent domain — noted inline). Link text is the module's path under `modules/<cloud>/`.
 
@@ -142,7 +142,7 @@ Both clouds build a hub-and-spoke private network from the same primitives; the 
 |:-----------|:-------------|:--------------------|
 | Core private network | [`network/vpc`](modules/gcp/network/vpc/), [`network/subnet`](modules/gcp/network/subnet/) | [`network/vpc`](modules/aws/network/vpc/) |
 | IP address management | *(manual CIDR planning)* | [`network/ipam`](modules/aws/network/ipam/) |
-| Hub interconnect / transit | [`network/shared-vpc-service`](modules/gcp/network/shared-vpc-service/), [`network/vpc-peering`](modules/gcp/network/vpc-peering/), [`network/interconnect`](modules/gcp/network/interconnect/) | [`network/transit-gateway`](modules/aws/network/transit-gateway/) |
+| Hub interconnect / transit | [`network/shared-vpc-service`](modules/gcp/network/shared-vpc-service/), [`network/vpc-peering`](modules/gcp/network/vpc-peering/), [`network/ncc-hub`](modules/gcp/network/ncc-hub/) + [`network/ncc-spoke`](modules/gcp/network/ncc-spoke/) (opt-in), [`network/interconnect`](modules/gcp/network/interconnect/) | [`network/transit-gateway`](modules/aws/network/transit-gateway/) |
 | Private service access | [`network/private-service-connect`](modules/gcp/network/private-service-connect/), [`network/private-service-access`](modules/gcp/network/private-service-access/) | [`network/vpc-endpoints`](modules/aws/network/vpc-endpoints/) |
 | DNS | [`network/dns`](modules/gcp/network/dns/) | [`network/route53-resolver`](modules/aws/network/route53-resolver/) |
 | Hybrid VPN | [`network/vpn`](modules/gcp/network/vpn/) (HA-VPN; supported in `stages/net-hub`, exposed through `network-hub` and config by a planned follow-up) | [`network/vpn`](modules/aws/network/vpn/) *(library-only)* (Site-to-Site) |

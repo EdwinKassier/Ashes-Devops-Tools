@@ -230,3 +230,55 @@ run "projects_contract_missing_hub_keys_fails" {
 
   expect_failures = [terraform_data.upstream_contract_guard]
 }
+
+# The opt-in NCC hub: off by default, so the contract carries a null hub ID and
+# gcp-workload keeps peering.
+run "contract_ncc_hub_null_by_default" {
+  command = plan
+
+  assert {
+    condition     = local.enable_ncc_hub == false && output.contract.hub_network.ncc_hub_id == null && output.contract.hub_network.ncc_spoke_group == null
+    error_message = "The NCC hub must be off by default, with a null ncc_hub_id / ncc_spoke_group in the contract."
+  }
+}
+
+run "contract_carries_ncc_hub_when_enabled" {
+  command = plan
+
+  variables {
+    enable_ncc_hub      = true
+    ncc_preset_topology = "MESH"
+  }
+
+  override_module {
+    target = module.network_hub
+    outputs = {
+      hub_vpc_self_link = "https://www.googleapis.com/compute/v1/projects/acme-hub-abcd/global/networks/acme-hub-vpc"
+      hub_vpc_name      = "acme-hub-vpc"
+      dns_zone_name     = "hub-dns"
+      hub_dns_domain    = "hub.internal."
+      ncc_hub_id        = "projects/acme-hub-abcd/locations/global/hubs/acme-ncc-hub"
+      ncc_spoke_group   = "default"
+    }
+  }
+
+  assert {
+    condition     = local.enable_ncc_hub && local.ncc_preset_topology == "MESH"
+    error_message = "enable_ncc_hub / ncc_preset_topology must take effect."
+  }
+
+  assert {
+    condition     = output.contract.hub_network.ncc_hub_id == "projects/acme-hub-abcd/locations/global/hubs/acme-ncc-hub" && output.contract.hub_network.ncc_spoke_group == "default"
+    error_message = "contract.hub_network must carry the NCC hub ID and spoke group for gcp-workload."
+  }
+}
+
+run "rejects_unknown_ncc_preset_topology" {
+  command = plan
+
+  variables {
+    ncc_preset_topology = "RING"
+  }
+
+  expect_failures = [var.ncc_preset_topology]
+}

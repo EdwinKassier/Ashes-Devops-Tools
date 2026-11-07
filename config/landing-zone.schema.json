@@ -182,6 +182,29 @@
                 "string",
                 "integer"
               ]
+            },
+            "connectivity": {
+              "type": "string",
+              "enum": [
+                "peering",
+                "ncc"
+              ]
+            },
+            "ncc_hub": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "preset_topology": {
+                  "type": "string",
+                  "enum": [
+                    "STAR",
+                    "MESH"
+                  ]
+                }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false
@@ -208,6 +231,13 @@
               },
               "is_production": {
                 "type": "boolean"
+              },
+              "network_connectivity": {
+                "type": "string",
+                "enum": [
+                  "peering",
+                  "ncc"
+                ]
               },
               "labels": {
                 "type": "object",
@@ -729,6 +759,16 @@
                 },
                 "vpc_self_link": {
                   "type": "string"
+                },
+                "ncc_hub_id": {
+                  "type": "string"
+                },
+                "ncc_spoke_group": {
+                  "type": "string",
+                  "enum": [
+                    "edge",
+                    "default"
+                  ]
                 }
               },
               "additionalProperties": false

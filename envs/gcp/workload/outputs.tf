@@ -48,6 +48,11 @@ output "vpc_peerings" {
   value       = module.host.vpc_peerings
 }
 
+output "ncc_spoke_id" {
+  description = "The environment VPC's NCC spoke ID, or null with network_connectivity = peering."
+  value       = module.host.ncc_spoke_id
+}
+
 output "security_policy_id" {
   description = "Cloud Armor security policy ID (null when Cloud Armor is disabled)"
   value       = module.host.security_policy_id

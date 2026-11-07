@@ -134,16 +134,34 @@ variable "projects_contract" {
 }
 
 variable "network_hub_contract" {
-  description = "gcp-network-hub stage contract: hub_network {vpc_self_link, dns_domain} the env VPC peers with and forwards DNS to. Null = gcp.contracts.network_hub from config/landing-zone.yaml, else read from the gcp-network-hub workspace's remote state. Ignored when enable_network_hub = false."
+  description = "gcp-network-hub stage contract: hub_network {vpc_self_link, dns_domain} the env VPC peers with and forwards DNS to, plus the optional NCC hub {ncc_hub_id, ncc_spoke_group} it joins when network_connectivity = ncc. Null = gcp.contracts.network_hub from config/landing-zone.yaml, else read from the gcp-network-hub workspace's remote state. Ignored when enable_network_hub = false."
   type = object({
-    vpc_self_link = string
-    dns_domain    = string
+    vpc_self_link   = string
+    dns_domain      = string
+    ncc_hub_id      = optional(string)
+    ncc_spoke_group = optional(string)
   })
   default = null
 
   validation {
     condition     = var.network_hub_contract == null || endswith(try(var.network_hub_contract.dns_domain, ""), ".")
     error_message = "network_hub_contract.dns_domain must be a fully-qualified DNS name ending in a dot (e.g. hub.internal.)."
+  }
+}
+
+variable "network_connectivity" {
+  description = "How the environment VPC reaches the hub: peering (VPC peering) or ncc (a Network Connectivity Center spoke on the gcp-network-hub NCC hub, which must be enabled there first). Switching an existing environment deletes its hub peering; see docs/runbooks/gcp-peering-to-ncc-migration.md. Null = gcp.environments[<environment>].network_connectivity, else gcp.network.connectivity from config/landing-zone.yaml, else peering. Ignored when enable_network_hub = false."
+  type        = string
+  default     = null
+
+  validation {
+    condition = contains(["peering", "ncc"], coalesce(
+      var.network_connectivity,
+      try(local.cfg.environment_connectivity[var.environment], null),
+      local.cfg.network_connectivity,
+      "peering",
+    ))
+    error_message = "network_connectivity (or gcp.environments.<env>.network_connectivity / gcp.network.connectivity in config/landing-zone.yaml) must be peering or ncc."
   }
 }
 

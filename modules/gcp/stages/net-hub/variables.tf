@@ -214,6 +214,24 @@ variable "vpn" {
   }
 }
 
+variable "ncc" {
+  description = "Network Connectivity Center hub, off by default (spokes then use VPC peering). preset_topology: STAR (edge spokes reach the center only; the peering-equivalent) or MESH. Immutable once created. name defaults to <project_prefix>-ncc-hub. export_private_service_access adds a producer VPC spoke for the hub PSA peering (when PSA is enabled)."
+  type = object({
+    enabled                       = optional(bool, false)
+    name                          = optional(string)
+    preset_topology               = optional(string, "STAR")
+    export_psc                    = optional(bool, false)
+    export_private_service_access = optional(bool, true)
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = contains(["STAR", "MESH"], var.ncc.preset_topology)
+    error_message = "ncc.preset_topology must be STAR or MESH."
+  }
+}
+
 variable "vpn_shared_secret" {
   description = "HA VPN pre-shared key. Required when vpn.enabled is true; inject it from Secret Manager or a sensitive workspace variable, not a plaintext tfvars file."
   type        = string
