@@ -634,3 +634,26 @@ run "production_budget_unchanged" {
     error_message = "production must keep the 1000 default budget and the module-default thresholds."
   }
 }
+
+# org.monthly_budget_usd only applies to the starter profile; production keeps 1000.
+run "production_ignores_monthly_budget_usd" {
+  command = plan
+
+  variables {
+    landing_zone_config_path  = "tests/fixtures/landing-zone-production-budget.yaml"
+    domain                    = null
+    project_prefix            = null
+    admin_email               = null
+    billing_account           = null
+    tfc_organization          = null
+    alert_notification_emails = []
+    organization_admin_groups = null
+    billing_admin_groups      = null
+    environments              = null
+  }
+
+  assert {
+    condition     = local.monthly_budget_amount == 1000
+    error_message = "a production estate must keep the 1000 default despite org.monthly_budget_usd."
+  }
+}

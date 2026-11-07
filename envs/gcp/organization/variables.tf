@@ -205,7 +205,7 @@ variable "billing_contact_email" {
 }
 
 variable "monthly_budget_amount" {
-  description = "Monthly budget limit for the organization. Set to 0 to disable budget alerts (rejected for the starter profile). Null = org.monthly_budget_usd from config/landing-zone.yaml, else 1000 (production) / unset (starter, which then fails the plan)."
+  description = "Monthly budget limit for the organization. Set to 0 to disable budget alerts (rejected for the starter profile). Null = org.monthly_budget_usd from config/landing-zone.yaml (starter profile only), else 1000 (production) / unset (starter, which then fails the plan)."
   type        = number
   default     = null
 

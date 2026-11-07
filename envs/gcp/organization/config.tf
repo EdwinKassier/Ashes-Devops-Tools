@@ -106,7 +106,7 @@ locals {
   # requires a budget (variable > org.monthly_budget_usd) and alerts at 50/80/100%.
   profile = coalesce(var.profile, local.cfg.profile, "production")
   monthly_budget_amount = coalesce(
-    var.monthly_budget_amount, local.cfg.monthly_budget_usd, local.profile == "starter" ? 0 : 1000
+    var.monthly_budget_amount, local.profile == "starter" ? local.cfg.monthly_budget_usd : null, local.profile == "starter" ? 0 : 1000
   )
   budget_threshold_rules = local.profile == "starter" ? [
     { percent = 0.5, spend_basis = "CURRENT_SPEND" },

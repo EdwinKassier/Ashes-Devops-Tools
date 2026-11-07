@@ -144,9 +144,11 @@ project from a budget Pub/Sub notification: a Cloud Function subscribed to the b
 calls the Cloud Billing API to detach the billing account once cost exceeds the budget. See
 the "Disable billing usage with notifications" page under the Cloud Billing budgets
 documentation at `cloud.google.com/billing/docs/how-to/disable-billing-with-notifications`.
-It is deliberately **not** wired by this repo: detaching billing stops every resource in the
+The billing module publishes budget notifications to a Pub/Sub topic, but this repo deploys no function (or subscription) that acts on it. The kill switch is deliberately **not** wired: detaching billing stops every resource in the
 project and can leave data unrecoverable, so it is an irreversible-by-default action. Add it
 only to disposable sandbox projects, never to production, and test it on a throwaway project.
+On AWS starter, `var.budgets` is replaced by the single `org-monthly` budget, so any custom-keyed budgets in state are destroyed on the first plan (`destroy_guard` does not cover `aws_budgets_budget`); re-add them outside the starter profile if needed.
+
 AWS has no equivalent single switch; use a Budgets action with an SCP or IAM policy attachment
 if you need one.
 
