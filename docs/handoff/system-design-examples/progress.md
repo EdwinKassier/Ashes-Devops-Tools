@@ -52,3 +52,4 @@ Task 3: implemented 50e9fb3 (5973 words; 157 snippet lines); review dispatched (
 REPO GAPS: modules/aws/network/load-balancer has no idle_timeout input (ALB 60s default); app-services sets no ulimits (Fargate nofile 65535 caps ~60k sockets/task); no modules for ElastiCache, DynamoDB, Memorystore Valkey, GCP service connection policy
 Task 5: implemented bfbafca (5967 words; outbox anchor 03-microservices-sync-async.md#the-transactional-outbox); review dispatched (opus)
 REPO GAPS: app-services queue policy can't admit SNS (single policy); workload KMS key policy needs sns.amazonaws.com; AWS hub central endpoints lack SNS/SQS; GCP app-services one subscription per service on own topic; no cpu_idle exposed; topics take no schema_settings
+Task 3: review Needs fixes (Important: zone-loss headroom 30%/260 → 50%/300) + minors (CloudFront 30s, NLCU figure, pricing markers) → fix round 1 sent
