@@ -35,7 +35,7 @@
       "groupName": "hashicorp providers"
     },
     {
-      "description": "Provider majors are deliberate (e.g. google 8.x is its own task), never proposed automatically",
+      "description": "Provider majors are deliberate (e.g. google 9.x is its own task), never proposed automatically",
       "matchManagers": [
         "terraform"
       ],

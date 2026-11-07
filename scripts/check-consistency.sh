@@ -19,10 +19,10 @@ badaws=$(grep -rl 'source *= *"hashicorp/aws"' --include='versions.tf' --exclude
 [ -z "$badaws" ] || { echo "$badaws" | while read -r f; do note "AWS pin not '>= 6.46.0, < 7.0.0': $f"; done; fail=1; }
 
 echo "==> GCP google provider pin is the canonical range in every GCP versions.tf"
-# Canonical: "~> 7.0" (6->7 migration complete; locks on 7.x, audit L4).
+# Canonical: "~> 8.0" (7->8 migration complete; locks on 8.x).
 badgcp=$(grep -rl 'hashicorp/google' --include='versions.tf' --exclude-dir='.terraform' modules/gcp envs/gcp 2>/dev/null \
-  | while read -r f; do grep -q '"~> 7.0"' "$f" || echo "$f"; done)
-[ -z "$badgcp" ] || { echo "$badgcp" | while read -r f; do note "google pin not '~> 7.0': $f"; done; fail=1; }
+  | while read -r f; do grep -q '"~> 8.0"' "$f" || echo "$f"; done)
+[ -z "$badgcp" ] || { echo "$badgcp" | while read -r f; do note "google pin not '~> 8.0': $f"; done; fail=1; }
 
 echo "==> Terraform required_version is the canonical range in every versions.tf"
 # Canonical: ">= 1.17, < 2.0" (mock_ephemeral, deprecated attributes, typed outputs).

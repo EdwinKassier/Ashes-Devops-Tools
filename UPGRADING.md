@@ -350,6 +350,61 @@ leave the setting out of the policy.
 
 ### GCP
 
+#### google / google-beta provider 8.x (every GCP workspace)
+
+**Breaking for every fork.** Every GCP `versions.tf` (modules, roots,
+examples, `templates/shared/module`, `tests/e2e/gcp`) now pins
+`google`/`google-beta` `~> 8.0`, and every lockfile resolves both to 8.10.0.
+A fork that pins google 7.x anywhere fails `terraform init`.
+
+Manual steps:
+
+1. **Forks bump too.** Change any fork-owned `hashicorp/google` or
+   `hashicorp/google-beta` constraint to `~> 8.0`, then re-lock each root you
+   own with `terraform providers lock -platform=linux_amd64
+   -platform=darwin_arm64 -platform=darwin_amd64`. `make consistency` fails on
+   a GCP `versions.tf` that is not `~> 8.0`, or on two google versions locked
+   in different lockfiles.
+2. **No way back.** The 8.x provider upgrades resource state in place (below).
+   A 7.x provider can fail to read state an 8.x apply has written, so do not roll a
+   workspace back to 7.x after its first 8.x apply.
+3. **Sandbox (operator).** Plan every GCP workspace (`gcp-bootstrap`,
+   `gcp-organization`, `gcp-guardrails`, `gcp-projects`, `gcp-network-hub`,
+   each `gcp-workload-<env>`) in the sandbox. Each must show **0 changes**, or
+   only the app-ingress item below. Anything else is an undocumented 8.x
+   change: stop and record it in the sandbox upgrade log before promoting.
+
+What changes on the first 8.x plan:
+
+- **Secret Manager write-only version (state migration, no plan change).**
+  `google_secret_manager_secret_version.secret_data_wo_version` is now a
+  String, and the provider migrates each stored `N` to `"N"` when it reads
+  the state. `modules/gcp/data/secret-manager` (and through it the SaaS secret
+  bridge in `gcp-workload-<env>`) now passes `tostring()` of its counter, so
+  the plan shows no diff and no secret version is replaced. The input
+  `secret_value_versions` stays `map(number)`. 8.x treats a `"0"` version as
+  unset and forces replacement; the module's validation already rejects
+  values below 1.
+- **app-ingress backend scheme (explicit now).** 8.x changes the
+  `google_compute_backend_service` `load_balancing_scheme` default from
+  `EXTERNAL` to `EXTERNAL_MANAGED`. `modules/gcp/network/app-ingress` (used by
+  `modules/gcp/stages/app-services`) left it unset while its forwarding rules
+  were `EXTERNAL_MANAGED`; it now sets `EXTERNAL_MANAGED`. A fresh plan, or a
+  state already at `EXTERNAL_MANAGED`, shows no change. If a state holds the
+  backend at `EXTERNAL`, the plan shows an update of `load_balancing_scheme`.
+  Review it in the sandbox before applying it to a serving load balancer.
+- **Deprecated attributes leave two whole-resource outputs (no resource
+  change).** `modules/gcp/network/subnet` output `subnet` no longer carries
+  `fingerprint`, and `modules/gcp/network/vpc` output `network` no longer
+  carries `numeric_id` (read `network.network_id`). Both are deprecated in the
+  provider and warned on every plan. No in-repo caller reads them; a fork root
+  that does must switch before upgrading.
+- **Not affected.** The other 8.0 breaking changes either name resource types
+  this repo does not use, or touch arguments it never sets (`cdn` and every
+  forwarding rule set their scheme explicitly; `gke-autopilot` sets no
+  `enable_components`; no BigQuery dataset sets `default_collation`). The full
+  table is in [provider-upgrades](docs/guides/provider-upgrades.md).
+
 #### GCP deny policies move to the security-team `gcp-guardrails` workspace
 
 In the default `guardrail_owner_mode = "separate"` the org IAM deny policies

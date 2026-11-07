@@ -49,13 +49,13 @@ module "example" {
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.17, < 2.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 7.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 8.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 7.46.2 |
+| <a name="provider_google"></a> [google](#provider\_google) | 8.10.0 |
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 
@@ -66,7 +66,7 @@ The following resources are created:
 
 
 - resource.google_secret_manager_secret.this (modules/gcp/data/secret-manager/main.tf#L38)
-- resource.google_secret_manager_secret_iam_member.accessor (modules/gcp/data/secret-manager/main.tf#L102)
+- resource.google_secret_manager_secret_iam_member.accessor (modules/gcp/data/secret-manager/main.tf#L105)
 - resource.google_secret_manager_secret_version.this (modules/gcp/data/secret-manager/main.tf#L82)
 - resource.terraform_data.deletion_protection_guard (modules/gcp/data/secret-manager/main.tf#L28)
 
