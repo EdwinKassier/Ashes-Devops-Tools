@@ -156,3 +156,31 @@ run "principal_access_boundary_from_config" {
     error_message = "gcp.principal_access_boundary: true must grant the organization SAs the boundary roles."
   }
 }
+
+# The opt-in NCC connectivity needs NCC roles on the network-hub and workload
+# SAs: off by default, on when config/landing-zone.yaml turns NCC on.
+run "ncc_roles_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = !local.enable_network_connectivity_center && !contains(module.bootstrap.network_folder_roles.apply, "roles/networkconnectivity.hubAdmin")
+    error_message = "NCC roles must be opt-in."
+  }
+}
+
+run "ncc_roles_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-ncc.yaml"
+  }
+
+  assert {
+    condition = (
+      local.enable_network_connectivity_center &&
+      contains(module.bootstrap.network_folder_roles.apply, "roles/networkconnectivity.hubAdmin") &&
+      contains(module.bootstrap.workload_folder_roles.apply, "roles/networkconnectivity.spokeAdmin")
+    )
+    error_message = "gcp.network.ncc_hub.enabled: true must grant the network-hub SAs hubAdmin and the workload SAs spokeAdmin."
+  }
+}

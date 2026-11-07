@@ -110,3 +110,37 @@ run "organization_label_is_sanitised" {
     error_message = "organization_name must be normalised to a valid GCP label value."
   }
 }
+
+# Per-project API additions (e.g. networkconnectivity.googleapis.com on the hub
+# and host projects for NCC) land only on the named project, on top of the
+# baseline; the default {} keeps the baseline everywhere.
+run "additional_project_services_reach_only_the_named_project" {
+  command = plan
+
+  variables {
+    environments = {
+      dev = {
+        display_name = "Development"
+        description  = "Development environment"
+        projects = {
+          host  = { name = "host", labels = {} }
+          tools = { name = "tools", labels = {} }
+        }
+      }
+    }
+    additional_project_services = {
+      "dev-host"   = ["networkconnectivity.googleapis.com"]
+      "no-such-pj" = ["networkconnectivity.googleapis.com"]
+    }
+  }
+
+  assert {
+    condition     = contains(module.project["dev-host"].services, "networkconnectivity.googleapis.com") && length(module.project["dev-host"].services) == 7
+    error_message = "additional_project_services must add the API to the named project on top of project_services."
+  }
+
+  assert {
+    condition     = !contains(module.project["dev-tools"].services, "networkconnectivity.googleapis.com") && length(module.project["dev-tools"].services) == 6
+    error_message = "Other projects must keep only project_services."
+  }
+}

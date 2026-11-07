@@ -59,3 +59,44 @@ run "mesh_hub_uses_default_group" {
     error_message = "A MESH hub has only the default group."
   }
 }
+
+run "spoke_group_not_managed_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(google_network_connectivity_group.spoke) == 0
+    error_message = "The service-created groups must not be managed unless auto_accept_projects is set."
+  }
+}
+
+run "auto_accept_adopts_edge_group" {
+  command = plan
+
+  variables {
+    auto_accept_projects = ["111111111111", "acme-dev-host"]
+  }
+
+  assert {
+    condition     = google_network_connectivity_group.spoke[0].name == "edge" && google_network_connectivity_group.spoke[0].project == "mock-hub-project"
+    error_message = "auto_accept_projects must adopt the STAR hub's service-created edge group by name."
+  }
+
+  assert {
+    condition     = google_network_connectivity_group.spoke[0].auto_accept[0].auto_accept_projects == tolist(["111111111111", "acme-dev-host"])
+    error_message = "The edge group must auto-accept exactly the listed projects."
+  }
+}
+
+run "auto_accept_on_mesh_uses_default_group" {
+  command = plan
+
+  variables {
+    preset_topology      = "MESH"
+    auto_accept_projects = ["111111111111"]
+  }
+
+  assert {
+    condition     = google_network_connectivity_group.spoke[0].name == "default"
+    error_message = "On a MESH hub the auto-accept list belongs to the default group."
+  }
+}

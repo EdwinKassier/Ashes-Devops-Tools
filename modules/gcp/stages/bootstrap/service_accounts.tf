@@ -214,13 +214,26 @@ locals {
 
   # Effective folder role lists: the plan viewer custom role is appended to the
   # workload plan roles (env folders) and the network plan roles (shared folder).
+  # With Network Connectivity Center on, the network SAs (shared folder: the
+  # hub project) manage the hub and its center spoke, and each workload SA (its
+  # own env folder: the host project) its environment spoke. Folder-scoped like
+  # every other stage role; nothing at the org node.
+  ncc_workload_folder_roles = var.enable_network_connectivity_center ? {
+    plan  = ["roles/networkconnectivity.hubViewer"]
+    apply = ["roles/networkconnectivity.spokeAdmin"]
+  } : { plan = [], apply = [] }
+  ncc_network_folder_roles = var.enable_network_connectivity_center ? {
+    plan  = ["roles/networkconnectivity.hubViewer"]
+    apply = ["roles/networkconnectivity.hubAdmin", "roles/networkconnectivity.spokeAdmin"]
+  } : { plan = [], apply = [] }
+
   effective_workload_folder_roles = {
-    plan  = distinct(concat(var.workload_folder_roles.plan, local.plan_viewer_roles))
-    apply = var.workload_folder_roles.apply
+    plan  = distinct(concat(var.workload_folder_roles.plan, local.plan_viewer_roles, local.ncc_workload_folder_roles.plan))
+    apply = distinct(concat(var.workload_folder_roles.apply, local.ncc_workload_folder_roles.apply))
   }
   effective_network_folder_roles = {
-    plan  = distinct(concat(var.network_folder_roles.plan, local.plan_viewer_roles))
-    apply = var.network_folder_roles.apply
+    plan  = distinct(concat(var.network_folder_roles.plan, local.plan_viewer_roles, local.ncc_network_folder_roles.plan))
+    apply = distinct(concat(var.network_folder_roles.apply, local.ncc_network_folder_roles.apply))
   }
 
   # Roles the projects-apply SA may hand out on folders (IAM delegated role

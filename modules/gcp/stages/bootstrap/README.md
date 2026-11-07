@@ -103,23 +103,23 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_access_context_manager_access_policy_iam_member.workload (modules/gcp/stages/bootstrap/service_accounts.tf#L306)
-- resource.google_billing_account_iam_member.stage_billing_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L296)
+- resource.google_access_context_manager_access_policy_iam_member.workload (modules/gcp/stages/bootstrap/service_accounts.tf#L319)
+- resource.google_billing_account_iam_member.stage_billing_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L309)
 - resource.google_organization_iam_custom_role.plan_viewer (modules/gcp/stages/bootstrap/plan_viewer.tf#L14)
-- resource.google_organization_iam_member.guardrails (modules/gcp/stages/bootstrap/service_accounts.tf#L396)
-- resource.google_organization_iam_member.guardrails_plan (modules/gcp/stages/bootstrap/service_accounts.tf#L422)
-- resource.google_organization_iam_member.projects_delegated_folder_iam (modules/gcp/stages/bootstrap/service_accounts.tf#L271)
-- resource.google_organization_iam_member.stage_org_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L245)
-- resource.google_organization_iam_member.stage_org_security_admin (modules/gcp/stages/bootstrap/service_accounts.tf#L257)
-- resource.google_project_iam_member.stage_admin_project_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L285)
-- resource.google_service_account.guardrails (modules/gcp/stages/bootstrap/service_accounts.tf#L386)
-- resource.google_service_account.guardrails_plan (modules/gcp/stages/bootstrap/service_accounts.tf#L413)
-- resource.google_service_account.stage (modules/gcp/stages/bootstrap/service_accounts.tf#L234)
-- resource.google_service_account_iam_member.guardrails_impersonation (modules/gcp/stages/bootstrap/service_accounts.tf#L404)
+- resource.google_organization_iam_member.guardrails (modules/gcp/stages/bootstrap/service_accounts.tf#L409)
+- resource.google_organization_iam_member.guardrails_plan (modules/gcp/stages/bootstrap/service_accounts.tf#L435)
+- resource.google_organization_iam_member.projects_delegated_folder_iam (modules/gcp/stages/bootstrap/service_accounts.tf#L284)
+- resource.google_organization_iam_member.stage_org_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L258)
+- resource.google_organization_iam_member.stage_org_security_admin (modules/gcp/stages/bootstrap/service_accounts.tf#L270)
+- resource.google_project_iam_member.stage_admin_project_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L298)
+- resource.google_service_account.guardrails (modules/gcp/stages/bootstrap/service_accounts.tf#L399)
+- resource.google_service_account.guardrails_plan (modules/gcp/stages/bootstrap/service_accounts.tf#L426)
+- resource.google_service_account.stage (modules/gcp/stages/bootstrap/service_accounts.tf#L247)
+- resource.google_service_account_iam_member.guardrails_impersonation (modules/gcp/stages/bootstrap/service_accounts.tf#L417)
 - resource.random_id.suffix (modules/gcp/stages/bootstrap/main.tf#L6)
-- resource.terraform_data.guardrails_workspace_bound_by_id (modules/gcp/stages/bootstrap/service_accounts.tf#L435)
+- resource.terraform_data.guardrails_workspace_bound_by_id (modules/gcp/stages/bootstrap/service_accounts.tf#L448)
 - resource.terraform_data.phase0_impersonation_is_time_boxed (modules/gcp/stages/bootstrap/main.tf#L77)
-- resource.terraform_data.production_workspaces_bound_by_id (modules/gcp/stages/bootstrap/service_accounts.tf#L329)
+- resource.terraform_data.production_workspaces_bound_by_id (modules/gcp/stages/bootstrap/service_accounts.tf#L342)
 
 
 ## Inputs
@@ -133,6 +133,7 @@ The following resources are created:
 | <a name="input_control_plane_workspaces"></a> [control\_plane\_workspaces](#input\_control\_plane\_workspaces) | TFC workspace name for each GCP control-plane stage. Keys are fixed: bootstrap, organization, projects, network-hub. Each workspace's plan phase is bound to <prefix>-<stage>-plan and its apply phase to <prefix>-<stage>-apply (bootstrap apply = the terraform-admin SA). | `map(string)` | <pre>{<br/>  "bootstrap": "gcp-bootstrap",<br/>  "network-hub": "gcp-network-hub",<br/>  "organization": "gcp-organization",<br/>  "projects": "gcp-projects"<br/>}</pre> | no |
 | <a name="input_enable_github_wif"></a> [enable\_github\_wif](#input\_enable\_github\_wif) | Create the GitHub Actions WIF pool. Default false: no workflow in this repo uses GCP OIDC, so a standing trust is unused privilege. When true, the trust is pinned to github\_repository\_id + github\_repository\_owner\_id on refs/heads/main and bound ONLY to the read-only organization plan SA. | `bool` | `false` | no |
 | <a name="input_enable_legacy_org_access_policy_grants"></a> [enable\_legacy\_org\_access\_policy\_grants](#input\_enable\_legacy\_org\_access\_policy\_grants) | LEGACY. Grant every workload apply SA roles/accesscontextmanager.policyEditor (plan: policyReader) on the org-wide policy vpc\_sc\_access\_policy\_id. Any one environment could then edit every perimeter in the org, including production and the hub. Default false: use enable\_scoped\_access\_policies instead. Enable only while migrating an existing deployment whose workload perimeters still live in the org-wide policy. | `bool` | `false` | no |
+| <a name="input_enable_network_connectivity_center"></a> [enable\_network\_connectivity\_center](#input\_enable\_network\_connectivity\_center) | Add the Network Connectivity Center roles to the folder-scoped stage roles: network-hub SAs (shared folder) get roles/networkconnectivity.hubAdmin + spokeAdmin (plan: hubViewer); each workload SA (its own environment folder) gets roles/networkconnectivity.spokeAdmin (plan: hubViewer). Needed before the opt-in NCC hub or any NCC spoke is applied. Default false. | `bool` | `false` | no |
 | <a name="input_enable_org_level_folder_iam_delegation"></a> [enable\_org\_level\_folder\_iam\_delegation](#input\_enable\_org\_level\_folder\_iam\_delegation) | LEGACY. Bind the projects-apply conditional roles/resourcemanager.folderIamAdmin at the ORG node, where it applies to every folder. Default false: gcp-organization binds it on each environment folder (workload roles only) and the shared folder (network roles only). Enable only to bridge a migration until gcp-organization has been re-applied. | `bool` | `false` | no |
 | <a name="input_enable_pam"></a> [enable\_pam](#input\_enable\_pam) | Grant the organization stage SAs Privileged Access Manager rights at the org node (apply: roles/privilegedaccessmanager.admin, plan: viewer) so gcp-organization can manage the just-in-time org-admin entitlement. Keep it in step with the gcp-organization enable\_pam input. Default false. | `bool` | `false` | no |
 | <a name="input_enable_phase0_admin_impersonation"></a> [enable\_phase0\_admin\_impersonation](#input\_enable\_phase0\_admin\_impersonation) | Let user:<admin\_email> impersonate the terraform-admin (gcp-bootstrap apply) SA. Needed for the documented phase-0 first apply, which runs as a human admin. Set false on pass 2, once gcp-bootstrap applies through TFC dynamic credentials, so no standing human path to the bootstrap apply identity remains. | `bool` | `true` | no |

@@ -80,3 +80,28 @@ run "ncc_hub_outputs_pass_through" {
     error_message = "ncc_hub_id / ncc_spoke_group must come from module.hub."
   }
 }
+
+# Every environment host project is on the spoke group's auto-accept list, so
+# a cross-project spoke never waits for a manual accept mid-migration.
+run "ncc_auto_accepts_environment_host_projects" {
+  command = plan
+
+  variables {
+    enable_ncc_hub        = true
+    spoke_project_numbers = { dev = "333333333333", prod = "projects/444444444444", pending = "" }
+  }
+
+  override_module {
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+    }
+  }
+
+  assert {
+    condition     = local.ncc_auto_accept_projects == tolist(["333333333333", "444444444444"])
+    error_message = "The auto-accept list must hold every environment host project number (prefix stripped, empty entries dropped)."
+  }
+}

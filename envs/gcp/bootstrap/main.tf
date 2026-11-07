@@ -43,6 +43,10 @@ module "bootstrap" {
   # Just-in-time org admin (PAM) managed by gcp-organization.
   enable_pam = var.enable_pam
 
+  # Network Connectivity Center roles on the network-hub (shared folder) and
+  # workload (env folder) SAs, when the opt-in NCC connectivity is in use.
+  enable_network_connectivity_center = local.enable_network_connectivity_center
+
   # Phase-0 human impersonation of terraform-admin (turn off on pass 2).
   enable_phase0_admin_impersonation     = var.enable_phase0_admin_impersonation
   phase0_admin_impersonation_expires_at = local.phase0_admin_impersonation_expires_at

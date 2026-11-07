@@ -523,11 +523,13 @@ Enable only after validating in a real/test org. Each defaults to prior behaviou
   `modules/gcp/network/ncc-spoke`). Not yet sandbox-proven: run path (a) of
   [the migration runbook](runbooks/gcp-peering-to-ncc-migration.md) on the sandbox
   spoke, then re-plan to 0 changes, before adopting it or making `ncc` the
-  scaffolder default. Open with it: `networkconnectivity.googleapis.com` is not
-  enabled by any root; cross-project spokes may need manual acceptance (the hub's
-  groups, and so an auto-accept list, are not managed); the producer spoke passes
-  the consumer VPC **name** as `linked_producer_vpc_network.network` (the provider
-  example's form), to be confirmed against the API.
+  scaffolder default. Still to confirm against the real API: the producer spoke
+  passes the consumer VPC **name** as `linked_producer_vpc_network.network` (the
+  provider example's form); the NCC folder roles (hubAdmin / spokeAdmin /
+  hubViewer) are enough to create a cross-project spoke on an auto-accepting
+  group; adopting the service-created spoke group by name needs no import, and
+  deleting it with the hub succeeds; path (b) route precedence (NCC subnet routes
+  over the temporary VPN's dynamic routes).
 
 ## Capability parity (2026 review)
 

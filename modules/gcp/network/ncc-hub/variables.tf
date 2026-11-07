@@ -55,3 +55,15 @@ variable "labels" {
   default     = {}
   nullable    = false
 }
+
+variable "auto_accept_projects" {
+  description = "Project IDs or numbers whose spokes the spoke group (edge, or default on MESH) accepts automatically. Spokes from any other project than the hub's wait for a manual accept. Default [] = the group is not managed."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for p in var.auto_accept_projects : can(regex("^([0-9]{1,20}|[a-z][a-z0-9-]{4,28}[a-z0-9])$", p))])
+    error_message = "auto_accept_projects entries must be project numbers or project IDs."
+  }
+}

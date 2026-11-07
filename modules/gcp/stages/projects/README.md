@@ -146,9 +146,9 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_folder_iam_member.network_sa_folder_roles (modules/gcp/stages/projects/main.tf#L112)
-- resource.google_folder_iam_member.workload_sa_folder_roles (modules/gcp/stages/projects/main.tf#L103)
-- resource.google_monitoring_monitored_project.projects (modules/gcp/stages/projects/main.tf#L63)
+- resource.google_folder_iam_member.network_sa_folder_roles (modules/gcp/stages/projects/main.tf#L115)
+- resource.google_folder_iam_member.workload_sa_folder_roles (modules/gcp/stages/projects/main.tf#L106)
+- resource.google_monitoring_monitored_project.projects (modules/gcp/stages/projects/main.tf#L66)
 
 
 ## Inputs
@@ -162,6 +162,7 @@ The following resources are created:
 | <a name="input_organization_name"></a> [organization\_name](#input\_organization\_name) | Organization name applied as a label on all created projects | `string` | n/a | yes |
 | <a name="input_project_prefix"></a> [project\_prefix](#input\_project\_prefix) | Short prefix applied to all project IDs for global uniqueness (e.g., 'my-org') | `string` | n/a | yes |
 | <a name="input_suffix"></a> [suffix](#input\_suffix) | Random suffix from bootstrap module appended to project IDs for uniqueness | `string` | n/a | yes |
+| <a name="input_additional_project_services"></a> [additional\_project\_services](#input\_additional\_project\_services) | Extra APIs to enable on individual projects, keyed by project key (<environment key>-<project key>, e.g. shared-hub, dev-host), on top of project\_services. Keys that match no project are ignored. Default {} = project\_services only. | `map(list(string))` | `{}` | no |
 | <a name="input_network_folder_key"></a> [network\_folder\_key](#input\_network\_folder\_key) | Key in var.folders of the folder holding the hub/DNS projects (network-hub SAs are granted roles there). | `string` | `"shared"` | no |
 | <a name="input_network_folder_roles"></a> [network\_folder\_roles](#input\_network\_folder\_roles) | Roles granted to the network-hub SAs on the shared/network folder ({ plan, apply }); read from the gcp-bootstrap output network\_folder\_roles. | <pre>object({<br/>    plan  = list(string)<br/>    apply = list(string)<br/>  })</pre> | <pre>{<br/>  "apply": [],<br/>  "plan": []<br/>}</pre> | no |
 | <a name="input_network_service_accounts"></a> [network\_service\_accounts](#input\_network\_service\_accounts) | The network-hub stage { plan, apply } SA emails (gcp-bootstrap output stage\_service\_accounts["network-hub"]). Granted var.network\_folder\_roles on the var.network\_folder\_key folder. Null = no grants. | <pre>object({<br/>    plan  = string<br/>    apply = string<br/>  })</pre> | `null` | no |

@@ -32,6 +32,13 @@ locals {
     allowed_regions           = try([for r in local.lz.gcp.allowed_regions : tostring(r)], null)
     hub_vpc_cidr_block        = try(tostring(local.lz.gcp.network.hub_cidr_block), null)
     dns_hub_vpc_cidr_block    = try(tostring(local.lz.gcp.network.dns_hub_cidr_block), null)
+    # Network Connectivity Center is in use when the hub is on
+    # (gcp.network.ncc_hub.enabled) or any environment connects through it
+    # (gcp.network.connectivity / gcp.environments.<env>.network_connectivity).
+    enable_network_connectivity_center = anytrue(concat(
+      [try(tobool(local.lz.gcp.network.ncc_hub.enabled), false), try(tostring(local.lz.gcp.network.connectivity), "") == "ncc"],
+      [for k, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : try(tostring(e.network_connectivity), "") == "ncc"],
+    ))
     # Normalised to the attribute types of var.environments (region defaults to
     # org.regions.gcp, display_name to the key). A malformed entry is caught by
     # the var.environments validations, which also read local.cfg.
@@ -90,4 +97,6 @@ locals {
   default_region    = coalesce(var.default_region, local.cfg.default_region, "europe-west2")
   tfc_organization  = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
   environments      = var.environments != null ? var.environments : local.cfg.environments
+  # NCC API on the hub and every environment host project (see main.tf).
+  enable_network_connectivity_center = coalesce(var.enable_network_connectivity_center, local.cfg.enable_network_connectivity_center)
 }

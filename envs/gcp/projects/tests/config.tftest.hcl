@@ -154,3 +154,27 @@ run "scaffold_gcp_aws_saas_plans" {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
   }
 }
+
+# One environment on NCC (gcp.environments.<env>.network_connectivity) turns the
+# NCC API on for the hub and every host project; the default fixture does not.
+run "ncc_api_follows_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-ncc.yaml"
+  }
+
+  assert {
+    condition     = local.enable_network_connectivity_center && toset(keys(local.ncc_project_services)) == toset(["shared-hub", "dev-host", "prod-host"])
+    error_message = "Any environment with network_connectivity = ncc must enable the NCC API on shared-hub and every host project."
+  }
+}
+
+run "ncc_api_off_without_ncc_config" {
+  command = plan
+
+  assert {
+    condition     = !local.enable_network_connectivity_center && length(local.ncc_project_services) == 0
+    error_message = "Without any NCC key in the config the NCC API must stay off."
+  }
+}

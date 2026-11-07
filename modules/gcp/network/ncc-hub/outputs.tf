@@ -26,10 +26,15 @@ output "group_ids" {
 
 output "spoke_group" {
   description = "The group name a spoke VPC joins: edge for STAR, default for MESH."
-  value       = var.preset_topology == "STAR" ? "edge" : "default"
+  value       = local.spoke_group
 }
 
 output "center_group" {
   description = "The group name the hub VPC joins: center for STAR, default for MESH."
   value       = var.preset_topology == "STAR" ? "center" : "default"
+}
+
+output "auto_accept_projects" {
+  description = "Projects whose spokes the spoke group accepts automatically (empty = the group is not managed)."
+  value       = var.auto_accept_projects
 }

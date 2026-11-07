@@ -189,6 +189,8 @@ module "ncc_hub" {
   preset_topology = var.ncc.preset_topology
   export_psc      = var.ncc.export_psc
   labels          = var.labels
+
+  auto_accept_projects = var.ncc.auto_accept_projects
 }
 
 module "ncc_hub_spoke" {

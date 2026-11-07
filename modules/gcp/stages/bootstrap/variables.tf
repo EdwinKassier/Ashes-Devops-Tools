@@ -430,6 +430,13 @@ variable "enable_pam" {
   default     = false
 }
 
+variable "enable_network_connectivity_center" {
+  description = "Add the Network Connectivity Center roles to the folder-scoped stage roles: network-hub SAs (shared folder) get roles/networkconnectivity.hubAdmin + spokeAdmin (plan: hubViewer); each workload SA (its own environment folder) gets roles/networkconnectivity.spokeAdmin (plan: hubViewer). Needed before the opt-in NCC hub or any NCC spoke is applied. Default false."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "enable_phase0_admin_impersonation" {
   description = "Let user:<admin_email> impersonate the terraform-admin (gcp-bootstrap apply) SA. Needed for the documented phase-0 first apply, which runs as a human admin. Set false on pass 2, once gcp-bootstrap applies through TFC dynamic credentials, so no standing human path to the bootstrap apply identity remains."
   type        = bool

@@ -409,6 +409,34 @@ workload and bootstrap roots first. A provider that still carries the old
 condition is denied on its next UPDATE (not on its existing state) until it is
 rewritten.
 
+#### NCC hub/spoke connectivity, opt-in (gcp-bootstrap, gcp-projects, gcp-network-hub, gcp-workload-&lt;env&gt;)
+
+**No action by default.** New config keys `gcp.network.ncc_hub` (`enabled`,
+`preset_topology`), `gcp.network.connectivity` and
+`gcp.environments.<env>.network_connectivity` all default to today's VPC
+peering. Unset, the upgrade apply plans no change in any root.
+
+**Contract:** the gcp-network-hub `contract.hub_network` gains `ncc_hub_id` and
+`ncc_spoke_group`. Both are null while the hub is off. gcp-workload reads them
+optionally, so an N-1 gcp-network-hub state without them still plans (in peering
+mode).
+
+**Adopting it** (after a sandbox proof): follow
+[docs/runbooks/gcp-peering-to-ncc-migration.md](docs/runbooks/gcp-peering-to-ncc-migration.md).
+Turning NCC on in the config changes four roots, applied in order:
+
+1. gcp-bootstrap adds folder-scoped NCC roles: `hubAdmin` + `spokeAdmin` for the
+   network-hub SAs on the shared folder, `spokeAdmin` for each workload SA on
+   its own environment folder, and `hubViewer` for the plan SAs.
+2. gcp-organization updates the delegated folderIamAdmin condition in place.
+3. gcp-projects enables `networkconnectivity.googleapis.com` on `shared-hub` and
+   every `<env>-host` project, and grants the roles.
+4. gcp-network-hub creates the hub, its center spoke and the spoke group's
+   auto-accept list.
+
+Switching an environment to `ncc` then **deletes its hub peering** in the same
+apply that creates its spoke. Run the runbook's pre-flight first.
+
 ### SaaS and cross-cloud
 
 #### SaaS secret bridge writes its secret write-only
@@ -652,3 +680,4 @@ Each dual mode keeps both paths until v1.0. Migrate before then.
 | Flag-off recorder path of the SCP (recorder actions in `DenyWeakenSecurityServices`) | `enable_config_recorder_scp = true` | AWS Config recorders move to an aws-organization StackSet |
 | `deprecated_inputs.tf` in gcp-organization and aws-security (inert re-declarations of the 81 removed variables, and `terraform_data.removed_inputs_guard`) | `gcp_overrides` / `aws_overrides` keys | Object pass-through: `gcp_overrides` (gcp-organization) and `aws_overrides` (aws-security) |
 | The individual cross-root outputs of the producer roots, and the consumers' fallback to them when `contract` is absent | The `contract` output (`outputs.contract.<key>`) | One `contract` output per producer root |
+| `connectivity = peering` as the default hub connectivity (VPC peering from each spoke) | `connectivity = ncc`, the default from v1.0 once sandbox-proven. `peering` stays selectable. | NCC hub/spoke connectivity, opt-in |

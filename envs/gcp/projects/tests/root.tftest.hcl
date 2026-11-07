@@ -183,3 +183,30 @@ run "organization_contract_missing_env_folder_fails" {
 
   expect_failures = [terraform_data.organization_contract_guard]
 }
+
+# Network Connectivity Center API: off by default (no project change); when on,
+# enabled on the hub project and every environment host project only.
+run "ncc_api_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = local.enable_network_connectivity_center == false && length(local.ncc_project_services) == 0
+    error_message = "The NCC API must not be added to any project unless NCC is in use."
+  }
+}
+
+run "ncc_api_on_hub_and_host_projects" {
+  command = plan
+
+  variables {
+    enable_network_connectivity_center = true
+  }
+
+  assert {
+    condition = (
+      toset(keys(local.ncc_project_services)) == toset(["shared-hub", "dev-host"]) &&
+      alltrue([for v in values(local.ncc_project_services) : v == ["networkconnectivity.googleapis.com"]])
+    )
+    error_message = "With NCC on, networkconnectivity.googleapis.com must be enabled on shared-hub and each <env>-host project only."
+  }
+}

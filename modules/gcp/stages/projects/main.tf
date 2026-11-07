@@ -50,7 +50,10 @@ module "project" {
     }
   )
 
-  services = var.project_services
+  # Baseline APIs on every project, plus any per-project additions (for
+  # example networkconnectivity.googleapis.com on the hub and host projects
+  # when Network Connectivity Center is in use).
+  services = distinct(concat(var.project_services, lookup(var.additional_project_services, each.key, [])))
 
   # Foundation projects must not be deletable by a routine plan.
   deletion_policy = "PREVENT"

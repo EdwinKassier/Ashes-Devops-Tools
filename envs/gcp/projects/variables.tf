@@ -26,6 +26,12 @@ variable "organization_name" {
   default     = null
 }
 
+variable "enable_network_connectivity_center" {
+  description = "Enable networkconnectivity.googleapis.com on the hub project and every environment host project, for the opt-in NCC hub/spoke connectivity. Null = true when config/landing-zone.yaml turns NCC on (gcp.network.ncc_hub.enabled, gcp.network.connectivity = ncc, or any gcp.environments.<env>.network_connectivity = ncc), else false."
+  type        = bool
+  default     = null
+}
+
 variable "project_services" {
   description = "List of APIs to enable on all projects"
   type        = list(string)

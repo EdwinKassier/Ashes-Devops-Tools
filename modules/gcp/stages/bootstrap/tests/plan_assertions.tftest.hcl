@@ -687,3 +687,59 @@ run "scaffold_matrix_with_ids_plans" {
     error_message = "the scaffold's production config plans cleanly once every workspace ID is supplied."
   }
 }
+
+# Network Connectivity Center roles are opt-in and folder-scoped: the network
+# SAs (shared folder) manage the hub, each workload SA (its env folder) its
+# spoke. None reaches the org node.
+run "ncc_roles_off_by_default" {
+  command = plan
+
+  assert {
+    condition = !anytrue([
+      for r in concat(output.workload_folder_roles.plan, output.workload_folder_roles.apply, output.network_folder_roles.plan, output.network_folder_roles.apply) :
+      startswith(r, "roles/networkconnectivity.")
+    ])
+    error_message = "No NCC role may be granted unless enable_network_connectivity_center = true."
+  }
+}
+
+run "ncc_roles_are_folder_scoped_when_enabled" {
+  command = plan
+
+  variables {
+    enable_network_connectivity_center = true
+  }
+
+  assert {
+    condition = (
+      contains(output.network_folder_roles.apply, "roles/networkconnectivity.hubAdmin") &&
+      contains(output.network_folder_roles.apply, "roles/networkconnectivity.spokeAdmin") &&
+      contains(output.network_folder_roles.plan, "roles/networkconnectivity.hubViewer")
+    )
+    error_message = "The network-hub SAs must get hubAdmin + spokeAdmin (plan: hubViewer) on the shared folder."
+  }
+
+  assert {
+    condition = (
+      contains(output.workload_folder_roles.apply, "roles/networkconnectivity.spokeAdmin") &&
+      !contains(output.workload_folder_roles.apply, "roles/networkconnectivity.hubAdmin") &&
+      contains(output.workload_folder_roles.plan, "roles/networkconnectivity.hubViewer")
+    )
+    error_message = "Each workload SA must get spokeAdmin only (plan: hubViewer) on its environment folder."
+  }
+
+  assert {
+    condition     = contains(output.delegated_network_folder_roles, "roles/networkconnectivity.hubAdmin") && !contains(output.delegated_workload_folder_roles, "roles/networkconnectivity.hubAdmin")
+    error_message = "The delegation allow-lists must carry the NCC roles to the matching folders only."
+  }
+
+  assert {
+    condition     = !anytrue([for k, m in google_organization_iam_member.stage_org_roles : startswith(m.role, "roles/networkconnectivity.")])
+    error_message = "No NCC role may be granted at the org node."
+  }
+
+  assert {
+    condition     = !anytrue([for r in output.network_folder_roles.plan : endswith(r, "Admin")]) && !anytrue([for r in output.workload_folder_roles.plan : endswith(r, "Admin")])
+    error_message = "Plan SAs must get only the NCC viewer role."
+  }
+}

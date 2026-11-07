@@ -160,6 +160,12 @@ variable "enable_pam" {
   default     = false
 }
 
+variable "enable_network_connectivity_center" {
+  description = "Grant the Network Connectivity Center roles (network-hub SAs on the shared folder: hubAdmin + spokeAdmin; workload SAs on their environment folder: spokeAdmin; plan SAs: hubViewer). Null = true when config/landing-zone.yaml turns NCC on (gcp.network.ncc_hub.enabled, gcp.network.connectivity = ncc, or any gcp.environments.<env>.network_connectivity = ncc), else false."
+  type        = bool
+  default     = null
+}
+
 variable "enable_phase0_admin_impersonation" {
   description = "Let user:<admin_email> impersonate the terraform-admin SA for the phase-0 first apply. Set false on pass 2 (once gcp-bootstrap runs through TFC dynamic credentials) so no standing human path to the bootstrap apply identity remains."
   type        = bool

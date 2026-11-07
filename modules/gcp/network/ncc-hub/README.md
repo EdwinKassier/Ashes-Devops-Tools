@@ -41,8 +41,12 @@ every other spoke. The topology is immutable: changing it replaces the hub,
 which first requires deleting every spoke attached to it.
 
 The hub's groups are created by the service (STAR: center + edge; MESH:
-default). They are referenced by ID (<hub id>/groups/<name>), never managed
-here, so this module never fights the service over them.
+default) and referenced by ID (<hub id>/groups/<name>). The one exception is
+opt-in: with auto\_accept\_projects set, the spoke group (edge, or default on
+MESH) is adopted by name to manage its auto-accept list, so spokes from those
+projects join without a manual accept. google\_network\_connectivity\_group only
+accepts the service-created names and its create PATCHes the existing group,
+so there is nothing to import.
 
 ## Usage
 
@@ -78,7 +82,8 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_network_connectivity_hub.this (modules/gcp/network/ncc-hub/main.tf#L22)
+- resource.google_network_connectivity_group.spoke (modules/gcp/network/ncc-hub/main.tf#L40)
+- resource.google_network_connectivity_hub.this (modules/gcp/network/ncc-hub/main.tf#L27)
 
 
 ## Inputs
@@ -87,6 +92,7 @@ The following resources are created:
 |------|-------------|------|---------|:--------:|
 | <a name="input_name"></a> [name](#input\_name) | Hub name. | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project that owns the hub (normally the network hub project). | `string` | n/a | yes |
+| <a name="input_auto_accept_projects"></a> [auto\_accept\_projects](#input\_auto\_accept\_projects) | Project IDs or numbers whose spokes the spoke group (edge, or default on MESH) accepts automatically. Spokes from any other project than the hub's wait for a manual accept. Default [] = the group is not managed. | `list(string)` | `[]` | no |
 | <a name="input_description"></a> [description](#input\_description) | Hub description. | `string` | `"Network Connectivity Center hub managed by Terraform"` | no |
 | <a name="input_export_psc"></a> [export\_psc](#input\_export\_psc) | Propagate Private Service Connect endpoint connections across the hub's VPC spokes. | `bool` | `false` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels applied to the hub. | `map(string)` | `{}` | no |
@@ -96,6 +102,7 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
+| <a name="output_auto_accept_projects"></a> [auto\_accept\_projects](#output\_auto\_accept\_projects) | Projects whose spokes the spoke group accepts automatically (empty = the group is not managed). |
 | <a name="output_center_group"></a> [center\_group](#output\_center\_group) | The group name the hub VPC joins: center for STAR, default for MESH. |
 | <a name="output_group_ids"></a> [group\_ids](#output\_group\_ids) | IDs of the service-created groups, keyed by group name (STAR: center, edge; MESH: default). |
 | <a name="output_id"></a> [id](#output\_id) | The hub ID (projects/<project>/locations/global/hubs/<name>); pass it to network/ncc-spoke hub\_id. |

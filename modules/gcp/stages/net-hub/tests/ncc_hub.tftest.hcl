@@ -66,6 +66,27 @@ run "ncc_star_hub_with_center_spoke" {
     condition     = keys(module.ncc_hub_spoke[0].producer_spoke_ids) == ["psa"]
     error_message = "With PSA enabled, the hub PSA peering must get a producer VPC spoke."
   }
+
+  assert {
+    condition     = length(module.ncc_hub[0].auto_accept_projects) == 0
+    error_message = "No auto-accept list unless ncc.auto_accept_projects is set."
+  }
+}
+
+run "ncc_auto_accept_projects_pass_through" {
+  command = plan
+
+  variables {
+    ncc = {
+      enabled              = true
+      auto_accept_projects = ["333333333333"]
+    }
+  }
+
+  assert {
+    condition     = module.ncc_hub[0].auto_accept_projects == tolist(["333333333333"])
+    error_message = "ncc.auto_accept_projects must reach network/ncc-hub."
+  }
 }
 
 run "ncc_mesh_hub_uses_default_group" {

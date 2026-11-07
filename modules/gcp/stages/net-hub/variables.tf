@@ -215,13 +215,14 @@ variable "vpn" {
 }
 
 variable "ncc" {
-  description = "Network Connectivity Center hub, off by default (spokes then use VPC peering). preset_topology: STAR (edge spokes reach the center only; the peering-equivalent) or MESH. Immutable once created. name defaults to <project_prefix>-ncc-hub. export_private_service_access adds a producer VPC spoke for the hub PSA peering (when PSA is enabled)."
+  description = "Network Connectivity Center hub, off by default (spokes then use VPC peering). preset_topology: STAR (edge spokes reach the center only; the peering-equivalent) or MESH. Immutable once created. name defaults to <project_prefix>-ncc-hub. export_private_service_access adds a producer VPC spoke for the hub PSA peering (when PSA is enabled). auto_accept_projects (project IDs or numbers) adopts the spoke group to auto-accept spokes from those projects; empty = spokes from other projects wait for a manual accept."
   type = object({
     enabled                       = optional(bool, false)
     name                          = optional(string)
     preset_topology               = optional(string, "STAR")
     export_psc                    = optional(bool, false)
     export_private_service_access = optional(bool, true)
+    auto_accept_projects          = optional(list(string), [])
   })
   default  = {}
   nullable = false

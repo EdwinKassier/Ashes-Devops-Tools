@@ -22,6 +22,10 @@ locals {
   # Staged dry-run delta for the hub perimeter (see network/vpc-sc): null =
   # no staged spec; a list = enforced status keeps the base set, the dry-run
   # spec trials base set + these.
+  # The NCC spoke group auto-accepts spokes from every environment host
+  # project (bare numbers; empty entries dropped).
+  ncc_auto_accept_projects = sort(distinct(compact([for n in values(var.spoke_project_numbers) : trimprefix(n, "projects/")])))
+
   hub_base_restricted_services = distinct(concat([
     "storage.googleapis.com",
     "bigquery.googleapis.com",
@@ -57,6 +61,8 @@ module "hub" {
   ncc = {
     enabled         = var.enable_ncc_hub
     preset_topology = var.ncc_preset_topology
+    # Environment host projects join without a manual accept.
+    auto_accept_projects = local.ncc_auto_accept_projects
   }
 
   # Hierarchical Firewall Policy (Defense in Depth)

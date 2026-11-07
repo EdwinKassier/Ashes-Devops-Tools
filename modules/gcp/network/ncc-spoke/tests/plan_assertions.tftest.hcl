@@ -59,8 +59,11 @@ run "psa_producer_spoke_same_group_after_consumer" {
     }
   }
 
-  # The producer spoke reads hub and group from the consumer spoke resource:
-  # the same group, and an implicit dependency (consumer spoke first).
+  # The name is kept from the task brief. "after consumer" is NOT asserted here:
+  # terraform test cannot assert apply order. The ordering comes from the
+  # producer spoke reading hub and group from the consumer spoke (a reference
+  # dependency) plus an explicit depends_on in main.tf. This run asserts only
+  # what a plan can show: the same hub and group.
   assert {
     condition     = google_network_connectivity_spoke.producer["psa"].group == google_network_connectivity_spoke.this.group && google_network_connectivity_spoke.producer["psa"].hub == google_network_connectivity_spoke.this.hub
     error_message = "The PSA producer spoke must join the same hub group as its consumer VPC spoke."

@@ -40,3 +40,13 @@ run "rejects_invalid_project_id" {
 
   expect_failures = [var.project_id]
 }
+
+run "rejects_malformed_auto_accept_project" {
+  command = plan
+
+  variables {
+    auto_accept_projects = ["projects/123"]
+  }
+
+  expect_failures = [var.auto_accept_projects]
+}

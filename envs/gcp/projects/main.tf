@@ -62,6 +62,16 @@ locals {
   )
 }
 
+locals {
+  # Network Connectivity Center: the hub project owns the hub, and each host
+  # project its environment spoke, so both need the API before gcp-network-hub
+  # / gcp-workload-<env> create them. Empty (no change) while NCC is off.
+  ncc_project_services = !local.enable_network_connectivity_center ? {} : merge(
+    { "shared-hub" = ["networkconnectivity.googleapis.com"] },
+    { for env_key in keys(local.environments) : "${env_key}-host" => ["networkconnectivity.googleapis.com"] },
+  )
+}
+
 module "projects" {
   source = "../../../modules/gcp/stages/projects"
 
@@ -71,9 +81,10 @@ module "projects" {
   admin_project_id        = local.bootstrap.admin_project_id
   # A missing environment folder is filled with an inert placeholder so that
   # terraform_data.organization_contract_guard reports the gap.
-  folders          = merge({ for k in keys(local.environments) : k => { id = "", name = "", display_name = "" } }, local.org.folders)
-  environments     = local.project_environments
-  project_services = var.project_services
+  folders                     = merge({ for k in keys(local.environments) : k => { id = "", name = "", display_name = "" } }, local.org.folders)
+  environments                = local.project_environments
+  project_services            = var.project_services
+  additional_project_services = local.ncc_project_services
 
   # Suffix comes from the gcp-bootstrap root for project-ID consistency.
   suffix = local.bootstrap.suffix
