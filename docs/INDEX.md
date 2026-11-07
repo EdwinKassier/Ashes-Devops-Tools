@@ -67,6 +67,7 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
 - [Service Team Onboarding](runbooks/service-team-onboarding.md): create a service project with Shared VPC attachment
 - [KMS Rotation](runbooks/kms-rotation.md): rotate CMEK keys automatically or manually
 - [ADR 0011: Temporary elevated access](adr/0011-temporary-elevated-access.md): IdP-native access requests over SCIM for Identity Center groups
+- [Architecture decision records](adr/README.md): ADRs 0001-0014 (cloud selection, config, contracts, identities, backend, sandbox, boundary, tags and more)
 - [CIDR Expansion](runbooks/cidr-expansion.md): expand subnet ranges without downtime
 - [Break Glass](runbooks/break-glass.md): emergency access when Workload Identity Federation fails
 - [GCP Workspace Rename](runbooks/gcp-workspace-rename.md): migrate live TFC workspaces to the `gcp-organization` / `gcp-workload-<env>` names
@@ -132,13 +133,15 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
 
 ## Audits
 
-Point-in-time reviews; later audits supersede earlier "resolved" claims.
+Point-in-time reviews; later audits supersede earlier "resolved" claims. Only the latest audit lives here; older ones are in `audit/archive/` and every still-open item is tracked in [Known Gaps](known-gaps.md).
 
-- [2026-11-05 Enterprise Boilerplate Audit](audit/2026-11-05-enterprise-boilerplate-audit.md): five-dimension review (best practice, capability, maintainability, security, modularity) and remediation roadmap
-- [2026-11-05 Deep Audit](audit/2026-11-05-deep-audit.md)
-- [2026-11-04 Best-Practice Audit](audit/2026-11-04-best-practice-audit.md)
-- [2026-11-04 FinOps Deep-Dive](audit/2026-11-04-finops-deep-dive.md): recurring cost of the default configuration
-- [2026-09-09 Due-Diligence Audit](audit/2026-09-09-due-diligence-audit.md)
+- [2026-11-06 Five-Dimension Audit](audit/2026-11-06-five-dimension-audit.md): latest independent audit
+- [2026-11-06 Enterprise Boilerplate Audit](audit/archive/2026-11-06-enterprise-boilerplate-audit.md)
+- [2026-11-05 Enterprise Boilerplate Audit](audit/archive/2026-11-05-enterprise-boilerplate-audit.md): five-dimension review (best practice, capability, maintainability, security, modularity) and remediation roadmap
+- [2026-11-05 Deep Audit](audit/archive/2026-11-05-deep-audit.md)
+- [2026-11-04 Best-Practice Audit](audit/archive/2026-11-04-best-practice-audit.md)
+- [2026-11-04 FinOps Deep-Dive](audit/archive/2026-11-04-finops-deep-dive.md): recurring cost of the default configuration
+- [2026-09-09 Due-Diligence Audit](audit/archive/2026-09-09-due-diligence-audit.md)
 
 ## Architecture
 

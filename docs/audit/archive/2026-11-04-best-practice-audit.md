@@ -4,7 +4,7 @@
 **Branch:** `claude/repo-audit-best-practices-11531b`
 **Scope:** Full repository. Terraform GCP + AWS + Supabase + Vercel landing zone. 98 modules, 10 deployable roots, ~33.4k lines of Terraform, 207 test suites.
 **Standard applied:** Latest (2025/2026) system design, infrastructure and Terraform/DevOps best practice. AWS SRA, Google enterprise foundations/FAST, CIS. Adversarial posture: assume a claim is false until proven at the source.
-**Method:** Five independent deep-dive audits (architecture, Terraform hygiene, security, CI/CD and state, testing and docs), each verified at `file:line`. The four most severe claims were re-verified by hand against source. This is a fresh external audit. It is deliberately distinct from the in-repo self-audit at `docs/audit/2026-09-09-due-diligence-audit.md`.
+**Method:** Five independent deep-dive audits (architecture, Terraform hygiene, security, CI/CD and state, testing and docs), each verified at `file:line`. The four most severe claims were re-verified by hand against source. This is a fresh external audit. It is deliberately distinct from the in-repo self-audit at `docs/audit/archive/2026-09-09-due-diligence-audit.md`.
 
 ---
 
@@ -35,7 +35,7 @@ This is a top-decile Terraform **specification** of a multi-cloud landing zone. 
 Evidence:
 
 - Every test is `mock_provider`. 197 of 201 module test files mock the provider. 774 of 795 `run` blocks are plan-only. The 21 `apply` runs are still against mocked providers. Source: test-suite census and `docs/known-gaps.md:104` ("mock-tested only, no on-path coverage").
-- The prior in-repo audit states plainly: "no live cloud plan/apply was performed" (`docs/audit/2026-09-09-due-diligence-audit.md:160`).
+- The prior in-repo audit states plainly: "no live cloud plan/apply was performed" (`docs/audit/archive/2026-09-09-due-diligence-audit.md:160`).
 - The repo is full of placeholders consistent with never-deployed: `your-tfc-org-name` (`examples/dev.tfvars:23`), `organizations/123456789` (`examples/vpc-sc/main.tf:13`), `example.com` account emails (`envs/aws/organization/variables.tf:48-53`). This is correct for a template, and the `my-org` rejection validations are a nice touch. It is listed here only as corroboration that no real org has run this.
 
 Why this is the top finding: for infrastructure code, "validates and mock-tests green" is not "works". The items that a mocked plan provably cannot catch are the ones most likely to fail on first real apply:
@@ -141,7 +141,7 @@ Root-level tests exist only under `envs/aws/*` (6 of 7). These have none: `envs/
 - **L6 — Local and CI pipelines have diverged.** `make validate-all` runs `terraform validate` on every root with no `configuration_aliases` skip, while CI inlines that skip in YAML (`terraform-plan.yml:120-127`). So `make ci` fails locally on the cross-account AWS modules CI passes. The alias skip is also a substring grep, so a comment containing the string disables validation for a whole root.
 - **L7 — Release provenance is loose.** The release job publishes a GitHub Release when the latest TFC run is `applied`, without checking that run corresponds to the tagged commit (`terraform-apply.yml:91-168`). A tag can mint a "deployed" release for an unrelated apply.
 - **L8 — `active-providers.sh` is stale after the reorg**, reporting only `saas` because it searches `envs` at depth 1 (roots now live at depth 2). An operator helper gives a false "only saas is active" picture.
-- **L9 — The in-repo self-audit is marketing.** `docs/audit/2026-09-09-due-diligence-audit.md` grades itself A-/B and declares all 22 findings "resolved the same day". Resolving 22 findings in one day is a signal that some fixes were documentation edits rather than behaviour changes (several explicitly were). A self-audit that lives in the audited repo and scores itself is a sales document, not independent assurance.
+- **L9 — The in-repo self-audit is marketing.** `docs/audit/archive/2026-09-09-due-diligence-audit.md` grades itself A-/B and declares all 22 findings "resolved the same day". Resolving 22 findings in one day is a signal that some fixes were documentation edits rather than behaviour changes (several explicitly were). A self-audit that lives in the audited repo and scores itself is a sales document, not independent assurance.
 
 ---
 

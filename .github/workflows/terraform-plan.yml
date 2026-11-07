@@ -342,6 +342,17 @@ jobs:
         with:
           extra_args: markdownlint --all-files
 
+      # The upstream repository ships placeholder owners on purpose; a fork must
+      # replace them (scripts/init-landing-zone.sh --codeowners) or code-owner
+      # review is silently inert.
+      - name: Fail on placeholder CODEOWNERS (forks only)
+        if: github.repository != 'EdwinKassier/Ashes-Devops-Tools'
+        run: |
+          if grep -n 'your-org' .github/CODEOWNERS; then
+            echo "::error file=.github/CODEOWNERS::CODEOWNERS contains your-org placeholders; render real owners with scripts/init-landing-zone.sh --codeowners."
+            exit 1
+          fi
+
       - name: Check conventional commit messages
         # commitizen's pre-commit hook is stage-restricted to `commit-msg` and
         # validates a single message, so it cannot run via `pre-commit run

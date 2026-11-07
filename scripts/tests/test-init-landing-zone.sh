@@ -312,8 +312,12 @@ if bash "${SCRIPT}" --non-interactive --output "${workdir}/co.yaml" --org-name a
   assert_line "${co}" '^\* @acme-gh/platform-team$' "default owner is the platform team"
   assert_line "${co}" '^/envs/tfc-admin/ +@acme-gh/platform-team @acme-gh/sec$' "tfc-admin needs platform + security"
   assert_line "${co}" '^/config/landing-zone.yaml +@acme-gh/platform-team @acme-gh/sec$' "landing-zone.yaml is security-owned"
-  assert_line "${co}" '^/policies/ ' "policies are owned"
-  assert_line "${co}" '^/modules/gcp/stages/guardrails/ ' "guardrails stage is owned"
+  # Every security-sensitive path routes to platform + security (last match wins).
+  for path in /modules/aws/iam/ /modules/aws/governance/ /modules/gcp/iam/ \
+    /modules/gcp/stages/organization/ /modules/gcp/stages/bootstrap/ /modules/gcp/stages/guardrails/ \
+    /envs/tfc-admin/ /envs/gcp/guardrails/ /policies/ /.github/; do
+    assert_line "${co}" "^${path} +@acme-gh/platform-team @acme-gh/sec\$" "${path} needs platform + security"
+  done
   assert_no_line "${co}" '\$\{|your-org' "no unrendered variables or placeholders"
   assert_no_line "${co}" '^[^#]*@acme-gh/(sec|platform-team|app-platform-team|docs-team)@' "no malformed owners"
 else

@@ -68,7 +68,7 @@ logs-granted KMS key for CloudWatch Logs).
 
 Cut the always-on footprint for dev, sandbox, and throwaway environments (the
 default AWS footprint is about USD 1,500/month before any workload, see
-[`docs/audit/2026-11-04-finops-deep-dive.md`](../../docs/audit/2026-11-04-finops-deep-dive.md)).
+[`docs/audit/archive/2026-11-04-finops-deep-dive.md`](../../docs/audit/archive/2026-11-04-finops-deep-dive.md)).
 
 | Preset | Root | What it changes | Approx saving |
 |---|---|---|---|

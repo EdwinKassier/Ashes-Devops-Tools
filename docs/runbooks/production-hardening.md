@@ -110,7 +110,7 @@ Deeper cuts, now exposed as `envs/aws/security` root variables (FinOps F5):
 Both are in `examples/presets/nonprod-aws-security.tfvars`.
 
 Keep the full posture for production. See the cost model in
-[`docs/audit/2026-11-04-finops-deep-dive.md`](../audit/2026-11-04-finops-deep-dive.md).
+[`docs/audit/archive/2026-11-04-finops-deep-dive.md`](../audit/archive/2026-11-04-finops-deep-dive.md).
 
 ## Contain the automation identity (audit C2)
 

@@ -80,10 +80,17 @@ CHANGELOG.md   @your-org/platform-team
 # security baseline. Listed after the general /modules/ lines so they win.
 /modules/gcp/governance/  @your-org/platform-team @your-org/security-team
 /modules/gcp/iam/         @your-org/platform-team @your-org/security-team
+/modules/gcp/stages/organization/  @your-org/platform-team @your-org/security-team
+/modules/gcp/stages/bootstrap/    @your-org/platform-team @your-org/security-team
 /modules/gcp/stages/guardrails/  @your-org/platform-team @your-org/security-team
 /modules/aws/governance/  @your-org/platform-team @your-org/security-team
 /modules/aws/iam/         @your-org/platform-team @your-org/security-team
 /modules/aws/security/    @your-org/platform-team @your-org/security-team
+
+# ── Policy-as-code and the configuration file ────────────────────────────────
+# The OPA guardrails decide what a plan may do; landing-zone.yaml feeds every root.
+/policies/                 @your-org/platform-team @your-org/security-team
+/config/landing-zone.yaml  @your-org/platform-team @your-org/security-team
 
 # ── This file ────────────────────────────────────────────────────────────────
 # Changing ownership itself needs both teams.

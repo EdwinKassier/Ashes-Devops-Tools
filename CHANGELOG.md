@@ -41,7 +41,7 @@ release metadata for a Terraform Cloud run.
   fixes app-services services that share a repository with different ref/environment pins: each
   deploy SA is now reachable only by its own tuple. **Breaking:** see [UPGRADING.md](UPGRADING.md).
 
-### Wave A of the [2026-11-06 enterprise boilerplate audit](docs/audit/2026-11-06-enterprise-boilerplate-audit.md)
+### Wave A of the [2026-11-06 enterprise boilerplate audit](docs/audit/archive/2026-11-06-enterprise-boilerplate-audit.md)
 
 - **The management aws-security role cannot disable org detection (S-H1).** Disabling delegated
   admins or trusted access and deregistering delegated admins now need the off-by-default
@@ -362,7 +362,7 @@ release metadata for a Terraform Cloud run.
   the import block, which now sets its VCS triggers and turns speculative plans off. If the
   workspace is deliberately CLI-only, set `manage_tfc_admin_workspace = false`.
 
-Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/2026-11-05-enterprise-boilerplate-audit.md).
+Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/2026-11-05-enterprise-boilerplate-audit.md).
 
 ### Added
 

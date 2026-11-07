@@ -364,6 +364,27 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   `examples/presets/prod-gcp-workload.yaml`, consistency-tested). Other roots
   still need the `-var-file` overlays or TFC variables.
 
+## OPEN — operator actions and items carried from archived audits
+
+`docs/audit/archive/` holds superseded audits; this file is the single list of open items.
+
+- **Operator, GitHub and HCP side (cannot be done from code):**
+  - Create real GitHub teams with at least 2 humans between them, and render
+    `.github/CODEOWNERS` for the fork (`scripts/init-landing-zone.sh --codeowners`;
+    the upstream file keeps `your-org` placeholders, and the meta-lint job fails on
+    a fork while any remain).
+  - Enable required code-owner review and `enforce_admins` on the default branch,
+    and make `Validation Summary` a required check (`docs/guides/BRANCH_PROTECTION.md`;
+    `make required-checks-live` diffs the live settings).
+  - Set `RELEASE_PLEASE_TOKEN` (`release.yml` requires it) and cut the first release.
+- **No IAM policy-simulation harness.** SCP, RCP and boundary conditions are
+  asserted against rendered JSON only; nothing in `scripts/` or CI runs
+  `SimulatePrincipalPolicy`. Real-cloud proof comes from the sandbox (ADR 0006).
+- **Workload runtimes not yet modularised.** There are no modules for EKS, Lambda,
+  Cloud Functions, a cache tier (ElastiCache or Memorystore) or NoSQL (DynamoDB or
+  Firestore). The golden paths cover Cloud Run, GKE Autopilot, ECS Fargate,
+  Cloud SQL and Aurora only.
+
 ## MODERNIZATION — latest-best-practice gaps (2026 review)
 
 From a 2026 gap analysis of both landing zones against the current AWS SRA and
