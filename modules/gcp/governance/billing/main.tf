@@ -1,6 +1,15 @@
 # Google Cloud Billing Budget Module
 # This module creates budget alerts using GCP Budget API
 
+locals {
+  effective_threshold_rules = var.threshold_rules != null ? var.threshold_rules : [
+    { percent = var.alert_threshold_percent, spend_basis = "CURRENT_SPEND" },
+    { percent = 0.9, spend_basis = "CURRENT_SPEND" },
+    { percent = 1.0, spend_basis = "FORECASTED_SPEND" },
+    { percent = 1.0, spend_basis = "CURRENT_SPEND" },
+  ]
+}
+
 # Budget alert for monthly spending
 resource "google_billing_budget" "monthly_budget" {
   billing_account = var.billing_account
@@ -20,29 +29,15 @@ resource "google_billing_budget" "monthly_budget" {
     }
   }
 
-  # Alert at 50% of budget
-  threshold_rules {
-    threshold_percent = var.alert_threshold_percent
-    spend_basis       = "CURRENT_SPEND"
-  }
-
-  # Alert at 90% of budget
-  threshold_rules {
-    threshold_percent = 0.9
-    spend_basis       = "CURRENT_SPEND"
-  }
-
-  # Alert at 100% forecasted: fires before actual spend reaches budget (predictive warning)
-  threshold_rules {
-    threshold_percent = 1.0
-    spend_basis       = "FORECASTED_SPEND"
-  }
-
-  # Alert at 100% actual: fires when real spend hits the budget limit (confirmatory alert)
-  # Both 100% rules are intentional — forecasted fires earlier, actual confirms breach.
-  threshold_rules {
-    threshold_percent = 1.0
-    spend_basis       = "CURRENT_SPEND"
+  # Default rules: 50% (alert_threshold_percent) / 90% / 100% forecasted /
+  # 100% actual. Both 100% rules are intentional: forecasted fires earlier,
+  # actual confirms the breach. threshold_rules overrides the whole set.
+  dynamic "threshold_rules" {
+    for_each = local.effective_threshold_rules
+    content {
+      threshold_percent = threshold_rules.value.percent
+      spend_basis       = threshold_rules.value.spend_basis
+    }
   }
 
   # Notification configuration

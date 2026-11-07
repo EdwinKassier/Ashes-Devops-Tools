@@ -227,6 +227,7 @@ variable "budgets" {
     limit_amount      = string
     threshold_percent = number
     emails            = optional(list(string), [])
+    alert_percents    = optional(list(number), [])
   }))
   # Default limit sized above the landing-zone idle baseline (the AWS security +
   # network hub is ~USD 1,500/month before any workload) so the alert is not
@@ -236,6 +237,28 @@ variable "budgets" {
       limit_amount      = "3000"
       threshold_percent = 80
     }
+  }
+}
+
+variable "profile" {
+  description = "Cost/assurance profile: production (default) or starter. starter replaces var.budgets with one org-monthly budget sized from monthly_budget_usd that alerts at 50/80/100%, and fails the plan when no budget amount resolves. Null = org.profile from config/landing-zone.yaml, else production."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.profile == null || contains(["production", "starter"], coalesce(var.profile, "production"))
+    error_message = "profile must be production or starter."
+  }
+}
+
+variable "monthly_budget_usd" {
+  description = "Monthly budget in USD for the starter profile. Null = org.monthly_budget_usd from config/landing-zone.yaml. Ignored for the production profile (use budgets)."
+  type        = number
+  default     = null
+
+  validation {
+    condition     = var.monthly_budget_usd == null || coalesce(var.monthly_budget_usd, 1) > 0
+    error_message = "monthly_budget_usd must be greater than 0."
   }
 }
 

@@ -281,3 +281,48 @@ run "no_section_is_noop" {
     error_message = "without a notifications section the FinOps defaults and an empty guard list must be unchanged."
   }
 }
+
+# starter: one budget from org.monthly_budget_usd, alerting at 50/80/100% to
+# notifications.emails.
+run "starter_budget_alerts_wired" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-starter.yaml"
+  }
+
+  assert {
+    condition     = length(local.budgets) == 1 && local.budgets["org-monthly"].limit_amount == "300" && jsonencode(local.budgets["org-monthly"].alert_percents) == jsonencode([50, 80, 100])
+    error_message = "starter must plan one org-monthly budget of org.monthly_budget_usd alerting at 50/80/100%."
+  }
+
+  assert {
+    condition     = join(",", local.budgets["org-monthly"].emails) == "alerts@cfg.test,oncall@cfg.test"
+    error_message = "starter budget alerts must reach notifications.emails."
+  }
+}
+
+# starter without a resolvable budget amount must fail the plan.
+run "starter_requires_budget" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-starter-nobudget.yaml"
+  }
+
+  expect_failures = [terraform_data.starter_requires_budget]
+}
+
+# Production keeps the variable-driven budgets untouched.
+run "production_budgets_unchanged" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+  }
+
+  assert {
+    condition     = local.budgets["org-monthly"].limit_amount == "3000" && length(local.budgets["org-monthly"].alert_percents) == 0 && length(terraform_data.starter_requires_budget) == 0
+    error_message = "the production profile must keep the default budget and no starter guard."
+  }
+}

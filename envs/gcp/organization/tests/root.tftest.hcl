@@ -575,3 +575,62 @@ run "no_section_is_noop" {
     error_message = "without a notifications section the alert list is the variable and budgets get no channels."
   }
 }
+
+# starter: the budget comes from org.monthly_budget_usd and alerts at 50/80/100%
+# through the notifications.emails channels.
+run "starter_budget_alerts_wired" {
+  command = plan
+
+  variables {
+    landing_zone_config_path  = "tests/fixtures/landing-zone-starter.yaml"
+    domain                    = null
+    project_prefix            = null
+    admin_email               = null
+    billing_account           = null
+    tfc_organization          = null
+    alert_notification_emails = []
+    organization_admin_groups = null
+    billing_admin_groups      = null
+    environments              = null
+  }
+
+  assert {
+    condition     = local.monthly_budget_amount == 300 && jsonencode([for r in local.budget_threshold_rules : r.percent]) == jsonencode([0.5, 0.8, 1])
+    error_message = "starter must budget org.monthly_budget_usd with 50/80/100% thresholds."
+  }
+
+  assert {
+    condition     = local.notify_budget_channels && join(",", local.alert_notification_emails) == "alerts@acme.io"
+    error_message = "starter budget alerts must reach notifications.emails."
+  }
+}
+
+# starter without a resolvable budget amount must fail the plan.
+run "starter_requires_budget" {
+  command = plan
+
+  variables {
+    landing_zone_config_path  = "tests/fixtures/landing-zone-starter-nobudget.yaml"
+    domain                    = null
+    project_prefix            = null
+    admin_email               = null
+    billing_account           = null
+    tfc_organization          = null
+    alert_notification_emails = []
+    organization_admin_groups = null
+    billing_admin_groups      = null
+    environments              = null
+  }
+
+  expect_failures = [terraform_data.starter_requires_budget]
+}
+
+# Production keeps today's default budget and threshold set.
+run "production_budget_unchanged" {
+  command = plan
+
+  assert {
+    condition     = local.monthly_budget_amount == 1000 && local.budget_threshold_rules == null && length(terraform_data.starter_requires_budget) == 0
+    error_message = "production must keep the 1000 default budget and the module-default thresholds."
+  }
+}

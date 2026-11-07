@@ -205,9 +205,25 @@ variable "billing_contact_email" {
 }
 
 variable "monthly_budget_amount" {
-  description = "Monthly budget limit for the organization. Set to 0 to disable budget alerts."
+  description = "Monthly budget limit for the organization. Set to 0 to disable budget alerts (rejected for the starter profile). Null = org.monthly_budget_usd from config/landing-zone.yaml, else 1000 (production) / unset (starter, which then fails the plan)."
   type        = number
-  default     = 1000
+  default     = null
+
+  validation {
+    condition     = var.monthly_budget_amount == null || coalesce(var.monthly_budget_amount, 0) >= 0
+    error_message = "monthly_budget_amount must be 0 (disabled) or a positive number."
+  }
+}
+
+variable "profile" {
+  description = "Cost/assurance profile: production (default) or starter. starter requires a monthly budget (monthly_budget_amount or org.monthly_budget_usd) and alerts at 50/80/100% of it. Null = org.profile from config/landing-zone.yaml, else production."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.profile == null || contains(["production", "starter"], coalesce(var.profile, "production"))
+    error_message = "profile must be production or starter."
+  }
 }
 
 variable "budget_currency" {

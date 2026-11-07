@@ -83,7 +83,8 @@ module "organization" {
   os_login_exempt_environment_keys      = var.os_login_exempt_environment_keys
   security_contact_email                = var.security_contact_email
   billing_contact_email                 = var.billing_contact_email
-  monthly_budget_amount                 = var.monthly_budget_amount
+  monthly_budget_amount                 = local.monthly_budget_amount
+  budget_threshold_rules                = local.budget_threshold_rules
   budget_currency                       = var.budget_currency
 
   # Dedicated logging project for the org audit sink, bucket, audit
@@ -162,3 +163,16 @@ module "organization" {
 # split into their own roots and states. gcp-projects reads this
 # root's folders/tag values; gcp-network-hub reads gcp-projects' host project
 # IDs. See docs/architecture/gcp-state-decomposition.md.
+
+# The starter profile must have a budget: an unmetered sandbox is the failure
+# mode this profile exists to prevent.
+resource "terraform_data" "starter_requires_budget" {
+  count = local.profile == "starter" ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = local.monthly_budget_amount > 0
+      error_message = "org.profile is starter but no monthly budget resolves: set org.monthly_budget_usd in config/landing-zone.yaml (or var.monthly_budget_amount) to a value above 0."
+    }
+  }
+}

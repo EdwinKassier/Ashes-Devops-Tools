@@ -31,6 +31,8 @@ locals {
     billing_admin_groups      = try([for g in local.lz.gcp.billing_admin_groups : tostring(g)], null)
     allowed_regions           = try([for r in local.lz.gcp.allowed_regions : tostring(r)], null)
     break_glass_group         = try(tostring(local.lz.gcp.break_glass_group), null)
+    profile                   = try(tostring(local.lz.org.profile), null)
+    monthly_budget_usd        = try(tonumber(local.lz.org.monthly_budget_usd), null)
     alert_emails              = try([for e in local.lz.gcp.alert_emails : tostring(e)], null)
     notification_emails       = try([for e in local.lz.notifications.emails : tostring(e)], null)
     admin_containment         = try(tobool(local.lz.gcp.admin_containment), null)
@@ -100,6 +102,17 @@ locals {
   alert_notification_emails = length(var.alert_notification_emails) > 0 ? var.alert_notification_emails : (
     length(coalesce(local.cfg.alert_emails, [])) > 0 ? local.cfg.alert_emails : coalesce(local.cfg.notification_emails, [])
   )
+  # Cost profile (variable > org.profile > production). The starter profile
+  # requires a budget (variable > org.monthly_budget_usd) and alerts at 50/80/100%.
+  profile = coalesce(var.profile, local.cfg.profile, "production")
+  monthly_budget_amount = coalesce(
+    var.monthly_budget_amount, local.cfg.monthly_budget_usd, local.profile == "starter" ? 0 : 1000
+  )
+  budget_threshold_rules = local.profile == "starter" ? [
+    { percent = 0.5, spend_basis = "CURRENT_SPEND" },
+    { percent = 0.8, spend_basis = "CURRENT_SPEND" },
+    { percent = 1.0, spend_basis = "CURRENT_SPEND" },
+  ] : null
   # Budgets notify the control-plane email channels only when the estate opted
   # in through the notifications section (an existing estate's budget is untouched).
   notify_budget_channels = length(coalesce(local.cfg.notification_emails, [])) > 0

@@ -132,9 +132,23 @@ the automation identities with no human confirmation. Only `tfc-admin` and
 ## Budget and who owns the bill
 
 `org.monthly_budget_usd` (300 in the placeholder) is the monthly ceiling for the whole
-sandbox estate. The budget alerts that consume it are wired by Task 2.10. Until then,
-create a billing budget by hand on the sandbox GCP billing account and in AWS Budgets on
-the sandbox management account.
+sandbox estate. With `org.profile: starter` it is **required**: the `gcp-organization` and
+`aws-organization` plans fail when no budget amount resolves. Both roots then build the
+budget from it and alert at **50%, 80% and 100%** of actual spend (plus a forecast alert at
+100% on AWS) to `notifications.emails`. A budget only notifies; it does not stop spend.
+
+### Optional kill switch (Google Cloud)
+
+To make the GCP side stop spending, Google documents a pattern that disables billing on a
+project from a budget Pub/Sub notification: a Cloud Function subscribed to the budget topic
+calls the Cloud Billing API to detach the billing account once cost exceeds the budget. See
+the "Disable billing usage with notifications" page under the Cloud Billing budgets
+documentation at `cloud.google.com/billing/docs/how-to/disable-billing-with-notifications`.
+It is deliberately **not** wired by this repo: detaching billing stops every resource in the
+project and can leave data unrecoverable, so it is an irreversible-by-default action. Add it
+only to disposable sandbox projects, never to production, and test it on a throwaway project.
+AWS has no equivalent single switch; use a Budgets action with an SCP or IAM policy attachment
+if you need one.
 
 The **platform team owns the sandbox bill**. It is a platform cost centre
 (`cost_center: platform-sandbox`), not charged back to any workload team. The `starter`

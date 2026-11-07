@@ -58,10 +58,10 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_budgets_budget.this (modules/aws/governance/cost-governance/main.tf#L24)
-- resource.aws_ce_anomaly_monitor.this (modules/aws/governance/cost-governance/main.tf#L59)
-- resource.aws_ce_anomaly_subscription.this (modules/aws/governance/cost-governance/main.tf#L68)
-- resource.aws_ce_cost_allocation_tag.this (modules/aws/governance/cost-governance/main.tf#L96)
+- resource.aws_budgets_budget.this (modules/aws/governance/cost-governance/main.tf#L38)
+- resource.aws_ce_anomaly_monitor.this (modules/aws/governance/cost-governance/main.tf#L68)
+- resource.aws_ce_anomaly_subscription.this (modules/aws/governance/cost-governance/main.tf#L77)
+- resource.aws_ce_cost_allocation_tag.this (modules/aws/governance/cost-governance/main.tf#L105)
 
 
 ## Inputs
@@ -72,7 +72,7 @@ The following resources are created:
 | <a name="input_anomaly_monitor_name"></a> [anomaly\_monitor\_name](#input\_anomaly\_monitor\_name) | Name of the DIMENSIONAL/SERVICE Cost Anomaly Detection monitor. | `string` | `"org-service-monitor"` | no |
 | <a name="input_anomaly_subscription_name"></a> [anomaly\_subscription\_name](#input\_anomaly\_subscription\_name) | Name of the Cost Anomaly Detection subscription wired to the monitor. | `string` | `"org-anomaly-sub"` | no |
 | <a name="input_anomaly_threshold_usd"></a> [anomaly\_threshold\_usd](#input\_anomaly\_threshold\_usd) | Absolute dollar impact (USD) at or above which an anomaly triggers an alert (ANOMALY\_TOTAL\_IMPACT\_ABSOLUTE). | `number` | `100` | no |
-| <a name="input_budgets"></a> [budgets](#input\_budgets) | Monthly COST budgets keyed by budget name. limit\_amount is the USD limit; threshold\_percent triggers an ACTUAL-spend notification when crossed; emails receive the notification alongside the optional SNS topic. | <pre>map(object({<br/>    limit_amount      = string<br/>    threshold_percent = number<br/>    emails            = optional(list(string), [])<br/>  }))</pre> | <pre>{<br/>  "org-monthly": {<br/>    "limit_amount": "1000",<br/>    "threshold_percent": 80<br/>  }<br/>}</pre> | no |
+| <a name="input_budgets"></a> [budgets](#input\_budgets) | Monthly COST budgets keyed by budget name. limit\_amount is the USD limit; threshold\_percent triggers an ACTUAL-spend notification when crossed (alert\_percents, when non-empty, replaces it with one ACTUAL notification per percent plus a FORECASTED one at the highest); emails receive the notification alongside the optional SNS topic. | <pre>map(object({<br/>    limit_amount      = string<br/>    threshold_percent = number<br/>    emails            = optional(list(string), [])<br/>    alert_percents    = optional(list(number), [])<br/>  }))</pre> | <pre>{<br/>  "org-monthly": {<br/>    "limit_amount": "1000",<br/>    "threshold_percent": 80<br/>  }<br/>}</pre> | no |
 | <a name="input_cost_allocation_tags"></a> [cost\_allocation\_tags](#input\_cost\_allocation\_tags) | Tag keys to activate as cost-allocation tags in Cost Explorer / the Cost & Usage Report. Should mirror the B3 tag-policy keys. | `list(string)` | <pre>[<br/>  "CostCenter",<br/>  "Environment",<br/>  "Owner"<br/>]</pre> | no |
 | <a name="input_enable_cost_governance"></a> [enable\_cost\_governance](#input\_enable\_cost\_governance) | Master gate. When false, no budgets, anomaly monitor/subscription or cost-allocation tags are created (the module composes as a no-op). | `bool` | `true` | no |
 | <a name="input_notifications_topic_arn"></a> [notifications\_topic\_arn](#input\_notifications\_topic\_arn) | Optional SNS topic ARN that budget notifications are published to, in addition to any per-budget email subscribers. Empty string disables SNS fan-out. | `string` | `""` | no |

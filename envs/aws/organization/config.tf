@@ -35,6 +35,8 @@ locals {
     allowed_regions         = try([for r in local.lz.aws.allowed_regions : tostring(r)], null)
     aws_enabled_regions     = try([for r in local.lz.aws.enabled_regions : tostring(r)], null)
     guard_alert_emails      = try([for e in local.lz.aws.guard_alert_emails : tostring(e)], null)
+    profile                 = try(tostring(local.lz.org.profile), null)
+    monthly_budget_usd      = try(tonumber(local.lz.org.monthly_budget_usd), null)
     notification_emails     = try([for e in local.lz.notifications.emails : tostring(e)], null)
     # Config recorder migration flags (docs/runbooks/aws-config-recorder-migration.md).
     enable_org_config_recorders = try(tobool(local.lz.aws.enable_org_config_recorders), null)
@@ -135,8 +137,21 @@ locals {
   )
   # Budgets without their own recipients, and the single anomaly address, follow
   # notifications.emails (default: today's values).
+  profile            = coalesce(var.profile, local.cfg.profile, "production")
+  monthly_budget_usd = var.monthly_budget_usd != null ? var.monthly_budget_usd : local.cfg.monthly_budget_usd
+  # The starter profile replaces the budget set with one budget sized from
+  # org.monthly_budget_usd that alerts at 50/80/100% of actual spend (plus a
+  # forecast at 100%). Requires the amount (terraform_data.starter_requires_budget).
+  effective_budgets = local.profile == "starter" ? {
+    org-monthly = {
+      limit_amount      = tostring(coalesce(local.monthly_budget_usd, 0))
+      threshold_percent = 100
+      emails            = []
+      alert_percents    = [50, 80, 100]
+    }
+  } : var.budgets
   budgets = {
-    for k, b in var.budgets : k => merge(b, { emails = length(b.emails) > 0 ? b.emails : local.notification_emails })
+    for k, b in local.effective_budgets : k => merge(b, { emails = length(b.emails) > 0 ? b.emails : local.notification_emails })
   }
   cost_anomaly_email = var.cost_anomaly_email != null ? var.cost_anomaly_email : (
     length(local.notification_emails) > 0 ? local.notification_emails[0] : "finops@example.com"

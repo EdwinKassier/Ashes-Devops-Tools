@@ -64,3 +64,16 @@ module "aws_organization" {
   # app_ingress_mode = "public_alb" (internet-facing ALB). Off by default.
   allow_vpc_bpa_exclusions = var.allow_vpc_bpa_exclusions
 }
+
+# The starter profile must have a budget: an unmetered sandbox is the failure
+# mode this profile exists to prevent.
+resource "terraform_data" "starter_requires_budget" {
+  count = local.profile == "starter" ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = coalesce(local.monthly_budget_usd, 0) > 0 && var.enable_cost_governance
+      error_message = "org.profile is starter but no budget resolves: set org.monthly_budget_usd in config/landing-zone.yaml (or var.monthly_budget_usd) above 0 and keep enable_cost_governance = true."
+    }
+  }
+}

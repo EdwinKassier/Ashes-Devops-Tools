@@ -31,3 +31,15 @@ run "invalid_anomaly_email_rejected" {
 
   expect_failures = [var.anomaly_email]
 }
+
+run "rejects_alert_percent_out_of_range" {
+  command = plan
+
+  variables {
+    budgets = {
+      org-monthly = { limit_amount = "300", threshold_percent = 80, alert_percents = [50, 150] }
+    }
+  }
+
+  expect_failures = [var.budgets]
+}

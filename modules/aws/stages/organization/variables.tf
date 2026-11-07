@@ -144,6 +144,7 @@ variable "budgets" {
     limit_amount      = string
     threshold_percent = number
     emails            = optional(list(string), [])
+    alert_percents    = optional(list(number), [])
   }))
   default = {
     org-monthly = {

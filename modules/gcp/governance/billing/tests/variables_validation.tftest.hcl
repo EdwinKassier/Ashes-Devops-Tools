@@ -211,3 +211,17 @@ run "accepts_email_notifications_false_with_empty_bucket" {
     function_source_object     = ""
   }
 }
+
+run "threshold_rules_reject_bad_basis" {
+  command = plan
+
+  variables {
+    billing_account = "012345-6789AB-CDEF01"
+    project_id      = "p"
+    project_name    = "p"
+    region          = "europe-west1"
+    threshold_rules = [{ percent = 0.5, spend_basis = "BOGUS" }]
+  }
+
+  expect_failures = [var.threshold_rules]
+}

@@ -175,3 +175,21 @@ run "webhook_push_and_email_notifier" {
     error_message = "Invoker binding must grant roles/run.invoker to the Pub/Sub service agent (serviceAccount: prefixed)."
   }
 }
+
+# Explicit rules replace the default set (the starter cost guard uses 50/80/100).
+run "starter_budget_alerts_wired" {
+  command = plan
+
+  variables {
+    threshold_rules = [
+      { percent = 0.5 },
+      { percent = 0.8 },
+      { percent = 1.0 },
+    ]
+  }
+
+  assert {
+    condition     = [for r in google_billing_budget.monthly_budget.threshold_rules : r.threshold_percent] == [0.5, 0.8, 1]
+    error_message = "threshold_rules must replace the default rule set with exactly 50/80/100%."
+  }
+}

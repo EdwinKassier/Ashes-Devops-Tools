@@ -229,6 +229,15 @@ variable "monthly_budget_amount" {
   }
 }
 
+variable "budget_threshold_rules" {
+  description = "Explicit threshold rules for the organization budget (percent is a fraction: 0.5 = 50%; spend_basis CURRENT_SPEND or FORECASTED_SPEND). Null = the billing module defaults (50% / 90% / 100% forecasted / 100% actual). The starter profile passes 50/80/100."
+  type = list(object({
+    percent     = number
+    spend_basis = optional(string, "CURRENT_SPEND")
+  }))
+  default = null
+}
+
 variable "budget_currency" {
   description = "ISO 4217 currency code for the budget (e.g., USD, EUR, GBP)"
   type        = string

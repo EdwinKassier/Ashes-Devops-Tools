@@ -708,6 +708,7 @@ module "org_budget" {
   project_name          = "${var.project_prefix}-org"
   monthly_budget_limit  = var.monthly_budget_amount
   currency_code         = var.budget_currency
+  threshold_rules       = var.budget_threshold_rules
   kms_key_name          = module.cmek.key_names["billing-alerts"]
   region                = var.default_region
   notification_channels = var.budget_notify_alert_channels && var.enable_control_plane_alerting ? module.control_plane_alerting.notification_channel_ids : []
