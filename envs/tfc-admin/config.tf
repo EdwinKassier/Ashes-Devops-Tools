@@ -160,7 +160,7 @@ locals {
   # to the key name (prod / production), so a prod env is never missed.
   gcp_production_flags = var.environments != null ? { for k, e in var.environments : k => e.is_production } : local.cfg.gcp_production
   production_workloads = toset(concat(
-    [for k in local.gcp_environment_keys : "gcp-workload-${k}" if coalesce(lookup(local.gcp_production_flags, k, null), can(regex("^prod(uction)?$", k)))],
-    [for k, e in local.aws_environments : "aws-workload-${k}" if coalesce(e.is_production, can(regex("^prod(uction)?$", k)))],
+    [for k in local.gcp_environment_keys : "${local.catalog_family.gcp}-${k}" if coalesce(lookup(local.gcp_production_flags, k, null), can(regex("^prod(uction)?$", k)))],
+    [for k, e in local.aws_environments : "${local.catalog_family.aws}-${k}" if coalesce(e.is_production, can(regex("^prod(uction)?$", k)))],
   ))
 }

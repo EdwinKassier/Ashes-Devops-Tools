@@ -129,7 +129,30 @@ Within a root, `enable_*` variables toggle **features** (a Cloud Armor policy, a
 `local.catalog` in `envs/tfc-admin/main.tf`. The workspace set, the run-trigger
 DAG, the remote-state consumer graph, the multi-account alias env vars and the
 management-default list are all derived from it, so a new root is one entry.
-Nothing else in `envs/tfc-admin` lists workspace names.
+The per-environment prefixes (`gcp-workload`, `aws-workload`, `saas`) also
+come from the catalog keys (`local.catalog_family`).
+
+A few literals stay, on purpose. Each names a specific phase-0 root whose
+outputs or behaviour tfc-admin depends on, so a new catalog entry never needs
+to touch them:
+
+- `main.tf`, `local.tfc_admin_reads` and the two `data "tfe_outputs"` blocks
+  name `gcp-bootstrap` and `aws-organization`. tfc-admin reads those two
+  workspaces' `contract` outputs (credentials, admin project ID, account
+  roles). A different upstream would need a new read, not a catalog field.
+- `main.tf`, the `gcp_bootstrap_workspace_ids` locals and
+  `tfe_variable.gcp_bootstrap_workspace_ids` name `gcp-bootstrap` and select
+  `gcp-*` workspaces. They write the workspace-ID map onto gcp-bootstrap for
+  its WIF bindings, and every GCP workspace is bound there.
+- `main.tf`, `check "gcp_bootstrap_remote_after_handover"` names
+  `gcp-bootstrap`, the only workspace with a local-execution phase 0.
+- `variables.tf`: the `workspace_execution_modes` default
+  (`{ gcp-bootstrap = "local" }`) and its validation (`local` only for
+  `gcp-bootstrap` / `aws-organization`), and the
+  `speculative_disabled_workspaces` default. These are user-facing defaults,
+  and a variable cannot read the catalog: the catalog reads
+  `var.tfc_admin_workspace_name`. Add a new control-plane root to
+  `speculative_disabled_workspaces` by hand.
 
 ```hcl
 # envs/tfc-admin/main.tf, inside local.catalog
@@ -177,8 +200,12 @@ AWS workspace that is not in that list is denied at
   `log_archive = ["aws-security", "aws-observability"]`.
 - **Per-environment workload:** nothing to edit. Each
   `aws.workload_environments.<env>.account_key` in `config/landing-zone.yaml`
-  binds `aws-workload-<env>` to that account (`local.cfg.workload_bindings`),
-  the same source tfc-admin expands `aws-workload` from.
+  binds `aws-workload-<env>` to that account (`local.cfg.workload_bindings`).
+  This is the same source tfc-admin expands `aws-workload` from, **but only
+  while tfc-admin's `var.environments` is unset**. An explicit
+  `environments` map in tfc-admin replaces `aws.workload_environments` there
+  but not in `aws-organization`. In that case keep the two in step by hand, or
+  set `tfc_workspace_bindings` explicitly.
 - **Explicit override:** an `aws-organization` that sets
   `var.tfc_workspace_bindings` replaces both derivations, so add the new name
   there too.

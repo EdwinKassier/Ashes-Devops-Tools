@@ -50,7 +50,8 @@ locals {
   #                           (payer) account
   #   security_only           security-team project, no shared variable set,
   #                           never auto-applies (gcp-guardrails)
-  catalog = {
+  catalog = merge(local.catalog_roots, local.catalog_platform)
+  catalog_roots = {
     "gcp-bootstrap" = {
       dir       = "envs/gcp/bootstrap", cloud = "gcp", desc = "GCP phase-0: admin project, Terraform admin SA, WIF pools", tags = ["cloud:gcp", "layer:bootstrap"]
       upstreams = [var.tfc_admin_workspace_name]
@@ -114,12 +115,16 @@ locals {
       dir             = "envs/saas", cloud = "saas", desc = "SaaS {env} (Supabase/Vercel)", tags = ["cloud:saas", "layer:workload"]
       per_environment = true
     }
-    # Optional self-management of the hand-created tfc-admin workspace (adopted
-    # via the import block below, never created; manage_tfc_admin_workspace).
+  }
+  # Optional self-management of the hand-created tfc-admin workspace (adopted
+  # via the import block below, never created; manage_tfc_admin_workspace).
+  # Merged in only when managed, so an unmanaged tfc_admin_workspace_name never
+  # becomes a catalog key (a managed one that collides fails input_contract).
+  catalog_platform = var.manage_tfc_admin_workspace ? {
     (var.tfc_admin_workspace_name) = {
       dir = "envs/tfc-admin", cloud = "platform", desc = "TFC workspace layer (this root)", tags = ["cloud:tfc", "layer:control-plane"]
     }
-  }
+  } : {}
 
   # Which clouds' entries exist, and each cloud's environment list for its
   # per_environment families.
@@ -175,6 +180,13 @@ locals {
   is_control_plane = {
     for k, w in local.workspaces :
     k => contains(w.tags, "layer:control-plane") || contains(w.tags, "layer:bootstrap")
+  }
+
+  # Per-environment family prefix by cloud (catalog key of its per_environment
+  # entry): gcp-workload, aws-workload, saas. Ungated by catalog_cloud_enabled,
+  # like the environment lists it is combined with.
+  catalog_family = {
+    for k, e in local.catalog_entries : e.cloud => k if e.per_environment
   }
 
   # Per-environment family members by cloud.
@@ -249,10 +261,10 @@ locals {
   # GCP service-account IDs are 6-30 characters; "-apply" is the longer suffix.
   gcp_workload_account_ids_too_long = sort([for env, ids in local.gcp_workload_account_ids : ids.apply if length(ids.apply) > 30])
   derived_gcp_plan_sas = local.derive_gcp_workload_sas ? {
-    for env, ids in local.gcp_workload_account_ids : "gcp-workload-${env}" => "${ids.plan}@${local.gcp_admin_project_id}.iam.gserviceaccount.com"
+    for env, ids in local.gcp_workload_account_ids : "${local.catalog_family.gcp}-${env}" => "${ids.plan}@${local.gcp_admin_project_id}.iam.gserviceaccount.com"
   } : {}
   derived_gcp_apply_sas = local.derive_gcp_workload_sas ? {
-    for env, ids in local.gcp_workload_account_ids : "gcp-workload-${env}" => "${ids.apply}@${local.gcp_admin_project_id}.iam.gserviceaccount.com"
+    for env, ids in local.gcp_workload_account_ids : "${local.catalog_family.gcp}-${env}" => "${ids.apply}@${local.gcp_admin_project_id}.iam.gserviceaccount.com"
   } : {}
   bootstrap_gcp_plan_sas  = try(tomap(local.gcp_bootstrap_outputs.tfc_plan_service_accounts), {})
   bootstrap_gcp_apply_sas = try(tomap(local.gcp_bootstrap_outputs.tfc_apply_service_accounts), {})
@@ -334,7 +346,7 @@ locals {
   aws_workspace_accounts = {
     for ws, acct in merge(
       { for ws, accts in local.aws_bound_workspaces : ws => sort(accts)[0] },
-      { for env, e in local.aws_environments : "aws-workload-${env}" => e.aws_account_key if e.aws_account_key != null },
+      { for env, e in local.aws_environments : "${local.catalog_family.aws}-${env}" => e.aws_account_key if e.aws_account_key != null },
       var.aws_workspace_account_keys,
     ) : ws => acct if !contains(local.aws_management_workspaces, ws)
   }
@@ -651,6 +663,10 @@ locals {
 # Fail the plan on inputs that reference workspaces this root does not manage.
 resource "terraform_data" "input_contract" {
   lifecycle {
+    precondition {
+      condition     = !var.manage_tfc_admin_workspace || !contains(keys(local.catalog_roots), var.tfc_admin_workspace_name)
+      error_message = "tfc_admin_workspace_name (${var.tfc_admin_workspace_name}) collides with a workspace catalog key (${join(", ", sort(keys(local.catalog_roots)))}): a self-managed tfc-admin workspace needs its own name."
+    }
     precondition {
       condition     = length(local.unknown_workspace_keys) == 0
       error_message = "workspace_variables / extra_remote_state_consumers reference unmanaged workspaces: ${join(", ", sort(tolist(local.unknown_workspace_keys)))}."

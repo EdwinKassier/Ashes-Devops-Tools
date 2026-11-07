@@ -125,6 +125,76 @@ run "default_catalog_names_unchanged" {
     ])
     error_message = "working directories and the guardrails variable-set exclusion must be unchanged."
   }
+
+  # production_workloads (<family>-<env>) drives the speculative-plan opt-out.
+  assert {
+    condition = tolist([for ws in output.workspace_names : ws if !module.workspace[ws].speculative_enabled]) == tolist([
+      "aws-backup", "aws-identity", "aws-network", "aws-organization", "aws-security", "aws-shared-services",
+      "aws-workload-prod",
+      "gcp-bootstrap", "gcp-guardrails", "gcp-network-hub", "gcp-organization", "gcp-projects",
+      "gcp-workload-prod",
+      "saas-web",
+    ])
+    error_message = "the speculative-plan opt-out set (control plane, production workloads, saas) must be unchanged."
+  }
+}
+
+# aws_workspace_accounts: aws-workload-<env> => environments[env].aws_account_key
+# selects that account's roles from the aws-organization outputs, and the
+# derived gcp-workload-<env> SA emails keep their workspace keys.
+run "derived_family_keys_unchanged" {
+  command = plan
+
+  variables {
+    environments = {
+      dev  = { aws_account_key = "workload_dev" }
+      prod = {}
+    }
+    aws_organization_outputs_from_tfc = true
+    gcp_bootstrap_outputs_from_tfc    = true
+    gcp_project_prefix                = "acme"
+    workspace_execution_modes         = {}
+  }
+
+  override_data {
+    target = data.tfe_outputs.gcp_bootstrap[0]
+    values = {
+      nonsensitive_values = {
+        contract = {
+          admin_project_id           = "acme-admin-1a2b"
+          tfc_workload_provider_name = "projects/123456789/locations/global/workloadIdentityPools/tfc-pool/providers/tfc-provider"
+        }
+      }
+    }
+  }
+
+  override_data {
+    target = data.tfe_outputs.aws_organization[0]
+    values = {
+      nonsensitive_values = {
+        contract = {
+          tfc_plan_role_arns  = { workload_dev = "arn:aws:iam::555555555555:role/tfc-plan" }
+          tfc_apply_role_arns = { workload_dev = "arn:aws:iam::555555555555:role/tfc-apply" }
+        }
+      }
+    }
+  }
+
+  override_data {
+    target = data.tfe_workspace.tfc_admin[0]
+    values = { id = "ws-tfcadmin" }
+  }
+
+  assert {
+    condition = alltrue([
+      output.dynamic_credential_workspaces.aws == tolist(["aws-workload-dev"]),
+      module.workspace["aws-workload-dev"].variable_values["TFC_AWS_PLAN_ROLE_ARN"] == "arn:aws:iam::555555555555:role/tfc-plan",
+      module.workspace["aws-workload-dev"].variable_values["workload_account_key"] == "workload_dev",
+      output.dynamic_credential_workspaces.gcp == tolist(["gcp-workload-dev", "gcp-workload-prod"]),
+      module.workspace["gcp-workload-prod"].variable_values["TFC_GCP_APPLY_SERVICE_ACCOUNT_EMAIL"] == "acme-wl-prod-apply@acme-admin-1a2b.iam.gserviceaccount.com",
+    ])
+    error_message = "aws-workload-<env> account roles and gcp-workload-<env> derived SAs must keep their workspace keys."
+  }
 }
 
 # A multi-environment estate: four environments, two saas stacks, split
@@ -311,6 +381,15 @@ run "catalog_drives_workspaces_and_triggers" {
   }
 
   assert {
+    condition = module.workspace["aws-backup"].variable_keys == tolist([
+      "TFC_AWS_APPLY_ROLE_ARN", "TFC_AWS_APPLY_ROLE_ARN_backup",
+      "TFC_AWS_PLAN_ROLE_ARN", "TFC_AWS_PLAN_ROLE_ARN_backup",
+      "TFC_AWS_PROVIDER_AUTH", "TFC_AWS_PROVIDER_AUTH_backup",
+    ])
+    error_message = "aws-backup's credential and backup-alias variable names must be unchanged."
+  }
+
+  assert {
     condition = alltrue([
       for ws, w in output.workspace_catalog :
       module.workspace[ws].working_directory == w.dir &&
@@ -328,4 +407,81 @@ run "catalog_drives_workspaces_and_triggers" {
     ])
     error_message = "per_environment families expand over the cloud's environments (saas: saas_workspaces)."
   }
+}
+
+# The committed sandbox estate (config/sandbox/), self-managed tfc-admin and
+# auto_apply_on_merge.
+run "sandbox_catalog_names_unchanged" {
+  command = plan
+
+  variables {
+    tfc_organization           = null
+    environments               = null
+    enable_gcp                 = null
+    enable_aws                 = null
+    enable_saas                = null
+    saas_workspaces            = null
+    landing_zone_config_path   = "../../config/sandbox/landing-zone.yaml"
+    workspace_variables_file   = "../../config/sandbox/tfc-workspaces.yaml"
+    manage_tfc_admin_workspace = true
+    import_tfc_admin_workspace = false
+    auto_apply_on_merge        = true
+  }
+
+  assert {
+    condition = output.workspace_names == tolist([
+      "aws-backup", "aws-identity", "aws-network", "aws-organization", "aws-security", "aws-shared-services",
+      "aws-workload-dev",
+      "gcp-bootstrap", "gcp-guardrails", "gcp-network-hub", "gcp-organization", "gcp-projects",
+      "gcp-workload-dev",
+      "tfc-admin",
+    ])
+    error_message = "the sandbox workspace names must be unchanged."
+  }
+
+  assert {
+    condition     = toset(keys(tfe_workspace_settings.this)) == toset(output.workspace_names)
+    error_message = "tfe_workspace_settings must stay keyed by workspace name."
+  }
+
+  assert {
+    condition = toset(keys(tfe_run_trigger.dag)) == toset([
+      "tfc-admin->aws-organization",
+      "gcp-bootstrap->gcp-organization", "gcp-organization->gcp-projects", "gcp-projects->gcp-network-hub",
+      "gcp-network-hub->gcp-workload-dev",
+      "aws-organization->aws-backup", "aws-organization->aws-identity", "aws-organization->aws-network",
+      "aws-organization->aws-security", "aws-organization->aws-shared-services",
+      "aws-network->aws-workload-dev", "aws-security->aws-workload-dev",
+    ])
+    error_message = "the sandbox run-trigger keys must be unchanged."
+  }
+
+  assert {
+    condition     = toset(keys(tfe_team_project_access.this)) == toset(["guardrails/security"]) && toset(keys(tfe_project.this)) == toset(["aws", "gcp", "guardrails", "platform"])
+    error_message = "the sandbox project and team-grant keys must be unchanged."
+  }
+
+  assert {
+    condition = alltrue([
+      module.workspace["aws-workload-dev"].variable_keys == tolist(["environment", "landing_zone_config_path", "workload_account_key"]),
+      module.workspace["gcp-workload-dev"].variable_keys == tolist(["environment", "landing_zone_config_path"]),
+      module.workspace["aws-security"].variable_keys == tolist(["landing_zone_config_path"]),
+      length(module.workspace["tfc-admin"].variable_keys) == 0,
+    ])
+    error_message = "the sandbox per-workspace variable keys must be unchanged."
+  }
+}
+
+# A self-managed tfc-admin whose name collides with a catalog key fails the
+# plan instead of silently replacing that entry.
+run "managed_tfc_admin_name_collision_fails" {
+  command = plan
+
+  variables {
+    manage_tfc_admin_workspace = true
+    import_tfc_admin_workspace = false
+    tfc_admin_workspace_name   = "aws-network"
+  }
+
+  expect_failures = [terraform_data.input_contract]
 }
