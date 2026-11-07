@@ -46,6 +46,9 @@ resource "google_network_connectivity_group" "spoke" {
   description = "Spoke group of ${var.name}, with auto-accept for the landing-zone spoke projects"
   labels      = var.labels
 
+  # The group is service-created (STAR edge / MESH default): never send DELETE for it.
+  deletion_policy = "ABANDON"
+
   auto_accept {
     auto_accept_projects = var.auto_accept_projects
   }

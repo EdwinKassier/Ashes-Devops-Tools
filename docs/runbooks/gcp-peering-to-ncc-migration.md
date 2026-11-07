@@ -58,8 +58,8 @@ gcp-network-hub adopts it by name (`google_network_connectivity_group`) to set i
 list to the environment host projects. This is needed because spokes are created in the host
 projects, not the hub project, and NCC otherwise holds a cross-project spoke for review. The
 provider only accepts the service-created group names, and its create updates the existing
-group, so you don't need to import anything. If a plan nonetheless reports the group as already
-existing, import it:
+group, so you don't need to import anything. If an apply nonetheless fails because the group already
+exists, import it:
 `terraform import 'module.network_hub.module.hub.module.ncc_hub[0].google_network_connectivity_group.spoke[0]' projects/<hub project>/locations/global/hubs/<hub>/groups/edge`
 (one-off, from a TFC-connected CLI run).
 
@@ -104,6 +104,7 @@ something that would otherwise fail *after* the peering is deleted.
 
 ```sh
 HUB_PROJECT=<shared-hub project id>; HOST_PROJECT=<env host project id>
+WORKLOAD_APPLY_SA=<prefix>-wl-<env>-apply@<admin project id>.iam.gserviceaccount.com
 HOST_NUMBER=$(gcloud projects describe "$HOST_PROJECT" --format='value(projectNumber)')
 HUB=$(terraform output -json contract | jq -r .hub_network.ncc_hub_id)   # in gcp-network-hub
 
@@ -121,8 +122,19 @@ gcloud network-connectivity hubs describe "$HUB" --format='value(state)'
 gcloud network-connectivity hubs list-spokes "$HUB" --format='table(name,group,state)'
 
 # 4. The host project is on the spoke group's auto-accept list (no manual accept needed).
-gcloud network-connectivity hubs groups describe edge --hub="$HUB" \
+#    GROUP is edge on a STAR hub, default on a MESH hub.
+GROUP=edge
+gcloud network-connectivity hubs groups describe "$GROUP" --hub="$HUB" \
   --format='value(autoAccept.autoAcceptProjects)' | tr ';' '\n' | grep -x "$HOST_NUMBER"
+
+# 5. Cross-project attach permission (unverified until the sandbox proof): whether spokeAdmin on
+#    the env folder is enough to attach to a hub in another project. If the sandbox shows it is
+#    not, grant roles/networkconnectivity.groupUser on the hub project to the workload apply SA,
+#    and this check must print it before the window: a missing grant fails the spoke create after
+#    the peering is already gone.
+gcloud projects get-iam-policy "$HUB_PROJECT" --flatten='bindings[].members' \
+  --filter="bindings.members:serviceAccount:$WORKLOAD_APPLY_SA AND bindings.role~networkconnectivity" \
+  --format='value(bindings.role)'
 ```
 
 Also have the rollback PR (`network_connectivity: peering`) ready before you start.
@@ -190,8 +202,8 @@ Use this for production. A temporary HA VPN carries the traffic while the peerin
 ## Known limits
 
 - Only the spoke group (`edge` / `default`) is managed, for its auto-accept list. It is
-  destroyed only with the hub, which a topology change also requires. Whether the API accepts
-  deleting a service-created group is unverified. If a destroy fails there, stop managing it with
-  `terraform state rm` on the group address before you retry.
+  removed only with the hub, which a topology change also requires. It sets
+  `deletion_policy = "ABANDON"`, so Terraform drops it from state without calling DELETE on the
+  service-created group.
 - `export_psc` (Private Service Connect propagation) is off. It is a `stages/net-hub` `ncc`
   setting and is not exposed at the root yet.
