@@ -28,3 +28,23 @@ run "invalid_org_arn_rejected" {
 
   expect_failures = [var.org_arn]
 }
+
+run "rejects_enable_vpn_without_customer_gateway_ip" {
+  command = plan
+
+  variables {
+    enable_vpn = true
+  }
+
+  expect_failures = [var.vpn]
+}
+
+run "rejects_unknown_vpn_segment" {
+  command = plan
+
+  variables {
+    vpn = { route_table = "dmz" }
+  }
+
+  expect_failures = [var.vpn]
+}

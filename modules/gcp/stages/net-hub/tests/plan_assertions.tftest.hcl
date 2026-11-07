@@ -101,7 +101,7 @@ run "ha_vpn_and_interconnect" {
       enabled          = true
       peer_gateway_ips = ["203.0.113.1", "203.0.113.2"]
     }
-    vpn_shared_secret = "mock-psk-not-a-secret"
+    vpn_shared_secret_wo = "mock-psk-not-a-secret"
     interconnects = {
       "ic-partner-1" = {
         region      = "us-central1"
@@ -113,6 +113,41 @@ run "ha_vpn_and_interconnect" {
   assert {
     condition     = length(module.vpn) == 1 && keys(module.interconnects) == ["ic-partner-1"]
     error_message = "Enabling VPN and declaring an interconnect must plan both."
+  }
+}
+
+run "ncc_with_vpn_makes_a_hybrid_spoke" {
+  command = plan
+
+  variables {
+    ncc = { enabled = true, vpn_site_to_site_data_transfer = true }
+    vpn = {
+      enabled          = true
+      peer_gateway_ips = ["203.0.113.1", "203.0.113.2"]
+    }
+    vpn_shared_secret_wo = "mock-psk-not-a-secret"
+  }
+
+  assert {
+    condition     = length(module.ncc_vpn_spoke) == 1
+    error_message = "NCC plus VPN must link the HA VPN tunnels to the hub as a hybrid spoke."
+  }
+}
+
+run "vpn_without_ncc_has_no_hybrid_spoke" {
+  command = plan
+
+  variables {
+    vpn = {
+      enabled          = true
+      peer_gateway_ips = ["203.0.113.1", "203.0.113.2"]
+    }
+    vpn_shared_secret_wo = "mock-psk-not-a-secret"
+  }
+
+  assert {
+    condition     = length(module.vpn) == 1 && length(module.ncc_vpn_spoke) == 0
+    error_message = "Without NCC the VPN is a plain hub VPN with no hybrid spoke."
   }
 }
 

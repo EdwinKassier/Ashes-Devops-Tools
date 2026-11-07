@@ -104,6 +104,33 @@ variable "ncc_preset_topology" {
   }
 }
 
+variable "vpn" {
+  description = "HA VPN from the hub VPC to an on-premises or other-cloud gateway, off by default. Same shape as the net-hub vpn input: enabled, tunnel_count (1 or 2), router_asn, peer_asn, peer_gateway_ips, local_ips, peer_ips, advertised_ip_ranges, site_to_site_data_transfer. With enable_ncc_hub the tunnels also join the NCC hub as a hybrid spoke. Null = gcp.network.vpn from config/landing-zone.yaml, else off. The pre-shared key is never config: set vpn_shared_secret_wo."
+  type        = any
+  default     = null
+}
+
+variable "vpn_shared_secret_wo" {
+  description = "Write-only HA VPN pre-shared key (required when the effective vpn.enabled is true): sent to the API at apply time and never stored in state or plan. Supply it as a sensitive TFC workspace variable, not in config or tfvars files."
+  type        = string
+  default     = null
+  sensitive   = true
+  ephemeral   = true
+}
+
+variable "vpn_shared_secret_wo_version" {
+  description = "Rotation counter for vpn_shared_secret_wo: write-only values are not diffed, so increment this to push a changed pre-shared key."
+  type        = number
+  default     = 1
+  nullable    = false
+}
+
+variable "interconnects" {
+  description = "Cloud Interconnect VLAN attachments on the hub VPC, keyed by attachment name (same shape as the net-hub interconnects input; region and router_name required). Null = gcp.network.interconnect from config/landing-zone.yaml, else none."
+  type        = any
+  default     = null
+}
+
 variable "vpc_sc_access_policy_name" {
   description = "Bare numeric ID of the org-level Access Context Manager access policy for the hub VPC-SC perimeter (e.g. '1234567890'). Optional — if null, no hub perimeter is created. Do NOT include the 'accessPolicies/' prefix. Null = gcp.network.vpc_sc_access_policy from config/landing-zone.yaml."
   type        = string

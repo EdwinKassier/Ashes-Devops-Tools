@@ -311,6 +311,43 @@ module "transit_gateway" {
 }
 
 # ---------------------------------------------------------------------------
+# Site-to-Site VPN — opt-in hybrid connectivity terminating on the TGW
+#
+# The TGW has default association/propagation disabled (segmentation), so the
+# VPN attachment is associated with one segment and propagates its on-premises
+# routes into the listed segments explicitly.
+# ---------------------------------------------------------------------------
+
+module "vpn" {
+  source = "../../network/vpn"
+  count  = var.enable_vpn ? 1 : 0
+
+  name                     = "hub"
+  customer_gateway_ip      = var.vpn.customer_gateway_ip
+  customer_gateway_bgp_asn = var.vpn.customer_gateway_bgp_asn
+  attach_to                = "transit_gateway"
+  transit_gateway_id       = module.transit_gateway.tgw_id
+  static_routes_only       = var.vpn.static_routes_only
+  tunnel_inside_cidrs      = var.vpn.tunnel_inside_cidrs
+  enable_acceleration      = var.vpn.enable_acceleration
+  tags                     = var.tags
+}
+
+resource "aws_ec2_transit_gateway_route_table_association" "vpn" {
+  count = var.enable_vpn ? 1 : 0
+
+  transit_gateway_attachment_id  = module.vpn[0].transit_gateway_attachment_id
+  transit_gateway_route_table_id = module.transit_gateway.route_table_ids[var.vpn.route_table]
+}
+
+resource "aws_ec2_transit_gateway_route_table_propagation" "vpn" {
+  for_each = var.enable_vpn ? toset(var.vpn.propagate_to) : toset([])
+
+  transit_gateway_attachment_id  = module.vpn[0].transit_gateway_attachment_id
+  transit_gateway_route_table_id = module.transit_gateway.route_table_ids[each.key]
+}
+
+# ---------------------------------------------------------------------------
 # Network Firewall — stateful inspection in the inspection VPC
 # ---------------------------------------------------------------------------
 

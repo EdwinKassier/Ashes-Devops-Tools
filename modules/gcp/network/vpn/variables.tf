@@ -80,9 +80,30 @@ variable "peer_asn" {
 }
 
 variable "shared_secret" {
-  description = "Shared secret for IKE authentication"
+  description = "Shared secret for IKE authentication, stored in state (legacy). Prefer shared_secret_wo, which never enters state or plan. Set exactly one of the two."
   type        = string
+  default     = null
   sensitive   = true
+}
+
+variable "shared_secret_wo" {
+  description = "Write-only shared secret for IKE authentication: sent to the API at apply time, never stored in state or plan. Pass it from an ephemeral source. Set exactly one of shared_secret or shared_secret_wo."
+  type        = string
+  default     = null
+  sensitive   = true
+  ephemeral   = true
+
+  validation {
+    condition     = (var.shared_secret == null) != (var.shared_secret_wo == null)
+    error_message = "Set exactly one of shared_secret (legacy, stored in state) or shared_secret_wo (write-only)."
+  }
+}
+
+variable "shared_secret_wo_version" {
+  description = "Rotation counter for shared_secret_wo. Write-only values are not diffed, so increment this to push a changed secret. Must not be ephemeral."
+  type        = number
+  default     = 1
+  nullable    = false
 }
 
 variable "tunnel_count" {

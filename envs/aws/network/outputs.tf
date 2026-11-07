@@ -52,3 +52,8 @@ output "interface_endpoint_phz_id" {
   description = "Deprecated: read contract.interface_endpoint_phz_id (removed in v1.0). Zone ID of the shared private hosted zone fronting the interface endpoints, or null when no zone was created."
   value       = local.contract.interface_endpoint_phz_id
 }
+
+output "vpn_tunnel_addresses" {
+  description = "AWS-side public IPs of the Site-to-Site VPN tunnels (configure them on the on-premises device); empty unless the VPN is enabled."
+  value       = module.aws_network_hub.vpn_tunnel_addresses
+}

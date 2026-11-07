@@ -1,0 +1,23 @@
+# Test fixture: hybrid connectivity (HA VPN and Interconnect) from the config
+# file (hybrid.tftest.hcl). No secret lives here.
+version: 1
+org:
+  prefix: acme
+  regions:
+    gcp: europe-west1
+gcp:
+  network:
+    hub_cidr_block: 10.0.0.0/16
+    dns_hub_cidr_block: 10.1.0.0/16
+    ncc_hub:
+      enabled: true
+    vpn:
+      enabled: true
+      tunnel_count: 2
+      peer_gateway_ips: [203.0.113.1, 203.0.113.2]
+      advertised_ip_ranges:
+        - { range: 10.0.0.0/16, description: hub VPC }
+    interconnect:
+      hub-partner-1:
+        region: europe-west1
+        router_name: hub-ic-router

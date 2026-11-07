@@ -213,3 +213,37 @@ variable "ipam_new_vpcs" {
     error_message = "ipam_new_vpcs may only contain inspection and egress."
   }
 }
+
+variable "enable_vpn" {
+  description = "Attach an on-premises Site-to-Site VPN to the transit gateway (network/vpn). Off by default. Requires vpn.customer_gateway_ip. AWS generates the tunnel pre-shared keys (see docs/known-gaps.md for their state exposure)."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "vpn" {
+  description = <<-EOT
+    Site-to-Site VPN settings, used only when enable_vpn is true. customer_gateway_ip is the public IPv4 of the on-premises device; customer_gateway_bgp_asn its BGP ASN. static_routes_only = true uses static routing instead of BGP. tunnel_inside_cidrs is empty (AWS-assigned) or two /30s in 169.254.0.0/16. route_table is the TGW segment the VPN attachment is associated with; propagate_to lists the segments that learn the on-premises routes.
+  EOT
+  type = object({
+    customer_gateway_ip      = optional(string)
+    customer_gateway_bgp_asn = optional(number, 65000)
+    static_routes_only       = optional(bool, false)
+    tunnel_inside_cidrs      = optional(list(string), [])
+    enable_acceleration      = optional(bool, false)
+    route_table              = optional(string, "shared")
+    propagate_to             = optional(list(string), ["prod", "nonprod"])
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = !var.enable_vpn || (var.vpn.customer_gateway_ip != null && can(regex("^([0-9]{1,3}\\.){3}[0-9]{1,3}$", var.vpn.customer_gateway_ip)))
+    error_message = "vpn.customer_gateway_ip must be the on-premises device's public IPv4 address when enable_vpn is true."
+  }
+
+  validation {
+    condition     = contains(["prod", "nonprod", "inspection", "shared"], var.vpn.route_table) && alltrue([for r in var.vpn.propagate_to : contains(["prod", "nonprod", "inspection", "shared"], r)])
+    error_message = "vpn.route_table and vpn.propagate_to entries must be transit gateway segments: prod, nonprod, inspection or shared."
+  }
+}

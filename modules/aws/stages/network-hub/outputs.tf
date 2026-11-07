@@ -42,3 +42,13 @@ output "inspection_route_table_ids_by_tier" {
   description = "Map of inspection VPC subnet tier to its per-AZ route table IDs (owned by the vpc module)."
   value       = module.inspection_vpc.route_table_ids_by_tier
 }
+
+output "vpn_connection_id" {
+  description = "ID of the Site-to-Site VPN connection, or null when enable_vpn = false."
+  value       = try(module.vpn[0].vpn_connection_id, null)
+}
+
+output "vpn_tunnel_addresses" {
+  description = "AWS-side public IPs of the two VPN tunnels (configure these on the on-premises device), or an empty list when enable_vpn = false."
+  value       = var.enable_vpn ? [module.vpn[0].tunnel1_address, module.vpn[0].tunnel2_address] : []
+}

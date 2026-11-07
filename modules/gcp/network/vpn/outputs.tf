@@ -30,6 +30,11 @@ output "tunnels" {
   sensitive   = true
 }
 
+output "tunnel_self_links" {
+  description = "Self links of the VPN tunnels (what an NCC hybrid spoke links)"
+  value       = google_compute_vpn_tunnel.tunnels[*].self_link
+}
+
 output "tunnel_statuses" {
   description = "The status of each VPN tunnel"
   value       = google_compute_vpn_tunnel.tunnels[*].detailed_status

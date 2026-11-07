@@ -1,9 +1,5 @@
 # AWS Site-to-Site VPN Module
 
-> Status: experimental
->
-> No root composes this module yet; a later task wires it into the AWS network layer.
-
 IPsec Site-to-Site VPN for hybrid connectivity to an on-premises network — the
 AWS parity counterpart to GCP's `modules/gcp/network/vpn` (HA-VPN). Terminates
 on either a **Transit Gateway** (recommended — centralized in the network
@@ -91,6 +87,7 @@ The following resources are created:
 | Name | Description |
 |------|-------------|
 | <a name="output_customer_gateway_id"></a> [customer\_gateway\_id](#output\_customer\_gateway\_id) | ID of the customer gateway. |
+| <a name="output_transit_gateway_attachment_id"></a> [transit\_gateway\_attachment\_id](#output\_transit\_gateway\_attachment\_id) | ID of the transit gateway attachment the VPN connection creates (null when attach\_to = vpn\_gateway). Associate it with a TGW route table to route through it. |
 | <a name="output_tunnel1_address"></a> [tunnel1\_address](#output\_tunnel1\_address) | Public IP address of the first VPN tunnel (AWS side). |
 | <a name="output_tunnel2_address"></a> [tunnel2\_address](#output\_tunnel2\_address) | Public IP address of the second VPN tunnel (AWS side). |
 | <a name="output_vpn_connection_id"></a> [vpn\_connection\_id](#output\_vpn\_connection\_id) | ID of the Site-to-Site VPN connection. |

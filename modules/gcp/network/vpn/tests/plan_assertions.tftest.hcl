@@ -36,3 +36,18 @@ run "creates_tunnels_with_ikev2_and_shared_secret" {
     error_message = "shared_secret must be wired into every VPN tunnel."
   }
 }
+
+run "write_only_secret_never_reaches_the_planned_attribute" {
+  command = plan
+
+  variables {
+    shared_secret            = null
+    shared_secret_wo         = "mock-wo-secret"
+    shared_secret_wo_version = 2
+  }
+
+  assert {
+    condition     = alltrue([for t in google_compute_vpn_tunnel.tunnels : t.shared_secret == null && t.shared_secret_wo_version == "2"])
+    error_message = "A write-only secret must leave shared_secret null and carry the rotation version."
+  }
+}

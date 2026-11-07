@@ -35,6 +35,11 @@ locals {
     dns_hub_vpc_cidr_block    = try(tostring(local.lz.gcp.network.dns_hub_cidr_block), null)
     enable_ncc_hub            = try(tobool(local.lz.gcp.network.ncc_hub.enabled), null)
     ncc_preset_topology       = try(tostring(local.lz.gcp.network.ncc_hub.preset_topology), null)
+    # Hybrid connectivity as JSON text (so the explicit-variable fallback can
+    # be a plain conditional); the stage's variable types validate the shape.
+    # No secret lives here: the VPN pre-shared key is a write-only variable.
+    vpn          = try(jsonencode(local.lz.gcp.network.vpn), null)
+    interconnect = try(jsonencode(local.lz.gcp.network.interconnect), null)
     # Normalised to the attribute types of var.environments (region defaults to
     # org.regions.gcp, display_name to the key). A malformed entry is caught by
     # the var.environments validations, which also read local.cfg.
@@ -92,4 +97,7 @@ locals {
   # Opt-in NCC hub (default off: environment VPCs peer with the hub VPC).
   enable_ncc_hub      = coalesce(var.enable_ncc_hub, local.cfg.enable_ncc_hub, false)
   ncc_preset_topology = coalesce(var.ncc_preset_topology, local.cfg.ncc_preset_topology, "STAR")
+  # Opt-in hybrid connectivity (default off: no VPN, no Interconnect).
+  vpn           = jsondecode(var.vpn != null ? jsonencode(var.vpn) : coalesce(local.cfg.vpn, "{}"))
+  interconnects = jsondecode(var.interconnects != null ? jsonencode(var.interconnects) : coalesce(local.cfg.interconnect, "{}"))
 }

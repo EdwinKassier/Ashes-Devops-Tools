@@ -42,3 +42,23 @@ output "ncc_spoke_group" {
   description = "NCC group environment spokes join (edge for STAR, default for MESH), or null when enable_ncc_hub = false."
   value       = module.hub.ncc_spoke_group
 }
+
+output "vpn_gateway_ips" {
+  description = "The hub HA VPN gateway external IP addresses (give them to the on-premises peer), or null when vpn.enabled = false."
+  value       = try(module.hub.vpn_gateway_ips, null)
+}
+
+output "interconnect_states" {
+  description = "State of each hub Cloud Interconnect attachment (empty when none are configured)."
+  value       = try(module.hub.interconnect_states, {})
+}
+
+output "ncc_vpn_spoke_id" {
+  description = "ID of the NCC hybrid spoke that links the hub HA VPN tunnels, or null unless both enable_ncc_hub and vpn.enabled."
+  value       = try(module.hub.ncc_vpn_spoke_id, null)
+}
+
+output "hybrid_connectivity" {
+  description = "Which hybrid connectivity is planned for the hub: vpn (HA VPN on), ncc_vpn_spoke (tunnels linked to the NCC hub) and the Cloud Interconnect attachment names."
+  value       = try(module.hub.hybrid_connectivity, { vpn = false, ncc_vpn_spoke = false, interconnects = [] })
+}

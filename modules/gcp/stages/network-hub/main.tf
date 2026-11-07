@@ -63,7 +63,16 @@ module "hub" {
     preset_topology = var.ncc_preset_topology
     # Environment host projects join without a manual accept.
     auto_accept_projects = local.ncc_auto_accept_projects
+    # Hybrid spoke for the VPN tunnels (created only when vpn.enabled too).
+    vpn_site_to_site_data_transfer = var.vpn.site_to_site_data_transfer
   }
+
+  # Opt-in hybrid connectivity: HA VPN (write-only pre-shared key) and Cloud
+  # Interconnect attachments. Both off by default.
+  vpn                          = var.vpn
+  vpn_shared_secret_wo         = var.vpn_shared_secret_wo
+  vpn_shared_secret_wo_version = var.vpn_shared_secret_wo_version
+  interconnects                = var.interconnects
 
   # Hierarchical Firewall Policy (Defense in Depth)
   hierarchical_firewall_policies = {

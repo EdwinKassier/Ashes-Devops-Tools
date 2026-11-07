@@ -43,7 +43,7 @@ run "rejects_vpn_without_shared_secret" {
   variables {
     vpn = { enabled = true, peer_gateway_ips = ["203.0.113.1", "203.0.113.2"] }
   }
-  expect_failures = [var.vpn_shared_secret]
+  expect_failures = [var.vpn_shared_secret_wo]
 }
 
 run "rejects_invalid_vpn_tunnel_count" {
@@ -83,4 +83,14 @@ run "rejects_unknown_ncc_topology" {
   }
 
   expect_failures = [var.ncc]
+}
+
+run "rejects_vpn_with_both_secret_forms" {
+  command = plan
+  variables {
+    vpn                  = { enabled = true, peer_gateway_ips = ["203.0.113.1", "203.0.113.2"] }
+    vpn_shared_secret    = "mock-legacy"
+    vpn_shared_secret_wo = "mock-wo"
+  }
+  expect_failures = [var.vpn_shared_secret_wo]
 }

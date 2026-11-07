@@ -116,3 +116,24 @@ run "rejects_local_ips_fewer_than_tunnel_count" {
     local_ip_addresses = ["169.254.0.1"]
   }
 }
+
+run "rejects_both_secret_forms" {
+  command = plan
+
+  variables {
+    shared_secret    = "mock-secret"
+    shared_secret_wo = "mock-wo"
+  }
+
+  expect_failures = [var.shared_secret_wo]
+}
+
+run "rejects_no_secret" {
+  command = plan
+
+  variables {
+    shared_secret = null
+  }
+
+  expect_failures = [var.shared_secret_wo]
+}

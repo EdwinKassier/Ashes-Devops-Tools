@@ -303,3 +303,31 @@ run "rejects_unknown_ncc_preset_topology" {
 
   expect_failures = [var.ncc_preset_topology]
 }
+
+run "rejects_vpn_without_write_only_key" {
+  command = plan
+
+  override_module {
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
+  }
+  override_module {
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
+  }
+
+  variables {
+    vpn = { enabled = true, peer_gateway_ips = ["203.0.113.1", "203.0.113.2"] }
+  }
+
+  expect_failures = [var.vpn_shared_secret_wo]
+}

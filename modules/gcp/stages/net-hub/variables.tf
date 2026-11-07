@@ -190,7 +190,7 @@ variable "vpn" {
     tunnel_count is 2 for HA (production) or 1 for testing. peer_gateway_ips
     lists the peer interface IPv4 addresses (one per tunnel). local_ips and
     peer_ips are the BGP link-local addresses. The pre-shared key is the separate
-    sensitive vpn_shared_secret input.
+    separate vpn_shared_secret_wo (write-only) or legacy vpn_shared_secret input. With ncc.enabled, the tunnels also join the NCC hub as a hybrid spoke.
   EOT
   type = object({
     enabled          = optional(bool, false)
@@ -215,14 +215,15 @@ variable "vpn" {
 }
 
 variable "ncc" {
-  description = "Network Connectivity Center hub, off by default (spokes then use VPC peering). preset_topology: STAR (edge spokes reach the center only; the peering-equivalent) or MESH. Immutable once created. name defaults to <project_prefix>-ncc-hub. export_private_service_access adds a producer VPC spoke for the hub PSA peering (when PSA is enabled). auto_accept_projects (project IDs or numbers) adopts the spoke group to auto-accept spokes from those projects; empty = spokes from other projects wait for a manual accept."
+  description = "Network Connectivity Center hub, off by default (spokes then use VPC peering). preset_topology: STAR (edge spokes reach the center only; the peering-equivalent) or MESH. Immutable once created. name defaults to <project_prefix>-ncc-hub. export_private_service_access adds a producer VPC spoke for the hub PSA peering (when PSA is enabled). auto_accept_projects (project IDs or numbers) adopts the spoke group to auto-accept spokes from those projects; empty = spokes from other projects wait for a manual accept. vpn_site_to_site_data_transfer lets on-premises sites exchange traffic through the VPN hybrid spoke (only when vpn.enabled; the region must support it)."
   type = object({
-    enabled                       = optional(bool, false)
-    name                          = optional(string)
-    preset_topology               = optional(string, "STAR")
-    export_psc                    = optional(bool, false)
-    export_private_service_access = optional(bool, true)
-    auto_accept_projects          = optional(list(string), [])
+    enabled                        = optional(bool, false)
+    name                           = optional(string)
+    preset_topology                = optional(string, "STAR")
+    export_psc                     = optional(bool, false)
+    export_private_service_access  = optional(bool, true)
+    auto_accept_projects           = optional(list(string), [])
+    vpn_site_to_site_data_transfer = optional(bool, false)
   })
   default  = {}
   nullable = false
@@ -234,15 +235,30 @@ variable "ncc" {
 }
 
 variable "vpn_shared_secret" {
-  description = "HA VPN pre-shared key. Required when vpn.enabled is true; inject it from Secret Manager or a sensitive workspace variable, not a plaintext tfvars file."
+  description = "HA VPN pre-shared key, stored in state (legacy). Prefer vpn_shared_secret_wo, which never enters state. Set exactly one of the two when vpn.enabled is true."
   type        = string
   default     = null
   sensitive   = true
+}
+
+variable "vpn_shared_secret_wo" {
+  description = "Write-only HA VPN pre-shared key: sent to the API at apply time, never stored in state or plan. Supply it from an ephemeral source (an ephemeral resource, or a TFC variable). Set exactly one of vpn_shared_secret or vpn_shared_secret_wo when vpn.enabled is true."
+  type        = string
+  default     = null
+  sensitive   = true
+  ephemeral   = true
 
   validation {
-    condition     = !var.vpn.enabled || (var.vpn_shared_secret != null && var.vpn_shared_secret != "")
-    error_message = "vpn_shared_secret must be set (non-null, non-empty) when vpn.enabled is true."
+    condition     = !var.vpn.enabled || ((var.vpn_shared_secret != null && var.vpn_shared_secret != "") != (var.vpn_shared_secret_wo != null && var.vpn_shared_secret_wo != ""))
+    error_message = "When vpn.enabled is true, set exactly one non-empty pre-shared key: vpn_shared_secret_wo (preferred, write-only) or vpn_shared_secret (legacy)."
   }
+}
+
+variable "vpn_shared_secret_wo_version" {
+  description = "Rotation counter for vpn_shared_secret_wo. Write-only values are not diffed: increment this to push a changed key."
+  type        = number
+  default     = 1
+  nullable    = false
 }
 
 variable "interconnects" {

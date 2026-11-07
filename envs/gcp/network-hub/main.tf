@@ -39,6 +39,11 @@ module "network_hub" {
   enable_ncc_hub      = local.enable_ncc_hub
   ncc_preset_topology = local.ncc_preset_topology
 
+  vpn                          = local.vpn
+  vpn_shared_secret_wo         = var.vpn_shared_secret_wo
+  vpn_shared_secret_wo_version = var.vpn_shared_secret_wo_version
+  interconnects                = local.interconnects
+
   vpc_sc_access_policy_name = local.vpc_sc_access_policy_name
   vpc_sc_enable_dry_run     = var.vpc_sc_enable_dry_run
 

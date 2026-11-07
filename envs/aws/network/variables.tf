@@ -286,3 +286,15 @@ variable "egress_alert_only_waived" {
   type        = bool
   default     = null
 }
+
+variable "enable_vpn" {
+  description = "Attach an on-premises Site-to-Site VPN to the transit gateway. Null = aws.network.vpn.enabled from config/landing-zone.yaml, else false. Needs vpn.customer_gateway_ip."
+  type        = bool
+  default     = null
+}
+
+variable "vpn" {
+  description = "Site-to-Site VPN settings (customer_gateway_ip, customer_gateway_bgp_asn, static_routes_only, tunnel_inside_cidrs, enable_acceleration, route_table, propagate_to), used only when the VPN is enabled. Null = aws.network.vpn from config/landing-zone.yaml. AWS generates the tunnel pre-shared keys: none are set here."
+  type        = any
+  default     = null
+}

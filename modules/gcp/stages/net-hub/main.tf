@@ -133,6 +133,8 @@ module "vpn" {
   peer_asn                  = var.vpn.peer_asn
   peer_external_gateway_ips = var.vpn.peer_gateway_ips
   shared_secret             = var.vpn_shared_secret
+  shared_secret_wo          = var.vpn_shared_secret_wo
+  shared_secret_wo_version  = var.vpn_shared_secret_wo_version
   local_ip_addresses        = var.vpn.local_ips
   peer_ip_addresses         = var.vpn.peer_ips
   advertised_ip_ranges      = var.vpn.advertised_ip_ranges
@@ -214,6 +216,26 @@ module "ncc_hub_spoke" {
       peering = module.private_service_access[0].peering.peering
     }
   } : {}
+}
+
+# Under NCC the hub's HA VPN tunnels become a hybrid spoke, so on-premises
+# routes reach the other spokes through the hub instead of only the hub VPC.
+module "ncc_vpn_spoke" {
+  source = "../../network/ncc-spoke"
+  count  = var.ncc.enabled && var.vpn.enabled ? 1 : 0
+
+  project_id  = var.project_id
+  name        = "${var.project_prefix}-vpn"
+  description = "NCC hybrid spoke for the hub HA VPN tunnels"
+  labels      = var.labels
+  hub_id      = module.ncc_hub[0].id
+  group       = module.ncc_hub[0].spoke_group
+  location    = var.region
+
+  linked_vpn_tunnels = {
+    uris                       = module.vpn[0].tunnel_self_links
+    site_to_site_data_transfer = var.ncc.vpn_site_to_site_data_transfer
+  }
 }
 
 # =============================================================================

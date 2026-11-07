@@ -31,6 +31,11 @@ locals {
     egress_domain_allowlist  = try([for d in local.lz.aws.network.egress_domain_allowlist : tostring(d)], null)
     stateful_default_actions = try([for a in local.lz.aws.network.stateful_default_actions : tostring(a)], null)
     egress_alert_only_waived = try(tobool(local.lz.aws.network.egress_alert_only_waived), null)
+    # aws.network.vpn: opt-in Site-to-Site VPN on the TGW (no secret: AWS
+    # generates the tunnel keys). JSON text so the explicit-variable fallback
+    # is a plain conditional; the stage's variable type validates the shape.
+    enable_vpn = try(tobool(local.lz.aws.network.vpn.enabled), null)
+    vpn        = try(jsonencode(local.lz.aws.network.vpn), null)
     # aws.workload_environments production flags (unset = keys prod/production).
     workload_production = try([
       for k, e in local.lz.aws.workload_environments : k
@@ -70,4 +75,7 @@ locals {
   network_firewall_egress_domain_allowlist  = var.network_firewall_egress_domain_allowlist != null ? var.network_firewall_egress_domain_allowlist : coalesce(local.cfg.egress_domain_allowlist, [])
   network_firewall_stateful_default_actions = var.network_firewall_stateful_default_actions != null ? var.network_firewall_stateful_default_actions : coalesce(local.cfg.stateful_default_actions, ["aws:alert_established"])
   egress_alert_only_waived                  = coalesce(var.egress_alert_only_waived, local.cfg.egress_alert_only_waived, false)
+  # Opt-in hybrid connectivity (default off: no VPN).
+  enable_vpn = coalesce(var.enable_vpn, local.cfg.enable_vpn, false)
+  vpn        = jsondecode(var.vpn != null ? jsonencode(var.vpn) : coalesce(local.cfg.vpn, "{}"))
 }

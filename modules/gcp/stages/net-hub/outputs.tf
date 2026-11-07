@@ -69,6 +69,20 @@ output "vpn_tunnel_statuses" {
   value       = var.vpn.enabled ? module.vpn[0].tunnel_statuses : null
 }
 
+output "ncc_vpn_spoke_id" {
+  description = "ID of the NCC hybrid spoke for the HA VPN tunnels, or null unless both ncc.enabled and vpn.enabled."
+  value       = try(module.ncc_vpn_spoke[0].id, null)
+}
+
+output "hybrid_connectivity" {
+  description = "Which hybrid connectivity is planned: vpn (HA VPN on), ncc_vpn_spoke (tunnels linked to the NCC hub) and the interconnect attachment names."
+  value = {
+    vpn           = length(module.vpn) > 0
+    ncc_vpn_spoke = length(module.ncc_vpn_spoke) > 0
+    interconnects = sort(keys(module.interconnects))
+  }
+}
+
 output "interconnect_states" {
   description = "The state of each interconnect attachment."
   value       = { for k, v in module.interconnects : k => v.state }
