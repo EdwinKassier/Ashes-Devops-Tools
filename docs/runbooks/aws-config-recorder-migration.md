@@ -21,7 +21,11 @@ records configuration changes in that account.
 - Break-glass access to the management account. The member-account break-glass
   role must exist in every workload account (`enable_member_break_glass_role`).
 - The AWS CLI.
-- The list of workload account IDs and their enabled Regions.
+- The list of workload account IDs and their enabled Regions, and the
+  security-tooling account ID (the script refuses to touch it).
+- `org.regions.aws` (the aws-security home Region, `org_trail_home_region`)
+  must be one of `aws.enabled_regions`. Only the home-Region recorder records
+  global resource types, and the plan fails with the flag on otherwise.
 
 ---
 
@@ -39,6 +43,16 @@ Facts the order depends on:
 - CloudFormation cannot adopt an existing recorder, and an account holds one
   customer recorder and one delivery channel per Region. A stack instance
   fails in any account that still has its legacy recorder.
+- The StackSet uses its own names, `org-stackset-recorder` and
+  `org-stackset-delivery`. The legacy names are `org-recorder` and
+  `org-delivery`. `PutConfigurationRecorder` and `PutDeliveryChannel` are
+  upserts by name, so a shared name would let CloudFormation silently take
+  over a live legacy recorder. With distinct names the outcome of step 3 is
+  deterministic: the instance fails in every account that still has a legacy
+  recorder.
+- Global resource types are gated inside the template on `AWS::Region` equal
+  to the home Region, not by per-instance parameters. Auto-deployed accounts
+  therefore get the same recording group.
 - The template creates no IAM resources. The recorder uses the account's
   `AWSServiceRoleForConfig` service-linked role, the same role the workload
   recorder used by default. The SLR stays in the account when the workload
@@ -87,9 +101,11 @@ What to expect:
 - The management account gets its direct recorder.
 - Stack instances **succeed** in accounts that never had a recorder: the
   Infrastructure accounts, log archive, forensics, and any account vended later.
-- They **fail** in accounts that still hold a legacy recorder
-  (`MaxNumberOfConfigurationRecordersExceededException` or
-  `MaxNumberOfDeliveryChannelsExceededException`).
+- They **fail** in accounts that still hold a legacy recorder. The error is
+  `MaxNumberOfConfigurationRecordersExceededException` (the second customer
+  recorder, `org-stackset-recorder`, beside `org-recorder`). If the recorder
+  got through, it is `MaxNumberOfDeliveryChannelsExceededException` (a second
+  channel). The legacy recorder is untouched either way.
 - With tolerance 100 the apply still succeeds.
 
 List the failed instances. These are the accounts for step 4:
@@ -106,16 +122,29 @@ From a management-account **break-glass** session, dry-run first:
 ```bash
 scripts/aws-delete-legacy-recorders.sh \
   --accounts 333333333333,444444444444 --regions eu-west-2,eu-west-1 \
-  --role-name break-glass
+  --role-name break-glass --exclude-account <security_tooling_id>
 ```
 
-Check the output. It must list only workload accounts (**never security
-tooling**) and only the legacy `org-recorder` / `org-delivery`. Then delete:
+Check the output. It must list only workload accounts and only the legacy
+`org-recorder` / `org-delivery`.
+
+The script refuses three things:
+
+- **Security tooling.** An account passed in `--exclude-account` is refused
+  before any AWS call.
+- **Other names.** Recorders and channels without the legacy names are left
+  alone and shown as `KEEP`. Override the names with `--legacy-recorder-name`
+  / `--legacy-channel-name` if yours differ.
+- **StackSet Regions.** A Region with a live `StackSet-org-config-recorders-*`
+  stack is refused (`REFUSED`, non-zero exit), because the StackSet already
+  records there.
+
+Then delete:
 
 ```bash
 scripts/aws-delete-legacy-recorders.sh \
   --accounts 333333333333,444444444444 --regions eu-west-2,eu-west-1 \
-  --role-name break-glass --execute
+  --role-name break-glass --exclude-account <security_tooling_id> --execute
 ```
 
 For each Region, the script stops the recorder, deletes the delivery channel,
@@ -147,8 +176,8 @@ Record the time recording resumed. The gap is from step 4 to now.
 
 Set `enable_config_recorder_scp = true` (or `aws.enable_config_recorder_scp:
 true`) and apply `aws-organization`. Only the StackSet execution role,
-break-glass and security tooling's `tfc-apply` may then put, stop or delete a
-recorder or delete a delivery channel.
+break-glass and security tooling's `tfc-apply` (`security_tooling_apply_role_name`)
+may then put, stop or delete a recorder, or put or delete a delivery channel.
 
 Routine applies are unaffected:
 

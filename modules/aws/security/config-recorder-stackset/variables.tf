@@ -92,15 +92,25 @@ variable "stack_set_name" {
 }
 
 variable "recorder_name" {
-  description = "Name of the configuration recorder in each account and Region."
+  description = "Name of the configuration recorder in each account and Region. Must differ from the legacy Terraform-managed recorder name (config-org recorder_name, org-recorder): PutConfigurationRecorder is an upsert by name."
   type        = string
-  default     = "org-recorder"
+  default     = "org-stackset-recorder"
+
+  validation {
+    condition     = var.recorder_name != "org-recorder"
+    error_message = "recorder_name must differ from the legacy config-org recorder name org-recorder."
+  }
 }
 
 variable "delivery_channel_name" {
-  description = "Name of the delivery channel in each account and Region."
+  description = "Name of the delivery channel in each account and Region. Must differ from the legacy Terraform-managed channel name (config-org delivery_channel_name, org-delivery)."
   type        = string
-  default     = "org-delivery"
+  default     = "org-stackset-delivery"
+
+  validation {
+    condition     = var.delivery_channel_name != "org-delivery"
+    error_message = "delivery_channel_name must differ from the legacy config-org delivery channel name org-delivery."
+  }
 }
 
 variable "call_as" {

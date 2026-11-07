@@ -10,6 +10,9 @@
 # Constraints this design follows:
 #   * Service-managed StackSets never deploy to the management account; the
 #     caller (aws-organization) gives it a direct recorder instead.
+#   * The recorder and channel names differ from the legacy Terraform-managed
+#     ones (org-recorder / org-delivery): Put* are upserts by name, so a shared
+#     name could let CloudFormation silently take over a live legacy recorder.
 #   * CloudFormation cannot adopt an existing recorder, and an account/Region
 #     holds one customer recorder and one delivery channel. Accounts that still
 #     have a Terraform-managed (legacy) recorder fail their stack instance until
@@ -27,16 +30,11 @@ locals {
   template = jsonencode({
     AWSTemplateFormatVersion = "2010-09-09"
     Description              = "AWS Config recorder and delivery channel for the organization (managed by aws-organization)."
-    Parameters = {
-      IncludeGlobalResourceTypes = {
-        Type          = "String"
-        AllowedValues = ["true", "false"]
-        Default       = "false"
-        Description   = "Record global resource types (IAM) in this Region. true only in the home Region, so global items are not duplicated per Region."
-      }
-    }
+    # Global resource types (IAM) are recorded only in the home Region. A
+    # template Condition on AWS::Region (not a per-instance parameter override)
+    # so auto-deployed accounts get the same result.
     Conditions = {
-      RecordGlobalTypes = { "Fn::Equals" = [{ Ref = "IncludeGlobalResourceTypes" }, "true"] }
+      IsHomeRegion = { "Fn::Equals" = [{ Ref = "AWS::Region" }, var.home_region] }
     }
     Resources = {
       ConfigRecorder = {
@@ -46,7 +44,7 @@ locals {
           RoleARN = { "Fn::Sub" = "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:role/aws-service-role/config.amazonaws.com/AWSServiceRoleForConfig" }
           RecordingGroup = {
             AllSupported               = true
-            IncludeGlobalResourceTypes = { "Fn::If" = ["RecordGlobalTypes", true, false] }
+            IncludeGlobalResourceTypes = { "Fn::If" = ["IsHomeRegion", true, false] }
           }
         }
       }
@@ -69,10 +67,6 @@ resource "aws_cloudformation_stack_set" "this" {
   call_as          = var.call_as
   template_body    = local.template
 
-  parameters = {
-    IncludeGlobalResourceTypes = "false"
-  }
-
   auto_deployment {
     enabled                          = true
     retain_stacks_on_account_removal = false
@@ -82,6 +76,9 @@ resource "aws_cloudformation_stack_set" "this" {
     active = true
   }
 
+  # The provider's StackSet-level operation_preferences has no concurrency_mode
+  # (only the stack instance resource does), so StackSet updates run in the
+  # default STRICT_FAILURE_TOLERANCE mode; the instances below use SOFT.
   operation_preferences {
     failure_tolerance_percentage = var.migration_failure_tolerance_percentage
     max_concurrent_percentage    = var.max_concurrent_percentage
@@ -95,7 +92,8 @@ resource "aws_cloudformation_stack_set" "this" {
   }
 }
 
-# One instance set per Region. The home Region records global resource types.
+# One instance set per Region. The template records global resource types
+# only in the home Region.
 resource "aws_cloudformation_stack_set_instance" "this" {
   for_each = toset(var.aws_enabled_regions)
 
@@ -103,10 +101,6 @@ resource "aws_cloudformation_stack_set_instance" "this" {
   stack_set_instance_region = each.value
   call_as                   = var.call_as
   retain_stack              = false
-
-  parameter_overrides = {
-    IncludeGlobalResourceTypes = each.value == var.home_region ? "true" : "false"
-  }
 
   # Changing these forces replacement of the instances (recorders recreated).
   deployment_targets {

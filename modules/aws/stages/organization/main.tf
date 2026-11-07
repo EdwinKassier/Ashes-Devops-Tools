@@ -97,7 +97,7 @@ module "policies" {
   # role, break-glass and security tooling's tfc-apply (its aggregator
   # recorder) may change recorders.
   enable_config_recorder_scp         = var.enable_config_recorder_scp
-  config_recorder_pipeline_role_arns = var.enable_config_recorder_scp ? ["arn:${var.partition}:iam::${local.security_tooling_account_id}:role/tfc-apply"] : []
+  config_recorder_pipeline_role_arns = var.enable_config_recorder_scp ? ["arn:${var.partition}:iam::${local.security_tooling_account_id}:role/${var.security_tooling_apply_role_name}"] : []
 
   # Detection settings are reachable only from the security accounts' pipeline.
   central_detection_account_ids = [for k in var.central_detection_account_keys : module.account[k].account_id]

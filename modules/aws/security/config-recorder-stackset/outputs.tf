@@ -23,3 +23,13 @@ output "failure_tolerance_percentage" {
   description = "The failure tolerance the stack instance operations run with (0 routine, 100 during the migration pass)."
   value       = var.migration_failure_tolerance_percentage
 }
+
+output "recorder_name" {
+  description = "Name of the configuration recorder the StackSet deploys (distinct from the legacy config-org name)."
+  value       = var.recorder_name
+}
+
+output "delivery_channel_name" {
+  description = "Name of the delivery channel the StackSet deploys (distinct from the legacy config-org name)."
+  value       = var.delivery_channel_name
+}

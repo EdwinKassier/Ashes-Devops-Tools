@@ -82,3 +82,13 @@ run "tolerance_out_of_range_rejected" {
     migration_failure_tolerance_percentage = 101
   }
 }
+
+run "legacy_recorder_name_rejected" {
+  command         = plan
+  expect_failures = [var.recorder_name, var.delivery_channel_name]
+
+  variables {
+    recorder_name         = "org-recorder"
+    delivery_channel_name = "org-delivery"
+  }
+}

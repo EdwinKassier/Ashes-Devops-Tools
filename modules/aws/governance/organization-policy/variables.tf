@@ -281,7 +281,7 @@ variable "partition" {
 # -----------------------------------------------------------------------------
 
 variable "enable_config_recorder_scp" {
-  description = "Move the Config recorder actions (Put/Delete/StopConfigurationRecorder, DeleteDeliveryChannel) from DenyWeakenSecurityServices, where every pipeline role is exempt, to DenyConfigRecorderChanges, whose only exemptions are the StackSet execution role, break-glass and config_recorder_pipeline_role_arns. Default false. Turn it on only after the org-wide recorder StackSet has replaced the Terraform-managed member recorders (docs/runbooks/aws-config-recorder-migration.md)."
+  description = "Move the Config recorder actions (Put/Delete/StopConfigurationRecorder, DeleteDeliveryChannel) from DenyWeakenSecurityServices, where every pipeline role is exempt, to DenyConfigRecorderChanges (which also denies PutDeliveryChannel, so delivery cannot be redirected), whose only exemptions are the StackSet execution role, break-glass and config_recorder_pipeline_role_arns. Default false. Turn it on only after the org-wide recorder StackSet has replaced the Terraform-managed member recorders (docs/runbooks/aws-config-recorder-migration.md)."
   type        = bool
   default     = false
   nullable    = false

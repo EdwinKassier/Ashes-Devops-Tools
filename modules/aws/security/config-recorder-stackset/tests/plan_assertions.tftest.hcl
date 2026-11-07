@@ -82,24 +82,35 @@ run "global_types_home_region_only" {
   command = plan
 
   assert {
-    condition     = aws_cloudformation_stack_set_instance.this["eu-west-2"].parameter_overrides["IncludeGlobalResourceTypes"] == "true"
-    error_message = "the home Region instance must record global resource types"
+    condition = (
+      jsondecode(aws_cloudformation_stack_set.this.template_body).Conditions.IsHomeRegion["Fn::Equals"][0].Ref == "AWS::Region" &&
+      jsondecode(aws_cloudformation_stack_set.this.template_body).Conditions.IsHomeRegion["Fn::Equals"][1] == "eu-west-2" &&
+      jsondecode(aws_cloudformation_stack_set.this.template_body).Resources.ConfigRecorder.Properties.RecordingGroup.IncludeGlobalResourceTypes["Fn::If"][0] == "IsHomeRegion"
+    )
+    error_message = "IncludeGlobalResourceTypes must be gated on AWS::Region == home_region inside the template"
   }
 
+  # No per-instance overrides: auto-deployed accounts must get the same result.
   assert {
-    condition = alltrue([
-      for r in ["eu-west-1", "us-east-1"] :
-      aws_cloudformation_stack_set_instance.this[r].parameter_overrides["IncludeGlobalResourceTypes"] == "false"
-    ])
-    error_message = "non-home Region instances must not record global resource types"
+    condition = (
+      !can(jsondecode(aws_cloudformation_stack_set.this.template_body).Parameters) &&
+      alltrue([for i in aws_cloudformation_stack_set_instance.this : length(coalesce(i.parameter_overrides, {})) == 0])
+    )
+    error_message = "the template takes no parameters and the instances carry no parameter overrides"
   }
+}
+
+# PutConfigurationRecorder / PutDeliveryChannel are upserts by name: the
+# StackSet must never share the legacy config-org names.
+run "names_differ_from_legacy_config_org" {
+  command = plan
 
   assert {
     condition = (
-      jsondecode(aws_cloudformation_stack_set.this.template_body).Resources.ConfigRecorder.Properties.RecordingGroup.IncludeGlobalResourceTypes["Fn::If"][0] == "RecordGlobalTypes" &&
-      jsondecode(aws_cloudformation_stack_set.this.template_body).Parameters.IncludeGlobalResourceTypes.Default == "false"
+      jsondecode(aws_cloudformation_stack_set.this.template_body).Resources.ConfigRecorder.Properties.Name == "org-stackset-recorder" &&
+      jsondecode(aws_cloudformation_stack_set.this.template_body).Resources.DeliveryChannel.Properties.Name == "org-stackset-delivery"
     )
-    error_message = "the template must gate IncludeGlobalResourceTypes on the parameter, default false"
+    error_message = "the StackSet recorder / channel defaults must be org-stackset-recorder / org-stackset-delivery"
   }
 }
 

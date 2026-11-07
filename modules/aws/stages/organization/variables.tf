@@ -491,6 +491,23 @@ variable "enable_org_config_recorders" {
     condition     = !var.enable_org_config_recorders || contains(keys(merge(var.accounts, var.workload_accounts)), "security_tooling")
     error_message = "enable_org_config_recorders needs a security_tooling account (accounts / workload_accounts): it is excluded from the StackSet and keeps the aggregator recorder."
   }
+
+  validation {
+    condition     = !var.enable_org_config_recorders || contains(var.aws_enabled_regions, var.org_trail_home_region)
+    error_message = "enable_org_config_recorders needs org_trail_home_region (the aws-security home region, org.regions.aws) in aws_enabled_regions (aws.enabled_regions): only the home-region recorder records global resource types (IAM)."
+  }
+}
+
+variable "security_tooling_apply_role_name" {
+  description = "Name (optionally path-prefixed) of the security-tooling pipeline role that manages the aggregator recorder: the only pipeline role exempt from the recorder SCP, as arn:<partition>:iam::<security_tooling>:role/<name>. Default tfc-apply (tfc-oidc-baseline)."
+  type        = string
+  default     = "tfc-apply"
+  nullable    = false
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9+=,.@_/-]+$", var.security_tooling_apply_role_name))
+    error_message = "security_tooling_apply_role_name must be an IAM role name without wildcards."
+  }
 }
 
 variable "org_config_recorders_failure_tolerance_percentage" {

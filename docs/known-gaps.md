@@ -42,6 +42,11 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   - the CloudFormation-created recorder starts recording without an explicit
     `StartConfigurationRecorder`;
   - the `DIFFERENCE` filter keeps security tooling out on auto-deployment too;
+  - SUSPENDED or closed accounts under the root (Suspended OU, accounts
+    pending closure) do not fail or block the StackSet operations, and the
+    tolerance-0 re-run still succeeds with them present;
+  - StackSets can re-run an instance whose earlier stack is `ROLLBACK_COMPLETE`
+    (runbook step 5);
   - `SOFT_FAILURE_TOLERANCE` with tolerance 100 lets the migration pass apply;
   - the recording gap between runbook steps 4 and 5. Record it in the runbook.
 

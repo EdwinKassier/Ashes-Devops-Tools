@@ -143,6 +143,46 @@ run "management_direct_recorder_when_enabled" {
     condition     = module.org_config_recorders[0].failure_tolerance_percentage == 0
     error_message = "the routine failure tolerance is 0"
   }
+
+  # Put* are upserts by name: the StackSet must not reuse the legacy config-org
+  # names (the management recorder uses the config-org defaults).
+  assert {
+    condition = (
+      module.org_config_recorders[0].recorder_name != module.management_config_recorder[0].recorder_names["eu-west-2"] &&
+      module.org_config_recorders[0].recorder_name == "org-stackset-recorder" &&
+      module.org_config_recorders[0].delivery_channel_name == "org-stackset-delivery"
+    )
+    error_message = "the StackSet recorder / channel names must differ from the config-org (legacy) names"
+  }
+}
+
+run "recorders_need_home_region_in_enabled_regions" {
+  command = plan
+
+  variables {
+    enable_org_config_recorders = true
+    aws_enabled_regions         = ["eu-west-1"]
+    org_trail_home_region       = "eu-west-2"
+  }
+
+  expect_failures = [var.enable_org_config_recorders]
+}
+
+run "recorder_scp_apply_role_name_is_configurable" {
+  command = plan
+
+  variables {
+    enable_config_recorder_scp       = true
+    security_tooling_apply_role_name = "automation/tfc-apply-security"
+  }
+
+  assert {
+    condition = contains(
+      one([for s in jsondecode(module.policies.policy_contents["scp-deny-tamper"]).Statement : s if s.Sid == "DenyConfigRecorderChanges"]).Condition.ArnNotLike["aws:PrincipalArn"],
+      "arn:aws:iam::222222222222:role/automation/tfc-apply-security"
+    )
+    error_message = "the security-tooling exemption must follow security_tooling_apply_role_name"
+  }
 }
 
 run "migration_tolerance_passes_through" {
@@ -182,9 +222,9 @@ run "recorder_scp_exempts_only_qualified_arns" {
   assert {
     condition = (
       toset(one([for s in jsondecode(module.policies.policy_contents["scp-deny-tamper"]).Statement : s if s.Sid == "DenyConfigRecorderChanges"]).Action) ==
-      toset(["config:PutConfigurationRecorder", "config:DeleteConfigurationRecorder", "config:StopConfigurationRecorder", "config:DeleteDeliveryChannel"])
+      toset(["config:PutConfigurationRecorder", "config:DeleteConfigurationRecorder", "config:StopConfigurationRecorder", "config:DeleteDeliveryChannel", "config:PutDeliveryChannel"])
     )
-    error_message = "DenyConfigRecorderChanges must hold the four recorder actions"
+    error_message = "DenyConfigRecorderChanges must hold the four recorder actions plus PutDeliveryChannel"
   }
 
   assert {

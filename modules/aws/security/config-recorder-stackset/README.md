@@ -12,7 +12,13 @@ owned by the aws-organization stage.
 - The template is built with `jsonencode()` and creates **no IAM resources**.
   The recorder uses the account's Config service-linked role
   (`AWSServiceRoleForConfig`) at its fixed ARN.
-- Global resource types are recorded only in `home_region`.
+- Global resource types are recorded only in `home_region`. A template
+  Condition on `AWS::Region` decides this, so auto-deployed accounts get the
+  same result.
+- The recorder and channel are named `org-stackset-recorder` and
+  `org-stackset-delivery`, distinct from the legacy config-org names
+  (`org-recorder` / `org-delivery`). `Put*` calls are upserts by name, so a
+  shared name could silently take over a live legacy recorder.
 - Delivery goes to the log-archive bucket (`aws.log_archive_bucket_name`).
 
 > **Changing `deployment_targets` forces replacement.** Editing `target_ou_ids`
@@ -63,8 +69,8 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_cloudformation_stack_set.this (modules/aws/security/config-recorder-stackset/main.tf#L65)
-- resource.aws_cloudformation_stack_set_instance.this (modules/aws/security/config-recorder-stackset/main.tf#L99)
+- resource.aws_cloudformation_stack_set.this (modules/aws/security/config-recorder-stackset/main.tf#L63)
+- resource.aws_cloudformation_stack_set_instance.this (modules/aws/security/config-recorder-stackset/main.tf#L97)
 
 
 ## Inputs
@@ -76,11 +82,11 @@ The following resources are created:
 | <a name="input_target_ou_ids"></a> [target\_ou\_ids](#input\_target\_ou\_ids) | OU IDs (or the organization root ID) whose accounts get the recorder. Every account under them except security\_tooling\_account\_id is targeted, and accounts that later join them are auto-deployed. Changing this list forces replacement of the stack instances. | `list(string)` | n/a | yes |
 | <a name="input_aws_enabled_regions"></a> [aws\_enabled\_regions](#input\_aws\_enabled\_regions) | Regions that get a recorder (one stack instance set per Region). | `list(string)` | <pre>[<br/>  "eu-west-2"<br/>]</pre> | no |
 | <a name="input_call_as"></a> [call\_as](#input\_call\_as) | Manage the StackSet as the management account (SELF) or a CloudFormation delegated administrator (DELEGATED\_ADMIN). | `string` | `"SELF"` | no |
-| <a name="input_delivery_channel_name"></a> [delivery\_channel\_name](#input\_delivery\_channel\_name) | Name of the delivery channel in each account and Region. | `string` | `"org-delivery"` | no |
+| <a name="input_delivery_channel_name"></a> [delivery\_channel\_name](#input\_delivery\_channel\_name) | Name of the delivery channel in each account and Region. Must differ from the legacy Terraform-managed channel name (config-org delivery\_channel\_name, org-delivery). | `string` | `"org-stackset-delivery"` | no |
 | <a name="input_home_region"></a> [home\_region](#input\_home\_region) | The only Region whose recorder records global resource types (IAM), so global items are not duplicated per Region. Must be one of aws\_enabled\_regions. | `string` | `"eu-west-2"` | no |
 | <a name="input_max_concurrent_percentage"></a> [max\_concurrent\_percentage](#input\_max\_concurrent\_percentage) | Maximum percentage of accounts per Region a stack operation runs in at once. | `number` | `25` | no |
 | <a name="input_migration_failure_tolerance_percentage"></a> [migration\_failure\_tolerance\_percentage](#input\_migration\_failure\_tolerance\_percentage) | Percentage of accounts per Region in which a stack operation may fail without failing the whole operation (operation\_preferences.failure\_tolerance\_percentage). 0 (default) for routine runs; the migration pass sets 100 while legacy recorders still block some accounts, then returns to 0. | `number` | `0` | no |
-| <a name="input_recorder_name"></a> [recorder\_name](#input\_recorder\_name) | Name of the configuration recorder in each account and Region. | `string` | `"org-recorder"` | no |
+| <a name="input_recorder_name"></a> [recorder\_name](#input\_recorder\_name) | Name of the configuration recorder in each account and Region. Must differ from the legacy Terraform-managed recorder name (config-org recorder\_name, org-recorder): PutConfigurationRecorder is an upsert by name. | `string` | `"org-stackset-recorder"` | no |
 | <a name="input_stack_set_name"></a> [stack\_set\_name](#input\_stack\_set\_name) | Name of the recorder StackSet. | `string` | `"org-config-recorders"` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to the StackSet. Org-wide tags come from the root provider's default\_tags. | `map(string)` | `{}` | no |
 
@@ -88,7 +94,9 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
+| <a name="output_delivery_channel_name"></a> [delivery\_channel\_name](#output\_delivery\_channel\_name) | Name of the delivery channel the StackSet deploys (distinct from the legacy config-org name). |
 | <a name="output_failure_tolerance_percentage"></a> [failure\_tolerance\_percentage](#output\_failure\_tolerance\_percentage) | The failure tolerance the stack instance operations run with (0 routine, 100 during the migration pass). |
+| <a name="output_recorder_name"></a> [recorder\_name](#output\_recorder\_name) | Name of the configuration recorder the StackSet deploys (distinct from the legacy config-org name). |
 | <a name="output_stack_set_id"></a> [stack\_set\_id](#output\_stack\_set\_id) | ID of the recorder StackSet. |
 | <a name="output_stack_set_instances"></a> [stack\_set\_instances](#output\_stack\_set\_instances) | Per-Region stack instance deployment targets: target OUs, the account filter and the excluded account. |
 | <a name="output_stack_set_name"></a> [stack\_set\_name](#output\_stack\_set\_name) | Name of the recorder StackSet. |
