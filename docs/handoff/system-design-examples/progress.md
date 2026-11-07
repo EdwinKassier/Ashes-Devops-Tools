@@ -76,3 +76,5 @@ REPO GAPS: AWS app_ingress_mode exposes whole shared ALB (no per-service exposur
 Task 7: implemented df7e3b4 (5911 words; 156 snippet lines); review dispatched (opus)
 REPO GAPS: edge-security has no rate-based WAF rule and its web ACL lacks ignore_changes=[rule] for aws_wafv2_web_acl_rule; GCP environment stage doesn't pass Cloud Armor custom_rules; repo api-gateway module is HTTP API (no per-client limits)
 Task 8: review Needs fixes (3 Important: unknown-outcome resolver can double-charge via Stripe Search lag; psp_clearing invariant wrong; egress allowlist w/o drop fails prod precondition) + 4 minors → fix round 1 sent
+Task 6: review Needs fixes (3 Important: Parameter Manager condition uses project id not number; gcp-sa-pm grant before identity exists; egress allowlist missing secretsmanager + org-wide semantics) + minors + LLM 429 note → fix round 1 sent
+REPO GAP: net-spoke variables.tf:151 allows MANUAL_ONLY NAT without nat_ips (latent bug)
