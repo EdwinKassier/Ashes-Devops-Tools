@@ -61,3 +61,4 @@ Task 3: complete (commits 50e9fb3, fe22015)
 Task 3: minor (deferred): NLCU 100k figure lacks its own inline citation
 Task 9: dispatched (opus); writer-instructions gained 'Lessons from earlier reviews'
 Task 5: fix round 1 committed 01f0910; scoped re-review dispatched
+Task 4: fix round 1 committed 3afa694; scoped re-review dispatched
