@@ -27,8 +27,9 @@ A **greenfield** estate still needs the phase-0 pass in [bootstrap.md](bootstrap
 (`tfc-admin → gcp-bootstrap → gcp-organization → gcp-projects → gcp-network-hub → gcp-workload-<env>`).
 Each run is queued when its upstream **applies**; a no-op apply fires no trigger. Shared workspaces wait
 for your confirmation. A workload whose environment sets `is_production: false` **explicitly** has
-`auto_apply_run_trigger` and `queue_all_runs` (`enable_nonprod_workload_auto_apply`), so the run its
-upstream queues applies on its own. Set `is_production: false` explicitly to opt an environment into
+`auto_apply_run_trigger` and `queue_all_runs` (`enable_nonprod_workload_auto_apply`; by default only
+while the policy sets and their `destroy_guard` are attached), so the run its upstream queues applies
+on its own. Set `is_production: false` explicitly to opt an environment into
 auto-apply: an omitted flag fails closed, so the workload waits for confirmation like production and
 the shared workspaces.
 

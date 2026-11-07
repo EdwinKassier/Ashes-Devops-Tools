@@ -210,15 +210,17 @@ run "multi_environment_catalog_names_unchanged" {
       prod    = { is_production = true, aws_account_key = "workload_prod" }
       qa      = {}
     }
-    saas_workspaces               = ["web", "admin"]
-    manage_tfc_admin_workspace    = true
-    import_tfc_admin_workspace    = false
-    tfc_admin_team_id             = "team-tfcadmin1"
-    platform_team_id              = "team-platform1"
-    split_workload_projects       = true
-    workspace_execution_modes     = {}
-    aws_management_plan_role_arn  = "arn:aws:iam::111111111111:role/p"
-    aws_management_apply_role_arn = "arn:aws:iam::111111111111:role/a"
+    saas_workspaces            = ["web", "admin"]
+    manage_tfc_admin_workspace = true
+    import_tfc_admin_workspace = false
+    # Explicit: the null default follows the (here absent) policy sets.
+    enable_nonprod_workload_auto_apply = true
+    tfc_admin_team_id                  = "team-tfcadmin1"
+    platform_team_id                   = "team-platform1"
+    split_workload_projects            = true
+    workspace_execution_modes          = {}
+    aws_management_plan_role_arn       = "arn:aws:iam::111111111111:role/p"
+    aws_management_apply_role_arn      = "arn:aws:iam::111111111111:role/a"
     aws_alias_role_arns = {
       "aws-security" = {
         security_tooling = { plan_role_arn = "arn:aws:iam::111111111111:role/p", apply_role_arn = "arn:aws:iam::111111111111:role/a" }

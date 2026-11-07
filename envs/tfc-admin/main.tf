@@ -492,6 +492,20 @@ locals {
   file_bad_categories = flatten([
     for ws, vars in local.file_workspace_variables : [for k, v in vars : "${ws}.${k}" if !contains(["terraform", "env"], v.category)]
   ])
+  # The committed file is platform-reviewable; a security_only workspace
+  # (gcp-guardrails) takes inputs only from its own security-owned root or from
+  # the security team's workspace_variables, never from this file. The one
+  # exception is pointing it at this estate's own landing-zone file (the
+  # sandbox estate does), which is the file tfc-admin itself reads.
+  file_security_only_entries = sort(flatten([
+    for ws, vars in local.file_workspace_variables : [
+      for k, v in vars : "${ws}.${k}"
+      if try(local.workspaces[ws].security_only, false) && !(
+        k == "landing_zone_config_path" && v.category == "terraform" && local.estate_landing_zone_path != null &&
+        v.value == "../../../${coalesce(local.estate_landing_zone_path, "-")}"
+      )
+    ]
+  ]))
 
   workspace_vars = {
     for ws in local.workspace_names : ws => merge(
@@ -586,7 +600,10 @@ locals {
     [for k in local.gcp_workload_names : k if lookup(local.gcp_production_flags, local.workspaces[k].environment, null) == false],
     [for k in local.aws_workload_names : k if try(local.aws_environments[local.workspaces[k].environment].is_production, null) == false],
   ))
-  nonprod_auto_apply_workloads = var.enable_nonprod_workload_auto_apply ? setsubtract(
+  # Null follows the policy sets: an auto-applied run is only allowed where
+  # destroy_guard can stop a stateful delete/replace (fail-safe default).
+  enable_nonprod_workload_auto_apply = coalesce(var.enable_nonprod_workload_auto_apply, local.enable_policy_sets)
+  nonprod_auto_apply_workloads = local.enable_nonprod_workload_auto_apply ? setsubtract(
     local.explicit_nonprod_workloads,
     setunion(local.production_workloads, toset(local.never_auto_apply_workspaces)),
   ) : toset([])
@@ -721,6 +738,10 @@ resource "terraform_data" "input_contract" {
     precondition {
       condition     = length(local.file_bad_categories) == 0
       error_message = "workspace_variables_file categories must be terraform or env: ${join(", ", local.file_bad_categories)}."
+    }
+    precondition {
+      condition     = length(local.file_security_only_entries) == 0
+      error_message = "workspace_variables_file sets variables on security-only workspaces: ${join(", ", local.file_security_only_entries)}. Their inputs come from their own security-owned root (e.g. envs/gcp/guardrails/guardrails.auto.tfvars) or the security team's workspace_variables, never from the platform-editable committed file."
     }
   }
 }

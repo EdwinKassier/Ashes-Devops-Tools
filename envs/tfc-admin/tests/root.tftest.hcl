@@ -745,6 +745,18 @@ run "workspace_variables_file_rejects_reserved_env" {
   expect_failures = [terraform_data.input_contract]
 }
 
+# gcp-guardrails is security_only: the platform-editable committed file must
+# not reach it (its inputs live in its security-owned root).
+run "workspace_variables_file_rejects_security_only_workspace" {
+  command = plan
+
+  variables {
+    workspace_variables_file = "tests/fixtures/tfc-workspaces-security-only.yaml"
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
 # Control-plane run notifications: a configured control-plane
 # notification reaches foundational workspaces but not workload workspaces.
 run "control_plane_notifications_routed_by_tag" {
@@ -1355,6 +1367,7 @@ run "new_nonprod_workload_queues_all_runs_and_auto_applies_triggers" {
   command = plan
 
   variables {
+    enable_nonprod_workload_auto_apply = true
     environments = {
       dev  = { is_production = false }
       prod = {}
@@ -1388,6 +1401,54 @@ run "omitted_is_production_never_auto_applies" {
       for ws in output.workspace_names : !module.workspace[ws].queue_all_runs && !module.workspace[ws].auto_apply_run_trigger
     ])
     error_message = "only is_production = false (explicit) opts a workload into auto-apply; an omitted flag must keep manual confirmation."
+  }
+}
+
+# The default (null) follows the policy sets: off while destroy_guard is not
+# attached, on once it is.
+run "nonprod_workload_auto_apply_default_off_without_policy_sets" {
+  command = plan
+
+  variables {
+    environments = {
+      dev  = { is_production = false }
+      prod = {}
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      for ws in output.workspace_names : !module.workspace[ws].queue_all_runs && !module.workspace[ws].auto_apply_run_trigger
+    ])
+    error_message = "without policy sets (no destroy_guard) the default must keep manual confirmation everywhere."
+  }
+}
+
+run "nonprod_workload_auto_apply_default_on_with_policy_sets" {
+  command = plan
+
+  variables {
+    enable_policy_sets         = true
+    vcs_repo                   = { identifier = "acme/landing-zone", oauth_token_id = "ot-abc123" }
+    manage_tfc_admin_workspace = true
+    import_tfc_admin_workspace = false
+    environments = {
+      dev  = { is_production = false }
+      prod = {}
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      for ws in ["gcp-workload-dev", "aws-workload-dev"] :
+      module.workspace[ws].queue_all_runs && module.workspace[ws].auto_apply_run_trigger
+    ])
+    error_message = "with the policy sets (and destroy_guard) attached, the default auto-applies explicit non-prod workloads."
+  }
+
+  assert {
+    condition     = !module.workspace["gcp-workload-prod"].auto_apply_run_trigger && !module.workspace["aws-workload-prod"].auto_apply_run_trigger
+    error_message = "production workloads keep manual confirmation."
   }
 }
 

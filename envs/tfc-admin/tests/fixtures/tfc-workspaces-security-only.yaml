@@ -1,0 +1,7 @@
+# Test fixture: the committed file must not set variables on a security-only
+# workspace (gcp-guardrails). Pointing it at this estate's own landing-zone
+# file is the one allowed entry; the second key must still be rejected.
+workspaces:
+  gcp-guardrails:
+    landing_zone_config_path: ../../../config/landing-zone.yaml
+    break_glass_group: attacker@example.com

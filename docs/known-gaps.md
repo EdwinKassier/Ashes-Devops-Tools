@@ -20,7 +20,8 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   `gcp-workload-<env>` / `aws-workload-<env>` workspaces whose environment sets
   `is_production: false` explicitly (an omitted flag never qualifies) get
   `auto_apply_run_trigger` and `queue_all_runs`
-  (`enable_nonprod_workload_auto_apply`, default true). The trust change: a
+  (`enable_nonprod_workload_auto_apply`; the null default turns it on only while
+  the policy sets, and so `destroy_guard`, are attached). The trust change: a
   human confirms the upstream apply (`gcp-network-hub`, `aws-network`,
   `aws-security`), and the run it queues on each non-prod workload then applies
   **without a second confirmation**. So whoever may confirm a shared

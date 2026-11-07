@@ -605,7 +605,7 @@ variable "auto_apply_on_merge" {
 }
 
 variable "enable_nonprod_workload_auto_apply" {
-  description = "Workload workspaces whose environment sets is_production = false EXPLICITLY get auto_apply_run_trigger (a run queued by a confirmed upstream apply applies without a second confirmation) and queue_all_runs. The run queue_all_runs starts at creation is expected to fail (the workspace's identity and variables do not exist yet); the setting exists so later VCS and run-trigger runs queue without a manual first run. An omitted is_production, production workloads and every shared workspace keep manual confirmation. Set false to confirm every run (set it before upgrading to keep the previous behaviour)."
+  description = "Workload workspaces whose environment sets is_production = false EXPLICITLY get auto_apply_run_trigger (a run queued by a confirmed upstream apply applies without a second confirmation) and queue_all_runs. The run queue_all_runs starts at creation is expected to fail (the workspace's identity and variables do not exist yet); the setting exists so later VCS and run-trigger runs queue without a manual first run. An omitted is_production, production workloads and every shared workspace keep manual confirmation. Null (default) = on only while the policy sets (and so the mandatory destroy_guard) are attached, so an unguarded estate never auto-applies; true forces it on, false confirms every run."
   type        = bool
-  default     = true
+  default     = null
 }

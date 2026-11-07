@@ -45,8 +45,12 @@ Manual steps for the next release, grouped by area. A breaking change
 
 #### Run triggers auto-apply explicitly non-prod workloads (tfc-admin)
 
-**Trust change on the upgrade apply.** tfc-admin's new
-`enable_nonprod_workload_auto_apply` defaults to `true`. Every
+**Trust change on the upgrade apply (estates with policy sets on).** tfc-admin's
+new `enable_nonprod_workload_auto_apply` defaults to `null`, which follows the
+policy sets: it is on only while `enable_policy_sets` is on, so the mandatory
+`destroy_guard` (below) is attached to every auto-applied run. An estate without
+policy sets (no `org.tfc.plan`, or a free/essentials plan) keeps manual
+confirmation and sees no change. With policy sets on, every
 `gcp-workload-<env>` / `aws-workload-<env>` whose environment sets
 `is_production: false` **explicitly** gets `auto_apply_run_trigger` and
 `queue_all_runs`. A confirmed upstream apply (`gcp-network-hub`, `aws-network`,
@@ -56,9 +60,20 @@ every shared workspace are unchanged.
 
 **To keep the previous behaviour,** set `enable_nonprod_workload_auto_apply = false`
 on tfc-admin **before** the upgrade apply.
+`enable_nonprod_workload_auto_apply = true` forces auto-apply on without policy
+sets; do that only if you accept non-prod applies with no destroy guard.
 
 Also in this release (no manual step):
 
+- tfc-admin rejects `config/tfc-workspaces.yaml` entries on a security-only
+  workspace (`gcp-guardrails`): the file is platform-editable, so the plan fails
+  naming the entry. The only allowed entry is `landing_zone_config_path` set to
+  this estate's own landing-zone file (as `config/sandbox/tfc-workspaces.yaml`
+  does). Move any other value into `envs/gcp/guardrails` (security-owned) or the
+  security team's `workspace_variables`. CODEOWNERS now also requires the
+  security team on `config/tfc-workspaces.yaml` and
+  `modules/aws/stages/{organization,security,backup}/`; copy those lines from
+  `templates/CODEOWNERS.tftpl` into a CODEOWNERS you scaffolded earlier.
 - tfc-admin now triggers `aws-organization` after each of its applies. It
   triggers `gcp-bootstrap` too once that runs remotely
   (`workspace_execution_modes = {}`). Plans with no changes end as "planned and
