@@ -370,3 +370,12 @@ run "security_lake_creates_meta_store_role" {
     error_message = "an empty meta_store_manager_role_arn must create the Security Lake metastore role."
   }
 }
+
+run "sectool_cmk_allows_eventbridge_to_publish_alerts" {
+  command = plan
+
+  assert {
+    condition     = contains(local.sectool_cmk_service_principals, "events.amazonaws.com")
+    error_message = "The security-tooling CMK must grant events.amazonaws.com, or EventBridge cannot publish sec-notify-* alerts to the encrypted security-notifications topic."
+  }
+}

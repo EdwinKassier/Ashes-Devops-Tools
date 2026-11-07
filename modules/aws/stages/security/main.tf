@@ -170,7 +170,7 @@ module "sectool_cmk" {
   key_user_arns          = try(var.aws.kms_key_user_arns["security_tooling"], [])
   enable_protection_tag  = var.aws.enable_kms_protection_tag
   log_service_principals = []
-  service_principals     = ["sns.amazonaws.com", "ssm.amazonaws.com", "cloudwatch.amazonaws.com"]
+  service_principals     = local.sectool_cmk_service_principals
   # Local services only: scope the grant to this account (aws:SourceAccount),
   # not the whole org.
   service_principal_scope = "account"

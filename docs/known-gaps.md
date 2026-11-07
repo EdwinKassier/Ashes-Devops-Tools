@@ -569,12 +569,11 @@ Enable only after validating in a real/test org. Each defaults to prior behaviou
     (management account) also alerts on any trail change made from the
     management account (phase-0 or break-glass; SCPs never apply there), on
     any trail.
-  - The security-notifications topic is encrypted with the security-tooling
-    CMK, whose key policy grants `sns`, `ssm` and `cloudwatch` but not
-    `events.amazonaws.com`. This affects every `sec-notify-*` rule, and it is
-    not new. If EventBridge cannot use the key, delivery to the topic fails.
-    **Validate in the sandbox**, then add `events.amazonaws.com` to the key's
-    service principals (a key-policy change: break-glass apply).
+  - The security-tooling CMK now grants `events.amazonaws.com`, scoped by
+    `aws:SourceAccount`, so EventBridge can publish `sec-notify-*` alerts to
+    the encrypted security-notifications topic. **Validate in the sandbox**
+    that EventBridge's KMS calls carry `aws:SourceAccount`. If they don't, the
+    grant needs its own statement without that condition.
   - The new trail's log group, CIS alarms, alarm topic and CloudWatch CMK in
     security tooling lack the management role's explicit denies
     (`DenyTrailAndKeyDestruction*`). The CMK's key policy grants the account

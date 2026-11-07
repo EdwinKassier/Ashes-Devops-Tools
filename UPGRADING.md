@@ -280,6 +280,62 @@ keys are stored in Secrets Manager (`vpn_preshared_key_arn` output), not in
 state, unless you set `preshared_key_storage = "Standard"`. Off by default: no
 plan change when unset.
 
+#### AWS org trail managed by the CloudTrail delegated administrator (opt-in)
+
+New `aws.enable_cloudtrail_delegated_admin` (default `false`: no change on
+upgrade). When on, `aws-organization` registers security tooling with
+`aws_cloudtrail_organization_delegated_admin_account` and removes every trail
+write (`OrganizationTrailOnly`, the delivery-role PassRole, and the
+`cloudtrail.amazonaws.com` delegation) from `tfc-mgmt-aws-security-apply`;
+`aws-security` creates a new organization trail, `org-trail-delegated`, with the
+security-tooling provider, with its CloudWatch Logs group, delivery role, CMK,
+CIS alarms and topic in security tooling. The deny-tamper SCP then applies to
+the trail. New keys: `aws.enable_cloudtrail_delegated_admin`,
+`aws.create_management_trail`, `aws.adopt.cloudtrail_delegated_admin_account_id`
+(aws-organization), and `aws_overrides.cloudtrail_delegated_admin_trail_name`.
+
+**Manual steps (existing estates), in order** — follow
+`docs/runbooks/aws-cloudtrail-delegated-admin-migration.md`:
+
+1. Set `aws.enable_cloudtrail_delegated_admin: true` and
+   `aws.adopt.cloudtrail_delegated_admin_account_id: "<security-tooling ID>"`.
+   Apply `aws-organization` (expect one import and an in-place policy update).
+2. Before `aws-security` applies:
+   `terraform state rm 'module.aws_security.module.delegated_admin.aws_organizations_delegated_administrator.this["cloudtrail.amazonaws.com"]'`.
+   Apply `aws-security`: creates only; `module.cloudtrail[0]` unchanged.
+3. Verify delivery of `org-trail-delegated`, overlap at least one hour.
+4. Delete `org-trail` with break-glass, then
+   `terraform state rm 'module.aws_security.module.cloudtrail[0]'` and set
+   `aws.create_management_trail: false` together. Retire the old CIS alarms.
+
+Greenfield estates that start with the flag on also set
+`aws.create_management_trail: false` and no adopt ID. The scaffolder does not
+turn it on until the sandbox proves the runbook.
+
+**v1.0 legacy removal:** the management-account trail mode is removed:
+`enable_cloudtrail_delegated_admin = false`, `module.cloudtrail` in the
+aws-security stage (retired with
+`removed { from = module.cloudtrail  lifecycle { destroy = false } }`),
+`create_management_trail`, the `OrganizationTrailOnly` /
+`PassTrailDeliveryRoleToCloudTrail` grants, the generic
+`cloudtrail.amazonaws.com` registration (`register_cloudtrail_admin`) and
+`create_org_trail_delivery_role`.
+
+With the flag on, aws-organization's `org-guard-alerts` event pattern changes in
+place (it also alerts on any trail change made from the management account), and
+aws-security adds `sec-notify-org-trail-tamper` in security tooling.
+
+
+#### aws-security: the security-tooling CMK grants EventBridge (key-policy update)
+
+The security-tooling CMK, which encrypts the security-notifications SNS topic,
+now grants `events.amazonaws.com` (scoped to the account by `aws:SourceAccount`).
+Before this, EventBridge could not publish the `sec-notify-*` alerts to the
+encrypted topic, so those deliveries failed. The next aws-security plan shows an
+in-place key-policy update. Where the key policy is protected against pipeline
+edits, apply it with break-glass. After the apply, check that a test alert
+arrives.
+
 ### GCP
 
 #### GCP deny policies move to the security-team `gcp-guardrails` workspace
