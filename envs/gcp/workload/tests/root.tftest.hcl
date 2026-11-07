@@ -11,6 +11,42 @@
 
 mock_provider "google" {}
 mock_provider "google-beta" {}
+# tfe serves only the SaaS secret bridge (ephemeral "tfe_outputs"); mocked so
+# no run contacts HCP Terraform. The default mock is a saas workspace that
+# predates the bridge_version output; tfe.bridge_v4 publishes bridge_version 4.
+mock_provider "tfe" {
+  mock_ephemeral "tfe_outputs" {
+    defaults = {
+      values = {
+        supabase_api_url           = "https://abcd.supabase.co"
+        supabase_service_role_key  = "service-role-key-xxxx"
+        supabase_database_password = "db-password-xxxx"
+      }
+      nonsensitive_values = {
+        supabase_api_url = "https://abcd.supabase.co"
+      }
+    }
+  }
+}
+
+mock_provider "tfe" {
+  alias = "bridge_v4"
+
+  mock_ephemeral "tfe_outputs" {
+    defaults = {
+      values = {
+        supabase_api_url           = "https://abcd.supabase.co"
+        supabase_service_role_key  = "service-role-key-xxxx"
+        supabase_database_password = "db-password-xxxx"
+        bridge_version             = 4
+      }
+      nonsensitive_values = {
+        supabase_api_url = "https://abcd.supabase.co"
+        bridge_version   = 4
+      }
+    }
+  }
+}
 
 variables {
   # Isolate the suite from any committed config/landing-zone.yaml.
@@ -165,17 +201,6 @@ run "saas_secret_bridge_creates_secret_when_enabled" {
     saas_secret_accessor_members = ["serviceAccount:app@acme-dev-host-abcd.iam.gserviceaccount.com"]
   }
 
-  override_data {
-    target = data.terraform_remote_state.saas[0]
-    values = {
-      outputs = {
-        supabase_api_url           = "https://abcd.supabase.co"
-        supabase_service_role_key  = "service-role-key-xxxx"
-        supabase_database_password = "db-password-xxxx"
-      }
-    }
-  }
-
   assert {
     condition     = module.environment.components.saas_secret_bridge
     error_message = "enabling the bridge must instantiate the secret-manager module once."
@@ -299,34 +324,53 @@ run "vm_backup_can_be_disabled" {
   }
 }
 
-# The module writes the bridged secret write-only (secret_data_wo); the saas
-# bridge_version output drives its secret_value_versions counter so a rotation
-# bump re-writes the secret.
+# The values come from ephemeral "tfe_outputs" (never in this root's plan or
+# state) and the stage writes them write-only (secret_data_wo). The version is
+# non-ephemeral: saas_bridge_version / saas.bridge_rotation, which must match the
+# bridge_version the saas workspace publishes.
 run "bridge_uses_write_only_secret" {
   command = plan
+
+  providers = {
+    google      = google
+    google-beta = google-beta
+    tfe         = tfe.bridge_v4
+  }
 
   variables {
     enable_saas_secret_bridge    = true
     saas_workspace_name          = "saas-web"
     saas_secret_name             = "supabase-connection"
     saas_secret_accessor_members = ["serviceAccount:app@acme-dev-host-abcd.iam.gserviceaccount.com"]
-  }
-
-  override_data {
-    target = data.terraform_remote_state.saas[0]
-    values = {
-      outputs = {
-        supabase_api_url           = "https://abcd.supabase.co"
-        supabase_service_role_key  = "service-role-key-xxxx"
-        supabase_database_password = "db-password-xxxx"
-        bridge_version             = 4
-      }
-    }
+    saas_bridge_version          = 4
   }
 
   assert {
-    condition     = local.saas_bridge_versions["supabase-connection"] == 4 && length(local.saas_bridge_versions) == 1
-    error_message = "the bridge's secret_value_versions must carry the saas bridge_version output."
+    condition     = module.environment.components.saas_secret_bridge && local.saas_bridge_version == 4
+    error_message = "the bridge's secret_value_versions must carry saas_bridge_version."
+  }
+}
+
+run "bridge_version_from_config_file" {
+  command = plan
+
+  providers = {
+    google      = google
+    google-beta = google-beta
+    tfe         = tfe.bridge_v4
+  }
+
+  variables {
+    landing_zone_config_path     = "tests/fixtures/landing-zone-saas-bridge.yaml"
+    enable_saas_secret_bridge    = true
+    saas_workspace_name          = "saas-web"
+    saas_secret_name             = "supabase-connection"
+    saas_secret_accessor_members = ["serviceAccount:app@acme-dev-host-abcd.iam.gserviceaccount.com"]
+  }
+
+  assert {
+    condition     = local.saas_bridge_version == 4
+    error_message = "the write-only version must come from saas.bridge_rotation when saas_bridge_version is unset."
   }
 }
 
@@ -340,29 +384,34 @@ run "bridge_version_defaults_to_1_without_producer_output" {
     saas_secret_accessor_members = ["serviceAccount:app@acme-dev-host-abcd.iam.gserviceaccount.com"]
   }
 
-  override_data {
-    target = data.terraform_remote_state.saas[0]
-    values = {
-      outputs = {
-        supabase_api_url           = "https://abcd.supabase.co"
-        supabase_service_role_key  = "service-role-key-xxxx"
-        supabase_database_password = "db-password-xxxx"
-      }
-    }
+  assert {
+    condition     = local.saas_bridge_version == 1
+    error_message = "without saas_bridge_version or saas.bridge_rotation the write-only version must be 1 (today's value)."
+  }
+}
+
+# Bumped here but not yet published by the saas workspace: the plan fails
+# instead of writing the old values under the new version.
+run "bridge_version_ahead_of_producer_fails" {
+  command = plan
+
+  variables {
+    enable_saas_secret_bridge    = true
+    saas_workspace_name          = "saas-web"
+    saas_secret_name             = "supabase-connection"
+    saas_secret_accessor_members = ["serviceAccount:app@acme-dev-host-abcd.iam.gserviceaccount.com"]
+    saas_bridge_version          = 2
   }
 
-  assert {
-    condition     = local.saas_bridge_versions["supabase-connection"] == 1 && length(local.saas_bridge_versions) == 1
-    error_message = "without a producer bridge_version output the write-only version must be 1 (today's value)."
-  }
+  expect_failures = [ephemeral.tfe_outputs.saas]
 }
 
 run "bridge_off_reads_nothing" {
   command = plan
 
   assert {
-    condition     = length(data.terraform_remote_state.saas) == 0 && !module.environment.components.saas_secret_bridge && length(local.saas_bridge_versions) == 0
-    error_message = "with the bridge off, no saas state is read and no bridge module is instantiated."
+    condition     = !module.environment.components.saas_secret_bridge && output.saas_secret_id == null
+    error_message = "with the bridge off, no bridge module is instantiated."
   }
 }
 

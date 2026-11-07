@@ -25,6 +25,7 @@ locals {
     domain                    = try(tostring(local.lz.org.domain), null)
     default_region            = try(tostring(local.lz.org.regions.gcp), null)
     tfc_organization          = try(tostring(local.lz.org.tfc.organization), null)
+    saas_bridge_rotation      = try(tonumber(local.lz.saas.bridge_rotation), null)
     billing_account           = try(tostring(local.lz.gcp.billing_account), null)
     admin_email               = try(tostring(local.lz.gcp.admin_email), null)
     organization_admin_groups = try([for g in local.lz.gcp.organization_admin_groups : tostring(g)], null)
@@ -141,6 +142,9 @@ locals {
   # the unset case first.
   project_prefix   = coalesce(var.project_prefix, local.cfg.project_prefix, "unset")
   tfc_organization = coalesce(var.tfc_organization, local.cfg.tfc_organization, "unset")
+  # Write-only version of the bridged secret (saas.bridge_rotation, the counter
+  # the saas root publishes as bridge_version).
+  saas_bridge_version = coalesce(var.saas_bridge_version, local.cfg.saas_bridge_rotation, 1)
   # This environment's region: gcp.environments[<env>].region, else
   # org.regions.gcp, else europe-west2 (the same default gcp-projects applies).
   region = coalesce(var.region, try(local.cfg.environments[var.environment].region, null), local.cfg.default_region, "europe-west2")

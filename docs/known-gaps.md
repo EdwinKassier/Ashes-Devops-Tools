@@ -703,31 +703,26 @@ side (all mock-tested, secure defaults):
   legacy sensitive inputs stay for backward compatibility. Vercel env-var inputs
   cannot be ephemeral: they also feed the `for_each` keys and the stored fingerprints.
 
-- **S-M3 — SaaS bridge values pass through workload state (waiting on
-  Terraform 1.17 test mocking).** With `enable_saas_secret_bridge`, the bridged
-  secret versions are write-only: `secret_string_wo` (AWS) and the
-  secret-manager module's `secret_data_wo` (GCP). The saas `bridge_version`
-  output (`saas.bridge_rotation`) drives `*_wo_version`. **Residual:**
-  `envs/aws/workload` and `envs/gcp/workload` still read the Supabase
-  service-role key and database password through
-  `data "terraform_remote_state" "saas"`, and a data source's result is stored
-  in the workload's state. Task 3.6 closes this. It replaces that read with
-  `ephemeral "tfe_outputs"` (tfe >= 0.65), keeps a non-ephemeral
-  `data "tfe_outputs"` for `bridge_version`, and authenticates with the
-  hand-created `saas-outputs-reader` team token (`saas_outputs_reader_team_id`,
-  already granted). It waits on the test toolchain. Terraform 1.14, the CI pin,
-  cannot test a root that contains an ephemeral resource offline:
-  `mock_provider` rejects every ephemeral resource type at validation, even at
-  `count = 0`. `override_resource`, `override_data` and `override_module` cannot
-  target one, and a real `tfe` provider contacts the HCP Terraform host when it
-  is configured. Terraform 1.17 mocks ephemeral resources.
+- **S-M3 — RESOLVED (2026-11-07): SaaS bridge values stay out of workload
+  state.** `envs/aws/workload` and `envs/gcp/workload` read the Supabase outputs
+  with `ephemeral "tfe_outputs" "saas"` (tfe 0.83) and write them with the
+  write-only `secret_string_wo` (AWS) / the secret-manager module's ephemeral
+  `secret_data_wo` path (GCP). No `terraform_remote_state` or `data "tfe_outputs"`
+  read remains: either would store every saas output, secrets included, in the
+  workload's state. The write-only version must be non-ephemeral, so it comes
+  from `saas.bridge_rotation` in the config file (or `saas_bridge_version`); a
+  postcondition on the ephemeral read fails the plan until the saas workspace
+  publishes the same `bridge_version`. Unit-tested with `mock_ephemeral`
+  (Terraform 1.17). **Residual (sandbox):** `terraform state pull` on a bridging
+  workload, showing no secret value, has not been run against a live workspace.
 - **SaaS secrets stay in `saas-*` state (provider limitation).**
   `supabase_project` has no write-only `database_password`, so the creation-time
   password is in the `saas-<name>` state and its `supabase_database_password`
   output. The service-role key is in the same state as a data-source result and
   an output. Access to that state is limited to the `saas-*` workspace's
   writers, the listed `extra_remote_state_consumers` and the
-  `saas-outputs-reader` team (outputs only). Rotation: see
+  `saas-outputs-reader` team (outputs only, read ephemerally by the bridging
+  workloads). Rotation: see
   [saas-bootstrap](runbooks/saas-bootstrap.md#bridging-secrets-to-a-workload-and-rotating-them).
 
 ## DECISION — needs a human call

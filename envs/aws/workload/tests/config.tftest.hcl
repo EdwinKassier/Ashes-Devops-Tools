@@ -4,6 +4,9 @@
 
 mock_provider "aws" {}
 mock_provider "aws" { alias = "us_east_1" }
+# tfe serves only the SaaS secret bridge (ephemeral "tfe_outputs"); mocked so
+# no run contacts HCP Terraform.
+mock_provider "tfe" {}
 
 variables {
   landing_zone_config_path = "tests/fixtures/landing-zone.yaml"

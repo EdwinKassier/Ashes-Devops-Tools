@@ -310,10 +310,11 @@ variable "saas_secret_bridge" {
 }
 
 variable "saas_secret_bridge_value" {
-  description = "The bridged connection payload (JSON) written write-only into the saas_secret_bridge secret. Required when saas_secret_bridge.enabled."
+  description = "The bridged connection payload (JSON) written write-only into the saas_secret_bridge secret. Ephemeral: pass it from an ephemeral resource (the workload root reads it with ephemeral tfe_outputs) or a plain value; it is never stored in plan or state. Required when saas_secret_bridge.enabled."
   type        = string
   default     = null
   sensitive   = true
+  ephemeral   = true
 
   validation {
     condition     = !var.saas_secret_bridge.enabled || var.saas_secret_bridge_value != null

@@ -444,15 +444,11 @@ variable "service_teams" {
 # Opt-in. When enabled, this workload reads the Supabase outputs from a saas-<name>
 # workspace and writes them into a GCP Secret Manager secret in the host project,
 # so a GCP runtime can use Supabase as a managed datastore by secret reference.
-# Default off: no SaaS coupling, and the workload reads no saas state.
+# Default off: no SaaS coupling, and the workload reads no saas outputs.
 #
-# NOTE: the secret version is written write-only (secret_data_wo), so it keeps no
-# plaintext. The bridged values (service role key, database password) still pass
-# through data.terraform_remote_state.saas, which is stored in THIS root's state as
-# well as the saas root's (docs/known-gaps.md). Teams that require zero secret
-# duplication should instead create the secret container with
-# modules/gcp/data/secret-manager and set the value out of band, leaving this
-# bridge disabled.
+# The values are read with ephemeral "tfe_outputs" and written with the
+# write-only secret_data_wo, so they are in neither this root's plan nor its
+# state. They stay in the saas root's state (docs/known-gaps.md).
 # -----------------------------------------------------------------------------
 
 variable "enable_saas_secret_bridge" {
@@ -463,6 +459,17 @@ variable "enable_saas_secret_bridge" {
   validation {
     condition     = !var.enable_saas_secret_bridge || (var.saas_workspace_name != null && length(var.saas_secret_accessor_members) > 0)
     error_message = "enable_saas_secret_bridge = true requires saas_workspace_name and at least one saas_secret_accessor_members entry (the runtime that reads the secret)."
+  }
+}
+
+variable "saas_bridge_version" {
+  description = "Write-only version of the bridged secret (the secret-manager value version): a new value re-pushes it. Must equal the bridge_version the saas workspace publishes, or the plan fails. Null = saas.bridge_rotation from config/landing-zone.yaml, else 1."
+  type        = number
+  default     = null
+
+  validation {
+    condition     = var.saas_bridge_version == null || try(var.saas_bridge_version >= 1 && floor(var.saas_bridge_version) == var.saas_bridge_version, false)
+    error_message = "saas_bridge_version must be a whole number >= 1 (or null)."
   }
 }
 

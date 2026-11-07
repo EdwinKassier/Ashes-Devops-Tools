@@ -143,28 +143,30 @@ locals {
   app_bootstrap_image = coalesce(var.app_bootstrap_image, local.cfg.app_bootstrap_image, "us-docker.pkg.dev/cloudrun/container/hello")
 }
 
-# SaaS secret bridge (opt-in, default off: no saas state is read). The Supabase
-# outputs of a saas-<name> workspace; the environment stage writes them into a
-# Secret Manager secret. See docs/architecture/saas-integration.md.
+# SaaS secret bridge (opt-in, default off: no saas outputs are read). The
+# Supabase outputs of a saas-<name> workspace; the environment stage writes them
+# into a Secret Manager secret. See docs/architecture/saas-integration.md.
+#
+# The read is ephemeral and the stage writes the value with the write-only
+# secret_data_wo, so the values are in neither this root's plan nor its state.
+# Authenticated with the saas-outputs-reader team token (TFE_TOKEN on the
+# bridging workspaces, docs/runbooks/saas-bootstrap.md).
 
-data "terraform_remote_state" "saas" {
-  count   = var.enable_saas_secret_bridge ? 1 : 0
-  backend = "cloud"
-  config = {
-    organization = local.tfc_organization
-    workspaces = {
-      name = var.saas_workspace_name
+ephemeral "tfe_outputs" "saas" {
+  count        = var.enable_saas_secret_bridge ? 1 : 0
+  organization = local.tfc_organization
+  workspace    = var.saas_workspace_name
+
+  lifecycle {
+    # The write-only version is non-ephemeral, so it comes from the config file
+    # (saas.bridge_rotation), not from this read. Refuse to push while the saas
+    # workspace has not yet published the same counter: pushing then would write
+    # the old values under the new version, and nothing would re-push them.
+    postcondition {
+      condition     = try(tonumber(self.nonsensitive_values.bridge_version), 1) == local.saas_bridge_version
+      error_message = "saas bridge_version (published by ${coalesce(var.saas_workspace_name, "the saas workspace")}) differs from this workload's saas_bridge_version / saas.bridge_rotation. Apply the saas workspace first, then re-run this workload."
     }
   }
-}
-
-# Write-only version counter for the bridged secret: the saas bridge_version
-# output (saas.bridge_rotation), else 1 for a producer that predates it (the
-# module's previous default, so upgrading re-writes nothing).
-locals {
-  saas_bridge_versions = var.enable_saas_secret_bridge ? {
-    (var.saas_secret_name) = try(tonumber(data.terraform_remote_state.saas[0].outputs.bridge_version), 1)
-  } : {}
 }
 
 # The environment (modules/gcp/stages/environment): spoke network + perimeter,
@@ -244,14 +246,14 @@ module "environment" {
     enabled          = var.enable_saas_secret_bridge
     secret_name      = var.saas_secret_name
     accessor_members = var.saas_secret_accessor_members
-    value_version    = try(local.saas_bridge_versions[var.saas_secret_name], 1)
+    value_version    = local.saas_bridge_version
   }
   # Written write-only; still stored in this state via the remote-state read
   # (docs/known-gaps.md).
   saas_secret_bridge_value = var.enable_saas_secret_bridge ? jsonencode({
-    api_url           = data.terraform_remote_state.saas[0].outputs.supabase_api_url
-    service_role_key  = data.terraform_remote_state.saas[0].outputs.supabase_service_role_key
-    database_password = data.terraform_remote_state.saas[0].outputs.supabase_database_password
+    api_url           = ephemeral.tfe_outputs.saas[0].values.supabase_api_url
+    service_role_key  = ephemeral.tfe_outputs.saas[0].values.supabase_service_role_key
+    database_password = ephemeral.tfe_outputs.saas[0].values.supabase_database_password
   }) : null
 
   app_services   = local.app_services_input

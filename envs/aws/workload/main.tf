@@ -253,15 +253,28 @@ module "app_edge" {
 # Opt-in. Reads the Supabase outputs from a saas-<name> workspace and writes them
 # into an AWS Secrets Manager secret, so an ECS/Fargate task can consume Supabase
 # as a managed datastore via its container-secret valueFrom. Default off: no saas
-# state is read and nothing is created. See docs/architecture/saas-integration.md.
+# outputs are read and nothing is created. See docs/architecture/saas-integration.md.
+#
+# The read is ephemeral: the values exist only during the run and flow into the
+# write-only secret_string_wo, so neither the data nor the secret version holds
+# them in this root's plan or state. Authenticated with the saas-outputs-reader
+# team token (TFE_TOKEN on the bridging workspaces, docs/runbooks/saas-bootstrap.md).
 # =============================================================================
 
-data "terraform_remote_state" "saas" {
-  count   = var.enable_saas_secret_bridge ? 1 : 0
-  backend = "cloud"
-  config = {
-    organization = local.tfc_organization
-    workspaces   = { name = var.saas_workspace_name }
+ephemeral "tfe_outputs" "saas" {
+  count        = var.enable_saas_secret_bridge ? 1 : 0
+  organization = local.tfc_organization
+  workspace    = var.saas_workspace_name
+
+  lifecycle {
+    # The write-only version is non-ephemeral, so it comes from the config file
+    # (saas.bridge_rotation), not from this read. Refuse to push while the saas
+    # workspace has not yet published the same counter: pushing then would write
+    # the old values under the new version, and nothing would re-push them.
+    postcondition {
+      condition     = try(tonumber(self.nonsensitive_values.bridge_version), 1) == local.saas_bridge_version
+      error_message = "saas bridge_version (published by ${coalesce(var.saas_workspace_name, "the saas workspace")}) differs from this workload's saas_bridge_version / saas.bridge_rotation. Apply the saas workspace first, then re-run this workload."
+    }
   }
 }
 
@@ -277,19 +290,16 @@ resource "aws_secretsmanager_secret" "saas_bridge" {
 
 # Write-only (aws >= 6.45 switches from secret_string in place): the secret
 # version keeps no plaintext in plan or state. Write-only values are not diffed,
-# so the saas bridge_version output (saas.bridge_rotation) is the re-push signal;
-# a producer that predates that output counts as version 1. The values still
-# pass through data.terraform_remote_state.saas, which IS stored in this state
-# (docs/known-gaps.md).
+# so local.saas_bridge_version (saas.bridge_rotation) is the re-push signal.
 resource "aws_secretsmanager_secret_version" "saas_bridge" {
   count     = var.enable_saas_secret_bridge ? 1 : 0
   secret_id = aws_secretsmanager_secret.saas_bridge[0].id
   secret_string_wo = jsonencode({
-    api_url           = data.terraform_remote_state.saas[0].outputs.supabase_api_url
-    service_role_key  = data.terraform_remote_state.saas[0].outputs.supabase_service_role_key
-    database_password = data.terraform_remote_state.saas[0].outputs.supabase_database_password
+    api_url           = ephemeral.tfe_outputs.saas[0].values.supabase_api_url
+    service_role_key  = ephemeral.tfe_outputs.saas[0].values.supabase_service_role_key
+    database_password = ephemeral.tfe_outputs.saas[0].values.supabase_database_password
   })
-  secret_string_wo_version = try(tonumber(data.terraform_remote_state.saas[0].outputs.bridge_version), 1)
+  secret_string_wo_version = local.saas_bridge_version
 }
 
 # Grant only the named task roles GetSecretValue on the bridged secret.

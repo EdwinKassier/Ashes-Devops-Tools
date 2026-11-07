@@ -100,8 +100,10 @@ config.
 
 - **Build, incrementally:**
   1. **Secret bridge (opt-in) — DELIVERED for GCP and AWS.**
-     `enable_saas_secret_bridge` reads the `saas-<name>` remote state and writes
-     the Supabase connection details into the cloud's secret store: GCP Secret
+     `enable_saas_secret_bridge` reads the `saas-<name>` outputs ephemerally
+     (`ephemeral "tfe_outputs"`, so they never enter the workload's plan or
+     state) and writes the Supabase connection details, write-only, into the
+     cloud's secret store: GCP Secret
      Manager on `envs/gcp/workload` (reusing `modules/gcp/data/secret-manager`),
      and AWS Secrets Manager on `envs/aws/workload` (granting named task roles
      GetSecretValue). Default off on both.

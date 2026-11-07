@@ -279,9 +279,9 @@ module "os_patch_management" {
 #
 # Opt-in. Writes the caller-supplied connection payload (the Supabase outputs of
 # a saas-<name> workspace) into a Secret Manager secret in the host project, so
-# a GCP runtime can use Supabase by secret reference. The module writes it with
-# the write-only secret_data_wo, so the secret version holds no plaintext in
-# state. See docs/architecture/saas-integration.md.
+# a GCP runtime can use Supabase by secret reference. The payload is ephemeral
+# and the module writes it with the write-only secret_data_wo, so it is in
+# neither plan nor state. See docs/architecture/saas-integration.md.
 # =============================================================================
 
 module "saas_secret_bridge" {
@@ -293,6 +293,10 @@ module "saas_secret_bridge" {
   secrets = {
     (var.saas_secret_bridge.secret_name) = {
       labels = var.labels
+      # The payload is ephemeral (the workload reads it with ephemeral
+      # "tfe_outputs"), so it takes the module's ephemeral path. Same resource
+      # address as the former secret_values path: no replacement.
+      ephemeral_value = true
     }
   }
 
@@ -300,7 +304,7 @@ module "saas_secret_bridge" {
     (var.saas_secret_bridge.secret_name) = var.saas_secret_bridge.value_version
   }
 
-  secret_values = {
+  ephemeral_secret_values = {
     (var.saas_secret_bridge.secret_name) = var.saas_secret_bridge_value
   }
 

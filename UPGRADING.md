@@ -629,17 +629,18 @@ Applies to workloads with `enable_saas_secret_bridge = true`.
   and the repo floor is 6.46. Afterwards the secret version holds no plaintext
   in state. The secret's content does not change.
 - **GCP (`gcp-workload-<env>`).** The secret was already write-only. Its
-  version counter now comes from the saas `bridge_version` output. It stays 1
-  until you bump `saas.bridge_rotation`, so the upgrade re-writes nothing.
+  version counter now follows `saas.bridge_rotation`. It stays 1 until you bump
+  it, so the upgrade re-writes nothing.
 - **Rotation.** A write-only value is not diffed. After rotating a bridged
   Supabase secret, bump `saas.bridge_rotation`, apply `saas-<name>`, then apply
   each bridging workload
   ([saas-bootstrap](docs/runbooks/saas-bootstrap.md#bridging-secrets-to-a-workload-and-rotating-them)).
   A `saas-<name>` that has not applied the new output yet counts as version 1.
-- **Still in workload state.** The values pass through
+- **The read itself.** This release still read the values through
   `data.terraform_remote_state.saas`, whose result is stored in the workload's
-  state. Task 3.6 moves this read to `ephemeral "tfe_outputs"` (see
-  `docs/known-gaps.md`).
+  state. The Terraform 1.17 release replaces it with `ephemeral "tfe_outputs"`,
+  so the values no longer reach the workload's state (see "SaaS secret bridge
+  reads ephemerally" under Terraform 1.17).
 
 ### All clouds
 

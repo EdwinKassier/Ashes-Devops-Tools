@@ -54,6 +54,8 @@ locals {
     security_contract = try(local.lz.aws.contracts.security.log_archive_bucket_name, null) == null ? null : {
       log_archive_bucket_name = tostring(local.lz.aws.contracts.security.log_archive_bucket_name)
     }
+    # saas.bridge_rotation: the counter the saas root publishes as bridge_version.
+    saas_bridge_rotation = try(tonumber(local.lz.saas.bridge_rotation), null)
   }
 
   # Required values fall back to an inert sentinel only so static tools (tflint)
@@ -67,6 +69,7 @@ locals {
   workload_account_key = coalesce(var.workload_account_key, try(local.cfg.workload_account_keys[var.environment], null), "unset")
   vpc_cidr             = coalesce(var.vpc_cidr, try(local.cfg.vpc_cidrs[local.environment], null), "10.20.0.0/16")
   app_bootstrap_image  = coalesce(var.app_bootstrap_image, local.cfg.app_bootstrap_image, "public.ecr.aws/nginx/nginx-unprivileged:stable-alpine")
+  saas_bridge_version  = coalesce(var.saas_bridge_version, local.cfg.saas_bridge_rotation, 1)
 
   # Services: explicit variable > aws.workload_environments.<env>.services >
   # none. For-expressions (not a conditional) so the differently-typed sources

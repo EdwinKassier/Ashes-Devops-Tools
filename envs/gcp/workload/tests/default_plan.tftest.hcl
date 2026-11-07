@@ -8,6 +8,9 @@
 
 mock_provider "google" {}
 mock_provider "google-beta" {}
+# tfe serves only the SaaS secret bridge (ephemeral "tfe_outputs"); mocked so
+# no run contacts HCP Terraform.
+mock_provider "tfe" {}
 
 variables {
   # Isolate the suite from any committed config/landing-zone.yaml.

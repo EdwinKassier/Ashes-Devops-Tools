@@ -1,0 +1,5 @@
+# Test fixture: saas.bridge_rotation drives the bridged secret's write-only
+# version (root.tftest.hcl, bridge_version_from_config_file).
+version: 1
+saas:
+  bridge_rotation: 4

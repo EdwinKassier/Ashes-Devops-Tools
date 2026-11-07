@@ -73,8 +73,8 @@ variables come from `vercel_*_env_vars`.
 
 A workload root with `enable_saas_secret_bridge = true` copies `supabase_api_url`,
 `supabase_service_role_key` and `supabase_database_password` from `saas-<name>` into a Secrets
-Manager (AWS) or Secret Manager (GCP) secret. List the workload in tfc-admin's
-`extra_remote_state_consumers["saas-<name>"]`: no other workspace can read saas state.
+Manager (AWS) or Secret Manager (GCP) secret. It reads them with `ephemeral "tfe_outputs"` and
+writes them with a write-only argument, so they are in neither the workload's plan nor its state.
 
 **Reader team (an organization owner, once).** Create a team named `saas-outputs-reader` with no
 organization access flags. Put its ID into tfc-admin's `saas_outputs_reader_team_id`. tfc-admin then
@@ -84,14 +84,17 @@ read-outputs`, runs read-only, no variables. Create a team token with a unique d
 workload workspaces that set `enable_saas_secret_bridge`, through tfc-admin's write-only
 `workspace_variables`. tfc-admin never creates the token, so the token is in no state. Rotate it
 like the [tfc-admin token](tfc-admin-token-rotation.md#3-rotate-every-90-days-or-on-any-suspected-exposure).
-The workload bridge reads saas outputs with this token once it moves to the ephemeral
-`tfe_outputs` read. Until then it reads saas state. The secret version is write-only, but the values
-it reads from saas state are stored in the workload's state too (see
-[known gaps](../known-gaps.md#blocked--waiting-on-provider-capability)).
+The bridge reads saas outputs with this token, through the reader team's grant, not through
+remote-state sharing (`extra_remote_state_consumers`). A workload with the bridge off needs no
+`TFE_TOKEN`: its `tfe` provider gets an inert placeholder.
 
 **Rotation counter.** `saas.bridge_rotation` in `config/landing-zone.yaml` (default `1`) is
-published as the non-sensitive `bridge_version` output. A write-only secret argument cannot be
-diffed, so a bridging workload re-pushes the secret only when that number changes.
+published by `saas-<name>` as the non-sensitive `bridge_version` output, and read directly from the
+same file by each bridging workload as its write-only version (`saas_bridge_version` overrides it
+per workload). A write-only secret argument cannot be diffed, so a bridging workload re-pushes the
+secret only when that number changes. Until `saas-<name>` has applied and published the new
+number, the workload's plan fails on purpose (it would otherwise push the old values under the new
+version). Apply `saas-<name>` first, then re-run the workload.
 
 **Rotating the service-role key.** Supabase reissues the anon and service-role keys when you
 generate a new JWT secret (dashboard: Project Settings -> API).
