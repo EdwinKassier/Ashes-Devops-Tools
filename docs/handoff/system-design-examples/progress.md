@@ -73,3 +73,5 @@ REPO GAPS: AWS app-services wires only writer DB_HOST (no Aurora reader endpoint
 Task 8: implemented be9cc61 (5941 words; 4 deep dives per spec entry); review dispatched (opus)
 Ruling: spec entry deep-dive list wins over writer-instructions "2–3" when the spec names more (spec is binding) — cost: longer walkthroughs
 REPO GAPS: AWS app_ingress_mode exposes whole shared ALB (no per-service exposure); no restricted/append-only DB role (AWS hands master secret; GCP runtime SA is IAM DB user); no scheduled-task support (AWS app-services, GCP Cloud Run jobs); GCP Cloud SQL edition default ENTERPRISE caps PITR logs at 7 days
+Task 7: implemented df7e3b4 (5911 words; 156 snippet lines); review dispatched (opus)
+REPO GAPS: edge-security has no rate-based WAF rule and its web ACL lacks ignore_changes=[rule] for aws_wafv2_web_acl_rule; GCP environment stage doesn't pass Cloud Armor custom_rules; repo api-gateway module is HTTP API (no per-client limits)
