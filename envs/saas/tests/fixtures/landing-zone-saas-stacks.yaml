@@ -7,6 +7,7 @@ saas:
   workspaces: [web]
   supabase: true
   vercel: true
+  bridge_rotation: 3
   defaults:
     supabase:
       organization_id: acmeorgid1234

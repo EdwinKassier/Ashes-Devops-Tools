@@ -274,3 +274,17 @@ variable "stack" {
   type        = string
   default     = null
 }
+
+variable "bridge_rotation" {
+  description = "Rotation counter published as the non-sensitive bridge_version output. A workload that bridges this workspace's Supabase secrets feeds it to its write-only *_wo_version, so bumping it (after rotating the database password or service-role key) re-pushes the bridged secret on the workload's next apply. Null = saas.bridge_rotation from config/landing-zone.yaml, else 1."
+  type        = number
+  default     = null
+
+  validation {
+    condition = (
+      floor(coalesce(var.bridge_rotation, local.cfg.bridge_rotation, 1)) == coalesce(var.bridge_rotation, local.cfg.bridge_rotation, 1) &&
+      coalesce(var.bridge_rotation, local.cfg.bridge_rotation, 1) >= 1
+    )
+    error_message = "bridge_rotation (or saas.bridge_rotation in config/landing-zone.yaml) must be a whole number >= 1."
+  }
+}

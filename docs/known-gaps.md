@@ -542,6 +542,33 @@ side (all mock-tested, secure defaults):
   legacy sensitive inputs stay for backward compatibility. Vercel env-var inputs
   cannot be ephemeral: they also feed the `for_each` keys and the stored fingerprints.
 
+- **S-M3 — SaaS bridge secrets in workload state (waiting on Terraform 1.17
+  test mocking).** With `enable_saas_secret_bridge`, `envs/aws/workload` and
+  `envs/gcp/workload` read the Supabase service-role key and database password
+  through `data "terraform_remote_state" "saas"`, so the values are in the
+  workload's state. AWS also stores them in `secret_string`. The fix is ready:
+  `ephemeral "tfe_outputs"` (tfe >= 0.65) feeds `secret_string_wo` (AWS) and
+  the secret-manager module's `ephemeral_secret_values` (GCP). The non-ephemeral
+  `data "tfe_outputs"` reads `bridge_version` (from `saas.bridge_rotation`)
+  for `*_wo_version`, and the token is the hand-created `saas-outputs-reader`
+  team's (`saas_outputs_reader_team_id`). The saas `bridge_version` output and
+  the tfc-admin reader grant are in place. What blocks it is the test toolchain.
+  Terraform 1.14 (the CI pin) cannot test a root that contains an ephemeral
+  resource offline. `mock_provider` rejects every ephemeral resource type at
+  validation, even at `count = 0`. `override_resource`, `override_data` and
+  `override_module` cannot target one. A real `tfe` provider contacts the
+  HCP Terraform host when it is configured. Adding the block would therefore
+  break every test suite of both workload roots. It lands with the Terraform
+  1.17 toolchain, which mocks ephemeral resources.
+- **SaaS secrets stay in `saas-*` state (provider limitation).**
+  `supabase_project` has no write-only `database_password`, so the creation-time
+  password is in the `saas-<name>` state and its `supabase_database_password`
+  output. The service-role key is in the same state as a data-source result and
+  an output. Access to that state is limited to the `saas-*` workspace's
+  writers, the listed `extra_remote_state_consumers` and the
+  `saas-outputs-reader` team (outputs only). Rotation: see
+  [saas-bootstrap](runbooks/saas-bootstrap.md#bridging-secrets-to-a-workload-and-rotating-them).
+
 ## DECISION — needs a human call
 
 - **Behaviour-changing security defaults** (not applied, would change posture):

@@ -305,6 +305,11 @@ saas:
   # Provider toggles for the saas root (enable_supabase / enable_vercel).
   supabase: true
   vercel: true
+  # Rotation counter for the workload secret bridge (enable_saas_secret_bridge),
+  # published as the saas bridge_version output. Bump it after rotating the
+  # Supabase database password or service-role key, then re-apply saas-<name>
+  # and each bridging workload. See docs/runbooks/saas-bootstrap.md.
+  bridge_rotation: 1
   # Per-stack settings for saas-<name> workspaces (stack = <name>): saas.stacks
   # wins over saas.defaults, and an explicit TFC variable wins over both. IDs and
   # names only. The Supabase database password stays a sensitive TFC variable

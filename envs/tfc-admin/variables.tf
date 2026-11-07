@@ -458,6 +458,17 @@ variable "tfc_admin_team_id" {
   }
 }
 
+variable "saas_outputs_reader_team_id" {
+  description = "TFC team ID (team-...) of the hand-created saas-outputs-reader team. It gets custom access on every saas-<name> workspace with state_versions = read-outputs (no state download, no variables, runs read-only) and nothing else. Its team token, created by an owner with an expiry and stored as a sensitive TFE_TOKEN only on workload workspaces that set enable_saas_secret_bridge, lets the workload secret bridge read saas outputs; tfc-admin never creates that token, so it is in no state. Must differ from every other team input. Null = no grant."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.saas_outputs_reader_team_id == null || can(regex("^team-[A-Za-z0-9]+$", var.saas_outputs_reader_team_id))
+    error_message = "saas_outputs_reader_team_id must be a TFC team ID (team-...)."
+  }
+}
+
 variable "viewer_team_ids" {
   description = "TFC team IDs (team-...) granted READ on every landing-zone project."
   type        = list(string)

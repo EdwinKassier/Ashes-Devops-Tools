@@ -28,6 +28,12 @@ run "saas_noop_plans_credential_free" {
     condition     = output.supabase_project_id == null && output.vercel_project_id == null
     error_message = "a no-op SaaS root (both features off) must plan with null supabase/vercel outputs"
   }
+
+  # Empty config: the bridge version signal defaults to 1 (today's behaviour).
+  assert {
+    condition     = output.bridge_version == 1
+    error_message = "with no saas.bridge_rotation, bridge_version must default to 1."
+  }
 }
 
 # Supabase enabled, Vercel off: the Supabase side composes; the Vercel output is

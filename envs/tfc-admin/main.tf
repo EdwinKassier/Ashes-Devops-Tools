@@ -591,6 +591,13 @@ resource "terraform_data" "input_contract" {
       error_message = "security_team_id must differ from platform_team_id and control_plane_approvers_team_id: the security team alone applies gcp-guardrails, which contains the platform's own automation identity."
     }
     precondition {
+      condition = var.saas_outputs_reader_team_id == null || !contains(
+        concat(compact([var.platform_team_id, var.control_plane_approvers_team_id, var.security_team_id, var.tfc_admin_team_id]), var.viewer_team_ids),
+        var.saas_outputs_reader_team_id,
+      )
+      error_message = "saas_outputs_reader_team_id must be a dedicated team (not platform_team_id, control_plane_approvers_team_id, security_team_id, tfc_admin_team_id or a viewer_team_ids entry): its token sits on workload workspaces, so it must carry read-outputs on saas-* workspaces and nothing else."
+    }
+    precondition {
       condition     = local.gcp_project_prefix == null || can(regex("^[a-z][a-z0-9-]{0,9}$", coalesce(local.gcp_project_prefix, "a")))
       error_message = "The GCP prefix (gcp_project_prefix, else org.prefix in config/landing-zone.yaml) must start with a lowercase letter, contain only lowercase letters, digits and hyphens, and be 10 characters or fewer (the gcp-bootstrap project_prefix rule)."
     }
@@ -679,6 +686,27 @@ resource "tfe_team_access" "platform_workload" {
   team_id      = var.platform_team_id
   workspace_id = module.workspace[each.key].id
   access       = "write"
+}
+
+# SaaS bridge reader: the hand-created saas-outputs-reader team reads saas-*
+# outputs (state_versions = read-outputs) and nothing else. Its team token is
+# the TFE_TOKEN of workload workspaces that set enable_saas_secret_bridge; an
+# owner creates it by hand with an expiry (docs/runbooks/saas-bootstrap.md),
+# so it never enters this root's state.
+resource "tfe_team_access" "saas_outputs_reader" {
+  for_each = var.saas_outputs_reader_team_id == null ? toset([]) : toset(keys(local.saas))
+
+  team_id      = var.saas_outputs_reader_team_id
+  workspace_id = module.workspace[each.key].id
+
+  permissions {
+    runs              = "read"
+    variables         = "none"
+    state_versions    = "read-outputs"
+    sentinel_mocks    = "none"
+    workspace_locking = false
+    run_tasks         = false
+  }
 }
 
 # Explicit apply grant for the team that owns tfc-admin's token. That team's

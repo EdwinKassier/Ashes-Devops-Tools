@@ -1404,3 +1404,83 @@ run "effective_prefix_format_validated" {
 
   expect_failures = [terraform_data.input_contract]
 }
+
+# SaaS bridge reader: a hand-created team whose token (TFE_TOKEN on bridging
+# workload workspaces only) reads saas-* outputs and nothing else. tfc-admin
+# grants the access; it never creates the token.
+run "saas_outputs_reader_default_off" {
+  command = plan
+
+  assert {
+    condition     = length(tfe_team_access.saas_outputs_reader) == 0
+    error_message = "without saas_outputs_reader_team_id no saas outputs-reader grant may exist."
+  }
+}
+
+run "saas_outputs_reader_reads_saas_outputs_only" {
+  command = plan
+
+  variables {
+    saas_workspaces             = ["web", "admin"]
+    saas_outputs_reader_team_id = "team-saasreader1"
+  }
+
+  assert {
+    condition     = toset(keys(tfe_team_access.saas_outputs_reader)) == toset(["saas-web", "saas-admin"])
+    error_message = "the outputs-reader team gets one grant per saas-* workspace and no other workspace."
+  }
+
+  assert {
+    condition = alltrue([
+      for k, a in tfe_team_access.saas_outputs_reader :
+      a.team_id == "team-saasreader1" &&
+      a.permissions[0].state_versions == "read-outputs" &&
+      a.permissions[0].runs == "read" &&
+      a.permissions[0].variables == "none" &&
+      a.permissions[0].sentinel_mocks == "none" &&
+      !a.permissions[0].workspace_locking &&
+      !a.permissions[0].run_tasks
+    ])
+    error_message = "the outputs-reader grant is custom read-outputs: no state download, no variables, no runs beyond read, no locking or run tasks."
+  }
+
+  assert {
+    condition     = length([for k, g in tfe_team_project_access.this : k if g.team_id == "team-saasreader1"]) == 0
+    error_message = "the outputs-reader team must get no project-level grant."
+  }
+}
+
+run "saas_outputs_reader_needs_saas" {
+  command = plan
+
+  variables {
+    enable_saas                 = false
+    saas_outputs_reader_team_id = "team-saasreader1"
+  }
+
+  assert {
+    condition     = length(tfe_team_access.saas_outputs_reader) == 0
+    error_message = "with no saas-* workspaces the outputs-reader team gets nothing."
+  }
+}
+
+run "saas_outputs_reader_must_be_dedicated" {
+  command = plan
+
+  variables {
+    platform_team_id            = "team-same1"
+    saas_outputs_reader_team_id = "team-same1"
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+run "saas_outputs_reader_team_id_format" {
+  command = plan
+
+  variables {
+    saas_outputs_reader_team_id = "saas-reader"
+  }
+
+  expect_failures = [var.saas_outputs_reader_team_id]
+}

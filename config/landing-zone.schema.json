@@ -1188,6 +1188,10 @@
         "vercel": {
           "type": "boolean"
         },
+        "bridge_rotation": {
+          "type": "integer",
+          "minimum": 1
+        },
         "defaults": {
           "type": "object",
           "properties": {
