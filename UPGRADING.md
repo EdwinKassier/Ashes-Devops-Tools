@@ -644,6 +644,102 @@ Applies to workloads with `enable_saas_secret_bridge = true`.
 
 ### All clouds
 
+#### Terraform 1.17
+
+**Breaking for every fork.** Every `versions.tf` now requires
+`>= 1.17, < 2.0` (CI, `.tool-versions` and `.terraform-version` pin 1.17.1).
+An older CLI fails at `terraform init`.
+
+Manual steps:
+
+1. **Local CLI.** Install Terraform 1.17.1 (`scripts/setup.sh` reads
+   `.tool-versions`). Pin it in any fork-owned pipeline that runs `terraform`.
+2. **HCP Terraform workspaces.** Each workspace's `terraform_version` must
+   allow 1.17. tfc-admin's `terraform_version` default moves from `~> 1.9` to
+   `~> 1.17`, so apply `tfc-admin` first: it bumps every workspace it manages.
+   (HCP resolves a constraint to the newest matching release, so a workspace on
+   the old `~> 1.9` default may already run 1.17; the bump makes the floor
+   explicit. A workspace pinned to an exact older version fails until bumped.)
+   If you set `terraform_version` yourself (tfvars or a TFC variable on
+   tfc-admin), raise it to `~> 1.17`. Bump by hand any workspace tfc-admin does
+   not manage, including tfc-admin's own workspace when
+   `manage_tfc_admin_workspace = false`.
+3. **No way back.** A state written by 1.17 cannot be read by an older CLI.
+   Roll the CLI forward everywhere before the first 1.17 apply.
+
+What else changes on the next plan:
+
+- **Deprecation warnings (no plan change).** Compatibility inputs now carry
+  Terraform's `deprecated` attribute, so setting one prints a "Deprecated
+  variable got a value" warning that names the replacement. Nothing else
+  changes. The inputs:
+  - the 81 removed variables in `envs/gcp/organization/deprecated_inputs.tf`
+    and `envs/aws/security/deprecated_inputs.tf` (setting one still fails the
+    plan through the removed-inputs guard);
+  - `config_role_arn` and `create_config_service_linked_role` on
+    `envs/aws/workload` and `modules/aws/stages/workload`. The root no longer
+    passes them to the stage, which replaces the stage's warning `check`;
+  - `vpn_shared_secret` on `modules/gcp/stages/net-hub` (use
+    `vpn_shared_secret_wo`).
+
+  Root-module outputs cannot be deprecated (Terraform rejects it), and a module
+  output marked deprecated fails `terraform validate` on the module. The
+  individual producer outputs and `guardrail_deny_policy_specs` therefore keep
+  their "Deprecated" description only. `network/vpn` `shared_secret` is not
+  marked either, because `stages/net-hub` always passes it, and the warning
+  would then fire on every hub plan. All of them are still removed at v1.0.
+- **Typed `contract` outputs (no resource change).** Each producer's
+  `output "contract"` declares its exact object type. The JSON is unchanged.
+  The map-valued keys (`account_ids`, `ou_ids`, `folders`, `project_ids` and
+  others) are now stored as maps rather than objects. In-repo consumers already
+  read them through `tomap()`. A fork root that compares a contract key with
+  `==` against an object literal must compare `jsonencode()` values instead.
+  If you add a key to a producer's `local.contract`, add it to the output's
+  `type` too, or the conversion drops it; `make consistency` catches the
+  mismatch.
+- **`import` blocks stay in the roots.** `make consistency` now fails on an
+  `import` block inside `modules/` or `templates/`: a module-level import is
+  inherited by every caller. Put adoption `import` blocks in the root (see
+  [gcp-brownfield-adoption](docs/runbooks/gcp-brownfield-adoption.md)).
+
+#### SaaS secret bridge reads ephemerally (aws-workload-&lt;env&gt;, gcp-workload-&lt;env&gt;)
+
+Applies to workloads with `enable_saas_secret_bridge = true`. Workloads with
+the bridge off see no change and need no new token.
+
+`data.terraform_remote_state.saas` is gone. The workload now reads the Supabase
+outputs with `ephemeral "tfe_outputs" "saas"` and writes them with the existing
+write-only arguments, so the service-role key and database password are no
+longer stored in the workload's plan or state. The first apply drops the old
+data source from state. Older state versions in HCP Terraform still hold the
+values: rotate the bridged secrets
+([saas-bootstrap](docs/runbooks/saas-bootstrap.md#bridging-secrets-to-a-workload-and-rotating-them))
+if that history matters to you.
+
+Before the first plan:
+
+1. **`TFE_TOKEN` is now required** on every bridging workspace: the
+   `saas-outputs-reader` team token, set as described in the runbook. Without
+   it the `tfe` provider fails to configure. The bridge reads through that
+   team's `read-outputs` grant, not through remote-state sharing.
+2. **The version source moved.** The write-only version cannot come from an
+   ephemeral read, and any non-ephemeral read of the saas workspace stores all
+   of its outputs. The version therefore comes from `saas.bridge_rotation` in
+   `config/landing-zone.yaml`, the same key the saas root publishes as
+   `bridge_version`. A new `saas_bridge_version` variable overrides it per
+   workload. If you set `bridge_rotation` as a variable on a `saas-<name>`
+   workspace instead of in the config file, set the same number as
+   `saas_bridge_version` on its bridging workloads.
+3. **Mismatch fails the plan.** A postcondition on the ephemeral read fails
+   the workload plan while the saas workspace publishes a different
+   `bridge_version`. After a rotation bump, apply `saas-<name>` first, then
+   re-run the workloads. Until then, any workload run fails, by design: it
+   would otherwise push the old values under the new version.
+
+The plan shows no change to the secret: the version stays the same, and the
+GCP secret moves to the secret-manager module's ephemeral path under the same
+address. Both workload lockfiles gain `hashicorp/tfe` 0.83.0.
+
 #### Object pass-through: `gcp_overrides` (gcp-organization) and `aws_overrides` (aws-security)
 
 **Breaking for anyone who sets these roots' variables** in a tfvars file, a TFC

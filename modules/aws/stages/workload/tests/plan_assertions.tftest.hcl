@@ -143,10 +143,6 @@ run "composes_workload_edge_enabled" {
 run "no_workload_recorder_resource" {
   command = plan
 
-  variables {
-    config_role_arn = null
-  }
-
   assert {
     condition     = output.config_role_arn == null
     error_message = "the workload stage must not plan a Config recorder (aws-organization's StackSet owns it)"

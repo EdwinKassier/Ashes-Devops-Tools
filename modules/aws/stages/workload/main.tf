@@ -214,15 +214,6 @@ removed {
   }
 }
 
-# config_role_arn / create_config_service_linked_role are deprecated (no
-# recorder here any more) and removed in v1.0; warn when a caller still sets them.
-check "config_recorder_inputs_deprecated" {
-  assert {
-    condition     = var.config_role_arn == null && var.create_config_service_linked_role
-    error_message = "config_role_arn and create_config_service_linked_role are ignored: the workload Config recorder is deployed by aws-organization (enable_org_config_recorders). Remove them; they are deleted in v1.0."
-  }
-}
-
 # ---------------------------------------------------------------------------
 # Systems Manager — optional (Session Manager, patch baseline, inventory)
 # ---------------------------------------------------------------------------

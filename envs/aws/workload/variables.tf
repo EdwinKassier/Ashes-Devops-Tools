@@ -159,7 +159,9 @@ variable "security_workspace_name" {
   default     = "aws-security"
 }
 
+# tflint-ignore: terraform_unused_declarations # deprecated and ignored, kept so a set value warns until v1.0
 variable "config_role_arn" {
+  deprecated  = "Ignored: the Config recorder is deployed by aws-organization's recorder StackSet (enable_org_config_recorders). Remove this input; it is deleted in v1.0."
   description = "Deprecated and ignored: the account's Config recorder is deployed by aws-organization's recorder StackSet (enable_org_config_recorders). Removed in v1.0."
   type        = string
   default     = null
@@ -170,7 +172,9 @@ variable "config_role_arn" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations # deprecated and ignored, kept so a set value warns until v1.0
 variable "create_config_service_linked_role" {
+  deprecated  = "Ignored: the Config recorder is deployed by aws-organization's recorder StackSet (enable_org_config_recorders). Remove this input; it is deleted in v1.0."
   description = "Deprecated and ignored: the account's Config recorder is deployed by aws-organization's recorder StackSet (enable_org_config_recorders). Removed in v1.0."
   type        = bool
   default     = true

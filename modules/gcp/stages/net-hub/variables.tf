@@ -253,6 +253,7 @@ variable "ncc" {
 }
 
 variable "vpn_shared_secret" {
+  deprecated  = "Stored in state. Set vpn_shared_secret_wo (write-only; bump vpn_shared_secret_wo_version to rotate) instead; this input is removed in v1.0."
   description = "HA VPN pre-shared key, stored in state (legacy). Prefer vpn_shared_secret_wo, which never enters state. Set exactly one of the two when vpn.enabled is true."
   type        = string
   default     = null

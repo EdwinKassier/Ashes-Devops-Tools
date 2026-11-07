@@ -87,7 +87,7 @@ The following resources are created:
 
 - resource.aws_ebs_default_kms_key.home (modules/aws/stages/workload/main.tf#L193)
 - resource.aws_ec2_transit_gateway_vpc_attachment.spoke (modules/aws/stages/workload/main.tf#L138)
-- resource.aws_vpc_block_public_access_exclusion.public_ingress (modules/aws/stages/workload/main.tf#L277)
+- resource.aws_vpc_block_public_access_exclusion.public_ingress (modules/aws/stages/workload/main.tf#L268)
 - data source.aws_caller_identity.current (modules/aws/stages/workload/main.tf#L48)
 - data source.aws_partition.current (modules/aws/stages/workload/main.tf#L52)
 

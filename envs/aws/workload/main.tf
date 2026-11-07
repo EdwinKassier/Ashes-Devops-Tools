@@ -121,11 +121,9 @@ module "aws_workload" {
 
   # Flow logs + Config snapshots + Session Manager logs all land in the central
   # log-archive bucket (cross-root naming contract).
-  flow_log_destination_arn          = "arn:${local.partition}:s3:::${local.log_archive_bucket_name}"
-  log_archive_bucket_name           = local.log_archive_bucket_name
-  config_role_arn                   = var.config_role_arn
-  create_config_service_linked_role = var.create_config_service_linked_role
-  kms_key_arn                       = local.kms_key_arn # kms.tf: created unless supplied
+  flow_log_destination_arn = "arn:${local.partition}:s3:::${local.log_archive_bucket_name}"
+  log_archive_bucket_name  = local.log_archive_bucket_name
+  kms_key_arn              = local.kms_key_arn # kms.tf: created unless supplied
   # A CMK created in this plan has an unknown ARN: let the stage set the
   # default EBS key with a plan-safe count (home region, where the key lives).
   enable_ebs_default_kms_key = local.create_kms_key ? true : null

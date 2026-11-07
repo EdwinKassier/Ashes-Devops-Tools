@@ -84,7 +84,7 @@ module "example" {
 The following resources are created:
 
 
-- resource.terraform_data.removed_inputs_guard (envs/gcp/organization/deprecated_inputs.tf#L292)
+- resource.terraform_data.removed_inputs_guard (envs/gcp/organization/deprecated_inputs.tf#L343)
 - resource.terraform_data.starter_requires_budget (envs/gcp/organization/main.tf#L104)
 - data source.google_billing_account.billing (envs/gcp/organization/data.tf#L33)
 - data source.google_organization.org (envs/gcp/organization/data.tf#L27)

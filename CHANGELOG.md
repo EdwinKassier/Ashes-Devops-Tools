@@ -41,6 +41,18 @@ release metadata for a Terraform Cloud run.
   fixes app-services services that share a repository with different ref/environment pins: each
   deploy SA is now reachable only by its own tuple. **Breaking:** see [UPGRADING.md](UPGRADING.md).
 
+#### Toolchain
+
+- **Terraform 1.17.** Every `versions.tf` requires `>= 1.17, < 2.0`, and CI pins 1.17.1.
+  tfc-admin's workspace `terraform_version` default is `~> 1.17`. Compatibility inputs carry
+  `deprecated`. Producer `contract` outputs are typed, and `check-contracts.sh` compares their
+  type keys with `local.contract`. `check-consistency.sh` guards the version pins and rejects
+  `import` blocks in modules. **Breaking:** see [UPGRADING.md](UPGRADING.md).
+- **SaaS bridge secrets never reach workload state (S-M3).** The workload roots read the saas
+  outputs with `ephemeral "tfe_outputs"`. The write-only version comes from `saas.bridge_rotation`
+  (or the new `saas_bridge_version`), and a postcondition fails the plan until the saas workspace
+  publishes the same `bridge_version`. Upgrade steps: `UPGRADING.md`.
+
 ### Wave A of the [2026-11-06 enterprise boilerplate audit](docs/audit/archive/2026-11-06-enterprise-boilerplate-audit.md)
 
 - **The management aws-security role cannot disable org detection (S-H1).** Disabling delegated
