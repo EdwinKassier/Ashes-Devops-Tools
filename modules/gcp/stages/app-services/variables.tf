@@ -398,12 +398,14 @@ variable "services" {
   }
 
   validation {
-    # ref / environment become exact principalSet attribute values.
+    # ref / environment become exact principalSet attribute values. environment
+    # is the last '/'-joined part of repo_ref_env, so a '/' in it would make
+    # two different (ref, environment) pairs map to the same value.
     condition = alltrue([for k, s in var.services : s.github == null || (
       (try(s.github.ref, null) == null || can(regex("^[A-Za-z0-9_./-]+$", s.github.ref))) &&
-      (try(s.github.environment, null) == null || (can(regex("^[A-Za-z0-9_./-]+$", s.github.environment)) && try(s.github.environment, null) != "-"))
+      (try(s.github.environment, null) == null || (can(regex("^[A-Za-z0-9_.-]+$", s.github.environment)) && try(s.github.environment, null) != "-"))
     )])
-    error_message = "services[*].github.ref and .environment may contain only letters, digits, '_', '.', '/' and '-' (no wildcards, quotes or spaces), and environment may not be \"-\" (the value a token without an environment claim maps to)."
+    error_message = "services[*].github.ref may contain only letters, digits, '_', '.', '/' and '-', and .environment only letters, digits, '_', '.' and '-' (no '/', wildcards, quotes or spaces); environment may not be \"-\" (the value a token without an environment claim maps to)."
   }
 
   validation {

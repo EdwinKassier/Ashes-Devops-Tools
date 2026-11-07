@@ -92,6 +92,19 @@ run "rejects_environment_with_space" {
   expect_failures = [var.services]
 }
 
+# environment is the last '/'-joined part of repo_ref_env: a '/' would let
+# ref "refs/heads/a" + env "b/c" collide with ref "refs/heads/a/b" + env "c".
+run "rejects_environment_with_slash" {
+  command = plan
+
+  variables {
+    enable_app_deploy_wif = true
+    services              = { api = { github = { repository_id = "123", environment = "prod/eu" } } }
+  }
+
+  expect_failures = [var.services]
+}
+
 # "-" is the mapped value of a token WITHOUT an environment claim.
 run "rejects_environment_sentinel" {
   command = plan
