@@ -41,3 +41,4 @@ Tasks 3,4,5: writers hit the 5-hour usage limit (resets 18:10 Europe/London); pa
 Task 2: fix round 1 sent to primer implementer (18:12)
 Tasks 3,4,5: writers resumed after limit reset (18:12), told GCP region = local.env_config.region
 Ruling: GCP region-scoped resources in all snippets use local.env_config.region (not local.region) — subnet and CMEK must match the service region — cost: none
+Task 2: fix round 1 committed f342691; scoped re-review dispatched
