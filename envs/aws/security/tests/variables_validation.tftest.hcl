@@ -13,15 +13,17 @@ variables {
   landing_zone_config_path = ""
   landing_zone_name        = "acme"
   management_account_id    = "111111111111"
-  log_archive_bucket_name  = "acme-org-log-archive"
   # Security Lake off so meta_store_manager_role_arn is not exercised by default.
-  enable_security_lake = false
   organization_contract = {
     organization_id       = "o-abcdefghij"
     organization_root_id  = "r-abcd"
     management_account_id = "111111111111"
     account_ids           = { security_tooling = "222222222222", log_archive = "333333333333", shared_services = "444444444444", forensics = "555555555555" }
     account_role_arns     = { security_tooling = "arn:aws:iam::222222222222:role/cross-account", log_archive = "arn:aws:iam::333333333333:role/cross-account", forensics = "arn:aws:iam::555555555555:role/cross-account" }
+  }
+  aws_overrides = {
+    log_archive_bucket_name = "acme-org-log-archive"
+    enable_security_lake    = false
   }
 }
 
@@ -40,20 +42,22 @@ run "accepts_valid_values" {
   command = plan
 
   variables {
-    aws_region                = "eu-west-1"
-    aws_enabled_regions       = ["eu-west-1", "us-east-1"]
-    key_admin_arn             = "arn:aws:iam::111111111111:user/kms-admin"
-    kms_key_user_arns         = { log_archive = ["arn:aws:iam::333333333333:role/log-reader"], security_tooling = [] }
-    config_role_arn           = "arn:aws:iam::222222222222:role/aws-config-recorder"
-    aggregator_role_arn       = "arn:aws:iam::222222222222:role/aws-config-aggregator"
-    break_glass_role_arn      = "arn:aws:iam::111111111111:role/OrganizationBreakGlass"
-    notification_subscribers  = { soc = { protocol = "https", endpoint = "https://soc.example.com/hook" } }
-    enabled_security_services = ["macie", "inspector", "detective", "resource-explorer"]
-    cloudtrail_s3_data_events = "all"
-    profile                   = "starter"
-    cost_center               = "security"
-    owner                     = "secops"
-    default_tags              = { DataClass = "restricted" }
+    aws_region   = "eu-west-1"
+    profile      = "starter"
+    cost_center  = "security"
+    owner        = "secops"
+    default_tags = { DataClass = "restricted" }
+    aws_overrides = merge(var.aws_overrides, {
+      aws_enabled_regions       = ["eu-west-1", "us-east-1"]
+      key_admin_arn             = "arn:aws:iam::111111111111:user/kms-admin"
+      kms_key_user_arns         = { log_archive = ["arn:aws:iam::333333333333:role/log-reader"], security_tooling = [] }
+      config_role_arn           = "arn:aws:iam::222222222222:role/aws-config-recorder"
+      aggregator_role_arn       = "arn:aws:iam::222222222222:role/aws-config-aggregator"
+      break_glass_role_arn      = "arn:aws:iam::111111111111:role/OrganizationBreakGlass"
+      notification_subscribers  = { soc = { protocol = "https", endpoint = "https://soc.example.com/hook" } }
+      enabled_security_services = ["macie", "inspector", "detective", "resource-explorer"]
+      cloudtrail_s3_data_events = "all"
+    })
   }
 
   assert {
@@ -78,8 +82,10 @@ run "accepts_meta_store_manager_role_arn" {
   command = plan
 
   variables {
-    enable_security_lake        = true
-    meta_store_manager_role_arn = "arn:aws:iam::222222222222:role/AmazonSecurityLakeMetaStoreManager"
+    aws_overrides = merge(var.aws_overrides, {
+      enable_security_lake        = true
+      meta_store_manager_role_arn = "arn:aws:iam::222222222222:role/AmazonSecurityLakeMetaStoreManager"
+    })
   }
 
   assert {
@@ -92,7 +98,9 @@ run "accepts_each_s3_data_events_mode" {
   command = plan
 
   variables {
-    cloudtrail_s3_data_events = "none"
+    aws_overrides = merge(var.aws_overrides, {
+      cloudtrail_s3_data_events = "none"
+    })
   }
 }
 
@@ -111,6 +119,11 @@ run "defaults_apply_when_unset" {
 # -----------------------------------------------------------------------------
 # Rejecting runs
 # -----------------------------------------------------------------------------
+#
+# The aws_overrides keys (regions, bucket name, ARNs, subscribers, services, data
+# events) are validated by the stage's aws object; a root test cannot expect a
+# child-module failure, so their rejecting runs are in
+# modules/aws/stages/security/tests/variables_validation.tftest.hcl.
 
 run "rejects_non_12_digit_contract_account_id" {
   command = plan
@@ -156,126 +169,6 @@ run "rejects_invalid_aws_region" {
   }
 
   expect_failures = [var.aws_region]
-}
-
-run "rejects_empty_aws_enabled_regions" {
-  command = plan
-
-  variables {
-    aws_enabled_regions = []
-  }
-
-  expect_failures = [var.aws_enabled_regions]
-}
-
-run "rejects_unset_log_archive_bucket_name" {
-  command = plan
-
-  variables {
-    log_archive_bucket_name = null
-  }
-
-  expect_failures = [var.log_archive_bucket_name]
-}
-
-run "rejects_blank_log_archive_bucket_name" {
-  command = plan
-
-  variables {
-    log_archive_bucket_name = "   "
-  }
-
-  expect_failures = [var.log_archive_bucket_name]
-}
-
-run "rejects_group_arn_as_key_admin" {
-  command = plan
-
-  variables {
-    key_admin_arn = "arn:aws:iam::111111111111:group/kms-admins"
-  }
-
-  expect_failures = [var.key_admin_arn]
-}
-
-run "rejects_unknown_kms_key_user_key" {
-  command = plan
-
-  variables {
-    kms_key_user_arns = { audit = ["arn:aws:iam::333333333333:role/log-reader"] }
-  }
-
-  expect_failures = [var.kms_key_user_arns]
-}
-
-run "rejects_non_arn_config_role" {
-  command = plan
-
-  variables {
-    config_role_arn = "AWSServiceRoleForConfig"
-  }
-
-  expect_failures = [var.config_role_arn]
-}
-
-run "rejects_non_arn_aggregator_role" {
-  command = plan
-
-  variables {
-    aggregator_role_arn = "arn:aws:iam::222222222222:policy/aws-config-aggregator"
-  }
-
-  expect_failures = [var.aggregator_role_arn]
-}
-
-run "rejects_non_arn_meta_store_manager_role" {
-  command = plan
-
-  variables {
-    meta_store_manager_role_arn = "AmazonSecurityLakeMetaStoreManager"
-  }
-
-  expect_failures = [var.meta_store_manager_role_arn]
-}
-
-run "rejects_non_arn_break_glass_role" {
-  command = plan
-
-  variables {
-    break_glass_role_arn = "arn:aws:iam::role/OrganizationBreakGlass"
-  }
-
-  expect_failures = [var.break_glass_role_arn]
-}
-
-run "rejects_empty_notification_subscribers" {
-  command = plan
-
-  variables {
-    notification_subscribers = {}
-  }
-
-  expect_failures = [var.notification_subscribers]
-}
-
-run "rejects_unknown_security_service" {
-  command = plan
-
-  variables {
-    enabled_security_services = ["inspector", "guardduty"]
-  }
-
-  expect_failures = [var.enabled_security_services]
-}
-
-run "rejects_unknown_s3_data_events_mode" {
-  command = plan
-
-  variables {
-    cloudtrail_s3_data_events = "write-only"
-  }
-
-  expect_failures = [var.cloudtrail_s3_data_events]
 }
 
 run "rejects_unknown_profile" {

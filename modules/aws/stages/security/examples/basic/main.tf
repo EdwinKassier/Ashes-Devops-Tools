@@ -47,14 +47,17 @@ module "aws_security" {
   shared_services_account_id  = "555555555555"
   forensics_account_id        = "444444444444"
 
-  # key_admin_arn / config_role_arn / aggregator_role_arn omitted: each CMK is
-  # administered by its own account's tfc-apply role, and the Config SLR + org
-  # aggregator role are created by the stage.
-  log_archive_bucket_name     = "ashes-org-log-archive"
-  meta_store_manager_role_arn = "arn:aws:iam::222222222222:role/AmazonSecurityLakeMetaStoreManager"
-  break_glass_role_arn        = "arn:aws:iam::111111111111:role/break-glass"
+  # Every tuning input sits in one object (the aws section); unset keys take
+  # the stage defaults. key_admin_arn / config_role_arn / aggregator_role_arn
+  # omitted: each CMK is administered by its own account's tfc-apply role, and
+  # the Config SLR + org aggregator role are created by the stage.
+  aws = {
+    log_archive_bucket_name     = "ashes-org-log-archive"
+    meta_store_manager_role_arn = "arn:aws:iam::222222222222:role/AmazonSecurityLakeMetaStoreManager"
+    break_glass_role_arn        = "arn:aws:iam::111111111111:role/break-glass"
 
-  notification_subscribers = {
-    secops = { protocol = "email", endpoint = "secops@example.com" }
+    notification_subscribers = {
+      secops = { protocol = "email", endpoint = "secops@example.com" }
+    }
   }
 }

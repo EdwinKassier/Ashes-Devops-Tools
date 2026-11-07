@@ -84,10 +84,10 @@ apply or a human decision. Enable them per environment, highest-value first.
 
 | Control | Enable with | File | Apply-time risk |
 |---|---|---|---|
-| IAM Deny policies (GCP) | populate `iam_deny_policies` | `envs/gcp/organization` → `modules/gcp/iam/deny-policy` | Ships empty (inert). Define deny rules carefully: a deny applies before allow and can block legitimate automation. Test in a non-prod org first. |
+| IAM Deny policies (GCP) | populate `gcp_overrides.iam_deny_policies` | `envs/gcp/organization` → `modules/gcp/iam/deny-policy` | Ships empty (inert). Define deny rules carefully: a deny applies before allow and can block legitimate automation. Test in a non-prod org first. |
 | Config conformance packs (AWS) | supply a pack to `config-org` | `modules/aws/security/config-org` | Adds per-evaluation cost and may surface many findings at once. Start with one AWS-managed Operational-Best-Practices pack. |
 | CMEK (AWS/GCP) | pass a key ARN/name at the module boundary | per module (e.g. `ecr`, `network-firewall`, `cloud-storage`) | Without a key, encryption falls back to an AWS-owned key or GMEK. Supplying a CMK is safe; requiring it can break a module that is not given one. |
-| **Audit-log WORM lock (GCP)** | `enable_audit_bucket_lock = true` | `envs/gcp/organization` → `cloud-audit-logs` | **IRREVERSIBLE.** A locked retention policy cannot be shortened or removed. Enable only for a compliance regime that requires tamper-proof retention, and only once the retention period is final. This is why it is **not** default-on. |
+| **Audit-log WORM lock (GCP)** | `gcp.enable_audit_bucket_lock: true` (or `gcp_overrides.enable_audit_bucket_lock = true`) | `envs/gcp/organization` → `cloud-audit-logs` | **IRREVERSIBLE.** A locked retention policy cannot be shortened or removed. Enable only for a compliance regime that requires tamper-proof retention, and only once the retention period is final. This is why it is **not** default-on. |
 | AWS CloudTrail → CloudWatch Logs + CIS 4.x alarms | **on by default** (`enable_cloudwatch_logs`) | `modules/aws/stages/security` | The module creates its own rotated, `logs.*`-granted CMK and a KMS-encrypted SNS topic unless you pass `cloudwatch_logs_kms_key_arn`. Subscribe your on-call address. See audit A1/A4. |
 
 The WORM lock is the one item that must stay opt-in: an irreversible default in a
@@ -102,7 +102,7 @@ presets in [`examples/presets/`](../../examples/presets/):
 - Network: `nonprod-aws-network.tfvars` (`az_count = 1`, `enable_network_firewall = false`).
 - Security: `nonprod-aws-security.tfvars` (`enable_security_lake = false`, `enabled_security_services = []`).
 
-Deeper cuts, now exposed as `envs/aws/security` root variables (FinOps F5):
+Deeper cuts, exposed as `envs/aws/security` `aws_overrides` keys (FinOps F5):
 
 - `config_record_all_supported = false` — Config is most expensive in record-all mode.
 - `guardduty_enable_ebs_malware_protection = false` — agentless EBS malware scanning.
@@ -172,7 +172,7 @@ Three refinements close the remaining paths:
 
 ### 2. Deny-policy backstop (audit C2/C3)
 
-`enable_admin_containment = true` (gcp-organization; **on** in
+`gcp_overrides.enable_admin_containment = true` (gcp-organization; **on** in
 `examples/presets/prod-gcp-organization.tfvars`) adds an org-node IAM deny policy
 `contain-admin-identity` with two rules. Both deny `principalSet://goog/public:all`
 and exempt only `containment_exempt_principals` (your break-glass group).
@@ -214,7 +214,7 @@ include them. Each one has an alert instead:
 **Production default.** Containment stays opt-in (it changes how every sink and
 perimeter change is applied), but gcp-organization fails the plan (precondition
 `production_requires_admin_containment`) when any environment is
-`is_production = true` and `enable_admin_containment = false` (the explicit waiver). The WORM lock
+`is_production = true` and `gcp.admin_containment: false` / `gcp_overrides.enable_admin_containment = false` (the explicit waiver). The WORM lock
 (`enable_audit_bucket_lock`) stays a separate opt-in because it is irreversible.
 
 **Operational consequence.** Terraform legitimately calls `sinks.update` and
@@ -290,7 +290,7 @@ denied for the SA, then promote.
 
 ### 3. Dedicated logging project (audit G4/C3)
 
-Set `logging_project_id` and `logging_project_number` (gcp-organization). The
+Set `gcp_overrides.logging_project_id` and `gcp_overrides.logging_project_number` (gcp-organization). The
 following then move out of the admin project into that project:
 
 - the org audit bucket
@@ -386,6 +386,6 @@ and `break_glass_user` are granted as `user:` principals only with
 watched by the break-glass alert either way. For human elevation prefer the
 just-in-time Privileged Access Manager entitlement: `enable_pam = true` in both
 gcp-bootstrap (gives organization-apply `privilegedaccessmanager.admin`) and
-gcp-organization, with `pam_eligible_groups` (requesters) and a disjoint
+gcp-organization (`gcp_overrides.enable_pam`), with `pam_eligible_groups` (requesters) and a disjoint
 `pam_approver_groups`. A grant lasts at most `pam_max_request_duration` (default
 1h) and needs a justification and an approval.

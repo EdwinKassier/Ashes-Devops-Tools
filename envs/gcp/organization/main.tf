@@ -32,7 +32,7 @@ locals {
 
   # Deny-policy ownership follows gcp-bootstrap unless set explicitly; an older
   # bootstrap state without the output means the legacy single-owner model.
-  guardrail_owner_mode = coalesce(var.guardrail_owner_mode, try(local.bootstrap.guardrail_owner_mode, null), "organization")
+  guardrail_owner_mode = coalesce(try(local.gcp.guardrail_owner_mode, null), try(local.bootstrap.guardrail_owner_mode, null), "organization")
 }
 
 # 1. Organization: Hierarchy & Governance
@@ -48,27 +48,24 @@ module "organization" {
   project_prefix       = local.project_prefix
   environments         = local.organization_units
 
-  admin_email                      = local.admin_email
-  break_glass_user                 = var.break_glass_user
-  terraform_admin_email            = local.bootstrap.terraform_admin_email
-  enable_legacy_admin_folder_roles = var.enable_legacy_admin_folder_roles
-  restrict_cloud_run_ingress       = var.restrict_cloud_run_ingress
-  organization_admin_groups        = local.organization_admin_groups
-  billing_admin_groups             = local.billing_admin_groups
+  terraform_admin_email = local.bootstrap.terraform_admin_email
 
-  # Standing admin is group-only; user principals only via the escape hatch.
-  allow_user_principals_for_break_glass = var.allow_user_principals_for_break_glass
-
-  # Just-in-time org admin (Privileged Access Manager), opt-in.
-  enable_pam               = var.enable_pam
-  pam_eligible_groups      = var.pam_eligible_groups
-  pam_approver_groups      = var.pam_approver_groups
-  pam_max_request_duration = var.pam_max_request_duration
+  # Every tuning input: the gcp section (config/landing-zone.yaml gcp.* under
+  # var.gcp_overrides), plus the values this root derives from the estate.
+  gcp = merge(local.gcp, {
+    # Without a break-glass principal the stage is never asked for containment
+    # (it would deny everyone); the contract output's precondition fails the plan.
+    enable_admin_containment      = local.enable_admin_containment && length(local.containment_exempt_principals) > 0
+    containment_exempt_principals = local.containment_exempt_principals
+    # Deny policies are authored and applied by gcp-guardrails (separate) or here
+    # (legacy organization mode).
+    guardrail_owner_mode              = local.guardrail_owner_mode
+    allowed_workload_identity_issuers = coalesce(try(local.gcp.allowed_workload_identity_issuers, null), ["https://${var.tfc_hostname}", "https://token.actions.githubusercontent.com"])
+  })
 
   # Per-environment folder-scoped VPC-SC access policies; each environment's
   # workload SAs get rights on their own policy only. try() keeps an older
   # gcp-bootstrap state (no such outputs) planning with no grants.
-  enable_scoped_access_policies = var.enable_scoped_access_policies
   workload_service_accounts = {
     for env, sas in try(local.bootstrap.workload_service_accounts, {}) : env => sas
     if contains(keys(local.environments), env)
@@ -80,87 +77,21 @@ module "organization" {
   delegated_workload_folder_roles = try(local.bootstrap.delegated_workload_folder_roles, [])
   delegated_network_folder_roles  = try(local.bootstrap.delegated_network_folder_roles, [])
 
-  default_region                        = local.default_region
-  allowed_regions                       = local.allowed_regions
-  strict_folder_policy_environment_keys = var.strict_folder_policy_environment_keys
-  enforce_os_login                      = var.enforce_os_login
-  os_login_exempt_environment_keys      = var.os_login_exempt_environment_keys
-  security_contact_email                = var.security_contact_email
-  billing_contact_email                 = var.billing_contact_email
-  monthly_budget_amount                 = local.monthly_budget_amount
-  budget_threshold_rules                = local.budget_threshold_rules
-  budget_currency                       = var.budget_currency
+  default_region               = local.default_region
+  monthly_budget_amount        = local.monthly_budget_amount
+  budget_threshold_rules       = local.budget_threshold_rules
+  budget_notify_alert_channels = local.notify_budget_channels
 
-  # Dedicated logging project for the org audit sink, bucket, audit
-  # CMEK and control-plane alerts (default null = admin project).
-  logging_project_id     = var.logging_project_id
-  logging_project_number = var.logging_project_number
-
-  # Soft delete on the audit buckets (Object Versioning is always on unless
-  # the WORM lock is enabled, which GCS does not allow together with versioning).
-  audit_soft_delete_retention_days = var.audit_soft_delete_retention_days
-
-  # Control-plane alerting (on by default).
-  enable_control_plane_alerting = var.enable_control_plane_alerting
-  alert_notification_emails     = local.alert_notification_emails
-  budget_notify_alert_channels  = local.notify_budget_channels
-  alert_notification_channels   = var.alert_notification_channels
-  break_glass_principal_emails  = var.break_glass_principal_emails
-  enable_cis_log_metrics        = var.enable_cis_log_metrics
-
-  # Opt-in custom org-policy constraints (default [] = none).
-  custom_org_constraints = var.custom_org_constraints
-
-  # Opt-in WORM lock on the audit-log bucket (default false; irreversible).
-  enable_audit_bucket_lock = local.enable_audit_bucket_lock
-
-  # Opt-in IAM deny policies at the org node (default [] = none). Legacy
-  # organization mode only; in separate mode gcp-guardrails owns them.
-  iam_deny_policies = var.iam_deny_policies
-
-  # Opt-in org-wide CMEK enforcement (default off). The prod-hardening
-  # preset turns this on.
-  enable_cmek_org_policy = var.enable_cmek_org_policy
-  cmek_required_services = var.cmek_required_services
-
-  # Opt-in containment of the automation identity (default off; the prod preset
-  # turns it on, and a check warns when an is_production environment lacks it). Set containment_exempt_principals to your break-glass
-  # principal when enabling — placeholders are rejected.
-  org_policy_overrides                   = var.org_policy_overrides
-  allowed_workload_identity_issuers      = coalesce(var.allowed_workload_identity_issuers, ["https://${var.tfc_hostname}", "https://token.actions.githubusercontent.com"])
-  allowed_workload_identity_aws_accounts = var.allowed_workload_identity_aws_accounts
-  wif_tenant_pin_enforcement             = var.wif_tenant_pin_enforcement
   wif_tenant_pins = {
     tfc_hostname     = var.tfc_hostname
     tfc_organization = var.pin_wif_to_tfc_organization ? local.tfc_organization : null
     github_owner_ids = var.wif_github_owner_ids
   }
 
-  # Without a break-glass principal the stage is never asked for containment
-  # (it would deny everyone); output.admin_containment_enabled fails the plan.
-  enable_admin_containment      = local.enable_admin_containment && length(local.containment_exempt_principals) > 0
-  containment_exempt_principals = local.containment_exempt_principals
-  # Explicit opt-out (variable or gcp.admin_containment: false in config; unset is not a waiver), or the root's own precondition already fails the plan.
-  production_containment_waived = var.enable_admin_containment == false || local.cfg.admin_containment == false || (local.enable_admin_containment && length(local.containment_exempt_principals) == 0)
-
-  # Deny policies are authored and applied by gcp-guardrails (separate) or here
-  # (legacy organization mode).
-  guardrail_owner_mode = local.guardrail_owner_mode
-
-  # Managed org-policy constraints where Google offers a successor.
-  prefer_managed_constraints = var.prefer_managed_constraints
-
-  # Log Analytics bucket + linked BigQuery dataset for the org audit logs.
-  enable_log_analytics         = var.enable_log_analytics
-  log_analytics_retention_days = var.log_analytics_retention_days
-
-  # Org logging settings (default log-bucket location / CMEK), opt-in.
-  enable_logging_organization_settings = var.enable_logging_organization_settings
-  logging_settings_kms_key_name        = var.logging_settings_kms_key_name
-
-  # Principal access boundary for the automation SAs, opt-in.
-  enable_principal_access_boundary            = local.enable_principal_access_boundary
-  principal_access_boundary_allowed_resources = var.principal_access_boundary_allowed_resources
+  # Explicit opt-out (gcp.admin_containment: false in config, or
+  # gcp_overrides.enable_admin_containment = false; unset is not a waiver), or
+  # the root's own precondition already fails the plan.
+  production_containment_waived = local.gcp.enable_admin_containment == false || (local.enable_admin_containment && length(local.containment_exempt_principals) == 0)
 }
 
 # The projects stage (gcp-projects) and network-hub stage (gcp-network-hub) were

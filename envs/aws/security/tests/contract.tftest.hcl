@@ -18,8 +18,10 @@ variables {
   landing_zone_config_path = ""
   landing_zone_name        = "acme"
   management_account_id    = "111111111111"
-  log_archive_bucket_name  = "acme-org-log-archive"
-  enable_security_lake     = false
+  aws_overrides = {
+    log_archive_bucket_name = "acme-org-log-archive"
+    enable_security_lake    = false
+  }
 }
 
 override_module {
@@ -93,7 +95,9 @@ run "config_without_contract_still_reads_remote_state" {
   variables {
     landing_zone_config_path = "tests/fixtures/landing-zone-no-contract.yaml"
     management_account_id    = null
-    log_archive_bucket_name  = null
+    aws_overrides = merge(var.aws_overrides, {
+      log_archive_bucket_name = null
+    })
   }
 
   assert {
@@ -102,7 +106,7 @@ run "config_without_contract_still_reads_remote_state" {
   }
 
   assert {
-    condition     = local.management_account_id == "012345678901" && local.log_archive_bucket_name == "cfgco-org-log-archive"
+    condition     = local.management_account_id == "012345678901" && local.aws.log_archive_bucket_name == "cfgco-org-log-archive"
     error_message = "management_account_id / log_archive_bucket_name must fall back to the config file."
   }
 }
@@ -114,8 +118,10 @@ run "config_contract_replaces_remote_state" {
     landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
     landing_zone_name        = null
     management_account_id    = null
-    log_archive_bucket_name  = null
-    enable_security_lake     = null
+    aws_overrides = merge(var.aws_overrides, {
+      log_archive_bucket_name = null
+      enable_security_lake    = null
+    })
   }
 
   assert {
@@ -137,7 +143,7 @@ run "config_contract_replaces_remote_state" {
       local.landing_zone_name == "cfgco" && local.aws_region == "eu-west-1" &&
       join(",", local.aws_enabled_regions) == "eu-west-1,eu-west-2" &&
       local.management_account_id == "012345678901" &&
-      local.log_archive_bucket_name == "cfgco-org-log-archive"
+      local.aws.log_archive_bucket_name == "cfgco-org-log-archive"
     )
     error_message = "name / region / enabled regions / management account / log-archive bucket must fall back to the config file."
   }
@@ -169,7 +175,7 @@ run "variable_contract_beats_config_contract" {
   }
 
   assert {
-    condition     = local.management_account_id == "111111111111" && local.log_archive_bucket_name == "acme-org-log-archive" && local.landing_zone_name == "acme"
+    condition     = local.management_account_id == "111111111111" && local.aws.log_archive_bucket_name == "acme-org-log-archive" && local.landing_zone_name == "acme"
     error_message = "explicit variables must win over the config file."
   }
 }
@@ -183,8 +189,10 @@ run "emails_feed_security_topic" {
     landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
     landing_zone_name        = null
     management_account_id    = null
-    log_archive_bucket_name  = null
-    enable_security_lake     = null
+    aws_overrides = merge(var.aws_overrides, {
+      log_archive_bucket_name = null
+      enable_security_lake    = null
+    })
   }
 
   assert {
@@ -205,9 +213,11 @@ run "explicit_subscribers_beat_notifications_emails" {
     landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
     landing_zone_name        = null
     management_account_id    = null
-    log_archive_bucket_name  = null
-    enable_security_lake     = null
-    notification_subscribers = { soc = { protocol = "https", endpoint = "https://soc.example.com/hook" } }
+    aws_overrides = merge(var.aws_overrides, {
+      log_archive_bucket_name  = null
+      enable_security_lake     = null
+      notification_subscribers = { soc = { protocol = "https", endpoint = "https://soc.example.com/hook" } }
+    })
   }
 
   assert {
@@ -223,5 +233,58 @@ run "no_section_is_noop" {
   assert {
     condition     = length(local.notification_subscribers) == 1 && local.notification_subscribers["secops"].endpoint == "secops@example.com"
     error_message = "without a notifications section the default placeholder subscriber must be unchanged."
+  }
+}
+
+# Object pass-through precedence: a set aws_overrides key beats the config file
+# (config keys and override-only keys alike) ...
+run "override_wins_over_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    aws_overrides = {
+      log_archive_bucket_name   = "override-org-log-archive"
+      aws_enabled_regions       = ["us-east-1"]
+      enabled_security_services = ["macie"]
+      enable_incident_response  = false
+    }
+  }
+
+  assert {
+    condition     = local.aws.log_archive_bucket_name == "override-org-log-archive" && join(",", local.aws_enabled_regions) == "us-east-1" && local.enabled_security_services == toset(["macie"])
+    error_message = "a set aws_overrides key must win over aws.* in config/landing-zone.yaml and over the profile default."
+  }
+
+  assert {
+    condition     = output.contract.log_archive_bucket_name == "override-org-log-archive"
+    error_message = "the overridden bucket name must reach the stage."
+  }
+}
+
+# ... and an unset (or null) key keeps the config value (or the profile default).
+run "unset_override_keeps_config_value" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    aws_overrides = {
+      log_archive_bucket_name = null
+      aws_enabled_regions     = null
+    }
+  }
+
+  assert {
+    condition     = local.aws.log_archive_bucket_name == "cfgco-org-log-archive" && join(",", local.aws_enabled_regions) == "eu-west-1,eu-west-2" && local.enabled_security_services == toset(["inspector"])
+    error_message = "an unset aws_overrides key must keep the aws.* config value (and the starter profile default)."
+  }
+
+  assert {
+    condition     = output.contract.log_archive_bucket_name == "cfgco-org-log-archive"
+    error_message = "the config bucket name must reach the stage."
   }
 }

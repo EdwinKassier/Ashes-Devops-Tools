@@ -52,12 +52,12 @@ output "contract" {
   # deprecated admin_containment_enabled alias) so they outlive its v1.0 removal.
   precondition {
     condition     = !local.enable_admin_containment || length(local.containment_exempt_principals) > 0
-    error_message = "Admin containment is on (it defaults on when an environment is_production) but no break-glass principal is set, so the deny would lock out everyone. Set gcp.break_glass_group in config/landing-zone.yaml (or containment_exempt_principals), or set enable_admin_containment = false explicitly to run production without it."
+    error_message = "Admin containment is on (it defaults on when an environment is_production) but no break-glass principal is set, so the deny would lock out everyone. Set gcp.break_glass_group in config/landing-zone.yaml (or gcp_overrides.containment_exempt_principals), or set gcp.admin_containment: false (or gcp_overrides.enable_admin_containment = false) explicitly to run production without it."
   }
 
   precondition {
     condition     = !anytrue([for p in local.containment_exempt_principals : can(regex("(?i)(replace-me|your-domain|example\\.(com|org|net)|\\.invalid$|changeme)", p))])
-    error_message = "The break-glass principal (gcp.break_glass_group / containment_exempt_principals) is still a placeholder. Set your real break-glass group."
+    error_message = "The break-glass principal (gcp.break_glass_group / gcp_overrides.containment_exempt_principals) is still a placeholder. Set your real break-glass group."
   }
 }
 

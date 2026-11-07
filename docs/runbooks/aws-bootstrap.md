@@ -61,7 +61,7 @@ aws cloudformation deploy --stack-name ashes-phase0 \
 aws cloudformation describe-stacks --stack-name ashes-phase0 --query 'Stacks[0].Outputs'
 ```
 
-After aws-organization has created the dedicated `aws-security` / `aws-backup` roles, update the stack with `TrustSecurityAndBackup=false`. Keep `create_break_glass = false` in aws-security: the break-glass role belongs to this phase-0 stack, and the aws-security management role is deliberately denied access to it. To create the resources by hand instead, in the **management account** create:
+After aws-organization has created the dedicated `aws-security` / `aws-backup` roles, update the stack with `TrustSecurityAndBackup=false`. Keep `aws_overrides.create_break_glass` unset (false) in aws-security: the break-glass role belongs to this phase-0 stack, and the aws-security management role is deliberately denied access to it. To create the resources by hand instead, in the **management account** create:
 
 1. An IAM OIDC identity provider for `https://app.terraform.io` with audience `aws.workload.identity`.
 2. A **plan** role, e.g. `tfc-mgmt-plan`, with `ReadOnlyAccess`, and an **apply** role, e.g. `tfc-mgmt-apply`, with an admin-scoped policy. Each trusts only the management-account workspaces, for its own run phase:

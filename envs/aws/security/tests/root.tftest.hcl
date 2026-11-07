@@ -17,11 +17,13 @@ variables {
   landing_zone_config_path = ""
   landing_zone_name        = "acme"
   management_account_id    = "111111111111" # C4 account guard
-  log_archive_bucket_name  = "ashes-org-log-archive"
   # key_admin_arn / config_role_arn / aggregator_role_arn omitted: the defaults
   # (own-account tfc-apply key admin, Config SLR, created aggregator role) must plan.
   # Security Lake off so meta_store_manager_role_arn is not required.
-  enable_security_lake = false
+  aws_overrides = {
+    log_archive_bucket_name = "ashes-org-log-archive"
+    enable_security_lake    = false
+  }
 }
 
 # The forensics CMK ARN flows through the stage into the incident-response
@@ -166,8 +168,10 @@ run "starter_profile_trims_cost_scaling_services" {
   command = plan
 
   variables {
-    profile              = "starter"
-    enable_security_lake = null
+    profile = "starter"
+    aws_overrides = merge(var.aws_overrides, {
+      enable_security_lake = null
+    })
   }
 
   assert {
@@ -185,8 +189,10 @@ run "production_profile_keeps_full_stack" {
   command = plan
 
   variables {
-    enable_security_lake        = null
-    meta_store_manager_role_arn = "arn:aws:iam::222222222222:role/AmazonSecurityLakeMetaStoreManager"
+    aws_overrides = merge(var.aws_overrides, {
+      enable_security_lake        = null
+      meta_store_manager_role_arn = "arn:aws:iam::222222222222:role/AmazonSecurityLakeMetaStoreManager"
+    })
   }
 
   assert {
@@ -201,7 +207,9 @@ run "production_default_plans_without_meta_store_role" {
   command = plan
 
   variables {
-    enable_security_lake = null
+    aws_overrides = merge(var.aws_overrides, {
+      enable_security_lake = null
+    })
   }
 
   assert {

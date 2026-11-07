@@ -6,30 +6,32 @@
 mock_provider "google" {}
 
 variables {
-  domain                                = "acme.io"
-  org_id                                = "123456789"
-  admin_project_id                      = "acme-admin-project"
-  admin_project_number                  = "123456789012"
-  customer_id                           = "C01abc123"
-  admin_email                           = "admin@acme.io"
-  break_glass_user                      = "break-glass@acme.io"
-  terraform_admin_email                 = "terraform-admin@acme-admin-project.iam.gserviceaccount.com"
-  billing_account                       = "ABCDEF-123456-789012"
-  project_prefix                        = "acme"
-  organization_admin_groups             = ["org-admins@acme.io"]
-  billing_admin_groups                  = ["billing-admins@acme.io"]
-  default_region                        = "europe-west1"
-  allowed_regions                       = ["europe-west1"]
-  strict_folder_policy_environment_keys = ["prod"]
-  monthly_budget_amount                 = 0
-  budget_currency                       = "USD"
-  alert_notification_emails             = ["secops@acme.io"]
+  domain                = "acme.io"
+  org_id                = "123456789"
+  admin_project_id      = "acme-admin-project"
+  admin_project_number  = "123456789012"
+  customer_id           = "C01abc123"
+  terraform_admin_email = "terraform-admin@acme-admin-project.iam.gserviceaccount.com"
+  billing_account       = "ABCDEF-123456-789012"
+  project_prefix        = "acme"
+  default_region        = "europe-west1"
+  monthly_budget_amount = 0
   environments = {
     dev = {
       display_name            = "Development"
       description             = "Development environment"
       iam_group_role_bindings = {}
     }
+  }
+  gcp = {
+    admin_email                           = "admin@acme.io"
+    break_glass_user                      = "break-glass@acme.io"
+    organization_admin_groups             = ["org-admins@acme.io"]
+    billing_admin_groups                  = ["billing-admins@acme.io"]
+    allowed_regions                       = ["europe-west1"]
+    strict_folder_policy_environment_keys = ["prod"]
+    budget_currency                       = "USD"
+    alert_notification_emails             = ["secops@acme.io"]
   }
 }
 
@@ -128,8 +130,10 @@ run "control_plane_alerting_can_be_disabled" {
   command = plan
 
   variables {
-    enable_control_plane_alerting = false
-    alert_notification_emails     = []
+    gcp = merge(var.gcp, {
+      enable_control_plane_alerting = false
+      alert_notification_emails     = []
+    })
   }
 
   assert {
@@ -142,7 +146,9 @@ run "no_alert_destination_warns" {
   command = plan
 
   variables {
-    alert_notification_emails = []
+    gcp = merge(var.gcp, {
+      alert_notification_emails = []
+    })
   }
 
   expect_failures = [check.control_plane_alerts_have_a_destination]
@@ -152,8 +158,10 @@ run "containment_denies_mutation_and_tag_scopes_audit_store" {
   command = plan
 
   variables {
-    enable_admin_containment      = true
-    containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
+    gcp = merge(var.gcp, {
+      enable_admin_containment      = true
+      containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
+    })
   }
 
   # Default guardrail_owner_mode = "separate": this stage neither applies nor
@@ -186,21 +194,25 @@ run "containment_rejects_placeholder_break_glass" {
   command = plan
 
   variables {
-    enable_admin_containment      = true
-    containment_exempt_principals = ["principalSet://goog/group/break-glass@REPLACE-ME.invalid"]
+    gcp = merge(var.gcp, {
+      enable_admin_containment      = true
+      containment_exempt_principals = ["principalSet://goog/group/break-glass@REPLACE-ME.invalid"]
+    })
   }
 
-  expect_failures = [var.containment_exempt_principals]
+  expect_failures = [var.gcp]
 }
 
 run "dedicated_logging_project_holds_audit_store_and_cmek" {
   command = plan
 
   variables {
-    logging_project_id            = "acme-logging"
-    logging_project_number        = "999999999999"
-    enable_admin_containment      = true
-    containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
+    gcp = merge(var.gcp, {
+      logging_project_id            = "acme-logging"
+      logging_project_number        = "999999999999"
+      enable_admin_containment      = true
+      containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
+    })
   }
 
   assert {
@@ -223,10 +235,12 @@ run "logging_project_requires_number" {
   command = plan
 
   variables {
-    logging_project_id = "acme-logging"
+    gcp = merge(var.gcp, {
+      logging_project_id = "acme-logging"
+    })
   }
 
-  expect_failures = [var.logging_project_number]
+  expect_failures = [var.gcp]
 }
 
 # Audit C2: the phase-0 bootstrap SA holds no standing folder-admin rights by
@@ -244,7 +258,9 @@ run "legacy_admin_folder_grants_opt_in" {
   command = plan
 
   variables {
-    enable_legacy_admin_folder_roles = true
+    gcp = merge(var.gcp, {
+      enable_legacy_admin_folder_roles = true
+    })
   }
 
   assert {
@@ -272,7 +288,9 @@ run "os_login_folder_exemption" {
   command = plan
 
   variables {
-    os_login_exempt_environment_keys = ["dev"]
+    gcp = merge(var.gcp, {
+      os_login_exempt_environment_keys = ["dev"]
+    })
   }
 
   assert {
@@ -290,8 +308,10 @@ run "os_login_org_enforcement_can_be_disabled" {
   command = plan
 
   variables {
-    enforce_os_login                 = false
-    os_login_exempt_environment_keys = ["dev"]
+    gcp = merge(var.gcp, {
+      enforce_os_login                 = false
+      os_login_exempt_environment_keys = ["dev"]
+    })
   }
 
   assert {
@@ -330,7 +350,9 @@ run "user_principals_only_with_break_glass_escape" {
   command = plan
 
   variables {
-    allow_user_principals_for_break_glass = true
+    gcp = merge(var.gcp, {
+      allow_user_principals_for_break_glass = true
+    })
   }
 
   assert {
@@ -373,7 +395,9 @@ run "scoped_access_policies_can_be_disabled" {
   command = plan
 
   variables {
-    enable_scoped_access_policies = false
+    gcp = merge(var.gcp, {
+      enable_scoped_access_policies = false
+    })
   }
 
   assert {
@@ -459,7 +483,6 @@ run "explicit_waiver_plans" {
   command = plan
 
   variables {
-    enable_admin_containment      = false
     production_containment_waived = true
     environments = {
       prod = {
@@ -469,6 +492,9 @@ run "explicit_waiver_plans" {
         is_production           = true
       }
     }
+    gcp = merge(var.gcp, {
+      enable_admin_containment = false
+    })
   }
 
   override_module {
@@ -497,9 +523,11 @@ run "pam_entitlement_requires_approval" {
   command = plan
 
   variables {
-    enable_pam          = true
-    pam_eligible_groups = ["org-admin-requesters@acme.io"]
-    pam_approver_groups = ["org-admin-approvers@acme.io"]
+    gcp = merge(var.gcp, {
+      enable_pam          = true
+      pam_eligible_groups = ["org-admin-requesters@acme.io"]
+      pam_approver_groups = ["org-admin-approvers@acme.io"]
+    })
   }
 
   assert {
@@ -523,9 +551,11 @@ run "containment_applied_in_stage_in_organization_mode" {
   command = plan
 
   variables {
-    guardrail_owner_mode          = "organization"
-    enable_admin_containment      = true
-    containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
+    gcp = merge(var.gcp, {
+      guardrail_owner_mode          = "organization"
+      enable_admin_containment      = true
+      containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
+    })
   }
 
   assert {
@@ -594,8 +624,10 @@ run "containment_tags_the_log_analytics_bucket" {
   command = plan
 
   variables {
-    enable_admin_containment      = true
-    containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
+    gcp = merge(var.gcp, {
+      enable_admin_containment      = true
+      containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
+    })
   }
 
   assert {
@@ -608,7 +640,9 @@ run "legacy_constraints_when_managed_not_preferred" {
   command = plan
 
   variables {
-    prefer_managed_constraints = false
+    gcp = merge(var.gcp, {
+      prefer_managed_constraints = false
+    })
   }
 
   assert {
@@ -635,11 +669,13 @@ run "logging_org_settings_and_boundary_opt_in" {
   command = plan
 
   variables {
-    enable_logging_organization_settings = true
-    enable_principal_access_boundary     = true
-    enable_admin_containment             = true
-    containment_exempt_principals        = ["principalSet://goog/group/break-glass@acme.io"]
-    guardrail_owner_mode                 = "organization"
+    gcp = merge(var.gcp, {
+      enable_logging_organization_settings = true
+      enable_principal_access_boundary     = true
+      enable_admin_containment             = true
+      containment_exempt_principals        = ["principalSet://goog/group/break-glass@acme.io"]
+      guardrail_owner_mode                 = "organization"
+    })
   }
 
   assert {
@@ -665,17 +701,19 @@ run "guardrail_spec_empty_in_separate_mode" {
   command = plan
 
   variables {
-    iam_deny_policies = [
-      {
-        name = "deny-sa-keys"
-        rules = [
-          {
-            denied_principals  = ["principalSet://goog/public:all"]
-            denied_permissions = ["iam.googleapis.com/serviceAccountKeys.create"]
-          },
-        ]
-      },
-    ]
+    gcp = merge(var.gcp, {
+      iam_deny_policies = [
+        {
+          name = "deny-sa-keys"
+          rules = [
+            {
+              denied_principals  = ["principalSet://goog/public:all"]
+              denied_permissions = ["iam.googleapis.com/serviceAccountKeys.create"]
+            },
+          ]
+        },
+      ]
+    })
   }
 
   # The ignored input is flagged, not silently dropped.
@@ -691,19 +729,21 @@ run "guardrail_spec_and_apply_in_organization_mode" {
   command = plan
 
   variables {
-    guardrail_owner_mode = "organization"
-    iam_deny_policies = [
-      {
-        name = "deny-sa-keys"
-        rules = [
-          {
-            denied_principals  = ["principalSet://goog/public:all"]
-            denied_permissions = ["iam.googleapis.com/serviceAccountKeys.create"]
-            denial_condition   = { title = "t", expression = "resource.matchTag('123/env', 'prod')" }
-          },
-        ]
-      },
-    ]
+    gcp = merge(var.gcp, {
+      guardrail_owner_mode = "organization"
+      iam_deny_policies = [
+        {
+          name = "deny-sa-keys"
+          rules = [
+            {
+              denied_principals  = ["principalSet://goog/public:all"]
+              denied_permissions = ["iam.googleapis.com/serviceAccountKeys.create"]
+              denial_condition   = { title = "t", expression = "resource.matchTag('123/env', 'prod')" }
+            },
+          ]
+        },
+      ]
+    })
   }
 
   assert {
@@ -718,7 +758,9 @@ run "resource_locations_use_region_value_groups" {
   command = plan
 
   variables {
-    allowed_regions = ["europe-west2", "in:eu-locations"]
+    gcp = merge(var.gcp, {
+      allowed_regions = ["europe-west2", "in:eu-locations"]
+    })
   }
 
   assert {
@@ -747,12 +789,14 @@ run "org_policy_overrides_merge_over_baseline" {
   command = plan
 
   variables {
-    org_policy_overrides = {
-      "compute.requireShieldedVm"                    = { enforce = false }
-      "cloudfunctions.requireVPCConnector"           = { disabled = true }
-      "compute.restrictVpcPeering"                   = { allow_all = true }
-      "compute.restrictLoadBalancerCreationForTypes" = { allowed_values = ["INTERNAL_HTTP_HTTPS"] }
-    }
+    gcp = merge(var.gcp, {
+      org_policy_overrides = {
+        "compute.requireShieldedVm"                    = { enforce = false }
+        "cloudfunctions.requireVPCConnector"           = { disabled = true }
+        "compute.restrictVpcPeering"                   = { allow_all = true }
+        "compute.restrictLoadBalancerCreationForTypes" = { allowed_values = ["INTERNAL_HTTP_HTTPS"] }
+      }
+    })
   }
 
   assert {
@@ -924,9 +968,11 @@ run "containment_uses_namespaced_tag_ids" {
   command = plan
 
   variables {
-    guardrail_owner_mode          = "organization"
-    enable_admin_containment      = true
-    containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
+    gcp = merge(var.gcp, {
+      guardrail_owner_mode          = "organization"
+      enable_admin_containment      = true
+      containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
+    })
   }
 
   override_module {
@@ -954,7 +1000,9 @@ run "budget_channels_over_limit_fails" {
   variables {
     monthly_budget_amount        = 100
     budget_notify_alert_channels = true
-    alert_notification_emails    = ["a@acme.io", "b@acme.io", "c@acme.io", "d@acme.io", "e@acme.io", "f@acme.io"]
+    gcp = merge(var.gcp, {
+      alert_notification_emails = ["a@acme.io", "b@acme.io", "c@acme.io", "d@acme.io", "e@acme.io", "f@acme.io"]
+    })
   }
 
   expect_failures = [terraform_data.budget_channel_limit]

@@ -405,6 +405,146 @@ Applies to workloads with `enable_saas_secret_bridge = true`.
 
 ### All clouds
 
+#### Object pass-through: `gcp_overrides` (gcp-organization) and `aws_overrides` (aws-security)
+
+**Breaking for anyone who sets these roots' variables** in a tfvars file, a TFC
+workspace variable or `config/tfc-workspaces.yaml`. The two roots that re-declared
+almost every stage input now take one object each:
+
+- `envs/gcp/organization` declares `gcp_overrides`, the gcp section of
+  `modules/gcp/stages/organization` (its new `gcp` input). 46 variables moved.
+- `envs/aws/security` declares `aws_overrides`, the aws section of
+  `modules/aws/stages/security` (its new `aws` input). 35 variables moved.
+
+Every key is optional. The effective object is
+`merge(local.lz_<section>, { for k, v in var.<section>_overrides : k => v if v != null })`,
+so precedence is unchanged: a set key > `config/landing-zone.yaml` > the stage
+default. The validations moved onto the stage object; their messages name the
+config key. Resource addresses do not change: the upgrade plan of an estate
+whose values moved 1:1 shows no changes.
+
+**Before the upgrade plan,** move each old variable into the override object.
+For a TFC workspace variable, delete the old variable and add one HCL variable,
+for example `gcp_overrides = { enable_pam = true, pam_eligible_groups = ["..."] }`.
+Leave a key out to keep its config value. **An old variable that is still set
+is not an error:** Terraform only warns "Value for undeclared variable" (tfvars
+files and TFC workspace variables; a `TF_VAR_` environment variable is ignored
+silently), and the setting falls back to the config file or the stage default.
+Check the workspace variables list, and read the upgrade plan: any change in it
+means a value was not moved.
+
+Behaviour changes to check:
+
+- **An empty list now wins.** `alert_notification_emails = []` and
+  `containment_exempt_principals = []` used to mean "fall back to the config file".
+  As override keys, `[]` is a set value. Leave the key out (or null) to keep
+  `gcp.alert_emails` / `notifications.emails` and `gcp.break_glass_group`.
+- **The waiver follows the effective value.** gcp-organization waives production
+  admin containment when the effective `enable_admin_containment` is `false`. Before,
+  `gcp.admin_containment: false` waived it even when the variable said `true`.
+- **Presets replace, they do not merge.** A `-var-file` sets the whole object, so
+  `examples/presets/prod-gcp-organization.tfvars`, `prod-aws-security.tfvars` and
+  `nonprod-aws-security.tfvars` replace your own `gcp_overrides` / `aws_overrides`.
+  Copy their keys into your own object instead of stacking the files.
+- **`key_policy_admin_role_name` stays a variable** on aws-security and its stage:
+  `null` (legacy key-policy admin) cannot be expressed through the null-filtered merge.
+- **The stage interfaces changed.** A fork that calls
+  `modules/gcp/stages/organization` or `modules/aws/stages/security` from its own
+  root passes the moved inputs inside `gcp = { ... }` / `aws = { ... }`. Their
+  names are unchanged. gcp-organization keeps `domain`, `project_prefix`,
+  `organization_name`, `billing_account(_display_name)`, `tfc_organization`,
+  `environments`, `shared_iam_group_role_bindings`, `default_region`, `profile`,
+  `monthly_budget_amount`, the bootstrap contract inputs, `terraform_admin_email`,
+  `tfc_hostname`, `pin_wif_to_tfc_organization` and `wif_github_owner_ids`.
+  aws-security keeps its org-section, tagging, credential and contract inputs.
+
+| Old `gcp-organization` variable | New key | Config key (unchanged) |
+|---|---|---|
+| `admin_email` | `gcp_overrides.admin_email` | `gcp.admin_email` |
+| `break_glass_user` | `gcp_overrides.break_glass_user` | - |
+| `organization_admin_groups` | `gcp_overrides.organization_admin_groups` | `gcp.organization_admin_groups` |
+| `billing_admin_groups` | `gcp_overrides.billing_admin_groups` | `gcp.billing_admin_groups` |
+| `allow_user_principals_for_break_glass` | `gcp_overrides.allow_user_principals_for_break_glass` | - |
+| `allowed_regions` | `gcp_overrides.allowed_regions` | `gcp.allowed_regions` |
+| `strict_folder_policy_environment_keys` | `gcp_overrides.strict_folder_policy_environment_keys` | - |
+| `enforce_os_login` | `gcp_overrides.enforce_os_login` | - |
+| `os_login_exempt_environment_keys` | `gcp_overrides.os_login_exempt_environment_keys` | - |
+| `security_contact_email` | `gcp_overrides.security_contact_email` | - |
+| `billing_contact_email` | `gcp_overrides.billing_contact_email` | - |
+| `budget_currency` | `gcp_overrides.budget_currency` | - |
+| `logging_project_id` | `gcp_overrides.logging_project_id` | - |
+| `logging_project_number` | `gcp_overrides.logging_project_number` | - |
+| `audit_soft_delete_retention_days` | `gcp_overrides.audit_soft_delete_retention_days` | - |
+| `enable_control_plane_alerting` | `gcp_overrides.enable_control_plane_alerting` | - |
+| `enable_cis_log_metrics` | `gcp_overrides.enable_cis_log_metrics` | - |
+| `alert_notification_emails` | `gcp_overrides.alert_notification_emails` | `gcp.alert_emails / notifications.emails` |
+| `alert_notification_channels` | `gcp_overrides.alert_notification_channels` | - |
+| `break_glass_principal_emails` | `gcp_overrides.break_glass_principal_emails` | - |
+| `custom_org_constraints` | `gcp_overrides.custom_org_constraints` | - |
+| `enable_audit_bucket_lock` | `gcp_overrides.enable_audit_bucket_lock` | `gcp.enable_audit_bucket_lock` |
+| `iam_deny_policies` | `gcp_overrides.iam_deny_policies` | - |
+| `enable_cmek_org_policy` | `gcp_overrides.enable_cmek_org_policy` | - |
+| `cmek_required_services` | `gcp_overrides.cmek_required_services` | - |
+| `enable_admin_containment` | `gcp_overrides.enable_admin_containment` | `gcp.admin_containment` |
+| `containment_exempt_principals` | `gcp_overrides.containment_exempt_principals` | `gcp.break_glass_group` |
+| `enable_legacy_admin_folder_roles` | `gcp_overrides.enable_legacy_admin_folder_roles` | - |
+| `enable_scoped_access_policies` | `gcp_overrides.enable_scoped_access_policies` | - |
+| `enable_pam` | `gcp_overrides.enable_pam` | - |
+| `pam_eligible_groups` | `gcp_overrides.pam_eligible_groups` | - |
+| `pam_approver_groups` | `gcp_overrides.pam_approver_groups` | - |
+| `pam_max_request_duration` | `gcp_overrides.pam_max_request_duration` | - |
+| `guardrail_owner_mode` | `gcp_overrides.guardrail_owner_mode` | - |
+| `prefer_managed_constraints` | `gcp_overrides.prefer_managed_constraints` | - |
+| `enable_log_analytics` | `gcp_overrides.enable_log_analytics` | - |
+| `log_analytics_retention_days` | `gcp_overrides.log_analytics_retention_days` | - |
+| `enable_logging_organization_settings` | `gcp_overrides.enable_logging_organization_settings` | - |
+| `logging_settings_kms_key_name` | `gcp_overrides.logging_settings_kms_key_name` | - |
+| `enable_principal_access_boundary` | `gcp_overrides.enable_principal_access_boundary` | `gcp.principal_access_boundary` |
+| `principal_access_boundary_allowed_resources` | `gcp_overrides.principal_access_boundary_allowed_resources` | - |
+| `restrict_cloud_run_ingress` | `gcp_overrides.restrict_cloud_run_ingress` | - |
+| `allowed_workload_identity_issuers` | `gcp_overrides.allowed_workload_identity_issuers` | - |
+| `allowed_workload_identity_aws_accounts` | `gcp_overrides.allowed_workload_identity_aws_accounts` | - |
+| `org_policy_overrides` | `gcp_overrides.org_policy_overrides` | - |
+| `wif_tenant_pin_enforcement` | `gcp_overrides.wif_tenant_pin_enforcement` | - |
+
+| Old `aws-security` variable | New key | Config key (unchanged) |
+|---|---|---|
+| `aws_enabled_regions` | `aws_overrides.aws_enabled_regions` | `aws.enabled_regions` |
+| `log_archive_bucket_name` | `aws_overrides.log_archive_bucket_name` | `aws.log_archive_bucket_name` |
+| `key_admin_arn` | `aws_overrides.key_admin_arn` | - |
+| `key_admin_role_name` | `aws_overrides.key_admin_role_name` | - |
+| `kms_key_user_arns` | `aws_overrides.kms_key_user_arns` | - |
+| `enable_kms_protection_tag` | `aws_overrides.enable_kms_protection_tag` | - |
+| `config_role_arn` | `aws_overrides.config_role_arn` | - |
+| `create_config_service_linked_role` | `aws_overrides.create_config_service_linked_role` | - |
+| `aggregator_role_arn` | `aws_overrides.aggregator_role_arn` | - |
+| `meta_store_manager_role_arn` | `aws_overrides.meta_store_manager_role_arn` | - |
+| `break_glass_role_arn` | `aws_overrides.break_glass_role_arn` | - |
+| `enabled_security_services` | `aws_overrides.enabled_security_services` | - |
+| `enable_security_lake` | `aws_overrides.enable_security_lake` | - |
+| `config_record_all_supported` | `aws_overrides.config_record_all_supported` | - |
+| `guardduty_enable_ebs_malware_protection` | `aws_overrides.guardduty_enable_ebs_malware_protection` | - |
+| `enable_incident_response` | `aws_overrides.enable_incident_response` | - |
+| `enable_service_quotas` | `aws_overrides.enable_service_quotas` | - |
+| `notification_subscribers` | `aws_overrides.notification_subscribers` | `notifications.emails` |
+| `identity_account_id` | `aws_overrides.identity_account_id` | - |
+| `enable_cloudwatch_logs` | `aws_overrides.enable_cloudwatch_logs` | - |
+| `cloudwatch_logs_retention_days` | `aws_overrides.cloudwatch_logs_retention_days` | - |
+| `cloudwatch_logs_kms_key_arn` | `aws_overrides.cloudwatch_logs_kms_key_arn` | - |
+| `cloudtrail_alarm_sns_topic_arn` | `aws_overrides.cloudtrail_alarm_sns_topic_arn` | - |
+| `cloudtrail_alarm_subscribers` | `aws_overrides.cloudtrail_alarm_subscribers` | - |
+| `cloudtrail_cis_alarms_excluded` | `aws_overrides.cloudtrail_cis_alarms_excluded` | - |
+| `cloudtrail_s3_data_events` | `aws_overrides.cloudtrail_s3_data_events` | - |
+| `cloudtrail_s3_data_events_excluded_bucket_arns` | `aws_overrides.cloudtrail_s3_data_events_excluded_bucket_arns` | - |
+| `cloudtrail_lambda_data_events` | `aws_overrides.cloudtrail_lambda_data_events` | - |
+| `create_break_glass` | `aws_overrides.create_break_glass` | - |
+| `break_glass_role_name` | `aws_overrides.break_glass_role_name` | - |
+| `break_glass_trusted_principals` | `aws_overrides.break_glass_trusted_principals` | - |
+| `break_glass_mfa_max_age` | `aws_overrides.break_glass_mfa_max_age` | - |
+| `break_glass_active` | `aws_overrides.break_glass_active` | - |
+| `create_organization_trail` | `aws_overrides.create_organization_trail` | - |
+| `cloudtrail_cloudwatch_role_arn` | `aws_overrides.cloudtrail_cloudwatch_role_arn` | - |
+
 #### Removed: `modules/gcp/stages/host` and `modules/gcp/network/dns-records`
 
 Both modules had no caller in this repo. `stages/host` (the deprecated network

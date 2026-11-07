@@ -118,50 +118,89 @@ variable "default_region" {
   default     = null
 }
 
-variable "allowed_regions" {
-  description = "List of allowed GCP regions for resource creation. Null = gcp.allowed_regions from config/landing-zone.yaml, else europe-west1/europe-west2/us-central1."
-  type        = list(string)
-  default     = null
-}
-
-variable "strict_folder_policy_environment_keys" {
-  description = "Environment folder keys that should receive the stricter folder policy bundle"
-  type        = list(string)
-  default     = ["prod"]
-}
-
-variable "admin_email" {
-  description = "Email address for the organization administrator. Null = gcp.admin_email from config/landing-zone.yaml."
-  type        = string
-  default     = null
-
-  validation {
-    condition     = can(regex("^[^@]+@[^@]+\\.[^@]+$", coalesce(var.admin_email, local.cfg.admin_email, "!unset")))
-    error_message = "admin_email is unset or not a valid email address: set var.admin_email or gcp.admin_email in config/landing-zone.yaml."
-  }
-}
-
-variable "break_glass_user" {
-  description = "Email address for the break glass user (optional). Always watched by the break-glass alert; granted Organization Admin only when allow_user_principals_for_break_glass = true."
-  type        = string
-  default     = null
-
-  validation {
-    condition     = var.break_glass_user == null || can(regex("^[^@]+@[^@]+\\.[^@]+$", var.break_glass_user))
-    error_message = "break_glass_user must be a valid email address when provided."
-  }
-}
-
-variable "organization_admin_groups" {
-  description = "Bare group emails granted Organization Admin. Standing admin is group-only: at least one is required unless allow_user_principals_for_break_glass = true. Null = gcp.organization_admin_groups from config/landing-zone.yaml, else []."
-  type        = list(string)
-  default     = null
-}
-
-variable "billing_admin_groups" {
-  description = "Bare group emails granted Billing Admin. At least one is required unless allow_user_principals_for_break_glass = true. Null = gcp.billing_admin_groups from config/landing-zone.yaml, else []."
-  type        = list(string)
-  default     = null
+variable "gcp_overrides" {
+  description = "Explicit overrides of the gcp section (config/landing-zone.yaml gcp.*) fed to the organization stage. Every key is optional and the type is the stage's gcp object: a set (non-null) key wins over the config file, an unset or null key keeps the config value, else the stage default. Keys that are not in the config schema (enable_pam, logging_project_id, ...) are set only here. Precedence: gcp_overrides > config/landing-zone.yaml > built-in default. See UPGRADING.md for the old variable names."
+  type = object({
+    admin_email                           = optional(string)
+    break_glass_user                      = optional(string)
+    organization_admin_groups             = optional(list(string))
+    billing_admin_groups                  = optional(list(string))
+    allow_user_principals_for_break_glass = optional(bool)
+    allowed_regions                       = optional(list(string))
+    strict_folder_policy_environment_keys = optional(list(string))
+    enforce_os_login                      = optional(bool)
+    os_login_exempt_environment_keys      = optional(list(string))
+    security_contact_email                = optional(string)
+    billing_contact_email                 = optional(string)
+    budget_currency                       = optional(string)
+    logging_project_id                    = optional(string)
+    logging_project_number                = optional(string)
+    audit_soft_delete_retention_days      = optional(number)
+    enable_control_plane_alerting         = optional(bool)
+    enable_cis_log_metrics                = optional(bool)
+    alert_notification_emails             = optional(list(string))
+    alert_notification_channels           = optional(list(string))
+    break_glass_principal_emails          = optional(list(string))
+    custom_org_constraints = optional(list(object({
+      name           = string
+      display_name   = string
+      description    = string
+      action_type    = string
+      condition      = string
+      method_types   = list(string)
+      resource_types = list(string)
+      enforcement    = optional(string, "enforce")
+    })))
+    enable_audit_bucket_lock = optional(bool)
+    iam_deny_policies = optional(list(object({
+      name         = string
+      display_name = optional(string)
+      rules = list(object({
+        description           = optional(string)
+        denied_principals     = list(string)
+        denied_permissions    = list(string)
+        exception_principals  = optional(list(string), [])
+        exception_permissions = optional(list(string), [])
+        denial_condition = optional(object({
+          expression  = string
+          title       = optional(string)
+          description = optional(string)
+        }))
+      }))
+    })))
+    enable_cmek_org_policy                      = optional(bool)
+    cmek_required_services                      = optional(list(string))
+    enable_admin_containment                    = optional(bool)
+    containment_exempt_principals               = optional(list(string))
+    enable_legacy_admin_folder_roles            = optional(bool)
+    enable_scoped_access_policies               = optional(bool)
+    enable_pam                                  = optional(bool)
+    pam_eligible_groups                         = optional(list(string))
+    pam_approver_groups                         = optional(list(string))
+    pam_max_request_duration                    = optional(string)
+    guardrail_owner_mode                        = optional(string)
+    prefer_managed_constraints                  = optional(bool)
+    enable_log_analytics                        = optional(bool)
+    log_analytics_retention_days                = optional(number)
+    enable_logging_organization_settings        = optional(bool)
+    logging_settings_kms_key_name               = optional(string)
+    enable_principal_access_boundary            = optional(bool)
+    principal_access_boundary_allowed_resources = optional(list(string))
+    restrict_cloud_run_ingress                  = optional(bool)
+    allowed_workload_identity_issuers           = optional(list(string))
+    allowed_workload_identity_aws_accounts      = optional(list(string))
+    org_policy_overrides = optional(map(object({
+      enforce        = optional(bool)
+      allowed_values = optional(list(string))
+      denied_values  = optional(list(string))
+      allow_all      = optional(bool)
+      deny_all       = optional(bool)
+      disabled       = optional(bool, false)
+    })))
+    wif_tenant_pin_enforcement = optional(string)
+  })
+  default  = {}
+  nullable = false
 }
 
 # Stage contract override (FAST-style): when set (here or as gcp.contracts.bootstrap
@@ -200,18 +239,6 @@ variable "bootstrap_workspace_name" {
   default     = "gcp-bootstrap"
 }
 
-variable "security_contact_email" {
-  description = "Email for security notifications via Essential Contacts (optional)"
-  type        = string
-  default     = null
-}
-
-variable "billing_contact_email" {
-  description = "Email for billing notifications via Essential Contacts (optional)"
-  type        = string
-  default     = null
-}
-
 variable "monthly_budget_amount" {
   description = "Monthly budget limit for the organization. Set to 0 to disable budget alerts (rejected for the starter profile). Null = org.monthly_budget_usd from config/landing-zone.yaml (starter profile only), else 1000 (production) / unset (starter, which then fails the plan)."
   type        = number
@@ -234,59 +261,6 @@ variable "profile" {
   }
 }
 
-variable "budget_currency" {
-  description = "ISO 4217 currency code for budget alerts (e.g., USD, EUR, GBP)"
-  type        = string
-  default     = "USD"
-
-  validation {
-    condition     = can(regex("^[A-Z]{3}$", var.budget_currency))
-    error_message = "budget_currency must be a 3-letter ISO 4217 currency code (e.g., USD, EUR)."
-  }
-}
-
-variable "custom_org_constraints" {
-  description = "Opt-in custom organization-policy constraints (CEL-defined resource-shape guardrails), created AND enforced at the org node (enforcement = enforce | dry_run | off). Default [] = none. See docs/known-gaps.md."
-  type = list(object({
-    name           = string
-    display_name   = string
-    description    = string
-    action_type    = string
-    condition      = string
-    method_types   = list(string)
-    resource_types = list(string)
-    enforcement    = optional(string, "enforce")
-  }))
-  default = []
-}
-
-variable "enable_audit_bucket_lock" {
-  description = "Opt-in WORM lock on the org audit-log GCS bucket (locked retention of audit_log_retention_days). Null (default) = gcp.enable_audit_bucket_lock from config, else false (operator-correctable). A locked policy is IRREVERSIBLE — enable only for compliance regimes that require tamper-proof retention. See docs/known-gaps.md."
-  type        = bool
-  default     = null
-}
-
-variable "iam_deny_policies" {
-  description = "Opt-in IAM deny policies applied at the org node — a coarse, allow-independent backstop blocking specific permissions for specific principals regardless of roles (deny before allow). Used only in the legacy guardrail_owner_mode = \"organization\"; in separate mode set them on the gcp-guardrails root instead. Default [] = none. See docs/known-gaps.md."
-  type = list(object({
-    name         = string
-    display_name = optional(string)
-    rules = list(object({
-      description           = optional(string)
-      denied_principals     = list(string)
-      denied_permissions    = list(string)
-      exception_principals  = optional(list(string), [])
-      exception_permissions = optional(list(string), [])
-      denial_condition = optional(object({
-        expression  = string
-        title       = optional(string)
-        description = optional(string)
-      }))
-    }))
-  }))
-  default = []
-}
-
 variable "terraform_admin_email" {
   description = <<-EOT
     Service account email for the Terraform admin SA created by the bootstrap stage.
@@ -303,231 +277,6 @@ variable "terraform_admin_email" {
     condition     = var.terraform_admin_email == null || can(regex("^[^@]+@[^@]+\\.iam\\.gserviceaccount\\.com$", var.terraform_admin_email))
     error_message = "terraform_admin_email must be a GCP service account email (ends in .iam.gserviceaccount.com) or null."
   }
-}
-
-# --- Dedicated logging project (opt-in, default = unchanged) ---
-variable "logging_project_id" {
-  description = "Dedicated logging project for the org audit sink/bucket, audit CMEK keyring and control-plane alerts (separation of duties). Default null = admin project. MUST NOT be owned by the Terraform admin/automation SA (create it out-of-band or from a separate identity). Decide before the first apply. Requires logging_project_number. PREVIEW: not yet validated against a real apply."
-  type        = string
-  default     = null
-}
-
-variable "logging_project_number" {
-  description = "Project number of logging_project_id (required when it is set); used for the audit CMEK service-agent grants."
-  type        = string
-  default     = null
-}
-
-variable "audit_soft_delete_retention_days" {
-  description = "Soft-delete window (days) on the org audit-log buckets (M-4). 7-90, or 0 to disable. Default 30."
-  type        = number
-  default     = 30
-}
-
-variable "enforce_os_login" {
-  description = "Enforce compute.requireOsLogin at the organization node (CIS GCP 4.4). Default true."
-  type        = bool
-  default     = true
-}
-
-variable "os_login_exempt_environment_keys" {
-  description = "Environment folder keys exempted from the org-wide OS Login requirement (folder-level override). Strict folders cannot be exempted. Default []."
-  type        = list(string)
-  default     = []
-}
-
-variable "enable_cis_log_metrics" {
-  description = "CIS GCP 2.4-2.11 log-based metrics and alerts in the alerting project, fed org-wide by the aggregated org sink (requires enable_control_plane_alerting). Default true."
-  type        = bool
-  default     = true
-}
-
-variable "enable_control_plane_alerting" {
-  description = "Log-match alerts on org IAM / org policy / VPC-SC / sink / custom-role / deny-policy / KMS-destroy changes and on break-glass use. Default true."
-  type        = bool
-  default     = true
-}
-
-variable "alert_notification_emails" {
-  description = "Email addresses notified by the control-plane alerts. Empty (default) = gcp.alert_emails from config/landing-zone.yaml; a check warns when no destination is set."
-  type        = list(string)
-  default     = []
-}
-
-variable "alert_notification_channels" {
-  description = "Existing Cloud Monitoring notification channel IDs (projects/<p>/notificationChannels/<id>) attached to every control-plane alert. Default []."
-  type        = list(string)
-  default     = []
-}
-
-variable "break_glass_principal_emails" {
-  description = "Extra break-glass account emails whose admin actions raise a CRITICAL alert (break_glass_user is always included). List the members of a break-glass group here — group membership is not visible in audit logs."
-  type        = list(string)
-  default     = []
-}
-
-variable "enable_cmek_org_policy" {
-  description = "Enforce CMEK on sensitive services org-wide (gcp.restrictNonCmekServices). Default false; set true (or use examples/presets/prod-gcp-organization.tfvars) once CMEK keys are wired for cmek_required_services."
-  type        = bool
-  default     = false
-}
-
-variable "cmek_required_services" {
-  description = "Services that require CMEK when enable_cmek_org_policy is true."
-  type        = list(string)
-  default = [
-    "storage.googleapis.com",
-    "bigquery.googleapis.com",
-    "sqladmin.googleapis.com",
-    "spanner.googleapis.com",
-    "pubsub.googleapis.com",
-    "secretmanager.googleapis.com",
-  ]
-}
-
-variable "enable_admin_containment" {
-  description = "IAM deny policy blocking (for all but containment_exempt_principals) org-wide sink update/delete, exclusion changes, log-bucket delete and VPC-SC perimeter update/delete, plus — tag-scoped to the audit store — bucket delete/IAM change/untag, object delete, key-version destroy/disable and key IAM change. Once on, any sink/exclusion/perimeter change must be applied by break-glass. Null (default) = gcp.admin_containment from config, else ON whenever an environment is_production. Needs a break-glass principal (gcp.break_glass_group or containment_exempt_principals)."
-  type        = bool
-  default     = null
-}
-
-variable "containment_exempt_principals" {
-  description = "Break-glass principals exempt from the admin-containment deny policy, as IAM v2 principal identifiers (e.g. principalSet://goog/group/break-glass@acme.com). Empty (default) = principalSet://goog/group/<gcp.break_glass_group> from config. Required (non-empty) when containment is on. Placeholder values (REPLACE-ME, your-domain, example.com, .invalid) are rejected so a copied preset fails loudly."
-  type        = list(string)
-  default     = []
-
-  validation {
-    condition     = !anytrue([for p in var.containment_exempt_principals : can(regex("(?i)(replace-me|your-domain|example\\.(com|org|net)|\\.invalid$|changeme)", p))])
-    error_message = "containment_exempt_principals still contains a placeholder (REPLACE-ME / your-domain / example.com / .invalid). Set your real break-glass group before enabling admin containment."
-  }
-}
-
-variable "enable_legacy_admin_folder_roles" {
-  description = "Grant the phase-0 bootstrap SA (terraform_admin_email) folderAdmin/projectCreator/billing.projectManager/networkAdmin on every folder. Legacy single-identity model; default false because the per-stage plan/apply service accounts replace it. Enable only while migrating an existing deployment."
-  type        = bool
-  default     = false
-}
-
-variable "allow_user_principals_for_break_glass" {
-  description = "Escape hatch: also grant admin_email and break_glass_user standing Organization Admin (admin_email also Billing Admin) as user: principals. Default false (groups only); prefer a break-glass group or enable_pam."
-  type        = bool
-  default     = false
-}
-
-variable "enable_pam" {
-  description = "Create a just-in-time Privileged Access Manager entitlement for Organization Admin (pam_eligible_groups request, pam_approver_groups approve). Requires gcp-bootstrap enable_pam = true. Default false."
-  type        = bool
-  default     = false
-}
-
-variable "pam_eligible_groups" {
-  description = "Bare group emails whose members may request just-in-time Organization Admin (enable_pam)."
-  type        = list(string)
-  default     = []
-}
-
-variable "pam_approver_groups" {
-  description = "Bare group emails whose members approve just-in-time Organization Admin requests (enable_pam). Must not overlap pam_eligible_groups."
-  type        = list(string)
-  default     = []
-}
-
-variable "pam_max_request_duration" {
-  description = "Maximum just-in-time grant duration, '<seconds>s' (max 86400s). Default 3600s."
-  type        = string
-  default     = "3600s"
-}
-
-variable "enable_scoped_access_policies" {
-  description = "Create one folder-scoped VPC-SC access policy per environment and grant that environment's workload SAs rights on it only (gcp-workload builds its perimeter there). Requires gcp-bootstrap enable_scoped_access_policies = true. Default true."
-  type        = bool
-  default     = true
-}
-
-variable "guardrail_owner_mode" {
-  description = "Who applies the org IAM deny policies: \"separate\" (the gcp-guardrails root, as the gcp-bootstrap guardrails SA; this root only creates and binds the containment tag) or \"organization\" (this root; legacy). Null = the gcp-bootstrap guardrail_owner_mode output (\"organization\" for an older bootstrap state without it). Must match gcp-bootstrap: in separate mode this root's apply SA has no roles/iam.denyAdmin."
-  type        = string
-  default     = null
-
-  validation {
-    condition     = var.guardrail_owner_mode == null || contains(["separate", "organization"], coalesce(var.guardrail_owner_mode, "separate"))
-    error_message = "guardrail_owner_mode must be \"separate\", \"organization\" or null."
-  }
-}
-
-variable "prefer_managed_constraints" {
-  description = "Use the managed (constraints/*.managed.*) successor of each baseline org-policy constraint where Google offers one. Default true."
-  type        = bool
-  default     = true
-}
-
-variable "enable_log_analytics" {
-  description = "Org audit logs into a Log Analytics-enabled log bucket with a linked BigQuery dataset. Default true."
-  type        = bool
-  default     = true
-}
-
-variable "log_analytics_retention_days" {
-  description = "Retention (days, 365-3650) of the audit Log Analytics bucket."
-  type        = number
-  default     = 400
-}
-
-variable "enable_logging_organization_settings" {
-  description = "Manage org Cloud Logging settings (default log-bucket location = default_region, optional CMEK). Default false."
-  type        = bool
-  default     = false
-}
-
-variable "logging_settings_kms_key_name" {
-  description = "Optional CMEK for new projects' _Default/_Required log buckets (grant the org Logging SA on it first). Null = Google-managed."
-  type        = string
-  default     = null
-}
-
-variable "enable_principal_access_boundary" {
-  description = "Principal access boundary on every SA in the admin project (this org's resources only). Needs gcp-bootstrap enable_principal_access_boundary. Null (default) = gcp.principal_access_boundary from config/landing-zone.yaml (shared with gcp-bootstrap and gcp-guardrails), else false."
-  type        = bool
-  default     = null
-}
-
-variable "principal_access_boundary_allowed_resources" {
-  description = "Extra/explicit resources the bounded automation SAs may act on. Empty = this organization only."
-  type        = list(string)
-  default     = []
-}
-
-variable "restrict_cloud_run_ingress" {
-  description = "Enforce run.allowedIngress org-wide so Cloud Run services accept only internal or Cloud Load Balancing traffic (never ingress \"all\"). Public apps are served through the external ALB + Cloud Armor. Default true."
-  type        = bool
-  default     = true
-}
-
-variable "org_policy_overrides" {
-  description = "Per-constraint overrides of the organization-policy baseline (stage org_policy_overrides): set enforce, replace list values, disabled = true to drop, or add a constraint. Use it instead of forking the stage."
-  type = map(object({
-    enforce        = optional(bool)
-    allowed_values = optional(list(string))
-    denied_values  = optional(list(string))
-    allow_all      = optional(bool)
-    deny_all       = optional(bool)
-    disabled       = optional(bool, false)
-  }))
-  default  = {}
-  nullable = false
-}
-
-variable "allowed_workload_identity_issuers" {
-  description = "OIDC issuers workload identity pool providers may trust (org policy iam.workloadIdentityPoolProviders). Null = https://<tfc_hostname> plus GitHub Actions. Add GitLab / TFE hosts when used."
-  type        = list(string)
-  default     = null
-}
-
-variable "allowed_workload_identity_aws_accounts" {
-  description = "AWS account IDs workload identity pools may federate (iam.workloadIdentityPoolAwsAccounts). Empty (default) denies AWS-account federation."
-  type        = list(string)
-  default     = []
-  nullable    = false
 }
 
 variable "tfc_hostname" {
@@ -549,8 +298,3 @@ variable "wif_github_owner_ids" {
   nullable    = false
 }
 
-variable "wif_tenant_pin_enforcement" {
-  description = "custom.wifProviderTenantPinned: enforce (default), dry_run (log only: stage it first on an org with existing WIF providers) or off."
-  type        = string
-  default     = "enforce"
-}

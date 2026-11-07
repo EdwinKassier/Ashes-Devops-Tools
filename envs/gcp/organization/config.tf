@@ -81,36 +81,45 @@ locals {
     }
   }
 
-  # Effective values. Required ones fall back to an inert sentinel only so
-  # static tools (tflint) can evaluate the root; the variable validations reject
-  # the unset case first.
-  domain                    = coalesce(var.domain, local.cfg.domain, "unset.invalid")
-  project_prefix            = coalesce(var.project_prefix, local.cfg.project_prefix, "unset")
-  organization_name         = coalesce(var.organization_name, local.cfg.organization_name, "My Organization")
-  billing_account           = try(coalesce(var.billing_account, local.cfg.billing_account), null)
-  tfc_organization          = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
-  environments              = var.environments != null ? var.environments : local.cfg.environments
-  default_region            = coalesce(var.default_region, local.cfg.default_region, "europe-west2")
-  allowed_regions           = var.allowed_regions != null ? var.allowed_regions : coalesce(local.cfg.allowed_regions, ["europe-west1", "europe-west2", "us-central1"])
-  admin_email               = coalesce(var.admin_email, local.cfg.admin_email, "unset@unset.invalid")
-  organization_admin_groups = var.organization_admin_groups != null ? var.organization_admin_groups : coalesce(local.cfg.organization_admin_groups, [])
-  billing_admin_groups      = var.billing_admin_groups != null ? var.billing_admin_groups : coalesce(local.cfg.billing_admin_groups, [])
+  # The gcp section as the stage's gcp object (config-backed keys only; every
+  # other key is unset here). Config fallbacks between keys are resolved here, so
+  # the effective object below keeps gcp_overrides > config file > stage default.
+  lz_gcp = {
+    admin_email                      = local.cfg.admin_email
+    organization_admin_groups        = local.cfg.organization_admin_groups
+    billing_admin_groups             = local.cfg.billing_admin_groups
+    allowed_regions                  = local.cfg.allowed_regions
+    enable_audit_bucket_lock         = local.cfg.enable_audit_bucket_lock
+    enable_admin_containment         = local.cfg.admin_containment
+    enable_principal_access_boundary = local.cfg.principal_access_boundary
+    # gcp.break_glass_group as an IAM v2 principal.
+    containment_exempt_principals = local.cfg.break_glass_group != null ? ["principalSet://goog/group/${local.cfg.break_glass_group}"] : null
+    # gcp.alert_emails > notifications.emails > unset.
+    alert_notification_emails = length(coalesce(local.cfg.alert_emails, [])) > 0 ? local.cfg.alert_emails : (
+      length(coalesce(local.cfg.notification_emails, [])) > 0 ? local.cfg.notification_emails : null
+    )
+  }
+  # A set (non-null) override key wins; an unset one keeps the config value.
+  gcp = merge(local.lz_gcp, { for k, v in var.gcp_overrides : k => v if v != null })
+
+  # Effective org-section values. Required ones fall back to an inert sentinel
+  # only so static tools (tflint) can evaluate the root; the variable
+  # validations reject the unset case first.
+  domain            = coalesce(var.domain, local.cfg.domain, "unset.invalid")
+  project_prefix    = coalesce(var.project_prefix, local.cfg.project_prefix, "unset")
+  organization_name = coalesce(var.organization_name, local.cfg.organization_name, "My Organization")
+  billing_account   = try(coalesce(var.billing_account, local.cfg.billing_account), null)
+  tfc_organization  = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
+  environments      = var.environments != null ? var.environments : local.cfg.environments
+  default_region    = coalesce(var.default_region, local.cfg.default_region, "europe-west2")
 
   # Admin containment follows the estate: on whenever a production environment
-  # exists, unless explicitly set (variable > gcp.admin_containment > derived).
-  production_environment_keys = sort([for k, e in coalesce(local.environments, {}) : k if e.is_production])
-  enable_audit_bucket_lock    = coalesce(var.enable_audit_bucket_lock, local.cfg.enable_audit_bucket_lock, false)
+  # exists, unless explicitly set (gcp_overrides > gcp.admin_containment > derived).
   # gcp.principal_access_boundary is shared with gcp-bootstrap and gcp-guardrails,
   # so the boundary and its containment deny rules cannot drift apart.
-  enable_principal_access_boundary = coalesce(var.enable_principal_access_boundary, local.cfg.principal_access_boundary, false)
-  enable_admin_containment         = coalesce(var.enable_admin_containment, local.cfg.admin_containment, length(local.production_environment_keys) > 0)
-  containment_exempt_principals = length(var.containment_exempt_principals) > 0 ? var.containment_exempt_principals : (
-    local.cfg.break_glass_group != null ? ["principalSet://goog/group/${local.cfg.break_glass_group}"] : []
-  )
-  # variable > gcp.alert_emails > notifications.emails > none.
-  alert_notification_emails = length(var.alert_notification_emails) > 0 ? var.alert_notification_emails : (
-    length(coalesce(local.cfg.alert_emails, [])) > 0 ? local.cfg.alert_emails : coalesce(local.cfg.notification_emails, [])
-  )
+  production_environment_keys   = sort([for k, e in coalesce(local.environments, {}) : k if e.is_production])
+  enable_admin_containment      = coalesce(local.gcp.enable_admin_containment, length(local.production_environment_keys) > 0)
+  containment_exempt_principals = local.gcp.containment_exempt_principals == null ? [] : tolist(local.gcp.containment_exempt_principals)
   # Cost profile (variable > org.profile > production). The starter profile
   # requires a budget (variable > org.monthly_budget_usd) and alerts at 50/80/100%.
   profile = coalesce(var.profile, local.cfg.profile, "production")

@@ -56,8 +56,8 @@ Terraform tier**; on the free tier, set `enable_health_assessments = false` and 
 
 ## Variables belong in code
 
-Control-plane inputs (for example `enable_admin_containment`, `containment_exempt_principals`,
-`break_glass_trusted_principals`) must come from `config/landing-zone.yaml`,
+Control-plane inputs (for example gcp-organization `gcp_overrides` and aws-security
+`aws_overrides`, which hold `enable_admin_containment` and `break_glass_trusted_principals`) must come from `config/landing-zone.yaml`,
 `config/tfc-workspaces.yaml` or `workspace_variables`, all reviewed in a PR. TFC cannot forbid
 an organization owner from setting a variable in the UI, so this is enforced by permissions, not
 by Terraform: no team this root grants has `variables = write` on a control-plane project, and

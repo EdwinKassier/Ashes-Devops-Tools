@@ -43,9 +43,14 @@ for preset in examples/presets/*.tfvars; do
     note "preset $preset targets missing root envs/$cloud/$root"
     continue
   fi
-  # Active (uncommented) and commented-out assignments must both name real variables.
-  for key in $(sed -nE 's/^#?[[:space:]]*([a-z][a-z0-9_]*)[[:space:]]+=.*/\1/p' "$preset"); do
+  # Active (uncommented) and commented-out assignments must both name real
+  # variables (column 0) or, inside a <section>_overrides = { ... } object (two-
+  # space indent), real attributes of an object variable of that root.
+  for key in $(sed -nE 's/^(# ?)?([a-z][a-z0-9_]*)[[:space:]]+=.*/\2/p' "$preset"); do
     grep -q "variable \"$key\"" "$vars" || note "preset $preset sets unknown variable '$key' (not in $vars)"
+  done
+  for key in $(sed -nE 's/^  (# )?([a-z][a-z0-9_]*)[[:space:]]+=.*/\2/p' "$preset"); do
+    grep -qE "^    $key[[:space:]]+= optional\(" "$vars" || note "preset $preset sets unknown override key '$key' (not an object attribute in $vars)"
   done
 done
 

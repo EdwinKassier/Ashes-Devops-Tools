@@ -50,7 +50,7 @@ output "control_plane_alert_policy_ids" {
 
 output "admin_containment_rules" {
   description = "Rules of the admin-containment IAM deny policy this stage applies (legacy guardrail_owner_mode = \"organization\" only; empty in separate mode, where the gcp-guardrails root owns the policy, and when enable_admin_containment = false): denied permissions, exempt principals and whether the rule is tag-scoped to the audit store."
-  value       = var.guardrail_owner_mode == "organization" ? module.guardrails[0].admin_containment_rules : []
+  value       = var.gcp.guardrail_owner_mode == "organization" ? module.guardrails[0].admin_containment_rules : []
 }
 
 output "containment_tag" {
@@ -130,7 +130,7 @@ output "billing_admin_members" {
 
 output "pam_entitlement_name" {
   description = "Resource name of the just-in-time org-admin PAM entitlement (null when enable_pam = false)."
-  value       = var.enable_pam ? google_privileged_access_manager_entitlement.org_admin[0].name : null
+  value       = var.gcp.enable_pam ? google_privileged_access_manager_entitlement.org_admin[0].name : null
 }
 
 output "production_environment_keys" {
@@ -140,12 +140,12 @@ output "production_environment_keys" {
 
 output "guardrail_owner_mode" {
   description = "Deny-policy ownership mode: \"separate\" (deny policies authored and applied by the gcp-guardrails root) or \"organization\" (legacy: applied by this stage)."
-  value       = var.guardrail_owner_mode
+  value       = var.gcp.guardrail_owner_mode
 }
 
 output "guardrail_deny_policy_specs" {
   description = "DEPRECATED (removed in v1.0). Map of deny-policy ID => gcloud policy-file JSON for the deny policies this stage applies in the legacy organization mode. Always empty in separate mode: the gcp-guardrails root owns the policies and exposes the break-glass specs as its deny_policy_specs output."
-  value       = var.guardrail_owner_mode == "organization" ? module.guardrails[0].deny_policy_specs : {}
+  value       = var.gcp.guardrail_owner_mode == "organization" ? module.guardrails[0].deny_policy_specs : {}
 }
 
 output "managed_org_policy_constraints" {
@@ -165,10 +165,10 @@ output "log_analytics_linked_dataset" {
 
 output "logging_organization_service_account" {
   description = "The org's Cloud Logging service account (grant it the CMEK key before setting logging_settings_kms_key_name); null when enable_logging_organization_settings = false."
-  value       = var.enable_logging_organization_settings ? google_logging_organization_settings.this[0].kms_service_account_id : null
+  value       = var.gcp.enable_logging_organization_settings ? google_logging_organization_settings.this[0].kms_service_account_id : null
 }
 
 output "principal_access_boundary_policy" {
   description = "Name of the automation principal access boundary policy (null when disabled)."
-  value       = var.enable_principal_access_boundary ? module.automation_boundary[0].policy_name : null
+  value       = var.gcp.enable_principal_access_boundary ? module.automation_boundary[0].policy_name : null
 }

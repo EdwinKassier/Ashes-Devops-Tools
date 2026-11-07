@@ -49,7 +49,7 @@ links to the minimal-input reference file in this directory.
 |---|------|---------|-------------------------|-------|
 | 1 | `aws-organization` | Org, OU tree, accounts, guardrails (the producer root) | `terraform_run_role_arn`, `break_glass_role_arn`, `log_archive_bucket_name` (+ real unique account emails) | [`aws-organization.tfvars.example`](./aws-organization.tfvars.example) |
 | — | **MANUAL GATE** | Enable IAM Identity Center in the mgmt account, delegate to shared-services | — | Console action; blocks step 4. See runbook. |
-| 2 | `aws-security` | Security tooling, log archive, CloudTrail, GuardDuty, Security Hub, Config aggregator | `log_archive_bucket_name`, `key_admin_arn`, `config_role_arn`, `aggregator_role_arn` | [`aws-security.tfvars.example`](./aws-security.tfvars.example) |
+| 2 | `aws-security` | Security tooling, log archive, CloudTrail, GuardDuty, Security Hub, Config aggregator | `aws_overrides`: `log_archive_bucket_name`, `key_admin_arn`, `config_role_arn`, `aggregator_role_arn` | [`aws-security.tfvars.example`](./aws-security.tfvars.example) |
 | 3 | `aws-network` | TGW hub-spoke, IPAM, inspection/egress VPCs, resolver | `log_archive_bucket_name` | [`aws-network.tfvars.example`](./aws-network.tfvars.example) |
 | 4 | `aws-identity` | Identity Center permission sets + assignments | *(none required)* — needs the gate above | [`aws-identity.tfvars.example`](./aws-identity.tfvars.example) |
 | 5 | `aws-shared-services` | ACM Private CA + Secrets baseline *(gated, off by default)* | *(none required)* | [`aws-shared-services.tfvars.example`](./aws-shared-services.tfvars.example) |

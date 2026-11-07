@@ -20,7 +20,6 @@ module "organization" {
   admin_project_id      = local.admin_project_id
   admin_project_number  = local.admin_project_number
   customer_id           = local.customer_id
-  admin_email           = "infra-admin@example.com"
   terraform_admin_email = local.terraform_admin_email
   billing_account       = local.billing_account
   project_prefix        = "myorg"
@@ -38,13 +37,19 @@ module "organization" {
     }
   }
 
-  organization_admin_groups             = ["gcp-organization-admins@example.com"]
-  billing_admin_groups                  = ["gcp-billing-admins@example.com"]
-  default_region                        = "us-central1"
-  allowed_regions                       = ["us-central1", "us-east1", "europe-west1"]
-  strict_folder_policy_environment_keys = ["prod"]
-  security_contact_email                = "security@example.com"
-  billing_contact_email                 = "billing@example.com"
-  monthly_budget_amount                 = 1000
-  budget_currency                       = "USD"
+  default_region        = "us-central1"
+  monthly_budget_amount = 1000
+
+  # Every tuning input sits in one object (the gcp section); unset keys take
+  # the stage defaults.
+  gcp = {
+    admin_email                           = "infra-admin@example.com"
+    organization_admin_groups             = ["gcp-organization-admins@example.com"]
+    billing_admin_groups                  = ["gcp-billing-admins@example.com"]
+    allowed_regions                       = ["us-central1", "us-east1", "europe-west1"]
+    strict_folder_policy_environment_keys = ["prod"]
+    security_contact_email                = "security@example.com"
+    billing_contact_email                 = "billing@example.com"
+    budget_currency                       = "USD"
+  }
 }

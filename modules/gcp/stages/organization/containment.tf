@@ -10,7 +10,7 @@ locals {
   # The keyring that holds the audit-logs / audit-analytics keys.
   audit_keyring_id = local.separate_logging_project ? module.audit_cmek[0].keyring_id : module.cmek.keyring_id
 
-  containment_bucket_targets = var.enable_admin_containment ? {
+  containment_bucket_targets = var.gcp.enable_admin_containment ? {
     audit_bucket      = module.audit_logs.storage_bucket_name
     access_log_bucket = module.audit_logs.access_log_bucket_name
   } : {}
@@ -27,7 +27,7 @@ resource "google_tags_location_tag_binding" "containment_buckets" {
 # The audit Log Analytics log bucket (its update/untag is denied by the
 # tag-scoped containment rule).
 resource "google_tags_location_tag_binding" "containment_log_analytics_bucket" {
-  count = var.enable_admin_containment && var.enable_log_analytics ? 1 : 0
+  count = var.gcp.enable_admin_containment && var.gcp.enable_log_analytics ? 1 : 0
 
   parent    = "//logging.googleapis.com/${module.audit_logs.log_analytics_bucket_id}"
   location  = module.audit_logs.log_analytics_bucket_location
@@ -35,7 +35,7 @@ resource "google_tags_location_tag_binding" "containment_log_analytics_bucket" {
 }
 
 resource "google_tags_location_tag_binding" "containment_audit_keyring" {
-  count = var.enable_admin_containment ? 1 : 0
+  count = var.gcp.enable_admin_containment ? 1 : 0
 
   parent    = "//cloudkms.googleapis.com/${local.audit_keyring_id}"
   location  = var.default_region

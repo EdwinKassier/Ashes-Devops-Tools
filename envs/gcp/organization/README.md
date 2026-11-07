@@ -22,6 +22,26 @@ Application environments are declared once through `var.environments`. Each entr
 
 See [`terraform.tfvars.example`](./terraform.tfvars.example) for the expected shape.
 
+## Tuning inputs: `gcp_overrides`
+
+Every other input of the organization stage is one object, `gcp_overrides`, of
+the stage's `gcp` type. The effective value is the gcp section of
+`config/landing-zone.yaml` with the set (non-null) override keys on top:
+`merge(local.lz_gcp, { for k, v in var.gcp_overrides : k => v if v != null })`.
+So a set key wins over the config file, and an unset or null key keeps the
+config value, else the stage default. Keys outside the config schema (for
+example `enable_pam`, `logging_project_id`) are set only here.
+
+```hcl
+gcp_overrides = {
+  enable_pam          = true
+  pam_eligible_groups = ["gcp-org-admin-requesters@example.com"]
+  pam_approver_groups = ["gcp-org-admin-approvers@example.com"]
+}
+```
+
+The variable names before this change map 1:1 to keys (UPGRADING.md).
+
 <!-- BEGIN_TF_DOCS -->
 
 

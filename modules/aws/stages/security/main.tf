@@ -54,15 +54,15 @@ locals {
   # The ARN the assumption alarm watches: the role this stage creates when
   # create_break_glass is true, otherwise the externally-managed ARN the caller
   # passes. So "managed here" and "monitored here" stay in lockstep.
-  effective_break_glass_role_arn = var.create_break_glass ? module.break_glass[0].break_glass_role_arn : var.break_glass_role_arn
+  effective_break_glass_role_arn = var.aws.create_break_glass ? module.break_glass[0].break_glass_role_arn : var.aws.break_glass_role_arn
 
   # Key administrator per CMK: the explicit key_admin_arn, else the key's own
   # account role key_admin_role_name (tfc-apply by default — the principal that
   # applies the key, so the key can never be created un-administrable).
   key_admin_arns = {
-    log_archive      = coalesce(var.key_admin_arn, "arn:${local.partition}:iam::${var.log_archive_account_id}:role/${var.key_admin_role_name}")
-    forensics        = coalesce(var.key_admin_arn, "arn:${local.partition}:iam::${var.forensics_account_id}:role/${var.key_admin_role_name}")
-    security_tooling = coalesce(var.key_admin_arn, "arn:${local.partition}:iam::${var.security_tooling_account_id}:role/${var.key_admin_role_name}")
+    log_archive      = coalesce(var.aws.key_admin_arn, "arn:${local.partition}:iam::${var.log_archive_account_id}:role/${var.aws.key_admin_role_name}")
+    forensics        = coalesce(var.aws.key_admin_arn, "arn:${local.partition}:iam::${var.forensics_account_id}:role/${var.aws.key_admin_role_name}")
+    security_tooling = coalesce(var.aws.key_admin_arn, "arn:${local.partition}:iam::${var.security_tooling_account_id}:role/${var.aws.key_admin_role_name}")
   }
 
   # kms:PutKeyPolicy holder per CMK: the member-account break-glass role in the
@@ -94,17 +94,17 @@ locals {
 
 module "break_glass" {
   source = "../../iam/iam-role"
-  count  = var.create_break_glass ? 1 : 0
+  count  = var.aws.create_break_glass ? 1 : 0
   providers = {
     aws = aws.management
   }
 
   roles                          = {}
   enable_break_glass             = true
-  break_glass_role_name          = var.break_glass_role_name
-  break_glass_trusted_principals = var.break_glass_trusted_principals
-  break_glass_mfa_max_age        = var.break_glass_mfa_max_age
-  break_glass_active             = var.break_glass_active
+  break_glass_role_name          = var.aws.break_glass_role_name
+  break_glass_trusted_principals = var.aws.break_glass_trusted_principals
+  break_glass_mfa_max_age        = var.aws.break_glass_mfa_max_age
+  break_glass_active             = var.aws.break_glass_active
 }
 
 # ---------------------------------------------------------------------------
@@ -129,8 +129,8 @@ module "log_cmk" {
   management_account_id = var.management_account_id
   key_admin_arn         = local.key_admin_arns["log_archive"]
   key_policy_admin_arns = local.key_policy_admin_arns["log_archive"]
-  key_user_arns         = try(var.kms_key_user_arns["log_archive"], [])
-  enable_protection_tag = var.enable_kms_protection_tag
+  key_user_arns         = try(var.aws.kms_key_user_arns["log_archive"], [])
+  enable_protection_tag = var.aws.enable_kms_protection_tag
   # log_service_principals uses the module SRA default
   # (cloudtrail / config / securitylake / delivery.logs for vended logs).
 }
@@ -146,8 +146,8 @@ module "forensics_cmk" {
   management_account_id = var.management_account_id
   key_admin_arn         = local.key_admin_arns["forensics"]
   key_policy_admin_arns = local.key_policy_admin_arns["forensics"]
-  key_user_arns         = try(var.kms_key_user_arns["forensics"], [])
-  enable_protection_tag = var.enable_kms_protection_tag
+  key_user_arns         = try(var.aws.kms_key_user_arns["forensics"], [])
+  enable_protection_tag = var.aws.enable_kms_protection_tag
 }
 
 # Security-tooling CMK. The log CMK lives in the log-archive account and its key
@@ -167,8 +167,8 @@ module "sectool_cmk" {
   management_account_id  = var.management_account_id
   key_admin_arn          = local.key_admin_arns["security_tooling"]
   key_policy_admin_arns  = local.key_policy_admin_arns["security_tooling"]
-  key_user_arns          = try(var.kms_key_user_arns["security_tooling"], [])
-  enable_protection_tag  = var.enable_kms_protection_tag
+  key_user_arns          = try(var.aws.kms_key_user_arns["security_tooling"], [])
+  enable_protection_tag  = var.aws.enable_kms_protection_tag
   log_service_principals = []
   service_principals     = ["sns.amazonaws.com", "ssm.amazonaws.com", "cloudwatch.amazonaws.com"]
   # Local services only: scope the grant to this account (aws:SourceAccount),
@@ -187,7 +187,7 @@ module "log_archive_bucket" {
     aws = aws.log_archive
   }
 
-  log_archive_bucket_name = var.log_archive_bucket_name
+  log_archive_bucket_name = var.aws.log_archive_bucket_name
   kms_key_arn             = module.log_cmk.key_arn
   org_id                  = var.org_id
 }
@@ -199,7 +199,7 @@ module "log_archive_bucket" {
 module "cloudtrail" {
   source = "../../security/cloudtrail-org"
   # false when another owner (e.g. AWS Control Tower) already runs the org trail.
-  count = var.create_organization_trail ? 1 : 0
+  count = var.aws.create_organization_trail ? 1 : 0
   providers = {
     aws = aws.management
   }
@@ -209,23 +209,23 @@ module "cloudtrail" {
 
   # CIS AWS 3.8/3.9: S3 object-level data events (WriteOnly by default; the
   # log-archive bucket is excluded inside the module to avoid recursion).
-  cloudtrail_s3_data_events           = var.cloudtrail_s3_data_events
-  s3_data_events_excluded_bucket_arns = var.cloudtrail_s3_data_events_excluded_bucket_arns
-  enable_lambda_data_events           = var.cloudtrail_lambda_data_events
+  cloudtrail_s3_data_events           = var.aws.cloudtrail_s3_data_events
+  s3_data_events_excluded_bucket_arns = var.aws.cloudtrail_s3_data_events_excluded_bucket_arns
+  enable_lambda_data_events           = var.aws.cloudtrail_lambda_data_events
 
   # CIS AWS section 4: CloudWatch Logs + metric-filter alarms (default ON). The
   # module creates its own logs-granted CMK and KMS-encrypted SNS topic in the
   # management account unless existing ones are supplied.
-  enable_cloudwatch_logs         = var.enable_cloudwatch_logs
-  cloudwatch_logs_role_arn       = var.cloudtrail_cloudwatch_role_arn
-  cloudwatch_logs_retention_days = var.cloudwatch_logs_retention_days
-  cloudwatch_logs_kms_key_arn    = var.cloudwatch_logs_kms_key_arn
+  enable_cloudwatch_logs         = var.aws.enable_cloudwatch_logs
+  cloudwatch_logs_role_arn       = var.aws.cloudtrail_cloudwatch_role_arn
+  cloudwatch_logs_retention_days = var.aws.cloudwatch_logs_retention_days
+  cloudwatch_logs_kms_key_arn    = var.aws.cloudwatch_logs_kms_key_arn
   # The management-account aws-security apply role manages the CMK by key
   # policy (its own IAM policy grants no tag-based kms:*).
   cloudwatch_logs_kms_key_manager_arns = coalesce(var.cloudwatch_logs_kms_key_manager_arns, ["arn:${var.partition}:iam::${var.management_account_id}:role/${var.management_role_name_prefix}aws-security-apply"])
-  alarm_sns_topic_arn                  = var.cloudtrail_alarm_sns_topic_arn
-  alarm_subscriptions                  = coalesce(var.cloudtrail_alarm_subscribers, var.notification_subscribers)
-  cis_alarms_excluded                  = var.cloudtrail_cis_alarms_excluded
+  alarm_sns_topic_arn                  = var.aws.cloudtrail_alarm_sns_topic_arn
+  alarm_subscriptions                  = coalesce(var.aws.cloudtrail_alarm_subscribers, var.aws.notification_subscribers)
+  cis_alarms_excluded                  = var.aws.cloudtrail_cis_alarms_excluded
 
   depends_on = [module.log_archive_bucket]
 }
@@ -240,20 +240,20 @@ module "config" {
     aws = aws.security_tooling
   }
 
-  aws_enabled_regions = var.aws_enabled_regions
+  aws_enabled_regions = var.aws.aws_enabled_regions
   # Null role ARNs -> the module creates the AWSServiceRoleForConfig SLR and
   # the org aggregator role in the security-tooling account.
-  config_role_arn            = var.config_role_arn
-  create_service_linked_role = var.create_config_service_linked_role
+  config_role_arn            = var.aws.config_role_arn
+  create_service_linked_role = var.aws.create_config_service_linked_role
   account_id                 = var.security_tooling_account_id
-  aggregator_role_arn        = var.aggregator_role_arn
+  aggregator_role_arn        = var.aws.aggregator_role_arn
   log_archive_bucket         = module.log_archive_bucket.bucket_name
   recorder_only              = false
   # Record global resource types in the home Region only, not once per Region.
   home_region = var.aws_region
   # Record ALL supported resource types (default true, the full-coverage but
   # most expensive Config mode). Set false for cost-sensitive non-prod.
-  record_all_supported = var.config_record_all_supported
+  record_all_supported = var.aws.config_record_all_supported
   # The org aggregator role is created in the security-tooling account.
   permissions_boundary_arn = local.security_tooling_boundary_arn
 }
@@ -269,11 +269,11 @@ module "guardduty" {
     aws.management = aws.management
   }
 
-  aws_enabled_regions         = var.aws_enabled_regions
+  aws_enabled_regions         = var.aws.aws_enabled_regions
   security_tooling_account_id = var.security_tooling_account_id
   # Agentless EBS malware scanning (default true, billed per GB scanned). Set
   # false for non-prod where it is not required.
-  enable_ebs_malware_protection = var.guardduty_enable_ebs_malware_protection
+  enable_ebs_malware_protection = var.aws.guardduty_enable_ebs_malware_protection
 }
 
 # ---------------------------------------------------------------------------
@@ -320,7 +320,7 @@ module "delegated_admin" {
   # management account — keep its blast radius tight). Default null keeps the previous
   # shared-services target (unchanged); set identity_account_id to a dedicated account.
   # PREVIEW: opt-in (default off), not yet validated against a real apply. before relying on the new target.
-  identity_account_id = coalesce(var.identity_account_id, var.shared_services_account_id)
+  identity_account_id = coalesce(var.aws.identity_account_id, var.shared_services_account_id)
 }
 
 # ---------------------------------------------------------------------------
@@ -334,7 +334,7 @@ module "org_security_service" {
     aws.management = aws.management
   }
 
-  enabled_services            = var.enabled_security_services
+  enabled_services            = var.aws.enabled_security_services
   security_tooling_account_id = var.security_tooling_account_id
 }
 
@@ -348,10 +348,10 @@ module "securitylake" {
     aws = aws.security_tooling
   }
 
-  enable_security_lake        = var.enable_security_lake
+  enable_security_lake        = var.aws.enable_security_lake
   meta_store_manager_role_arn = local.meta_store_manager_role_arn
   kms_key_id                  = module.log_cmk.key_arn
-  aws_enabled_regions         = var.aws_enabled_regions
+  aws_enabled_regions         = var.aws.aws_enabled_regions
 }
 
 # ---------------------------------------------------------------------------
@@ -380,7 +380,7 @@ module "incident_response" {
     aws = aws.security_tooling
   }
 
-  enable_incident_response = var.enable_incident_response
+  enable_incident_response = var.aws.enable_incident_response
   forensics_account_id     = var.forensics_account_id
   org_id                   = var.org_id
   # Let the forensics role decrypt snapshots encrypted with the forensics CMK.
@@ -404,7 +404,7 @@ module "security_notifications" {
   # encrypted with a key that account can access — the sectool CMK, not the
   # cross-account log CMK (which would fail with KMSAccessDenied on publish).
   kms_key_id                = module.sectool_cmk.key_arn
-  notification_subscribers  = var.notification_subscribers
+  notification_subscribers  = var.aws.notification_subscribers
   break_glass_role_arn      = local.effective_break_glass_role_arn
   cloudtrail_log_group_name = var.cloudtrail_log_group_name
 }
@@ -419,7 +419,7 @@ module "service_quotas" {
     aws = aws.security_tooling
   }
 
-  enable_service_quotas   = var.enable_service_quotas
+  enable_service_quotas   = var.aws.enable_service_quotas
   notifications_topic_arn = module.security_notifications.topic_arn
 }
 

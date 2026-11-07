@@ -5,19 +5,19 @@
 # allow_user_principals_for_break_glass escape hatch; prefer a break-glass group
 # plus the just-in-time PAM entitlement (pam.tf) for human elevation.
 locals {
-  admin_user_members = var.allow_user_principals_for_break_glass ? distinct(concat(
-    ["user:${var.admin_email}"],
-    var.break_glass_user != null ? ["user:${var.break_glass_user}"] : [],
+  admin_user_members = var.gcp.allow_user_principals_for_break_glass ? distinct(concat(
+    ["user:${var.gcp.admin_email}"],
+    var.gcp.break_glass_user != null ? ["user:${var.gcp.break_glass_user}"] : [],
   )) : []
 
   org_admin_members = distinct(concat(
-    [for group in var.organization_admin_groups : "group:${group}"],
+    [for group in var.gcp.organization_admin_groups : "group:${group}"],
     local.admin_user_members,
   ))
 
   billing_admin_members = distinct(concat(
-    [for group in var.billing_admin_groups : "group:${group}"],
-    var.allow_user_principals_for_break_glass ? ["user:${var.admin_email}"] : [],
+    [for group in var.gcp.billing_admin_groups : "group:${group}"],
+    var.gcp.allow_user_principals_for_break_glass ? ["user:${var.gcp.admin_email}"] : [],
   ))
 
   production_environment_keys = sort([for k, e in var.environments : k if e.is_production])
@@ -43,7 +43,7 @@ module "organization" {
 # bootstrap identity holds no standing folder-admin rights; enable only while
 # migrating an existing deployment that still runs every stage as terraform-admin.
 resource "google_folder_iam_member" "terraform_admin_folder_roles" {
-  for_each = !var.enable_legacy_admin_folder_roles ? {} : {
+  for_each = !var.gcp.enable_legacy_admin_folder_roles ? {} : {
     for pair in flatten([
       for folder_key, folder in module.organization.folders : [
         for role in [
@@ -72,9 +72,9 @@ locals {
   # audit bucket AND its CMEK keys live in that dedicated logging project (which
   # the Terraform admin/automation SA must NOT own — see variable docs), instead
   # of the admin/bootstrap project. Default null = admin project (unchanged).
-  separate_logging_project = var.logging_project_id != null
-  audit_project_id         = coalesce(var.logging_project_id, var.admin_project_id)
-  audit_project_number     = local.separate_logging_project ? coalesce(var.logging_project_number, "0") : var.admin_project_number
+  separate_logging_project = var.gcp.logging_project_id != null
+  audit_project_id         = coalesce(var.gcp.logging_project_id, var.admin_project_id)
+  audit_project_number     = local.separate_logging_project ? coalesce(var.gcp.logging_project_number, "0") : var.admin_project_number
 
   # CMEK keys for the audit store, granted to the GCS / BigQuery service agents
   # of the project that actually holds the bucket and dataset.
@@ -146,15 +146,15 @@ module "audit_logs" {
   project_id                 = local.audit_project_id
   bucket_location            = var.default_region
   log_retention_days         = var.audit_log_retention_days
-  enable_bucket_lock         = var.enable_audit_bucket_lock
-  soft_delete_retention_days = var.audit_soft_delete_retention_days
+  enable_bucket_lock         = var.gcp.enable_audit_bucket_lock
+  soft_delete_retention_days = var.gcp.audit_soft_delete_retention_days
   org_id                     = var.org_id
   kms_key_name               = local.audit_key_names["audit-logs"]
 
   # Log Analytics: org audit logs in an analytics-enabled log bucket with a
   # linked BigQuery dataset (Google's current recommendation).
-  enable_log_analytics         = var.enable_log_analytics
-  log_analytics_retention_days = var.log_analytics_retention_days
+  enable_log_analytics         = var.gcp.enable_log_analytics
+  log_analytics_retention_days = var.gcp.log_analytics_retention_days
 
   # Enable BigQuery Analytics for improved security investigation
   enable_bigquery_analytics = true
@@ -172,19 +172,19 @@ module "audit_logs" {
 module "control_plane_alerting" {
   source = "../../monitoring/control-plane"
 
-  enable                         = var.enable_control_plane_alerting
+  enable                         = var.gcp.enable_control_plane_alerting
   project_id                     = local.audit_project_id
   org_id                         = var.org_id
-  notification_email_addresses   = var.alert_notification_emails
-  extra_notification_channel_ids = var.alert_notification_channels
+  notification_email_addresses   = var.gcp.alert_notification_emails
+  extra_notification_channel_ids = var.gcp.alert_notification_channels
   break_glass_principal_emails = distinct(concat(
-    var.break_glass_user != null ? [var.break_glass_user] : [],
-    var.break_glass_principal_emails,
+    var.gcp.break_glass_user != null ? [var.gcp.break_glass_user] : [],
+    var.gcp.break_glass_principal_emails,
   ))
 
   # CIS GCP 2.4-2.11 log-based metrics + alerts, fed org-wide by the aggregated
   # org sink (every project's Admin Activity logs).
-  enable_cis_log_metrics = var.enable_cis_log_metrics
+  enable_cis_log_metrics = var.gcp.enable_cis_log_metrics
 }
 
 # Production needs the containment deny policy: without it the automation
@@ -194,7 +194,7 @@ module "control_plane_alerting" {
 resource "terraform_data" "production_requires_admin_containment" {
   lifecycle {
     precondition {
-      condition     = length(local.production_environment_keys) == 0 || var.enable_admin_containment || var.production_containment_waived
+      condition     = length(local.production_environment_keys) == 0 || var.gcp.enable_admin_containment || var.production_containment_waived
       error_message = "Production environments (${join(", ", local.production_environment_keys)}) exist but enable_admin_containment = false: the audit store and VPC-SC perimeters are not protected from the automation identity. Enable it with a real break-glass group (examples/presets/prod-gcp-organization.tfvars), or waive it explicitly with enable_admin_containment = false in the root. The WORM lock (enable_audit_bucket_lock) stays a separate, irreversible opt-in."
     }
   }
@@ -202,19 +202,19 @@ resource "terraform_data" "production_requires_admin_containment" {
 
 # A budget accepts at most 5 monitoring notification channels.
 resource "terraform_data" "budget_channel_limit" {
-  count = var.budget_notify_alert_channels && var.enable_control_plane_alerting ? 1 : 0
+  count = var.budget_notify_alert_channels && var.gcp.enable_control_plane_alerting ? 1 : 0
 
   lifecycle {
     precondition {
-      condition     = length(var.alert_notification_emails) + length(var.alert_notification_channels) <= 5
-      error_message = "budget_notify_alert_channels attaches every control-plane notification channel to the org budget, and a budget accepts at most 5 (${length(var.alert_notification_emails)} emails + ${length(var.alert_notification_channels)} extra channels configured). Reduce the recipients or set budget_notify_alert_channels = false."
+      condition     = length(var.gcp.alert_notification_emails) + length(var.gcp.alert_notification_channels) <= 5
+      error_message = "budget_notify_alert_channels attaches every control-plane notification channel to the org budget, and a budget accepts at most 5 (${length(var.gcp.alert_notification_emails)} emails + ${length(var.gcp.alert_notification_channels)} extra channels configured). Reduce the recipients or set budget_notify_alert_channels = false."
     }
   }
 }
 
 check "control_plane_alerts_have_a_destination" {
   assert {
-    condition     = !var.enable_control_plane_alerting || length(var.alert_notification_emails) + length(var.alert_notification_channels) > 0
+    condition     = !var.gcp.enable_control_plane_alerting || length(var.gcp.alert_notification_emails) + length(var.gcp.alert_notification_channels) > 0
     error_message = "Control-plane alerting is enabled but neither alert_notification_emails nor alert_notification_channels is set: guardrail-change alerts will fire without notifying anyone."
   }
 }
@@ -250,7 +250,7 @@ module "tags" {
       values      = ["public", "internal", "confidential", "restricted"]
       description = "Data sensitivity level per the organization data classification policy"
     }
-    }, var.enable_admin_containment ? {
+    }, var.gcp.enable_admin_containment ? {
     # Marks the audit store (buckets + CMEK keyring) for the tag-conditioned
     # containment deny rule. IAM deny conditions can only match resource tags.
     "containment" = {
@@ -264,15 +264,15 @@ module "tags" {
 locals {
   # Opt-in CMEK-required org policy (gcp.restrictNonCmekServices). Default
   # off (empty list), so a default apply is unchanged. Enable with
-  # var.enable_cmek_org_policy; the hardening preset turns it on. Admins choose
-  # which services require CMEK via var.cmek_required_services.
-  cmek_list_policy = var.enable_cmek_org_policy ? [
+  # var.gcp.enable_cmek_org_policy; the hardening preset turns it on. Admins choose
+  # which services require CMEK via var.gcp.cmek_required_services.
+  cmek_list_policy = var.gcp.enable_cmek_org_policy ? [
     {
       constraint     = "gcp.restrictNonCmekServices"
       allow_all      = false
       deny_all       = false
       allowed_values = []
-      denied_values  = var.cmek_required_services
+      denied_values  = var.gcp.cmek_required_services
     }
   ] : []
 }
@@ -288,7 +288,7 @@ module "org_policies" {
   # iam.managed.allowedPolicyMembers blocks the automatic Owner / Folder Admin
   # grants made at project and folder creation and Google-owned principals
   # outside the org (see docs/known-gaps.md).
-  prefer_managed_constraints = var.prefer_managed_constraints
+  prefer_managed_constraints = var.gcp.prefer_managed_constraints
 
   list_policies    = local.effective_list_policies
   boolean_policies = local.effective_boolean_policies
@@ -296,7 +296,7 @@ module "org_policies" {
   # Opt-in custom organization-policy constraints (CEL-defined, resource-shape
   # guardrails the fixed boolean/list constraints can't express). Default [] =
   # none. See docs/known-gaps.md.
-  custom_constraints = concat(local.wif_tenant_constraints, var.custom_org_constraints)
+  custom_constraints = concat(local.wif_tenant_constraints, var.gcp.custom_org_constraints)
 }
 
 # Workload identity federation, tenant level. iam.workloadIdentityPoolProviders
@@ -337,7 +337,7 @@ locals {
     ]))
     method_types   = ["CREATE", "UPDATE"]
     resource_types = ["iam.googleapis.com/WorkloadIdentityPoolProvider"]
-    enforcement    = var.wif_tenant_pin_enforcement
+    enforcement    = var.gcp.wif_tenant_pin_enforcement
   }]
 }
 
@@ -347,7 +347,7 @@ locals {
   # would be denied. Bare regions become the in:<region>-locations value group;
   # anything already a value group or a zone/multi-region is passed through.
   resource_location_values = [
-    for r in var.allowed_regions : can(regex("^[a-z]+-[a-z]+[0-9]+$", r)) ? "in:${r}-locations" : r
+    for r in var.gcp.allowed_regions : can(regex("^[a-z]+-[a-z]+[0-9]+$", r)) ? "in:${r}-locations" : r
   ]
 
   # Workload identity federation is limited to the issuers this estate trusts
@@ -391,18 +391,18 @@ locals {
     },
     {
       constraint     = "iam.workloadIdentityPoolProviders"
-      allowed_values = var.allowed_workload_identity_issuers
+      allowed_values = var.gcp.allowed_workload_identity_issuers
       denied_values  = null
       allow_all      = null
-      deny_all       = length(var.allowed_workload_identity_issuers) == 0 ? true : null
+      deny_all       = length(var.gcp.allowed_workload_identity_issuers) == 0 ? true : null
     },
     # No AWS-account federation unless listed.
     {
       constraint     = "iam.workloadIdentityPoolAwsAccounts"
-      allowed_values = var.allowed_workload_identity_aws_accounts
+      allowed_values = var.gcp.allowed_workload_identity_aws_accounts
       denied_values  = null
       allow_all      = null
-      deny_all       = length(var.allowed_workload_identity_aws_accounts) == 0 ? true : null
+      deny_all       = length(var.gcp.allowed_workload_identity_aws_accounts) == 0 ? true : null
     },
     # Only internal protocol forwarding: no external forwarding rules that
     # bypass the load-balancer + Cloud Armor edge.
@@ -418,7 +418,7 @@ locals {
     # (ingress "all"). Public apps go through the external ALB + Cloud Armor
     # (internal-and-cloud-load-balancing). Closes the invoker_iam_disabled +
     # INGRESS_TRAFFIC_ALL bypass of domain-restricted sharing.
-    var.restrict_cloud_run_ingress ? [{
+    var.gcp.restrict_cloud_run_ingress ? [{
       constraint     = "run.allowedIngress"
       allowed_values = ["internal", "internal-and-cloud-load-balancing"]
       denied_values  = null
@@ -488,7 +488,7 @@ locals {
       constraint = "compute.setNewProjectDefaultToZonalDNSOnly"
       enforce    = true
     }
-    ], var.enforce_os_login ? [
+    ], var.gcp.enforce_os_login ? [
     # CIS GCP 4.4: OS Login org-wide. Folders in os_login_exempt_environment_keys
     # get a folder-level override (module.os_login_exemptions).
     {
@@ -504,7 +504,7 @@ locals {
   default_list_constraints    = [for p in local.default_list_policies : p.constraint]
   default_boolean_constraints = [for p in local.default_boolean_policies : p.constraint]
   override_is_list = {
-    for c, o in var.org_policy_overrides : c => (
+    for c, o in var.gcp.org_policy_overrides : c => (
       contains(local.default_list_constraints, c) ||
       (!contains(local.default_boolean_constraints, c) && (o.allowed_values != null || o.denied_values != null || o.allow_all != null || o.deny_all != null))
     )
@@ -513,17 +513,17 @@ locals {
   effective_list_policies = concat(
     [
       for p in local.default_list_policies : (
-        contains(keys(var.org_policy_overrides), p.constraint) ? {
+        contains(keys(var.gcp.org_policy_overrides), p.constraint) ? {
           constraint     = p.constraint
-          allowed_values = var.org_policy_overrides[p.constraint].allowed_values
-          denied_values  = var.org_policy_overrides[p.constraint].denied_values
-          allow_all      = var.org_policy_overrides[p.constraint].allow_all
-          deny_all       = var.org_policy_overrides[p.constraint].deny_all
+          allowed_values = var.gcp.org_policy_overrides[p.constraint].allowed_values
+          denied_values  = var.gcp.org_policy_overrides[p.constraint].denied_values
+          allow_all      = var.gcp.org_policy_overrides[p.constraint].allow_all
+          deny_all       = var.gcp.org_policy_overrides[p.constraint].deny_all
         } : p
-      ) if !try(var.org_policy_overrides[p.constraint].disabled, false)
+      ) if !try(var.gcp.org_policy_overrides[p.constraint].disabled, false)
     ],
     [
-      for c, o in var.org_policy_overrides : {
+      for c, o in var.gcp.org_policy_overrides : {
         constraint     = c
         allowed_values = o.allowed_values
         denied_values  = o.denied_values
@@ -537,11 +537,11 @@ locals {
     [
       for p in local.default_boolean_policies : {
         constraint = p.constraint
-        enforce    = try(coalesce(var.org_policy_overrides[p.constraint].enforce, p.enforce), p.enforce)
-      } if !try(var.org_policy_overrides[p.constraint].disabled, false)
+        enforce    = try(coalesce(var.gcp.org_policy_overrides[p.constraint].enforce, p.enforce), p.enforce)
+      } if !try(var.gcp.org_policy_overrides[p.constraint].disabled, false)
     ],
     [
-      for c, o in var.org_policy_overrides : { constraint = c, enforce = coalesce(o.enforce, true) }
+      for c, o in var.gcp.org_policy_overrides : { constraint = c, enforce = coalesce(o.enforce, true) }
       if !local.override_is_list[c] && !contains(local.default_boolean_constraints, c) && !o.disabled
     ],
   )
@@ -563,22 +563,22 @@ locals {
 # existing state addresses do not move.
 module "guardrails" {
   source = "../guardrails"
-  count  = var.guardrail_owner_mode == "organization" ? 1 : 0
+  count  = var.gcp.guardrail_owner_mode == "organization" ? 1 : 0
 
   org_id                           = module.organization.organization_id
   create_deny_policies             = false
-  enable_admin_containment         = var.enable_admin_containment
-  containment_exempt_principals    = var.containment_exempt_principals
+  enable_admin_containment         = var.gcp.enable_admin_containment
+  containment_exempt_principals    = var.gcp.containment_exempt_principals
   containment_tag_key_id           = try(module.tags.tag_keys["containment"], null)
   containment_tag_value_id         = try(module.tags.tag_values["containment-protected"], null)
-  enable_principal_access_boundary = var.enable_principal_access_boundary
-  iam_deny_policies                = var.iam_deny_policies
+  enable_principal_access_boundary = var.gcp.enable_principal_access_boundary
+  iam_deny_policies                = var.gcp.iam_deny_policies
 }
 
 # In separate mode iam_deny_policies is ignored here: it belongs on gcp-guardrails.
 check "iam_deny_policies_belong_to_guardrails" {
   assert {
-    condition     = var.guardrail_owner_mode == "organization" || length(var.iam_deny_policies) == 0
+    condition     = var.gcp.guardrail_owner_mode == "organization" || length(var.gcp.iam_deny_policies) == 0
     error_message = "iam_deny_policies is set but guardrail_owner_mode = \"separate\": this stage ignores it. Move the policies to the gcp-guardrails root (variable iam_deny_policies there), which applies them as the guardrails SA."
   }
 }
@@ -587,21 +587,21 @@ module "iam_deny" {
   source = "../../iam/deny-policy"
 
   parent        = urlencode("cloudresourcemanager.googleapis.com/organizations/${module.organization.organization_id}")
-  deny_policies = var.guardrail_owner_mode == "organization" ? module.guardrails[0].deny_policies : []
+  deny_policies = var.gcp.guardrail_owner_mode == "organization" ? module.guardrails[0].deny_policies : []
 }
 
 # Folder-level Organization Policies for Production
 module "prod_folder_policies" {
   source = "../../governance/org-policy"
   for_each = {
-    for env_key in var.strict_folder_policy_environment_keys :
+    for env_key in var.gcp.strict_folder_policy_environment_keys :
     env_key => module.organization.folders[env_key]
     if contains(keys(module.organization.folders), env_key)
   }
 
   parent = each.value.name
 
-  prefer_managed_constraints = var.prefer_managed_constraints
+  prefer_managed_constraints = var.gcp.prefer_managed_constraints
 
   list_policies = []
 
@@ -631,8 +631,8 @@ module "prod_folder_policies" {
 # org-wide default. Strict folders can never be exempted (variable validation).
 module "os_login_exemptions" {
   source = "../../governance/org-policy"
-  for_each = var.enforce_os_login ? {
-    for env_key in var.os_login_exempt_environment_keys :
+  for_each = var.gcp.enforce_os_login ? {
+    for env_key in var.gcp.os_login_exempt_environment_keys :
     env_key => module.organization.folders[env_key]
     if contains(keys(module.organization.folders), env_key)
   } : {}
@@ -642,7 +642,7 @@ module "os_login_exemptions" {
 
   # Must match the org-node policy: overriding the managed constraint needs the
   # managed name, the legacy one needs the legacy name.
-  prefer_managed_constraints = var.prefer_managed_constraints
+  prefer_managed_constraints = var.gcp.prefer_managed_constraints
 
   boolean_policies = [
     {
@@ -658,11 +658,11 @@ module "os_login_exemptions" {
 # needs roles/cloudkms.cryptoKeyEncrypterDecrypter on the key BEFORE kms_key_name
 # is set, or the settings update fails.
 resource "google_logging_organization_settings" "this" {
-  count = var.enable_logging_organization_settings ? 1 : 0
+  count = var.gcp.enable_logging_organization_settings ? 1 : 0
 
   organization         = var.org_id
   storage_location     = coalesce(var.logging_settings_storage_location, var.default_region)
-  kms_key_name         = var.logging_settings_kms_key_name
+  kms_key_name         = var.gcp.logging_settings_kms_key_name
   disable_default_sink = false
 }
 
@@ -672,28 +672,28 @@ resource "google_logging_organization_settings" "this" {
 # enable_principal_access_boundary input. Validate on a non-production org.
 module "automation_boundary" {
   source = "../../iam/principal-access-boundary"
-  count  = var.enable_principal_access_boundary ? 1 : 0
+  count  = var.gcp.enable_principal_access_boundary ? 1 : 0
 
   organization_id   = var.org_id
-  allowed_resources = var.principal_access_boundary_allowed_resources
+  allowed_resources = var.gcp.principal_access_boundary_allowed_resources
   project_bindings  = { admin = var.admin_project_id }
 }
 
 # Essential Contacts
 resource "google_essential_contacts_contact" "security" {
-  count = var.security_contact_email != null ? 1 : 0
+  count = var.gcp.security_contact_email != null ? 1 : 0
 
   parent                              = "organizations/${var.org_id}"
-  email                               = var.security_contact_email
+  email                               = var.gcp.security_contact_email
   language_tag                        = "en-US"
   notification_category_subscriptions = ["SECURITY", "TECHNICAL", "LEGAL", "PRIVACY", "ALL"]
 }
 
 resource "google_essential_contacts_contact" "billing" {
-  count = var.billing_contact_email != null ? 1 : 0
+  count = var.gcp.billing_contact_email != null ? 1 : 0
 
   parent                              = "organizations/${var.org_id}"
-  email                               = var.billing_contact_email
+  email                               = var.gcp.billing_contact_email
   language_tag                        = "en-US"
   notification_category_subscriptions = ["BILLING"]
 }
@@ -707,11 +707,11 @@ module "org_budget" {
   project_id            = var.admin_project_id
   project_name          = "${var.project_prefix}-org"
   monthly_budget_limit  = var.monthly_budget_amount
-  currency_code         = var.budget_currency
+  currency_code         = var.gcp.budget_currency
   threshold_rules       = var.budget_threshold_rules
   kms_key_name          = module.cmek.key_names["billing-alerts"]
   region                = var.default_region
-  notification_channels = var.budget_notify_alert_channels && var.enable_control_plane_alerting ? module.control_plane_alerting.notification_channel_ids : []
+  notification_channels = var.budget_notify_alert_channels && var.gcp.enable_control_plane_alerting ? module.control_plane_alerting.notification_channel_ids : []
 
   # Monitor the entire Billing Account by defaulting 'projects' to empty (null)
   # projects = ["projects/${var.admin_project_number}"]

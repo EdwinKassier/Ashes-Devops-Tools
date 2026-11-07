@@ -51,7 +51,7 @@ graph TB
 | `<env>-host` | per environment | Per-environment Shared VPC **host** project; workload service projects attach here. |
 | *admin* | *(none — top-level)* | Bootstrap admin project: `terraform-admin` SA, WIF pools, org CMEK, audit sink. |
 
-The environment folder/project keys are the exact keys of the `environment_config` output the org root publishes — the [cross-root contract](adding-a-cloud.md#4-stable-output-keys-are-the-cross-root-contract). A **dedicated logging project** is available but opt-in: `logging_project_id` (default `null` → the audit sink lives in the admin project). Separating it is a PREVIEW separation-of-duties item (see [`known-gaps.md`](../known-gaps.md)).
+The environment folder/project keys are the exact keys of the `environment_config` output the org root publishes — the [cross-root contract](adding-a-cloud.md#4-stable-output-keys-are-the-cross-root-contract). A **dedicated logging project** is available but opt-in: `gcp_overrides.logging_project_id` (default `null` → the audit sink lives in the admin project). Separating it is a PREVIEW separation-of-duties item (see [`known-gaps.md`](../known-gaps.md)).
 
 ---
 
