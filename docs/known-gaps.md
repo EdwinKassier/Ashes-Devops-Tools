@@ -11,8 +11,9 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
 
 ## OPEN — validate before relying on
 
-- **Upstream applies auto-apply non-prod workloads.** Non-production
-  `gcp-workload-<env>` / `aws-workload-<env>` workspaces get
+- **Upstream applies auto-apply non-prod workloads.** Workload
+  `gcp-workload-<env>` / `aws-workload-<env>` workspaces whose environment sets
+  `is_production: false` explicitly (an omitted flag never qualifies) get
   `auto_apply_run_trigger` and `queue_all_runs`
   (`enable_nonprod_workload_auto_apply`, default true). The trust change: a
   human confirms the upstream apply (`gcp-network-hub`, `aws-network`,
@@ -21,13 +22,21 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   network/security apply can change non-prod workloads too. Production
   workloads, the control plane, `gcp-guardrails` and `tfc-admin` still confirm.
   Residuals, not yet run in the sandbox:
-  - the `queue_all_runs` run is queued as soon as tfc-admin creates the
-    workspace, before `gcp-bootstrap` creates its SAs (or `aws-organization`
-    trusts its name), so it normally fails or waits; the workload then builds
-    from the run trigger of the next upstream apply. If that apply is a no-op
-    (no trigger fires), queue the workload's run once by hand;
+  - the run `queue_all_runs` starts when tfc-admin creates the workspace is
+    **expected to fail**: it runs before `gcp-bootstrap` creates its SAs (or
+    `aws-organization` trusts its name). The setting exists so later VCS and
+    run-trigger runs queue without a manual first run; the workload builds from
+    the run trigger of the next upstream apply. If that apply is a no-op (no
+    trigger fires), queue the workload's run once by hand;
   - the `tfc-admin -> gcp-bootstrap` / `aws-organization` triggers queue a plan
-    on both roots after **every** tfc-admin apply; discard the no-op ones;
+    on both roots after **every** tfc-admin apply. A plan with no changes ends
+    as "planned and finished" and needs no action. `gcp-bootstrap` is a target
+    only once it runs remotely (`workspace_execution_modes = {}`);
+  - **a new AWS workload still needs a second tfc-admin pass.** Its
+    `TFC_AWS_*` role ARNs come from the `aws-organization` outputs
+    (`tfc_plan_role_arns` / `tfc_apply_role_arns`, keyed by account key), and a
+    new workload account's roles exist only after `aws-organization` applies.
+    Re-apply tfc-admin then. Only GCP workload SA emails are derived;
   - with `auto_apply_on_merge` (sandbox only) a tfc-admin apply auto-applies
     `gcp-bootstrap` and `aws-organization`.
 

@@ -1,0 +1,11 @@
+# Test fixture: an org.prefix that breaks the gcp-bootstrap project_prefix rule
+# (root.tftest.hcl effective_prefix_format_validated).
+version: 1
+org:
+  prefix: Bad_Prefix
+  tfc:
+    organization: cfg-tfc
+gcp:
+  enabled: true
+  environments:
+    dev: {is_production: false}

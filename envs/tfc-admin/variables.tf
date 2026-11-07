@@ -589,7 +589,7 @@ variable "auto_apply_on_merge" {
 }
 
 variable "enable_nonprod_workload_auto_apply" {
-  description = "Non-production gcp-/aws-workload-<env> workspaces get queue_all_runs (a new one runs as soon as tfc-admin creates it) and auto_apply_run_trigger (a run queued by a confirmed upstream apply applies without a second confirmation), so a new non-prod environment builds itself. Production workloads and every shared workspace keep manual confirmation. Set false to confirm every run."
+  description = "Workload workspaces whose environment sets is_production = false EXPLICITLY get auto_apply_run_trigger (a run queued by a confirmed upstream apply applies without a second confirmation) and queue_all_runs. The run queue_all_runs starts at creation is expected to fail (the workspace's identity and variables do not exist yet); the setting exists so later VCS and run-trigger runs queue without a manual first run. An omitted is_production, production workloads and every shared workspace keep manual confirmation. Set false to confirm every run (set it before upgrading to keep the previous behaviour)."
   type        = bool
   default     = true
 }

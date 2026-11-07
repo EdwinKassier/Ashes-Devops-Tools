@@ -1247,6 +1247,11 @@ run "derived_account_id_too_long_fails" {
 run "tfc_admin_triggers_dag_roots" {
   command = plan
 
+  variables {
+    # Post-handover: gcp-bootstrap runs remotely.
+    workspace_execution_modes = {}
+  }
+
   override_data {
     target = data.tfe_workspace.tfc_admin[0]
     values = { id = "ws-tfcadmin" }
@@ -1269,9 +1274,32 @@ run "tfc_admin_triggers_dag_roots" {
   }
 }
 
-# Non-prod workloads: queued at creation, and run-trigger runs apply.
+# While gcp-bootstrap runs locally (phase 0) it is no trigger target.
+run "tfc_admin_skips_local_gcp_bootstrap" {
+  command = plan
+
+  override_data {
+    target = data.tfe_workspace.tfc_admin[0]
+    values = { id = "ws-tfcadmin" }
+  }
+
+  assert {
+    condition     = !contains(output.run_triggers, "tfc-admin->gcp-bootstrap") && contains(output.run_triggers, "tfc-admin->aws-organization")
+    error_message = "a local-execution gcp-bootstrap cannot run a triggered run, so tfc-admin must not target it."
+  }
+}
+
+# Non-prod workloads (is_production explicitly false): queued at creation, and
+# run-trigger runs apply.
 run "new_nonprod_workload_queues_all_runs_and_auto_applies_triggers" {
   command = plan
+
+  variables {
+    environments = {
+      dev  = { is_production = false }
+      prod = {}
+    }
+  }
 
   assert {
     condition = alltrue([
@@ -1282,11 +1310,36 @@ run "new_nonprod_workload_queues_all_runs_and_auto_applies_triggers" {
   }
 }
 
+# Fail-closed: an environment that omits is_production (prd, live, prod-eu,
+# or even dev) never auto-applies.
+run "omitted_is_production_never_auto_applies" {
+  command = plan
+
+  variables {
+    environments = {
+      dev     = {}
+      prd     = {}
+      prod-eu = {}
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      for ws in output.workspace_names : !module.workspace[ws].queue_all_runs && !module.workspace[ws].auto_apply_run_trigger
+    ])
+    error_message = "only is_production = false (explicit) opts a workload into auto-apply; an omitted flag must keep manual confirmation."
+  }
+}
+
 run "nonprod_workload_auto_apply_opt_out" {
   command = plan
 
   variables {
     enable_nonprod_workload_auto_apply = false
+    environments = {
+      dev  = { is_production = false }
+      prod = {}
+    }
   }
 
   assert {
@@ -1300,6 +1353,13 @@ run "nonprod_workload_auto_apply_opt_out" {
 # Production workloads and every shared workspace keep manual confirmation.
 run "prod_and_shared_need_confirmation" {
   command = plan
+
+  variables {
+    environments = {
+      dev  = { is_production = false }
+      prod = {}
+    }
+  }
 
   assert {
     condition = alltrue([
@@ -1331,4 +1391,16 @@ run "gcp_bootstrap_local_after_handover_warns" {
   }
 
   expect_failures = [check.gcp_bootstrap_remote_after_handover]
+}
+
+# The effective prefix is validated, including one read from org.prefix.
+run "effective_prefix_format_validated" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-bad-prefix.yaml"
+    tfc_organization         = "acme"
+  }
+
+  expect_failures = [terraform_data.input_contract]
 }

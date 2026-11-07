@@ -26,9 +26,11 @@ A **greenfield** estate still needs the phase-0 pass in [bootstrap.md](bootstrap
 **How it runs.** tfc-admin is the root of the run-trigger DAG
 (`tfc-admin → gcp-bootstrap → gcp-organization → gcp-projects → gcp-network-hub → gcp-workload-<env>`).
 Each run is queued when its upstream **applies**; a no-op apply fires no trigger. Shared workspaces wait
-for your confirmation. A non-production workload (`is_production: false`) has `auto_apply_run_trigger`
-and `queue_all_runs` (`enable_nonprod_workload_auto_apply`), so the run its upstream queues applies on
-its own. A production workload waits for confirmation like the shared ones.
+for your confirmation. A workload whose environment sets `is_production: false` **explicitly** has
+`auto_apply_run_trigger` and `queue_all_runs` (`enable_nonprod_workload_auto_apply`), so the run its
+upstream queues applies on its own. Set `is_production: false` explicitly to opt an environment into
+auto-apply: an omitted flag fails closed, so the workload waits for confirmation like production and
+the shared workspaces.
 
 > **Trust change.** Confirming a shared upstream apply (`gcp-network-hub`, `aws-network`,
 > `aws-security`) also applies every non-production workload it triggers, with no second
@@ -97,19 +99,26 @@ Confirm them in order, as each queues (the triggers enforce the order):
 | 3 | `gcp-projects` | The host project; publishes `environment_config["staging"]` |
 | 4 | `gcp-network-hub` | Adds the new host project to the hub VPC-SC perimeter |
 
-Discard any plan that shows no changes (tfc-admin triggers `aws-organization` too, for example).
+A plan with no changes ends as "planned and finished" and needs no action (tfc-admin triggers
+`aws-organization` too, for example).
 The config-edit runs from step 1 may already have queued some of these; confirm the latest.
 
 ### 4. The new non-prod workload creates itself and applies
 
-When `gcp-network-hub` applies, its run trigger queues `gcp-workload-staging`. A non-production
-workload applies that run without confirmation. A production workload (`is_production: true`, or the
-key `prod` / `production`) waits for your confirmation; review its plan first.
+When `gcp-network-hub` applies, its run trigger queues `gcp-workload-staging`. A workload with
+`is_production: false` applies that run without confirmation. Any other workload (`is_production:
+true`, or the flag omitted) waits for your confirmation; review its plan first.
 
-`queue_all_runs` also queued a run when tfc-admin created the workspace. That run started before
-`gcp-bootstrap` created the SAs, so expect it to fail at authentication; ignore it. If
+`queue_all_runs` also queued a run when tfc-admin created the workspace. That run is **expected to
+fail**: it started before `gcp-bootstrap` created the SAs. Ignore it. The setting exists so later VCS
+and run-trigger runs queue without a manual first run. If
 `gcp-network-hub`'s apply was a no-op (for example the VPC-SC perimeter is off), no trigger fires:
 start one run on `gcp-workload-staging` by hand.
+
+> **AWS workloads need a second tfc-admin pass.** A new `aws-workload-<env>` gets its `TFC_AWS_*` role
+> ARNs from the `aws-organization` outputs, and a new workload account's roles exist only after
+> `aws-organization` applies. Re-apply tfc-admin after that apply; follow
+> [aws-add-account.md](aws-add-account.md).
 
 ### 5. (Optional) Workload tfvars, in the step-1 PR
 

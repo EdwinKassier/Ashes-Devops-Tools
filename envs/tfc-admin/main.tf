@@ -470,9 +470,15 @@ locals {
   # Non-production gcp-/aws-workload-<env> workspaces: queue_all_runs and
   # auto_apply_run_trigger (enable_nonprod_workload_auto_apply). Trust change:
   # a confirmed upstream apply (gcp-network-hub, aws-network, aws-security)
-  # applies these without a further confirmation.
+  # applies these without a further confirmation. Fail-closed: only an
+  # environment whose is_production is EXPLICITLY false qualifies; an omitted
+  # flag (prd, live, prod-eu, ...) keeps manual confirmation.
+  explicit_nonprod_workloads = toset(concat(
+    [for k in keys(local.gcp_workloads) : k if lookup(local.gcp_production_flags, trimprefix(k, "gcp-workload-"), null) == false],
+    [for k in keys(local.aws_workloads) : k if try(local.aws_environments[trimprefix(k, "aws-workload-")].is_production, null) == false],
+  ))
   nonprod_auto_apply_workloads = var.enable_nonprod_workload_auto_apply ? setsubtract(
-    toset(concat(keys(local.gcp_workloads), keys(local.aws_workloads))),
+    local.explicit_nonprod_workloads,
     setunion(local.production_workloads, toset(local.never_auto_apply_workspaces)),
   ) : toset([])
 
@@ -583,6 +589,10 @@ resource "terraform_data" "input_contract" {
     precondition {
       condition     = var.security_team_id == null || (var.security_team_id != var.platform_team_id && var.security_team_id != var.control_plane_approvers_team_id)
       error_message = "security_team_id must differ from platform_team_id and control_plane_approvers_team_id: the security team alone applies gcp-guardrails, which contains the platform's own automation identity."
+    }
+    precondition {
+      condition     = local.gcp_project_prefix == null || can(regex("^[a-z][a-z0-9-]{0,9}$", coalesce(local.gcp_project_prefix, "a")))
+      error_message = "The GCP prefix (gcp_project_prefix, else org.prefix in config/landing-zone.yaml) must start with a lowercase letter, contain only lowercase letters, digits and hyphens, and be 10 characters or fewer (the gcp-bootstrap project_prefix rule)."
     }
     precondition {
       condition     = length(local.gcp_workload_account_ids_too_long) == 0
@@ -966,7 +976,12 @@ locals {
   }
   # tfc-admin is the DAG root: its apply (a workspace or environment added in
   # config) queues the two phase-0 roots, which carry it down the DAG.
-  tfc_admin_trigger_targets = var.enable_run_triggers ? [for ws in ["gcp-bootstrap", "aws-organization"] : ws if contains(keys(local.workspaces), ws)] : []
+  # A local-execution workspace cannot run a triggered run, so gcp-bootstrap is
+  # a target only once it runs remotely (after the handover).
+  tfc_admin_trigger_targets = var.enable_run_triggers ? [
+    for ws in ["gcp-bootstrap", "aws-organization"] : ws
+    if contains(keys(local.workspaces), ws) && lookup(local.execution_modes, ws, "remote") != "local"
+  ] : []
   tfc_admin_trigger_source_id = length(local.tfc_admin_trigger_targets) == 0 ? null : (
     var.manage_tfc_admin_workspace ? module.workspace[var.tfc_admin_workspace_name].id : data.tfe_workspace.tfc_admin[0].id
   )

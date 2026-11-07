@@ -192,10 +192,9 @@ run "default_is_manual_apply" {
   assert {
     condition = alltrue([
       for ws in output.workspace_names :
-      module.workspace[ws].auto_apply == false &&
-      module.workspace[ws].auto_apply_run_trigger == contains(["gcp-workload-dev", "aws-workload-dev"], ws)
+      module.workspace[ws].auto_apply == false && module.workspace[ws].auto_apply_run_trigger == false
     ])
-    error_message = "auto_apply_on_merge defaults to false: every workspace keeps manual apply; only non-prod workloads auto-apply run-trigger runs (enable_nonprod_workload_auto_apply)."
+    error_message = "auto_apply_on_merge defaults to false: every workspace keeps manual apply (dev omits is_production, so it is not opted into run-trigger auto-apply)."
   }
 }
 

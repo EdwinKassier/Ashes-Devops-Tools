@@ -5,6 +5,35 @@ fork. Newest first.
 
 ## Unreleased
 
+### Run triggers auto-apply explicitly non-prod workloads (tfc-admin)
+
+**Trust change on the upgrade apply.** tfc-admin's new
+`enable_nonprod_workload_auto_apply` defaults to `true`. Every
+`gcp-workload-<env>` / `aws-workload-<env>` whose environment sets
+`is_production: false` **explicitly** gets `auto_apply_run_trigger` and
+`queue_all_runs`. A confirmed upstream apply (`gcp-network-hub`, `aws-network`,
+`aws-security`) then applies those workloads with no second confirmation.
+An omitted `is_production` keeps manual confirmation. Production workloads and
+every shared workspace are unchanged.
+
+**To keep the previous behaviour,** set `enable_nonprod_workload_auto_apply = false`
+on tfc-admin **before** the upgrade apply.
+
+Also in this release (no manual step):
+
+- tfc-admin now triggers `aws-organization` after each of its applies. It
+  triggers `gcp-bootstrap` too once that runs remotely
+  (`workspace_execution_modes = {}`). Plans with no changes end as "planned and
+  finished".
+- With `gcp_bootstrap_outputs_from_tfc`, tfc-admin derives each
+  `gcp-workload-<env>`'s SA emails from `org.prefix` (or `gcp_project_prefix`)
+  and the gcp-bootstrap `admin_project_id` output. A `check` warns when a
+  derived email disagrees with a gcp-bootstrap output; align `org.prefix` with
+  gcp-bootstrap's `project_prefix`. The plan fails on an invalid prefix or on
+  `<prefix>-wl-<env>-apply` over 30 characters.
+- A `check` warns while `gcp_bootstrap_outputs_from_tfc` is on and
+  `gcp-bootstrap` still runs locally.
+
 ### AWS Config recorders move to an aws-organization StackSet
 
 The workload roots no longer manage a Config recorder. `aws-organization`
