@@ -24,6 +24,12 @@ locals {
     owner             = try(tostring(local.lz.org.owner), null)
     aws_region        = try(tostring(local.lz.org.regions.aws), null)
     tfc_organization  = try(tostring(local.lz.org.tfc.organization), null)
+    # aws.identity.groups: group display name => [{permission_set, accounts}]
+    identity_groups = try(local.lz.aws.identity.groups, null) == null ? null : {
+      for g, entries in local.lz.aws.identity.groups : g => [
+        for e in entries : { permission_set = tostring(e.permission_set), accounts = [for a in e.accounts : tostring(a)] }
+      ]
+    }
     # aws.contracts.organization: stage contract override (same shape as
     # var.organization_contract). Present => the aws-organization read is skipped.
     organization_contract = try(local.lz.aws.contracts.organization, null) == null ? null : {

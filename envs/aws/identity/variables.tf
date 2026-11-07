@@ -53,7 +53,7 @@ variable "aws_region" {
 # -----------------------------------------------------------------------------
 
 variable "permission_sets" {
-  description = "Map of permission set name to definition, passed to the iam-identity-center module. Defaults to a small AdministratorAccess + ReadOnly set; override to add finer-grained sets."
+  description = "Map of permission set name to definition, passed to the iam-identity-center module. Defaults: AdministratorAccess (break-glass), PlatformAdmin, Developer (PowerUserAccess), SecurityAudit and ReadOnly; override to add finer-grained sets."
   type = map(object({
     description         = string
     session_duration    = string
@@ -61,12 +61,31 @@ variable "permission_sets" {
     # AWS-managed policy names (e.g. "ReadOnlyAccess"); the ARN is built for the running partition.
     managed_policy_names = optional(list(string), [])
     inline_policy        = optional(string, "")
+    customer_managed_policies = optional(list(object({
+      name = string
+      path = optional(string, "/")
+    })), [])
   }))
   default = {
     AdministratorAccess = {
       description          = "Full administrative access. Assign only to break-glass groups."
       session_duration     = "PT1H"
       managed_policy_names = ["AdministratorAccess"]
+    }
+    PlatformAdmin = {
+      description          = "Platform engineering administrative access (AdministratorAccess, time-boxed)."
+      session_duration     = "PT4H"
+      managed_policy_names = ["AdministratorAccess"]
+    }
+    Developer = {
+      description          = "Application developer access: everything except IAM and Organizations administration (PowerUserAccess)."
+      session_duration     = "PT8H"
+      managed_policy_names = ["PowerUserAccess"]
+    }
+    SecurityAudit = {
+      description          = "Read-only security audit access (SecurityAudit)."
+      session_duration     = "PT4H"
+      managed_policy_names = ["SecurityAudit"]
     }
     ReadOnly = {
       description          = "Organization-wide read-only access for auditors and viewers."
@@ -77,14 +96,45 @@ variable "permission_sets" {
 }
 
 variable "assignments" {
-  description = "Map of assignment key to a binding of a permission set to a principal (GROUP or USER) in a target AWS account. account_id may be set directly or, in tfvars, resolved from the org remote state via the account_ids map."
+  description = "Explicit assignments (merged with those derived from aws.identity.groups): map of assignment key to a binding of a permission set to a principal in a target account. Set exactly one of principal_id / group_display_name and exactly one of account_id / account_key (a key of the org contract account_ids)."
   type = map(object({
-    permission_set = string
-    principal_type = string
-    principal_id   = string
-    account_id     = string
+    permission_set     = string
+    principal_type     = optional(string, "GROUP")
+    principal_id       = optional(string)
+    group_display_name = optional(string)
+    account_id         = optional(string)
+    account_key        = optional(string)
   }))
   default = {}
+}
+
+variable "identity_groups" {
+  description = "Name-based assignments: Identity Store group display name => list of {permission_set, accounts} where accounts are keys of the org contract account_ids. Null = aws.identity.groups from config/landing-zone.yaml (absent = none)."
+  type = map(list(object({
+    permission_set = string
+    accounts       = list(string)
+  })))
+  default = null
+
+  validation {
+    condition = alltrue(flatten([
+      for g, entries in coalesce(var.identity_groups, local.cfg.identity_groups, {}) : [
+        for e in entries : [
+          for a in e.accounts : contains(keys(local.org.account_ids), a)
+        ]
+      ]
+    ]))
+    error_message = "identity groups (var.identity_groups or aws.identity.groups) name an account key that is not in the organization contract account_ids."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for g, entries in coalesce(var.identity_groups, local.cfg.identity_groups, {}) : [
+        for e in entries : contains(keys(var.permission_sets), e.permission_set)
+      ]
+    ]))
+    error_message = "identity groups (var.identity_groups or aws.identity.groups) name a permission_set that is not in permission_sets."
+  }
 }
 
 # -----------------------------------------------------------------------------

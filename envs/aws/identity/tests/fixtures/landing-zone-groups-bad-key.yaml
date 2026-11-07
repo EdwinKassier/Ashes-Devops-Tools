@@ -1,0 +1,16 @@
+# Test fixture: aws.identity.groups naming an account key the org contract lacks.
+version: 1
+org:
+  name: cfgco
+  tfc:
+    organization: cfg-tfc
+aws:
+  contracts:
+    organization:
+      account_ids:
+        shared_services: "022222222222"
+  identity:
+    groups:
+      Platform Admins:
+        - permission_set: PlatformAdmin
+          accounts: [typo_account]

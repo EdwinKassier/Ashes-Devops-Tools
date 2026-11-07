@@ -13,6 +13,9 @@ mock_provider "aws" {
       identity_store_ids = ["d-0000000000"]
     }
   }
+  mock_data "aws_identitystore_group" {
+    defaults = { group_id = "11111111-2222-3333-4444-555555555555" }
+  }
 }
 
 run "default_permission_sets_have_valid_session_duration" {
@@ -116,5 +119,72 @@ run "default_policies_resolve_in_govcloud" {
       local.managed_attachments["Admin/arn:aws:iam::aws:policy/ReadOnlyAccess"].arn == "arn:aws-us-gov:iam::aws:policy/ReadOnlyAccess"
     )
     error_message = "policy names and AWS-managed ARNs must follow the partition (aws-us-gov)."
+  }
+}
+
+# Assignments by Identity Store group display name and org account key: the
+# group is looked up by DisplayName, the account key resolves via account_ids,
+# and the existing explicit-ID form keeps its key and shape.
+run "assignment_by_group_name_and_account_key" {
+  command = plan
+
+  variables {
+    account_ids = { shared_services = "222222222222" }
+    assignments = {
+      by-name = {
+        permission_set     = "ReadOnly"
+        group_display_name = "Platform Admins"
+        account_key        = "shared_services"
+      }
+      by-id = {
+        permission_set = "ReadOnly"
+        principal_type = "GROUP"
+        principal_id   = "00000000-0000-0000-0000-000000000000"
+        account_id     = "111111111111"
+      }
+    }
+  }
+
+  assert {
+    condition     = aws_ssoadmin_account_assignment.this["by-name"].target_id == "222222222222" && aws_ssoadmin_account_assignment.this["by-name"].principal_type == "GROUP"
+    error_message = "account_key must resolve through account_ids and a group name implies a GROUP principal."
+  }
+
+  assert {
+    condition     = aws_ssoadmin_account_assignment.this["by-id"].target_id == "111111111111" && aws_ssoadmin_account_assignment.this["by-id"].principal_id == "00000000-0000-0000-0000-000000000000"
+    error_message = "explicit principal_id / account_id assignments must be unchanged."
+  }
+
+  assert {
+    condition     = length(data.aws_identitystore_group.this) == 1 && contains(keys(data.aws_identitystore_group.this), "Platform Admins")
+    error_message = "exactly the named groups must be looked up by display name."
+  }
+}
+
+run "customer_managed_policy_attached" {
+  command = plan
+
+  variables {
+    permission_sets = {
+      Custom = {
+        description               = "x"
+        session_duration          = "PT1H"
+        customer_managed_policies = [{ name = "deny-iam", path = "/org/" }]
+      }
+    }
+  }
+
+  assert {
+    condition     = aws_ssoadmin_customer_managed_policy_attachment.this["Custom//org/deny-iam"].customer_managed_policy_reference[0].name == "deny-iam"
+    error_message = "customer_managed_policies must create a customer-managed policy attachment."
+  }
+}
+
+run "no_named_assignments_means_no_lookups" {
+  command = plan
+
+  assert {
+    condition     = length(data.aws_identitystore_group.this) == 0
+    error_message = "without group_display_name assignments no identity-store lookups are made."
   }
 }

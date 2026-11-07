@@ -29,23 +29,24 @@ data "terraform_remote_state" "aws_organization" {
 }
 
 locals {
-  # Assignments passed straight through. Callers may set account_id directly, or
-  # reference a member account by name from the org cross-root contract
-  # (local.org.account_ids), e.g. in
-  # tfvars:
-  #
-  #   assignments = {
-  #     admins-shared-services = {
-  #       permission_set = "AdministratorAccess"
-  #       principal_type = "GROUP"
-  #       principal_id   = "<identity-store-group-id>"
-  #       account_id     = "<shared_services account id from account_ids>"
-  #     }
-  #   }
-  #
-  # The pass-through keeps the root generic. The account_ids map is exported
-  # below as an output so operators can resolve names to ids.
-  assignments = var.assignments
+  # Explicit assignments pass straight through (existing keys are unchanged).
+  # aws.identity.groups (or var.identity_groups) adds name-based assignments:
+  # one per group x permission set x account key, keyed
+  # "<group>/<permission set>/<account key>"; the module resolves the group by
+  # display name and the account key through the org contract account_ids.
+  identity_groups = coalesce(var.identity_groups, local.cfg.identity_groups, {})
+  group_assignments = merge(flatten([
+    for g, entries in local.identity_groups : [
+      for e in entries : {
+        for a in e.accounts : "${g}/${e.permission_set}/${a}" => {
+          permission_set     = e.permission_set
+          group_display_name = g
+          account_key        = a
+        }
+      }
+    ]
+  ])...)
+  assignments = merge(var.assignments, local.group_assignments)
 }
 
 module "iam_identity_center" {
@@ -53,6 +54,7 @@ module "iam_identity_center" {
 
   permission_sets = var.permission_sets
   assignments     = local.assignments
+  account_ids     = local.org.account_ids
 
   enable_abac     = var.enable_abac
   abac_attributes = var.abac_attributes

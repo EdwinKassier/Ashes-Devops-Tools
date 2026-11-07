@@ -268,6 +268,21 @@ aws:
       #     desired_count: 2
       #     health_check_path: /healthz
 
+  # IAM Identity Center access by name (aws-identity): Identity Store group
+  # DISPLAY NAME => list of {permission_set, accounts}. Accounts are keys of the
+  # organization account map (aws.accounts / workload_accounts). Permission sets
+  # (defaults PlatformAdmin, Developer, SecurityAudit, ReadOnly) come from
+  # envs/aws/identity. Absent = no name-based assignments. Temporary elevated
+  # access: docs/adr/0011-temporary-elevated-access.md.
+  # identity:
+  #   groups:
+  #     Platform Admins:
+  #       - permission_set: PlatformAdmin
+  #         accounts: [shared_services, network]
+  #     Auditors:
+  #       - permission_set: SecurityAudit
+  #         accounts: [log_archive, security_tooling]
+
   # Network Firewall egress posture (aws-network). A production estate (profile
   # production AND a workload environment with is_production, or keyed
   # prod/production) fails the plan unless unmatched traffic is dropped AND the

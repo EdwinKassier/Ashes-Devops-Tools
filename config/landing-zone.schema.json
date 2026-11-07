@@ -1080,6 +1080,37 @@
           },
           "additionalProperties": false
         },
+        "identity": {
+          "type": "object",
+          "properties": {
+            "groups": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "permission_set": {
+                      "type": "string"
+                    },
+                    "accounts": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "permission_set",
+                    "accounts"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
         "contracts": {
           "type": "object",
           "properties": {

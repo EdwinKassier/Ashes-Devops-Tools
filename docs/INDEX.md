@@ -66,6 +66,7 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
 - [Add Environment](runbooks/add-environment.md): provision a new dev/staging/prod environment
 - [Service Team Onboarding](runbooks/service-team-onboarding.md): create a service project with Shared VPC attachment
 - [KMS Rotation](runbooks/kms-rotation.md): rotate CMEK keys automatically or manually
+- [ADR 0011: Temporary elevated access](adr/0011-temporary-elevated-access.md): IdP-native access requests over SCIM for Identity Center groups
 - [CIDR Expansion](runbooks/cidr-expansion.md): expand subnet ranges without downtime
 - [Break Glass](runbooks/break-glass.md): emergency access when Workload Identity Federation fails
 - [GCP Workspace Rename](runbooks/gcp-workspace-rename.md): migrate live TFC workspaces to the `gcp-organization` / `gcp-workload-<env>` names

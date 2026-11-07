@@ -3,7 +3,7 @@
 # -----------------------------------------------------------------------------
 
 variable "permission_sets" {
-  description = "Map of permission set name to its definition. session_duration is an ISO-8601 duration (e.g. PT1H). managed_policy_names are AWS-managed policy names (the ARN is built for the running partition: aws, aws-us-gov or aws-cn) and managed_policy_arns are full policy ARNs (customer-managed, or AWS-managed written out); both attach to the set; inline_policy is an optional inline IAM policy JSON document."
+  description = "Map of permission set name to its definition. session_duration is an ISO-8601 duration (e.g. PT1H). managed_policy_names are AWS-managed policy names (the ARN is built for the running partition: aws, aws-us-gov or aws-cn) and managed_policy_arns are full policy ARNs (AWS-managed written out); customer_managed_policies reference policies by name and path that already exist in the target accounts; all three attach to the set; inline_policy is an optional inline IAM policy JSON document."
   type = map(object({
     description         = string
     session_duration    = string
@@ -11,6 +11,11 @@ variable "permission_sets" {
     # AWS-managed policy names (e.g. "ReadOnlyAccess"); the ARN is built for the running partition.
     managed_policy_names = optional(list(string), [])
     inline_policy        = optional(string, "")
+    # Customer-managed policies (must already exist in every target account); path defaults to "/".
+    customer_managed_policies = optional(list(object({
+      name = string
+      path = optional(string, "/")
+    })), [])
   }))
   default = {
     AdministratorAccess = {
@@ -41,12 +46,14 @@ variable "permission_sets" {
 # -----------------------------------------------------------------------------
 
 variable "assignments" {
-  description = "Map of assignment key to an assignment binding a permission set to a principal (GROUP or USER) in a target AWS account. permission_set must be a key in permission_sets. Prefer GROUP principals; reserve USER for the management account only."
+  description = "Map of assignment key to an assignment binding a permission set to a principal in a target AWS account. permission_set must be a key in permission_sets. Principal: set exactly one of principal_id (Identity Store group or user ID) or group_display_name (looked up in the Identity Store by DisplayName; implies a GROUP). Account: set exactly one of account_id or account_key (resolved through account_ids). Prefer GROUP principals; reserve USER for the management account only."
   type = map(object({
-    permission_set = string
-    principal_type = string # one of: GROUP, USER
-    principal_id   = string # Identity Store group or user ID
-    account_id     = string # Target AWS account ID
+    permission_set     = string
+    principal_type     = optional(string, "GROUP") # one of: GROUP, USER
+    principal_id       = optional(string)          # Identity Store group or user ID
+    group_display_name = optional(string)          # Identity Store group DisplayName
+    account_id         = optional(string)          # Target AWS account ID
+    account_key        = optional(string)          # Key into account_ids
   }))
   default = {}
 
@@ -56,6 +63,36 @@ variable "assignments" {
     ])
     error_message = "Each assignment principal_type must be either GROUP or USER."
   }
+
+  validation {
+    condition = alltrue([
+      for a in values(var.assignments) :
+      (a.principal_id != null) != (a.group_display_name != null) &&
+      (a.group_display_name == null || a.principal_type == "GROUP")
+    ])
+    error_message = "Each assignment must set exactly one of principal_id or group_display_name (and group_display_name implies principal_type GROUP)."
+  }
+
+  validation {
+    condition = alltrue([
+      for a in values(var.assignments) : (a.account_id != null) != (a.account_key != null)
+    ])
+    error_message = "Each assignment must set exactly one of account_id or account_key."
+  }
+
+  validation {
+    condition = alltrue([
+      for a in values(var.assignments) : a.account_key == null || contains(keys(var.account_ids), coalesce(a.account_key, "-"))
+    ])
+    error_message = "An assignment account_key is not a key of account_ids (known keys are the account_ids map keys)."
+  }
+}
+
+variable "account_ids" {
+  description = "Map of account key (e.g. shared_services) to 12-digit AWS account ID, used to resolve assignments that set account_key."
+  type        = map(string)
+  default     = {}
+  nullable    = false
 }
 
 # -----------------------------------------------------------------------------
