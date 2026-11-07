@@ -166,3 +166,20 @@ run "contracts_skip_remote_state" {
     error_message = "supplied contracts must skip the gcp-bootstrap / gcp-organization reads and feed environment_config"
   }
 }
+
+# A supplied organization contract that lacks an environment's folder or tag
+# value fails on the named guard, not on a bare lookup.
+run "organization_contract_missing_env_folder_fails" {
+  command = plan
+
+  variables {
+    organization_contract = {
+      billing_account = "billingAccounts/000000-111111-222222"
+      folders         = { shared = { id = "folders/100", name = "folders/100", display_name = "Shared" } }
+      tag_values      = {}
+    }
+    bootstrap_contract = { admin_project_id = "acme-admin-abcd", suffix = "abcd" }
+  }
+
+  expect_failures = [terraform_data.organization_contract_guard]
+}

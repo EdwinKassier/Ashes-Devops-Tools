@@ -215,3 +215,18 @@ run "pre_contract_upstream_states_still_plan" {
     error_message = "a pre-contract upstream state (individual outputs only) must still resolve the org and projects contracts."
   }
 }
+
+# A supplied projects contract without the hub/DNS projects or an env host
+# number fails on the named guard, not on a bare lookup.
+run "projects_contract_missing_hub_keys_fails" {
+  command = plan
+
+  variables {
+    projects_contract = {
+      project_ids     = { "shared-hub" = "acme-hub-abcd" }
+      project_numbers = { "shared-hub" = "111111111111" }
+    }
+  }
+
+  expect_failures = [terraform_data.upstream_contract_guard]
+}

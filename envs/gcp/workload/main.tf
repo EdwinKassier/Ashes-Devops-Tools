@@ -103,11 +103,20 @@ locals {
 }
 
 locals {
-  env_config = (
-    local.read_projects
-    ? local.projects_remote.environment_config[var.environment]
-    : local.projects_contract.environment_config[var.environment]
-  )
+  # A missing environment resolves to a well-formed placeholder (provider-side
+  # validation still runs at plan) so that terraform_data.projects_contract_guard,
+  # not a bare lookup error, fails the plan. It can never be applied.
+  env_config_map = local.read_projects ? local.projects_remote.environment_config : local.projects_contract.environment_config
+  env_config = try(local.env_config_map[var.environment], {
+    folder_id               = "folders/0"
+    host_project_id         = "contract-missing-env"
+    host_project_number     = "0"
+    region                  = "us-central1"
+    cidr_block              = "10.255.0.0/24"
+    labels                  = {}
+    is_production           = null
+    vpc_sc_access_policy_id = null
+  })
 
   labels = merge(
     {
@@ -580,4 +589,17 @@ check "vpc_sc_enforced_in_prod" {
 
 locals {
   psc_target = coalesce(var.private_service_connect_target, local.vpc_sc_access_policy != null && !local.vpc_sc_enable_dry_run ? "vpc-sc" : "all-apis")
+}
+
+# Fail early, naming the contract field, when the effective gcp-projects contract
+# (variable, config file or the upstream workspace's contract output) lacks a
+# key this root reads. The reads below tolerate the gap so that this
+# precondition, not a bare "key not in collection", is the plan error.
+resource "terraform_data" "projects_contract_guard" {
+  lifecycle {
+    precondition {
+      condition     = contains(keys(local.env_config_map), var.environment)
+      error_message = "The gcp-projects contract environment_config has no \"${var.environment}\" entry (projects_contract / gcp.contracts.projects, else the ${var.projects_workspace_name} workspace's contract output); add the environment to gcp.environments and apply gcp-projects first."
+    }
+  }
 }

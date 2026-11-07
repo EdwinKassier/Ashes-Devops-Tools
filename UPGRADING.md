@@ -427,6 +427,13 @@ No manual step. Upgrade apply order is unchanged.
   Fields that only some roots need are now `optional`. A root that needs a field
   checks it in a variable validation, and the error names the field. Existing
   overrides and `<cloud>.contracts.*` config keep working unchanged.
+- **New guard resources.** aws-backup, gcp-projects, gcp-network-hub and
+  gcp-workload each plan one new `terraform_data` contract guard (a create,
+  with no cloud resource). It fails the plan with the missing contract field
+  named, for example `ou_ids["Workloads"]` or `environment_config["<env>"]`,
+  whatever the source: variable, config or remote state.
+- **The gcp-organization admin-containment preconditions** moved from the
+  `admin_containment_enabled` output to the `contract` output.
 
 ## Sandbox upgrade log
 

@@ -424,7 +424,7 @@ run "production_without_break_glass_fails" {
     }
   }
 
-  expect_failures = [output.admin_containment_enabled]
+  expect_failures = [output.contract]
 }
 
 run "production_containment_explicit_opt_out" {

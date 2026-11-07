@@ -58,6 +58,9 @@ allowed() {
 }
 
 ref_re='(terraform_remote_state|tfe_outputs)\.[A-Za-z0-9_]+(\[[^]]*\])?\.(outputs|nonsensitive_values|values)'
+# try(<ref>.<attr>.contract, <ref>.<attr>) — captures: 1 whole match, 2/6 the
+# two refs, 5/9 the two attributes, 10 the closing delimiter.
+legacy_re='(try\(([A-Za-z0-9_.]*(terraform_remote_state|tfe_outputs)\.[A-Za-z0-9_]+(\[[^]]*\])?)\.(outputs|nonsensitive_values)\.contract, ([A-Za-z0-9_.]*(terraform_remote_state|tfe_outputs)\.[A-Za-z0-9_]+(\[[^]]*\])?)\.(outputs|nonsensitive_values)([,)]))'
 
 # Only lines that mention a remote-state / tfe_outputs read are inspected.
 while IFS= read -r match; do
@@ -73,11 +76,13 @@ while IFS= read -r match; do
     code="${line%%#*}"
     code="${code%%//*}"
     grep -Eq "${ref_re}" <<<"${code}" || continue
-    # Accepted forms: <ref>.contract, and the one-line legacy fallback.
-    code="$(sed -E \
-      -e "s/${ref_re}\.contract([^A-Za-z0-9_]|$)/CONTRACT_OK\4/g" \
-      -e 's/CONTRACT_OK, [A-Za-z0-9_.]*(\[[^]]*\])?\.(outputs|nonsensitive_values)([^A-Za-z0-9_.[]|$)/CONTRACT_OK, LEGACY_OK\3/g' \
-      <<<"${code}")"
+    # Accepted forms: the one-line legacy fallback, whose two try() arguments
+    # must name the SAME data source and attribute, then <ref>.contract.
+    while [[ "${code}" =~ ${legacy_re} ]]; do
+      [[ "${BASH_REMATCH[2]}" == "${BASH_REMATCH[6]}" && "${BASH_REMATCH[5]}" == "${BASH_REMATCH[9]}" ]] || break
+      code="${code/"${BASH_REMATCH[1]}"/try(CONTRACT_OK, LEGACY_OK${BASH_REMATCH[10]}}"
+    done
+    code="$(sed -E -e "s/${ref_re}\.contract([^A-Za-z0-9_]|$)/CONTRACT_OK\4/g" <<<"${code}")"
     while IFS= read -r hit; do
       [[ -z "${hit}" ]] && continue
       name="$(sed -E 's/^(terraform_remote_state|tfe_outputs)\.([A-Za-z0-9_]+).*/\2/' <<<"${hit}")"

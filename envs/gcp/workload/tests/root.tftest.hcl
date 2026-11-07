@@ -369,3 +369,25 @@ run "bridge_off_reads_nothing" {
     error_message = "with the bridge off, no saas state is read and no bridge module is instantiated."
   }
 }
+
+# A supplied projects contract without this environment fails on the named
+# guard, not on a bare "key not in collection".
+run "projects_contract_missing_environment_fails" {
+  command = plan
+
+  variables {
+    projects_contract = {
+      environment_config = {
+        prod = {
+          folder_id           = "folders/222"
+          host_project_id     = "acme-prod-host-abcd"
+          host_project_number = "444444444444"
+          region              = "europe-west1"
+          cidr_block          = "10.20.0.0/16"
+        }
+      }
+    }
+  }
+
+  expect_failures = [terraform_data.projects_contract_guard]
+}

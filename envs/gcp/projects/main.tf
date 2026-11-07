@@ -69,9 +69,11 @@ module "projects" {
   organization_name       = local.organization_name
   default_billing_account = local.org.billing_account
   admin_project_id        = local.bootstrap.admin_project_id
-  folders                 = local.org.folders
-  environments            = local.project_environments
-  project_services        = var.project_services
+  # A missing environment folder is filled with an inert placeholder so that
+  # terraform_data.organization_contract_guard reports the gap.
+  folders          = merge({ for k in keys(local.environments) : k => { id = "", name = "", display_name = "" } }, local.org.folders)
+  environments     = local.project_environments
+  project_services = var.project_services
 
   # Suffix comes from the gcp-bootstrap root for project-ID consistency.
   suffix = local.bootstrap.suffix
@@ -88,4 +90,21 @@ module "projects" {
   workload_folder_roles    = try(local.bootstrap.workload_folder_roles, { plan = [], apply = [] })
   network_service_accounts = try(local.bootstrap.stage_service_accounts["network-hub"], null)
   network_folder_roles     = try(local.bootstrap.network_folder_roles, { plan = [], apply = [] })
+}
+
+# Fail early, naming the contract field, when the effective gcp-organization contract
+# (variable, config file or the upstream workspace's contract output) lacks a
+# key this root reads. The reads below tolerate the gap so that this
+# precondition, not a bare "key not in collection", is the plan error.
+resource "terraform_data" "organization_contract_guard" {
+  lifecycle {
+    precondition {
+      condition     = length(setsubtract(keys(local.environments), keys(local.org.folders))) == 0
+      error_message = "The gcp-organization contract folders lack ${join(", ", sort(setsubtract(keys(local.environments), keys(local.org.folders))))} (organization_contract / gcp.contracts.organization, else the ${var.organization_workspace_name} workspace's contract output); every environment needs its folder."
+    }
+    precondition {
+      condition     = length(setsubtract([for e in keys(local.environments) : "environment-${e}"], keys(local.org.tag_values))) == 0
+      error_message = "The gcp-organization contract tag_values lack ${join(", ", sort(setsubtract([for e in keys(local.environments) : "environment-${e}"], keys(local.org.tag_values))))} (organization_contract / gcp.contracts.organization, else the ${var.organization_workspace_name} workspace's contract output)."
+    }
+  }
 }

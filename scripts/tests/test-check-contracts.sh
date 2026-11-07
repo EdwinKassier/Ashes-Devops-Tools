@@ -87,6 +87,14 @@ printf 'locals {\n  x = try(data.tfe_outputs.org[0].nonsensitive_values.contract
 expect_pass "tfe_outputs contract with legacy fallback passes"
 
 reset_fixture
+printf 'locals {\n  x = try(data.terraform_remote_state.org[0].outputs.contract, data.terraform_remote_state.net[0].outputs)\n}\n' >>"${workdir}/repo/envs/aws/a/main.tf"
+expect_fail "legacy fallback to a different upstream fails" "terraform_remote_state.net[0].outputs"
+
+reset_fixture
+printf 'locals {\n  x = data.terraform_remote_state.org[0].outputs["account_ids"]\n}\n' >>"${workdir}/repo/envs/aws/a/main.tf"
+expect_fail "bracket read outputs[\"key\"] fails" "terraform_remote_state.org[0].outputs["
+
+reset_fixture
 rm "${workdir}/repo/envs/aws/organization/outputs.tf"
 printf 'output "account_ids" {\n  value = {}\n}\n' >"${workdir}/repo/envs/aws/organization/outputs.tf"
 expect_fail "producer without a contract output fails" "envs/aws/organization"

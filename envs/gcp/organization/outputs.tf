@@ -47,6 +47,18 @@ locals {
 output "contract" {
   description = "The gcp-organization cross-root contract: every key below in one non-sensitive object. Downstream roots read this output only; the individual outputs are deprecated aliases kept until v1.0."
   value       = local.contract
+
+  # Admin-containment guards. They live on the contract output (not the
+  # deprecated admin_containment_enabled alias) so they outlive its v1.0 removal.
+  precondition {
+    condition     = !local.enable_admin_containment || length(local.containment_exempt_principals) > 0
+    error_message = "Admin containment is on (it defaults on when an environment is_production) but no break-glass principal is set, so the deny would lock out everyone. Set gcp.break_glass_group in config/landing-zone.yaml (or containment_exempt_principals), or set enable_admin_containment = false explicitly to run production without it."
+  }
+
+  precondition {
+    condition     = !anytrue([for p in local.containment_exempt_principals : can(regex("(?i)(replace-me|your-domain|example\\.(com|org|net)|\\.invalid$|changeme)", p))])
+    error_message = "The break-glass principal (gcp.break_glass_group / containment_exempt_principals) is still a placeholder. Set your real break-glass group."
+  }
 }
 
 output "billing_account" {
@@ -218,14 +230,4 @@ output "principal_access_boundary_policy" {
 output "admin_containment_enabled" {
   description = "Deprecated: read contract.admin_containment_enabled (removed in v1.0). Whether the admin-containment deny policy is on (explicit enable_admin_containment, else gcp.admin_containment, else on when any environment is_production)."
   value       = local.contract.admin_containment_enabled
-
-  precondition {
-    condition     = !local.enable_admin_containment || length(local.containment_exempt_principals) > 0
-    error_message = "Admin containment is on (it defaults on when an environment is_production) but no break-glass principal is set, so the deny would lock out everyone. Set gcp.break_glass_group in config/landing-zone.yaml (or containment_exempt_principals), or set enable_admin_containment = false explicitly to run production without it."
-  }
-
-  precondition {
-    condition     = !anytrue([for p in local.containment_exempt_principals : can(regex("(?i)(replace-me|your-domain|example\\.(com|org|net)|\\.invalid$|changeme)", p))])
-    error_message = "The break-glass principal (gcp.break_glass_group / containment_exempt_principals) is still a placeholder. Set your real break-glass group."
-  }
 }

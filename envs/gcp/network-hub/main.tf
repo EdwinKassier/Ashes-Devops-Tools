@@ -22,12 +22,12 @@ module "network_hub" {
   project_prefix = local.project_prefix
   default_region = local.default_region
 
-  hub_project_id = local.projects.project_ids["shared-hub"]
-  dns_project_id = local.projects.project_ids["shared-dns"]
+  hub_project_id = try(local.projects.project_ids["shared-hub"], "")
+  dns_project_id = try(local.projects.project_ids["shared-dns"], "")
   # VPC-SC / ACM require numeric project numbers, not ID strings.
   spoke_project_numbers = {
     for env_key in sort(keys(local.environments)) :
-    env_key => local.projects.project_numbers["${env_key}-host"]
+    env_key => try(local.projects.project_numbers["${env_key}-host"], "")
   }
 
   org_id  = local.org.org_id
@@ -56,5 +56,26 @@ check "hub_vpc_sc_enforced_when_prod_present" {
       local.vpc_sc_access_policy_name != null && !var.vpc_sc_enable_dry_run
     )
     error_message = "A production environment (is_production = true) is present but the hub VPC-SC perimeter is ${local.vpc_sc_access_policy_name == null ? "NOT CREATED (set gcp.network.vpc_sc_access_policy or vpc_sc_access_policy_name)" : "in DRY-RUN (vpc_sc_enable_dry_run = true)"}. Dry-run gives no exfiltration protection: validate the violation logs, then set vpc_sc_enable_dry_run = false (use vpc_sc_dry_run_additional_restricted_services to keep staging further changes)."
+  }
+}
+
+# Fail early, naming the contract field, when the effective gcp-organization / gcp-projects contract
+# (variable, config file or the upstream workspace's contract output) lacks a
+# key this root reads. The reads below tolerate the gap so that this
+# precondition, not a bare "key not in collection", is the plan error.
+resource "terraform_data" "upstream_contract_guard" {
+  lifecycle {
+    precondition {
+      condition     = length(local.org.folders) > 0
+      error_message = "The gcp-organization contract has no folders (organization_contract / gcp.contracts.organization, else the ${var.organization_workspace_name} workspace's contract output)."
+    }
+    precondition {
+      condition     = length(setsubtract(["shared-hub", "shared-dns"], keys(local.projects.project_ids))) == 0
+      error_message = "The gcp-projects contract project_ids lack ${join(", ", sort(setsubtract(["shared-hub", "shared-dns"], keys(local.projects.project_ids))))} (projects_contract / gcp.contracts.projects, else the ${var.projects_workspace_name} workspace's contract output)."
+    }
+    precondition {
+      condition     = length(setsubtract([for e in keys(local.environments) : "${e}-host"], keys(local.projects.project_numbers))) == 0
+      error_message = "The gcp-projects contract project_numbers lack ${join(", ", sort(setsubtract([for e in keys(local.environments) : "${e}-host"], keys(local.projects.project_numbers))))} (projects_contract / gcp.contracts.projects, else the ${var.projects_workspace_name} workspace's contract output)."
+    }
   }
 }

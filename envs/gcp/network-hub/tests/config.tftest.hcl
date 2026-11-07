@@ -32,11 +32,13 @@ override_data {
           "shared-hub" = "acme-hub-abcd"
           "shared-dns" = "acme-dns-abcd"
           "dev-host"   = "acme-dev-host-abcd"
+          "prod-host"  = "acme-prod-host-abcd"
         }
         project_numbers = {
           "shared-hub" = "111111111111"
           "shared-dns" = "222222222222"
           "dev-host"   = "333333333333"
+          "prod-host"  = "444444444444"
         }
       }
     }

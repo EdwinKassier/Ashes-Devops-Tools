@@ -13,15 +13,15 @@ locals {
     project_numbers = module.projects.project_numbers
     environment_config = {
       for env_key, env in local.environments : env_key => {
-        folder_id           = local.org.folders[env_key].id
-        folder_name         = local.org.folders[env_key].display_name
+        folder_id           = try(local.org.folders[env_key].id, null)
+        folder_name         = try(local.org.folders[env_key].display_name, null)
         host_project_id     = module.projects.project_ids["${env_key}-host"]
         host_project_number = module.projects.project_numbers["${env_key}-host"]
         region              = env.region
         cidr_block          = env.cidr_block
         labels              = env.labels
         tag_value_ids = {
-          environment = local.org.tag_values["environment-${env_key}"]
+          environment = try(local.org.tag_values["environment-${env_key}"], null)
         }
         # Explicit production marker for the workload guardrail checks.
         is_production = env.is_production
