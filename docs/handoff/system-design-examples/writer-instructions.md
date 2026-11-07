@@ -15,6 +15,7 @@ These come from the ledger.
 - **GCP CMEK.** The repo has no workload CMEK output on GCP. GCP snippets use `module "workload_cmek"` (source `modules/gcp/governance/kms`) in `gcp-workload-<env>`, referenced as `module.workload_cmek.key_ids["<component>"]`, with a one-line gap note. Follow the primer's #conventions exactly.
 - **AWS CMEK.** The `workload_kms_key_arn` output of `aws-workload-<env>`, per the primer.
 - **Tags and labels.** Follow the code, as the primer documents it: AWS `default_tags` (6 keys), GCP `default_labels` (4 keys).
+- **GCP region.** Region-scoped GCP resources (Cloud Run, subnet attachments, KMS key rings) use `local.env_config.region` from `envs/gcp/workload`, never `local.region`.
 - **GCP egress.** It is per-environment Cloud NAT, not inspected through the hub. Say so where egress matters.
 - **Cross-references to later walkthroughs.** Leave them out for now. A final consistency task adds the links. You may name another question in prose ("see the adapter gateway walkthrough").
 
