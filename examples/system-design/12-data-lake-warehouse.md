@@ -260,10 +260,11 @@ small files and unbounded metadata. The managed options do it for you:
   DML statement per table at a time, no partition evolution, and external
   engines read an exported metadata snapshot
   ([Google Cloud docs](https://docs.cloud.google.com/bigquery/docs/iceberg-tables),
-  checked 2026-11). Google has renamed BigLake to Lakehouse and its metastore to
-  the **Lakehouse runtime catalog**, which serves the Iceberg REST catalog API
-  for Spark and other engines
-  ([Google Cloud docs](https://docs.cloud.google.com/biglake/docs/about-blms),
+  checked 2026-11). On 2026-04-20 Google renamed BigLake to Google Cloud
+  Lakehouse and its metastore to the **Lakehouse runtime catalog**, which
+  serves the Iceberg REST catalog API for Spark and other engines; API and IAM
+  names still say `biglake`
+  ([Google Cloud docs](https://docs.cloud.google.com/biglake/docs/biglake-basics),
   checked 2026-11).
 
 **Where it breaks.** Many writers to one table conflict: Iceberg retries a
@@ -354,7 +355,8 @@ Three layers, each catching what the one inside it misses.
 - **GCP: VPC Service Controls.** This repo's environment stage already draws a
   perimeter around each `gcp-workload-<env>` host project, restricting
   `bigquery.googleapis.com` and `storage.googleapis.com` among others, and the
-  root fails the plan if a production perimeter is absent or in dry-run
+  root warns at plan (a check block, which never fails the plan) if a
+  production perimeter is absent or in dry-run
   ([`envs/gcp/workload/main.tf`](../../envs/gcp/workload/main.tf), check
   `vpc_sc_enforced_in_prod`). Protecting the BigQuery API also protects the
   BigQuery Storage, Reservation and Connection APIs; the lakehouse catalog is a
@@ -386,8 +388,9 @@ Three layers, each catching what the one inside it misses.
   ([AWS docs](https://docs.aws.amazon.com/lake-formation/latest/dg/tag-based-access-control.html),
   checked 2026-11). Data filters give row-, column- and cell-level security
   ([AWS docs](https://docs.aws.amazon.com/lake-formation/latest/dg/data-filtering.html),
-  checked 2026-11), with limits: 100 filters per principal per table and none
-  on nested columns
+  checked 2026-11), with limits: 100 filters per principal per table, and
+  column filters reach nested fields only to five levels, with no cell-level
+  security on nested columns
   ([AWS docs](https://docs.aws.amazon.com/lake-formation/latest/dg/data-filtering-notes.html),
   checked 2026-11).
 - **The classic Lake Formation trap.** The default S3 Tables integration grants
@@ -418,8 +421,9 @@ Three layers, each catching what the one inside it misses.
   existing tables. If BigQuery loses the key, queries fail, and recovery can
   stay degraded for days
   ([Google Cloud docs](https://docs.cloud.google.com/bigquery/docs/customer-managed-encryption),
-  checked 2026-11). Iceberg data in Cloud Storage is encrypted by **the
-  bucket's** key, not BigQuery's (same source), and the Cloud Storage key ring
+  checked 2026-11). Data in Cloud Storage is encrypted by **the bucket's** key,
+  and the same source says BigLake tables support CMEK-encrypted Cloud Storage
+  data; for Iceberg tables, **verify before relying on**. The Cloud Storage key ring
   must be in the bucket's location
   ([Google Cloud docs](https://docs.cloud.google.com/storage/docs/encryption/customer-managed-keys),
   checked 2026-11).
@@ -520,7 +524,7 @@ gcp:
     prod:
       region: europe-west2
       cidr_block: 10.40.0.0/16
-      is_production: true # gcp-workload-prod then refuses a dry-run perimeter
+      is_production: true # gcp-workload-prod then warns on a dry-run perimeter
   workload:
     presets_by_environment:
       prod: [prod-gcp-workload] # enforces the perimeter
