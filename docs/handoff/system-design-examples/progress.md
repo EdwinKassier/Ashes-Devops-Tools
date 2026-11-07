@@ -75,3 +75,4 @@ Ruling: spec entry deep-dive list wins over writer-instructions "2–3" when the
 REPO GAPS: AWS app_ingress_mode exposes whole shared ALB (no per-service exposure); no restricted/append-only DB role (AWS hands master secret; GCP runtime SA is IAM DB user); no scheduled-task support (AWS app-services, GCP Cloud Run jobs); GCP Cloud SQL edition default ENTERPRISE caps PITR logs at 7 days
 Task 7: implemented df7e3b4 (5911 words; 156 snippet lines); review dispatched (opus)
 REPO GAPS: edge-security has no rate-based WAF rule and its web ACL lacks ignore_changes=[rule] for aws_wafv2_web_acl_rule; GCP environment stage doesn't pass Cloud Armor custom_rules; repo api-gateway module is HTTP API (no per-client limits)
+Task 8: review Needs fixes (3 Important: unknown-outcome resolver can double-charge via Stripe Search lag; psp_clearing invariant wrong; egress allowlist w/o drop fails prod precondition) + 4 minors → fix round 1 sent
