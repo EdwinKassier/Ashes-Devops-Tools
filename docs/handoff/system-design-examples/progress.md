@@ -56,3 +56,6 @@ Task 3: review Needs fixes (Important: zone-loss headroom 30%/260 → 50%/300) +
 Task 5: review Needs fixes (4 Important: Debezium column defaults claim wrong; consumer SQL dedupe/decrement bug; pubsub subscription missing expiration_policy; Token Creator condition is service-agent date not project age) + 4 minors → fix round 1 sent
 Task 4: review Needs fixes (3 Important: notify-api lacks KMS grant once queue CMEK on; DynamoDB WRU undercount 51k>40k; Firestore TTL needs Timestamp) + minors → fix round 1 sent
 Task 3: fix round 1 committed fe22015; scoped re-review dispatched
+Task 3: re-review Approved
+Task 3: complete (commits 50e9fb3, fe22015)
+Task 3: minor (deferred): NLCU 100k figure lacks its own inline citation
