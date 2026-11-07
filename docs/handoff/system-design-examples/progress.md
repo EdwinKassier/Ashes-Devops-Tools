@@ -62,3 +62,6 @@ Task 3: minor (deferred): NLCU 100k figure lacks its own inline citation
 Task 9: dispatched (opus); writer-instructions gained 'Lessons from earlier reviews'
 Task 5: fix round 1 committed 01f0910; scoped re-review dispatched
 Task 4: fix round 1 committed 3afa694; scoped re-review dispatched
+Task 5: re-review Approved
+Task 5: complete (commits bfbafca, 01f0910)
+Task 5: minor (deferred): inventory task_role_policy_json example not shown; consumer snippet doesn't write the reservations table
