@@ -34,3 +34,5 @@ Ruling: primer anchor slugs are FROZEN (walkthroughs start now in parallel with 
 Ruling: GCP workload CMEK convention = new module "workload_cmek" (modules/gcp/governance/kms) in gcp-workload-<env>, key ring <prefix>-<env>-cmek, referenced as module.workload_cmek.key_ids["<component>"], with a gap note — repo has no workload CMEK output on GCP — cost if wrong: walkthroughs show a key the repo doesn't yet create (flagged as gap)
 Ruling: tags/labels follow code (AWS 6 keys, GCP 4) not the spec's "four keys" wording; GCP egress described honestly as per-env Cloud NAT, not hub-inspected — code is truth — cost: none
 Task 2: out-of-scope repo issues logged (not this plan): org cmek_key_names description says full IDs but returns short names; CLAUDE.md lists google ~> 7.0 (repo is 8.x); aws-landing-zone.md links a dead anchor in adding-a-cloud.md
+Writers: shared instructions at .superpowers/sdd/2026-11-07-system-design-examples/writer-instructions.md (opus writers, opus/sonnet reviewers)
+Tasks 3,4,5: dispatched in parallel (base 5ff6820)
