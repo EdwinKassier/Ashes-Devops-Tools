@@ -53,20 +53,20 @@ The following resources are created:
 
 
 - resource.terraform_data.env_key_uniqueness (modules/vercel/project/main.tf#L120)
-- resource.terraform_data.prod_vars_version (modules/vercel/project/main.tf#L178)
-- resource.terraform_data.qa_vars_version (modules/vercel/project/main.tf#L170)
-- resource.terraform_data.shared_vars_version (modules/vercel/project/main.tf#L182)
-- resource.terraform_data.uat_vars_version (modules/vercel/project/main.tf#L174)
-- resource.vercel_custom_environment.uat (modules/vercel/project/main.tf#L156)
+- resource.terraform_data.prod_vars_version (modules/vercel/project/main.tf#L184)
+- resource.terraform_data.qa_vars_version (modules/vercel/project/main.tf#L176)
+- resource.terraform_data.shared_vars_version (modules/vercel/project/main.tf#L188)
+- resource.terraform_data.uat_vars_version (modules/vercel/project/main.tf#L180)
+- resource.vercel_custom_environment.uat (modules/vercel/project/main.tf#L162)
 - resource.vercel_project.this (modules/vercel/project/main.tf#L137)
-- resource.vercel_project_domain.prod (modules/vercel/project/main.tf#L321)
-- resource.vercel_project_domain.qa (modules/vercel/project/main.tf#L299)
-- resource.vercel_project_domain.uat (modules/vercel/project/main.tf#L312)
-- resource.vercel_project_environment_variable.prod (modules/vercel/project/main.tf#L233)
-- resource.vercel_project_environment_variable.qa (modules/vercel/project/main.tf#L188)
-- resource.vercel_project_environment_variable.shared (modules/vercel/project/main.tf#L260)
-- resource.vercel_project_environment_variable.shared_uat (modules/vercel/project/main.tf#L278)
-- resource.vercel_project_environment_variable.uat (modules/vercel/project/main.tf#L212)
+- resource.vercel_project_domain.prod (modules/vercel/project/main.tf#L327)
+- resource.vercel_project_domain.qa (modules/vercel/project/main.tf#L305)
+- resource.vercel_project_domain.uat (modules/vercel/project/main.tf#L318)
+- resource.vercel_project_environment_variable.prod (modules/vercel/project/main.tf#L239)
+- resource.vercel_project_environment_variable.qa (modules/vercel/project/main.tf#L194)
+- resource.vercel_project_environment_variable.shared (modules/vercel/project/main.tf#L266)
+- resource.vercel_project_environment_variable.shared_uat (modules/vercel/project/main.tf#L284)
+- resource.vercel_project_environment_variable.uat (modules/vercel/project/main.tf#L218)
 
 
 ## Inputs
@@ -78,11 +78,12 @@ The following resources are created:
 | <a name="input_allowed_branches"></a> [allowed\_branches](#input\_allowed\_branches) | Git branches that trigger deployments. Builds on all other branches are skipped.<br/>The module generates an ignore\_command using POSIX sh syntax (not bash) — Vercel<br/>executes this in /bin/sh. Do not add bash-specific syntax ([[ ]], ==).<br/>Must contain at least one branch name. | `list(string)` | <pre>[<br/>  "main"<br/>]</pre> | no |
 | <a name="input_domains"></a> [domains](#input\_domains) | Domain assignments for the project. Each entry maps a domain to an environment.<br/>environment must be one of: "qa", "uat", "production". | <pre>list(object({<br/>    domain      = string<br/>    environment = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_framework"></a> [framework](#input\_framework) | Framework preset applied to the Vercel project. Set null for framework-agnostic projects. | `string` | `"nextjs"` | no |
+| <a name="input_function_default_regions"></a> [function\_default\_regions](#input\_function\_default\_regions) | Default regions for Vercel Functions (resource\_config.function\_default\_regions). Null (default) uses [serverless\_function\_region]; set a list for multi-region functions (a Vercel plan limit applies). | `list(string)` | `null` | no |
 | <a name="input_prod_environment_variables"></a> [prod\_environment\_variables](#input\_prod\_environment\_variables) | Environment variables for the production environment. key and value are required; sensitive defaults to true (secure by default: the value cannot be read back via the Vercel API or dashboard). Set sensitive = false only for non-secret values you need to read in the dashboard. | <pre>list(object({<br/>    key       = string<br/>    value     = string<br/>    sensitive = optional(bool, true)<br/>  }))</pre> | `[]` | no |
 | <a name="input_production_branch"></a> [production\_branch](#input\_production\_branch) | Git branch to deploy to the production environment.<br/>⚠️  Must be an existing branch — Vercel validates branch existence at apply time.<br/>Setting a non-existent branch name will fail. Default "main" is safe for most repos. | `string` | `"main"` | no |
 | <a name="input_qa_environment_variables"></a> [qa\_environment\_variables](#input\_qa\_environment\_variables) | Environment variables for the QA (preview) environment. key and value are required; sensitive defaults to true (secure by default: the value cannot be read back via the Vercel API or dashboard). Set sensitive = false only for non-secret values you need to read in the dashboard. | <pre>list(object({<br/>    key       = string<br/>    value     = string<br/>    sensitive = optional(bool, true)<br/>  }))</pre> | `[]` | no |
 | <a name="input_root_directory"></a> [root\_directory](#input\_root\_directory) | Root directory of the project within the repository (e.g. "apps/nextjs" for a monorepo).<br/>Leave empty ("") for the repository root. The module converts "" to null internally —<br/>the Vercel API rejects an empty string with invalid\_root\_directory. | `string` | `""` | no |
-| <a name="input_serverless_function_region"></a> [serverless\_function\_region](#input\_serverless\_function\_region) | Region for serverless function execution. Must be a valid Vercel function region code. | `string` | `"lhr1"` | no |
+| <a name="input_serverless_function_region"></a> [serverless\_function\_region](#input\_serverless\_function\_region) | Region for function execution (feeds resource\_config.function\_default\_regions unless function\_default\_regions is set). Must be a valid Vercel function region code. | `string` | `"lhr1"` | no |
 | <a name="input_shared_environment_variables"></a> [shared\_environment\_variables](#input\_shared\_environment\_variables) | Environment variables applied to all three environments (QA, UAT, production). Useful for SSL certs and global feature flags. sensitive defaults to true (secure by default). | <pre>list(object({<br/>    key       = string<br/>    value     = string<br/>    sensitive = optional(bool, true)<br/>  }))</pre> | `[]` | no |
 | <a name="input_team_id"></a> [team\_id](#input\_team\_id) | Vercel team ID the project belongs to. Required for team-scoped projects; omit for personal account projects. | `string` | `null` | no |
 | <a name="input_uat_environment_variables"></a> [uat\_environment\_variables](#input\_uat\_environment\_variables) | Environment variables for the UAT custom environment. key and value are required; sensitive defaults to true (secure by default: the value cannot be read back via the Vercel API or dashboard). Set sensitive = false only for non-secret values you need to read in the dashboard. | <pre>list(object({<br/>    key       = string<br/>    value     = string<br/>    sensitive = optional(bool, true)<br/>  }))</pre> | `[]` | no |
