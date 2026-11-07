@@ -125,7 +125,7 @@ Once the sandbox workflow exists, add **`Sandbox convergence`** (HCP Terraform h
 Ensure Dependabot auto-approves and merges **security** PRs only:
 
 1. **Settings → Code security and analysis → Dependabot security updates**: Enable
-2. **Settings → Code security and analysis → Dependabot version updates**: Review `.github/dependabot.yml`. It covers GitHub Actions and Terraform providers. Terraform provider bumps are grouped and labeled for REVIEW, never auto-merged; the version pins keep proposals inside the current major (see `docs/guides/provider-upgrades.md`)
+2. **Settings → Code security and analysis → Dependabot version updates**: Review `.github/dependabot.yml`. It covers GitHub Actions and the CI Python tooling only. Terraform providers and `.terraform.lock.hcl` files are owned by Renovate (`renovate.json`): one grouped weekly PR per provider family, labelled for REVIEW, never auto-merged, with provider majors disabled so they stay deliberate (see `docs/guides/provider-upgrades.md`)
 3. Create a branch protection rule that allows Dependabot to bypass review requirements for patch-level security updates
 
 ---

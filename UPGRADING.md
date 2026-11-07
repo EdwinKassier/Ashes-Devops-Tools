@@ -94,8 +94,9 @@ Also in this release (no manual step):
 set, `<project_name_prefix>destructive-change-guard`, with `overridable = true`.
 It now denies every delete or replace of a stateful type (databases, buckets,
 KMS keys, projects/folders/accounts, networks, secrets, log sinks/buckets,
-CloudTrail, StackSet instances, `supabase_project`), not only log-named
-buckets. The `<prefix>opa-guardrails` set stays non-overridable.
+CloudTrail, StackSet instances, `supabase_project`, and the admin-containment
+deny policies with their `google_tags_tag_key` / `google_tags_tag_value`), not
+only log-named buckets. The `<prefix>opa-guardrails` set stays non-overridable.
 
 **Manual steps (estates with policy sets on):**
 
@@ -128,6 +129,57 @@ limits Sandbox to the `sandbox_allowed_instance_types` families (default
 `scp-suspended-deny-all` / `scp-sandbox-guard` to `disabled_org_policies`
 (its default is `["backup-policy"]`, so repeat that entry); their attachments
 drop with them. Check that nothing you run lives in Sandbox/Suspended first.
+
+#### The region SCP no longer exempts the Terraform run role (aws-organization)
+
+`scp-region-restriction` used to carve the `tfc-apply` run role
+(`terraform_run_role_arn`) out of its deny; break-glass is now the only
+exemption. Global-endpoint services stay in `NotAction`, which also gains
+`networkmanager:*` and `notifications:*`. The next aws-organization apply
+updates the SCP **in place**, and from then on a member-account pipeline call
+to a service outside `NotAction` in a region outside `allowed_regions` is
+denied. **Before upgrading,** check that no layer manages resources in a region
+outside `allowed_regions` (a provider alias in another region, a resource with
+an explicit `region`); add that region to `allowed_regions` or move the
+resource. If an apply fails with an SCP `AccessDenied` afterwards, the service
+is missing from `NotAction`: add it in `modules/aws/governance/organization-policy`
+or apply with break-glass (`docs/known-gaps.md`, "Region SCP no longer exempts
+the run role").
+
+#### Plan roles are denied more data-plane reads (aws-organization)
+
+The `DenyDataPlaneReads` statement on the `tfc-plan` roles (the member-account
+baseline from `tfc-oidc-baseline`, and the management-account plan roles from
+`tfc-management-roles`) also denies `ssm:GetCommandInvocation`,
+`logs:GetLogRecord`, `rds:DownloadDBLogFilePortion`, `es:ESHttpGet`,
+`cassandra:Select`, `codecommit:GitPull` and `codecommit:GetFile`; the
+management plan roles additionally lose `s3:GetObject*`,
+`secretsmanager:BatchGetSecretValue` and `kms:GenerateDataKey*`. The next
+aws-organization apply updates the policies in place (the member baseline
+through its StackSet). A plan that reads content through a data source with
+one of these actions (for example an `aws_s3_object` body in the management
+account) now fails with `AccessDenied`; move such reads to the apply run or
+out of Terraform. tfc-admin also adds `aws-shared-services` to
+`speculative_disabled_workspaces` (in-place workspace update: PRs no longer run
+speculative plans there).
+
+#### Three more default AWS permission sets (aws-identity)
+
+The `permission_sets` default grows from `AdministratorAccess` + `ReadOnly` to
+also include `PlatformAdmin` (AdministratorAccess, 4 h), `Developer`
+(PowerUserAccess, 8 h) and `SecurityAudit` (SecurityAudit, 4 h). The next
+aws-identity apply **creates** the three permission sets (unassigned until you
+assign them, but provisioned). Assignments now also accept
+`group_display_name` and `account_key`, and `aws.identity.groups` derives them
+from config. **To opt out,** set `permission_sets` on aws-identity to the
+previous two entries only:
+
+```hcl
+permission_sets = {
+  AdministratorAccess = { description = "Full administrative access. Assign only to break-glass groups.", session_duration = "PT1H", managed_policy_names = ["AdministratorAccess"] }
+  ReadOnly            = { description = "Organization-wide read-only access for auditors and viewers.", session_duration = "PT1H", managed_policy_names = ["ReadOnlyAccess"] }
+}
+```
 
 #### IPAM explicit-CIDR allocation is opt-in (aws-network, aws-workload)
 
@@ -440,11 +492,17 @@ What changes on the first 8.x plan:
 - **app-ingress backend scheme (explicit now).** 8.x changes the
   `google_compute_backend_service` `load_balancing_scheme` default from
   `EXTERNAL` to `EXTERNAL_MANAGED`. `modules/gcp/network/app-ingress` (used by
-  `modules/gcp/stages/app-services`) left it unset while its forwarding rules
-  were `EXTERNAL_MANAGED`; it now sets `EXTERNAL_MANAGED`. A fresh plan, or a
-  state already at `EXTERNAL_MANAGED`, shows no change. If a state holds the
-  backend at `EXTERNAL`, the plan shows an update of `load_balancing_scheme`.
-  Review it in the sandbox before applying it to a serving load balancer.
+  `modules/gcp/stages/environment`, i.e. `gcp-workload-<env>`) left it unset
+  while its forwarding rules were `EXTERNAL_MANAGED`; it now sets
+  `EXTERNAL_MANAGED`. An `EXTERNAL` backend behind `EXTERNAL_MANAGED`
+  forwarding rules is a mix GCP rejects, so a working load balancer cannot hold
+  it: a fresh plan, or a state already at `EXTERNAL_MANAGED`, shows no change.
+  If a plan nevertheless shows a `load_balancing_scheme` update (a state written
+  some other way), do not apply it directly to a serving load balancer: GCP
+  moves a backend between the two schemes only through the
+  `external_managed_migration_state` flow (`PREPARE` → `TEST_BY_PERCENTAGE` →
+  `TEST_ALL_TRAFFIC`, then the scheme change). Run that flow in the sandbox
+  first and record it in the sandbox upgrade log.
 - **Deprecated attributes leave two whole-resource outputs (no resource
   change).** `modules/gcp/network/subnet` output `subnet` no longer carries
   `fingerprint`, and `modules/gcp/network/vpc` output `network` no longer
@@ -587,9 +645,11 @@ to.
 
 - `github_repository_owner_id` is required once a service declares `github`
   (`gh api orgs/<org> --jq .id`). It was optional.
-- `services[*].github.ref` and `.environment` must match `^[A-Za-z0-9_./-]+$`,
-  and `environment` may not be `-` (the value a token without an environment
-  claim maps to).
+- `services[*].github.ref` must match `^[A-Za-z0-9_./-]+$` and
+  `.environment` `^[A-Za-z0-9_.-]+$` (no `/`: the environment is the last
+  `/`-joined part of `repo_ref_env`, so a `/` would let two ref/environment
+  pairs collide). `environment` may not be `-` (the value a token without an
+  environment claim maps to). Rename a GitHub environment whose name has a `/`.
 
 **What the next apply does (no manual step):**
 
@@ -689,7 +749,8 @@ other's configs. The Pub/Sub topics are shared and never replaced. Follow
 
 #### gcp-organization: `disable_default_sink` is configurable
 
-`gcp.disable_default_sink` (default `false`) is no longer hard-coded. It only takes
+`gcp_overrides.disable_default_sink` (default `false`; gcp-organization's
+`gcp_overrides` object, not a `config/landing-zone.yaml` key) is no longer hard-coded. It only takes
 effect when `enable_logging_organization_settings` is on. Don't disable the
 `_Default` sink unless a catch-all sink exists: the central Log Analytics sink
 routes only Cloud Audit Logs.
@@ -731,10 +792,12 @@ stays as the fallback. Expect one in-place update to each `vercel_project`.
 Applies to workloads with `enable_saas_secret_bridge = true`.
 
 - **AWS (`aws-workload-<env>`).** `aws_secretsmanager_secret_version.saas_bridge`
-  moves from `secret_string` to the write-only `secret_string_wo`. The plan shows
-  an **in-place update**, not a replacement: aws 6.45 and later switch in place,
-  and the repo floor is 6.46. Afterwards the secret version holds no plaintext
-  in state. The secret's content does not change.
+  moves from `secret_string` to the write-only `secret_string_wo`. The plan is
+  **expected** to show an in-place update, not a replacement (aws 6.45 and later
+  switch in place, and the repo floor is 6.46), and the secret version is
+  expected to hold no plaintext in state afterwards; confirm both with
+  `terraform state pull` in the sandbox before relying on them. The secret's
+  content does not change.
 - **GCP (`gcp-workload-<env>`).** The secret was already write-only. Its
   version counter now follows `saas.bridge_rotation`. It stays 1 until you bump
   it, so the upgrade re-writes nothing.
@@ -751,6 +814,48 @@ Applies to workloads with `enable_saas_secret_bridge = true`.
   reads ephemerally" under Terraform 1.17).
 
 ### All clouds
+
+#### The `starter` profile requires a budget (aws-organization, gcp-organization)
+
+An estate with `org.profile: starter` and no `org.monthly_budget_usd` now
+**fails the plan** of aws-organization and gcp-organization
+(`terraform_data.starter_requires_budget`). Set `org.monthly_budget_usd` (USD,
+above 0) in `config/landing-zone.yaml`, or `monthly_budget_usd`
+(aws-organization) / `monthly_budget_amount` (gcp-organization). On AWS also
+keep `enable_cost_governance = true`. Then, for starter estates only:
+
+- **aws-organization** replaces `budgets` with one `org-monthly` budget of that
+  amount, alerting at 50/80/100% of actual spend and 100% forecast. The default
+  `org-monthly` budget updates in place; **any other key you set in `budgets`
+  is deleted**. Keep a custom budget by switching to `profile: production` or
+  re-creating it outside this root.
+- **gcp-organization** sets the organization budget to that amount, with
+  thresholds at 50/80/100% of current spend (in-place update of the budget).
+
+`production` estates are unchanged: `monthly_budget_usd` is ignored there, and
+the GCP budget keeps its default thresholds.
+
+#### One `notifications` section feeds the existing alert paths
+
+New optional `notifications` in `config/landing-zone.yaml` (`emails`,
+`hcp_email_user_ids`). Without it nothing changes. When set, it becomes the
+fallback (an explicit variable and the specific keys `gcp.alert_emails` /
+`aws.guard_alert_emails` still win):
+
+- **gcp-organization:** the control-plane alert email channels, which are also
+  attached to the organization budget (at most 5 channels; the plan fails
+  above that).
+- **aws-security:** `notification_subscribers` (now default `null`) becomes one
+  email subscription per address on the security topic (also used by the CIS
+  alarms); without the section it keeps the old placeholder. Each new address
+  must confirm its SNS subscription.
+- **aws-organization:** `guard_alert_emails`, budgets with empty `emails`, and
+  `cost_anomaly_email` (now default `null`: the first address, else
+  `finops@example.com` as before). The anomaly monitor takes one subscriber only.
+- **tfc-admin:** `hcp_email_user_ids` (HCP user IDs, not addresses) adds a
+  `notify-email` notification (`run:errored`, `run:needs_attention`,
+  `assessment:*`) to control-plane and workload workspaces; your own
+  `control_plane_notifications` / `workload_notifications` are kept.
 
 #### Terraform 1.17
 

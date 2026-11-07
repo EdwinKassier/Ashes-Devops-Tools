@@ -52,6 +52,7 @@ stage-contract variables. When a contract is set, the matching remote-state read
 |---|---|
 | `gcp/bootstrap` | none (phase 0, no upstream) |
 | `gcp/organization` | `bootstrap_contract` |
+| `gcp/guardrails` | none (by design it reads no remote state: it looks the organization and the `containment` tag up in GCP, so apply `gcp/organization` first) |
 | `gcp/projects` | `bootstrap_contract`, `organization_contract` |
 | `gcp/network-hub` | `organization_contract`, `projects_contract` |
 | `gcp/workload` | `organization_contract`, `projects_contract`, `network_hub_contract` |

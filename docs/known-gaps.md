@@ -46,6 +46,31 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   - with `auto_apply_on_merge` (sandbox only) a tfc-admin apply auto-applies
     `gcp-bootstrap` and `aws-organization`.
 
+- **AWS spoke TGW routing is mock-tested only, and needs a manual hand-off.**
+  Until this release no spoke attachment was accepted, associated or
+  propagated, so workload spokes had no egress, no egress replies and no
+  on-premises path. aws-network now wires each spoke listed in
+  `aws.network.spoke_attachments` (accept, associate with `prod`/`nonprod`,
+  propagate into `inspection`, plus `inspection 0/0 → egress` and
+  `shared <top_cidr> → inspection`). Open:
+  - the hand-off is manual: copy each `aws-workload-<env>` output
+    `tgw_attachment_id` into the config and apply aws-network. A spoke not
+    listed has no routing (no run trigger or discovery closes the loop; the TGW
+    owner cannot read tags the workload account set on its attachment);
+  - **with `enable_network_firewall = false` (the `starter` profile) wired
+    spokes still have no egress:** prod/nonprod default to the inspection
+    attachment, and without the firewall the inspection VPC's tgw tier has no
+    forwarding route. Route those segments to egress (or keep the firewall) is a
+    design decision not yet made;
+  - prod↔nonprod flows are routable *through* inspection (the inspection
+    table knows every spoke); only the Network Firewall policy separates the
+    segments. Alert-only mode passes them. Separate per-segment inspection
+    tables would enforce it at the routing layer;
+  - **validate in the sandbox:** the accepter on a `pendingAcceptance`
+    attachment, the association of a cross-account attachment, end-to-end
+    egress and reply through the firewall (appliance mode), and on-premises →
+    spoke over the VPN.
+
 - **Org-wide Config recorders are mock-tested only.** The
   `org-config-recorders` StackSet (`modules/aws/security/config-recorder-stackset`)
   and the migration runbook
@@ -121,6 +146,10 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   is a residual owner-only step: document it in the runbook rather than
   widening the team to `manage_teams` or `manage_organization_access`. The
   90-day token expiry and rotation are an operator control, not enforced in code.
+  The tfc-admin workspace's own access is limited to owners and the tfc-admin
+  team, but **any other team holding organization-level `manage_workspaces`
+  can still queue and apply tfc-admin** (that permission spans every
+  workspace). Keep that permission on the tfc-admin team alone.
 
 - **Org-trail selector changes are detected, not prevented.** The
   aws-security management apply role keeps `cloudtrail:PutEventSelectors` /
@@ -243,9 +272,10 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   `guardrail_identity_change`). And **tfc-admin can still repoint
   `gcp-guardrails`** (working directory, VCS branch, team access, variables):
   whoever can apply tfc-admin can undo the security-team-only boundary, so the
-  separation of duties also rests on CODEOWNERS for `envs/tfc-admin/**`
-  (plan Task 3.5) and on keeping tfc-admin's own approvers apart from the
-  platform team;
+  separation of duties also rests on CODEOWNERS for `envs/tfc-admin/**` and
+  `config/tfc-workspaces.yaml` (both security co-owned; the committed file
+  cannot set `gcp-guardrails` variables) and on keeping tfc-admin's own
+  approvers apart from the platform team;
   (2) **containment additions** (all on the deny-supported list, re-verified
   2026-11): `accessLevels.update/delete/replaceAll`,
   `authorizedOrgsDescs.create/update/delete`, `policies.update/setIamPolicy`
@@ -437,13 +467,26 @@ GCP:
   boolean/list constraints to the `*.managed.*` namespace and adding
   `gcp.restrictNonCmekServices` are still open. Ref:
   <https://docs.cloud.google.com/resource-manager/docs/custom-constraints>
-- **G7 — host firewall uses legacy VPC firewall rules, not network firewall
-  policies** (HIGH, BEHAVIOR-CHANGING). `modules/gcp/network/network-firewall`
-  creates `google_compute_firewall` (legacy per-VPC rules with network tags);
-  `tiered-vpc` instantiates it for all tier-to-tier rules. Google directs new
-  builds to global/regional **network firewall policies** with IAM-governed
-  secure tags. Migration changes rule evaluation → real apply. Ref:
-  <https://docs.cloud.google.com/firewall/docs/firewall-policies-overview>
+- **G7 — host firewall defaults to legacy VPC firewall rules** (HIGH,
+  BEHAVIOR-CHANGING) — ⚠️ **module shipped opt-in, roots not wired.**
+  `tiered-vpc` (and the `net-hub` / `net-spoke` compositions) take
+  `firewall_mode = legacy | both | policy`: `both` adds one global **network
+  firewall policy** whose rules select tiers by subnet CIDR beside the legacy
+  tag-based rules; `policy` removes the legacy rules
+  ([`gcp-firewall-policy-migration.md`](runbooks/gcp-firewall-policy-migration.md)).
+  Default stays `legacy`, mock-tested only. Open:
+  - no deployable root (`gcp-network-hub`, `gcp-workload-<env>`) exposes
+    `firewall_mode` yet, so an estate cannot select it without a code change;
+  - in `policy` mode the legacy `deny_all` rule's logging is lost (the implied
+    deny is not logged);
+  - the internal-load-balancer policy rule is untargeted (no
+    `target_secure_tags`); Cloud Run direct VPC egress cannot carry secure tags;
+  - in `both` mode an explicit `firewall_priority` no longer sets the policy
+    rule's priority (undocumented);
+  - runbook wording: step 2 says "before step 1", and the `gcloud` filter
+    quoting (`~ -db-`) needs a check;
+  - the migration has not run in the sandbox.
+  Ref: <https://docs.cloud.google.com/firewall/docs/firewall-policies-overview>
 - **G8 — audit-log bucket WORM lock** — ✅ **SHIPPED opt-in**
   (`enable_audit_bucket_lock` on `envs/gcp/organization` → `stages/organization`
   → `cloud-audit-logs`, default `false`, mock-tested). When enabled it applies a
@@ -559,6 +602,12 @@ Enable only after validating in a real/test org. Each defaults to prior behaviou
     `kms:CreateKey`.
 
   Residuals:
+  - aws-organization and aws-security each read
+    `aws.enable_cloudtrail_delegated_admin` themselves (not through a
+    contract, ADR 0003). Set it in the config file, not as a variable on one
+    workspace: a value set on only one root makes them diverge (the plans fail
+    closed rather than leave a gap, but the estate is half-migrated until both
+    agree).
   - The SCP stops `StopLogging` / `DeleteTrail` on the new trail for everyone
     but break-glass (`DenyDisableSecurityServices`). `UpdateTrail`,
     `PutEventSelectors` and `PutInsightSelectors` are denied to member
@@ -616,6 +665,14 @@ Enable only after validating in a real/test org. Each defaults to prior behaviou
   group; adopting the service-created spoke group by name needs no import, and
   deleting it with the hub succeeds; path (b) route precedence (NCC subnet routes
   over the temporary VPN's dynamic routes).
+- **Smaller opt-ins from the 2026-11 remediation, mock-tested only.**
+  SCC v2 notification/mute configs (`gcp_overrides.scc_api_version = "v2"`);
+  `gcp_overrides.disable_default_sink`; IPAM explicit-CIDR allocation
+  (`ipam_mode_for_new_vpcs_only`, `ipam_new_vpcs`); the declarative EC2 Allowed
+  AMIs policy (`ec2_allowed_images`, `audit_mode` by default, so it only logs);
+  the Suspended deny-all and Sandbox guard SCPs (on by default where those OUs
+  exist). Apart from those two SCPs, each keeps today's behaviour until set
+  (UPGRADING.md); none has run against a real organization yet.
 - **Hybrid connectivity (HA VPN, Cloud Interconnect, Site-to-Site VPN)**
   (`gcp.network.vpn`, `gcp.network.interconnect`, `aws.network.vpn`;
   `modules/gcp/stages/net-hub`, `modules/aws/stages/network-hub`). Mock-tested
@@ -624,7 +681,9 @@ Enable only after validating in a real/test org. Each defaults to prior behaviou
   VPN tunnels and on-premises learns the environment spokes' routes through it;
   on AWS, that on-premises traffic really traverses the Network Firewall in both
   directions (VPN attachment in the `hybrid` TGW table defaulting to inspection;
-  routes propagated into the `inspection` table only).
+  routes propagated into the `inspection` table only). On AWS a spoke is
+  reachable from on-premises only once it is wired through
+  `aws.network.spoke_attachments` (see the spoke-routing entry above).
   - **GCP tunnel secret changes replace the tunnel.** `google_compute_vpn_tunnel`
     has no in-place update for its secret: switching `shared_secret` to
     `shared_secret_wo`, or raising `vpn_shared_secret_wo_version`, is a
@@ -731,13 +790,10 @@ side (all mock-tested, secure defaults):
 - **Behaviour-changing security defaults** (not applied, would change posture):
   packet-mirroring default mirrors all traffic; vpc-peering exports public-IP
   subnet routes; the shared VPC-endpoint policy is `Action="*"`.
-- **GCP VPN / Interconnect exposure.** `modules/gcp/stages/net-hub` wires
-  `network/vpn` (`var.vpn`) and `network/interconnect`, but
-  `modules/gcp/stages/network-hub` does not pass them through, so they cannot
-  be set from `envs/gcp/network-hub` or `config/landing-zone.yaml`. Pending
-  Task 4.4.
-- **Toolchain currency automation.** Dependabot covers both GitHub Actions and
-  the `terraform` ecosystem (`directories: ["/**"]`, one grouped weekly PR,
-  labelled for review, never auto-merged); the repo pins keep proposals inside
-  the current provider major. Open call: switch to Renovate only if grouped,
-  compatibility-aware *major* bumps or `required_version` bumps are wanted.
+- **Toolchain currency automation.** Renovate owns Terraform providers and
+  lockfiles (`renovate.json`: weekly `lockFileMaintenance`, one grouped
+  `hashicorp/*` PR, labelled for review, never auto-merged, provider majors
+  disabled); Dependabot keeps GitHub Actions and the CI Python tooling. The
+  Renovate GitHub App still has to be installed by an operator. Open calls:
+  `semanticCommits` is off (the `build(deps):` prefix is set by hand), and
+  `required_version` / provider-major bumps stay manual by design.

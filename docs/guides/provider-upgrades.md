@@ -156,10 +156,10 @@ refresh, a CI runner cache miss) would have surfaced the same failures just as e
 - **The real, actionable defects are the two Terraform-1.9.8-specific bugs above.** These
   are tracked as separate follow-ups (see "Related defects" below) — they are unrelated
   to provider version and should be fixed independently of any future provider bump.
-- Re-enabling Dependabot for the `terraform` ecosystem is still **not** recommended until
-  those two bug classes are fixed repo-wide, since any lock-file-only bump (of any
-  provider, any version) will keep re-triggering them and generating red, confusing PRs
-  that look like provider incompatibilities but aren't.
+- Re-enabling Dependabot for the `terraform` ecosystem was **not** recommended until
+  those two bug classes were fixed repo-wide. **Superseded:** Renovate now owns provider
+  updates and lockfiles (`renovate.json`, see above), and Dependabot keeps only GitHub
+  Actions and the CI Python tooling (`.github/dependabot.yml`).
 
 ### Related defects (tracked separately, not fixed by this task)
 

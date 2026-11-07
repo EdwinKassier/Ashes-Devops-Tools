@@ -59,8 +59,11 @@ Do these in order so tfc-admin never runs without a valid token:
 2. Update the workspace variable `TFE_TOKEN` on tfc-admin to the new token.
 3. Queue a plan on tfc-admin to prove the new token works.
 4. Revoke the old token (Team -> API tokens -> delete the one with the old
-   description). A team has one token at a time per the UI; if the UI replaces the
-   old one on creation, do step 1 and 2 back to back and run step 3 immediately.
+   description). HCP Terraform lets a team hold several tokens, each with its own
+   description and expiry, so the old one keeps working until you delete it here.
+   (Legacy single-token teams, and the API's legacy team-token endpoint, replace
+   the old token on creation: then do steps 1 and 2 back to back and run step 3
+   immediately.)
 
 After exposure, do 1 to 4 immediately and review the audit trail for the old token.
 
