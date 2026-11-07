@@ -78,3 +78,10 @@ REPO GAPS: edge-security has no rate-based WAF rule and its web ACL lacks ignore
 Task 8: review Needs fixes (3 Important: unknown-outcome resolver can double-charge via Stripe Search lag; psp_clearing invariant wrong; egress allowlist w/o drop fails prod precondition) + 4 minors → fix round 1 sent
 Task 6: review Needs fixes (3 Important: Parameter Manager condition uses project id not number; gcp-sa-pm grant before identity exists; egress allowlist missing secretsmanager + org-wide semantics) + minors + LLM 429 note → fix round 1 sent
 REPO GAP: net-spoke variables.tf:151 allows MANUAL_ONLY NAT without nat_ips (latent bug)
+Controller handover (2026-11-07 20:15): previous session stopped (usage limit). New worktree flamboyant-brahmagupta-7a722e, local branch claude/system-design-examples-cont (push target: origin claude/system-design-examples). Old worktree's staged fixes for Tasks 6 and 8 and drafts of 07/08 carried over.
+Task 6: fix round 1 committed be669c3 (was staged, never committed); scoped re-review dispatched
+Task 8: fix round 1 committed cd9f652; scoped re-review dispatched
+Task 7: review dispatched (opus)
+Task 9: draft found at 7,144 words; writer dispatched to finish, trim and commit
+Task 10: draft found at 7,142 words; writer dispatched to finish, trim and commit
+Task 11: dispatched (opus)
