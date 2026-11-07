@@ -663,9 +663,10 @@ module "workload_cmek" {
 }
 
 # Gap: the repo has no Memorystore for Valkey module or service connection policy.
+# One per network, region and service class: create once per environment; reuse it if it exists.
 resource "google_network_connectivity_service_connection_policy" "memorystore" {
   project       = local.env_config.host_project_id
-  name          = "memorystore-${var.environment}"
+  name          = "memorystore-${local.env_config.region}"
   location      = local.env_config.region
   service_class = "gcp-memorystore"
   network       = module.environment.network_id

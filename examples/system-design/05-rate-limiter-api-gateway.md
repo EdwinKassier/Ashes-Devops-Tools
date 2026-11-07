@@ -643,6 +643,7 @@ resource "google_compute_security_policy_rule" "per_ip_rate" {
 }
 
 # Gap: the repo has no Memorystore module or service connection policy.
+# One per network, region and service class: create once per environment; reuse it if it exists.
 resource "google_network_connectivity_service_connection_policy" "memorystore" {
   project       = local.env_config.host_project_id
   name          = "memorystore-${local.env_config.region}"

@@ -652,9 +652,10 @@ module "workload_cmek" {
 }
 
 # Gap: the repo has no Memorystore or service-connection-policy module; raw resources in the landing zone's conventions.
+# One per network, region and service class: create once per environment; reuse it if it exists.
 resource "google_network_connectivity_service_connection_policy" "memorystore" {
   project       = local.env_config.host_project_id # Shared VPC: the policy lives in the host project
-  name          = "gcp-memorystore-${local.env_config.region}"
+  name          = "memorystore-${local.env_config.region}"
   location      = local.env_config.region
   service_class = "gcp-memorystore"
   network       = module.environment.network_id
