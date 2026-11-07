@@ -134,8 +134,8 @@ conversions.
   ([AWS docs](https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/quota-limits.html),
   checked 2026-11).
 - **Operations per second at peak.**
-  - Feed pages: 18,000 × (1 own range + 5 celebrity ranges + 1 ranked-list read
-    - 20 post reads) ≈ 486,000.
+  - Feed pages: 18,000 × (1 own range + 5 celebrity ranges +
+    1 ranked-list read + 20 post reads) ≈ 486,000.
   - Fan-out: 26,000 × 3 (ZADD, trim, EXPIRE, pipelined) = 78,000.
   - Ranked-list writes and post-cache fills: about 6,000.
   - Total: about **570,000 ops/s**, or 36,000 per primary across 16, about a
@@ -219,7 +219,7 @@ graph TB
     pdb --> relay["outbox relay"]
     relay --> q["fan-out queue"]
     q --> fan["fanout worker"]
-    fan --> graph["graph service"]
+    fan --> graphsvc["graph service"]
     fan --> cache[("feed cache<br/>Valkey cluster")]
     relay --> upd["cache updater"]
     upd --> cache
@@ -692,14 +692,14 @@ resource "google_memorystore_instance" "feed_cache" {
 
 Notes:
 
-- One policy can exist per network, region and service class, and the
+- One policy can exist per project, network, region and service class, and the
   Network Admin creates it in the Shared VPC host project
   ([Google Cloud docs](https://docs.cloud.google.com/memorystore/docs/valkey/networking),
   checked 2026-11). If another Memorystore instance already has one, reuse it.
 - The same page says client firewalls must allow port 6379 **and** the data
   node ports 11000–13047 that cluster discovery returns. The `database_ports`
   default in [`modules/gcp/network/tiered-vpc`](../../modules/gcp/network/tiered-vpc/)
-  covers only 6379, so add that range to the tier rules. Whether VPC ingress
+  includes 6379 but not 11000–13047, so add that range to the tier rules. Whether VPC ingress
   rules apply to PSC endpoint addresses at all: **verify before relying on**.
 - Whether the `gcp-sa-memorystore` agent exists before first use is not
   documented; if the key grant fails, create it first (**verify before
