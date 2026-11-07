@@ -333,7 +333,7 @@ variable "alert_notification_emails" {
 }
 
 variable "budget_notify_alert_channels" {
-  description = "Attach the control-plane email notification channels to the organization budget, so budget alerts reach the same recipients. Default false (the budget notifies only its Pub/Sub topic). Needs enable_control_plane_alerting and alert_notification_emails."
+  description = "Attach the control-plane email notification channels to the organization budget, so budget alerts reach the same recipients. Default false (the budget notifies only its Pub/Sub topic). A budget accepts at most 5 channels, so alert_notification_emails plus alert_notification_channels must total 5 or fewer (the plan fails otherwise). The identity that applies the budget needs monitoring.notificationChannels.get on the audit project. Needs enable_control_plane_alerting and alert_notification_emails."
   type        = bool
   default     = false
 }

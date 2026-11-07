@@ -1327,9 +1327,6 @@
           "items": {
             "type": "string"
           }
-        },
-        "webhook_url_secret_name": {
-          "type": "string"
         }
       },
       "additionalProperties": false

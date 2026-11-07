@@ -948,6 +948,18 @@ run "containment_uses_namespaced_tag_ids" {
   }
 }
 
+run "budget_channels_over_limit_fails" {
+  command = plan
+
+  variables {
+    monthly_budget_amount        = 100
+    budget_notify_alert_channels = true
+    alert_notification_emails    = ["a@acme.io", "b@acme.io", "c@acme.io", "d@acme.io", "e@acme.io", "f@acme.io"]
+  }
+
+  expect_failures = [terraform_data.budget_channel_limit]
+}
+
 # Budget alerts can reuse the control-plane email channels (opt-in).
 run "budget_channels_opt_in" {
   command = plan

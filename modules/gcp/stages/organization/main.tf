@@ -200,6 +200,18 @@ resource "terraform_data" "production_requires_admin_containment" {
   }
 }
 
+# A budget accepts at most 5 monitoring notification channels.
+resource "terraform_data" "budget_channel_limit" {
+  count = var.budget_notify_alert_channels && var.enable_control_plane_alerting ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = length(var.alert_notification_emails) + length(var.alert_notification_channels) <= 5
+      error_message = "budget_notify_alert_channels attaches every control-plane notification channel to the org budget, and a budget accepts at most 5 (${length(var.alert_notification_emails)} emails + ${length(var.alert_notification_channels)} extra channels configured). Reduce the recipients or set budget_notify_alert_channels = false."
+    }
+  }
+}
+
 check "control_plane_alerts_have_a_destination" {
   assert {
     condition     = !var.enable_control_plane_alerting || length(var.alert_notification_emails) + length(var.alert_notification_channels) > 0

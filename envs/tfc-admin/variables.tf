@@ -566,6 +566,11 @@ variable "control_plane_notifications" {
     enabled          = optional(bool, true)
   }))
   default = {}
+
+  validation {
+    condition     = var.control_plane_notifications != null && !anytrue([for u in local.cfg.hcp_email_user_ids : strcontains(u, "REPLACE")])
+    error_message = "notifications.hcp_email_user_ids still holds the REPLACE_WITH_HCP_USER_ID placeholder from config/landing-zone.example.yaml; set real HCP Terraform user IDs (user-...) or remove the key."
+  }
 }
 
 variable "workload_notifications" {

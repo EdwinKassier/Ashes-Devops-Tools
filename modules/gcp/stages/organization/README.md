@@ -115,18 +115,19 @@ The following resources are created:
 
 - resource.google_access_context_manager_access_policy.environment (modules/gcp/stages/organization/automation_delegation.tf#L41)
 - resource.google_access_context_manager_access_policy_iam_member.environment (modules/gcp/stages/organization/automation_delegation.tf#L49)
-- resource.google_bigquery_dataset.billing_export (modules/gcp/stages/organization/main.tf#L709)
-- resource.google_bigquery_dataset_iam_member.billing_export_writer (modules/gcp/stages/organization/main.tf#L740)
-- resource.google_essential_contacts_contact.billing (modules/gcp/stages/organization/main.tf#L680)
-- resource.google_essential_contacts_contact.security (modules/gcp/stages/organization/main.tf#L671)
+- resource.google_bigquery_dataset.billing_export (modules/gcp/stages/organization/main.tf#L721)
+- resource.google_bigquery_dataset_iam_member.billing_export_writer (modules/gcp/stages/organization/main.tf#L752)
+- resource.google_essential_contacts_contact.billing (modules/gcp/stages/organization/main.tf#L692)
+- resource.google_essential_contacts_contact.security (modules/gcp/stages/organization/main.tf#L683)
 - resource.google_folder_iam_member.projects_delegated_folder_iam (modules/gcp/stages/organization/automation_delegation.tf#L57)
 - resource.google_folder_iam_member.terraform_admin_folder_roles (modules/gcp/stages/organization/main.tf#L45)
-- resource.google_logging_organization_settings.this (modules/gcp/stages/organization/main.tf#L648)
+- resource.google_logging_organization_settings.this (modules/gcp/stages/organization/main.tf#L660)
 - resource.google_privileged_access_manager_entitlement.org_admin (modules/gcp/stages/organization/pam.tf#L10)
 - resource.google_tags_location_tag_binding.containment_audit_keyring (modules/gcp/stages/organization/containment.tf#L37)
 - resource.google_tags_location_tag_binding.containment_buckets (modules/gcp/stages/organization/containment.tf#L19)
 - resource.google_tags_location_tag_binding.containment_log_analytics_bucket (modules/gcp/stages/organization/containment.tf#L29)
 - resource.google_tags_tag_binding.environment (modules/gcp/stages/organization/tags_binding.tf#L1)
+- resource.terraform_data.budget_channel_limit (modules/gcp/stages/organization/main.tf#L204)
 - resource.terraform_data.production_requires_admin_containment (modules/gcp/stages/organization/main.tf#L194)
 
 
@@ -161,7 +162,7 @@ The following resources are created:
 | <a name="input_billing_contact_email"></a> [billing\_contact\_email](#input\_billing\_contact\_email) | Email address for billing notifications and budget alerts via Essential Contacts. Optional — if null, no Essential Contact is registered for the BILLING category. | `string` | `null` | no |
 | <a name="input_break_glass_principal_emails"></a> [break\_glass\_principal\_emails](#input\_break\_glass\_principal\_emails) | Extra break-glass principal emails (users/SAs) whose ANY admin action raises a CRITICAL control-plane alert. break\_glass\_user is always included. Group membership is not visible in audit logs, so list the member accounts of a break-glass group here. | `list(string)` | `[]` | no |
 | <a name="input_break_glass_user"></a> [break\_glass\_user](#input\_break\_glass\_user) | Optional break-glass emergency user email. Always watched by the CRITICAL break-glass control-plane alert; granted standing org admin ONLY when allow\_user\_principals\_for\_break\_glass = true (prefer a break-glass group, or the PAM entitlement). | `string` | `null` | no |
-| <a name="input_budget_notify_alert_channels"></a> [budget\_notify\_alert\_channels](#input\_budget\_notify\_alert\_channels) | Attach the control-plane email notification channels to the organization budget, so budget alerts reach the same recipients. Default false (the budget notifies only its Pub/Sub topic). Needs enable\_control\_plane\_alerting and alert\_notification\_emails. | `bool` | `false` | no |
+| <a name="input_budget_notify_alert_channels"></a> [budget\_notify\_alert\_channels](#input\_budget\_notify\_alert\_channels) | Attach the control-plane email notification channels to the organization budget, so budget alerts reach the same recipients. Default false (the budget notifies only its Pub/Sub topic). A budget accepts at most 5 channels, so alert\_notification\_emails plus alert\_notification\_channels must total 5 or fewer (the plan fails otherwise). The identity that applies the budget needs monitoring.notificationChannels.get on the audit project. Needs enable\_control\_plane\_alerting and alert\_notification\_emails. | `bool` | `false` | no |
 | <a name="input_cmek_required_services"></a> [cmek\_required\_services](#input\_cmek\_required\_services) | Services that require CMEK when enable\_cmek\_org\_policy is true. Admins tune this list. | `list(string)` | <pre>[<br/>  "storage.googleapis.com",<br/>  "bigquery.googleapis.com",<br/>  "sqladmin.googleapis.com",<br/>  "spanner.googleapis.com",<br/>  "pubsub.googleapis.com",<br/>  "secretmanager.googleapis.com"<br/>]</pre> | no |
 | <a name="input_containment_exempt_principals"></a> [containment\_exempt\_principals](#input\_containment\_exempt\_principals) | Break-glass principals exempt from the admin-containment deny policy, e.g. ["principalSet://goog/group/break-glass@example.com"]. Required (non-empty) when enable\_admin\_containment is true. | `list(string)` | `[]` | no |
 | <a name="input_custom_org_constraints"></a> [custom\_org\_constraints](#input\_custom\_org\_constraints) | Opt-in custom organization-policy constraints (CEL-defined resource-shape guardrails), created AND enforced at the org node (enforcement = enforce \| dry\_run \| off; dry\_run logs violations without blocking, the way to stage a new one). Default [] = none. See docs/known-gaps.md. | <pre>list(object({<br/>    name           = string<br/>    display_name   = string<br/>    description    = string<br/>    action_type    = string<br/>    condition      = string<br/>    method_types   = list(string)<br/>    resource_types = list(string)<br/>    enforcement    = optional(string, "enforce")<br/>  }))</pre> | `[]` | no |

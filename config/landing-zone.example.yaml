@@ -358,7 +358,8 @@ saas:
 # aws.guard_alert_emails) > notifications.emails > the root's built-in default.
 # notifications:
 #   # GCP control-plane alert channels, aws-security notification + CIS alarm
-#   # topics, the org-guard-alerts topic, AWS budget and anomaly emails.
+#   # topics, the org-guard-alerts topic, AWS budget emails (all) and Cost Anomaly Detection
+#   # (first address only: the module takes one subscriber).
 #   emails:
 #     - secops@my-org.example.com
 #   # HCP Terraform user IDs (not addresses: HCP email notifications take user
@@ -366,9 +367,6 @@ saas:
 #   # failures, on every workspace tfc-admin manages.
 #   hcp_email_user_ids:
 #     - user-REPLACE_WITH_HCP_USER_ID
-#   # Reserved for a future webhook destination (Slack / generic). The name of
-#   # a secret, never the URL itself. Not consumed yet.
-#   # webhook_url_secret_name: alerts-webhook
 
 # Presets: named overlays from examples/presets/<name>.yaml, applied by the
 # root the preset targets (precedence: explicit variable > preset > this file).

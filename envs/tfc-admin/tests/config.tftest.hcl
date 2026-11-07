@@ -258,3 +258,13 @@ run "no_section_is_noop" {
     error_message = "without a notifications section no notification is created."
   }
 }
+
+run "placeholder_hcp_user_id_rejected" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications-placeholder.yaml"
+  }
+
+  expect_failures = [var.control_plane_notifications]
+}
