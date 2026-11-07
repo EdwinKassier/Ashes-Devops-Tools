@@ -70,3 +70,17 @@ output "estate_config_trigger_patterns" {
   description = "Trigger patterns every workspace gets for this estate's own config: the landing-zone file + workspace_variables_file for production (config/landing-zone.yaml + config/tfc-workspaces.yaml by default), <dir>/** (plus an outside workspace_variables_file) for any other estate (e.g. config/sandbox/**)."
   value       = local.estate_config_trigger_patterns
 }
+
+output "workspace_catalog" {
+  description = "The managed workspaces as derived from the workspace catalog (local.catalog): name => {dir, cloud, environment (per-environment family members only), upstreams (run-trigger sources), reads (remote-state producers), aws_member_aliases}."
+  value = {
+    for k, w in local.workspaces : k => {
+      dir                = w.dir
+      cloud              = w.cloud
+      environment        = w.environment
+      upstreams          = w.upstreams
+      reads              = w.reads
+      aws_member_aliases = w.aws_member_aliases
+    }
+  }
+}

@@ -123,6 +123,78 @@ Within a root, `enable_*` variables toggle **features** (a Cloud Armor policy, a
 
 ---
 
+## 7. Register the workspace in the tfc-admin catalog
+
+`envs/tfc-admin` builds the whole TFC workspace layer from **one** local,
+`local.catalog` in `envs/tfc-admin/main.tf`. The workspace set, the run-trigger
+DAG, the remote-state consumer graph, the multi-account alias env vars and the
+management-default list are all derived from it, so a new root is one entry.
+Nothing else in `envs/tfc-admin` lists workspace names.
+
+```hcl
+# envs/tfc-admin/main.tf, inside local.catalog
+"aws-observability" = {
+  dir       = "envs/aws/observability"
+  cloud     = "aws" # must be a key of module_paths / catalog_cloud_enabled
+  desc      = "AWS central observability"
+  tags      = ["cloud:aws", "layer:control-plane"] # layer:control-plane|bootstrap|workload
+  upstreams = ["aws-organization"]                 # run triggers: direct edges only
+  reads     = ["aws-organization"]                 # every terraform_remote_state it reads
+  # Optional:
+  # aws_member_aliases     = ["log_archive"] # one TFC_AWS_*_<alias> set per provider alias
+  # aws_management_account = true            # default provider is the management account
+  # per_environment        = true            # expand to <key>-<env> per environment;
+  #                                          # use "{env}" in desc / tags
+}
+```
+
+- `upstreams` are run-trigger sources. List only the direct parents (the DAG's
+  transitive reduction), or a downstream run is queued once per ancestor. The
+  tfc-admin workspace name (`var.tfc_admin_workspace_name`) as an upstream marks
+  a phase-0 DAG root.
+- `reads` must match the root's `data "terraform_remote_state"` blocks. A read
+  that is not listed is denied, because `global_remote_state` is false.
+- The keys pinned by `envs/tfc-admin/tests/catalog.tftest.hcl` must not change
+  for existing entries: a renamed key moves every `tfe_workspace`, run trigger
+  and grant. Extend the literal lists there for the new name.
+
+A **new cloud** (not only a new root) also needs these in `envs/tfc-admin`: a
+`module_paths` entry (the module domains it consumes), a `catalog_cloud_enabled`
+entry (its `enable_<cloud>` gate), a `catalog_environments` entry (`[]` without
+per-environment workspaces), and a `project_name_keys` entry in `config.tf`.
+
+### AWS: add the workspace to the OIDC trust in the same change
+
+Each member account's `tfc-plan` / `tfc-apply` role, created by
+`modules/aws/iam/tfc-oidc-baseline`, trusts a literal list of workspace names
+(`organization:<org>:project:<project>:workspace:<ws>:run_phase:<phase>`). A new
+AWS workspace that is not in that list is denied at
+`AssumeRoleWithWebIdentity`. The names come from `aws-organization`:
+
+- **Foundational root in a member account:** add it to
+  `local.default_workspace_bindings` in `envs/aws/organization/config.tf`
+  (account key => workspace names), e.g.
+  `log_archive = ["aws-security", "aws-observability"]`.
+- **Per-environment workload:** nothing to edit. Each
+  `aws.workload_environments.<env>.account_key` in `config/landing-zone.yaml`
+  binds `aws-workload-<env>` to that account (`local.cfg.workload_bindings`),
+  the same source tfc-admin expands `aws-workload` from.
+- **Explicit override:** an `aws-organization` that sets
+  `var.tfc_workspace_bindings` replaces both derivations, so add the new name
+  there too.
+- **Management-default root** (`aws_management_account = true`): add it to
+  `tfc_management_workspaces` in `modules/aws/stages/organization/variables.tf`
+  (with an `apply_policy_json`; only aws-security and aws-backup have built-in
+  policies), and add its `sub` to the phase-0 management-role trust
+  (`docs/runbooks/aws-bootstrap.md`, Step 2) until its dedicated role exists.
+- **Member aliases** (`aws_member_aliases`): each alias is an account key, so
+  that account's binding must list the workspace as well.
+
+Apply `aws-organization` (the StackSet updates the trusts) before the new
+workspace's first run.
+
+---
+
 ## Checklist for a new cloud root
 
 1. Clone `templates/aws/root/` (or `templates/shared/cloud-root/` for a non-AWS cloud) to `envs/<cloud>/<layer>/`.

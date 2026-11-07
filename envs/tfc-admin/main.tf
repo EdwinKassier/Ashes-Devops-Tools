@@ -25,52 +25,149 @@ locals {
     platform = ["modules/tfc/**"]
   }
 
-  gcp_control_plane = local.enable_gcp ? {
-    "gcp-bootstrap"    = { dir = "envs/gcp/bootstrap", cloud = "gcp", desc = "GCP phase-0: admin project, Terraform admin SA, WIF pools", tags = ["cloud:gcp", "layer:bootstrap"] }
-    "gcp-organization" = { dir = "envs/gcp/organization", cloud = "gcp", desc = "GCP org: folders, org policy, KMS, audit, billing", tags = ["cloud:gcp", "layer:control-plane"] }
-    "gcp-projects"     = { dir = "envs/gcp/projects", cloud = "gcp", desc = "GCP host/spoke projects", tags = ["cloud:gcp", "layer:control-plane"] }
-    "gcp-network-hub"  = { dir = "envs/gcp/network-hub", cloud = "gcp", desc = "GCP hub VPC, DNS anchor, hub VPC-SC", tags = ["cloud:gcp", "layer:control-plane"] }
-    # Security-team workspace: org IAM deny policies (admin containment).
-    "gcp-guardrails" = { dir = "envs/gcp/guardrails", cloud = "gcp", desc = "GCP org IAM deny policies (security team)", tags = ["cloud:gcp", "layer:control-plane", "owner:security"] }
-  } : {}
+  # ── Workspace catalog ─────────────────────────────────────────────────────
+  # The one hand-maintained workspace inventory. Every other workspace list in
+  # this root (the workspace set, the remote-state consumer graph, the run-
+  # trigger DAG, the multi-account alias lists, the management-default roots and
+  # the security-only workspaces) is derived from it, so a new root is one entry
+  # here (docs/architecture/adding-a-cloud.md). Keyed by workspace name, or by
+  # the name prefix of a per_environment family. Fields:
+  #   dir, cloud, desc, tags  workspace settings; "{env}" in desc / tags is
+  #                           replaced with the environment of a family member
+  #   per_environment         expand into "<key>-<env>" per configured
+  #                           environment of the cloud (catalog_environments)
+  #   upstreams               run-trigger sources: direct DAG edges only (the
+  #                           transitive reduction), so a downstream workspace
+  #                           is queued once per upstream change. The tfc-admin
+  #                           workspace name marks a DAG root (phase-0 roots)
+  #   reads                   upstream states read via terraform_remote_state
+  #                           (envs/**): the explicit remote-state consumer graph
+  #   aws_member_aliases      member-account provider aliases of a multi-account
+  #                           root (alias == aws-organization account key, see
+  #                           envs/aws/{security,backup}/providers.tf); each gets
+  #                           TFC_AWS_*_<alias> dynamic-credential env vars
+  #   aws_management_account  the root's DEFAULT provider is the management
+  #                           (payer) account
+  #   security_only           security-team project, no shared variable set,
+  #                           never auto-applies (gcp-guardrails)
+  catalog = {
+    "gcp-bootstrap" = {
+      dir       = "envs/gcp/bootstrap", cloud = "gcp", desc = "GCP phase-0: admin project, Terraform admin SA, WIF pools", tags = ["cloud:gcp", "layer:bootstrap"]
+      upstreams = [var.tfc_admin_workspace_name]
+    }
+    "gcp-organization" = {
+      dir       = "envs/gcp/organization", cloud = "gcp", desc = "GCP org: folders, org policy, KMS, audit, billing", tags = ["cloud:gcp", "layer:control-plane"]
+      upstreams = ["gcp-bootstrap"], reads = ["gcp-bootstrap"]
+    }
+    "gcp-projects" = {
+      dir       = "envs/gcp/projects", cloud = "gcp", desc = "GCP host/spoke projects", tags = ["cloud:gcp", "layer:control-plane"]
+      upstreams = ["gcp-organization"], reads = ["gcp-bootstrap", "gcp-organization"]
+    }
+    "gcp-network-hub" = {
+      dir       = "envs/gcp/network-hub", cloud = "gcp", desc = "GCP hub VPC, DNS anchor, hub VPC-SC", tags = ["cloud:gcp", "layer:control-plane"]
+      upstreams = ["gcp-projects"], reads = ["gcp-organization", "gcp-projects"]
+    }
+    # Security-team workspace: org IAM deny policies (admin containment). Reads
+    # no state and is triggered by nothing.
+    "gcp-guardrails" = {
+      dir           = "envs/gcp/guardrails", cloud = "gcp", desc = "GCP org IAM deny policies (security team)", tags = ["cloud:gcp", "layer:control-plane", "owner:security"]
+      security_only = true
+    }
+    "gcp-workload" = {
+      dir             = "envs/gcp/workload", cloud = "gcp", desc = "GCP {env} workload", tags = ["cloud:gcp", "layer:workload", "env:{env}"]
+      per_environment = true
+      upstreams       = ["gcp-network-hub"], reads = ["gcp-organization", "gcp-projects", "gcp-network-hub"]
+    }
+    "aws-organization" = {
+      dir       = "envs/aws/organization", cloud = "aws", desc = "AWS org, SCP/RCP, account factory", tags = ["cloud:aws", "layer:control-plane"]
+      upstreams = [var.tfc_admin_workspace_name], aws_management_account = true
+    }
+    "aws-security" = {
+      dir                = "envs/aws/security", cloud = "aws", desc = "AWS security baseline + log archive", tags = ["cloud:aws", "layer:control-plane"]
+      upstreams          = ["aws-organization"], reads = ["aws-organization"], aws_management_account = true
+      aws_member_aliases = ["security_tooling", "log_archive", "forensics"]
+    }
+    "aws-network" = {
+      dir       = "envs/aws/network", cloud = "aws", desc = "AWS shared networking (TGW/IPAM)", tags = ["cloud:aws", "layer:control-plane"]
+      upstreams = ["aws-organization"], reads = ["aws-organization"]
+    }
+    "aws-identity" = {
+      dir       = "envs/aws/identity", cloud = "aws", desc = "AWS IAM Identity Center", tags = ["cloud:aws", "layer:control-plane"]
+      upstreams = ["aws-organization"], reads = ["aws-organization"]
+    }
+    "aws-shared-services" = {
+      dir       = "envs/aws/shared-services", cloud = "aws", desc = "AWS shared platform services", tags = ["cloud:aws", "layer:control-plane"]
+      upstreams = ["aws-organization"], reads = ["aws-organization"]
+    }
+    "aws-backup" = {
+      dir                = "envs/aws/backup", cloud = "aws", desc = "AWS centralized backup", tags = ["cloud:aws", "layer:control-plane"]
+      upstreams          = ["aws-organization"], reads = ["aws-organization"], aws_management_account = true
+      aws_member_aliases = ["backup"]
+    }
+    "aws-workload" = {
+      dir             = "envs/aws/workload", cloud = "aws", desc = "AWS {env} workload", tags = ["cloud:aws", "layer:workload", "env:{env}"]
+      per_environment = true
+      upstreams       = ["aws-network", "aws-security"], reads = ["aws-organization", "aws-network", "aws-security"]
+    }
+    # saas-<name> per saas.workspaces entry.
+    "saas" = {
+      dir             = "envs/saas", cloud = "saas", desc = "SaaS {env} (Supabase/Vercel)", tags = ["cloud:saas", "layer:workload"]
+      per_environment = true
+    }
+    # Optional self-management of the hand-created tfc-admin workspace (adopted
+    # via the import block below, never created; manage_tfc_admin_workspace).
+    (var.tfc_admin_workspace_name) = {
+      dir = "envs/tfc-admin", cloud = "platform", desc = "TFC workspace layer (this root)", tags = ["cloud:tfc", "layer:control-plane"]
+    }
+  }
 
-  gcp_workloads = local.enable_gcp ? {
-    for env in local.gcp_environment_keys :
-    "gcp-workload-${env}" => { dir = "envs/gcp/workload", cloud = "gcp", desc = "GCP ${env} workload", tags = ["cloud:gcp", "layer:workload", "env:${env}"] }
-  } : {}
+  # Which clouds' entries exist, and each cloud's environment list for its
+  # per_environment families.
+  catalog_cloud_enabled = {
+    gcp      = local.enable_gcp
+    aws      = local.enable_aws
+    saas     = local.enable_saas
+    platform = var.manage_tfc_admin_workspace
+  }
+  catalog_environments = {
+    gcp      = local.gcp_environment_keys
+    aws      = keys(local.aws_environments)
+    saas     = local.saas_workspaces
+    platform = []
+  }
 
-  aws_control_plane = local.enable_aws ? {
-    "aws-organization"    = { dir = "envs/aws/organization", cloud = "aws", desc = "AWS org, SCP/RCP, account factory", tags = ["cloud:aws", "layer:control-plane"] }
-    "aws-security"        = { dir = "envs/aws/security", cloud = "aws", desc = "AWS security baseline + log archive", tags = ["cloud:aws", "layer:control-plane"] }
-    "aws-network"         = { dir = "envs/aws/network", cloud = "aws", desc = "AWS shared networking (TGW/IPAM)", tags = ["cloud:aws", "layer:control-plane"] }
-    "aws-identity"        = { dir = "envs/aws/identity", cloud = "aws", desc = "AWS IAM Identity Center", tags = ["cloud:aws", "layer:control-plane"] }
-    "aws-shared-services" = { dir = "envs/aws/shared-services", cloud = "aws", desc = "AWS shared platform services", tags = ["cloud:aws", "layer:control-plane"] }
-    "aws-backup"          = { dir = "envs/aws/backup", cloud = "aws", desc = "AWS centralized backup", tags = ["cloud:aws", "layer:control-plane"] }
-  } : {}
+  # Every entry with every field (omitted fields take their defaults).
+  catalog_entries = {
+    for k, e in local.catalog : k => {
+      dir                    = e.dir
+      cloud                  = e.cloud
+      desc                   = e.desc
+      tags                   = tolist(e.tags)
+      per_environment        = try(e.per_environment, false)
+      upstreams              = tolist(try(e.upstreams, []))
+      reads                  = tolist(try(e.reads, []))
+      aws_member_aliases     = tolist(try(e.aws_member_aliases, []))
+      aws_management_account = try(e.aws_management_account, false)
+      security_only          = try(e.security_only, false)
+    }
+  }
 
-  aws_workloads = local.enable_aws ? {
-    for env in keys(local.aws_environments) :
-    "aws-workload-${env}" => { dir = "envs/aws/workload", cloud = "aws", desc = "AWS ${env} workload", tags = ["cloud:aws", "layer:workload", "env:${env}"] }
-  } : {}
-
-  saas = local.enable_saas ? {
-    for name in local.saas_workspaces :
-    "saas-${name}" => { dir = "envs/saas", cloud = "saas", desc = "SaaS ${name} (Supabase/Vercel)", tags = ["cloud:saas", "layer:workload"] }
-  } : {}
-
-  # Optional self-management of the hand-created tfc-admin workspace (adopted via
-  # the import block below, never created).
-  platform = var.manage_tfc_admin_workspace ? {
-    (var.tfc_admin_workspace_name) = { dir = "envs/tfc-admin", cloud = "platform", desc = "TFC workspace layer (this root)", tags = ["cloud:tfc", "layer:control-plane"] }
-  } : {}
-
+  # The managed workspaces: the enabled clouds' entries, each per_environment
+  # family expanded into <key>-<env> (environment = null for the others).
   workspaces = merge(
-    local.gcp_control_plane,
-    local.gcp_workloads,
-    local.aws_control_plane,
-    local.aws_workloads,
-    local.saas,
-    local.platform,
+    {
+      for k, e in local.catalog_entries : k => merge(e, { environment = null })
+      if !e.per_environment && local.catalog_cloud_enabled[e.cloud]
+    },
+    merge([
+      for k, e in local.catalog_entries : {
+        for env in local.catalog_environments[e.cloud] : "${k}-${env}" => merge(e, {
+          desc        = replace(e.desc, "{env}", env)
+          tags        = [for t in e.tags : replace(t, "{env}", env)]
+          environment = env
+        })
+      } if e.per_environment && local.catalog_cloud_enabled[e.cloud]
+    ]...),
   )
 
   workspace_names = toset(keys(local.workspaces))
@@ -80,21 +177,17 @@ locals {
     k => contains(w.tags, "layer:control-plane") || contains(w.tags, "layer:bootstrap")
   }
 
-  # ── Remote-state consumer graph ───────────────────────────────────────────
-  # Derived from the data "terraform_remote_state" blocks in envs/**: producer
-  # => the workspaces that read it. global_remote_state is false everywhere, so
-  # only these edges (plus extra_remote_state_consumers) can read a state file.
-  gcp_workload_names = keys(local.gcp_workloads)
-  aws_workload_names = keys(local.aws_workloads)
+  # Per-environment family members by cloud.
+  gcp_workload_names   = [for k, w in local.workspaces : k if w.cloud == "gcp" && w.environment != null]
+  aws_workload_names   = [for k, w in local.workspaces : k if w.cloud == "aws" && w.environment != null]
+  saas_workspace_names = [for k, w in local.workspaces : k if w.cloud == "saas" && w.environment != null]
 
+  # ── Remote-state consumer graph ───────────────────────────────────────────
+  # The catalog's reads, inverted: producer => the workspaces that read it.
+  # global_remote_state is false everywhere, so only these edges (plus
+  # extra_remote_state_consumers) can read a state file.
   base_consumers = {
-    "gcp-bootstrap"    = ["gcp-organization", "gcp-projects"]
-    "gcp-organization" = concat(["gcp-projects", "gcp-network-hub"], local.gcp_workload_names)
-    "gcp-projects"     = concat(["gcp-network-hub"], local.gcp_workload_names)
-    "gcp-network-hub"  = local.gcp_workload_names
-    "aws-organization" = concat(["aws-security", "aws-network", "aws-identity", "aws-shared-services", "aws-backup"], local.aws_workload_names)
-    "aws-network"      = local.aws_workload_names
-    "aws-security"     = local.aws_workload_names
+    for producer in local.workspace_names : producer => [for k, w in local.workspaces : k if contains(w.reads, producer)]
   }
 
   # tfc-admin reads gcp-bootstrap / aws-organization outputs (tfe_outputs) only
@@ -212,17 +305,18 @@ locals {
   aws_output_mgmt_plan_roles  = try(tomap(local.aws_organization_outputs.tfc_management_plan_role_arns), {})
   aws_output_mgmt_apply_roles = try(tomap(local.aws_organization_outputs.tfc_management_apply_role_arns), {})
 
-  # Roots whose DEFAULT provider is the management (payer) account. Their default
-  # credentials are the phase-0 management-account role, never a member role.
-  aws_management_workspaces = ["aws-organization", "aws-security", "aws-backup"]
+  # Roots whose DEFAULT provider is the management (payer) account (catalog
+  # aws_management_account). Their default credentials are the phase-0
+  # management-account role, never a member role.
+  aws_management_workspaces = [for k, e in local.catalog_entries : k if e.aws_management_account]
 
-  # Multi-account roots and their member-account provider aliases (alias name ==
-  # aws-organization account key; see envs/aws/{security,backup}/providers.tf).
-  # Each alias authenticates directly as that account's tfc-plan / tfc-apply role
-  # through a TFC multiple-configuration dynamic credential.
+  # Multi-account roots and their member-account provider aliases (catalog
+  # aws_member_aliases; alias name == aws-organization account key, see
+  # envs/aws/{security,backup}/providers.tf). Each alias authenticates directly
+  # as that account's tfc-plan / tfc-apply role through a TFC
+  # multiple-configuration dynamic credential.
   aws_alias_accounts = {
-    "aws-security" = ["security_tooling", "log_archive", "forensics"]
-    "aws-backup"   = ["backup"]
+    for k, e in local.catalog_entries : k => e.aws_member_aliases if length(e.aws_member_aliases) > 0
   }
 
   # Single-account workspace => account key. Sources, lowest precedence first:
@@ -330,20 +424,20 @@ locals {
   # workspace_variables (or the committed workspace_variables_file).
   derived_terraform_vars = merge(
     {
-      for ws in keys(local.saas) : ws => {
-        stack = { value = trimprefix(ws, "saas-"), category = "terraform", hcl = false, sensitive = false, description = "SaaS stack key in saas.stacks (derived from the workspace name)." }
+      for ws in local.saas_workspace_names : ws => {
+        stack = { value = local.workspaces[ws].environment, category = "terraform", hcl = false, sensitive = false, description = "SaaS stack key in saas.stacks (derived from the workspace name)." }
       }
     },
     {
       for ws in local.gcp_workload_names : ws => {
-        environment = { value = trimprefix(ws, "gcp-workload-"), category = "terraform", hcl = false, sensitive = false, description = "Environment key (derived from the workspace name)." }
+        environment = { value = local.workspaces[ws].environment, category = "terraform", hcl = false, sensitive = false, description = "Environment key (derived from the workspace name)." }
       }
     },
     {
       for ws in local.aws_workload_names : ws => merge(
-        { environment = { value = trimprefix(ws, "aws-workload-"), category = "terraform", hcl = false, sensitive = false, description = "Environment key (derived from the workspace name)." } },
-        try(local.aws_environments[trimprefix(ws, "aws-workload-")].aws_account_key, null) == null ? {} : {
-          workload_account_key = { value = local.aws_environments[trimprefix(ws, "aws-workload-")].aws_account_key, category = "terraform", hcl = false, sensitive = false, description = "aws-organization account key this workload deploys into (environments[*].aws_account_key or aws.workload_environments[*].account_key)." }
+        { environment = { value = local.workspaces[ws].environment, category = "terraform", hcl = false, sensitive = false, description = "Environment key (derived from the workspace name)." } },
+        try(local.aws_environments[local.workspaces[ws].environment].aws_account_key, null) == null ? {} : {
+          workload_account_key = { value = local.aws_environments[local.workspaces[ws].environment].aws_account_key, category = "terraform", hcl = false, sensitive = false, description = "aws-organization account key this workload deploys into (environments[*].aws_account_key or aws.workload_environments[*].account_key)." }
         },
       )
     },
@@ -463,7 +557,7 @@ locals {
   # approvers or viewer grant. Organization owners keep their implicit access,
   # and tfc-admin itself can still repoint the workspace, so separation of
   # duties also rests on CODEOWNERS for envs/tfc-admin/** (docs/known-gaps.md).
-  guardrails_workspaces = local.enable_gcp ? ["gcp-guardrails"] : []
+  guardrails_workspaces = [for k, w in local.workspaces : k if w.security_only]
   guardrails_project    = contains(local.project_keys, "guardrails")
 
   # Workspaces that must never apply without a human confirmation, whatever a
@@ -477,8 +571,8 @@ locals {
   # environment whose is_production is EXPLICITLY false qualifies; an omitted
   # flag (prd, live, prod-eu, ...) keeps manual confirmation.
   explicit_nonprod_workloads = toset(concat(
-    [for k in keys(local.gcp_workloads) : k if lookup(local.gcp_production_flags, trimprefix(k, "gcp-workload-"), null) == false],
-    [for k in keys(local.aws_workloads) : k if try(local.aws_environments[trimprefix(k, "aws-workload-")].is_production, null) == false],
+    [for k in local.gcp_workload_names : k if lookup(local.gcp_production_flags, local.workspaces[k].environment, null) == false],
+    [for k in local.aws_workload_names : k if try(local.aws_environments[local.workspaces[k].environment].is_production, null) == false],
   ))
   nonprod_auto_apply_workloads = var.enable_nonprod_workload_auto_apply ? setsubtract(
     local.explicit_nonprod_workloads,
@@ -529,7 +623,7 @@ locals {
     toset(var.speculative_disabled_workspaces),
     toset(local.guardrails_workspaces),
     var.disable_speculative_on_production ? local.production_workloads : toset([]),
-    var.disable_speculative_on_saas ? toset(keys(local.saas)) : toset([]),
+    var.disable_speculative_on_saas ? toset(local.saas_workspace_names) : toset([]),
   )
 
   # Every input keyed by workspace name must name a managed workspace of the
@@ -571,7 +665,7 @@ resource "terraform_data" "input_contract" {
     }
     precondition {
       condition     = length(local.unknown_alias_keys) == 0
-      error_message = "aws_alias_role_arns names aliases the root does not declare (aws-security: security_tooling, log_archive, forensics; aws-backup: backup): ${join(", ", local.unknown_alias_keys)}."
+      error_message = "aws_alias_role_arns names aliases the root does not declare (${join("; ", [for ws, a in local.aws_alias_accounts : "${ws}: ${join(", ", a)}"])}): ${join(", ", local.unknown_alias_keys)}."
     }
     precondition {
       condition     = length(local.aws_incomplete_multi_account) == 0
@@ -697,7 +791,7 @@ resource "tfe_team_access" "platform_workload" {
 # owner creates it by hand with an expiry (docs/runbooks/saas-bootstrap.md),
 # so it never enters this root's state.
 resource "tfe_team_access" "saas_outputs_reader" {
-  for_each = var.saas_outputs_reader_team_id == null ? toset([]) : toset(keys(local.saas))
+  for_each = var.saas_outputs_reader_team_id == null ? toset([]) : toset(local.saas_workspace_names)
 
   team_id      = var.saas_outputs_reader_team_id
   workspace_id = module.workspace[each.key].id
@@ -992,26 +1086,18 @@ resource "tfe_variable" "gcp_bootstrap_workspace_ids" {
 # auto_apply_on_merge the triggered run is a plan awaiting confirmation; with
 # it, the run applies (auto_apply_run_trigger), except on the
 # never_auto_apply_workspaces.
-# Only the direct edges (the DAG's transitive reduction), so a workload is
-# queued once per upstream change, not once per ancestor.
+# The edges are the catalog's upstreams: only the direct edges (the DAG's
+# transitive reduction), so a workload is queued once per upstream change, not
+# once per ancestor.
 locals {
-  run_trigger_edges = {
-    "gcp-organization"    = ["gcp-bootstrap"]
-    "gcp-projects"        = ["gcp-organization"]
-    "gcp-network-hub"     = ["gcp-projects"]
-    "aws-security"        = ["aws-organization"]
-    "aws-network"         = ["aws-organization"]
-    "aws-identity"        = ["aws-organization"]
-    "aws-shared-services" = ["aws-organization"]
-    "aws-backup"          = ["aws-organization"]
-  }
   # tfc-admin is the DAG root: its apply (a workspace or environment added in
-  # config) queues the two phase-0 roots, which carry it down the DAG.
-  # A local-execution workspace cannot run a triggered run, so gcp-bootstrap is
-  # a target only once it runs remotely (after the handover).
+  # config) queues the catalog entries that list it as an upstream (the two
+  # phase-0 roots), which carry it down the DAG. A local-execution workspace
+  # cannot run a triggered run, so gcp-bootstrap is a target only once it runs
+  # remotely (after the handover).
   tfc_admin_trigger_targets = var.enable_run_triggers ? [
-    for ws in ["gcp-bootstrap", "aws-organization"] : ws
-    if contains(keys(local.workspaces), ws) && lookup(local.execution_modes, ws, "remote") != "local"
+    for ws, w in local.workspaces : ws
+    if contains(w.upstreams, var.tfc_admin_workspace_name) && lookup(local.execution_modes, ws, "remote") != "local"
   ] : []
   tfc_admin_trigger_source_id = length(local.tfc_admin_trigger_targets) == 0 ? null : (
     var.manage_tfc_admin_workspace ? module.workspace[var.tfc_admin_workspace_name].id : data.tfe_workspace.tfc_admin[0].id
@@ -1019,19 +1105,9 @@ locals {
   run_trigger_pairs = var.enable_run_triggers ? merge(
     { for ws in local.tfc_admin_trigger_targets : "${var.tfc_admin_workspace_name}->${ws}" => { source = var.tfc_admin_workspace_name, downstream = ws } },
     merge([
-      for downstream, sources in local.run_trigger_edges : {
-        for src in sources : "${src}->${downstream}" => { source = src, downstream = downstream }
-        if contains(keys(local.workspaces), src) && contains(keys(local.workspaces), downstream)
-      }
-    ]...),
-    {
-      for ws in local.gcp_workload_names : "gcp-network-hub->${ws}" => { source = "gcp-network-hub", downstream = ws }
-      if contains(keys(local.workspaces), "gcp-network-hub")
-    },
-    merge([
-      for ws in local.aws_workload_names : {
-        for src in ["aws-network", "aws-security"] : "${src}->${ws}" => { source = src, downstream = ws }
-        if contains(keys(local.workspaces), src)
+      for downstream, w in local.workspaces : {
+        for src in w.upstreams : "${src}->${downstream}" => { source = src, downstream = downstream }
+        if src != var.tfc_admin_workspace_name && contains(keys(local.workspaces), src)
       }
     ]...),
   ) : {}
