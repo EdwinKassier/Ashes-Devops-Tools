@@ -19,3 +19,24 @@ run "zero_unused_access_age_rejected" {
 
   expect_failures = [var.unused_access_age]
 }
+
+run "regions_without_home_region_rejected" {
+  command = plan
+
+  variables {
+    regions = ["eu-west-1"]
+  }
+
+  expect_failures = [var.regions]
+}
+
+run "invalid_region_rejected" {
+  command = plan
+
+  variables {
+    home_region = "eu-west-2"
+    regions     = ["not a region"]
+  }
+
+  expect_failures = [var.regions]
+}
