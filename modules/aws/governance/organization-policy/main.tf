@@ -218,8 +218,22 @@ locals {
     # VPC BPA) stays on the Workloads OU, where public ingress goes through
     # the edge layer only.
     declarative-ec2-baseline = {
-      type    = "DECLARATIVE_POLICY_EC2"
-      content = file("${path.module}/policies/declarative-ec2-baseline.json")
+      type = "DECLARATIVE_POLICY_EC2"
+      # Allowed AMIs ride on the baseline (root) so every account gets them;
+      # audit_mode by default, so nothing is blocked until state = enabled.
+      content = jsonencode(merge(jsondecode(file("${path.module}/policies/declarative-ec2-baseline.json")), {
+        ec2_attributes = merge(jsondecode(file("${path.module}/policies/declarative-ec2-baseline.json")).ec2_attributes,
+          var.ec2_allowed_images.state == "unmanaged" ? {} : {
+            allowed_images_settings = {
+              state = { "@@assign" = var.ec2_allowed_images.state }
+              image_criteria = {
+                criteria_1 = {
+                  allowed_image_providers = { "@@assign" = var.ec2_allowed_images.allowed_image_providers }
+                }
+              }
+            }
+        })
+      }))
     }
     # Opt every account out of AWS AI services using its content to improve
     # those services (data-residency / IP hygiene default).

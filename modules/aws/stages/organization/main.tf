@@ -102,6 +102,7 @@ module "policies" {
   break_glass_role_names             = var.break_glass_role_names
   data_perimeter_trusted_account_ids = var.data_perimeter_trusted_account_ids
   allow_vpc_bpa_exclusions           = var.allow_vpc_bpa_exclusions
+  ec2_allowed_images                 = var.ec2_allowed_images
 
   # Recorder SCP: after the recorder migration only the StackSet execution
   # role, break-glass and security tooling's tfc-apply (its aggregator

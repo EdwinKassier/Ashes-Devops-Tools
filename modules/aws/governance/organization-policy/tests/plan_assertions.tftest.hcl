@@ -756,3 +756,50 @@ run "sandbox_has_guard" {
     error_message = "SCPs are limited to 10,240 characters"
   }
 }
+
+# Declarative EC2 Allowed AMIs: audit mode with amazon-only by default.
+run "allowed_images_audit_mode_default" {
+  command = plan
+
+  assert {
+    condition = (
+      jsondecode(aws_organizations_policy.policy["declarative-ec2-baseline"].content).ec2_attributes.allowed_images_settings.state["@@assign"] == "audit_mode" &&
+      jsondecode(aws_organizations_policy.policy["declarative-ec2-baseline"].content).ec2_attributes.allowed_images_settings.image_criteria.criteria_1.allowed_image_providers["@@assign"][0] == "amazon" &&
+      jsondecode(aws_organizations_policy.policy["declarative-ec2-baseline"].content).ec2_attributes.instance_metadata_defaults.http_tokens["@@assign"] == "required" &&
+      length(aws_organizations_policy.policy["declarative-ec2-baseline"].content) < 10000
+    )
+    error_message = "declarative-ec2-baseline must carry allowed_images_settings in audit_mode for amazon only, keep IMDSv2, and stay under the 10,000-char declarative policy limit."
+  }
+}
+
+run "allowed_images_enabled_with_account_provider" {
+  command = plan
+
+  variables {
+    ec2_allowed_images = {
+      state                   = "enabled"
+      allowed_image_providers = ["amazon", "123456789012"]
+    }
+  }
+
+  assert {
+    condition = (
+      jsondecode(aws_organizations_policy.policy["declarative-ec2-baseline"].content).ec2_attributes.allowed_images_settings.state["@@assign"] == "enabled" &&
+      length(jsondecode(aws_organizations_policy.policy["declarative-ec2-baseline"].content).ec2_attributes.allowed_images_settings.image_criteria.criteria_1.allowed_image_providers["@@assign"]) == 2
+    )
+    error_message = "ec2_allowed_images must flow into the baseline declarative policy."
+  }
+}
+
+run "allowed_images_unmanaged_omits_setting" {
+  command = plan
+
+  variables {
+    ec2_allowed_images = { state = "unmanaged" }
+  }
+
+  assert {
+    condition     = !contains(keys(jsondecode(aws_organizations_policy.policy["declarative-ec2-baseline"].content).ec2_attributes), "allowed_images_settings")
+    error_message = "state = unmanaged must leave the baseline policy without an allowed-images setting."
+  }
+}

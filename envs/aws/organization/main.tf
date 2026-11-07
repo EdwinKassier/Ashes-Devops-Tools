@@ -66,6 +66,8 @@ module "aws_organization" {
   # VPC Block Public Access exclusions: required only for aws-workload
   # app_ingress_mode = "public_alb" (internet-facing ALB). Off by default.
   allow_vpc_bpa_exclusions = var.allow_vpc_bpa_exclusions
+
+  ec2_allowed_images = var.ec2_allowed_images
 }
 
 # The starter profile must have a budget: an unmetered sandbox is the failure

@@ -196,6 +196,31 @@ variable "allow_vpc_bpa_exclusions" {
   default     = false
 }
 
+variable "ec2_allowed_images" {
+  description = "Declarative EC2 Allowed AMIs setting, in the root-attached baseline declarative policy (every account, every region). state: audit_mode (default; records non-compliant AMIs, blocks nothing), enabled (blocks launches from other AMIs), disabled, or unmanaged (the policy carries no allowed-images setting). allowed_image_providers: amazon, aws_marketplace, aws_backup_vault or 12-digit account IDs. Move to enabled only after reviewing the audit-mode findings."
+  type = object({
+    state                   = optional(string, "audit_mode")
+    allowed_image_providers = optional(list(string), ["amazon"])
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = contains(["audit_mode", "enabled", "disabled", "unmanaged"], var.ec2_allowed_images.state)
+    error_message = "ec2_allowed_images.state must be audit_mode, enabled, disabled or unmanaged."
+  }
+
+  validation {
+    condition     = alltrue([for p in var.ec2_allowed_images.allowed_image_providers : contains(["amazon", "aws_marketplace", "aws_backup_vault"], p) || can(regex("^[0-9]{12}$", p))])
+    error_message = "ec2_allowed_images.allowed_image_providers entries must be amazon, aws_marketplace, aws_backup_vault or a 12-digit account ID."
+  }
+
+  validation {
+    condition     = var.ec2_allowed_images.state == "unmanaged" || length(var.ec2_allowed_images.allowed_image_providers) > 0
+    error_message = "ec2_allowed_images.allowed_image_providers must not be empty unless state is unmanaged."
+  }
+}
+
 variable "default_region" {
   description = "Region used by the backup policy's default plan."
   type        = string

@@ -181,3 +181,23 @@ run "sandbox_instance_types_must_not_be_empty" {
 
   expect_failures = [var.sandbox_allowed_instance_types]
 }
+
+run "rejects_bad_allowed_images_state" {
+  command = plan
+
+  variables {
+    ec2_allowed_images = { state = "block" }
+  }
+
+  expect_failures = [var.ec2_allowed_images]
+}
+
+run "rejects_bad_allowed_image_provider" {
+  command = plan
+
+  variables {
+    ec2_allowed_images = { allowed_image_providers = ["not-a-provider"] }
+  }
+
+  expect_failures = [var.ec2_allowed_images]
+}
