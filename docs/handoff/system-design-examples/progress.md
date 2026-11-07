@@ -53,3 +53,4 @@ REPO GAPS: modules/aws/network/load-balancer has no idle_timeout input (ALB 60s 
 Task 5: implemented bfbafca (5967 words; outbox anchor 03-microservices-sync-async.md#the-transactional-outbox); review dispatched (opus)
 REPO GAPS: app-services queue policy can't admit SNS (single policy); workload KMS key policy needs sns.amazonaws.com; AWS hub central endpoints lack SNS/SQS; GCP app-services one subscription per service on own topic; no cpu_idle exposed; topics take no schema_settings
 Task 3: review Needs fixes (Important: zone-loss headroom 30%/260 → 50%/300) + minors (CloudFront 30s, NLCU figure, pricing markers) → fix round 1 sent
+Task 5: review Needs fixes (4 Important: Debezium column defaults claim wrong; consumer SQL dedupe/decrement bug; pubsub subscription missing expiration_policy; Token Creator condition is service-agent date not project age) + 4 minors → fix round 1 sent
