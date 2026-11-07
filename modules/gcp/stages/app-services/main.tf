@@ -8,16 +8,27 @@
  * Run v2 service (internal ingress, Direct VPC egress, scale-to-zero, secrets from
  * Secret Manager), an optional private-IP Cloud SQL Postgres with IAM auth, and an
  * optional GitHub deploy identity (WIF, bound on the immutable repository_id),
- * per-service Cloud Monitoring alert policies (5xx ratio, p99 latency) and an
+ * per-service Cloud Monitoring alert policies (5xx ratio, p99 latency), an
+ * optional SLO (availability or latency, with an optional burn-rate alert) and an
  * optional Pub/Sub topic + subscription + dead-letter topic.
+ * A service with runtime = "cloud-run-job" gets a Cloud Run v2 job (run to
+ * completion, no URL) instead of a service; request alerts and SLOs apply only to
+ * Cloud Run services.
  * An optional GKE Autopilot cluster is available at environment level.
  * Everything is behind flags: the default (services = {}) creates nothing.
  */
 
 locals {
+  # Runtime split. Keys never change: a cloud-run entry keeps
+  # module.service["<key>"]; a cloud-run-job entry is module.job["<key>"].
+  cloud_run_services = { for k, s in var.services : k => s if s.runtime == "cloud-run" }
+  cloud_run_jobs     = { for k, s in var.services : k => s if s.runtime == "cloud-run-job" }
+
   services_with_db     = { for k, s in var.services : k => s if s.database != null }
   services_with_github = { for k, s in var.services : k => s if s.github != null }
-  services_with_alerts = var.enable_alerts ? { for k, s in var.services : k => s if s.alerts.enabled } : {}
+  # Request metrics (5xx ratio, latency) exist only for Cloud Run services.
+  services_with_alerts = var.enable_alerts ? { for k, s in local.cloud_run_services : k => s if s.alerts.enabled } : {}
+  services_with_slo    = { for k, s in local.cloud_run_services : k => s if s.slo != null }
   services_with_pubsub = { for k, s in var.services : k => s if s.pubsub.enabled }
 
   # Where each service lives: its own project_id (a team service project), else
@@ -99,6 +110,28 @@ locals {
       for m in s.invoker_members : "${k}/${m}" => { service = k, member = m }
     }
   ]...)
+  service_invoker_grants = { for g, v in local.invoker_grants : g => v if var.services[v.service].runtime == "cloud-run" }
+  job_invoker_grants     = { for g, v in local.invoker_grants : g => v if var.services[v.service].runtime == "cloud-run-job" }
+
+  github_services = { for k, s in local.services_with_github : k => s if s.runtime == "cloud-run" }
+  github_jobs     = { for k, s in local.services_with_github : k => s if s.runtime == "cloud-run-job" }
+
+  # Environment of a service or job: its own env_vars plus the injected
+  # database and Pub/Sub coordinates.
+  service_env_vars = {
+    for k, s in var.services : k => merge(
+      s.env_vars,
+      s.database == null ? {} : {
+        DB_INSTANCE_CONNECTION_NAME = "${local.service_project[k]}:${var.region}:${local.db_instance_name[k]}"
+        DB_IAM_USER                 = trimsuffix(local.runtime_sa_email[k], ".gserviceaccount.com")
+        DB_NAME                     = try(s.database.databases[0], "")
+      },
+      s.pubsub.enabled ? {
+        PUBSUB_TOPIC        = local.pubsub_topic[k]
+        PUBSUB_SUBSCRIPTION = local.pubsub_subscription[k]
+      } : {}
+    )
+  }
 
   # ---------------------------------------------------------------------------
   # App-deploy Workload Identity Federation
@@ -139,7 +172,7 @@ locals {
     length(local.services_with_db) > 0 ? ["sqladmin.googleapis.com", "servicenetworking.googleapis.com"] : [],
     var.enable_app_deploy_wif ? ["iam.googleapis.com", "iamcredentials.googleapis.com", "sts.googleapis.com"] : [],
     var.enable_gke_autopilot ? ["container.googleapis.com"] : [],
-    length(local.services_with_alerts) > 0 ? ["monitoring.googleapis.com"] : [],
+    length(local.services_with_alerts) > 0 || length(local.services_with_slo) > 0 ? ["monitoring.googleapis.com"] : [],
     length(local.services_with_pubsub) > 0 ? ["pubsub.googleapis.com"] : [],
   ))
 }
@@ -245,7 +278,7 @@ resource "google_project_iam_member" "runtime_extra" {
 
 module "service" {
   source   = "../../compute/cloud-run"
-  for_each = var.services
+  for_each = local.cloud_run_services
 
   project_id            = local.service_project[each.key]
   location              = var.region
@@ -263,18 +296,7 @@ module "service" {
   concurrency        = each.value.concurrency
   timeout            = each.value.timeout
 
-  env_vars = merge(
-    each.value.env_vars,
-    each.value.database == null ? {} : {
-      DB_INSTANCE_CONNECTION_NAME = "${local.service_project[each.key]}:${var.region}:${local.db_instance_name[each.key]}"
-      DB_IAM_USER                 = trimsuffix(local.runtime_sa_email[each.key], ".gserviceaccount.com")
-      DB_NAME                     = try(each.value.database.databases[0], "")
-    },
-    each.value.pubsub.enabled ? {
-      PUBSUB_TOPIC        = local.pubsub_topic[each.key]
-      PUBSUB_SUBSCRIPTION = local.pubsub_subscription[each.key]
-    } : {}
-  )
+  env_vars        = local.service_env_vars[each.key]
   secret_env_vars = [for name, ref in each.value.secrets : { name = name, secret = ref.secret, version = ref.version }]
 
   # Direct VPC egress into the environment Shared VPC subnet (no connector).
@@ -303,11 +325,68 @@ module "service" {
 }
 
 resource "google_cloud_run_v2_service_iam_member" "invoker" {
-  for_each = local.invoker_grants
+  for_each = local.service_invoker_grants
 
   project  = local.service_project[each.value.service]
   location = var.region
   name     = module.service[each.value.service].name
+  role     = "roles/run.invoker"
+  member   = each.value.member
+}
+
+# =============================================================================
+# CLOUD RUN JOBS (runtime = "cloud-run-job") — run to completion, no URL
+# =============================================================================
+
+module "job" {
+  source   = "../../compute/cloud-run-job"
+  for_each = local.cloud_run_jobs
+
+  project_id            = local.service_project[each.key]
+  location              = var.region
+  name                  = each.key
+  image                 = local.initial_image[each.key]
+  service_account_email = local.runtime_sa_email[each.key]
+
+  cpu         = each.value.cpu
+  memory      = each.value.memory
+  timeout     = each.value.timeout
+  task_count  = each.value.job.task_count
+  parallelism = each.value.job.parallelism
+  max_retries = each.value.job.max_retries
+
+  env_vars        = local.service_env_vars[each.key]
+  secret_env_vars = [for name, ref in each.value.secrets : { name = name, secret = ref.secret, version = ref.version }]
+
+  vpc_access = {
+    egress = each.value.vpc_egress
+    network_interfaces = {
+      network    = var.network_id
+      subnetwork = coalesce(each.value.subnetwork_id, var.subnetwork_id)
+    }
+  }
+
+  binary_authorization = each.value.enable_binary_authorization ? { policy = each.value.binary_authorization_policy } : null
+
+  enable_deletion_protection = coalesce(each.value.enable_deletion_protection, var.enable_deletion_protection)
+  labels                     = merge(var.labels, { service = each.key }, each.value.labels)
+
+  depends_on = [
+    google_service_account.runtime,
+    google_secret_manager_secret_iam_member.runtime,
+    google_project_service.this,
+    google_compute_subnetwork_iam_member.serverless_network_user,
+    google_project_iam_member.serverless_network_viewer,
+  ]
+}
+
+# roles/run.invoker on a job lets the member start executions (run.jobs.run).
+resource "google_cloud_run_v2_job_iam_member" "invoker" {
+  for_each = local.job_invoker_grants
+
+  project  = local.service_project[each.value.service]
+  location = var.region
+  name     = module.job[each.value.service].name
   role     = "roles/run.invoker"
   member   = each.value.member
 }
@@ -477,11 +556,23 @@ resource "google_service_account_iam_member" "deploy_wif" {
 }
 
 resource "google_cloud_run_v2_service_iam_member" "deploy" {
-  for_each = local.services_with_github
+  for_each = local.github_services
 
   project  = local.service_project[each.key]
   location = var.region
   name     = module.service[each.key].name
+  role     = "roles/run.developer"
+  member   = "serviceAccount:${local.deploy_sa_email[each.key]}"
+
+  depends_on = [google_service_account.deploy]
+}
+
+resource "google_cloud_run_v2_job_iam_member" "deploy" {
+  for_each = local.github_jobs
+
+  project  = local.service_project[each.key]
+  location = var.region
+  name     = module.job[each.key].name
   role     = "roles/run.developer"
   member   = "serviceAccount:${local.deploy_sa_email[each.key]}"
 
@@ -615,6 +706,55 @@ resource "google_monitoring_alert_policy" "latency_p99" {
   user_labels = merge(var.labels, { service = each.key })
 
   depends_on = [google_project_service.this]
+}
+
+# =============================================================================
+# SLOs — optional per Cloud Run service (services[*].slo)
+# =============================================================================
+#
+# The SLO attaches to a monitored service. GCP auto-detects Cloud Run services
+# under a generated ID, so the stage declares its own basic CLOUD_RUN service
+# (deterministic ID, basic SLIs available) and composes modules/gcp/monitoring/slo.
+
+resource "google_monitoring_service" "slo" {
+  for_each = local.services_with_slo
+
+  project      = local.service_project[each.key]
+  service_id   = "cloud-run-${each.key}"
+  display_name = "${var.environment}/${each.key}"
+  user_labels  = merge(var.labels, { service = each.key })
+
+  basic_service {
+    service_type = "CLOUD_RUN"
+    service_labels = {
+      service_name = each.key
+      location     = var.region
+    }
+  }
+
+  depends_on = [google_project_service.this]
+}
+
+module "slo" {
+  source   = "../../monitoring/slo"
+  for_each = local.services_with_slo
+
+  project_id   = local.service_project[each.key]
+  service_id   = google_monitoring_service.slo[each.key].service_id
+  slo_id       = "${each.key}-${each.value.slo.sli_type}"
+  display_name = "${var.environment}/${each.key} ${format("%.4g", each.value.slo.goal * 100)}% ${each.value.slo.sli_type}"
+
+  sli_type            = each.value.slo.sli_type
+  latency_threshold   = each.value.slo.latency_threshold
+  goal                = each.value.slo.goal
+  rolling_period_days = each.value.slo.rolling_period_days
+
+  enable_burn_rate_alert = each.value.slo.enable_burn_rate_alert
+  burn_rate_threshold    = each.value.slo.burn_rate_threshold
+  burn_rate_lookback     = each.value.slo.burn_rate_lookback
+  notification_channels  = var.alert_notification_channel_ids
+
+  labels = merge(var.labels, { service = each.key })
 }
 
 # =============================================================================

@@ -1,6 +1,6 @@
 # CLAUDE.md — Agent Onboarding
 
-Terraform GCP + AWS landing zone. 122 modules, 15 deployable roots, remote state via Terraform Cloud.
+Terraform GCP + AWS landing zone. 123 modules, 15 deployable roots, remote state via Terraform Cloud.
 
 ---
 
@@ -36,7 +36,7 @@ modules/               # grouped by owning cloud (domain)
     monitoring/         # alert-policy, compute-dashboard, slo, control-plane (landing-zone self-observability)
     ops/                # os-config (VM Manager patch deployments)
     backup/             # backup-plan (snapshot schedules)
-    compute/            # cloud-run, gke-autopilot (application runtimes)
+    compute/            # cloud-run, cloud-run-job, gke-autopilot (application runtimes)
     data/               # cloud-sql, secret-manager
     firebase/           # project
     cloud-storage/

@@ -696,3 +696,188 @@ run "team_service_secret_in_host_project" {
     error_message = "a projects/<p>/secrets/<s> ref grants the runtime SA on that exact secret."
   }
 }
+
+# -----------------------------------------------------------------------------
+# Runtimes: the default stays a Cloud Run service at the same address.
+# -----------------------------------------------------------------------------
+
+# A service that does not set runtime plans exactly as before: module.service
+# keyed by the service name, no job, and the request alerts.
+run "default_runtime_service_address_present" {
+  command = plan
+
+  variables {
+    enable_app_deploy_wif = true
+    services = {
+      api = {
+        invoker_members = ["serviceAccount:caller@acme-dev-host-abcd.iam.gserviceaccount.com"]
+        github          = { repository_id = "123456789" }
+      }
+    }
+  }
+
+  assert {
+    condition     = keys(module.service) == ["api"] && length(module.job) == 0
+    error_message = "the default runtime must keep module.service[\"api\"] and create no job."
+  }
+
+  assert {
+    condition = (
+      keys(google_cloud_run_v2_service_iam_member.invoker) == ["api/serviceAccount:caller@acme-dev-host-abcd.iam.gserviceaccount.com"] &&
+      keys(google_cloud_run_v2_service_iam_member.deploy) == ["api"] &&
+      length(google_cloud_run_v2_job_iam_member.invoker) == 0 &&
+      length(google_cloud_run_v2_job_iam_member.deploy) == 0
+    )
+    error_message = "invoker and deploy grants of a default-runtime service must stay on the Cloud Run service at the same keys."
+  }
+
+  assert {
+    condition     = keys(google_monitoring_alert_policy.error_ratio) == ["api"] && keys(google_monitoring_alert_policy.latency_p99) == ["api"]
+    error_message = "request alerts of a default-runtime service must keep their keys."
+  }
+
+  assert {
+    condition     = output.services["api"].runtime == "cloud-run" && output.services["api"].job_name == null && output.services["api"].slo_name == null
+    error_message = "the default runtime is cloud-run, with no job and no SLO."
+  }
+
+  assert {
+    condition     = output.github_actions["api"].CLOUD_RUN_SERVICE == "api" && output.github_actions["api"].CLOUD_RUN_JOB == null
+    error_message = "github_actions must name the Cloud Run service for a default-runtime service."
+  }
+
+  assert {
+    condition     = length(google_monitoring_service.slo) == 0 && length(module.slo) == 0
+    error_message = "no SLO may be created unless a service declares one."
+  }
+}
+
+run "job_runtime_creates_job" {
+  command = plan
+
+  variables {
+    enable_app_deploy_wif = true
+    services = {
+      api = {}
+      nightly = {
+        runtime         = "cloud-run-job"
+        timeout         = "3600s"
+        job             = { task_count = 3, parallelism = 1, max_retries = 1 }
+        database        = {}
+        secrets         = { API_KEY = { secret = "api-key" } }
+        invoker_members = ["serviceAccount:scheduler@acme-dev-host-abcd.iam.gserviceaccount.com"]
+        github          = { repository_id = "987654321" }
+      }
+    }
+  }
+
+  assert {
+    condition     = keys(module.service) == ["api"] && keys(module.job) == ["nightly"]
+    error_message = "a cloud-run-job entry must create module.job[<key>] and no Cloud Run service; the other entry stays a service."
+  }
+
+  assert {
+    condition     = google_service_account.runtime["nightly"].account_id == "nightly-run" && keys(module.registry) == ["api", "nightly"]
+    error_message = "a job still gets its runtime SA and its Artifact Registry repo."
+  }
+
+  assert {
+    condition     = keys(google_cloud_run_v2_job_iam_member.invoker) == ["nightly/serviceAccount:scheduler@acme-dev-host-abcd.iam.gserviceaccount.com"] && length(google_cloud_run_v2_service_iam_member.invoker) == 0
+    error_message = "a job's invoker_members must be granted run.invoker on the job, not on a service."
+  }
+
+  assert {
+    condition     = google_cloud_run_v2_job_iam_member.deploy["nightly"].role == "roles/run.developer" && google_cloud_run_v2_job_iam_member.deploy["nightly"].member == "serviceAccount:nightly-deploy@acme-dev-host-abcd.iam.gserviceaccount.com" && !contains(keys(google_cloud_run_v2_service_iam_member.deploy), "nightly")
+    error_message = "the job's deploy SA must get run.developer on the job."
+  }
+
+  assert {
+    condition     = keys(google_monitoring_alert_policy.error_ratio) == ["api"]
+    error_message = "request alerts must not be created for a job."
+  }
+
+  assert {
+    condition     = google_secret_manager_secret_iam_member.runtime["nightly/API_KEY"].member == "serviceAccount:nightly-run@acme-dev-host-abcd.iam.gserviceaccount.com" && keys(module.database) == ["nightly"]
+    error_message = "a job keeps its secret grants and database."
+  }
+
+  assert {
+    condition = (
+      output.services["nightly"].runtime == "cloud-run-job" &&
+      output.services["nightly"].service_name == null &&
+      output.services["nightly"].url == null &&
+      output.github_actions["nightly"].CLOUD_RUN_JOB == "nightly" &&
+      output.github_actions["nightly"].CLOUD_RUN_SERVICE == null
+    )
+    error_message = "a job's outputs must carry its runtime and job name, with no service name or URL."
+  }
+
+  assert {
+    condition = (
+      keys(output.urls) == ["api"] &&
+      output.runtime_service_account_emails["nightly"] == "nightly-run@acme-dev-host-abcd.iam.gserviceaccount.com" &&
+      output.image_repositories["nightly"] == "europe-west1-docker.pkg.dev/acme-dev-host-abcd/nightly/nightly" &&
+      keys(output.sql_connection_names) == ["nightly"]
+    )
+    error_message = "per-service output maps: URLs for services only; SA email, repo and SQL connection name per declared key."
+  }
+}
+
+run "slo_created_when_declared" {
+  command = plan
+
+  override_resource {
+    target          = module.slo["api"].google_monitoring_slo.this
+    override_during = plan
+    values          = { name = "projects/acme-dev-host-abcd/services/cloud-run-api/serviceLevelObjectives/api-availability" }
+  }
+
+  override_resource {
+    target          = module.slo["api"].google_monitoring_alert_policy.burn_rate
+    override_during = plan
+    values          = { id = "projects/acme-dev-host-abcd/alertPolicies/burn" }
+  }
+
+  variables {
+    alert_notification_channel_ids = ["projects/acme-dev-host-abcd/notificationChannels/123"]
+    services = {
+      api = {
+        slo = { goal = 0.999, enable_burn_rate_alert = true }
+      }
+      web = {
+        slo = { sli_type = "latency", latency_threshold = "0.5s" }
+      }
+      batch = {}
+    }
+  }
+
+  assert {
+    condition     = keys(module.slo) == ["api", "web"] && keys(google_monitoring_service.slo) == ["api", "web"]
+    error_message = "an SLO (and its monitored service) must be created exactly for the services that declare one."
+  }
+
+  assert {
+    condition = (
+      google_monitoring_service.slo["api"].service_id == "cloud-run-api" &&
+      google_monitoring_service.slo["api"].basic_service[0].service_type == "CLOUD_RUN" &&
+      google_monitoring_service.slo["api"].basic_service[0].service_labels["service_name"] == "api" &&
+      google_monitoring_service.slo["api"].basic_service[0].service_labels["location"] == "europe-west1"
+    )
+    error_message = "the SLO's monitored service must be a basic CLOUD_RUN service on the Cloud Run service name and region."
+  }
+
+  assert {
+    condition     = module.slo["api"].burn_rate_alert_policy_id != null && module.slo["web"].burn_rate_alert_policy_id == null
+    error_message = "the burn-rate alert must follow slo.enable_burn_rate_alert."
+  }
+
+  assert {
+    condition     = contains(keys(google_project_service.this), "monitoring.googleapis.com")
+    error_message = "an SLO must enable monitoring.googleapis.com."
+  }
+
+  assert {
+    condition     = output.services["api"].slo_name == module.slo["api"].slo_name && output.services["batch"].slo_name == null
+    error_message = "output.services must expose the SLO name, null without one."
+  }
+}

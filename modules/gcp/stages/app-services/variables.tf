@@ -192,10 +192,20 @@ variable "services" {
       secrets  = { ENV_VAR = { secret = "<secret id in the service project, or projects/<p>/secrets/<s>>" } }
                            -> env vars from Secret Manager; the runtime SA gets
                            secretAccessor on exactly those secrets.
+      runtime  = "cloud-run-job"
+                        -> a Cloud Run v2 job `<name>` (run to completion, no
+                           URL; `job` sets task_count / parallelism / max_retries,
+                           `timeout` is the task timeout) instead of a service.
+                           Default "cloud-run". Request alerts and SLOs apply to
+                           services only; a job cannot be unauthenticated.
+      slo      = {...}  -> an availability or latency SLO on the Cloud Run
+                           service (modules/gcp/monitoring/slo), optionally with
+                           an error-budget burn-rate alert.
     The default `{}` creates nothing.
   EOT
   type = map(object({
-    image                       = optional(string) # null => var.bootstrap_image
+    runtime                     = optional(string, "cloud-run") # cloud-run | cloud-run-job
+    image                       = optional(string)              # null => var.bootstrap_image
     ingress                     = optional(string, "INGRESS_TRAFFIC_INTERNAL_ONLY")
     cpu                         = optional(string, "1000m")
     memory                      = optional(string, "512Mi")
@@ -268,6 +278,25 @@ variable "services" {
       duration              = optional(string, "300s") # sustained before it fires
     }), {})
 
+    # Cloud Run job settings (runtime = "cloud-run-job" only; ignored otherwise).
+    job = optional(object({
+      task_count  = optional(number, 1)
+      parallelism = optional(number) # null = as many as possible
+      max_retries = optional(number, 3)
+    }), {})
+
+    # Service-level objective on the Cloud Run service (runtime = "cloud-run"
+    # only). Null (default) creates none.
+    slo = optional(object({
+      sli_type               = optional(string, "availability") # availability | latency
+      goal                   = optional(number, 0.99)           # (0, 1)
+      rolling_period_days    = optional(number, 28)
+      latency_threshold      = optional(string, "1s") # latency SLI only
+      enable_burn_rate_alert = optional(bool, false)
+      burn_rate_threshold    = optional(number, 10)
+      burn_rate_lookback     = optional(string, "3600s")
+    }))
+
     # Pub/Sub topic `<name>` + pull subscription `<name>-sub` with a dead-letter
     # topic `<name>-dlq` (+ `<name>-dlq-sub` so dead letters are retained). The
     # runtime SA may publish to ITS topic and consume ITS subscription only;
@@ -312,6 +341,38 @@ variable "services" {
   validation {
     condition     = alltrue([for k, s in var.services : can(regex("^[a-z][a-z0-9-]{0,20}[a-z0-9]$", k))])
     error_message = "service keys must be 2-22 characters: lowercase letters, digits and hyphens, starting with a letter (the key prefixes the <name>-run / <name>-deploy service account IDs)."
+  }
+
+  validation {
+    condition     = alltrue([for k, s in var.services : contains(["cloud-run", "cloud-run-job"], s.runtime)])
+    error_message = "services[*].runtime must be \"cloud-run\" (a Cloud Run service, the default) or \"cloud-run-job\" (a Cloud Run job)."
+  }
+
+  validation {
+    # A job has no URL: nothing to expose, no request metrics to alert on.
+    condition     = alltrue([for k, s in var.services : s.runtime == "cloud-run" || (!s.enable_unauthenticated && s.slo == null)])
+    error_message = "a service with runtime = \"cloud-run-job\" cannot set enable_unauthenticated = true (or be exposed through public ingress) or declare an slo: a job serves no requests."
+  }
+
+  validation {
+    condition = alltrue([for k, s in var.services : (
+      (s.job.task_count >= 1 && s.job.task_count <= 10000) &&
+      (s.job.parallelism == null || try(s.job.parallelism >= 1, false)) &&
+      (s.job.max_retries >= 0 && s.job.max_retries <= 10)
+    )])
+    error_message = "services[*].job: task_count must be 1-10000, parallelism null or at least 1, max_retries 0-10."
+  }
+
+  validation {
+    condition = alltrue([for k, s in var.services : s.slo == null || (
+      contains(["availability", "latency"], try(s.slo.sli_type, "")) &&
+      try(s.slo.goal > 0 && s.slo.goal < 1, false) &&
+      try(s.slo.rolling_period_days >= 1 && s.slo.rolling_period_days <= 30, false) &&
+      can(regex("^[0-9]+(\\.[0-9]+)?s$", s.slo.latency_threshold)) &&
+      can(regex("^[0-9]+s$", s.slo.burn_rate_lookback)) &&
+      try(s.slo.burn_rate_threshold > 0, false)
+    )])
+    error_message = "services[*].slo: sli_type must be availability or latency, goal strictly between 0 and 1 (e.g. 0.999), rolling_period_days 1-30, latency_threshold and burn_rate_lookback seconds strings (\"1s\", \"3600s\"), burn_rate_threshold > 0."
   }
 
   validation {

@@ -1,13 +1,11 @@
 # gcp/monitoring/slo
 
-> Status: experimental
->
-> No root composes this module yet; a later task wires it into the golden-path stages.
-
 A service-level objective for a monitored service, with an optional error-budget
 burn-rate alert. Part of the application observability layer (audit C1): attach it
 to the monitored service of a Cloud Run or GKE workload to track availability or
-latency against a goal and get paged before the SLO is missed.
+latency against a goal and get paged before the SLO is missed. The
+`gcp/stages/app-services` golden path composes it for every service that sets
+`slo`.
 
 <!-- BEGIN_TF_DOCS -->
 

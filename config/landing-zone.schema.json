@@ -271,6 +271,14 @@
                 "additionalProperties": {
                   "type": "object",
                   "properties": {
+                    "runtime": {
+                      "type": "string",
+                      "enum": [
+                        "cloud-run",
+                        "cloud-run-job"
+                      ],
+                      "description": "cloud-run (default): a Cloud Run service. cloud-run-job: a Cloud Run job (run to completion, no URL)."
+                    },
                     "image": {
                       "type": "string"
                     },
@@ -471,6 +479,54 @@
                           "type": "number"
                         },
                         "message_retention_duration": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "job": {
+                      "type": "object",
+                      "description": "Cloud Run job settings (runtime = cloud-run-job only).",
+                      "properties": {
+                        "task_count": {
+                          "type": "number"
+                        },
+                        "parallelism": {
+                          "type": "number"
+                        },
+                        "max_retries": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "slo": {
+                      "type": "object",
+                      "description": "Service-level objective on the Cloud Run service (runtime = cloud-run only).",
+                      "properties": {
+                        "sli_type": {
+                          "type": "string",
+                          "enum": [
+                            "availability",
+                            "latency"
+                          ]
+                        },
+                        "goal": {
+                          "type": "number"
+                        },
+                        "rolling_period_days": {
+                          "type": "number"
+                        },
+                        "latency_threshold": {
+                          "type": "string"
+                        },
+                        "enable_burn_rate_alert": {
+                          "type": "boolean"
+                        },
+                        "burn_rate_threshold": {
+                          "type": "number"
+                        },
+                        "burn_rate_lookback": {
                           "type": "string"
                         }
                       },

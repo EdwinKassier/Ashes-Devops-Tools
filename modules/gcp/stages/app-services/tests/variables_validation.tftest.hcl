@@ -274,3 +274,51 @@ run "rejects_network_access_false_with_foreign_project" {
 
   expect_failures = [var.services]
 }
+
+run "rejects_unknown_runtime" {
+  command         = plan
+  expect_failures = [var.services]
+  variables {
+    services = { api = { runtime = "lambda" } }
+  }
+}
+
+run "rejects_unauthenticated_job" {
+  command         = plan
+  expect_failures = [var.services]
+  variables {
+    services = { api = { runtime = "cloud-run-job", enable_unauthenticated = true, ingress = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER" } }
+  }
+}
+
+run "rejects_slo_on_job" {
+  command         = plan
+  expect_failures = [var.services]
+  variables {
+    services = { api = { runtime = "cloud-run-job", slo = {} } }
+  }
+}
+
+run "rejects_zero_job_task_count" {
+  command         = plan
+  expect_failures = [var.services]
+  variables {
+    services = { api = { runtime = "cloud-run-job", job = { task_count = 0 } } }
+  }
+}
+
+run "rejects_slo_goal_of_one" {
+  command         = plan
+  expect_failures = [var.services]
+  variables {
+    services = { api = { slo = { goal = 1 } } }
+  }
+}
+
+run "rejects_unknown_sli_type" {
+  command         = plan
+  expect_failures = [var.services]
+  variables {
+    services = { api = { slo = { sli_type = "throughput" } } }
+  }
+}

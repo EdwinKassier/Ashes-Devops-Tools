@@ -15,8 +15,13 @@
 #     context to log groups in THIS account,
 #   - ECR in this region on behalf of principals in this account,
 #   - the app-services task execution roles (<environment>-<service>-exec) to
-#     decrypt the secrets they inject, matched by aws:PrincipalArn so the policy
-#     never names a role that does not exist yet.
+#     decrypt the secrets they inject: one exact ARN per declared service, built
+#     from the service keys (not read from the roles, which would be a cycle:
+#     the roles' policies need this key's ARN). They are matched by
+#     aws:PrincipalArn on the account-root principal because KMS rejects a key
+#     policy whose Principal names a role that does not exist yet, and the roles
+#     are created after the key. No services = no statement (never an empty
+#     principal list).
 # =============================================================================
 
 data "aws_partition" "current" {}
@@ -25,9 +30,15 @@ locals {
   create_kms_key = var.kms_key_arn == ""
   kms_partition  = data.aws_partition.current.partition
 
+  # Exact ARNs of the task execution roles modules/aws/stages/app-services
+  # creates (aws_iam_role.execution: "<environment>-<service>-exec").
+  app_exec_role_arns = [
+    for k in sort(keys(local.services)) : "arn:${local.kms_partition}:iam::${local.workload_account_id}:role/${local.environment}-${k}-exec"
+  ]
+
   workload_kms_policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Sid       = "AccountRootAdmin"
         Effect    = "Allow"
@@ -86,6 +97,7 @@ locals {
           }
         }
       },
+      ], length(local.app_exec_role_arns) == 0 ? [] : [
       {
         Sid       = "AppTaskExecutionRolesDecrypt"
         Effect    = "Allow"
@@ -93,12 +105,12 @@ locals {
         Action    = ["kms:Decrypt", "kms:DescribeKey"]
         Resource  = "*"
         Condition = {
-          ArnLike = {
-            "aws:PrincipalArn" = "arn:${local.kms_partition}:iam::${local.workload_account_id}:role/${local.environment}-*-exec"
+          ArnEquals = {
+            "aws:PrincipalArn" = local.app_exec_role_arns
           }
         }
       },
-    ]
+    ])
   })
 
   # The key every consumer in this root uses.

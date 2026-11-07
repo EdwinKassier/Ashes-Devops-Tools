@@ -24,6 +24,8 @@ from `gcp-projects`), on the **environment Shared VPC**, not the hub.
 | Artifact Registry docker repo | `<region>-docker.pkg.dev/<host>/<svc>` | Immutable tags; cleanup policies (keep the 20 most recent versions, delete untagged after 7 days); optional CMEK via `artifact_registry_kms_key_name`. |
 | Runtime service account | `<svc>-run@<host>.iam.gserviceaccount.com` | No project roles. It gets `secretmanager.secretAccessor` on the secrets it references only, plus Cloud SQL client/instanceUser conditioned to its own instance when it has a database. |
 | Cloud Run v2 service | `<svc>` | `INGRESS_TRAFFIC_INTERNAL_ONLY` by default, Direct VPC egress (`PRIVATE_RANGES_ONLY`) to the env VPC's first private subnet, min 0 / max 10 instances, secrets from Secret Manager, optional Binary Authorization, deletion protection follows `enable_deletion_protection`. |
+| Cloud Run v2 job (instead, with `runtime = "cloud-run-job"`) | `<svc>` | Run to completion, no URL: `job = { task_count, parallelism, max_retries }`, `timeout` is the task timeout. Same runtime SA, secrets, database and Direct VPC egress as a service; `invoker_members` get `run.invoker` on the job (start executions) and the deploy SA `run.developer`. No request alerts or SLO; `enable_unauthenticated` is rejected. |
+| SLO (optional `slo`) | `<svc>-<availability\|latency>` | `modules/gcp/monitoring/slo` on a basic `CLOUD_RUN` monitored service `cloud-run-<svc>`: `slo = { goal = 0.999 }` (availability) or `slo = { sli_type = "latency", latency_threshold = "0.5s" }`; `enable_burn_rate_alert = true` pages the `app_alert_notification_channel_ids`. Cloud Run services only. |
 | Cloud SQL Postgres (optional `database`) | `<svc>-db` | Private IP only through the env VPC's Private Service Access (the host stage creates it by default: `enable_private_service_access = true`). TLS-only, backups + PITR, IAM database auth. The runtime SA is the IAM database user. Edition `ENTERPRISE` with `db-custom-1-3840`. |
 | Deploy identity (optional `github`) | `<svc>-deploy@<host>.iam.gserviceaccount.com` | Impersonable only through the app-deploy WIF pool, by the GitHub repo's **immutable numeric `repository_id`** (optionally a ref and/or a GitHub environment). Roles: `run.developer` on the service, `artifactregistry.writer` on the repo, `iam.serviceAccountUser` on the runtime SA only. |
 
@@ -212,7 +214,7 @@ in `config/landing-zone.yaml`. See [AWS](#aws) at the end of this guide.
 - Any extra runtime roles (`runtime_project_roles` is empty by default, so keep it
   minimal).
 - The content of your domain's DNS zone.
-- Service objectives: attach `modules/gcp/monitoring/slo` to the service.
+- Choosing service objectives: `slo` creates one per service; pick a goal your error budget can carry.
 - Promotion: add the same entry under the next environment in
   `config/landing-zone.yaml` (a new deploy SA and provider are created per
   environment). See
