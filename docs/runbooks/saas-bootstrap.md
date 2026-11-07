@@ -94,7 +94,9 @@ same file by each bridging workload as its write-only version (`saas_bridge_vers
 per workload). A write-only secret argument cannot be diffed, so a bridging workload re-pushes the
 secret only when that number changes. Until `saas-<name>` has applied and published the new
 number, the workload's plan fails on purpose (it would otherwise push the old values under the new
-version). Apply `saas-<name>` first, then re-run the workload.
+version). Apply `saas-<name>` first, then re-queue each bridging workload by hand: no run trigger
+connects them. For an emergency workload change in that window, set `saas_bridge_version` on the
+workload to the old value temporarily, and remove it once `saas-<name>` has applied.
 
 **Rotating the service-role key.** Supabase reissues the anon and service-role keys when you
 generate a new JWT secret (dashboard: Project Settings -> API).
@@ -103,7 +105,7 @@ generate a new JWT secret (dashboard: Project Settings -> API).
 2. Bump `saas.bridge_rotation` in the same pull request that records the rotation, and merge it.
 3. Apply `saas-<name>`. It reads the new keys, updates the Vercel environment variables and
    publishes the new `bridge_version`.
-4. Apply each bridging workload. It writes a new secret version. Restart or redeploy the
+4. Start a run on each bridging workload (no run trigger does it). It writes a new secret version. Restart or redeploy the
    consumers that cache the old value.
 
 **Rotating the database password.** The Supabase provider cannot rotate it: the module sets it once

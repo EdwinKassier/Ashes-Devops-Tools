@@ -11,7 +11,8 @@
 # into tfe_outputs' sensitive_values. Give the output the exact object type: the
 # conversion drops any key the type does not name. If downstream roots read this
 # layer, add it to PRODUCERS in scripts/check-contracts.sh (which then requires
-# the type and compares its keys with local.contract).
+# the type and compares its top-level keys with local.contract; nested
+# attributes are not compared, so add those to the type by hand).
 
 locals {
   contract = {

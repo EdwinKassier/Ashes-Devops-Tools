@@ -49,7 +49,9 @@ for p in ${PRODUCERS}; do
     fail "${p}: output \"contract\" has no 'type = object({...})' constraint"
   else
     # The object conversion silently drops an attribute the type does not name,
-    # so the type's top-level keys must equal local.contract's.
+    # so the type's top-level keys must equal local.contract's. Nested
+    # attributes (objects inside objects, for-expression results) are NOT
+    # compared: whoever adds one must add it to the output type by hand.
     type_keys="$(awk '/^  type[[:space:]]*=[[:space:]]*object\(\{/{on=1; next} on&&/^  \}\)/{exit} on&&/^    [a-z0-9_]+[[:space:]]*=/{sub(/^    /,""); sub(/[[:space:]]*=.*/,""); print}' <<<"${block}" | sort)"
     local_keys="$(awk '/^  contract[[:space:]]*=[[:space:]]*\{/{on=1; next} on&&/^  \}/{exit} on&&/^    [a-z0-9_]+[[:space:]]*=/{sub(/^    /,""); sub(/[[:space:]]*=.*/,""); print}' "${dir}"/*.tf | sort)"
     if [[ -z "${local_keys}" ]]; then

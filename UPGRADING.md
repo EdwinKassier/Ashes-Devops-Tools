@@ -635,7 +635,8 @@ Applies to workloads with `enable_saas_secret_bridge = true`.
   Supabase secret, bump `saas.bridge_rotation`, apply `saas-<name>`, then apply
   each bridging workload
   ([saas-bootstrap](docs/runbooks/saas-bootstrap.md#bridging-secrets-to-a-workload-and-rotating-them)).
-  A `saas-<name>` that has not applied the new output yet counts as version 1.
+  Under Terraform 1.17 the workload plan fails until `saas-<name>` has applied
+  the new number (see "SaaS secret bridge reads ephemerally").
 - **The read itself.** This release still read the values through
   `data.terraform_remote_state.saas`, whose result is stored in the workload's
   state. The Terraform 1.17 release replaces it with `ephemeral "tfe_outputs"`,
@@ -732,9 +733,19 @@ Before the first plan:
    `saas_bridge_version` on its bridging workloads.
 3. **Mismatch fails the plan.** A postcondition on the ephemeral read fails
    the workload plan while the saas workspace publishes a different
-   `bridge_version`. After a rotation bump, apply `saas-<name>` first, then
-   re-run the workloads. Until then, any workload run fails, by design: it
-   would otherwise push the old values under the new version.
+   `bridge_version`. Until then, any bridging-workload run fails, by design:
+   it would otherwise push the old values under the new version.
+4. **Re-queue each bridging workload after `saas-<name>` applies.** No run
+   trigger connects them, so after a rotation bump: apply `saas-<name>`, then
+   start a run on every bridging workload by hand.
+5. **Escape hatch.** For an emergency workload change while the versions
+   differ, temporarily set `saas_bridge_version` on that workload to the old
+   value (the one `saas-<name>` still publishes). Remove the override once
+   `saas-<name>` has applied.
+
+Workloads with the bridge off make unauthenticated discovery and ping calls to
+`app.terraform.io` when their `tfe` provider configures with the placeholder
+token. A fork on Terraform Enterprise sets `TFE_HOSTNAME` on those workspaces.
 
 The plan shows no change to the secret: the version stays the same, and the
 GCP secret moves to the secret-manager module's ephemeral path under the same

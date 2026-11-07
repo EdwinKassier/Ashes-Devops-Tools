@@ -47,7 +47,8 @@ locals {
 output "contract" {
   description = "The gcp-organization cross-root contract: every key below in one non-sensitive object. Downstream roots read this output only; the individual outputs are deprecated aliases kept until v1.0."
   # Exact shape: a key added to local.contract must be added here too, or the
-  # conversion drops it (scripts/check-contracts.sh compares the two key sets).
+  # conversion drops it silently. scripts/check-contracts.sh compares the
+  # top-level keys only: add a NESTED attribute to the type by hand as well.
   type = object({
     billing_account      = string
     admin_project        = object({ project_id = string, number = string })

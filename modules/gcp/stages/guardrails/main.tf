@@ -170,6 +170,8 @@ locals {
 module "iam_deny" {
   source = "../../iam/deny-policy"
 
-  parent        = local.parent
-  deny_policies = var.create_deny_policies ? local.deny_policies : []
+  parent = local.parent
+  # A filtering for (not a conditional): a tuple of rules and [] do not unify
+  # in every evaluator (tflint rejects it); the planned list is the same.
+  deny_policies = [for p in local.deny_policies : p if var.create_deny_policies]
 }
