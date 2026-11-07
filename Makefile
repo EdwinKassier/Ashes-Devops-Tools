@@ -1,4 +1,4 @@
-.PHONY: help install fmt fmt-check validate validate-all lint consistency security security-low security-report docs docs-check count count-check links required-checks required-checks-live backend-check cfn-lint shellcheck test test-scripts ci clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
+.PHONY: help install fmt fmt-check validate validate-all lint consistency security security-low security-report docs docs-check count count-check links examples-refs required-checks required-checks-live backend-check cfn-lint shellcheck test test-scripts ci clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
 
 TERRAFORM := terraform
 TFLINT := tflint
@@ -131,6 +131,9 @@ count-check: ## Fail if README.md / CLAUDE.md counts drifted from the tree (CI: 
 	@./scripts/check-docs-counts.sh
 	@python3 scripts/check-module-usage.py --check
 
+examples-refs: ## Fail when a code snippet in examples/system-design cites a missing module, input, config key or envs/ path (offline; CI: meta-lint)
+	@bash scripts/check-examples-refs.sh
+
 links: ## Fail on broken repo-relative links in any Markdown file (offline; CI: meta-lint)
 	@python3 scripts/check-md-links.py
 
@@ -199,6 +202,7 @@ ci: ## Run the local CI pipeline (fmt → consistency → counts → links → s
 	@$(MAKE) config-check
 	@$(MAKE) count-check
 	@$(MAKE) links
+	@$(MAKE) examples-refs
 	@$(MAKE) required-checks
 	@$(MAKE) backend-check
 	@$(MAKE) shellcheck

@@ -426,6 +426,9 @@ jobs:
       - name: Markdown relative links resolve (offline)
         run: python3 scripts/check-md-links.py
 
+      - name: Check examples references
+        run: bash scripts/check-examples-refs.sh
+
       # Every context in BRANCH_PROTECTION.md's `gh api` command must be a job
       # name GitHub actually reports (no bare matrix / reusable-caller names).
       - name: Required status-check contexts exist
