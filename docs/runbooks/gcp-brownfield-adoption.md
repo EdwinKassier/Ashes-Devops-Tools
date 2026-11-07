@@ -116,6 +116,13 @@ import {
 }
 ```
 
+The `google_project_service` imports assume `var.project_services` in `envs/gcp/projects` lists
+every service already enabled on the adopted projects; services outside that list are left alone,
+and listed services that are not yet enabled show as creates. The ID suffix is the `suffix`
+output of `gcp-bootstrap` (`bootstrap_contract.suffix` when contracts are used); the project ID is
+`<project_prefix>-<env>-<project>-<suffix>`, so a project created before the bootstrap suffix existed
+will not match and must not be adopted.
+
 Adopt a project only if its ID, folder and billing account match the plan's values. The module sets
 `auto_create_network = false` and `deletion_policy = "PREVENT"`; on an adopted project these show as
 in-place updates (`deletion_policy` is Terraform-only, so no API call). Remove the

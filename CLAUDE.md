@@ -91,7 +91,8 @@ One committed file, `config/landing-zone.yaml` (schema and placeholders: `config
 | hashicorp/aws | `>= 6.46.0, < 7.0.0` (floored pin — deliberate, not `~> 6.0`) |
 | supabase/supabase | `~> 1.0` |
 | vercel/vercel | `>= 4.8.2, < 5.0.0` |
-| hashicorp/null | `~> 3.6` (GCP roots and stages); `~> 3.0` in `envs/saas` |
+| hashicorp/random | `~> 3.6` (GCP roots and stages) |
+| hashicorp/null | `~> 3.0` — declared only in `envs/saas` (migration-only: the `null_resource` → `terraform_data` `moved` blocks) |
 
 ---
 

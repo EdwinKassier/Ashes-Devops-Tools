@@ -574,6 +574,11 @@ side (all mock-tested, secure defaults):
 - **Behaviour-changing security defaults** (not applied, would change posture):
   packet-mirroring default mirrors all traffic; vpc-peering exports public-IP
   subnet routes; the shared VPC-endpoint policy is `Action="*"`.
+- **GCP VPN / Interconnect exposure.** `modules/gcp/stages/net-hub` wires
+  `network/vpn` (`var.vpn`) and `network/interconnect`, but
+  `modules/gcp/stages/network-hub` does not pass them through, so they cannot
+  be set from `envs/gcp/network-hub` or `config/landing-zone.yaml`. Pending
+  Task 4.4.
 - **`host` stage decomposition.** `modules/gcp/stages/host` (~2,000 LOC) is
   large-but-cohesive; a targeted split (firewall / egress / advanced sub-stages)
   is optional maintainability work, not a bug.

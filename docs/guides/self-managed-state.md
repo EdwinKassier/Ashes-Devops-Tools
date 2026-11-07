@@ -50,10 +50,15 @@ stage-contract variables. When a contract is set, the matching remote-state read
 
 | Root | Contract variables (config key `gcp.contracts.<layer>` / `aws.contracts.<layer>`) |
 |---|---|
+| `gcp/bootstrap` | none (phase 0, no upstream) |
 | `gcp/organization` | `bootstrap_contract` |
 | `gcp/projects` | `bootstrap_contract`, `organization_contract` |
 | `gcp/network-hub` | `organization_contract`, `projects_contract` |
-| `aws/security`, `aws/network`, `aws/backup`, `aws/shared-services`, `aws/identity`, `aws/workload` | `organization_contract` |
+| `gcp/workload` | `organization_contract`, `projects_contract`, `network_hub_contract` |
+| `aws/organization` | none (first AWS root) |
+| `aws/security`, `aws/network`, `aws/backup`, `aws/shared-services`, `aws/identity` | `organization_contract` |
+| `aws/workload` | `organization_contract`, `network_contract`, `security_contract` |
+| `saas/*`, `tfc-admin` | none (tfc-admin is not used without HCP Terraform) |
 
 Fill them from the upstream root's `terraform output -json`, in a `*.auto.tfvars` file your pipeline
 renders, or under `gcp.contracts` / `aws.contracts` in `config/landing-zone.yaml`. Each variable's

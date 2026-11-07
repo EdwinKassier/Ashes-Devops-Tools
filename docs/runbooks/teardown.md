@@ -67,7 +67,7 @@ Newer network modules implement the same protection through a conditional `terra
 |------------------|--------------|----------|
 | VPC-SC perimeters | `enable_deletion_protection = true` | [`modules/gcp/network/vpc-sc`](../../modules/gcp/network/vpc-sc/main.tf#L20) |
 | Network hub + DNS VPC | `enable_deletion_protection = true` | [`modules/gcp/stages/network-hub`](../../modules/gcp/stages/network-hub/main.tf) |
-| Host-project VPC/subnet stack | `enable_deletion_protection = false` | [`modules/gcp/stages/host`](../../modules/gcp/stages/host/main.tf#L55) |
+| Spoke VPC/subnet stack | `deletion_protection` input (`variables.tf`) | [`modules/gcp/stages/net-spoke`](../../modules/gcp/stages/net-spoke/main.tf) |
 | Standalone VPC module | `enable_deletion_protection = false` | [`modules/gcp/network/vpc`](../../modules/gcp/network/vpc/main.tf#L15) |
 
 Teardown sequence for these:

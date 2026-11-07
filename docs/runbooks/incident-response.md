@@ -58,7 +58,7 @@ bq query --use_legacy_sql=false \
 
 External IPs are **already denied org-wide** — `compute.vmExternalIpAccess` is set with `deny_all = true` in `modules/gcp/stages/organization` (CIS 4.9), so a compromised VM cannot reach the internet directly through a public IP. Containment therefore targets **internal reachability and egress**.
 
-The host stack (`modules/gcp/stages/host`) already lays down a tiered firewall with a **deny-all ingress rule at priority 65535** and a **deny-egress rule on the database tier at 65534** (both via `modules/gcp/network/network-firewall`). To quarantine a specific instance, add a higher-priority (lower number) deny rule scoped to its network tag, so it overrides the tier allow-rules:
+The tiered VPC (`modules/gcp/network/tiered-vpc`, composed by `stages/net-hub` and `stages/net-spoke`) already lays down a tiered firewall with a **deny-all ingress rule at priority 65535** and a **deny-egress rule on the database tier at 65534** (both via `modules/gcp/network/network-firewall`). To quarantine a specific instance, add a higher-priority (lower number) deny rule scoped to its network tag, so it overrides the tier allow-rules:
 
 ```bash
 # Deny ALL egress from the compromised instance's tag (priority beats the tier allows)
