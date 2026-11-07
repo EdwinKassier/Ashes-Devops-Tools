@@ -225,7 +225,6 @@ In your GitHub repo → Settings → Secrets and variables → Actions:
 
 | Name | Type | Value |
 |------|------|-------|
-| `GOOGLE_PROJECT_ID` | Variable | Admin project ID from the bootstrap output |
 | `TFC_ORGANIZATION` | Variable | Your Terraform Cloud org name |
 | `TFC_TOKEN` | Secret | A TFC team token scoped to "Read runs" on the GCP workspaces |
 
@@ -362,7 +361,7 @@ Any variable below that maps to a `config/landing-zone.yaml` key (shown in brack
 | `enable_deletion_protection` | `true` | Guard against accidental destruction of the VPC/subnets/DNS zones |
 | `vpc_sc_ingress_policies` / `vpc_sc_egress_policies` | `[]` | Optional VPC Service Controls ingress/egress policies for the perimeter |
 
-> **Host-level networking (Dedicated Interconnect, HA-VPN, explicit zone pinning):** `envs/gcp/workload` does not expose `enable_interconnect`, `enable_vpn`, or `explicit_zones` as its own variables — those are variables of the underlying `modules/gcp/stages/host` module (`interconnects`, `enable_vpn`, `explicit_zones`). To use them, either call `modules/gcp/stages/host` directly from a custom root, or extend `envs/gcp/workload/main.tf`'s `module "host"` call to pass them through.
+> **Hybrid connectivity (HA-VPN, Dedicated/Partner Interconnect):** `modules/gcp/stages/net-hub` already wires `network/vpn` (`var.vpn.enabled`) and `network/interconnect`. `modules/gcp/stages/network-hub` does not pass them through yet, so they are not configurable from `config/landing-zone.yaml` or `envs/gcp/network-hub`; exposing them is planned work (see [`known-gaps.md`](../known-gaps.md)). `modules/gcp/stages/host` is deprecated and is not the route for VPN or Interconnect.
 
 ---
 

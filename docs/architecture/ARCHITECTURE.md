@@ -224,7 +224,7 @@ The validation workflow runs:
 - `terraform init -backend=false`
 - `terraform validate`
 - `tflint`
-- `tfsec`
+- `trivy config`
 - `checkov`
 
 ### Tags

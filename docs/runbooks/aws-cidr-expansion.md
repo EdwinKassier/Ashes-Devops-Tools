@@ -93,7 +93,7 @@ variable "secondary_cidrs" {
 }
 ```
 
-Subnets in the new range are declared as ordinary tiers, but their `cidrsubnet()` math must operate on the **secondary** block, not the primary `cidr_block`. Add the new tiers with a `base` field (or a parallel `subnets_secondary` map keyed to the association) so the module carves them from `var.secondary_cidrs[<key>].cidr_block` rather than the primary. Keep every `for_each` key a plan-known string so the module still passes its `mock_provider` tests (see the `#tfsec`/mock notes throughout the module).
+Subnets in the new range are declared as ordinary tiers, but their `cidrsubnet()` math must operate on the **secondary** block, not the primary `cidr_block`. Add the new tiers with a `base` field (or a parallel `subnets_secondary` map keyed to the association) so the module carves them from `var.secondary_cidrs[<key>].cidr_block` rather than the primary. Keep every `for_each` key a plan-known string so the module still passes its `mock_provider` tests (see the mock-provider notes in the module's tests).
 
 > This is a genuine module change: run `make docs && make test` on the vpc module and ship it as its own PR (per [CLAUDE.md → Updating an existing module](../../CLAUDE.md)) before the workload apply below.
 

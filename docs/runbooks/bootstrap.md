@@ -222,7 +222,6 @@ The same flow applies to AWS (`aws.enabled: true`): see the [AWS bootstrap runbo
 
 | Name | Type | Value |
 |------|------|-------|
-| `GOOGLE_PROJECT_ID` | Variable | Admin project ID (`admin_project` output) |
 | `TFC_ORGANIZATION` | Variable | Your TFC org name |
 | `TFC_TOKEN` | Secret | Read-only TFC team token (release run-status checks) |
 | `TFC_TOKEN_DRIFT` | Secret | Queue-plans TFC team token for drift detection (no fallback to `TFC_TOKEN`) |

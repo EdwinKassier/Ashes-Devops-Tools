@@ -53,12 +53,12 @@ If the file is still out of date, confirm the module has:
 
 ## `make security` fails
 
-The local security target runs TFSec and Checkov.
+The local security target runs Trivy (IaC config scan) and Checkov.
 
 Use the component commands while debugging:
 
 ```bash
-tfsec . --config-file .tfsec.yml --exclude-path examples
+trivy config . --skip-dirs examples
 checkov -d modules --framework terraform
 checkov -d envs --framework terraform
 ```
@@ -180,15 +180,15 @@ If an acceptance test fails due to data source postconditions in deeply nested m
   }
   ```
 
-## tfsec or Checkov reports a false positive
+## Trivy or Checkov reports a false positive
 
 Inline skips are the correct fix. Do not add findings to the global skip list in `security-scan.yml` — that silences the check for all future resources.
 
-**tfsec inline skip:**
+**Trivy inline skip:**
 
 ```hcl
 resource "google_storage_bucket" "example" {
-  #tfsec:ignore:google-storage-bucket-encryption-customer-key
+  #trivy:ignore:AVD-GCP-0066
   name = "example"
 }
 ```

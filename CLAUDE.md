@@ -90,8 +90,8 @@ One committed file, `config/landing-zone.yaml` (schema and placeholders: `config
 | google / google-beta | `~> 7.0` (6→7 migration complete; locks on 7.x, CI green — audit L4) |
 | hashicorp/aws | `>= 6.46.0, < 7.0.0` (floored pin — deliberate, not `~> 6.0`) |
 | supabase/supabase | `~> 1.0` |
-| vercel/vercel | `~> 4.0` |
-| hashicorp/null | `~> 3.0` |
+| vercel/vercel | `>= 4.8.2, < 5.0.0` |
+| hashicorp/null | `~> 3.6` (GCP roots and stages); `~> 3.0` in `envs/saas` |
 
 ---
 

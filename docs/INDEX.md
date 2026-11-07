@@ -81,6 +81,7 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
 - [Deploying a Service](guides/deploying-a-service.md): the golden path to run an application on the landing zone
 - [SaaS Integration](architecture/saas-integration.md): options and decision for integrating Supabase/Vercel with the clouds
 - [CI Secrets & Variables](guides/CI_SECRETS.md): repository secrets and variables the workflows expect
+- [Self-Managed State](guides/self-managed-state.md): run the roots on a GCS or S3 backend instead of HCP Terraform
 - [Sandbox E2E](guides/sandbox-e2e.md): real-apply `terraform test` suites against disposable GCP/AWS sandboxes (keyless auth, guaranteed teardown)
 
 ## GCP Landing Zone
@@ -111,6 +112,7 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
 - [AWS Incident Response](runbooks/aws-incident-response.md): quarantine and forensics flow
 - [AWS Teardown](runbooks/aws-teardown.md): reverse-order destroy, WORM/Vault Lock caveats
 - [AWS Brownfield Adoption](runbooks/aws-brownfield-adoption.md): import an existing organization, OUs and accounts; Control Tower coexistence
+- [GCP Brownfield Adoption](runbooks/gcp-brownfield-adoption.md): import existing folders, projects and org IAM with `import` + `for_each`
 
 ## SaaS Modules
 
