@@ -9,6 +9,8 @@ variables {
   landing_zone_name        = "acme"
   log_archive_bucket_name  = "ashes-org-log-archive"
   default_tags             = { CostCenter = "networking" }
+  # Spokes need the inspection firewall (the stage rejects spokes without it).
+  enable_network_firewall = true
 }
 
 override_data {

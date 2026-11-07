@@ -25,6 +25,8 @@
 #     inspected both ways (the inspection attachment runs in appliance mode).
 # ---------------------------------------------------------------------------
 
+# Destroying an accepter deletes the attachment itself. Never flip `accept` on a
+# managed spoke, and move (not rename) a key with a `moved` block.
 resource "aws_ec2_transit_gateway_vpc_attachment_accepter" "spoke" {
   for_each = { for k, s in var.spoke_attachments : k => s if s.accept }
 

@@ -289,4 +289,9 @@ variable "spoke_attachments" {
     condition     = length(distinct([for s in values(var.spoke_attachments) : s.attachment_id])) == length(var.spoke_attachments)
     error_message = "spoke_attachments must not list the same attachment_id twice (an attachment associates with exactly one route table)."
   }
+
+  validation {
+    condition     = length(var.spoke_attachments) == 0 || var.enable_network_firewall
+    error_message = "spoke_attachments (config: aws.network.spoke_attachments) needs enable_network_firewall = true: spokes route 0.0.0.0/0 through the inspection VPC, which has no forwarding path without the firewall, so the spokes would have no egress."
+  }
 }

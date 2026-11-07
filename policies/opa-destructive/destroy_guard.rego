@@ -56,6 +56,12 @@ protected_types := {
 	"google_iam_deny_policy",
 	"google_tags_tag_key",
 	"google_tags_tag_value",
+	# Deleting the containment tag binding also lifts the tag-scoped deny.
+	"google_tags_tag_binding",
+	"google_tags_location_tag_binding",
+	# Network: destroying the accepter deletes the spoke's TGW attachment.
+	"aws_ec2_transit_gateway_vpc_attachment",
+	"aws_ec2_transit_gateway_vpc_attachment_accepter",
 }
 
 action_verb(rc) := "replaces" if lib.creates(rc)

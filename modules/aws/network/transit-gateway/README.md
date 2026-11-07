@@ -52,15 +52,15 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_ec2_transit_gateway.this (modules/aws/network/transit-gateway/main.tf#L21)
-- resource.aws_ec2_transit_gateway_route.this (modules/aws/network/transit-gateway/main.tf#L73)
-- resource.aws_ec2_transit_gateway_route_table.this (modules/aws/network/transit-gateway/main.tf#L32)
-- resource.aws_ec2_transit_gateway_route_table_association.this (modules/aws/network/transit-gateway/main.tf#L54)
-- resource.aws_ec2_transit_gateway_route_table_propagation.this (modules/aws/network/transit-gateway/main.tf#L64)
-- resource.aws_ec2_transit_gateway_vpc_attachment.this (modules/aws/network/transit-gateway/main.tf#L39)
-- resource.aws_ram_principal_association.org (modules/aws/network/transit-gateway/main.tf#L95)
-- resource.aws_ram_resource_association.tgw (modules/aws/network/transit-gateway/main.tf#L90)
-- resource.aws_ram_resource_share.this (modules/aws/network/transit-gateway/main.tf#L84)
+- resource.aws_ec2_transit_gateway.this (modules/aws/network/transit-gateway/main.tf#L23)
+- resource.aws_ec2_transit_gateway_route.this (modules/aws/network/transit-gateway/main.tf#L76)
+- resource.aws_ec2_transit_gateway_route_table.this (modules/aws/network/transit-gateway/main.tf#L34)
+- resource.aws_ec2_transit_gateway_route_table_association.this (modules/aws/network/transit-gateway/main.tf#L56)
+- resource.aws_ec2_transit_gateway_route_table_propagation.this (modules/aws/network/transit-gateway/main.tf#L67)
+- resource.aws_ec2_transit_gateway_vpc_attachment.this (modules/aws/network/transit-gateway/main.tf#L41)
+- resource.aws_ram_principal_association.org (modules/aws/network/transit-gateway/main.tf#L98)
+- resource.aws_ram_resource_association.tgw (modules/aws/network/transit-gateway/main.tf#L93)
+- resource.aws_ram_resource_share.this (modules/aws/network/transit-gateway/main.tf#L87)
 
 
 ## Inputs

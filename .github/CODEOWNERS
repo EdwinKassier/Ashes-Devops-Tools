@@ -98,6 +98,7 @@ CHANGELOG.md   @your-org/platform-team
 /policies/                   @your-org/platform-team @your-org/security-team
 /config/landing-zone.yaml    @your-org/platform-team @your-org/security-team
 /config/tfc-workspaces.yaml  @your-org/platform-team @your-org/security-team
+/config/sandbox/             @your-org/platform-team @your-org/security-team
 
 # ── This file ────────────────────────────────────────────────────────────────
 # Changing ownership itself needs both teams.

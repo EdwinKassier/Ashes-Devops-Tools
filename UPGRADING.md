@@ -372,7 +372,10 @@ aws:
 2. Add it under `aws.network.spoke_attachments` with the spoke's segment. If
    the attachment is already `available` (someone accepted it by hand), set
    `accept: false`; a `pendingAcceptance` one keeps the default `accept: true`.
-   If someone also associated it by hand, disassociate it first or import the
+   **Never flip `accept` (true to false or back) on a spoke Terraform already
+   manages, and never rename its key without a `moved` block:** destroying the
+   accepter deletes the spoke's attachment, which cuts the spoke off
+   (`destroy_guard` blocks it). If someone also associated it by hand, disassociate it first or import the
    association (`terraform import 'module.aws_network_hub.aws_ec2_transit_gateway_route_table_association.spoke["<env>"]' <tgw-rtb-id>_<tgw-attach-id>`).
 3. Apply `aws-network`. The plan is additive only: per spoke an accepter
    (when `accept`), an association and a propagation into the inspection table,

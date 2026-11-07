@@ -104,11 +104,11 @@ The following resources are created:
 
 
 - resource.aws_ec2_transit_gateway_route.vpn_onprem (modules/aws/stages/network-hub/main.tf#L375)
-- resource.aws_ec2_transit_gateway_route_table_association.spoke (modules/aws/stages/network-hub/spokes.tf#L40)
+- resource.aws_ec2_transit_gateway_route_table_association.spoke (modules/aws/stages/network-hub/spokes.tf#L42)
 - resource.aws_ec2_transit_gateway_route_table_association.vpn (modules/aws/stages/network-hub/main.tf#L359)
-- resource.aws_ec2_transit_gateway_route_table_propagation.spoke (modules/aws/stages/network-hub/spokes.tf#L49)
+- resource.aws_ec2_transit_gateway_route_table_propagation.spoke (modules/aws/stages/network-hub/spokes.tf#L51)
 - resource.aws_ec2_transit_gateway_route_table_propagation.vpn (modules/aws/stages/network-hub/main.tf#L367)
-- resource.aws_ec2_transit_gateway_vpc_attachment_accepter.spoke (modules/aws/stages/network-hub/spokes.tf#L28)
+- resource.aws_ec2_transit_gateway_vpc_attachment_accepter.spoke (modules/aws/stages/network-hub/spokes.tf#L30)
 - resource.aws_eip.nat (modules/aws/stages/network-hub/main.tf#L193)
 - resource.aws_nat_gateway.this (modules/aws/stages/network-hub/main.tf#L201)
 - resource.aws_route.egress_default (modules/aws/stages/network-hub/main.tf#L216)

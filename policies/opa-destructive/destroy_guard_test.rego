@@ -164,4 +164,12 @@ test_google_tags_tag_value_delete_denied if denied_delete("google_tags_tag_value
 
 test_google_iam_deny_policy_replace_denied if count(p.deny) == 1 with input as one("google_iam_deny_policy", ["delete", "create"])
 
+test_google_tags_tag_binding_delete_denied if denied_delete("google_tags_tag_binding")
+
+test_google_tags_location_tag_binding_delete_denied if denied_delete("google_tags_location_tag_binding")
+
+test_tgw_attachment_delete_denied if denied_delete("aws_ec2_transit_gateway_vpc_attachment")
+
+test_tgw_attachment_accepter_delete_denied if denied_delete("aws_ec2_transit_gateway_vpc_attachment_accepter")
+
 test_google_tags_tag_value_update_allowed if count(p.deny) == 0 with input as one("google_tags_tag_value", ["update"])
