@@ -154,7 +154,7 @@ graph TB
     teams["Teams"] --> api["Scheduler API"]
     api --> shard[("Scheduler DB<br/>jobs, runs, leases, outbox")]
     disp["Dispatchers x3"] -->|"lease, claim due, insert run"| shard
-    reaper["Reaper"] -->|"expired run leases"| shard
+    reaper["Reaper sweep<br/>(in the dispatchers)"] -->|"expired run leases"| shard
     shard --> relay["Outbox relay"]
     relay --> q(["run-ready queue"])
     q --> workers["Worker fleet"]
@@ -248,7 +248,8 @@ SELECT job_id, next_fire_at FROM jobs
  WHERE partition_id = $p AND enabled AND next_fire_at <= now()
  ORDER BY next_fire_at LIMIT 500
    FOR UPDATE SKIP LOCKED;
--- For each job; the app computes $next from the cron and time zone:
+-- Per job, the app computes $next in the job's time zone: the first occurrence
+-- after $due for fire_all, after max($due, now()) for fire_once and skip.
 INSERT INTO runs (job_id, scheduled_for, partition_id, attempt, max_attempts, state)
 VALUES ($job, $due, $p, 1, $max_attempts, 'QUEUED')
 ON CONFLICT (job_id, scheduled_for) DO NOTHING
@@ -316,7 +317,7 @@ GC pause causes needless takeovers.
 
 **Why 256 logical partitions.** Partitions are the unit of ownership, of
 rebalancing and of sharding. 256 gives about 85 per dispatcher at three nodes,
-and 2 per node even at 100 dispatchers. Rebalancing moves whole partitions,
+and 3 per node even at 100 dispatchers. Rebalancing moves whole partitions,
 not jobs.
 
 **Hash, not time.** `partition_id = hash(job_id) mod 256`, fixed at creation.
@@ -420,8 +421,13 @@ a non-existent time is skipped, and on fall-back a repeated time runs once
 checked 2026-11). Cloud Scheduler warns that jobs in DST zones "might observe
 execution anomalies" and recommends UTC
 ([Google Cloud docs](https://docs.cloud.google.com/scheduler/docs/configuring/cron-job-schedules),
-checked 2026-11). The unique run key makes the fall-back rule automatic: the
-same UTC instant can't fire twice.
+checked 2026-11). The unique run key does **not** enforce run-once: 01:30 in
+America/New_York is 05:30Z before the fall-back and 06:30Z after it, two
+different `scheduled_for` values. The rule lives in the next-fire computation:
+for an ambiguous local time, take the first occurrence and skip the second;
+for a non-existent one, skip it. An hourly `0 * * * *` job therefore fires at
+the first 01:00 and not again until 02:00 (two real hours later) on
+fall-back, and simply has no 02:00 run on spring-forward.
 
 **Misfire policy.** After an outage, a job may have missed several times. Per
 job:
@@ -645,7 +651,7 @@ resource "google_cloud_run_v2_worker_pool" "this" {
   name                = each.key
   location            = local.env_config.region
   deletion_protection = true
-  labels              = merge(local.labels, { service = each.key })
+  labels              = merge(local.labels, { service = each.key == "job-worker" ? "job-worker" : "scheduler" })
 
   scaling {
     scaling_mode          = "MANUAL"
@@ -763,9 +769,11 @@ worker's contract tests.
 - **"How do you guarantee a job fires exactly once?"** A unique key on
   `(job_id, scheduled_for)` inside the trigger transaction. Leases reduce
   races; the constraint resolves them.
-- **"What if a node pauses and wakes up after its lease expired?"** The lease
-  check runs in the same transaction with `FOR SHARE`, so it fails, and the
-  target rejects its lower fencing token.
+- **"What if a dispatcher pauses and wakes after its lease expired?"** Its
+  partition-lease check runs in the trigger transaction with `FOR SHARE`, so
+  the database fences it out.
+- **"And a paused worker?"** Its run-lease writes match no row, and the target
+  rejects its lower `Fencing-Token`.
 - **"Does the job run exactly once?"** No. It runs at least once; the target
   gets an idempotency key and a fencing token for effectively-once effects.
 - **"Why not keep retries in the queue?"** Delays are capped at 15 minutes
