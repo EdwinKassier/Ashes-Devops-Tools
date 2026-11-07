@@ -42,3 +42,6 @@ Task 2: fix round 1 sent to primer implementer (18:12)
 Tasks 3,4,5: writers resumed after limit reset (18:12), told GCP region = local.env_config.region
 Ruling: GCP region-scoped resources in all snippets use local.env_config.region (not local.region) — subnet and CMEK must match the service region — cost: none
 Task 2: fix round 1 committed f342691; scoped re-review dispatched
+Task 2: re-review Approved (all 8 addressed; anchors intact)
+Task 2: complete (commits 4aae741, f342691)
+Task 2: minor (deferred): data-zones bullet calls workload_cmek "the per-environment key on GCP" — should note it is a convention/gap (see CMEK source)
