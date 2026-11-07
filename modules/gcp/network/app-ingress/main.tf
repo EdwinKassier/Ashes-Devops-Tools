@@ -28,6 +28,11 @@ resource "google_compute_backend_service" "this" {
   protocol   = "HTTPS"
   enable_cdn = var.enable_cdn
 
+  # Explicit, to match the EXTERNAL_MANAGED forwarding rules below. google 8.x
+  # changed the provider default from EXTERNAL to EXTERNAL_MANAGED; pinning it
+  # keeps the scheme independent of the provider major.
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+
   # Access logging on for the front door.
   log_config {
     enable      = true

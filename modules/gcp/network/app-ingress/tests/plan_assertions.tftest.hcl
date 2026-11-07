@@ -32,6 +32,13 @@ run "front_door_is_secure_by_default" {
     error_message = "the backend service must use HTTPS."
   }
 
+  # Backend and forwarding rules share one scheme, independent of the provider
+  # default (EXTERNAL on google 7.x, EXTERNAL_MANAGED on 8.x).
+  assert {
+    condition     = google_compute_backend_service.this.load_balancing_scheme == "EXTERNAL_MANAGED" && google_compute_global_forwarding_rule.https.load_balancing_scheme == "EXTERNAL_MANAGED"
+    error_message = "the backend service must use EXTERNAL_MANAGED, matching its forwarding rules."
+  }
+
   # HTTP listener redirects to HTTPS, so nothing is served in plaintext.
   assert {
     condition     = google_compute_url_map.redirect.default_url_redirect[0].https_redirect == true
