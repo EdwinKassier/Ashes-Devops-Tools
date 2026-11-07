@@ -72,6 +72,8 @@ module "aws_network_hub" {
   enable_vpn = local.enable_vpn
   vpn        = local.vpn
 
+  spoke_attachments = local.spoke_attachments
+
   enforce_egress_allowlist                  = local.enforce_egress_allowlist
   egress_alert_only_waived                  = local.egress_alert_only_waived
   network_firewall_egress_domain_allowlist  = local.network_firewall_egress_domain_allowlist

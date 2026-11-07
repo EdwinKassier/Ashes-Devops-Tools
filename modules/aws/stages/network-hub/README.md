@@ -103,16 +103,19 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_ec2_transit_gateway_route.vpn_onprem (modules/aws/stages/network-hub/main.tf#L364)
-- resource.aws_ec2_transit_gateway_route_table_association.vpn (modules/aws/stages/network-hub/main.tf#L348)
-- resource.aws_ec2_transit_gateway_route_table_propagation.vpn (modules/aws/stages/network-hub/main.tf#L356)
-- resource.aws_eip.nat (modules/aws/stages/network-hub/main.tf#L182)
-- resource.aws_nat_gateway.this (modules/aws/stages/network-hub/main.tf#L190)
-- resource.aws_route.egress_default (modules/aws/stages/network-hub/main.tf#L205)
-- resource.aws_route.egress_tgw_default (modules/aws/stages/network-hub/main.tf#L215)
-- resource.aws_route.hub_to_tgw (modules/aws/stages/network-hub/main.tf#L237)
-- resource.aws_route.inspection_tgw_to_firewall (modules/aws/stages/network-hub/main.tf#L229)
-- resource.terraform_data.production_egress_enforced (modules/aws/stages/network-hub/main.tf#L400)
+- resource.aws_ec2_transit_gateway_route.vpn_onprem (modules/aws/stages/network-hub/main.tf#L375)
+- resource.aws_ec2_transit_gateway_route_table_association.spoke (modules/aws/stages/network-hub/spokes.tf#L40)
+- resource.aws_ec2_transit_gateway_route_table_association.vpn (modules/aws/stages/network-hub/main.tf#L359)
+- resource.aws_ec2_transit_gateway_route_table_propagation.spoke (modules/aws/stages/network-hub/spokes.tf#L49)
+- resource.aws_ec2_transit_gateway_route_table_propagation.vpn (modules/aws/stages/network-hub/main.tf#L367)
+- resource.aws_ec2_transit_gateway_vpc_attachment_accepter.spoke (modules/aws/stages/network-hub/spokes.tf#L28)
+- resource.aws_eip.nat (modules/aws/stages/network-hub/main.tf#L193)
+- resource.aws_nat_gateway.this (modules/aws/stages/network-hub/main.tf#L201)
+- resource.aws_route.egress_default (modules/aws/stages/network-hub/main.tf#L216)
+- resource.aws_route.egress_tgw_default (modules/aws/stages/network-hub/main.tf#L226)
+- resource.aws_route.hub_to_tgw (modules/aws/stages/network-hub/main.tf#L248)
+- resource.aws_route.inspection_tgw_to_firewall (modules/aws/stages/network-hub/main.tf#L240)
+- resource.terraform_data.production_egress_enforced (modules/aws/stages/network-hub/main.tf#L411)
 
 
 ## Inputs
@@ -142,6 +145,7 @@ The following resources are created:
 | <a name="input_network_firewall_suricata_rules"></a> [network\_firewall\_suricata\_rules](#input\_network\_firewall\_suricata\_rules) | Optional custom Suricata rules (STRICT\_ORDER semantics) evaluated after the managed threat groups. Empty (default) = none. | `string` | `""` | no |
 | <a name="input_private_hosted_zone_name"></a> [private\_hosted\_zone\_name](#input\_private\_hosted\_zone\_name) | Name of the shared Route 53 private hosted zone for split-horizon DNS in the egress VPC. Empty string skips creating the zone. | `string` | `""` | no |
 | <a name="input_regional_cidrs"></a> [regional\_cidrs](#input\_regional\_cidrs) | Map of region to the CIDR each regional IPAM pool provisions. Every CIDR should fall within top\_cidr. | `map(string)` | <pre>{<br/>  "eu-west-2": "10.0.0.0/12"<br/>}</pre> | no |
+| <a name="input_spoke_attachments"></a> [spoke\_attachments](#input\_spoke\_attachments) | Workload spoke attachments to the shared transit gateway, keyed by a plan-known name (usually the environment). attachment\_id is the aws-workload-<env> output tgw\_attachment\_id (created in the workload account, so the hub only learns it once that workload has applied). segment is prod or nonprod: the attachment is associated with that route table (whose 0.0.0.0/0 goes to inspection) and propagated into the inspection route table so inspected traffic, egress replies and on-premises traffic reach the spoke. accept = true (default) accepts the cross-account attachment (the TGW does not auto-accept shared attachments); set false for an attachment that is already accepted. A non-empty map also adds the hub routes the spokes need: inspection 0.0.0.0/0 to the egress attachment and shared top\_cidr to the inspection attachment (egress replies are inspected too). Empty (default): no change. | <pre>map(object({<br/>    attachment_id = string<br/>    segment       = string<br/>    accept        = optional(bool, true)<br/>  }))</pre> | `{}` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to the stage's own taggable resources (NAT gateways, EIPs) and passed to every child module (hub VPCs, IPAM, TGW, Network Firewall, endpoints, Resolver, Network Access Analyzer). Org-wide tags normally come from the provider default\_tags; use this for stage-specific additions. | `map(string)` | `{}` | no |
 | <a name="input_top_cidr"></a> [top\_cidr](#input\_top\_cidr) | CIDR of the top-level supernet owned by the top IPAM pool. | `string` | `"10.0.0.0/8"` | no |
 | <a name="input_vpn"></a> [vpn](#input\_vpn) | Site-to-Site VPN settings, used only when enable\_vpn is true. customer\_gateway\_ip is the public IPv4 of the on-premises device; customer\_gateway\_bgp\_asn its BGP ASN (not the transit gateway's 64512). static\_routes\_only = true uses static routing: then onprem\_cidrs (the on-premises prefixes) is required and becomes static routes to the VPN in the inspection route table; with BGP the routes propagate and onprem\_cidrs is ignored. tunnel\_inside\_cidrs is empty (AWS-assigned) or two /30s in 169.254.0.0/16. preshared\_key\_storage is SecretsManager (default; the keys stay out of state and the stage outputs the secret ARN) or Standard (keys in state). | <pre>object({<br/>    customer_gateway_ip      = optional(string)<br/>    customer_gateway_bgp_asn = optional(number, 65000)<br/>    static_routes_only       = optional(bool, false)<br/>    onprem_cidrs             = optional(list(string), [])<br/>    tunnel_inside_cidrs      = optional(list(string), [])<br/>    enable_acceleration      = optional(bool, false)<br/>    preshared_key_storage    = optional(string, "SecretsManager")<br/>  })</pre> | `{}` | no |
@@ -157,8 +161,9 @@ The following resources are created:
 | <a name="output_interface_endpoint_phz_id"></a> [interface\_endpoint\_phz\_id](#output\_interface\_endpoint\_phz\_id) | Zone ID of the shared private hosted zone fronting the interface endpoints, or null when no zone was created. |
 | <a name="output_ipam_pool_ids"></a> [ipam\_pool\_ids](#output\_ipam\_pool\_ids) | Map of region to the ID of its regional IPAM pool, consumed by app roots to allocate VPC CIDRs. |
 | <a name="output_resolver_profile_id"></a> [resolver\_profile\_id](#output\_resolver\_profile\_id) | The ID of the Route 53 Profile shared org-wide over RAM. |
+| <a name="output_spoke_attachment_route_tables"></a> [spoke\_attachment\_route\_tables](#output\_spoke\_attachment\_route\_tables) | Map of spoke\_attachments key to the TGW route table its attachment is associated with (prod or nonprod segment); every listed spoke also propagates into the inspection route table. |
 | <a name="output_tgw_id"></a> [tgw\_id](#output\_tgw\_id) | The ID of the transit gateway (the network cross-root routing contract). |
-| <a name="output_tgw_inspection_routes"></a> [tgw\_inspection\_routes](#output\_tgw\_inspection\_routes) | The centralized-inspection routing contract fed to the transit gateway: the segment default routes (0.0.0.0/0) pointed at the inspection attachment so prod and nonprod traffic is forced through the firewall. |
+| <a name="output_tgw_inspection_routes"></a> [tgw\_inspection\_routes](#output\_tgw\_inspection\_routes) | The centralized-inspection routing contract fed to the transit gateway: the segment default routes (0.0.0.0/0) pointed at the inspection attachment so prod and nonprod traffic is forced through the firewall, plus (with spoke\_attachments) inspection 0.0.0.0/0 to egress and shared top\_cidr to inspection. |
 | <a name="output_vpn_connection_id"></a> [vpn\_connection\_id](#output\_vpn\_connection\_id) | ID of the Site-to-Site VPN connection, or null when enable\_vpn = false. |
 | <a name="output_vpn_preshared_key_arn"></a> [vpn\_preshared\_key\_arn](#output\_vpn\_preshared\_key\_arn) | ARN of the Secrets Manager secret holding the VPN tunnel pre-shared keys (read it to configure the on-premises device), or null when enable\_vpn = false or vpn.preshared\_key\_storage = Standard. |
 | <a name="output_vpn_tunnel_addresses"></a> [vpn\_tunnel\_addresses](#output\_vpn\_tunnel\_addresses) | AWS-side public IPs of the two VPN tunnels (configure these on the on-premises device), or an empty list when enable\_vpn = false. |

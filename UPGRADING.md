@@ -290,10 +290,47 @@ explicitly if you relied on that. A supplied `kms_key_arn` is unaffected.
 `aws.network.vpn.enabled` adds a Site-to-Site VPN attached to the Transit
 Gateway, with a new `hybrid` TGW route table that default-routes to the
 inspection VPC. On-premises routes propagate into the `inspection` table only,
-so traffic to and from on-premises is inspected both ways. Tunnel pre-shared
+so on-premises traffic to and from a spoke is routed through inspection in both
+directions **once that spoke is wired** with `aws.network.spoke_attachments`
+(see the next entry); an unwired spoke has no route to or from on-premises. Tunnel pre-shared
 keys are stored in Secrets Manager (`vpn_preshared_key_arn` output), not in
 state, unless you set `preshared_key_storage = "Standard"`. Off by default: no
 plan change when unset.
+
+#### aws-network: workload spoke routing wired from config (fixes unrouted spokes)
+
+**Before this release no workload spoke was routed.** `aws-workload-<env>`
+creates its TGW attachment with default association/propagation off, and nothing
+accepted, associated or propagated it, so spokes had no egress, no egress
+replies and no on-premises path. New `aws.network.spoke_attachments` (aws-network
+variable `spoke_attachments`, default empty: no plan change) lists each spoke:
+
+```yaml
+aws:
+  network:
+    spoke_attachments:
+      dev:  {attachment_id: tgw-attach-..., segment: nonprod}
+      prod: {attachment_id: tgw-attach-..., segment: prod}
+```
+
+**Manual steps (estates with spokes):**
+
+1. Read each `aws-workload-<env>` output `tgw_attachment_id` (new root output;
+   or `aws ec2 describe-transit-gateway-attachments` in the network account).
+2. Add it under `aws.network.spoke_attachments` with the spoke's segment. If
+   the attachment is already `available` (someone accepted it by hand), set
+   `accept: false`; a `pendingAcceptance` one keeps the default `accept: true`.
+   If someone also associated it by hand, disassociate it first or import the
+   association (`terraform import 'module.aws_network_hub.aws_ec2_transit_gateway_route_table_association.spoke["<env>"]' <tgw-rtb-id>_<tgw-attach-id>`).
+3. Apply `aws-network`. The plan is additive only: per spoke an accepter
+   (when `accept`), an association and a propagation into the inspection table,
+   plus two hub routes once (`inspection 0.0.0.0/0 → egress`,
+   `shared <top_cidr> → inspection`).
+
+A new spoke needs the same step after its first workload apply
+(`docs/runbooks/aws-add-account.md`). With `enable_network_firewall = false`
+(the `starter` profile) the inspection VPC has no forwarding route, so wired
+spokes still have no egress; see `docs/known-gaps.md`.
 
 #### AWS org trail managed by the CloudTrail delegated administrator (opt-in)
 

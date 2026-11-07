@@ -60,7 +60,18 @@ locals {
     },
     # On-premises traffic is default-routed to inspection too (hybrid table).
     var.enable_vpn ? { "hybrid:default" = { route_table = "hybrid", cidr = "0.0.0.0/0", attachment = "inspection" } } : {},
+    local.spoke_hub_routes,
   )
+
+  # Hub routes the workload spokes need (spokes.tf); added only once a spoke is
+  # wired so an estate without spoke_attachments plans no change.
+  spoke_hub_routes = length(var.spoke_attachments) > 0 ? {
+    # Inspected internet-bound traffic leaves through the egress VPC (NAT).
+    "inspection:default" = { route_table = "inspection", cidr = "0.0.0.0/0", attachment = "egress" }
+    # NAT replies to the spokes (egress sits in the shared segment) go back
+    # through inspection, so egress is inspected in both directions.
+    "shared:spokes" = { route_table = "shared", cidr = var.top_cidr, attachment = "inspection" }
+  } : {}
 }
 
 # ---------------------------------------------------------------------------

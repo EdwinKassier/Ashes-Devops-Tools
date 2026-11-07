@@ -36,6 +36,9 @@ locals {
     # is a plain conditional; the stage's variable type validates the shape.
     enable_vpn = try(tobool(local.lz.aws.network.vpn.enabled), null)
     vpn        = try(jsonencode(local.lz.aws.network.vpn), null)
+    # aws.network.spoke_attachments: workload spokes the hub accepts, associates
+    # and propagates (JSON text for the same reason as vpn).
+    spoke_attachments = try(jsonencode(local.lz.aws.network.spoke_attachments), null)
     # aws.workload_environments production flags (unset = keys prod/production).
     workload_production = try([
       for k, e in local.lz.aws.workload_environments : k
@@ -78,4 +81,6 @@ locals {
   # Opt-in hybrid connectivity (default off: no VPN).
   enable_vpn = coalesce(var.enable_vpn, local.cfg.enable_vpn, false)
   vpn        = jsondecode(var.vpn != null ? jsonencode(var.vpn) : coalesce(local.cfg.vpn, "{}"))
+  # Workload spoke routing (default none: no change).
+  spoke_attachments = jsondecode(var.spoke_attachments != null ? jsonencode(var.spoke_attachments) : coalesce(local.cfg.spoke_attachments, "{}"))
 }

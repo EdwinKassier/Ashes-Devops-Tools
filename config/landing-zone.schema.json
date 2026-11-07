@@ -1421,6 +1421,32 @@
             "egress_alert_only_waived": {
               "type": "boolean"
             },
+            "spoke_attachments": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "attachment_id": {
+                    "type": "string",
+                    "pattern": "^tgw-attach-[0-9a-f]{8,17}$"
+                  },
+                  "segment": {
+                    "enum": [
+                      "prod",
+                      "nonprod"
+                    ]
+                  },
+                  "accept": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "attachment_id",
+                  "segment"
+                ],
+                "additionalProperties": false
+              }
+            },
             "vpn": {
               "type": "object",
               "properties": {

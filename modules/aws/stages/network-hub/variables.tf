@@ -262,3 +262,31 @@ variable "vpn" {
     error_message = "vpn.preshared_key_storage must be SecretsManager or Standard."
   }
 }
+
+variable "spoke_attachments" {
+  description = <<-EOT
+    Workload spoke attachments to the shared transit gateway, keyed by a plan-known name (usually the environment). attachment_id is the aws-workload-<env> output tgw_attachment_id (created in the workload account, so the hub only learns it once that workload has applied). segment is prod or nonprod: the attachment is associated with that route table (whose 0.0.0.0/0 goes to inspection) and propagated into the inspection route table so inspected traffic, egress replies and on-premises traffic reach the spoke. accept = true (default) accepts the cross-account attachment (the TGW does not auto-accept shared attachments); set false for an attachment that is already accepted. A non-empty map also adds the hub routes the spokes need: inspection 0.0.0.0/0 to the egress attachment and shared top_cidr to the inspection attachment (egress replies are inspected too). Empty (default): no change.
+  EOT
+  type = map(object({
+    attachment_id = string
+    segment       = string
+    accept        = optional(bool, true)
+  }))
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = alltrue([for k, s in var.spoke_attachments : contains(["prod", "nonprod"], s.segment)])
+    error_message = "spoke_attachments[*].segment must be prod or nonprod."
+  }
+
+  validation {
+    condition     = alltrue([for k, s in var.spoke_attachments : can(regex("^tgw-attach-[0-9a-f]{8,17}$", s.attachment_id))])
+    error_message = "spoke_attachments[*].attachment_id must be a transit gateway attachment ID (tgw-attach-...), the aws-workload-<env> output tgw_attachment_id."
+  }
+
+  validation {
+    condition     = length(distinct([for s in values(var.spoke_attachments) : s.attachment_id])) == length(var.spoke_attachments)
+    error_message = "spoke_attachments must not list the same attachment_id twice (an attachment associates with exactly one route table)."
+  }
+}

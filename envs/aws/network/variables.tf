@@ -298,3 +298,13 @@ variable "vpn" {
   type        = any
   default     = null
 }
+
+variable "spoke_attachments" {
+  description = "Workload spoke attachments the hub accepts, associates with their segment table (prod or nonprod) and propagates into the inspection table: map of name to {attachment_id, segment, accept (default true)}. attachment_id is the aws-workload-<env> output tgw_attachment_id. Null = aws.network.spoke_attachments from config/landing-zone.yaml, else none. See docs/architecture/aws-landing-zone.md."
+  type = map(object({
+    attachment_id = string
+    segment       = string
+    accept        = optional(bool, true)
+  }))
+  default = null
+}

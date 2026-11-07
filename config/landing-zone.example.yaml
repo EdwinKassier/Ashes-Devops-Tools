@@ -369,6 +369,15 @@ aws:
     stateful_default_actions:
       - aws:drop_established
       - aws:alert_established
+    # Workload spokes wired into the hub (aws-network): accepted, associated with
+    # their segment table (prod | nonprod; 0.0.0.0/0 goes to inspection) and
+    # propagated into the inspection table. Until a spoke is listed it has NO
+    # routing. After an aws-workload-<env> first apply, copy its output
+    # tgw_attachment_id here and apply aws-network. accept: false for an
+    # attachment someone already accepted.
+    # spoke_attachments:
+    #   dev:  {attachment_id: tgw-attach-0123456789abcdef0, segment: nonprod}
+    #   prod: {attachment_id: tgw-attach-0fedcba9876543210, segment: prod}
 
   # Application golden path (aws-workload-<env>). All optional.
   # internal (default) | public_alb (internet-facing ALB + regional WAF; needs

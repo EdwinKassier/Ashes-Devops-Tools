@@ -128,9 +128,11 @@ module "vpc" {
 # Attaches the spoke VPC to the SHARED transit gateway (var.tgw_id) that the
 # network account shared into this account over RAM. This attachment resource is
 # created IN THE WORKLOAD ACCOUNT (that is where the VPC and its tgw-tier subnets
-# live); the network account owns the TGW and manages its route-table
-# association/propagation. So both default-route-table flags are false here —
-# the workload never touches the hub's segment routing.
+# live); the network account owns the TGW, so only it can accept the attachment
+# and associate/propagate it: aws-network does that from
+# aws.network.spoke_attachments.<env> (fed from this root's tgw_attachment_id
+# output; until then the spoke has no routing). So both default-route-table
+# flags are false here — the workload never touches the hub's segment routing.
 #
 # Skipped entirely when tgw_id = null (standalone spoke, no aws-network layer).
 # ---------------------------------------------------------------------------
