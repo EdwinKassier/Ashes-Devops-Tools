@@ -119,8 +119,8 @@ is 60 requests in flight: AZ spread, not load, sets the replica count.
 | Endpoint | Caller | Purpose | Notes |
 |---|---|---|---|
 | `POST /orders` | client | Create an order in `PENDING`. | Requires an `Idempotency-Key` header. Returns `202` with the order ID and `version`. |
-| `GET /orders/{id}` | client | Current status of one order. | Served by order-view; falls back to orders for the caller's own just-created order. |
-| `GET /customers/{id}/orders` | client | Order history. | order-view only. |
+| `GET /orders/{id}` | client | Current status of one order. | A point read on orders, the owner. |
+| `GET /customers/{id}/orders` | client | Order history. | order-view, the read model. |
 | `GET /inventory/availability?sku=` | orders | Soft stock check before accepting. | 50 ms timeout. On timeout or error, orders accepts and lets the reservation decide. |
 
 The idempotency key is unique on the order row, so a retry returns the
@@ -168,7 +168,7 @@ producer and a subscription per consumer.
 | Table | Owner | Key | Access pattern |
 |---|---|---|---|
 | `orders` | orders | `order_id`; unique `idempotency_key` | Point read and update by ID; the saga state lives here. |
-| `outbox` | orders (and every producer) | `event_id`; index on `(published_at IS NULL, created_at)` | Insert in the business transaction; the relay scans unpublished rows oldest first. |
+| `outbox` | orders (and every producer) | `id`; partial index on `(created_at) WHERE published_at IS NULL` | Insert in the business transaction; the relay scans unpublished rows oldest first. |
 | `processed_events` | every consumer | `(consumer, event_id)` | Insert in the consumer's transaction; a conflict means "already done". |
 | `reservations` | inventory | `(order_id, sku)` | Created by `StockReservationRequested`, deleted by `StockReleaseRequested`. |
 | `order_view` | order-view | `order_id`; secondary `(customer_id, created_at)` | Upsert per event if `aggregate_version` is newer; list by customer. |
@@ -279,10 +279,23 @@ exactly-once**, and consumers must be idempotent.
 BEGIN;
 INSERT INTO orders (order_id, status, version, idempotency_key)
   VALUES ('ord_8K2N4', 'PENDING', 1, 'idem_51');
-INSERT INTO outbox (event_id, aggregate_type, aggregate_id, type, payload, created_at)
+INSERT INTO outbox (id, aggregatetype, aggregateid, type, payload, created_at)
   VALUES (gen_random_uuid(), 'order', 'ord_8K2N4', 'OrderPlaced', '{}', now());
 COMMIT;
+
+-- Relay, one batch: claim, publish (in application code), mark, commit.
+BEGIN;
+SELECT id, aggregatetype, aggregateid, type, payload FROM outbox
+  WHERE published_at IS NULL ORDER BY created_at LIMIT 500 FOR UPDATE SKIP LOCKED;
+-- publish each row to the broker, then:
+UPDATE outbox SET published_at = now() WHERE id = ANY($1);
+COMMIT;
+-- A daily job deletes rows published more than three days ago.
 ```
+
+The column names are Debezium's outbox-router defaults (`id`, `aggregatetype`,
+`aggregateid`, `type`, `payload`), so a later move to CDC needs no remapping.
+The envelope's `event_id` is the outbox `id`.
 
 **Two ways to build the relay.**
 
@@ -301,11 +314,12 @@ checked 2026-11) or `cloudsql.logical_decoding` on Cloud SQL
 checked 2026-11). A replication slot keeps the WAL it needs even with no
 consumer connected, which in extreme cases can shut the database down
 ([PostgreSQL docs](https://www.postgresql.org/docs/current/logicaldecoding-explanation.html),
-checked 2026-11). Debezium's outbox router expects an append-only table with
-`id`, `aggregatetype` and `aggregateid` columns
+checked 2026-11). Debezium's outbox router reads an append-only table whose
+default columns match the one above, routes by `aggregatetype` and keys by
+`aggregateid`; other names need `table.field.event.id`,
+`table.field.event.key` and `route.by.field`
 ([Debezium docs](https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html),
-checked 2026-11); the table above matches it, so moving to CDC later needs no
-schema change.
+checked 2026-11).
 
 **Why polling wins here.** At 1,200 events a second, a relay polling every
 100 ms in batches of 500 has ample headroom and adds no infrastructure. Move to
@@ -337,12 +351,9 @@ operations, not rollbacks.
 | **Managed engine**: Step Functions or Workflows | Execution history, built-in retries and timeouts. | Another place where state lives; still needs idempotent steps. |
 
 Step Functions Standard workflows run up to one year with exactly-once
-execution; Express workflows run up to five minutes, at-least-once when
-asynchronous
+execution
 ([AWS docs](https://docs.aws.amazon.com/step-functions/latest/dg/choosing-workflow-type.html),
-checked 2026-11). Google Cloud Workflows executions also run up to one year
-([Google Cloud docs](https://docs.cloud.google.com/workflows/quotas), checked 2026-11).
-Choose an engine when the flow has many steps, long waits or human approvals.
+checked 2026-11), so choose an engine for long, many-step flows.
 
 ```mermaid
 stateDiagram-v2
@@ -385,17 +396,20 @@ checked 2026-11). The outbox can publish twice anyway. No broker setting
 removes the need for an idempotent consumer.
 
 In the consumer's own transaction, insert `(consumer, event_id)` into
-`processed_events` **and** apply the side effect. A key conflict means the
-event was already handled: acknowledge and stop.
+`processed_events` **and** apply the side effect. The application checks each
+statement's result: a duplicate rolls back and acknowledges.
 
 ```sql
 BEGIN;
 INSERT INTO processed_events (consumer, event_id) VALUES ('inventory', $1)
-  ON CONFLICT DO NOTHING; -- 0 rows inserted: duplicate, so ack and stop
-UPDATE stock SET reserved = reserved + $2 WHERE sku = $3 AND available >= $2;
-INSERT INTO outbox (event_id, aggregate_type, aggregate_id, type, payload, created_at)
-  VALUES (gen_random_uuid(), 'order', $4, 'StockReserved', $5, now());
-COMMIT;
+  ON CONFLICT DO NOTHING RETURNING event_id;
+-- App: no row returned => duplicate. ROLLBACK, acknowledge, stop.
+UPDATE stock SET available = available - $2, reserved = reserved + $2
+  WHERE sku = $3 AND available >= $2 RETURNING sku;
+-- App: one row => type = 'StockReserved'; no row => type = 'StockReservationFailed'.
+INSERT INTO outbox (id, aggregatetype, aggregateid, type, payload, created_at)
+  VALUES (gen_random_uuid(), 'order', $4, $5, $6, now());
+COMMIT; -- then acknowledge the message
 ```
 
 - **Retention.** Keep `processed_events` longer than any redelivery or replay
@@ -494,8 +508,6 @@ shard, or use a distributed store with a change stream, and a partitioned log
 | Per-consumer backlog | SQS queue subscribed to the topic | Pub/Sub subscription | AWS fan-out takes two services; on GCP the subscription is the queue. |
 | Retries and DLQ | `maxReceiveCount`, redrive to a DLQ | `dead_letter_policy`, 5–100 attempts ([Google Cloud docs](https://docs.cloud.google.com/pubsub/docs/handling-failures), checked 2026-11) | Pub/Sub's service agent needs publisher on the DLQ topic and subscriber on the source subscription. |
 | Processing time limit | Visibility timeout 30 s default, 12 hours max ([AWS docs](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/quotas-messages.html), checked 2026-11) | Ack deadline 10–600 s ([Google Cloud docs](https://docs.cloud.google.com/pubsub/docs/lease-management), checked 2026-11) | Push subscriptions cannot extend the deadline per message. |
-| Content routing (alternative) | EventBridge: 5 targets per rule, PutEvents 10,000/s in us-east-1 ([AWS docs](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-quota.html), checked 2026-11) | Eventarc | For many event types routed by content. |
-| Saga engine (alternative) | Step Functions | Workflows | See the saga deep dive. |
 | Schema enforcement | None at the broker | Pub/Sub topic schemas | GCP rejects bad messages at publish; AWS cannot. |
 
 Two differences change the design:
@@ -549,11 +561,15 @@ aws:
           autoscaling_max_capacity: 20
           database:
             instance_count: 2
+          task_role_policy_json: >-
+            {"Version":"2012-10-17","Statement":[
+            {"Effect":"Allow","Action":"sns:Publish","Resource":"arn:aws:sns:REGION:ACCOUNT_ID:prod-orders-events"},
+            {"Effect":"Allow","Action":["kms:GenerateDataKey","kms:Decrypt"],"Resource":"WORKLOAD_KMS_KEY_ARN"}]}
         inventory:
           path_patterns: ["/inventory", "/inventory/*"]
           database: {}
         order-view:
-          path_patterns: ["/order-view/*"]
+          path_patterns: ["/customers/*"]
           database: {}
 gcp:
   environments:
@@ -631,6 +647,14 @@ resource "aws_sqs_queue" "inventory_orders" {
   tags = { Service = "inventory" }
 }
 
+resource "aws_sqs_queue_policy" "inventory_orders_dlq" {
+  queue_url = aws_sqs_queue.inventory_orders_dlq.id
+  policy = jsonencode({ Version = "2012-10-17", Statement = [{
+    Sid = "DenyInsecureTransport", Effect = "Deny", Principal = "*", Action = "sqs:*",
+    Resource = aws_sqs_queue.inventory_orders_dlq.arn, Condition = { Bool = { "aws:SecureTransport" = "false" } }
+  }] })
+}
+
 resource "aws_sqs_queue_policy" "inventory_orders" {
   queue_url = aws_sqs_queue.inventory_orders.id
   policy = jsonencode({
@@ -663,26 +687,15 @@ resource "aws_sns_topic_subscription" "inventory_orders" {
   raw_message_delivery = true
   filter_policy        = jsonencode({ type = ["StockReservationRequested", "StockReleaseRequested"] })
 }
-
-resource "aws_iam_role_policy" "orders_publish" {
-  name = "orders-events-publish"
-  role = split("/", module.app_services.services["orders"].task_role_arn)[1] # <env>-orders-task
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      { Effect = "Allow", Action = "sns:Publish", Resource = aws_sns_topic.orders_events.arn },
-      { Effect = "Allow", Action = ["kms:GenerateDataKey", "kms:Decrypt"], Resource = local.kms_key_arn },
-    ]
-  })
-}
 ```
 
 The consumer queue is raw because app-services' queue policy only denies
 non-TLS access, and a queue has one policy, so it cannot also admit SNS without
-a module change. The inventory task role gets a matching inline policy
-(`sqs:ReceiveMessage`, `DeleteMessage`, `ChangeMessageVisibility` on this queue,
-and `kms:Decrypt`). Both roles already carry the `tfc-apply-boundary` from
-app-services. Alarm on the raw DLQ, as app-services does for its own.
+a module change. Task-role grants go through `task_role_policy_json` in the
+config: orders publishes, and inventory gets `sqs:ReceiveMessage`,
+`DeleteMessage` and `ChangeMessageVisibility` on this queue plus
+`kms:Decrypt`. app-services attaches them under the `tfc-apply-boundary`.
+Alarm on the raw DLQ, as app-services does for its own.
 
 ### GCP: one consumer subscription on the orders topic
 
@@ -694,8 +707,7 @@ against google v8.10.0
 checked 2026-11).
 
 ```hcl
-# Gap: app-services gives a service one subscription to its own topic; a
-# cross-service consumer is a raw push subscription in the landing zone's conventions.
+# Gap: app-services subscribes a service only to its own topic; raw push subscription in the landing zone's conventions.
 resource "google_service_account" "inventory_push" {
   project      = local.env_config.host_project_id
   account_id   = "inventory-push" # signs push requests to inventory; nothing else
@@ -729,6 +741,10 @@ resource "google_pubsub_subscription" "inventory_orders" {
     minimum_backoff = "10s"
     maximum_backoff = "600s"
   }
+
+  expiration_policy {
+    ttl = "" # never expire; the default deletes it after 31 idle days
+  }
 }
 
 # The service agent acks forwarded dead letters; app-services already lets it publish to inventory-dlq.
@@ -744,8 +760,10 @@ resource "google_pubsub_subscription_iam_member" "inventory_orders_agent" {
 ([Per-component identity](00-primer.md#per-component-identity)) and gets
 `roles/run.invoker` on inventory alone, through `invoker_members` above.
 Create the subscription after inventory's first revision is ready, or early
-pushes fail and back off. **Verify before relying on** whether older projects
-also need the Pub/Sub service agent granted Token Creator on `inventory-push`.
+pushes fail and back off. The Pub/Sub service agent needs Token Creator only
+if it was enabled on or before 8 April 2021; otherwise it has it by default
+([Google Cloud docs](https://docs.cloud.google.com/eventarc/standard/docs/run/pubsub-authenticated),
+checked 2026-11). Landing-zone projects are newer, so no grant is needed.
 
 ## Runbook
 
@@ -791,21 +809,9 @@ seconds. Put broker quotas into capacity planning. Game-day a stopped relay.
 
 ### A consumer's dead-letter queue is filling
 
-**Detection signal.** `ApproximateNumberOfMessagesVisible` above zero on
-`<env>-inventory-orders-dlq`, or `subscription/dead_letter_message_count` on
-`inventory-orders-sub`.
-
-**Triage.** One poison event (bad payload, unknown `schema_version`) or every
-event (a broken deploy, a dependency down)? Check the consumer's last deploy.
-
-**Mitigation.** Roll back a broken deploy, or fix the consumer for a poison
-event. Then redrive: SQS DLQ redrive to the source queue, or replay the
-`inventory-dlq-sub` messages. Idempotency makes redrive safe to repeat.
-
-**Verification.** The DLQ is empty and the affected orders have moved on.
-
-**Follow-up.** Add the payload to contract tests; add a schema compatibility
-check to the producer's CI if a schema change caused it.
+**Detection:** a non-empty `<env>-inventory-orders-dlq` or a rising `subscription/dead_letter_message_count`. **Triage:** one poison event, or every event after a deploy?
+**Mitigation:** roll back or fix the consumer, then redrive (SQS DLQ redrive, or replay `inventory-dlq-sub`); idempotency makes it safe.
+**Verification and follow-up:** the DLQ is empty; add the payload to contract tests.
 
 ## Study aids
 
@@ -819,7 +825,7 @@ check to the producer's CI if a schema change caused it.
 | SQS | Visibility 30 s default, 12 h max; retention 4 days default, 14 max; FIFO dedup 5 minutes |
 | Pub/Sub | Ack deadline 10–600 s; 5–100 dead-letter attempts; 10 MB messages; topic retention up to 31 days |
 | Pub/Sub exactly-once | Pull only, same-region subscribers |
-| Step Functions | Standard 1 year, exactly-once; Express 5 minutes |
+| Step Functions Standard | Up to 1 year, exactly-once |
 | This design's peak | 200 orders/s, 1,200 events/s, 3,600 deliveries/s |
 
 ### Likely follow-ups
@@ -846,14 +852,11 @@ check to the producer's CI if a schema change caused it.
 - Treating "exactly-once delivery" as a substitute for idempotency.
 - Requiring global ordering, then fighting FIFO limits.
 - Sagas without compensations or timeouts.
-- Services reading each other's databases.
-- Breaking an event schema in place.
-- No DLQ alarm.
+- Services reading each other's databases; no DLQ alarm.
 
 ### Further reading
 
 - [PostgreSQL `SKIP LOCKED`](https://www.postgresql.org/docs/current/sql-select.html)
-- [Debezium outbox event router](https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html)
 - [SNS fan-out to SQS](https://docs.aws.amazon.com/sns/latest/dg/sns-sqs-as-subscriber.html)
 - [Pub/Sub exactly-once delivery](https://docs.cloud.google.com/pubsub/docs/exactly-once-delivery)
 - The primer's [service map](00-primer.md#aws-gcp-service-map).
