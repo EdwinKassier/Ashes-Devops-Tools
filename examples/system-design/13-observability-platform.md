@@ -132,9 +132,11 @@ errors (about 1%), slow traces (about 1%) and a 5% baseline keeps **7%**, about
 checked 2026-11), so the default would evict traces before deciding. Set it
 to at least 400,000 across the tier.
 
-**Collector fleet.** Assume 10,000 spans a second per vCPU (**verify before
-relying on**: it depends on the processors). The peak needs 30 vCPU; to survive
-losing one of three zones, provision 30 × 3/2 = **45 vCPU**.
+**Collector fleet.** Spans are not the only load: 300,000 log lines and
+333,000 metric samples a second also pass through, about 933,000 items a second
+at peak. Assume 10,000 items a second per vCPU (**verify before relying on**:
+it depends on the processors). The peak needs about 93 vCPU; to survive losing
+one of three zones, provision 93 × 3/2 ≈ **140 vCPU**.
 
 ## API and data model
 
@@ -263,8 +265,9 @@ checked 2026-11), each billed per metric-month
 the wrong home for high-cardinality application metrics. Cloud Monitoring allows 200 labels per Prometheus metric
 and 1 million active series per monitored resource
 ([Google Cloud docs](https://docs.cloud.google.com/monitoring/quotas), checked
-2026-11). AMP allows 150 labels per series and 7 KB of labels, and it
-throttles a workspace that more than doubles its 30-minute baseline
+2026-11). AMP allows 150 labels per series and 7 KB of labels, and it can
+throttle a workspace that doubles its 30-minute baseline or grows 10 million
+series above it, whichever comes first
 ([AWS docs](https://docs.aws.amazon.com/prometheus/latest/userguide/AMP_quotas.html),
 checked 2026-11). A cardinality explosion therefore becomes an outage of
 *every team's* metrics, not just the offender's.
@@ -274,7 +277,7 @@ checked 2026-11). A cardinality explosion therefore becomes an outage of
 1. **Trust developers and review dashboards.** The explosion arrives in a
    deploy; the bill lags by weeks.
 2. **Per-tenant series limits in the TSDB only.** AMP's `limits_per_label_set`
-   confines the damage to the offending team, but acts after the data has
+   confines the damage to the offending service, but acts after the data has
    travelled.
 3. **An allowlist at the gateway (chosen), with TSDB limits as a backstop.**
 
@@ -364,8 +367,8 @@ its question.
   resolution for 1 week, 1-minute points for the next 5 weeks, then 10-minute
   points ([Google Cloud docs](https://docs.cloud.google.com/monitoring/quotas),
   checked 2026-11). The warm tier is automatic.
-- **AMP** keeps samples for 150 days by default, up to 1,095 in the console
-  ([AWS docs](https://docs.aws.amazon.com/prometheus/latest/userguide/AMP-workspace-configuration.html),
+- **AMP** keeps samples for 150 days by default, up to 1,095
+  ([AWS docs](https://docs.aws.amazon.com/prometheus/latest/userguide/what-is-Amazon-Managed-Service-Prometheus.html),
   checked 2026-11). The docs describe no automatic downsampling (**verify
   before relying on**), so long-range dashboards read recording-rule rollups.
 - **CloudWatch metrics** roll up on their own: 1-minute points for 15 days,
@@ -499,9 +502,10 @@ aws:
           container_image: REPLACE_WITH_ECR_COLLECTOR_IMAGE
           container_port: 4318 # OTLP/HTTP
           host_headers: ["otel.internal.example"]
-          health_check_path: /health # verify before relying on: the ALB checks the traffic port
+          cpu: 4096 # 4 vCPU per task
+          memory: 8192
           enable_autoscaling: true
-          autoscaling_max_capacity: 24
+          autoscaling_max_capacity: 36 # 144 vCPU: the peak, plus a zone's headroom
           task_role_managed_policy_arns:
             - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy # logs + X-Ray spans
           task_role_policy_json: >-
@@ -526,11 +530,21 @@ gcp:
 
 `roles/telemetry.tracesWriter` is the narrowest role for OTLP spans
 ([Google Cloud docs](https://docs.cloud.google.com/trace/docs/iam), checked
-2026-11). The AWS managed policy is the one AWS documents for collectors
-([AWS docs](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch-OTLPSimplesetup.html),
-checked 2026-11); tighten it once you have confirmed the span actions. Set the
-root variable `app_log_retention_days` (default 365, too long for a hot tier)
-to 14.
+2026-11). On AWS, the OTLP traces endpoint is authorised as
+`xray:PutTraceSegments`
+([AWS docs](https://docs.aws.amazon.com/xray/latest/devguide/xray-opentelemetry-bearer-token.html),
+checked 2026-11), and `CloudWatchAgentServerPolicy` grants it along with
+`logs:PutLogEvents`
+([AWS docs](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/CloudWatchAgentServerPolicy.html),
+checked 2026-11). Set the root variable `app_log_retention_days` (default 365,
+too long for a hot tier) to 14.
+
+**Gap: the gateway's health check.** app-services health-checks
+`health_check_path` on `container_port` with matcher `200-399`
+([`modules/aws/stages/app-services/main.tf`](../../modules/aws/stages/app-services/main.tf)).
+The OTLP/HTTP receiver on 4318 serves only `/v1/*`, and the collector's
+`health_check` extension listens on 13133, so no path on 4318 passes. Add a
+health-check port input to app-services, or run the gateway as raw ECS.
 
 Gaps this design hits: the tail-sampling tier must be addressable, so it
 cannot be a Cloud Run or ALB-fronted service. Run it on ECS with Cloud Map
@@ -565,9 +579,10 @@ resource "aws_prometheus_workspace_configuration" "metrics" {
   workspace_id             = aws_prometheus_workspace.metrics.id
   retention_period_in_days = 400 # 13 months of rollups, plus margin
 
-  # Cardinality backstop: one team's explosion cannot exhaust the workspace.
+  # Cardinality backstop: one service's explosion cannot exhaust the workspace.
+  # Keyed on `service`, a label the gateway allowlist keeps.
   limits_per_label_set {
-    label_set = { team = "payments" }
+    label_set = { service = "checkout" }
     limits {
       max_series = 2000000
     }
@@ -696,7 +711,10 @@ resource "google_logging_project_exclusion" "app_from_default" {
 ```
 
 The archive gets every Cloud Run log, DEBUG included; the hot bucket is the
-indexed subset. Cloud Storage sinks deliver roughly hourly
+indexed subset. `resource.type="cloud_run_revision"` matches only what Cloud
+Run captures from stdout and stderr. Logs the gateway exports over the Logging
+API carry whatever resource type its exporter sets, so add that type to all
+three filters. Cloud Storage sinks deliver roughly hourly
 ([Google Cloud docs](https://docs.cloud.google.com/logging/docs/routing/overview),
 checked 2026-11), which is fine for a cold tier.
 
@@ -727,7 +745,7 @@ dashboards show gaps, and the gateway's retry queue grows.
 1. **Drop the label at the gateway**: add it to the collector's deny list and
    roll the gateway. Minutes, without waiting for the offending team.
 2. Roll back the offending service if the label can't be dropped cleanly.
-3. If the label-set limit was missing, add one for that team in the
+3. If the label-set limit was missing, add one for that `service` in the
    `aws-workload-<env>` workspace through Terraform Cloud, not in the console.
 4. Do not raise the quota to absorb it: that makes the incident a permanent
    bill.
@@ -736,7 +754,7 @@ dashboards show gaps, and the gateway's retry queue grows.
 to its baseline, and every team's dashboards fill in again.
 
 **Follow-up.** A CI check that fails builds whose metrics use labels outside
-the allowlist; an alert on series-count growth rate; per-team series budgets.
+the allowlist; an alert on series-count growth rate; per-service series budgets.
 
 ### The platform is silent: the watchdog heartbeat stops
 
