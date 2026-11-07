@@ -24,3 +24,5 @@ Task 1: dispatched (base 95bff95, sonnet)
 Task 2: dispatched (base 95bff95, opus) concurrent with Task 1 (disjoint files; examples-refs gate re-run at review)
 Task 1: implemented 04f3b0f; review dispatched
 Task 1: review Needs fixes (2 Important false negatives: heredoc brace depth, fence aliases) + minors → fix round 1 sent (new commit, no amend)
+Task 1: fix round 1 committed 8d12b07; scoped re-review dispatched
+Handoff: tracked copy at docs/handoff/system-design-examples/ (commit 5216619); draft PR #594 (stacked on #592 branch) — ledger synced+pushed after every update
