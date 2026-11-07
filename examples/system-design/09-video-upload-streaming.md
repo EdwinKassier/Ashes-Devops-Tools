@@ -521,7 +521,7 @@ Two differences change the design:
 | Apply order | `aws-organization` → … → `aws-network` → `aws-workload-<env>` | `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` |
 
 Services sit in `private`, the database in `isolated` (AWS) or on Private
-Service Access (GCP), per [VPC-tier placement](00-primer.md#vpc-tier-placement);
+Service Access (GCP), per [VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md));
 buckets, queues and transcoders are in no tier. The AWS hub's central endpoints
 omit MediaConvert, so `mediaconvert.<region>.amazonaws.com` must pass
 `aws.network.egress_domain_allowlist`; S3 uses the spoke's gateway endpoint.
@@ -581,7 +581,7 @@ In `envs/aws/workload`, using `local.environment`, `local.aws_region` and
   ([AWS docs](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-key-management.html), checked 2026-11),
   and one admitting `cloudfront.amazonaws.com` on the distribution's ARN.
 - A queue policy admits `events.amazonaws.com` only with `aws:SourceArn`
-  equal to the rule's ARN, as in the microservices walkthrough.
+  equal to the rule's ARN, as in the [microservices walkthrough](03-microservices-sync-async.md#aws-the-orders-topic-and-one-consumer-queue).
 - A raw-bucket lifecycle rule aborts incomplete multipart uploads after 7
   days and moves `sources/` to `STANDARD_IA` after 30.
 - The MediaConvert role `<env>-transcode-mediaconvert` (trusts
@@ -755,8 +755,8 @@ Wiring that is not shown:
 - The Cloud Storage service agent needs `roles/pubsub.publisher` on the topic
   before the notification is created.
 - The module's subscription is pull, which request-billed Cloud Run cannot
-  drain: add a push subscription to the dispatcher, as the microservices
-  walkthrough does. Answering `429` at the Transcoder quota makes Pub/Sub back off.
+  drain: add a push subscription to the dispatcher, as the [microservices
+  walkthrough](03-microservices-sync-async.md#gcp-one-consumer-subscription-on-the-orders-topic) does. Answering `429` at the Transcoder quota makes Pub/Sub back off.
 - Add the signed-cookie key out-of-band from Secret Manager, because
   `google_compute_backend_bucket_signed_url_key` stores `key_value` in state.
   Then grant the fill account `roles/storage.objectViewer` on serving.

@@ -4,7 +4,7 @@ This walkthrough follows the [interview framework](00-primer.md#interview-framew
 It uses the [estimation cheat sheet](00-primer.md#estimation-cheat-sheet), the
 [conventions](00-primer.md#conventions) and the zone names in
 [Data zones](00-primer.md#data-zones). Running two live regions, the top rung
-of the ladder, is the multi-region active-active walkthrough.
+of the ladder, is the [multi-region active-active walkthrough](16-multi-region-active-active.md).
 
 ## The question
 
@@ -196,7 +196,7 @@ checked 2026-11):
 | Backup-restore | Nothing; backups copied there; infrastructure as code redeploys | Hours / hours to a day | Warehouse, cold archives |
 | Pilot light | Data stores replicating; compute deployed but switched off | Minutes / tens of minutes | Carts, raw zone |
 | Warm standby | A scaled-down full stack, already serving health checks | Seconds / minutes | Orders |
-| Active-active | Full stacks serving traffic in each region | Near zero / near zero for site loss | Not used; see the active-active walkthrough |
+| Active-active | Full stacks serving traffic in each region | Near zero / near zero for site loss | Not used; see the [active-active walkthrough](16-multi-region-active-active.md) |
 
 The whitepaper draws the key line: pilot light cannot serve requests without
 first switching things on, while warm standby serves immediately at reduced
@@ -399,7 +399,7 @@ managed replica such as BigQuery managed disaster recovery, whose replication
 aims to stay within 15 minutes of the primary
 ([Google Cloud docs](https://docs.cloud.google.com/bigquery/docs/managed-disaster-recovery),
 checked 2026-11). A single orders primary no longer fits; sharding makes DR
-per-shard, the start of the active-active walkthrough's cell-based design.
+per-shard, the start of the active-active walkthrough's [cell-based design](16-multi-region-active-active.md#cell-based-design).
 
 **Blast radius.**
 
@@ -456,7 +456,8 @@ Differences that change the design:
 | Member-account vault | `aws-workload-<env>` (new) | Not applicable |
 | Apply order | `aws-organization` → `aws-security` → `aws-network` → … → `aws-backup` → `aws-workload-<env>` | `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` |
 
-Also needed: cross-account backup enabled once in the management account
+Tiers follow [VPC-tier placement](00-primer.md#vpc-tier-placement)
+([#14](14-n-tier-network.md)). Also needed: cross-account backup enabled once in the management account
 (`aws_backup_global_settings`), and a statement in `envs/aws/workload/kms.tf`
 letting the backup account use the workload CMK for copies.
 

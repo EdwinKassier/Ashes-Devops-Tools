@@ -480,7 +480,7 @@ Two differences change the design:
 | Audit tier | `aws-security` (`envs/aws/security`): organization CloudTrail into the log-archive bucket | `gcp-organization` (`envs/gcp/organization`): [`modules/gcp/governance/cloud-audit-logs`](../../modules/gcp/governance/cloud-audit-logs/) and [control-plane alerting](../../modules/gcp/monitoring/control-plane/) |
 | Apply order | `aws-organization` → `aws-security` → … → `aws-workload-<env>` | `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` |
 
-Placement follows [VPC-tier placement](00-primer.md#vpc-tier-placement):
+Placement follows [VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md)):
 collectors in `private`, managed stores in no tier. On AWS the hub's interface
 endpoints include `logs` but not `aps` or `xray`, so those calls leave through
 central inspection, and a narrowed `aws.network.egress_domain_allowlist` must

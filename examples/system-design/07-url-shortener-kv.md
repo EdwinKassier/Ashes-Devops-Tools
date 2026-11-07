@@ -53,7 +53,7 @@ Questions to ask, with the answers assumed here:
 | Analytics? | Click counts per link, approximate, visible within an hour. |
 | Same long URL twice? | Two short links, each with its own owner, expiry and stats. |
 | Retention? | 5 years. |
-| Regions? | One region, multi-AZ, behind a global CDN. Multi-region is the active-active walkthrough. |
+| Regions? | One region, multi-AZ, behind a global CDN. Multi-region is the [active-active walkthrough](16-multi-region-active-active.md). |
 
 Non-functional:
 
@@ -418,7 +418,7 @@ checked 2026-11), so **verify before relying on** any number.
 hot spot is the **owner index**. On DynamoDB, one owner's links share an index
 partition, and if the index cannot absorb a write **the base-table write is
 throttled too**
-([AWS docs](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html),
+([AWS docs](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/gsi-throttling.html),
 checked 2026-11). Hence the 200-a-second per-owner limit, well under the 1,000-unit
 ceiling; a customer who needs more gets a sharded index key (`owner#0` to
 `owner#9`, queried in parallel).
@@ -489,7 +489,7 @@ regions never mint the same code.
 | Links store | Raw DynamoDB table in `envs/aws/workload` | Raw Firestore database in `envs/gcp/workload`, in the host project |
 | Apply order | `aws-organization` → … → `aws-network` → `aws-workload-<env>` | `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` |
 
-Per [VPC-tier placement](00-primer.md#vpc-tier-placement), services sit in
+Per [VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md)), services sit in
 `private`; the serverless store is in no tier. On AWS the spoke's DynamoDB **gateway endpoint** keeps table
 traffic off the Transit Gateway and the inspection firewall
 ([`modules/aws/stages/workload/main.tf:120`](../../modules/aws/stages/workload/main.tf)).

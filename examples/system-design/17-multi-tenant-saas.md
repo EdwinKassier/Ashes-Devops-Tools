@@ -511,7 +511,7 @@ Differences that change the design:
 | Silo | `aws-organization` vends the account; `aws-workload-acme-prod` builds it | Five-root flow, then `gcp-workload-acme-prod` | `saas-acme` |
 | Apply order | `aws-organization` → tfc-admin → `aws-workload-acme-prod` → `aws-network` (accept the spoke) | `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` | tfc-admin → `saas-<name>` |
 
-Placement follows [VPC-tier placement](00-primer.md#vpc-tier-placement):
+Placement follows [VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md)):
 services in `private`, the pooled database in `isolated` (AWS) or on Private
 Service Access (GCP), buckets reached over endpoints. The region for GCP
 buckets and keys is `local.env_config.region`.

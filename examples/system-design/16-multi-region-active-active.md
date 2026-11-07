@@ -2,7 +2,7 @@
 
 This walkthrough follows the [interview framework](00-primer.md#interview-framework).
 It uses the [estimation cheat sheet](00-primer.md#estimation-cheat-sheet) and the
-[conventions](00-primer.md#conventions). The data DR walkthrough ends its pattern
+[conventions](00-primer.md#conventions). The [data DR walkthrough](15-data-disaster-recovery.md#rto-and-rpo-per-tier-and-the-pattern-ladder) ends its pattern
 ladder at active-active; this is that rung, designed end to end.
 
 ## The question
@@ -459,7 +459,7 @@ even pull from ECR. Close that gap first.
 | EU-only location policy | An SCP per OU (gap) | A folder policy from `gcp-organization` (`envs/gcp/organization`) |
 | Apply order | `aws-organization` → `aws-network` → `-a` → `-b` | `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-prod-eu1` |
 
-Placement follows [VPC-tier placement](00-primer.md#vpc-tier-placement):
+Placement follows [VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md)):
 `public_alb` puts the ALB in `public` with a regional WAF, because Route 53
 checks need a public endpoint; tasks stay in `private`.
 

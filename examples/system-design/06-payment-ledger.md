@@ -3,7 +3,7 @@
 This walkthrough follows the [interview framework](00-primer.md#interview-framework).
 It uses the numbers in the [estimation cheat sheet](00-primer.md#estimation-cheat-sheet)
 and the conventions in the [primer](00-primer.md#conventions). It reuses the
-**transactional outbox** defined in the microservices walkthrough, under
+**transactional outbox** defined in the [microservices walkthrough](03-microservices-sync-async.md), under
 [The transactional outbox](03-microservices-sync-async.md#the-transactional-outbox),
 and does not re-explain it.
 
@@ -61,7 +61,7 @@ Questions to ask, with the answers assumed here:
 | Correctness? | No double charge, no lost capture, and a ledger that balances at every commit. Money is never a float. |
 | Currencies? | Several, each in integer minor units. No FX inside a journal entry. |
 | Audit? | Every movement traceable to a request, PSP event and settlement line, for years. |
-| Regions? | One region, multi-AZ. Multi-region is the active-active walkthrough. |
+| Regions? | One region, multi-AZ. Multi-region is the [active-active walkthrough](16-multi-region-active-active.md). |
 
 Non-functional: 99.95% availability for accepting payments; RPO zero within
 the region (synchronous cross-zone replication); RTO of minutes; CMEK on all
@@ -77,9 +77,9 @@ Arithmetic uses the primer's [QPS conversions](00-primer.md#qps-conversions).
 **Payments.** 5 million a day is about 58 a second. At 5× peak that is about
 300 a second; design for **500 payments a second**.
 
-**PSP calls.** Authorise plus capture, and a few refunds: about **1,000 PSP
+**PSP calls.** Create, confirm and capture (three per payment): about **1,500 PSP
 calls a second** at peak. Assume a PSP p99 of 2 s (**verify before relying
-on** for your PSP). By Little's law that is **2,000 calls in flight**, which
+on** for your PSP). By Little's law that is **3,000 calls in flight**, which
 sizes connection pools and task count, not CPU.
 
 **Ledger postings.** A payment produces about four journal entries over its
@@ -434,7 +434,7 @@ forward transitions, so a late or duplicated event cannot regress state.
 
 - **The ledger primary fails first:** 50,000 inserts a second is past one
   primary's comfort zone. Batch inserts, then shard by account group.
-- **PSP concurrency:** 20,000 calls in flight. Pools, file descriptors and the
+- **PSP concurrency:** 30,000 calls in flight. Pools, file descriptors and the
   PSP's rate limits bind before compute.
 - **Idempotency table:** 300 GB at 72 hours; partition by day.
 
@@ -487,7 +487,7 @@ checked 2026-11). In-flight requests fail and are retried with the same keys.
 | Egress allowlist | `aws-network` (`envs/aws/network`) | None: Cloud NAT |
 | Apply order | `aws-organization` → `aws-security` → `aws-network` → … → `aws-workload-prod` | `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-prod` (twice; see below) |
 
-Placement follows [VPC-tier placement](00-primer.md#vpc-tier-placement):
+Placement follows [VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md)):
 services in `private`, Aurora in `isolated`, Cloud SQL on Private Service
 Access. To keep the PCI-relevant blast radius and IAM apart from other
 workloads, give payments a dedicated environment (an account added per
@@ -504,7 +504,7 @@ aws:
   workload:
     app_ingress_mode: cloudfront_vpc_origin # public HTTPS for PSP webhooks; see the gap below
   network:
-    stateful_default_actions: ["aws:drop_established"] # fail closed; required in production
+    stateful_default_actions: ["aws:drop_established", "aws:alert_established"] # fail closed, log drops
     egress_domain_allowlist:
       - .amazonaws.com
       - api.stripe.com # the PSP API; any other domain is dropped
@@ -785,7 +785,7 @@ removed a trigger, add a schema check for it to CI.
 
 | Fact | Value |
 |---|---|
-| This design's peak | 500 payments/s, 1,000 PSP calls/s, 5,000 postings/s |
+| This design's peak | 500 payments/s, 1,500 PSP calls/s, 5,000 postings/s |
 | Ledger growth | ~12.5 GB/day, ~4.6 TB/year |
 | Stripe idempotency | Keys up to 255 characters; prunable after 24 hours; replays stored `500`s |
 | Stripe webhooks | Retries for up to 3 days live; unordered; signature tolerance 5 minutes |

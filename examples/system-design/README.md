@@ -52,8 +52,10 @@ is for and how long to spend on it in a 45-minute round.
 ## Reading order
 
 Read in this order the first time through. Later walkthroughs reuse ideas from
-earlier ones: the outbox pattern from #3, the adapter pattern from #4, the data
-zones and the VPC-tier rules from the primer.
+earlier ones: the outbox pattern from
+[#3](03-microservices-sync-async.md#the-transactional-outbox), the adapter
+pattern from [#4](04-adapter-gateway.md), the data zones and the VPC-tier rules
+from the primer.
 
 ### Primer
 
@@ -62,72 +64,72 @@ zones and the VPC-tier rules from the primer.
 
 ### Real-time and messaging
 
-- **#1 Real-time WebSocket platform** (`01-realtime-websockets.md`). Millions of
+- **#1** [Real-time WebSocket platform](01-realtime-websockets.md). Millions of
   open connections, chat and presence: route each message to the right socket,
   and survive slow consumers and reconnect storms.
-- **#2 Notification system** (`02-notification-system.md`). Push, SMS and email
+- **#2** [Notification system](02-notification-system.md). Push, SMS and email
   from one pipeline, with prioritised fan-out, idempotent retries, and
   per-user preferences and rate limits.
 
 ### Services and integration
 
-- **#3 Microservices with sync and async events** (`03-microservices-sync-async.md`).
+- **#3** [Microservices with sync and async events](03-microservices-sync-async.md).
   When to call and when to publish, the transactional outbox, sagas,
   idempotent consumers and CQRS read models.
-- **#4 Adapter gateway over multiple backends** (`04-adapter-gateway.md`). One
+- **#4** [Adapter gateway over multiple backends](04-adapter-gateway.md). One
   interface over primary, backup and auxiliary providers, with routing
   policies, circuit breakers and safe failover.
-- **#5 Rate limiter and API gateway** (`05-rate-limiter-api-gateway.md`). Token
+- **#5** [Rate limiter and API gateway](05-rate-limiter-api-gateway.md). Token
   bucket against sliding window, distributed counters, and whether the limit
   lives at the edge, the gateway or the service.
-- **#6 Payment system and ledger** (`06-payment-ledger.md`). Idempotency keys,
+- **#6** [Payment system and ledger](06-payment-ledger.md). Idempotency keys,
   double-entry invariants, reconciliation with providers, and where
   exactly-once really holds.
 
 ### Read-heavy and content
 
-- **#7 URL shortener / key-value lookup** (`07-url-shortener-kv.md`). ID
+- **#7** [URL shortener / key-value lookup](07-url-shortener-kv.md). ID
   generation, cache tiers and CDN, sharding and hot keys.
-- **#8 News feed / timeline** (`08-news-feed.md`). Fan-out on write against
+- **#8** [News feed / timeline](08-news-feed.md). Fan-out on write against
   fan-out on read, the celebrity hybrid, ranking and cache invalidation.
-- **#9 Video upload and streaming** (`09-video-upload-streaming.md`). Resumable
+- **#9** [Video upload and streaming](09-video-upload-streaming.md). Resumable
   upload, the transcoding pipeline, adaptive bitrate over a CDN, and what it
   all costs.
-- **#10 Search and typeahead** (`10-search-typeahead.md`). The indexing pipeline
+- **#10** [Search and typeahead](10-search-typeahead.md). The indexing pipeline
   and its freshness, trie against search engine, sharding and ranking.
 
 ### Data
 
-- **#11 ETL for batch and streaming, with lineage and replay**
-  (`11-etl-batch-streaming.md`). Kappa against Lambda, CDC ingestion, replay
-  from an immutable raw zone, lineage, late data and schema evolution.
-- **#12 Data lake and warehouse** (`12-data-lake-warehouse.md`). Iceberg
+- **#11** [ETL for batch and streaming, with lineage and replay](11-etl-batch-streaming.md).
+  Kappa against Lambda, CDC ingestion, replay from an immutable raw zone,
+  lineage, late data and schema evolution.
+- **#12** [Data lake and warehouse](12-data-lake-warehouse.md). Iceberg
   lakehouse against warehouse-native, raw, curated and serving zones,
   partitioning and clustering, access control and CMEK.
-- **#13 Observability platform** (`13-observability-platform.md`). Metrics, logs
+- **#13** [Observability platform](13-observability-platform.md). Metrics, logs
   and traces at scale, cardinality, sampling and retention tiers.
 
 ### Platform and resilience
 
-- **#14 N-tier network architecture** (`14-n-tier-network.md`). Tier boundaries
+- **#14** [N-tier network architecture](14-n-tier-network.md). Tier boundaries
   and controls, hub-spoke against flat, inspected egress and private service
   access. This one leans hardest on the repo's own modules.
-- **#15 Data disaster recovery across data architectures**
-  (`15-data-disaster-recovery.md`). RTO and RPO per tier, the ladder from
-  backup-restore to active-active, replication modes and DR testing.
-- **#16 Multi-region active-active global app** (`16-multi-region-active-active.md`).
+- **#15** [Data disaster recovery across data architectures](15-data-disaster-recovery.md).
+  RTO and RPO per tier, the ladder from backup-restore to active-active,
+  replication modes and DR testing.
+- **#16** [Multi-region active-active global app](16-multi-region-active-active.md).
   Global routing and DNS failover, data placement and residency, conflict
   resolution and cells.
-- **#17 Multi-tenant SaaS isolation tiers** (`17-multi-tenant-saas.md`). Silo,
+- **#17** [Multi-tenant SaaS isolation tiers](17-multi-tenant-saas.md). Silo,
   pool and bridge models, noisy neighbours, per-tenant keys, and mapping
   tenants onto accounts and projects.
-- **#18 Distributed job scheduler** (`18-distributed-job-scheduler.md`).
+- **#18** [Distributed job scheduler](18-distributed-job-scheduler.md).
   Exactly-once triggering with leases, partitioned work, retries and dead
   letters, and cron at scale.
 
 ### AI
 
-- **#19 LLM serving and RAG system** (`19-llm-serving-rag.md`). Batching, GPU
+- **#19** [LLM serving and RAG system](19-llm-serving-rag.md). Batching, GPU
   capacity and model routing; ingestion, chunking and the vector store;
   guardrails, evaluation and cost per token.
 

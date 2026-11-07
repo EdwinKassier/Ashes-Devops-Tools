@@ -208,9 +208,24 @@ That is 10⁹ requests a day, about 12,000 per second on average, and about
 ## AWS-GCP service map
 
 One primary managed service per cell. Every external link goes to the vendor's
-official product page, except the NAT gateway and data-perimeter rows, which
-link documentation pages because those features have no product page. Every
+official product page, except the NAT gateway, vector search and data-perimeter rows,
+which link documentation pages because those features have no product page. Every
 link was checked 2026-11.
+
+Three Google renames are recent, and older docs, APIs and IAM roles keep the old
+names (checked 2026-11):
+
+- BigLake became **Lakehouse** on 2026-04-20, and BigLake metastore became the
+  Lakehouse runtime catalog; APIs, CLI commands and IAM names still say
+  `biglake`
+  ([release notes](https://docs.cloud.google.com/biglake/docs/release-notes)).
+- Vertex AI Search is being renamed **Agent Search**
+  ([Google Cloud docs](https://docs.cloud.google.com/generative-ai-app-builder/docs/introduction)).
+- Vertex AI's generative and agent products, Vector Search included, are now
+  documented as **Gemini Enterprise Agent Platform**, "an evolution of Vertex
+  AI". The `aiplatform.googleapis.com` API and `roles/aiplatform.*` role names
+  still appear across the docs; **verify before relying on** them staying
+  ([overview](https://docs.cloud.google.com/gemini-enterprise-agent-platform/overview)).
 
 | Capability | AWS | Google Cloud |
 |---|---|---|
@@ -235,12 +250,12 @@ link was checked 2026-11.
 | In-memory cache | [Amazon ElastiCache](https://aws.amazon.com/elasticache/) | [Memorystore](https://cloud.google.com/memorystore) |
 | Object storage | [Amazon S3](https://aws.amazon.com/s3/) | [Cloud Storage](https://cloud.google.com/storage) |
 | Data warehouse | [Amazon Redshift](https://aws.amazon.com/redshift/) | [BigQuery](https://cloud.google.com/bigquery) |
-| Lake, table formats and governance | [Amazon S3 Tables](https://aws.amazon.com/s3/features/tables/) (Iceberg), [AWS Lake Formation](https://aws.amazon.com/lake-formation/) | [BigLake](https://cloud.google.com/biglake) (Iceberg), [Dataplex](https://cloud.google.com/dataplex) |
+| Lake, table formats and governance | [Amazon S3 Tables](https://aws.amazon.com/s3/features/tables/) (Iceberg), [AWS Lake Formation](https://aws.amazon.com/lake-formation/) | [Lakehouse](https://cloud.google.com/products/lakehouse) (formerly BigLake; Iceberg), [Dataplex](https://cloud.google.com/dataplex) |
 | Batch ETL | [AWS Glue](https://aws.amazon.com/glue/) (or [Amazon EMR](https://aws.amazon.com/emr/)) | [Dataflow](https://cloud.google.com/dataflow) (or [Dataproc](https://cloud.google.com/dataproc)) |
 | Stream processing | [Managed Service for Apache Flink](https://aws.amazon.com/managed-service-apache-flink/) | [Dataflow](https://cloud.google.com/dataflow) |
-| Search | [Amazon OpenSearch Service](https://aws.amazon.com/opensearch-service/) | [Vertex AI Search](https://cloud.google.com/enterprise-search) (no first-party OpenSearch service; see below) |
-| Vector search | [Amazon S3 Vectors](https://aws.amazon.com/s3/features/vectors/) (or OpenSearch vector engine) | [Vertex AI Vector Search](https://cloud.google.com/vertex-ai/docs/vector-search/overview) |
-| Model serving and foundation models | [Amazon Bedrock](https://aws.amazon.com/bedrock/), [Amazon SageMaker AI](https://aws.amazon.com/sagemaker-ai/) | [Vertex AI](https://cloud.google.com/vertex-ai) |
+| Search | [Amazon OpenSearch Service](https://aws.amazon.com/opensearch-service/) | [Agent Search](https://cloud.google.com/products/gemini-enterprise-agent-platform/agent-search) (formerly Vertex AI Search; no first-party OpenSearch service; see below) |
+| Vector search | [Amazon S3 Vectors](https://aws.amazon.com/s3/features/vectors/) (or OpenSearch vector engine) | [Vector Search](https://docs.cloud.google.com/vertex-ai/docs/vector-search/overview) (Gemini Enterprise Agent Platform) |
+| Model serving and foundation models | [Amazon Bedrock](https://aws.amazon.com/bedrock/), [Amazon SageMaker AI](https://aws.amazon.com/sagemaker-ai/) | [Gemini Enterprise Agent Platform](https://cloud.google.com/products/gemini-enterprise-agent-platform) (formerly Vertex AI) |
 | Metrics, alarms and logs | [Amazon CloudWatch](https://aws.amazon.com/cloudwatch/) (metrics, alarms, Logs) | [Cloud Monitoring](https://cloud.google.com/monitoring), [Cloud Logging](https://cloud.google.com/logging) |
 | Traces | [AWS X-Ray](https://aws.amazon.com/xray/) | [Cloud Trace](https://cloud.google.com/trace) |
 | Key management | [AWS KMS](https://aws.amazon.com/kms/) | [Cloud KMS](https://cloud.google.com/security/products/security-key-management) |
@@ -269,7 +284,7 @@ These are the gaps that move boxes, not just rename them. Each walkthrough's
   shards are regional and, in provisioned mode, sized by you. SQS and Pub/Sub
   both serve as work queues, but only Pub/Sub also serves as a fan-out stream.
 - **Search.** AWS has a first-party OpenSearch service. Google Cloud has none:
-  you choose between Vertex AI Search (managed, opinionated), Elastic or
+  you choose between Agent Search (managed, opinionated), Elastic or
   OpenSearch from the Marketplace, or a self-run cluster on GKE. **Verify
   before relying on** a specific option's features.
 - **Data perimeter.** VPC Service Controls draws a perimeter around Google APIs.
@@ -627,8 +642,9 @@ Naming and keys:
   `<dataset>_<zone>` for BigQuery datasets, whose IDs allow underscores but not
   hyphens.
 - **Keys:** every zone is encrypted with the workload CMEK from
-  [CMEK source](#cmek-source): `workload_kms_key_arn` on AWS, the per-environment
-  `workload_cmek` key on GCP.
+  [CMEK source](#cmek-source): `workload_kms_key_arn` on AWS; on GCP, the
+  `workload_cmek` key, a convention this primer sets because the repo has no
+  per-environment workload key yet (a gap).
 
 How long each zone is kept is a per-dataset policy, often set by regulation. The
 rule is the ordering, raw ≥ curated ≥ serving, and that each zone can be

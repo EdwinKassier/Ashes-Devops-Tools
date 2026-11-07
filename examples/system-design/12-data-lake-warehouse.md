@@ -4,8 +4,8 @@ This walkthrough follows the [interview framework](00-primer.md#interview-framew
 It uses the [estimation cheat sheet](00-primer.md#estimation-cheat-sheet) and
 the [conventions](00-primer.md#conventions). The zone names raw, curated and
 serving are the primer's [data zones](00-primer.md#data-zones); this file
-governs them and does not redefine them. Getting data into raw is the ETL
-walkthrough's job.
+governs them and does not redefine them. Getting data into raw is the [ETL
+walkthrough's](11-etl-batch-streaming.md) job.
 
 ## The question
 
@@ -505,7 +505,7 @@ Three layers, each catching what the one inside it misses.
 
 No component takes a VPC tier: S3, S3 Tables, Glue, Athena, BigQuery and Cloud
 Storage are reached over endpoints or Private Google Access, per
-[VPC-tier placement](00-primer.md#vpc-tier-placement). Spark clusters you run
+[VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md)). Spark clusters you run
 go in `private`. On GCP, egress is the environment's Cloud NAT, not inspected
 through the hub, which is one more reason the perimeter matters.
 

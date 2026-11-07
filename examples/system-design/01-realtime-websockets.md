@@ -64,15 +64,15 @@ interviewer leaves them open.
 | History? | Kept for 1 year, paginated by conversation. |
 | Multi-device? | Up to 5 devices per user, each with its own cursor. |
 | Presence? | Online, away, last seen. Eventually consistent within about 30 seconds. Typing indicators are best-effort. |
-| Offline users? | Handed to the notification system (its own walkthrough). |
+| Offline users? | Handed to the [notification system](02-notification-system.md) (its own walkthrough). |
 | Latency? | p99 send-to-deliver under 500 ms in-region. |
 | Regions? | One region, three zones. |
 
 **Functional:** connect, send, receive in order, acknowledge, fetch history,
 presence and typing, resume without loss. **Non-functional:** 99.95% for the
 send path; losing a gateway or a zone costs only a reconnect; no hot shard.
-**Out of scope:** end-to-end encryption, media (see the video upload
-walkthrough), search and moderation.
+**Out of scope:** end-to-end encryption, media (see the [video upload
+walkthrough](09-video-upload-streaming.md)), search and moderation.
 
 ## Back-of-envelope estimates
 
@@ -143,8 +143,9 @@ Peak-to-average is assumed to be 3×.
   checked 2026-11).
 - 10 M / 3,000 ≈ **3,300 LCUs** for active connections versus 5,500 / 25 = 220
   for new ones. Long-lived sockets make **active connections the ALB bill**.
-  One NLB capacity unit (NLCU) covers 100,000 active TCP connections, so the
-  same load is about 100 NLCUs: the main argument for an NLB at this scale.
+  One NLB capacity unit (NLCU) covers 100,000 active TCP connections
+  ([AWS pricing](https://aws.amazon.com/elasticloadbalancing/pricing/), checked 2026-11),
+  so about 100 NLCUs: the main NLB argument at this scale.
 
 **Decisions these numbers drive:** presence in memory with TTLs; per-gateway
 channels, not broadcast; density per task matters more than CPU; a 10 M-client
@@ -345,7 +346,7 @@ it for you. On high event-loop lag or total queued bytes, fail readiness (not
 liveness) so new sockets go elsewhere, and drop presence and typing first.
 
 **Where it breaks.** None of this protects `chat-api` from a flood of sends.
-That is per-user rate limiting; see the rate limiter walkthrough.
+That is per-user rate limiting; see the [rate limiter walkthrough](05-rate-limiter-api-gateway.md).
 
 ### 3. Reconnect storms
 
@@ -446,7 +447,7 @@ the runbook covers the case where it happens anyway.
 |---|---|---|
 | ×1 (10 M connections) | Nothing, if sized as above. | |
 | ×10 (100 M connections) | Load-balancer cost; registry reads (3.5 M/s); 3,000 channels. | NLB; more shards; cells (a full stack per slice of users) with a cross-cell router. |
-| ×100 | A single region. Cross-cell routing and per-region data residency dominate. | Multi-region active-active; see the multi-region walkthrough. |
+| ×100 | A single region. Cross-cell routing and per-region data residency dominate. | Multi-region active-active; see the [multi-region walkthrough](16-multi-region-active-active.md). |
 | Hot room (one room ×100) | The room's counter key and channel, both on one shard. | Split the room channel; allocate `seq` in blocks; drop typing and presence in huge rooms. |
 
 ### Blast radius per component
@@ -470,7 +471,7 @@ the runbook covers the case where it happens anyway.
 | Managed alternative | API Gateway WebSocket APIs | None first-party | Limits in the trade-offs and study aids. |
 | Registry and pub/sub | ElastiCache for Valkey, cluster mode | Memorystore for Valkey, cluster mode | Memorystore connects over Private Service Connect through a service connection policy; ElastiCache sits in a subnet. |
 | Message store | DynamoDB | Bigtable (Firestore at small scale) | DynamoDB on-demand bills per request; Bigtable bills provisioned nodes hourly whether used or not ([pricing](https://cloud.google.com/bigtable/pricing), checked 2026-11), so a small deployment pays a floor. |
-| Offline handoff | SQS | Pub/Sub | See the notification system walkthrough. |
+| Offline handoff | SQS | Pub/Sub | See the [notification system walkthrough](02-notification-system.md). |
 | Keys | KMS CMK `alias/workload-<env>` | Cloud KMS key ring `<prefix>-<env>-cmek` | GCP needs the key added (see [CMEK source](00-primer.md#cmek-source)). |
 
 ## Build it here
@@ -486,7 +487,7 @@ the runbook covers the case where it happens anyway.
 | Message store | DynamoDB, reached through the spoke's gateway endpoint | Bigtable, reached through Private Google Access |
 | Egress | Through the Transit Gateway to the inspection VPC | The environment's own Cloud NAT, not inspected through the hub |
 
-Tiers follow [VPC-tier placement](00-primer.md#vpc-tier-placement). Apply order
+Tiers follow [VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md)). Apply order
 is the usual chain, `aws-network` → `aws-workload-prod` and `gcp-network-hub` →
 `gcp-workload-prod` (see [accounts and projects](00-primer.md#accounts-and-projects));
 nothing here adds a cross-root dependency.

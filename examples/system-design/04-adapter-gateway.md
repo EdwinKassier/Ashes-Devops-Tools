@@ -503,7 +503,7 @@ has a `JSON_SCHEMA` validator) and roll out every change gradually.
 
 - Split merchants into cells, each with its own gateway, ledger and provider
   accounts, so a bad config or throttled account hits one cell (the
-  multi-region walkthrough's cell-based design).
+  [multi-region walkthrough's cell-based design](16-multi-region-active-active.md#cell-based-design)).
 
 ### Blast radius per component
 
@@ -548,7 +548,7 @@ provider docs sources (checked 2026-11):
 - **AWS:** the environment's workload account, workspace `aws-workload-<env>`
   from `envs/aws/workload`. The gateway runs in the spoke's `private` tier and
   the ledger in `isolated`
-  ([VPC-tier placement](00-primer.md#vpc-tier-placement)). Calls to PSPs leave
+  ([VPC-tier placement](00-primer.md#vpc-tier-placement), [#14](14-n-tier-network.md)). Calls to PSPs leave
   through the Transit Gateway, Network Firewall and central NAT, so the PSP
   hostnames go in `aws.network.egress_domain_allowlist`, applied by
   `aws-network` (`envs/aws/network`). In production a non-empty allowlist is
@@ -744,8 +744,8 @@ resource "google_project_iam_member" "pay_gateway_routing" {
 
   condition {
     title = "pay-gateway-routing-only"
-    # resource.name uses the project NUMBER; the resource's id uses the project ID.
-    expression = "resource.name.startsWith(\"projects/${local.env_config.host_project_number}/locations/${local.env_config.region}/parameters/pay-gateway-routing\")"
+    # Project NUMBER, not ID; the trailing / stops pay-gateway-routing-v2 matching.
+    expression = "resource.name.startsWith(\"projects/${local.env_config.host_project_number}/locations/${local.env_config.region}/parameters/pay-gateway-routing/\")"
   }
 }
 ```
@@ -762,8 +762,8 @@ Notes:
   checked 2026-11). The condition matches `resource.name`, which is
   `projects/<number>/locations/<loc>/parameters/<id>` plus `/versions/<id>`
   ([Google Cloud docs](https://docs.cloud.google.com/iam/docs/conditions-resource-attributes),
-  checked 2026-11), so the runtime account `pay-gateway-run` reads only this
-  parameter.
+  checked 2026-11), so the trailing `/` limits `pay-gateway-run` to this
+  parameter's versions.
 
 ## Runbook
 

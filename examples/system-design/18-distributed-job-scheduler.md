@@ -4,7 +4,7 @@ This walkthrough follows the [interview framework](00-primer.md#interview-framew
 uses the [estimation cheat sheet](00-primer.md#estimation-cheat-sheet) and the
 [conventions](00-primer.md#conventions). It reuses the
 [transactional outbox](03-microservices-sync-async.md#the-transactional-outbox)
-from the microservices walkthrough rather than re-explaining it.
+from the [microservices walkthrough](03-microservices-sync-async.md) rather than re-explaining it.
 
 ## The question
 
@@ -488,7 +488,7 @@ second):**
 
 - **The single primary fails first.** Split the 256 partitions across 4 to 8
   shards; the map exists for exactly this.
-- **The outbox relay:** one per shard, or CDC as the outbox walkthrough describes.
+- **The outbox relay:** one per shard, or CDC as the [outbox walkthrough](03-microservices-sync-async.md#the-transactional-outbox) describes.
 - **Workers** autoscale on queue age, not CPU.
 
 **At ×100:** move to a wide-column table keyed by `(fire minute, partition)`,
@@ -534,7 +534,7 @@ a Cloud Run service and the loops move to worker pools.
 | Workers | `job-worker` ECS service | Raw worker pool `job-worker` |
 | Apply order | `aws-organization` → … → `aws-network` → `aws-workload-<env>` | `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` |
 
-Placement follows [VPC-tier placement](00-primer.md#vpc-tier-placement):
+Placement follows [VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md)):
 compute in `private`, Aurora in `isolated`, Cloud SQL on Private Service
 Access. Targets are internal, so no internet egress is needed. On GCP, workers
 use `ALL_TRAFFIC` VPC egress so they can reach internal-ingress Cloud Run
@@ -718,7 +718,7 @@ minute`) rise.
 3. **Database?** CPU, lock waits and connections on Aurora or Cloud SQL.
 4. **Herd or bug?** Lag only in the first minute of the hour is the herd.
 5. **Relay?** Runs inserted but stuck `QUEUED` with unpublished outbox rows is
-   the outbox runbook in the microservices walkthrough, not this one.
+   the [outbox runbook](03-microservices-sync-async.md#orders-stuck-in-pending-the-outbox-is-not-draining) in the microservices walkthrough, not this one.
 
 **Mitigation.**
 

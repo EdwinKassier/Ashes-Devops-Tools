@@ -64,7 +64,7 @@ Questions to ask, with the answers assumed here:
 | Can we lose events? | No. Duplicates are tolerable if consumers are idempotent. |
 | Ordering? | Per order, state must never regress. No global order. |
 | Scale? | 5 million orders a day, peak 3× average; reads are 50× writes. |
-| Regions? | One region, multi-AZ. Multi-region is the active-active walkthrough. |
+| Regions? | One region, multi-AZ. Multi-region is the [active-active walkthrough](16-multi-region-active-active.md). |
 | Teams? | One team per service, deploying independently, so schemas must evolve safely. |
 
 Non-functional: 99.95% availability for placing an order, which rules out a
@@ -254,7 +254,7 @@ Ask four questions of every interaction:
 caller's own deadline, with the remaining deadline propagated downstream;
 retries only for idempotent requests, with jittered backoff and a retry budget
 (say, at most 10% extra requests); a circuit breaker per dependency (the
-adapter gateway walkthrough covers breakers in depth); and an idempotency key
+[adapter gateway walkthrough](04-adapter-gateway.md#routing-and-failover-policy) covers breakers in depth); and an idempotency key
 on every non-idempotent write.
 
 **Where async hurts.** The user must learn the outcome by polling or a push
@@ -419,7 +419,7 @@ COMMIT; -- then acknowledge the message
   ([Google Cloud docs](https://docs.cloud.google.com/pubsub/quotas), checked 2026-11).
 - **External side effects** (a card authorisation) can't join the
   transaction. Pass the order ID as the provider's idempotency key; the
-  payment walkthrough covers that boundary.
+  [payment walkthrough](06-payment-ledger.md) covers that boundary.
 - **Order tolerance.** Projections ignore any event whose `aggregate_version`
   is not newer, which makes duplicates and reordering harmless together. So
   this design needs no FIFO queues or ordering keys. Pub/Sub ordering keys
@@ -535,7 +535,7 @@ Two differences change the design:
 | Egress to broker APIs | TGW and inspection in `aws-network` (`envs/aws/network`) | Private Google Access from `private`; not inspected |
 | Apply order | `aws-organization` → … → `aws-network` → `aws-workload-<env>` | `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` |
 
-Placement follows [VPC-tier placement](00-primer.md#vpc-tier-placement):
+Placement follows [VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md)):
 services in `private`, databases in `isolated` (AWS) or on Private Service
 Access (GCP), brokers in no tier. The AWS hub's central interface endpoints
 default to `ec2`, `ssm`, `ssmmessages`, `ec2messages`, `kms`, `logs` and `sts`

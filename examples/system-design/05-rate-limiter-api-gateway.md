@@ -467,7 +467,7 @@ Two differences change the design:
 | Counter store | Raw ElastiCache Serverless in `envs/aws/workload`, `isolated` tier | Raw Memorystore in `envs/gcp/workload`, PSC into the `database` tier |
 | Apply order | `aws-organization` → … → `aws-network` → `aws-workload-<env>` | `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` |
 
-Placement follows [VPC-tier placement](00-primer.md#vpc-tier-placement): the
+Placement follows [VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md)): the
 gateway in `private`, the counter store in `isolated` (AWS) or behind PSC in the
 `database` tier (GCP). On GCP, `ALL_TRAFFIC` sends the gateway's internet-bound
 traffic, if any, through the environment's Cloud NAT, which is not inspected

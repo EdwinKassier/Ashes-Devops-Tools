@@ -166,7 +166,7 @@ checked 2026-11).
 
 The catalog writes `ProductChanged {event_id, product_id, version,
 changed_at}` to a transactional outbox in the same transaction as the row (as
-in the microservices walkthrough). The event carries no body: the indexer reads
+in the [microservices walkthrough](03-microservices-sync-async.md#the-transactional-outbox)). The event carries no body: the indexer reads
 the current row. Search writes a `QueryLogged {query, normalized, result_count,
 clicked_ids, ts}` record to the raw zone
 ([data zones](00-primer.md#data-zones)).
@@ -409,7 +409,7 @@ exploration slots.
 | Typeahead | Precomputed trie in the service, engine for the long tail | Completion suggester; edge n-grams | Microseconds, CDN-cacheable, isolates engine CPU | Suggestions that must respect filters or permissions. |
 | Shards | 12 primaries × 3 copies, about 18 GB each | Many small shards; custom routing | Fewer shard-queries per search; even spread | A tenant key on every query. |
 | Ranking | BM25 + function score on shards, LTR rescore of 100 | Model on every match; no learning | Cost bounded by window | A dense-vector retrieval stage (hybrid search). |
-| Engine on GCP | OpenSearch on the env GKE Autopilot cluster | Vertex AI Search; Elastic from the Marketplace | Same engine and pipeline on both clouds; repo module exists | No team to run stateful clusters: take the managed product. |
+| Engine on GCP | OpenSearch on the env GKE Autopilot cluster | Agent Search (formerly Vertex AI Search); Elastic from the Marketplace | Same engine and pipeline on both clouds; repo module exists | No team to run stateful clusters: take the managed product. |
 
 ## Failure modes and scaling limits
 
@@ -438,7 +438,7 @@ exploration slots.
 | Component | AWS | GCP | Difference that matters |
 |---|---|---|---|
 | Search engine | Amazon OpenSearch Service, VPC domain, Multi-AZ with Standby | Self-run OpenSearch on GKE Autopilot | A managed domain against a stateful set you operate: upgrades, snapshots and node failure are yours on GCP. |
-| Managed alternative | OpenSearch Serverless | Vertex AI Search, being renamed Agent Search ([Google Cloud docs](https://docs.cloud.google.com/generative-ai-app-builder/docs/introduction), checked 2026-11) | Vertex AI Search owns ranking; you trade control for no cluster. |
+| Managed alternative | OpenSearch Serverless | Vertex AI Search, being renamed Agent Search ([Google Cloud docs](https://docs.cloud.google.com/generative-ai-app-builder/docs/introduction), checked 2026-11) | Agent Search owns ranking; you trade control for no cluster. |
 | `catalog`, `search`, `typeahead` | ECS Fargate via app-services | Cloud Run via app-services | Same golden path. |
 | `indexer` | ECS Fargate, long-polling its SQS queue | A Deployment on the GKE cluster, streaming pull | Request-billed Cloud Run is a poor pull consumer, and the indexer sits beside the engine anyway. |
 | Change queue | SQS standard | Pub/Sub topic and pull subscription | Neither needs ordering. |
@@ -466,7 +466,7 @@ checked 2026-11). Whether that runs on Autopilot, or OpenSearch needs
 | Apply order | `aws-organization` → … → `aws-network` → `aws-workload-<env>` | `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` |
 
 The domain's network interfaces sit in the `isolated` tier, per
-[VPC-tier placement](00-primer.md#vpc-tier-placement). GCP departs from it:
+[VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md)). GCP departs from it:
 the module's single cluster runs in the first `private` subnet, not
 `database`, because that tier denies all egress and GKE nodes need egress to
 the control plane, Google APIs and image pulls. The compensating control is a

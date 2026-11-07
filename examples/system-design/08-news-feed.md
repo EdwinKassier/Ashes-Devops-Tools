@@ -61,7 +61,7 @@ Questions to ask, with the answers this walkthrough assumes:
 | Read latency? | First page in under 300 ms at p99, server-side. |
 | Consistency? | Eventual for the feed. Read-your-own-writes for the author's own post. |
 | Deletes and privacy? | A deleted or hidden post must never render after the delete returns. |
-| Media? | Out of scope (see the video walkthrough). |
+| Media? | Out of scope (see the [video walkthrough](09-video-upload-streaming.md)). |
 | Social graph? | An existing graph service pages "followers of X" and "followees of Y". |
 | Regions? | One region, three zones. |
 
@@ -191,7 +191,7 @@ The cursor encodes a session ID and offset (ranked) or the last `post_id`
 ### Events
 
 `PostCreated`, `PostUpdated` and `PostDeleted` go into a transactional outbox
-(as in the microservices walkthrough) with
+(as in the [microservices walkthrough](03-microservices-sync-async.md#the-transactional-outbox)) with
 `{event_id, post_id, author_id, version, created_at}`. The fan-out worker
 consumes `PostCreated`; a cache updater consumes all three.
 
@@ -362,8 +362,8 @@ COMMIT;
 ```
 
 `id`, `aggregatetype`, `aggregateid`, `type` and `payload` are the Debezium
-outbox event router's default column names, as in the microservices
-walkthrough; `created_at` is an extra column for the polling relay. A later
+outbox event router's default column names, as in the [microservices
+walkthrough](03-microservices-sync-async.md#the-transactional-outbox); `created_at` is an extra column for the polling relay. A later
 move to CDC needs no remapping.
 
 **The race to avoid.** Delete-on-write has a known race. Reader A misses,
@@ -472,7 +472,8 @@ times its normal reads. Give it its own capacity plan.
 | Egress | TGW and inspection in `aws-network` | Per-environment Cloud NAT, not inspected through the hub |
 | Apply order | `aws-organization` → … → `aws-network` → `aws-workload-<env>` | `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` |
 
-Cache traffic stays inside the VPC on both clouds: on AWS from the `private`
+Per [VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md)),
+cache traffic stays in the VPC: on AWS from the `private`
 tier to the `isolated` tier; on GCP from Cloud Run's Direct VPC egress to a
 private range, which the app-services default `PRIVATE_RANGES_ONLY` already
 routes into the VPC.
@@ -540,7 +541,7 @@ Gaps in the golden path that this design hits:
 - **GCP fan-out delivery.** The module's pull subscription is consumable only
   by `post-run`. `fanout` needs a raw push subscription on topic `post`, with
   `expiration_policy { ttl = "" }` and a dead-letter topic, as in the
-  microservices walkthrough.
+  [microservices walkthrough](03-microservices-sync-async.md#gcp-one-consumer-subscription-on-the-orders-topic).
 - **Project-wide cache role.** `roles/memorystore.dbConnectionUser` is
   project-wide; narrow it with an IAM condition if other caches share the
   project.

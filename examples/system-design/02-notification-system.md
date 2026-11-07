@@ -236,8 +236,8 @@ graph TB
    key exists, it returns the stored `notification_id` and stops.
 3. It writes the notification record, publishes to the route queue and
    returns `202`. If the publish fails, the producer's retry finds the record
-   not yet enqueued and re-publishes; the router dedups. (The transactional
-   outbox in the microservices walkthrough is the stricter version.)
+   not yet enqueued and re-publishes; the router dedups. (The [transactional
+   outbox](03-microservices-sync-async.md#the-transactional-outbox) in the microservices walkthrough is the stricter version.)
 
 ### Write path (deliver)
 
@@ -283,7 +283,7 @@ queue, a blast ahead of a password reset delays it by the blast's drain time:
 push lanes draw on one 10,000/s budget. Reserve shares (say critical 1,000/s,
 transactional 6,000/s) and give bulk the remainder. The limiter is a token
 bucket per (provider, lane) in a shared counter store, in front of the
-provider, not our API; the rate limiter walkthrough covers the algorithms.
+provider, not our API; the [rate limiter walkthrough](05-rate-limiter-api-gateway.md#the-algorithms-token-bucket-vs-sliding-window) covers the algorithms.
 
 **Two-stage fan-out.** The expander turns a segment into chunks and the
 router turns chunks into jobs. The expander slows when lane depth rises,
@@ -453,7 +453,7 @@ increments a second.
 | Sync or async accept | Async: `202` and a queue | Synchronous send inside the API call | Provider latency and outages must not reach producers; retries need a durable buffer | A caller that must know the provider accepted |
 | Priority | Separate lanes per channel and priority | One queue with a priority field | Neither SQS nor Pub/Sub has message priority; physical isolation stops a blast from delaying an OTP | Very low volume, where nine queues cost more than they save |
 | Dedup | Own store, deterministic job ID, 24 h TTL | SQS FIFO dedup or Pub/Sub exactly-once alone | FIFO's window is 5 minutes and caps throughput; Pub/Sub's is regional and pull-only; neither covers the provider call | A provider that accepts an idempotency key and dedups for you |
-| State store | Key-value with TTL (DynamoDB, Firestore) | Relational database | Every access is by key; 17,000 writes/s and automatic expiry suit key-value | Ad-hoc queries, which belong in the warehouse |
+| State store | Key-value with TTL (DynamoDB, Firestore) | Relational database | Every access is by key; ~51,000 writes/s and automatic expiry suit key-value | Ad-hoc queries, which belong in the warehouse |
 | Provider rate limit | Token bucket per (provider, lane) | Rely on provider 429s and retry | Hitting 429 on purpose wastes calls and, for email and SMS, risks reputation | GCP's Cloud Tasks for low-rate lanes, which enforces the rate for you |
 
 ## Failure modes and scaling limits
@@ -472,7 +472,7 @@ increments a second.
 
 - One region and one push project cannot carry it. Split users into cells,
   each with its own queues, workers, state and push credentials (the
-  cell-based design of the multi-region walkthrough).
+  [cell-based design](16-multi-region-active-active.md#cell-based-design) of the multi-region walkthrough).
 
 ### Blast radius per component
 
@@ -520,7 +520,7 @@ google v8.10.0 (the provider's registry docs source), checked 2026-11:
   `envs/aws/workload`. Services run in the spoke's `private` tier; DynamoDB is
   reached over the gateway endpoint; provider calls leave through the Transit
   Gateway, Network Firewall and central NAT
-  ([VPC-tier placement](00-primer.md#vpc-tier-placement)), so allowlist
+  ([VPC-tier placement](00-primer.md#vpc-tier-placement), [#14](14-n-tier-network.md)), so allowlist
   `api.push.apple.com`, `fcm.googleapis.com` and the vendors there. Whether SES
   has an interface endpoint for its API is **verify before relying on**.
 - **GCP:** the environment's host project, `gcp-workload-<env>` from

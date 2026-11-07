@@ -3,7 +3,7 @@
 Part of the [system design library](README.md). The framework, the estimation
 numbers and the landing-zone conventions live in the [primer](00-primer.md).
 This walkthrough lands data in the primer's [data zones](00-primer.md#data-zones)
-(raw, curated, serving) and uses those names without redefining them. It
+(raw, curated, serving), which the [lake walkthrough](12-data-lake-warehouse.md#zones-raw-curated-serving-and-governance) governs, without redefining them. It
 reuses the [transactional outbox](03-microservices-sync-async.md#the-transactional-outbox)
 by name.
 
@@ -64,7 +64,7 @@ graph LR
 | Replay? | Rebuild any curated table from any point in the last 2 years; rebuild 7 days of it in under 8 hours. |
 | Late data? | 99% of events arrive within 5 minutes; mobile clients can be up to 72 hours late. |
 | Schema change? | Additive changes flow without a deploy; breaking changes must not silently corrupt tables. |
-| Regions? | One region per cloud. Cross-region DR is the data DR walkthrough. |
+| Regions? | One region per cloud. Cross-region DR is the [data DR walkthrough](15-data-disaster-recovery.md). |
 
 Non-functional: CDC must never fill the source's disk, nothing may be lost
 between source and raw, and duplicates are tolerated in transit but not in
@@ -543,7 +543,7 @@ Two differences change the design:
 | API access | A Kinesis interface endpoint (hub list in `aws-network`, `envs/aws/network`, or the spoke) | Private Google Access from `private` |
 | Apply order | `aws-organization` → … → `aws-network` → `aws-workload-<env>` | `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` |
 
-Placement follows [VPC-tier placement](00-primer.md#vpc-tier-placement): the
+Placement follows [VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md)): the
 DMS replication instance, Flink and Dataflow workers go in `private`; the
 database stays in `isolated` (AWS) or on Private Service Access (GCP); Kinesis
 and Pub/Sub sit in no tier. DMS 3.4.7+ must reach Kinesis through a VPC
@@ -596,7 +596,7 @@ gcp:
 In `envs/aws/workload`, using `local.environment`, `local.kms_key_arn`,
 `local.workload_account_id` and `data.aws_partition.current`. The raw bucket
 `aws_s3_bucket.etl_raw` (Object Lock, SSE-KMS with the workload key, public
-access block) follows the payment walkthrough's pattern and is omitted.
+access block) follows the [payment walkthrough's](06-payment-ledger.md) pattern and is omitted.
 Whether Firehose writes to an Object Lock bucket with default retention is
 **verify before relying on**. These services use the caller's IAM permissions
 on the key, so the key policy needs no new statement

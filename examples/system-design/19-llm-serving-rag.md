@@ -37,7 +37,7 @@ guardrail**, embeds it, and runs a **filtered hybrid search** (vector plus
 keyword) over chunks in Postgres with pgvector, filtered by tenant and access
 groups *inside the query*. It packs the top chunks into a prompt with a cached
 system prefix and calls a **model router**, the adapter gateway from the
-earlier walkthrough, which picks a managed model or a self-hosted one by
+[earlier walkthrough](04-adapter-gateway.md), which picks a managed model or a self-hosted one by
 capability, cost and health, and treats a 429 as a capacity signal rather than
 a fault. The answer streams back through an **output guardrail** that checks
 grounding against the retrieved chunks. Documents enter through an
@@ -550,7 +550,8 @@ their private DNS answers only inside the endpoints VPC, so Bedrock calls
 leave through inspection. A narrowed `aws.network.egress_domain_allowlist`
 must keep `bedrock-runtime.<region>.amazonaws.com`. On GCP, add
 `aiplatform.googleapis.com` and `modelarmor.googleapis.com` to the root's
-`vpc_sc_restricted_services` in production.
+`vpc_sc_restricted_services` in production. Tiers follow
+[VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md)).
 
 ### Config
 
