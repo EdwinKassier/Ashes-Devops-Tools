@@ -36,7 +36,35 @@ locals {
 
 output "contract" {
   description = "The gcp-projects cross-root contract: every key below in one non-sensitive object. Downstream roots read this output only; the individual outputs are deprecated aliases kept until v1.0."
-  value       = local.contract
+  # Exact shape: a key added to local.contract must be added here too, or the
+  # conversion drops it (scripts/check-contracts.sh compares the two key sets).
+  type = object({
+    projects = map(object({
+      id              = string
+      project_id      = string
+      number          = string
+      name            = string
+      parent          = string
+      labels          = map(string)
+      billing_account = string
+    }))
+    project_ids     = map(string)
+    project_numbers = map(string)
+    environment_config = map(object({
+      folder_id               = string
+      folder_name             = string
+      host_project_id         = string
+      host_project_number     = string
+      region                  = string
+      cidr_block              = string
+      labels                  = map(string)
+      tag_value_ids           = object({ environment = string })
+      is_production           = bool
+      vpc_sc_access_policy_id = string
+    }))
+    automation_folder_grants = map(object({ folder = string, role = string }))
+  })
+  value = local.contract
 }
 
 output "projects" {

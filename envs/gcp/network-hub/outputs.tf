@@ -23,7 +23,19 @@ locals {
 
 output "contract" {
   description = "The gcp-network-hub cross-root contract: every key below in one non-sensitive object. Downstream roots read this output only; the individual outputs are deprecated aliases kept until v1.0."
-  value       = local.contract
+  # Exact shape: a key added to local.contract must be added here too, or the
+  # conversion drops it (scripts/check-contracts.sh compares the two key sets).
+  type = object({
+    hub_network = object({
+      vpc_self_link   = string
+      vpc_name        = string
+      dns_zone_name   = string
+      dns_domain      = string
+      ncc_hub_id      = string
+      ncc_spoke_group = string
+    })
+  })
+  value = local.contract
 }
 
 output "hub_network" {

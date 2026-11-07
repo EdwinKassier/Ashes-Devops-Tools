@@ -46,7 +46,47 @@ locals {
 
 output "contract" {
   description = "The gcp-organization cross-root contract: every key below in one non-sensitive object. Downstream roots read this output only; the individual outputs are deprecated aliases kept until v1.0."
-  value       = local.contract
+  # Exact shape: a key added to local.contract must be added here too, or the
+  # conversion drops it (scripts/check-contracts.sh compares the two key sets).
+  type = object({
+    billing_account      = string
+    admin_project        = object({ project_id = string, number = string })
+    admin_project_number = string
+    organization         = object({ id = string })
+    org_id               = string
+    folders = map(object({
+      id           = string
+      name         = string
+      display_name = string
+    }))
+    project_prefix                  = string
+    organization_name               = string
+    default_region                  = string
+    terraform_service_account_email = string
+    github_oidc_pool_id             = string
+    github_oidc_provider_name       = string
+    tfc_oidc_pool_id                = string
+    tfc_oidc_provider_name          = string
+    tag_values                      = map(string)
+    tag_keys                        = map(string)
+    audit_logs_bucket_name          = string
+    billing_export_dataset_id       = string
+    scc_pubsub_topic_id             = string
+    cmek_key_names                  = map(string)
+    audit_project_id                = string
+    control_plane_alert_policy_ids  = map(string)
+    scoped_access_policy_ids        = map(string)
+    delegated_folder_iam_targets    = map(list(string))
+    pam_entitlement_name            = string
+    guardrail_owner_mode            = string
+    # Deprecated (removed at v1.0) and read by no root: the rendered deny-policy
+    # specs keep their own shape.
+    guardrail_deny_policy_specs      = any
+    log_analytics_bucket_id          = string
+    principal_access_boundary_policy = string
+    admin_containment_enabled        = bool
+  })
+  value = local.contract
 
   # Admin-containment guards. They live on the contract output (not the
   # deprecated admin_containment_enabled alias) so they outlive its v1.0 removal.

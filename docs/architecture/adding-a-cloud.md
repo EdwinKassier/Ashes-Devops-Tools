@@ -77,6 +77,12 @@ locals {
 }
 
 output "contract" {
+  # Exact shape (Terraform >= 1.15 output types). The conversion drops any key
+  # the type does not name; scripts/check-contracts.sh compares the two key sets.
+  type = object({
+    account_ids       = map(string)
+    account_role_arns = map(string)
+  })
   value = local.contract
 }
 ```

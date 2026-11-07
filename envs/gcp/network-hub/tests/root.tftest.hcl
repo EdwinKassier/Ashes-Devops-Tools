@@ -180,7 +180,7 @@ run "contract_output_carries_hub_network" {
   command = plan
 
   assert {
-    condition     = output.contract.hub_network.dns_domain == "hub.internal." && output.contract.hub_network == output.hub_network
+    condition     = output.contract.hub_network.dns_domain == "hub.internal." && jsonencode(output.contract.hub_network) == jsonencode(output.hub_network)
     error_message = "output.contract must carry hub_network, identical to the deprecated hub_network alias."
   }
 }

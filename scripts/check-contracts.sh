@@ -45,6 +45,18 @@ for p in ${PRODUCERS}; do
     fail "${p}: producer has no output \"contract\""
   elif grep -Eq '^[[:space:]]*sensitive[[:space:]]*=[[:space:]]*true' <<<"${block}"; then
     fail "${p}: output \"contract\" is sensitive; it must stay non-sensitive (tfe_outputs nonsensitive_values)"
+  elif ! grep -Eq '^  type[[:space:]]*=[[:space:]]*object\(\{' <<<"${block}"; then
+    fail "${p}: output \"contract\" has no 'type = object({...})' constraint"
+  else
+    # The object conversion silently drops an attribute the type does not name,
+    # so the type's top-level keys must equal local.contract's.
+    type_keys="$(awk '/^  type[[:space:]]*=[[:space:]]*object\(\{/{on=1; next} on&&/^  \}\)/{exit} on&&/^    [a-z0-9_]+[[:space:]]*=/{sub(/^    /,""); sub(/[[:space:]]*=.*/,""); print}' <<<"${block}" | sort)"
+    local_keys="$(awk '/^  contract[[:space:]]*=[[:space:]]*\{/{on=1; next} on&&/^  \}/{exit} on&&/^    [a-z0-9_]+[[:space:]]*=/{sub(/^    /,""); sub(/[[:space:]]*=.*/,""); print}' "${dir}"/*.tf | sort)"
+    if [[ -z "${local_keys}" ]]; then
+      fail "${p}: no 'contract = {' local found to compare the output type against"
+    elif [[ "${type_keys}" != "${local_keys}" ]]; then
+      fail "${p}: output \"contract\" type keys differ from local.contract: $(diff <(echo "${type_keys}") <(echo "${local_keys}") | grep -E '^[<>]' | tr '\n' ' ')"
+    fi
   fi
 done
 

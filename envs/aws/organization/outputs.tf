@@ -26,7 +26,23 @@ locals {
 
 output "contract" {
   description = "The aws-organization cross-root contract: every key below in one non-sensitive object. Downstream roots read this output only; the individual outputs are deprecated aliases kept until v1.0."
-  value       = local.contract
+  # Exact shape: a key added to local.contract must be added here too, or the
+  # conversion drops it (scripts/check-contracts.sh compares the two key sets).
+  type = object({
+    organization_id                = string
+    management_account_id          = string
+    organization_root_id           = string
+    ou_ids                         = map(string)
+    account_ids                    = map(string)
+    account_role_arns              = map(string)
+    tfc_plan_role_arns             = map(string)
+    tfc_apply_role_arns            = map(string)
+    tfc_workspace_bindings         = map(list(string))
+    tfc_management_plan_role_arns  = map(string)
+    tfc_management_apply_role_arns = map(string)
+    guard_alerts_topic_arn         = string
+  })
+  value = local.contract
 }
 
 output "organization_id" {

@@ -152,15 +152,15 @@ run "output_contract_is_stable" {
   # every key the deprecated individual outputs carry, with the same values.
   assert {
     condition = (
-      output.contract.organization_id == output.organization_id &&
-      output.contract.organization_root_id == output.organization_root_id &&
-      output.contract.management_account_id == output.management_account_id &&
-      output.contract.account_ids == output.account_ids &&
-      output.contract.account_role_arns == output.account_role_arns &&
-      output.contract.ou_ids == output.ou_ids &&
-      output.contract.tfc_plan_role_arns == output.tfc_plan_role_arns &&
-      output.contract.tfc_apply_role_arns == output.tfc_apply_role_arns &&
-      output.contract.tfc_workspace_bindings == output.tfc_workspace_bindings
+      jsonencode(output.contract.organization_id) == jsonencode(output.organization_id) &&
+      jsonencode(output.contract.organization_root_id) == jsonencode(output.organization_root_id) &&
+      jsonencode(output.contract.management_account_id) == jsonencode(output.management_account_id) &&
+      jsonencode(output.contract.account_ids) == jsonencode(output.account_ids) &&
+      jsonencode(output.contract.account_role_arns) == jsonencode(output.account_role_arns) &&
+      jsonencode(output.contract.ou_ids) == jsonencode(output.ou_ids) &&
+      jsonencode(output.contract.tfc_plan_role_arns) == jsonencode(output.tfc_plan_role_arns) &&
+      jsonencode(output.contract.tfc_apply_role_arns) == jsonencode(output.tfc_apply_role_arns) &&
+      jsonencode(output.contract.tfc_workspace_bindings) == jsonencode(output.tfc_workspace_bindings)
     )
     error_message = "output.contract must carry every cross-root key with the same value as its deprecated alias."
   }

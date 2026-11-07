@@ -20,7 +20,17 @@ locals {
 
 output "contract" {
   description = "The aws-network cross-root contract: every key below in one non-sensitive object. Downstream roots read this output only; the individual outputs are deprecated aliases kept until v1.0."
-  value       = local.contract
+  # Exact shape: a key added to local.contract must be added here too, or the
+  # conversion drops it (scripts/check-contracts.sh compares the two key sets).
+  type = object({
+    tgw_id                    = string
+    ipam_pool_ids             = map(string)
+    inspection_vpc_id         = string
+    egress_vpc_id             = string
+    resolver_profile_id       = string
+    interface_endpoint_phz_id = string
+  })
+  value = local.contract
 }
 
 output "tgw_id" {

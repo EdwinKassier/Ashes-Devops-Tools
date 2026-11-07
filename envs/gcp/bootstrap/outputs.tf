@@ -40,7 +40,37 @@ locals {
 
 output "contract" {
   description = "The gcp-bootstrap cross-root contract: every key below in one non-sensitive object. Downstream roots read this output only; the individual outputs are deprecated aliases kept until v1.0."
-  value       = local.contract
+  # Exact shape: a key added to local.contract must be added here too, or the
+  # conversion drops it (scripts/check-contracts.sh compares the two key sets).
+  type = object({
+    admin_project_id                    = string
+    admin_project_number                = string
+    terraform_admin_email               = string
+    suffix                              = string
+    github_oidc_pool_id                 = string
+    github_oidc_pool_name               = string
+    github_oidc_provider_name           = string
+    tfc_oidc_pool_id                    = string
+    tfc_oidc_pool_name                  = string
+    tfc_oidc_provider_name              = string
+    resman_email                        = string
+    tfc_plan_service_accounts           = map(string)
+    tfc_apply_service_accounts          = map(string)
+    tfc_workload_provider_name          = string
+    stage_service_accounts              = map(object({ plan = string, apply = string }))
+    workload_service_accounts           = map(object({ plan = string, apply = string }))
+    workload_folder_roles               = object({ plan = list(string), apply = list(string) })
+    network_folder_roles                = object({ plan = list(string), apply = list(string) })
+    delegated_workload_folder_roles     = list(string)
+    delegated_network_folder_roles      = list(string)
+    plan_viewer_role                    = string
+    production_workspaces_bound_by_name = list(string)
+    guardrail_owner_mode                = string
+    guardrails_service_account          = string
+    guardrails_plan_service_account     = string
+    guardrails_workspace_bound_by_id    = bool
+  })
+  value = local.contract
 }
 
 output "admin_project_id" {

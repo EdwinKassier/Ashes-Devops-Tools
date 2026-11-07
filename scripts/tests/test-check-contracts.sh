@@ -39,9 +39,20 @@ reset_fixture() {
   rm -rf "${workdir}/repo"
   mkdir -p "${workdir}/repo/envs/aws/organization" "${workdir}/repo/envs/aws/a" "${workdir}/repo/envs/aws/b"
   cat >"${workdir}/repo/envs/aws/organization/outputs.tf" <<'EOF'
+locals {
+  contract = {
+    account_ids     = {}
+    organization_id = "o-abc"
+  }
+}
+
 output "contract" {
   description = "Cross-root contract."
-  value       = local.contract
+  type = object({
+    account_ids     = map(string)
+    organization_id = string
+  })
+  value = local.contract
 }
 EOF
   for r in a b; do
@@ -107,6 +118,15 @@ output "contract" {
 }
 EOF
 expect_fail "sensitive contract output fails" "sensitive"
+
+reset_fixture
+sed -i.bak '/^  type = object/,/^  })/d' "${workdir}/repo/envs/aws/organization/outputs.tf"
+expect_fail "untyped contract output fails" "has no 'type = object"
+
+reset_fixture
+sed -i.bak 's/^    organization_id = "o-abc"$/    organization_id = "o-abc"\
+    ou_ids          = {}/' "${workdir}/repo/envs/aws/organization/outputs.tf"
+expect_fail "contract key missing from the output type fails" "> ou_ids"
 
 # Mismatch fixture: two consumers of the same upstream with different types.
 reset_fixture

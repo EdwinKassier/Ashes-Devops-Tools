@@ -22,7 +22,19 @@ locals {
 
 output "contract" {
   description = "The aws-security cross-root contract: every key below in one non-sensitive object. Downstream roots read this output only; the individual outputs are deprecated aliases kept until v1.0."
-  value       = local.contract
+  # Exact shape: a key added to local.contract must be added here too, or the
+  # conversion drops it (scripts/check-contracts.sh compares the two key sets).
+  type = object({
+    log_archive_bucket_arn              = string
+    log_archive_bucket_name             = string
+    log_cmk_arn                         = string
+    guardduty_detector_ids              = map(string)
+    securityhub_configuration_policy_id = string
+    security_notifications_topic_arn    = string
+    forensics_account_id                = string
+    break_glass_role_arn                = string
+  })
+  value = local.contract
 }
 
 output "log_archive_bucket_arn" {

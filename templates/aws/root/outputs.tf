@@ -8,15 +8,25 @@
 # Downstream roots read ONE output, `contract`: a non-sensitive object holding
 # every key they may consume (they read .outputs.contract, nothing else). Never
 # put a sensitive value in it: one sensitive attribute moves the whole object
-# into tfe_outputs' sensitive_values. If downstream roots read this layer, add it
-# to PRODUCERS in scripts/check-contracts.sh.
+# into tfe_outputs' sensitive_values. Give the output the exact object type: the
+# conversion drops any key the type does not name. If downstream roots read this
+# layer, add it to PRODUCERS in scripts/check-contracts.sh (which then requires
+# the type and compares its keys with local.contract).
 
-output "contract" {
-  description = "This root's cross-root contract: one non-sensitive object downstream roots read as .outputs.contract."
-  value = {
+locals {
+  contract = {
     account_ids = local.account_ids
     aws_region  = local.aws_region
   }
+}
+
+output "contract" {
+  description = "This root's cross-root contract: one non-sensitive object downstream roots read as .outputs.contract."
+  type = object({
+    account_ids = map(string)
+    aws_region  = string
+  })
+  value = local.contract
 }
 
 output "account_ids" {
