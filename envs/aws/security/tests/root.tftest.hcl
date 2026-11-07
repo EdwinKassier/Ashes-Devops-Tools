@@ -217,3 +217,20 @@ run "production_default_plans_without_meta_store_role" {
     error_message = "the default production profile must plan with Security Lake on and no hand-made metastore role."
   }
 }
+
+# A removed variable that is still set (tfvars, TFC variable or TF_VAR_) fails
+# the plan, and the message names its aws_overrides replacement.
+run "removed_input_fails_with_replacement" {
+  command = plan
+
+  variables {
+    create_break_glass = true
+  }
+
+  expect_failures = [terraform_data.removed_inputs_guard]
+
+  assert {
+    condition     = local.removed_inputs_message == "Removed variables are set; move each into aws_overrides (UPGRADING.md): create_break_glass -> aws_overrides.create_break_glass."
+    error_message = "the guard must name the removed variable and its aws_overrides key."
+  }
+}

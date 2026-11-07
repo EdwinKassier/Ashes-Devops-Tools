@@ -288,3 +288,21 @@ run "unset_override_keeps_config_value" {
     error_message = "the config bucket name must reach the stage."
   }
 }
+
+# ... and a key unset in both the config file and aws_overrides takes the stage
+# default (key_admin_role_name = "tfc-apply" administers every CMK).
+run "unset_everywhere_takes_stage_default" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    aws_overrides            = {}
+  }
+
+  assert {
+    condition     = try(local.aws.key_admin_role_name, null) == null && alltrue([for a in values(module.aws_security.key_admin_arns) : endswith(a, ":role/tfc-apply")])
+    error_message = "a key unset in config and aws_overrides must reach the stage as its default (tfc-apply key admin)."
+  }
+}

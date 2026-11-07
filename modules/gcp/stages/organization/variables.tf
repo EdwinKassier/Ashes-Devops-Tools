@@ -297,167 +297,167 @@ variable "gcp" {
 
   validation {
     condition     = var.gcp.break_glass_user == null || can(regex("^[^@]+@[^@]+\\.[^@]+$", var.gcp.break_glass_user))
-    error_message = "break_glass_user must be null or a valid email address."
+    error_message = "gcp_overrides.break_glass_user must be null or a valid email address."
   }
 
   validation {
     condition     = alltrue([for g in var.gcp.organization_admin_groups : can(regex("^[^@:\\s]+@[^@\\s]+\\.[^@\\s]+$", g))])
-    error_message = "Each organization_admin_groups entry must be a bare group email address (no 'user:'/'group:'/'serviceAccount:' prefix)."
+    error_message = "Each gcp_overrides.organization_admin_groups entry must be a bare group email address (no 'user:'/'group:'/'serviceAccount:' prefix)."
   }
 
   validation {
     condition     = length(var.gcp.organization_admin_groups) > 0 || var.gcp.allow_user_principals_for_break_glass
-    error_message = "organization_admin_groups must list at least one group (gcp.organization_admin_groups in config/landing-zone.yaml): standing org admin is granted to groups only. To grant admin_email / break_glass_user as users instead, set allow_user_principals_for_break_glass = true (break-glass only)."
+    error_message = "gcp_overrides.organization_admin_groups must list at least one group (gcp.organization_admin_groups in config/landing-zone.yaml): standing org admin is granted to groups only. To grant gcp_overrides.admin_email / gcp_overrides.break_glass_user as users instead, set gcp_overrides.allow_user_principals_for_break_glass = true (break-glass only)."
   }
 
   validation {
     condition     = !contains([for g in var.gcp.organization_admin_groups : lower(g)], lower(coalesce(var.gcp.admin_email, "-"))) && (var.gcp.break_glass_user == null || !contains([for g in var.gcp.organization_admin_groups : lower(g)], lower(coalesce(var.gcp.break_glass_user, "-"))))
-    error_message = "organization_admin_groups must not contain admin_email or break_glass_user: they are user accounts and would be bound as group: principals."
+    error_message = "gcp_overrides.organization_admin_groups must not contain gcp_overrides.admin_email or gcp_overrides.break_glass_user: they are user accounts and would be bound as group: principals."
   }
 
   validation {
     condition     = alltrue([for g in var.gcp.billing_admin_groups : can(regex("^[^@:\\s]+@[^@\\s]+\\.[^@\\s]+$", g))])
-    error_message = "Each billing_admin_groups entry must be a bare group email address (no 'user:'/'group:'/'serviceAccount:' prefix)."
+    error_message = "Each gcp_overrides.billing_admin_groups entry must be a bare group email address (no 'user:'/'group:'/'serviceAccount:' prefix)."
   }
 
   validation {
     condition     = length(var.gcp.billing_admin_groups) > 0 || var.gcp.allow_user_principals_for_break_glass
-    error_message = "billing_admin_groups must list at least one group (gcp.billing_admin_groups in config/landing-zone.yaml): standing billing admin is granted to groups only (or set allow_user_principals_for_break_glass = true)."
+    error_message = "gcp_overrides.billing_admin_groups must list at least one group (gcp.billing_admin_groups in config/landing-zone.yaml): standing billing admin is granted to groups only (or set gcp_overrides.allow_user_principals_for_break_glass = true)."
   }
 
   validation {
     condition     = length(var.gcp.allowed_regions) > 0
-    error_message = "allowed_regions (gcp.allowed_regions in config/landing-zone.yaml) must contain at least one region."
+    error_message = "gcp_overrides.allowed_regions (gcp.allowed_regions in config/landing-zone.yaml) must contain at least one region."
   }
 
   validation {
     condition     = length(setintersection(toset(var.gcp.os_login_exempt_environment_keys), toset(var.gcp.strict_folder_policy_environment_keys))) == 0
-    error_message = "os_login_exempt_environment_keys must not include a strict folder (strict_folder_policy_environment_keys always requires OS Login)."
+    error_message = "gcp_overrides.os_login_exempt_environment_keys must not include a strict folder (gcp_overrides.strict_folder_policy_environment_keys always requires OS Login)."
   }
 
   validation {
     condition     = var.gcp.security_contact_email == null || can(regex("^[^@]+@[^@]+\\.[^@]+$", var.gcp.security_contact_email))
-    error_message = "security_contact_email must be a valid email address when provided."
+    error_message = "gcp_overrides.security_contact_email must be a valid email address when provided."
   }
 
   validation {
     condition     = var.gcp.billing_contact_email == null || can(regex("^[^@]+@[^@]+\\.[^@]+$", var.gcp.billing_contact_email))
-    error_message = "billing_contact_email must be a valid email address when provided."
+    error_message = "gcp_overrides.billing_contact_email must be a valid email address when provided."
   }
 
   validation {
     condition     = can(regex("^[A-Z]{3}$", var.gcp.budget_currency))
-    error_message = "budget_currency must be a 3-letter ISO 4217 currency code (e.g., USD, EUR)."
+    error_message = "gcp_overrides.budget_currency must be a 3-letter ISO 4217 currency code (e.g., USD, EUR)."
   }
 
   validation {
     condition     = var.gcp.logging_project_id == null || can(regex("^[a-z][a-z0-9-]{4,28}[a-z0-9]$", var.gcp.logging_project_id))
-    error_message = "logging_project_id must be null or a valid GCP project ID."
+    error_message = "gcp_overrides.logging_project_id must be null or a valid GCP project ID."
   }
 
   validation {
     condition     = var.gcp.logging_project_number == null || can(regex("^[0-9]+$", var.gcp.logging_project_number))
-    error_message = "logging_project_number must contain only digits."
+    error_message = "gcp_overrides.logging_project_number must contain only digits."
   }
 
   validation {
     condition     = var.gcp.logging_project_id == null || var.gcp.logging_project_number != null
-    error_message = "logging_project_number is required when logging_project_id is set."
+    error_message = "gcp_overrides.logging_project_number is required when gcp_overrides.logging_project_id is set."
   }
 
   validation {
     condition     = var.gcp.audit_soft_delete_retention_days == 0 || (var.gcp.audit_soft_delete_retention_days >= 7 && var.gcp.audit_soft_delete_retention_days <= 90)
-    error_message = "audit_soft_delete_retention_days must be 0 or between 7 and 90."
+    error_message = "gcp_overrides.audit_soft_delete_retention_days must be 0 or between 7 and 90."
   }
 
   validation {
     condition     = alltrue([for e in var.gcp.alert_notification_emails : can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", e))])
-    error_message = "Each alert_notification_emails entry must be a valid email address."
+    error_message = "Each gcp_overrides.alert_notification_emails entry must be a valid email address."
   }
 
   validation {
     condition     = alltrue([for c in var.gcp.alert_notification_channels : can(regex("^projects/[^/]+/notificationChannels/[^/]+$", c))])
-    error_message = "Each alert_notification_channels entry must be projects/<project>/notificationChannels/<id>."
+    error_message = "Each gcp_overrides.alert_notification_channels entry must be projects/<project>/notificationChannels/<id>."
   }
 
   validation {
     condition     = !var.gcp.enable_admin_containment || length(var.gcp.containment_exempt_principals) > 0
-    error_message = "containment_exempt_principals must be non-empty when enable_admin_containment is true, or the deny applies to everyone including break-glass."
+    error_message = "gcp_overrides.containment_exempt_principals must be non-empty when gcp_overrides.enable_admin_containment is true, or the deny applies to everyone including break-glass."
   }
 
   validation {
     condition     = alltrue([for p in var.gcp.containment_exempt_principals : can(regex("^principal(Set)?://", p))])
-    error_message = "containment_exempt_principals entries must be IAM v2 principal identifiers (principal://... or principalSet://...), e.g. principalSet://goog/group/break-glass@acme.com."
+    error_message = "gcp_overrides.containment_exempt_principals entries must be IAM v2 principal identifiers (principal://... or principalSet://...), e.g. principalSet://goog/group/break-glass@acme.com."
   }
 
   validation {
     condition     = !anytrue([for p in var.gcp.containment_exempt_principals : can(regex("(?i)(replace-me|your-domain|example\\.(com|org|net)|\\.invalid$|changeme)", p))])
-    error_message = "containment_exempt_principals (gcp.break_glass_group in config/landing-zone.yaml) still contains a placeholder (REPLACE-ME / your-domain / example.com / .invalid). Set your real break-glass group before enabling admin containment."
+    error_message = "gcp_overrides.containment_exempt_principals (gcp.break_glass_group in config/landing-zone.yaml) still contains a placeholder (REPLACE-ME / your-domain / example.com / .invalid). Set your real break-glass group before enabling admin containment."
   }
 
   validation {
     condition     = !var.gcp.enable_pam || length(var.gcp.pam_eligible_groups) > 0
-    error_message = "pam_eligible_groups must be non-empty when enable_pam = true."
+    error_message = "gcp_overrides.pam_eligible_groups must be non-empty when gcp_overrides.enable_pam = true."
   }
 
   validation {
     condition     = alltrue([for g in var.gcp.pam_eligible_groups : can(regex("^[^@:\\s]+@[^@\\s]+\\.[^@\\s]+$", g)) && !can(regex("(?i)(replace-me|\\.invalid$)", g))])
-    error_message = "pam_eligible_groups entries must be bare group email addresses (placeholders such as REPLACE-ME / .invalid are rejected)."
+    error_message = "gcp_overrides.pam_eligible_groups entries must be bare group email addresses (placeholders such as REPLACE-ME / .invalid are rejected)."
   }
 
   validation {
     condition     = !var.gcp.enable_pam || length(var.gcp.pam_approver_groups) > 0
-    error_message = "pam_approver_groups must be non-empty when enable_pam = true."
+    error_message = "gcp_overrides.pam_approver_groups must be non-empty when gcp_overrides.enable_pam = true."
   }
 
   validation {
     condition     = length(setintersection(toset(var.gcp.pam_approver_groups), toset(var.gcp.pam_eligible_groups))) == 0
-    error_message = "pam_approver_groups must not overlap pam_eligible_groups (self-approval)."
+    error_message = "gcp_overrides.pam_approver_groups must not overlap gcp_overrides.pam_eligible_groups (self-approval)."
   }
 
   validation {
     condition     = alltrue([for g in var.gcp.pam_approver_groups : can(regex("^[^@:\\s]+@[^@\\s]+\\.[^@\\s]+$", g)) && !can(regex("(?i)(replace-me|\\.invalid$)", g))])
-    error_message = "pam_approver_groups entries must be bare group email addresses (placeholders such as REPLACE-ME / .invalid are rejected)."
+    error_message = "gcp_overrides.pam_approver_groups entries must be bare group email addresses (placeholders such as REPLACE-ME / .invalid are rejected)."
   }
 
   validation {
     condition     = can(regex("^[0-9]+s$", var.gcp.pam_max_request_duration)) && tonumber(trimsuffix(var.gcp.pam_max_request_duration, "s")) <= 86400
-    error_message = "pam_max_request_duration must be '<seconds>s' and at most 86400s (24h)."
+    error_message = "gcp_overrides.pam_max_request_duration must be '<seconds>s' and at most 86400s (24h)."
   }
 
   validation {
     condition     = contains(["separate", "organization"], var.gcp.guardrail_owner_mode)
-    error_message = "guardrail_owner_mode must be \"separate\" or \"organization\"."
+    error_message = "gcp_overrides.guardrail_owner_mode must be \"separate\" or \"organization\"."
   }
 
   validation {
     condition     = var.gcp.log_analytics_retention_days >= 365 && var.gcp.log_analytics_retention_days <= 3650
-    error_message = "log_analytics_retention_days must be between 365 and 3650 (audit logs are kept at least a year)."
+    error_message = "gcp_overrides.log_analytics_retention_days must be between 365 and 3650 (audit logs are kept at least a year)."
   }
 
   validation {
     condition     = var.gcp.logging_settings_kms_key_name == null || can(regex("^projects/.+/locations/.+/keyRings/.+/cryptoKeys/.+$", var.gcp.logging_settings_kms_key_name))
-    error_message = "logging_settings_kms_key_name must be in format: projects/{project}/locations/{location}/keyRings/{keyring}/cryptoKeys/{key}."
+    error_message = "gcp_overrides.logging_settings_kms_key_name must be in format: projects/{project}/locations/{location}/keyRings/{keyring}/cryptoKeys/{key}."
   }
 
   validation {
     condition     = alltrue([for u in var.gcp.allowed_workload_identity_issuers : can(regex("^https://[a-z0-9.-]+(/.*)?$", u))])
-    error_message = "allowed_workload_identity_issuers entries must be https:// issuer URIs."
+    error_message = "gcp_overrides.allowed_workload_identity_issuers entries must be https:// issuer URIs."
   }
 
   validation {
     condition     = alltrue([for a in var.gcp.allowed_workload_identity_aws_accounts : can(regex("^[0-9]{12}$", a))])
-    error_message = "allowed_workload_identity_aws_accounts entries must be 12-digit AWS account IDs."
+    error_message = "gcp_overrides.allowed_workload_identity_aws_accounts entries must be 12-digit AWS account IDs."
   }
 
   validation {
     condition     = alltrue([for c in keys(var.gcp.org_policy_overrides) : can(regex("^[a-zA-Z0-9]+\\.[a-zA-Z0-9.]+$", c))])
-    error_message = "org_policy_overrides keys must be constraint names such as compute.requireOsLogin (no constraints/ prefix)."
+    error_message = "gcp_overrides.org_policy_overrides keys must be constraint names such as compute.requireOsLogin (no constraints/ prefix)."
   }
 
   validation {
     condition     = contains(["enforce", "dry_run", "off"], var.gcp.wif_tenant_pin_enforcement)
-    error_message = "wif_tenant_pin_enforcement must be enforce, dry_run or off."
+    error_message = "gcp_overrides.wif_tenant_pin_enforcement must be enforce, dry_run or off."
   }
 }
 

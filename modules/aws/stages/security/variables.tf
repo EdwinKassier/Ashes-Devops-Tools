@@ -239,12 +239,12 @@ variable "aws" {
 
   validation {
     condition     = length(var.aws.aws_enabled_regions) > 0
-    error_message = "aws_enabled_regions (aws.enabled_regions in config/landing-zone.yaml) must contain at least one Region."
+    error_message = "aws_overrides.aws_enabled_regions (aws.enabled_regions in config/landing-zone.yaml) must contain at least one Region."
   }
 
   validation {
     condition     = length(var.aws.aws_enabled_regions) == length(distinct(var.aws.aws_enabled_regions))
-    error_message = "aws_enabled_regions (aws.enabled_regions in config/landing-zone.yaml) must not contain duplicate Regions."
+    error_message = "aws_overrides.aws_enabled_regions (aws.enabled_regions in config/landing-zone.yaml) must not contain duplicate Regions."
   }
 
   validation {
@@ -254,74 +254,74 @@ variable "aws" {
 
   validation {
     condition     = var.aws.key_admin_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:(role|user)/.+$", coalesce(var.aws.key_admin_arn, "x")))
-    error_message = "key_admin_arn must be null or an account-qualified IAM role/user ARN."
+    error_message = "aws_overrides.key_admin_arn must be null or an account-qualified IAM role/user ARN."
   }
 
   validation {
     condition     = can(regex("^[A-Za-z0-9+=,.@_/-]{1,64}$", var.aws.key_admin_role_name))
-    error_message = "key_admin_role_name must be a valid IAM role name."
+    error_message = "aws_overrides.key_admin_role_name must be a valid IAM role name."
   }
 
   validation {
     condition     = alltrue([for k in keys(var.aws.kms_key_user_arns) : contains(["log_archive", "forensics", "security_tooling"], k)])
-    error_message = "kms_key_user_arns keys must be one of log_archive, forensics, security_tooling."
+    error_message = "aws_overrides.kms_key_user_arns keys must be one of log_archive, forensics, security_tooling."
   }
 
   validation {
     condition     = var.aws.config_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", coalesce(var.aws.config_role_arn, "x")))
-    error_message = "config_role_arn must be null or an account-qualified IAM role ARN."
+    error_message = "aws_overrides.config_role_arn must be null or an account-qualified IAM role ARN."
   }
 
   validation {
     condition     = var.aws.aggregator_role_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", coalesce(var.aws.aggregator_role_arn, "x")))
-    error_message = "aggregator_role_arn must be null or an account-qualified IAM role ARN."
+    error_message = "aws_overrides.aggregator_role_arn must be null or an account-qualified IAM role ARN."
   }
 
   validation {
     condition     = var.aws.meta_store_manager_role_arn == "" || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", var.aws.meta_store_manager_role_arn))
-    error_message = "meta_store_manager_role_arn must be empty (create the role) or a valid IAM role ARN."
+    error_message = "aws_overrides.meta_store_manager_role_arn must be empty (create the role) or a valid IAM role ARN."
   }
 
   validation {
     condition     = var.aws.break_glass_role_arn == "" || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:role/.+$", var.aws.break_glass_role_arn))
-    error_message = "break_glass_role_arn must be empty or an account-qualified IAM role ARN."
+    error_message = "aws_overrides.break_glass_role_arn must be empty or an account-qualified IAM role ARN."
   }
 
   validation {
     condition = alltrue([
       for s in var.aws.enabled_security_services : contains(["macie", "inspector", "detective", "resource-explorer"], s)
     ])
-    error_message = "enabled_security_services entries must be one of: macie, inspector, detective, resource-explorer."
+    error_message = "aws_overrides.enabled_security_services entries must be one of: macie, inspector, detective, resource-explorer."
   }
 
   validation {
     condition     = length(var.aws.notification_subscribers) > 0
-    error_message = "notification_subscribers must contain at least one subscriber."
+    error_message = "aws_overrides.notification_subscribers must contain at least one subscriber."
   }
 
   validation {
     condition     = contains(["none", "write", "read", "all"], var.aws.cloudtrail_s3_data_events)
-    error_message = "cloudtrail_s3_data_events must be one of: none, write, read, all."
+    error_message = "aws_overrides.cloudtrail_s3_data_events must be one of: none, write, read, all."
   }
 
   validation {
     condition     = !var.aws.create_break_glass || length(var.aws.break_glass_trusted_principals) > 0
-    error_message = "create_break_glass = true requires at least one break_glass_trusted_principals entry (an empty trust policy is rejected by AWS)."
+    error_message = "aws_overrides.create_break_glass = true requires at least one aws_overrides.break_glass_trusted_principals entry (an empty trust policy is rejected by AWS)."
   }
 
   validation {
     condition     = can(regex("^[a-zA-Z0-9+=,.@_-]{1,64}$", var.aws.break_glass_role_name))
-    error_message = "break_glass_role_name must be a valid IAM role name (1-64 chars of A-Z a-z 0-9 +=,.@_-)."
+    error_message = "aws_overrides.break_glass_role_name must be a valid IAM role name (1-64 chars of A-Z a-z 0-9 +=,.@_-)."
   }
 
   validation {
     condition     = alltrue([for p in var.aws.break_glass_trusted_principals : can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:", p))])
-    error_message = "Each break_glass_trusted_principals entry must be an account-qualified IAM ARN (arn:aws:iam::<12-digit>:...)."
+    error_message = "Each aws_overrides.break_glass_trusted_principals entry must be an account-qualified IAM ARN (arn:aws:iam::<12-digit>:...)."
   }
 
   validation {
     condition     = var.aws.break_glass_mfa_max_age >= 300 && var.aws.break_glass_mfa_max_age <= 43200
-    error_message = "break_glass_mfa_max_age must be between 300 and 43200 seconds."
+    error_message = "aws_overrides.break_glass_mfa_max_age must be between 300 and 43200 seconds."
   }
 }
 

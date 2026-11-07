@@ -44,13 +44,28 @@ for preset in examples/presets/*.tfvars; do
     continue
   fi
   # Active (uncommented) and commented-out assignments must both name real
-  # variables (column 0) or, inside a <section>_overrides = { ... } object (two-
-  # space indent), real attributes of an object variable of that root.
-  for key in $(sed -nE 's/^(# ?)?([a-z][a-z0-9_]*)[[:space:]]+=.*/\2/p' "$preset"); do
+  # variables. Keys inside a top-level <section>_overrides = { ... } object are
+  # checked separately: each direct attribute (active or commented) must be an
+  # attribute of that root's <section>_overrides variable.
+  for key in $(awk '/^[a-z][a-z0-9_]*_overrides[[:space:]]*=[[:space:]]*\{/{skip=1; next} skip && /^\}/{skip=0; next} !skip' "$preset" \
+    | sed -nE 's/^#?[[:space:]]*([a-z][a-z0-9_]*)[[:space:]]+=.*/\1/p'); do
     grep -q "variable \"$key\"" "$vars" || note "preset $preset sets unknown variable '$key' (not in $vars)"
   done
-  for key in $(sed -nE 's/^  (# )?([a-z][a-z0-9_]*)[[:space:]]+=.*/\2/p' "$preset"); do
-    grep -qE "^    $key[[:space:]]+= optional\(" "$vars" || note "preset $preset sets unknown override key '$key' (not an object attribute in $vars)"
+  for obj in $(sed -nE 's/^([a-z][a-z0-9_]*_overrides)[[:space:]]*=[[:space:]]*\{.*/\1/p' "$preset"); do
+    attrs=$(awk -v v="variable \"$obj\" {" '$0 == v {inb=1; next} inb && /^\}/ {inb=0} inb' "$vars" \
+      | sed -nE 's/^    ([a-z][a-z0-9_]*)[[:space:]]+= optional\(.*/\1/p')
+    [ -n "$attrs" ] || { note "preset $preset sets '$obj', which is not an object variable of $vars"; continue; }
+    # Direct attributes only: brace depth 1 inside the object; comments keep the depth.
+    for key in $(awk -v o="$obj" '
+      $0 ~ "^" o "[[:space:]]*=[[:space:]]*\\{" {inb=1; d=1; next}
+      inb {
+        line=$0; c=line; sub(/^[[:space:]]*#[[:space:]]?/, "", c)
+        if (d == 1 && match(c, /^[[:space:]]*[a-z][a-z0-9_]*[[:space:]]+=/)) { k=c; sub(/^[[:space:]]*/, "", k); sub(/[[:space:]]+=.*/, "", k); print k }
+        if (line !~ /^[[:space:]]*#/) { n=gsub(/\{/, "{", line); m=gsub(/\}/, "}", line); d += n - m }
+        if (d <= 0) inb=0
+      }' "$preset"); do
+      printf '%s\n' "$attrs" | grep -qx "$key" || note "preset $preset sets unknown key '$obj.$key' (not an attribute of variable \"$obj\" in $vars)"
+    done
   done
 done
 

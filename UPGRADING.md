@@ -427,11 +427,12 @@ whose values moved 1:1 shows no changes.
 For a TFC workspace variable, delete the old variable and add one HCL variable,
 for example `gcp_overrides = { enable_pam = true, pam_eligible_groups = ["..."] }`.
 Leave a key out to keep its config value. **An old variable that is still set
-is not an error:** Terraform only warns "Value for undeclared variable" (tfvars
-files and TFC workspace variables; a `TF_VAR_` environment variable is ignored
-silently), and the setting falls back to the config file or the stage default.
-Check the workspace variables list, and read the upgrade plan: any change in it
-means a value was not moved.
+fails the plan.** Each root's `deprecated_inputs.tf` declares every removed name
+again (untyped, `default = null`, inert), and `terraform_data.removed_inputs_guard`
+fails while any of them is set, from a tfvars file, a TFC workspace variable or
+a `TF_VAR_` environment variable. The error lists each one with its replacement,
+for example `enable_pam -> gcp_overrides.enable_pam`. The guard and the inert
+declarations are removed at v1.0 (see "Legacy modes removed at v1.0").
 
 Behaviour changes to check:
 
@@ -457,6 +458,8 @@ Behaviour changes to check:
   `monthly_budget_amount`, the bootstrap contract inputs, `terraform_admin_email`,
   `tfc_hostname`, `pin_wif_to_tfc_organization` and `wif_github_owner_ids`.
   aws-security keeps its org-section, tagging, credential and contract inputs.
+
+Setting any old name below fails the plan (removed-inputs guard, removed at v1.0).
 
 | Old `gcp-organization` variable | New key | Config key (unchanged) |
 |---|---|---|
@@ -507,7 +510,7 @@ Behaviour changes to check:
 | `org_policy_overrides` | `gcp_overrides.org_policy_overrides` | - |
 | `wif_tenant_pin_enforcement` | `gcp_overrides.wif_tenant_pin_enforcement` | - |
 
-| Old `aws-security` variable | New key | Config key (unchanged) |
+| Old `aws-security` variable (guarded the same way) | New key | Config key (unchanged) |
 |---|---|---|
 | `aws_enabled_regions` | `aws_overrides.aws_enabled_regions` | `aws.enabled_regions` |
 | `log_archive_bucket_name` | `aws_overrides.log_archive_bucket_name` | `aws.log_archive_bucket_name` |
@@ -617,4 +620,5 @@ Each dual mode keeps both paths until v1.0. Migrate before then.
 | `guardrail_owner_mode = "organization"` (in-stage apply, `roles/iam.denyAdmin` on the organization apply SA) | `guardrail_owner_mode = "separate"` | GCP deny policies move to the security-team `gcp-guardrails` workspace |
 | Workload `removed` block for `module.config_recorder`, the deprecated `config_role_arn` and `create_config_service_linked_role` inputs, and the `config_role_arn` output | The `org-config-recorders` StackSet in aws-organization | AWS Config recorders move to an aws-organization StackSet |
 | Flag-off recorder path of the SCP (recorder actions in `DenyWeakenSecurityServices`) | `enable_config_recorder_scp = true` | AWS Config recorders move to an aws-organization StackSet |
+| `deprecated_inputs.tf` in gcp-organization and aws-security (inert re-declarations of the 81 removed variables, and `terraform_data.removed_inputs_guard`) | `gcp_overrides` / `aws_overrides` keys | Object pass-through: `gcp_overrides` (gcp-organization) and `aws_overrides` (aws-security) |
 | The individual cross-root outputs of the producer roots, and the consumers' fallback to them when `contract` is absent | The `contract` output (`outputs.contract.<key>`) | One `contract` output per producer root |

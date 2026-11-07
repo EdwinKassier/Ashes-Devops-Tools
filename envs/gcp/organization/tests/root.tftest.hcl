@@ -697,3 +697,42 @@ run "unset_override_keeps_config_value" {
     error_message = "the config value (boundary on) must reach the stage."
   }
 }
+
+# A removed variable that is still set (tfvars, TFC variable or TF_VAR_) fails
+# the plan, and the message names its gcp_overrides replacement.
+run "removed_input_fails_with_replacement" {
+  command = plan
+
+  variables {
+    enable_pam = true
+  }
+
+  expect_failures = [terraform_data.removed_inputs_guard]
+
+  assert {
+    condition     = local.removed_inputs_message == "Removed variables are set; move each into gcp_overrides (UPGRADING.md): enable_pam -> gcp_overrides.enable_pam."
+    error_message = "the guard must name the removed variable and its gcp_overrides key."
+  }
+}
+
+# ... and a key unset in both the config file and gcp_overrides takes the stage
+# default (strict_folder_policy_environment_keys = ["prod"]; the fixture has no
+# such key and the schema has none).
+run "unset_everywhere_takes_stage_default" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-prod-pab.yaml"
+    domain                   = null
+    project_prefix           = null
+    billing_account          = null
+    tfc_organization         = null
+    environments             = null
+    gcp_overrides            = {}
+  }
+
+  assert {
+    condition     = try(local.gcp.strict_folder_policy_environment_keys, null) == null && module.organization.strict_folder_policy_environment_keys == tolist(["prod"])
+    error_message = "a key unset in config and gcp_overrides must reach the stage as its default (strict folder bundle on prod)."
+  }
+}

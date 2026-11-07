@@ -1,13 +1,16 @@
 # Presets
 
-Ready-to-use `-var-file` overlays. Each preset sets only a handful of toggles and
-is applied IN ADDITION to your own tfvars, so you keep full control. In Terraform
-Cloud, set the same values as workspace variables instead of a local `-var-file`.
+Ready-to-use `-var-file` overlays. Each preset sets only a handful of toggles.
+In Terraform Cloud, set the same values as workspace variables instead of a
+local `-var-file`. How a preset combines with your own tfvars depends on its root:
 
-`envs/gcp/organization` and `envs/aws/security` take their tuning inputs as one
-object (`gcp_overrides` / `aws_overrides`). A `-var-file` sets the whole object,
-so their presets replace your own override object rather than merging with it:
-copy the preset's keys into your own `gcp_overrides` / `aws_overrides` instead.
+- **Most roots** take plain variables, so a preset is applied IN ADDITION to your
+  own tfvars (a later `-var-file` wins per variable).
+- **`envs/gcp/organization` and `envs/aws/security`** take their tuning inputs as
+  one object (`gcp_overrides` / `aws_overrides`). A `-var-file` sets the whole
+  object, so a preset's override object REPLACES yours: stacking it after your
+  own tfvars drops every key of yours it does not repeat. Do not stack these
+  presets. Copy their keys into your own `<section>_overrides` instead.
 
 There are two families: cost presets (cut the non-production idle baseline) and
 hardening presets (flip the safe production controls on together).
@@ -59,8 +62,10 @@ other roots ignore it. A preset name with no `.yaml` twin fails the plan.
 |---|---|
 | `prod-gcp-workload.yaml` | `envs/gcp/workload` (top-level `presets` or `gcp.workload.presets_by_environment`) |
 
-The other presets have no YAML twin yet, so `envs/gcp/network-hub`, `envs/aws/security`
-and the rest still take them with `-var-file`. Each `.yaml` mirrors its `.tfvars`
+The other presets have no YAML twin yet. `envs/gcp/network-hub` and the other
+plain-variable roots still take them with `-var-file`. For `envs/gcp/organization`
+and `envs/aws/security`, copy the preset's keys into your own `gcp_overrides` /
+`aws_overrides` (see the top of this page): their override object replaces yours. Each `.yaml` mirrors its `.tfvars`
 exactly: `envs/gcp/workload/tests/presets.tftest.hcl` fails when the two disagree.
 Prefer `presets_by_environment` for hardening presets, so dev is not enforced
 along with prod.
