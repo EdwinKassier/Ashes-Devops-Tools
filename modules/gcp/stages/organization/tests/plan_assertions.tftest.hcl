@@ -1022,3 +1022,27 @@ run "budget_channels_opt_in" {
     error_message = "the org budget must plan with the control-plane channels attached."
   }
 }
+
+run "scc_api_version_defaults_to_v1_and_flips_to_v2" {
+  command = plan
+
+  assert {
+    condition     = length(module.scc_notifications.v2_notification_configs) == 0
+    error_message = "scc_api_version must default to v1 (no v2 resources for existing estates)."
+  }
+}
+
+run "scc_api_version_v2_creates_v2_config" {
+  command = plan
+
+  variables {
+    gcp = merge(var.gcp, {
+      scc_api_version = "v2"
+    })
+  }
+
+  assert {
+    condition     = length(module.scc_notifications.v2_notification_configs) == 1
+    error_message = "scc_api_version = v2 must create the v2 notification config."
+  }
+}

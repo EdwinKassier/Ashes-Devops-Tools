@@ -229,6 +229,7 @@ module "scc_notifications" {
   config_id         = "scc-notify-all-active"
   filter            = "state=\"ACTIVE\""
   kms_key_name      = module.cmek.key_names["scc-notifications"]
+  scc_api_version   = var.gcp.scc_api_version
 }
 
 # Resource Manager Tags (Metadata & Governance)

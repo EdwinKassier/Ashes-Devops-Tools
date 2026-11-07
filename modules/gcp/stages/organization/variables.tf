@@ -242,6 +242,9 @@ variable "gcp" {
     # (logging_settings_storage_location, default default_region) and optionally their CMEK
     # (logging_settings_kms_key_name). Default false.
     enable_logging_organization_settings = optional(bool, false)
+    # SCC API generation for the notification stream: v1 (default, unchanged), both (add the v2 twin
+    # next to v1 to verify), or v2 (flip; v1 configs destroyed). See docs/runbooks/scc-v2-migration.md.
+    scc_api_version = optional(string, "v1")
     # Optional CMEK for the _Default/_Required buckets of new projects. Grant the org Cloud Logging
     # service account (gcloud logging settings describe --organization=<id>)
     # roles/cloudkms.cryptoKeyEncrypterDecrypter on the key first. Null = Google-managed encryption.

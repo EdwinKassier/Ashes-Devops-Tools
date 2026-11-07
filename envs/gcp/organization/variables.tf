@@ -183,6 +183,7 @@ variable "gcp_overrides" {
     enable_log_analytics                        = optional(bool)
     log_analytics_retention_days                = optional(number)
     enable_logging_organization_settings        = optional(bool)
+    scc_api_version                             = optional(string)
     logging_settings_kms_key_name               = optional(string)
     enable_principal_access_boundary            = optional(bool)
     principal_access_boundary_allowed_resources = optional(list(string))

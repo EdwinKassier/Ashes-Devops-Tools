@@ -123,3 +123,74 @@ run "module_labels_applied" {
     error_message = "var.labels must land on the SCC notification topic."
   }
 }
+
+# --- SCC API version (v1 default / both / v2) ---------------------------------
+
+run "v1_default_creates_no_v2_resources" {
+  command = plan
+
+  assert {
+    condition     = length(google_scc_v2_organization_notification_config.this) == 0 && length(google_scc_v2_organization_mute_config.this) == 0 && length(google_scc_mute_config.this) == 0
+    error_message = "Default scc_api_version=v1 with no mute_configs must plan no v2 or mute resources."
+  }
+
+  assert {
+    condition     = length(google_scc_notification_config.notification_config) == 1
+    error_message = "Default must keep the v1 notification config."
+  }
+}
+
+run "both_adds_v2_twin_and_mute_configs" {
+  command = plan
+
+  variables {
+    scc_api_version = "both"
+    mute_configs = {
+      noisy = { filter = "category=\"OPEN_FIREWALL\"" }
+    }
+  }
+
+  assert {
+    condition     = length(google_scc_notification_config.notification_config) == 1 && length(google_scc_v2_organization_notification_config.this) == 1 && length(google_pubsub_topic_iam_member.scc_publisher_v2) == 1
+    error_message = "both must keep v1 and add the v2 notification config plus publisher binding."
+  }
+
+  assert {
+    condition     = length(google_scc_mute_config.this) == 1 && length(google_scc_v2_organization_mute_config.this) == 1 && google_scc_v2_organization_mute_config.this["noisy"].location == "global"
+    error_message = "both must create the mute config under v1 and v2."
+  }
+}
+
+run "v2_flip_drops_v1_configs_keeps_topic" {
+  command = plan
+
+  variables {
+    scc_api_version = "v2"
+  }
+
+  assert {
+    condition     = length(google_scc_notification_config.notification_config) == 0 && length(google_pubsub_topic_iam_member.scc_publisher) == 0 && length(google_scc_v2_organization_notification_config.this) == 1
+    error_message = "v2 must drop the v1 configs and keep only the v2 notification config."
+  }
+
+  assert {
+    condition     = length(google_pubsub_topic.scc_notifications) == 1
+    error_message = "The topic must stay (shared across API versions)."
+  }
+}
+
+run "v2_multi_config" {
+  command = plan
+
+  variables {
+    scc_api_version = "v2"
+    notification_configs = {
+      crit = { pubsub_topic_name = "scc-crit", filter = "severity=\"CRITICAL\"" }
+    }
+  }
+
+  assert {
+    condition     = length(google_scc_v2_organization_notification_config.this) == 1 && length(google_scc_notification_config.notification_config_multi) == 0
+    error_message = "v2 multi path must create one v2 config per entry and no v1 config."
+  }
+}
