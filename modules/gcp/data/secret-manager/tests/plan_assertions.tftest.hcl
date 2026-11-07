@@ -73,7 +73,7 @@ run "secrets_plan_with_expected_shape" {
 
   # The value is written via the write-only argument: nothing in state.
   assert {
-    condition     = google_secret_manager_secret_version.this["database-url"].secret_data == null && google_secret_manager_secret_version.this["database-url"].secret_data_wo_version == 1
+    condition     = google_secret_manager_secret_version.this["database-url"].secret_data == null && tostring(google_secret_manager_secret_version.this["database-url"].secret_data_wo_version) == "1"
     error_message = "secret versions must use secret_data_wo (never secret_data) with version 1 by default."
   }
 
@@ -141,7 +141,7 @@ run "ephemeral_secret_value_creates_version" {
   }
 
   assert {
-    condition     = google_secret_manager_secret_version.this["api-token"].secret_data == null && google_secret_manager_secret_version.this["api-token"].secret_data_wo_version == 2
+    condition     = google_secret_manager_secret_version.this["api-token"].secret_data == null && tostring(google_secret_manager_secret_version.this["api-token"].secret_data_wo_version) == "2"
     error_message = "the ephemeral secret must be written via secret_data_wo with its version counter."
   }
 }
