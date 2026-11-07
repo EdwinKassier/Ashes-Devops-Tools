@@ -262,13 +262,12 @@ does not: Kinesis retention is 24 hours by default and at most 365 days
 ([AWS docs](https://docs.aws.amazon.com/streams/latest/dev/service-sizes-and-limits.html),
 checked 2026-11), and Pub/Sub topic retention is at most 31 days
 ([Google Cloud docs](https://docs.cloud.google.com/pubsub/quotas), checked
-2026-11). Keeping two years in the log is expensive or impossible, so the raw
-zone is the long log, and a backfill reads files instead of the stream. The
-job's source is a parameter: "log from checkpoint" or "raw from T1 to T2".
+2026-11). So raw is the long log, and the job's source is a parameter: "log
+from checkpoint" or "raw from T1 to T2".
 
-**Where it breaks.** Genuinely batch-shaped work (full-history training, a
-join across a year) belongs in a scheduled job over curated. That is not
-Lambda unless it reimplements a streaming metric.
+**Where it breaks.** Batch-shaped work (full-history training) belongs in a
+scheduled job over curated; that is not Lambda unless it duplicates a
+streaming metric.
 
 ### CDC ingestion
 
@@ -292,11 +291,11 @@ checked 2026-11). Publish only the tables you need.
 **Snapshot, then stream.** DMS "full load and CDC" and Datastream backfill
 copy existing rows, then stream from the slot. Snapshot rows (DMS `load`,
 Datastream backfill `read_method`) carry no log position, so stamp them
-(`commit_pos` = P, `rec_offset` = 0), where P is `pg_current_wal_lsn()`
+(`commit_pos` = P, `rec_offset` = −1), where P is `pg_current_wal_lsn()`
 recorded by the controller **before** the snapshot begins. Not zero: after a
 re-snapshot, a zero would lose to stale rows in curated. A transaction that
-commits after P outranks the snapshot row; one that committed before P is
-already reflected in it.
+commits at or after P (offsets start at 0) outranks the snapshot row; one
+that committed before P is already reflected in it.
 
 **Ordering and duplicates.** Datastream says event order is not guaranteed
 and duplicates can occur
@@ -342,8 +341,8 @@ bounded period, or encrypt per data subject and destroy the key
 
 **3. Idempotent writes.** The upsert keeps the newest version per key and
 never lets an older position overwrite a newer one. Deletes are soft
-tombstones that keep the last business values, so a replayed old insert cannot
-resurrect a deleted row:
+tombstones (their business columns are not authoritative), so a replayed old
+insert cannot resurrect a deleted row:
 
 ```sql
 -- BigQuery dialect. staged_changes holds one micro-batch (or one backfill slice).
@@ -370,27 +369,29 @@ WHEN NOT MATCHED THEN
           s.source_ts, s.op = 'd'); -- a first-seen delete is a key-only tombstone
 ```
 
-It is idempotent and order-insensitive. Aggregates use the other idempotent form: **overwrite whole partitions**,
-never increment.
+It is idempotent and order-insensitive. Aggregates use the other idempotent
+form: **overwrite whole partitions**, never increment.
 
-**Backfill into a shadow, then swap.** A backfill writes to
-`orders__bf_<run_id>`, not the live table. That avoids the BigQuery DML
-concurrency limit from the [estimates](#back-of-envelope-estimates), keeps the
-live table correct, and lets you diff before promoting. The steps:
+**Backfill into a shadow, then swap.** Writing `orders__bf_<run_id>` instead
+of the live table avoids the DML concurrency limit from the
+[estimates](#back-of-envelope-estimates) and lets you diff before promoting:
 
 1. **Seed the shadow** with the table as it was at T1 minus a margin (say an
-   hour); a backfill over `[T1, T2)` only touches keys changed in that window,
-   so an empty shadow would drop every other row. BigQuery can copy or
+   hour): a backfill only touches keys changed in its window, so an empty
+   shadow would drop every other row. BigQuery can copy or
    snapshot a table at a past time within its time-travel window, 2 to 7 days
    and 7 by default
    ([Google Cloud docs](https://docs.cloud.google.com/bigquery/docs/time-travel),
    checked 2026-11); Iceberg branches from the snapshot of that time if it has
    not expired. An older rebuild starts empty and replays raw from the
    source's initial snapshot.
-2. **Apply raw `[T1 − margin, T2)`**; the guard makes the margin harmless.
-   Pick T2 inside the log's retention.
+2. **Apply raw from the seed time minus the maximum consumer lag, to T2.** A
+   record that reached raw just before the seed instant may not yet have been
+   merged into the seed, so the replay must overlap it; the
+   (`commit_pos`, `rec_offset`) guard makes the overlap harmless. Pick T2
+   inside the log's retention.
 3. **Promote:** pause the live consumer, swap atomically (a table copy on
-   BigQuery, a branch swap on Iceberg), seek the consumer back to T2, resume.
+   BigQuery, a branch swap on Iceberg), seek the consumer back to T2 minus the same lag, resume.
 
 **Where it breaks.** Replaying a job with external side effects (an email, a
 payment call) repeats them: replayable jobs must be pure.
@@ -798,10 +799,11 @@ for CDC tables past 15 minutes while event tables are fresh.
    (`SELECT pg_drop_replication_slot('<slot>');`), trading a CDC re-snapshot
    for production's survival.
 5. After a drop, recreate the slot and re-snapshot (DMS full load plus CDC,
-   or a Datastream backfill) **into a shadow table, then swap**, as in
-   [Replay and backfill](#replay-and-backfill). Deletes during the gap were
-   never emitted, so merging the snapshot into the live table would keep
-   deleted rows; alternatively, tombstone live keys absent from the snapshot.
+   or a Datastream backfill) into a shadow that **starts empty**, not seeded
+   from live, then swap. Deletes during the gap were never emitted, so live
+   state would keep deleted rows. Alternatively, tombstone live keys absent
+   from the snapshot, stamped (P, −1) through the guarded MERGE, so keys
+   inserted after the snapshot read survive.
 
 **Verification.** Retained WAL under 1 GB, CDC freshness under 5 minutes, and
 source-to-curated row counts reconcile for the affected tables.
@@ -844,7 +846,7 @@ serving. **Verification and follow-up:** reconciliation passes; add a test.
 ### Classic mistakes
 
 - Polling `updated_at` and missing deletes.
-- Treating event-time raw folders (Datastream's layout) as closed: late changes keep landing in them.
+- Treating event-time raw folders (Datastream's) as closed.
 - Upserts without a position guard: replays overwrite newer data.
 - Hard deletes that let a replay resurrect rows.
 - Backfilling straight into the live table.
