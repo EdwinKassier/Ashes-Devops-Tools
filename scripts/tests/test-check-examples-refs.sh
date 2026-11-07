@@ -42,6 +42,12 @@ expect_pass good.md
 expect_fail bad-module.md "modules/gcp/network/does-not-exist not found"
 expect_fail bad-input.md "not_a_real_input not found"
 expect_fail bad-yaml.md "gcp.nonexistent_key not found"
+expect_pass good-nonlocal.md
+expect_fail bad-heredoc.md "heredoc_bad_input not found"
+expect_fail bad-second-module.md "modules/gcp/network/nope-two not found"
+expect_fail bad-terraform-fence.md "modules/gcp/network/nope-tf not found"
+expect_fail bad-single-line.md "modules/gcp/network/nope-single not found"
+expect_fail bad-unclosed.md "unclosed module"
 expect_fail bad-envs.md "envs/gcp/nowhere not found"
 
 # Missing and empty dirs pass.

@@ -26,14 +26,19 @@ report() { # file line kind ref
 META_ARGS=" source count for_each providers depends_on "
 
 # ---- module block state (per hcl fence) ----
-in_mod=0 depth=0 mod_src="" mod_src_line=0
+in_mod=0 depth=0 mod_src="" mod_src_line=0 mod_name="" mod_line=0 heredoc=""
 args=()
 
-reset_mod() { in_mod=0; depth=0; mod_src=""; mod_src_line=0; args=(); }
+reset_mod() { in_mod=0; depth=0; mod_src=""; mod_src_line=0; mod_name=""; mod_line=0; args=(); }
 
 finish_mod() { # file
   local f="$1" norm a name ln
   if [[ -z "${mod_src}" ]]; then reset_mod; return; fi
+  # Registry / git / other non-local sources are out of scope.
+  if [[ "${mod_src}" != ./* && "${mod_src}" != ../* && "${mod_src}" != modules/* ]]; then
+    reset_mod
+    return
+  fi
   norm="${mod_src}"
   while [[ "${norm}" == ./* || "${norm}" == ../* ]]; do
     norm="${norm#./}"
@@ -92,11 +97,19 @@ check_file() {
   while IFS=$'\t' read -r ln lang text; do
     if [[ "${lang}" == "hcl" ]]; then
       if [[ ${in_mod} -eq 0 ]]; then
-        if [[ "${text}" =~ ^[[:space:]]*module[[:space:]]+\"[^\"]+\"[[:space:]]*\{ ]]; then
-          in_mod=1; depth=0
+        if [[ "${text}" =~ ^[[:space:]]*module[[:space:]]+\"([^\"]+)\"[[:space:]]*\{ ]]; then
+          in_mod=1; depth=0; mod_name="${BASH_REMATCH[1]}"; mod_line="${ln}"
+          # single-line block: capture an inline source
+          if [[ "${text}" =~ \{[[:space:]]*source[[:space:]]*=[[:space:]]*\"([^\"]*)\" ]]; then
+            mod_src="${BASH_REMATCH[1]}"; mod_src_line="${ln}"
+          fi
         else
           continue
         fi
+      fi
+      if [[ -n "${heredoc}" ]]; then
+        [[ "${text//[[:space:]]/}" == "${heredoc}" ]] && heredoc=""
+        continue
       fi
       [[ "${text}" =~ ^[[:space:]]*(#|//) ]] && continue
       if [[ ${depth} -eq 1 ]]; then
@@ -109,18 +122,28 @@ check_file() {
       stripped="$(sed -E 's/"[^"]*"//g' <<<"${text}")"
       o="${stripped//[^\{]/}"; c="${stripped//[^\}]/}"
       depth=$((depth + ${#o} - ${#c}))
+      if [[ "${text}" =~ \<\<-?[[:space:]]*\"?([A-Za-z_][A-Za-z0-9_]*)\"? ]]; then
+        heredoc="${BASH_REMATCH[1]}"
+      fi
       if [[ ${depth} -le 0 ]]; then finish_mod "${rel}"; fi
     elif [[ "${lang}" == "yaml" ]]; then
       check_yaml_line "${rel}" "${ln}" "${text}"
     elif [[ "${lang}" == "END" ]]; then
-      [[ ${in_mod} -eq 1 ]] && reset_mod
+      if [[ ${in_mod} -eq 1 ]]; then
+        printf '%s:%s: unclosed module "%s" block at end of fence (checks skipped)\n' "${rel}" "${mod_line}" "${mod_name}"
+        problems=$((problems + 1))
+        reset_mod
+      fi
+      heredoc=""
       y_top=""; y_child_indent=-1
     fi
   done < <(awk '
     /^[[:space:]]*```/ {
       if (inf) { print NR "\tEND\t"; inf = 0; lang = ""; next }
       l = $0; sub(/^[[:space:]]*```/, "", l); sub(/[[:space:]].*$/, "", l)
-      if (l == "hcl" || l == "yaml") { inf = 1; lang = l } else { inf = 2 }
+      if (l == "hcl" || l == "terraform" || l == "tf") { inf = 1; lang = "hcl" }
+      else if (l == "yaml" || l == "yml") { inf = 1; lang = "yaml" }
+      else if (0) { } else { inf = 2 }
       next
     }
     inf == 1 { printf "%d\t%s\t%s\n", NR, lang, $0 }
@@ -131,7 +154,7 @@ check_file() {
   while IFS=: read -r ln ref; do
     ref="${ref#\`}"; ref="${ref%\`}"
     ref="${ref%/}"
-    [[ -d "${REPO_ROOT}/${ref}" ]] || report "${rel}" "${ln}" "envs-path" "${ref}"
+    [[ -e "${REPO_ROOT}/${ref}" ]] || report "${rel}" "${ln}" "envs-path" "${ref}"
   done < <(grep -noE '`envs/[A-Za-z0-9_./-]+`' "${f}" || true)
 }
 
