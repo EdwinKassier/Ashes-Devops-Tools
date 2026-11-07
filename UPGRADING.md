@@ -270,6 +270,16 @@ key is not replaced or moved. A role whose name matches the old wildcard but is
 not an app-services execution role loses kms:Decrypt on the key: grant it
 explicitly if you relied on that. A supplied `kms_key_arn` is unaffected.
 
+#### aws-network: Site-to-Site VPN on the TGW (opt-in)
+
+`aws.network.vpn.enabled` adds a Site-to-Site VPN attached to the Transit
+Gateway, with a new `hybrid` TGW route table that default-routes to the
+inspection VPC. On-premises routes propagate into the `inspection` table only,
+so traffic to and from on-premises is inspected both ways. Tunnel pre-shared
+keys are stored in Secrets Manager (`vpn_preshared_key_arn` output), not in
+state, unless you set `preshared_key_storage = "Standard"`. Off by default: no
+plan change when unset.
+
 ### GCP
 
 #### GCP deny policies move to the security-team `gcp-guardrails` workspace
@@ -455,6 +465,25 @@ apply that creates its spoke. Run the runbook's pre-flight first.
 null) are new. With the defaults every existing address plans unchanged. The
 `services` output gains `runtime`, `job_name` and `slo_name`; `github_actions`
 gains `CLOUD_RUN_JOB`. There are no manual steps.
+
+#### gcp-network-hub: HA VPN and Interconnect from config (opt-in)
+
+`gcp.network.vpn` and `gcp.network.interconnect` now reach the existing hub
+VPN/Interconnect modules. Off by default: no plan change when unset. Supply the
+VPN pre-shared key with the write-only `vpn_shared_secret_wo` (rotate by raising
+`vpn_shared_secret_wo_version`); it never enters state. The sensitive
+`stages/net-hub` `vpn_shared_secret` and `network/vpn` `shared_secret` inputs
+are legacy and are removed at v1.0.
+
+**A secret change replaces the VPN tunnels.** Moving from the legacy input to
+`vpn_shared_secret_wo`, or raising its version, recreates the tunnels, which
+means an outage. With NCC, the hybrid spoke can block the replacement. Do it in a
+maintenance window, following
+[gcp-hybrid-connectivity](docs/runbooks/gcp-hybrid-connectivity.md).
+
+With `gcp.network.ncc_hub.enabled` and `gcp.network.vpn.enabled` both set, the
+tunnels also join the NCC hub's center group (`default` on MESH) as a hybrid
+spoke. This is a new resource.
 
 ### SaaS and cross-cloud
 
