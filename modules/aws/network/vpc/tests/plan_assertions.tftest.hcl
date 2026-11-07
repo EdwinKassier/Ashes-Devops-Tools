@@ -145,3 +145,37 @@ run "no_igw_by_default" {
     error_message = "gateway_endpoint_tiers must restrict endpoint associations to the chosen tiers."
   }
 }
+
+run "ipam_mode_passes_pool_and_explicit_cidr" {
+  command = plan
+
+  variables {
+    flow_log_destination_arn = "arn:aws:s3:::example-log-archive-bucket"
+    ipam_pool_id             = "ipam-pool-0123456789abcdef0"
+    cidr_block               = "10.20.0.0/16"
+  }
+
+  assert {
+    condition     = aws_vpc.this.ipv4_ipam_pool_id == "ipam-pool-0123456789abcdef0" && aws_vpc.this.cidr_block == "10.20.0.0/16"
+    error_message = "IPAM mode must pass the pool together with the explicit cidr_block"
+  }
+
+  assert {
+    condition     = aws_vpc.this.ipv4_netmask_length == null
+    error_message = "no netmask length may be sent alongside an explicit CIDR"
+  }
+}
+
+run "static_mode_unchanged" {
+  command = plan
+
+  variables {
+    flow_log_destination_arn = "arn:aws:s3:::example-log-archive-bucket"
+    cidr_block               = "10.20.0.0/16"
+  }
+
+  assert {
+    condition     = aws_vpc.this.ipv4_ipam_pool_id == null && aws_vpc.this.cidr_block == "10.20.0.0/16" && aws_vpc.this.ipv4_netmask_length == null
+    error_message = "static mode must set cidr_block only"
+  }
+}

@@ -10,7 +10,7 @@ variable "name" {
 }
 
 variable "cidr_block" {
-  description = "IPv4 CIDR used for subnet math (cidrsubnet). Also the literal VPC CIDR when ipam_pool_id is empty. When using IPAM, still set this to the CIDR IPAM will allocate so subnet layout is deterministic."
+  description = "IPv4 CIDR used for subnet math (cidrsubnet). Also the VPC CIDR: literal when ipam_pool_id is empty, otherwise the exact block requested from the IPAM pool."
   type        = string
   default     = "10.0.0.0/16"
 
@@ -23,13 +23,13 @@ variable "cidr_block" {
 }
 
 variable "ipam_pool_id" {
-  description = "IPAM pool ID to allocate the VPC CIDR from. Empty string uses the literal cidr_block instead."
+  description = "IPAM pool ID the VPC allocates from. When set, the VPC requests exactly cidr_block from the pool; empty string uses cidr_block as a static CIDR. Adding a pool to an existing static VPC forces replacement."
   type        = string
   default     = ""
 }
 
 variable "netmask_length" {
-  description = "Netmask length requested from the IPAM pool when ipam_pool_id is set. Ignored when using a literal cidr_block."
+  description = "Retained for compatibility and ignored: the VPC requests the explicit cidr_block from the IPAM pool, so no netmask length is sent."
   type        = number
   default     = 16
 

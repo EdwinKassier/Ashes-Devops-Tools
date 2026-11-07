@@ -194,3 +194,22 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "ipam_mode_for_new_vpcs_only" {
+  description = "When true (default), the hub VPCs allocate from the regional IPAM pool only if named in ipam_new_vpcs; all others keep their static CIDR attributes (adding a pool to an existing VPC forces replacement). Set false to move BOTH hub VPCs to the pool (replaces them; the destroy guard blocks it unless overridden)."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
+variable "ipam_new_vpcs" {
+  description = "Hub VPCs to create from the regional IPAM pool while ipam_mode_for_new_vpcs_only is true. Allowed: inspection, egress. List a VPC only when it is being created; listing an existing static VPC replaces it."
+  type        = set(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for v in var.ipam_new_vpcs : contains(["inspection", "egress"], v)])
+    error_message = "ipam_new_vpcs may only contain inspection and egress."
+  }
+}

@@ -20,8 +20,8 @@
 #   To keep subnet math deterministic and testable, local.vpc_cidr is ALWAYS
 #   var.cidr_block. The caller therefore passes the intended CIDR (the same value
 #   IPAM will allocate) even when ipam_pool_id drives the VPC allocation;
-#   ipam_pool_id + netmask_length only control how the VPC itself obtains its
-#   block. cidr_block is always required for the subnet layout.
+#   the VPC requests exactly that cidr_block from the pool. cidr_block is always
+#   required for the subnet layout.
 
 locals {
   vpc_cidr = var.cidr_block
@@ -79,12 +79,14 @@ locals {
 }
 
 resource "aws_vpc" "this" {
-  # When using IPAM, the CIDR is allocated from the pool (ipv4_ipam_pool_id +
-  # ipv4_netmask_length). Otherwise a literal cidr_block is used. Exactly one
-  # path is active.
+  # IPAM mode requests the explicit var.cidr_block from the pool
+  # (ipv4_ipam_pool_id + cidr_block), so the pool allocates exactly the block the
+  # subnet math (cidrsubnet over var.cidr_block) already assumes. Static mode
+  # sets cidr_block alone. ipv4_netmask_length is never set alongside a CIDR
+  # (the provider rejects the combination).
   ipv4_ipam_pool_id   = var.ipam_pool_id != "" ? var.ipam_pool_id : null
-  ipv4_netmask_length = var.ipam_pool_id != "" ? var.netmask_length : null
-  cidr_block          = var.ipam_pool_id == "" ? var.cidr_block : null
+  ipv4_netmask_length = null
+  cidr_block          = var.cidr_block
 
   assign_generated_ipv6_cidr_block = var.enable_ipv6
   enable_dns_support               = true

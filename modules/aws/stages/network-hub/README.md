@@ -102,13 +102,13 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_eip.nat (modules/aws/stages/network-hub/main.tf#L162)
-- resource.aws_nat_gateway.this (modules/aws/stages/network-hub/main.tf#L170)
-- resource.aws_route.egress_default (modules/aws/stages/network-hub/main.tf#L185)
-- resource.aws_route.egress_tgw_default (modules/aws/stages/network-hub/main.tf#L195)
-- resource.aws_route.hub_to_tgw (modules/aws/stages/network-hub/main.tf#L217)
-- resource.aws_route.inspection_tgw_to_firewall (modules/aws/stages/network-hub/main.tf#L209)
-- resource.terraform_data.production_egress_enforced (modules/aws/stages/network-hub/main.tf#L325)
+- resource.aws_eip.nat (modules/aws/stages/network-hub/main.tf#L176)
+- resource.aws_nat_gateway.this (modules/aws/stages/network-hub/main.tf#L184)
+- resource.aws_route.egress_default (modules/aws/stages/network-hub/main.tf#L199)
+- resource.aws_route.egress_tgw_default (modules/aws/stages/network-hub/main.tf#L209)
+- resource.aws_route.hub_to_tgw (modules/aws/stages/network-hub/main.tf#L231)
+- resource.aws_route.inspection_tgw_to_firewall (modules/aws/stages/network-hub/main.tf#L223)
+- resource.terraform_data.production_egress_enforced (modules/aws/stages/network-hub/main.tf#L339)
 
 
 ## Inputs
@@ -129,6 +129,8 @@ The following resources are created:
 | <a name="input_enable_network_firewall"></a> [enable\_network\_firewall](#input\_enable\_network\_firewall) | Whether to deploy the Network Firewall in the inspection VPC. COST TOGGLE: bills per endpoint-hour plus per-GB processed. | `bool` | `true` | no |
 | <a name="input_enforce_egress_allowlist"></a> [enforce\_egress\_allowlist](#input\_enforce\_egress\_allowlist) | Production egress gate. When true (and egress\_alert\_only\_waived is false) the plan fails unless network\_firewall\_stateful\_default\_actions contains aws:drop\_established and network\_firewall\_egress\_domain\_allowlist is non-empty, so production never runs alert-only. The aws-network root sets it when org.profile is production and an AWS workload environment is\_production. | `bool` | `false` | no |
 | <a name="input_inspection_cidr"></a> [inspection\_cidr](#input\_inspection\_cidr) | IPv4 CIDR of the inspection VPC that hosts the Network Firewall endpoints and its transit-gateway attachment. | `string` | `"10.0.0.0/16"` | no |
+| <a name="input_ipam_mode_for_new_vpcs_only"></a> [ipam\_mode\_for\_new\_vpcs\_only](#input\_ipam\_mode\_for\_new\_vpcs\_only) | When true (default), the hub VPCs allocate from the regional IPAM pool only if named in ipam\_new\_vpcs; all others keep their static CIDR attributes (adding a pool to an existing VPC forces replacement). Set false to move BOTH hub VPCs to the pool (replaces them; the destroy guard blocks it unless overridden). | `bool` | `true` | no |
+| <a name="input_ipam_new_vpcs"></a> [ipam\_new\_vpcs](#input\_ipam\_new\_vpcs) | Hub VPCs to create from the regional IPAM pool while ipam\_mode\_for\_new\_vpcs\_only is true. Allowed: inspection, egress. List a VPC only when it is being created; listing an existing static VPC replaces it. | `set(string)` | `[]` | no |
 | <a name="input_network_firewall_egress_domain_allowlist"></a> [network\_firewall\_egress\_domain\_allowlist](#input\_network\_firewall\_egress\_domain\_allowlist) | Optional HTTP\_HOST/TLS\_SNI egress domain allowlist. Non-empty DROPS all other HTTP/TLS egress from the org supernet (top\_cidr). Empty (default) = no domain filtering. | `list(string)` | `[]` | no |
 | <a name="input_network_firewall_managed_rule_groups"></a> [network\_firewall\_managed\_rule\_groups](#input\_network\_firewall\_managed\_rule\_groups) | AWS-managed StrictOrder stateful rule group names attached to the inspection firewall policy (see modules/aws/network/network-firewall managed\_rule\_groups). | `list(string)` | <pre>[<br/>  "AttackInfrastructureStrictOrder",<br/>  "MalwareDomainsStrictOrder",<br/>  "BotNetCommandAndControlDomainsStrictOrder"<br/>]</pre> | no |
 | <a name="input_network_firewall_stateful_default_actions"></a> [network\_firewall\_stateful\_default\_actions](#input\_network\_firewall\_stateful\_default\_actions) | STRICT\_ORDER default actions for unmatched traffic. Default ["aws:alert\_established"] = log-but-pass (no day-one blackhole); move to ["aws:drop\_established", "aws:alert\_established"] once allow rules cover legitimate egress. | `list(string)` | <pre>[<br/>  "aws:alert_established"<br/>]</pre> | no |

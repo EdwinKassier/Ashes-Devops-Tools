@@ -74,6 +74,18 @@ module "ipam" {
   tags = var.tags
 }
 
+locals {
+  # Hub VPCs allocate their (explicit) CIDR from the regional IPAM pool only when
+  # opted in. Adding ipv4_ipam_pool_id to an existing static VPC forces
+  # replacement, so with ipam_mode_for_new_vpcs_only (default) only the VPCs named
+  # in ipam_new_vpcs move; every other keeps today's static attributes.
+  hub_regional_pool_id = try(module.ipam.regional_pool_ids[var.aws_region], "")
+  hub_vpc_ipam_pool_ids = {
+    for name in ["inspection", "egress"] :
+    name => (!var.ipam_mode_for_new_vpcs_only || contains(var.ipam_new_vpcs, name)) ? local.hub_regional_pool_id : ""
+  }
+}
+
 # ---------------------------------------------------------------------------
 # Inspection VPC — hosts the Network Firewall + its TGW attachment
 # ---------------------------------------------------------------------------
@@ -83,6 +95,7 @@ module "inspection_vpc" {
 
   name                     = "inspection"
   cidr_block               = var.inspection_cidr
+  ipam_pool_id             = local.hub_vpc_ipam_pool_ids["inspection"]
   region                   = var.aws_region
   availability_zones       = var.availability_zones
   az_count                 = var.az_count
@@ -101,6 +114,7 @@ module "egress_vpc" {
 
   name                     = "egress"
   cidr_block               = var.egress_cidr
+  ipam_pool_id             = local.hub_vpc_ipam_pool_ids["egress"]
   region                   = var.aws_region
   availability_zones       = var.availability_zones
   az_count                 = var.az_count

@@ -254,3 +254,41 @@ run "composes_network_hub" {
     error_message = "egress_route_table_ids_by_tier must surface module.egress_vpc.route_table_ids_by_tier"
   }
 }
+
+# Adding ipv4_ipam_pool_id to an existing static VPC forces replacement, so by
+# default (ipam_mode_for_new_vpcs_only = true, ipam_new_vpcs = []) no hub VPC is
+# moved to the pool.
+run "existing_vpc_not_moved_to_pool" {
+  command = plan
+
+  assert {
+    condition     = local.hub_vpc_ipam_pool_ids == { inspection = "", egress = "" }
+    error_message = "with defaults no hub VPC may receive an IPAM pool"
+  }
+}
+
+run "only_listed_new_vpcs_use_the_pool" {
+  command = plan
+
+  variables {
+    ipam_new_vpcs = ["egress"]
+  }
+
+  assert {
+    condition     = local.hub_vpc_ipam_pool_ids == { inspection = "", egress = "ipam-pool-eu-west-2-0" }
+    error_message = "only the VPC named in ipam_new_vpcs gets the regional pool; the other keeps static attributes"
+  }
+}
+
+run "all_hub_vpcs_use_pool_when_new_only_disabled" {
+  command = plan
+
+  variables {
+    ipam_mode_for_new_vpcs_only = false
+  }
+
+  assert {
+    condition     = local.hub_vpc_ipam_pool_ids == { inspection = "ipam-pool-eu-west-2-0", egress = "ipam-pool-eu-west-2-0" }
+    error_message = "disabling the new-only gate moves both hub VPCs to the pool"
+  }
+}
