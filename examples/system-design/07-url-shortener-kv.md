@@ -642,8 +642,13 @@ resource "aws_cloudfront_cache_policy" "short_redirects" {
 }
 
 module "short_edge" {
-  source    = "../../../modules/aws/security/edge-security"
-  providers = { aws = aws, aws.us_east_1 = aws.us_east_1 }
+  source = "../../../modules/aws/security/edge-security"
+  count  = local.apps_enabled && local.app_vpc_origin ? 1 : 0 # mirrors app_edge
+
+  providers = {
+    aws           = aws
+    aws.us_east_1 = aws.us_east_1
+  }
 
   name_prefix        = "${local.environment}-short"
   enable_edge        = local.app_vpc_origin
