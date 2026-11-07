@@ -18,8 +18,8 @@
 [![Terraform Validation](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml)
 [![Security Scan](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml)
 [![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?style=flat-square&logo=pre-commit)](https://pre-commit.com)
-[![Modules](https://img.shields.io/badge/modules-122-blueviolet?style=flat-square)](modules/)
-[![Tests](https://img.shields.io/badge/test_suites-312-blue?style=flat-square)](modules/)
+[![Modules](https://img.shields.io/badge/modules-120-blueviolet?style=flat-square)](modules/)
+[![Tests](https://img.shields.io/badge/test_suites-308-blue?style=flat-square)](modules/)
 
 <sub>Module/test-suite counts are static badges, enforced in CI: <code>make count</code> prints the live figures and <code>scripts/check-docs-counts.sh</code> (meta-lint) fails when this README or CLAUDE.md disagrees with the tree.</sub>
 
@@ -116,7 +116,7 @@ Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives i
 
 ## Module Library
 
-122 modules — **62 GCP · 53 AWS · 6 SaaS · 1 TFC** — each with auto-generated docs and `mock_provider` tests.
+120 modules — **60 GCP · 53 AWS · 6 SaaS · 1 TFC** — each with auto-generated docs and `mock_provider` tests.
 
 Both clouds are organized into the **same conceptual domains** so you can map a capability across providers at a glance. Each table reads: **capability → Google Cloud module → Amazon Web Services module**. A `—` means the platform has no dedicated module for that capability (often because it is native, or lives in an adjacent domain — noted inline). Link text is the module's path under `modules/<cloud>/`.
 
@@ -263,14 +263,14 @@ Composite stages wrap the primitives above into deployable landing-zone layers, 
 | Network hub | [`stages/network-hub`](modules/gcp/stages/network-hub/) (composes [`stages/net-hub`](modules/gcp/stages/net-hub/) + [`stages/dns-anchor`](modules/gcp/stages/dns-anchor/)) | [`stages/network-hub`](modules/aws/stages/network-hub/) |
 | Shared services | *(via `stages/projects`)* | [`stages/shared-services`](modules/aws/stages/shared-services/) |
 | Backup | — | [`stages/backup`](modules/aws/stages/backup/) |
-| Workload (per environment) | [`stages/workload`](modules/gcp/stages/workload/), [`stages/net-spoke`](modules/gcp/stages/net-spoke/) *(replaces the deprecated [`stages/host`](modules/gcp/stages/host/))* | [`stages/workload`](modules/aws/stages/workload/) |
+| Workload (per environment) | [`stages/workload`](modules/gcp/stages/workload/), [`stages/net-spoke`](modules/gcp/stages/net-spoke/) *(replaced the removed `stages/host`)* | [`stages/workload`](modules/aws/stages/workload/) |
 
 </details>
 
 <details>
 <summary><strong>Library-only modules</strong> — not wired into a root</summary>
 
-These modules are tested and documented but **no `envs/**` root composes them** (`make count` lists them via `scripts/check-module-usage.py`). Marked *(library-only)* in the tables above. Call them from your own root or stage; they are not deployed by applying the landing-zone workspaces.
+These modules are tested and documented but **no `envs/**` root composes them** (`make count` lists them via `scripts/check-module-usage.py`; a module with no caller must carry `> Status: experimental` in its README, and `make count-check` fails otherwise). Marked *(library-only)* in the tables above. Call them from your own root or stage; they are not deployed by applying the landing-zone workspaces.
 
 | Module | Why it is library-only |
 |:-------|:-----------------------|
@@ -279,12 +279,11 @@ These modules are tested and documented but **no `envs/**` root composes them** 
 | [`gcp/iam/identity-group`](modules/gcp/iam/identity-group/), [`gcp/iam/identity-group-memberships`](modules/gcp/iam/identity-group-memberships/) | Example-only; Cloud Identity groups are usually managed in the IdP / Workspace |
 | [`gcp/iam/role`](modules/gcp/iam/role/) | Example-only; custom roles are org-specific |
 | [`gcp/monitoring/alert-policy`](modules/gcp/monitoring/alert-policy/), [`gcp/monitoring/compute-dashboard`](modules/gcp/monitoring/compute-dashboard/) | Example-only; app-level alerting/dashboards (the landing zone's own alerting is `monitoring/control-plane`) |
-| [`gcp/network/api-gateway`](modules/gcp/network/api-gateway/), [`gcp/network/cdn`](modules/gcp/network/cdn/), [`gcp/network/internal-lb`](modules/gcp/network/internal-lb/), [`gcp/network/packet-mirroring`](modules/gcp/network/packet-mirroring/) | Only the deprecated `stages/host` composed them; not carried into `net-hub` / `net-spoke` — compose directly |
-| [`gcp/stages/host`](modules/gcp/stages/host/) | Deprecated facade, removed in `v1.0.0`; replaced by `net-hub` / `dns-anchor` / `net-spoke` |
+| [`gcp/network/api-gateway`](modules/gcp/network/api-gateway/), [`gcp/network/cdn`](modules/gcp/network/cdn/), [`gcp/network/internal-lb`](modules/gcp/network/internal-lb/), [`gcp/network/packet-mirroring`](modules/gcp/network/packet-mirroring/) | Not composed by `net-hub` / `net-spoke`; example-only — compose directly |
 | [`gcp/network/app-ingress`](modules/gcp/network/app-ingress/) | Golden-path Cloud Run front door; opt-in per service |
 | [`gcp/monitoring/slo`](modules/gcp/monitoring/slo/) | Per-service SLO + burn-rate alert; opt-in per service |
 | [`gcp/governance/private-ca`](modules/gcp/governance/private-ca/) | Private CA (CAS) is opt-in; no root needs internal certificates by default |
-| [`gcp/network/dns-records`](modules/gcp/network/dns-records/), [`aws/network/dns-records`](modules/aws/network/dns-records/) | Write records into an existing zone (DNS unification); caller-owned records |
+| [`aws/network/dns-records`](modules/aws/network/dns-records/) | Write records into an existing zone (DNS unification); caller-owned records |
 | [`aws/network/api-gateway`](modules/aws/network/api-gateway/) | Opt-in API edge per workload |
 | [`aws/network/vpn`](modules/aws/network/vpn/) | Site-to-Site VPN needs customer-gateway details; opt-in |
 

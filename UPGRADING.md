@@ -405,6 +405,16 @@ Applies to workloads with `enable_saas_secret_bridge = true`.
 
 ### All clouds
 
+#### Removed: `modules/gcp/stages/host` and `modules/gcp/network/dns-records`
+
+Both modules had no caller in this repo. `stages/host` (the deprecated network
+facade) is replaced by `stages/net-hub`, `stages/dns-anchor` and
+`stages/net-spoke`; `network/dns-records` duplicated `network/dns`.
+
+No manual step for the landing-zone roots. A fork that calls either module from
+its own root must move off it before taking this release: use the replacement
+stages above, or declare the records through `modules/gcp/network/dns`.
+
 #### One `contract` output per producer root
 
 Every producer root (`aws-organization`, `aws-security`, `aws-network`,

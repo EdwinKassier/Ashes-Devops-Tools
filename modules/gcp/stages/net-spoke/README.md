@@ -8,7 +8,7 @@ flow-log export (CMEK), Shared VPC service-project attachments and the
 environment VPC Service Controls perimeter.
 
 Called by [`envs/gcp/workload`](../../../../envs/gcp/workload/). It replaces the
-spoke use of the deprecated [`stages/host`](../host/) module.
+spoke use of the removed `stages/host` module.
 
 ## Interface
 

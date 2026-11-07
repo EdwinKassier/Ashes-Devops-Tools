@@ -7,7 +7,7 @@ firewall policies, the hub VPC Service Controls perimeter, and opt-in hybrid
 connectivity (HA VPN, Cloud Interconnect).
 
 Called by [`stages/network-hub`](../network-hub/) as `module.hub`. It replaces
-the hub use of the deprecated [`stages/host`](../host/) module.
+the hub use of the removed `stages/host` module.
 
 ## Interface
 

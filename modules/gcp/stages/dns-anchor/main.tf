@@ -12,8 +12,7 @@
  * Private Service Access: nothing in the anchor VPC egresses or calls Google
  * APIs, so those billable resources would be pure cost (FinOps F4).
  *
- * Replaces the DNS-hub use of the deprecated stages/host module (see the
- * README migration table for the moved blocks).
+ * Replaces the DNS-hub use of the removed stages/host module.
  */
 
 locals {

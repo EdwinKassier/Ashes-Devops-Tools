@@ -1,5 +1,9 @@
 # AWS Site-to-Site VPN Module
 
+> Status: experimental
+>
+> No root composes this module yet; a later task wires it into the AWS network layer.
+
 IPsec Site-to-Site VPN for hybrid connectivity to an on-premises network — the
 AWS parity counterpart to GCP's `modules/gcp/network/vpn` (HA-VPN). Terminates
 on either a **Transit Gateway** (recommended — centralized in the network

@@ -1,5 +1,9 @@
 # gcp/monitoring/slo
 
+> Status: experimental
+>
+> No root composes this module yet; a later task wires it into the golden-path stages.
+
 A service-level objective for a monitored service, with an optional error-budget
 burn-rate alert. Part of the application observability layer (audit C1): attach it
 to the monitored service of a Cloud Run or GKE workload to track availability or

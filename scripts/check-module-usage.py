@@ -8,12 +8,16 @@ module is then classified:
 
   wired         reachable (transitively) from an envs/** root
   example-only  not wired, but called by an examples/ configuration
-  unreferenced  not wired and not called by any example (test-only or nothing)
+  experimental  unreferenced, and its README carries the line "> Status: experimental"
+  unreferenced  not wired, not called by any example, and not marked experimental
 
 Calls made from *.tftest.hcl suites do not count: a test harness is not a caller.
 Modules labelled "library-only" in README.md are expected to appear here.
 
-Usage: scripts/check-module-usage.py [--quiet]   (exit status is always 0)
+Usage: scripts/check-module-usage.py [--quiet] [--check]
+  default  informational, exit status 0
+  --check  exit 1 when any module is `unreferenced:` (wire it, or mark its README
+           with the line "> Status: experimental")
 """
 
 from __future__ import annotations
@@ -84,15 +88,28 @@ def main() -> int:
     from_examples = reach({c for c in callers if under("examples", c)}) - wired
 
     example_only = sorted(rel(m) for m in from_examples)
-    unreferenced = sorted(rel(m) for m in modules - wired - from_examples)
+    uncalled = sorted(rel(m) for m in modules - wired - from_examples)
+    marker = "> Status: experimental"
+    experimental = [
+        m for m in uncalled
+        if marker in (ROOT / m / "README.md").read_text(encoding="utf-8", errors="replace").splitlines()
+    ]
+    unreferenced = [m for m in uncalled if m not in experimental]
 
     print(f"check-module-usage: {len(modules)} modules — {len(wired & modules)} wired into a root, "
-          f"{len(example_only)} example-only, {len(unreferenced)} unreferenced (informational)")
+          f"{len(example_only)} example-only, {len(experimental)} experimental, "
+          f"{len(unreferenced)} unreferenced")
     if not quiet:
         for m in example_only:
             print(f"  example-only:  {m}")
+        for m in experimental:
+            print(f"  experimental:  {m}")
         for m in unreferenced:
             print(f"  unreferenced:  {m}")
+    if "--check" in sys.argv[1:] and unreferenced:
+        print("check-module-usage: FAIL - wire the module, or add the line "
+              f'"{marker}" to its README.', file=sys.stderr)
+        return 1
     return 0
 
 

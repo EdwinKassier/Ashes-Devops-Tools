@@ -129,6 +129,7 @@ count: ## Print the live module/root/test-suite counts (the figures README.md an
 
 count-check: ## Fail if README.md / CLAUDE.md counts drifted from the tree (CI: meta-lint)
 	@./scripts/check-docs-counts.sh
+	@python3 scripts/check-module-usage.py --check
 
 links: ## Fail on broken repo-relative links in any Markdown file (offline; CI: meta-lint)
 	@python3 scripts/check-md-links.py

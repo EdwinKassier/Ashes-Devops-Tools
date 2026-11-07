@@ -1,8 +1,12 @@
 # dns-records (Route 53)
 
+> Status: experimental
+>
+> No root composes this module; it writes records into an existing Route 53 zone and is called from your own stage.
+
 Write DNS records into an **existing** Route 53 hosted zone (audit H9, option C —
 DNS unification). The AWS counterpart of
-[`../../../gcp/network/dns-records`](../../../gcp/network/dns-records). This module
+the removed `gcp/network/dns-records`. This module
 does not create the hosted zone; it adds records to a zone managed elsewhere. Use
 it to keep SaaS custom-domain records (Vercel, Supabase) in the organization's
 managed zone instead of a separate registrar.

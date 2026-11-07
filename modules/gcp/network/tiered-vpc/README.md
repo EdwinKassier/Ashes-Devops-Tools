@@ -7,7 +7,7 @@ the network core of the [`net-hub`](../../stages/net-hub/),
 [`dns-anchor`](../../stages/dns-anchor/) compositions.
 
 It reproduces the network core of the deprecated
-[`stages/host`](../../stages/host/) module resource for resource (same names,
+`stages/host` (removed) module resource for resource (same names,
 same CIDR maths), which is what lets callers migrate with `moved` blocks and no
 replacement.
 

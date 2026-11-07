@@ -15,7 +15,6 @@ staged-deployment diagram is in the [top-level modules README](../../README.md).
 | [dns-anchor](./dns-anchor/) | — | Workload-free DNS-anchor VPC and the private zones spokes peer to | `stages/network-hub` |
 | [net-spoke](./net-spoke/) | — | Per-env spoke network composition: Shared VPC host, NAT, PSA, PSC, hub peering, DNS, Cloud Armor, flow-log export, VPC-SC | `envs/gcp/workload` |
 | [workload](./workload/) | — | Per-env application projects (workload factory) | `envs/gcp/workload` / `examples/workloads` |
-| [host](./host/) | — | **Deprecated** god-module facade kept for one cycle for external callers; replaced by `net-hub`, `net-spoke` and `dns-anchor` | none in-repo |
 
 The AWS landing zone uses the same primitive/stage split under
 [`modules/aws/stages/`](../../aws/stages/).

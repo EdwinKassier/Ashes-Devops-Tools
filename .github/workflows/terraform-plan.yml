@@ -425,8 +425,8 @@ jobs:
           python -m pip install --no-deps --require-hashes -r .github/requirements/yamllint.txt
           make test-scripts
 
-      - name: Library-only modules (informational)
-        run: python3 scripts/check-module-usage.py
+      - name: Library-only modules (fails on unmarked unreferenced)
+        run: python3 scripts/check-module-usage.py --check
 
   security:
     name: Security

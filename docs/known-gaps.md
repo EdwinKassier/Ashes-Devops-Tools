@@ -405,7 +405,7 @@ GCP:
 - **G7 — host firewall uses legacy VPC firewall rules, not network firewall
   policies** (HIGH, BEHAVIOR-CHANGING). `modules/gcp/network/network-firewall`
   creates `google_compute_firewall` (legacy per-VPC rules with network tags);
-  `stages/host` instantiates it for all tier-to-tier rules. Google directs new
+  `tiered-vpc` instantiates it for all tier-to-tier rules. Google directs new
   builds to global/regional **network firewall policies** with IAM-governed
   secure tags. Migration changes rule evaluation → real apply. Ref:
   <https://docs.cloud.google.com/firewall/docs/firewall-policies-overview>
@@ -579,9 +579,6 @@ side (all mock-tested, secure defaults):
   `modules/gcp/stages/network-hub` does not pass them through, so they cannot
   be set from `envs/gcp/network-hub` or `config/landing-zone.yaml`. Pending
   Task 4.4.
-- **`host` stage decomposition.** `modules/gcp/stages/host` (~2,000 LOC) is
-  large-but-cohesive; a targeted split (firewall / egress / advanced sub-stages)
-  is optional maintainability work, not a bug.
 - **Toolchain currency automation.** Dependabot covers both GitHub Actions and
   the `terraform` ecosystem (`directories: ["/**"]`, one grouped weekly PR,
   labelled for review, never auto-merged); the repo pins keep proposals inside

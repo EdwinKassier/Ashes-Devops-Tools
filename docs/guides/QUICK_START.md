@@ -361,7 +361,7 @@ Any variable below that maps to a `config/landing-zone.yaml` key (shown in brack
 | `enable_deletion_protection` | `true` | Guard against accidental destruction of the VPC/subnets/DNS zones |
 | `vpc_sc_ingress_policies` / `vpc_sc_egress_policies` | `[]` | Optional VPC Service Controls ingress/egress policies for the perimeter |
 
-> **Hybrid connectivity (HA-VPN, Dedicated/Partner Interconnect):** `modules/gcp/stages/net-hub` already wires `network/vpn` (`var.vpn.enabled`) and `network/interconnect`. `modules/gcp/stages/network-hub` does not pass them through yet, so they are not configurable from `config/landing-zone.yaml` or `envs/gcp/network-hub`; exposing them is planned work (see [`known-gaps.md`](../known-gaps.md)). `modules/gcp/stages/host` is deprecated and is not the route for VPN or Interconnect.
+> **Hybrid connectivity (HA-VPN, Dedicated/Partner Interconnect):** `modules/gcp/stages/net-hub` already wires `network/vpn` (`var.vpn.enabled`) and `network/interconnect`. `modules/gcp/stages/network-hub` does not pass them through yet, so they are not configurable from `config/landing-zone.yaml` or `envs/gcp/network-hub`; exposing them is planned work (see [`known-gaps.md`](../known-gaps.md)).
 
 ---
 

@@ -12,7 +12,7 @@ anchor VPC egresses or calls Google APIs, so those billable resources would be
 pure cost.
 
 Called by [`stages/network-hub`](../network-hub/) as `module.dns_anchor`. It
-replaces the DNS-hub use of the deprecated [`stages/host`](../host/) module plus
+replaces the DNS-hub use of the removed `stages/host` module plus
 the stage's separate root-zone module.
 
 ## Interface
@@ -45,8 +45,7 @@ There is deliberately no Cloud NAT, Cloud Armor, Private Service Connect or
 Private Service Access: nothing in the anchor VPC egresses or calls Google
 APIs, so those billable resources would be pure cost (FinOps F4).
 
-Replaces the DNS-hub use of the deprecated stages/host module (see the
-README migration table for the moved blocks).
+Replaces the DNS-hub use of the removed stages/host module.
 
 ## Usage
 
@@ -89,7 +88,7 @@ module "example" {
 The following resources are created:
 
 
-- data source.google_compute_zones.available (modules/gcp/stages/dns-anchor/main.tf#L25)
+- data source.google_compute_zones.available (modules/gcp/stages/dns-anchor/main.tf#L24)
 
 
 ## Inputs
