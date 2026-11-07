@@ -95,7 +95,7 @@ tier per zone by default
   ([Google Cloud docs](https://docs.cloud.google.com/run/docs/configuring/vpc-direct-vpc),
   checked 2026-11). The environment stage puts every Cloud Run service in the
   *first* private subnet
-  ([`modules/gcp/stages/environment/main.tf:377`](../../modules/gcp/stages/environment/main.tf)).
+  ([`modules/gcp/stages/environment/main.tf:378`](../../modules/gcp/stages/environment/main.tf)).
   252 / 2 = 126 instances. Keep half free for a full redeploy's overlap and the
   real ceiling is about 63 instances for all services together.
 
@@ -133,10 +133,13 @@ Region:
 - Network Firewall at $0.065/GB is about $1,690, plus 3 endpoints × $0.395/h ×
   730 h, about $865
   ([pricing](https://aws.amazon.com/network-firewall/pricing/)).
-- NAT data processing (an Ohio example of $0.045/GB) may be waived when the NAT
-  gateway is chained behind the firewall
-  ([pricing](https://aws.amazon.com/vpc/pricing/)). Whether this hub's separate
-  egress VPC qualifies is **verify before relying on**.
+- NAT gateway processing (an Ohio example of $0.045/GB on the
+  [VPC pricing page](https://aws.amazon.com/vpc/pricing/)) is waived up to the
+  firewall's volume when the NAT gateway is in the same Region and the same
+  networking path as the firewall endpoint
+  ([Network Firewall pricing](https://aws.amazon.com/network-firewall/pricing/)).
+  Whether this hub's separate egress VPC counts as the same path is **verify
+  before relying on**.
 
 Inspection costs about $3,000 a month for this design, which is why it is
 centralised once rather than run per spoke. S3 and DynamoDB gateway endpoints
@@ -158,7 +161,7 @@ tiers enforce, and the **cross-root outputs** that let a spoke find its hub.
 | Data → anywhere | none | `-db` SG has no egress; `isolated` has no route | database-tier egress deny |
 | Application → internet | 443 | SG egress 443 → TGW → firewall → NAT | Cloud NAT, not inspected |
 | Application → cloud APIs | 443 | Gateway endpoints (S3, DynamoDB); others via inspection | PSC `googleapis.com` endpoint |
-| Operators → VMs | 22 | SSM Session Manager, no inbound | IAP range `35.235.240.0/20` only |
+| Operators → VMs | 22 | SSM Session Manager, no inbound | IAP range `35.235.240.0/20` in the VPC rules, but the hub's hierarchical deny blocks it first (see deep dive 1) |
 | Prod ↔ nonprod | none | Separate TGW tables; firewall policy decides | Peering is non-transitive; no route |
 
 Sources: [`modules/aws/stages/app-services/main.tf:509`](../../modules/aws/stages/app-services/main.tf),
@@ -217,7 +220,7 @@ allowlist, and hands the flow back to the TGW. The `inspection` table forwards
 it to the egress VPC, and a same-AZ NAT gateway sends it out. The reply comes
 back through the firewall because the `shared` table routes the org supernet to
 inspection
-([`modules/aws/stages/network-hub/main.tf:68`](../../modules/aws/stages/network-hub/main.tf)).
+([`modules/aws/stages/network-hub/main.tf:73`](../../modules/aws/stages/network-hub/main.tf)).
 
 **Egress path (GCP).** A VM or GKE node in `private` leaves through the
 environment's Cloud NAT. Cloud Run with the default `PRIVATE_RANGES_ONLY` sends
@@ -279,12 +282,20 @@ unless you set it explicitly
 Policy rules cannot use network tags, only secure tags or service accounts, so
 ingress rules pick their tier by destination range. The policy has no trailing
 deny-all, so unmatched traffic falls through to GKE's automatic VPC rules and
-then the implied deny. A hierarchical policy on every folder denies 22 and 3389 from the
-internet above all of this
-([`modules/gcp/stages/network-hub/main.tf:79`](../../modules/gcp/stages/network-hub/main.tf)).
+then the implied deny. A hierarchical policy on every folder denies tcp 22
+and 3389 from `0.0.0.0/0` at priority 500
+([`modules/gcp/stages/network-hub/main.tf:86`](../../modules/gcp/stages/network-hub/main.tf)).
+Hierarchical policies are evaluated first and a matching deny ends evaluation
+(evaluation-order docs above). The rule has no allow or `goto_next` for the
+IAP range `35.235.240.0/20`, which falls inside `0.0.0.0/0`, so IAP TCP
+forwarding for SSH and RDP is denied before the VPC's IAP rule is ever
+reached.
 
 **Where it breaks.**
 
+- **IAP SSH is blocked (repo gap).** Fix it with a higher-priority
+  hierarchical rule that allows, or sends to `goto_next`, tcp 22 and 3389 from
+  `35.235.240.0/20`.
 - No deployable root exposes `firewall_mode` yet, so every environment runs
   `legacy` ([known gaps, G7](../../docs/known-gaps.md)).
 - In `policy` mode the implied deny is not logged, so you lose the deny-all
@@ -355,7 +366,7 @@ host. The options, from weakest to strongest:
 `STRICT_ORDER`: the managed `AttackInfrastructure`, `MalwareDomains` and
 `BotNetCommandAndControlDomains` groups, then optional custom Suricata rules,
 then an egress domain allowlist, with `HOME_NET` set to the org supernet
-([`modules/aws/stages/network-hub/main.tf:387`](../../modules/aws/stages/network-hub/main.tf)).
+([`modules/aws/stages/network-hub/main.tf:400`](../../modules/aws/stages/network-hub/main.tf)).
 The default action is `aws:alert_established`: log but pass, so day one never
 blackholes. A production estate must fail closed. With `enforce_egress_allowlist`
 set, which `aws-network` derives from `org.profile` and a production workload,
@@ -569,6 +580,9 @@ Gaps this design hits:
   `net-spoke`.
 - **No inspected egress on GCP**, and no shared DNS for the central AWS
   interface endpoints.
+- **IAP is denied by the hub's hierarchical policy.** `gcp-network-hub` needs
+  an allow or `goto_next` rule for `35.235.240.0/20` on tcp 22 and 3389 at a
+  priority higher than 500.
 
 ### GCP: prove policy mode on a sandbox spoke
 
@@ -705,9 +719,12 @@ checked 2026-11). It usually starts right after an `aws-network` apply.
 1. **Missing domain:** add it to the allowlist in config and apply
    `aws-network` through Terraform Cloud. Never edit the firewall policy in the
    console: the next apply reverts it.
-2. **Broad breakage after a tightening:** set
-   `aws.network.egress_alert_only_waived: true` to return to log-but-pass while
-   the allowlist is completed. It is reviewable and must be removed.
+2. **Broad breakage after a tightening:** remove `aws:drop_established` from
+   `aws.network.stateful_default_actions`, which is what returns the firewall
+   to log-but-pass, **and** set `aws.network.egress_alert_only_waived: true`.
+   The waiver only lets the plan pass the production gate; on its own it
+   changes no firewall behaviour. Both are reviewable and must be reverted once
+   the allowlist is complete.
 3. **Routing:** restore the spoke entry or revert the routing change.
 4. **AZ endpoint fault:** open an AWS support case; the other AZs keep working
    because every route is same-AZ.
