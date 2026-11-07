@@ -159,7 +159,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="provider_aws.security_tooling"></a> [aws.security\_tooling](#provider\_aws.security\_tooling) | 6.54.0 |
+| <a name="provider_aws.security_tooling"></a> [aws.security\_tooling](#provider\_aws.security\_tooling) | 6.72.0 |
 
 ## Modules
 

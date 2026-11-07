@@ -60,8 +60,8 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.54.0 |
-| <a name="provider_aws.backup"></a> [aws.backup](#provider\_aws.backup) | 6.54.0 |
+| <a name="provider_aws"></a> [aws](#provider\_aws) | 6.72.0 |
+| <a name="provider_aws.backup"></a> [aws.backup](#provider\_aws.backup) | 6.72.0 |
 
 ## Modules
 

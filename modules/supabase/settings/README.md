@@ -33,7 +33,7 @@ module "example" {
 
 | Name | Version |
 |------|---------|
-| <a name="provider_supabase"></a> [supabase](#provider\_supabase) | 1.9.0 |
+| <a name="provider_supabase"></a> [supabase](#provider\_supabase) | 1.9.1 |
 
 
 
