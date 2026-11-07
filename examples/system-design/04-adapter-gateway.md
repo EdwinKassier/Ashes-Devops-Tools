@@ -737,6 +737,10 @@ resource "google_kms_crypto_key_iam_member" "pm_agent" {
 }
 
 # Parameter Manager has no resource-level IAM: a project grant narrowed by a condition.
+locals {
+  pm_routing = "projects/${local.env_config.host_project_number}/locations/${local.env_config.region}/parameters/pay-gateway-routing"
+}
+
 resource "google_project_iam_member" "pay_gateway_routing" {
   project = local.env_config.host_project_id
   role    = "roles/parametermanager.parameterAccessor"
@@ -744,8 +748,8 @@ resource "google_project_iam_member" "pay_gateway_routing" {
 
   condition {
     title = "pay-gateway-routing-only"
-    # Project NUMBER, not ID; the trailing / stops pay-gateway-routing-v2 matching.
-    expression = "resource.name.startsWith(\"projects/${local.env_config.host_project_number}/locations/${local.env_config.region}/parameters/pay-gateway-routing/\")"
+    # Project NUMBER, not ID; exact name or "/", so pay-gateway-routing-v2 never matches.
+    expression = "resource.name == \"${local.pm_routing}\" || resource.name.startsWith(\"${local.pm_routing}/\")"
   }
 }
 ```
@@ -762,8 +766,8 @@ Notes:
   checked 2026-11). The condition matches `resource.name`, which is
   `projects/<number>/locations/<loc>/parameters/<id>` plus `/versions/<id>`
   ([Google Cloud docs](https://docs.cloud.google.com/iam/docs/conditions-resource-attributes),
-  checked 2026-11), so the trailing `/` limits `pay-gateway-run` to this
-  parameter's versions.
+  checked 2026-11), so the exact match plus the trailing `/` limit `pay-gateway-run`
+  to this parameter and its versions.
 
 ## Runbook
 
