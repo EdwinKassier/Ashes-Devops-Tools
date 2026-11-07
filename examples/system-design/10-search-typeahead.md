@@ -354,7 +354,8 @@ the shard count and copies supply throughput.
 25 shards or fewer per GiB of heap, and a shard count that is a multiple of
 the data node count
 ([AWS docs](https://docs.aws.amazon.com/opensearch-service/latest/developerguide/bp.html),
-checked 2026-11). The primary count is fixed at creation
+checked 2026-11). Our 12 primaries are not a multiple of 18 nodes, but the 36
+copies are exactly 2 per node, which is what the rule protects. The primary count is fixed at creation
 (`index.number_of_shards` is a final setting,
 [OpenSearch docs](https://docs.opensearch.org/latest/install-and-configure/configuring-opensearch/index-settings/),
 checked 2026-11), so growth means a blue/green reindex with more shards. Plan
@@ -467,7 +468,10 @@ checked 2026-11). Whether that runs on Autopilot, or OpenSearch needs
 The domain's network interfaces sit in the `isolated` tier, per
 [VPC-tier placement](00-primer.md#vpc-tier-placement). GCP departs from it:
 the module's single cluster runs in the first `private` subnet, not
-`database`. Egress from the indexer is per-environment Cloud NAT, not
+`database`, because that tier denies all egress and GKE nodes need egress to
+the control plane, Google APIs and image pulls. The compensating control is a
+Kubernetes NetworkPolicy that admits 9200 only from `indexer`, `search` and
+`typeahead`. Egress from the indexer is per-environment Cloud NAT, not
 inspected through the hub.
 
 ### Config
@@ -539,7 +543,7 @@ checked 2026-11).
 ```hcl
 # Gap: the repo has no OpenSearch module; raw resources in the landing zone's conventions.
 locals {
-  search_name = "${local.environment}-search" # <env>-<component>
+  search_name = "${local.environment}-search-engine" # <env>-<component>
 }
 
 resource "aws_security_group" "search" {
