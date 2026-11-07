@@ -285,3 +285,117 @@ run "rejects_placeholder_landing_zone_name" {
 
   expect_failures = [var.landing_zone_name]
 }
+
+# SaaS bridge write-only: the bridged values go to secret_string_wo (never in
+# plan or state for the secret version), and the non-sensitive saas
+# bridge_version output drives secret_string_wo_version so a rotation bump
+# re-pushes the secret.
+run "bridge_uses_write_only_secret" {
+  command = plan
+
+  variables {
+    enable_saas_secret_bridge = true
+    saas_workspace_name       = "saas-web"
+    saas_secret_reader_arns   = ["arn:aws:iam::222222222222:role/app-task-role"]
+  }
+
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = { outputs = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_network
+    values = { outputs = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_security
+    values = { outputs = { log_archive_bucket_name = "ashes-org-log-archive" } }
+  }
+  override_data {
+    target = data.terraform_remote_state.saas[0]
+    values = {
+      outputs = {
+        supabase_api_url           = "https://abcd.supabase.co"
+        supabase_service_role_key  = "service-role-key-xxxx"
+        supabase_database_password = "db-password-xxxx"
+        bridge_version             = 4
+      }
+    }
+  }
+
+  assert {
+    condition     = aws_secretsmanager_secret_version.saas_bridge[0].secret_string == null
+    error_message = "the bridged secret must be written with the write-only secret_string_wo, never secret_string."
+  }
+
+  assert {
+    condition     = aws_secretsmanager_secret_version.saas_bridge[0].secret_string_wo_version == 4
+    error_message = "secret_string_wo_version must equal the saas bridge_version output."
+  }
+}
+
+# A saas producer that has not applied the bridge_version output yet: version 1.
+run "bridge_version_defaults_to_1_without_producer_output" {
+  command = plan
+
+  variables {
+    enable_saas_secret_bridge = true
+    saas_workspace_name       = "saas-web"
+    saas_secret_reader_arns   = ["arn:aws:iam::222222222222:role/app-task-role"]
+  }
+
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = { outputs = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_network
+    values = { outputs = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_security
+    values = { outputs = { log_archive_bucket_name = "ashes-org-log-archive" } }
+  }
+  override_data {
+    target = data.terraform_remote_state.saas[0]
+    values = {
+      outputs = {
+        supabase_api_url           = "https://abcd.supabase.co"
+        supabase_service_role_key  = "service-role-key-xxxx"
+        supabase_database_password = "db-password-xxxx"
+      }
+    }
+  }
+
+  assert {
+    condition     = aws_secretsmanager_secret_version.saas_bridge[0].secret_string_wo_version == 1
+    error_message = "without a producer bridge_version output the write-only version must be 1."
+  }
+}
+
+run "bridge_off_reads_nothing" {
+  command = plan
+
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = { outputs = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_network
+    values = { outputs = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_security
+    values = { outputs = { log_archive_bucket_name = "ashes-org-log-archive" } }
+  }
+
+  assert {
+    condition = (
+      length(data.terraform_remote_state.saas) == 0 &&
+      length(aws_secretsmanager_secret.saas_bridge) == 0 &&
+      length(aws_secretsmanager_secret_version.saas_bridge) == 0 &&
+      length(aws_secretsmanager_secret_policy.saas_bridge) == 0
+    )
+    error_message = "with the bridge off, no saas state is read and no bridge resource is planned."
+  }
+}

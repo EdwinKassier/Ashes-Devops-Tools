@@ -201,10 +201,12 @@ variable "workload_roles" {
 # task can consume Supabase as a managed datastore via the container secrets
 # valueFrom. Default off: no SaaS coupling, and the workload reads no saas state.
 #
-# NOTE: the bridged values (service role key, database password) are stored as a
-# secret version, so they persist in THIS root's state as well as the saas root's.
-# Teams that require zero secret duplication should create the secret out of band
-# and leave this bridge disabled.
+# NOTE: the secret version is written write-only (secret_string_wo), so it keeps
+# no plaintext. The bridged values (service role key, database password) still
+# pass through data.terraform_remote_state.saas, which is stored in THIS root's
+# state as well as the saas root's (docs/known-gaps.md). Teams that require zero
+# secret duplication should create the secret out of band and leave this bridge
+# disabled.
 # -----------------------------------------------------------------------------
 
 variable "enable_saas_secret_bridge" {

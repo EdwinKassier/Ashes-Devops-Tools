@@ -400,6 +400,15 @@ data "terraform_remote_state" "saas" {
   }
 }
 
+# Write-only version counter for the bridged secret: the saas bridge_version
+# output (saas.bridge_rotation), else 1 for a producer that predates it (the
+# module's previous default, so upgrading re-writes nothing).
+locals {
+  saas_bridge_versions = var.enable_saas_secret_bridge ? {
+    (var.saas_secret_name) = try(tonumber(data.terraform_remote_state.saas[0].outputs.bridge_version), 1)
+  } : {}
+}
+
 module "saas_secret_bridge" {
   count  = var.enable_saas_secret_bridge ? 1 : 0
   source = "../../../modules/gcp/data/secret-manager"
@@ -412,8 +421,12 @@ module "saas_secret_bridge" {
     }
   }
 
-  # Bridged connection details. Sensitive values are stored as a secret version,
-  # so they persist in this root's state (see the variable note).
+  # Bridged connection details. The module writes them with the write-only
+  # secret_data_wo, so the secret version holds no plaintext in state; they still
+  # pass through data.terraform_remote_state.saas, which is stored in this state
+  # (docs/known-gaps.md).
+  secret_value_versions = local.saas_bridge_versions
+
   secret_values = {
     (var.saas_secret_name) = jsonencode({
       api_url           = data.terraform_remote_state.saas[0].outputs.supabase_api_url

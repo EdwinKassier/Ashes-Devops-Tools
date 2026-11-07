@@ -265,14 +265,21 @@ resource "aws_secretsmanager_secret" "saas_bridge" {
   kms_key_id  = local.kms_key_arn
 }
 
+# Write-only (aws >= 6.45 switches from secret_string in place): the secret
+# version keeps no plaintext in plan or state. Write-only values are not diffed,
+# so the saas bridge_version output (saas.bridge_rotation) is the re-push signal;
+# a producer that predates that output counts as version 1. The values still
+# pass through data.terraform_remote_state.saas, which IS stored in this state
+# (docs/known-gaps.md).
 resource "aws_secretsmanager_secret_version" "saas_bridge" {
   count     = var.enable_saas_secret_bridge ? 1 : 0
   secret_id = aws_secretsmanager_secret.saas_bridge[0].id
-  secret_string = jsonencode({
+  secret_string_wo = jsonencode({
     api_url           = data.terraform_remote_state.saas[0].outputs.supabase_api_url
     service_role_key  = data.terraform_remote_state.saas[0].outputs.supabase_service_role_key
     database_password = data.terraform_remote_state.saas[0].outputs.supabase_database_password
   })
+  secret_string_wo_version = try(tonumber(data.terraform_remote_state.saas[0].outputs.bridge_version), 1)
 }
 
 # Grant only the named task roles GetSecretValue on the bridged secret.

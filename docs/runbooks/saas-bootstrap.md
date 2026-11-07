@@ -85,8 +85,9 @@ workload workspaces that set `enable_saas_secret_bridge`, through tfc-admin's wr
 `workspace_variables`. tfc-admin never creates the token, so the token is in no state. Rotate it
 like the [tfc-admin token](tfc-admin-token-rotation.md#3-rotate-every-90-days-or-on-any-suspected-exposure).
 The workload bridge reads saas outputs with this token once it moves to the ephemeral
-`tfe_outputs` read. Until then it reads saas state, and the bridged values are also in the workload's
-state (see [known gaps](../known-gaps.md#blocked--waiting-on-provider-capability)).
+`tfe_outputs` read. Until then it reads saas state. The secret version is write-only, but the values
+it reads from saas state are stored in the workload's state too (see
+[known gaps](../known-gaps.md#blocked--waiting-on-provider-capability)).
 
 **Rotation counter.** `saas.bridge_rotation` in `config/landing-zone.yaml` (default `1`) is
 published as the non-sensitive `bridge_version` output. A write-only secret argument cannot be

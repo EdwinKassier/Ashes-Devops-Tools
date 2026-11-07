@@ -408,11 +408,13 @@ variable "service_teams" {
 # so a GCP runtime can use Supabase as a managed datastore by secret reference.
 # Default off: no SaaS coupling, and the workload reads no saas state.
 #
-# NOTE: the bridged values (service role key, database password) are sensitive and
-# will be stored as a secret version, so they are persisted in THIS root's state as
-# well as the saas root's. Teams that require zero secret duplication should instead
-# create the secret container with modules/gcp/data/secret-manager and set the value
-# out of band, leaving this bridge disabled.
+# NOTE: the secret version is written write-only (secret_data_wo), so it keeps no
+# plaintext. The bridged values (service role key, database password) still pass
+# through data.terraform_remote_state.saas, which is stored in THIS root's state as
+# well as the saas root's (docs/known-gaps.md). Teams that require zero secret
+# duplication should instead create the secret container with
+# modules/gcp/data/secret-manager and set the value out of band, leaving this
+# bridge disabled.
 # -----------------------------------------------------------------------------
 
 variable "enable_saas_secret_bridge" {

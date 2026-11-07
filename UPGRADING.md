@@ -5,6 +5,28 @@ fork. Newest first.
 
 ## Unreleased
 
+### SaaS secret bridge writes its secret write-only
+
+Applies to workloads with `enable_saas_secret_bridge = true`.
+
+- **AWS (`aws-workload-<env>`).** `aws_secretsmanager_secret_version.saas_bridge`
+  moves from `secret_string` to the write-only `secret_string_wo`. The plan shows
+  an **in-place update**, not a replacement: aws 6.45 and later switch in place,
+  and the repo floor is 6.46. Afterwards the secret version holds no plaintext
+  in state. The secret's content does not change.
+- **GCP (`gcp-workload-<env>`).** The secret was already write-only. Its
+  version counter now comes from the saas `bridge_version` output. It stays 1
+  until you bump `saas.bridge_rotation`, so the upgrade re-writes nothing.
+- **Rotation.** A write-only value is not diffed. After rotating a bridged
+  Supabase secret, bump `saas.bridge_rotation`, apply `saas-<name>`, then apply
+  each bridging workload
+  ([saas-bootstrap](docs/runbooks/saas-bootstrap.md#bridging-secrets-to-a-workload-and-rotating-them)).
+  A `saas-<name>` that has not applied the new output yet counts as version 1.
+- **Still in workload state.** The values pass through
+  `data.terraform_remote_state.saas`, whose result is stored in the workload's
+  state. Task 3.6 moves this read to `ephemeral "tfe_outputs"` (see
+  `docs/known-gaps.md`).
+
 ### Run triggers auto-apply explicitly non-prod workloads (tfc-admin)
 
 **Trust change on the upgrade apply.** tfc-admin's new

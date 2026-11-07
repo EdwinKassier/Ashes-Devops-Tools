@@ -296,3 +296,70 @@ run "vm_backup_can_be_disabled" {
     error_message = "enable_vm_backup_policy = false must create no snapshot policies."
   }
 }
+
+# The module writes the bridged secret write-only (secret_data_wo); the saas
+# bridge_version output drives its secret_value_versions counter so a rotation
+# bump re-writes the secret.
+run "bridge_uses_write_only_secret" {
+  command = plan
+
+  variables {
+    enable_saas_secret_bridge    = true
+    saas_workspace_name          = "saas-web"
+    saas_secret_name             = "supabase-connection"
+    saas_secret_accessor_members = ["serviceAccount:app@acme-dev-host-abcd.iam.gserviceaccount.com"]
+  }
+
+  override_data {
+    target = data.terraform_remote_state.saas[0]
+    values = {
+      outputs = {
+        supabase_api_url           = "https://abcd.supabase.co"
+        supabase_service_role_key  = "service-role-key-xxxx"
+        supabase_database_password = "db-password-xxxx"
+        bridge_version             = 4
+      }
+    }
+  }
+
+  assert {
+    condition     = local.saas_bridge_versions["supabase-connection"] == 4 && length(local.saas_bridge_versions) == 1
+    error_message = "the bridge's secret_value_versions must carry the saas bridge_version output."
+  }
+}
+
+run "bridge_version_defaults_to_1_without_producer_output" {
+  command = plan
+
+  variables {
+    enable_saas_secret_bridge    = true
+    saas_workspace_name          = "saas-web"
+    saas_secret_name             = "supabase-connection"
+    saas_secret_accessor_members = ["serviceAccount:app@acme-dev-host-abcd.iam.gserviceaccount.com"]
+  }
+
+  override_data {
+    target = data.terraform_remote_state.saas[0]
+    values = {
+      outputs = {
+        supabase_api_url           = "https://abcd.supabase.co"
+        supabase_service_role_key  = "service-role-key-xxxx"
+        supabase_database_password = "db-password-xxxx"
+      }
+    }
+  }
+
+  assert {
+    condition     = local.saas_bridge_versions["supabase-connection"] == 1 && length(local.saas_bridge_versions) == 1
+    error_message = "without a producer bridge_version output the write-only version must be 1 (today's value)."
+  }
+}
+
+run "bridge_off_reads_nothing" {
+  command = plan
+
+  assert {
+    condition     = length(data.terraform_remote_state.saas) == 0 && length(module.saas_secret_bridge) == 0 && length(local.saas_bridge_versions) == 0
+    error_message = "with the bridge off, no saas state is read and no bridge module is instantiated."
+  }
+}

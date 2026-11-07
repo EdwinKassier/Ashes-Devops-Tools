@@ -542,24 +542,24 @@ side (all mock-tested, secure defaults):
   legacy sensitive inputs stay for backward compatibility. Vercel env-var inputs
   cannot be ephemeral: they also feed the `for_each` keys and the stored fingerprints.
 
-- **S-M3 — SaaS bridge secrets in workload state (waiting on Terraform 1.17
-  test mocking).** With `enable_saas_secret_bridge`, `envs/aws/workload` and
-  `envs/gcp/workload` read the Supabase service-role key and database password
-  through `data "terraform_remote_state" "saas"`, so the values are in the
-  workload's state. AWS also stores them in `secret_string`. The fix is ready:
-  `ephemeral "tfe_outputs"` (tfe >= 0.65) feeds `secret_string_wo` (AWS) and
-  the secret-manager module's `ephemeral_secret_values` (GCP). The non-ephemeral
-  `data "tfe_outputs"` reads `bridge_version` (from `saas.bridge_rotation`)
-  for `*_wo_version`, and the token is the hand-created `saas-outputs-reader`
-  team's (`saas_outputs_reader_team_id`). The saas `bridge_version` output and
-  the tfc-admin reader grant are in place. What blocks it is the test toolchain.
-  Terraform 1.14 (the CI pin) cannot test a root that contains an ephemeral
-  resource offline. `mock_provider` rejects every ephemeral resource type at
-  validation, even at `count = 0`. `override_resource`, `override_data` and
-  `override_module` cannot target one. A real `tfe` provider contacts the
-  HCP Terraform host when it is configured. Adding the block would therefore
-  break every test suite of both workload roots. It lands with the Terraform
-  1.17 toolchain, which mocks ephemeral resources.
+- **S-M3 — SaaS bridge values pass through workload state (waiting on
+  Terraform 1.17 test mocking).** With `enable_saas_secret_bridge`, the bridged
+  secret versions are write-only: `secret_string_wo` (AWS) and the
+  secret-manager module's `secret_data_wo` (GCP). The saas `bridge_version`
+  output (`saas.bridge_rotation`) drives `*_wo_version`. **Residual:**
+  `envs/aws/workload` and `envs/gcp/workload` still read the Supabase
+  service-role key and database password through
+  `data "terraform_remote_state" "saas"`, and a data source's result is stored
+  in the workload's state. Task 3.6 closes this. It replaces that read with
+  `ephemeral "tfe_outputs"` (tfe >= 0.65), keeps a non-ephemeral
+  `data "tfe_outputs"` for `bridge_version`, and authenticates with the
+  hand-created `saas-outputs-reader` team token (`saas_outputs_reader_team_id`,
+  already granted). It waits on the test toolchain. Terraform 1.14, the CI pin,
+  cannot test a root that contains an ephemeral resource offline:
+  `mock_provider` rejects every ephemeral resource type at validation, even at
+  `count = 0`. `override_resource`, `override_data` and `override_module` cannot
+  target one, and a real `tfe` provider contacts the HCP Terraform host when it
+  is configured. Terraform 1.17 mocks ephemeral resources.
 - **SaaS secrets stay in `saas-*` state (provider limitation).**
   `supabase_project` has no write-only `database_password`, so the creation-time
   password is in the `saas-<name>` state and its `supabase_database_password`
