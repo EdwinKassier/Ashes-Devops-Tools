@@ -436,6 +436,17 @@ variable "split_workload_projects" {
   default     = null
 }
 
+variable "tfc_admin_team_id" {
+  description = "TFC team ID (team-...) of the tfc-admin team whose token is tfc-admin's TFE_TOKEN (docs/runbooks/tfc-admin-token-rotation.md). With manage_tfc_admin_workspace it gets explicit write (apply) on the tfc-admin workspace; together with organization owners it is the only apply path (the approvers team gets no grant on the project holding tfc-admin and the platform team is capped at plan there). Null = no explicit grant."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.tfc_admin_team_id == null || can(regex("^team-[A-Za-z0-9]+$", var.tfc_admin_team_id))
+    error_message = "tfc_admin_team_id must be a TFC team ID (team-...)."
+  }
+}
+
 variable "viewer_team_ids" {
   description = "TFC team IDs (team-...) granted READ on every landing-zone project."
   type        = list(string)

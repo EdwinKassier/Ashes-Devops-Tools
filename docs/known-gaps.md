@@ -40,6 +40,17 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   membership of the owners team is an operator control
   ([`BRANCH_PROTECTION.md`](guides/BRANCH_PROTECTION.md#tfc-organization-owners)).
 
+- **tfc-admin team-token permissions are unvalidated.** tfc-admin runs on a
+  non-owner `tfc-admin` team token (`manage_workspaces`, `manage_projects`,
+  `manage_policies`, `manage_vcs_settings`; runbook
+  [`tfc-admin-token-rotation.md`](runbooks/tfc-admin-token-rotation.md)). No
+  real HCP access exists to prove that set covers every resource tfc-admin
+  manages, notably organization-level variable sets and policy sets. If the
+  first plan shows a permission error that only owners can clear, that resource
+  is a residual owner-only step: document it in the runbook rather than
+  widening the team to `manage_teams` or `manage_organization_access`. The
+  90-day token expiry and rotation are an operator control, not enforced in code.
+
 - **Org-trail selector changes are detected, not prevented.** The
   aws-security management apply role keeps `cloudtrail:PutEventSelectors` /
   `PutInsightSelectors`, because `aws_cloudtrail` calls them on create. A

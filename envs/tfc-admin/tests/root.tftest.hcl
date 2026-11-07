@@ -1038,6 +1038,43 @@ run "self_management_adopts_tfc_admin" {
   }
 }
 
+# tfc-admin holds the TFE_TOKEN: its applies are confirmed by owners and the
+# tfc-admin team only. Never auto-applied, and neither the approvers team nor a
+# platform team that may apply control-plane roots gets apply on the platform
+# project (it holds only this workspace).
+run "tfc_admin_workspace_apply_restricted" {
+  command = plan
+
+  variables {
+    manage_tfc_admin_workspace       = true
+    import_tfc_admin_workspace       = false
+    tfc_admin_team_id                = "team-tfcadmin1"
+    platform_team_id                 = "team-platform1"
+    control_plane_approvers_team_id  = "team-approvers1"
+    platform_team_control_plane_runs = "apply"
+  }
+
+  assert {
+    condition     = module.workspace["tfc-admin"].auto_apply == false && module.workspace["tfc-admin"].auto_apply_run_trigger == false && module.workspace["tfc-admin"].speculative_enabled == false
+    error_message = "tfc-admin must never auto-apply and must not run speculative plans."
+  }
+
+  assert {
+    condition     = tfe_team_access.tfc_admin[0].team_id == "team-tfcadmin1" && tfe_team_access.tfc_admin[0].access == "write"
+    error_message = "the tfc-admin team gets explicit write (apply) on the tfc-admin workspace."
+  }
+
+  assert {
+    condition     = !contains(keys(tfe_team_project_access.this), "platform/approvers") && tfe_team_project_access.this["platform/platform"].workspace_access[0].runs == "plan"
+    error_message = "on the platform project (tfc-admin only) the approvers team gets no grant and the platform team is capped at plan."
+  }
+
+  assert {
+    condition     = contains(keys(tfe_team_project_access.this), "gcp/approvers") && tfe_team_project_access.this["gcp/platform"].workspace_access[0].runs == "apply"
+    error_message = "other control-plane projects are unchanged."
+  }
+}
+
 # gcp-bootstrap receives every gcp-* workspace ID so its WIF bindings are by ID.
 run "gcp_bootstrap_gets_workspace_ids" {
   command = plan

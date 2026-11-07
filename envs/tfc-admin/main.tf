@@ -429,17 +429,25 @@ locals {
   # future auto-apply setting does for the others.
   never_auto_apply_workspaces = concat(local.guardrails_workspaces, [var.tfc_admin_workspace_name])
 
+  # The self-managed tfc-admin workspace is the only member of the platform
+  # project. It holds the TFE_TOKEN, so no project grant may confirm its apply:
+  # approvers get nothing there and the platform team is capped at plan. Apply
+  # is limited to organization owners and the tfc-admin team (tfe_team_access.tfc_admin).
+  tfc_admin_only_projects = var.manage_tfc_admin_workspace && var.enable_projects ? toset([local.workspace_project_key[var.tfc_admin_workspace_name]]) : toset([])
+
   team_project_access = merge(
     var.platform_team_id == null ? {} : {
       for p in local.shared_access_projects : "${p}/platform" => {
         project = p
         team_id = var.platform_team_id
         access  = contains(local.control_plane_projects, p) ? "custom" : "write"
-        custom  = contains(local.control_plane_projects, p) ? local.platform_custom_access : null
+        custom = contains(local.control_plane_projects, p) ? (
+          contains(local.tfc_admin_only_projects, p) ? merge(local.platform_custom_access, { runs = local.platform_custom_access.runs == "apply" ? "plan" : local.platform_custom_access.runs }) : local.platform_custom_access
+        ) : null
       }
     },
     var.control_plane_approvers_team_id == null ? {} : {
-      for p in local.control_plane_projects : "${p}/approvers" => {
+      for p in setsubtract(local.control_plane_projects, local.tfc_admin_only_projects) : "${p}/approvers" => {
         project = p
         team_id = var.control_plane_approvers_team_id
         access  = "custom"
@@ -608,6 +616,17 @@ resource "tfe_team_access" "platform_workload" {
 
   team_id      = var.platform_team_id
   workspace_id = module.workspace[each.key].id
+  access       = "write"
+}
+
+# Explicit apply grant for the team that owns tfc-admin's token. That team's
+# token also holds organization-level manage_workspaces, so this is a
+# belt-and-braces record of who may confirm tfc-admin's own applies.
+resource "tfe_team_access" "tfc_admin" {
+  count = var.manage_tfc_admin_workspace && var.tfc_admin_team_id != null ? 1 : 0
+
+  team_id      = var.tfc_admin_team_id
+  workspace_id = module.workspace[var.tfc_admin_workspace_name].id
   access       = "write"
 }
 
