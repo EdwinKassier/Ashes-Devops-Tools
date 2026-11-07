@@ -343,7 +343,9 @@ run "credentials_from_upstream_outputs" {
   variables {
     gcp_bootstrap_outputs_from_tfc    = true
     aws_organization_outputs_from_tfc = true
-    aws_workspace_account_keys        = { "aws-workload-prod" = "prod" }
+    # Pass 2 (bootstrap.md): gcp-bootstrap moves to remote execution.
+    workspace_execution_modes  = {}
+    aws_workspace_account_keys = { "aws-workload-prod" = "prod" }
   }
 
   override_data {
@@ -1130,4 +1132,203 @@ run "run_triggers_opt_out" {
     condition     = length(output.run_triggers) == 0
     error_message = "enable_run_triggers = false must create no run triggers."
   }
+}
+
+# ── New environment = one PR + shared-workspace confirmations ───────────────
+# tfc-admin derives a new environment's workload SA emails from org.prefix
+# (gcp_project_prefix) and the static gcp-bootstrap outputs, so the new
+# gcp-workload-<env> gets its TFC_GCP_* env vars in the same tfc-admin apply
+# that creates it (no second tfc-admin pass).
+run "sa_emails_derived_from_prefix_and_bootstrap_outputs" {
+  command = plan
+
+  variables {
+    gcp_bootstrap_outputs_from_tfc = true
+    gcp_project_prefix             = "acme"
+    workspace_execution_modes      = {}
+  }
+
+  override_data {
+    target = data.tfe_outputs.gcp_bootstrap[0]
+    values = {
+      nonsensitive_values = {
+        admin_project_id           = "acme-admin-1a2b"
+        tfc_workload_provider_name = "projects/123456789/locations/global/workloadIdentityPools/tfc-pool/providers/tfc-provider"
+        # Phase-0 outputs: only the control plane + dev existed when gcp-bootstrap last applied.
+        tfc_plan_service_accounts  = { "gcp-projects" = "acme-projects-plan@acme-admin-1a2b.iam.gserviceaccount.com", "gcp-workload-dev" = "acme-wl-dev-plan@acme-admin-1a2b.iam.gserviceaccount.com" }
+        tfc_apply_service_accounts = { "gcp-projects" = "acme-projects-apply@acme-admin-1a2b.iam.gserviceaccount.com", "gcp-workload-dev" = "acme-wl-dev-apply@acme-admin-1a2b.iam.gserviceaccount.com" }
+      }
+    }
+  }
+
+  override_data {
+    target = data.tfe_workspace.tfc_admin[0]
+    values = { id = "ws-tfcadmin" }
+  }
+
+  # gcp-workload-prod is not in the bootstrap outputs yet: its emails are derived.
+  assert {
+    condition = (
+      module.workspace["gcp-workload-prod"].variable_values["TFC_GCP_PLAN_SERVICE_ACCOUNT_EMAIL"] == "acme-wl-prod-plan@acme-admin-1a2b.iam.gserviceaccount.com" &&
+      module.workspace["gcp-workload-prod"].variable_values["TFC_GCP_APPLY_SERVICE_ACCOUNT_EMAIL"] == "acme-wl-prod-apply@acme-admin-1a2b.iam.gserviceaccount.com" &&
+      module.workspace["gcp-workload-prod"].variable_values["TFC_GCP_WORKLOAD_PROVIDER_NAME"] == "projects/123456789/locations/global/workloadIdentityPools/tfc-pool/providers/tfc-provider"
+    )
+    error_message = "a new gcp-workload-<env> must get <prefix>-wl-<env>-{plan,apply}@<admin_project_id>.iam.gserviceaccount.com and the bootstrap WIF provider in the same apply."
+  }
+
+  assert {
+    condition     = contains(output.dynamic_credential_workspaces.gcp, "gcp-workload-dev") && contains(output.dynamic_credential_workspaces.gcp, "gcp-workload-prod") && contains(output.dynamic_credential_workspaces.gcp, "gcp-projects")
+    error_message = "derived workload emails merge with the bootstrap outputs, never replace them."
+  }
+
+  # Only workload SAs are derived; control-plane SAs come from the outputs.
+  assert {
+    condition     = toset(keys(local.derived_gcp_plan_sas)) == toset(["gcp-workload-dev", "gcp-workload-prod"])
+    error_message = "tfc-admin derives the per-environment workload SAs only."
+  }
+}
+
+# No derivation without the prefix or the bootstrap outputs.
+run "sa_emails_not_derived_without_inputs" {
+  command = plan
+
+  assert {
+    condition     = length(local.derived_gcp_plan_sas) == 0 && length(output.dynamic_credential_workspaces.gcp) == 0
+    error_message = "without gcp_bootstrap_outputs_from_tfc and a prefix, nothing is derived (greenfield phase 0 is unchanged)."
+  }
+}
+
+# The derived email must match what gcp-bootstrap actually created.
+run "derived_email_check_matches_bootstrap_output" {
+  command = plan
+
+  variables {
+    gcp_bootstrap_outputs_from_tfc = true
+    gcp_project_prefix             = "acme"
+    workspace_execution_modes      = {}
+  }
+
+  override_data {
+    target = data.tfe_outputs.gcp_bootstrap[0]
+    values = {
+      nonsensitive_values = {
+        admin_project_id           = "acme-admin-1a2b"
+        tfc_workload_provider_name = "projects/123456789/locations/global/workloadIdentityPools/tfc-pool/providers/tfc-provider"
+        tfc_plan_service_accounts  = { "gcp-workload-dev" = "other-wl-dev-plan@acme-admin-1a2b.iam.gserviceaccount.com" }
+        tfc_apply_service_accounts = { "gcp-workload-dev" = "acme-wl-dev-apply@acme-admin-1a2b.iam.gserviceaccount.com" }
+      }
+    }
+  }
+
+  override_data {
+    target = data.tfe_workspace.tfc_admin[0]
+    values = { id = "ws-tfcadmin" }
+  }
+
+  expect_failures = [check.derived_gcp_service_accounts_match_bootstrap]
+}
+
+# GCP SA account IDs are at most 30 characters: <prefix>-wl-<env>-apply must fit.
+run "derived_account_id_too_long_fails" {
+  command = plan
+
+  variables {
+    gcp_project_prefix = "acmecorp"
+    environments = {
+      dev                  = {}
+      integration-testing2 = {}
+    }
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+# tfc-admin is the DAG root: its apply queues gcp-bootstrap and aws-organization.
+run "tfc_admin_triggers_dag_roots" {
+  command = plan
+
+  override_data {
+    target = data.tfe_workspace.tfc_admin[0]
+    values = { id = "ws-tfcadmin" }
+  }
+
+  assert {
+    condition     = contains(output.run_triggers, "tfc-admin->gcp-bootstrap") && contains(output.run_triggers, "tfc-admin->aws-organization")
+    error_message = "tfc-admin must trigger gcp-bootstrap and aws-organization."
+  }
+
+  assert {
+    condition     = tfe_run_trigger.dag["tfc-admin->gcp-bootstrap"].sourceable_id == "ws-tfcadmin"
+    error_message = "an unmanaged tfc-admin is the trigger source through data.tfe_workspace.tfc_admin."
+  }
+
+  # tfc-admin is never a trigger target, and no other DAG root edge is added.
+  assert {
+    condition     = length([for t in output.run_triggers : t if startswith(t, "tfc-admin->")]) == 2 && length([for t in output.run_triggers : t if endswith(t, "->tfc-admin")]) == 0
+    error_message = "tfc-admin triggers exactly the two DAG roots and is never triggered."
+  }
+}
+
+# Non-prod workloads: queued at creation, and run-trigger runs apply.
+run "new_nonprod_workload_queues_all_runs_and_auto_applies_triggers" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for ws in ["gcp-workload-dev", "aws-workload-dev"] :
+      module.workspace[ws].queue_all_runs && module.workspace[ws].auto_apply_run_trigger && !module.workspace[ws].auto_apply
+    ])
+    error_message = "non-prod workloads must queue_all_runs and auto-apply run-trigger runs (merges to the workload itself still need confirmation)."
+  }
+}
+
+run "nonprod_workload_auto_apply_opt_out" {
+  command = plan
+
+  variables {
+    enable_nonprod_workload_auto_apply = false
+  }
+
+  assert {
+    condition = alltrue([
+      for ws in output.workspace_names : !module.workspace[ws].queue_all_runs && !module.workspace[ws].auto_apply_run_trigger
+    ])
+    error_message = "enable_nonprod_workload_auto_apply = false restores manual confirmation everywhere."
+  }
+}
+
+# Production workloads and every shared workspace keep manual confirmation.
+run "prod_and_shared_need_confirmation" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for ws in output.workspace_names :
+      !module.workspace[ws].queue_all_runs && !module.workspace[ws].auto_apply_run_trigger && !module.workspace[ws].auto_apply
+      if !contains(["gcp-workload-dev", "aws-workload-dev"], ws)
+    ])
+    error_message = "production workloads, the control plane, saas, gcp-guardrails and tfc-admin must wait for confirmation."
+  }
+}
+
+# Once gcp-bootstrap's outputs are read (post-handover), gcp-bootstrap must run
+# remotely, or tfc-admin's run trigger has nothing to queue.
+run "gcp_bootstrap_local_after_handover_warns" {
+  command = plan
+
+  variables {
+    gcp_bootstrap_outputs_from_tfc = true
+  }
+
+  override_data {
+    target = data.tfe_outputs.gcp_bootstrap[0]
+    values = { nonsensitive_values = {} }
+  }
+
+  override_data {
+    target = data.tfe_workspace.tfc_admin[0]
+    values = { id = "ws-tfcadmin" }
+  }
+
+  expect_failures = [check.gcp_bootstrap_remote_after_handover]
 }

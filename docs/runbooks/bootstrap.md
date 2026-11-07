@@ -237,9 +237,12 @@ See [CI_SECRETS.md](../guides/CI_SECRETS.md).
 
 Once `gcp-organization` is applied and its outputs are published, each application environment is a separate `gcp-workload-<env>` workspace that reads the org remote state. **Do not duplicate that procedure here** — it is fully covered in [add-environment.md](add-environment.md). In brief:
 
-1. Add **one** entry under `gcp.environments` in `config/landing-zone.yaml` and commit it. Re-apply **tfc-admin**, which creates `gcp-workload-<env>` with its `environment` variable. Then re-apply **gcp-bootstrap** (creates the `<prefix>-wl-<env>-plan/-apply` SAs and their `gcp-workload-<env>:plan/:apply` WIF bindings), **gcp-organization** (the env folder), **gcp-projects** (host project and env-folder grants) and **gcp-network-hub**. Re-apply tfc-admin once more for the workspace's `TFC_GCP_*` env vars.
-2. Add a `-var-file` for the workload's own tfvars if it needs any.
-3. Plan and apply the workload root — it reads `environment_config[<env>]` (CIDR, region, folder, host project) from the org remote state; the per-env CIDR is **not** set in the workload tfvars.
+1. Add **one** entry under `gcp.environments` in `config/landing-zone.yaml` (plus any workload tfvars and their `-var-file` wiring) in one PR, and merge it.
+2. Confirm the **tfc-admin** apply. It creates `gcp-workload-<env>` with its `environment` variable and, after the handover (pass 2 above, `gcp_bootstrap_outputs_from_tfc = true`), its `TFC_GCP_*` env vars: the SA emails are derived as `<org.prefix>-wl-<env>-{plan,apply}@<admin_project_id>.iam.gserviceaccount.com`, so no second tfc-admin pass is needed. Its apply triggers `gcp-bootstrap` and `aws-organization`, the DAG roots.
+3. Confirm each shared workspace as its triggered run queues: **gcp-bootstrap** (creates the `<prefix>-wl-<env>-plan/-apply` SAs and their `gcp-workload-<env>:plan/:apply` WIF bindings), **gcp-organization** (the env folder), **gcp-projects** (host project and env-folder grants) and **gcp-network-hub**.
+4. A non-production workload then applies itself from `gcp-network-hub`'s run trigger (`auto_apply_run_trigger`); a production one waits for confirmation. The workload reads `environment_config[<env>]` (CIDR, region, folder, host project) from the org remote state; the per-env CIDR is **not** set in the workload tfvars.
+
+Greenfield is different: the first environment exists before any gcp-bootstrap output, so it follows the phase-0 two-pass flow above.
 
 See [add-environment.md](add-environment.md) for the exact steps, expected plan output, and rollback.
 

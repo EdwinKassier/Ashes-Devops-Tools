@@ -94,6 +94,7 @@ The following resources are created:
 | <a name="output_id"></a> [id](#output\_id) | The workspace ID (ws-...). |
 | <a name="output_name"></a> [name](#output\_name) | The workspace name. |
 | <a name="output_notification_ids"></a> [notification\_ids](#output\_notification\_ids) | Map of notification name to its configuration ID. |
+| <a name="output_queue_all_runs"></a> [queue\_all\_runs](#output\_queue\_all\_runs) | Whether the workspace queues a run as soon as it is created. |
 | <a name="output_remote_state_consumer_ids"></a> [remote\_state\_consumer\_ids](#output\_remote\_state\_consumer\_ids) | Workspace IDs allowed to read this workspace's state as managed by this module (empty when global\_remote\_state = true or manage\_settings = false). |
 | <a name="output_speculative_enabled"></a> [speculative\_enabled](#output\_speculative\_enabled) | Whether automatic speculative (PR) plans are allowed. |
 | <a name="output_trigger_patterns"></a> [trigger\_patterns](#output\_trigger\_patterns) | Trigger patterns configured on the workspace. |

@@ -67,7 +67,10 @@ locals {
   ))
 
   cfg = {
-    tfc_organization    = try(tostring(local.lz.org.tfc.organization), null)
+    tfc_organization = try(tostring(local.lz.org.tfc.organization), null)
+    # The same key gcp-bootstrap reads as project_prefix: the <prefix> of its
+    # <prefix>-wl-<env>-{plan,apply} workload service accounts.
+    gcp_project_prefix  = try(tostring(local.lz.org.prefix), null)
     project_name_prefix = try(tostring(local.lz.org.tfc.project_name_prefix), null)
     # Project keys: one per cloud, plus gcp-workloads / aws-workloads when
     # split_workload_projects is on (config keys org.tfc.<cloud>_project and
@@ -106,6 +109,7 @@ locals {
   # static tools (tflint) can evaluate the root; the variable validations reject
   # the unset case first.
   tfc_organization    = coalesce(var.tfc_organization, local.cfg.tfc_organization, "unset")
+  gcp_project_prefix  = var.gcp_project_prefix != null ? var.gcp_project_prefix : local.cfg.gcp_project_prefix
   enable_gcp          = var.enable_gcp != null ? var.enable_gcp : coalesce(local.cfg.enable_gcp, false)
   enable_aws          = var.enable_aws != null ? var.enable_aws : coalesce(local.cfg.enable_aws, false)
   enable_saas         = var.enable_saas != null ? var.enable_saas : coalesce(local.cfg.enable_saas, false)

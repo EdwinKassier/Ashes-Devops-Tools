@@ -11,6 +11,26 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
 
 ## OPEN — validate before relying on
 
+- **Upstream applies auto-apply non-prod workloads.** Non-production
+  `gcp-workload-<env>` / `aws-workload-<env>` workspaces get
+  `auto_apply_run_trigger` and `queue_all_runs`
+  (`enable_nonprod_workload_auto_apply`, default true). The trust change: a
+  human confirms the upstream apply (`gcp-network-hub`, `aws-network`,
+  `aws-security`), and the run it queues on each non-prod workload then applies
+  **without a second confirmation**. So whoever may confirm a shared
+  network/security apply can change non-prod workloads too. Production
+  workloads, the control plane, `gcp-guardrails` and `tfc-admin` still confirm.
+  Residuals, not yet run in the sandbox:
+  - the `queue_all_runs` run is queued as soon as tfc-admin creates the
+    workspace, before `gcp-bootstrap` creates its SAs (or `aws-organization`
+    trusts its name), so it normally fails or waits; the workload then builds
+    from the run trigger of the next upstream apply. If that apply is a no-op
+    (no trigger fires), queue the workload's run once by hand;
+  - the `tfc-admin -> gcp-bootstrap` / `aws-organization` triggers queue a plan
+    on both roots after **every** tfc-admin apply; discard the no-op ones;
+  - with `auto_apply_on_merge` (sandbox only) a tfc-admin apply auto-applies
+    `gcp-bootstrap` and `aws-organization`.
+
 - **Org-wide Config recorders are mock-tested only.** The
   `org-config-recorders` StackSet (`modules/aws/security/config-recorder-stackset`)
   and the migration runbook

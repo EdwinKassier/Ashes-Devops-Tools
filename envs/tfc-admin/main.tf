@@ -129,12 +129,50 @@ locals {
 
   gcp_workload_provider_name = coalesce(var.gcp_workload_provider_name, try(local.gcp_bootstrap_outputs.tfc_workload_provider_name, null), "unset")
 
+  # Per-environment workload SAs, derived so a NEW environment's workspace gets
+  # its TFC_GCP_* env vars in the same tfc-admin apply that creates it. Naming is
+  # gcp-bootstrap's (modules/gcp/stages/bootstrap/service_accounts.tf):
+  # <prefix>-wl-<env>-{plan,apply}@<admin_project_id>.iam.gserviceaccount.com.
+  # The admin project ID carries a random suffix, so it comes from the existing
+  # gcp-bootstrap outputs (static after phase 0), never from config. Greenfield
+  # still needs the phase-0 pass: until gcp-bootstrap has applied there are no
+  # outputs and nothing is derived. Precedence: derived < bootstrap outputs <
+  # explicit variables (check.derived_gcp_service_accounts_match_bootstrap
+  # flags a derived email that disagrees with the outputs).
+  gcp_admin_project_id = try(tostring(local.gcp_bootstrap_outputs.admin_project_id), null)
+  derive_gcp_workload_sas = (
+    local.enable_gcp && var.gcp_bootstrap_outputs_from_tfc &&
+    local.gcp_project_prefix != null && local.gcp_admin_project_id != null
+  )
+  gcp_workload_account_ids = local.enable_gcp && local.gcp_project_prefix != null ? {
+    for env in local.gcp_environment_keys : env => {
+      plan  = "${local.gcp_project_prefix}-wl-${env}-plan"
+      apply = "${local.gcp_project_prefix}-wl-${env}-apply"
+    }
+  } : {}
+  # GCP service-account IDs are 6-30 characters; "-apply" is the longer suffix.
+  gcp_workload_account_ids_too_long = sort([for env, ids in local.gcp_workload_account_ids : ids.apply if length(ids.apply) > 30])
+  derived_gcp_plan_sas = local.derive_gcp_workload_sas ? {
+    for env, ids in local.gcp_workload_account_ids : "gcp-workload-${env}" => "${ids.plan}@${local.gcp_admin_project_id}.iam.gserviceaccount.com"
+  } : {}
+  derived_gcp_apply_sas = local.derive_gcp_workload_sas ? {
+    for env, ids in local.gcp_workload_account_ids : "gcp-workload-${env}" => "${ids.apply}@${local.gcp_admin_project_id}.iam.gserviceaccount.com"
+  } : {}
+  bootstrap_gcp_plan_sas  = try(tomap(local.gcp_bootstrap_outputs.tfc_plan_service_accounts), {})
+  bootstrap_gcp_apply_sas = try(tomap(local.gcp_bootstrap_outputs.tfc_apply_service_accounts), {})
+  derived_gcp_sa_mismatches = sort(concat(
+    [for ws, e in local.derived_gcp_plan_sas : "${ws} plan (${e} vs ${local.bootstrap_gcp_plan_sas[ws]})" if contains(keys(local.bootstrap_gcp_plan_sas), ws) && try(local.bootstrap_gcp_plan_sas[ws] != e, true)],
+    [for ws, e in local.derived_gcp_apply_sas : "${ws} apply (${e} vs ${local.bootstrap_gcp_apply_sas[ws]})" if contains(keys(local.bootstrap_gcp_apply_sas), ws) && try(local.bootstrap_gcp_apply_sas[ws] != e, true)],
+  ))
+
   gcp_plan_sas = merge(
-    try(tomap(local.gcp_bootstrap_outputs.tfc_plan_service_accounts), {}),
+    local.derived_gcp_plan_sas,
+    local.bootstrap_gcp_plan_sas,
     var.gcp_plan_service_accounts,
   )
   gcp_apply_sas = merge(
-    try(tomap(local.gcp_bootstrap_outputs.tfc_apply_service_accounts), {}),
+    local.derived_gcp_apply_sas,
+    local.bootstrap_gcp_apply_sas,
     var.gcp_apply_service_accounts,
   )
 
@@ -429,6 +467,15 @@ locals {
   # future auto-apply setting does for the others.
   never_auto_apply_workspaces = concat(local.guardrails_workspaces, [var.tfc_admin_workspace_name])
 
+  # Non-production gcp-/aws-workload-<env> workspaces: queue_all_runs and
+  # auto_apply_run_trigger (enable_nonprod_workload_auto_apply). Trust change:
+  # a confirmed upstream apply (gcp-network-hub, aws-network, aws-security)
+  # applies these without a further confirmation.
+  nonprod_auto_apply_workloads = var.enable_nonprod_workload_auto_apply ? setsubtract(
+    toset(concat(keys(local.gcp_workloads), keys(local.aws_workloads))),
+    setunion(local.production_workloads, toset(local.never_auto_apply_workspaces)),
+  ) : toset([])
+
   # The self-managed tfc-admin workspace is the only member of the platform
   # project. It holds the TFE_TOKEN, so no project grant may confirm its apply:
   # approvers get nothing there and the platform team is capped at plan. Apply
@@ -538,6 +585,10 @@ resource "terraform_data" "input_contract" {
       error_message = "security_team_id must differ from platform_team_id and control_plane_approvers_team_id: the security team alone applies gcp-guardrails, which contains the platform's own automation identity."
     }
     precondition {
+      condition     = length(local.gcp_workload_account_ids_too_long) == 0
+      error_message = "GCP service-account IDs are at most 30 characters, so <prefix>-wl-<env>-apply must fit (prefix from gcp_project_prefix or org.prefix): ${join(", ", local.gcp_workload_account_ids_too_long)}. Shorten the gcp.environments key or the prefix."
+    }
+    precondition {
       condition     = length(local.file_bad_categories) == 0
       error_message = "workspace_variables_file categories must be terraform or env: ${join(", ", local.file_bad_categories)}."
     }
@@ -557,10 +608,11 @@ data "tfe_outputs" "aws_organization" {
   workspace    = "aws-organization"
 }
 
-# The hand-created tfc-admin workspace, looked up only when it must be granted
-# read access to an upstream state and is not self-managed.
+# The hand-created tfc-admin workspace, looked up only when it is not
+# self-managed and must be granted read access to an upstream state or be the
+# source of the DAG-root run triggers.
 data "tfe_workspace" "tfc_admin" {
-  count        = length(local.tfc_admin_reads) > 0 && !var.manage_tfc_admin_workspace ? 1 : 0
+  count        = (length(local.tfc_admin_reads) > 0 || length(local.tfc_admin_trigger_targets) > 0) && !var.manage_tfc_admin_workspace ? 1 : 0
   name         = var.tfc_admin_workspace_name
   organization = local.tfc_organization
 }
@@ -681,10 +733,15 @@ module "workspace" {
   # control plane. auto_apply is false unless auto_apply_on_merge (the sandbox
   # estate); the never_auto_apply_workspaces (gcp-guardrails, tfc-admin) stay
   # false under it too.
-  speculative_enabled    = !contains(local.speculative_disabled, each.key)
-  allow_destroy_plan     = !local.is_control_plane[each.key]
+  speculative_enabled = !contains(local.speculative_disabled, each.key)
+  allow_destroy_plan  = !local.is_control_plane[each.key]
+  # Non-production workloads also auto-apply run-trigger runs (an upstream
+  # apply carries down to them) and queue a run at creation, so a new non-prod
+  # environment builds itself; production and shared workspaces still wait for
+  # a human confirmation.
   auto_apply             = var.auto_apply_on_merge && !contains(local.never_auto_apply_workspaces, each.key)
-  auto_apply_run_trigger = var.auto_apply_on_merge && !contains(local.never_auto_apply_workspaces, each.key)
+  auto_apply_run_trigger = (var.auto_apply_on_merge || contains(local.nonprod_auto_apply_workloads, each.key)) && !contains(local.never_auto_apply_workspaces, each.key)
+  queue_all_runs         = contains(local.nonprod_auto_apply_workloads, each.key)
 
   assessments_enabled = var.enable_health_assessments
 
@@ -907,7 +964,14 @@ locals {
     "aws-shared-services" = ["aws-organization"]
     "aws-backup"          = ["aws-organization"]
   }
+  # tfc-admin is the DAG root: its apply (a workspace or environment added in
+  # config) queues the two phase-0 roots, which carry it down the DAG.
+  tfc_admin_trigger_targets = var.enable_run_triggers ? [for ws in ["gcp-bootstrap", "aws-organization"] : ws if contains(keys(local.workspaces), ws)] : []
+  tfc_admin_trigger_source_id = length(local.tfc_admin_trigger_targets) == 0 ? null : (
+    var.manage_tfc_admin_workspace ? module.workspace[var.tfc_admin_workspace_name].id : data.tfe_workspace.tfc_admin[0].id
+  )
   run_trigger_pairs = var.enable_run_triggers ? merge(
+    { for ws in local.tfc_admin_trigger_targets : "${var.tfc_admin_workspace_name}->${ws}" => { source = var.tfc_admin_workspace_name, downstream = ws } },
     merge([
       for downstream, sources in local.run_trigger_edges : {
         for src in sources : "${src}->${downstream}" => { source = src, downstream = downstream }
@@ -931,5 +995,25 @@ resource "tfe_run_trigger" "dag" {
   for_each = local.run_trigger_pairs
 
   workspace_id  = module.workspace[each.value.downstream].id
-  sourceable_id = module.workspace[each.value.source].id
+  sourceable_id = each.value.source == var.tfc_admin_workspace_name ? local.tfc_admin_trigger_source_id : module.workspace[each.value.source].id
+}
+
+# A derived workload SA email that disagrees with what gcp-bootstrap created
+# (prefix drift between org.prefix and gcp-bootstrap's project_prefix, or a
+# changed naming scheme) would hand the workspace an identity that does not exist.
+check "derived_gcp_service_accounts_match_bootstrap" {
+  assert {
+    condition     = length(local.derived_gcp_sa_mismatches) == 0
+    error_message = "Derived workload SA emails differ from the gcp-bootstrap outputs (derived vs output): ${join("; ", local.derived_gcp_sa_mismatches)}. Align gcp_project_prefix / org.prefix with gcp-bootstrap's project_prefix."
+  }
+}
+
+# Post-handover (tfc-admin reads gcp-bootstrap's outputs) gcp-bootstrap must run
+# remotely: a local-execution workspace cannot run what tfc-admin's run trigger
+# queues, and its local applies fire no downstream triggers.
+check "gcp_bootstrap_remote_after_handover" {
+  assert {
+    condition     = !var.gcp_bootstrap_outputs_from_tfc || lookup(local.execution_modes, "gcp-bootstrap", "remote") != "local"
+    error_message = "gcp_bootstrap_outputs_from_tfc = true but gcp-bootstrap still runs in local execution mode: set workspace_execution_modes = {} so tfc-admin's run trigger (and the DAG below it) reaches gcp-bootstrap."
+  }
 }

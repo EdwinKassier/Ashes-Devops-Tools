@@ -62,3 +62,8 @@ output "allow_destroy_plan" {
   description = "Whether destroy plans may be queued from the UI/API."
   value       = tfe_workspace.this.allow_destroy_plan
 }
+
+output "queue_all_runs" {
+  description = "Whether the workspace queues a run as soon as it is created."
+  value       = tfe_workspace.this.queue_all_runs
+}

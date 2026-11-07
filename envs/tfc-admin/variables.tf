@@ -229,6 +229,17 @@ variable "gcp_apply_service_accounts" {
   }
 }
 
+variable "gcp_project_prefix" {
+  description = "Prefix gcp-bootstrap names its workload service accounts with (<prefix>-wl-<env>-{plan,apply}); null reads org.prefix from config/landing-zone.yaml, the key gcp-bootstrap reads. With gcp_bootstrap_outputs_from_tfc, tfc-admin derives each gcp-workload-<env>'s plan/apply SA emails from it and the gcp-bootstrap admin_project_id output, so a new environment needs no second tfc-admin pass."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.gcp_project_prefix == null || can(regex("^[a-z][a-z0-9-]{0,9}$", coalesce(var.gcp_project_prefix, "a")))
+    error_message = "gcp_project_prefix must start with a lowercase letter, contain only lowercase letters, digits and hyphens, and be 10 characters or fewer (the gcp-bootstrap project_prefix rule)."
+  }
+}
+
 variable "gcp_bootstrap_outputs_from_tfc" {
   description = "Read tfc_workload_provider_name / tfc_plan_service_accounts / tfc_apply_service_accounts from the gcp-bootstrap workspace outputs (tfe_outputs) instead of copying them into variables. Enable only after gcp-bootstrap has applied; grants tfc-admin read on gcp-bootstrap state."
   type        = bool
@@ -575,4 +586,10 @@ variable "auto_apply_on_merge" {
   description = "Apply every merge without confirmation: auto_apply and auto_apply_run_trigger on every workspace except tfc-admin and gcp-guardrails, so a merge applies the changed roots and the run triggers carry it down the DAG. Path-filtered VCS triggers stay on. Meant for the sandbox estate (docs/guides/sandbox-estate.md); default false keeps manual apply everywhere."
   type        = bool
   default     = false
+}
+
+variable "enable_nonprod_workload_auto_apply" {
+  description = "Non-production gcp-/aws-workload-<env> workspaces get queue_all_runs (a new one runs as soon as tfc-admin creates it) and auto_apply_run_trigger (a run queued by a confirmed upstream apply applies without a second confirmation), so a new non-prod environment builds itself. Production workloads and every shared workspace keep manual confirmation. Set false to confirm every run."
+  type        = bool
+  default     = true
 }

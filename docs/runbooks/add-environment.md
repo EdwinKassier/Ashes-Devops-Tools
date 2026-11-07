@@ -2,9 +2,17 @@
 
 **When to use:** You need a new isolated GCP environment (e.g., `staging`, `production`) with its own spoke project, VPC, and service accounts.
 
-**Time:** ~30 minutes
+**Time:** one PR, then a few run confirmations
 **Risk:** Low — creates new resources, does not modify existing environments.
-**Prerequisites:** the four GCP control-plane roots — `gcp-bootstrap`, `gcp-organization`, `gcp-projects` and `gcp-network-hub` — have each been applied at least once. You have Terraform Cloud access.
+**Prerequisites:**
+
+- The handover is done: tfc-admin pass 2 has applied with `gcp_bootstrap_outputs_from_tfc = true`
+  and `workspace_execution_modes = {}`, so `gcp-bootstrap` runs remotely in TFC.
+- The four GCP control-plane roots have each applied at least once.
+- `enable_run_triggers` is on (the default).
+
+A **greenfield** estate still needs the phase-0 pass in [bootstrap.md](bootstrap.md) first. Until
+`gcp-bootstrap` has outputs, tfc-admin cannot derive the new environment's service-account emails.
 
 > **Five-root flow.** A new environment touches every GCP root, because each one derives
 > something from the shared `environments` map (`gcp.environments` in the committed
@@ -15,18 +23,30 @@
 > spoke itself. All applies run in Terraform Cloud — never locally (see
 > [CLAUDE.md → State & Apply Rules](../../CLAUDE.md#state--apply-rules)).
 
+**How it runs.** tfc-admin is the root of the run-trigger DAG
+(`tfc-admin → gcp-bootstrap → gcp-organization → gcp-projects → gcp-network-hub → gcp-workload-<env>`).
+Each run is queued when its upstream **applies**; a no-op apply fires no trigger. Shared workspaces wait
+for your confirmation. A non-production workload (`is_production: false`) has `auto_apply_run_trigger`
+and `queue_all_runs` (`enable_nonprod_workload_auto_apply`), so the run its upstream queues applies on
+its own. A production workload waits for confirmation like the shared ones.
+
+> **Trust change.** Confirming a shared upstream apply (`gcp-network-hub`, `aws-network`,
+> `aws-security`) also applies every non-production workload it triggers, with no second
+> confirmation. Review the downstream effect before you confirm, or set
+> `enable_nonprod_workload_auto_apply = false`. See [known gaps](../known-gaps.md#open--validate-before-relying-on).
+
 ---
 
 ## Steps
 
-### 1. Add the environment to `config/landing-zone.yaml`
+### 1. Edit `config/landing-zone.yaml` and merge
 
 Per-environment CIDR, region, and other config are **not** set in `envs/gcp/workload` tfvars. They
 live in the `environments` map and reach `envs/gcp/workload` through the `environment_config` that
 `gcp-projects` publishes to remote state (`environment_config[var.environment]`). See
 [cidr-expansion.md](cidr-expansion.md) for the authoritative model.
 
-Add **one** entry under `gcp.environments` and commit it. All four control-plane roots and tfc-admin
+Add **one** entry under `gcp.environments` and open a PR. All four control-plane roots and tfc-admin
 read the same map, so nothing needs to be kept in sync by hand:
 
 ```yaml
@@ -43,41 +63,58 @@ gcp:
 ```
 
 Choose a non-overlapping CIDR. Refer to [network-topology.md](../architecture/network-topology.md) and
-the [CIDR plan](../architecture/cidr-plan.md) for the layout.
+the [CIDR plan](../architecture/cidr-plan.md) for the layout. Keep the key short:
+`<org.prefix>-wl-<env>-apply` must fit the 30-character GCP service-account ID limit, and the tfc-admin
+plan fails if it does not.
 
 > **Explicit `environments` variable?** If a workspace sets `environments` explicitly (tfvars or a TFC
 > variable), that value wins over the config file. Remove it so that the root reads the file, or add the
 > entry there too.
 
-### 2. Create the Terraform Cloud workspace (tfc-admin)
+Merge the PR. The config edit queues a run on tfc-admin and on every workspace that triggers on
+`config/landing-zone.yaml`.
 
-Re-apply the `tfc-admin` workspace (`envs/tfc-admin`). It derives one `gcp-workload-<env>` workspace per
-`gcp.environments` key, with the right working directory, VCS trigger, variable sets and the
-`environment` variable set from the workspace name.
+### 2. tfc-admin and the affected roots run
 
-Manual fallback, in the Terraform Cloud UI (or via the TFC API):
+Confirm the **tfc-admin** apply (it never auto-applies). It:
 
-1. Go to your organization → **Workspaces** → **New workspace**
-2. Name it `gcp-workload-{env}` (e.g., `gcp-workload-staging`)
-3. Set execution mode: **Remote** (or **Agent** if using self-hosted runners)
-4. Configure VCS connection to this repository, triggering on changes to `envs/gcp/workload/**`
-5. Set the Terraform working directory to `envs/gcp/workload`
+- creates `gcp-workload-staging` with its `environment` variable, triggers and settings;
+- sets its `TFC_GCP_*` env vars in the same apply. The SA emails are derived as
+  `<org.prefix>-wl-staging-{plan,apply}@<admin_project_id>.iam.gserviceaccount.com`, with the admin
+  project ID from the gcp-bootstrap outputs, so no second tfc-admin pass is needed. A `check` warns if
+  a derived email differs from one gcp-bootstrap already outputs;
+- triggers `gcp-bootstrap` (and `aws-organization`), the DAG roots.
 
-### 3. Apply the control-plane roots, in order, in Terraform Cloud
+### 3. Confirm each shared workspace as it queues
 
-Queue a run on each workspace and wait for it to finish before starting the next — each reads the
-previous one's remote state. Preview locally first if you like (e.g.
-`terraform -chdir=envs/gcp/projects plan`); every plan should show **additions only** for the new
-environment and no changes to existing ones.
+Each plan should show **additions only** for the new environment and no changes to existing ones.
+Confirm them in order, as each queues (the triggers enforce the order):
 
 | Order | Workspace | What the new environment adds |
 |-------|-----------|-------------------------------|
-| 1 | `gcp-bootstrap` | WIF trust for the `gcp-workload-staging` workspace |
+| 1 | `gcp-bootstrap` | The `<prefix>-wl-staging-plan/-apply` SAs and WIF trust for the `gcp-workload-staging` workspace |
 | 2 | `gcp-organization` | The environment folder (and its folder-level policies) |
 | 3 | `gcp-projects` | The host project; publishes `environment_config["staging"]` |
 | 4 | `gcp-network-hub` | Adds the new host project to the hub VPC-SC perimeter |
 
-### 4. (Optional) Create a tfvars file for the new environment
+Discard any plan that shows no changes (tfc-admin triggers `aws-organization` too, for example).
+The config-edit runs from step 1 may already have queued some of these; confirm the latest.
+
+### 4. The new non-prod workload creates itself and applies
+
+When `gcp-network-hub` applies, its run trigger queues `gcp-workload-staging`. A non-production
+workload applies that run without confirmation. A production workload (`is_production: true`, or the
+key `prod` / `production`) waits for your confirmation; review its plan first.
+
+`queue_all_runs` also queued a run when tfc-admin created the workspace. That run started before
+`gcp-bootstrap` created the SAs, so expect it to fail at authentication; ignore it. If
+`gcp-network-hub`'s apply was a no-op (for example the VPC-SC perimeter is off), no trigger fires:
+start one run on `gcp-workload-staging` by hand.
+
+### 5. (Optional) Workload tfvars, in the step-1 PR
+
+A non-prod workload applies as soon as its upstream does, so put any tfvars file and its
+`-var-file` wiring in the same PR as the config edit, not afterwards.
 
 `environment` comes from tfc-admin, and `project_prefix` / `tfc_organization` / `region` come from
 `config/landing-zone.yaml`. A tfvars file is needed only for workload-specific inputs (Cloud Armor,
@@ -96,19 +133,21 @@ git add examples/staging.tfvars
 git commit -m "feat: add staging environment tfvars"
 ```
 
-### 5. Point the workspace at the tfvars file (only if you created one)
+### 6. Point the workspace at the tfvars file (only if you created one)
 
-tfc-admin already sets the `environment` Terraform variable. If you created a tfvars file in step 4, set
-this **environment variable**, either on the workspace or in `config/tfc-workspaces.yaml` with
-`category: env`:
+tfc-admin already sets the `environment` Terraform variable. If you created a tfvars file in step 5, set
+this **environment variable** through tfc-admin's `workspace_variables` input (`category = "env"`;
+the committed `config/tfc-workspaces.yaml` rejects `TF_CLI_ARGS*`):
 
 | Key | Value |
 |-----|-------|
 | `TF_CLI_ARGS_plan` | `-var-file=../../../examples/staging.tfvars` |
 
-### 6. Trigger the first plan
+### 7. Verify
 
-Push to `main` or manually trigger the `gcp-workload-staging` workspace run in TFC. Review the plan carefully — it should create new resources only (no modifications to existing environments and no project creation, since `gcp-projects` already created the host project in Step 3).
+Review the first workload plan or apply log: it should create new resources only (no modifications
+to existing environments and no project creation, since `gcp-projects` created the host project in
+step 3).
 
 ```text
 Expected new resources:
@@ -118,10 +157,6 @@ Expected new resources:
   + module.host.module.nat.*
   (etc.)
 ```
-
-### 7. Apply and verify
-
-After plan review, approve the apply in TFC.
 
 Verify the environment is healthy:
 
