@@ -32,14 +32,14 @@ standby**, or **active-active**. Here the order database is
 tier 0: an asynchronous cross-region replica that can be promoted, with
 seconds of RPO and about 15 minutes of RTO. Carts are tier 1, replicated
 tables with compute switched off in the DR region. Objects and streams are
-tier 2: continuous replication plus versioning and long stream retention, so
-the stream can be replayed. The warehouse is tier 3: rebuilt from the raw zone
-and snapshots within a day. Every store also writes backups into a
-**write-once vault in a separate account or project, in a second region**,
+tier 2: continuous replication, versioning, and replayable stream retention.
+The warehouse is tier 3: rebuilt from the raw zone within two days. Every
+store also writes backups into a
+**write-once vault outside the primary region** (a second region on AWS, a
+multi-region vault on GCP), in a separate account where the cloud allows,
 because a compromised production account must not be able to delete its own
-backups. Finally, nothing counts until it is tested: automated restore tests
-every week, switchover drills every quarter, and runbooks that a tired
-engineer can follow at 3am.
+backups. Nothing counts until tested: weekly automated restore tests,
+quarterly switchover drills, and runbooks a tired engineer can follow.
 
 ```mermaid
 flowchart LR
@@ -77,28 +77,25 @@ Every input is an assumption.
 **Relational (orders).** 2 TB, 3,000 writes/s at peak, about 2 KB of
 write-ahead log per write: 3,000 × 2 KB = **6 MB/s of log**, about 48 Mbps
 across regions and about 0.5 TB of log a day. Keeping 35 days of
-point-in-time logs is about 17 TB before compression. *Drives:* a single
-asynchronous replica stream is easily within budget, so tier 0 can replicate
-continuously instead of shipping snapshots.
+point-in-time logs is about 18 TB before compression. *Drives:* one
+asynchronous replica stream is cheap, so tier 0 replicates continuously.
 
 **NoSQL (carts).** 400 GB, 8,000 writes/s of 1 KB items. Cross-region
 replication consumes write capacity in every replica
 ([AWS docs](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/V2globaltables_HowItWorks.html),
 checked 2026-11), so the DR replica also needs 8,000 write units per second.
-*Drives:* "compute off" is cheap, but "storage on" is not free; budget the
-replicated writes.
+*Drives:* pilot light is not free; budget the replicated writes.
 
 **Objects.** 800 TB stored, 3 TB a day of new objects: 3 TB ÷ 86,400 s ≈
 35 MB/s average, about 105 MB/s (0.84 Gbps) at peak. S3 Replication Time
 Control has a default quota of 1 Gbps
 ([AWS docs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication-time-control.html),
-checked 2026-11), so peak uses 84% of it: raise the quota before launch. At
-2 MB per object, peak is about 53 objects/s, and each SSE-KMS object
-replicated costs 2 KMS requests, so about 106 KMS requests/s
+checked 2026-11), so peak uses 84% of it: raise the quota. At 2 MB per
+object, peak is about 53 objects/s, and each SSE-KMS object replicated costs 2
+KMS requests, about 106/s
 ([same page](https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication-time-control.html)).
-*Drives:* restoring 800 TB from backup at an optimistic 10 GB/s would take
-80,000 s, about 22 hours. That misses a 4-hour RTO, so objects must be
-**replicated live**, with backups only for deletion and corruption.
+*Drives:* restoring 800 TB at an optimistic 10 GB/s takes 80,000 s, about 22
+hours, missing a 4-hour RTO, so objects are **replicated live**.
 
 **Streams.** 20 MB/s ingest with 7 days of retention: 20 MB/s × 604,800 s ≈
 12 TB. *Drives:* the raw zone lands every event within minutes, so streams
@@ -107,11 +104,12 @@ from the outbox or source.
 
 **Warehouse.** 300 TB. Rebuilding from the raw zone at an assumed 3 GB/s of
 aggregate scan and write is 300,000 GB ÷ 3 GB/s = 100,000 s ≈ 28 hours.
-*Drives:* a 48-hour RTO fits backup-restore. A 4-hour RTO would force a
-managed cross-region replica.
+*Drives:* a 48-hour RTO fits backup-restore; 4 hours would need a managed
+replica.
 
-**Backups.** Daily snapshots give a worst-case data-loss RPO of 24 hours plus
-copy time, hourly about 1 hour, and Aurora continuous backup about 5 minutes
+**Backups.** Snapshot RPO equals the interval plus copy time: 24 h daily, 6 h
+for Cloud SQL vault backups at best, about 1 h hourly on AWS. Aurora continuous
+backup gives about 5 minutes
 ([AWS docs](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/Aurora.Managing.Backups.html),
 checked 2026-11).
 
@@ -121,17 +119,16 @@ People forget "decide"; it is why failover is a button, not a trigger.
 
 ## API and data model
 
-The DR control plane is small. Its core is a **dataset catalog** that turns
-tiers into configuration and records evidence.
+The DR control plane is a **dataset catalog** that turns tiers into
+configuration and records evidence.
 
 | Entity | Key fields | Access pattern |
 |---|---|---|
 | `dataset` | `id`, `tier`, `rpo_seconds`, `rto_seconds`, `store_type`, `primary_region`, `dr_region`, `replication_mode`, `backup_plan`, `owner` | Read by the policy generator; drives tags and labels such as `backup=true` |
-| `recovery_evidence` | `dataset_id`, `kind` (`restore_test`, `switchover`, `game_day`), `started_at`, `measured_rpo_s`, `measured_rto_s`, `passed` | Appended by each test; reported weekly; a dataset with no passing test in 30 days is red |
+| `recovery_evidence` | `dataset_id`, `kind` (`restore_test`, `switchover`, `game_day`), `started_at`, `measured_rpo_s`, `measured_rto_s`, `passed` | Appended by each test; no pass in 30 days turns a dataset red |
 | `failover_run` | `id`, `group`, `mode` (`switchover`, `failover`), `target_region`, `fenced_at`, `promoted_at`, `traffic_at` | Written by the orchestrator; the audit trail |
 
-Operations, exposed by an orchestrator (AWS Step Functions or GCP Workflows
-calling the managed APIs):
+Orchestrator operations (Step Functions or Workflows over the managed APIs):
 
 ```text
 POST /failover-groups/{group}/switchover   {target_region}        # planned, RPO 0
@@ -220,7 +217,7 @@ So every tier gets a second, data-loss target:
 
 | Tier | Site-loss RPO / RTO | Data-loss recovery window | Mechanism for data loss |
 |---|---|---|---|
-| 0 Orders | Seconds / 15 min | Any second in 35 days | Aurora continuous backup (1–35 days), Cloud SQL PITR |
+| 0 Orders | Seconds / 15 min | Any second in 35 days (Aurora); 7 days on Cloud SQL through this repo | Aurora continuous backup (1–35 days); Cloud SQL PITR, plus vault backups every 6 h at best |
 | 1 Carts | ~1 s / 1 h | Any second in 35 days (AWS); any minute in 7 days (Firestore) | DynamoDB PITR, up to 35 days at per-second granularity; Firestore PITR, 7 days at 1-minute granularity |
 | 2 Objects | 15 min / 4 h | Soft delete or versions; vault copies | S3 versioning + Object Lock; Cloud Storage soft delete, 7–90 days |
 | 2 Streams | Minutes (raw zone lag) / 1 h | Topic retention, then raw zone | Kinesis up to 365 days; Pub/Sub topics up to 31 days |
@@ -301,22 +298,21 @@ An untested backup is a hope. Four levels, from cheap to expensive:
    it after a retention window of 1 to 168 hours. It covers Aurora, RDS,
    DynamoDB, EBS, S3, Redshift and more
    ([AWS docs](https://docs.aws.amazon.com/aws-backup/latest/devguide/restore-testing.html),
-   checked 2026-11). Add a validation step that runs row-count and checksum
-   queries, and record the restore duration as `measured_rto_s`. On GCP,
-   schedule a Workflows job that runs a PITR clone and the same checks.
+   checked 2026-11). Validate with row counts and checksums and record the
+   duration as `measured_rto_s`. On GCP, a scheduled Workflows job runs a PITR
+   clone and the same checks.
 2. **Tabletop, quarterly.** Walk the runbook with a stopwatch.
 3. **Switchover drills, quarterly.** A planned switchover loses nothing:
    Aurora reports RPO 0 and, on recent engine versions, typically under 30
    seconds of write downtime
    ([AWS docs](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/aurora-global-database-disaster-recovery.html)).
-   Cloud SQL switchover is likewise lossless and suited to routine DR
-   drills. Run the application in the DR region for a day, then switch back.
-4. **Game day, twice a year.** Inject the failure, don't simulate the
-   response. AWS Fault Injection Service can pause DynamoDB global-table
+   Cloud SQL switchover is likewise lossless. Run a day in the DR region,
+   then switch back.
+4. **Game day, twice a year.** Inject the failure. AWS Fault Injection Service can pause DynamoDB global-table
    replication to isolate a Region
    ([AWS docs](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/V2globaltables_HowItWorks.html),
-   checked 2026-11). Include one data-loss scenario: drop a table in staging
-   and restore it under time pressure.
+   checked 2026-11). Include one data-loss scenario, such as a dropped staging
+   table.
 
 Two runbook rules: **prefer data-plane actions at failover** (the whitepaper
 suggests Application Recovery Controller routing controls, because control
@@ -336,8 +332,8 @@ What exists today:
   creates the vault in the backup account with a **Compliance-mode Vault
   Lock** (`changeable_for_days` default 3, `min_retention_days` 7,
   `max_retention_days` 3650) and a weekly restore testing plan. After the
-  grace period, which must be at least 3 days, nobody, not root and not AWS,
-  can delete recovery points early
+  grace time (at least 3 days) nobody, not even root or AWS, can delete
+  recovery points early
   ([AWS docs](https://docs.aws.amazon.com/aws-backup/latest/devguide/vault-lock.html),
   checked 2026-11). [`modules/aws/stages/backup`](../../modules/aws/stages/backup/)
   composes both across the management and backup accounts, applied by
@@ -357,14 +353,14 @@ Gaps this design must close, each checked against the code:
    receives the effective policy"
    ([AWS docs](https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_backup_syntax.html),
    checked 2026-11). The repo creates `org-backup-vault` only in the backup
-   account, so the daily rule has no local target in workload accounts.
-   **Verify before relying on** whether something outside this repo creates
-   it.
+   account, so workload accounts have no target. **Verify before relying on**
+   whether something outside this repo creates it.
 2. **Single region, no cross-account copy.** No `copy_actions`
    ([known gaps A5](../../docs/known-gaps.md#modernization--latest-best-practice-gaps-2026-review)).
-   The backups never leave the account they protect.
-3. **Untagged databases.** `modules/aws/stages/app-services` tags each Aurora
-   cluster with `Service`, not `backup=true`, so the policy does not select it.
+3. **Databases not selected.** `modules/aws/stages/app-services` tags each
+   Aurora cluster with its stage-wide `tags` plus `Service`. Setting
+   `backup=true` in the stage-wide tags would select every taggable resource;
+   there is no per-service tag input to select only the orders cluster.
 4. **The vault key.** `kms_key_arn` defaults to `""`, the AWS-managed backup
    key. Cross-account copies of resources that AWS Backup does not fully
    manage need a customer-managed key, and a source encrypted with a CMK must
@@ -374,8 +370,10 @@ Gaps this design must close, each checked against the code:
 5. **Restore testing covers EBS only** (`protected_resource_type = "EBS"`).
 6. **No cross-region database replicas.** `rds-aurora` has no global-cluster
    input, and `cloud-sql` has no replica, backup-location, retained-backup
-   count or `retain_backups_on_delete` input. There is no GCP Backup and DR
-   vault module.
+   count or `retain_backups_on_delete` input. The app-services database call
+   does not forward `transaction_log_retention_days` and the config schema has
+   no such key, so Cloud SQL PITR stays at 7 days even on Enterprise Plus.
+   There is no GCP Backup and DR vault module.
 
 ## Trade-offs to defend
 
@@ -387,14 +385,12 @@ Gaps this design must close, each checked against the code:
 | Object DR | Live replication + versioning + lock | Restore from backup | 800 TB restore ≈ 22 h misses the 4 h RTO | A smaller, colder dataset |
 | Stream DR | Replay from outbox and raw zone | Cross-region stream replication | Streams are derived; raw zone already replicated | A stream that is the system of record (no upstream source) |
 | Warehouse DR | Rebuild from raw + snapshots | Managed cross-region replica | 28 h rebuild fits 48 h RTO at a fraction of the cost | BI becomes customer-facing with a 4 h RTO |
-| Retention | 35 days hot, 365 cold | Keep everything forever | Locked vaults bill for the full retention | Legal hold or longer regulatory periods |
 
 ## Failure modes and scaling limits
 
 **At ×10 (30 TB/day of objects, 30,000 writes/s).** Object replication needs
-about 8.4 Gbps at peak, far over the 1 Gbps default RTC quota, above which the
-RTC SLA does not apply. Replication KMS requests reach about 1,000/s and
-compete with the application. The 60 MB/s orders log still replicates, but
+about 8.4 Gbps at peak, far over the 1 Gbps default RTC quota (no RTC SLA
+above it), and about 1,000 KMS requests/s. The 60 MB/s orders log still replicates, but
 lag spikes during bulk jobs and trips the RPO alarm; move bulk loads off the
 primary.
 
@@ -402,9 +398,8 @@ primary.
 managed replica such as BigQuery managed disaster recovery, whose replication
 aims to stay within 15 minutes of the primary
 ([Google Cloud docs](https://docs.cloud.google.com/bigquery/docs/managed-disaster-recovery),
-checked 2026-11). A single orders primary no longer fits, so the database is
-sharded, and DR becomes per-shard. That is where cell-based design from the
-active-active walkthrough starts.
+checked 2026-11). A single orders primary no longer fits; sharding makes DR
+per-shard, the start of the active-active walkthrough's cell-based design.
 
 **Blast radius.**
 
@@ -415,7 +410,6 @@ active-active walkthrough starts.
 | A bad deploy or write | Corruption everywhere replicas reach | PITR, versions, locked vault |
 | Production account credentials | Attacker deletes data and tries to delete backups | Vault in another account; Compliance lock |
 | The backup key | Every backup becomes unreadable | Separate key per vault; KMS deletion waits 7–30 days, default 30 ([AWS docs](https://docs.aws.amazon.com/kms/latest/developerguide/deleting-keys.html), checked 2026-11); alarm on `ScheduleKeyDeletion` |
-| The orchestrator | Manual runbook instead of a button | Runbook works without it |
 
 ## AWS and GCP mapping
 
@@ -429,7 +423,7 @@ active-active walkthrough starts.
 | Object deletion protection | Versioning, Object Lock | Soft delete (7–90 days), Object Retention, bucket lock |
 | Streams | Kinesis, retention up to 365 days | Pub/Sub, topic retention up to 31 days; seek to time or snapshot |
 | Warehouse | Redshift snapshots (about every 8 h or 5 GB per node) and cross-region copy | BigQuery time travel, fail-safe, managed DR (Enterprise Plus) |
-| Central backup | AWS Backup vaults, Vault Lock, logically air-gapped vaults, restore testing | Backup and DR Service backup vaults with enforced retention |
+| Central backup | AWS Backup vaults, Vault Lock, logically air-gapped vaults, restore testing | Backup and DR vaults with enforced retention; Cloud SQL plans every 6–23 h into a regional or multi-region vault |
 | Traffic shift | Route 53 with ARC routing controls | Cloud DNS, global load balancer backends |
 
 Differences that change the design:
@@ -439,17 +433,16 @@ Differences that change the design:
   99 years, and its access restriction setting is permanent
   ([Google Cloud docs](https://docs.cloud.google.com/backup-disaster-recovery/docs/concepts/backup-vault),
   checked 2026-11).
-- **Isolation unit.** AWS isolates backups by account and copies across
-  them; a logically air-gapped vault adds RAM sharing and a permanent
-  Compliance lock. GCP isolates by vault, whose service agent holds decryption
+- **Isolation unit.** AWS isolates by account; a logically air-gapped vault
+  adds RAM sharing and a permanent Compliance lock
   ([AWS docs](https://docs.aws.amazon.com/aws-backup/latest/devguide/logicallyairgappedvault.html),
-  checked 2026-11).
-- **Bucket geography.** A GCP dual-region bucket is one bucket, so failover
-  changes no name. An S3 replica is a second bucket, so the app needs a
-  region-aware bucket name (or a Multi-Region Access Point; **verify before
-  relying on** its failover controls).
-- **Edition gates.** Cloud SQL advanced DR and 35-day PITR, and BigQuery
-  managed DR, need Enterprise Plus.
+  checked 2026-11). GCP isolates by vault, but a Cloud SQL vault backup still
+  needs the instance's key.
+- **Bucket geography.** A GCP dual-region bucket is one bucket; an S3 replica
+  is a second bucket, so the app needs a region-aware name (or a Multi-Region
+  Access Point; **verify before relying on** its failover controls).
+- **Edition gates.** Cloud SQL advanced DR and BigQuery managed DR need
+  Enterprise Plus.
 
 ## Build it here
 
@@ -482,22 +475,19 @@ aws:
           database:
             instance_count: 2
             backup_retention_period: 35 # PITR window, the Aurora maximum
-            deletion_protection: true
-            skip_final_snapshot: false
 gcp:
   environments:
     prod:
-      region: europe-west2
+      region: us-central1
       additional_regions:
-        europe-west4: # DR region for pilot-light compute
+        us-east4: # DR region for pilot-light compute
           subnet_cidrs: {public: 10.41.0.0/24, private: 10.41.16.0/24, database: 10.41.32.0/24}
       services:
         orders:
           database:
             edition: ENTERPRISE_PLUS # needed for advanced DR and 35-day PITR
+            tier: db-perf-optimized-N-2 # the module requires this family for Enterprise Plus
             enable_high_availability: true
-            enable_point_in_time_recovery: true
-            enable_deletion_protection: true
 ```
 
 ### AWS: locked vaults and the copy
@@ -515,7 +505,6 @@ checked 2026-11).
 resource "aws_kms_key" "backup_dr" {
   provider            = aws.backup
   region              = var.dr_region # new variable, e.g. "eu-west-1"
-  description         = "org-backup-vault-dr recovery points"
   enable_key_rotation = true
 }
 
@@ -586,8 +575,8 @@ resource "aws_backup_vault" "org_local" {
 }
 ```
 
-Tag the orders cluster `backup = "true"`; app-services has no per-service
-tag input today, so that is a module change (gap).
+Tag the orders cluster `backup = "true"` through a new per-service tag input
+on app-services (gap; the stage-wide `tags` would select everything).
 
 ### GCP: a locked backup vault for Cloud SQL
 
@@ -595,50 +584,72 @@ In `envs/gcp/workload`. Arguments checked against google v8.10.0
 ([`google_backup_dr_backup_vault`](https://registry.terraform.io/providers/hashicorp/google/8.10.0/docs/resources/backup_dr_backup_vault),
 [`google_backup_dr_backup_plan`](https://registry.terraform.io/providers/hashicorp/google/8.10.0/docs/resources/backup_dr_backup_plan),
 [`google_backup_dr_backup_plan_association`](https://registry.terraform.io/providers/hashicorp/google/8.10.0/docs/resources/backup_dr_backup_plan_association),
-checked 2026-11). The Backup and DR service agent needs Encrypter/Decrypter
-on the vault key and on the instance's key, or the association fails
-([Google Cloud docs](https://docs.cloud.google.com/backup-disaster-recovery/docs/cloud-console/sql/csql-backup),
-checked 2026-11). Google's own Terraform example uses `google-beta`; the
-resources are present in google 8.10.0.
+checked 2026-11). Limits that shape it, all checked 2026-11:
+
+- A Cloud SQL plan runs every **6 to 23 hours** with a window of at least 6
+  hours ([docs](https://docs.cloud.google.com/backup-disaster-recovery/docs/cloud-console/backup-plan)),
+  so vault backups give **at best a 6-hour RPO**; the instance's PITR logs
+  (and `log_retention_days`) cover the gap.
+- The plan sits in the instance's region. For Cloud SQL the vault is regional
+  or a **multi-region** (`asia`, `eu`, `us`); cross-region vaults are not
+  listed for Cloud SQL
+  ([docs](https://docs.cloud.google.com/backup-disaster-recovery/docs/concepts/backup-vault)).
+  A `us` vault survives the loss of `us-central1`.
+- The vault key must be in the vault's location. Cloud SQL backups are
+  encrypted with the **instance's** key, which the Backup and DR service agent
+  must be able to use
+  ([CMEK](https://docs.cloud.google.com/backup-disaster-recovery/docs/concepts/cmek),
+  [Cloud SQL](https://docs.cloud.google.com/backup-disaster-recovery/docs/cloud-console/sql/csql-backup)).
 
 ```hcl
 # Gap: no per-environment workload CMEK (see CMEK source) and no Backup and DR module.
+locals {
+  sql_agent      = "serviceAccount:service-${local.env_config.host_project_number}@gcp-sa-cloud-sql.iam.gserviceaccount.com"
+  backupdr_agent = "serviceAccount:service-${local.env_config.host_project_number}@gcp-sa-backupdr.iam.gserviceaccount.com"
+}
+
 module "workload_cmek" {
   source       = "../../../modules/gcp/governance/kms"
   project_id   = local.env_config.host_project_id
   keyring_name = "${local.project_prefix}-${var.environment}-cmek"
   location     = local.env_config.region
   labels       = local.labels
-  keys = {
-    "orders-db" = { encrypter_decrypters = [
-      "serviceAccount:service-${local.env_config.host_project_number}@gcp-sa-cloud-sql.iam.gserviceaccount.com",
-      "serviceAccount:service-${local.env_config.host_project_number}@gcp-sa-backupdr.iam.gserviceaccount.com",
-    ] }
-  }
+  keys = { "orders-db" = { encrypter_decrypters = [local.sql_agent, local.backupdr_agent] } }
+}
+
+module "vault_cmek" { # the vault's key, in the vault's multi-region
+  source       = "../../../modules/gcp/governance/kms"
+  project_id   = local.env_config.host_project_id
+  keyring_name = "${local.project_prefix}-${var.environment}-vault-cmek"
+  location     = "us"
+  labels       = local.labels
+  keys         = { "orders-vault" = { encrypter_decrypters = [local.backupdr_agent] } }
 }
 
 resource "google_backup_dr_backup_vault" "orders" {
   project                                    = local.env_config.host_project_id
-  location                                   = var.dr_region # cross-region vault, e.g. "europe-west4"
+  location                                   = "us" # multi-region; matches the us-central1 instance
   backup_vault_id                            = "orders-vault"
   backup_minimum_enforced_retention_duration = "3024000s" # 35 days, undeletable
   access_restriction                         = "WITHIN_ORGANIZATION" # permanent
   labels                                     = merge(local.labels, { service = "orders" })
-  # CMEK: add encryption_config { kms_key_name } with a key ring in var.dr_region (omitted for length).
+  encryption_config {
+    kms_key_name = module.vault_cmek.key_ids["orders-vault"]
+  }
 }
 
 resource "google_backup_dr_backup_plan" "orders" {
   project        = local.env_config.host_project_id
   location       = local.env_config.region
-  backup_plan_id = "orders-hourly"
+  backup_plan_id = "orders-6h"
   resource_type  = "sqladmin.googleapis.com/Instance"
   backup_vault   = google_backup_dr_backup_vault.orders.id
   backup_rules {
-    rule_id               = "hourly"
+    rule_id               = "every-6h"
     backup_retention_days = 35
     standard_schedule {
       recurrence_type  = "HOURLY"
-      hourly_frequency = 1
+      hourly_frequency = 6 # Cloud SQL minimum
       time_zone        = "UTC"
       backup_window {
         start_hour_of_day = 0
@@ -659,9 +670,11 @@ resource "google_backup_dr_backup_plan_association" "orders" {
 }
 ```
 
-Set the database's `encryption_key_name` in config to the key's full ID (gap:
-it is not wired from a module output). Whether a plan in the instance's region
-may target a vault in another region is **verify before relying on**.
+Set the database's `encryption_key_name` in config to the `orders-db` key's
+full ID (gap: it is not wired from a module output). The vault sits in the host
+project; a dedicated backup project would isolate it better (gap). Whether the
+Backup and DR `us` vault pairs with the Cloud KMS `us` location is **verify
+before relying on**.
 
 ## Runbook
 
@@ -682,7 +695,8 @@ site loss.
 3. **Choose the scope.** Rows from a few tables can be repaired from a
    restored copy; a wholesale loss means cutting over.
 4. **Check the window.** The time must be after the earliest restorable time:
-   35 days on Aurora with the config above; 7 or 35 days of logs on Cloud SQL.
+   35 days on Aurora with the config above; 7 days on Cloud SQL through this
+   repo.
 
 **Mitigation.**
 
@@ -709,9 +723,8 @@ gate row-deleting migrations behind a backup checkpoint.
 ### Region loss: promote the orders replica
 
 **Detection:** primary unreachable from two vantage points, region health
-events, rising `AuroraGlobalDBRPOLag` or Cloud SQL replica lag. **Triage:** is
-it the region or one service? Compare lag on every secondary; pick the
-smallest. **Mitigation:** stop app writes, fail over (`aws rds
+events. **Triage:** region or one service? Pick the secondary with the
+smallest lag. **Mitigation:** stop app writes, fail over (`aws rds
 failover-global-cluster --allow-data-loss`, or Cloud SQL replica failover),
 scale DR compute, and flip the ARC routing control or DNS. **Verification:**
 writes succeed in the DR region and errors return to baseline. **Follow-up:**
@@ -727,7 +740,7 @@ switchover.
 |---|---|
 | Aurora PITR window / latest restorable time | 1–35 days / within about 5 minutes |
 | Aurora Global Database | RPO typically seconds; switchover RPO 0, typically under 30 s on recent versions |
-| Cloud SQL PITR logs | 1–7 days Enterprise, 1–35 days Enterprise Plus |
+| Cloud SQL | PITR logs 1–7 days Enterprise, 1–35 Enterprise Plus; vault backups every 6–23 h |
 | DynamoDB PITR | Up to 35 days, per second; MREC lag typically ≤ 1 s; MRSC exactly 3 Regions |
 | Firestore | PITR 7 days at 1 minute; backups up to 14 weeks |
 | S3 RTC / GCS turbo | 99.9% within 15 min / RPO 15 min (default dual-region replication 12 h) |
@@ -740,11 +753,10 @@ switchover.
 ### Likely follow-ups
 
 - **"Isn't a replica a backup?"** No. It copies a `DELETE` in a second. A
-  backup is a point in time you can return to, ideally where the attacker
-  can't reach it.
+  backup is a point in time, kept where an attacker can't reach it.
 - **"Why not fail over automatically?"** Failover loses the lag window and
-  risks split-brain. A false alarm costs more than 5 minutes of human
-  judgement. Automate every step after the decision.
+  risks split-brain; a false alarm costs more than 5 minutes of judgement.
+  Automate every step after the decision.
 - **"How do you get RPO 0?"** Synchronous replication to a quorum: MRSC
   tables, Spanner, or Aurora's RPO bound, which blocks commits instead of
   losing them. You pay write latency and availability.
@@ -766,6 +778,4 @@ switchover.
 
 - [Disaster recovery options in the cloud](https://docs.aws.amazon.com/whitepapers/latest/disaster-recovery-workloads-on-aws/disaster-recovery-options-in-the-cloud.html)
 - [Cloud SQL disaster recovery](https://docs.cloud.google.com/sql/docs/postgres/intro-to-cloud-sql-disaster-recovery)
-- [Backup policy syntax](https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_backup_syntax.html)
-- The repo's [incident response runbook](../../docs/runbooks/aws-incident-response.md)
-  and [known gaps](../../docs/known-gaps.md).
+- The repo's [known gaps](../../docs/known-gaps.md).
