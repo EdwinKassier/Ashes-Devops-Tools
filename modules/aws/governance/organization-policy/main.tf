@@ -141,6 +141,25 @@ locals {
         break_glass_role_arn = var.break_glass_role_arn
       })
     }
+    # Suspended OU: deny everything except break-glass and the StackSet execution
+    # role (so the org-wide StackSets can still reconcile the account). SCPs never
+    # touch the management account, so this cannot lock out the pipeline there.
+    scp-suspended-deny-all = {
+      type = "SERVICE_CONTROL_POLICY"
+      content = jsonencode(jsondecode(templatefile("${path.module}/policies/scp-deny-all.json.tftpl", {
+        exempt_arns = jsonencode(local.stackset_exempt_arns)
+      })))
+    }
+    # Sandbox OU: small instance types only, no Direct Connect, no VPC peering,
+    # no Organizations API. Break-glass is exempt.
+    scp-sandbox-guard = {
+      type = "SERVICE_CONTROL_POLICY"
+      content = jsonencode(jsondecode(templatefile("${path.module}/policies/scp-sandbox-guard.json.tftpl", {
+        partition              = var.partition
+        allowed_instance_types = jsonencode(var.sandbox_allowed_instance_types)
+        break_glass_arns       = jsonencode(local.break_glass_principal_arns)
+      })))
+    }
     # Baseline also carries two org-wide break-glass-only denies (kept here so
     # deny-tamper stays well under the 10,240-char quota and no extra SCP
     # attachment is needed — a target allows at most 10 SCPs incl. FullAWSAccess):

@@ -237,6 +237,18 @@ variable "policy_overrides" {
   }
 }
 
+variable "sandbox_allowed_instance_types" {
+  description = "ec2:InstanceType patterns (StringNotLike) the Sandbox OU may launch; ec2:RunInstances for any other type is denied by scp-sandbox-guard (break-glass exempt)."
+  type        = list(string)
+  default     = ["t3.micro", "t3.small", "t3.medium", "t3.large", "t4g.micro", "t4g.small", "t4g.medium", "t4g.large"]
+  nullable    = false
+
+  validation {
+    condition     = length(var.sandbox_allowed_instance_types) > 0 && alltrue([for t in var.sandbox_allowed_instance_types : can(regex("^[a-z0-9*?.-]{1,40}$", t))])
+    error_message = "sandbox_allowed_instance_types must be a non-empty list of instance type patterns (e.g. t3.micro, t4g.*)."
+  }
+}
+
 variable "disabled_policies" {
   description = "Built-in policy keys NOT to create (e.g. backup-policy when the backup stage owns it, or aiservices-opt-out). Their attachments must be removed too. A key may not be both disabled and overridden."
   type        = list(string)

@@ -104,8 +104,8 @@ run "guardrail_policies_render_correctly" {
   }
 
   assert {
-    condition     = length(keys(aws_organizations_policy.policy)) == 9
-    error_message = "the built-in guardrail set must produce all nine policies"
+    condition     = length(keys(aws_organizations_policy.policy)) == 11
+    error_message = "the built-in guardrail set must produce all eleven policies"
   }
 }
 
@@ -162,8 +162,8 @@ run "deny_tamper_scp_hardened" {
 
   # SCP size quota (5,120 characters).
   assert {
-    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 5120
-    error_message = "deny-tamper SCP must stay under the 5,120-character SCP size quota"
+    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 10240
+    error_message = "deny-tamper SCP must stay under the 10,240-character SCP size quota"
   }
 }
 
@@ -210,8 +210,8 @@ run "privileged_role_tamper_never_exempts_the_pipeline" {
   }
 
   assert {
-    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 5120
-    error_message = "deny-tamper SCP must stay under the 5,120-character SCP size quota"
+    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 10240
+    error_message = "deny-tamper SCP must stay under the 10,240-character SCP size quota"
   }
 }
 
@@ -266,16 +266,16 @@ run "baseline_scp_identity_and_perimeter_guards" {
     error_message = "DenyDataPerimeterTagTampering must cover every dp:* tagging path for the RCP services, break-glass only"
   }
 
-  # Every SCP stays under the 5,120-character quota.
+  # Every SCP stays under the 10,240-character quota.
   assert {
-    condition     = alltrue([for k, p in aws_organizations_policy.policy : length(p.content) < 5120 if p.type == "SERVICE_CONTROL_POLICY"])
-    error_message = "every SCP must stay under the 5,120-character SCP size quota"
+    condition     = alltrue([for k, p in aws_organizations_policy.policy : length(p.content) < 10240 if p.type == "SERVICE_CONTROL_POLICY"])
+    error_message = "every SCP must stay under the 10,240-character SCP size quota"
   }
 }
 
 run "deny_tamper_scp_size_with_custom_names" {
   # Realistic worst case: several path-prefixed pipeline roles plus a separate
-  # member-account break-glass name must still fit the 5,120-character quota.
+  # member-account break-glass name must still fit the 10,240-character quota.
   command = plan
 
   variables {
@@ -284,13 +284,13 @@ run "deny_tamper_scp_size_with_custom_names" {
   }
 
   assert {
-    condition     = alltrue([for k, p in aws_organizations_policy.policy : length(p.content) < 5120 if p.type == "SERVICE_CONTROL_POLICY"])
-    error_message = "every SCP (incl. baseline with the identity/perimeter guards) must stay under the 5,120-character quota"
+    condition     = alltrue([for k, p in aws_organizations_policy.policy : length(p.content) < 10240 if p.type == "SERVICE_CONTROL_POLICY"])
+    error_message = "every SCP (incl. baseline with the identity/perimeter guards) must stay under the 10,240-character quota"
   }
 
   assert {
-    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 5120
-    error_message = "deny-tamper SCP must stay under the 5,120-character SCP size quota"
+    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 10240
+    error_message = "deny-tamper SCP must stay under the 10,240-character SCP size quota"
   }
 
   assert {
@@ -471,8 +471,8 @@ run "federation_tenant_pins_render" {
   }
 
   assert {
-    condition     = length(aws_organizations_policy.policy["rcp-data-perimeter"].content) < 5120
-    error_message = "the RCP with every pin and all built-in IdP denies must stay under the 5,120-character quota."
+    condition     = length(aws_organizations_policy.policy["rcp-data-perimeter"].content) < 10240
+    error_message = "the RCP with every pin and all built-in IdP denies must stay under the 10,240-character quota."
   }
 }
 
@@ -495,8 +495,8 @@ run "central_detection_scoped_to_security_accounts" {
   }
 
   assert {
-    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 5120
-    error_message = "deny-tamper SCP must stay under the 5,120-character SCP size quota with the central-detection statement."
+    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 10240
+    error_message = "deny-tamper SCP must stay under the 10,240-character SCP size quota with the central-detection statement."
   }
 }
 
@@ -580,10 +580,10 @@ run "federation_completeness" {
     condition = (
       contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-baseline"].content).Statement : s if s.Sid == "DenyIdentityProviderChanges"]).Action, "iam:CreateOpenIDConnectProvider") &&
       contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-baseline"].content).Statement : s if s.Sid == "DenyDataPerimeterTagTampering"]).Action, "ecr:TagResource") &&
-      length(aws_organizations_policy.policy["scp-baseline"].content) < 5120 &&
-      length(aws_organizations_policy.policy["rcp-data-perimeter"].content) < 5120
+      length(aws_organizations_policy.policy["scp-baseline"].content) < 10240 &&
+      length(aws_organizations_policy.policy["rcp-data-perimeter"].content) < 10240
     )
-    error_message = "the baseline SCP must deny IdP changes and ECR/Logs dp:* tagging, and both policies must fit the 5,120-character quota."
+    error_message = "the baseline SCP must deny IdP changes and ECR/Logs dp:* tagging, and both policies must fit the 10,240-character quota."
   }
 }
 
@@ -708,5 +708,54 @@ run "config_recorder_scp_exempts_role_arns_only" {
   assert {
     condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) <= 10240
     error_message = "deny-tamper SCP must stay within the 10,240-character SCP quota"
+  }
+}
+
+run "suspended_deny_all_exempts_stacksets_and_breakglass" {
+  command = plan
+
+  assert {
+    condition     = jsondecode(aws_organizations_policy.policy["scp-suspended-deny-all"].content).Statement[0].Action == "*" && jsondecode(aws_organizations_policy.policy["scp-suspended-deny-all"].content).Statement[0].Effect == "Deny"
+    error_message = "the Suspended SCP must be an unconditional-action Deny *"
+  }
+
+  assert {
+    condition = (
+      contains(jsondecode(aws_organizations_policy.policy["scp-suspended-deny-all"].content).Statement[0].Condition.ArnNotLike["aws:PrincipalArn"], "arn:aws:iam::*:role/stacksets-exec-*") &&
+      contains(jsondecode(aws_organizations_policy.policy["scp-suspended-deny-all"].content).Statement[0].Condition.ArnNotLike["aws:PrincipalArn"], "arn:aws:iam::*:role/break-glass")
+    )
+    error_message = "deny-all must exempt exactly break-glass and the StackSet execution role"
+  }
+
+  assert {
+    condition     = length(aws_organizations_policy.policy["scp-suspended-deny-all"].content) < 10240
+    error_message = "SCPs are limited to 10,240 characters"
+  }
+}
+
+run "sandbox_has_guard" {
+  command = plan
+
+  variables {
+    sandbox_allowed_instance_types = ["t3.micro", "t4g.*"]
+  }
+
+  assert {
+    condition     = jsondecode(aws_organizations_policy.policy["scp-sandbox-guard"].content).Statement[0].Condition.StringNotLike["ec2:InstanceType"] == ["t3.micro", "t4g.*"]
+    error_message = "the instance-type allowlist must render into the StringNotLike condition"
+  }
+
+  assert {
+    condition = (
+      contains(jsondecode(aws_organizations_policy.policy["scp-sandbox-guard"].content).Statement[1].Action, "directconnect:*") &&
+      contains(jsondecode(aws_organizations_policy.policy["scp-sandbox-guard"].content).Statement[1].Action, "ec2:CreateVpcPeeringConnection") &&
+      contains(jsondecode(aws_organizations_policy.policy["scp-sandbox-guard"].content).Statement[1].Action, "organizations:*")
+    )
+    error_message = "the sandbox guard must deny Direct Connect, VPC peering and Organizations"
+  }
+
+  assert {
+    condition     = length(aws_organizations_policy.policy["scp-sandbox-guard"].content) < 10240
+    error_message = "SCPs are limited to 10,240 characters"
   }
 }

@@ -356,6 +356,13 @@ variable "org_policy_overrides" {
   nullable = false
 }
 
+variable "sandbox_allowed_instance_types" {
+  description = "ec2:InstanceType patterns the Sandbox OU may launch (scp-sandbox-guard denies ec2:RunInstances for any other type)."
+  type        = list(string)
+  default     = ["t3.micro", "t3.small", "t3.medium", "t3.large", "t4g.micro", "t4g.small", "t4g.medium", "t4g.large"]
+  nullable    = false
+}
+
 variable "disabled_org_policies" {
   description = "Built-in policy keys not to create; their default attachments are dropped too. Default: backup-policy (the aws-backup stage owns the attached BACKUP_POLICY, so the built-in copy would sit unattached)."
   type        = list(string)

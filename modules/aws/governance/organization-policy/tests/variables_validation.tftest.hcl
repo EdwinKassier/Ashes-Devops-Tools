@@ -166,3 +166,18 @@ run "config_recorder_pipeline_role_wildcard_account_rejected" {
     config_recorder_pipeline_role_arns = ["arn:aws:iam::*:role/tfc-apply"]
   }
 }
+
+run "sandbox_instance_types_must_not_be_empty" {
+  command = plan
+
+  variables {
+    org_id                         = "o-abc1234567"
+    allowed_regions                = ["eu-west-2"]
+    terraform_run_role_arn         = "arn:aws:iam::111111111111:role/tfc-run-role"
+    break_glass_role_arn           = "arn:aws:iam::111111111111:role/break-glass"
+    log_archive_bucket_name        = "sra-log-archive-111111111111"
+    sandbox_allowed_instance_types = []
+  }
+
+  expect_failures = [var.sandbox_allowed_instance_types]
+}

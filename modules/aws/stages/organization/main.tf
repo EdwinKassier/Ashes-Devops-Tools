@@ -55,6 +55,14 @@ locals {
       "declarative-baseline@root" = { policy_key = "declarative-ec2-baseline", target_id = module.organization.roots_id }
       "aiservices-opt-out@root"   = { policy_key = "aiservices-opt-out", target_id = module.organization.roots_id }
     },
+    # Suspended deny-all and Sandbox guard, attached only when the OU exists
+    # (the OU list is overridable in the organization module).
+    contains(keys(module.organization.ou_ids), "Suspended") ? {
+      "suspended-deny-all@suspended" = { policy_key = "scp-suspended-deny-all", target_id = module.organization.ou_ids["Suspended"] }
+    } : {},
+    contains(keys(module.organization.ou_ids), "Sandbox") ? {
+      "sandbox-guard@sandbox" = { policy_key = "scp-sandbox-guard", target_id = module.organization.ou_ids["Sandbox"] }
+    } : {},
   )
   # Attachments of disabled built-in policies are dropped with them.
   effective_attachments = merge(
@@ -86,6 +94,8 @@ module "policies" {
   policy_overrides        = var.org_policy_overrides
   partition               = var.partition
   disabled_policies       = var.disabled_org_policies
+
+  sandbox_allowed_instance_types = var.sandbox_allowed_instance_types
 
   # Member-account carve-outs + perimeter tuning (validated in the policy module).
   pipeline_role_names                = var.pipeline_role_names

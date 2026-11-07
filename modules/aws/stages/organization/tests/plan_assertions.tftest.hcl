@@ -521,3 +521,55 @@ run "teardown_gate_passes_through" {
     error_message = "enable_security_service_teardown must reach tfc-management-roles."
   }
 }
+
+run "suspended_and_sandbox_policies_attached" {
+  command = plan
+
+  assert {
+    condition = (
+      local.effective_attachments["suspended-deny-all@suspended"].target_id == "ou-abcd-suspend00" &&
+      local.effective_attachments["suspended-deny-all@suspended"].policy_key == "scp-suspended-deny-all" &&
+      local.effective_attachments["sandbox-guard@sandbox"].target_id == "ou-abcd-sandbox00" &&
+      local.effective_attachments["sandbox-guard@sandbox"].policy_key == "scp-sandbox-guard"
+    )
+    error_message = "Suspended must get the deny-all SCP and Sandbox the guard SCP"
+  }
+}
+
+run "per_target_scp_count_le_10" {
+  command = plan
+
+  # FullAWSAccess is attached by AWS to every target and counts toward the
+  # 10-SCP quota, so at most 9 managed SCPs per target.
+  assert {
+    condition = alltrue([
+      for t in distinct([for k, a in local.effective_attachments : a.target_id]) :
+      length([for k, a in local.effective_attachments : k if a.target_id == t && startswith(a.policy_key, "scp-")]) <= 9
+    ])
+    error_message = "a target may carry at most 10 SCPs including FullAWSAccess"
+  }
+}
+
+run "missing_sandbox_ou_skips_guard_attachment" {
+  command = plan
+
+  override_module {
+    target = module.organization
+    outputs = {
+      organization_id       = "o-abc1234567"
+      organization_arn      = "arn:aws:organizations::111111111111:organization/o-abc1234567"
+      roots_id              = "r-abcd"
+      management_account_id = "111111111111"
+      ou_ids = {
+        "Security"       = "ou-abcd-security0"
+        "Infrastructure" = "ou-abcd-infra0000"
+        "Workloads"      = "ou-abcd-workload0"
+      }
+    }
+  }
+
+  assert {
+    condition     = !contains(keys(local.effective_attachments), "sandbox-guard@sandbox") && !contains(keys(local.effective_attachments), "suspended-deny-all@suspended")
+    error_message = "attachments for absent OUs must be skipped, not fail"
+  }
+}
