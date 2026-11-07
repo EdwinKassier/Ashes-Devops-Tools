@@ -40,7 +40,7 @@ run "remote_state_read_without_contract" {
   override_data {
     target = data.terraform_remote_state.aws_organization[0]
     values = {
-      outputs = { account_ids = { workload = "222222222222" } }
+      outputs = { contract = { account_ids = { workload = "222222222222" } } }
     }
   }
 

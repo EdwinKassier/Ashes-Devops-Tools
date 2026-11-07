@@ -110,29 +110,46 @@ variable "organization_workspace_name" {
 # Stage contract overrides (FAST-style): when set (here or as gcp.contracts.<layer>
 # in config/landing-zone.yaml) the matching remote-state read is skipped.
 variable "bootstrap_contract" {
-  description = "gcp-bootstrap stage contract: admin_project_id and suffix, plus the optional automation identities (workload_service_accounts, workload_folder_roles, stage_service_accounts, network_folder_roles; omitted = no folder grants). Null = gcp.contracts.bootstrap from config/landing-zone.yaml, else read from the gcp-bootstrap workspace's remote state."
+  description = "gcp-bootstrap stage contract, the same type in every gcp root: admin_project_id, admin_project_number, terraform_admin_email, suffix, plus the optional automation identities (workload_service_accounts, stage_service_accounts, workload/network_folder_roles, delegated_workload/network_folder_roles; omitted = no grants) and guardrail_owner_mode. This root needs: admin_project_id, suffix. Null = gcp.contracts.bootstrap from config/landing-zone.yaml, else the contract output of the gcp-bootstrap workspace."
   type = object({
-    admin_project_id          = string
-    suffix                    = string
-    workload_service_accounts = optional(map(object({ plan = string, apply = string })), {})
-    workload_folder_roles     = optional(object({ plan = list(string), apply = list(string) }), { plan = [], apply = [] })
-    stage_service_accounts    = optional(map(object({ plan = string, apply = string })), {})
-    network_folder_roles      = optional(object({ plan = list(string), apply = list(string) }), { plan = [], apply = [] })
+    admin_project_id                = string
+    admin_project_number            = optional(string)
+    terraform_admin_email           = optional(string)
+    suffix                          = optional(string)
+    workload_service_accounts       = optional(map(object({ plan = string, apply = string })), {})
+    stage_service_accounts          = optional(map(object({ plan = string, apply = string })), {})
+    workload_folder_roles           = optional(object({ plan = list(string), apply = list(string) }), { plan = [], apply = [] })
+    network_folder_roles            = optional(object({ plan = list(string), apply = list(string) }), { plan = [], apply = [] })
+    delegated_workload_folder_roles = optional(list(string), [])
+    delegated_network_folder_roles  = optional(list(string), [])
+    guardrail_owner_mode            = optional(string, "separate")
   })
   default = null
+
+  validation {
+    condition     = var.bootstrap_contract == null || alltrue([for k in ["suffix"] : try(length(trimspace(var.bootstrap_contract[k])) > 0, false)])
+    error_message = "bootstrap_contract must set suffix for this root."
+  }
 }
 
 variable "organization_contract" {
-  description = "gcp-organization stage contract: billing_account, folders (key => {id, name, display_name}), tag_values (needs environment-<env>) and scoped_access_policy_ids (optional). Null = gcp.contracts.organization from config/landing-zone.yaml, else read from the gcp-organization workspace's remote state."
+  description = "gcp-organization stage contract, the same type in every gcp root: org_id (numeric), billing_account (billingAccounts/XXXXXX-XXXXXX-XXXXXX or bare ID), admin_project_number, folders (key => {id, name, display_name}), tag_values (key => tag value ID) and scoped_access_policy_ids (env => policy ID). This root needs: billing_account, folders, tag_values (environment-<env>). Null = gcp.contracts.organization from config/landing-zone.yaml, else the contract output of the gcp-organization workspace."
   type = object({
-    billing_account = string
-    folders = map(object({
+    org_id               = optional(string)
+    billing_account      = optional(string)
+    admin_project_number = optional(string)
+    folders = optional(map(object({
       id           = string
       name         = string
       display_name = string
-    }))
-    tag_values               = map(string)
+    })), {})
+    tag_values               = optional(map(string), {})
     scoped_access_policy_ids = optional(map(string), {})
   })
   default = null
+
+  validation {
+    condition     = var.organization_contract == null || alltrue([for k in ["billing_account"] : try(length(trimspace(var.organization_contract[k])) > 0, false)])
+    error_message = "organization_contract must set billing_account for this root."
+  }
 }

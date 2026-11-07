@@ -46,6 +46,15 @@ locals {
       admin_project_id      = tostring(local.lz.gcp.contracts.bootstrap.admin_project_id)
       admin_project_number  = tostring(local.lz.gcp.contracts.bootstrap.admin_project_number)
       terraform_admin_email = tostring(local.lz.gcp.contracts.bootstrap.terraform_admin_email)
+      suffix                = try(tostring(local.lz.gcp.contracts.bootstrap.suffix), null)
+      workload_folder_roles = {
+        plan  = [for r in try(local.lz.gcp.contracts.bootstrap.workload_folder_roles.plan, []) : tostring(r)]
+        apply = [for r in try(local.lz.gcp.contracts.bootstrap.workload_folder_roles.apply, []) : tostring(r)]
+      }
+      network_folder_roles = {
+        plan  = [for r in try(local.lz.gcp.contracts.bootstrap.network_folder_roles.plan, []) : tostring(r)]
+        apply = [for r in try(local.lz.gcp.contracts.bootstrap.network_folder_roles.apply, []) : tostring(r)]
+      }
       workload_service_accounts = {
         for k, sa in try({ for k, sa in local.lz.gcp.contracts.bootstrap.workload_service_accounts : k => sa }, {}) : k => { plan = tostring(sa.plan), apply = tostring(sa.apply) }
       }

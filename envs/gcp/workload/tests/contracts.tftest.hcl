@@ -104,9 +104,11 @@ run "remote_state_read_without_contract" {
     target = data.terraform_remote_state.network_hub
     values = {
       outputs = {
-        hub_network = {
-          vpc_self_link = "https://www.googleapis.com/compute/v1/projects/remote-hub/global/networks/hub-vpc"
-          dns_domain    = "remote.internal."
+        contract = {
+          hub_network = {
+            vpc_self_link = "https://www.googleapis.com/compute/v1/projects/remote-hub/global/networks/hub-vpc"
+            dns_domain    = "remote.internal."
+          }
         }
       }
     }

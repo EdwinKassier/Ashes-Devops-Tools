@@ -88,11 +88,18 @@ variable "network_hub_workspace_name" {
 # -----------------------------------------------------------------------------
 
 variable "organization_contract" {
-  description = "gcp-organization stage contract: org_id (numeric), billing_account (billingAccounts/XXXXXX-XXXXXX-XXXXXX or bare ID) and admin_project_number. Null = gcp.contracts.organization from config/landing-zone.yaml, else read from the gcp-organization workspace's remote state."
+  description = "gcp-organization stage contract, the same type in every gcp root: org_id (numeric), billing_account (billingAccounts/XXXXXX-XXXXXX-XXXXXX or bare ID), admin_project_number, folders (key => {id, name, display_name}), tag_values (key => tag value ID) and scoped_access_policy_ids (env => policy ID). This root needs: org_id, billing_account, admin_project_number. Null = gcp.contracts.organization from config/landing-zone.yaml, else the contract output of the gcp-organization workspace."
   type = object({
-    org_id               = string
-    billing_account      = string
-    admin_project_number = string
+    org_id               = optional(string)
+    billing_account      = optional(string)
+    admin_project_number = optional(string)
+    folders = optional(map(object({
+      id           = string
+      name         = string
+      display_name = string
+    })), {})
+    tag_values               = optional(map(string), {})
+    scoped_access_policy_ids = optional(map(string), {})
   })
   default = null
 
@@ -100,12 +107,19 @@ variable "organization_contract" {
     condition     = var.organization_contract == null || (can(regex("^[0-9]+$", try(var.organization_contract.org_id, ""))) && can(regex("^[0-9]+$", try(var.organization_contract.admin_project_number, ""))))
     error_message = "organization_contract.org_id and admin_project_number must be numeric."
   }
+
+  validation {
+    condition     = var.organization_contract == null || alltrue([for k in ["billing_account"] : try(length(trimspace(var.organization_contract[k])) > 0, false)])
+    error_message = "organization_contract must set billing_account for this root."
+  }
 }
 
 variable "projects_contract" {
-  description = "gcp-projects stage contract: environment_config (environment => folder_id, host_project_id, host_project_number, region, cidr_block, labels, is_production, vpc_sc_access_policy_id); must contain var.environment. Null = gcp.contracts.projects from config/landing-zone.yaml, else read from the gcp-projects workspace's remote state."
+  description = "gcp-projects stage contract, the same type in every gcp root: project_ids and project_numbers (project key => value, e.g. shared-hub, shared-dns, <env>-host) and environment_config (environment => folder_id, host_project_id, host_project_number, region, cidr_block, labels, is_production, vpc_sc_access_policy_id). This root needs: environment_config, which must contain var.environment. Null = gcp.contracts.projects from config/landing-zone.yaml, else the contract output of the gcp-projects workspace."
   type = object({
-    environment_config = map(object({
+    project_ids     = optional(map(string), {})
+    project_numbers = optional(map(string), {})
+    environment_config = optional(map(object({
       folder_id               = string
       host_project_id         = string
       host_project_number     = string
@@ -114,7 +128,7 @@ variable "projects_contract" {
       labels                  = optional(map(string), {})
       is_production           = optional(bool)
       vpc_sc_access_policy_id = optional(string)
-    }))
+    })), {})
   })
   default = null
 }

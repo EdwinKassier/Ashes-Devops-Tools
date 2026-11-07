@@ -37,7 +37,12 @@ locals {
     # aws.contracts.<layer>: stage contract overrides (same shape as the
     # <layer>_contract variables). Present => that remote-state read is skipped.
     organization_contract = try(local.lz.aws.contracts.organization, null) == null ? null : {
-      account_ids = { for k, v in try(local.lz.aws.contracts.organization.account_ids, {}) : k => tostring(v) }
+      organization_id       = try(tostring(local.lz.aws.contracts.organization.organization_id), null)
+      organization_root_id  = try(tostring(local.lz.aws.contracts.organization.organization_root_id), null)
+      management_account_id = try(tostring(local.lz.aws.contracts.organization.management_account_id), null)
+      ou_ids                = { for k, v in try(local.lz.aws.contracts.organization.ou_ids, {}) : k => tostring(v) }
+      account_ids           = { for k, v in try(local.lz.aws.contracts.organization.account_ids, {}) : k => tostring(v) }
+      account_role_arns     = { for k, v in try(local.lz.aws.contracts.organization.account_role_arns, {}) : k => tostring(v) }
     }
     network_contract = try(local.lz.aws.contracts.network, null) == null ? null : {
       tgw_id        = try(tostring(local.lz.aws.contracts.network.tgw_id), null)

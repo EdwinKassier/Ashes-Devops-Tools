@@ -352,9 +352,11 @@ run "credentials_from_upstream_outputs" {
     target = data.tfe_outputs.gcp_bootstrap[0]
     values = {
       nonsensitive_values = {
-        tfc_workload_provider_name = "projects/123456789/locations/global/workloadIdentityPools/tfc-pool/providers/tfc-provider"
-        tfc_plan_service_accounts  = { "gcp-projects" = "tfc-plan-projects@admin-proj.iam.gserviceaccount.com" }
-        tfc_apply_service_accounts = { "gcp-projects" = "tfc-apply-projects@admin-proj.iam.gserviceaccount.com" }
+        contract = {
+          tfc_workload_provider_name = "projects/123456789/locations/global/workloadIdentityPools/tfc-pool/providers/tfc-provider"
+          tfc_plan_service_accounts  = { "gcp-projects" = "tfc-plan-projects@admin-proj.iam.gserviceaccount.com" }
+          tfc_apply_service_accounts = { "gcp-projects" = "tfc-apply-projects@admin-proj.iam.gserviceaccount.com" }
+        }
       }
     }
   }
@@ -363,9 +365,11 @@ run "credentials_from_upstream_outputs" {
     target = data.tfe_outputs.aws_organization[0]
     values = {
       nonsensitive_values = {
-        tfc_plan_role_arns     = { prod = "arn:aws:iam::222222222222:role/tfc-plan", network = "arn:aws:iam::444444444444:role/tfc-plan", security_tooling = "arn:aws:iam::333333333333:role/tfc-plan" }
-        tfc_apply_role_arns    = { prod = "arn:aws:iam::222222222222:role/tfc-apply", network = "arn:aws:iam::444444444444:role/tfc-apply", security_tooling = "arn:aws:iam::333333333333:role/tfc-apply" }
-        tfc_workspace_bindings = { security_tooling = ["aws-security"], network = ["aws-network"] }
+        contract = {
+          tfc_plan_role_arns     = { prod = "arn:aws:iam::222222222222:role/tfc-plan", network = "arn:aws:iam::444444444444:role/tfc-plan", security_tooling = "arn:aws:iam::333333333333:role/tfc-plan" }
+          tfc_apply_role_arns    = { prod = "arn:aws:iam::222222222222:role/tfc-apply", network = "arn:aws:iam::444444444444:role/tfc-apply", security_tooling = "arn:aws:iam::333333333333:role/tfc-apply" }
+          tfc_workspace_bindings = { security_tooling = ["aws-security"], network = ["aws-network"] }
+        }
       }
     }
   }
@@ -390,6 +394,52 @@ run "credentials_from_upstream_outputs" {
   }
 }
 
+# N-1 upgrade: upstream states written before the `contract` output existed
+# (individual outputs only) still resolve the same credentials. The fallback
+# goes at v1.0 (UPGRADING.md).
+run "credentials_from_pre_contract_upstream_outputs" {
+  command = plan
+
+  variables {
+    gcp_bootstrap_outputs_from_tfc    = true
+    aws_organization_outputs_from_tfc = true
+    workspace_execution_modes         = {}
+    aws_workspace_account_keys        = { "aws-workload-prod" = "prod" }
+  }
+
+  override_data {
+    target = data.tfe_outputs.gcp_bootstrap[0]
+    values = {
+      nonsensitive_values = {
+        tfc_workload_provider_name = "projects/123456789/locations/global/workloadIdentityPools/tfc-pool/providers/tfc-provider"
+        tfc_plan_service_accounts  = { "gcp-projects" = "tfc-plan-projects@admin-proj.iam.gserviceaccount.com" }
+        tfc_apply_service_accounts = { "gcp-projects" = "tfc-apply-projects@admin-proj.iam.gserviceaccount.com" }
+      }
+    }
+  }
+
+  override_data {
+    target = data.tfe_outputs.aws_organization[0]
+    values = {
+      nonsensitive_values = {
+        tfc_plan_role_arns     = { prod = "arn:aws:iam::222222222222:role/tfc-plan", network = "arn:aws:iam::444444444444:role/tfc-plan" }
+        tfc_apply_role_arns    = { prod = "arn:aws:iam::222222222222:role/tfc-apply", network = "arn:aws:iam::444444444444:role/tfc-apply" }
+        tfc_workspace_bindings = { network = ["aws-network"] }
+      }
+    }
+  }
+
+  override_data {
+    target = data.tfe_workspace.tfc_admin[0]
+    values = { id = "ws-tfcadmin" }
+  }
+
+  assert {
+    condition     = output.dynamic_credential_workspaces.gcp == tolist(["gcp-projects"]) && output.dynamic_credential_workspaces.aws == tolist(["aws-network", "aws-workload-prod"])
+    error_message = "pre-contract upstream outputs must still resolve the dynamic credentials."
+  }
+}
+
 # Multi-account roots: default = management account, one TFC configuration per
 # member-account alias derived from the aws-organization outputs.
 run "multi_account_alias_credentials" {
@@ -405,17 +455,19 @@ run "multi_account_alias_credentials" {
     target = data.tfe_outputs.aws_organization[0]
     values = {
       nonsensitive_values = {
-        tfc_plan_role_arns = {
-          security_tooling = "arn:aws:iam::333333333333:role/tfc-plan"
-          log_archive      = "arn:aws:iam::555555555555:role/tfc-plan"
-          forensics        = "arn:aws:iam::666666666666:role/tfc-plan"
+        contract = {
+          tfc_plan_role_arns = {
+            security_tooling = "arn:aws:iam::333333333333:role/tfc-plan"
+            log_archive      = "arn:aws:iam::555555555555:role/tfc-plan"
+            forensics        = "arn:aws:iam::666666666666:role/tfc-plan"
+          }
+          tfc_apply_role_arns = {
+            security_tooling = "arn:aws:iam::333333333333:role/tfc-apply"
+            log_archive      = "arn:aws:iam::555555555555:role/tfc-apply"
+            forensics        = "arn:aws:iam::666666666666:role/tfc-apply"
+          }
+          tfc_workspace_bindings = { security_tooling = ["aws-security"], log_archive = ["aws-security"], forensics = ["aws-security"] }
         }
-        tfc_apply_role_arns = {
-          security_tooling = "arn:aws:iam::333333333333:role/tfc-apply"
-          log_archive      = "arn:aws:iam::555555555555:role/tfc-apply"
-          forensics        = "arn:aws:iam::666666666666:role/tfc-apply"
-        }
-        tfc_workspace_bindings = { security_tooling = ["aws-security"], log_archive = ["aws-security"], forensics = ["aws-security"] }
       }
     }
   }
@@ -466,19 +518,21 @@ run "dedicated_management_roles_per_workspace" {
     target = data.tfe_outputs.aws_organization[0]
     values = {
       nonsensitive_values = {
-        tfc_plan_role_arns = {
-          security_tooling = "arn:aws:iam::333333333333:role/tfc-plan"
-          log_archive      = "arn:aws:iam::555555555555:role/tfc-plan"
-          forensics        = "arn:aws:iam::666666666666:role/tfc-plan"
+        contract = {
+          tfc_plan_role_arns = {
+            security_tooling = "arn:aws:iam::333333333333:role/tfc-plan"
+            log_archive      = "arn:aws:iam::555555555555:role/tfc-plan"
+            forensics        = "arn:aws:iam::666666666666:role/tfc-plan"
+          }
+          tfc_apply_role_arns = {
+            security_tooling = "arn:aws:iam::333333333333:role/tfc-apply"
+            log_archive      = "arn:aws:iam::555555555555:role/tfc-apply"
+            forensics        = "arn:aws:iam::666666666666:role/tfc-apply"
+          }
+          tfc_workspace_bindings         = { security_tooling = ["aws-security"], log_archive = ["aws-security"], forensics = ["aws-security"] }
+          tfc_management_plan_role_arns  = { "aws-security" = "arn:aws:iam::111111111111:role/tfc-mgmt-aws-security-plan" }
+          tfc_management_apply_role_arns = { "aws-security" = "arn:aws:iam::111111111111:role/tfc-mgmt-aws-security-apply" }
         }
-        tfc_apply_role_arns = {
-          security_tooling = "arn:aws:iam::333333333333:role/tfc-apply"
-          log_archive      = "arn:aws:iam::555555555555:role/tfc-apply"
-          forensics        = "arn:aws:iam::666666666666:role/tfc-apply"
-        }
-        tfc_workspace_bindings         = { security_tooling = ["aws-security"], log_archive = ["aws-security"], forensics = ["aws-security"] }
-        tfc_management_plan_role_arns  = { "aws-security" = "arn:aws:iam::111111111111:role/tfc-mgmt-aws-security-plan" }
-        tfc_management_apply_role_arns = { "aws-security" = "arn:aws:iam::111111111111:role/tfc-mgmt-aws-security-apply" }
       }
     }
   }
@@ -565,9 +619,11 @@ run "aws_workload_account_binding" {
     target = data.tfe_outputs.aws_organization[0]
     values = {
       nonsensitive_values = {
-        tfc_plan_role_arns     = { workload_dev = "arn:aws:iam::888888888888:role/tfc-plan" }
-        tfc_apply_role_arns    = { workload_dev = "arn:aws:iam::888888888888:role/tfc-apply" }
-        tfc_workspace_bindings = {}
+        contract = {
+          tfc_plan_role_arns     = { workload_dev = "arn:aws:iam::888888888888:role/tfc-plan" }
+          tfc_apply_role_arns    = { workload_dev = "arn:aws:iam::888888888888:role/tfc-apply" }
+          tfc_workspace_bindings = {}
+        }
       }
     }
   }
@@ -1152,11 +1208,13 @@ run "sa_emails_derived_from_prefix_and_bootstrap_outputs" {
     target = data.tfe_outputs.gcp_bootstrap[0]
     values = {
       nonsensitive_values = {
-        admin_project_id           = "acme-admin-1a2b"
-        tfc_workload_provider_name = "projects/123456789/locations/global/workloadIdentityPools/tfc-pool/providers/tfc-provider"
-        # Phase-0 outputs: only the control plane + dev existed when gcp-bootstrap last applied.
-        tfc_plan_service_accounts  = { "gcp-projects" = "acme-projects-plan@acme-admin-1a2b.iam.gserviceaccount.com", "gcp-workload-dev" = "acme-wl-dev-plan@acme-admin-1a2b.iam.gserviceaccount.com" }
-        tfc_apply_service_accounts = { "gcp-projects" = "acme-projects-apply@acme-admin-1a2b.iam.gserviceaccount.com", "gcp-workload-dev" = "acme-wl-dev-apply@acme-admin-1a2b.iam.gserviceaccount.com" }
+        contract = {
+          admin_project_id           = "acme-admin-1a2b"
+          tfc_workload_provider_name = "projects/123456789/locations/global/workloadIdentityPools/tfc-pool/providers/tfc-provider"
+          # Phase-0 outputs: only the control plane + dev existed when gcp-bootstrap last applied.
+          tfc_plan_service_accounts  = { "gcp-projects" = "acme-projects-plan@acme-admin-1a2b.iam.gserviceaccount.com", "gcp-workload-dev" = "acme-wl-dev-plan@acme-admin-1a2b.iam.gserviceaccount.com" }
+          tfc_apply_service_accounts = { "gcp-projects" = "acme-projects-apply@acme-admin-1a2b.iam.gserviceaccount.com", "gcp-workload-dev" = "acme-wl-dev-apply@acme-admin-1a2b.iam.gserviceaccount.com" }
+        }
       }
     }
   }
@@ -1212,10 +1270,12 @@ run "derived_email_check_matches_bootstrap_output" {
     target = data.tfe_outputs.gcp_bootstrap[0]
     values = {
       nonsensitive_values = {
-        admin_project_id           = "acme-admin-1a2b"
-        tfc_workload_provider_name = "projects/123456789/locations/global/workloadIdentityPools/tfc-pool/providers/tfc-provider"
-        tfc_plan_service_accounts  = { "gcp-workload-dev" = "other-wl-dev-plan@acme-admin-1a2b.iam.gserviceaccount.com" }
-        tfc_apply_service_accounts = { "gcp-workload-dev" = "acme-wl-dev-apply@acme-admin-1a2b.iam.gserviceaccount.com" }
+        contract = {
+          admin_project_id           = "acme-admin-1a2b"
+          tfc_workload_provider_name = "projects/123456789/locations/global/workloadIdentityPools/tfc-pool/providers/tfc-provider"
+          tfc_plan_service_accounts  = { "gcp-workload-dev" = "other-wl-dev-plan@acme-admin-1a2b.iam.gserviceaccount.com" }
+          tfc_apply_service_accounts = { "gcp-workload-dev" = "acme-wl-dev-apply@acme-admin-1a2b.iam.gserviceaccount.com" }
+        }
       }
     }
   }

@@ -21,9 +21,14 @@ variable "organization_workspace_name" {
 }
 
 variable "organization_contract" {
-  description = "aws-organization stage contract (FAST-style override): account_ids (account key => 12-digit ID). When set, the aws-organization remote state is NOT read. Null = aws.contracts.organization from config/landing-zone.yaml, else read from the organization_workspace_name workspace's remote state."
+  description = "aws-organization stage contract (FAST-style override), the same type in every aws root: organization_id (o-xxxxxxxxxx), organization_root_id (r-xxxx), management_account_id, ou_ids (OU name => OU ID), account_ids (account key => 12-digit ID), account_role_arns (account key => cross-account role ARN). This root needs: account_ids. When set, the aws-organization remote state is NOT read. Null = aws.contracts.organization from config/landing-zone.yaml, else the contract output of the organization_workspace_name workspace."
   type = object({
-    account_ids = map(string)
+    organization_id       = optional(string)
+    organization_root_id  = optional(string)
+    management_account_id = optional(string)
+    ou_ids                = optional(map(string), {})
+    account_ids           = map(string)
+    account_role_arns     = optional(map(string), {})
   })
   default = null
 

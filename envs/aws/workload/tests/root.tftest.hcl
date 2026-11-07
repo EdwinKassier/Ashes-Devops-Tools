@@ -1,8 +1,8 @@
 # Root-level contract test. Mocks BOTH aws providers (default + us_east_1 alias)
-# so no real credentials or role assumption happens, and overrides BOTH upstream
-# remote-state data sources with a known cross-root contract. Asserts the keys
-# this root consumes — account_role_arns[workload_account_key] (both providers),
-# tgw_id and ipam_pool_ids[aws_region] (aws_network) — are readable.
+# so no real credentials or role assumption happens, and overrides the upstream
+# remote-state data sources with a known `contract` output. Asserts the values
+# this root DERIVES from them — the workload account id, the TGW id, the region's
+# IPAM pool and the log-archive bucket — not the overrides echoed back.
 #
 # validate already covers syntax/type wiring; this guards the remote-state
 # contract shape the root depends on.
@@ -26,9 +26,11 @@ run "consumes_remote_state_contracts" {
     target = data.terraform_remote_state.aws_organization
     values = {
       outputs = {
-        account_ids = { workload_dev = "222222222222" }
-        account_role_arns = {
-          workload_dev = "arn:aws:iam::222222222222:role/cross-account"
+        contract = {
+          account_ids = { workload_dev = "222222222222" }
+          account_role_arns = {
+            workload_dev = "arn:aws:iam::222222222222:role/cross-account"
+          }
         }
       }
     }
@@ -38,8 +40,10 @@ run "consumes_remote_state_contracts" {
     target = data.terraform_remote_state.aws_network
     values = {
       outputs = {
-        tgw_id        = "tgw-000000000000abcd"
-        ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" }
+        contract = {
+          tgw_id        = "tgw-000000000000abcd"
+          ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" }
+        }
       }
     }
   }
@@ -48,28 +52,30 @@ run "consumes_remote_state_contracts" {
     target = data.terraform_remote_state.aws_security
     values = {
       outputs = {
-        log_archive_bucket_name = "ashes-org-log-archive"
+        contract = {
+          log_archive_bucket_name = "ashes-org-log-archive"
+        }
       }
     }
   }
 
-  # With var.log_archive_bucket_name = null, the central bucket name is sourced
-  # from the aws-security remote state (its owner), not a hand-typed string.
+  # With var.log_archive_bucket_name = null, the central bucket name is derived
+  # from the aws-security contract (its owner), not a hand-typed string.
   assert {
-    condition     = data.terraform_remote_state.aws_security[0].outputs.log_archive_bucket_name == "ashes-org-log-archive"
-    error_message = "aws_security must expose log_archive_bucket_name for aws-workload to consume"
+    condition     = local.log_archive_bucket_name == "ashes-org-log-archive"
+    error_message = "the log-archive bucket name must be derived from the aws-security contract"
   }
 
-  # The workload-account role the providers assume is readable from the org contract.
+  # The wrong-account guard is derived from the org contract's account_ids.
   assert {
-    condition     = data.terraform_remote_state.aws_organization[0].outputs.account_role_arns[var.workload_account_key] != ""
-    error_message = "aws_organization account_role_arns must expose the workload_account_key role"
+    condition     = local.workload_account_id == "222222222222"
+    error_message = "the workload account id must be derived from the aws-organization contract account_ids[workload_account_key]"
   }
 
-  # The shared TGW id is readable from the network contract.
+  # The shared TGW id is derived from the network contract.
   assert {
-    condition     = data.terraform_remote_state.aws_network[0].outputs.tgw_id == "tgw-000000000000abcd"
-    error_message = "aws_network tgw_id contract key must be readable by the root"
+    condition     = local.tgw_id == "tgw-000000000000abcd"
+    error_message = "the TGW id must be derived from the aws-network contract"
   }
 
   # Provider default_tags: the canonical cost-allocation keys are written, and the
@@ -96,10 +102,40 @@ run "consumes_remote_state_contracts" {
     error_message = "the spoke must route its private tier to the shared TGW"
   }
 
-  # The regional IPAM pool for this root's region is readable from the network contract.
+  # The IPAM pool for this root's region is selected from the network contract.
   assert {
-    condition     = data.terraform_remote_state.aws_network[0].outputs.ipam_pool_ids[local.aws_region] == "ipam-pool-eu-west-2-0"
-    error_message = "aws_network ipam_pool_ids must expose a pool for aws_region"
+    condition     = local.ipam_pool_id == "ipam-pool-eu-west-2-0"
+    error_message = "the IPAM pool must be the aws-network contract's pool for aws_region"
+  }
+}
+
+# N-1 upgrade: an upstream state written before the `contract` output existed
+# (not yet re-applied on this release) still plans, from the same keys as
+# individual outputs. The fallback goes at v1.0 (UPGRADING.md).
+run "pre_contract_upstream_state_still_plans" {
+  command = plan
+
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = { outputs = { account_ids = { workload_dev = "222222222222" } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_network
+    values = { outputs = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_security
+    values = { outputs = { log_archive_bucket_name = "ashes-org-log-archive" } }
+  }
+
+  assert {
+    condition = (
+      local.workload_account_id == "222222222222" &&
+      local.tgw_id == "tgw-000000000000abcd" &&
+      local.ipam_pool_id == "ipam-pool-eu-west-2-0" &&
+      local.log_archive_bucket_name == "ashes-org-log-archive"
+    )
+    error_message = "a pre-contract upstream state (individual outputs only) must still resolve every contract value"
   }
 }
 
@@ -110,15 +146,15 @@ run "saas_secret_bridge_default_off" {
 
   override_data {
     target = data.terraform_remote_state.aws_organization
-    values = { outputs = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } }
+    values = { outputs = { contract = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } } }
   }
   override_data {
     target = data.terraform_remote_state.aws_network
-    values = { outputs = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } }
+    values = { outputs = { contract = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } } }
   }
   override_data {
     target = data.terraform_remote_state.aws_security
-    values = { outputs = { log_archive_bucket_name = "ashes-org-log-archive" } }
+    values = { outputs = { contract = { log_archive_bucket_name = "ashes-org-log-archive" } } }
   }
 
   assert {
@@ -138,15 +174,15 @@ run "saas_secret_bridge_creates_secret_when_enabled" {
 
   override_data {
     target = data.terraform_remote_state.aws_organization
-    values = { outputs = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } }
+    values = { outputs = { contract = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } } }
   }
   override_data {
     target = data.terraform_remote_state.aws_network
-    values = { outputs = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } }
+    values = { outputs = { contract = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } } }
   }
   override_data {
     target = data.terraform_remote_state.aws_security
-    values = { outputs = { log_archive_bucket_name = "ashes-org-log-archive" } }
+    values = { outputs = { contract = { log_archive_bucket_name = "ashes-org-log-archive" } } }
   }
   override_data {
     target = data.terraform_remote_state.saas[0]
@@ -180,15 +216,15 @@ run "app_services_default_creates_nothing" {
 
   override_data {
     target = data.terraform_remote_state.aws_organization
-    values = { outputs = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } }
+    values = { outputs = { contract = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } } }
   }
   override_data {
     target = data.terraform_remote_state.aws_network
-    values = { outputs = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } }
+    values = { outputs = { contract = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } } }
   }
   override_data {
     target = data.terraform_remote_state.aws_security
-    values = { outputs = { log_archive_bucket_name = "ashes-org-log-archive" } }
+    values = { outputs = { contract = { log_archive_bucket_name = "ashes-org-log-archive" } } }
   }
 
   assert {
@@ -212,15 +248,15 @@ run "app_services_one_service" {
 
   override_data {
     target = data.terraform_remote_state.aws_organization
-    values = { outputs = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } }
+    values = { outputs = { contract = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } } }
   }
   override_data {
     target = data.terraform_remote_state.aws_network
-    values = { outputs = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } }
+    values = { outputs = { contract = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } } }
   }
   override_data {
     target = data.terraform_remote_state.aws_security
-    values = { outputs = { log_archive_bucket_name = "ashes-org-log-archive" } }
+    values = { outputs = { contract = { log_archive_bucket_name = "ashes-org-log-archive" } } }
   }
 
   assert {
@@ -256,9 +292,11 @@ run "rejects_placeholder_landing_zone_name" {
     target = data.terraform_remote_state.aws_organization
     values = {
       outputs = {
-        account_ids = { workload_dev = "222222222222" }
-        account_role_arns = {
-          workload_dev = "arn:aws:iam::222222222222:role/cross-account"
+        contract = {
+          account_ids = { workload_dev = "222222222222" }
+          account_role_arns = {
+            workload_dev = "arn:aws:iam::222222222222:role/cross-account"
+          }
         }
       }
     }
@@ -268,8 +306,10 @@ run "rejects_placeholder_landing_zone_name" {
     target = data.terraform_remote_state.aws_network
     values = {
       outputs = {
-        tgw_id        = "tgw-000000000000abcd"
-        ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" }
+        contract = {
+          tgw_id        = "tgw-000000000000abcd"
+          ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" }
+        }
       }
     }
   }
@@ -278,7 +318,9 @@ run "rejects_placeholder_landing_zone_name" {
     target = data.terraform_remote_state.aws_security
     values = {
       outputs = {
-        log_archive_bucket_name = "ashes-org-log-archive"
+        contract = {
+          log_archive_bucket_name = "ashes-org-log-archive"
+        }
       }
     }
   }
@@ -301,15 +343,15 @@ run "bridge_uses_write_only_secret" {
 
   override_data {
     target = data.terraform_remote_state.aws_organization
-    values = { outputs = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } }
+    values = { outputs = { contract = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } } }
   }
   override_data {
     target = data.terraform_remote_state.aws_network
-    values = { outputs = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } }
+    values = { outputs = { contract = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } } }
   }
   override_data {
     target = data.terraform_remote_state.aws_security
-    values = { outputs = { log_archive_bucket_name = "ashes-org-log-archive" } }
+    values = { outputs = { contract = { log_archive_bucket_name = "ashes-org-log-archive" } } }
   }
   override_data {
     target = data.terraform_remote_state.saas[0]
@@ -346,15 +388,15 @@ run "bridge_version_defaults_to_1_without_producer_output" {
 
   override_data {
     target = data.terraform_remote_state.aws_organization
-    values = { outputs = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } }
+    values = { outputs = { contract = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } } }
   }
   override_data {
     target = data.terraform_remote_state.aws_network
-    values = { outputs = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } }
+    values = { outputs = { contract = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } } }
   }
   override_data {
     target = data.terraform_remote_state.aws_security
-    values = { outputs = { log_archive_bucket_name = "ashes-org-log-archive" } }
+    values = { outputs = { contract = { log_archive_bucket_name = "ashes-org-log-archive" } } }
   }
   override_data {
     target = data.terraform_remote_state.saas[0]
@@ -378,15 +420,15 @@ run "bridge_off_reads_nothing" {
 
   override_data {
     target = data.terraform_remote_state.aws_organization
-    values = { outputs = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } }
+    values = { outputs = { contract = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } } }
   }
   override_data {
     target = data.terraform_remote_state.aws_network
-    values = { outputs = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } }
+    values = { outputs = { contract = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } } }
   }
   override_data {
     target = data.terraform_remote_state.aws_security
-    values = { outputs = { log_archive_bucket_name = "ashes-org-log-archive" } }
+    values = { outputs = { contract = { log_archive_bucket_name = "ashes-org-log-archive" } } }
   }
 
   assert {

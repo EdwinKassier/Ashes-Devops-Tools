@@ -57,22 +57,30 @@ data "terraform_remote_state" "aws_security" {
 }
 
 locals {
+  # The upstream contract outputs. A producer state from before the contract
+  # output existed (N-1, not yet re-applied) exposes the same keys as individual
+  # outputs, so each read falls back to them; that fallback goes at v1.0 with the
+  # individual outputs (UPGRADING.md).
+  org_remote      = local.read_organization ? try(data.terraform_remote_state.aws_organization[0].outputs.contract, data.terraform_remote_state.aws_organization[0].outputs) : null
+  network_remote  = local.read_network ? try(data.terraform_remote_state.aws_network[0].outputs.contract, data.terraform_remote_state.aws_network[0].outputs) : null
+  security_remote = local.read_security ? try(data.terraform_remote_state.aws_security[0].outputs.contract, data.terraform_remote_state.aws_security[0].outputs) : null
+
   # Wrong-account guard for both providers. No try(): a missing account_ids key
   # fails the plan loudly instead of silently dropping the guard.
   workload_account_id = (
     local.read_organization
-    ? data.terraform_remote_state.aws_organization[0].outputs.account_ids[local.workload_account_key]
+    ? local.org_remote.account_ids[local.workload_account_key]
     : local.organization_contract.account_ids[local.workload_account_key]
   )
 
   # Network contract; null / "" in standalone mode (enable_network_hub = false).
   tgw_id = (
     !var.enable_network_hub ? null :
-    local.read_network ? data.terraform_remote_state.aws_network[0].outputs.tgw_id : local.network_contract.tgw_id
+    local.read_network ? local.network_remote.tgw_id : local.network_contract.tgw_id
   )
   ipam_pool_id = (
     !var.enable_network_hub ? "" :
-    local.read_network ? data.terraform_remote_state.aws_network[0].outputs.ipam_pool_ids[local.aws_region] : lookup(local.network_contract.ipam_pool_ids, local.aws_region, "")
+    local.read_network ? local.network_remote.ipam_pool_ids[local.aws_region] : lookup(local.network_contract.ipam_pool_ids, local.aws_region, "")
   )
 
   # The central log-archive bucket name comes from aws-security (its owner) unless
@@ -80,7 +88,7 @@ locals {
   # workload writing to a stale bucket.
   log_archive_bucket_name = (
     local.read_security
-    ? data.terraform_remote_state.aws_security[0].outputs.log_archive_bucket_name
+    ? local.security_remote.log_archive_bucket_name
     : local.security_contract.log_archive_bucket_name
   )
 }

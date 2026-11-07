@@ -15,8 +15,10 @@ override_data {
   target = data.terraform_remote_state.aws_organization
   values = {
     outputs = {
-      account_ids       = { workload_nonprod = "222222222222", workload_prod = "333333333333" }
-      account_role_arns = { workload_nonprod = "arn:aws:iam::222222222222:role/cross-account", workload_prod = "arn:aws:iam::333333333333:role/cross-account" }
+      contract = {
+        account_ids       = { workload_nonprod = "222222222222", workload_prod = "333333333333" }
+        account_role_arns = { workload_nonprod = "arn:aws:iam::222222222222:role/cross-account", workload_prod = "arn:aws:iam::333333333333:role/cross-account" }
+      }
     }
   }
 }
@@ -25,8 +27,10 @@ override_data {
   target = data.terraform_remote_state.aws_network
   values = {
     outputs = {
-      tgw_id        = "tgw-000000000000abcd"
-      ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" }
+      contract = {
+        tgw_id        = "tgw-000000000000abcd"
+        ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" }
+      }
     }
   }
 }
@@ -35,7 +39,9 @@ override_data {
   target = data.terraform_remote_state.aws_security
   values = {
     outputs = {
-      log_archive_bucket_name = "cfgco-org-log-archive"
+      contract = {
+        log_archive_bucket_name = "cfgco-org-log-archive"
+      }
     }
   }
 }
@@ -132,8 +138,10 @@ run "scaffold_aws_plans" {
     target = data.terraform_remote_state.aws_organization
     values = {
       outputs = {
-        account_ids       = { workload_dev = "222222222222", workload_prod = "333333333333" }
-        account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account", workload_prod = "arn:aws:iam::333333333333:role/cross-account" }
+        contract = {
+          account_ids       = { workload_dev = "222222222222", workload_prod = "333333333333" }
+          account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account", workload_prod = "arn:aws:iam::333333333333:role/cross-account" }
+        }
       }
     }
   }
@@ -152,8 +160,10 @@ run "scaffold_gcp_aws_plans" {
     target = data.terraform_remote_state.aws_organization
     values = {
       outputs = {
-        account_ids       = { workload_dev = "222222222222", workload_prod = "333333333333" }
-        account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account", workload_prod = "arn:aws:iam::333333333333:role/cross-account" }
+        contract = {
+          account_ids       = { workload_dev = "222222222222", workload_prod = "333333333333" }
+          account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account", workload_prod = "arn:aws:iam::333333333333:role/cross-account" }
+        }
       }
     }
   }
@@ -172,8 +182,10 @@ run "scaffold_gcp_aws_saas_plans" {
     target = data.terraform_remote_state.aws_organization
     values = {
       outputs = {
-        account_ids       = { workload_dev = "222222222222", workload_prod = "333333333333" }
-        account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account", workload_prod = "arn:aws:iam::333333333333:role/cross-account" }
+        contract = {
+          account_ids       = { workload_dev = "222222222222", workload_prod = "333333333333" }
+          account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account", workload_prod = "arn:aws:iam::333333333333:role/cross-account" }
+        }
       }
     }
   }

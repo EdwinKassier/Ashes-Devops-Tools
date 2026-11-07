@@ -188,8 +188,9 @@ pre-commit-run: ## Run pre-commit across the repository
 pre-commit-update: ## Update pinned pre-commit hooks
 	@$(PRE_COMMIT) autoupdate
 
-consistency: ## Assert canonical strings (region regex, provider pins) haven't drifted across copies
+consistency: ## Assert canonical strings (region regex, provider pins) haven't drifted across copies, and cross-root contracts (scripts/check-contracts.sh)
 	@./scripts/check-consistency.sh
+	@./scripts/check-contracts.sh
 
 ci: ## Run the local CI pipeline (fmt → consistency → counts → links → shellcheck → docs → validate → lint → test → security)
 	@$(MAKE) fmt-check

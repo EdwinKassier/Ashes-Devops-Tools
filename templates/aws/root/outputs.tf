@@ -4,6 +4,20 @@
 #
 # Keep output keys stable across refactors; renaming a key breaks every root
 # that reads it. Replace / extend the outputs below with this root's real ones.
+#
+# Downstream roots read ONE output, `contract`: a non-sensitive object holding
+# every key they may consume (they read .outputs.contract, nothing else). Never
+# put a sensitive value in it: one sensitive attribute moves the whole object
+# into tfe_outputs' sensitive_values. If downstream roots read this layer, add it
+# to PRODUCERS in scripts/check-contracts.sh.
+
+output "contract" {
+  description = "This root's cross-root contract: one non-sensitive object downstream roots read as .outputs.contract."
+  value = {
+    account_ids = local.account_ids
+    aws_region  = local.aws_region
+  }
+}
 
 output "account_ids" {
   description = "Map of account key -> AWS account ID this root resolved from the organization contract (variable, config file or aws-organization remote state)."

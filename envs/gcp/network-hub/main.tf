@@ -8,8 +8,12 @@ locals {
   # Remote state when read (count = 1), else the supplied contract. try() only
   # selects the source — it does not unify the two object types — and a failed
   # read still errors at plan time.
-  org      = try(data.terraform_remote_state.gcp_organization[0].outputs, local.organization_contract)
-  projects = try(data.terraform_remote_state.gcp_projects[0].outputs, local.projects_contract)
+  # Each upstream is read through its single `contract` output. A producer
+  # state from before that output existed (N-1, not yet re-applied) exposes the
+  # same keys as individual outputs, so the read falls back to them; that
+  # fallback goes at v1.0 with the individual outputs (UPGRADING.md).
+  org      = try(data.terraform_remote_state.gcp_organization[0].outputs.contract, data.terraform_remote_state.gcp_organization[0].outputs, local.organization_contract)
+  projects = try(data.terraform_remote_state.gcp_projects[0].outputs.contract, data.terraform_remote_state.gcp_projects[0].outputs, local.projects_contract)
 }
 
 module "network_hub" {

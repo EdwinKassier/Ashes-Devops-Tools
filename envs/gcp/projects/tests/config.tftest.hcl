@@ -16,8 +16,10 @@ override_data {
   target = data.terraform_remote_state.gcp_bootstrap
   values = {
     outputs = {
-      admin_project_id = "cfgco-admin-abcd"
-      suffix           = "abcd"
+      contract = {
+        admin_project_id = "cfgco-admin-abcd"
+        suffix           = "abcd"
+      }
     }
   }
 }
@@ -26,12 +28,14 @@ override_data {
   target = data.terraform_remote_state.gcp_organization
   values = {
     outputs = {
-      billing_account = "billingAccounts/000000-111111-222222"
-      folders = {
-        dev  = { id = "folders/111", display_name = "dev" }
-        prod = { id = "folders/222", display_name = "Production" }
+      contract = {
+        billing_account = "billingAccounts/000000-111111-222222"
+        folders = {
+          dev  = { id = "folders/111", display_name = "dev" }
+          prod = { id = "folders/222", display_name = "Production" }
+        }
+        tag_values = { "environment-dev" = "tagValues/1", "environment-prod" = "tagValues/2" }
       }
-      tag_values = { "environment-dev" = "tagValues/1", "environment-prod" = "tagValues/2" }
     }
   }
 }

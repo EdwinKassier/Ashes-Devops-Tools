@@ -25,23 +25,25 @@ run "consumes_remote_state_contract" {
     target = data.terraform_remote_state.aws_organization
     values = {
       outputs = {
-        organization_id       = "o-abcdefghij"
-        management_account_id = "111111111111"
-        account_ids           = { network = "666666666666" }
-        account_role_arns = {
-          network = "arn:aws:iam::666666666666:role/cross-account"
+        contract = {
+          organization_id       = "o-abcdefghij"
+          management_account_id = "111111111111"
+          account_ids           = { network = "666666666666" }
+          account_role_arns = {
+            network = "arn:aws:iam::666666666666:role/cross-account"
+          }
         }
       }
     }
   }
 
   assert {
-    condition     = data.terraform_remote_state.aws_organization[0].outputs.organization_id == "o-abcdefghij"
+    condition     = local.org.organization_id == "o-abcdefghij"
     error_message = "remote-state organization_id contract key must be readable by the root"
   }
 
   assert {
-    condition     = data.terraform_remote_state.aws_organization[0].outputs.account_role_arns["network"] != ""
+    condition     = local.org.account_role_arns["network"] != ""
     error_message = "remote-state account_role_arns must expose the network role the provider assumes"
   }
 
@@ -79,11 +81,13 @@ run "rejects_placeholder_landing_zone_name" {
     target = data.terraform_remote_state.aws_organization
     values = {
       outputs = {
-        organization_id       = "o-abcdefghij"
-        management_account_id = "111111111111"
-        account_ids           = { network = "666666666666" }
-        account_role_arns = {
-          network = "arn:aws:iam::666666666666:role/cross-account"
+        contract = {
+          organization_id       = "o-abcdefghij"
+          management_account_id = "111111111111"
+          account_ids           = { network = "666666666666" }
+          account_role_arns = {
+            network = "arn:aws:iam::666666666666:role/cross-account"
+          }
         }
       }
     }
@@ -117,11 +121,13 @@ override_data {
   target = data.terraform_remote_state.aws_organization
   values = {
     outputs = {
-      organization_id       = "o-abcdefghij"
-      management_account_id = "111111111111"
-      account_ids           = { network = "666666666666" }
-      account_role_arns = {
-        network = "arn:aws:iam::666666666666:role/cross-account"
+      contract = {
+        organization_id       = "o-abcdefghij"
+        management_account_id = "111111111111"
+        account_ids           = { network = "666666666666" }
+        account_role_arns = {
+          network = "arn:aws:iam::666666666666:role/cross-account"
+        }
       }
     }
   }

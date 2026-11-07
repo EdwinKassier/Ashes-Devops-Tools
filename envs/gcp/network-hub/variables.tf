@@ -154,23 +154,42 @@ variable "projects_workspace_name" {
 # Stage contract overrides (FAST-style): when set (here or as gcp.contracts.<layer>
 # in config/landing-zone.yaml) the matching remote-state read is skipped.
 variable "organization_contract" {
-  description = "gcp-organization stage contract: org_id and folders (key => {id, name, display_name}). Null = gcp.contracts.organization from config/landing-zone.yaml, else read from the gcp-organization workspace's remote state."
+  description = "gcp-organization stage contract, the same type in every gcp root: org_id (numeric), billing_account (billingAccounts/XXXXXX-XXXXXX-XXXXXX or bare ID), admin_project_number, folders (key => {id, name, display_name}), tag_values (key => tag value ID) and scoped_access_policy_ids (env => policy ID). This root needs: org_id, folders. Null = gcp.contracts.organization from config/landing-zone.yaml, else the contract output of the gcp-organization workspace."
   type = object({
-    org_id = string
-    folders = map(object({
+    org_id               = optional(string)
+    billing_account      = optional(string)
+    admin_project_number = optional(string)
+    folders = optional(map(object({
       id           = string
       name         = string
       display_name = string
-    }))
+    })), {})
+    tag_values               = optional(map(string), {})
+    scoped_access_policy_ids = optional(map(string), {})
   })
   default = null
+
+  validation {
+    condition     = var.organization_contract == null || alltrue([for k in ["org_id"] : try(length(trimspace(var.organization_contract[k])) > 0, false)])
+    error_message = "organization_contract must set org_id for this root."
+  }
 }
 
 variable "projects_contract" {
-  description = "gcp-projects stage contract: project_ids and project_numbers (project key => value; needs shared-hub, shared-dns and every <env>-host). Null = gcp.contracts.projects from config/landing-zone.yaml, else read from the gcp-projects workspace's remote state."
+  description = "gcp-projects stage contract, the same type in every gcp root: project_ids and project_numbers (project key => value, e.g. shared-hub, shared-dns, <env>-host) and environment_config (environment => folder_id, host_project_id, host_project_number, region, cidr_block, labels, is_production, vpc_sc_access_policy_id). This root needs: project_ids and project_numbers (shared-hub, shared-dns and every <env>-host). Null = gcp.contracts.projects from config/landing-zone.yaml, else the contract output of the gcp-projects workspace."
   type = object({
-    project_ids     = map(string)
-    project_numbers = map(string)
+    project_ids     = optional(map(string), {})
+    project_numbers = optional(map(string), {})
+    environment_config = optional(map(object({
+      folder_id               = string
+      host_project_id         = string
+      host_project_number     = string
+      region                  = string
+      cidr_block              = string
+      labels                  = optional(map(string), {})
+      is_production           = optional(bool)
+      vpc_sc_access_policy_id = optional(string)
+    })), {})
   })
   default = null
 }

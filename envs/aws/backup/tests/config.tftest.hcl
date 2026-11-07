@@ -11,12 +11,14 @@ override_data {
   target = data.terraform_remote_state.aws_organization
   values = {
     outputs = {
-      ou_ids = {
-        Workloads = "ou-abcd-workloads0"
-      }
-      account_ids = { backup = "444444444444" }
-      account_role_arns = {
-        backup = "arn:aws:iam::444444444444:role/cross-account"
+      contract = {
+        ou_ids = {
+          Workloads = "ou-abcd-workloads0"
+        }
+        account_ids = { backup = "444444444444" }
+        account_role_arns = {
+          backup = "arn:aws:iam::444444444444:role/cross-account"
+        }
       }
     }
   }

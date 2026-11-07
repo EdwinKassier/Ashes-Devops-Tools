@@ -124,8 +124,11 @@ locals {
   }
 
   # ── Dynamic provider credentials ──────────────────────────────────────────
-  # Explicit input maps win over values read from upstream outputs.
-  gcp_bootstrap_outputs = try(data.tfe_outputs.gcp_bootstrap[0].nonsensitive_values, {})
+  # Explicit input maps win over values read from upstream outputs. Upstreams
+  # are read through their single non-sensitive `contract` output
+  # (scripts/check-contracts.sh); a state from before that output existed falls
+  # back to the same keys as individual outputs until v1.0 (UPGRADING.md).
+  gcp_bootstrap_outputs = try(data.tfe_outputs.gcp_bootstrap[0].nonsensitive_values.contract, data.tfe_outputs.gcp_bootstrap[0].nonsensitive_values, {})
 
   gcp_workload_provider_name = coalesce(var.gcp_workload_provider_name, try(local.gcp_bootstrap_outputs.tfc_workload_provider_name, null), "unset")
 
@@ -201,7 +204,7 @@ locals {
     if w.cloud == "gcp" && local.gcp_workload_provider_name != "unset" && (try(local.gcp_plan_sas[ws], null) != null || try(local.gcp_apply_sas[ws], null) != null)
   }
 
-  aws_organization_outputs = try(data.tfe_outputs.aws_organization[0].nonsensitive_values, {})
+  aws_organization_outputs = try(data.tfe_outputs.aws_organization[0].nonsensitive_values.contract, data.tfe_outputs.aws_organization[0].nonsensitive_values, {})
   aws_output_plan_roles    = try(tomap(local.aws_organization_outputs.tfc_plan_role_arns), {})
   aws_output_apply_roles   = try(tomap(local.aws_organization_outputs.tfc_apply_role_arns), {})
   # Dedicated per-workspace management roles (aws-security, aws-backup) from

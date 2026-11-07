@@ -76,11 +76,11 @@ run "remote_state_read_without_contract" {
 
   override_data {
     target = data.terraform_remote_state.aws_network
-    values = { outputs = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } }
+    values = { outputs = { contract = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } } }
   }
   override_data {
     target = data.terraform_remote_state.aws_security
-    values = { outputs = { log_archive_bucket_name = "remote-org-log-archive" } }
+    values = { outputs = { contract = { log_archive_bucket_name = "remote-org-log-archive" } } }
   }
 
   assert {

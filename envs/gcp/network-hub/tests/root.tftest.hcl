@@ -29,9 +29,11 @@ override_data {
   target = data.terraform_remote_state.gcp_organization
   values = {
     outputs = {
-      org_id = "123456789012"
-      folders = {
-        dev = { id = "folders/111", display_name = "Development" }
+      contract = {
+        org_id = "123456789012"
+        folders = {
+          dev = { id = "folders/111", display_name = "Development" }
+        }
       }
     }
   }
@@ -41,15 +43,17 @@ override_data {
   target = data.terraform_remote_state.gcp_projects
   values = {
     outputs = {
-      project_ids = {
-        "shared-hub" = "acme-hub-abcd"
-        "shared-dns" = "acme-dns-abcd"
-        "dev-host"   = "acme-dev-host-abcd"
-      }
-      project_numbers = {
-        "shared-hub" = "111111111111"
-        "shared-dns" = "222222222222"
-        "dev-host"   = "333333333333"
+      contract = {
+        project_ids = {
+          "shared-hub" = "acme-hub-abcd"
+          "shared-dns" = "acme-dns-abcd"
+          "dev-host"   = "acme-dev-host-abcd"
+        }
+        project_numbers = {
+          "shared-hub" = "111111111111"
+          "shared-dns" = "222222222222"
+          "dev-host"   = "333333333333"
+        }
       }
     }
   }
@@ -102,8 +106,10 @@ run "prod_env_with_dry_run_hub_perimeter_warns" {
     target = data.terraform_remote_state.gcp_projects
     values = {
       outputs = {
-        project_ids     = { "shared-hub" = "acme-hub-abcd", "shared-dns" = "acme-dns-abcd", "prod-host" = "acme-prod-host-abcd" }
-        project_numbers = { "shared-hub" = "111111111111", "shared-dns" = "222222222222", "prod-host" = "333333333333" }
+        contract = {
+          project_ids     = { "shared-hub" = "acme-hub-abcd", "shared-dns" = "acme-dns-abcd", "prod-host" = "acme-prod-host-abcd" }
+          project_numbers = { "shared-hub" = "111111111111", "shared-dns" = "222222222222", "prod-host" = "333333333333" }
+        }
       }
     }
   }
@@ -132,8 +138,10 @@ run "prod_named_env_without_flag_does_not_warn" {
     target = data.terraform_remote_state.gcp_projects
     values = {
       outputs = {
-        project_ids     = { "shared-hub" = "acme-hub-abcd", "shared-dns" = "acme-dns-abcd", "prod-host" = "acme-prod-host-abcd" }
-        project_numbers = { "shared-hub" = "111111111111", "shared-dns" = "222222222222", "prod-host" = "333333333333" }
+        contract = {
+          project_ids     = { "shared-hub" = "acme-hub-abcd", "shared-dns" = "acme-dns-abcd", "prod-host" = "acme-prod-host-abcd" }
+          project_numbers = { "shared-hub" = "111111111111", "shared-dns" = "222222222222", "prod-host" = "333333333333" }
+        }
       }
     }
   }
@@ -163,5 +171,47 @@ run "contracts_skip_remote_state" {
       local.projects.project_ids["shared-hub"] == "acme-hub-abcd"
     )
     error_message = "supplied contracts must skip the gcp-organization / gcp-projects reads and feed the root"
+  }
+}
+
+# The single `contract` output carries the same hub_network (what gcp-workload
+# reads), and the deprecated alias still matches it.
+run "contract_output_carries_hub_network" {
+  command = plan
+
+  assert {
+    condition     = output.contract.hub_network.dns_domain == "hub.internal." && output.contract.hub_network == output.hub_network
+    error_message = "output.contract must carry hub_network, identical to the deprecated hub_network alias."
+  }
+}
+
+# N-1 upgrade: upstream states written before the `contract` output existed
+# (individual outputs only) still plan. The fallback goes at v1.0 (UPGRADING.md).
+run "pre_contract_upstream_states_still_plan" {
+  command = plan
+
+  override_data {
+    target = data.terraform_remote_state.gcp_organization
+    values = {
+      outputs = {
+        org_id  = "999999999999"
+        folders = { dev = { id = "folders/111", display_name = "Development" } }
+      }
+    }
+  }
+
+  override_data {
+    target = data.terraform_remote_state.gcp_projects
+    values = {
+      outputs = {
+        project_ids     = { "shared-hub" = "acme-hub-abcd", "shared-dns" = "acme-dns-abcd", "dev-host" = "acme-dev-host-abcd" }
+        project_numbers = { "shared-hub" = "111111111111", "shared-dns" = "222222222222", "dev-host" = "333333333333" }
+      }
+    }
+  }
+
+  assert {
+    condition     = local.org.org_id == "999999999999" && local.projects.project_ids["shared-hub"] == "acme-hub-abcd"
+    error_message = "a pre-contract upstream state (individual outputs only) must still resolve the org and projects contracts."
   }
 }

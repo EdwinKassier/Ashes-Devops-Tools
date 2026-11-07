@@ -35,8 +35,10 @@ data "terraform_remote_state" "aws_organization" {
 }
 
 locals {
-  # No try(): a renamed upstream output must fail the plan, not degrade silently.
-  account_ids = local.read_organization ? data.terraform_remote_state.aws_organization[0].outputs.account_ids : local.organization_contract.account_ids
+  # Read the upstream's single `contract` output (scripts/check-contracts.sh
+  # rejects any other key). No try(): a renamed contract key must fail the plan,
+  # not degrade silently.
+  account_ids = local.read_organization ? data.terraform_remote_state.aws_organization[0].outputs.contract.account_ids : local.organization_contract.account_ids
 }
 
 # Wire the stage module for this layer. Account IDs, role ARNs and other

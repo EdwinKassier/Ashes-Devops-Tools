@@ -27,24 +27,26 @@ run "consumes_remote_state_contract" {
     target = data.terraform_remote_state.aws_organization
     values = {
       outputs = {
-        ou_ids = {
-          Workloads = "ou-abcd-workloads0"
-        }
-        account_ids = { backup = "444444444444" }
-        account_role_arns = {
-          backup = "arn:aws:iam::444444444444:role/cross-account"
+        contract = {
+          ou_ids = {
+            Workloads = "ou-abcd-workloads0"
+          }
+          account_ids = { backup = "444444444444" }
+          account_role_arns = {
+            backup = "arn:aws:iam::444444444444:role/cross-account"
+          }
         }
       }
     }
   }
 
   assert {
-    condition     = data.terraform_remote_state.aws_organization[0].outputs.account_role_arns["backup"] == "arn:aws:iam::444444444444:role/cross-account"
+    condition     = local.org.account_role_arns["backup"] == "arn:aws:iam::444444444444:role/cross-account"
     error_message = "remote-state account_role_arns must expose the backup role the aws.backup provider assumes"
   }
 
   assert {
-    condition     = data.terraform_remote_state.aws_organization[0].outputs.ou_ids["Workloads"] == "ou-abcd-workloads0"
+    condition     = local.org.ou_ids["Workloads"] == "ou-abcd-workloads0"
     error_message = "remote-state ou_ids must expose the Workloads OU the org BACKUP_POLICY attaches to"
   }
 }
@@ -61,12 +63,14 @@ run "rejects_placeholder_landing_zone_name" {
     target = data.terraform_remote_state.aws_organization
     values = {
       outputs = {
-        ou_ids = {
-          Workloads = "ou-abcd-workloads0"
-        }
-        account_ids = { backup = "444444444444" }
-        account_role_arns = {
-          backup = "arn:aws:iam::444444444444:role/cross-account"
+        contract = {
+          ou_ids = {
+            Workloads = "ou-abcd-workloads0"
+          }
+          account_ids = { backup = "444444444444" }
+          account_role_arns = {
+            backup = "arn:aws:iam::444444444444:role/cross-account"
+          }
         }
       }
     }

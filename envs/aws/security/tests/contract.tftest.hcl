@@ -33,23 +33,25 @@ override_data {
   target = data.terraform_remote_state.aws_organization
   values = {
     outputs = {
-      organization_id       = "o-abcdefghij"
-      organization_root_id  = "r-abcd"
-      management_account_id = "111111111111"
-      ou_ids                = { Security = "ou-abcd-security00" }
-      account_ids = {
-        security_tooling = "222222222222"
-        log_archive      = "333333333333"
-        shared_services  = "444444444444"
-        forensics        = "555555555555"
-        network          = "666666666666"
+      contract = {
+        organization_id       = "o-abcdefghij"
+        organization_root_id  = "r-abcd"
+        management_account_id = "111111111111"
+        ou_ids                = { Security = "ou-abcd-security00" }
+        account_ids = {
+          security_tooling = "222222222222"
+          log_archive      = "333333333333"
+          shared_services  = "444444444444"
+          forensics        = "555555555555"
+          network          = "666666666666"
+        }
+        account_role_arns = {
+          security_tooling = "arn:aws:iam::222222222222:role/cross-account"
+          log_archive      = "arn:aws:iam::333333333333:role/cross-account"
+          forensics        = "arn:aws:iam::555555555555:role/cross-account"
+        }
+        tfc_plan_role_arns = {}
       }
-      account_role_arns = {
-        security_tooling = "arn:aws:iam::222222222222:role/cross-account"
-        log_archive      = "arn:aws:iam::333333333333:role/cross-account"
-        forensics        = "arn:aws:iam::555555555555:role/cross-account"
-      }
-      tfc_plan_role_arns = {}
     }
   }
 }
@@ -63,8 +65,8 @@ run "remote_state_is_projected_onto_the_contract" {
   }
 
   assert {
-    condition     = toset(keys(local.org)) == toset(["organization_id", "organization_root_id", "management_account_id", "account_ids", "account_role_arns"])
-    error_message = "local.org must project the remote state onto exactly the five contract fields."
+    condition     = toset(keys(local.org)) == toset(["organization_id", "organization_root_id", "management_account_id", "ou_ids", "account_ids", "account_role_arns"])
+    error_message = "local.org must project the remote contract onto the shared aws organization_contract type (all six fields)."
   }
 
   assert {

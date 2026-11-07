@@ -9,11 +9,13 @@ override_data {
   target = data.terraform_remote_state.aws_organization
   values = {
     outputs = {
-      organization_id       = "o-abcdefghij"
-      management_account_id = "111111111111"
-      account_ids           = { shared_services = "777777777777" }
-      account_role_arns = {
-        shared_services = "arn:aws:iam::222222222222:role/cross-account"
+      contract = {
+        organization_id       = "o-abcdefghij"
+        management_account_id = "111111111111"
+        account_ids           = { shared_services = "777777777777" }
+        account_role_arns = {
+          shared_services = "arn:aws:iam::222222222222:role/cross-account"
+        }
       }
     }
   }

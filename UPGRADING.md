@@ -403,6 +403,31 @@ Applies to workloads with `enable_saas_secret_bridge = true`.
   state. Task 3.6 moves this read to `ephemeral "tfe_outputs"` (see
   `docs/known-gaps.md`).
 
+### All clouds
+
+#### One `contract` output per producer root
+
+Every producer root (`aws-organization`, `aws-security`, `aws-network`,
+`gcp-bootstrap`, `gcp-organization`, `gcp-projects`, `gcp-network-hub`) now
+publishes one non-sensitive `contract` output: an object holding every key it
+already exported. The roots in this repo, and tfc-admin's `tfe_outputs` reads,
+now read only `.outputs.contract` (`.nonsensitive_values.contract`).
+`scripts/check-contracts.sh` (`make consistency`, CI) enforces it.
+
+No manual step. Upgrade apply order is unchanged.
+
+- **Before a producer re-applies,** its state has no `contract` output yet.
+  Consumers then fall back to the old individual outputs, which hold the same
+  keys, so a consumer that plans first still plans with no changes.
+- **The individual outputs stay** as deprecated aliases. Their descriptions say
+  `Deprecated: read contract.<key>`. A consumer outside this repo should switch
+  to `outputs.contract.<key>` before v1.0.
+- **The `<layer>_contract` override variables share one type per upstream.**
+  For example, `organization_contract` has the same type in every aws root.
+  Fields that only some roots need are now `optional`. A root that needs a field
+  checks it in a variable validation, and the error names the field. Existing
+  overrides and `<cloud>.contracts.*` config keep working unchanged.
+
 ## Sandbox upgrade log
 
 Copy this block once per release, fill it in from the sandbox run, and commit it
@@ -435,3 +460,4 @@ Each dual mode keeps both paths until v1.0. Migrate before then.
 | `guardrail_owner_mode = "organization"` (in-stage apply, `roles/iam.denyAdmin` on the organization apply SA) | `guardrail_owner_mode = "separate"` | GCP deny policies move to the security-team `gcp-guardrails` workspace |
 | Workload `removed` block for `module.config_recorder`, the deprecated `config_role_arn` and `create_config_service_linked_role` inputs, and the `config_role_arn` output | The `org-config-recorders` StackSet in aws-organization | AWS Config recorders move to an aws-organization StackSet |
 | Flag-off recorder path of the SCP (recorder actions in `DenyWeakenSecurityServices`) | `enable_config_recorder_scp = true` | AWS Config recorders move to an aws-organization StackSet |
+| The individual cross-root outputs of the producer roots, and the consumers' fallback to them when `contract` is absent | The `contract` output (`outputs.contract.<key>`) | One `contract` output per producer root |

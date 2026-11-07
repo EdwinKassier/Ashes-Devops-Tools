@@ -21,19 +21,25 @@ variable "organization_workspace_name" {
 }
 
 variable "organization_contract" {
-  description = "aws-organization stage contract (FAST-style override): organization_id (o-xxxxxxxxxx), organization_root_id (r-xxxx), management_account_id, account_ids (account key => 12-digit ID), account_role_arns (account key => cross-account role ARN). When set, the aws-organization remote state is NOT read. Null = aws.contracts.organization from config/landing-zone.yaml, else read from the organization_workspace_name workspace's remote state."
+  description = "aws-organization stage contract (FAST-style override), the same type in every aws root: organization_id (o-xxxxxxxxxx), organization_root_id (r-xxxx), management_account_id, ou_ids (OU name => OU ID), account_ids (account key => 12-digit ID), account_role_arns (account key => cross-account role ARN). This root needs: organization_id, organization_root_id, management_account_id, account_ids, account_role_arns. When set, the aws-organization remote state is NOT read. Null = aws.contracts.organization from config/landing-zone.yaml, else the contract output of the organization_workspace_name workspace."
   type = object({
-    organization_id       = string
-    organization_root_id  = string
-    management_account_id = string
+    organization_id       = optional(string)
+    organization_root_id  = optional(string)
+    management_account_id = optional(string)
+    ou_ids                = optional(map(string), {})
     account_ids           = map(string)
-    account_role_arns     = map(string)
+    account_role_arns     = optional(map(string), {})
   })
   default = null
 
   validation {
     condition     = var.organization_contract == null || alltrue([for id in values(try(var.organization_contract.account_ids, {})) : can(regex("^[0-9]{12}$", id))])
     error_message = "organization_contract.account_ids values must be 12-digit AWS account IDs."
+  }
+
+  validation {
+    condition     = var.organization_contract == null || alltrue([for k in ["organization_id", "organization_root_id", "management_account_id"] : try(length(trimspace(var.organization_contract[k])) > 0, false)])
+    error_message = "organization_contract must set organization_id, organization_root_id, management_account_id for this root."
   }
 }
 

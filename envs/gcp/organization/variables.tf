@@ -167,13 +167,16 @@ variable "billing_admin_groups" {
 # Stage contract override (FAST-style): when set (here or as gcp.contracts.bootstrap
 # in config/landing-zone.yaml) the gcp-bootstrap remote-state read is skipped.
 variable "bootstrap_contract" {
-  description = "gcp-bootstrap stage contract: admin_project_id, admin_project_number and terraform_admin_email, plus the optional automation identities (workload_service_accounts, stage_service_accounts, delegated_workload/network_folder_roles; omitted = no grants) and guardrail_owner_mode. Null = gcp.contracts.bootstrap from config/landing-zone.yaml, else read from the gcp-bootstrap workspace's remote state."
+  description = "gcp-bootstrap stage contract, the same type in every gcp root: admin_project_id, admin_project_number, terraform_admin_email, suffix, plus the optional automation identities (workload_service_accounts, stage_service_accounts, workload/network_folder_roles, delegated_workload/network_folder_roles; omitted = no grants) and guardrail_owner_mode. This root needs: admin_project_id, admin_project_number, terraform_admin_email. Null = gcp.contracts.bootstrap from config/landing-zone.yaml, else the contract output of the gcp-bootstrap workspace."
   type = object({
     admin_project_id                = string
-    admin_project_number            = string
-    terraform_admin_email           = string
+    admin_project_number            = optional(string)
+    terraform_admin_email           = optional(string)
+    suffix                          = optional(string)
     workload_service_accounts       = optional(map(object({ plan = string, apply = string })), {})
     stage_service_accounts          = optional(map(object({ plan = string, apply = string })), {})
+    workload_folder_roles           = optional(object({ plan = list(string), apply = list(string) }), { plan = [], apply = [] })
+    network_folder_roles            = optional(object({ plan = list(string), apply = list(string) }), { plan = [], apply = [] })
     delegated_workload_folder_roles = optional(list(string), [])
     delegated_network_folder_roles  = optional(list(string), [])
     guardrail_owner_mode            = optional(string, "separate")
@@ -183,6 +186,11 @@ variable "bootstrap_contract" {
   validation {
     condition     = var.bootstrap_contract == null || can(regex("^[0-9]+$", var.bootstrap_contract.admin_project_number))
     error_message = "bootstrap_contract.admin_project_number must be numeric."
+  }
+
+  validation {
+    condition     = var.bootstrap_contract == null || alltrue([for k in ["terraform_admin_email"] : try(length(trimspace(var.bootstrap_contract[k])) > 0, false)])
+    error_message = "bootstrap_contract must set terraform_admin_email for this root."
   }
 }
 

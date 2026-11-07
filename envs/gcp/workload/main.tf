@@ -5,7 +5,7 @@
 # otherwise), so this root can plan without the upstream workspaces existing:
 #   - organization → org_id, billing_account, admin_project_number
 #   - projects     → environment_config[<env>] (host project, folder, region, ...)
-#   - network_hub  → hub_network {vpc_self_link, dns_domain}. OPTIONAL: with
+#   - network_hub  → contract.hub_network {vpc_self_link, dns_domain}. OPTIONAL: with
 #     enable_network_hub = false there is no hub peering and no DNS peering zone
 #     (local.hub_vpc_peerings / local.hub_dns_zones are empty).
 # Consumers (incl. the host module block) must use the locals below, never
@@ -58,15 +58,23 @@ data "terraform_remote_state" "network_hub" {
 }
 
 locals {
-  org_id               = local.read_organization ? data.terraform_remote_state.organization[0].outputs.org_id : local.organization_contract.org_id
-  billing_account      = local.read_organization ? data.terraform_remote_state.organization[0].outputs.billing_account : local.organization_contract.billing_account
-  admin_project_number = local.read_organization ? data.terraform_remote_state.organization[0].outputs.admin_project_number : local.organization_contract.admin_project_number
+  # Each upstream is read through its single `contract` output. A producer
+  # state from before that output existed (N-1, not yet re-applied) exposes the
+  # same keys as individual outputs, so the read falls back to them; that
+  # fallback goes at v1.0 with the individual outputs (UPGRADING.md).
+  org_remote         = local.read_organization ? try(data.terraform_remote_state.organization[0].outputs.contract, data.terraform_remote_state.organization[0].outputs) : null
+  projects_remote    = local.read_projects ? try(data.terraform_remote_state.projects[0].outputs.contract, data.terraform_remote_state.projects[0].outputs) : null
+  network_hub_remote = local.read_network_hub ? try(data.terraform_remote_state.network_hub[0].outputs.contract, data.terraform_remote_state.network_hub[0].outputs) : null
+
+  org_id               = local.read_organization ? local.org_remote.org_id : local.organization_contract.org_id
+  billing_account      = local.read_organization ? local.org_remote.billing_account : local.organization_contract.billing_account
+  admin_project_number = local.read_organization ? local.org_remote.admin_project_number : local.organization_contract.admin_project_number
 
   # Hub network contract, or null when the network hub is not part of this
   # landing zone (enable_network_hub = false).
   hub_network = (
     !var.enable_network_hub ? null :
-    local.read_network_hub ? data.terraform_remote_state.network_hub[0].outputs.hub_network : local.network_hub_contract
+    local.read_network_hub ? local.network_hub_remote.hub_network : local.network_hub_contract
   )
 
   # Hub-dependent host inputs: empty maps in standalone mode (no hub peering, no
@@ -97,7 +105,7 @@ locals {
 locals {
   env_config = (
     local.read_projects
-    ? data.terraform_remote_state.projects[0].outputs.environment_config[var.environment]
+    ? local.projects_remote.environment_config[var.environment]
     : local.projects_contract.environment_config[var.environment]
   )
 
@@ -274,7 +282,7 @@ module "budget" {
   # budget topic is CMEK-encrypted via the CMEK key created in stages/organization.
   # App-environment budget topics use Google-managed encryption. To change this,
   # pass the CMEK key from remote state (or add it to organization_contract):
-  #   kms_key_name = data.terraform_remote_state.organization[0].outputs.cmek_key_names["budget-alerts"]
+  #   kms_key_name = local.org_remote.cmek_key_names["budget-alerts"]
   # Ensure the Pub/Sub service agent has roles/cloudkms.cryptoKeyEncrypterDecrypter first.
 
   labels = local.labels

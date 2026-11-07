@@ -388,6 +388,11 @@ jobs:
       - name: Consistency guards (canonical region regex + provider pins)
         run: ./scripts/check-consistency.sh
 
+      # One non-sensitive `contract` output per producer root; consumers read
+      # only .outputs.contract; contract variable types identical per upstream.
+      - name: Cross-root contracts
+        run: ./scripts/check-contracts.sh
+
       - name: Scaffold fixtures match the scaffolder output
         run: make scaffold-fixtures-check
 

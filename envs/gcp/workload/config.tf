@@ -78,11 +78,16 @@ locals {
     # gcp.contracts.<layer>: stage contract overrides (same shape as the
     # <layer>_contract variables). Present => that remote-state read is skipped.
     organization_contract = try(local.lz.gcp.contracts.organization, null) == null ? null : {
-      org_id               = tostring(local.lz.gcp.contracts.organization.org_id)
-      billing_account      = tostring(local.lz.gcp.contracts.organization.billing_account)
-      admin_project_number = tostring(local.lz.gcp.contracts.organization.admin_project_number)
+      org_id                   = tostring(local.lz.gcp.contracts.organization.org_id)
+      billing_account          = tostring(local.lz.gcp.contracts.organization.billing_account)
+      admin_project_number     = tostring(local.lz.gcp.contracts.organization.admin_project_number)
+      folders                  = { for k, f in try({ for k, f in local.lz.gcp.contracts.organization.folders : k => f }, {}) : k => { id = tostring(f.id), name = tostring(try(f.name, f.id)), display_name = tostring(try(f.display_name, k)) } }
+      tag_values               = { for k, v in try(local.lz.gcp.contracts.organization.tag_values, {}) : k => tostring(v) }
+      scoped_access_policy_ids = { for k, v in try(local.lz.gcp.contracts.organization.scoped_access_policy_ids, {}) : k => tostring(v) }
     }
     projects_contract = try(local.lz.gcp.contracts.projects, null) == null ? null : {
+      project_ids     = { for k, v in try(local.lz.gcp.contracts.projects.project_ids, {}) : k => tostring(v) }
+      project_numbers = { for k, v in try(local.lz.gcp.contracts.projects.project_numbers, {}) : k => tostring(v) }
       environment_config = {
         for k, e in try({ for k, e in local.lz.gcp.contracts.projects.environment_config : k => e }, {}) : k => {
           folder_id               = tostring(e.folder_id)

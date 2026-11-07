@@ -21,10 +21,12 @@ override_data {
   target = data.terraform_remote_state.organization
   values = {
     outputs = {
-      org_id               = "123456789012"
-      billing_account      = "billingAccounts/000000-111111-222222"
-      admin_project_number = "111111111111"
-      cmek_key_names       = {}
+      contract = {
+        org_id               = "123456789012"
+        billing_account      = "billingAccounts/000000-111111-222222"
+        admin_project_number = "111111111111"
+        cmek_key_names       = {}
+      }
     }
   }
 }
@@ -33,16 +35,18 @@ override_data {
   target = data.terraform_remote_state.projects
   values = {
     outputs = {
-      environment_config = {
-        dev = {
-          folder_id           = "folders/111"
-          folder_name         = "Development"
-          host_project_id     = "acme-dev-host-abcd"
-          host_project_number = "222222222222"
-          region              = "europe-west1"
-          cidr_block          = "10.10.0.0/16"
-          labels              = {}
-          tag_value_ids       = { environment = "tagValues/1" }
+      contract = {
+        environment_config = {
+          dev = {
+            folder_id           = "folders/111"
+            folder_name         = "Development"
+            host_project_id     = "acme-dev-host-abcd"
+            host_project_number = "222222222222"
+            region              = "europe-west1"
+            cidr_block          = "10.10.0.0/16"
+            labels              = {}
+            tag_value_ids       = { environment = "tagValues/1" }
+          }
         }
       }
     }
@@ -53,11 +57,13 @@ override_data {
   target = data.terraform_remote_state.network_hub
   values = {
     outputs = {
-      hub_network = {
-        vpc_self_link = "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc"
-        vpc_name      = "hub-vpc"
-        dns_zone_name = "hub-dns"
-        dns_domain    = "hub.internal."
+      contract = {
+        hub_network = {
+          vpc_self_link = "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc"
+          vpc_name      = "hub-vpc"
+          dns_zone_name = "hub-dns"
+          dns_domain    = "hub.internal."
+        }
       }
     }
   }
@@ -134,16 +140,18 @@ run "prod_without_enforced_perimeter_warns" {
     target = data.terraform_remote_state.projects
     values = {
       outputs = {
-        environment_config = {
-          prod = {
-            folder_id           = "folders/333"
-            folder_name         = "Production"
-            host_project_id     = "acme-prod-host-abcd"
-            host_project_number = "333333333333"
-            region              = "europe-west1"
-            cidr_block          = "10.30.0.0/16"
-            labels              = {}
-            tag_value_ids       = { environment = "tagValues/3" }
+        contract = {
+          environment_config = {
+            prod = {
+              folder_id           = "folders/333"
+              folder_name         = "Production"
+              host_project_id     = "acme-prod-host-abcd"
+              host_project_number = "333333333333"
+              region              = "europe-west1"
+              cidr_block          = "10.30.0.0/16"
+              labels              = {}
+              tag_value_ids       = { environment = "tagValues/3" }
+            }
           }
         }
       }

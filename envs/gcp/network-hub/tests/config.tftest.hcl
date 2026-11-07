@@ -13,9 +13,11 @@ override_data {
   target = data.terraform_remote_state.gcp_organization
   values = {
     outputs = {
-      org_id = "123456789012"
-      folders = {
-        dev = { id = "folders/111", display_name = "Development" }
+      contract = {
+        org_id = "123456789012"
+        folders = {
+          dev = { id = "folders/111", display_name = "Development" }
+        }
       }
     }
   }
@@ -25,15 +27,17 @@ override_data {
   target = data.terraform_remote_state.gcp_projects
   values = {
     outputs = {
-      project_ids = {
-        "shared-hub" = "acme-hub-abcd"
-        "shared-dns" = "acme-dns-abcd"
-        "dev-host"   = "acme-dev-host-abcd"
-      }
-      project_numbers = {
-        "shared-hub" = "111111111111"
-        "shared-dns" = "222222222222"
-        "dev-host"   = "333333333333"
+      contract = {
+        project_ids = {
+          "shared-hub" = "acme-hub-abcd"
+          "shared-dns" = "acme-dns-abcd"
+          "dev-host"   = "acme-dev-host-abcd"
+        }
+        project_numbers = {
+          "shared-hub" = "111111111111"
+          "shared-dns" = "222222222222"
+          "dev-host"   = "333333333333"
+        }
       }
     }
   }

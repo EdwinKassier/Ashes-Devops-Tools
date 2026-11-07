@@ -51,12 +51,28 @@ locals {
     # gcp.contracts.<layer>: stage contract overrides (same shape as the
     # <layer>_contract variables). Present => that remote-state read is skipped.
     organization_contract = try(local.lz.gcp.contracts.organization, null) == null ? null : {
-      org_id  = tostring(local.lz.gcp.contracts.organization.org_id)
-      folders = { for k, f in try({ for k, f in local.lz.gcp.contracts.organization.folders : k => f }, {}) : k => { id = tostring(f.id), name = tostring(try(f.name, f.id)), display_name = tostring(try(f.display_name, k)) } }
+      org_id                   = tostring(local.lz.gcp.contracts.organization.org_id)
+      billing_account          = try(tostring(local.lz.gcp.contracts.organization.billing_account), null)
+      admin_project_number     = try(tostring(local.lz.gcp.contracts.organization.admin_project_number), null)
+      tag_values               = { for k, v in try(local.lz.gcp.contracts.organization.tag_values, {}) : k => tostring(v) }
+      scoped_access_policy_ids = { for k, v in try(local.lz.gcp.contracts.organization.scoped_access_policy_ids, {}) : k => tostring(v) }
+      folders                  = { for k, f in try({ for k, f in local.lz.gcp.contracts.organization.folders : k => f }, {}) : k => { id = tostring(f.id), name = tostring(try(f.name, f.id)), display_name = tostring(try(f.display_name, k)) } }
     }
     projects_contract = try(local.lz.gcp.contracts.projects.project_ids, null) == null ? null : {
       project_ids     = { for k, v in local.lz.gcp.contracts.projects.project_ids : k => tostring(v) }
       project_numbers = { for k, v in try(local.lz.gcp.contracts.projects.project_numbers, {}) : k => tostring(v) }
+      environment_config = {
+        for k, e in try({ for k, e in local.lz.gcp.contracts.projects.environment_config : k => e }, {}) : k => {
+          folder_id               = tostring(e.folder_id)
+          host_project_id         = tostring(e.host_project_id)
+          host_project_number     = tostring(e.host_project_number)
+          region                  = tostring(e.region)
+          cidr_block              = tostring(e.cidr_block)
+          labels                  = try({ for lk, lv in e.labels : lk => tostring(lv) }, {})
+          is_production           = try(tobool(e.is_production), null)
+          vpc_sc_access_policy_id = try(tostring(e.vpc_sc_access_policy_id), null)
+        }
+      }
     }
   }
 

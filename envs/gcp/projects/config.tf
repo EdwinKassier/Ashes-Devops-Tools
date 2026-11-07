@@ -50,8 +50,13 @@ locals {
     # gcp.contracts.<layer>: stage contract overrides (same shape as the
     # <layer>_contract variables). Present => that remote-state read is skipped.
     bootstrap_contract = try(local.lz.gcp.contracts.bootstrap, null) == null ? null : {
-      admin_project_id = tostring(local.lz.gcp.contracts.bootstrap.admin_project_id)
-      suffix           = tostring(local.lz.gcp.contracts.bootstrap.suffix)
+      admin_project_id                = tostring(local.lz.gcp.contracts.bootstrap.admin_project_id)
+      suffix                          = tostring(local.lz.gcp.contracts.bootstrap.suffix)
+      admin_project_number            = try(tostring(local.lz.gcp.contracts.bootstrap.admin_project_number), null)
+      terraform_admin_email           = try(tostring(local.lz.gcp.contracts.bootstrap.terraform_admin_email), null)
+      delegated_workload_folder_roles = [for r in try(local.lz.gcp.contracts.bootstrap.delegated_workload_folder_roles, []) : tostring(r)]
+      delegated_network_folder_roles  = [for r in try(local.lz.gcp.contracts.bootstrap.delegated_network_folder_roles, []) : tostring(r)]
+      guardrail_owner_mode            = tostring(try(local.lz.gcp.contracts.bootstrap.guardrail_owner_mode, "separate"))
       workload_service_accounts = {
         for k, sa in try({ for k, sa in local.lz.gcp.contracts.bootstrap.workload_service_accounts : k => sa }, {}) : k => { plan = tostring(sa.plan), apply = tostring(sa.apply) }
       }
@@ -68,7 +73,9 @@ locals {
       }
     }
     organization_contract = try(local.lz.gcp.contracts.organization, null) == null ? null : {
+      org_id                   = try(tostring(local.lz.gcp.contracts.organization.org_id), null)
       billing_account          = tostring(local.lz.gcp.contracts.organization.billing_account)
+      admin_project_number     = try(tostring(local.lz.gcp.contracts.organization.admin_project_number), null)
       folders                  = { for k, f in try({ for k, f in local.lz.gcp.contracts.organization.folders : k => f }, {}) : k => { id = tostring(f.id), name = tostring(try(f.name, f.id)), display_name = tostring(try(f.display_name, k)) } }
       tag_values               = { for k, v in try(local.lz.gcp.contracts.organization.tag_values, {}) : k => tostring(v) }
       scoped_access_policy_ids = { for k, v in try(local.lz.gcp.contracts.organization.scoped_access_policy_ids, {}) : k => tostring(v) }

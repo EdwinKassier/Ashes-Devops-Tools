@@ -20,19 +20,21 @@ override_data {
   target = data.terraform_remote_state.aws_organization
   values = {
     outputs = {
-      organization_id       = "o-abcdefghij"
-      organization_root_id  = "r-abcd"
-      management_account_id = "111111111111"
-      account_ids = {
-        security_tooling = "222222222222"
-        log_archive      = "333333333333"
-        shared_services  = "444444444444"
-        forensics        = "555555555555"
-      }
-      account_role_arns = {
-        security_tooling = "arn:aws:iam::222222222222:role/cross-account"
-        log_archive      = "arn:aws:iam::333333333333:role/cross-account"
-        forensics        = "arn:aws:iam::555555555555:role/cross-account"
+      contract = {
+        organization_id       = "o-abcdefghij"
+        organization_root_id  = "r-abcd"
+        management_account_id = "111111111111"
+        account_ids = {
+          security_tooling = "222222222222"
+          log_archive      = "333333333333"
+          shared_services  = "444444444444"
+          forensics        = "555555555555"
+        }
+        account_role_arns = {
+          security_tooling = "arn:aws:iam::222222222222:role/cross-account"
+          log_archive      = "arn:aws:iam::333333333333:role/cross-account"
+          forensics        = "arn:aws:iam::555555555555:role/cross-account"
+        }
       }
     }
   }

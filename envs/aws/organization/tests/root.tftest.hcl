@@ -147,6 +147,23 @@ run "output_contract_is_stable" {
     condition     = contains(output.tfc_workspace_bindings["shared_services"], "aws-identity")
     error_message = "tfc_workspace_bindings must be re-exported."
   }
+
+  # Downstream roots and tfc-admin read ONLY output.contract; it must carry
+  # every key the deprecated individual outputs carry, with the same values.
+  assert {
+    condition = (
+      output.contract.organization_id == output.organization_id &&
+      output.contract.organization_root_id == output.organization_root_id &&
+      output.contract.management_account_id == output.management_account_id &&
+      output.contract.account_ids == output.account_ids &&
+      output.contract.account_role_arns == output.account_role_arns &&
+      output.contract.ou_ids == output.ou_ids &&
+      output.contract.tfc_plan_role_arns == output.tfc_plan_role_arns &&
+      output.contract.tfc_apply_role_arns == output.tfc_apply_role_arns &&
+      output.contract.tfc_workspace_bindings == output.tfc_workspace_bindings
+    )
+    error_message = "output.contract must carry every cross-root key with the same value as its deprecated alias."
+  }
 }
 
 run "tfc_organization_required_when_baseline_enabled" {

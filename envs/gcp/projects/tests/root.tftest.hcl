@@ -30,8 +30,10 @@ override_data {
   target = data.terraform_remote_state.gcp_bootstrap
   values = {
     outputs = {
-      admin_project_id = "acme-admin-abcd"
-      suffix           = "abcd"
+      contract = {
+        admin_project_id = "acme-admin-abcd"
+        suffix           = "abcd"
+      }
     }
   }
 }
@@ -40,15 +42,17 @@ override_data {
   target = data.terraform_remote_state.gcp_organization
   values = {
     outputs = {
-      billing_account = "billingAccounts/000000-111111-222222"
-      folders = {
-        dev = { id = "folders/111", display_name = "Development" }
-      }
-      tag_values = {
-        "environment-dev" = "tagValues/123"
-      }
-      scoped_access_policy_ids = {
-        dev = "555555555"
+      contract = {
+        billing_account = "billingAccounts/000000-111111-222222"
+        folders = {
+          dev = { id = "folders/111", display_name = "Development" }
+        }
+        tag_values = {
+          "environment-dev" = "tagValues/123"
+        }
+        scoped_access_policy_ids = {
+          dev = "555555555"
+        }
       }
     }
   }
@@ -115,12 +119,14 @@ run "environment_config_tolerates_pre_scoped_org_state" {
     target = data.terraform_remote_state.gcp_organization
     values = {
       outputs = {
-        billing_account = "billingAccounts/000000-111111-222222"
-        folders = {
-          dev = { id = "folders/111", display_name = "Development" }
-        }
-        tag_values = {
-          "environment-dev" = "tagValues/123"
+        contract = {
+          billing_account = "billingAccounts/000000-111111-222222"
+          folders = {
+            dev = { id = "folders/111", display_name = "Development" }
+          }
+          tag_values = {
+            "environment-dev" = "tagValues/123"
+          }
         }
       }
     }

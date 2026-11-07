@@ -13,22 +13,24 @@ override_data {
   target = data.terraform_remote_state.gcp_bootstrap
   values = {
     outputs = {
-      admin_project_id          = "acme-admin-abcd"
-      admin_project_number      = "123456789012"
-      terraform_admin_email     = "terraform-admin@acme-admin-abcd.iam.gserviceaccount.com"
-      github_oidc_pool_id       = "github-pool"
-      github_oidc_provider_name = "projects/123456789012/locations/global/workloadIdentityPools/github-pool/providers/github"
-      tfc_oidc_pool_id          = null
-      tfc_oidc_provider_name    = null
-      workload_service_accounts = {
-        dev  = { plan = "acme-wl-dev-plan@acme-admin-abcd.iam.gserviceaccount.com", apply = "acme-wl-dev-apply@acme-admin-abcd.iam.gserviceaccount.com" }
-        prod = { plan = "acme-wl-prod-plan@acme-admin-abcd.iam.gserviceaccount.com", apply = "acme-wl-prod-apply@acme-admin-abcd.iam.gserviceaccount.com" }
+      contract = {
+        admin_project_id          = "acme-admin-abcd"
+        admin_project_number      = "123456789012"
+        terraform_admin_email     = "terraform-admin@acme-admin-abcd.iam.gserviceaccount.com"
+        github_oidc_pool_id       = "github-pool"
+        github_oidc_provider_name = "projects/123456789012/locations/global/workloadIdentityPools/github-pool/providers/github"
+        tfc_oidc_pool_id          = null
+        tfc_oidc_provider_name    = null
+        workload_service_accounts = {
+          dev  = { plan = "acme-wl-dev-plan@acme-admin-abcd.iam.gserviceaccount.com", apply = "acme-wl-dev-apply@acme-admin-abcd.iam.gserviceaccount.com" }
+          prod = { plan = "acme-wl-prod-plan@acme-admin-abcd.iam.gserviceaccount.com", apply = "acme-wl-prod-apply@acme-admin-abcd.iam.gserviceaccount.com" }
+        }
+        stage_service_accounts = {
+          projects = { plan = "acme-projects-plan@acme-admin-abcd.iam.gserviceaccount.com", apply = "acme-projects-apply@acme-admin-abcd.iam.gserviceaccount.com" }
+        }
+        delegated_workload_folder_roles = ["roles/compute.admin", "roles/run.admin"]
+        delegated_network_folder_roles  = ["roles/compute.networkAdmin"]
       }
-      stage_service_accounts = {
-        projects = { plan = "acme-projects-plan@acme-admin-abcd.iam.gserviceaccount.com", apply = "acme-projects-apply@acme-admin-abcd.iam.gserviceaccount.com" }
-      }
-      delegated_workload_folder_roles = ["roles/compute.admin", "roles/run.admin"]
-      delegated_network_folder_roles  = ["roles/compute.networkAdmin"]
     }
   }
 }

@@ -61,25 +61,46 @@ data "terraform_remote_state" "aws_organization" {
 
 ---
 
-## 4. Stable output keys are the cross-root contract
+## 4. One `contract` output is the cross-root API
 
-A root's `outputs.tf` re-exports its stage module's outputs. Those keys are the **API** that downstream roots consume via `terraform_remote_state`:
+A producer root publishes **one** output, `contract`: a non-sensitive object
+holding every key downstream roots may consume. Downstream roots read
+`terraform_remote_state` `.outputs.contract` and nothing else:
 
 ```hcl
 # aws-organization root
-output "account_role_arns" {
-  value = module.organization.account_role_arns  # map: account name -> assume-role ARN
+locals {
+  contract = {
+    account_ids       = module.aws_organization.account_ids
+    account_role_arns = module.aws_organization.account_role_arns # account key -> assume-role ARN
+  }
+}
+
+output "contract" {
+  value = local.contract
 }
 ```
 
 ```hcl
-# aws-security root reads it back
-assume_role {
-  role_arn = data.terraform_remote_state.aws_organization.outputs.account_role_arns["security_tooling"]
-}
+# a downstream aws root reads it back
+account_ids = data.terraform_remote_state.aws_organization[0].outputs.contract.account_ids
 ```
 
-Keep these keys **stable**. Renaming a key breaks every root that reads it. `outputs.tf` must never be empty in a live root.
+The rules:
+
+- **Never put a sensitive value in `contract`.** One sensitive attribute moves
+  the whole object into `tfe_outputs`' `sensitive_values`, out of tfc-admin's
+  reach.
+- **Keep the keys stable.** Renaming a key breaks every root that reads it.
+- **Use one override type per upstream.** Each consumer's `<layer>_contract`
+  variable has the same type as every other consumer of that upstream. A field
+  that only some consumers need is `optional`, and those consumers check it in
+  a validation.
+
+`scripts/check-contracts.sh` (`make consistency`) checks that every producer
+has a non-sensitive `contract`, that consumers read only `contract`, and that
+the override types match. Add a new producer root to its `PRODUCERS` list. `outputs.tf` must never be empty in a
+live root.
 
 ---
 
@@ -108,6 +129,6 @@ Within a root, `enable_*` variables toggle **features** (a Cloud Armor policy, a
 2. Set the workspace `name` (or `prefix`) in `backend.tf`.
 3. Fill in `versions.tf` (floored + capped provider pin) and `providers.tf` (one default provider, aliased-per-foundational-account if cross-account).
 4. Uncomment and wire the `terraform_remote_state` block(s) and the stage `module` call in `main.tf`.
-5. Re-export the stage contract in `outputs.tf` (stable keys).
+5. Re-export the stage contract in `outputs.tf` as one non-sensitive `contract` output (stable keys).
 6. Copy `terraform.tfvars.example` to `terraform.tfvars` and set `tfc_organization`.
 7. `terraform -chdir=envs/<cloud>/<layer> init -backend=false && terraform ... validate` — must be green with no cloud credentials.

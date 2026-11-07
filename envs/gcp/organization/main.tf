@@ -24,7 +24,11 @@ locals {
   # pools). gcp-bootstrap is applied first; this root reads it via remote state
   #.
   # Remote state when read (count = 1), else the supplied contract.
-  bootstrap = try(data.terraform_remote_state.gcp_bootstrap[0].outputs, local.bootstrap_contract)
+  # Each upstream is read through its single `contract` output. A producer
+  # state from before that output existed (N-1, not yet re-applied) exposes the
+  # same keys as individual outputs, so the read falls back to them; that
+  # fallback goes at v1.0 with the individual outputs (UPGRADING.md).
+  bootstrap = try(data.terraform_remote_state.gcp_bootstrap[0].outputs.contract, data.terraform_remote_state.gcp_bootstrap[0].outputs, local.bootstrap_contract)
 
   # Deny-policy ownership follows gcp-bootstrap unless set explicitly; an older
   # bootstrap state without the output means the legacy single-owner model.
