@@ -29,3 +29,8 @@ Handoff: tracked copy at docs/handoff/system-design-examples/ (commit 5216619); 
 Task 1: re-review Approved (all 6 addressed)
 Task 1: complete (commits 04f3b0f, 8d12b07)
 Task 1: minor (deferred): a heredoc inside a resource block containing literal `module "x" {` text is parsed as a module (contrived)
+Task 2: implemented 4aae741 (anchors: #interview-framework #estimation-cheat-sheet #aws-gcp-service-map #how-this-landing-zone-anchors-a-design #conventions #data-zones #vpc-tier-placement #how-to-read-a-walkthrough); review dispatched (opus)
+Ruling: primer anchor slugs are FROZEN (walkthroughs start now in parallel with the primer review; any primer fix must keep these slugs) — cost: none
+Ruling: GCP workload CMEK convention = new module "workload_cmek" (modules/gcp/governance/kms) in gcp-workload-<env>, key ring <prefix>-<env>-cmek, referenced as module.workload_cmek.key_ids["<component>"], with a gap note — repo has no workload CMEK output on GCP — cost if wrong: walkthroughs show a key the repo doesn't yet create (flagged as gap)
+Ruling: tags/labels follow code (AWS 6 keys, GCP 4) not the spec's "four keys" wording; GCP egress described honestly as per-env Cloud NAT, not hub-inspected — code is truth — cost: none
+Task 2: out-of-scope repo issues logged (not this plan): org cmek_key_names description says full IDs but returns short names; CLAUDE.md lists google ~> 7.0 (repo is 8.x); aws-landing-zone.md links a dead anchor in adding-a-cloud.md
