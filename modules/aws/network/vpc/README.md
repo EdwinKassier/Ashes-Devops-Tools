@@ -51,17 +51,17 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_default_security_group.this (modules/aws/network/vpc/main.tf#L118)
-- resource.aws_flow_log.this (modules/aws/network/vpc/main.tf#L125)
-- resource.aws_internet_gateway.this (modules/aws/network/vpc/main.tf#L176)
-- resource.aws_route.public_internet (modules/aws/network/vpc/main.tf#L184)
-- resource.aws_route.this (modules/aws/network/vpc/main.tf#L195)
-- resource.aws_route_table.this (modules/aws/network/vpc/main.tf#L156)
-- resource.aws_route_table_association.this (modules/aws/network/vpc/main.tf#L167)
-- resource.aws_subnet.this (modules/aws/network/vpc/main.tf#L98)
+- resource.aws_default_security_group.this (modules/aws/network/vpc/main.tf#L121)
+- resource.aws_flow_log.this (modules/aws/network/vpc/main.tf#L128)
+- resource.aws_internet_gateway.this (modules/aws/network/vpc/main.tf#L179)
+- resource.aws_route.public_internet (modules/aws/network/vpc/main.tf#L187)
+- resource.aws_route.this (modules/aws/network/vpc/main.tf#L198)
+- resource.aws_route_table.this (modules/aws/network/vpc/main.tf#L159)
+- resource.aws_route_table_association.this (modules/aws/network/vpc/main.tf#L170)
+- resource.aws_subnet.this (modules/aws/network/vpc/main.tf#L101)
 - resource.aws_vpc.this (modules/aws/network/vpc/main.tf#L81)
-- resource.aws_vpc_endpoint.gateway (modules/aws/network/vpc/main.tf#L135)
-- resource.aws_vpc_endpoint_route_table_association.gateway (modules/aws/network/vpc/main.tf#L145)
+- resource.aws_vpc_endpoint.gateway (modules/aws/network/vpc/main.tf#L138)
+- resource.aws_vpc_endpoint_route_table_association.gateway (modules/aws/network/vpc/main.tf#L148)
 
 
 ## Inputs
@@ -77,9 +77,10 @@ The following resources are created:
 | <a name="input_enable_ipv6"></a> [enable\_ipv6](#input\_enable\_ipv6) | Whether to assign an Amazon-provided /56 IPv6 CIDR block to the VPC. | `bool` | `false` | no |
 | <a name="input_gateway_endpoint_tiers"></a> [gateway\_endpoint\_tiers](#input\_gateway\_endpoint\_tiers) | Subnet tiers whose route tables the gateway endpoints are associated with. null (default) associates them with every non-public tier. | `list(string)` | `null` | no |
 | <a name="input_gateway_endpoints"></a> [gateway\_endpoints](#input\_gateway\_endpoints) | AWS services to create Gateway VPC endpoints for (e.g. s3, dynamodb). | `list(string)` | <pre>[<br/>  "s3",<br/>  "dynamodb"<br/>]</pre> | no |
-| <a name="input_ipam_pool_id"></a> [ipam\_pool\_id](#input\_ipam\_pool\_id) | IPAM pool ID the VPC allocates from. When set, the VPC requests exactly cidr\_block from the pool; empty string uses cidr\_block as a static CIDR. Adding a pool to an existing static VPC forces replacement. | `string` | `""` | no |
+| <a name="input_ipam_allocation"></a> [ipam\_allocation](#input\_ipam\_allocation) | How an IPAM VPC obtains its CIDR: netmask (default, legacy: pool + netmask\_length, no cidr\_block) or explicit\_cidr (pool + cidr\_block). Switching an existing VPC between the two forces replacement; use explicit\_cidr for new VPCs only. Ignored when ipam\_pool\_id is empty. | `string` | `"netmask"` | no |
+| <a name="input_ipam_pool_id"></a> [ipam\_pool\_id](#input\_ipam\_pool\_id) | IPAM pool ID the VPC allocates from. When set, the VPC allocates from the pool (see ipam\_allocation); empty string uses cidr\_block as a static CIDR. Adding a pool to an existing static VPC forces replacement. | `string` | `""` | no |
 | <a name="input_name"></a> [name](#input\_name) | Name applied to the VPC and used as the prefix for subnet Name tags. | `string` | `"landing-zone"` | no |
-| <a name="input_netmask_length"></a> [netmask\_length](#input\_netmask\_length) | Retained for compatibility and ignored: the VPC requests the explicit cidr\_block from the IPAM pool, so no netmask length is sent. | `number` | `16` | no |
+| <a name="input_netmask_length"></a> [netmask\_length](#input\_netmask\_length) | Netmask length requested from the IPAM pool when ipam\_pool\_id is set and ipam\_allocation = netmask. Ignored for static and explicit\_cidr VPCs. Changing it on an existing VPC forces replacement. | `number` | `16` | no |
 | <a name="input_routes"></a> [routes](#input\_routes) | Static routes keyed by subnet tier; each route is added to EVERY AZ route table of that tier. Set exactly one target per route (e.g. transit\_gateway\_id for spoke default routing to the hub). Per-AZ targets (such as per-AZ NAT gateways) should instead be added by the caller against route\_table\_ids\_by\_tier. | <pre>map(list(object({<br/>    destination_cidr_block    = string<br/>    transit_gateway_id        = optional(string)<br/>    nat_gateway_id            = optional(string)<br/>    gateway_id                = optional(string)<br/>    vpc_endpoint_id           = optional(string)<br/>    network_interface_id      = optional(string)<br/>    vpc_peering_connection_id = optional(string)<br/>  })))</pre> | `{}` | no |
 | <a name="input_subnets"></a> [subnets](#input\_subnets) | Subnet tiers, keyed by tier name. newbits/number\_offset drive cidrsubnet(cidr\_block, newbits, number\_offset + az\_index); public toggles map\_public\_ip\_on\_launch. | <pre>map(object({<br/>    newbits       = number<br/>    number_offset = number<br/>    public        = optional(bool, false)<br/>  }))</pre> | <pre>{<br/>  "isolated": {<br/>    "newbits": 8,<br/>    "number_offset": 16<br/>  },<br/>  "private": {<br/>    "newbits": 8,<br/>    "number_offset": 8<br/>  },<br/>  "public": {<br/>    "newbits": 8,<br/>    "number_offset": 0,<br/>    "public": true<br/>  }<br/>}</pre> | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged under the per-resource Name/Tier tags). Org-wide tags (CostCenter, Environment, Owner, ...) normally come from the provider default\_tags; use this for module-specific additions. | `map(string)` | `{}` | no |

@@ -152,6 +152,7 @@ run "ipam_mode_passes_pool_and_explicit_cidr" {
   variables {
     flow_log_destination_arn = "arn:aws:s3:::example-log-archive-bucket"
     ipam_pool_id             = "ipam-pool-0123456789abcdef0"
+    ipam_allocation          = "explicit_cidr"
     cidr_block               = "10.20.0.0/16"
   }
 
@@ -177,5 +178,20 @@ run "static_mode_unchanged" {
   assert {
     condition     = aws_vpc.this.ipv4_ipam_pool_id == null && aws_vpc.this.cidr_block == "10.20.0.0/16" && aws_vpc.this.ipv4_netmask_length == null
     error_message = "static mode must set cidr_block only"
+  }
+}
+
+run "existing_ipam_vpc_keeps_netmask_shape" {
+  command = plan
+
+  variables {
+    flow_log_destination_arn = "arn:aws:s3:::example-log-archive-bucket"
+    ipam_pool_id             = "ipam-pool-0123456789abcdef0"
+    cidr_block               = "10.20.0.0/16"
+  }
+
+  assert {
+    condition     = aws_vpc.this.ipv4_ipam_pool_id == "ipam-pool-0123456789abcdef0" && aws_vpc.this.ipv4_netmask_length == 16
+    error_message = "default IPAM allocation must keep the legacy pool + netmask_length shape (cidr_block stays unset; verified against the real provider)"
   }
 }

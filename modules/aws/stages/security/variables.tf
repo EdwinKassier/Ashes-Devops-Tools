@@ -163,6 +163,9 @@ variable "aws" {
     # Master switch for service-quota management (opt-in). When false, no quota requests or usage
     # alarms are created.
     enable_service_quotas = optional(bool, false)
+    # Create the ORGANIZATION_INTERNAL_ACCESS analyzer (alongside the external one) in the home region
+    # and every enabled region. External analyzers are always created in every enabled region.
+    enable_internal_access_analyzer = optional(bool, true)
     # Subscribers attached to the security-notifications SNS topic, keyed by an arbitrary name. At
     # least one is required (findings would otherwise fire into a void). Defaults to a placeholder
     # SecOps email the root is expected to override.

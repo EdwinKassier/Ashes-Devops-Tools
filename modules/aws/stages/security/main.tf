@@ -301,6 +301,12 @@ module "access_analyzer" {
   providers = {
     aws = aws.security_tooling
   }
+
+  # Home region (the provider's) plus every enabled region, via the resource-level
+  # region argument.
+  home_region                     = var.aws_region
+  regions                         = distinct(concat([var.aws_region], var.aws.aws_enabled_regions))
+  enable_internal_access_analyzer = var.aws.enable_internal_access_analyzer
 }
 
 # ---------------------------------------------------------------------------

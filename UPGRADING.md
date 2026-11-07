@@ -102,6 +102,36 @@ variable to its own workspaces (or `REAL_CLOUD_CHECKS_OPT_OUT=true`).
 
 ### AWS
 
+#### Suspended deny-all and Sandbox guard SCPs (aws-organization)
+
+Two SCPs are created and attached by default, but only when the `Suspended` /
+`Sandbox` OU exists. `scp-suspended-deny-all` denies every action in the
+Suspended OU except break-glass and `stacksets-exec-*`. `scp-sandbox-guard`
+limits Sandbox to the `sandbox_allowed_instance_types` families (default
+`t3`/`t4g` micro to large), and denies `directconnect:*`, VPC peering and
+`organizations:*`. SCPs never touch the management account. **To opt out,** add
+`scp-suspended-deny-all` / `scp-sandbox-guard` to `disabled_org_policies`
+(its default is `["backup-policy"]`, so repeat that entry); their attachments
+drop with them. Check that nothing you run lives in Sandbox/Suspended first.
+
+#### IPAM explicit-CIDR allocation is opt-in (aws-network, aws-workload)
+
+The vpc module keeps the legacy IPAM shape (`ipv4_ipam_pool_id` +
+`ipv4_netmask_length`) by default, so existing VPCs plan no change. New
+`ipam_allocation = "explicit_cidr"` requests the exact CIDR from the pool;
+switching an existing VPC replaces it. Hub: `ipam_new_vpcs` (default `[]`) lists
+VPCs to create from the pool and `ipam_mode_for_new_vpcs_only` (default `true`)
+guards the rest. Workload: `ipam_explicit_cidr` (default `false`), for NEW
+workloads only. No manual step on upgrade.
+
+#### Access Analyzer in every enabled region (aws-security)
+
+The external analyzer now exists in every `aws.enabled_regions` entry (the home
+region keeps its address), and `enable_internal_access_analyzer` (default `true`)
+adds the `ORGANIZATION_INTERNAL_ACCESS` analyzer in each region. These are NEW
+resources on the upgrade apply, in the security-tooling account. Set
+`aws_overrides.enable_internal_access_analyzer = false` to skip the internal ones.
+
 #### AWS Config recorders move to an aws-organization StackSet
 
 The workload roots no longer manage a Config recorder. `aws-organization`

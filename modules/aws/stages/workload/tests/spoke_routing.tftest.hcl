@@ -85,3 +85,30 @@ run "unknown_route_tier_rejected" {
 
   expect_failures = [var.tgw_route_tiers]
 }
+
+run "ipam_default_plans_legacy_netmask_shape" {
+  command = plan
+
+  variables {
+    ipam_pool_id = "ipam-pool-0123456789abcdef0"
+  }
+
+  assert {
+    condition     = local.ipam_allocation == "netmask"
+    error_message = "the default must keep the legacy pool + netmask_length shape (explicit CIDR would replace existing VPCs)"
+  }
+}
+
+run "ipam_explicit_cidr_is_opt_in" {
+  command = plan
+
+  variables {
+    ipam_pool_id       = "ipam-pool-0123456789abcdef0"
+    ipam_explicit_cidr = true
+  }
+
+  assert {
+    condition     = local.ipam_allocation == "explicit_cidr"
+    error_message = "ipam_explicit_cidr must select the explicit-CIDR allocation"
+  }
+}

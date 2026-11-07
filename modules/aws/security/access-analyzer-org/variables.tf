@@ -50,6 +50,11 @@ variable "regions" {
   }
 
   validation {
+    condition     = length(var.regions) == 0 || contains(var.regions, var.home_region)
+    error_message = "home_region must be one of regions when regions is non-empty."
+  }
+
+  validation {
     condition     = alltrue([for r in var.regions : can(regex("^[a-z]{2}(-[a-z]+)+-[0-9]{1,2}$", r))])
     error_message = "regions entries must be valid AWS region ids (e.g. eu-west-2)."
   }

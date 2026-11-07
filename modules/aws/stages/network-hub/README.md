@@ -102,13 +102,13 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_eip.nat (modules/aws/stages/network-hub/main.tf#L176)
-- resource.aws_nat_gateway.this (modules/aws/stages/network-hub/main.tf#L184)
-- resource.aws_route.egress_default (modules/aws/stages/network-hub/main.tf#L199)
-- resource.aws_route.egress_tgw_default (modules/aws/stages/network-hub/main.tf#L209)
-- resource.aws_route.hub_to_tgw (modules/aws/stages/network-hub/main.tf#L231)
-- resource.aws_route.inspection_tgw_to_firewall (modules/aws/stages/network-hub/main.tf#L223)
-- resource.terraform_data.production_egress_enforced (modules/aws/stages/network-hub/main.tf#L339)
+- resource.aws_eip.nat (modules/aws/stages/network-hub/main.tf#L178)
+- resource.aws_nat_gateway.this (modules/aws/stages/network-hub/main.tf#L186)
+- resource.aws_route.egress_default (modules/aws/stages/network-hub/main.tf#L201)
+- resource.aws_route.egress_tgw_default (modules/aws/stages/network-hub/main.tf#L211)
+- resource.aws_route.hub_to_tgw (modules/aws/stages/network-hub/main.tf#L233)
+- resource.aws_route.inspection_tgw_to_firewall (modules/aws/stages/network-hub/main.tf#L225)
+- resource.terraform_data.production_egress_enforced (modules/aws/stages/network-hub/main.tf#L341)
 
 
 ## Inputs

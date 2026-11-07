@@ -96,6 +96,7 @@ module "inspection_vpc" {
   name                     = "inspection"
   cidr_block               = var.inspection_cidr
   ipam_pool_id             = local.hub_vpc_ipam_pool_ids["inspection"]
+  ipam_allocation          = "explicit_cidr"
   region                   = var.aws_region
   availability_zones       = var.availability_zones
   az_count                 = var.az_count
@@ -115,6 +116,7 @@ module "egress_vpc" {
   name                     = "egress"
   cidr_block               = var.egress_cidr
   ipam_pool_id             = local.hub_vpc_ipam_pool_ids["egress"]
+  ipam_allocation          = "explicit_cidr"
   region                   = var.aws_region
   availability_zones       = var.availability_zones
   az_count                 = var.az_count

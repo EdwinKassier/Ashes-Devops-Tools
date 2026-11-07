@@ -73,6 +73,13 @@ variable "ipam_pool_id" {
   default     = ""
 }
 
+variable "ipam_explicit_cidr" {
+  description = "When true and ipam_pool_id is set, the spoke VPC requests vpc_cidr explicitly from the pool (pool + cidr_block). Default false keeps the legacy pool + netmask_length shape; switching an existing VPC replaces it, so enable for NEW workloads only."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "availability_zones" {
   description = "Availability zones to spread each subnet tier across. Only the first az_count entries are used."
   type        = list(string)

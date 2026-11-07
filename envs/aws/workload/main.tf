@@ -117,6 +117,8 @@ module "aws_workload" {
   tgw_id       = local.tgw_id
   ipam_pool_id = local.ipam_pool_id
 
+  ipam_explicit_cidr = var.ipam_explicit_cidr
+
   # Flow logs + Config snapshots + Session Manager logs all land in the central
   # log-archive bucket (cross-root naming contract).
   flow_log_destination_arn          = "arn:${local.partition}:s3:::${local.log_archive_bucket_name}"

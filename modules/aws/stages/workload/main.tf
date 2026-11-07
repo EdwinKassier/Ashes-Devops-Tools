@@ -98,6 +98,12 @@ locals {
   }
 }
 
+locals {
+  # Legacy shape (pool + netmask_length) unless the caller opts a NEW workload
+  # into the explicit-CIDR allocation; switching an existing VPC replaces it.
+  ipam_allocation = var.ipam_explicit_cidr ? "explicit_cidr" : "netmask"
+}
+
 module "vpc" {
   source = "../../network/vpc"
 
@@ -110,6 +116,7 @@ module "vpc" {
   create_internet_gateway  = local.create_internet_gateway
   flow_log_destination_arn = var.flow_log_destination_arn
   ipam_pool_id             = var.ipam_pool_id
+  ipam_allocation          = local.ipam_allocation
   gateway_endpoints        = ["s3", "dynamodb"]
   routes                   = local.spoke_routes
   tags                     = var.tags

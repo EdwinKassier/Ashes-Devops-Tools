@@ -40,3 +40,14 @@ run "invalid_region_rejected" {
 
   expect_failures = [var.regions]
 }
+
+run "home_region_must_be_in_regions" {
+  command = plan
+
+  variables {
+    home_region = "eu-west-2"
+    regions     = ["eu-west-1"]
+  }
+
+  expect_failures = [var.regions]
+}

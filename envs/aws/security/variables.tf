@@ -89,6 +89,7 @@ variable "aws_overrides" {
     guardduty_enable_ebs_malware_protection = optional(bool)
     enable_incident_response                = optional(bool)
     enable_service_quotas                   = optional(bool)
+    enable_internal_access_analyzer         = optional(bool)
     notification_subscribers = optional(map(object({
       protocol = string # one of: email, https, sms, sqs, lambda, etc.
       endpoint = string # e.g. an email address or HTTPS URL

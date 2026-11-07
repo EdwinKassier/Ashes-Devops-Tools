@@ -720,10 +720,7 @@ run "suspended_deny_all_exempts_stacksets_and_breakglass" {
   }
 
   assert {
-    condition = (
-      contains(jsondecode(aws_organizations_policy.policy["scp-suspended-deny-all"].content).Statement[0].Condition.ArnNotLike["aws:PrincipalArn"], "arn:aws:iam::*:role/stacksets-exec-*") &&
-      contains(jsondecode(aws_organizations_policy.policy["scp-suspended-deny-all"].content).Statement[0].Condition.ArnNotLike["aws:PrincipalArn"], "arn:aws:iam::*:role/break-glass")
-    )
+    condition     = toset(jsondecode(aws_organizations_policy.policy["scp-suspended-deny-all"].content).Statement[0].Condition.ArnNotLike["aws:PrincipalArn"]) == toset(["arn:aws:iam::*:role/break-glass", "arn:aws:iam::*:role/stacksets-exec-*"])
     error_message = "deny-all must exempt exactly break-glass and the StackSet execution role"
   }
 

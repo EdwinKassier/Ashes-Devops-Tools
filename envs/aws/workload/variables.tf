@@ -64,6 +64,13 @@ variable "network_contract" {
   }
 }
 
+variable "ipam_explicit_cidr" {
+  description = "Opt a NEW spoke VPC into requesting vpc_cidr explicitly from the IPAM pool (pool + cidr_block). Default false keeps the legacy pool + netmask_length shape; enabling it on an existing VPC replaces it."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "enable_network_hub" {
   description = "Attach the spoke to the aws-network hub (shared TGW + IPAM pool, from network_contract or the aws-network remote state). False = standalone mode: no aws-network read, no TGW attachment or routes, the literal vpc_cidr, and NAT-less private tiers (no egress off the VPC)."
   type        = bool
