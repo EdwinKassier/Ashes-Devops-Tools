@@ -1,11 +1,10 @@
 # Adapter gateway over multiple backends
 
-A walkthrough of a gateway that puts one stable interface in front of several
-interchangeable backends: a primary, a backup, and auxiliary instances used
-only for some requests. The running example is a payment gateway over two
-payment service providers (PSPs) and a regional acquirer. The same pattern
-covers LLM providers and database replicas, and a table in the deep dives
-shows what changes for each. It follows the
+One stable interface in front of interchangeable backends: a primary, a
+backup, and auxiliary instances for some requests. The running example is a
+payment gateway over two payment service providers (PSPs) and a regional
+acquirer; a deep-dive table shows what changes for LLM providers and database
+replicas. It follows the
 [interview framework](00-primer.md#interview-framework). Numbers lean on the
 [estimation cheat sheet](00-primer.md#estimation-cheat-sheet), service names
 on the [AWS-GCP service map](00-primer.md#aws-gcp-service-map), and the build
@@ -39,8 +38,7 @@ operations, currencies, features and limits it supports. A **router** filters
 backends by the request's required capabilities, drops those whose **circuit
 breaker** is open, and picks one by policy: priority, weight or measured
 health. The backup always carries a small share of live traffic, so failover
-moves traffic to a path that already works rather than to one nobody has
-exercised. Failover follows the side effects. A call that never reached the
+lands on a path that already works. Failover follows the side effects. A call that never reached the
 backend can go elsewhere at once. A call whose outcome is **unknown** (a
 timeout after sending a charge) must be resolved with the same backend,
 through its idempotency key and a status lookup, before anything else
@@ -61,7 +59,7 @@ graph LR
 
 ## Clarify the requirements
 
-Questions to ask, with the assumptions this walkthrough uses.
+Questions to ask, with this walkthrough's assumptions (one region, multi-AZ).
 
 ### Functional
 
@@ -86,7 +84,6 @@ Questions to ask, with the assumptions this walkthrough uses.
 - **Latency.** The gateway adds at most 10 ms at p99; authorise has a 3 s
   end-to-end budget.
 - **Failover time.** Off a failing primary within 30 s, with no human.
-- **Region.** One region, multi-AZ.
 
 ## Back-of-envelope estimates
 
@@ -109,8 +106,8 @@ Little's law ([cheat sheet](00-primer.md#throughput-per-instance-and-per-partiti
 - **Healthy.** Authorise at p50 400 ms: 700/s × 0.4 s = **280 calls in
   flight**.
 - **Brownout.** The primary stops answering and every call waits for a 10 s
-  timeout: 700 × 10 = **7,000 in flight**, 25 times as many. Each in-flight
-  call holds a connection, memory and a slot of the instance's concurrency.
+  timeout: 700 × 10 = **7,000 in flight**, 25 times as many, each holding a
+  connection and a concurrency slot.
 - **With a 2.5 s per-attempt deadline and a breaker** that opens within
   seconds: 700 × 2.5 = 1,750 in flight briefly, then back near 280.
 
@@ -307,9 +304,8 @@ limits: { authorize_rps: 200 }
 no extra hop. Split an adapter out when it needs its own release cadence,
 language SDK, scaling or isolation; the port then becomes a gRPC contract.
 
-**Where it breaks.** Lowest-common-denominator ports. A feature only one
-backend has (incremental authorisation, say) becomes an optional capability in
-the manifest, not a bypass around the port.
+**Where it breaks.** Lowest-common-denominator ports: a single-backend
+feature becomes an optional capability, not a bypass.
 
 ### Routing and failover policy
 
@@ -349,15 +345,22 @@ each instance's memory.
   `RETRYABLE_NOT_SENT` and deadline overruns. Declines are not faults.
 - **Open** for 30 s, with jitter, then **half-open**: let 1 to 5 probe
   requests through. Close on success, reopen on failure.
-- **These numbers mirror** Google Cloud's outlier-detection defaults: 5
-  consecutive errors, 30 s base ejection, at most 50% of endpoints ejected
+- **Compare** Google Cloud's outlier-detection defaults: eject after 5
+  consecutive errors, for a 30 s base time, with at most 50% of endpoints
+  ejected at once (the 10 s window and 20-call minimum above are ours)
   ([Google Cloud API reference](https://docs.cloud.google.com/java/docs/reference/google-cloud-compute/latest/com.google.cloud.compute.v1.OutlierDetection),
   checked 2026-11). Borrow the "at most half" idea: if every breaker is open,
   the fault is probably ours (egress, DNS, credentials), so fail open to the
   primary and page someone.
-- **State stays local.** At ~70/s per instance each one decides within
-  seconds; a shared Redis would be one more dependency to fail on the bad day.
-  Only the manual override is shared, through the routing config.
+- **State stays local.** 700/s across 3 to 20 instances is 35 to 230 calls a
+  second each, so each instance decides on the primary within seconds; a
+  shared Redis would be one more dependency to fail on the bad day. The limit:
+  at 20 instances the 5% backup sees under 20 calls per 10 s per instance, so
+  only the consecutive-fault rule trips for it. The manual override is shared
+  through the routing config.
+
+**For LLM backends,** treat a 429 as a capacity signal for the token bucket
+and backoff, not a breaker fault, and set deadlines on time to first token.
 
 **Step 4: bulkheads.** A per-backend concurrency cap per instance and a token
 bucket at the contracted rate, so a slow PSP A fills only its own slots.
@@ -445,8 +448,8 @@ out per operation, not per system.
 
 ### Adding a backend without client changes
 
-Clients never change because they never named a backend. A new backend is a
-**gateway code change plus a configuration rollout**:
+Clients never named a backend, so a new one is a **gateway code change plus a
+configuration rollout**:
 
 1. **Write the adapter,** including the error map and `lookup`.
 2. **Pass the conformance suite,** run against the provider's sandbox:
@@ -466,8 +469,8 @@ Clients never change because they never named a backend. A new backend is a
 6. **Promote** it into the failover order only after it has carried real
    traffic.
 
-**Versioning the port.** Additive changes only, with `port_version` in each
-manifest; the router never sends a field to an adapter that predates it.
+**Versioning the port.** Additive changes, with `port_version` in each
+manifest.
 
 **Where it breaks.** Configuration becomes code: one typo in a weight moves
 all traffic. Validate every routing document against a JSON Schema (AppConfig
@@ -571,7 +574,8 @@ aws:
       - api.psp-a.example
       - api.psp-b.example
       - api.acquirer-latam.example
-      - appconfigdata.<region>.amazonaws.com # no interface endpoint by default
+      - appconfigdata.<region>.amazonaws.com # no interface endpoints for these
+      - secretsmanager.<region>.amazonaws.com # ECS secret injection
   workload_environments:
     prod:
       services:
@@ -620,11 +624,16 @@ Notes:
 
 - app-services injects only the writer endpoint (`DB_HOST`). Fine here; a
   replica-routing design needs the Aurora reader endpoint wired too (gap).
-- The network hub's interface endpoints default to `ec2`, `ssm`,
-  `ssmmessages`, `ec2messages`, `kms`, `logs` and `sts`, and the stage does
-  not expose that list (gap). So AppConfig and Secrets Manager traffic needs
-  the allowlist; whether your estate already has it is **verify before relying
-  on**.
+- `egress_domain_allowlist` is **org-wide**: when non-empty it drops all
+  other HTTP/TLS egress from every spoke. Append these entries to the existing
+  list; never replace it. The network hub's interface endpoints default to
+  `ec2`, `ssm`, `ssmmessages`, `ec2messages`, `kms`, `logs` and `sts`, and the
+  stage does not expose that list (gap), so AppConfig and Secrets Manager need
+  the allowlist (or `.amazonaws.com`, as the repo's production allowlist test
+  fixture uses).
+- The literal `encryption_key_name` creates no Terraform dependency on
+  `module.workload_cmek`, so the first apply can race the key and its grant:
+  apply the key first, or target it.
 - `net-spoke` exposes `nat.ip_allocate_option` but passes no reserved
   addresses to the NAT module's `nat_ips`, so GCP cannot meet a PSP's
   source-IP allowlist today (gap).
@@ -679,13 +688,15 @@ Notes:
 - Not shown: the alarm on the gateway's per-backend fault metric, and the
   monitor role, which carries `tfc-apply-boundary` like every role this root
   creates ([per-component identity](00-primer.md#per-component-identity)).
-- Retrieval of a configuration encrypted with a customer-managed key needs
-  `kms:Decrypt` on that key for the reading role, which the task policy above
-  grants. Whether AppConfig itself needs a key-policy statement beyond the
-  account-root delegation in `envs/aws/workload/kms.tf` is **verify before
-  relying on**.
-- Versions are created by the routing pipeline, not by Terraform, so a weight
-  change never needs an apply.
+- AppConfig calls KMS as the caller, and the key policy's account-root
+  statement in `envs/aws/workload/kms.tf` lets IAM grant access, so no extra
+  key-policy statement is needed
+  ([AWS docs](https://docs.aws.amazon.com/appconfig/latest/userguide/appconfig-security.html),
+  checked 2026-11). The reader needs `kms:Decrypt` (granted above); the
+  pipeline needs `kms:GenerateDataKey` for `CreateHostedConfigurationVersion`
+  and `kms:GenerateDataKey*` for `StartDeployment`.
+- The routing pipeline, not Terraform, creates versions: no apply per weight
+  change.
 
 ### GCP: CMEK and the routing parameter
 
@@ -700,9 +711,7 @@ module "workload_cmek" {
   location     = local.env_config.region
   labels       = local.labels
   keys = {
-    "pay-gateway-routing" = {
-      encrypter_decrypters = ["serviceAccount:service-${local.env_config.host_project_number}@gcp-sa-pm.iam.gserviceaccount.com"]
-    }
+    "pay-gateway-routing" = {} # service-agent grant below, after the parameter
     "pay-gateway-db" = {
       encrypter_decrypters = ["serviceAccount:service-${local.env_config.host_project_number}@gcp-sa-cloud-sql.iam.gserviceaccount.com"]
     }
@@ -719,6 +728,14 @@ resource "google_parameter_manager_regional_parameter" "routing" {
   labels       = merge(local.labels, { service = "pay-gateway" })
 }
 
+# The gcp-sa-pm agent exists only after the project's first parameter: grant after it.
+resource "google_kms_crypto_key_iam_member" "pm_agent" {
+  crypto_key_id = module.workload_cmek.key_ids["pay-gateway-routing"]
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  member        = "serviceAccount:service-${local.env_config.host_project_number}@gcp-sa-pm.iam.gserviceaccount.com"
+  depends_on    = [google_parameter_manager_regional_parameter.routing]
+}
+
 # Parameter Manager has no resource-level IAM: a project grant narrowed by a condition.
 resource "google_project_iam_member" "pay_gateway_routing" {
   project = local.env_config.host_project_id
@@ -726,27 +743,27 @@ resource "google_project_iam_member" "pay_gateway_routing" {
   member  = "serviceAccount:pay-gateway-run@${local.env_config.host_project_id}.iam.gserviceaccount.com"
 
   condition {
-    title      = "pay-gateway-routing-only"
-    expression = "resource.name.startsWith(\"${google_parameter_manager_regional_parameter.routing.id}\")"
+    title = "pay-gateway-routing-only"
+    # resource.name uses the project NUMBER; the resource's id uses the project ID.
+    expression = "resource.name.startsWith(\"projects/${local.env_config.host_project_number}/locations/${local.env_config.region}/parameters/pay-gateway-routing\")"
   }
 }
 ```
 
 Notes:
 
-- The Parameter Manager service agent,
-  `service-<project-number>@gcp-sa-pm.iam.gserviceaccount.com`, needs
-  Encrypter/Decrypter on a key in the parameter's location, or version
-  creation is rejected
+- The documented order is key, parameter with CMEK, agent grant, then
+  versions; the `gcp-sa-pm` agent needs Encrypter/Decrypter on a key in the
+  parameter's location, or version creation is rejected
   ([Google Cloud docs](https://docs.cloud.google.com/secret-manager/parameter-manager/docs/cmek),
-  checked 2026-11). It must exist before the grant (**verify before relying
-  on** how your project provisions it).
+  checked 2026-11).
 - Parameter Manager has no resource-level IAM
   ([Google Cloud docs](https://docs.cloud.google.com/secret-manager/parameter-manager/docs/access-control),
-  checked 2026-11), and the docs do not say whether a `resource.name`
-  condition is honoured (**verify before relying on**). Without it, the
-  runtime account `pay-gateway-run` (created by app-services) reads every
-  parameter in the project.
+  checked 2026-11). The condition matches `resource.name`, which is
+  `projects/<number>/locations/<loc>/parameters/<id>` plus `/versions/<id>`
+  ([Google Cloud docs](https://docs.cloud.google.com/iam/docs/conditions-resource-attributes),
+  checked 2026-11), so the runtime account `pay-gateway-run` reads only this
+  parameter.
 
 ## Runbook
 
@@ -782,12 +799,11 @@ and traffic is moving to the backup.
 4. **Do not drain the pending backlog to the backup.** Only intents the
    primary confirms `not found` may go elsewhere.
 
-**Verification.** Authorise success back at baseline, the backup's fault rate
-flat, and the pending count falling to zero once the primary answers lookups.
+**Verification.** Authorise success at baseline; pending count falling to
+zero once the primary answers lookups.
 
-**Follow-up.** Restore the primary through a canary (1%, 5%, base weight).
-Reconcile both backends' settlement files and void orphans. Review breaker
-thresholds, the warm share, and the backup's contracted limit.
+**Follow-up.** Restore the primary by canary (1%, 5%, base weight); reconcile
+both settlement files and void orphans; review thresholds and the warm share.
 
 ### A routing change sends traffic to the wrong place
 
@@ -818,8 +834,6 @@ it.
 - **"The primary timed out. Why not just send it to the backup?"** Because
   the primary may have charged. Resolve with the same backend's idempotency
   key and `lookup` first; fail over only on a confirmed `not found`.
-- **"How fast is failover?"** New requests: seconds (the breaker). In-flight
-  unknowns: when the primary answers lookups, or at reconciliation.
 - **"Why keep 5% on the backup?"** An unexercised path is a latent failure;
   5% proves credentials, adapter and limits every minute.
 - **"A card was declined at A. Try B?"** No. A decline is the backend working.
@@ -834,8 +848,6 @@ it.
 - Failing over on a timeout for a call with side effects.
 - Counting business declines as faults, which opens breakers on normal days.
 - A cold backup that has not taken a real request in months.
-- Retrying at every layer instead of one, with no budget.
-- Letting backend-specific fields leak into the canonical API.
 - Routing capture or refund anywhere but the authorising backend.
 - Promoting replicas from your own router (split brain).
 
