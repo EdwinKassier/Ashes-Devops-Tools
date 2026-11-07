@@ -64,12 +64,11 @@ graph LR
 | Replay? | Rebuild any curated table from any point in the last 2 years; rebuild 7 days of it in under 8 hours. |
 | Late data? | 99% of events arrive within 5 minutes; mobile clients can be up to 72 hours late. |
 | Schema change? | Additive changes flow without a deploy; breaking changes must not silently corrupt tables. |
-| Lineage? | Table-level for every job, column-level where the engine provides it. |
 | Regions? | One region per cloud. Cross-region DR is the data DR walkthrough. |
 
-Non-functional: the pipeline must never endanger the source database (CDC
-must not fill its disk), no record may be lost between source and raw, and
-duplicates are tolerated in transit but not in curated tables.
+Non-functional: CDC must never fill the source's disk, nothing may be lost
+between source and raw, and duplicates are tolerated in transit but not in
+curated.
 
 ## Back-of-envelope estimates
 
@@ -77,7 +76,8 @@ Arithmetic uses the primer's [QPS conversions](00-primer.md#qps-conversions)
 and [storage units](00-primer.md#storage-and-bandwidth-units).
 
 **CDC.** 2,000 row changes a second on average, 5,000 at peak, about 1 KB each
-with before and after images: **2 MB/s average, 5 MB/s peak**, or 173 GB a
+with after images (and full before images where needed): **2 MB/s average,
+5 MB/s peak**, or 173 GB a
 day.
 
 **Events.** 8,000 a second on average, 20,000 at peak, at 1 KB: **8 MB/s
@@ -127,7 +127,8 @@ Every raw record keeps the source payload untouched and adds an envelope:
   "source": "orders_db",
   "object": "public.orders",
   "op": "u",
-  "source_pos": 4892311221,
+  "commit_pos": 4892311221,
+  "rec_offset": 3,
   "source_ts": "2026-11-07T13:02:11.512Z",
   "ingest_ts": "2026-11-07T13:02:12.104Z",
   "schema_id": "orders_db.public.orders/v7",
@@ -137,15 +138,22 @@ Every raw record keeps the source payload untouched and adds an envelope:
 }
 ```
 
-`source_pos` is a sortable integer position in the source's log: the Postgres
-log sequence number. Datastream puts `lsn`, `change_type` and `is_deleted` in
-each event's PostgreSQL source metadata
-([Google Cloud docs](https://docs.cloud.google.com/datastream/docs/events-and-streams),
-checked 2026-11). DMS adds a log position when the Kinesis endpoint sets
+The **source position** is the pair (`commit_pos`, `rec_offset`): where the
+change's transaction committed in the log, then the record's offset within
+it. Commit order, not the change's own log position, is what makes the merge
+guard safe: an update logged at LSN 100 in a transaction that commits at 300
+must beat anything stamped 200. DMS supplies a commit timestamp, a log
+position and `transaction_record_id` when the Kinesis endpoint sets
 `IncludeTransactionDetails`
 ([AWS docs](https://docs.aws.amazon.com/dms/latest/userguide/CHAP_Target.Kinesis.html),
-checked 2026-11); its exact format is **verify before relying on**, so
-normalise both to an integer in the stream job. `ingest_ts` (arrival) decides
+checked 2026-11); their exact formats are **verify before relying on**.
+Datastream gives `lsn`, `tx_id`, `change_type`, `is_deleted` and `sort_keys`
+([Google Cloud docs](https://docs.cloud.google.com/datastream/docs/events-and-streams),
+checked 2026-11), but `lsn` is the entry's position, not its commit's: how to
+derive a commit-ordered key from them is **verify before relying on**. A full
+`before` image needs `REPLICA IDENTITY FULL` (Postgres sends key columns only
+by default), which adds WAL volume (DMS page above); the design only needs
+`after`. `ingest_ts` (arrival) decides
 the raw prefix, `source=…/ingest_date=…/hour=…/`, so "replay what arrived
 between T1 and T2" is a list of prefixes that never change once the hour
 closes. `source_ts` (event time) decides the curated partition.
@@ -154,7 +162,7 @@ closes. `source_ts` (event time) decides the curated partition.
 
 | Table | Key | Columns that matter | Access pattern |
 |---|---|---|---|
-| `curated.orders` | `order_id` | business columns, `_source_pos`, `_source_ts`, `_deleted`, `_run_id` | Upsert per micro-batch; analysts query by date |
+| `curated.orders` | `order_id` | business columns, `_commit_pos`, `_rec_offset`, `_source_ts`, `_deleted`, `_run_id` | Upsert per micro-batch; analysts query by date |
 | `curated.order_events` | `event_id` | event fields, `event_ts`, `_ingest_ts` | Append with dedupe on `event_id` |
 | `serving.daily_revenue` | `day` | totals | Overwrite whole day partitions |
 | `ops.job_runs` | `run_id` | job, git SHA, mode (live or backfill), input range, output snapshot, status | Written by the controller; joins to lineage |
@@ -242,11 +250,9 @@ reprocesses by replaying the log into a new output.
 | Codebases | Two, which drift: one metric computed two ways. | One graph over bounded and unbounded sources. |
 | Reprocessing | Rerun the batch layer. | Run the same job over raw into a shadow output. |
 | Correctness | Batch is truth; speed is an estimate. | Idempotent upserts plus bounded restatement. |
-| Cost | Both pipelines, always. | Replay capacity only during a backfill. |
 
-**Why Kappa wins here.** Lambda's painful failure is two implementations
-disagreeing, and finance noticing. Its original reason, that streams could not
-be correct, is gone: Flink restores exactly-once state
+**Why Kappa wins here.** Lambda fails when its two implementations disagree.
+Its premise, that streams cannot be correct, is gone: Flink restores exactly-once state
 from checkpoints, taken every 60 seconds by default on Managed Flink
 ([AWS docs](https://docs.aws.amazon.com/managed-flink/latest/java/how-fault.html),
 checked 2026-11), and Beam lets one pipeline read Pub/Sub or Cloud Storage.
@@ -285,17 +291,18 @@ checked 2026-11). Publish only the tables you need.
 
 **Snapshot, then stream.** DMS "full load and CDC" and Datastream backfill
 copy existing rows, then stream from the slot. Snapshot rows (DMS `load`,
-Datastream backfill `read_method`) carry no log position, so stamp them with
-the WAL position at which the snapshot started, recorded by the controller
-(`pg_current_wal_lsn()`). Not zero: after a re-snapshot, a zero would lose to
-stale rows already in curated. Any change during the snapshot has a higher
-position and wins.
+Datastream backfill `read_method`) carry no log position, so stamp them
+(`commit_pos` = P, `rec_offset` = 0), where P is `pg_current_wal_lsn()`
+recorded by the controller **before** the snapshot begins. Not zero: after a
+re-snapshot, a zero would lose to stale rows in curated. A transaction that
+commits after P outranks the snapshot row; one that committed before P is
+already reflected in it.
 
 **Ordering and duplicates.** Datastream says event order is not guaranteed
 and duplicates can occur
 ([Google Cloud docs](https://docs.cloud.google.com/datastream/docs/behavior-overview),
 checked 2026-11); DMS notes that Kinesis does not deduplicate (DMS page above).
-So the merge compares `source_pos` and never trusts arrival order. Partition by
+So the merge compares source positions and never trusts arrival order. Partition by
 primary key, not by table: that is DMS's default under parallel apply, and
 `PartitionIncludeSchemaTable` spreads equal keys from different tables (DMS
 page above).
@@ -334,44 +341,56 @@ bounded period, or encrypt per data subject and destroy the key
 | Anything older, or a bug fix | A bounded job over raw prefixes `[T1, T2)`. |
 
 **3. Idempotent writes.** The upsert keeps the newest version per key and
-never lets an older position overwrite a newer one. Deletes are soft, so a
-replayed old insert cannot resurrect a deleted row:
+never lets an older position overwrite a newer one. Deletes are soft
+tombstones that keep the last business values, so a replayed old insert cannot
+resurrect a deleted row:
 
 ```sql
 -- BigQuery dialect. staged_changes holds one micro-batch (or one backfill slice).
 MERGE curated.orders AS t
 USING (
-  SELECT order_id, status, total_cents, source_pos, source_ts, op
+  SELECT order_id, status, total_cents, commit_pos, rec_offset, source_ts, op
   FROM (
-    SELECT *, ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY source_pos DESC) AS rn
+    SELECT *, ROW_NUMBER() OVER (
+      PARTITION BY order_id ORDER BY commit_pos DESC, rec_offset DESC) AS rn
     FROM staged_changes
   )
   WHERE rn = 1
 ) AS s
 ON t.order_id = s.order_id
-WHEN MATCHED AND s.source_pos > t._source_pos THEN
-  UPDATE SET status = s.status, total_cents = s.total_cents,
-             _source_pos = s.source_pos, _source_ts = s.source_ts,
-             _deleted = (s.op = 'd')
+WHEN MATCHED AND (s.commit_pos > t._commit_pos OR
+                  (s.commit_pos = t._commit_pos AND s.rec_offset > t._rec_offset)) THEN
+  UPDATE SET status      = IF(s.op = 'd', t.status, s.status), -- a delete has no after image
+             total_cents = IF(s.op = 'd', t.total_cents, s.total_cents),
+             _commit_pos = s.commit_pos, _rec_offset = s.rec_offset,
+             _source_ts  = s.source_ts, _deleted = (s.op = 'd')
 WHEN NOT MATCHED THEN
-  INSERT (order_id, status, total_cents, _source_pos, _source_ts, _deleted)
-  VALUES (s.order_id, s.status, s.total_cents, s.source_pos, s.source_ts, s.op = 'd');
+  INSERT (order_id, status, total_cents, _commit_pos, _rec_offset, _source_ts, _deleted)
+  VALUES (s.order_id, s.status, s.total_cents, s.commit_pos, s.rec_offset,
+          s.source_ts, s.op = 'd'); -- a first-seen delete is a key-only tombstone
 ```
 
-Running it twice changes nothing, and the order in which batches arrive does
-not matter. Ties on `source_pos` (several changes in one transaction to the
-same row) need a secondary sort key such as the record offset within the
-transaction. Aggregates use the other idempotent form: **overwrite whole
-partitions**, never increment.
+It is idempotent and order-insensitive. Aggregates use the other idempotent form: **overwrite whole partitions**,
+never increment.
 
 **Backfill into a shadow, then swap.** A backfill writes to
 `orders__bf_<run_id>`, not the live table. That avoids the BigQuery DML
 concurrency limit from the [estimates](#back-of-envelope-estimates), keeps the
-live table correct, and lets you diff before promoting. Promotion is atomic (a
-table copy on BigQuery, a branch or snapshot swap on Iceberg). Changes that reached the old table after the backfill's input
-ended are missing from the shadow, so after the swap, rewind the live consumer
-to the backfill's end time (a log seek); the position guard makes the overlap
-harmless.
+live table correct, and lets you diff before promoting. The steps:
+
+1. **Seed the shadow** with the table as it was at T1 minus a margin (say an
+   hour); a backfill over `[T1, T2)` only touches keys changed in that window,
+   so an empty shadow would drop every other row. BigQuery can copy or
+   snapshot a table at a past time within its time-travel window, 2 to 7 days
+   and 7 by default
+   ([Google Cloud docs](https://docs.cloud.google.com/bigquery/docs/time-travel),
+   checked 2026-11); Iceberg branches from the snapshot of that time if it has
+   not expired. An older rebuild starts empty and replays raw from the
+   source's initial snapshot.
+2. **Apply raw `[T1 − margin, T2)`**; the guard makes the margin harmless.
+   Pick T2 inside the log's retention.
+3. **Promote:** pause the live consumer, swap atomically (a table copy on
+   BigQuery, a branch swap on Iceberg), seek the consumer back to T2, resume.
 
 **Where it breaks.** Replaying a job with external side effects (an email, a
 payment call) repeats them: replayable jobs must be pure.
@@ -404,22 +423,19 @@ which data, produced this snapshot?"
 | Automatic capture | Spark integrations (**verify before relying on** per job type); Flink needs a custom emitter | Dataflow with `enable_lineage=true` covers Pub/Sub, BigQuery and Cloud Storage on Beam 2.63.0+ ([Google Cloud docs](https://docs.cloud.google.com/dataflow/docs/guides/lineage), checked 2026-11) |
 | Column level | The docs' sample event carries a `columnLineage` facet | Rendered only for BigQuery SQL and managed Spark; custom column facets are not shown (Knowledge Catalog page above) |
 
-**Using it.** Before a schema change, query downstream to see who breaks.
-After a bad deploy, walk downstream from the bad runs to list what to
-backfill. Emit asynchronously: a lineage outage must delay the graph, never
-the pipeline.
+**Using it.** Query downstream before a schema change, or from bad runs to
+list what to backfill. Emit asynchronously so a lineage outage never stops the
+pipeline.
 
-**Where it breaks.** Lineage is only as complete as its emitters. A notebook
-that writes a table without emitting is a hole, so only pipeline identities
-may write curated.
+**Where it breaks.** Lineage is only as complete as its emitters, so only
+pipeline identities may write curated.
 
 ### Late data and schema evolution
 
-**Late data.** Windows use **event time** (`source_ts`), not arrival. The
-watermark trails the maximum event time seen by 5 minutes, matching the 99th
-percentile. After the watermark passes, a window fires; with **allowed
-lateness** of 1 hour, a late record re-fires it with an updated result. Both
-engines default allowed lateness to zero and drop anything later. Flink can
+**Late data.** Windows use **event time** (`source_ts`). The watermark trails
+the latest event time by 5 minutes (the 99th percentile); with **allowed
+lateness** of 1 hour, a late record re-fires its window with an updated
+result. Both engines default allowed lateness to zero and drop later records. Flink can
 route those records to a side output instead
 ([Flink docs](https://nightlies.apache.org/flink/flink-docs-stable/docs/dev/datastream/operators/windows/),
 checked 2026-11), and in Beam the default trigger re-fires on each late record
@@ -462,9 +478,9 @@ fix, replay from raw.
 | Decision | Chosen | Rejected | Why | What would change the answer |
 |---|---|---|---|---|
 | Architecture | Kappa, raw as the long log | Lambda | One codebase; no drift between batch and speed numbers. | A batch engine the team trusts and a stream engine it does not. |
-| Ingestion | Log-based CDC | Polling; dual writes | Captures deletes and every state; no load on tables. | A source without an accessible log (a SaaS API): poll with a high-water mark. |
+| Ingestion | Log-based CDC | Polling; dual writes | Captures deletes and every state. | A source with no log (a SaaS API): poll a high-water mark. |
 | Log | Kinesis on-demand / Pub/Sub | Kafka (MSK, Managed Kafka) | No brokers to run; IAM and KMS native. | Kafka ecosystem needs (Connect, compacted topics) or more than 200 MB/s in a small Region. |
-| Writes | Position-guarded upsert, soft deletes | Append-only plus query-time dedupe | Readers see one row per key; replay-safe. | Pure event tables: append with dedupe on `event_id`. |
+| Writes | Position-guarded upsert, soft deletes | Append plus query-time dedupe | One row per key; replay-safe. | Pure event tables. |
 | Backfill target | Shadow table, then atomic swap | Merge into live | No DML contention; diff before promote. | Tiny tables where a live merge finishes in seconds. |
 | Late data | 1 h allowed lateness plus nightly restatement | Unbounded lateness | Bounded state; late tail handled in batch. | A metric that must be final within minutes. |
 
@@ -490,10 +506,9 @@ and shard the source or use a database with a native change stream.
 |---|---|---|
 | CDC task | Changes stop; slot retains WAL | Freshness of every CDC table, then the **source database's disk**. |
 | Log | Producers fail or buffer | All freshness; outbox rows wait, nothing is lost. |
-| Archiver | Raw stops growing | No immediate impact; replay coverage gap if the outage exceeds log retention. |
+| Archiver | Raw stops growing | A replay gap only if the outage outlasts log retention. |
 | Stream job | Curated goes stale | Freshness; resumes from checkpoint. |
 | Bad deploy | Wrong values in curated | Every downstream table; fixed by a lineage-guided backfill. |
-| Lineage backend | Graph stale | None to data. |
 
 ## AWS and GCP mapping
 
@@ -510,9 +525,8 @@ and shard the source or use a database with a native change stream.
 
 Two differences change the design:
 
-- **Where raw comes from on GCP.** Datastream writes files, so CDC freshness
-  includes file rotation plus notification delay, but raw is the primary copy
-  rather than an archive.
+- **GCP CDC lands as files:** freshness includes rotation and notification
+  delay, but raw is the primary copy, not an archive.
 - **Read fan-out on AWS.** Without enhanced fan-out, Kinesis consumers share
   2 MB/s per shard; each Pub/Sub subscription gets its own copy.
 
@@ -660,9 +674,9 @@ resource "aws_kinesis_firehose_delivery_stream" "etl_archive" {
 }
 ```
 
-The Flink role reads through enhanced fan-out (`kinesis:SubscribeToShard`)
-and needs `kms:Decrypt` too. The raw bucket policy should deny `s3:PutObject`
-to everyone but the archiver, so only the pipeline writes raw.
+The Flink role (enhanced fan-out, `kinesis:SubscribeToShard`) needs
+`kms:Decrypt` too; the raw bucket policy should admit `s3:PutObject` only from
+the archiver.
 
 ### GCP: the events topic, its archive and the raw bucket
 
@@ -783,8 +797,11 @@ for CDC tables past 15 minutes while event tables are fresh.
 4. **Disk will fill before the fix lands:** drop the slot
    (`SELECT pg_drop_replication_slot('<slot>');`), trading a CDC re-snapshot
    for production's survival.
-5. After a drop, recreate the slot and rerun full load plus CDC (DMS) or a
-   backfill (Datastream); the position guard absorbs the overlap.
+5. After a drop, recreate the slot and re-snapshot (DMS full load plus CDC,
+   or a Datastream backfill) **into a shadow table, then swap**, as in
+   [Replay and backfill](#replay-and-backfill). Deletes during the gap were
+   never emitted, so merging the snapshot into the live table would keep
+   deleted rows; alternatively, tombstone live keys absent from the snapshot.
 
 **Verification.** Retained WAL under 1 GB, CDC freshness under 5 minutes, and
 source-to-curated row counts reconcile for the affected tables.
@@ -794,12 +811,10 @@ slots, and add a heartbeat row that must reach curated within 5 minutes.
 
 ### A bad deploy wrote wrong values for three days
 
-**Detection:** a data-quality check or a user report. **Triage:** find the
-first bad run in `ops.job_runs`, then walk downstream lineage to list affected
-tables. **Mitigation:** deploy the fix, then `POST /backfills` over raw for the
-bad window into shadows, diff, and promote in lineage order (curated before
-serving). **Verification and follow-up:** reconciliation passes; add the case
-to the job's tests.
+**Detection:** a data-quality check or user report. **Triage:** find the first
+bad run in `ops.job_runs`; walk lineage downstream. **Mitigation:** deploy the
+fix, backfill the window into seeded shadows, diff, promote curated before
+serving. **Verification and follow-up:** reconciliation passes; add a test.
 
 ## Study aids
 
@@ -810,7 +825,7 @@ to the job's tests.
 | Kinesis shard | 1 MB/s or 1,000 records/s write; 2 MB/s shared read |
 | Kinesis retention | 24 h default, 365 days max |
 | Kinesis on-demand | Starts at 4 MB/s write; 200 MB/s outside the largest Regions |
-| Pub/Sub | 200 MB/s publish in small regions; topic retention up to 31 days; snapshots 7 days max |
+| Pub/Sub | 200 MB/s publish in small regions; topic retention up to 31 days; snapshots 7 days max ([docs](https://docs.cloud.google.com/pubsub/docs/replay-overview), checked 2026-11) |
 | Archivers | Firehose 1–128 MiB, 0–900 s; GCS subscription 1–10 min |
 | BigQuery mutating DML | 2 concurrent per table, 20 queued |
 | Allowed lateness default | Zero in Flink and Beam |
@@ -829,16 +844,13 @@ to the job's tests.
 ### Classic mistakes
 
 - Polling `updated_at` and missing deletes.
-- A Lambda architecture whose batch and speed numbers disagree.
 - Treating event-time raw folders (Datastream's layout) as closed: late changes keep landing in them.
 - Upserts without a position guard: replays overwrite newer data.
 - Hard deletes that let a replay resurrect rows.
-- No alert on replication slot lag.
 - Backfilling straight into the live table.
 
 ### Further reading
 
 - [OpenLineage object model](https://openlineage.io/docs/spec/object-model)
 - [Datastream to BigQuery template](https://docs.cloud.google.com/dataflow/docs/guides/templates/provided/datastream-to-bigquery)
-- [PostgreSQL logical decoding](https://www.postgresql.org/docs/current/logicaldecoding-explanation.html)
 - The primer's [data zones](00-primer.md#data-zones) and [service map](00-primer.md#aws-gcp-service-map).
