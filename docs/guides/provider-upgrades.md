@@ -2,7 +2,7 @@
 
 This guide records the repo's current stance on the `google`/`google-beta`, `supabase`,
 `vercel`, and `aws` provider major versions, what was actually tested, and the procedure for
-re-testing when the question comes up again (it will — Dependabot or a contributor will
+re-testing when the question comes up again (it will — Renovate or a contributor will
 eventually try to bump past the current ceiling).
 
 ## Current constraint
@@ -45,9 +45,12 @@ plan. The `7.0` major is **gated behind a deliberate upgrade** (`< 7.0.0`) rathe
 open — 7.0 has not been validated against this codebase, so it is not silently permitted the
 way google 7.x is.
 
-The AWS `.terraform.lock.hcl` files are committed **dual-platform** (`linux_amd64` +
-`darwin_arm64`) so the CI Linux runners and local macOS machines resolve the identical provider
-hashes.
+All `.terraform.lock.hcl` files are committed **multi-platform** (`linux_amd64`,
+`darwin_arm64`, `darwin_amd64`) so the CI Linux runners and local macOS machines resolve the
+identical provider hashes. Renovate owns provider updates and lockfiles (`renovate.json`: weekly
+`lockFileMaintenance`, one `hashicorp/*` group, provider majors disabled so they stay deliberate);
+Dependabot no longer covers Terraform. `scripts/check-consistency.sh` fails on single-platform
+locks and on a provider locked at different versions in different lockfiles.
 
 The upgrade/testing procedure for `aws` is the **same as the other providers** (see "How to
 re-test this in the future" below): temporarily bump the constraint on a representative example

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "enabledManagers": [
+    "terraform"
+  ],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "before 6am on monday"
+    ],
+    "commitMessageAction": "Refresh",
+    "commitMessageTopic": "provider lockfiles"
+  },
+  "commitMessagePrefix": "build(deps):",
+  "labels": [
+    "dependencies",
+    "terraform"
+  ],
+  "prConcurrentLimit": 5,
+  "packageRules": [
+    {
+      "description": "One reviewed PR for all hashicorp/* provider updates within their current major",
+      "matchManagers": [
+        "terraform"
+      ],
+      "matchDepTypes": [
+        "required_provider"
+      ],
+      "matchPackageNames": [
+        "hashicorp/**"
+      ],
+      "groupName": "hashicorp providers"
+    },
+    {
+      "description": "Provider majors are deliberate (e.g. google 8.x is its own task), never proposed automatically",
+      "matchManagers": [
+        "terraform"
+      ],
+      "matchDepTypes": [
+        "required_provider"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "enabled": false
+    }
+  ]
+}

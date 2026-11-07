@@ -107,30 +107,33 @@ if [ -n "$prov" ]; then
   fail=1
 fi
 
-echo "==> Multi-platform lockfiles (FATAL for deployable roots, informational for library modules)"
+echo "==> Lockfiles: multi-platform and one version per provider (Renovate owns them)"
 # A lockfile written by a plain local `terraform init` carries one h1: hash per
 # provider (the host platform). The canonical command writes one per platform:
 #   terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64
-# A provider block with fewer than 3 h1: hashes marks the file single-platform.
+# A provider block with fewer than 3 h1: hashes marks the file single-platform,
+# which fails `init -lockfile=readonly` on the other platform. Both that and a
+# provider locked at different versions in different lockfiles are fatal.
 nlocks=0
 nsingle=0
+verlist=$(mktemp)
 while IFS= read -r lf; do
   nlocks=$((nlocks + 1))
   if awk '/^provider /{ if (inblk && h < 3) bad=1; inblk=1; h=0 } /"h1:/{ h++ } END { if (inblk && h < 3) bad=1; exit bad ? 0 : 1 }' "$lf"; then
     nsingle=$((nsingle + 1))
-    case "$lf" in
-      # A deployable root's lockfile is what CI (linux) and operators (macOS)
-      # actually install from: a single-platform one fails `init -lockfile=readonly`
-      # on the other platform. Library-module lockfiles are ignored by consumers.
-      envs/* | tests/e2e/*)
-        echo "  ERROR single-platform root lockfile: $lf (terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64)" >&2
-        fail=1
-        ;;
-      *) [ -z "${LOCK_VERBOSE:-}" ] || echo "  single-platform: $lf" ;;
-    esac
+    echo "  ERROR single-platform lockfile: $lf (terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64)" >&2
+    fail=1
   fi
+  awk -v f="$lf" '/^provider "/{ gsub(/"/, "", $2); p=$2 } /^  version[[:space:]]*=/{ gsub(/"/, "", $3); print p, $3, f }' "$lf" >> "$verlist"
 done < <(git ls-files '*.terraform.lock.hcl' 2>/dev/null)
-echo "  ${nsingle}/${nlocks} committed lockfiles lack the linux_amd64/darwin_arm64/darwin_amd64 h1: hashes (LOCK_VERBOSE=1 lists them)"
+drift=$(awk '{ print $1, $2 }' "$verlist" | sort -u | awk '{ n[$1]++; s[$1]=s[$1] " " $2 } END { for (p in n) if (n[p] > 1) print p ":" s[p] }' | sort)
+if [ -n "$drift" ]; then
+  echo "$drift" | while read -r l; do echo "  ERROR provider locked at several versions: $l (LOCK_VERBOSE=1 lists files)" >&2; done
+  [ -z "${LOCK_VERBOSE:-}" ] || sort "$verlist" | sed 's/^/  /'
+  fail=1
+fi
+rm -f "$verlist"
+echo "  ${nsingle}/${nlocks} committed lockfiles lack the linux_amd64/darwin_arm64/darwin_amd64 h1: hashes"
 
 if [ "$fail" -eq 0 ]; then
   echo "OK: all consistency invariants hold."
