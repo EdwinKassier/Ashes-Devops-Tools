@@ -258,6 +258,18 @@ HTTP/TLS egress is dropped once applied. To keep alert-only inspection while
 you build the list, set `aws.network.egress_alert_only_waived: true` (an
 explicit, reviewable waiver). Starter-profile estates are unaffected.
 
+#### aws-workload: exact exec-role ARNs in the workload CMK key policy (in-place)
+
+The `AppTaskExecutionRolesDecrypt` statement of the workload CMK
+(`aws_kms_key.workload`, created when `kms_key_arn = ""`) no longer matches
+`role/<environment>-*-exec`. It lists the exact ARN of each declared service's
+task execution role (`arn:<partition>:iam::<account>:role/<environment>-<service>-exec`)
+under `ArnEquals aws:PrincipalArn`, and is omitted when `services = {}`. The
+next plan shows an **in-place** update of the key policy; this is expected. The
+key is not replaced or moved. A role whose name matches the old wildcard but is
+not an app-services execution role loses kms:Decrypt on the key: grant it
+explicitly if you relied on that. A supplied `kms_key_arn` is unaffected.
+
 ### GCP
 
 #### GCP deny policies move to the security-team `gcp-guardrails` workspace
@@ -436,6 +448,13 @@ Turning NCC on in the config changes four roots, applied in order:
 
 Switching an environment to `ncc` then **deletes its hub peering** in the same
 apply that creates its spoke. Run the runbook's pre-flight first.
+
+#### gcp app-services: Cloud Run Jobs and SLOs (additive)
+
+`services[*].runtime` (default `"cloud-run"`) and `services[*].slo` (default
+null) are new. With the defaults every existing address plans unchanged. The
+`services` output gains `runtime`, `job_name` and `slo_name`; `github_actions`
+gains `CLOUD_RUN_JOB`. There are no manual steps.
 
 ### SaaS and cross-cloud
 
