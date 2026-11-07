@@ -26,3 +26,6 @@ Task 1: implemented 04f3b0f; review dispatched
 Task 1: review Needs fixes (2 Important false negatives: heredoc brace depth, fence aliases) + minors → fix round 1 sent (new commit, no amend)
 Task 1: fix round 1 committed 8d12b07; scoped re-review dispatched
 Handoff: tracked copy at docs/handoff/system-design-examples/ (commit 5216619); draft PR #594 (stacked on #592 branch) — ledger synced+pushed after every update
+Task 1: re-review Approved (all 6 addressed)
+Task 1: complete (commits 04f3b0f, 8d12b07)
+Task 1: minor (deferred): a heredoc inside a resource block containing literal `module "x" {` text is parsed as a module (contrived)
