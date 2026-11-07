@@ -83,7 +83,7 @@ will not survive a train tunnel, so resumable upload is required.
 **Parts.** S3 parts are 5 MiB to 5 GiB, at most 10,000 per upload, and an object
 may be up to 48.8 TiB
 ([AWS docs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html), checked 2026-11).
-With 16 MiB parts a 375 MB file is 23 parts, and 10,000 parts cover 160 GiB:
+With 16 MiB parts a 375 MB file is 23 parts, and 10,000 parts cover about 156 GiB:
 ample for our 50 GB cap.
 
 **Transcoding.** 100,000 × 5 minutes is **500,000 content minutes a day**. A
@@ -107,7 +107,7 @@ is **about 1,050 concurrent jobs** at peak, 350 on average.
   20 jobs of 300 s is 0.07 jobs a second, about 5,800 a day: under 6% of our
   volume. Raise both quotas before launch, or run the encoders yourself.
 
-**Storage.** The ladder below averages about 11.5 Mbps across all rungs, so the
+**Storage.** The ladder's rungs below total about 11.5 Mbps, so the
 renditions of one 5-minute video are about 431 MB. With the source, that is
 about 806 MB per video, **81 TB a day, about 2.4 PB a month**, compounding.
 
@@ -130,7 +130,8 @@ requests a second
 bandwidth is 3× over, so raise it before launch.
 
 **Origin.** At a 95% hit ratio, origin sees 5%: 25 Gbps and 1,400 GETs a second
-at peak, well under S3's 5,500 GETs a second per prefix. Each SSE-KMS GET
+at peak, well under S3's 5,500 GETs a second per prefix
+([Throughput table](00-primer.md#throughput-per-instance-and-per-partition)). Each SSE-KMS GET
 without an S3 Bucket Key is a KMS `Decrypt` (see [Cost](#cost)).
 
 ## API and data model
@@ -223,8 +224,9 @@ CDN. Misses go to a regional cache, then the origin shield, then the bucket.
 **How resume works on AWS.** The client keeps `video_id`, `upload_id` and the
 ETag of each acknowledged part. After a failure the resume endpoint calls
 `ListParts`, and the client re-sends only missing parts. Upload 4–8 parts in
-parallel; a 16 MiB part on 2 Mbps takes about 67 seconds, the most a drop can
-lose. Send a checksum with each part; SigV4 presigned URLs support CRC32C,
+parallel. A drop loses only the parts in flight: on a 2 Mbps link, 4–8
+parallel 16 MiB parts take about 4.5–9 minutes each, so use smaller parts on
+slow links. Send a checksum with each part; SigV4 presigned URLs support CRC32C,
 SHA-256 and others
 ([AWS docs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html), checked 2026-11).
 
@@ -416,7 +418,9 @@ Monthly at our scale, at list prices before discounts.
   in US East (Ohio) as volume rises
   ([AWS pricing](https://aws.amazon.com/mediaconvert/pricing/), checked 2026-11).
   Our ladder is 7 normalised minutes per content minute, 105 million a month:
-  **about $0.4–0.8 million**, depending on which tier most minutes land in.
+  the tiers are graduated monthly thresholds, so the first 20 million cost
+  about $78,000 and the other 85 million at most $0.0038 each: **about
+  $0.4 million or less** (no tier above 20 million is published).
 
 **Delivery: 54 PB a month.** CloudFront's US price falls from $0.085 per GB
 after the free first TB to $0.020 per GB above 5 PB a month, and origin fetches
