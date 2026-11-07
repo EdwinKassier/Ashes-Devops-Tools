@@ -38,3 +38,6 @@ Writers: shared instructions at .superpowers/sdd/2026-11-07-system-design-exampl
 Tasks 3,4,5: dispatched in parallel (base 5ff6820)
 Task 2: review Needs fixes — Important: GCP canonical snippet uses local.region; must be local.env_config.region (subnet + CMEK key must match service region) at 00-primer.md:778-810. Minors: Cloud SQL grant is project-level w/ IAM condition (app-services main.tf:433-451); add AWS org tag-policy casing (CostCenter/Environment/Owner); latency table add SSD 4KB ~100µs + cross-AZ RTT ~1ms; split units row; service map drop dup Logs/DR rows + cite SCP/RCP docs for data perimeter; mermaid GCP chain missing gcp-projects; data zones add naming line + workload CMEK → fix round 1 pending
 Tasks 3,4,5: writers hit the 5-hour usage limit (resets 18:10 Europe/London); partial work unsaved to git — resume by SendMessage after reset, or re-dispatch fresh writers (files may be partially written in working tree: check `git status examples/system-design`)
+Task 2: fix round 1 sent to primer implementer (18:12)
+Tasks 3,4,5: writers resumed after limit reset (18:12), told GCP region = local.env_config.region
+Ruling: GCP region-scoped resources in all snippets use local.env_config.region (not local.region) — subnet and CMEK must match the service region — cost: none
