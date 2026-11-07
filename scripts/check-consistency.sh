@@ -18,10 +18,25 @@ badaws=$(grep -rl 'source *= *"hashicorp/aws"' --include='versions.tf' --exclude
   | while read -r f; do grep -q '">= 6.46.0, < 7.0.0"' "$f" || echo "$f"; done)
 [ -z "$badaws" ] || { echo "$badaws" | while read -r f; do note "AWS pin not '>= 6.46.0, < 7.0.0': $f"; done; fail=1; }
 
-echo "==> GCP google provider pin is the canonical range in every GCP versions.tf"
-# Canonical: "~> 8.0" (7->8 migration complete; locks on 8.x).
-badgcp=$(grep -rl 'hashicorp/google' --include='versions.tf' --exclude-dir='.terraform' modules/gcp envs/gcp 2>/dev/null \
-  | while read -r f; do grep -q '"~> 8.0"' "$f" || echo "$f"; done)
+echo "==> GCP google provider pin is the canonical range wherever google/google-beta is required"
+# Canonical: "~> 8.0" (7->8 migration complete; locks on 8.x). Checked per
+# provider entry (google and google-beta each need it, so one correct pin in a
+# file cannot hide a stale one), across modules, roots, examples, templates and
+# the e2e tests.
+badgcp=$(grep -rlE 'source *= *"hashicorp/google(-beta)?"' --include='*.tf' --exclude-dir='.terraform' \
+  modules envs examples templates tests 2>/dev/null \
+  | while read -r f; do
+      awk -v f="$f" '
+        /^[[:space:]]*[A-Za-z0-9_-]+[[:space:]]*=[[:space:]]*\{/ { inblk = 1; buf = "" }
+        inblk { buf = buf $0 "\n" }
+        inblk && /\}/ {
+          if (buf ~ /"hashicorp\/google(-beta)?"/) {
+            src = buf; sub(/.*"hashicorp\//, "", src); sub(/".*/, "", src)
+            if (buf !~ /version[[:space:]]*=[[:space:]]*"~> 8\.0"/) print f " (" src ")"
+          }
+          inblk = 0
+        }' "$f"
+    done)
 [ -z "$badgcp" ] || { echo "$badgcp" | while read -r f; do note "google pin not '~> 8.0': $f"; done; fail=1; }
 
 echo "==> Terraform required_version is the canonical range in every versions.tf"

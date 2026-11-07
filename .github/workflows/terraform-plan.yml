@@ -349,7 +349,9 @@ jobs:
         if: github.repository != 'EdwinKassier/Ashes-Devops-Tools'
         run: |
           if grep -n 'your-org' .github/CODEOWNERS; then
-            echo "::error file=.github/CODEOWNERS::CODEOWNERS contains your-org placeholders; render real owners with scripts/init-landing-zone.sh --codeowners."
+            msg="CODEOWNERS contains your-org placeholders;"
+            msg+=" render real owners with scripts/init-landing-zone.sh --codeowners."
+            echo "::error file=.github/CODEOWNERS::${msg}"
             exit 1
           fi
 
@@ -391,7 +393,9 @@ jobs:
           if git log --format=%B "${base_sha}..HEAD" \
               | grep -Eq '^[a-z]+(\([^)]*\))?!:|^BREAKING[ -]CHANGE'; then
             if ! git diff --name-only "${base_sha}..HEAD" | grep -qx 'UPGRADING.md'; then
-              echo "::error::A commit in this PR is marked breaking (!: or BREAKING CHANGE) but UPGRADING.md is not in the diff. Add an entry under 'Unreleased'."
+              msg="A commit in this PR is marked breaking (!: or BREAKING CHANGE)"
+              msg+=" but UPGRADING.md is not in the diff. Add an entry under 'Unreleased'."
+              echo "::error::${msg}"
               exit 1
             fi
           fi
