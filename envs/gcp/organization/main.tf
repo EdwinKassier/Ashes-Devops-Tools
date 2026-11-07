@@ -98,6 +98,7 @@ module "organization" {
   # Control-plane alerting (on by default).
   enable_control_plane_alerting = var.enable_control_plane_alerting
   alert_notification_emails     = local.alert_notification_emails
+  budget_notify_alert_channels  = local.notify_budget_channels
   alert_notification_channels   = var.alert_notification_channels
   break_glass_principal_emails  = var.break_glass_principal_emails
   enable_cis_log_metrics        = var.enable_cis_log_metrics

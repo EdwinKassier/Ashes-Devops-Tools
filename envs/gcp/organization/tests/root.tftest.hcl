@@ -495,3 +495,83 @@ run "principal_access_boundary_variable_wins_over_config" {
     error_message = "an explicit enable_principal_access_boundary = false must override the config key."
   }
 }
+
+# notifications.emails feeds the control-plane alert channels when neither the
+# variable nor gcp.alert_emails is set.
+run "emails_feed_gcp_channels" {
+  command = plan
+
+  variables {
+    landing_zone_config_path  = "tests/fixtures/landing-zone-notifications.yaml"
+    domain                    = null
+    project_prefix            = null
+    admin_email               = null
+    billing_account           = null
+    tfc_organization          = null
+    alert_notification_emails = []
+    organization_admin_groups = null
+    billing_admin_groups      = null
+    environments              = null
+  }
+
+  assert {
+    condition     = join(",", local.alert_notification_emails) == "alerts@acme.io"
+    error_message = "notifications.emails must feed the GCP control-plane alert channels."
+  }
+}
+
+# Precedence: variable > gcp.alert_emails > notifications.emails.
+run "gcp_alert_emails_beat_notifications_emails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path  = "tests/fixtures/landing-zone-notifications-both.yaml"
+    domain                    = null
+    project_prefix            = null
+    admin_email               = null
+    billing_account           = null
+    tfc_organization          = null
+    alert_notification_emails = []
+    organization_admin_groups = null
+    billing_admin_groups      = null
+    environments              = null
+  }
+
+  assert {
+    condition     = join(",", local.alert_notification_emails) == "secops@acme.io"
+    error_message = "gcp.alert_emails must win over notifications.emails."
+  }
+}
+
+run "explicit_variable_beats_notifications_emails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path  = "tests/fixtures/landing-zone-notifications-both.yaml"
+    domain                    = null
+    project_prefix            = null
+    admin_email               = null
+    billing_account           = null
+    tfc_organization          = null
+    alert_notification_emails = ["explicit@acme.io"]
+    organization_admin_groups = null
+    billing_admin_groups      = null
+    environments              = null
+  }
+
+  assert {
+    condition     = join(",", local.alert_notification_emails) == "explicit@acme.io"
+    error_message = "the explicit variable must win over every config key."
+  }
+}
+
+# No notifications section: the explicit variable is used as-is and budgets get
+# no extra channels (today's behaviour).
+run "no_section_is_noop" {
+  command = plan
+
+  assert {
+    condition     = join(",", local.alert_notification_emails) == "secops@acme.io" && !local.notify_budget_channels
+    error_message = "without a notifications section the alert list is the variable and budgets get no channels."
+  }
+}

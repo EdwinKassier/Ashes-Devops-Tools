@@ -32,6 +32,7 @@ locals {
     allowed_regions           = try([for r in local.lz.gcp.allowed_regions : tostring(r)], null)
     break_glass_group         = try(tostring(local.lz.gcp.break_glass_group), null)
     alert_emails              = try([for e in local.lz.gcp.alert_emails : tostring(e)], null)
+    notification_emails       = try([for e in local.lz.notifications.emails : tostring(e)], null)
     admin_containment         = try(tobool(local.lz.gcp.admin_containment), null)
     principal_access_boundary = try(tobool(local.lz.gcp.principal_access_boundary), null)
     enable_audit_bucket_lock  = try(tobool(local.lz.gcp.enable_audit_bucket_lock), null)
@@ -95,5 +96,11 @@ locals {
   containment_exempt_principals = length(var.containment_exempt_principals) > 0 ? var.containment_exempt_principals : (
     local.cfg.break_glass_group != null ? ["principalSet://goog/group/${local.cfg.break_glass_group}"] : []
   )
-  alert_notification_emails = length(var.alert_notification_emails) > 0 ? var.alert_notification_emails : coalesce(local.cfg.alert_emails, [])
+  # variable > gcp.alert_emails > notifications.emails > none.
+  alert_notification_emails = length(var.alert_notification_emails) > 0 ? var.alert_notification_emails : (
+    length(coalesce(local.cfg.alert_emails, [])) > 0 ? local.cfg.alert_emails : coalesce(local.cfg.notification_emails, [])
+  )
+  # Budgets notify the control-plane email channels only when the estate opted
+  # in through the notifications section (an existing estate's budget is untouched).
+  notify_budget_channels = length(coalesce(local.cfg.notification_emails, [])) > 0
 }

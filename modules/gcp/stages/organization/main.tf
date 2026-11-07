@@ -691,13 +691,14 @@ module "org_budget" {
   count  = var.monthly_budget_amount > 0 ? 1 : 0
   source = "../../governance/billing"
 
-  billing_account      = var.billing_account
-  project_id           = var.admin_project_id
-  project_name         = "${var.project_prefix}-org"
-  monthly_budget_limit = var.monthly_budget_amount
-  currency_code        = var.budget_currency
-  kms_key_name         = module.cmek.key_names["billing-alerts"]
-  region               = var.default_region
+  billing_account       = var.billing_account
+  project_id            = var.admin_project_id
+  project_name          = "${var.project_prefix}-org"
+  monthly_budget_limit  = var.monthly_budget_amount
+  currency_code         = var.budget_currency
+  kms_key_name          = module.cmek.key_names["billing-alerts"]
+  region                = var.default_region
+  notification_channels = var.budget_notify_alert_channels && var.enable_control_plane_alerting ? module.control_plane_alerting.notification_channel_ids : []
 
   # Monitor the entire Billing Account by defaulting 'projects' to empty (null)
   # projects = ["projects/${var.admin_project_number}"]

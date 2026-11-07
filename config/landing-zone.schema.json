@@ -1315,7 +1315,23 @@
     },
     "notifications": {
       "type": "object",
-      "properties": {},
+      "properties": {
+        "emails": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "hcp_email_user_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "webhook_url_secret_name": {
+          "type": "string"
+        }
+      },
       "additionalProperties": false
     }
   },

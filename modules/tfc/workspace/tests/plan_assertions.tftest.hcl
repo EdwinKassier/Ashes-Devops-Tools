@@ -195,3 +195,29 @@ run "auto_apply_run_trigger_enabled" {
     error_message = "auto_apply_run_trigger = true must reach tfe_workspace without turning on auto_apply."
   }
 }
+
+# Health-assessment triggers: HCP email notifications take user IDs (plain
+# addresses work only on Terraform Enterprise), and the three assessment
+# events are valid triggers.
+run "hcp_assessment_notifications_use_user_ids" {
+  command = plan
+  variables {
+    notifications = {
+      drift = {
+        destination_type = "email"
+        email_user_ids   = ["user-abc123"]
+        triggers         = ["run:errored", "assessment:drifted", "assessment:check_failure", "assessment:failed"]
+      }
+    }
+  }
+
+  assert {
+    condition     = tfe_notification_configuration.this["drift"].destination_type == "email" && contains(tfe_notification_configuration.this["drift"].email_user_ids, "user-abc123")
+    error_message = "an email notification must carry the HCP user IDs."
+  }
+
+  assert {
+    condition     = contains(tfe_notification_configuration.this["drift"].triggers, "assessment:drifted") && contains(tfe_notification_configuration.this["drift"].triggers, "assessment:check_failure") && contains(tfe_notification_configuration.this["drift"].triggers, "assessment:failed")
+    error_message = "the three assessment triggers must pass through."
+  }
+}

@@ -19,10 +19,10 @@ module "aws_organization" {
 
   # Cost governance (management-account-scoped).
   enable_cost_governance       = var.enable_cost_governance
-  budgets                      = var.budgets
+  budgets                      = local.budgets
   cost_allocation_tags         = var.cost_allocation_tags
   cost_notifications_topic_arn = var.cost_notifications_topic_arn
-  cost_anomaly_email           = var.cost_anomaly_email
+  cost_anomaly_email           = local.cost_anomaly_email
 
   # Member-account TFC workload identity (OIDC provider + tfc-plan / tfc-apply).
   enable_tfc_oidc_baseline         = var.enable_tfc_oidc_baseline

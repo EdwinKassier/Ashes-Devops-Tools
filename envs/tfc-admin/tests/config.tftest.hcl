@@ -205,3 +205,56 @@ run "explicit_enable_policy_sets_false_wins" {
 
   expect_failures = [check.destructive_changes_guarded]
 }
+
+# notifications.hcp_email_user_ids becomes an email notification (user IDs, not
+# addresses) on failed runs and every health-assessment event.
+run "hcp_assessment_notifications_use_user_ids" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+  }
+
+  assert {
+    condition = (
+      local.control_plane_notifications["notify-email"].destination_type == "email" &&
+      toset(local.control_plane_notifications["notify-email"].email_user_ids) == toset(["user-aaa", "user-bbb"]) &&
+      contains(local.control_plane_notifications["notify-email"].triggers, "assessment:drifted") &&
+      contains(local.control_plane_notifications["notify-email"].triggers, "assessment:check_failure") &&
+      contains(local.control_plane_notifications["notify-email"].triggers, "assessment:failed") &&
+      contains(local.control_plane_notifications["notify-email"].triggers, "run:errored")
+    )
+    error_message = "hcp_email_user_ids must produce an email notification with run:errored and the three assessment triggers."
+  }
+
+  assert {
+    condition     = contains(keys(local.workload_notifications), "notify-email")
+    error_message = "workload workspaces must receive the assessment email notification too."
+  }
+}
+
+# Explicitly configured notifications are kept; the section only adds its entry.
+run "explicit_notifications_are_kept" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+    control_plane_notifications = {
+      ops = { destination_type = "generic", url = "https://hooks.example.com/x" }
+    }
+  }
+
+  assert {
+    condition     = contains(keys(local.control_plane_notifications), "ops") && contains(keys(local.control_plane_notifications), "notify-email")
+    error_message = "an explicit notification must be kept alongside the config-derived email entry."
+  }
+}
+
+run "no_section_is_noop" {
+  command = plan
+
+  assert {
+    condition     = length(local.control_plane_notifications) == 0 && length(local.workload_notifications) == 0
+    error_message = "without a notifications section no notification is created."
+  }
+}

@@ -80,7 +80,7 @@ module "aws_security" {
   break_glass_mfa_max_age        = var.break_glass_mfa_max_age
   break_glass_active             = var.break_glass_active
 
-  notification_subscribers  = var.notification_subscribers
+  notification_subscribers  = local.notification_subscribers
   enabled_security_services = local.enabled_security_services
   enable_security_lake      = local.enable_security_lake
   create_organization_trail = var.create_organization_trail

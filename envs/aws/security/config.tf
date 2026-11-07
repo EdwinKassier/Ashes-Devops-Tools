@@ -28,6 +28,7 @@ locals {
     management_account_id   = try(tostring(local.lz.aws.management_account_id), null)
     log_archive_bucket_name = try(tostring(local.lz.aws.log_archive_bucket_name), null)
     aws_enabled_regions     = try([for r in local.lz.aws.enabled_regions : tostring(r)], null)
+    notification_emails     = try([for e in local.lz.notifications.emails : tostring(e)], null)
     # aws.contracts.organization: stage contract override (same shape as
     # var.organization_contract). Present => the aws-organization read is skipped.
     organization_contract = try(local.lz.aws.contracts.organization, null) == null ? null : {
@@ -49,6 +50,13 @@ locals {
   management_account_id   = coalesce(var.management_account_id, local.cfg.management_account_id, "000000000000")
   log_archive_bucket_name = coalesce(var.log_archive_bucket_name, local.cfg.log_archive_bucket_name, "unset")
   aws_enabled_regions     = var.aws_enabled_regions != null ? var.aws_enabled_regions : coalesce(local.cfg.aws_enabled_regions, ["eu-west-2"])
+
+  # variable > notifications.emails (one email subscriber each) > placeholder.
+  notification_subscribers = var.notification_subscribers != null ? var.notification_subscribers : (
+    length(coalesce(local.cfg.notification_emails, [])) > 0 ?
+    { for i, e in local.cfg.notification_emails : "notify-${i}" => { protocol = "email", endpoint = e } } :
+    { secops = { protocol = "email", endpoint = "secops@example.com" } }
+  )
 
   # Profile-driven defaults (explicit variable > profile). starter keeps every
   # preventive and core detective control (CloudTrail, Config, GuardDuty,

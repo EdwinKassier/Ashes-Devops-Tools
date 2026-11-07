@@ -35,6 +35,7 @@ locals {
     allowed_regions         = try([for r in local.lz.aws.allowed_regions : tostring(r)], null)
     aws_enabled_regions     = try([for r in local.lz.aws.enabled_regions : tostring(r)], null)
     guard_alert_emails      = try([for e in local.lz.aws.guard_alert_emails : tostring(e)], null)
+    notification_emails     = try([for e in local.lz.notifications.emails : tostring(e)], null)
     # Config recorder migration flags (docs/runbooks/aws-config-recorder-migration.md).
     enable_org_config_recorders = try(tobool(local.lz.aws.enable_org_config_recorders), null)
     enable_config_recorder_scp  = try(tobool(local.lz.aws.enable_config_recorder_scp), null)
@@ -126,8 +127,20 @@ locals {
   allowed_regions   = var.allowed_regions != null ? var.allowed_regions : coalesce(local.cfg.allowed_regions, ["eu-west-2"])
   # Same precedence and fallback as the aws-security root: the guard alerts
   # forward from every region the security services run in.
-  aws_enabled_regions         = var.aws_enabled_regions != null ? var.aws_enabled_regions : coalesce(local.cfg.aws_enabled_regions, ["eu-west-2"])
-  guard_alert_emails          = var.guard_alert_emails != null ? var.guard_alert_emails : coalesce(local.cfg.guard_alert_emails, [])
+  aws_enabled_regions = var.aws_enabled_regions != null ? var.aws_enabled_regions : coalesce(local.cfg.aws_enabled_regions, ["eu-west-2"])
+  # variable > aws.guard_alert_emails > notifications.emails > none.
+  notification_emails = coalesce(local.cfg.notification_emails, [])
+  guard_alert_emails = var.guard_alert_emails != null ? var.guard_alert_emails : (
+    length(coalesce(local.cfg.guard_alert_emails, [])) > 0 ? local.cfg.guard_alert_emails : local.notification_emails
+  )
+  # Budgets without their own recipients, and the single anomaly address, follow
+  # notifications.emails (default: today's values).
+  budgets = {
+    for k, b in var.budgets : k => merge(b, { emails = length(b.emails) > 0 ? b.emails : local.notification_emails })
+  }
+  cost_anomaly_email = var.cost_anomaly_email != null ? var.cost_anomaly_email : (
+    length(local.notification_emails) > 0 ? local.notification_emails[0] : "finops@example.com"
+  )
   enable_org_config_recorders = var.enable_org_config_recorders != null ? var.enable_org_config_recorders : coalesce(local.cfg.enable_org_config_recorders, false)
   enable_config_recorder_scp  = var.enable_config_recorder_scp != null ? var.enable_config_recorder_scp : coalesce(local.cfg.enable_config_recorder_scp, false)
   terraform_run_role_arn      = coalesce(var.terraform_run_role_arn, local.cfg.terraform_run_role_arn, "arn:aws:iam::000000000000:role/unset")

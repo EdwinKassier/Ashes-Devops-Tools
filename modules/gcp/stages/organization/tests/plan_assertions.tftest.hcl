@@ -947,3 +947,18 @@ run "containment_uses_namespaced_tag_ids" {
     error_message = "the audit-store deny condition must match the namespaced tag IDs."
   }
 }
+
+# Budget alerts can reuse the control-plane email channels (opt-in).
+run "budget_channels_opt_in" {
+  command = plan
+
+  variables {
+    monthly_budget_amount        = 100
+    budget_notify_alert_channels = true
+  }
+
+  assert {
+    condition     = length(module.org_budget) == 1 && length(module.org_budget[0].budget_name) > 0
+    error_message = "the org budget must plan with the control-plane channels attached."
+  }
+}

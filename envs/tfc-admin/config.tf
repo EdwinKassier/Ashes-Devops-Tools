@@ -67,7 +67,8 @@ locals {
   ))
 
   cfg = {
-    tfc_organization = try(tostring(local.lz.org.tfc.organization), null)
+    tfc_organization   = try(tostring(local.lz.org.tfc.organization), null)
+    hcp_email_user_ids = try([for u in local.lz.notifications.hcp_email_user_ids : tostring(u)], [])
     # The same key gcp-bootstrap reads as project_prefix: the <prefix> of its
     # <prefix>-wl-<env>-{plan,apply} workload service accounts.
     gcp_project_prefix  = try(tostring(local.lz.org.prefix), null)
@@ -117,6 +118,23 @@ locals {
   project_name_prefix = var.project_name_prefix != null ? var.project_name_prefix : coalesce(local.cfg.project_name_prefix, "landing-zone-")
   vcs_repo            = var.vcs_repo != null ? var.vcs_repo : local.cfg.vcs_repo
   tfc_plan            = var.tfc_plan != null ? var.tfc_plan : local.cfg.tfc_plan
+
+  # notifications.hcp_email_user_ids: one email notification per workspace on
+  # failed runs and on every health-assessment event. HCP email notifications
+  # take user IDs (plain addresses work only on Terraform Enterprise). An
+  # explicitly configured notification of the same name wins.
+  config_email_notification = length(local.cfg.hcp_email_user_ids) == 0 ? {} : {
+    notify-email = {
+      destination_type = "email"
+      url              = null
+      token            = null
+      email_user_ids   = local.cfg.hcp_email_user_ids
+      triggers         = ["run:errored", "run:needs_attention", "assessment:drifted", "assessment:check_failure", "assessment:failed"]
+      enabled          = true
+    }
+  }
+  control_plane_notifications = merge(local.config_email_notification, var.control_plane_notifications)
+  workload_notifications      = merge(local.config_email_notification, var.workload_notifications)
   # VCS-sourced policy sets on by default only where the plan enforces them
   # (free and essentials are left to an explicit enable_policy_sets = true).
   enable_policy_sets = var.enable_policy_sets != null ? var.enable_policy_sets : (

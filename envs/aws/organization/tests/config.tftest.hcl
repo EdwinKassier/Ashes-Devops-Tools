@@ -233,3 +233,51 @@ run "split_workload_projects_trust_the_workloads_project" {
     error_message = "with split_workload_projects, workload accounts must trust <prefix>aws-workloads and foundational ones the default project."
   }
 }
+
+# notifications.emails feeds the org-guard-alerts topic, the budget emails and
+# the Cost Anomaly Detection address.
+run "emails_feed_org_guard_topic" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+  }
+
+  assert {
+    condition     = join(",", local.guard_alert_emails) == "alerts@cfg.test,oncall@cfg.test"
+    error_message = "notifications.emails must feed the org-guard-alerts subscriptions when aws.guard_alert_emails is unset."
+  }
+
+  assert {
+    condition     = local.cost_anomaly_email == "alerts@cfg.test" && join(",", local.budgets["org-monthly"].emails) == "alerts@cfg.test,oncall@cfg.test"
+    error_message = "notifications.emails must feed the default budget emails and the anomaly address."
+  }
+}
+
+# The specific key beats the shared section; the variable beats both.
+run "guard_key_beats_notifications_emails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
+  }
+
+  assert {
+    condition     = join(",", local.guard_alert_emails) == "secops@cfg.test"
+    error_message = "aws.guard_alert_emails must win over notifications.emails."
+  }
+}
+
+# No section: budgets, the anomaly address and the guard topic keep today's values.
+run "no_section_is_noop" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-split.yaml"
+  }
+
+  assert {
+    condition     = local.cost_anomaly_email == "finops@example.com" && length(local.budgets["org-monthly"].emails) == 0 && length(local.guard_alert_emails) == 0
+    error_message = "without a notifications section the FinOps defaults and an empty guard list must be unchanged."
+  }
+}

@@ -332,6 +332,12 @@ variable "alert_notification_emails" {
   }
 }
 
+variable "budget_notify_alert_channels" {
+  description = "Attach the control-plane email notification channels to the organization budget, so budget alerts reach the same recipients. Default false (the budget notifies only its Pub/Sub topic). Needs enable_control_plane_alerting and alert_notification_emails."
+  type        = bool
+  default     = false
+}
+
 variable "alert_notification_channels" {
   description = "IDs of existing Cloud Monitoring notification channels (projects/<p>/notificationChannels/<id>) attached to every control-plane alert. Default []."
   type        = list(string)

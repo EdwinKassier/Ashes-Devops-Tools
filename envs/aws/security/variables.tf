@@ -184,17 +184,15 @@ variable "break_glass_role_arn" {
 # -----------------------------------------------------------------------------
 
 variable "notification_subscribers" {
-  description = "Subscribers attached to the security-notifications SNS topic, keyed by an arbitrary name. At least one is required. Defaults to a placeholder SecOps email the root is expected to override."
+  description = "Subscribers attached to the security-notifications SNS topic, keyed by an arbitrary name. Null (default) = one email subscriber per notifications.emails entry in config/landing-zone.yaml, else a placeholder SecOps email the root is expected to override. A set value needs at least one subscriber."
   type = map(object({
     protocol = string # "email" | "https" | "sms" | "sqs" | "lambda" | ...
     endpoint = string # e.g. an email address or HTTPS URL
   }))
-  default = {
-    secops = { protocol = "email", endpoint = "secops@example.com" }
-  }
+  default = null
 
   validation {
-    condition     = length(var.notification_subscribers) > 0
+    condition     = var.notification_subscribers == null || length(var.notification_subscribers) > 0
     error_message = "notification_subscribers must contain at least one subscriber."
   }
 }

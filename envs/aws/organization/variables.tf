@@ -222,7 +222,7 @@ variable "enable_cost_governance" {
 }
 
 variable "budgets" {
-  description = "Monthly COST budgets keyed by budget name. limit_amount is the USD limit; threshold_percent triggers an ACTUAL-spend notification; emails receive the notification."
+  description = "Monthly COST budgets keyed by budget name. limit_amount is the USD limit; threshold_percent triggers an ACTUAL-spend notification; emails receive the notification (empty = notifications.emails from config/landing-zone.yaml)."
   type = map(object({
     limit_amount      = string
     threshold_percent = number
@@ -252,9 +252,9 @@ variable "cost_notifications_topic_arn" {
 }
 
 variable "cost_anomaly_email" {
-  description = "Email address that receives Cost Anomaly Detection alerts."
+  description = "Email address that receives Cost Anomaly Detection alerts. Null (default) = the first notifications.emails entry from config/landing-zone.yaml, else finops@example.com."
   type        = string
-  default     = "finops@example.com"
+  default     = null
 }
 
 # -----------------------------------------------------------------------------

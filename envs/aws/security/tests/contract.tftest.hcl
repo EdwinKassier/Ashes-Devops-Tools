@@ -171,3 +171,55 @@ run "variable_contract_beats_config_contract" {
     error_message = "explicit variables must win over the config file."
   }
 }
+
+# notifications.emails becomes one email subscriber each on the
+# security-notifications topic (and, by reuse, the CIS alarm topic).
+run "emails_feed_security_topic" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    log_archive_bucket_name  = null
+    enable_security_lake     = null
+  }
+
+  assert {
+    condition = (
+      length(local.notification_subscribers) == 2 &&
+      alltrue([for s in values(local.notification_subscribers) : s.protocol == "email"]) &&
+      toset([for s in values(local.notification_subscribers) : s.endpoint]) == toset(["alerts@cfg.test", "oncall@cfg.test"])
+    )
+    error_message = "notifications.emails must become email subscribers of the security-notifications topic."
+  }
+}
+
+# An explicit variable beats the config section.
+run "explicit_subscribers_beat_notifications_emails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    log_archive_bucket_name  = null
+    enable_security_lake     = null
+    notification_subscribers = { soc = { protocol = "https", endpoint = "https://soc.example.com/hook" } }
+  }
+
+  assert {
+    condition     = length(local.notification_subscribers) == 1 && contains(keys(local.notification_subscribers), "soc")
+    error_message = "an explicit notification_subscribers must win over notifications.emails."
+  }
+}
+
+# No section: the historical placeholder subscriber is kept.
+run "no_section_is_noop" {
+  command = plan
+
+  assert {
+    condition     = length(local.notification_subscribers) == 1 && local.notification_subscribers["secops"].endpoint == "secops@example.com"
+    error_message = "without a notifications section the default placeholder subscriber must be unchanged."
+  }
+}

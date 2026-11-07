@@ -796,7 +796,7 @@ module "workspace" {
 
   # Control-plane and bootstrap workspaces alert on failed runs;
   # workload workspaces use the separate workload channel (both default empty).
-  notifications = local.is_control_plane[each.key] ? var.control_plane_notifications : var.workload_notifications
+  notifications = local.is_control_plane[each.key] ? local.control_plane_notifications : local.workload_notifications
 }
 
 # Remote-state sharing: global_remote_state is false on every workspace and only
