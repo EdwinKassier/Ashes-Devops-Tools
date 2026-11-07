@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Report modules that no deployable root reaches (informational, never fails).
+"""Report modules that no deployable root reaches (informational unless --check).
 
 A module is a directory under modules/ holding a versions.tf (same definition as
 scripts/check-docs-counts.sh). Every `source = "<relative path>"` in a *.tf file
@@ -28,7 +28,8 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+# MODULE_USAGE_ROOT lets tests point the script at a temp tree.
+ROOT = Path(os.environ.get("MODULE_USAGE_ROOT") or Path(__file__).resolve().parent.parent).resolve()
 SKIP_DIRS = {".git", ".terraform", ".claude", "node_modules"}
 SOURCE = re.compile(r'^\s*source\s*=\s*"(\.{1,2}/[^"]+)"', re.MULTILINE)
 
@@ -90,10 +91,18 @@ def main() -> int:
     example_only = sorted(rel(m) for m in from_examples)
     uncalled = sorted(rel(m) for m in modules - wired - from_examples)
     marker = "> Status: experimental"
-    experimental = [
-        m for m in uncalled
-        if marker in (ROOT / m / "README.md").read_text(encoding="utf-8", errors="replace").splitlines()
-    ]
+
+    def has_marker(m: str) -> bool:
+        readme = ROOT / m / "README.md"
+        if not readme.is_file():
+            print(f"check-module-usage: {m} has no README.md; treated as unmarked", file=sys.stderr)
+            return False
+        text = readme.read_text(encoding="utf-8", errors="replace")
+        return any(line.strip() == marker for line in text.splitlines())
+
+    experimental = [m for m in uncalled if has_marker(m)]
+    # Stale markers: a module that is wired or example-called but still says experimental.
+    stale = sorted(rel(m) for m in (wired | from_examples) & modules if has_marker(rel(m)))
     unreferenced = [m for m in uncalled if m not in experimental]
 
     print(f"check-module-usage: {len(modules)} modules — {len(wired & modules)} wired into a root, "
@@ -106,6 +115,9 @@ def main() -> int:
             print(f"  experimental:  {m}")
         for m in unreferenced:
             print(f"  unreferenced:  {m}")
+    for m in stale:
+        print(f"check-module-usage: WARNING {m} has a caller but still carries "
+              f'"{marker}"; remove the marker', file=sys.stderr)
     if "--check" in sys.argv[1:] and unreferenced:
         print("check-module-usage: FAIL - wire the module, or add the line "
               f'"{marker}" to its README.', file=sys.stderr)
