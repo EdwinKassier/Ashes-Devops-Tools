@@ -128,8 +128,9 @@ Peak-to-average is assumed to be 3×.
   checked 2026-11), and each socket is a file descriptor. Memory per idle
   connection is assumed at about 64 KB including buffers (**verify before
   relying on**: measure your runtime), so 50,000 × 64 KB ≈ 3.2 GB.
-- 10 M / 50,000 = 200 tasks, plus 30% headroom so that losing one zone of three
-  does not overload the others: **about 260 tasks of 4 vCPU and 8 GB**.
+- 10 M / 50,000 = 200 tasks. To survive losing one zone of three, the other two
+  must hold all 10 M: 10 M / (2/3) / 50,000 = **300 tasks of 4 vCPU and 8 GB**
+  (50% headroom).
 - On Cloud Run, concurrency per instance caps at 1,000
   ([Google Cloud docs](https://docs.cloud.google.com/run/docs/triggering/websockets),
   checked 2026-11). 10 M / 1,000 = **10,000 instances**. That number is what
@@ -141,8 +142,9 @@ Peak-to-average is assumed to be 3×.
   per second ([AWS pricing](https://aws.amazon.com/elasticloadbalancing/pricing/),
   checked 2026-11).
 - 10 M / 3,000 ≈ **3,300 LCUs** for active connections versus 5,500 / 25 = 220
-  for new ones. Long-lived sockets make **active connections the ALB bill**,
-  the main argument for a Network Load Balancer at this scale.
+  for new ones. Long-lived sockets make **active connections the ALB bill**.
+  One NLB capacity unit (NLCU) covers 100,000 active TCP connections, so the
+  same load is about 100 NLCUs: the main argument for an NLB at this scale.
 
 **Decisions these numbers drive:** presence in memory with TTLs; per-gateway
 channels, not broadcast; density per task matters more than CPU; a 10 M-client
@@ -250,11 +252,11 @@ Steps 4 to 6 may lose messages; the client repairs any `seq` gap from the store.
 ### 1. Connection-tier scaling and routing a message to the right socket
 
 The core problem: a message is produced on one machine and must reach sockets
-held by a handful of the 260 gateways. Four ways to do it:
+held by a handful of the 300 gateways. Four ways to do it:
 
 | Option | How it works | Why not (or why) |
 |---|---|---|
-| Broadcast to all gateways | Every gateway subscribes to one channel and filters locally. | 70,000 msg/s × 260 gateways = 18 M deliveries/s, almost all discarded. |
+| Broadcast to all gateways | Every gateway subscribes to one channel and filters locally. | 70,000 msg/s × 300 gateways = 21 M deliveries/s, almost all discarded. |
 | Hash users to gateways | The load balancer routes `user_id` to a fixed gateway; the sender computes the target. | Needs custom routing on an application identity, and every scale-out remaps users and forces mass reconnects. |
 | **Registry + per-gateway channel** | Gateways record where each device lives; senders publish once per target gateway. | **Chosen.** Cost is proportional to actual recipients. Any gateway can hold any user. |
 | Per-room channel | Gateways subscribe to the room channels of the users they hold. | **Chosen for large rooms only.** One publish reaches every interested gateway, with no registry lookup per member. |
@@ -264,7 +266,7 @@ message to every node over the cluster bus. Sharded pub/sub (`SPUBLISH`,
 `SSUBSCRIBE`), introduced in Redis OSS 7.0, hashes a channel to a slot like a
 key and keeps the message inside that shard, so pub/sub capacity grows with
 shards ([Valkey docs](https://valkey.io/topics/pubsub/), checked 2026-11). With
-260 `gw:{id}` channels spread over, say, 6 shards, each shard carries about
+300 `gw:{id}` channels spread over, say, 6 shards, each shard carries about
 280,000 / 6 ≈ 47,000 publishes/s. That is inside the folk figure of about
 100,000 simple operations per second per shard in the primer, which is itself
 marked **verify before relying on**: load-test the node type.
@@ -287,7 +289,7 @@ subscription count, hence the hybrid.
 - **Connection density.** One task failure is a 50,000-client reconnect.
   Smaller tasks mean smaller blasts but more channels. 20,000–50,000 is a
   reasonable band; **verify before relying on** it for your runtime.
-- **Registry and pub/sub client connections** are modest: 260 gateways plus the
+- **Registry and pub/sub client connections** are modest: 300 gateways plus the
   `chat-api` fleet, each with a few connections per shard, against 65,000
   `maxclients` per ElastiCache node
   ([AWS docs](https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/ParameterGroups.Engine.html),
@@ -427,7 +429,7 @@ the runbook covers the case where it happens anyway.
 | Decision | Chosen | Rejected | Why | What would change the answer |
 |---|---|---|---|---|
 | Transport | WebSocket | Server-sent events plus HTTP POST; long polling | Bidirectional, high-frequency traffic in both directions; one connection per device. | Mostly server-to-client feeds: SSE is simpler and works through more proxies. |
-| Connection tier (AWS) | ECS Fargate behind an ALB | API Gateway WebSocket APIs; NLB | The repo's app-services path gives Fargate + ALB today. API Gateway's 500 new connections/s default and 2-hour cap fit a smaller product. | Above a few million connections the ALB's per-active-connection LCU cost argues for an NLB with TLS at the gateway. |
+| Connection tier (AWS) | ECS Fargate behind an ALB | API Gateway WebSocket APIs; NLB | The repo's app-services path gives Fargate + ALB today. API Gateway's 500 new connections/s default and 2-hour cap fit a smaller product. | Above a few million connections: an NLB with TLS at the gateway (100,000 active connections per NLCU versus 3,000 per ALB LCU). |
 | Connection tier (GCP) | Cloud Run behind the global external ALB | GKE Autopilot | The repo's app-services path; zero cluster operations; fine up to about 1 M connections. | 10 M connections means 10,000 Cloud Run instances and a 60-minute forced reconnect. Move to GKE (the repo can enable an Autopilot cluster) for denser pods and 24-hour connections. |
 | Routing | Registry + per-gateway sharded channel | Broadcast; consistent hashing | Work proportional to actual recipients; any gateway holds any user. | Mostly huge rooms (live events): per-room channels everywhere. |
 | Delivery guarantee | Durable write, then best-effort push, with client gap repair | Durable per-user queues | One replayable log (the store) instead of 50 M queues. | Strict server-side delivery receipts for compliance: add a per-device delivery log. |
@@ -443,31 +445,31 @@ the runbook covers the case where it happens anyway.
 | Load | First thing to fail | Fix |
 |---|---|---|
 | ×1 (10 M connections) | Nothing, if sized as above. | |
-| ×10 (100 M connections) | Load-balancer cost; registry reads (3.5 M/s); 2,600 channels. | NLB; more shards; cells (a full stack per slice of users) with a cross-cell router. |
+| ×10 (100 M connections) | Load-balancer cost; registry reads (3.5 M/s); 3,000 channels. | NLB; more shards; cells (a full stack per slice of users) with a cross-cell router. |
 | ×100 | A single region. Cross-cell routing and per-region data residency dominate. | Multi-region active-active; see the multi-region walkthrough. |
-| Hot room (one room ×100) | The room's counter key and its pub/sub channel, both on one shard. | Per-room channels split by sub-channel; block allocation of `seq`; drop typing and presence for rooms above a size. |
+| Hot room (one room ×100) | The room's counter key and channel, both on one shard. | Split the room channel; allocate `seq` in blocks; drop typing and presence in huge rooms. |
 
 ### Blast radius per component
 
 | Component | If it fails | Blast radius | Recovery |
 |---|---|---|---|
 | One gateway task | Its sockets drop. | Up to 50,000 clients reconnect. | Clients reconnect elsewhere with jitter; registry entries expire in 90 s. |
-| One zone | A third of the gateways and a third of the load balancer's nodes. | About 3.3 M reconnects. | 30% headroom absorbs it; admission control spreads it. |
+| One zone | A third of the gateways and a third of the load balancer's nodes. | About 3.3 M reconnects. | 50% headroom absorbs it; admission control spreads it. |
 | Valkey shard primary | Failover to a replica; in-flight publishes on that shard lost. | Messages to gateways whose channels hash to that shard are delayed until clients repair gaps. | Automatic failover; clients fetch `after_seq`. |
 | Whole Valkey cluster | No routing, no presence. | Live delivery stops; sends still succeed (durable first). | Degrade to client polling of `after_seq` every few seconds until restored. |
-| Message store | Sends fail. | Total for writes; reads of history fail. | The one component you cannot degrade around. Use a multi-zone managed store and point-in-time recovery. |
+| Message store | Sends and history fail. | Total for writes. | Cannot be degraded around: use a multi-zone store with point-in-time recovery. |
 | `chat-api` | Sends and resumes fail. | Total for writes. | Stateless; scale out. |
 
 ## AWS and GCP mapping
 
 | Component | AWS | GCP | Difference that matters |
 |---|---|---|---|
-| Edge and WAF | CloudFront + AWS WAF | Global external Application Load Balancer + Cloud Armor | CloudFront needs the `Sec-WebSocket-*` headers forwarded and supports WebSockets over HTTP/1.1 only ([AWS docs](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/distribution-working-with.websockets.html), checked 2026-11). The repo's CloudFront origin request policy (`AllViewerExceptHostHeader`) already forwards them. **Verify before relying on** CloudFront's timeouts for hour-long sockets. |
+| Edge and WAF | CloudFront + AWS WAF | Global external Application Load Balancer + Cloud Armor | CloudFront needs the `Sec-WebSocket-*` headers forwarded (the repo's `AllViewerExceptHostHeader` policy does) and supports WebSockets over HTTP/1.1 only ([AWS docs](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/distribution-working-with.websockets.html), checked 2026-11). Its origin response timeout defaults to 30 s between origin packets; no WebSocket maximum duration is documented ([AWS docs](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/DownloadDistValuesOrigin.html), checked 2026-11). With `cloudfront_vpc_origin` that 30 s is tighter than the ALB's 60 s; the 25 s ping still fits. `edge-security` sets no read timeout. |
 | Load balancer | ALB (idle timeout 1–4,000 s, default 60 s) | Global external ALB with a serverless NEG (fixed 60-minute timeout) or a GKE backend (idle closes at the backend timeout, active at 24 h) | The ALB's idle timeout means clients must ping under 60 s unless you raise it. |
 | Gateway compute | ECS Fargate | Cloud Run (or GKE Autopilot at scale) | Cloud Run's 1,000 concurrency and 60-minute cap; Fargate's `nofile` 65,535 default. |
 | Managed alternative | API Gateway WebSocket APIs | None first-party | Limits in the trade-offs and study aids. |
 | Registry and pub/sub | ElastiCache for Valkey, cluster mode | Memorystore for Valkey, cluster mode | Memorystore connects over Private Service Connect through a service connection policy; ElastiCache sits in a subnet. |
-| Message store | DynamoDB | Bigtable (Firestore at small scale) | DynamoDB on-demand bills per request; Bigtable bills per provisioned node, so a small deployment pays a floor (**verify before relying on** current pricing). |
+| Message store | DynamoDB | Bigtable (Firestore at small scale) | DynamoDB on-demand bills per request; Bigtable bills provisioned nodes hourly whether used or not ([pricing](https://cloud.google.com/bigtable/pricing), checked 2026-11), so a small deployment pays a floor. |
 | Offline handoff | SQS | Pub/Sub | See the notification system walkthrough. |
 | Keys | KMS CMK `alias/workload-<env>` | Cloud KMS key ring `<prefix>-<env>-cmek` | GCP needs the key added (see [CMEK source](00-primer.md#cmek-source)). |
 
@@ -506,7 +508,7 @@ aws:
           memory: 8192
           enable_autoscaling: true
           autoscaling_min_capacity: 12
-          autoscaling_max_capacity: 300
+          autoscaling_max_capacity: 360
           path_patterns: [/v1/ws]
           health_check_path: /readyz
         chat-api: {enable_autoscaling: true, health_check_path: /healthz}
@@ -701,8 +703,6 @@ Notes:
   needs Encrypter/Decrypter before creation
   ([Google Cloud docs](https://docs.cloud.google.com/memorystore/docs/valkey/use-cmek),
   checked 2026-11).
-- Cloud Run reaches the PSC endpoints over Direct VPC egress (the default
-  `PRIVATE_RANGES_ONLY` covers internal ranges).
 - The Bigtable message store follows the same pattern: `kms_key_name` on its
   `cluster` block, with the Bigtable service agent on the key
   ([registry](https://registry.terraform.io/providers/hashicorp/google/8.10.0/docs/resources/bigtable_instance),
@@ -746,31 +746,27 @@ balancer event) and are failing to reconnect or reconnecting in waves.
 3. **Add capacity.** Raise `autoscaling_min_capacity` (AWS) or `min_instances`
    (GCP) in config and run it through TFC; reconcile any emergency console
    change in config afterwards.
-4. **Shed optional work.** Turn off presence fan-out and typing with a feature
-   flag. Resume replays are the priority.
+4. **Shed optional work:** flag off presence fan-out and typing.
 5. **Protect the store.** If resume queries throttle DynamoDB or overload
    Bigtable, cap the resume page size and let clients page.
 
 **Verification.**
 
 - Active connections back within 5% of the pre-incident baseline.
-- Gateway 503 rate under 1%, and p99 send-to-deliver back under 500 ms.
-- No growth in clients reporting `seq` gaps that do not close.
+- Gateway 503 rate under 1%; p99 send-to-deliver under 500 ms; no lasting
+  `seq` gaps.
 
 **Follow-up.**
 
-- Restore admission rates, flags and capacity in `config/landing-zone.yaml`, so
-  nothing stays as console drift.
+- Reconcile admission rates, flags and capacity in `config/landing-zone.yaml`.
 - Check that the release process drains gateways in batches with `goaway`, and
   that the deregistration delay covers the drain.
-- Measure how many clients ignored jitter; force-upgrade old client versions.
+- Force-upgrade client versions that ignored jitter.
 
 ### Secondary: Valkey shard failover
 
-**Detection:** a failover event and a spike in client gap repairs.
-**Mitigation:** confirm gateways resubscribed (one subscriber per `gw:{id}`).
-**Verification:** gap repairs back to baseline. **Follow-up:** check memory
-pressure and output-buffer limits if it recurs.
+Detect a failover plus a spike in gap repairs; confirm one subscriber per
+`gw:{id}` and that repairs return to baseline.
 
 ## Study aids
 
@@ -802,8 +798,10 @@ pressure and output-buffer limits if it recurs.
 - **"100 M connections?"** Cells (independent stacks per slice of users) with a
   router for cross-cell conversations, an NLB in front, denser pods.
 - **"Why not API Gateway WebSockets?"** At small scale, do. At 10 M
-  connections its connect rate, 2-hour cap and per-message pricing bite
-  (**verify before relying on** current pricing).
+  connections its connect rate and 2-hour cap bite, and so does price: in
+  us-east-1, $1.00 per million messages (metered in 32 KB units) plus $0.25 per
+  million connection-minutes
+  ([pricing](https://aws.amazon.com/api-gateway/pricing/), checked 2026-11).
 - **"Presence at this scale?"** Never in the database: TTL keys, batched
   refresh, debounced reconnects, fan-out to online subscribers only.
 
@@ -819,7 +817,5 @@ pressure and output-buffer limits if it recurs.
 
 ### Further reading
 
-- [Valkey pub/sub](https://valkey.io/topics/pubsub/)
-- [WebSockets on Cloud Run](https://docs.cloud.google.com/run/docs/triggering/websockets)
-- [Google Cloud WebSocket timeouts](https://docs.cloud.google.com/load-balancing/docs/https/request-distribution)
-- [ALB listeners and WebSockets](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-listeners.html)
+[Valkey pub/sub](https://valkey.io/topics/pubsub/) and
+[ALB listeners and WebSockets](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-listeners.html).
