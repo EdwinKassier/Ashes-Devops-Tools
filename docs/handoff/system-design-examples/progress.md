@@ -70,3 +70,6 @@ Task 4: complete (commits d842499, 3afa694)
 Task 4: minor (deferred): L456 state-store trade-off row still says 17,000 writes/s (should be ~51,000) — fix word-neutral in Task 22
 Task 6: implemented 56fd864 (5930 words; anchors #adapter-and-port-contract-with-capability-negotiation #routing-and-failover-policy #failover-semantics-and-consistency-during-switchover #adding-a-backend-without-client-changes); review dispatched (opus)
 REPO GAPS: AWS app-services wires only writer DB_HOST (no Aurora reader endpoint); network-hub vpc_endpoints default list lacks AppConfig/Secrets Manager and stage doesn't expose it; net-spoke passes no nat_ips (no stable GCP egress IPs)
+Task 8: implemented be9cc61 (5941 words; 4 deep dives per spec entry); review dispatched (opus)
+Ruling: spec entry deep-dive list wins over writer-instructions "2–3" when the spec names more (spec is binding) — cost: longer walkthroughs
+REPO GAPS: AWS app_ingress_mode exposes whole shared ALB (no per-service exposure); no restricted/append-only DB role (AWS hands master secret; GCP runtime SA is IAM DB user); no scheduled-task support (AWS app-services, GCP Cloud Run jobs); GCP Cloud SQL edition default ENTERPRISE caps PITR logs at 7 days
