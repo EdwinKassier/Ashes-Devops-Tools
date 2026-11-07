@@ -54,14 +54,16 @@ override_module {
 }
 
 
+# vpc_sc_access_policy_name / vpc_sc_enable_dry_run are operator-supplied: the
+# access policy is created out of band, so the scaffold cannot carry it. The
+# check block hub_vpc_sc_enforced_when_prod_present only warns at plan time
+# (terraform test reports a failed check as a failure), so each scaffold run
+# supplies both to keep the production perimeter enforced.
 run "scaffold_gcp_plans" {
   command = plan
 
   variables {
-    landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp.yaml"
-    # Operator-supplied: a production estate must enforce the hub VPC-SC
-    # perimeter (check hub_vpc_sc_enforced_when_prod_present); the access
-    # policy is created out of band, so the scaffold cannot carry it.
+    landing_zone_config_path  = "../../../tests/fixtures/scaffold/landing-zone.gcp.yaml"
     vpc_sc_access_policy_name = "1234567890"
     vpc_sc_enable_dry_run     = false
   }
@@ -71,10 +73,7 @@ run "scaffold_gcp_aws_plans" {
   command = plan
 
   variables {
-    landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws.yaml"
-    # Operator-supplied: a production estate must enforce the hub VPC-SC
-    # perimeter (check hub_vpc_sc_enforced_when_prod_present); the access
-    # policy is created out of band, so the scaffold cannot carry it.
+    landing_zone_config_path  = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws.yaml"
     vpc_sc_access_policy_name = "1234567890"
     vpc_sc_enable_dry_run     = false
   }
@@ -84,10 +83,7 @@ run "scaffold_gcp_aws_saas_plans" {
   command = plan
 
   variables {
-    landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
-    # Operator-supplied: a production estate must enforce the hub VPC-SC
-    # perimeter (check hub_vpc_sc_enforced_when_prod_present); the access
-    # policy is created out of band, so the scaffold cannot carry it.
+    landing_zone_config_path  = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
     vpc_sc_access_policy_name = "1234567890"
     vpc_sc_enable_dry_run     = false
   }

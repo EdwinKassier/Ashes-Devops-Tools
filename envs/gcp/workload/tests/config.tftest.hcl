@@ -186,6 +186,46 @@ run "scaffold_gcp_plans" {
   variables {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp.yaml"
     environment              = "dev"
+    # Undo the file-level standalone/no-budget settings so the budget module
+    # (operator-chosen limit; the root takes it from a variable, not config)
+    # and the hub wiring (remote-state contract below) are planned.
+    monthly_budget_limit = 1000
+    enable_network_hub   = true
+  }
+
+  # google_billing_account.id is the bare XXXXXX-XXXXXX-XXXXXX form, which the
+  # budget module requires (the file-level override uses the name form).
+  override_data {
+    target = data.terraform_remote_state.organization
+    values = {
+      outputs = {
+        contract = {
+          org_id               = "123456789012"
+          billing_account      = "000000-111111-222222"
+          admin_project_number = "111111111111"
+          cmek_key_names       = {}
+        }
+      }
+    }
+  }
+
+  override_data {
+    target = data.terraform_remote_state.network_hub[0]
+    values = {
+      outputs = {
+        contract = {
+          hub_network = {
+            vpc_self_link = "https://www.googleapis.com/compute/v1/projects/acme-hub-abcd/global/networks/acme-hub-vpc"
+            dns_domain    = "hub.internal."
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = length(module.budget) == 1 && local.read_network_hub
+    error_message = "the scaffold runs must plan the budget module and read the network-hub remote state."
   }
 }
 
@@ -195,6 +235,46 @@ run "scaffold_gcp_aws_plans" {
   variables {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws.yaml"
     environment              = "dev"
+    # Undo the file-level standalone/no-budget settings so the budget module
+    # (operator-chosen limit; the root takes it from a variable, not config)
+    # and the hub wiring (remote-state contract below) are planned.
+    monthly_budget_limit = 1000
+    enable_network_hub   = true
+  }
+
+  # google_billing_account.id is the bare XXXXXX-XXXXXX-XXXXXX form, which the
+  # budget module requires (the file-level override uses the name form).
+  override_data {
+    target = data.terraform_remote_state.organization
+    values = {
+      outputs = {
+        contract = {
+          org_id               = "123456789012"
+          billing_account      = "000000-111111-222222"
+          admin_project_number = "111111111111"
+          cmek_key_names       = {}
+        }
+      }
+    }
+  }
+
+  override_data {
+    target = data.terraform_remote_state.network_hub[0]
+    values = {
+      outputs = {
+        contract = {
+          hub_network = {
+            vpc_self_link = "https://www.googleapis.com/compute/v1/projects/acme-hub-abcd/global/networks/acme-hub-vpc"
+            dns_domain    = "hub.internal."
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = length(module.budget) == 1 && local.read_network_hub
+    error_message = "the scaffold runs must plan the budget module and read the network-hub remote state."
   }
 }
 
@@ -204,5 +284,45 @@ run "scaffold_gcp_aws_saas_plans" {
   variables {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
     environment              = "dev"
+    # Undo the file-level standalone/no-budget settings so the budget module
+    # (operator-chosen limit; the root takes it from a variable, not config)
+    # and the hub wiring (remote-state contract below) are planned.
+    monthly_budget_limit = 1000
+    enable_network_hub   = true
+  }
+
+  # google_billing_account.id is the bare XXXXXX-XXXXXX-XXXXXX form, which the
+  # budget module requires (the file-level override uses the name form).
+  override_data {
+    target = data.terraform_remote_state.organization
+    values = {
+      outputs = {
+        contract = {
+          org_id               = "123456789012"
+          billing_account      = "000000-111111-222222"
+          admin_project_number = "111111111111"
+          cmek_key_names       = {}
+        }
+      }
+    }
+  }
+
+  override_data {
+    target = data.terraform_remote_state.network_hub[0]
+    values = {
+      outputs = {
+        contract = {
+          hub_network = {
+            vpc_self_link = "https://www.googleapis.com/compute/v1/projects/acme-hub-abcd/global/networks/acme-hub-vpc"
+            dns_domain    = "hub.internal."
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = length(module.budget) == 1 && local.read_network_hub
+    error_message = "the scaffold runs must plan the budget module and read the network-hub remote state."
   }
 }
