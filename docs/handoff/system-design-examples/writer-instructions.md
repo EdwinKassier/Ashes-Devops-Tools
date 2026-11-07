@@ -26,6 +26,17 @@ These anti-goals are the user's own.
 - **Usable as a study guide.** Use explicit numbers in the estimates. The trade-off table is a real decision record. Study aids give crisp follow-up answers.
 - **Length.** 3,000–6,000 words, counted with `wc -w`.
 
+## Lessons from earlier reviews (avoid these)
+- **Capacity numbers.** Re-derive every capacity number after you pick headroom. A zone-loss scenario must still meet the load.
+- **Copyable code.** Any SQL or pseudo-code a reader might copy must be correct:
+  - Detect duplicates by checking the row count or `RETURNING`.
+  - Conditional updates must check how many rows they matched.
+  - Outbox column names: say which CDC tool's defaults they match.
+- **Write limits.** Count every write path against provisioned or default limits, not only the obvious one.
+- **TTL fields.** Check TTL and expiry field types against each store's docs. Firestore TTL needs a Timestamp; DynamoDB TTL needs epoch seconds.
+- **Grants.** A grant on one service doesn't cover a caller. Check that every caller of an encrypted queue, topic or bucket has KMS on the key.
+- **GCP subscriptions.** Raw Pub/Sub subscriptions need `expiration_policy { ttl = "" }`.
+
 ## Build it here
 - Name the real roots and workspaces, and the apply order.
 - Show `config/landing-zone.yaml` snippets using real keys (check them in `config/landing-zone.schema.json`).
