@@ -65,3 +65,6 @@ Task 4: fix round 1 committed 3afa694; scoped re-review dispatched
 Task 5: re-review Approved
 Task 5: complete (commits bfbafca, 01f0910)
 Task 5: minor (deferred): inventory task_role_policy_json example not shown; consumer snippet doesn't write the reservations table
+Task 4: re-review Approved
+Task 4: complete (commits d842499, 3afa694)
+Task 4: minor (deferred): L456 state-store trade-off row still says 17,000 writes/s (should be ~51,000) — fix word-neutral in Task 22
