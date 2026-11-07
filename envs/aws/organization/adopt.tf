@@ -33,3 +33,13 @@ import {
   to       = module.aws_organization.module.account[each.key].aws_organizations_account.this
   id       = each.value
 }
+
+# The CloudTrail delegated admin. aws-security registered cloudtrail.amazonaws.com
+# through the generic Organizations API before enable_cloudtrail_delegated_admin;
+# CloudTrail rejects a second registration (AccountRegisteredException), so an
+# existing estate imports it. Greenfield leaves the ID unset and it is created.
+import {
+  for_each = local.enable_cloudtrail_delegated_admin && local.adopt_existing.cloudtrail_delegated_admin_account_id != null ? toset([local.adopt_existing.cloudtrail_delegated_admin_account_id]) : toset([])
+  to       = module.aws_organization.aws_cloudtrail_organization_delegated_admin_account.this[0]
+  id       = each.value
+}

@@ -49,13 +49,18 @@ output "break_glass_role_arn" {
 }
 
 output "cloudtrail_log_group_name" {
-  description = "CloudWatch Logs group the org trail delivers into (management account); null when enable_cloudwatch_logs = false."
-  value       = try(module.cloudtrail[0].cloudwatch_log_group_name, null)
+  description = "CloudWatch Logs group the org trail delivers into: the delegated-admin trail's (security-tooling account) when enable_cloudtrail_delegated_admin is true, else the management account's; null when enable_cloudwatch_logs = false."
+  value       = try(module.cloudtrail_delegated_admin[0].cloudwatch_log_group_name, module.cloudtrail[0].cloudwatch_log_group_name, null)
 }
 
 output "cis_alarm_sns_topic_arn" {
-  description = "SNS topic (management account) the CIS section-4 alarms publish to; null when enable_cloudwatch_logs = false."
-  value       = try(module.cloudtrail[0].cis_alarm_sns_topic_arn, null)
+  description = "SNS topic the CIS section-4 alarms publish to: in security tooling when enable_cloudtrail_delegated_admin is true, else in the management account; null when enable_cloudwatch_logs = false."
+  value       = try(module.cloudtrail_delegated_admin[0].cis_alarm_sns_topic_arn, module.cloudtrail[0].cis_alarm_sns_topic_arn, null)
+}
+
+output "delegated_admin_trail_arn" {
+  description = "ARN of the organization trail managed by the CloudTrail delegated administrator (owned by the management account), or null when enable_cloudtrail_delegated_admin is false."
+  value       = try(module.cloudtrail_delegated_admin[0].trail_arn, null)
 }
 
 output "key_admin_arns" {

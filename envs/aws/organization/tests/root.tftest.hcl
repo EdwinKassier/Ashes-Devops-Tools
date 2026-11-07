@@ -243,11 +243,21 @@ run "adopt_existing_rejects_bad_ids" {
   expect_failures = [var.adopt_existing]
 }
 
+run "adopt_existing_rejects_bad_cloudtrail_delegated_admin_id" {
+  command = plan
+
+  variables {
+    adopt_existing = { cloudtrail_delegated_admin_account_id = "security-tooling" }
+  }
+
+  expect_failures = [var.adopt_existing]
+}
+
 run "greenfield_imports_nothing" {
   command = plan
 
   assert {
-    condition     = local.adopt_existing.organization_id == null && length(local.adopt_existing.ou_ids) == 0 && length(local.adopt_existing.account_ids) == 0
+    condition     = local.adopt_existing.organization_id == null && length(local.adopt_existing.ou_ids) == 0 && length(local.adopt_existing.account_ids) == 0 && local.adopt_existing.cloudtrail_delegated_admin_account_id == null
     error_message = "with no adopt_existing / aws.adopt, nothing is imported."
   }
 }

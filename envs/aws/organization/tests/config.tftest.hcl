@@ -351,3 +351,47 @@ run "scaffold_gcp_aws_saas_plans" {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
   }
 }
+
+# CloudTrail delegated admin: the shared aws.enable_cloudtrail_delegated_admin
+# key turns it on, and aws.adopt.cloudtrail_delegated_admin_account_id names the
+# existing registration to import; the variable wins; absent keys keep it off.
+#
+# module.aws_organization is overridden in this file, so each run keeps the
+# import inactive (it needs both keys): the flag run blanks the adoption, the
+# adoption run turns the flag off.
+run "cloudtrail_delegated_admin_comes_from_config_file" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-cloudtrail-da.yaml"
+    adopt_existing           = {}
+  }
+
+  assert {
+    condition     = local.enable_cloudtrail_delegated_admin
+    error_message = "enable_cloudtrail_delegated_admin must fall back to aws.enable_cloudtrail_delegated_admin."
+  }
+}
+
+run "cloudtrail_delegated_admin_variable_wins_and_adoption_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path          = "tests/fixtures/landing-zone-cloudtrail-da.yaml"
+    enable_cloudtrail_delegated_admin = false
+  }
+
+  assert {
+    condition     = !local.enable_cloudtrail_delegated_admin && local.adopt_existing.cloudtrail_delegated_admin_account_id == "022222222222"
+    error_message = "An explicit enable_cloudtrail_delegated_admin must win over the config file, and the registration to adopt must come from aws.adopt."
+  }
+}
+
+run "cloudtrail_delegated_admin_absent_is_off" {
+  command = plan
+
+  assert {
+    condition     = !local.enable_cloudtrail_delegated_admin && local.adopt_existing.cloudtrail_delegated_admin_account_id == null
+    error_message = "With the keys absent the CloudTrail delegated admin must stay off and nothing is imported."
+  }
+}

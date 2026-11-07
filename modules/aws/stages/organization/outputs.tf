@@ -78,6 +78,11 @@ output "org_trail_cloudwatch_role_arn" {
   value       = try(aws_iam_role.org_trail_cloudwatch[0].arn, null)
 }
 
+output "cloudtrail_delegated_admin_account_id" {
+  description = "Account registered as the CloudTrail delegated administrator (security tooling) when enable_cloudtrail_delegated_admin is true, else null."
+  value       = try(aws_cloudtrail_organization_delegated_admin_account.this[0].account_id, null)
+}
+
 output "guard_alerts_topic_arn" {
   description = "ARN of the org-guard-alerts SNS topic (us-east-1, management account): org-detection teardown and organization-trail tampering alerts."
   value       = aws_sns_topic.guard_alerts.arn

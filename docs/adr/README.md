@@ -15,6 +15,6 @@ Each ADR records one decision as Context, Decision and Consequences, on one page
 | [0009](0009-aws-second-region.md) | AWS second region as a second network workspace | Proposed |
 | [0010](0010-repo-wide-tags.md) | Repo-wide tags and labels | Accepted |
 | [0011](0011-temporary-elevated-access.md) | Temporary elevated access to AWS accounts | Accepted |
-| [0012](0012-cloudtrail-delegated-admin.md) | CloudTrail delegated administrator | Proposed |
+| [0012](0012-cloudtrail-delegated-admin.md) | CloudTrail delegated administrator | Accepted |
 | [0013](0013-security-hub-and-policy-language.md) | Security Hub generation and policy language | Accepted |
 | [0014](0014-log-archive-bucket-policy.md) | Log-archive PutBucketPolicy stays allowed and is detected | Accepted |

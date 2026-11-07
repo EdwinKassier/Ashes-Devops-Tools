@@ -397,3 +397,58 @@ run "routine_apply_still_allowed" {
     error_message = "Routine aws-security applies (trusted access, delegated-admin registration, trail, selectors, alarms, log group, retention) must stay allowed and undenied."
   }
 }
+
+# With the CloudTrail delegated administrator the management role keeps no
+# trail write: no cloudtrail action is allowed (reads come from ReadOnlyAccess),
+# the delivery role cannot be passed, and the cloudtrail.amazonaws.com
+# delegation is aws-organization's alone. The trail denies stay.
+run "management_role_has_no_trail_write" {
+  command = plan
+
+  variables {
+    delegated_admin_account_ids       = ["222222222222"]
+    enable_cloudtrail_delegated_admin = true
+    enable_security_service_teardown  = true
+  }
+
+  assert {
+    condition = (
+      !anytrue([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s.Effect == "Allow" && anytrue([for a in flatten([s.Action]) : startswith(a, "cloudtrail:") || a == "iam:PassRole"])]) &&
+      length([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if contains(["OrganizationTrailOnly", "PassTrailDeliveryRoleToCloudTrail"], s.Sid)]) == 0 &&
+      contains(one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "DenyTrailAndKeyDestruction"]).Action, "cloudtrail:DeleteTrail")
+    )
+    error_message = "With the CloudTrail delegated admin, the aws-security role must allow no cloudtrail action and no PassRole, and keep the trail denies."
+  }
+
+  assert {
+    condition = alltrue([
+      for s in concat(jsondecode(output.apply_policies["aws-security"]).Statement, jsondecode(output.security_teardown_policy).Statement) :
+      !contains(flatten([try(s.Condition.StringEquals["organizations:ServicePrincipal"], [])]), "cloudtrail.amazonaws.com")
+    ])
+    error_message = "With the CloudTrail delegated admin, aws-security must not register, enable or deregister cloudtrail.amazonaws.com."
+  }
+
+  # Routine applies of everything else stay allowed.
+  assert {
+    condition = alltrue([
+      for a in ["organizations:RegisterDelegatedAdministrator", "cloudwatch:PutMetricAlarm", "logs:PutRetentionPolicy"] : anytrue([
+        for s in jsondecode(output.apply_policies["aws-security"]).Statement :
+        s.Effect == "Allow" && anytrue([for p in flatten([s.Action]) : p == a || (endswith(p, "*") && startswith(a, trimsuffix(p, "*")))])
+      ])
+    ])
+    error_message = "The delegated-admin mode must keep the other routine aws-security applies allowed."
+  }
+}
+
+# Default: unchanged, the management role still manages the org trail.
+run "management_role_keeps_trail_write_by_default" {
+  command = plan
+
+  assert {
+    condition = (
+      length([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if contains(["OrganizationTrailOnly", "PassTrailDeliveryRoleToCloudTrail"], s.Sid)]) == 2 &&
+      contains(one([for s in jsondecode(output.apply_policies["aws-security"]).Statement : s if s.Sid == "DelegateOnlyToSecurityAccounts"]).Condition.StringEquals["organizations:ServicePrincipal"], "cloudtrail.amazonaws.com")
+    )
+    error_message = "By default the aws-security role keeps its trail grants and the cloudtrail delegation."
+  }
+}

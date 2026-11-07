@@ -114,6 +114,9 @@ variable "aws_overrides" {
     break_glass_active                             = optional(bool)
     create_organization_trail                      = optional(bool)
     cloudtrail_cloudwatch_role_arn                 = optional(string)
+    enable_cloudtrail_delegated_admin              = optional(bool)
+    cloudtrail_delegated_admin_trail_name          = optional(string)
+    create_management_trail                        = optional(bool)
   })
   default  = {}
   nullable = false

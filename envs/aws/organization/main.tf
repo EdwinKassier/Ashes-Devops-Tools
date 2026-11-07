@@ -39,6 +39,9 @@ module "aws_organization" {
   create_management_config_service_linked_role      = var.create_management_config_service_linked_role
   enable_config_recorder_scp                        = local.enable_config_recorder_scp
 
+  # Org trail managed by the CloudTrail delegated admin (security tooling).
+  enable_cloudtrail_delegated_admin = local.enable_cloudtrail_delegated_admin
+
   backup_service_role_region             = local.aws_region
   org_policy_overrides                   = var.org_policy_overrides
   partition                              = var.partition

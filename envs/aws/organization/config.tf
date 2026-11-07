@@ -29,6 +29,9 @@ locals {
       organization_id = try(tostring(local.lz.aws.adopt.organization_id), null)
       ou_ids          = { for k, v in try(local.lz.aws.adopt.ou_ids, {}) : k => tostring(v) }
       account_ids     = { for k, v in try(local.lz.aws.adopt.account_ids, {}) : k => tostring(v) }
+      # Existing cloudtrail.amazonaws.com delegated admin (the security-tooling
+      # account ID) to import when enable_cloudtrail_delegated_admin turns on.
+      cloudtrail_delegated_admin_account_id = try(tostring(local.lz.aws.adopt.cloudtrail_delegated_admin_account_id), null)
     }
     management_account_id   = try(tostring(local.lz.aws.management_account_id), null)
     log_archive_bucket_name = try(tostring(local.lz.aws.log_archive_bucket_name), null)
@@ -41,8 +44,10 @@ locals {
     # Config recorder migration flags (docs/runbooks/aws-config-recorder-migration.md).
     enable_org_config_recorders = try(tobool(local.lz.aws.enable_org_config_recorders), null)
     enable_config_recorder_scp  = try(tobool(local.lz.aws.enable_config_recorder_scp), null)
-    terraform_run_role_arn      = try(tostring(local.lz.aws.terraform_run_role_arn), null)
-    break_glass_role_arn        = try(tostring(local.lz.aws.break_glass_role_arn), null)
+    # Org trail managed by the CloudTrail delegated admin (docs/runbooks/aws-cloudtrail-delegated-admin-migration.md).
+    enable_cloudtrail_delegated_admin = try(tobool(local.lz.aws.enable_cloudtrail_delegated_admin), null)
+    terraform_run_role_arn            = try(tostring(local.lz.aws.terraform_run_role_arn), null)
+    break_glass_role_arn              = try(tostring(local.lz.aws.break_glass_role_arn), null)
     # tfc-admin puts the aws-* workspaces in <project_name_prefix>aws.
     tfc_project = try(tostring(local.lz.org.tfc.aws_project), "${try(tostring(local.lz.org.tfc.project_name_prefix), "landing-zone-")}aws")
     # With org.tfc.split_workload_projects, tfc-admin puts aws-workload-<env> in
@@ -119,7 +124,7 @@ locals {
   adopt_existing = (
     var.adopt_existing != null ? var.adopt_existing :
     local.cfg.adopt != null ? local.cfg.adopt :
-    { organization_id = null, ou_ids = {}, account_ids = {} }
+    { organization_id = null, ou_ids = {}, account_ids = {}, cloudtrail_delegated_admin_account_id = null }
   )
   management_account_id   = coalesce(var.management_account_id, local.cfg.management_account_id, "000000000000")
   log_archive_bucket_name = coalesce(var.log_archive_bucket_name, local.cfg.log_archive_bucket_name, "unset")
@@ -158,9 +163,11 @@ locals {
   )
   enable_org_config_recorders = var.enable_org_config_recorders != null ? var.enable_org_config_recorders : coalesce(local.cfg.enable_org_config_recorders, false)
   enable_config_recorder_scp  = var.enable_config_recorder_scp != null ? var.enable_config_recorder_scp : coalesce(local.cfg.enable_config_recorder_scp, false)
-  terraform_run_role_arn      = coalesce(var.terraform_run_role_arn, local.cfg.terraform_run_role_arn, "arn:aws:iam::000000000000:role/unset")
-  break_glass_role_arn        = coalesce(var.break_glass_role_arn, local.cfg.break_glass_role_arn, "arn:aws:iam::000000000000:role/unset")
-  tfc_project                 = coalesce(var.tfc_project, local.cfg.tfc_project)
+  # Same key, same value in the aws-security root.
+  enable_cloudtrail_delegated_admin = var.enable_cloudtrail_delegated_admin != null ? var.enable_cloudtrail_delegated_admin : coalesce(local.cfg.enable_cloudtrail_delegated_admin, false)
+  terraform_run_role_arn            = coalesce(var.terraform_run_role_arn, local.cfg.terraform_run_role_arn, "arn:aws:iam::000000000000:role/unset")
+  break_glass_role_arn              = coalesce(var.break_glass_role_arn, local.cfg.break_glass_role_arn, "arn:aws:iam::000000000000:role/unset")
+  tfc_project                       = coalesce(var.tfc_project, local.cfg.tfc_project)
   # Foundational bindings + the workload bindings derived from the config file;
   # an explicit var.tfc_workspace_bindings replaces both.
   tfc_workspace_bindings = var.tfc_workspace_bindings != null ? var.tfc_workspace_bindings : {

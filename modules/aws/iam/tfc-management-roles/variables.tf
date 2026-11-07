@@ -155,3 +155,10 @@ variable "enable_security_service_teardown" {
   default     = false
   nullable    = false
 }
+
+variable "enable_cloudtrail_delegated_admin" {
+  description = "The organization trail is managed by the CloudTrail delegated administrator (security tooling) rather than from the management account. When true the aws-security apply role loses every trail write (the OrganizationTrailOnly cloudtrail:* and the delivery-role PassRole) and may no longer register or deregister the cloudtrail.amazonaws.com delegated admin (aws-organization owns that registration). Default false: unchanged."
+  type        = bool
+  default     = false
+  nullable    = false
+}

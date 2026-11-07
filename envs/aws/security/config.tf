@@ -29,6 +29,9 @@ locals {
     log_archive_bucket_name = try(tostring(local.lz.aws.log_archive_bucket_name), null)
     aws_enabled_regions     = try([for r in local.lz.aws.enabled_regions : tostring(r)], null)
     notification_emails     = try([for e in local.lz.notifications.emails : tostring(e)], null)
+    # Same key, same value in the aws-organization root.
+    enable_cloudtrail_delegated_admin = try(tobool(local.lz.aws.enable_cloudtrail_delegated_admin), null)
+    create_management_trail           = try(tobool(local.lz.aws.create_management_trail), null)
     # aws.contracts.organization: stage contract override (same type as
     # var.organization_contract, identical in every aws root). Present => the
     # aws-organization read is skipped.
@@ -48,6 +51,9 @@ locals {
   lz_aws = {
     log_archive_bucket_name = local.cfg.log_archive_bucket_name
     aws_enabled_regions     = local.cfg.aws_enabled_regions
+    # Org trail managed by the CloudTrail delegated admin (security tooling).
+    enable_cloudtrail_delegated_admin = local.cfg.enable_cloudtrail_delegated_admin
+    create_management_trail           = local.cfg.create_management_trail
     # One email subscriber per notifications.emails entry.
     notification_subscribers = length(coalesce(local.cfg.notification_emails, [])) > 0 ? {
       for i, e in local.cfg.notification_emails : "notify-${i}" => { protocol = "email", endpoint = e }

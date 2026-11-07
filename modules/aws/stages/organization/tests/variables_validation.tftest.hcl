@@ -133,3 +133,19 @@ run "aws_enabled_regions_must_not_be_empty" {
 
   expect_failures = [var.aws_enabled_regions]
 }
+
+run "cloudtrail_delegated_admin_needs_security_tooling" {
+  command = plan
+
+  variables {
+    enable_cloudtrail_delegated_admin = true
+    accounts = {
+      log_archive     = { email = "aws+log-archive@example.com", ou = "Security" }
+      shared_services = { email = "aws+shared-services@example.com", ou = "Infrastructure" }
+    }
+    central_detection_account_keys = ["log_archive"]
+    tfc_workspace_bindings         = {}
+  }
+
+  expect_failures = [var.enable_cloudtrail_delegated_admin]
+}

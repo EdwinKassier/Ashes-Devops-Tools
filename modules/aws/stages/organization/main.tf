@@ -224,6 +224,9 @@ module "tfc_management_roles" {
 
   # Turning org-wide detection off is a gated, reviewed teardown step.
   enable_security_service_teardown = var.enable_security_service_teardown
+
+  # With the CloudTrail delegated admin the role keeps no trail write.
+  enable_cloudtrail_delegated_admin = var.enable_cloudtrail_delegated_admin
 }
 
 # GitHub deploy roles need a pinned owner: without github_federation_owners the

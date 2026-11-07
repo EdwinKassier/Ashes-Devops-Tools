@@ -194,12 +194,24 @@ module "log_archive_bucket" {
 
 # ---------------------------------------------------------------------------
 # Organization CloudTrail (management account)
+#
+# Legacy path, and the trail every existing estate runs. With
+# enable_cloudtrail_delegated_admin it stays in configuration (so Terraform
+# never destroys it; the management role cannot delete it either) until the
+# migration runbook retires it with break-glass and sets
+# create_management_trail = false.
 # ---------------------------------------------------------------------------
+
+locals {
+  create_management_trail        = var.aws.create_organization_trail && (!var.aws.enable_cloudtrail_delegated_admin || var.aws.create_management_trail)
+  create_delegated_admin_trail   = var.aws.create_organization_trail && var.aws.enable_cloudtrail_delegated_admin
+  delegated_admin_log_group_name = try(module.cloudtrail_delegated_admin[0].cloudwatch_log_group_name, null)
+}
 
 module "cloudtrail" {
   source = "../../security/cloudtrail-org"
   # false when another owner (e.g. AWS Control Tower) already runs the org trail.
-  count = var.aws.create_organization_trail ? 1 : 0
+  count = local.create_management_trail ? 1 : 0
   providers = {
     aws = aws.management
   }
@@ -226,6 +238,52 @@ module "cloudtrail" {
   alarm_sns_topic_arn                  = var.aws.cloudtrail_alarm_sns_topic_arn
   alarm_subscriptions                  = coalesce(var.aws.cloudtrail_alarm_subscribers, var.aws.notification_subscribers)
   cis_alarms_excluded                  = var.aws.cloudtrail_cis_alarms_excluded
+
+  depends_on = [module.log_archive_bucket]
+}
+
+# ---------------------------------------------------------------------------
+# Organization CloudTrail managed by the CloudTrail delegated administrator
+# (security tooling; opt-in, enable_cloudtrail_delegated_admin)
+#
+# aws-organization registers security tooling as the CloudTrail delegated admin.
+# The trail is created with the security-tooling provider: the management
+# account still owns it (its ARN, aws:SourceAccount and the KMS encryption
+# context carry the management account ID, which the log CMK and log-archive
+# bucket policies already allow), but every change to it now comes from a
+# member account, so the deny-tamper SCP constrains it. CloudTrail requires the
+# CloudWatch Logs group and its role to exist in the calling account, so the
+# module creates them here, with their own CMK, topic and CIS alarms. A
+# different trail name keeps both trails logging until the old one is retired.
+# ---------------------------------------------------------------------------
+
+module "cloudtrail_delegated_admin" {
+  source = "../../security/cloudtrail-org"
+  count  = local.create_delegated_admin_trail ? 1 : 0
+  providers = {
+    aws = aws.security_tooling
+  }
+
+  trail_name             = var.aws.cloudtrail_delegated_admin_trail_name
+  trail_owner_account_id = var.management_account_id
+  log_archive_bucket     = module.log_archive_bucket.bucket_name
+  kms_key_arn            = module.log_cmk.key_arn
+
+  cloudtrail_s3_data_events           = var.aws.cloudtrail_s3_data_events
+  s3_data_events_excluded_bucket_arns = var.aws.cloudtrail_s3_data_events_excluded_bucket_arns
+  enable_lambda_data_events           = var.aws.cloudtrail_lambda_data_events
+
+  # Everything CloudWatch-side is created in security tooling: the
+  # management-account overrides (cloudtrail_cloudwatch_role_arn,
+  # cloudwatch_logs_kms_key_arn, cloudtrail_alarm_sns_topic_arn) do not apply.
+  # The delivery role carries the tfc-apply permissions boundary; the CMK is
+  # administered by the account root (so by IAM in that account).
+  enable_cloudwatch_logs                        = var.aws.enable_cloudwatch_logs
+  cloudwatch_logs_retention_days                = var.aws.cloudwatch_logs_retention_days
+  cloudwatch_logs_role_permissions_boundary_arn = local.security_tooling_boundary_arn
+  cloudwatch_logs_kms_key_manager_arns          = []
+  alarm_subscriptions                           = coalesce(var.aws.cloudtrail_alarm_subscribers, var.aws.notification_subscribers)
+  cis_alarms_excluded                           = var.aws.cloudtrail_cis_alarms_excluded
 
   depends_on = [module.log_archive_bucket]
 }
@@ -327,6 +385,10 @@ module "delegated_admin" {
   # shared-services target (unchanged); set identity_account_id to a dedicated account.
   # PREVIEW: opt-in (default off), not yet validated against a real apply. before relying on the new target.
   identity_account_id = coalesce(var.aws.identity_account_id, var.shared_services_account_id)
+
+  # aws-organization registers the CloudTrail delegated admin through CloudTrail
+  # once the trail moves to security tooling.
+  register_cloudtrail_admin = !var.aws.enable_cloudtrail_delegated_admin
 }
 
 # ---------------------------------------------------------------------------
@@ -409,10 +471,12 @@ module "security_notifications" {
   # The SNS topic is created in the security-tooling account, so it must be
   # encrypted with a key that account can access — the sectool CMK, not the
   # cross-account log CMK (which would fail with KMSAccessDenied on publish).
-  kms_key_id                = module.sectool_cmk.key_arn
-  notification_subscribers  = var.aws.notification_subscribers
-  break_glass_role_arn      = local.effective_break_glass_role_arn
-  cloudtrail_log_group_name = var.cloudtrail_log_group_name
+  kms_key_id               = module.sectool_cmk.key_arn
+  notification_subscribers = var.aws.notification_subscribers
+  break_glass_role_arn     = local.effective_break_glass_role_arn
+  # The delegated-admin trail's log group lives in this (security-tooling)
+  # account, so the break-glass metric alarm can read it by default.
+  cloudtrail_log_group_name = var.cloudtrail_log_group_name != "" ? var.cloudtrail_log_group_name : (local.delegated_admin_log_group_name == null ? "" : local.delegated_admin_log_group_name)
 }
 
 # ---------------------------------------------------------------------------

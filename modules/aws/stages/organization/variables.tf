@@ -430,6 +430,18 @@ variable "org_trail_name" {
   default     = "org-trail"
 }
 
+variable "enable_cloudtrail_delegated_admin" {
+  description = "Register the security_tooling account as the CloudTrail delegated administrator (aws_cloudtrail_organization_delegated_admin_account, which also creates the CloudTrail service-linked roles), so aws-security creates and manages the organization trail from security tooling under the deny-tamper SCP. Also strips every trail write from the aws-security management role. Set the same value in aws-security. Default false: the management account manages the trail, unchanged. Migration: docs/runbooks/aws-cloudtrail-delegated-admin-migration.md."
+  type        = bool
+  default     = false
+  nullable    = false
+
+  validation {
+    condition     = !var.enable_cloudtrail_delegated_admin || contains(keys(merge(var.accounts, var.workload_accounts)), "security_tooling")
+    error_message = "enable_cloudtrail_delegated_admin needs a security_tooling account (accounts / workload_accounts): it becomes the CloudTrail delegated administrator."
+  }
+}
+
 variable "identity_center_admin_account_key" {
   description = "Account key (accounts / workload_accounts) to register as the IAM Identity Center delegated administrator. Default shared_services, the aws-identity account in the SRA layout. Null = do not register here."
   type        = string

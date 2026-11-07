@@ -79,7 +79,7 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_organizations_delegated_administrator.this (modules/aws/security/security-delegated-admin/main.tf#L45)
+- resource.aws_organizations_delegated_administrator.this (modules/aws/security/security-delegated-admin/main.tf#L52)
 
 
 ## Inputs
@@ -89,6 +89,7 @@ The following resources are created:
 | <a name="input_identity_account_id"></a> [identity\_account\_id](#input\_identity\_account\_id) | 12-digit account ID of the Identity account, used as the delegated administrator for IAM Identity Center (sso.amazonaws.com) in the default registration set. Ignored when registrations is non-empty. | `string` | n/a | yes |
 | <a name="input_security_tooling_account_id"></a> [security\_tooling\_account\_id](#input\_security\_tooling\_account\_id) | 12-digit account ID of the Security Tooling account, used as the delegated administrator for the security services in the default registration set (Access Analyzer, Backup, Config, CloudTrail, FMS, SSM, Resource Explorer, Security Lake). Ignored when registrations is non-empty. | `string` | n/a | yes |
 | <a name="input_backup_account_id"></a> [backup\_account\_id](#input\_backup\_account\_id) | 12-digit account ID of the dedicated backup account, registered as the AWS Backup delegated administrator. Null = security\_tooling\_account\_id. | `string` | `null` | no |
+| <a name="input_register_cloudtrail_admin"></a> [register\_cloudtrail\_admin](#input\_register\_cloudtrail\_admin) | Register security\_tooling\_account\_id as the cloudtrail.amazonaws.com delegated administrator here, through the generic Organizations API (default set only). Set false when aws-organization registers it through CloudTrail (enable\_cloudtrail\_delegated\_admin). Default true: unchanged. | `bool` | `true` | no |
 | <a name="input_register_identity_center_admin"></a> [register\_identity\_center\_admin](#input\_register\_identity\_center\_admin) | Also register identity\_account\_id as the IAM Identity Center (sso.amazonaws.com) delegated administrator. Default false: aws-organization owns that registration, so the aws-security pipeline cannot hand identity control to an arbitrary account. | `bool` | `false` | no |
 | <a name="input_registrations"></a> [registrations](#input\_registrations) | Explicit map of AWS service principal to the account ID nominated as that service's delegated administrator. When non-empty this overrides the convenience default built from security\_tooling\_account\_id and identity\_account\_id. Do NOT include services that have a dedicated admin resource (guardduty, macie, inspector, detective, securityhub) — they are registered elsewhere. | `map(string)` | `{}` | no |
 

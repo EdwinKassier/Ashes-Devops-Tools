@@ -91,3 +91,30 @@ run "backup_delegated_to_backup_account" {
     error_message = "AWS Backup must be delegated to the dedicated backup account when one is given."
   }
 }
+
+# The CloudTrail delegated admin is registered by aws-organization (through
+# CloudTrail) once the trail moves there; only cloudtrail leaves the default set.
+run "cloudtrail_registration_can_move_out" {
+  command = plan
+
+  variables {
+    register_cloudtrail_admin = false
+  }
+
+  assert {
+    condition = (
+      !contains(keys(aws_organizations_delegated_administrator.this), "cloudtrail.amazonaws.com") &&
+      contains(keys(aws_organizations_delegated_administrator.this), "config.amazonaws.com")
+    )
+    error_message = "register_cloudtrail_admin = false must drop only cloudtrail.amazonaws.com from the default set."
+  }
+}
+
+run "cloudtrail_registered_by_default" {
+  command = plan
+
+  assert {
+    condition     = aws_organizations_delegated_administrator.this["cloudtrail.amazonaws.com"].account_id == "111111111111"
+    error_message = "cloudtrail.amazonaws.com must stay in the default set by default."
+  }
+}

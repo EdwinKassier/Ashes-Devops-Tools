@@ -39,7 +39,14 @@ locals {
   # management role never needs sso.amazonaws.com.
   sso_registration = var.register_identity_center_admin ? { "sso.amazonaws.com" = var.identity_account_id } : {}
 
-  effective_registrations = length(var.registrations) > 0 ? var.registrations : merge(local.default_registrations, local.sso_registration)
+  # With the CloudTrail delegated administrator, aws-organization registers
+  # cloudtrail.amazonaws.com through CloudTrail itself (which also creates the
+  # service-linked roles), so it leaves the default set.
+  default_set = {
+    for k, v in local.default_registrations : k => v if var.register_cloudtrail_admin || k != "cloudtrail.amazonaws.com"
+  }
+
+  effective_registrations = length(var.registrations) > 0 ? var.registrations : merge(local.default_set, local.sso_registration)
 }
 
 resource "aws_organizations_delegated_administrator" "this" {

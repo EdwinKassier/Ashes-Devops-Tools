@@ -239,3 +239,23 @@ run "rejects_unknown_security_service" {
 
   expect_failures = [var.aws]
 }
+
+run "delegated_admin_trail_name_must_differ" {
+  command = plan
+
+  variables {
+    aws = merge(var.aws, { cloudtrail_delegated_admin_trail_name = "org-trail" })
+  }
+
+  expect_failures = [var.aws]
+}
+
+run "delegated_admin_needs_organization_trail" {
+  command = plan
+
+  variables {
+    aws = merge(var.aws, { enable_cloudtrail_delegated_admin = true, create_organization_trail = false })
+  }
+
+  expect_failures = [var.aws]
+}

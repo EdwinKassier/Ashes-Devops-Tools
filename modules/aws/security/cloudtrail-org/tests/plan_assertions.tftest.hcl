@@ -378,3 +378,38 @@ run "pipeline_manager_statement_grants_refresh_and_rotation" {
     error_message = "KeyAdministration must remain alongside the pipeline statement."
   }
 }
+
+# Default: the delivery role trusts only its own account, as a plain string, so
+# an existing role's trust policy is unchanged.
+run "delivery_role_trusts_own_account_by_default" {
+  command = plan
+
+  assert {
+    condition = (
+      jsondecode(aws_iam_role.cloudtrail_cw[0].assume_role_policy).Statement[0].Condition.StringEquals["aws:SourceAccount"] == "111111111111" &&
+      aws_iam_role.cloudtrail_cw[0].permissions_boundary == null
+    )
+    error_message = "By default the delivery role must trust only this account, with no boundary."
+  }
+}
+
+# Delegated admin: the management account owns the trail, so the delivery role
+# in this (delegated-admin) account also trusts it, and carries the boundary.
+run "delegated_admin_trail_owner_trusted_and_bounded" {
+  command = plan
+
+  variables {
+    trail_name                                    = "org-trail-delegated"
+    trail_owner_account_id                        = "999999999999"
+    cloudwatch_logs_role_permissions_boundary_arn = "arn:aws:iam::111111111111:policy/tfc-apply-boundary"
+  }
+
+  assert {
+    condition = (
+      toset(jsondecode(aws_iam_role.cloudtrail_cw[0].assume_role_policy).Statement[0].Condition.StringEquals["aws:SourceAccount"]) == toset(["111111111111", "999999999999"]) &&
+      aws_iam_role.cloudtrail_cw[0].permissions_boundary == "arn:aws:iam::111111111111:policy/tfc-apply-boundary" &&
+      aws_cloudwatch_log_group.trail[0].name == "/aws/cloudtrail/org-trail-delegated"
+    )
+    error_message = "A delegated-admin trail's delivery role must trust the owner and this account, and carry the boundary."
+  }
+}

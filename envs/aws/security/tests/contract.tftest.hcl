@@ -306,3 +306,37 @@ run "unset_everywhere_takes_stage_default" {
     error_message = "a key unset in config and aws_overrides must reach the stage as its default (tfc-apply key admin)."
   }
 }
+
+# The shared aws.enable_cloudtrail_delegated_admin key moves the trail to
+# security tooling; absent, the management trail is unchanged.
+run "cloudtrail_delegated_admin_comes_from_config_file" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-cloudtrail-da.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    aws_overrides            = {}
+  }
+
+  assert {
+    condition     = local.aws.enable_cloudtrail_delegated_admin == true && module.aws_security.cloudtrail_log_group_name == "/aws/cloudtrail/org-trail-delegated"
+    error_message = "aws.enable_cloudtrail_delegated_admin must reach the stage and move the trail's log group to the delegated-admin trail."
+  }
+}
+
+run "cloudtrail_delegated_admin_absent_is_off" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    aws_overrides            = {}
+  }
+
+  assert {
+    condition     = local.aws.enable_cloudtrail_delegated_admin == null && module.aws_security.cloudtrail_log_group_name == "/aws/cloudtrail/org-trail"
+    error_message = "Without the key the management-account trail must be unchanged."
+  }
+}

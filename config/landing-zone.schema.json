@@ -1022,6 +1022,10 @@
           "type": "boolean",
           "description": "aws-organization + aws-security: the organization trail is created and managed from security tooling, the CloudTrail delegated administrator, so the deny-tamper SCP applies to it. Default false. Existing estates: docs/runbooks/aws-cloudtrail-delegated-admin-migration.md."
         },
+        "create_management_trail": {
+          "type": "boolean",
+          "description": "aws-security, with enable_cloudtrail_delegated_admin: keep the original management-account trail in configuration (default true) until the migration runbook deleted it with break-glass and removed it from state. A greenfield estate that starts with the delegated admin sets it false."
+        },
         "github_federation_owners": {
           "type": "array",
           "items": {

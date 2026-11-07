@@ -161,6 +161,12 @@ variable "create_management_config_service_linked_role" {
   nullable    = false
 }
 
+variable "enable_cloudtrail_delegated_admin" {
+  description = "Register security tooling as the CloudTrail delegated administrator so aws-security creates and manages the organization trail from there (under the deny-tamper SCP), and strip every trail write from the aws-security management role. Set the same value in aws-security (the shared aws.enable_cloudtrail_delegated_admin key does both). An existing registration (aws-security registered cloudtrail.amazonaws.com before) is imported via adopt_existing.cloudtrail_delegated_admin_account_id. Follow docs/runbooks/aws-cloudtrail-delegated-admin-migration.md. Null = aws.enable_cloudtrail_delegated_admin from config/landing-zone.yaml, else false."
+  type        = bool
+  default     = null
+}
+
 variable "enable_config_recorder_scp" {
   description = "Deny Config recorder changes to every member principal except the StackSet execution role, break-glass and security tooling's tfc-apply. Turn on only at the last step of docs/runbooks/aws-config-recorder-migration.md. Null = aws.enable_config_recorder_scp from config/landing-zone.yaml, else false."
   type        = bool
@@ -469,6 +475,10 @@ variable "adopt_existing" {
     organization_id = optional(string)
     ou_ids          = optional(map(string), {})
     account_ids     = optional(map(string), {})
+    # The security-tooling account ID, when cloudtrail.amazonaws.com is already
+    # delegated to it (aws-security registered it before
+    # enable_cloudtrail_delegated_admin): imported, not re-registered.
+    cloudtrail_delegated_admin_account_id = optional(string)
   })
   default = null
 
@@ -485,6 +495,11 @@ variable "adopt_existing" {
   validation {
     condition     = var.adopt_existing == null || alltrue([for id in values(try(var.adopt_existing.account_ids, {})) : can(regex("^[0-9]{12}$", id))])
     error_message = "adopt_existing.account_ids values must be 12-digit account IDs."
+  }
+
+  validation {
+    condition     = var.adopt_existing == null || try(var.adopt_existing.cloudtrail_delegated_admin_account_id, null) == null || can(regex("^[0-9]{12}$", coalesce(try(var.adopt_existing.cloudtrail_delegated_admin_account_id, null), "x")))
+    error_message = "adopt_existing.cloudtrail_delegated_admin_account_id must be a 12-digit account ID."
   }
 }
 

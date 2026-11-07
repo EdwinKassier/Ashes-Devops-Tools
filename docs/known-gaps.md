@@ -123,8 +123,10 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   by the `org-guard-alerts` EventBridge rule. That rule is in us-east-1 plus
   forwarders in every other enabled region, and it is owned by
   `aws-organization`. The CIS 4.5 alarm does not match selector calls. This
-  stays detect-only until Task 1.11 moves trail management to security
-  tooling, where the SCP applies. The rules and forwarding are mock-tested
+  stays detect-only until an estate turns on
+  `aws.enable_cloudtrail_delegated_admin`, which moves trail management to
+  security tooling, where the SCP applies (see the CloudTrail delegated-admin
+  item under PREVIEW). The rules and forwarding are mock-tested
   only. **Validate in the sandbox:** a `PutEventSelectors` call and a
   GuardDuty admin call made from a non-us-east-1 region must both email the
   topic.
@@ -274,7 +276,9 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   `cloudtrail_cis_alarms_excluded` if not). The security-notifications
   break-glass metric alarm (`cloudtrail_log_group_name`) still assumes a log
   group in the security-tooling account; the trail's group is in the management
-  account, so leave that input empty or point it at a copy.
+  account, so leave that input empty or point it at a copy. With
+  `aws.enable_cloudtrail_delegated_admin` the trail's group is in security
+  tooling and the alarm uses it by default.
 - **A8 — RESOLVED (2026-11-05): vended-log delivery to the log archive.** The
   log-archive bucket now grants `delivery.logs.amazonaws.com` AclCheck + Write
   (`AWSLogs/*`, `bucket-owner-full-control`), both scoped by `aws:SourceOrgID`, and
@@ -506,6 +510,55 @@ GCP:
 ## PREVIEW — opt-in, default-off, not yet validated (mock-tested only, no on-path coverage)
 
 Enable only after validating in a real/test org. Each defaults to prior behaviour.
+
+- **Organization trail managed by the CloudTrail delegated administrator**
+  (`aws.enable_cloudtrail_delegated_admin`, ADR 0012,
+  [runbook](runbooks/aws-cloudtrail-delegated-admin-migration.md)). Mock-tested
+  only; not sandbox-proven, so the scaffolder leaves it off.
+  Verified against AWS documentation (2026-11-07):
+  - The management account owns a trail a delegated admin creates, and removing
+    the delegated admin deletes none of its trails.
+  - A delegated admin can attach a CloudWatch Logs group only through
+    `CreateTrail` / `UpdateTrail`, and the group and its role must exist in the
+    calling account.
+  - Only a CloudTrail-API registration creates the CloudTrail service-linked
+    roles; `RegisterOrganizationDelegatedAdmin` fails with
+    `AccountRegisteredException` on an account already registered.
+  - For an organization trail, `aws:SourceAccount` is the management account,
+    and the KMS encryption context is the trail ARN in the management account.
+    The log CMK's `kms:EncryptionContext:aws:cloudtrail:arn` pattern
+    (`<management>:trail/*`) and the log-archive bucket's `aws:SourceOrgID`
+    statements are name-agnostic, so they admit the new trail unchanged. The
+    open A1 item (`aws:SourceOrgID` on CloudTrail's KMS calls) applies to it
+    exactly as to the old trail.
+
+  Assumed, to prove in the sandbox:
+  - The provider's `aws_cloudtrail` creates, reads and updates an organization
+    trail from the delegated-admin account. Its docs still say the management
+    account; its ID is the trail ARN.
+  - The delivery role's trust (`aws:SourceAccount` = management or security
+    tooling) is what CloudTrail sends when it assumes a role in the
+    delegated-admin account. AWS does not document that case.
+  - Importing the existing Organizations registration into
+    `aws_cloudtrail_organization_delegated_admin_account` reads cleanly, and the
+    management account already has `AWSServiceRoleForCloudTrail` from the old
+    trail (the import does not create it, and the event-context role is not
+    needed for trails).
+  - The security-tooling `tfc-apply` role and its boundary allow `CreateTrail`,
+    `PutEventSelectors`, `StartLogging`, `iam:PassRole` of the delivery role and
+    `kms:CreateKey`.
+
+  Residuals:
+  - The security-tooling `tfc-apply` is exempt from `DenyWeakenSecurityServices`
+    and `DenyCentralDetectionOutsideSecurityAccounts` (it must create the
+    trail), so it can still change the trail's selectors; SCPs, the boundary
+    and CODEOWNERS cover it. Stop and delete stay break-glass only.
+  - The `org-guard-alerts` rule (management account) matches the old trail's
+    name and only management-account API calls; it does not watch the new
+    trail, whose changes are prevented by the SCP instead.
+  - `aws-security` forgets its generic registration with a manual
+    `terraform state rm` (runbook step 1.3). A skipped step fails closed: the
+    plan shows a destroy and the apply is denied.
 
 - **G4 — dedicated logging project** (`logging_project_id` +
   `logging_project_number`, `modules/gcp/stages/organization`). The audit bucket,

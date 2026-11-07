@@ -236,6 +236,24 @@ variable "aws" {
     # create_org_trail_delivery_role). Null = the cloudtrail-org module creates it, which needs IAM
     # write in the management account.
     cloudtrail_cloudwatch_role_arn = optional(string)
+    # Create the organization trail from the security-tooling account, the CloudTrail delegated
+    # administrator that aws-organization registers (its enable_cloudtrail_delegated_admin, set to
+    # the same value). The trail is still owned by the management account, but a member account
+    # manages it, so the deny-tamper SCP applies. Its CloudWatch Logs group, delivery role, CMK, CIS
+    # alarms and topic are created in security tooling. Needs create_organization_trail. Default
+    # false: the management account manages the trail, unchanged. Migration:
+    # docs/runbooks/aws-cloudtrail-delegated-admin-migration.md.
+    enable_cloudtrail_delegated_admin = optional(bool, false)
+    # Name of the trail created from security tooling. It must differ from the management-account
+    # trail (org-trail), so both can log during the migration.
+    cloudtrail_delegated_admin_trail_name = optional(string, "org-trail-delegated")
+    # While enable_cloudtrail_delegated_admin is true, keep the original management-account trail
+    # (and its log group, CMK, topic and alarms) in this stage's configuration so Terraform never
+    # destroys it. Set false only after the runbook's break-glass step deleted that trail and removed
+    # it from state. A greenfield estate that starts with the delegated admin sets it false: there is
+    # no management trail to keep, and the management role can no longer create one. Ignored while
+    # enable_cloudtrail_delegated_admin is false. Default true.
+    create_management_trail = optional(bool, true)
   })
   default  = {}
   nullable = false
@@ -320,6 +338,16 @@ variable "aws" {
   validation {
     condition     = alltrue([for p in var.aws.break_glass_trusted_principals : can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:", p))])
     error_message = "Each aws_overrides.break_glass_trusted_principals entry must be an account-qualified IAM ARN (arn:aws:iam::<12-digit>:...)."
+  }
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9._-]{3,128}$", var.aws.cloudtrail_delegated_admin_trail_name)) && var.aws.cloudtrail_delegated_admin_trail_name != "org-trail"
+    error_message = "aws_overrides.cloudtrail_delegated_admin_trail_name must be a valid trail name (3-128 of A-Z a-z 0-9 . _ -) and differ from the management-account trail (org-trail)."
+  }
+
+  validation {
+    condition     = !var.aws.enable_cloudtrail_delegated_admin || var.aws.create_organization_trail
+    error_message = "aws.enable_cloudtrail_delegated_admin needs create_organization_trail = true: it moves the trail this stage owns."
   }
 
   validation {

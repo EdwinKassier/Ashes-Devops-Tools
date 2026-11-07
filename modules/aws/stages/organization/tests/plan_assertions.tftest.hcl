@@ -573,3 +573,105 @@ run "missing_sandbox_ou_skips_guard_attachment" {
     error_message = "attachments for absent OUs must be skipped, not fail"
   }
 }
+
+# CloudTrail delegated admin: security tooling is registered through CloudTrail
+# (not the generic Organizations resource), and the aws-security management
+# role loses every trail write.
+run "cloudtrail_delegated_admin_registered_through_cloudtrail" {
+  command = plan
+
+  variables {
+    enable_cloudtrail_delegated_admin = true
+  }
+
+  override_module {
+    target = module.account
+    outputs = {
+      account_id             = "222222222222"
+      account_arn            = "arn:aws:organizations::111111111111:account/o-abc1234567/222222222222"
+      cross_account_role_arn = "arn:aws:iam::222222222222:role/OrganizationAccountAccessRole"
+    }
+  }
+
+  assert {
+    condition = (
+      aws_cloudtrail_organization_delegated_admin_account.this[0].account_id == "222222222222" &&
+      output.cloudtrail_delegated_admin_account_id == "222222222222"
+    )
+    error_message = "enable_cloudtrail_delegated_admin must register security tooling through aws_cloudtrail_organization_delegated_admin_account."
+  }
+
+  assert {
+    condition = (
+      !anytrue([for s in jsondecode(module.tfc_management_roles[0].apply_policies["aws-security"]).Statement : s.Effect == "Allow" && anytrue([for a in flatten([s.Action]) : startswith(a, "cloudtrail:") || a == "iam:PassRole"])])
+    )
+    error_message = "With the CloudTrail delegated admin, the aws-security management role must allow no cloudtrail action and no PassRole."
+  }
+}
+
+run "cloudtrail_delegated_admin_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(aws_cloudtrail_organization_delegated_admin_account.this) == 0 && output.cloudtrail_delegated_admin_account_id == null
+    error_message = "The CloudTrail delegated admin must be opt-in."
+  }
+}
+
+# No new SCP statement: once the trail is managed from security tooling, the
+# existing deny-tamper statements cover it. Stop/delete is break-glass only;
+# selector and trail updates are allowed only to the pipeline (privileged) and,
+# with central detection, only from the security accounts.
+run "scp_denies_trail_tamper_except_exempt" {
+  command = plan
+
+  variables {
+    enable_cloudtrail_delegated_admin = true
+  }
+
+  override_module {
+    target = module.account
+    outputs = {
+      account_id             = "222222222222"
+      account_arn            = "arn:aws:organizations::111111111111:account/o-abc1234567/222222222222"
+      cross_account_role_arn = "arn:aws:iam::222222222222:role/OrganizationAccountAccessRole"
+    }
+  }
+
+  assert {
+    condition = (
+      toset(one([for s in jsondecode(module.policies.policy_contents["scp-deny-tamper"]).Statement : s if s.Sid == "DenyDisableSecurityServices"]).Condition.ArnNotLike["aws:PrincipalArn"]) == toset(["arn:aws:iam::*:role/break-glass"]) &&
+      length(setsubtract(["cloudtrail:StopLogging", "cloudtrail:DeleteTrail"], one([for s in jsondecode(module.policies.policy_contents["scp-deny-tamper"]).Statement : s if s.Sid == "DenyDisableSecurityServices"]).Action)) == 0
+    )
+    error_message = "Stopping or deleting any trail must be denied to everyone but break-glass."
+  }
+
+  assert {
+    condition = (
+      toset(one([for s in jsondecode(module.policies.policy_contents["scp-deny-tamper"]).Statement : s if s.Sid == "DenyWeakenSecurityServices"]).Condition.ArnNotLike["aws:PrincipalArn"]) == toset([
+        "arn:aws:iam::*:role/tfc-apply", "arn:aws:iam::*:role/OrganizationAccountAccessRole", "arn:aws:iam::*:role/stacksets-exec-*", "arn:aws:iam::*:role/break-glass",
+      ]) &&
+      length(setsubtract(["cloudtrail:PutEventSelectors", "cloudtrail:PutInsightSelectors", "cloudtrail:UpdateTrail"], one([for s in jsondecode(module.policies.policy_contents["scp-deny-tamper"]).Statement : s if s.Sid == "DenyWeakenSecurityServices"]).Action)) == 0
+    )
+    error_message = "Weakening a trail must be denied to everyone but the pipeline roles and break-glass."
+  }
+
+  assert {
+    condition = (
+      # Every account resolves to 222222222222 under the override (security_tooling, log_archive).
+      toset(one([for s in jsondecode(module.policies.policy_contents["scp-deny-tamper"]).Statement : s if s.Sid == "DenyCentralDetectionOutsideSecurityAccounts"]).Condition.StringNotEquals["aws:PrincipalAccount"]) == toset(["222222222222"]) &&
+      toset(one([for s in jsondecode(module.policies.policy_contents["scp-deny-tamper"]).Statement : s if s.Sid == "DenyCentralDetectionOutsideSecurityAccounts"]).Condition.ArnNotLike["aws:PrincipalArn"]) == toset(["arn:aws:iam::*:role/break-glass"]) &&
+      length(setsubtract(["cloudtrail:PutEventSelectors", "cloudtrail:PutInsightSelectors", "cloudtrail:UpdateTrail"], one([for s in jsondecode(module.policies.policy_contents["scp-deny-tamper"]).Statement : s if s.Sid == "DenyCentralDetectionOutsideSecurityAccounts"]).Action)) == 0
+    )
+    error_message = "Trail changes from outside the security accounts must be denied to everyone but break-glass."
+  }
+
+  # Only those three statements carry cloudtrail actions: no new statement.
+  assert {
+    condition = toset([
+      for s in jsondecode(module.policies.policy_contents["scp-deny-tamper"]).Statement : s.Sid
+      if anytrue([for a in flatten([s.Action]) : startswith(a, "cloudtrail:")])
+    ]) == toset(["DenyDisableSecurityServices", "DenyWeakenSecurityServices", "DenyCentralDetectionOutsideSecurityAccounts"])
+    error_message = "The CloudTrail delegated admin must add no SCP statement: the three existing ones cover trail tampering."
+  }
+}
