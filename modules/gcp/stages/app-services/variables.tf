@@ -189,7 +189,7 @@ variable "services" {
       github   = {...}  -> deploy SA `<name>-deploy` bound via WIF to the GitHub
                            repo's IMMUTABLE numeric repository_id (optionally a
                            ref and/or GitHub environment). Needs enable_app_deploy_wif.
-      secrets  = { ENV_VAR = { secret = "<secret id in the host project>" } }
+      secrets  = { ENV_VAR = { secret = "<secret id in the service project, or projects/<p>/secrets/<s>>" } }
                            -> env vars from Secret Manager; the runtime SA gets
                            secretAccessor on exactly those secrets.
     The default `{}` creates nothing.
@@ -227,7 +227,12 @@ variable "services" {
     # Explicit override of the Shared VPC grants above. Null derives it from
     # project_id; callers whose project_id is unknown until apply (a project
     # created in the same run) set it to true so for_each keys stay plan-time known.
+    # Must be true with a project_id of another project, false only without one.
     grant_network_access = optional(bool)
+    # Services sharing a value share ONE networkViewer and one networkUser per
+    # subnet (so removing a service never revokes a sibling's grant). Null = the
+    # service key. Set it to the team name for services of the same project.
+    network_access_group = optional(string)
 
     artifact_registry = optional(object({
       immutable_tags             = optional(bool, true)
@@ -288,6 +293,20 @@ variable "services" {
   validation {
     condition     = alltrue([for k, s in var.services : s.project_id == null || s.project_id == var.project_id || s.project_number != null])
     error_message = "a service with its own project_id (a team service project) must also set project_number: the Cloud Run service agent that needs Shared VPC subnet access is derived from it."
+  }
+
+  validation {
+    # Unknown project ids (created in the same plan) defer these to apply.
+    condition = alltrue([for k, s in var.services : (
+      s.grant_network_access == null ? true :
+      s.grant_network_access ? (s.project_id != null && s.project_id != var.project_id) : (s.project_id == null || s.project_id == var.project_id)
+    )])
+    error_message = "services[*].grant_network_access = true requires a project_id other than the host project; false with such a project_id is rejected (the service agent would have no Shared VPC access). Leave it null to derive it."
+  }
+
+  validation {
+    condition     = alltrue([for k, s in var.services : s.network_access_group == null || can(regex("^[a-z][a-z0-9-]{0,40}$", s.network_access_group))])
+    error_message = "services[*].network_access_group must be a lowercase slug (the service_team name)."
   }
 
   validation {

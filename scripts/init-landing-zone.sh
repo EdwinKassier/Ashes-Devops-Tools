@@ -285,7 +285,7 @@ fi
 # a numeric repository_id, enable_app_deploy_wif and github_repository_owner_id).
 if has_cloud gcp; then
   sed_args+=(
-    -e "/^      # Application services (Cloud Run/,/^    prod:\$/{/^      #     github: /d;s|^      # \(services:\)\$|      \1|;s|^      # \(service_teams:\)\$|      \1|;s|^      #   |        |;}"
+    -e "/^      # Application services (Cloud Run/,/^      iam_group_role_bindings:\$/{/^      #     github: /d;s|^      # \(services:\)\$|      \1|;s|^      # \(service_teams:\)\$|      \1|;s|^      #   |        |;}"
     -e "s|subnet_name: my-org-dev-vpc-private-|subnet_name: $(esc "${PREFIX}")-dev-vpc-private-|"
   )
 fi

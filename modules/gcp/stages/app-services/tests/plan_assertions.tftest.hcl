@@ -589,11 +589,11 @@ run "service_in_team_project_gets_subnet_network_user" {
 
   assert {
     condition = (
-      google_compute_subnetwork_iam_member.serverless_network_user["api"].role == "roles/compute.networkUser" &&
-      google_compute_subnetwork_iam_member.serverless_network_user["api"].member == "serviceAccount:service-333333333333@serverless-robot-prod.iam.gserviceaccount.com" &&
-      google_compute_subnetwork_iam_member.serverless_network_user["api"].project == "acme-dev-host-abcd" &&
-      google_compute_subnetwork_iam_member.serverless_network_user["api"].region == "europe-west1" &&
-      google_compute_subnetwork_iam_member.serverless_network_user["api"].subnetwork == "acme-dev-vpc-private-europe-west1-b"
+      google_compute_subnetwork_iam_member.serverless_network_user["api/default"].role == "roles/compute.networkUser" &&
+      google_compute_subnetwork_iam_member.serverless_network_user["api/default"].member == "serviceAccount:service-333333333333@serverless-robot-prod.iam.gserviceaccount.com" &&
+      google_compute_subnetwork_iam_member.serverless_network_user["api/default"].project == "acme-dev-host-abcd" &&
+      google_compute_subnetwork_iam_member.serverless_network_user["api/default"].region == "europe-west1" &&
+      google_compute_subnetwork_iam_member.serverless_network_user["api/default"].subnetwork == "acme-dev-vpc-private-europe-west1-b"
     )
     error_message = "the team project's serverless robot must get roles/compute.networkUser on the Shared VPC subnet in the host project."
   }
@@ -633,9 +633,9 @@ run "service_without_team_uses_host_project" {
   }
 }
 
-# A project created in the same plan has an unknown id; the explicit flag keeps
-# the for_each keys known.
-run "explicit_network_access_flag_overrides_derivation" {
+# Two services of one team share ONE viewer and ONE subnet binding, so removing
+# one service never revokes the other's grant.
+run "two_services_in_one_team_share_network_grants" {
   command = plan
 
   variables {
@@ -643,13 +643,56 @@ run "explicit_network_access_flag_overrides_derivation" {
       api = {
         project_id           = "payments-1a2b"
         project_number       = "333333333333"
-        grant_network_access = false
+        network_access_group = "payments"
+      }
+      worker = {
+        project_id           = "payments-1a2b"
+        project_number       = "333333333333"
+        network_access_group = "payments"
+      }
+      other = {
+        project_id           = "orders-3c4d"
+        project_number       = "444444444444"
+        network_access_group = "orders"
       }
     }
   }
 
   assert {
-    condition     = length(google_compute_subnetwork_iam_member.serverless_network_user) == 0
-    error_message = "grant_network_access = false must suppress the Shared VPC grants."
+    condition     = length(google_project_iam_member.serverless_network_viewer) == 2 && length(google_compute_subnetwork_iam_member.serverless_network_user) == 2
+    error_message = "one viewer and one subnet binding per team, not per service."
+  }
+
+  assert {
+    condition     = contains(keys(google_project_iam_member.serverless_network_viewer), "payments") && contains(keys(google_compute_subnetwork_iam_member.serverless_network_user), "payments/default")
+    error_message = "grants are keyed by network_access_group (and subnet), never by project numbers."
+  }
+}
+
+# A secret ref may name a secret in another project (the host's SaaS bridge secret).
+run "team_service_secret_in_host_project" {
+  command = plan
+
+  variables {
+    services = {
+      api = {
+        project_id     = "payments-1a2b"
+        project_number = "333333333333"
+        secrets = {
+          LOCAL = { secret = "local-secret" }
+          SAAS  = { secret = "projects/acme-dev-host-abcd/secrets/supabase-connection" }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = google_secret_manager_secret_iam_member.runtime["api/LOCAL"].project == "payments-1a2b" && google_secret_manager_secret_iam_member.runtime["api/LOCAL"].secret_id == "local-secret"
+    error_message = "a short secret id resolves in the service's project."
+  }
+
+  assert {
+    condition     = google_secret_manager_secret_iam_member.runtime["api/SAAS"].project == "acme-dev-host-abcd" && google_secret_manager_secret_iam_member.runtime["api/SAAS"].secret_id == "supabase-connection" && google_secret_manager_secret_iam_member.runtime["api/SAAS"].member == "serviceAccount:api-run@payments-1a2b.iam.gserviceaccount.com"
+    error_message = "a projects/<p>/secrets/<s> ref grants the runtime SA on that exact secret."
   }
 }

@@ -96,8 +96,14 @@ The root resolves the project ID and number from `module.service_team["payments"
 
 What the apply adds for such a service, beyond the per-service resources:
 
-- the team project gets `run.googleapis.com`, `artifactregistry.googleapis.com` and `iam.googleapis.com` (plus `sqladmin`, `secretmanager`, `pubsub` when the service uses them), merged into the team's `activate_apis`;
+- the team project gets `run.googleapis.com`, `artifactregistry.googleapis.com`, `iam.googleapis.com`, `containerscanning.googleapis.com` and `monitoring.googleapis.com` (plus `sqladmin`, `secretmanager`, `pubsub` when the service uses them), merged into the team's `activate_apis`;
 - the team project's Cloud Run service agent (`service-<project number>@serverless-robot-prod.iam.gserviceaccount.com`) gets `roles/compute.networkUser` on the Shared VPC subnet the service attaches to (the environment's first private subnet, or the service's `subnetwork_id`) and `roles/compute.networkViewer` on the host project. Direct VPC egress fails without both.
+
+Shared VPC grants are created once per team (and once per subnet), not once per service, so removing one service never revokes a sibling's access. The root groups them by the `service_team` name.
+
+Secrets: a short `secrets.<ENV>.secret` id is looked up in the **team project**. Secrets that live in the host project (including the SaaS bridge secret) must be referenced by full name, `projects/<host project id>/secrets/<name>`; the runtime SA is then granted `secretAccessor` on exactly that secret.
+
+CMEK: if you set `artifact_registry_kms_key_name` or `pubsub_kms_key_name`, the Artifact Registry and Pub/Sub service agents of **each team project** need `roles/cloudkms.cryptoKeyEncrypterDecrypter` on the key, in addition to the host project's. Grant it before the first apply that creates the team's repos or topics.
 
 Rules:
 

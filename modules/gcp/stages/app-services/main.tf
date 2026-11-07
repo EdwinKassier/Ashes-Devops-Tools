@@ -49,11 +49,25 @@ locals {
     for k, s in var.services : k => s
     if s.grant_network_access != null ? s.grant_network_access : (s.project_id != null && s.project_id != var.project_id)
   }
-  # Shared VPC subnet of each such service: projects/<host>/regions/<r>/subnetworks/<n>.
+  # One grant per network_access_group (default: the service key; the root sets
+  # the service_team name), so services of one team share, and never duplicate,
+  # the bindings. Keys come from config inputs only (never project numbers or
+  # subnet IDs that may be unknown at plan time).
+  network_access_group = { for k, s in local.services_in_team_project : k => coalesce(s.network_access_group, k) }
+  viewer_grants = {
+    for g in distinct(values(local.network_access_group)) :
+    g => [for k, gg in local.network_access_group : k if gg == g][0]
+  }
+  subnet_grants = {
+    for key in distinct([for k, s in local.services_in_team_project : "${local.network_access_group[k]}/${coalesce(s.subnetwork_id, "default")}"]) :
+    key => [for k, s in local.services_in_team_project : k if "${local.network_access_group[k]}/${coalesce(s.subnetwork_id, "default")}" == key][0]
+  }
+  # Shared VPC subnet of the representative service of each grant:
+  # projects/<host>/regions/<r>/subnetworks/<n>.
   team_service_subnet = {
-    for k, s in local.services_in_team_project : k => regex(
+    for key, k in local.subnet_grants : key => regex(
       "^projects/(?P<project>[^/]+)/regions/(?P<region>[^/]+)/subnetworks/(?P<name>[^/]+)$",
-      coalesce(s.subnetwork_id, var.subnetwork_id)
+      coalesce(local.services_in_team_project[k].subnetwork_id, var.subnetwork_id)
     )
   }
 
@@ -61,9 +75,16 @@ locals {
   initial_image = { for k, s in var.services : k => coalesce(s.image, var.bootstrap_image) }
 
   # Flatten secret refs into one IAM grant per (service, secret).
+  # A secret ref is a short id (looked up in the SERVICE's project) or a full
+  # projects/<p>/secrets/<s> name (any project, e.g. the host project's SaaS
+  # bridge secret for a team service); the grant lands on that secret.
   secret_grants = merge([
     for k, s in var.services : {
-      for env_name, ref in s.secrets : "${k}/${env_name}" => { service = k, secret = ref.secret }
+      for env_name, ref in s.secrets : "${k}/${env_name}" => {
+        service = k
+        project = can(regex("^projects/[^/]+/secrets/[^/]+$", ref.secret)) ? split("/", ref.secret)[1] : local.service_project[k]
+        secret  = can(regex("^projects/[^/]+/secrets/[^/]+$", ref.secret)) ? split("/", ref.secret)[3] : ref.secret
+      }
     }
   ]...)
 
@@ -200,7 +221,7 @@ resource "google_service_account" "runtime" {
 resource "google_secret_manager_secret_iam_member" "runtime" {
   for_each = local.secret_grants
 
-  project   = local.service_project[each.value.service]
+  project   = each.value.project
   secret_id = each.value.secret
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${local.runtime_sa_email[each.value.service]}"
@@ -365,21 +386,21 @@ resource "google_project_iam_member" "runtime_sql" {
 # needs neither: this creates nothing for it.
 
 resource "google_compute_subnetwork_iam_member" "serverless_network_user" {
-  for_each = local.services_in_team_project
+  for_each = local.subnet_grants
 
   project    = local.team_service_subnet[each.key].project
   region     = local.team_service_subnet[each.key].region
   subnetwork = local.team_service_subnet[each.key].name
   role       = "roles/compute.networkUser"
-  member     = "serviceAccount:service-${local.service_project_number[each.key]}@serverless-robot-prod.iam.gserviceaccount.com"
+  member     = "serviceAccount:service-${local.service_project_number[each.value]}@serverless-robot-prod.iam.gserviceaccount.com"
 }
 
 resource "google_project_iam_member" "serverless_network_viewer" {
-  for_each = local.services_in_team_project
+  for_each = local.viewer_grants
 
   project = var.project_id
   role    = "roles/compute.networkViewer"
-  member  = "serviceAccount:service-${local.service_project_number[each.key]}@serverless-robot-prod.iam.gserviceaccount.com"
+  member  = "serviceAccount:service-${local.service_project_number[each.value]}@serverless-robot-prod.iam.gserviceaccount.com"
 }
 
 # =============================================================================

@@ -102,13 +102,29 @@ run "service_team_resolves_service_project" {
     landing_zone_config_path = "tests/fixtures/landing-zone.team-service.yaml"
   }
 
+  override_module {
+    target = module.service_team["payments"]
+    outputs = {
+      project_id            = "payments-1a2b"
+      project_number        = "333333333333"
+      service_account_email = null
+      subnet_iam_bindings   = {}
+      host_project_id       = "cfgco-dev-host-abcd"
+    }
+  }
+
+  assert {
+    condition     = local.app_services["api"].project_id == "payments-1a2b" && local.app_services["api"].project_number == "333333333333" && local.app_services["api"].network_access_group == "payments"
+    error_message = "service_team must resolve project_id / project_number from module.service_team and group the Shared VPC grants by team."
+  }
+
   assert {
     condition     = local.app_services["api"].grant_network_access == true && !contains(keys(local.app_services["worker"]), "grant_network_access")
     error_message = "a service with service_team must be deployed into the team project (Shared VPC grants on); a service without must not."
   }
 
   assert {
-    condition     = contains(local.team_service_apis["payments"], "run.googleapis.com") && contains(local.team_service_apis["payments"], "artifactregistry.googleapis.com")
+    condition     = contains(local.team_service_apis["payments"], "run.googleapis.com") && contains(local.team_service_apis["payments"], "artifactregistry.googleapis.com") && contains(local.team_service_apis["payments"], "containerscanning.googleapis.com") && contains(local.team_service_apis["payments"], "monitoring.googleapis.com")
     error_message = "a team that hosts a service must have the Cloud Run and Artifact Registry APIs activated."
   }
 }

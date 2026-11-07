@@ -151,10 +151,6 @@ gcp:
       is_production: false
       labels:
         tier: non-production
-      # Group email => roles granted on the environment folder.
-      iam_group_role_bindings:
-        gcp-developers@my-org.example.com:
-          - roles/viewer
       # Application services (Cloud Run, optional Cloud SQL, GitHub deploy
       # identity). Same fields as the modules/gcp/stages/app-services `services`
       # variable; the key is the service name. A service runs in the host project
@@ -178,7 +174,11 @@ gcp:
       #     project_admin_group_email: platform-admins@my-org.example.com
       #     activate_apis: [run.googleapis.com]
       #     shared_vpc_subnets:
-      #       primary: {region: europe-west2, subnet_name: my-org-dev-vpc-private-europe-west2-b}
+      #       primary: {region: europe-west2, subnet_name: my-org-dev-vpc-private-europe-west2-a}
+      # Group email => roles granted on the environment folder.
+      iam_group_role_bindings:
+        gcp-developers@my-org.example.com:
+          - roles/viewer
     prod:
       display_name: Production
       region: europe-west2
@@ -272,12 +272,12 @@ aws:
       - .github.com
       - .githubusercontent.com
       - .terraform.io
-    stateful_default_actions:
-      - aws:drop_established
-      - aws:alert_established
     # Explicit waiver to run production alert-only (log-but-pass) while allow
     # rules are being built. Reviewable; remove once the allowlist is complete.
     # egress_alert_only_waived: true
+    stateful_default_actions:
+      - aws:drop_established
+      - aws:alert_established
 
   # Application golden path (aws-workload-<env>). All optional.
   # internal (default) | public_alb (internet-facing ALB + regional WAF; needs

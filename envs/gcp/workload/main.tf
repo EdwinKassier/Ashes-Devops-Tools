@@ -512,6 +512,7 @@ locals {
         project_id           = try(module.service_team[s.service_team].project_id, null)
         project_number       = try(module.service_team[s.service_team].project_number, null)
         grant_network_access = true
+        network_access_group = try(s.service_team, null)
       } : a => v if try(s.service_team, null) != null }
     )
   }
@@ -521,7 +522,7 @@ locals {
   team_service_apis = {
     for team, _ in local.service_teams : team => (
       length([for k, s in local.app_services_input : k if try(s.service_team, null) == team]) == 0 ? [] : distinct(concat(
-        ["run.googleapis.com", "artifactregistry.googleapis.com", "iam.googleapis.com"],
+        ["run.googleapis.com", "artifactregistry.googleapis.com", "iam.googleapis.com", "containerscanning.googleapis.com", "monitoring.googleapis.com"],
         anytrue([for k, s in local.app_services_input : try(s.database, null) != null if try(s.service_team, null) == team]) ? ["sqladmin.googleapis.com"] : [],
         anytrue([for k, s in local.app_services_input : length(try(s.secrets, {})) > 0 if try(s.service_team, null) == team]) ? ["secretmanager.googleapis.com"] : [],
         anytrue([for k, s in local.app_services_input : try(s.pubsub.enabled, false) == true if try(s.service_team, null) == team]) ? ["pubsub.googleapis.com"] : [],

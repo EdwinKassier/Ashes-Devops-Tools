@@ -254,3 +254,23 @@ run "rejects_malformed_team_project_number" {
 
   expect_failures = [var.services]
 }
+
+run "rejects_network_access_true_without_foreign_project" {
+  command = plan
+
+  variables {
+    services = { api = { grant_network_access = true } }
+  }
+
+  expect_failures = [var.services]
+}
+
+run "rejects_network_access_false_with_foreign_project" {
+  command = plan
+
+  variables {
+    services = { api = { project_id = "payments-1a2b", project_number = "333333333333", grant_network_access = false } }
+  }
+
+  expect_failures = [var.services]
+}
