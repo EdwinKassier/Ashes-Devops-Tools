@@ -172,7 +172,7 @@ highest source log position, so a replayed CDC batch changes nothing.
 graph TB
     cdc["CDC and event ingest"] --> rawb[("raw bucket, CMEK")]
     files["Partner file drops"] --> rawb
-    rawb --> tjob["Transform jobs: Spark or SQL"]
+    rawb --> tjob["Transform jobs: Spark (AWS), BigQuery SQL (GCP)"]
     tjob --> cat["Iceberg catalog"]
     cat --> curt[("curated Iceberg tables, CMEK")]
     curt --> sbuild["Serving builds"]

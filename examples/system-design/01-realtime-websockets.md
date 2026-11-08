@@ -119,7 +119,8 @@ Peak-to-average is assumed to be 3×.
   units per item: 70,000 × 6 = **420,000 write units/s** at peak, over millions
   of conversation keys. At 1,000 write units/s per DynamoDB partition (primer's
   [throughput table](00-primer.md#throughput-per-instance-and-per-partition)),
-  one conversation tops out near 160 sends/s: only a huge room gets there.
+  one conversation tops out near 160 sends/s, fewer with larger items or counter
+  conflicts: only a huge room gets there.
 
 **Gateway count.**
 
@@ -444,7 +445,7 @@ slows the recovery. Deploy canary-then-batch; the runbook covers the rest.
 | Connection tier (GCP) | Cloud Run behind the global external ALB | GKE Autopilot | The repo's app-services path; zero cluster operations; fine up to about 1 M connections. | 10 M connections means 10,000 Cloud Run instances and a 60-minute forced reconnect. Move to GKE (the repo can enable an Autopilot cluster) for denser pods and 24-hour connections. |
 | Routing | Registry + per-gateway sharded channel | Broadcast; consistent hashing | Work proportional to actual recipients; any gateway holds any user. | Mostly huge rooms (live events): per-room channels everywhere. |
 | Delivery guarantee | Durable write, then best-effort push, with client gap repair | Durable per-user queues | One replayable log (the store) instead of 50 M queues. | Strict server-side delivery receipts for compliance: add a per-device delivery log. |
-| Ordering | Per-conversation `seq`, committed with the message in one transaction | Timestamps; global sequencer | Timestamps collide and skew; a global sequencer is a bottleneck. | Very hot rooms: allocate `seq` in blocks. |
+| Ordering | Per-conversation `seq`, committed with the message in one transaction | Timestamps; global sequencer | Timestamps collide and skew; a global sequencer is a bottleneck. | Very hot rooms: a dedicated per-room sequencer. |
 | Message store | DynamoDB / Bigtable | Relational database | Append-heavy, key-range reads, 70,000 sends/s, 730 TB/year. | Small scale (under 1,000 writes/s): Aurora or Cloud SQL is simpler and gives you joins. |
 | Presence | TTL keys in Valkey, debounced | Database rows | 400,000 pings/s and high churn; staleness of seconds is acceptable. | Presence that must be exact (a call is ringing): a separate, stricter path. |
 | Slow consumers | Bounded queues, coalesce, then disconnect | Unbounded buffering; end-to-end flow control | Protects the other sockets on the gateway. | Single-consumer streams: credit-based flow control. |
@@ -458,7 +459,7 @@ slows the recovery. Deploy canary-then-batch; the runbook covers the rest.
 | ×1 (10 M connections) | Nothing, if sized as above. | |
 | ×10 (100 M connections) | Load-balancer cost; registry reads (3.5 M/s); 3,000 channels. | NLB; more shards; cells (a full stack per slice of users) with a cross-cell router. |
 | ×100 | A single region. Cross-cell routing and per-region data residency dominate. | Multi-region active-active; see the [multi-region walkthrough](16-multi-region-active-active.md). |
-| Hot room (one room ×100) | The room's counter key and channel, both on one shard. | Split the room channel; allocate `seq` in blocks; drop typing and presence in huge rooms. |
+| Hot room (one room ×100) | The room's counter key and channel, both on one shard. | Split the room channel; move `seq` to a per-room sequencer; drop typing and presence in huge rooms. |
 
 ### Blast radius per component
 

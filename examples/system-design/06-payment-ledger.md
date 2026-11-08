@@ -25,16 +25,17 @@ Common variants:
 A **payments service** accepts `POST /payments` with a client-supplied
 **idempotency key**, and records the key and the payment in one transaction
 before anything else, so a retry finds the existing payment. It calls the PSP
-with **its own** idempotency key, derived from the payment ID, so its own
-retries cannot double-charge either. A PSP call that times out is explicitly
-**unknown**, resolved by asking the PSP, never by charging again. Every
+with **its own** idempotency key, derived from the payment ID, so its retries
+cannot double-charge. A timed-out PSP call is **unknown**, resolved by asking
+the PSP, never by charging again. The PSP's default rate limits bind at
+launch, so request an increase weeks ahead. Every
 movement of money becomes an entry in an append-only **double-entry ledger**:
 postings sum to zero per currency, and corrections are reversing entries,
 never updates. The payment change and its ledger event commit together through
 a transactional outbox, and PSP webhooks are deduplicated hints to re-read the
 payment. Every day a **reconciliation** job matches the ledger against the
-PSP's settlement report and the bank statement, and sends every mismatch to a
-human queue. On AWS this is ECS on Fargate and Aurora PostgreSQL; on GCP,
+PSP's settlement report and the bank statement, and queues every mismatch for a
+human. On AWS this is ECS on Fargate and Aurora PostgreSQL; on GCP,
 Cloud Run and Cloud SQL for PostgreSQL.
 
 ```mermaid

@@ -414,7 +414,7 @@ days here); reconciliation covers anything later.
 
 **Freshness.** Event-driven, plus a nightly reconciliation of each source's
 document list and hashes against `document`, because connectors drop events.
-Deletions and permission changes skip embedding: a `DELETE` or `acl_groups`
+Deletions and permission changes skip embedding: a tombstone upsert or `acl_groups`
 update takes milliseconds, which is how the 1-minute revocation holds. A new
 embedding model is a migration: `ADD COLUMN emb_next vector(N)` and build its
 HNSW index `CONCURRENTLY`; ingestion then writes both columns on every chunk
@@ -820,7 +820,7 @@ baseline; add a regression test on input tokens per request.
 minutes, or a user report of a deleted document cited. **Triage.** Check queue
 depth and worker errors; find the document's `version` in `document`.
 **Mitigation.** For an exposure, run the deep dive 2 delete with a version
-above the current one now, then fix the connector. **Verification.** The query in
+above anything the source can emit, then fix the connector and reconcile. **Verification.** The query in
 deep dive 2 no longer returns its chunks. **Follow-up.** Run reconciliation
 for that source; add the case to the evaluation set.
 
