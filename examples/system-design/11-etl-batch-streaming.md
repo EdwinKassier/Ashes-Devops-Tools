@@ -102,11 +102,17 @@ regional publish quota is 200 MB/s even in a small region
 ([Google Cloud docs](https://docs.cloud.google.com/pubsub/quotas), checked
 2026-11): 25 MB/s is far below it.
 
-**Replay throughput.** Seven days of raw is about 6 TB uncompressed. Doing it
-in 8 hours is 6 TB ÷ 28,800 s ≈ **210 MB/s, 21× the live average**. Assuming 5
-MB/s per vCPU for parse, deduplicate and merge (an assumption: benchmark your
-transforms), that is 42 vCPUs; plan 48, for example 12 four-vCPU workers.
+**Replay throughput.** A backfill starts from the newest daily state
+checkpoint (see [replay](#replay-and-backfill)), so rebuilding seven days
+replays up to eight: about 6.9 TB uncompressed. Doing it in 8 hours is
+6.9 TB ÷ 28,800 s ≈ **240 MB/s, 24× the live average**. Assuming 5 MB/s per
+vCPU for parse, deduplicate and merge (an assumption: benchmark your
+transforms), that is 48 vCPUs; plan 56, for example 14 four-vCPU workers.
 Replay capacity, not live capacity, sizes the worker quota.
+
+**Checkpoints.** Current-state tables total about 100 GB compressed (an
+assumption: roughly the source database's size). Daily full copies kept 2
+years are about 73 TB on AWS; BigQuery table snapshots bill only changed bytes.
 
 **Curated writes.** Merging every minute, 2,000 changes a second becomes about
 120,000 rows per merge, spread over 50 tables. BigQuery runs at most two
@@ -185,7 +191,7 @@ graph TB
     stream["Stream job: Flink / Dataflow"]
     bf["Backfill job: same code, bounded"]
     ctrl["Replay controller + run registry"]
-    cur[("curated: Iceberg / BigQuery")]
+    cur[("curated: S3 Tables / BigQuery")]
     serv[("serving marts")]
     lin["Lineage backend"]
     oltp --> cdc -->|AWS| log
@@ -240,9 +246,8 @@ and serving; only backfills and audits read raw.
 
 ### Kappa vs Lambda
 
-**Lambda** runs two pipelines: a batch layer recomputes views from the full
-master dataset, a speed layer covers the hours since the last batch, and a
-serving layer merges the two. **Kappa** runs one stream pipeline and
+**Lambda** runs a batch layer over all history and a speed layer for the
+recent hours, merged at serving. **Kappa** runs one stream pipeline and
 reprocesses by replaying the log into a new output.
 
 | | Lambda | Kappa (chosen, with raw as the long log) |
@@ -264,10 +269,6 @@ checked 2026-11), and Pub/Sub topic retention is at most 31 days
 ([Google Cloud docs](https://docs.cloud.google.com/pubsub/quotas), checked
 2026-11). So raw is the long log, and the job's source is a parameter: "log
 from checkpoint" or "raw from T1 to T2".
-
-**Where it breaks.** Batch-shaped work (full-history training) belongs in a
-scheduled job over curated; that is not Lambda unless it duplicates a
-streaming metric.
 
 ### CDC ingestion
 
@@ -376,22 +377,32 @@ form: **overwrite whole partitions**, never increment.
 of the live table avoids the DML concurrency limit from the
 [estimates](#back-of-envelope-estimates) and lets you diff before promoting:
 
-1. **Seed the shadow** with the table as it was at T1 minus a margin (say an
-   hour): a backfill only touches keys changed in its window, so an empty
-   shadow would drop every other row. BigQuery can copy or
-   snapshot a table at a past time within its time-travel window, 2 to 7 days
-   and 7 by default
+1. **Seed the shadow** from the newest **state checkpoint** at or before T1:
+   a backfill only touches keys changed in its window, so an empty shadow
+   would drop every other row. Time travel cannot reach back 2 years: BigQuery
+   keeps 2 to 7 days
    ([Google Cloud docs](https://docs.cloud.google.com/bigquery/docs/time-travel),
-   checked 2026-11); Iceberg branches from the snapshot of that time if it has
-   not expired. An older rebuild starts empty and replays raw from the
-   source's initial snapshot.
+   checked 2026-11), and S3 Tables expires snapshots after 120 hours by default
+   ([AWS docs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-maintenance.html),
+   checked 2026-11). So a scheduled job checkpoints every current-state table
+   daily and records its watermark in `ops.job_runs`. GCP: a table snapshot
+   expiring after 730 days, billed only for bytes that later change, restored
+   with `CREATE TABLE … CLONE`
+   ([Google Cloud docs](https://docs.cloud.google.com/bigquery/docs/table-snapshots-intro),
+   checked 2026-11). AWS: a Parquet export to `checkpoints/<table>/day=<D>/`
+   in the locked raw bucket. Append-only history tables need no seed; the
+   backfill overwrites their day partitions.
 2. **Apply raw from the seed time minus the maximum consumer lag, to T2.** A
    record that reached raw just before the seed instant may not yet have been
    merged into the seed, so the replay must overlap it; the
    (`commit_pos`, `rec_offset`) guard makes the overlap harmless. Pick T2
    inside the log's retention.
-3. **Promote:** pause the live consumer, swap atomically (a table copy on
-   BigQuery, a branch swap on Iceberg), seek the consumer back to T2 minus the same lag, resume.
+3. **Promote:** pause the live consumer, swap atomically
+   (`CREATE OR REPLACE TABLE … COPY` on BigQuery; one `INSERT OVERWRITE`
+   commit from the shadow on S3 Tables, never a branch, because any
+   user-defined branch or tag stops S3 Tables snapshot expiry for the whole
+   table, same AWS page), seek the consumer back to T2 minus the same lag,
+   resume.
 
 **Where it breaks.** Replaying a job with external side effects (an email, a
 payment call) repeats them: replayable jobs must be pure.
@@ -427,9 +438,6 @@ which data, produced this snapshot?"
 **Using it.** Query downstream before a schema change, or from bad runs to
 list what to backfill. Emit asynchronously so a lineage outage never stops the
 pipeline.
-
-**Where it breaks.** Lineage is only as complete as its emitters, so only
-pipeline identities may write curated.
 
 ### Late data and schema evolution
 
@@ -520,16 +528,9 @@ and shard the source or use a database with a native change stream.
 | Log retention | 24 h default, up to 365 days | Topic retention up to 31 days | Kinesis can serve as a long log; Pub/Sub cannot. |
 | Archiver | Firehose, Kinesis source, 0–900 s buffer, 1–128 MiB ([AWS docs](https://docs.aws.amazon.com/firehose/latest/dev/create-configure-backup.html), checked 2026-11) | Cloud Storage subscription, 1–10 min files | Both are no-code; Firehose needs a role, the GCS subscription uses the Pub/Sub service agent. |
 | Stream engine | Managed Service for Apache Flink | Dataflow (Beam) | Both run one graph over bounded and unbounded sources. |
-| Curated store | Iceberg on S3 with the Glue catalog | BigQuery | BigQuery caps concurrent DML per table; Iceberg commits are optimistic. |
+| Curated store | S3 Tables (Iceberg), as in the [data lake walkthrough](12-data-lake-warehouse.md) | BigQuery native tables | Not that walkthrough's Iceberg managed tables: checkpoints and the swap need table snapshots and copies, which those lack ([docs](https://docs.cloud.google.com/bigquery/docs/iceberg-tables), checked 2026-11). |
 | Schema registry | Glue Schema Registry | Pub/Sub schemas | Glue checks at registration; Pub/Sub validates every publish. |
 | Lineage | SageMaker Catalog (DataZone) | Knowledge Catalog | Dataflow lineage is automatic; Flink needs an emitter. |
-
-Two differences change the design:
-
-- **GCP CDC lands as files:** freshness includes rotation and notification
-  delay, but raw is the primary copy, not an archive.
-- **Read fan-out on AWS.** Without enhanced fan-out, Kinesis consumers share
-  2 MB/s per shard; each Pub/Sub subscription gets its own copy.
 
 ## Build it here
 
@@ -831,7 +832,7 @@ serving. **Verification and follow-up:** reconciliation passes; add a test.
 | Archivers | Firehose 1–128 MiB, 0–900 s; GCS subscription 1–10 min |
 | BigQuery mutating DML | 2 concurrent per table, 20 queued |
 | Allowed lateness default | Zero in Flink and Beam |
-| This design | 25 MB/s peak; 175 GB/day raw compressed; replay at 21× live |
+| This design | 25 MB/s peak; 175 GB/day raw compressed; replay at 24× live; daily state checkpoints |
 
 ### Likely follow-ups
 
