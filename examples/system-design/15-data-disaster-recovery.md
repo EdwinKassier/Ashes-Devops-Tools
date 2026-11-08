@@ -374,6 +374,16 @@ Gaps this design must close, each checked against the code:
    does not forward `transaction_log_retention_days` and the config schema has
    no such key, so Cloud SQL PITR stays at 7 days even on Enterprise Plus.
    There is no GCP Backup and DR vault module.
+7. **DynamoDB backups cannot leave the account.** Cross-Region and
+   cross-account copy of DynamoDB need AWS Backup's **advanced features for
+   DynamoDB**; plain DynamoDB has neither
+   ([feature table](https://docs.aws.amazon.com/aws-backup/latest/devguide/backup-feature-availability.html),
+   checked 2026-11). Jobs from a backup policy need a manual opt-in in each
+   member account and Region
+   ([AWS docs](https://docs.aws.amazon.com/aws-backup/latest/devguide/advanced-ddb-backup.html),
+   checked 2026-11): `aws_backup_region_settings` with `DynamoDB = true` in
+   both preference maps. Nothing in the repo sets it, so carts never reach the
+   DR vault today.
 
 ## Trade-offs to defend
 
@@ -458,8 +468,8 @@ Differences that change the design:
 
 Tiers follow [VPC-tier placement](00-primer.md#vpc-tier-placement)
 ([#14](14-n-tier-network.md)). Also needed: cross-account backup enabled once in the management account
-(`aws_backup_global_settings`), and a statement in `envs/aws/workload/kms.tf`
-letting the backup account use the workload CMK for copies.
+(`aws_backup_global_settings`); a statement in `envs/aws/workload/kms.tf`
+letting the backup account use the workload CMK for copies; and gap 7.
 
 ### Config
 
@@ -544,15 +554,23 @@ module's `content` input, so add a passthrough to
 ```hcl
 locals {
   dr_vault_arn = aws_backup_vault.dr.arn
+  hot          = { delete_after_days = { "@@assign" = "35" } }
+  year = { # cold after 35 days; delete 365 (cold needs at least 90 days)
+    move_to_cold_storage_after_days = { "@@assign" = "35" }
+    delete_after_days               = { "@@assign" = "365" }
+  }
   backup_policy = jsonencode({ plans = { default = {
     regions = { "@@assign" = [local.aws_region] }
-    rules = { hourly = {
-      schedule_expression      = { "@@assign" = "cron(0 * ? * * *)" }
+    rules = { for name, r in {
+      hourly = { cron = "cron(0 * ? * * *)", lifecycle = local.hot }  # ~1 h RPO in the DR vault
+      daily  = { cron = "cron(0 5 ? * * *)", lifecycle = local.year } # the repo's 365-day rule
+      } : name => {
+      schedule_expression      = { "@@assign" = r.cron }
       target_backup_vault_name = { "@@assign" = "org-backup-vault" }
-      lifecycle                = { delete_after_days = { "@@assign" = "35" } }
+      lifecycle                = r.lifecycle
       copy_actions = { (local.dr_vault_arn) = {
         target_backup_vault_arn = { "@@assign" = local.dr_vault_arn }
-        lifecycle               = { delete_after_days = { "@@assign" = "35" } }
+        lifecycle               = r.lifecycle
       } }
     } }
     selections = { tags = { backup = {
@@ -563,6 +581,13 @@ locals {
   } } })
 }
 ```
+
+The daily rule keeps the requirement's year, which the DR lock's
+`max_retention_days = 400` allows. Cold storage needs 90 days there before
+deletion, and AWS Backup ignores the transition for types without cold
+storage, such as Aurora, which stays warm
+([AWS docs](https://docs.aws.amazon.com/aws-backup/latest/devguide/API_Lifecycle.html),
+checked 2026-11).
 
 And in `envs/aws/workload`, the vault the policy expects in every member
 account:
@@ -759,8 +784,8 @@ switchover.
   risks split-brain; a false alarm costs more than 5 minutes of judgement.
   Automate every step after the decision.
 - **"How do you get RPO 0?"** Synchronous replication to a quorum: MRSC
-  tables, Spanner, or Aurora's RPO bound, which blocks commits instead of
-  losing them. You pay write latency and availability.
+  tables or Spanner. You pay write latency and availability. Aurora's RPO
+  bound only caps the loss, at 20 seconds or more.
 - **"How do you restore the warehouse?"** Rebuild from the immutable,
   replicated raw zone; time travel or snapshots for recent mistakes.
 - **"How do you know DR works?"** Timed weekly restore tests, quarterly
