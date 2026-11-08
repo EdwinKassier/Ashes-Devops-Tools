@@ -24,7 +24,7 @@ Common variants:
 
 Every service is instrumented once, with **OpenTelemetry**, and sends all three
 signals over OTLP to a **collector pipeline**: an agent next to each workload,
-then a stateless **gateway** fleet that enforces the rules. It batches, redacts, **drops unapproved metric labels** (cardinality
+then a stateless **gateway** fleet that enforces the rules. It batches, redacts, **drops metric series with unapproved labels** (cardinality
 is the metric system's main cost and failure mode), and routes each signal to
 the right store. **Metrics** go to a managed Prometheus-compatible time-series
 database, which runs alert rules and SLO burn-rate alerts. **Traces** pass a
@@ -152,8 +152,8 @@ one of three zones, provision 93 × 3/2 ≈ **140 vCPU**.
 
 `service.name`, `service.version`, `deployment.environment`, `cloud.region`
 and the owning team: low-cardinality, and they say *who* emitted the data. The
-gateway drops pod and container IDs from metrics (see
-[Cardinality](#cardinality)).
+metrics keep `pod` as each series' single writer and drop the redundant
+container ID (see [Cardinality](#cardinality)).
 
 ### Signals and their keys
 
@@ -204,7 +204,7 @@ logs first, then baseline traces, never metrics or audit.
 
 **Read path.** Alert rules evaluate in the TSDB and route to the pager.
 Engineers go from an alert to an exemplar's trace, then pivot on `trace_id` to
-logs. That pivot is why correlation IDs matter more than any single store.
+logs.
 
 **Audit is separate.** CloudTrail and Cloud Audit Logs bypass the application
 pipeline, going from the control plane to a locked archive in the security
@@ -253,8 +253,9 @@ values. A metric's series count is the product of its labels' value counts:
 
 `http_requests_total{service, route, method, status} = 500 × 20 × 4 × 8 = 320,000 series.`
 
-Add `pod` (40 per service) and it becomes 12.8 million; add `user_id` and it
-is unbounded. Every series costs TSDB memory, index and query time, and on
+Add `pod` (40 per service) and the worst case is 12.8 million; only populated
+combinations exist, which is how the estimates hold at 500 series per
+container. Add `user_id` and it is unbounded. Every series costs TSDB memory, index and query time, and on
 managed back ends a sample on every scrape.
 
 **What the clouds enforce.** CloudWatch treats every unique dimension
@@ -281,17 +282,28 @@ checked 2026-11). A cardinality explosion therefore becomes an outage of
    travelled.
 3. **An allowlist at the gateway (chosen), with TSDB limits as a backstop.**
 
-**Why it wins.** The gateway's metric pipeline keeps only approved labels:
+**Why it wins.** The gateway's metric pipeline admits only approved labels:
 `service`, `route` (the template such as `/orders/{id}`, never the raw path),
-`method`, `status_class` and `zone`. It drops `pod`, `instance` and anything
-ID-like, and aggregates what remains. It also exports its own count of series
+`method`, `status_class`, `zone`, and `pod`, the series' writer. A series with
+any other label is **dropped and counted, never rewritten**. Stripping a label
+in a stateless, load-balanced tier gives one series many writers (40 pods via
+several replicas): remote write rejects duplicate or out-of-order samples, or
+reads counter resets. The safe rewrite is dropping
+a label that a kept one determines, such as `instance` next to `pod`. Pod-level
+aggregation happens once, in the TSDB: recording rules such as
+`sum without (pod) (rate(http_requests_total[5m]))` feed dashboards and
+alerts. Cutting `pod` before ingest needs aggregation keyed by series, each
+reduced series routed to one aggregator as the trace tier routes by
+`trace_id`; the collector's `streamID` metric routing is alpha
+([OpenTelemetry README](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/exporter/loadbalancingexporter/README.md),
+checked 2026-11), so **verify before relying on** it. The gateway also counts series
 per metric name, so a new label shows up on a dashboard before it shows up on
 the bill. High-cardinality questions ("which customer is slow?") go to traces
 and logs, which are priced per event, not per series. Exemplars bridge the two:
 the histogram stays low-cardinality, and the exemplar carries one `trace_id`.
 
-**Where it breaks.** Some per-pod metrics are genuinely needed to find one hot
-pod; keep a `topk(10, ...)` recording rule rather than the full set.
+**Where it breaks.** Finding one hot pod needs the per-pod series, so the
+`topk(10, ...)` query or recording rule runs in the TSDB over them.
 Histograms multiply cardinality: a 12-bucket classic histogram is 14 series per
 label set (the buckets plus `_sum` and `_count`). Prefer native histograms,
 which AMP prices at 0.25 of a sample per populated bucket
@@ -427,7 +439,7 @@ minutes to hours, so incident tooling must not depend on that tier.
 - **Cardinality and sample cost fail first.** 100 M series exceed AMP's 50 M
   default (adjustable to 1.5 billion), 3.3 M samples/s exceed the 1.67 M
   ingestion cap, and the bill is about $217,000 a month at GMP prices. Scrape
-  at 60 s and aggregate harder at the gateway.
+  at 60 s and add series-keyed aggregation for the biggest metrics.
 - **Log write quotas.** 1.5 GB/s exceeds Cloud Logging's 80 MB/s per-project
   default by about 19×. Either many service projects with raised quotas, or a
   self-run log store on object storage with a small index.
@@ -742,9 +754,10 @@ dashboards show gaps, and the gateway's retry queue grows.
 
 **Mitigation.**
 
-1. **Drop the label at the gateway**: add it to the collector's deny list and
-   roll the gateway. Minutes, without waiting for the offending team.
-2. Roll back the offending service if the label can't be dropped cleanly.
+1. **Drop the offending series at the gateway**: add the label to the
+   collector's deny list and roll the gateway. Stripping only the label would
+   merge series into duplicates. Minutes, without waiting for the team.
+2. Roll back the offending service if the metric is needed.
 3. If the label-set limit was missing, add one for that `service` in the
    `aws-workload-<env>` workspace through Terraform Cloud, not in the console.
 4. Do not raise the quota to absorb it: that makes the incident a permanent
@@ -794,8 +807,6 @@ resumes; game-day it every quarter.
   which are never sampled.
 - **"How do you cut the log bill?"** Tier before indexing. On GCP, route and
   exclude; on AWS, decide in the collector or use Essentials.
-- **"Who watches the watcher?"** An always-firing alert to an external
-  heartbeat, and native provider alarms as a fallback.
 
 ### Classic mistakes
 
@@ -804,6 +815,7 @@ resumes; game-day it every quarter.
 - Indexing debug logs for 365 days.
 - Audit logs flowing through the same sheddable pipeline as app logs.
 - A monitoring stack that shares the failure domain of what it monitors.
+- Stripping labels in a stateless gateway: many writers per series.
 - Transitioning short-lived data into archive classes with 90–365-day minimums.
 
 ### Further reading
