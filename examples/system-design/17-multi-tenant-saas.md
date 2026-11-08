@@ -325,8 +325,9 @@ Contain it in layers, cheapest first.
    ([PostgreSQL docs](https://www.postgresql.org/docs/current/runtime-config-client.html),
    checked 2026-11), and per-tenant storage quotas.
 5. **Shuffle sharding** when the pool has several cells. Give each tenant a
-   random pair of 8 workers: 28 combinations, so a poison tenant takes down
-   about 1/28 of capacity instead of 1/4
+   random pair of 8 workers: 28 combinations. A poison tenant still takes its
+   own 2 workers (1/4 of capacity), but only 1/28 of other tenants share both
+   and lose all service; the rest keep a healthy worker
    ([Amazon Builders' Library](https://aws.amazon.com/builders-library/workload-isolation-using-shuffle-sharding/),
    checked 2026-11).
 6. **Move the tenant up a tier** when it needs more than its share every day.
@@ -364,7 +365,12 @@ object ARN; with them it is the bucket ARN
 ([AWS docs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingKMSEncryption.html),
 checked 2026-11), so Bucket Keys stay off on the pooled bucket: the KMS cost
 in the estimates. A bug that asks for another tenant's object is denied by
-IAM. GCP has no session tags; its pooled equivalent is app-layer envelope
+IAM. GCP has no session tags. For the pooled bucket its analogue is a
+Credential Access Boundary: a downscoped short-lived token limited to
+`resource.name.startsWith('projects/_/buckets/B/objects/<tenant>/')`, for
+Cloud Storage only
+([Google Cloud docs](https://docs.cloud.google.com/iam/docs/downscoping-short-lived-credentials),
+checked 2026-11). Per-tenant crypto binding there is app-layer envelope
 encryption with a per-tenant data key wrapped by the environment key.
 
 **Crypto-shredding on offboarding.** Deleting an AWS KMS key has a mandatory
@@ -485,7 +491,7 @@ tenants, with a fleet manager for upgrades across hundreds of workspaces.
 | Edge and per-tenant rate limits | CloudFront + AWS WAF rate rules on a header key | Global external Application Load Balancer + Cloud Armor `HTTP_HEADER` keys |
 | Pooled compute | ECS on Fargate (app-services) | Cloud Run (app-services) |
 | Pooled database with RLS | Aurora PostgreSQL | Cloud SQL for PostgreSQL |
-| Tenant-scoped credentials | STS session tags + `aws:PrincipalTag` | No session tags: per-tenant grants or app-layer checks |
+| Tenant-scoped credentials | STS session tags + `aws:PrincipalTag` | No session tags: downscoped tokens (Credential Access Boundaries) for Cloud Storage; RLS in the database |
 | Per-tenant key | KMS key per tenant; encryption context in the pool | Cloud KMS key per tenant; app-layer envelope in the pool |
 | Bridge unit | Store and key in the shared workload account | Service project per tenant on the Shared VPC |
 | Silo unit | Workload account | Environment: folder, host project, VPC |
@@ -494,7 +500,8 @@ tenants, with a fleet manager for upgrades across hundreds of workspaces.
 Differences that change the design:
 
 - **Session tags exist only on AWS.** One AWS role serves every pooled tenant
-  with an IAM-enforced boundary. On GCP the pooled boundary is RLS plus
+  with an IAM-enforced boundary on every service. On GCP downscoped tokens
+  give that boundary only for Cloud Storage; the database boundary is RLS plus
   application checks, until the tenant moves to a bridge project.
 - **A GCP project is a lighter boundary than an AWS account.** A project per
   bridge tenant is routine; an account per bridge tenant is not, so the AWS
@@ -522,7 +529,7 @@ buckets and keys is `local.env_config.region`.
 # Illustrative. Keys are real (config/landing-zone.schema.json); values are placeholders.
 aws:
   workload_accounts:
-    tenant_acme_prod: {email: aws+tenant-acme-prod@example.com, ou: Prod, tags: {Tenant: acme}}
+    tenant_acme_prod: {email: aws+tenant-acme-prod@example.com, ou: Workloads/Prod, tags: {Tenant: acme}}
   workload_environments:
     acme-prod: {account_key: tenant_acme_prod, vpc_cidr: 10.60.0.0/16, is_production: true}
   network:
@@ -783,7 +790,7 @@ enabled and forced.
 | AWS Organizations | 10 accounts default, management included; 5 concurrent creations |
 | GCP folders | 300 children per parent; 10 levels deep |
 | Session tags | At most 50; trust policy needs `sts:TagSession` |
-| Shuffle sharding | 8 workers, pairs: 28 shards, 1/28 blast radius |
+| Shuffle sharding | 8 workers, pairs: 28 shards; poison tenant takes 2/8 of capacity, fully hits 1/28 of others |
 
 ### Likely follow-ups
 
