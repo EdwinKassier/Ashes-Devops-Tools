@@ -294,9 +294,9 @@ Versions are repo-wide SemVer tags (`vX.Y.Z`, cut by release-please); there are 
   }
   ```
 
-Three examples (`modules/gcp/stages/organization`, `modules/aws/stages/security`, `modules/saas/stages/saas-workload`, each under `examples/basic/`) use this form with an `# x-release-please-version` marker; the `extra-files` list in `release-please-config.json` bumps their `ref` on every release. Until the first tag is published they cannot `terraform init`, so `scripts/terraform-roots.sh` skips any example carrying that marker in the validate shards. After the first release tag is published, remove that skip so CI validates them against the published tag. Note that they then validate against the published tag, not the PR's module code, so a stage interface change must land and be released before the example's `ref` is bumped.
+Three examples (`modules/gcp/stages/organization`, `modules/aws/stages/security`, `modules/saas/stages/saas-workload`, each under `examples/basic/`) use this form with an `# x-release-please-version` marker; the `extra-files` list in `release-please-config.json` bumps their `ref` on every release. CI validates them against the published tag, not the PR's module code, so a stage interface change must land and be released before the example's `ref` is bumped.
 
-The first release is forced to `v0.1.0` by a one-time `"release-as": "0.1.0"` in `release-please-config.json` (the manifest stays at `0.1.0`; with no tag yet, release-please would otherwise propose 0.1.1/0.2.0). Remove `release-as` in the commit right after the first release is published, or every later release PR will keep proposing 0.1.0.
+The first release, `v0.1.0`, was cut on 2026-11-08 by hand (release-please could not run without `RELEASE_PLEASE_TOKEN`), and the one-time `release-as` override was removed afterwards. Later releases come from release-please once that secret is set (see `docs/guides/CI_SECRETS.md`).
 
 ### Release gate: sandbox convergence
 
