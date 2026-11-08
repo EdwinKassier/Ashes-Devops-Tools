@@ -81,18 +81,7 @@ module "hub" {
       parent       = try(local.shared_folder.name, "")
       description  = "Hub-level Defense in Depth Policy"
       associations = local.firewall_association_targets
-      rules = [
-        {
-          priority    = 500
-          action      = "deny"
-          direction   = "INGRESS"
-          description = "Deny RDP/SSH from Public Internet (Use IAP instead)"
-          layer4_configs = [
-            { ip_protocol = "tcp", ports = ["22", "3389"] }
-          ]
-          src_ip_ranges = ["0.0.0.0/0"]
-        }
-      ]
+      rules        = local.hub_firewall_rules
     }
   }
 
@@ -180,4 +169,32 @@ module "dns_anchor" {
       dnssec_enabled = true
     }
   }
+}
+
+# Hierarchical rules are evaluated before VPC rules, and a match stops
+# evaluation. The IAP range therefore gets goto_next ahead of the internet deny,
+# so IAP TCP forwarding reaches the tiered-vpc IAP rule, which decides it.
+locals {
+  hub_firewall_rules = [
+    {
+      priority    = 400
+      action      = "goto_next"
+      direction   = "INGRESS"
+      description = "Hand IAP TCP forwarding (SSH/RDP) to the VPC firewall"
+      layer4_configs = [
+        { ip_protocol = "tcp", ports = ["22", "3389"] }
+      ]
+      src_ip_ranges = ["35.235.240.0/20"]
+    },
+    {
+      priority    = 500
+      action      = "deny"
+      direction   = "INGRESS"
+      description = "Deny RDP/SSH from Public Internet (Use IAP instead)"
+      layer4_configs = [
+        { ip_protocol = "tcp", ports = ["22", "3389"] }
+      ]
+      src_ip_ranges = ["0.0.0.0/0"]
+    }
+  ]
 }
