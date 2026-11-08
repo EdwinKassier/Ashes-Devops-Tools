@@ -79,7 +79,7 @@ convention, not by a resource reference:
 
 ## Stand-up order
 
-Apply top to bottom, each as a Terraform Cloud run. The minimum governed
+Apply top to bottom, each as a Terraform Cloud run, with the gate rows done in place. This table follows [`docs/runbooks/aws-bootstrap.md`](../../docs/runbooks/aws-bootstrap.md#full-first-time-stand-up-order). The minimum governed
 footprint is just steps 1–2 (`aws-organization` + `aws-security`); everything
 after is additive. The last column links to the optional-override reference.
 
@@ -87,6 +87,8 @@ after is additive. The last column links to the optional-override reference.
 |---|------|---------|-------------------------------------------------------|-----------|
 | 1 | `aws-organization` | Org, OU tree, accounts, guardrails (the producer root) | `aws.management_account_id`, the two role ARNs, `aws.log_archive_bucket_name`, `aws.accounts` / `aws.workload_accounts` | [`aws-organization.tfvars.example`](./aws-organization.tfvars.example) |
 | — | **MANUAL GATE** | Enable IAM Identity Center in the mgmt account, delegate to shared-services | — | Console action; blocks step 4. See runbook. |
+| — | **tfc-admin pass 2** | Set `aws_organization_outputs_from_tfc = true` on `tfc-admin` and re-apply it. This writes the `TFC_AWS_*` dynamic-credential variables on every downstream workspace; without it step 2 has no AWS credentials | — | [Runbook step 4](../../docs/runbooks/aws-bootstrap.md#full-first-time-stand-up-order) |
+| — | **Phase-0.5** | Deploy the org-wide default-VPC-deletion StackSet now that the accounts exist | — | [Runbook](../../docs/runbooks/aws-bootstrap.md#phase-05-org-wide-default-vpc-deletion-stackset-out-of-band) |
 | 2 | `aws-security` | Security tooling, log archive, CloudTrail, GuardDuty, Security Hub, Config aggregator | `aws.management_account_id`, `aws.log_archive_bucket_name`. The KMS key admin, Config and aggregator roles and the Security Lake meta-store role are created or defaulted by the stage | [`aws-security.tfvars.example`](./aws-security.tfvars.example) |
 | 3 | `aws-network` | TGW hub-spoke, IPAM, inspection/egress VPCs, resolver | `aws.log_archive_bucket_name`; `aws.network.*` to tune | [`aws-network.tfvars.example`](./aws-network.tfvars.example) |
 | 4 | `aws-identity` | Identity Center permission sets + assignments | nothing more — needs the gate above; `aws.identity.groups` for assignments | [`aws-identity.tfvars.example`](./aws-identity.tfvars.example) |

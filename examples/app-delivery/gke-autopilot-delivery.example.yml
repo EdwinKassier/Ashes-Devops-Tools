@@ -28,7 +28,8 @@
 #       * roles/iam.workloadIdentityUser on the SA for ONE principalSet on the
 #         apps-<env> pool, pinned to this repo's numeric ID, e.g.
 #         principalSet://iam.googleapis.com/projects/<host-number>/locations/global/workloadIdentityPools/apps-<env>/attribute.repo_ref/<repository_id>/refs/heads/main
-#         (attribute.repository_id, repo_env and repo_ref_env also exist).
+#         (repo_env and repo_ref_env also exist; do not bind on attribute.repository_id
+#         alone, which trusts every branch of the repo).
 #   - Namespaced Kubernetes RBAC for that SA (applied by the platform team, not
 #     by this pipeline): a Role in the app namespace allowing get/list/watch/
 #     patch on deployments and get/list/watch on replicasets and pods, bound

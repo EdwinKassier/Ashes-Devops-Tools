@@ -49,7 +49,9 @@ module "vpc_sc" {
     {
       identity_type = null
       identities = [
-        "principalSet://iam.googleapis.com/projects/555666777888/locations/global/workloadIdentityPools/github-pool/attribute.repository_id/123456789",
+        # Pinned to one repo AND ref (attribute.repo_ref, mapped by modules/gcp/iam/workload-identity).
+        # attribute.repository_id alone would trust every branch of the repo.
+        "principalSet://iam.googleapis.com/projects/555666777888/locations/global/workloadIdentityPools/github-pool/attribute.repo_ref/123456789/refs/heads/main",
       ]
       sources = [
         {
@@ -59,8 +61,9 @@ module "vpc_sc" {
       ]
       resources = ["projects/111222333444"]
       operations = [
-        { service_name = "bigquery.googleapis.com", method_selectors = null },
-        { service_name = "storage.googleapis.com", method_selectors = null },
+        # Every method, stated explicitly; narrow to the methods CI actually calls.
+        { service_name = "bigquery.googleapis.com", method_selectors = [{ method = "*" }] },
+        { service_name = "storage.googleapis.com", method_selectors = [{ method = "*" }] },
       ]
     }
   ]

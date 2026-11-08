@@ -12,7 +12,7 @@ No finding was refuted in verification. 22 of the original Important findings we
 
 ## Status of the fixes (2026-11-08)
 
-All 5 Critical and all 27 Important findings are fixed, each in one of three PRs:
+Four of the 5 Critical findings and all 27 Important findings are fixed, each in one of three PRs. Critical 3 (the `?ref=v0.1.0` examples) stays open until the v0.1.0 tag is cut; a header note now tells readers how to try those examples meanwhile.
 
 - **System-design library:** EdwinKassier/Ashes-Devops-Tools#594 (branch `claude/system-design-examples`). Ten walkthroughs fixed (01, 03, 06, 09, 11, 12, 13, 15, 17, 19), including both library Critical findings. An independent review confirmed every finding fixed and found no regression; its Minor notes were also cleared.
 - **Runbook OU key:** EdwinKassier/Ashes-Devops-Tools#596 (`docs/runbooks/aws-add-account.md` now writes `ou: Workloads/Prod`).
@@ -21,7 +21,7 @@ All 5 Critical and all 27 Important findings are fixed, each in one of three PRs
   - the ECS, GKE and Cloud Run delivery workflows reworked (app-services output contract, least-privilege GKE RBAC, actions SHA-pinned at current majors), and the matching GKE advice in `docs/guides/deploying-a-service.md`;
   - `examples/aws-landing-zone` rewritten around `config/landing-zone.yaml`, with every tfvars key checked by a mock plan;
   - the `vpc-sc` ingress rule and log filter, and the `kms` and `workloads` READMEs, corrected;
-  - a header note on the three `?ref=v0.1.0` module examples (the real fix is cutting the v0.1.0 tag);
+  - a header note on the three `?ref=v0.1.0` module examples (mitigation only; the fix is cutting the v0.1.0 tag);
   - a `basic` example for each of the 25 modules that had none, each passing `terraform init` and `validate`.
 
 The open item is the v0.1.0 release tag. Until it exists, the three tag-pinned module examples only work with the relative source their header describes.

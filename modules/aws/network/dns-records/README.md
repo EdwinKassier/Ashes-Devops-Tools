@@ -1,8 +1,6 @@
 # dns-records (Route 53)
 
-> Status: experimental
->
-> No root composes this module; it writes records into an existing Route 53 zone and is called from your own stage.
+Library-only: no root composes this module; it writes records into an existing Route 53 zone and is called from your own stage. See [`examples/basic`](examples/basic/main.tf).
 
 Write DNS records into an **existing** Route 53 hosted zone (audit H9, option C —
 DNS unification). The AWS counterpart of
