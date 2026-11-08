@@ -103,3 +103,7 @@ The following resources are created:
 | <a name="output_variable_values"></a> [variable\_values](#output\_variable\_values) | Values of the NON-sensitive variables set directly on the workspace, keyed by name (sensitive ones are omitted). |
 | <a name="output_working_directory"></a> [working\_directory](#output\_working\_directory) | Working directory (root) the workspace runs in. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.
