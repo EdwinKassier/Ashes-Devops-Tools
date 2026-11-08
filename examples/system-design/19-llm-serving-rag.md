@@ -9,8 +9,8 @@ from the [conventions](00-primer.md#conventions). Model routing reuses the
 [adapter gateway](04-adapter-gateway.md) walkthrough and does not re-explain it.
 
 Naming: Google now documents Vertex AI's generative products as **Gemini
-Enterprise Agent Platform**, "an evolution of Vertex AI", and is renaming
-Vertex AI Search to **Agent Search**
+Enterprise Agent Platform** and is renaming Vertex AI Search to **Agent
+Search**
 ([overview](https://docs.cloud.google.com/gemini-enterprise-agent-platform/overview),
 [Agent Search](https://docs.cloud.google.com/generative-ai-app-builder/docs/introduction),
 checked 2026-11). This walkthrough says "Vertex AI", as the API, IAM roles and
@@ -114,8 +114,7 @@ keep `max_tokens` near the real answer length.
 - **An L4 fails the SLO.** It has 24 GB at 300 GB/s
   ([Google Cloud docs](https://docs.cloud.google.com/compute/docs/gpus),
   checked 2026-11). Filling it with 16 sequences reads 8 + 13 = 21 GB a step:
-  at most 14 tokens a second per stream, so 400 tokens take 29 s. Even 4
-  sequences with an FP8 KV cache reach only 31 tokens a second at the ceiling.
+  at most 14 tokens a second per stream, so 400 tokens take 29 s.
 - **An H100** has 80 GB at 3.35 TB/s (same source). Capped at **48
   sequences**: 8 + 48 × 0.83 = 48 GB a step, a ceiling of 70 steps a second;
   at an assumed 60% of peak bandwidth, about 42 tokens a second per stream
@@ -123,6 +122,11 @@ keep `max_tokens` near the real answer length.
 - A request then holds a slot about 11 s (1 s prefill, 400 tokens in 9.5 s),
   inside the 15 s SLO. Little's law: 40 × 11 = 440 sequences in flight ÷ 48 =
   10 GPUs.
+- Prefill competes with decode in mixed batches: 4 requests a second × 6,100
+  prompt tokens × 2 × 8e9 FLOPs ≈ 390 TFLOP/s per GPU, about 20% of an
+  H100's dense FP8 peak (NVIDIA lists 3,958 TFLOPS with sparsity,
+  [NVIDIA](https://www.nvidia.com/en-us/data-center/h100/), checked 2026-11).
+  Chunked prefill bounds the stall.
 - Spread across three zones, losing one must still carry peak: 10 ÷ ⅔ = **15
   H100s at peak**, 5 per zone, at 67% of capacity normally. At the trough
   (one third of peak, 4 GPUs of load) the same rule floors it at 6.
@@ -163,7 +167,8 @@ CREATE TABLE document (
   tenant_id      text NOT NULL,
   doc_id         text NOT NULL,
   version        bigint NOT NULL,
-  content_sha256 text NOT NULL,
+  content_sha256 text,                -- NULL on a tombstone
+  deleted_at     timestamptz,         -- set: a tombstone that keeps the version
   indexed_at     timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (tenant_id, doc_id)
 );
@@ -175,13 +180,12 @@ CREATE TABLE chunk (
   acl_groups  text[] NOT NULL,
   ordinal     int NOT NULL,
   content     text NOT NULL,
-  embedding   vector(1024) NOT NULL,
-  embed_model text NOT NULL,
+  emb_titan_v2 vector(1024) NOT NULL,  -- one column and HNSW index per embedding model
   FOREIGN KEY (tenant_id, doc_id) REFERENCES document (tenant_id, doc_id) ON DELETE CASCADE
 );
 
-CREATE INDEX chunk_embedding_hnsw ON chunk
-  USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
+CREATE INDEX chunk_emb_titan_v2 ON chunk
+  USING hnsw (emb_titan_v2 vector_cosine_ops) WITH (m = 16, ef_construction = 64);
 CREATE INDEX chunk_tenant ON chunk (tenant_id);
 CREATE INDEX chunk_acl ON chunk USING gin (acl_groups);
 CREATE INDEX chunk_doc ON chunk (tenant_id, doc_id);
@@ -193,7 +197,8 @@ Access patterns:
 - **Retrieve** (40/s): nearest chunks for one tenant and the user's groups.
 - **Replace a document** (under 1/s): delete its chunks, insert new ones, in
   one transaction.
-- **Delete a document**: one `DELETE FROM document`; chunks cascade.
+- **Delete a document**: tombstone the `document` row (keeping its version)
+  and delete its chunks; purge tombstones after 30 days.
 
 1,024 dimensions sits under pgvector's HNSW limit of 2,000 for `vector`
 (4,000 for `halfvec`), and `<=>` is cosine distance
@@ -204,8 +209,8 @@ checked 2026-11). Google's `gemini-embedding-001` outputs 3,072 by default, too
 many for an HNSW index on `vector`, so request 1,024 with
 `output_dimensionality`
 ([Google Cloud docs](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings),
-checked 2026-11). The `embed_model` column lets two models coexist during a
-re-embed.
+checked 2026-11). Each embedding model gets its own column and index, so a
+re-embed never mixes vector spaces or dimensions.
 
 ## High-level design
 
@@ -230,25 +235,23 @@ graph TB
 **Request path.**
 
 1. Authenticate; derive `tenant_id` and groups from the token.
-2. Input guardrail: prompt attacks and PII (100–200 ms, an assumption to
-   measure).
+2. Input guardrail: prompt attacks and PII.
 3. Embed the question; the filtered hybrid search returns 20 candidates and a
    reranker keeps 8.
 4. Assemble the prompt: static system prompt first (cacheable), chunks inside
    delimiters marked as untrusted data.
 5. The router picks a backend by capability, tier and health, and streams.
 6. Output guardrail checks grounding; the final event adds citations and
-   token counts, and a log record goes to the evaluation store.
+   token counts.
 
 **Write path.** A source change lands the document in the
-[raw zone](00-primer.md#data-zones), and its notification goes on a queue. A
-worker parses it, skips it if `content_sha256` is unchanged, chunks and embeds
-it outside any transaction, then replaces the document's chunks atomically
-(deep dive 2).
+[raw zone](00-primer.md#data-zones) and a notification on a queue. A worker
+skips it if `content_sha256` is unchanged, else chunks and embeds it outside
+any transaction, then replaces its chunks atomically (deep dive 2).
 
-**Placement.** Orchestrator and ingest workers in the `private` tier; the
-database in `isolated` (AWS) or on Private Service Access (GCP); GPU nodes in
-`private`. See [VPC-tier placement](00-primer.md#vpc-tier-placement).
+**Placement.** Orchestrator, workers and GPU nodes in `private`; the
+database in `isolated` (AWS) or on Private Service Access (GCP). See
+[VPC-tier placement](00-primer.md#vpc-tier-placement).
 
 ## Deep dives
 
@@ -262,45 +265,59 @@ in blocks instead of reserving the maximum length. vLLM does both, plus prefix
 caching, behind an OpenAI-compatible API
 ([vLLM docs](https://docs.vllm.ai/en/latest/), checked 2026-11).
 
-**What limits a GPU** is memory: capacity bounds how many sequences fit, and
-bandwidth bounds tokens a second per stream, because every step re-reads the
-weights and all their KV cache (the estimates rule out an L4 for 6,000-token
-prompts). Levers, in order: fewer chunks, prefix caching, FP8 KV cache, a
-capped batch, a GPU with more bandwidth. A 70B model in FP8 (about 70 GB)
+**What limits a GPU** is memory capacity (sequences that fit) and bandwidth
+(tokens a second per stream). Levers, in order: fewer chunks, prefix caching,
+FP8 KV cache, a capped batch, a GPU with more bandwidth. A 70B model in FP8
+(about 70 GB)
 needs tensor parallelism across two to four H100s to leave room for cache.
 
 **Requesting GPUs.**
 
-- **GKE Autopilot** takes a `cloud.google.com/gke-accelerator` node selector
-  (for example `nvidia-h100-80gb`) and an `nvidia.com/gpu` limit; an H100 Pod
-  may ask for 1, 2, 4 or 8, and Autopilot rejects a Pod without both
+- **GKE Autopilot** needs both a `cloud.google.com/gke-accelerator` node
+  selector (for example `nvidia-h100-80gb`) and an `nvidia.com/gpu` limit
   ([Google Cloud docs](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/autopilot-gpus),
   checked 2026-11).
 - **AWS:** Fargate does not accept the `gpu` task parameter
   ([AWS docs](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-tasks-services.html),
   checked 2026-11). Use ECS on GPU EC2 instances such as p5 (eight H100s)
   ([AWS docs](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-gpu.html),
-  checked 2026-11), or **EKS Auto Mode**, which manages the NVIDIA drivers and
-  device plugin and provisions nodes from a NodePool
+  checked 2026-11), or **EKS Auto Mode**, which manages the NVIDIA drivers
   ([AWS docs](https://docs.aws.amazon.com/eks/latest/userguide/auto-accelerated.html),
   checked 2026-11).
 
+**The middle tier: managed endpoints for open weights.** Between per-token
+APIs and your own cluster, the provider runs the GPUs for your model:
+
+- **SageMaker AI** real-time endpoints host models as inference components,
+  which can scale to zero instances, with a cold start of several minutes
+  ([AWS docs](https://docs.aws.amazon.com/sagemaker/latest/dg/endpoint-auto-scaling-zero-instances.html),
+  checked 2026-11).
+- **Model Garden** deploys open models to an endpoint on a vLLM container,
+  billed for the compute
+  ([Google Cloud docs](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-garden/explore-models),
+  checked 2026-11).
+- **Bedrock Custom Model Import** serves fine-tuned Llama, Mistral, Qwen or
+  GPT-OSS weights behind `InvokeModel`, billed per running model copy in
+  5-minute windows
+  ([AWS docs](https://docs.aws.amazon.com/bedrock/latest/userguide/import-model-calculate-cost.html),
+  checked 2026-11).
+
+It is the first answer for a fine-tuned open model; GPU time still bills, so
+break-even still applies.
+
 **Autoscaling.** Scale on what the server is waiting on. Google recommends
-queue size to maximise throughput within a latency target, and batch size for
-stricter latency, and warns that GPU utilisation measures only time busy, not
-work done
+queue size for throughput within a latency target, batch size for stricter
+latency, and warns that GPU utilisation measures time busy, not work
 ([Google Cloud docs](https://docs.cloud.google.com/kubernetes-engine/docs/best-practices/machine-learning/inference/autoscaling),
 checked 2026-11). With vLLM that is `vllm:num_requests_waiting`, with
 `vllm:kv_cache_usage_perc` as a guard and `vllm:time_to_first_token_seconds`
 as the SLO metric ([vLLM metrics](https://docs.vllm.ai/en/latest/design/metrics.html),
-checked 2026-11). Where it breaks: a new GPU node plus a multi-gigabyte model
-download takes minutes. Keep the zone-loss floor warm and spill to the
-managed model while capacity arrives.
+checked 2026-11). A new GPU node plus model download takes minutes: keep the
+zone-loss floor warm and spill to managed meanwhile.
 
 **Load balancing.** Round-robin ignores full KV caches. **GKE Inference
-Gateway** scores replicas by KV-cache use and queue depth, prefers a matching
-prefix cache, routes by model name, and sheds negative-priority requests
-first with a 429
+Gateway** scores replicas by KV-cache use, queue depth and prefix-cache match,
+and sheds low-priority requests first
 ([Google Cloud docs](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/about-gke-inference-gateway),
 checked 2026-11). AWS has no managed equivalent; use least outstanding
 requests.
@@ -324,24 +341,15 @@ What is specific to LLMs:
   ([Google Cloud docs](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/dynamic-shared-quota),
   checked 2026-11). Residency rules out the global options for EU tenants,
   which is a capability the manifest must express.
-- **Fail over only before the first token.** After it, return an error or
-  restart visibly.
-- **Tiering is routing.** `fast` goes to a small model, `best` to a frontier
-  model; a cheap classifier can choose when the client does not.
+- **Fail over only before the first token.**
+- **Tiering is routing:** `fast` to a small model, `best` to a frontier model.
 
 ### 2. The RAG pipeline: ingestion, chunking, vector store, freshness
 
-**Chunking.** Three options:
-
-- **Fixed windows** (512 tokens, 64 overlap): trivial, but split tables and
-  steps.
-- **Structure-aware** (the choice): split on headings, list items and tables,
-  merge small sections up to 512 tokens, and prefix each chunk with its title
-  and heading path so it stands alone.
-- **Semantic** (split where similarity drops): better on prose, but an
-  embedding per sentence and harder to reproduce.
-
-Tune the size on the evaluation set, never by intuition.
+**Chunking.** Fixed windows split tables and steps; semantic splitting costs
+an embedding per sentence. The choice is **structure-aware**: split on
+headings, list items and tables, merge small sections up to 512 tokens, and
+prefix each chunk with its heading path. Tune the size on the evaluation set.
 
 **Hybrid retrieval.** Vectors miss exact identifiers such as error codes;
 keywords miss paraphrase. Run both (`chunk_fts` covers keywords), fuse by
@@ -363,7 +371,7 @@ BEGIN;
 SET LOCAL hnsw.ef_search = 100;              -- default 40
 SET LOCAL hnsw.iterative_scan = relaxed_order;
 WITH candidates AS MATERIALIZED (
-  SELECT chunk_id, doc_id, content, embedding <=> $1::vector AS distance
+  SELECT chunk_id, doc_id, content, emb_titan_v2 <=> $1::vector AS distance
   FROM chunk
   WHERE tenant_id = $2
     AND acl_groups && $3::text[]
@@ -378,33 +386,41 @@ The filter is in SQL, never in the prompt or applied afterwards: a chunk the
 query does not return cannot leak. For a small tenant the planner may use the
 B-tree and sort exactly, which is correct.
 
-**Atomic replace, safe against reordered events.** Embed first, then:
+**Atomic replace, safe against reordered events.** Embed first, then run one
+statement for upserts and deletes:
 
 ```sql
 BEGIN;
-INSERT INTO document (tenant_id, doc_id, version, content_sha256)
-VALUES ($1, $2, $3, $4)
+INSERT INTO document (tenant_id, doc_id, version, content_sha256, deleted_at)
+VALUES ($1, $2, $3, $4, $5)  -- upsert: $5 NULL; delete: $4 NULL, $5 now()
 ON CONFLICT (tenant_id, doc_id) DO UPDATE
   SET version = EXCLUDED.version,
       content_sha256 = EXCLUDED.content_sha256,
+      deleted_at = EXCLUDED.deleted_at,
       indexed_at = now()
   WHERE document.version < EXCLUDED.version
 RETURNING doc_id;
 -- No row returned: a stale or duplicate event. ROLLBACK and acknowledge it.
 DELETE FROM chunk WHERE tenant_id = $1 AND doc_id = $2;
--- INSERT the new chunks (multi-row INSERT or COPY), then:
+-- Upsert only: INSERT the new chunks (multi-row INSERT or COPY), then:
 COMMIT;
 ```
 
-Readers see the old chunks or the new ones, never a mix, and an older version
-arriving late changes nothing.
+Readers see the old chunks or the new ones, never a mix. A delete leaves a
+tombstone row with its version, so an older upsert arriving late matches no
+row and changes nothing (tested on PostgreSQL 17 with pgvector 0.8.1). Purge
+tombstones by `deleted_at` only after the longest plausible event delay (30
+days here); reconciliation covers anything later.
 
 **Freshness.** Event-driven, plus a nightly reconciliation of each source's
 document list and hashes against `document`, because connectors drop events.
 Deletions and permission changes skip embedding: a `DELETE` or `acl_groups`
 update takes milliseconds, which is how the 1-minute revocation holds. A new
-embedding model is a migration: write both (`embed_model`), backfill by batch,
-switch reads when the evaluation set agrees, drop the old rows.
+embedding model is a migration: `ADD COLUMN emb_next vector(N)` and build its
+HNSW index `CONCURRENTLY`; ingestion then writes both columns on every chunk
+it inserts, so a replace keeps both models' vectors; backfill `emb_next` by
+batch, switch the query's column when the evaluation set agrees, then drop
+`emb_titan_v2` (its index goes with it).
 
 **Where pgvector breaks.** At 10× this corpus (22 million chunks, about 250
 GB) the index leaves memory and rebuilds take hours. Move vectors to a
@@ -416,9 +432,8 @@ as the source of truth.
 
 **Managed RAG?** Bedrock Knowledge Bases and RAG Engine
 ([Google Cloud docs](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/rag-engine/rag-overview),
-checked 2026-11) handle parsing, chunking and sync, and suit a single-tenant
-internal assistant. Per-chunk ACLs and 1-minute revocation argue for owning
-the pipeline here.
+checked 2026-11) suit a single-tenant assistant; per-chunk ACLs and 1-minute
+revocation argue for owning the pipeline.
 
 ### 3. Guardrails, evaluation and cost per token
 
@@ -428,27 +443,23 @@ the pipeline here.
    depend on a classifier.
 2. **Input screening.** Bedrock Guardrails' `ApplyGuardrail` API evaluates
    text without invoking a model, so it fronts any backend. Model Armor
-   screens prompts and responses for injection, jailbreaks, sensitive data and
-   malicious URLs, with templates and organisation-wide floor settings, for
-   models on any cloud
+   screens prompts and responses for injection, sensitive data and malicious
+   URLs, for models on any cloud
    ([Google Cloud docs](https://docs.cloud.google.com/model-armor/overview),
    checked 2026-11).
 3. **Prompt construction.** Retrieved text is data: delimit it, and give the
-   model no tools that act without confirmation. A poisoned document
-   (indirect injection) is the realistic attack.
+   model no tools that act without confirmation.
 4. **Output checks.** Bedrock's contextual grounding check scores grounding
-   and relevance against source and query (thresholds 0 to 0.99; at most
-   100,000 characters of source, 1,000 of query, 5,000 of response), and on a
-   stream may flag an irrelevant answer only after it has streamed
+   and relevance against source and query (limits in Study aids), and on a
+   stream may flag an answer only after it has streamed
    ([AWS docs](https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails-contextual-grounding-check.html),
-   checked 2026-11). Screen streams in segments; buffer for high-risk tenants.
+   checked 2026-11). Screen streams in segments.
 
 **Evaluation.**
 
 - **Offline set.** 500–2,000 real questions with labelled chunks and
-  reference answers, grown from feedback. Retrieval metrics (recall@8, MRR)
-  catch chunking regressions; faithfulness and correctness need an LLM judge
-  calibrated against human labels.
+  reference answers. Recall@8 catches chunking regressions; faithfulness needs
+  an LLM judge calibrated against human labels.
 - **Managed tooling.** Bedrock evaluations run judge-model and RAG jobs, even
   for RAG sources outside Bedrock
   ([AWS docs](https://docs.aws.amazon.com/bedrock/latest/userguide/evaluation.html),
@@ -478,7 +489,8 @@ provider's invocation log as the audit copy.
 
 | Decision | Chosen | Rejected | Why | What would change the answer |
 |---|---|---|---|---|
-| Model hosting | Managed by default; self-host one high-volume small model | Self-host everything | 15 H100s sized for a 3× peak sit largely idle; managed bills per token | Steady volume above break-even, a fine-tuned open model, strict residency |
+| Model hosting | Managed by default; self-host one high-volume small model | Self-host everything | 15 H100s sized for a 3× peak sit largely idle; managed bills per token | Steady volume above break-even, strict residency |
+| Fine-tuned open model | Managed endpoint (Custom Model Import, SageMaker AI, Model Garden) | Own GKE or EKS pool | No cluster, drivers or node scaling to run | Sustained high volume, or KV-aware routing the endpoint lacks |
 | Vector store | pgvector in Postgres | Dedicated vector database | 25 GB fits one instance; ACLs, versions and vectors commit together | 10× corpus |
 | Chunking | Structure-aware, 512 tokens with heading path | Fixed windows; semantic splitting | Keeps tables and steps whole; reproducible | Long unstructured prose: semantic splitting |
 | Retrieval | Hybrid (vector + keyword) with rerank | Vector only | Exact identifiers matter in support | A pure-prose corpus with no codes |
@@ -517,8 +529,6 @@ service by tenant.
 | Guardrail service | Unscreened traffic | Fail closed for input; degrade to buffered output |
 | Ingestion | Stale answers | Reconciliation catches up; alert on lag |
 
-No other embedding model can stand in: its vectors live in another space.
-
 ## AWS and GCP mapping
 
 | Component | AWS | Google Cloud | Difference that matters |
@@ -526,6 +536,7 @@ No other embedding model can stand in: its vectors live in another space.
 | Managed models | Amazon Bedrock | Vertex AI (Gemini Enterprise Agent Platform) | Bedrock throttles on TPM with output burndown; Vertex AI Standard PayGo uses usage tiers, and a 429 is contention |
 | Spill and capacity | Cross-Region inference profiles; Priority, Flex and Reserved tiers; Provisioned Throughput (not with inference profiles) | `global` endpoint; Priority and Flex PayGo; Provisioned Throughput with spillover | Global routing breaks geography residency on both |
 | Orchestrator | ECS on Fargate (app-services) | Cloud Run (app-services) | Raise timeouts for streamed answers on both |
+| Managed open-model endpoints | SageMaker AI inference components; Bedrock Custom Model Import | Model Garden deployment to an endpoint (vLLM) | Billed by GPU time or model copy, not per token |
 | Self-hosted GPUs | EKS Auto Mode or ECS on GPU EC2; no Fargate GPUs | GKE Autopilot with accelerator selectors | GKE adds Inference Gateway for KV-aware routing |
 | Vector store | Aurora PostgreSQL + pgvector | Cloud SQL PostgreSQL + pgvector | Same SQL on both |
 | Guardrails | Bedrock Guardrails (`ApplyGuardrail`) | Model Armor templates and floor settings | Both screen any model |
@@ -596,8 +607,7 @@ gcp:
 
 Gaps in the golden path:
 
-- **pgvector** comes from a `CREATE EXTENSION vector` migration; the modules
-  leave schema to the application.
+- **pgvector** and the schema come from application migrations.
 - **Cloud SQL CMEK** cannot be added to an existing instance, and the key
   ring must be in its region
   ([Google Cloud docs](https://docs.cloud.google.com/sql/docs/postgres/cmek),
@@ -605,11 +615,8 @@ Gaps in the golden path:
 - **Bedrock ARNs:** narrow them to the router's models and profiles. A
   cross-Region profile also needs the foundation model in each destination
   Region (**verify before relying on** the exact ARN set).
-- **GPU serving on AWS** has no module; `modules/aws/compute/ecs-fargate`
-  cannot run GPUs.
 - **GKE:** `enable_gke_autopilot = true` is a root variable of
   `envs/gcp/workload`, not a config key; GPU selectors live in manifests.
-  Check regional GPU quota first.
 
 ### AWS: guardrail and invocation logging
 
@@ -784,12 +791,11 @@ rises and users see slow or failed answers.
 
 **Triage.**
 
-1. **One backend or all?** One is provider capacity; all suggests our egress
-   (Network Firewall drops on AWS), credentials or a prompt-size regression.
-2. **Did our traffic change?** Compare input tokens per request with
-   yesterday, and check `max_tokens`, which Bedrock reserves up front.
-3. **Self-hosted:** pending Pods mean GPU stock or quota; full KV caches mean
-   too few replicas.
+1. **One backend or all?** One is provider capacity; all suggests our egress,
+   credentials or a prompt-size regression.
+2. **Did our traffic change?** Compare input tokens per request and
+   `max_tokens` with yesterday.
+3. **Self-hosted:** pending Pods mean GPU stock or quota.
 
 **Mitigation.**
 
@@ -805,17 +811,16 @@ rises and users see slow or failed answers.
 **Verification.** 429 rate under 1%, TTFT p95 under 2 s, and grounding-check
 block rate unchanged (the fallback model answers as well).
 
-**Follow-up.** Request a quota increase or Reserved/Provisioned capacity for
-the measured baseline; add a regression test on input tokens per request;
-review the warm share on the second backend.
+**Follow-up.** Buy Reserved or Provisioned capacity for the measured
+baseline; add a regression test on input tokens per request.
 
 ### Stale or over-shared answers after a document change
 
 **Detection signal.** Ingestion lag (oldest unprocessed change) above 5
 minutes, or a user report of a deleted document cited. **Triage.** Check queue
 depth and worker errors; find the document's `version` in `document`.
-**Mitigation.** For an exposure, `DELETE FROM document WHERE tenant_id = ... AND doc_id = ...`
-now (chunks cascade), then fix the connector. **Verification.** The query in
+**Mitigation.** For an exposure, run the deep dive 2 delete with a version
+above the current one now, then fix the connector. **Verification.** The query in
 deep dive 2 no longer returns its chunks. **Follow-up.** Run reconciliation
 for that source; add the case to the evaluation set.
 
@@ -841,12 +846,11 @@ for that source; add the case to the evaluation set.
   cannot apply per-user ACLs.
 - **"How do you stop one tenant seeing another's data?"** The filter is in the
   retrieval query, from the token, never from the prompt or the model.
-- **"Why is GPU utilisation a bad autoscaling signal?"** It measures time
-  busy, not work; queue depth tracks latency.
 - **"The provider returns 429. Open the breaker?"** No: it is a capacity
   signal. Slow down and move overflow.
 - **"When do you self-host?"** When steady utilisation makes GPU-hours cheaper
-  than tokens, or residency or a fine-tuned open model requires it.
+  than tokens, or residency requires it; a fine-tuned open model goes to a
+  managed endpoint first.
 
 ### Classic mistakes
 
