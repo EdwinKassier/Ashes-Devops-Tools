@@ -379,15 +379,17 @@ aws:
       - aws:drop_established
       - aws:alert_established
 
-  # Application golden path (aws-workload-<env>). All optional.
-  # internal (default) | public_alb (internet-facing ALB + regional WAF; needs
-  # app_alb_certificate_arn) | cloudfront_vpc_origin (internal ALB behind
-  # CloudFront + WAF; no certificate or domain needed).
-  # app_ingress_mode: cloudfront_vpc_origin
-  # Image the first task revision runs before CI deploys (default
-  # public.ecr.aws/nginx/nginx-unprivileged:stable-alpine, port 8080).
-  # bootstrap_image: public.ecr.aws/nginx/nginx-unprivileged:stable-alpine
-  workload: {}
+  # Application golden path (aws-workload-<env>). All optional: uncomment the
+  # keys you need and delete the {} below them.
+  workload:
+    # internal (default) | public_alb (internet-facing ALB + regional WAF; needs
+    # app_alb_certificate_arn) | cloudfront_vpc_origin (internal ALB behind
+    # CloudFront + WAF; no certificate or domain needed).
+    # app_ingress_mode: cloudfront_vpc_origin
+    # Image the first task revision runs before CI deploys (default
+    # public.ecr.aws/nginx/nginx-unprivileged:stable-alpine, port 8080).
+    # bootstrap_image: public.ecr.aws/nginx/nginx-unprivileged:stable-alpine
+    {}
 
 saas:
   # tfc-admin declares one saas-<name> workspace per entry when enabled.
