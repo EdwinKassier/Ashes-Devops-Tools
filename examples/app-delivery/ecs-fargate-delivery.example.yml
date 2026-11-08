@@ -1,88 +1,125 @@
-# Reference application-delivery pipeline for AWS ECS/Fargate (audit C1).
-# COPY this into an application repository's .github/workflows/ and adjust. It is
-# a template, not a workflow for THIS repo (hence the .example.yml suffix), so it
-# never runs here. This is the AWS counterpart to cloud-run-delivery.example.yml.
+# Reference application-delivery pipeline for AWS ECS/Fargate. COPY this into
+# the APPLICATION repository's .github/workflows/ and adjust. It is a template,
+# not a workflow for THIS repo (hence the .example.yml suffix), so it never runs
+# here. This is the AWS counterpart to cloud-run-delivery.example.yml.
 #
 # Flow: build -> scan -> push to ECR -> register a new task-definition revision
-# and deploy to the ECS service created by modules/aws/compute/ecs-fargate. Auth
-# is keyless via GitHub OIDC assuming a deploy role. No long-lived AWS keys.
+# (only the image changes) -> roll the ECS service. Auth is keyless: GitHub OIDC
+# -> the per-service deploy role. No long-lived AWS keys.
 #
-# Prerequisites (provisioned by the landing zone, not by this pipeline):
-#   - An ECS service from modules/aws/compute/ecs-fargate (service_name below).
-#   - An ECR repository from modules/aws/data/ecr (its repository_urls output).
-#   - A deploy IAM role trusting this repo via GitHub OIDC, with permission to
-#     push to the ECR repo and to update the ECS service / register task defs.
-#   - Container secrets delivered via the task definition's valueFrom (Secrets
-#     Manager), so they never pass through this pipeline.
+# Everything this pipeline needs is created by ONE `services` entry (with
+# `github` set and enable_github_oidc = true) in the aws-workload-<env>
+# workspace (modules/aws/stages/app-services):
+#   - ECR repository          <service> (immutable tags, scan on push, KMS)
+#   - ECS service             <service> on the shared cluster <env>-apps
+#   - task definition family  <env>-<service> (NOT the service name)
+#   - deploy role             <env>-<service>-deploy: push to ITS repo,
+#     Describe/RegisterTaskDefinition, Describe/UpdateService on ITS service,
+#     iam:PassRole on ITS task + execution roles (to ecs-tasks only); trusted
+#     only for the exact OIDC subject in the github_oidc_subjects output.
+#   - enable_external_deployments = true on the service, so Terraform keeps the
+#     revision this pipeline registers instead of reverting it on the next
+#     apply. If you build on modules/aws/compute/ecs-fargate directly instead
+#     of the stage, set enable_external_deployments = true yourself.
+#
+# Set these GitHub repository (or environment) VARIABLES from
+#   terraform -chdir=envs/aws/workload output -json app_services
+# (one object per service; the output key is in brackets):
+#   AWS_DEPLOY_ROLE_ARN       [deploy_role_arn]
+#   AWS_REGION                the aws-workload-<env> root's aws_region
+#   ECR_REPOSITORY_URL        [ecr_repository_url]
+#   ECS_CLUSTER               [ecs_cluster_name]
+#   ECS_SERVICE               [ecs_service_name]
+#   TASK_DEFINITION_FAMILY    [task_definition_family]
+#   CONTAINER_NAME            [container_name]
+#
+# The deploy role trusts exactly one OIDC `sub` (see the github_oidc_subjects
+# output). When the entry sets github.ref, trigger only from that ref (as
+# below); otherwise the subject ends in environment:<name> and the job MUST
+# declare `environment: <name>`. When the entry sets github.repository_id (the
+# recommended, rename-proof form), customise the app repo's OIDC subject claim
+# to include_claim_keys = [repository_owner_id, repository_id, context].
+#
+# Container secrets stay as task-definition valueFrom references (Secrets
+# Manager / SSM), resolved by the ECS agent at task start; they never pass
+# through this pipeline.
+#
+# Action pinning: every action is pinned to a full commit SHA; keep them
+# current with Dependabot or Renovate.
 
 name: Deploy service (ECS/Fargate)
 
 on:
   push:
-    branches: [main]
+    branches: [main] # must match services.<svc>.github.ref when set
 
 permissions:
   contents: read
   id-token: write # required for keyless OIDC auth to AWS
 
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
-  AWS_REGION: eu-west-2
-  ECR_REPO: ${{ vars.ECR_REPOSITORY_URL }}   # modules/aws/data/ecr repository_urls[...]
-  ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}       # ecs-fargate cluster (name or ARN)
-  ECS_SERVICE: ${{ vars.ECS_SERVICE }}       # ecs-fargate service_name
-  CONTAINER_NAME: ${{ vars.CONTAINER_NAME }} # ecs-fargate container_name
+  IMAGE: ${{ vars.ECR_REPOSITORY_URL }}:${{ github.sha }}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # environment: dev # REQUIRED when services.<svc>.github.ref is not set
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Authenticate to AWS (keyless OIDC)
-        uses: aws-actions/configure-aws-credentials@v4 # pin to a SHA in your repo
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }} # OIDC deploy role
-          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
 
       - name: Log in to Amazon ECR
-        id: ecr
-        uses: aws-actions/amazon-ecr-login@v2 # pin to a SHA in your repo
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
 
       - name: Build image
-        run: docker build -t "${ECR_REPO}:${GITHUB_SHA}" .
+        run: docker build -t "${IMAGE}" .
 
       - name: Scan image (block on CRITICAL/HIGH, matching the IaC gate)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ${{ env.ECR_REPO }}:${{ github.sha }}
+          image-ref: ${{ env.IMAGE }}
           severity: "CRITICAL,HIGH"
           exit-code: "1"
 
+      # The repo has immutable tags, so each commit SHA is a unique,
+      # non-overwritable image.
       - name: Push image
-        run: docker push "${ECR_REPO}:${GITHUB_SHA}"
+        run: docker push "${IMAGE}"
 
-      # Render a new task-definition revision from the Terraform-managed one,
-      # swapping only the image, then deploy it. In a GitOps setup, instead bump
-      # the image variable and let Terraform Cloud apply.
+      # Start from the latest revision of the Terraform-managed family (roles,
+      # secrets, logging, sizing) and swap only the image. Terraform owns
+      # everything else; to change it, edit the services entry and let
+      # Terraform Cloud apply.
       - name: Download current task definition
+        env:
+          TASK_DEFINITION_FAMILY: ${{ vars.TASK_DEFINITION_FAMILY }}
         run: |
           aws ecs describe-task-definition \
-            --task-definition "${ECS_SERVICE}" \
+            --task-definition "${TASK_DEFINITION_FAMILY}" \
             --query taskDefinition > task-definition.json
 
       - name: Render new image into the task definition
         id: render
-        uses: aws-actions/amazon-ecs-render-task-definition@v1 # pin to a SHA
+        uses: aws-actions/amazon-ecs-render-task-definition@8d79160660ad39c402a16e5fc7cd2a32e8f7d6b7 # v1.9.1
         with:
           task-definition: task-definition.json
-          container-name: ${{ env.CONTAINER_NAME }}
-          image: ${{ env.ECR_REPO }}:${{ github.sha }}
+          container-name: ${{ vars.CONTAINER_NAME }}
+          image: ${{ env.IMAGE }}
 
       - name: Deploy to ECS (wait for a stable service)
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2 # pin to a SHA
+        uses: aws-actions/amazon-ecs-deploy-task-definition@a00d4d57ac0de1a99b39fe469f3d898d38717c2b # v2.6.4
         with:
           task-definition: ${{ steps.render.outputs.task-definition }}
-          service: ${{ env.ECS_SERVICE }}
-          cluster: ${{ env.ECS_CLUSTER }}
+          service: ${{ vars.ECS_SERVICE }}
+          cluster: ${{ vars.ECS_CLUSTER }}
           wait-for-service-stability: true
