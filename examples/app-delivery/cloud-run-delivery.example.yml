@@ -1,15 +1,18 @@
-# Reference application-delivery pipeline for Cloud Run (audit C1/C2). COPY this
-# into the APPLICATION repository's .github/workflows/ and adjust. It is a
-# template, not a workflow for THIS repo (hence the .example.yml suffix), so it
-# never runs here.
+# Reference application-delivery pipeline for Cloud Run. COPY this into the
+# APPLICATION repository's .github/workflows/ and adjust. It is a template, not
+# a workflow for THIS repo (hence the .example.yml suffix), so it never runs
+# here.
 #
 # Flow: build -> scan -> push to Artifact Registry -> deploy a new revision of the
 # Cloud Run service. Auth is keyless: GitHub OIDC -> the app-deploy Workload
-# Identity pool in the env host project -> the per-service deploy SA. No keys.
+# Identity pool (apps-<env>) in the env host project -> the per-service deploy
+# SA. No keys.
 #
 # Everything this pipeline needs is created by ONE app_services entry in the
 # gcp-workload-<env> workspace (modules/gcp/stages/app-services):
-#   - Artifact Registry repo  <region>-docker.pkg.dev/<host>/<service>
+# (<project> below is the service's project: the env host project by default,
+# or the team project when the entry sets project_id.)
+#   - Artifact Registry repo  <region>-docker.pkg.dev/<project>/<service>
 #   - Cloud Run service       <service> (runtime SA <service>-run@...)
 #   - deploy SA               <service>-deploy@... with run.developer on the
 #     service, artifactregistry.writer on the repo, serviceAccountUser on the
@@ -20,19 +23,20 @@
 #   terraform -chdir=envs/gcp/workload output -json app_github_actions
 # (one object per service; the keys match the variable names):
 #   GCP_WIF_PROVIDER   projects/<host-number>/locations/global/workloadIdentityPools/apps-<env>/providers/github
-#   GCP_DEPLOY_SA      <service>-deploy@<host>.iam.gserviceaccount.com
-#   GCP_PROJECT_ID     <host project id>
+#   GCP_DEPLOY_SA      <service>-deploy@<project>.iam.gserviceaccount.com
+#   GCP_PROJECT_ID     <project> (the service's project; host by default)
 #   GCP_REGION         e.g. europe-west1
 #   CLOUD_RUN_SERVICE  <service>
-#   IMAGE_REPOSITORY   <region>-docker.pkg.dev/<host>/<service>/<service>
+#   IMAGE_REPOSITORY   <region>-docker.pkg.dev/<project>/<service>/<service>
 #
 # If the app_services entry sets github.environment, add `environment: <name>`
 # to the job; if it sets github.ref, trigger only from that ref (as below).
 #
-# Action pinning: actions/checkout and trivy-action are SHA-pinned (same SHAs as
-# this repo's workflows). google-github-actions/auth is on a VERSION TAG here
-# because no SHA for it is vetted in this repo yet — pin it to a full commit SHA
-# in your app repo before use.
+# Action pinning: every action is pinned to a full commit SHA (the same SHAs as
+# this repo's own workflows); keep them current with Dependabot or Renovate.
+# The gcloud steps use the CLI preinstalled on GitHub-hosted ubuntu runners; on
+# a self-hosted runner, add a SHA-pinned google-github-actions/setup-gcloud
+# step first.
 
 name: Deploy service (Cloud Run)
 
@@ -70,7 +74,7 @@ jobs:
           exit-code: "1"
 
       - name: Authenticate to Google Cloud (keyless WIF)
-        uses: google-github-actions/auth@v2 # UNPINNED TAG: pin to a SHA in your app repo
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SA }}
