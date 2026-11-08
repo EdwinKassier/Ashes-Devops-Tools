@@ -85,3 +85,7 @@ The following resources are created:
 | <a name="output_record_fqdns"></a> [record\_fqdns](#output\_record\_fqdns) | Map of record key to the created record's fully qualified domain name. |
 | <a name="output_record_names"></a> [record\_names](#output\_record\_names) | Map of record key to the created record name. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.
