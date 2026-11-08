@@ -134,3 +134,7 @@ module "app_lb" {
   }
 }
 ```
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.
