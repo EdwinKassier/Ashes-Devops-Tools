@@ -27,10 +27,11 @@ Land everything **immutable in raw**: files in object storage, partitioned by
 arrival time, under the environment's customer-managed key. A transform layer
 writes **curated** tables in **Apache Iceberg**, an open table format that adds
 atomic commits, schema evolution, hidden partitioning and time travel on top of
-Parquet files. Iceberg is managed for us: **S3 Tables** on AWS, **BigLake
-Iceberg tables in BigQuery** on GCP, both compacting files and expiring
+Parquet files. Iceberg is managed for us: **S3 Tables** on AWS, **Apache
+Iceberg managed tables** in BigQuery on GCP, both compacting files and expiring
 snapshots automatically. Several engines read the same curated tables: Athena,
-Redshift, Spark and BigQuery. **Serving** is warehouse-native: Redshift and
+Redshift, Spark and BigQuery (on GCP, only BigQuery writes them and Spark reads
+an exported metadata snapshot). **Serving** is warehouse-native: Redshift and
 BigQuery marts and materialised views shaped for dashboards, rebuildable from
 curated. Cost and speed come from **partitioning by event day and clustering by
 the common filter column**, plus per-query byte caps. Access is three layers:
@@ -128,7 +129,7 @@ The "API" of a lake is its tables and its grants.
 | Zone | Physical form (AWS / GCP) | Written by | Read by |
 |---|---|---|---|
 | raw | S3 general-purpose bucket / Cloud Storage bucket, Parquet or JSON files under `source=<s>/dt=<yyyy-mm-dd>/hr=<hh>/` | Ingest only | Transform jobs only |
-| curated | S3 Tables Iceberg table / BigLake Iceberg table in BigQuery, one namespace or dataset per domain | Transform jobs only, through the catalog | Analysts by grant, serving builds, ML |
+| curated | S3 Tables Iceberg table / Iceberg managed table in BigQuery, one namespace or dataset per domain | Transform jobs only, through the catalog | Analysts by grant, serving builds, ML |
 | serving | Redshift Serverless schema / BigQuery native dataset | Serving builds | Dashboards, APIs |
 
 The rule is one writer per zone and the catalog as the only door to curated:
@@ -236,7 +237,7 @@ checked 2026-11). Most important for this question, every engine reads the
 same table: Redshift queries Iceberg tables in the Glue Data Catalog
 and supports Lake Formation fine-grained access on them
 ([Redshift docs](https://docs.aws.amazon.com/redshift/latest/dg/querying-iceberg.html),
-checked 2026-11), and BigQuery reads and writes BigLake Iceberg tables.
+checked 2026-11). On GCP the managed tables have one writer, BigQuery, and other engines read them.
 
 **Why serving stays warehouse-native.** Dashboards want sub-second answers at
 high concurrency, result caching and materialised views. Warehouse storage does
@@ -255,17 +256,31 @@ small files and unbounded metadata. The managed options do it for you:
   table buckets per Region by default
   ([S3 Tables quotas](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-regions-quotas.html),
   checked 2026-11).
-- **BigLake Iceberg tables in BigQuery** keep Parquet in your Cloud Storage
-  bucket and compact and cluster automatically. Limits that bite: one mutating
-  DML statement per table at a time, no partition evolution, and external
-  engines read an exported metadata snapshot
+- **Apache Iceberg managed tables in BigQuery** (formerly BigLake Iceberg
+  tables) keep Parquet in your Cloud Storage bucket and compact and cluster
+  automatically. Limits that bite: one mutating DML statement per table at a
+  time, no partition evolution, no table copies, snapshots, clones or renames,
+  and only BigQuery writes them. Spark reads the metadata snapshot that
+  `EXPORT TABLE METADATA` writes, refreshed by a scheduled query (the docs'
+  example runs every 24 hours) or, on request, after every mutation at extra
+  cost
   ([Google Cloud docs](https://docs.cloud.google.com/bigquery/docs/iceberg-tables),
-  checked 2026-11). On 2026-04-20 Google renamed BigLake to Google Cloud
-  Lakehouse and its metastore to the **Lakehouse runtime catalog**, which
-  serves the Iceberg REST catalog API for Spark and other engines; API and IAM
-  names still say `biglake`
-  ([Google Cloud docs](https://docs.cloud.google.com/biglake/docs/biglake-basics),
   checked 2026-11).
+- **Lakehouse runtime catalog tables** are GCP's other Iceberg path. On
+  2026-04-20 Google renamed BigLake to Google Cloud Lakehouse and its metastore
+  to the Lakehouse runtime catalog; API and IAM names still say `biglake`
+  ([Google Cloud docs](https://docs.cloud.google.com/biglake/docs/biglake-basics),
+  checked 2026-11). Spark creates and writes these tables through its Iceberg
+  REST endpoint. BigQuery DML on them is Preview, and they do not support
+  fine-grained access control
+  ([Google Cloud docs](https://docs.cloud.google.com/biglake/docs/blms-rest-catalog),
+  checked 2026-11).
+
+**The GCP choice.** Curated uses managed tables, because the policy tags on
+`card_bin` need fine-grained access. ML pipelines accept up to a day of
+staleness from the exported snapshot, or read fresh rows through BigQuery. So
+"no single vendor lock" holds only for the files on GCP: the writer is
+BigQuery.
 
 **Where it breaks.** Many writers to one table conflict: Iceberg retries a
 failed commit 4 times by default
@@ -437,7 +452,7 @@ Three layers, each catching what the one inside it misses.
 | Decision | Chosen | Rejected | Why | What would change the answer |
 |---|---|---|---|---|
 | Curated format | Iceberg | Warehouse-native tables; Delta Lake or Hudi | Multi-engine, open, managed on both clouds | One engine forever and no Spark: warehouse-native is simpler |
-| Iceberg operations | Managed (S3 Tables, BigLake Iceberg in BigQuery) | Self-run compaction and expiry | Small files and metadata growth handled for us | Need branches or tags (S3 Tables expiry fails with them), or partition evolution on GCP |
+| Iceberg operations | Managed (S3 Tables, Iceberg managed tables in BigQuery) | Self-run compaction and expiry; Lakehouse runtime catalog tables on GCP | Small files and metadata growth handled; policy tags work | Need branches or tags (S3 Tables expiry fails with them), or Spark must write curated on GCP |
 | Serving | Warehouse-native marts | Dashboards on curated | Concurrency, caching, predictable cost | Few dashboards with loose latency |
 | Partition grain | Day | Hour; none | 730 partitions in 2 years; prunes most queries | Most queries look at the last hour of a huge stream |
 | Pricing | On-demand, then reserved capacity when steady | Capacity from day one | Unknown load first; caps and quotas bound risk | Spend steadily above the reservation price |
@@ -484,8 +499,8 @@ Three layers, each catching what the one inside it misses.
 | Component | AWS | GCP | Difference that matters |
 |---|---|---|---|
 | raw | S3 general-purpose bucket, SSE-KMS | Cloud Storage bucket, CMEK | Both object stores; bucket names are global on both. |
-| curated | S3 Tables (Iceberg) | BigLake Iceberg tables in BigQuery, data in your bucket | S3 Tables is its own bucket type with its own API (`s3tables`); BigLake tables live in a BigQuery dataset. |
-| Catalog | Glue Data Catalog (`s3tablescatalog`) | Lakehouse runtime catalog (Iceberg REST), BigQuery | Spark uses Glue or the S3 Tables catalog on AWS; the REST catalog on GCP. |
+| curated | S3 Tables (Iceberg) | Iceberg managed tables in BigQuery, data in your bucket | S3 Tables is its own bucket type with its own API (`s3tables`); managed tables live in a BigQuery dataset, and only BigQuery writes them. |
+| Catalog | Glue Data Catalog (`s3tablescatalog`) | BigQuery; the Lakehouse runtime catalog (Iceberg REST) serves Spark-written tables | AWS Spark reads and writes curated through the catalog; GCP Spark reads curated from an exported metadata snapshot, as stale as its refresh. |
 | Ad hoc SQL | Athena, $5 per TB | BigQuery, $6.25 per TiB on-demand | Athena has no warehouse storage; BigQuery is both engine and warehouse. |
 | serving | Redshift Serverless | BigQuery native tables, materialised views | On GCP, curated and serving share one engine. |
 | Fine-grained access | Lake Formation: LF-Tags, data filters | Policy tags, row access policies, Dataplex | LF is a separate grant system next to IAM; BigQuery's is part of IAM. |
@@ -681,18 +696,23 @@ resource "google_bigquery_dataset" "orders" {
   dataset_id = "orders_${each.key}" # <dataset>_<zone>
   location   = local.env_config.region
   labels     = merge(local.labels, { service = "orders-lake" })
-  # Native tables only; Iceberg files use the bucket key. Verify before relying on BigLake Iceberg tables accepting a dataset default key.
+  # Native tables only; Iceberg files use the bucket key. Verify before relying on Iceberg managed tables accepting a dataset default key.
   default_encryption_configuration {
     kms_key_name = module.workload_cmek.key_ids["lake"]
   }
 }
 
 resource "google_bigquery_table" "orders_curated" {
-  project             = local.env_config.host_project_id
-  dataset_id          = google_bigquery_dataset.orders["curated"].dataset_id
-  table_id            = "orders"
-  clustering          = ["region", "customer_id"]
-  deletion_protection = true
+  project                  = local.env_config.host_project_id
+  dataset_id               = google_bigquery_dataset.orders["curated"].dataset_id
+  table_id                 = "orders"
+  require_partition_filter = true # on Iceberg managed tables: verify before relying on
+  clustering               = ["region", "customer_id"]
+  deletion_protection      = true
+  time_partitioning {
+    type  = "DAY"
+    field = "order_ts"
+  }
   biglake_configuration {
     connection_id = google_bigquery_connection.lake.name
     storage_uri   = "gs://${module.lake_buckets.bucket_names["iceberg"]}/orders/"
@@ -835,7 +855,7 @@ the partition-filter list.
 
 - [Apache Iceberg: partitioning](https://iceberg.apache.org/docs/latest/partitioning/) (checked 2026-11)
 - [S3 Tables maintenance](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-maintenance.html) (checked 2026-11)
-- [BigLake Iceberg tables in BigQuery](https://docs.cloud.google.com/bigquery/docs/iceberg-tables) (checked 2026-11)
+- [Apache Iceberg managed tables](https://docs.cloud.google.com/bigquery/docs/iceberg-tables) (checked 2026-11)
 - [Lake Formation tag-based access control](https://docs.aws.amazon.com/lake-formation/latest/dg/tag-based-access-control.html) (checked 2026-11)
 - [Primer: data zones](00-primer.md#data-zones) and
   [CMEK source](00-primer.md#cmek-source)
