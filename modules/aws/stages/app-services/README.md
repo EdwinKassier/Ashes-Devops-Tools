@@ -164,3 +164,7 @@ The following resources are created:
 | <a name="output_kms_key_arn"></a> [kms\_key\_arn](#output\_kms\_key\_arn) | CMK encrypting every service's ECR repository, log group, Aurora cluster and RDS master secret, or null when services is empty. |
 | <a name="output_services"></a> [services](#output\_services) | Per-service deployment contract: everything a CI pipeline needs (ECR repo, deploy role, cluster/service, task-definition family, container name) plus the runtime roles, log group, optional database endpoint/secret and optional queue/DLQ URL + ARN. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

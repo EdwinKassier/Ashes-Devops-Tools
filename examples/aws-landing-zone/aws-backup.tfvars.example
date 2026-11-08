@@ -1,15 +1,26 @@
 # aws-backup — centralized AWS Backup vault + org plan + Vault Lock (phase-6).
-# Reference only. Canonical template: envs/aws-backup/terraform.tfvars.example.
+# Reference only. Canonical template: envs/aws/backup/terraform.tfvars.example.
 #
-# Derived from envs/aws-backup/variables.tf: variables with no default = REQUIRED.
+# Every input of envs/aws/backup has a default; the values come from
+# config/landing-zone.yaml. The keys below are OPTIONAL explicit overrides.
 
-# REQUIRED — account-qualified ARN of the role AWS Backup assumes to run backup
-# jobs for the org backup plan (rendered into the org BACKUP_POLICY).
-backup_role_arn = "arn:aws:iam::111111111111:role/aws-backup-role"
+# Required effective values (config key -> variable):
+# landing_zone_name     = "acme"         # org.name
+# tfc_organization      = "acme-tfc-org" # org.tfc.organization (reads the aws-organization workspace)
+# management_account_id = "111111111111" # aws.management_account_id (quoted)
 
-# REQUIRED — account-qualified ARN of the role (in the backup account) AWS Backup
-# assumes to perform restore-testing jobs.
-restore_testing_role_arn = "arn:aws:iam::444444444444:role/backup-restore-test"
+# Backup and restore-testing roles: leave both unset (the usual case).
+# - backup_role_arn = null renders arn:aws:iam::$account:role/<backup_role_name>
+#   into the org BACKUP_POLICY, so each Workloads-OU account runs its own jobs
+#   with the aws-backup-org-role that aws-organization deploys there through a
+#   StackSet (create_backup_service_role). If you bring your own role, it must
+#   exist in EVERY member account and the ARN must use the literal $account,
+#   never a fixed account ID: a fixed-account role cannot run jobs in the other
+#   accounts.
+# - restore_testing_role_arn = null creates aws-backup-restore-testing in the
+#   backup account.
+# backup_role_arn          = "arn:aws:iam::$account:role/my-backup-role"
+# restore_testing_role_arn = "arn:aws:iam::444444444444:role/my-restore-testing-role"
 
-# Optional — vault name (cross-account naming contract with the org BACKUP_POLICY),
+# The vault name (cross-account naming contract with the org BACKUP_POLICY),
 # CMK, and Vault Lock (WORM) retention window all have working defaults.

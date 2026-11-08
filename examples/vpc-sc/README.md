@@ -10,12 +10,29 @@ validated that no legitimate traffic is caught.
 | Resource | Notes |
 |----------|-------|
 | `google_access_context_manager_service_perimeter` | Dry-run perimeter around `protected_projects` |
-| Ingress policy | Allows Workload Identity Federation from a specific WIF pool |
+| Ingress policy | Lets one GitHub repository's federated identities (a WIF `principalSet` in `identities`) call BigQuery and Cloud Storage in the protected project |
 | Restricted services | BigQuery, Cloud Storage, Secret Manager |
+
+## How the ingress rule is built
+
+- `identities` names who may cross the perimeter: here the WIF `principalSet`
+  for one GitHub repository ID. Leave `identity_type` null when you list
+  identities; avoid `ANY_IDENTITY` for CI. If the workflow impersonates a
+  service account (the repo's usual pattern), list `serviceAccount:<email>`
+  instead, because that is the identity the protected API sees.
+- `sources` names where the request comes from. Only an access level (`"*"`
+  for any network origin) or a project, folder, organization or VPC network is
+  valid. A Workload Identity pool is not a source.
+- `resources` is required and names the perimeter projects the rule opens
+  (`projects/<number>`, or `"*"` for all of them).
+
+See Google's [ingress and egress rules](https://docs.cloud.google.com/vpc-service-controls/docs/ingress-egress-rules)
+and [supported identities](https://docs.cloud.google.com/vpc-service-controls/docs/supported-identities).
 
 ## Prerequisites
 
-- An **Access Policy** for the organization. A single org can have only one.
+- An **Access Policy**. An organization has one organization-level policy;
+  scoped policies (limited to a folder or project) can exist alongside it.
   - Use `create_access_policy = true` if you don't have one yet.
   - Otherwise get the existing policy ID: `gcloud access-context-manager policies list --organization=<org-id>`
 - The **numeric project number** (not the project ID) for every project you want
@@ -35,12 +52,31 @@ terraform -chdir=examples/vpc-sc plan
 # 4. Apply in dry-run mode first
 terraform -chdir=examples/vpc-sc apply
 
-# 5. Monitor for violations (dry-run logs to Cloud Audit Logs under protoPayload.status)
-# gcloud logging read 'protoPayload.serviceName="accesscontextmanager.googleapis.com" protoPayload.status.code=7'
+# 5. Monitor for violations (see "Finding violations" below)
 
 # 6. When confident, switch to enforced mode:
 #    Set enable_dry_run = false in main.tf, then re-apply
 ```
+
+## Finding violations
+
+VPC-SC writes violations to the **policy** audit log of the protected project,
+with `VpcServiceControlAuditMetadata` in `protoPayload.metadata`. On these
+entries, `protoPayload.serviceName` is the service that was called (for example
+`storage.googleapis.com`), not `accesscontextmanager.googleapis.com`. Dry-run
+violations also carry `metadata.dryRun = true`:
+
+```bash
+gcloud logging read --project=<protected-project-id> --freshness=7d '
+  logName:"cloudaudit.googleapis.com%2Fpolicy"
+  AND protoPayload.metadata."@type"="type.googleapis.com/google.cloud.audit.VpcServiceControlAuditMetadata"
+  AND protoPayload.metadata.dryRun=true'
+```
+
+Drop the `dryRun` line to see enforced denials after the switch, or add
+`AND protoPayload.serviceName="storage.googleapis.com"` to narrow to one
+service. See Google's [VPC-SC troubleshooting](https://docs.cloud.google.com/vpc-service-controls/docs/troubleshooting)
+and [dry-run mode](https://docs.cloud.google.com/vpc-service-controls/docs/dry-run-mode) pages.
 
 ## Dry-run → enforcement workflow
 

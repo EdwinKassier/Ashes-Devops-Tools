@@ -143,3 +143,7 @@ module "orders_db" {
 
 The generated master-user secret ARN is exposed as the
 `master_user_secret_arn` output for wiring into application configuration.
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

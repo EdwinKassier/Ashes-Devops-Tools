@@ -84,3 +84,7 @@ The following resources are created:
 | <a name="output_repository_arns"></a> [repository\_arns](#output\_repository\_arns) | Map of repository name to its ARN. |
 | <a name="output_repository_urls"></a> [repository\_urls](#output\_repository\_urls) | Map of repository name to its registry URL (for docker push/pull). |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

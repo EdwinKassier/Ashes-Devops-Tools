@@ -1,8 +1,6 @@
 # api-gateway (AWS)
 
-> Status: experimental
->
-> No root composes this module; it is an opt-in API edge you call from your own stage.
+Library-only: no root composes this module; it is an opt-in API edge you call from your own stage. See [`examples/basic`](examples/basic/main.tf).
 
 API Gateway v2 (HTTP API) primitive for the SRA landing zone — the AWS parity
 counterpart to `modules/gcp/network/api-gateway`. Creates an HTTP API with an
@@ -111,3 +109,7 @@ module "api" {
   }
 }
 ```
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

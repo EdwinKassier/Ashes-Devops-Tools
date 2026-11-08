@@ -1490,21 +1490,15 @@
           },
           "additionalProperties": false
         },
-        "app_ingress_mode": {
-          "enum": [
-            "internal",
-            "public_alb",
-            "cloudfront_vpc_origin"
-          ]
-        },
-        "bootstrap_image": {
-          "type": "string"
-        },
         "workload": {
           "type": "object",
           "properties": {
             "app_ingress_mode": {
-              "type": "string"
+              "enum": [
+                "internal",
+                "public_alb",
+                "cloudfront_vpc_origin"
+              ]
             },
             "bootstrap_image": {
               "type": "string"

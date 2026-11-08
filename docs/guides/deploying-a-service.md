@@ -201,7 +201,10 @@ still available per service via the cloud-run module's
 first private subnet (private nodes, private endpoint, Workload Identity, Gateway
 API). Workloads and their deploy identity are not generated for GKE yet. Use
 [`examples/app-delivery/gke-autopilot-delivery.example.yml`](../../examples/app-delivery/gke-autopilot-delivery.example.yml)
-with a deploy SA that you grant `roles/container.developer` yourself.
+with a deploy SA that you grant `roles/container.clusterViewer` (to fetch credentials) plus a
+namespace-scoped Kubernetes `Role` and `RoleBinding`, as the example's header shows. Avoid
+project-level `roles/container.developer`: it can read and write every object, Secrets
+included, in every cluster in the project.
 
 ## AWS golden path (containers)
 

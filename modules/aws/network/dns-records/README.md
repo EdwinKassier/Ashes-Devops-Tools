@@ -1,8 +1,6 @@
 # dns-records (Route 53)
 
-> Status: experimental
->
-> No root composes this module; it writes records into an existing Route 53 zone and is called from your own stage.
+Library-only: no root composes this module; it writes records into an existing Route 53 zone and is called from your own stage. See [`examples/basic`](examples/basic/main.tf).
 
 Write DNS records into an **existing** Route 53 hosted zone (audit H9, option C —
 DNS unification). The AWS counterpart of
@@ -85,3 +83,7 @@ The following resources are created:
 | <a name="output_record_fqdns"></a> [record\_fqdns](#output\_record\_fqdns) | Map of record key to the created record's fully qualified domain name. |
 | <a name="output_record_names"></a> [record\_names](#output\_record\_names) | Map of record key to the created record name. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

@@ -32,21 +32,38 @@ module "vpc_sc" {
     "secretmanager.googleapis.com",
   ]
 
-  # Allow CI/CD from the admin project's Workload Identity pool.
+  # Allow CI/CD from one GitHub repository federated through the admin
+  # project's Workload Identity pool.
+  #
+  # - identities: the federated principals (never ANY_IDENTITY for CI). A WIF
+  #   principalSet only matches when the job calls the API with its federated
+  #   token. If the job impersonates a service account instead, list
+  #   "serviceAccount:<sa-email>" here.
+  # - sources: where the request comes from. Only an access level ("*" = any
+  #   network origin) or a project / folder / org / VPC network is valid; a WIF
+  #   pool is not a source. GitHub-hosted runners call from the internet, so
+  #   "*" is used here; prefer an IP-based access level for self-hosted runners.
+  # - resources: required; the perimeter projects the rule opens
+  #   ("projects/<number>", or "*" for every project in the perimeter).
   ingress_policies = [
     {
-      identity_type = "ANY_IDENTITY"
-      identities    = null
+      identity_type = null
+      identities = [
+        # Pinned to one repo AND ref (attribute.repo_ref, mapped by modules/gcp/iam/workload-identity).
+        # attribute.repository_id alone would trust every branch of the repo.
+        "principalSet://iam.googleapis.com/projects/555666777888/locations/global/workloadIdentityPools/github-pool/attribute.repo_ref/123456789/refs/heads/main",
+      ]
       sources = [
         {
-          access_level = null
-          resource     = "//iam.googleapis.com/projects/555666777888/locations/global/workloadIdentityPools/github-pool"
+          access_level = "*"
+          resource     = null
         }
       ]
-      resources = null
+      resources = ["projects/111222333444"]
       operations = [
-        { service_name = "bigquery.googleapis.com", method_selectors = null },
-        { service_name = "storage.googleapis.com", method_selectors = null },
+        # Every method, stated explicitly; narrow to the methods CI actually calls.
+        { service_name = "bigquery.googleapis.com", method_selectors = [{ method = "*" }] },
+        { service_name = "storage.googleapis.com", method_selectors = [{ method = "*" }] },
       ]
     }
   ]

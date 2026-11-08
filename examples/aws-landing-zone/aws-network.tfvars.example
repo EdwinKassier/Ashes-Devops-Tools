@@ -1,12 +1,17 @@
-# aws-network — minimal required inputs (phase-3, TGW hub + shared networking).
-# Reference only. Canonical template: envs/aws-network/terraform.tfvars.example.
+# aws-network — TGW hub, IPAM, inspection/egress VPCs, resolver (phase-3).
+# Reference only. Canonical template: envs/aws/network/terraform.tfvars.example.
 #
-# Derived from envs/aws-network/variables.tf: variables with no default = REQUIRED.
+# Every input of envs/aws/network has a default; the values come from
+# config/landing-zone.yaml (egress allowlist, VPN and spoke attachments under
+# aws.network). The keys below are OPTIONAL explicit overrides.
 
-# REQUIRED — central log-archive bucket name. MUST match the value used in the
-# aws-organization / aws-security roots (cross-root naming contract). VPC flow
-# logs and Network Firewall logs are delivered here.
-log_archive_bucket_name = "acme-org-log-archive"
+# Required effective values (config key -> variable):
+# landing_zone_name = "acme"         # org.name
+# tfc_organization  = "acme-tfc-org" # org.tfc.organization (reads the aws-organization workspace)
 
-# Everything else (CIDR plan, AZ spread, firewall/analyzer toggles) has working
-# defaults — see the env template to override the addressing plan.
+# Central log-archive bucket for VPC flow logs and Network Firewall logs. It
+# must match the name aws-organization and aws-security use.
+# log_archive_bucket_name = "acme-org-log-archive" # aws.log_archive_bucket_name
+
+# The CIDR plan, AZ spread and firewall / analyzer toggles have working
+# defaults; see the env template to override the addressing plan.
