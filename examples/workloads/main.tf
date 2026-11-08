@@ -30,9 +30,11 @@ module "workload_api_service" {
     }
   }
 
+  # Additive grants to the admin group. Keep them narrow: data-plane roles,
+  # not storage.admin / bigquery.admin (which also manage IAM on the resources).
   project_admin_roles = [
-    "roles/storage.admin",
-    "roles/bigquery.admin"
+    "roles/storage.objectAdmin",
+    "roles/bigquery.dataEditor"
   ]
 
   labels = {
