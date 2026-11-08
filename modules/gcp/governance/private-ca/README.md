@@ -1,8 +1,7 @@
 # Private CA (Certificate Authority Service) Module
 
-> Status: experimental
->
-> No root composes this module; Private CA is opt-in and no root needs internal certificates by default.
+Library-only: no root composes this module; Private CA is opt-in and no root needs
+internal certificates by default. See [`examples/basic`](examples/basic/main.tf).
 
 Creates a Cloud Certificate Authority Service (CAS) CA pool and a single
 certificate authority (ROOT or SUBORDINATE) for issuing private/internal
