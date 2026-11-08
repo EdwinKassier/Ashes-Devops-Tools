@@ -125,7 +125,7 @@ The following resources are created:
 
 
 - data source.google_compute_zones.available (modules/gcp/stages/net-spoke/main.tf#L28)
-- data source.google_project.current (modules/gcp/stages/net-spoke/main.tf#L260)
+- data source.google_project.current (modules/gcp/stages/net-spoke/main.tf#L263)
 
 
 ## Inputs

@@ -56,6 +56,9 @@ module "network" {
   flow_logs           = var.network.flow_logs
   additional_regions  = var.additional_regions
 
+  # Cloud NAT needs a route to the default internet gateway (tiered-vpc deletes it).
+  enable_internet_egress_route = var.nat.enabled
+
   firewall_mode                     = var.firewall_mode
   firewall_policy_enforcement_order = var.firewall_policy_enforcement_order
 

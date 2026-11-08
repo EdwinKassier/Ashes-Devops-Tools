@@ -43,6 +43,8 @@ module "aws_organization" {
   enable_cloudtrail_delegated_admin = local.enable_cloudtrail_delegated_admin
 
   backup_service_role_region             = local.aws_region
+  create_member_backup_vault             = var.create_member_backup_vault
+  member_backup_vault_name               = var.member_backup_vault_name
   org_policy_overrides                   = var.org_policy_overrides
   partition                              = var.partition
   disabled_org_policies                  = var.disabled_org_policies

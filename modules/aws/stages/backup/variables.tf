@@ -3,7 +3,7 @@
 # -----------------------------------------------------------------------------
 
 variable "vault_name" {
-  description = "Name of the AWS Backup vault created in the backup account. This is the cross-account naming contract: the management account's org BACKUP_POLICY targets the vault by this name."
+  description = "Name of the AWS Backup vault created in the backup account. This is the cross-account naming contract: the org BACKUP_POLICY targets a vault of this name in each member account, which the member-account StackSet creates (aws-organization member_backup_vault_name must match)."
   type        = string
   default     = "org-backup-vault"
 }

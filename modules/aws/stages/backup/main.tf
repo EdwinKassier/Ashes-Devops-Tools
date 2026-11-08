@@ -9,8 +9,10 @@
 #     KMS-encrypted, Compliance-mode Vault Lock (WORM) backup vault and the
 #     restore testing plan.
 #
-# The vault is the WORM target for the org backup plan; the org policy points
-# every account under the Workloads OU at the vault by name. The two children
+# The org policy runs its jobs in each member account and writes to a vault of
+# this name IN THAT ACCOUNT. The member vaults come from the member-account
+# StackSet (aws-organization by default; the legacy one below when enabled).
+# The backup account's vault is the locked (WORM) vault of the same name. The two children
 # are joined by the vault name (backup_vault_name), which is the cross-account
 # naming contract between the backup account's vault and the management
 # account's policy.
@@ -80,10 +82,20 @@ locals {
   create_backup_role = var.backup_role_arn == null && var.create_backup_role_stack_set
   backup_role_arn    = var.backup_role_arn == null ? "arn:${var.partition}:iam::$account:role/${var.backup_role_name}" : var.backup_role_arn
 
+  # The BACKUP_POLICY writes to a vault named vault_name in each member account,
+  # so the legacy StackSet creates it there too (retained on stack deletion).
   backup_role_template = jsonencode({
     AWSTemplateFormatVersion = "2010-09-09"
-    Description              = "AWS Backup service role for the organization BACKUP_POLICY (managed by the aws-backup stage)."
+    Description              = "AWS Backup service role and vault for the organization BACKUP_POLICY (managed by the aws-backup stage)."
     Resources = {
+      MemberBackupVault = {
+        Type                = "AWS::Backup::BackupVault"
+        DeletionPolicy      = "Retain"
+        UpdateReplacePolicy = "Retain"
+        Properties = {
+          BackupVaultName = var.vault_name
+        }
+      }
       BackupServiceRole = {
         Type = "AWS::IAM::Role"
         Properties = {

@@ -138,4 +138,15 @@ run "ssh_rdp_deny_associated_with_every_folder" {
     condition     = toset(output.hierarchical_firewall_association_targets) == toset(["folders/111111111", "folders/222222222", "folders/333333333"])
     error_message = "the hub SSH/RDP deny policy must be associated with the shared folder AND every environment folder."
   }
+
+  assert {
+    condition = (
+      local.hub_firewall_rules[0].action == "goto_next" &&
+      local.hub_firewall_rules[0].src_ip_ranges == ["35.235.240.0/20"] &&
+      local.hub_firewall_rules[0].priority < local.hub_firewall_rules[1].priority &&
+      local.hub_firewall_rules[1].action == "deny" &&
+      local.hub_firewall_rules[1].src_ip_ranges == ["0.0.0.0/0"]
+    )
+    error_message = "The IAP range must get goto_next at a higher priority than the internet SSH/RDP deny, or IAP TCP forwarding is blocked."
+  }
 }

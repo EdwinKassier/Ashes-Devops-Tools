@@ -574,3 +574,17 @@ variable "partition" {
   type        = string
   default     = "aws"
 }
+
+variable "create_member_backup_vault" {
+  description = "Create the member-account backup vault (member_backup_vault_name) in every Workloads-OU account, in the Backup service-role StackSet. The aws-backup BACKUP_POLICY writes to a vault of that name in each member account. Disable only if another mechanism creates it."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
+variable "member_backup_vault_name" {
+  description = "Name of the member-account backup vault. Must equal aws-backup vault_name."
+  type        = string
+  default     = "org-backup-vault"
+  nullable    = false
+}

@@ -118,6 +118,26 @@ variable to its own workspaces (or `REAL_CLOUD_CHECKS_OPT_OUT=true`).
 
 ### AWS
 
+#### Member-account backup vault (aws-organization)
+
+**Behaviour change.** The org `BACKUP_POLICY` writes to `org-backup-vault` in
+each member account, but the repo only created that vault in the backup account,
+so scheduled jobs in workload accounts had no target. The Backup service-role
+StackSet now also creates `AWS::Backup::BackupVault` (`member_backup_vault_name`,
+default `org-backup-vault`, AWS managed key, retained on stack deletion) in
+every Workloads-OU account (`create_member_backup_vault`, default `true`).
+
+Manual steps:
+
+1. If you renamed aws-backup `vault_name`, set the same value in
+   aws-organization `member_backup_vault_name`.
+2. If a member account already has a vault of that name (created by hand or
+   another tool), the stack instance fails to create it. Either delete the
+   empty vault first, or set `create_member_backup_vault = false` and keep
+   managing it yourself.
+3. Apply `aws-organization`. The StackSet updates every existing stack
+   instance in place.
+
 #### Suspended deny-all and Sandbox guard SCPs (aws-organization)
 
 Two SCPs are created and attached by default, but only when the `Suspended` /
@@ -456,6 +476,34 @@ audit findings before you set `state = "enabled"`. Set `state = "unmanaged"` to
 leave the setting out of the policy.
 
 ### GCP
+
+#### Internet egress route for Cloud NAT (gcp-network-hub, gcp-workload-<env>)
+
+**Behaviour change.** `tiered-vpc` creates every VPC with
+`delete_default_routes_on_create = true`, and nothing added a route back, so
+Public Cloud NAT (which only uses routes whose next hop is the default internet
+gateway) had no path to the internet. `net-hub` and `net-spoke` now set the new
+`tiered-vpc` input `enable_internet_egress_route = var.nat.enabled`, which
+creates `<network>-egress-internet` (`0.0.0.0/0`, next hop
+`default-internet-gateway`, priority 1000). The tier firewall still governs
+egress; the database tier still denies it.
+
+Manual steps:
+
+1. Review the plan on `gcp-network-hub` and each `gcp-workload-<env>`: one new
+   `google_compute_route` per network with NAT on.
+2. If you added your own default route out of band, import it to
+   `module.<network>.google_compute_route.internet_egress[0]` or remove it
+   first, so the two do not overlap.
+3. If a network must stay without internet egress, set `nat.enabled = false`.
+
+#### IAP TCP forwarding through the hub firewall policy (gcp-network-hub)
+
+The hub hierarchical policy denied tcp 22/3389 from `0.0.0.0/0` at priority 500.
+Hierarchical rules run before VPC rules and a match stops evaluation, so it also
+blocked IAP (`35.235.240.0/20`). A priority-400 `goto_next` rule for the IAP
+range now hands those flows to the VPC firewall, where the `tiered-vpc` IAP rule
+decides them. No manual step; review the plan on `gcp-network-hub`.
 
 #### google / google-beta provider 8.x (every GCP workspace)
 

@@ -11,6 +11,18 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
 
 ## OPEN — validate before relying on
 
+- **GCP Cloud NAT egress route is mock-tested only.** `net-hub` / `net-spoke`
+  now add a `0.0.0.0/0` route to the default internet gateway when NAT is on
+  (`tiered-vpc` deletes the default route at creation). Confirm in the sandbox
+  that a VM with no external IP in the private tier reaches the internet through
+  Cloud NAT, and that the database tier still cannot.
+- **IAP through the hub hierarchical policy is mock-tested only.** Confirm in
+  the sandbox that `gcloud compute ssh --tunnel-through-iap` reaches a
+  private-tier VM, and that SSH from any other source is still denied.
+- **Member-account backup vault first apply is unproven.** Confirm that the
+  updated Backup service-role StackSet creates `org-backup-vault` in a
+  Workloads-OU account, and that the next daily BACKUP_POLICY job completes.
+
 - **Vercel `resource_config` first apply is unproven.** `modules/vercel/project` now sets
   `resource_config.function_default_regions` instead of the deprecated
   `serverless_function_region`. Confirm in the sandbox that the update is in place and that the
@@ -445,7 +457,10 @@ AWS:
   points to one region; there is no `copy_actions` stanza or Logically
   Air-Gapped destination vault. Latest AWS Backup guidance makes cross-region /
   cross-account copy the resilience baseline. Add a `copy_actions` destination +
-  second-region vault (needs a real apply). Ref:
+  second-region vault (needs a real apply). Member-account vaults now exist
+  (aws-organization `create_member_backup_vault`), but they use the AWS managed
+  key and nothing copies their recovery points to the backup account's locked
+  vault, so backups still share the workload account's blast radius. Ref:
   <https://aws.amazon.com/blogs/storage/aws-backup-2025-year-in-review-advancing-recovery-resilience/>
 - **A6 — log-analytics primary lags the June-2026 SRA** (MEDIUM, SAFE-DOC done /
   re-plumb BEHAVIOR-CHANGING). The June-2026 SRA names **CloudWatch Unified Data
