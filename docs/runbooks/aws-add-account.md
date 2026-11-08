@@ -23,17 +23,19 @@ aws:
     payments_prod: {email: aws+payments-prod@example.com, ou: Prod}   # placed under Workloads/Prod
   workload_environments:
     # ...existing...
-    payments_prod: {account_key: payments_prod}
+    payments-prod: {account_key: payments_prod}   # env key: hyphens, not underscores
 ```
 
-That single edit drives three roots. `aws-organization` vends the account and derives its OIDC trust binding (`payments_prod` → `aws-workload-payments_prod`). tfc-admin creates the `aws-workload-payments_prod` workspace with `workload_account_key = "payments_prod"`. `aws-workload` reads the same mapping. Without a binding, the account gets only the OIDC provider and no roles.
+The `workload_environments` key is the environment name: `aws-workload` accepts only lowercase letters, digits and hyphens there (`^[a-z][a-z0-9-]{0,30}$`), so use `payments-prod`. The account key (`payments_prod`) may keep its underscore.
+
+That single edit drives three roots. `aws-organization` vends the account and derives its OIDC trust binding (`payments_prod` → `aws-workload-payments-prod`). tfc-admin creates the `aws-workload-payments-prod` workspace with `workload_account_key = "payments_prod"`. `aws-workload` reads the same mapping. Without a binding, the account gets only the OIDC provider and no roles.
 
 If `aws-organization` sets `workload_accounts` or `tfc_workspace_bindings` **explicitly** (tfvars or a TFC variable), the explicit value wins over the file. Add the entry there instead, keeping the foundational defaults:
 
 ```hcl
 tfc_workspace_bindings = {
   # ...existing (the variable default lists the foundational bindings — keep them)...
-  payments_prod = { workspaces = ["aws-workload-payments_prod"] }
+  payments_prod = { workspaces = ["aws-workload-payments-prod"] }
 }
 ```
 
@@ -54,7 +56,7 @@ terraform -chdir=envs/aws/organization plan   # local read-only check
 # then apply via the aws-organization TFC workspace
 ```
 
-The apply creates the account and places it in the OU. It also updates the `tfc-oidc-baseline` StackSet, so the new account gets the OIDC provider and its `tfc-plan` / `tfc-apply` roles. Each role trusts only `organization:<tfc_organization>:project:<tfc_project>:workspace:aws-workload-payments_prod:run_phase:<plan|apply>`.
+The apply creates the account and places it in the OU. It also updates the `tfc-oidc-baseline` StackSet, so the new account gets the OIDC provider and its `tfc-plan` / `tfc-apply` roles. Each role trusts only `organization:<tfc_organization>:project:<tfc_project>:workspace:aws-workload-payments-prod:run_phase:<plan|apply>`.
 
 > If the account's OU was not already a StackSet target, the apply adds a stack instance for that OU. Otherwise auto-deployment creates the stack when the account joins the OU. In both cases, check that the stack instance is `CURRENT` before Step 4: CloudFormation console, StackSets, `tfc-oidc-baseline`, Stack instances.
 
@@ -69,19 +71,19 @@ terraform -chdir=envs/aws/organization output -json tfc_apply_role_arns
 
 ## Step 3 — Create the TFC workspace and wire its run role (tfc-admin)
 
-`envs/tfc-admin` creates and wires the workspace (see the decision section in [`aws-bootstrap.md`](aws-bootstrap.md#who-creates-the-downstream-workspaces-decision)). It already knows the environment from `aws.workload_environments` (Step 1). An explicit tfc-admin `environments` variable overrides the config file; if you set one, add `payments_prod = { aws_account_key = "payments_prod" }` to it. Make sure `aws_organization_outputs_from_tfc = true`.
+`envs/tfc-admin` creates and wires the workspace (see the decision section in [`aws-bootstrap.md`](aws-bootstrap.md#who-creates-the-downstream-workspaces-decision)). It already knows the environment from `aws.workload_environments` (Step 1). An explicit tfc-admin `environments` variable overrides the config file; if you set one, add `payments-prod = { aws_account_key = "payments_prod" }` to it. Make sure `aws_organization_outputs_from_tfc = true`.
 
-Re-apply tfc-admin. It creates `aws-workload-payments_prod` (VCS, working directory `envs/aws/workload`, triggers, remote-state access to `aws-organization` / `aws-network` / `aws-security`) and sets:
+Re-apply tfc-admin. It creates `aws-workload-payments-prod` (VCS, working directory `envs/aws/workload`, triggers, remote-state access to `aws-organization` / `aws-network` / `aws-security`) and sets:
 
 | Variable | Kind | Value |
 |---|---|---|
-| `environment` | terraform | `payments_prod` (from the workspace name) |
+| `environment` | terraform | `payments-prod` (from the workspace name) |
 | `workload_account_key` | terraform | `payments_prod` (from `aws.workload_environments[*].account_key`) |
 | `TFC_AWS_PROVIDER_AUTH` | env | `true` |
 | `TFC_AWS_PLAN_ROLE_ARN` | env | `tfc_plan_role_arns["payments_prod"]` |
 | `TFC_AWS_APPLY_ROLE_ARN` | env | `tfc_apply_role_arns["payments_prod"]` |
 
-Shared inputs (`landing_zone_name`, `tfc_organization`, region, tags) come from `config/landing-zone.yaml`. Put the workspace's other Terraform inputs (`kms_key_arn`, …) in the committed `config/tfc-workspaces.yaml` under `aws-workload-payments_prod`, because VCS-driven runs get no local tfvars. Leave `assume_role_arn` unset (`null`), so the provider uses the dynamic credentials directly with no role hop. Speculative PR plans then run as the read-only `tfc-plan` role.
+Shared inputs (`landing_zone_name`, `tfc_organization`, region, tags) come from `config/landing-zone.yaml`. Put the workspace's other Terraform inputs (`kms_key_arn`, …) in the committed `config/tfc-workspaces.yaml` under `aws-workload-payments-prod`, because VCS-driven runs get no local tfvars. Leave `assume_role_arn` unset (`null`), so the provider uses the dynamic credentials directly with no role hop. Speculative PR plans then run as the read-only `tfc-plan` role.
 
 **Trust:** nothing to do by hand. The roles already trust exactly this workspace name, because of the Step 1 binding. The workspace name must match the binding character for character, and the binding's project (`tfc_project`, default `landing-zone-aws`, matching tfc-admin) must match the workspace's project.
 
@@ -94,7 +96,7 @@ For a **foundational** account, use the corresponding key (`security_tooling`, `
 Apply the relevant layer root for the new account. For a workload account:
 
 ```bash
-export TF_WORKSPACE=aws-workload-payments_prod
+export TF_WORKSPACE=aws-workload-payments-prod
 terraform -chdir=envs/aws/workload plan   # read-only local check; apply via TFC
 ```
 
@@ -115,7 +117,7 @@ This stands up the env's spoke VPC, its TGW attachment, workload roles, and the 
 aws:
   network:
     spoke_attachments:
-      payments_prod: {attachment_id: tgw-attach-0123456789abcdef0, segment: prod}   # segment: prod | nonprod
+      payments-prod: {attachment_id: tgw-attach-0123456789abcdef0, segment: prod}   # segment: prod | nonprod
 ```
 
 Then apply `aws-network`. It accepts the attachment, associates it with the `prod` / `nonprod` route table (whose `0.0.0.0/0` goes to inspection) and propagates the spoke CIDR into the inspection table, so egress replies and on-premises traffic reach it (see [network topology](../architecture/aws-landing-zone.md#network-topology)). Set `accept: false` for an attachment that is already accepted.
