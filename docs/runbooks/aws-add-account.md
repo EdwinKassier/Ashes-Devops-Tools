@@ -20,7 +20,7 @@ Edit the committed `config/landing-zone.yaml`. For a **workload** account, add a
 aws:
   workload_accounts:
     # ...existing...
-    payments_prod: {email: aws+payments-prod@example.com, ou: Prod}   # placed under Workloads/Prod
+    payments_prod: {email: aws+payments-prod@example.com, ou: Workloads/Prod}   # child OUs are keyed by path
   workload_environments:
     # ...existing...
     payments-prod: {account_key: payments_prod}   # env key: hyphens, not underscores
@@ -43,7 +43,7 @@ Rules:
 
 - **Root email must be globally unique** across all AWS accounts, ever. A reused email (including one freed by a closed account) will fail. Use a `+` alias on a monitored inbox.
 - The **map key is the account name** — it becomes the key in the `account_ids` / `account_role_arns` outputs and the suffix of the workspace (`aws-workload-<key>`). Keep it stable; renaming it destroys and recreates the account.
-- `ou` places the account. Workload accounts go under the `Prod` / `NonProd` child OUs; foundational accounts under `Security` / `Infrastructure` (see [`aws-landing-zone.md`](../architecture/aws-landing-zone.md#account--ou-model)).
+- `ou` places the account. Workload accounts go under the `Prod` / `NonProd` child OUs, written as their full path (`Workloads/Prod`, `Workloads/NonProd`), because `aws-organization` keys child OUs by path; foundational accounts under `Security` / `Infrastructure` (see [`aws-landing-zone.md`](../architecture/aws-landing-zone.md#account--ou-model)).
 
 ---
 
