@@ -38,6 +38,11 @@ run "defaults_build_a_shared_vpc_hub" {
   }
 
   assert {
+    condition     = length(module.network.internet_egress_route) == 1 && module.network.internet_egress_route[0].next_hop_gateway == "default-internet-gateway"
+    error_message = "With Cloud NAT on, the hub must get a 0.0.0.0/0 route to the default internet gateway (tiered-vpc deletes the default route)."
+  }
+
+  assert {
     condition     = output.private_service_access_range_name == "google-managed-services" && length(module.private_service_connect) == 1
     error_message = "PSA and PSC must be on by default in the hub."
   }
@@ -200,6 +205,11 @@ run "optional_services_can_be_disabled" {
   assert {
     condition     = length(module.integrated_nat) == 0 && output.nat_ip == null && length(module.private_service_access) == 0 && length(module.private_service_connect) == 0
     error_message = "NAT, PSA and PSC must each be droppable."
+  }
+
+  assert {
+    condition     = length(module.network.internet_egress_route) == 0
+    error_message = "nat.enabled = false must not create the internet egress route."
   }
 }
 

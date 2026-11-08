@@ -160,6 +160,28 @@ module "database_subnets" {
 }
 
 # =============================================================================
+# INTERNET EGRESS ROUTE (opt-in; for Cloud NAT)
+# =============================================================================
+
+# The VPC is created with delete_default_routes_on_create = true, so it has no
+# route to the internet. Public Cloud NAT only uses routes whose next hop is the
+# default internet gateway, so a network with Cloud NAT needs this route back.
+# The tier firewall still decides which traffic may leave (the database tier
+# denies all egress). The net-hub and net-spoke compositions turn this on
+# whenever they create Cloud NAT. Google APIs keep using the PSC endpoint.
+resource "google_compute_route" "internet_egress" {
+  count = var.enable_internet_egress_route ? 1 : 0
+
+  project          = var.project_id
+  name             = "${var.name}-egress-internet"
+  network          = module.vpc.self_link
+  description      = "Default route to the internet gateway for Cloud NAT egress (deleted at VPC creation)."
+  dest_range       = "0.0.0.0/0"
+  next_hop_gateway = "default-internet-gateway"
+  priority         = 1000
+}
+
+# =============================================================================
 # ADDITIONAL REGIONS (opt-in; one regional subnet per tier per region)
 # =============================================================================
 #

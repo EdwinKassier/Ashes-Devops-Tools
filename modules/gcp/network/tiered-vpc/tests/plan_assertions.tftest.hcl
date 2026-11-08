@@ -188,3 +188,31 @@ run "second_region_subnets" {
     error_message = "The primary zonal layout must be unchanged by an additional region."
   }
 }
+
+run "no_internet_route_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(google_compute_route.internet_egress) == 0
+    error_message = "The VPC must have no internet route unless enable_internet_egress_route is set."
+  }
+}
+
+run "internet_route_for_cloud_nat" {
+  command = plan
+
+  variables {
+    enable_internet_egress_route = true
+  }
+
+  assert {
+    condition = (
+      length(google_compute_route.internet_egress) == 1 &&
+      google_compute_route.internet_egress[0].name == "mock-vpc-egress-internet" &&
+      google_compute_route.internet_egress[0].dest_range == "0.0.0.0/0" &&
+      google_compute_route.internet_egress[0].next_hop_gateway == "default-internet-gateway" &&
+      google_compute_route.internet_egress[0].priority == 1000
+    )
+    error_message = "enable_internet_egress_route must plan a priority-1000 0.0.0.0/0 route to the default internet gateway, named <name>-egress-internet."
+  }
+}

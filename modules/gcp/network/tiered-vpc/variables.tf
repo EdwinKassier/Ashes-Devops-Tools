@@ -207,3 +207,10 @@ variable "firewall_policy_enforcement_order" {
     error_message = "firewall_policy_enforcement_order must be null, BEFORE_CLASSIC_FIREWALL or AFTER_CLASSIC_FIREWALL."
   }
 }
+
+variable "enable_internet_egress_route" {
+  description = "Create a 0.0.0.0/0 route to the default internet gateway. The VPC is created without default routes, and Public Cloud NAT only uses routes whose next hop is the default internet gateway, so enable this for any network that has Cloud NAT. The tier firewall still governs egress. The net-hub and net-spoke compositions set it from nat.enabled."
+  type        = bool
+  default     = false
+  nullable    = false
+}

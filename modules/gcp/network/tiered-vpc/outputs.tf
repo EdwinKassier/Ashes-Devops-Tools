@@ -72,3 +72,12 @@ output "firewall_policy_rules" {
     }
   }
 }
+
+output "internet_egress_route" {
+  description = "The 0.0.0.0/0 route to the default internet gateway, as a list of zero or one objects (name, dest_range, next_hop_gateway); empty unless enable_internet_egress_route is set."
+  value = [for r in google_compute_route.internet_egress : {
+    name             = r.name
+    dest_range       = r.dest_range
+    next_hop_gateway = r.next_hop_gateway
+  }]
+}
