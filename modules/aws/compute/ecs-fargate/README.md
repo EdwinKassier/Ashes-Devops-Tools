@@ -146,3 +146,7 @@ module "orders_api" {
   enable_autoscaling = true
 }
 ```
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.
