@@ -18,7 +18,6 @@ Common variants:
 - "Design the transcoding pipeline. How do you scale it and retry it?"
 - "How does adaptive bitrate work, and where does the CDN fit?"
 - "Your CDN bill is the biggest line item. What do you do?"
-- "Design YouTube": the same core, plus recommendations you can leave out.
 
 ## The two-minute answer
 
@@ -34,8 +33,8 @@ manifests, to a **serving** bucket under a versioned path. The player picks a
 rendition per segment from its measured bandwidth. A **CDN** serves the
 immutable segments from a private bucket behind signed cookies, with long TTLs
 and an origin shield, so a popular video is fetched from storage about once.
-CDN egress and transcode minutes dominate cost, so the levers are hit ratio
-and transcoding only what will be watched.
+CDN egress, transcode minutes and compounding storage dominate cost, so the
+levers are hit ratio, transcoding only what will be watched, and tiering.
 
 ```mermaid
 graph LR
@@ -60,7 +59,7 @@ Questions to ask, with the answers assumed here:
 | Viewing volume? | 20 million views a day, average 4 minutes watched. |
 | Devices? | iOS, Android, web and smart TVs, so HLS and DASH both. |
 | Time to playable? | A short video is watchable within a few minutes of upload; the full ladder can follow. |
-| Who can watch? | Public, unlisted and private videos. Private needs per-viewer authorisation. DRM is out of scope. |
+| Who can watch? | Public, unlisted and private (per-viewer authorisation). No DRM. |
 | Regions and durability? | One home region; viewers worldwide via CDN. Sources are never lost; renditions can be regenerated. |
 
 Non-functional: playback starts within 2 seconds at p95 on broadband; upload
@@ -76,9 +75,9 @@ peak. One source is 300 s × 10 Mbps = 3,000 Mb = **375 MB**. Daily ingest is
 37.5 TB, an average of 3.5 Gbps and about 10 Gbps at peak, so nothing of ours
 proxies it.
 
-**Upload time decides the protocol.** 375 MB takes 5 minutes on a 10 Mbps
-uplink and 25 minutes on a 2 Mbps mobile uplink. A 25-minute single request
-will not survive a train tunnel, so resumable upload is required.
+**Upload time decides the protocol.** 375 MB takes 25 minutes on a 2 Mbps
+mobile uplink. One 25-minute request will not survive a train tunnel, so
+upload must be resumable.
 
 **Parts.** S3 parts are 5 MiB to 5 GiB, at most 10,000 per upload, and an object
 may be up to 48.8 TiB
@@ -109,7 +108,8 @@ is **about 1,050 concurrent jobs** at peak, 350 on average.
 
 **Storage.** The ladder's rungs below total about 11.5 Mbps, so the
 renditions of one 5-minute video are about 431 MB. With the source, that is
-about 806 MB per video, **81 TB a day, about 2.4 PB a month**, compounding.
+about 806 MB per video, **81 TB a day, about 2.4 PB a month**, compounding to
+**about 29 PB after a year** (see [Cost](#cost)).
 
 **Objects written.** 6-second segments are 50 per rendition, so about 256
 objects per video with playlists: 25.6 million a day, an average of 300 writes
@@ -149,10 +149,9 @@ without an S3 Bucket Key is a KMS `Decrypt` (see [Cost](#cost)).
 
 ### Events
 
-`VideoUploaded {video_id, bucket, key, etag_or_generation, size}` comes from the
-storage event; `TranscodeCompleted` and `TranscodeFailed {video_id, job_id,
-outputs[]}` from the transcoder. The dispatcher emits `VideoReady` or
-`VideoFailed` for notifications and search.
+`VideoUploaded` comes from the storage event, `TranscodeCompleted` and
+`TranscodeFailed` from the transcoder; the dispatcher emits `VideoReady` or
+`VideoFailed`.
 
 ### Key tables and object layout
 
@@ -190,10 +189,9 @@ graph TB
 
 ### Write path: upload to playable
 
-1. `POST /v1/videos`: upload-api inserts the row in `UPLOADING`, starts the
-   multipart upload or resumable session, and returns its handle.
-2. The client uploads chunks directly to the raw bucket and resumes after any
-   failure.
+1. `POST /v1/videos`: upload-api inserts the row in `UPLOADING` and returns
+   the multipart upload or session handle.
+2. The client uploads chunks directly to the raw bucket.
 3. On AWS the client calls `complete`; on GCP the last chunk finalises the
    object. Storage emits an object-created event onto the queue.
 4. The dispatcher claims the video with a conditional update and submits one
@@ -203,9 +201,8 @@ graph TB
 
 ### Read path: playback
 
-The player gets signed cookies and the manifest URL from
-`POST /v1/videos/{id}/playback`, then fetches playlists and segments from the
-CDN. Misses go to a regional cache, then the origin shield, then the bucket.
+The player gets signed cookies and the manifest URL from `playback`, then
+fetches segments from the CDN; misses go through the origin shield.
 
 ## Deep dives
 
@@ -219,14 +216,11 @@ CDN. Misses go to a regional cache, then the origin shield, then the bucket.
 | One presigned PUT | Simplest client. | No resume. S3 suggests multipart from about 100 MB. |
 | **S3 multipart, presigned parts** (chosen on AWS) | Parallel, resumable per part, bytes bypass us. | More client logic; abandoned uploads leave billable parts. |
 | **Cloud Storage resumable session** (chosen on GCP) | One URI, offset-based resume, no completion call. | Sequential chunks; the URI is a bearer credential. |
-| tus server (open protocol) | Cloud-neutral clients. | We run the byte path again. |
 
-**How resume works on AWS.** The client keeps `video_id`, `upload_id` and the
-ETag of each acknowledged part. After a failure the resume endpoint calls
-`ListParts`, and the client re-sends only missing parts. Upload 4–8 parts in
-parallel. A drop loses only the parts in flight: on a 2 Mbps link, 4–8
-parallel 16 MiB parts take about 4.5–9 minutes each, so use smaller parts on
-slow links. Send a checksum with each part; SigV4 presigned URLs support CRC32C,
+**How resume works on AWS.** The client keeps `upload_id` and each part's
+ETag. After a failure the resume endpoint calls `ListParts`, and the client
+re-sends only missing parts, 4–8 in parallel. On a 2 Mbps link eight 16 MiB parts take
+about 9 minutes and a drop loses them all, so use smaller parts there. Send a checksum with each part; SigV4 presigned URLs support CRC32C,
 SHA-256 and others
 ([AWS docs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html), checked 2026-11).
 
@@ -251,13 +245,14 @@ far Cloud Storage got. The session URI lets anyone upload without further
 authentication and expires after one week
 ([Google Cloud docs](https://docs.cloud.google.com/storage/docs/performing-resumable-uploads),
 [resumable uploads](https://docs.cloud.google.com/storage/docs/resumable-uploads),
-checked 2026-11). Treat it as a secret: never logged, encrypted at rest.
+checked 2026-11). Treat it as a secret.
 
-**Abandoned uploads cost money.** S3 keeps incomplete multipart parts until
-the upload is completed or aborted. A lifecycle rule with
+**Abandoned uploads cost money.** S3 keeps incomplete parts until aborted. A
+lifecycle rule with
 `AbortIncompleteMultipartUpload` removes them after N days
 ([AWS docs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/mpu-abort-incomplete-mpu-lifecycle-config.html), checked 2026-11).
-Cloud Storage has the same lifecycle action for incomplete multipart uploads
+Cloud Storage's equivalent action covers XML API multipart uploads only, not
+the resumable sessions used here
 ([Google Cloud docs](https://docs.cloud.google.com/storage/docs/lifecycle), checked 2026-11).
 Whether bytes of an expired, never-finalised resumable session are billed is
 not documented; **verify before relying on** it.
@@ -270,9 +265,8 @@ see [Build it here](#build-it-here).
 
 ### The transcoding pipeline
 
-**Shape.** Storage event → queue → dispatcher → transcoder → completion event.
-The queue is the buffer: it absorbs peaks above the concurrency quota and
-gives retries and a DLQ.
+**Shape.** Storage event → queue → dispatcher → transcoder. The queue absorbs
+peaks above the quota and gives retries and a DLQ.
 
 **Exactly-once claim, at-least-once events.** S3 event notifications are
 designed to be delivered at least once
@@ -313,10 +307,9 @@ the 5-a-second MediaConvert default, and a Transcoder API job prices each
 elementary stream once even when HLS and DASH both package it
 ([Google Cloud docs](https://cloud.google.com/transcoder/pricing), checked 2026-11).
 
-**Fast start, then full ladder.** Submit a cheap first job (360p and 720p),
-mark the video `READY` when it lands, and write the full ladder later as a new
-`version`. That doubles CreateJob calls to 7 a second at peak, so raise the
-quota or run the second job only for videos that get views (see [Cost](#cost)).
+**Fast start, then full ladder.** A cheap first job (360p and 720p) makes the
+video `READY`; the full ladder follows as a new `version`, only for videos
+that get views (see [Cost](#cost)), or CreateJob doubles to 7 a second.
 
 **Managed or self-run encoders.**
 
@@ -325,29 +318,25 @@ quota or run the second job only for videos that get views (see [Cost](#cost)).
 | **Managed transcoder** (chosen) | No encoder fleet; per-minute billing; completion events; automated ABR on MediaConvert. | Quotas (20 concurrent jobs on Transcoder by default); per-minute list prices. |
 | FFmpeg on containers (GKE Autopilot, ECS) | Full control, spot capacity; repo has [`modules/gcp/compute/gke-autopilot`](../../modules/gcp/compute/gke-autopilot/). | We own codec bugs, scaling, retries and packaging. |
 
-**Failure handling.** Probe input first and mark corrupt files `FAILED` without
+**Failure handling.** Probe input first and fail corrupt files without
 retrying. Retry transient failures 3 times with backoff, then dead-letter.
-Moderation and thumbnails consume `VideoReady` separately.
 
-**Where it breaks.** Concurrency quotas, as estimated. The job state event is
-also at-least-once, so `READY` is a conditional update from `PROCESSING` for
-the matching `version`. A job stuck in `SUBMITTED` usually means a full queue,
-which is the [runbook](#runbook) scenario.
+**Where it breaks.** Concurrency quotas, as estimated. Job state events are
+also at-least-once, so `READY` is a conditional update for the matching
+`version`. A job stuck in `SUBMITTED` is the [runbook](#runbook) scenario.
 
 ### Adaptive bitrate and the CDN
 
-**How ABR works.** The source is encoded into a **ladder** of renditions, each
-cut into short segments that start on a keyframe. A **multivariant playlist**
-(HLS) or **MPD** (DASH) lists the renditions with their bandwidths. The player
-measures throughput and buffer level and picks the rendition for each next
-segment. ABR is client logic over static files, so a CDN serves all of it.
+**How ABR works.** The source is encoded into a **ladder** of renditions cut
+into keyframe-aligned segments. A **multivariant playlist** (HLS) or **MPD**
+(DASH) lists them; the player picks a rendition per segment from throughput
+and buffer. It is client logic over static files, so a CDN serves all of it.
 
 **Segment and ladder choices.** Apple's HLS authoring spec says the target
 segment duration should be 6 seconds, keyframes every 2 seconds, and each
 segment must start with an IDR frame
 ([Apple docs](https://developer.apple.com/documentation/http-live-streaming/hls-authoring-specification-for-apple-devices), checked 2026-11).
-Shorter segments switch sooner but mean more requests and objects. Our rungs
-come from Apple's example H.264 ladder:
+Our rungs come from Apple's example H.264 ladder:
 
 | Rung | Resolution | Bitrate |
 |---|---|---|
@@ -400,8 +389,7 @@ and CloudFront caches GET responses up to 50 GB
   Cloud CDN coalesces concurrent fills per edge by default
   ([Google Cloud docs](https://docs.cloud.google.com/cdn/docs/caching), checked 2026-11).
 
-**Where it breaks.** The cold long tail misses on every view. Removing a key
-before cookies signed with it expire gives players 403s mid-session.
+**Where it breaks.** The cold long tail misses on every view.
 
 ### Cost
 
@@ -418,40 +406,64 @@ Monthly at our scale, at list prices before discounts.
   in US East (Ohio) as volume rises
   ([AWS pricing](https://aws.amazon.com/mediaconvert/pricing/), checked 2026-11).
   Our ladder is 7 normalised minutes per content minute, 105 million a month:
-  the tiers are graduated monthly thresholds, so the first 20 million cost
-  about $78,000 and the other 85 million at most $0.0038 each: **about
-  $0.4 million or less** (no tier above 20 million is published).
+  the first 20 million cost about $78,000 and the rest at most $0.0038 each:
+  **about $0.4 million or less**.
 
 **Delivery: 54 PB a month.** CloudFront's US price falls from $0.085 per GB
 after the free first TB to $0.020 per GB above 5 PB a month, and origin fetches
 from AWS origins are free
 ([AWS pricing](https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/), checked 2026-11).
-Summing the tiers gives **about $1.1 million a month** ($0.021 per GB blended).
+Summing the tiers gives **about $1.1 million a month** ($0.021 per GB
+blended), a US-only lower bound: worldwide viewers cost more.
 Cloud CDN charges $0.02–$0.20 per GiB of cache egress plus $0.01–$0.04 of
 cache fill
 ([Google Cloud pricing](https://cloud.google.com/cdn/pricing), checked 2026-11):
-the same order of magnitude.
+the same order of magnitude. Google's
+[Media CDN](https://docs.cloud.google.com/media-cdn/docs/overview) is "optimized
+for high-throughput egress workloads, such as streaming video" and reads
+private Cloud Storage buckets with signed cookies (checked 2026-11). It is the
+better GCP edge at 500 Gbps, but needs onboarding through Google Cloud sales
+and has no public list price (**verify before relying on** a rate).
+
+**Storage: 2.4 PB more every month.** S3 Standard in US East is $0.023 per
+GB-month for the first 50 TB, falling to $0.021 above 500 TB; Standard-IA is
+$0.0125 and Glacier Instant Retrieval $0.004
+([AWS pricing](https://aws.amazon.com/s3/pricing/), checked 2026-11). Cloud
+Storage in Iowa is about $0.020 per GiB-month for Standard, $0.010 Nearline
+and $0.004 Coldline
+([Google Cloud pricing](https://cloud.google.com/storage/pricing), checked 2026-11).
+Month 1 holds 2.4 PB, **about $50,000**; month 12 holds 28.8 PB,
+**about $605,000 a month** on S3 Standard ($540,000 on Cloud Storage). That is half
+the CDN bill and still growing; renditions are 53% of it, sources 47%.
 
 **Levers, biggest first.**
 
 1. **Transcode for demand.** Most user videos get few views (check your data).
    Encode 360p and 720p on upload ($0.045 a minute on Transcoder, 57% less)
-   and the full ladder after, say, 100 views.
-2. **Cache hit ratio.** Origin shield, path-only keys, immutable paths.
-3. **Codec for the head.** HEVC or AV1 cut bitrate but need the professional
-   tier; spend it only on the videos that carry most egress.
-4. **Storage classes.** Move sources to S3 Standard-IA (30-day minimum, 128 KB
-   minimum billable size) or Nearline (30-day minimum) after 30 days
+   and the full ladder after, say, 100 views. It cuts storage too: the two
+   fast-start rungs are 126 MB, not 431. If 90% of videos never qualify,
+   month-12 renditions fall from 15.5 PB to 5.6 PB, saving about $205,000 a
+   month.
+2. **Tier sources.** After 30 days move sources to Glacier Instant Retrieval or Coldline (90-day minimums,
+   a per-GB retrieval fee): of 13.5 PB of sources at month 12, the 12.4 PB
+   older than 30 days drop from $0.021 to $0.004, saving about $210,000 a
+   month. Standard-IA or Nearline (30-day minimums) save about half that
    ([AWS docs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/storage-class-intro.html),
    [Google Cloud docs](https://docs.cloud.google.com/storage/docs/storage-classes),
-   checked 2026-11). Intelligent-Tiering ignores objects under 128 KB, and a
-   6-second 145 kbps segment is about 109 KB.
-5. **KMS calls.** S3 Bucket Keys cut SSE-KMS request costs by up to 99%
+   checked 2026-11). With lever 1, month-12 storage is about $190,000.
+3. **Cache hit ratio.** Origin shield, path-only keys, immutable paths.
+4. **Expire cold renditions.** Delete top rungs of long-unwatched videos and
+   re-encode from the source on demand. Intelligent-Tiering will not do it:
+   it ignores objects under 128 KB, and a 6-second 145 kbps segment is about
+   109 KB.
+5. **Codec for the head.** HEVC or AV1 cut bitrate but need the professional
+   tier; spend it only on the videos that carry most egress.
+6. **KMS calls.** S3 Bucket Keys cut SSE-KMS request costs by up to 99%
    ([AWS docs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucket-key.html), checked 2026-11),
    and keep segment reads well under the KMS symmetric request quota of 10,000
    to 100,000 a second per Region
    ([AWS docs](https://docs.aws.amazon.com/kms/latest/developerguide/requests-per-second.html), checked 2026-11).
-6. **Commit.** Both CDNs discount committed volume.
+7. **Commit.** Both CDNs discount committed volume.
 
 ## Trade-offs to defend
 
@@ -460,22 +472,20 @@ the same order of magnitude.
 | Upload path | Direct to storage, resumable | Proxy through API | 10 Gbps of ingest never touches our fleet; per-part resume. | Inline scanning required before bytes are stored. |
 | Pipeline trigger | Storage event → queue → dispatcher | Transcode from the upload API | Buffers peaks over quota, retries, DLQ; no lost uploads. | Very low volume: call the transcoder inline. |
 | Encoders | Managed transcoder | FFmpeg on GKE/ECS | No fleet to run; events and packaging included. | Quota ceilings, or transcode spend past the cost of a team. |
-| Jobs per upload | One job, all rungs | One job per rendition | One CreateJob call; streams priced once. | Very long sources: chunked parallel encode. |
 | Ladder | Fast start + full ladder on demand | Full ladder for every upload | Most spend is on videos nobody watches. | A catalogue where every title is watched (licensed content). |
 | Access control | Signed cookies on a path prefix | Signed URLs per segment | One authorisation per playback session. | Single-file downloads. |
 | Origin protection | Origin shield + coalescing | Edge caches only | One origin fetch per object for a viral video. | Single-region audience. |
+| GCP edge | Media CDN once onboarded | Cloud CDN only | Built for video egress at 500 Gbps. | No sales agreement yet, or far less egress: Cloud CDN, the golden path. |
 
 ## Failure modes and scaling limits
 
 **At ×10 (1 million uploads, 200 million views a day):**
 
 - **Transcoder concurrency fails first:** about 10,000 jobs, ten times
-  MediaConvert's fixed London account cap. Spread across Regions or self-run
-  encoders; transcode-on-demand becomes mandatory.
+  MediaConvert's London cap. Spread across Regions or self-run encoders.
 - **CDN bandwidth** reaches 5 Tbps: negotiated commitments, or multi-CDN with
   the shield as the common origin.
-- **Object writes** reach 9,000 a second, too many for one Cloud Storage
-  bucket unless renditions are byte-range single files.
+- **Object writes** reach 9,000 a second: use byte-range single files.
 
 **At ×100:** a dedicated encoding fleet with per-title ladders, regional
 processing, and deleting top rungs of long-unwatched videos.
@@ -487,7 +497,7 @@ processing, and deleting top rungs of long-unwatched videos.
 | upload-api | No new uploads start | Uploads only; in-flight chunks keep going to storage. |
 | Queue, dispatcher or transcoder | Videos stay `PROCESSING` | New content only; events wait in the queue. |
 | Serving bucket | Misses fail | Cold videos; hot ones serve from cache. |
-| CDN signing key | 403 on new sessions | All private playback: the most visible failure. |
+| CDN signing key | 403 on new sessions | All private playback. |
 | videos DB | No status or playback authorisation | Everything except already-authorised sessions. |
 
 ## AWS and GCP mapping
@@ -498,16 +508,11 @@ processing, and deleting top rungs of long-unwatched videos.
 | Raw and serving storage | S3 | Cloud Storage | S3 resumes by part; Cloud Storage by byte offset in one session. Maximum object 48.8 TiB versus 5 TiB ([Google Cloud docs](https://docs.cloud.google.com/storage/quotas), checked 2026-11). |
 | Upload event | S3 → EventBridge → SQS | Pub/Sub notification on the bucket | GCS notifications need the Cloud Storage service agent to hold `roles/pubsub.publisher` on the topic ([Google Cloud docs](https://docs.cloud.google.com/storage/docs/reporting-changes), checked 2026-11). |
 | Transcoder | Elemental MediaConvert, with an IAM role passed per job | Transcoder API, through service agent `gcp-sa-transcoder` | 1,000–2,000 versus 20 concurrent jobs by default. The Transcoder agent can reach every bucket in the project by default; narrow it to per-bucket Storage Object Admin ([Google Cloud docs](https://cloud.google.com/transcoder/docs/access-control), checked 2026-11). |
-| CDN and edge auth | CloudFront + Origin Shield; key-group signed cookies | Cloud CDN on a backend bucket; HMAC-signed cookies | CloudFront reads S3 through OAC with RSA or ECDSA keys; Cloud CDN reads through its fill account with shared secrets. |
+| CDN and edge auth | CloudFront + Origin Shield; key-group signed cookies | Cloud CDN on a backend bucket (golden path), or Media CDN for video at scale; signed cookies | CloudFront reads S3 through OAC with RSA or ECDSA keys; Cloud CDN uses HMAC shared secrets. Media CDN needs sales onboarding. |
 
-Two differences change the design:
-
-- **Transcoder quota.** On GCP, plan the quota increase or a self-run fleet
-  from day one; on AWS, plan queues and Regions around a non-adjustable
-  account cap.
-- **Data perimeter.** VPC Service Controls blocks internet access to
-  perimeter buckets by network origin. On AWS the bucket policy and OAC carry
-  the boundary.
+The transcoder quota changes the design most: on GCP plan the increase or a
+self-run fleet from day one; on AWS plan queues and Regions around a fixed
+account cap.
 
 ## Build it here
 
@@ -633,10 +638,17 @@ resource "aws_sqs_queue" "transcode" {
   visibility_timeout_seconds = 120
   kms_master_key_id          = local.kms_key_arn
   redrive_policy = jsonencode({
-    deadLetterTargetArn = aws_sqs_queue.transcode_dlq.arn # same shape, 14-day retention
+    deadLetterTargetArn = aws_sqs_queue.transcode_dlq.arn
     maxReceiveCount     = 5
   })
   tags = { Service = "transcode" }
+}
+
+resource "aws_sqs_queue" "transcode_dlq" {
+  name                      = "${local.environment}-transcode-dlq"
+  message_retention_seconds = 1209600 # 14 days
+  kms_master_key_id         = local.kms_key_arn
+  tags                      = { Service = "transcode" }
 }
 
 resource "aws_cloudwatch_event_target" "transcode" {
@@ -667,6 +679,16 @@ resource "aws_cloudfront_origin_access_control" "media" {
   signing_protocol                  = "sigv4"
 }
 
+resource "aws_cloudfront_public_key" "media" {
+  name        = "${local.environment}-media-cookies"
+  encoded_key = file("${path.module}/keys/media-cookies.pub.pem") # private half: Secrets Manager
+}
+
+resource "aws_cloudfront_key_group" "media" {
+  name  = "${local.environment}-media"
+  items = [aws_cloudfront_public_key.media.id]
+}
+
 resource "aws_cloudfront_distribution" "media" {
   enabled = true
   origin {
@@ -689,14 +711,15 @@ resource "aws_cloudfront_distribution" "media" {
   restrictions {
     geo_restriction { restriction_type = "none" }
   }
-  viewer_certificate { cloudfront_default_certificate = true } # ACM cert for a custom domain
+  viewer_certificate { cloudfront_default_certificate = true } # cookies need a custom domain under the API's, with an ACM cert
   tags = { Service = "media" }
 }
 ```
 
 The serving bucket's policy admits `cloudfront.amazonaws.com` to
-`s3:GetObject` with `AWS:SourceArn` set to this distribution. The key group
-holds the public key; the private key stays in Secrets Manager for upload-api.
+`s3:GetObject` with `AWS:SourceArn` set to this distribution. Cookies
+set by upload-api reach the CDN only if both share a registrable domain (say
+`media.example.com`), so add an alias and certificate before launch.
 
 ### GCP: buckets, the upload notification and the CDN backend
 
@@ -778,12 +801,10 @@ the queue is at its concurrent-job limit
 
 **Triage.**
 
-1. **Volume or failure?** Rising uploads with healthy completions is capacity;
-   flat uploads with falling completions is failure.
+1. **Volume or failure?** Rising uploads with healthy completions is capacity.
 2. **At quota?** MediaConvert concurrent jobs per queue and account; on GCP,
    `RESOURCE_EXHAUSTED` in dispatcher logs.
-3. **Is the dispatcher consuming?** Its tasks or instances, errors, and
-   CreateJob throttling.
+3. **Is the dispatcher consuming?** Errors and CreateJob throttling.
 4. **Are jobs failing?** `AccessDenied` on S3 or KMS means a policy change;
    one input failing repeatedly is a poison video.
 
@@ -793,16 +814,15 @@ the queue is at its concurrent-job limit
    `aws-workload-<env>`, add queues with queue hopping (`hopDestinations` in
    the job), or request the Transcoder increase. Run only fast-start rungs
    until the backlog clears.
-2. **Dispatcher down:** restart or scale it; messages wait in the queue.
+2. **Dispatcher down:** restart or scale it.
 3. **Permissions:** revert through the owning workspace in Terraform Cloud,
    not in the console.
-4. **Poison input:** mark it `FAILED` and let it dead-letter.
+4. **Poison input:** mark it `FAILED`.
 
-**Verification.** Queue age under 2 minutes, the `PROCESSING` count at
-baseline, and a test upload reaching `READY`.
+**Verification.** Queue age under 2 minutes and a test upload reaching
+`READY`.
 
-**Follow-up.** Alert at 70% of the transcoder quota, plan quotas against the
-upload forecast, and game-day a full queue.
+**Follow-up.** Alert at 70% of the transcoder quota and game-day a full queue.
 
 ### Playback returns 403 after a key rotation
 
@@ -829,15 +849,11 @@ removal on "cookie lifetime has passed".
 ### Likely follow-ups
 
 - **"Why not upload through your API?"** 10 Gbps through your fleet, and every
-  restart loses progress. Storage takes the bytes; you issue the permission.
-- **"How does the player choose quality?"** From measured throughput and
-  buffer, per segment. The server only hosts files.
-- **"A video goes viral. What breaks?"** Nothing at origin: immutable cached
-  segments, and the shield collapses misses. The CDN quota and bill grow.
-- **"How do you stop hot-linking?"** Short-lived signed cookies scoped to the
-  video's path prefix.
-- **"How do you cut cost?"** Transcode what gets watched, raise the hit ratio,
-  better codecs on the head, tier storage.
+  restart loses progress.
+- **"A video goes viral. What breaks?"** Nothing at origin: the shield
+  collapses misses. The CDN quota and bill grow.
+- **"How do you cut cost?"** Transcode what gets watched, tier sources (storage
+  compounds to about $605,000 a month in a year), and raise the hit ratio.
 
 ### Classic mistakes
 
@@ -853,5 +869,4 @@ removal on "cookie lifetime has passed".
 - [Apple HLS authoring specification](https://developer.apple.com/documentation/http-live-streaming/hls-authoring-specification-for-apple-devices)
 - [S3 multipart upload overview](https://docs.aws.amazon.com/AmazonS3/latest/userguide/mpuoverview.html)
 - [Cloud Storage resumable uploads](https://docs.cloud.google.com/storage/docs/resumable-uploads)
-- [CloudFront Origin Shield](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/origin-shield.html)
 - The primer's [service map](00-primer.md#aws-gcp-service-map).
