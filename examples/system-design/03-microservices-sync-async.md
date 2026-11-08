@@ -103,8 +103,8 @@ second at peak, inside the
 [folk rule](00-primer.md#throughput-per-instance-and-per-partition) for one
 relational primary. No sharding at this scale.
 
-**Reads.** About 10,000 a second at peak, served by one lookup in a read model
-rather than a join across services.
+**Reads.** About 10,000 a second at peak, each one read-model lookup rather
+than a join across services.
 
 **Sync budget.** 300 ms p99: about 30 ms of gateway and TLS, 50 ms for the
 orders transaction, and a hard 50 ms timeout for one read to inventory. That
@@ -146,8 +146,9 @@ Every event uses one envelope:
 ```
 
 `event_id` is every consumer's deduplication key; `aggregate_version` rises
-by one per change, so consumers can discard stale events; `correlation_id`
-traces the saga. `type` and `schema_version` are copied into message
+by one per change to that producer's aggregate (each producer keeps one per
+order), so it is comparable only with versions from the same producer;
+`correlation_id` traces the saga. `type` and `schema_version` are copied into message
 attributes so the broker can filter without parsing the body.
 
 Event types by producer:
@@ -171,7 +172,7 @@ producer and a subscription per consumer.
 | `outbox` | orders (and every producer) | `id`; partial index on `(created_at) WHERE published_at IS NULL` | Insert in the business transaction; the relay scans unpublished rows oldest first. |
 | `processed_events` | every consumer | `(consumer, event_id)` | Insert in the consumer's transaction; a conflict means "already done". |
 | `reservations` | inventory | `(order_id, sku)` | Created by `StockReservationRequested`, deleted by `StockReleaseRequested`. |
-| `order_view` | order-view | `order_id`; secondary `(customer_id, created_at)` | Upsert per event if `aggregate_version` is newer; list by customer. |
+| `order_view` | order-view | `order_id`; secondary `(customer_id, created_at)` | A version column per producer (`order_version`, `payment_version`, ...); an event updates only its producer's columns, if newer. |
 
 ## High-level design
 
@@ -195,14 +196,13 @@ graph TB
 ```
 
 The payments and inventory topics fan out the same way, to orders and
-order-view; those subscriptions are omitted for readability.
+order-view; those subscriptions are omitted.
 
 ### Write path: placing an order
 
 1. The client sends `POST /orders` with an `Idempotency-Key`.
 2. orders calls `GET /inventory/availability` with a 50 ms timeout. "No stock"
-   rejects at once; a timeout does not, and the reservation decides. The call
-   improves UX; it is not on the correctness path.
+   rejects at once; a timeout does not, and the reservation decides.
 3. In **one local transaction**, orders inserts the order in `PENDING` with
    `version = 1` and two outbox rows: `OrderPlaced` and
    `StockReservationRequested`. It commits and returns `202` with the order ID.
@@ -219,9 +219,9 @@ order-view; those subscriptions are omitted for readability.
 
 ### Read path: order history
 
-order-view upserts one denormalised row per order from the events, ignoring
-any not newer than the row's `aggregate_version`. History is one indexed
-query; no request fans out.
+order-view upserts one denormalised row per order. An event updates only its
+producer's columns, and only if newer than that producer's stored version: one
+shared version would drop shipping's version 2 behind orders' version 5. History is one indexed query; no request fans out.
 
 ## Deep dives
 
@@ -247,7 +247,6 @@ Ask four questions of every interaction:
 | Client places order | Sync (`202 Accepted`) | The user needs an order ID now; confirmation can follow. |
 | orders checks stock | Sync read, 50 ms, fallback | Improves UX; the reservation is the real check. |
 | orders reserves stock, requests payment | Async events | Remote state changes; must survive the callee being down. |
-| Confirmation email | Async event | Nobody waits on it. |
 | Order history | Sync read of a local read model | The query is local; the data arrived async. |
 
 **Hygiene for the sync calls that remain:** a timeout shorter than the
@@ -314,9 +313,8 @@ checked 2026-11) or `cloudsql.logical_decoding` on Cloud SQL
 checked 2026-11). A replication slot keeps the WAL it needs even with no
 consumer connected, which in extreme cases can shut the database down
 ([PostgreSQL docs](https://www.postgresql.org/docs/current/logicaldecoding-explanation.html),
-checked 2026-11). Debezium's outbox router reads an append-only table whose
-default columns match the one above, routes by `aggregatetype` and keys by
-`aggregateid`; other names need `table.field.event.id`,
+checked 2026-11). Debezium's outbox router routes by `aggregatetype` and keys
+by `aggregateid`; other column names need `table.field.event.id`,
 `table.field.event.key` and `route.by.field`
 ([Debezium docs](https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html),
 checked 2026-11).
@@ -328,7 +326,7 @@ CDC when the rate or latency need outgrows polling, or a CDC platform exists.
 **Fast without fragile.** Make the relay eager: after commit, the request
 handler hands the new event IDs to an in-process publisher that publishes and
 marks them at once. The polling loop only sweeps what the eager path missed.
-Normal latency is milliseconds, and the sweep keeps the guarantee.
+Latency drops to milliseconds; the sweep keeps the guarantee.
 
 **Where it breaks.** Two relay replicas can reorder one order's events: either
 partition the relay by `aggregate_id`, or (as here) make consumers
@@ -377,9 +375,8 @@ Rules that keep it correct:
 - **Timeouts are events.** A sweep moves orders stuck in `AWAITING_PAYMENT`
   for 15 minutes to `RELEASING`; a late `PaymentAuthorized` for a cancelled
   order triggers a void.
-- **Isolation is lost.** Others can see intermediate states, so make them
-  explicit (`PENDING`, `AWAITING_PAYMENT`) rather than pretending they are
-  invisible.
+- **Isolation is lost.** Others see intermediate states, so name them
+  (`PENDING`, `AWAITING_PAYMENT`).
 
 ### Idempotent consumers, schema evolution and CQRS read models
 
@@ -408,7 +405,7 @@ UPDATE stock SET available = available - $2, reserved = reserved + $2
   WHERE sku = $3 AND available >= $2 RETURNING sku;
 -- App: one row => type = 'StockReserved'; no row => type = 'StockReservationFailed'.
 INSERT INTO outbox (id, aggregatetype, aggregateid, type, payload, created_at)
-  VALUES (gen_random_uuid(), 'order', $4, $5, $6, now());
+  VALUES (gen_random_uuid(), 'inventory', $4, $5, $6, now()); -- inventory topic, keyed by order
 COMMIT; -- then acknowledge the message
 ```
 
@@ -420,9 +417,10 @@ COMMIT; -- then acknowledge the message
 - **External side effects** (a card authorisation) can't join the
   transaction. Pass the order ID as the provider's idempotency key; the
   [payment walkthrough](06-payment-ledger.md) covers that boundary.
-- **Order tolerance.** Projections ignore any event whose `aggregate_version`
-  is not newer, which makes duplicates and reordering harmless together. So
-  this design needs no FIFO queues or ordering keys. Pub/Sub ordering keys
+- **Order tolerance.** Projections ignore an event unless its
+  `aggregate_version` beats the stored version for the same producer, so
+  duplicates and reordering are harmless together and this design needs no
+  FIFO queues or ordering keys. Pub/Sub ordering keys
   give per-key order at up to 1 MBps per key, but one redelivery redelivers the
   later messages for that key
   ([Google Cloud docs](https://docs.cloud.google.com/pubsub/docs/ordering),
@@ -447,10 +445,20 @@ event must be readable by older and newer consumers.
 write model from read models. order-view subscribes to the orders, inventory,
 payments and shipping events and keeps one denormalised row per order.
 
+```sql
+-- A payments event touches only the payment columns, gated on payments' version.
+INSERT INTO order_view (order_id, payment_status, payment_version)
+  VALUES ($1, $2, $3)
+  ON CONFLICT (order_id) DO UPDATE
+  SET payment_status = EXCLUDED.payment_status,
+      payment_version = EXCLUDED.payment_version
+  WHERE order_view.payment_version IS NULL
+     OR order_view.payment_version < EXCLUDED.payment_version;
+```
+
 - **Wins:** a history page is one indexed query, not a fan-out to four
   services at four p99s, and the read store scales separately.
-- **Cost: staleness.** A user who just ordered may not see the order in their
-  history. Return the order and its `version` from `POST /orders`, or have
+- **Cost: staleness.** A new order may lag in history. Return the order and its `version` from `POST /orders`, or have
   order-view fall back to orders for the creator's own recent order.
 - **Rebuild by replay.** A new projection replays a retained topic or
   backfills from the owners' databases, then joins the live stream at a
@@ -505,10 +513,9 @@ shard, or use a distributed store with a change stream, and a partitioned log
 | Sync service-to-service | Internal ALB, path routing, security groups | Internal ingress plus `roles/run.invoker` and ID tokens ([Google Cloud docs](https://docs.cloud.google.com/run/docs/authenticating/service-to-service), checked 2026-11) | A Cloud Run caller must route through a VPC to reach an internal-ingress service ([Google Cloud docs](https://docs.cloud.google.com/run/docs/securing/ingress), checked 2026-11). |
 | Database per service | Aurora PostgreSQL | Cloud SQL for PostgreSQL | Both support `SKIP LOCKED` and logical decoding. |
 | Event topic | SNS standard topic | Pub/Sub topic | SNS messages default to 256 KiB, up to 1 MiB ([AWS docs](https://docs.aws.amazon.com/general/latest/gr/sns.html), checked 2026-11); Pub/Sub allows 10 MB ([Google Cloud docs](https://docs.cloud.google.com/pubsub/quotas), checked 2026-11). |
-| Per-consumer backlog | SQS queue subscribed to the topic | Pub/Sub subscription | AWS fan-out takes two services; on GCP the subscription is the queue. |
+| Per-consumer backlog | SQS queue subscribed to the topic | Pub/Sub subscription | See the fan-out shape below. |
 | Retries and DLQ | `maxReceiveCount`, redrive to a DLQ | `dead_letter_policy`, 5–100 attempts ([Google Cloud docs](https://docs.cloud.google.com/pubsub/docs/handling-failures), checked 2026-11) | Pub/Sub's service agent needs publisher on the DLQ topic and subscriber on the source subscription. |
 | Processing time limit | Visibility timeout 30 s default, 12 hours max ([AWS docs](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/quotas-messages.html), checked 2026-11) | Ack deadline 10–600 s ([Google Cloud docs](https://docs.cloud.google.com/pubsub/docs/lease-management), checked 2026-11) | Push subscriptions cannot extend the deadline per message. |
-| Schema enforcement | None at the broker | Pub/Sub topic schemas | GCP rejects bad messages at publish; AWS cannot. |
 
 Two differences change the design:
 
