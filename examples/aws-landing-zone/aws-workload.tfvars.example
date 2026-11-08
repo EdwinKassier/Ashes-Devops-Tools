@@ -2,24 +2,34 @@
 # selected with TF_WORKSPACE=aws-workload-<env> (e.g. aws-workload-dev).
 # Reference only. Canonical template: envs/aws/workload/terraform.tfvars.example.
 #
-# Derived from envs/aws/workload/variables.tf: variables with no default = REQUIRED.
+# Every input of envs/aws/workload has a default. tfc-admin declares one
+# workspace per aws.workload_environments entry in config/landing-zone.yaml and
+# sets its `environment` variable; the root then reads that entry
+# (account_key, vpc_cidr, services) and the shared aws.workload settings. The
+# keys below are OPTIONAL explicit overrides.
 
-# REQUIRED — key into the aws-organization account_role_arns map for THIS env's
-# workload account. Both providers assume this role.
-workload_account_key = "workload_dev"
+# Required effective values (config key -> variable):
+# landing_zone_name = "acme"         # org.name
+# tfc_organization  = "acme-tfc-org" # org.tfc.organization (reads aws-organization, aws-network, aws-security)
+# environment       = "dev"          # set by tfc-admin per workspace
 
-# REQUIRED — central log-archive bucket name. MUST match the value used in the
-# aws-organization / aws-network roots (cross-root naming contract).
-log_archive_bucket_name = "acme-org-log-archive"
+# Key into the aws-organization account_role_arns map for THIS env's workload
+# account. Null = aws.workload_environments.<environment>.account_key.
+# workload_account_key = "workload_dev"
+
+# Legacy single-field override: setting log_archive_bucket_name SKIPS the
+# aws-security remote-state read. Leave it unset so the bucket name comes from
+# the aws-security contract (security_contract or its remote state).
+# log_archive_bucket_name = "acme-org-log-archive"
 
 # The account's AWS Config recorder is deployed by aws-organization's org-wide
 # recorder StackSet; config_role_arn is deprecated and ignored (removed in v1.0).
 
 # Optional — bring your own CMK. Empty (default) creates a rotating workload CMK
 # (alias/workload-<env>) for EBS, Session Manager and the app services.
-# kms_key_arn = "arn:aws:kms:eu-west-2:222222222222:key/abcd-1234"
+# kms_key_arn = "arn:aws:kms:eu-west-2:222222222222:key/00000000-0000-0000-0000-000000000000"
 
-# Optional — public exposure of the app ALB: internal (default) |
-# cloudfront_vpc_origin (no certificate needed) | public_alb (needs
-# app_alb_certificate_arn).
+# Optional — public exposure of the app ALB (aws.workload.app_ingress_mode):
+# internal (default) | cloudfront_vpc_origin (no certificate needed) |
+# public_alb (needs app_alb_certificate_arn).
 # app_ingress_mode = "cloudfront_vpc_origin"

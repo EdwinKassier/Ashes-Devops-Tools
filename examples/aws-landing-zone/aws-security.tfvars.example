@@ -1,27 +1,28 @@
-# aws-security — minimal required inputs (phase-2, security tooling + log archive).
+# aws-security — security tooling, log archive, org CloudTrail (phase-2).
 # Reference only. Canonical template: envs/aws/security/terraform.tfvars.example.
 #
-# Derived from envs/aws/security/variables.tf. Every input below sits in the
-# aws_overrides object (unset keys keep the config/landing-zone.yaml value).
+# Every input of envs/aws/security has a default; the values come from
+# config/landing-zone.yaml. The keys below are OPTIONAL explicit overrides
+# (tfvars or a TFC workspace variable win over the config file).
 
-aws_overrides = {
-  # REQUIRED — central log-archive bucket name. MUST match the value used in the
-  # aws-organization root (this root actually creates the bucket).
-  log_archive_bucket_name = "acme-org-log-archive"
+# Required effective values (config key -> variable):
+# landing_zone_name     = "acme"         # org.name
+# tfc_organization      = "acme-tfc-org" # org.tfc.organization (also the backend's TF_CLOUD_ORGANIZATION)
+# management_account_id = "111111111111" # aws.management_account_id (quoted)
 
-  # REQUIRED — account-qualified ARN of the KMS key administrator (kms:*) on the
-  # log and forensics CMKs. Prevents locking the keys out of management.
-  key_admin_arn = "arn:aws:iam::111111111111:role/key-admin"
-
-  # REQUIRED — account-qualified ARN of the role AWS Config assumes to record
-  # resource configurations.
-  config_role_arn = "arn:aws:iam::222222222222:role/aws-config-recorder"
-
-  # REQUIRED — account-qualified ARN of the role the Config org aggregator assumes.
-  aggregator_role_arn = "arn:aws:iam::222222222222:role/aws-config-aggregator"
-
-  # Optional but REQUIRED when enable_security_lake = true (the default) — the
-  # AmazonSecurityLakeMetaStoreManager role ARN. Set enable_security_lake = false
-  # to drop this requirement.
-  # meta_store_manager_role_arn = "arn:aws:iam::222222222222:role/AmazonSecurityLakeMetaStoreManager"
-}
+# Tuning inputs go in ONE object: unset keys keep the config value (or the
+# profile-driven default).
+# aws_overrides = {
+#   # aws.log_archive_bucket_name — this root creates the bucket; it must match
+#   # the name the aws-organization deny-tamper SCP protects.
+#   log_archive_bucket_name = "acme-org-log-archive"
+#
+#   # Bring-your-own operator roles. Leave unset (the usual case): the stage
+#   # uses each account's tfc-apply role as KMS key admin, creates the AWS
+#   # Config recorder service-linked role and the aggregator role, and creates
+#   # the Security Lake V2 meta-store manager role.
+#   # key_admin_arn               = "arn:aws:iam::222222222222:role/key-admin"
+#   # config_role_arn             = "arn:aws:iam::222222222222:role/aws-config-recorder"
+#   # aggregator_role_arn         = "arn:aws:iam::222222222222:role/aws-config-aggregator"
+#   # meta_store_manager_role_arn = "arn:aws:iam::222222222222:role/service-role/AmazonSecurityLakeMetaStoreManagerV2"
+# }

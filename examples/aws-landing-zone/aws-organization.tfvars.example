@@ -1,32 +1,36 @@
-# aws-organization — minimal required inputs (phase-1, the producer root).
-# Reference only. The canonical, fully-commented template is
-# envs/aws-organization/terraform.tfvars.example — copy THAT to
-# envs/aws-organization/terraform.tfvars for a real apply.
+# aws-organization — org, OU tree, accounts, guardrails (phase-1, the producer root).
+# Reference only. Canonical template: envs/aws/organization/terraform.tfvars.example.
 #
-# Derived from envs/aws-organization/variables.tf: any variable with no default
-# is REQUIRED. Everything else has a working default and is omitted here.
+# Every input of envs/aws/organization has a default, so nothing here is
+# needed when config/landing-zone.yaml is filled in: the VCS-driven TFC run reads
+# the values from it. The keys below are OPTIONAL explicit overrides (tfvars,
+# TF_VAR_* or a TFC workspace variable win over the config file). Each comment
+# names the config key the variable falls back to. The plan fails, naming that
+# key, while an effective value is still unset or a placeholder.
 
-# REQUIRED — account-qualified ARN of the Terraform Cloud run role. Carved out
-# of every guardrail deny statement so automation is never locked out.
-terraform_run_role_arn = "arn:aws:iam::111111111111:role/terraform-run"
+# Required effective values (config key -> variable):
+# landing_zone_name = "acme"         # org.name (the placeholders ashes / my-org are rejected)
+# tfc_organization  = "acme-tfc-org" # org.tfc.organization (needed with the TFC OIDC baseline, on by default)
 
-# REQUIRED — account-qualified ARN of the emergency break-glass role.
-break_glass_role_arn = "arn:aws:iam::111111111111:role/break-glass"
+# management_account_id = "111111111111" # aws.management_account_id (quoted)
 
-# REQUIRED — central log-archive S3 bucket name, protected by the deny-tamper
-# SCP. This exact string is the cross-root naming contract: aws-security (which
-# creates the bucket), aws-network, and aws-workload must all use the same value.
-log_archive_bucket_name = "acme-org-log-archive"
+# Phase-0 management-account roles (aws-bootstrap runbook Step 2). Both are
+# carved out of every guardrail deny statement.
+# terraform_run_role_arn = "arn:aws:iam::111111111111:role/tfc-mgmt-apply" # aws.terraform_run_role_arn
+# break_glass_role_arn   = "arn:aws:iam::111111111111:role/break-glass"    # aws.break_glass_role_arn
 
-# Near-required in practice — the six foundational SRA accounts ship with
-# PLACEHOLDER emails that AWS will reject (duplicate/undeliverable). Override
-# with real, unique root emails before apply. See the env template for the full
-# map shape.
+# Central log-archive bucket protected by the deny-tamper SCP. aws-security
+# creates it, and aws-network reads the same aws.log_archive_bucket_name.
+# log_archive_bucket_name = "acme-org-log-archive" # aws.log_archive_bucket_name
+
+# Foundational SRA accounts (aws.accounts). The example.com placeholder emails
+# are rejected: every root email must be real, unique and deliverable. See the
+# env template for the full map shape (name, alternate_contacts, ...).
 # accounts = {
-#   log_archive      = { email = "aws+log-archive@example.com", ou = "Security" }
-#   security_tooling = { email = "aws+security-tooling@example.com", ou = "Security" }
-#   network          = { email = "aws+network@example.com", ou = "Infrastructure" }
-#   shared_services  = { email = "aws+shared-services@example.com", ou = "Infrastructure" }
-#   backup           = { email = "aws+backup@example.com", ou = "Infrastructure" }
-#   forensics        = { email = "aws+forensics@example.com", ou = "Security" }
+#   log_archive      = { email = "aws+log-archive@acme.test", ou = "Security" }
+#   security_tooling = { email = "aws+security-tooling@acme.test", ou = "Security" }
+#   network          = { email = "aws+network@acme.test", ou = "Infrastructure" }
+#   shared_services  = { email = "aws+shared-services@acme.test", ou = "Infrastructure" }
+#   backup           = { email = "aws+backup@acme.test", ou = "Infrastructure" }
+#   forensics        = { email = "aws+forensics@acme.test", ou = "Security" }
 # }

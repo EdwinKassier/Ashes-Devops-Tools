@@ -3,11 +3,13 @@
 # TF_WORKSPACE=saas-<name>.
 # Reference only. Canonical (three-stanza) template: envs/saas/terraform.tfvars.example.
 #
-# Derived from envs/saas/variables.tf: NO variable is UNCONDITIONALLY required —
-# everything is gated behind enable_supabase / enable_vercel and defaults are
-# supplied so the both-false case validates. But each feature you TURN ON makes a
-# set of inputs required (enforced by gated validations in the root). Provide the
-# matching token via env var only:
+# NO variable of envs/saas is UNCONDITIONALLY required — everything is gated
+# behind enable_supabase / enable_vercel and defaults are supplied so the
+# both-false case validates. In a TFC run the toggles and IDs come from
+# config/landing-zone.yaml (saas.supabase / saas.vercel, saas.defaults and
+# saas.stacks.<name>), so the keys below are OPTIONAL explicit overrides. Each
+# feature you TURN ON makes a set of inputs required (enforced by gated
+# validations in the root). Provide the matching token via env var only:
 #   SUPABASE_ACCESS_TOKEN  (when enable_supabase = true)
 #   VERCEL_API_TOKEN       (when enable_vercel   = true)
 
@@ -15,7 +17,9 @@
 # enable_supabase            = true
 # supabase_organization_id   = "abcdefghijklmnop"          # >= 8 lowercase alnum
 # supabase_project_name      = "my-app-prod"               # 3-64 chars
-# supabase_database_password = "super-secret-password-16!" # >= 16 chars (sensitive)
+# supabase_database_password: >= 16 chars, sensitive. Never put it in a tfvars
+# file: set TF_VAR_supabase_database_password locally, or a sensitive TFC
+# workspace variable (tfc-admin workspace_variables).
 
 # --- Vercel enabled: these become required ---
 # enable_vercel       = true
