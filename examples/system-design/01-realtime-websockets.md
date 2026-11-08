@@ -18,8 +18,8 @@ Common variants, and what each changes:
   no per-message durability.
 - **"Just presence"**: the same connection tier with no message store.
 
-This walkthrough answers chat with presence, the hardest variant: it needs both
-durable messages and ephemeral, high-churn state.
+This walkthrough answers chat with presence, the hardest variant: durable
+messages plus high-churn ephemeral state.
 
 ## The two-minute answer
 
@@ -33,8 +33,8 @@ on a **sharded pub/sub** channel; each gateway pushes to its local sockets.
 Pub/sub is at-most-once, so delivery is best-effort and **the sequence number is
 the source of truth**: a client that sees a gap, or reconnects, asks for
 everything after its last sequence. Presence is ephemeral TTL keys, coalesced
-and fanned out only to online subscribers. Slow consumers get bounded buffers and are disconnected rather than back up the
-gateway; reconnect storms meet jittered backoff, admission limits and resume
+and fanned out only to online subscribers. Slow consumers get bounded buffers
+and are disconnected rather than back up the gateway; reconnect storms meet jittered backoff, admission limits and resume
 cursors. On AWS this is ECS Fargate behind an ALB, ElastiCache for Valkey and
 DynamoDB; on GCP it is Cloud Run (or GKE at very large scale) behind the global
 external Application Load Balancer, Memorystore for Valkey and Bigtable.
@@ -115,10 +115,11 @@ Peak-to-average is assumed to be 3×.
 
 - 2 × 10⁹ messages/day × 1 KB = **2 TB/day**, ≈ **730 TB/year** before
   replication. Retention, not throughput, drives the storage bill.
-- 70,000 writes/s spread over millions of conversation keys, against 1,000
-  write units/s per DynamoDB partition (primer's
-  [throughput table](00-primer.md#throughput-per-instance-and-per-partition)):
-  only a pathological room makes a key hot.
+- Each send is one transaction of three items, and transactions bill two write
+  units per item: 70,000 × 6 = **420,000 write units/s** at peak, over millions
+  of conversation keys. At 1,000 write units/s per DynamoDB partition (primer's
+  [throughput table](00-primer.md#throughput-per-instance-and-per-partition)),
+  one conversation tops out near 160 sends/s: only a huge room gets there.
 
 **Gateway count.**
 
@@ -170,7 +171,7 @@ Every frame is a JSON (or protobuf) envelope `{type, id, payload}`.
 | C → S | `hello` | `device_id`, `resume: {conversation_id: last_seq}` | Server replies with `welcome` and replays gaps. |
 | C → S | `send` | `client_msg_id` (UUID), `conversation_id`, `body` | `client_msg_id` is the idempotency key. |
 | S → C | `send_ack` | `client_msg_id`, `seq`, `server_ts` | Sent only after the durable write. |
-| S → C | `message` | `conversation_id`, `seq`, `sender`, `body`, `server_ts` | Client drops duplicates by `(conversation_id, seq)`. |
+| S → C | `message` | `conversation_id`, `seq`, `client_msg_id`, `sender`, `body`, `server_ts` | Client drops duplicates by `(conversation_id, seq)`. |
 | C → S | `read` | `conversation_id`, `seq` | Advances the device cursor; batched every few seconds. |
 | C ↔ S | `ping` / `pong` | none | Every 25 s. Keeps the load balancer from idling the socket out. |
 | S → C | `presence` | `user_id`, `state`, `last_seen` | Coalesced; may skip intermediate states. |
@@ -183,16 +184,18 @@ History is HTTPS: `GET /v1/conversations/{id}/messages?after_seq=1200&limit=100`
 
 | Entity | Store | Key | Access pattern |
 |---|---|---|---|
-| Message | DynamoDB / Bigtable | PK `conversation_id`, SK `seq` | Append; range read "after seq N"; newest page. |
-| Conversation counter | Same store | `conversation_id` | Atomic increment to allocate `seq`. |
-| Idempotency record | Same store, TTL 24 h | `conversation_id#client_msg_id` | Conditional put; on conflict return the original `seq`. |
+| Message | DynamoDB / Bigtable | PK `conversation_id`, SK `m#<seq>` | Append; range read "after seq N"; newest page. |
+| Conversation counter | Same table | PK `conversation_id`, SK `counter` | Conditional increment, in the same transaction as the message. |
+| Idempotency record | Same table, TTL 24 h | PK `conversation_id`, SK `idem#<client_msg_id>` | Conditional put holding the `seq`; on conflict return it. |
 | Membership | Same store | PK `conversation_id`, SK `user_id` (plus an inverse index) | Recipients of a conversation; conversations of a user. |
 | Device cursor | Same store | PK `user_id#device_id`, SK `conversation_id` | Last delivered and last read `seq`. |
 | Connection registry | Valkey hash, TTL 90 s | `conn:{user_id}` → `{device_id: gateway_id}` | Read per recipient on every send; refreshed by the gateway every 60 s. |
 | Presence | Valkey key, TTL 90 s | `presence:{user_id}` | Set on connect, refreshed with the registry, expires on silent death. |
 
-On Bigtable, the row key is `conversation_id#seq` (zero-padded so it sorts)
-and the counter is a read-modify-write increment.
+On Bigtable, the row key is `conversation_id#seq` (zero-padded so it sorts),
+the counter is a read-modify-write increment, and only single-row writes are
+atomic ([Google Cloud docs](https://docs.cloud.google.com/bigtable/docs/writes),
+checked 2026-11).
 
 ## High-level design
 
@@ -233,12 +236,17 @@ graph TB
 ### Write path: send
 
 1. The gateway forwards `send` to `chat-api`. Gateways stay thin: no database
-   credentials and no business logic, so they are cheap to restart.
-2. `chat-api` conditionally writes the idempotency record. If it exists, it
-   returns the original `seq`, so a client retry is harmless.
-3. It increments the conversation counter, writes the message with that `seq`,
-   and only then sends `send_ack` back through the gateway. **Durable before
-   visible** is the invariant that makes everything downstream best-effort.
+   credentials, no business logic.
+2. `chat-api` reads the counter `n` (strongly consistent), then issues one
+   `TransactWriteItems`: update the counter to `n+1` if it is still `n`, put
+   message `n+1`, and put the idempotency record holding `n+1`, both only if
+   absent. All three land or none do
+   ([AWS docs](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transaction-apis.html),
+   checked 2026-11), so a crash leaves no hole and no record pointing at a
+   missing message. If the idempotency put fails, this is a retry: return the
+   stored `seq`. If the counter check fails, another send won: re-read, retry.
+3. Only then does it send `send_ack`. **Durable before visible** is the
+   invariant that makes everything downstream best-effort.
 4. It reads the membership list (cached), then `HGETALL conn:{user_id}` for
    each recipient, pipelined. It groups the recipient devices by gateway.
 5. For each gateway it issues one `SPUBLISH gw:{gateway_id}` carrying the
@@ -247,6 +255,13 @@ graph TB
    device go to the offline queue for push notifications.
 
 Steps 4 to 6 may lose messages; the client repairs any `seq` gap from the store.
+
+Bigtable has no multi-row transaction, so there the writes stay separate and
+are ordered to fail safe: increment, write the message (it carries
+`client_msg_id`), then write the idempotency row with `CheckAndMutateRow`. A
+crash leaves a hole or, after a retry, a duplicate under a new `seq`. So history
+responses carry the counter's high-water mark (a missing `seq` below it is a
+hole, filled if it arrives late) and clients also dedup on `client_msg_id`.
 
 ## Deep dives
 
@@ -275,8 +290,7 @@ marked **verify before relying on**: load-test the node type.
 **Large rooms.** In a 100,000-member room one message would be 100,000 registry
 reads. Above a threshold (say 1,000 members) the room gets a channel
 `room:{id}`; a gateway subscribes while any local socket is in the room and fans
-out locally. Doing this for every small conversation would explode the
-subscription count, hence the hybrid.
+out locally.
 
 **Where it breaks.**
 
@@ -301,9 +315,8 @@ subscription count, hence the hybrid.
 
 ### 2. Backpressure and slow consumers
 
-A WebSocket is a TCP stream. If a phone on a weak network reads slower than the
-server writes, the bytes pile up somewhere. The design question is where, and
-what you drop.
+When a phone reads slower than the server writes, bytes pile up. The question
+is where, and what you drop.
 
 **The three queues that fill up, in order.**
 
@@ -337,7 +350,7 @@ Unbounded state for one bad client endangers the 49,999 others.
 - *Unbounded queues:* one slow client becomes an out-of-memory kill of the
   gateway, then a reconnect storm.
 - *Blocking the publisher* (end-to-end flow control): one slow group member
-  would slow everyone. Right for single-consumer streams, wrong for fan-out.
+  would slow everyone.
 - *A durable queue per user:* 50 M queues, when the store is already a
   replayable log.
 
@@ -381,8 +394,6 @@ sequenceDiagram
 - **Honour `Retry-After` and `goaway.reconnect_after_ms`.** The server spreads
   the herd explicitly.
 - **Resume, don't refetch.** Cursors mean the server sends only the gap.
-- **Cache the refresh token,** so a storm does not also hammer the identity
-  provider.
 
 **Server side.**
 
@@ -422,8 +433,7 @@ sequenceDiagram
   checked 2026-11).
 
 **Where it breaks.** If every gateway restarts at once, admission control only
-turns a crash into a slow recovery. The real fix is canary-then-batch deploys;
-the runbook covers the case where it happens anyway.
+slows the recovery. Deploy canary-then-batch; the runbook covers the rest.
 
 ## Trade-offs to defend
 
@@ -434,8 +444,8 @@ the runbook covers the case where it happens anyway.
 | Connection tier (GCP) | Cloud Run behind the global external ALB | GKE Autopilot | The repo's app-services path; zero cluster operations; fine up to about 1 M connections. | 10 M connections means 10,000 Cloud Run instances and a 60-minute forced reconnect. Move to GKE (the repo can enable an Autopilot cluster) for denser pods and 24-hour connections. |
 | Routing | Registry + per-gateway sharded channel | Broadcast; consistent hashing | Work proportional to actual recipients; any gateway holds any user. | Mostly huge rooms (live events): per-room channels everywhere. |
 | Delivery guarantee | Durable write, then best-effort push, with client gap repair | Durable per-user queues | One replayable log (the store) instead of 50 M queues. | Strict server-side delivery receipts for compliance: add a per-device delivery log. |
-| Ordering | Per-conversation `seq` from an atomic counter | Timestamps; global sequencer | Timestamps collide and skew; a global sequencer is a bottleneck. | Very hot rooms: allocate `seq` in blocks. |
-| Message store | DynamoDB / Bigtable | Relational database | Append-heavy, key-range reads, 70,000 writes/s, 730 TB/year. | Small scale (under 1,000 writes/s): Aurora or Cloud SQL is simpler and gives you joins. |
+| Ordering | Per-conversation `seq`, committed with the message in one transaction | Timestamps; global sequencer | Timestamps collide and skew; a global sequencer is a bottleneck. | Very hot rooms: allocate `seq` in blocks. |
+| Message store | DynamoDB / Bigtable | Relational database | Append-heavy, key-range reads, 70,000 sends/s, 730 TB/year. | Small scale (under 1,000 writes/s): Aurora or Cloud SQL is simpler and gives you joins. |
 | Presence | TTL keys in Valkey, debounced | Database rows | 400,000 pings/s and high churn; staleness of seconds is acceptable. | Presence that must be exact (a call is ringing): a separate, stricter path. |
 | Slow consumers | Bounded queues, coalesce, then disconnect | Unbounded buffering; end-to-end flow control | Protects the other sockets on the gateway. | Single-consumer streams: credit-based flow control. |
 
@@ -466,9 +476,8 @@ the runbook covers the case where it happens anyway.
 | Component | AWS | GCP | Difference that matters |
 |---|---|---|---|
 | Edge and WAF | CloudFront + AWS WAF | Global external Application Load Balancer + Cloud Armor | CloudFront needs the `Sec-WebSocket-*` headers forwarded (the repo's `AllViewerExceptHostHeader` policy does) and supports WebSockets over HTTP/1.1 only ([AWS docs](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/distribution-working-with.websockets.html), checked 2026-11). Its origin response timeout defaults to 30 s between origin packets; no WebSocket maximum duration is documented ([AWS docs](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/DownloadDistValuesOrigin.html), checked 2026-11). With `cloudfront_vpc_origin` that 30 s is tighter than the ALB's 60 s; the 25 s ping still fits. `edge-security` sets no read timeout. |
-| Load balancer | ALB (idle timeout 1–4,000 s, default 60 s) | Global external ALB with a serverless NEG (fixed 60-minute timeout) or a GKE backend (idle closes at the backend timeout, active at 24 h) | The ALB's idle timeout means clients must ping under 60 s unless you raise it. |
+| Load balancer | ALB (idle timeout 1–4,000 s, default 60 s) | Global external ALB with a serverless NEG (fixed 60-minute timeout) or a GKE backend (idle closes at the backend timeout, active at 24 h) | Clients ping inside the shortest idle timeout on the path. |
 | Gateway compute | ECS Fargate | Cloud Run (or GKE Autopilot at scale) | Cloud Run's 1,000 concurrency and 60-minute cap; Fargate's `nofile` 65,535 default. |
-| Managed alternative | API Gateway WebSocket APIs | None first-party | Limits in the trade-offs and study aids. |
 | Registry and pub/sub | ElastiCache for Valkey, cluster mode | Memorystore for Valkey, cluster mode | Memorystore connects over Private Service Connect through a service connection policy; ElastiCache sits in a subnet. |
 | Message store | DynamoDB | Bigtable (Firestore at small scale) | DynamoDB on-demand bills per request; Bigtable bills provisioned nodes hourly whether used or not ([pricing](https://cloud.google.com/bigtable/pricing), checked 2026-11), so a small deployment pays a floor. |
 | Offline handoff | SQS | Pub/Sub | See the [notification system walkthrough](02-notification-system.md). |
@@ -499,7 +508,8 @@ from the estimates.
 
 ```yaml
 aws:
-  app_ingress_mode: cloudfront_vpc_origin # internal ALB, CloudFront + WAF in front
+  workload:
+    app_ingress_mode: cloudfront_vpc_origin # internal ALB, CloudFront + WAF in front
   workload_environments:
     prod:
       account_key: workload_prod
@@ -523,7 +533,7 @@ gcp:
           concurrency: 1000 # Cloud Run maximum
           timeout: 3600s # 60-minute cap; clients reconnect before it
           min_instances: 20
-          max_instances: 2000
+          max_instances: 2000 # ≈ 2 M sockets: the Cloud Run tier; 10 M means GKE
         chat-api: {min_instances: 3}
   workload:
     public_ingress:
@@ -539,8 +549,6 @@ Repo gaps the config cannot express:
   every 25 s.
 - app-services sets no `ulimits`, so a task keeps Fargate's 65,535 `nofile`
   limit: roughly 60,000 sockets per task at most.
-- [`modules/gcp/compute/cloud-run`](../../modules/gcp/compute/cloud-run/) does
-  not expose session affinity. This design does not need it.
 
 ### AWS: registry, pub/sub and message store
 
@@ -579,6 +587,8 @@ resource "aws_elasticache_replication_group" "realtime" {
   description                = "connection registry, presence, sharded pub/sub"
   engine                     = "valkey"
   node_type                  = "cache.r7g.large"
+  engine_version             = "9.0"
+  parameter_group_name       = "default.valkey9.cluster.on" # cluster-enabled, for SPUBLISH sharding
   cluster_mode               = "enabled"
   num_node_groups            = 6 # shards: pub/sub and registry capacity scale with these
   replicas_per_node_group    = 1
@@ -597,7 +607,7 @@ resource "aws_dynamodb_table" "messages" {
   name                        = "${local.environment}-messages"
   billing_mode                = "PAY_PER_REQUEST"
   hash_key                    = "pk" # conversation_id
-  range_key                   = "sk" # zero-padded seq
+  range_key                   = "sk" # m#<zero-padded seq>, counter, idem#<client_msg_id>
   deletion_protection_enabled = true
   attribute {
     name = "pk"
@@ -708,7 +718,7 @@ Notes:
 - The Bigtable message store follows the same pattern: `kms_key_name` on its
   `cluster` block, with the Bigtable service agent on the key
   ([registry](https://registry.terraform.io/providers/hashicorp/google/8.10.0/docs/resources/bigtable_instance),
-  checked 2026-11). It is left out to keep this section short.
+  checked 2026-11); it is omitted here.
 - `chat-api-run` and `ws-gateway-run`, the runtime service accounts app-services
   creates, each get their own Memorystore IAM grant on this instance; see
   [Per-component identity](00-primer.md#per-component-identity).
@@ -746,8 +756,7 @@ balancer event) and are failing to reconnect or reconnecting in waves.
 2. **Lower admission rates** (a runtime flag) and raise `Retry-After`, spreading
    the herd over 5–10 minutes.
 3. **Add capacity.** Raise `autoscaling_min_capacity` (AWS) or `min_instances`
-   (GCP) in config and run it through TFC; reconcile any emergency console
-   change in config afterwards.
+   (GCP) in config and run it through TFC.
 4. **Shed optional work:** flag off presence fan-out and typing.
 5. **Protect the store.** If resume queries throttle DynamoDB or overload
    Bigtable, cap the resume page size and let clients page.
@@ -788,24 +797,18 @@ Detect a failover plus a spike in gap repairs; confirm one subscriber per
 
 ### Likely follow-ups
 
-- **"How do you guarantee ordering?"** A per-conversation `seq` allocated by an
-  atomic counter in the store, assigned before delivery. Clients render by
+- **"How do you guarantee ordering?"** A per-conversation `seq` committed in
+  the same transaction as the message, before delivery. Clients render by
   `seq`, not arrival order.
 - **"What if pub/sub drops a message?"** It will, sometimes. The message is
   already durable. The client sees a gap in `seq` and fetches `after_seq`.
 - **"Exactly-once?"** At-least-once delivery plus dedup on `(conversation_id,
   seq)` at the client, and on `client_msg_id` at the server for sends.
-- **"Why not sticky sessions?"** A WebSocket is already pinned to its target.
-  Routing a message from another gateway needs the registry.
-- **"100 M connections?"** Cells (independent stacks per slice of users) with a
-  router for cross-cell conversations, an NLB in front, denser pods.
 - **"Why not API Gateway WebSockets?"** At small scale, do. At 10 M
   connections its connect rate and 2-hour cap bite, and so does price: in
   us-east-1, $1.00 per million messages (metered in 32 KB units) plus $0.25 per
   million connection-minutes
   ([pricing](https://aws.amazon.com/api-gateway/pricing/), checked 2026-11).
-- **"Presence at this scale?"** Never in the database: TTL keys, batched
-  refresh, debounced reconnects, fan-out to online subscribers only.
 
 ### Classic mistakes
 
