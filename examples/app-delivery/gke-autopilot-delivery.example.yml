@@ -1,87 +1,120 @@
-# Reference application-delivery pipeline for GKE Autopilot (audit C1).
-# COPY this into an application repository's .github/workflows/ and adjust. It is
-# a template, not a workflow for THIS repo (hence the .example.yml suffix), so it
-# never runs here. This is the Kubernetes counterpart to
-# cloud-run-delivery.example.yml.
+# Reference application-delivery pipeline for GKE Autopilot. COPY this into the
+# APPLICATION repository's .github/workflows/ and adjust. It is a template, not
+# a workflow for THIS repo (hence the .example.yml suffix), so it never runs
+# here. This is the Kubernetes counterpart to cloud-run-delivery.example.yml.
 #
 # Flow: build -> scan -> push to Artifact Registry -> roll out the new image to a
-# Deployment on the GKE Autopilot cluster created by
-# modules/gcp/compute/gke-autopilot. Auth is keyless (WIF), using the
-# pool/provider from the gcp-bootstrap root. No service-account keys.
+# Deployment on the env GKE Autopilot cluster. Auth is keyless: GitHub OIDC ->
+# the app-deploy Workload Identity pool (apps-<env>) in the env host project ->
+# a GKE deploy SA. No service-account keys. Do NOT bind app deploy SAs to the
+# gcp-bootstrap pool: that pool is for the infrastructure pipelines only.
 #
 # Prerequisites (provisioned by the landing zone, not by this pipeline):
-#   - A GKE Autopilot cluster: set enable_gke_autopilot = true in the
-#     gcp-workload-<env> workspace (modules/gcp/stages/app-services creates
-#     <env>-apps via modules/gcp/compute/gke-autopilot). The GKE deploy SA below
-#     is NOT generated yet (only Cloud Run app_services get one); create it and
-#     its WIF binding yourself, ideally on the app-deploy pool (apps-<env>).
-#   - An Artifact Registry repo from modules/gcp/artifact-registry.
-#   - A deploy service account with roles/container.developer +
-#     artifactregistry.writer, and a WIF binding for this repo
-#     (modules/gcp/iam/workload-identity).
-#   - A Kubernetes Deployment (the k8s manifests live in the app repo); this
-#     pipeline updates its image. Secrets come from Secret Manager via the
-#     workload's CSI driver / env, not from this pipeline.
+#   - The cluster: enable_gke_autopilot = true in the gcp-workload-<env>
+#     workspace (modules/gcp/stages/app-services creates <env>-apps; see the
+#     gke_cluster_name output). Its control plane is private by default
+#     (enable_private_endpoint), so run this job on a self-hosted runner inside
+#     the VPC or one listed in gke_master_authorized_networks; a GitHub-hosted
+#     runner cannot reach it.
+#   - The app-deploy pool and its `github` provider: enable_app_deploy_wif =
+#     true, and at least one app_services entry with `github` set (the provider
+#     is created only then). GCP_WIF_PROVIDER is the same value
+#     app_github_actions emits for that entry.
+#   - A GKE deploy SA. The stage generates deploy SAs for Cloud Run app_services
+#     only, so create this one yourself in the host project, with:
+#       * roles/container.clusterViewer on the project: enough for
+#         get-gke-credentials, and no access to Kubernetes objects;
+#       * roles/artifactregistry.writer on the image repository only;
+#       * roles/iam.workloadIdentityUser on the SA for ONE principalSet on the
+#         apps-<env> pool, pinned to this repo's numeric ID, e.g.
+#         principalSet://iam.googleapis.com/projects/<host-number>/locations/global/workloadIdentityPools/apps-<env>/attribute.repo_ref/<repository_id>/refs/heads/main
+#         (attribute.repository_id, repo_env and repo_ref_env also exist).
+#   - Namespaced Kubernetes RBAC for that SA (applied by the platform team, not
+#     by this pipeline): a Role in the app namespace allowing get/list/watch/
+#     patch on deployments and get/list/watch on replicasets and pods, bound
+#     with a RoleBinding to the subject (kind: User)
+#     <sa-name>@<host>.iam.gserviceaccount.com. Never grant
+#     roles/container.developer: it is read/write on every object, Secrets
+#     included, in every cluster in the project.
+#   - An Artifact Registry Docker repository (modules/gcp/artifact-registry).
+#   - The Kubernetes Deployment itself (its manifests live in the app repo);
+#     this pipeline only updates its image. Secrets come from Secret Manager via
+#     the workload's CSI driver / env, not from this pipeline.
+#
+# GitHub repository (or environment) VARIABLES (same names as the Cloud Run
+# workflow where they mean the same thing):
+#   GCP_WIF_PROVIDER   projects/<host-number>/locations/global/workloadIdentityPools/apps-<env>/providers/github
+#   GCP_DEPLOY_SA      <sa-name>@<host>.iam.gserviceaccount.com
+#   GCP_PROJECT_ID     <host project id>
+#   GCP_REGION         e.g. europe-west1 (the cluster is regional)
+#   GKE_CLUSTER        the gke_cluster_name output, e.g. dev-apps
+#   IMAGE_REPOSITORY   <region>-docker.pkg.dev/<project>/<repo>/<image>
+#
+# Action pinning: every action is pinned to a full commit SHA; keep them
+# current with Dependabot or Renovate.
 
 name: Deploy service (GKE Autopilot)
 
 on:
   push:
-    branches: [main]
+    branches: [main] # must match the ref pinned in the WIF principalSet
 
 permissions:
   contents: read
   id-token: write # required for keyless WIF auth
 
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
-  REGION: europe-west1
-  CLUSTER: ${{ vars.GKE_CLUSTER }}       # gke-autopilot name output
-  DEPLOYMENT: my-api                     # the Kubernetes Deployment to update
-  NAMESPACE: default
-  CONTAINER: my-api                      # the container within the Deployment
-  AR_REPO: europe-west1-docker.pkg.dev/${{ vars.GOOGLE_PROJECT_ID }}/apps
+  IMAGE: ${{ vars.IMAGE_REPOSITORY }}:${{ github.sha }}
+  DEPLOYMENT: my-api # the Kubernetes Deployment to update
+  NAMESPACE: my-api # the namespace the deploy SA's RoleBinding covers
+  CONTAINER: my-api # the container within the Deployment
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest # private control plane: use a runner that can reach it
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Authenticate to Google Cloud (keyless)
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }} # from gcp-bootstrap output
-          service_account: ${{ vars.GCP_DEPLOY_SA }}
-
       - name: Build image
-        run: docker build -t "${AR_REPO}/${DEPLOYMENT}:${GITHUB_SHA}" .
+        run: docker build -t "${IMAGE}" .
 
       - name: Scan image (block on CRITICAL/HIGH, matching the IaC gate)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ${{ env.AR_REPO }}/${{ env.DEPLOYMENT }}:${{ github.sha }}
+          image-ref: ${{ env.IMAGE }}
           severity: "CRITICAL,HIGH"
           exit-code: "1"
 
+      - name: Authenticate to Google Cloud (keyless WIF)
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
       - name: Push image
         run: |
-          gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
-          docker push "${AR_REPO}/${DEPLOYMENT}:${GITHUB_SHA}"
+          gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
+          docker push "${IMAGE}"
 
       - name: Get cluster credentials
-        uses: google-github-actions/get-gke-credentials@v2
+        uses: google-github-actions/get-gke-credentials@3da1e46a907576cefaa90c484278bb5b259dd395 # v3.0.0
         with:
-          cluster_name: ${{ env.CLUSTER }}
-          location: ${{ env.REGION }}
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ vars.GCP_REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
 
       # Roll out the new image. In a GitOps setup, instead have the pipeline
       # commit the new image tag to the manifests repo and let Argo CD / Config
-      # Sync apply it.
+      # Sync apply it, so the cluster never drifts from the app-repo manifests.
       - name: Roll out the new image
         run: |
           kubectl set image "deployment/${DEPLOYMENT}" \
-            "${CONTAINER}=${AR_REPO}/${DEPLOYMENT}:${GITHUB_SHA}" \
+            "${CONTAINER}=${IMAGE}" \
             --namespace "${NAMESPACE}"
           kubectl rollout status "deployment/${DEPLOYMENT}" \
             --namespace "${NAMESPACE}" --timeout=300s
