@@ -1,3 +1,9 @@
+# NOTE: the module source below is pinned to a release tag (?ref=v0.1.0, bumped
+# by release-please through the x-release-please-version marker). Until the
+# first release tag exists, `terraform init` fails on it. To try this example
+# now, replace the source with the relative path "../../" (the module this
+# example lives in). CI skips tag-pinned examples until that tag is cut.
+#
 # Basic working example for the aws-security stage.
 #
 # The stage runs across four accounts, so it declares four aliased providers.
