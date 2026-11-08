@@ -18,7 +18,6 @@ Common variants:
 
 - "The client times out and retries a payment. How do you not charge twice?"
 - "Design a double-entry ledger. What invariants does it enforce?"
-- "The PSP's settlement file disagrees with your records. What happens?"
 - "Where is exactly-once real in this system, and where is it a lie?"
 
 ## The two-minute answer
@@ -78,9 +77,19 @@ Arithmetic uses the primer's [QPS conversions](00-primer.md#qps-conversions).
 300 a second; design for **500 payments a second**.
 
 **PSP calls.** Create, confirm and capture (three per payment): about **1,500 PSP
-calls a second** at peak. Assume a PSP p99 of 2 s (**verify before relying
-on** for your PSP). By Little's law that is **3,000 calls in flight**, which
-sizes connection pools and task count, not CPU.
+calls a second** at peak, 500 a second on each endpoint. Assume a PSP p99 of
+2 s (**verify before relying on** for your PSP). Little's law at p99 gives an
+upper bound of **3,000 calls in flight**, which sizes connection pools and
+task count, not CPU.
+
+**PSP limits bind at 1×.** Stripe's live-mode defaults are 100 requests a
+second per account, 25 a second per endpoint and 50 concurrent requests, and a
+large increase needs at least 6 weeks' notice
+([Stripe docs](https://docs.stripe.com/rate-limits), checked 2026-11). Even
+the average of about 175 calls a second exceeds them. Request about 2,000 a second,
+600 per endpoint and 3,000 concurrent before launch (headroom for resolver and
+webhook re-reads), enforce them with a client-side token bucket and
+concurrency cap, and coalesce re-reads per payment.
 
 **Ledger postings.** A payment produces about four journal entries over its
 life (capture, PSP fee, settlement, seller payable) with two or three postings
@@ -95,14 +104,13 @@ about 580 a second on average and **5,000 a second at design peak**. At about
 - Multi-terabyte growth means **monthly partitions**, with old ones exported
   to the raw zone and detached.
 
-**Payments DB writes.** About 15 row writes per payment (key, payment
-transitions, attempts, outbox rows and publish marks, inbox rows): about
-**7,500 a second** at peak. It is the busier database, still inside one primary.
+**Payments DB writes.** About 15 row writes per payment: about **7,500 a
+second** at peak, still inside one primary.
 
-**Hot accounts.** Every payment posts to the PSP clearing account. As one
-balance row updated in place, it would serialise 5,000 postings a second on
-one lock that sustains perhaps a few hundred updates a second (**verify before
-relying on**; measure it). So hot balances are **derived**, never updated.
+**Hot accounts.** Every payment posts to the PSP clearing account. One
+balance row updated in place would serialise 5,000 postings a second on a lock
+that sustains perhaps a few hundred (**verify before relying on**). So hot
+balances are **derived**, never updated.
 
 **Idempotency records.** 5 million keys a day at about 2 KB each (the request
 hash and the stored response) is 10 GB a day. Kept 72 hours: about 30 GB.
@@ -112,8 +120,7 @@ PSP retries after an outage arrive in a burst; plan for **10×**, about 1,750 a
 second.
 
 **Reconciliation.** About 5 million settlement lines at 300 bytes: **1.5 GB a
-day**, matched by key in one hash join. Minutes in a batch, not a streaming
-problem.
+day**, minutes in a batch.
 
 ## API and data model
 
@@ -154,8 +161,8 @@ turns each into one journal entry.
 | `psp_events` | payments | `psp_event_id` | Inbox: insert on webhook receipt; a key conflict is a duplicate. |
 | `accounts` | ledger | `account_id` | Chart of accounts: type (asset, liability, revenue, expense), currency, `hot` flag. |
 | `journal_entries` | ledger | `entry_id`; unique `source_event_id` | Append-only; one per business event. |
-| `postings` | ledger | `(entry_id, line)`; index `(account_id, created_at)` | Append-only, partitioned by month; balances are sums. |
-| `balance_snapshots` | ledger | `(account_id, as_of)` | Periodic checkpoints so a balance is snapshot + recent postings. |
+| `postings` | ledger | `(entry_id, line, created_at)`; index `(account_id, created_at)` | Append-only, partitioned by month on `created_at`, which the key must include; balances are sums. |
+| `balance_snapshots` | ledger | `(account_id, currency, as_of)` | Checkpoints at a horizon so a balance is snapshot + later postings. |
 | `settlement_lines` | recon | `(psp, psp_reference)` | Loaded from the raw zone; matched against postings. |
 | `recon_breaks` | recon | `break_id` | Open mismatches with category, amount and owner. |
 
@@ -204,13 +211,11 @@ graph TB
 
 ### Read path: balance
 
-The latest `balance_snapshots` row plus the postings since it. Snapshots are
-written every few minutes, so a read sums minutes of postings, not years.
+The latest `balance_snapshots` row plus the postings with `created_at` at or
+after its `as_of`. Snapshots are written every few minutes at a safe horizon
+(see the ledger deep dive), so a read sums minutes of postings, not years.
 
-### Webhook path
-
-payments verifies the signature, inserts the event into `psp_events` (a
-conflict means a duplicate), returns `200`, and processes it later, as the
+Webhooks are verified, stored in `psp_events` and acknowledged, as the
 exactly-once deep dive describes.
 
 ## Deep dives
@@ -225,10 +230,9 @@ There are **three** idempotency boundaries, and each needs its own key.
 | payments → PSP | `payment_id:operation`, stored on `psp_attempts` | The PSP | The PSP's window |
 | PSP → payments (webhooks) | `psp_event_id` | Our `psp_events` inbox | As long as the inbox is kept |
 
-**Client to us.** The key row and the payment row commit together, so neither
-exists without the other. Store a hash of the request body and reject a reused
+**Client to us.** The key row and the payment row commit together. Store a hash of the request body and reject a reused
 key with a different body (`422`). Scope keys per merchant. Return the
-**stored** response on a retry, including a stored decline.
+**stored** response on a retry, declines included.
 
 **Us to the PSP.** Stripe replays the stored result of the first request with
 a key, **including `500` errors**, rejects reuse with different parameters,
@@ -237,8 +241,7 @@ accepts keys up to 255 characters, and may prune a key after 24 hours
 Three rules follow:
 
 - **Derive the PSP key deterministically** from the payment ID and the
-  operation. A restarted process recomputes the same key; a random key per
-  attempt would charge twice.
+  operation, so a restarted process recomputes it.
 - **A key does not resolve an unknown.** A retry after a `5xx` replays the
   stored `500`, and a key past its window starts a new request. So the
   money-moving call acts on a PSP object created first, whose ID we store; the
@@ -256,10 +259,7 @@ Three rules follow:
 **Concurrency and crashes.** Concurrent retries race on the unique
 constraint; the loser gets `409`. A request that dies holding `in_progress`
 leaves a lease (`locked_until`); after it expires, a retry resumes from the
-last committed phase, which makes a crash at any line safe.
-
-**Where it breaks.** A client that generates a new key per retry defeats all
-of this; make the SDK do it right.
+last committed phase.
 
 ### Double-entry ledger invariants
 
@@ -280,9 +280,9 @@ The invariants, in the order an interviewer usually asks:
 4. **Traceability.** Every entry carries a unique `source_event_id`, which
    also makes the consumer idempotent.
 5. **Derived balances.** A balance is the sum of postings; snapshots are a
-   recomputable cache.
-6. **Global zero.** So all postings in a currency sum to zero: a cheap nightly
-   corruption check.
+   cache that the nightly check recomputes from postings and compares.
+6. **Global zero.** All postings in a currency sum to zero: a cheap nightly
+   check.
 
 A capture of 100.00 GBP with a 1.50 fee, as two entries:
 
@@ -315,18 +315,50 @@ and that is what reconciliation checks.
   ([PostgreSQL docs](https://www.postgresql.org/docs/current/transaction-iso.html),
   checked 2026-11).
 
+**Snapshots must not miss a late commit.** `created_at` is `now()`, the
+transaction's start, so a transaction can start before a snapshot's `as_of` and
+commit after it is computed, missing every later balance. So writers run with PostgreSQL 17's
+`transaction_timeout` (30 s here), and a snapshot covers only postings older
+than a 5-minute horizon, by which time every such transaction has committed or
+aborted ([PostgreSQL docs](https://www.postgresql.org/docs/17/runtime-config-client.html),
+checked 2026-11). An entry's lines share one transaction, so one
+`created_at`, and the key still identifies a line.
+
+```sql
+CREATE TABLE postings (
+  entry_id   bigint      NOT NULL,
+  line       smallint    NOT NULL,
+  account_id bigint      NOT NULL,
+  currency   char(3)     NOT NULL,
+  amount     bigint      NOT NULL,               -- minor units, debit positive
+  created_at timestamptz NOT NULL DEFAULT now(), -- transaction start
+  PRIMARY KEY (entry_id, line, created_at)       -- must include the partition key
+) PARTITION BY RANGE (created_at);
+
+-- Every few minutes: extend each account's latest snapshot up to the horizon.
+INSERT INTO balance_snapshots (account_id, currency, as_of, balance)
+SELECT a.account_id, a.currency, h.horizon,
+       coalesce(s.balance, 0) + coalesce((
+         SELECT sum(p.amount) FROM postings p
+         WHERE p.account_id = a.account_id AND p.currency = a.currency
+           AND p.created_at >= coalesce(s.as_of, '-infinity')
+           AND p.created_at <  h.horizon), 0)
+FROM accounts a
+CROSS JOIN (SELECT now() - interval '5 minutes' AS horizon) h
+LEFT JOIN LATERAL (
+  SELECT as_of, balance FROM balance_snapshots b
+  WHERE b.account_id = a.account_id AND b.currency = a.currency
+  ORDER BY as_of DESC LIMIT 1) s ON true;
+```
+
 **The hot-account fix.** `psp_clearing` takes a posting from almost every
 payment:
 
 | Option | Wins | Breaks |
 |---|---|---|
 | Balance column updated per posting | Simple reads. | One row lock serialises every payment: the hot-row ceiling from the estimates. |
-| **Derived balance plus snapshots** (chosen for hot accounts) | Inserts never contend; postings are append-only rows. | Reads cost a snapshot plus a range sum. Hot accounts cannot have an overdraft check, which is fine: they are the platform's own. |
-| Split a hot account into N sub-accounts | Spreads lock contention. | Reporting must sum the sub-accounts. Use it only if a hot account really needs a locked balance check. |
-
-**Alternatives** ([DynamoDB transactions](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transaction-apis.html),
-[Spanner](https://docs.cloud.google.com/spanner/docs/true-time-external-consistency),
-checked 2026-11) are weighed in the trade-off table.
+| **Derived balance plus snapshots** (chosen for hot accounts) | Inserts never contend. | Reads cost a snapshot plus a range sum; no overdraft check, fine for the platform's own accounts. |
+| Split a hot account into N sub-accounts | Spreads lock contention. | Reporting must sum the sub-accounts. |
 
 **Where it breaks.** Past one primary's insert ceiling, shard by account
 group, and entries that span shards need a two-phase pattern of their own.
@@ -339,18 +371,16 @@ Reconciliation proves what the ledger believes against the **PSP** and the
 **Three-way match.**
 
 1. **Ledger to PSP transactions.** Each capture, refund and fee posting
-   against the PSP's settlement report, matched on the PSP reference (carried
-   on the event and the journal entry, since recon reads only the ledger API)
-   and amount.
+   against the settlement report, matched on PSP reference (carried on the
+   journal entry) and amount.
 2. **PSP payout to bank.** Each payout batch in the settlement report against
    the credit on the bank statement.
 3. **Clearing equals expected settlement.** `psp_clearing` must equal
    unsettled captures net of fees and refunds: the PSP's next net payout.
 
-**Flow.** The PSP's report lands in the **raw zone** exactly as received,
-with retention locked ([Data zones](00-primer.md#data-zones)), so any run can be
-repeated and audited. The job loads it into `settlement_lines`, matches, and
-opens a break for everything unmatched.
+**Flow.** The PSP's report lands in the **raw zone** as received, with
+retention locked ([Data zones](00-primer.md#data-zones)), so any run can be
+repeated. The job loads `settlement_lines`, matches, and opens breaks.
 
 **Break categories.** Each has an owner and an action:
 
@@ -361,18 +391,17 @@ opens a break for everything unmatched.
 | Amount mismatch | Fees, FX, partial capture, rounding | Post an adjustment entry to a named account, with the break ID. |
 | Duplicate at PSP | A double charge: two PSP charges for one payment | Refund one, post the refund, and treat it as an incident. |
 
-**Timing.** Settlement lags capture by days, so matching runs on a rolling
-window and a break counts only once older than the settlement delay. Unmatched
-money sits in a **suspense account**, never silently adjusted.
+**Timing.** Settlement lags capture by days, so a break counts only once
+older than the settlement delay. Unmatched money sits in a **suspense
+account**.
 
-**Where it breaks.** Silent format changes (schema-check on arrival), partial
-files (check the trailer totals), and ×100 volume (a warehouse job).
+**Where it breaks.** Silent format changes and partial files: schema-check
+and verify trailer totals on arrival.
 
 ### Exactly-once boundaries
 
-Exactly-once is real in exactly one place: **inside one database
-transaction**. Everywhere else the system is at-least-once with idempotency,
-and the design has to say which.
+Exactly-once is real only **inside one database transaction**. Everywhere
+else it is at-least-once with idempotency.
 
 | Hop | Delivery | What makes it effectively-once |
 |---|---|---|
@@ -402,10 +431,8 @@ sequenceDiagram
     P->>DB: AUTHORIZED + outbox event (one commit)
 ```
 
-**The unknown outcome is the core idea.** A timeout means you do not know.
-Treating it as failure invites the classic double charge; treating it as
-success loses money. Only `unknown`, resolved by reading the stored PSP ID,
-is safe.
+**The unknown outcome is the core idea.** Treating a timeout as failure
+invites a double charge; treating it as success loses money.
 
 **Webhooks are hints, not commands.** Stripe retries undelivered events for up
 to three days in live mode, does not guarantee order, may send duplicates, and
@@ -413,14 +440,14 @@ asks for a `2xx` before complex work. It signs with HMAC-SHA256 over a
 timestamp and the body, and its libraries reject timestamps older than 5
 minutes by default
 ([Stripe docs](https://docs.stripe.com/webhooks), checked 2026-11). So verify,
-store and acknowledge; then re-read the payment from the PSP and apply only
-forward transitions, so a late or duplicated event cannot regress state.
+store and acknowledge; then re-read the payment and apply only forward
+transitions.
 
 ## Trade-offs to defend
 
 | Decision | Chosen | Rejected | Why | What would change the answer |
 |---|---|---|---|---|
-| Ledger store | PostgreSQL (Aurora / Cloud SQL), one primary | DynamoDB; Spanner | Constraints, triggers and SQL audits; 5,000 postings/s fits one primary. | Multi-region active writes (Spanner), or ×100 volume. |
+| Ledger store | PostgreSQL (Aurora / Cloud SQL), one primary | [DynamoDB transactions](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transaction-apis.html); [Spanner](https://docs.cloud.google.com/spanner/docs/true-time-external-consistency) (checked 2026-11) | Constraints, triggers and SQL audits; 5,000 postings/s fits one primary. | Multi-region active writes (Spanner), or ×100 volume. |
 | Balances | Derived from postings plus snapshots | Balance column per account | No hot-row contention; balances are recomputable. | An account that needs an overdraft check at high write rate: split it. |
 | Corrections | Reversing entries | Updating postings | History is evidence. | Nothing: not negotiable. |
 | PSP timeout | `unknown` state plus resolver | Treat as failure | Cannot double-charge or lose money. | Nothing realistic; even a reliable status API needs the state. |
@@ -434,8 +461,8 @@ forward transitions, so a late or duplicated event cannot regress state.
 
 - **The ledger primary fails first:** 50,000 inserts a second is past one
   primary's comfort zone. Batch inserts, then shard by account group.
-- **PSP concurrency:** 30,000 calls in flight. Pools, file descriptors and the
-  PSP's rate limits bind before compute.
+- **PSP limits:** 15,000 calls a second and up to 30,000 in flight, 150 times
+  Stripe's default rate. That needs a negotiated limit or a second PSP.
 - **Idempotency table:** 300 GB at 72 hours; partition by day.
 
 **At ×100:** a sharded or distributed ledger (Spanner, or PostgreSQL shards by
@@ -467,7 +494,7 @@ checked 2026-11). In-flight requests fail and are retried with the same keys.
 
 | Component | AWS | GCP | Difference that matters |
 |---|---|---|---|
-| Services | ECS on Fargate | Cloud Run | The relay and resolver are background loops; on Cloud Run they need instance-based billing or a request trigger. |
+| Services | ECS on Fargate | Cloud Run | The relay and resolver are background loops: Cloud Run needs instance-based billing. |
 | Ledger and payments DBs | Aurora PostgreSQL | Cloud SQL for PostgreSQL | Aurora backup retention is 1–35 days, default 1 ([AWS docs](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/Aurora.Managing.Backups.html), checked 2026-11). Cloud SQL point-in-time log retention is 1–7 days on Enterprise and 1–35 on Enterprise Plus ([Google Cloud docs](https://docs.cloud.google.com/sql/docs/postgres/backup-recovery/configure-pitr), checked 2026-11). |
 | CMEK on the DB | Workload CMK, set by app-services | Cloud SQL CMEK, **creation time only** | Cloud SQL cannot add or change CMEK on an existing instance, and the key ring must be in the instance's region ([Google Cloud docs](https://docs.cloud.google.com/sql/docs/postgres/cmek), checked 2026-11). |
 | Raw zone (settlement files) | S3 with Object Lock | Cloud Storage with a locked retention policy | S3 compliance mode stops even the root user deleting a locked version, and needs versioning ([AWS docs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lock.html), checked 2026-11). A locked GCS policy can never be removed or shortened, up to 100 years ([Google Cloud docs](https://docs.cloud.google.com/storage/docs/bucket-lock), checked 2026-11). |
@@ -487,9 +514,8 @@ checked 2026-11). In-flight requests fail and are retried with the same keys.
 | Egress allowlist | `aws-network` (`envs/aws/network`) | None: Cloud NAT |
 | Apply order | `aws-organization` → `aws-security` → `aws-network` → … → `aws-workload-prod` | `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-prod` (twice; see below) |
 
-Placement follows [VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md)):
-services in `private`, Aurora in `isolated`, Cloud SQL on Private Service
-Access. To keep the PCI-relevant blast radius and IAM apart from other
+Placement follows [VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md)).
+To keep the PCI-relevant blast radius and IAM apart from other
 workloads, give payments a dedicated environment (an account added per
 [Adding an AWS account](../../docs/runbooks/aws-add-account.md), and a GCP
 project); the snippets use `prod` for brevity. The
@@ -505,9 +531,9 @@ aws:
     app_ingress_mode: cloudfront_vpc_origin # public HTTPS for PSP webhooks; see the gap below
   network:
     stateful_default_actions: ["aws:drop_established", "aws:alert_established"] # fail closed, log drops
-    egress_domain_allowlist:
+    egress_domain_allowlist: # org-wide: append to the existing list, never replace it
       - .amazonaws.com
-      - api.stripe.com # the PSP API; any other domain is dropped
+      - api.stripe.com # the PSP API
   workload_environments:
     prod:
       account_key: workload_prod
@@ -569,13 +595,10 @@ gcp:
 Gaps in the golden path that this design hits:
 
 - **AWS public ingress is all-or-nothing.** `app_ingress_mode` exposes the
-  shared ALB, so `/ledger/*` and `/recon/*` become reachable through
-  CloudFront too. Until app-services can expose one service, add a WAF rule
-  allowing only `/payments*` and `/webhooks/psp`. GCP's `public_ingress`
-  exposes the payments service alone.
-- **Database roles.** AWS app-services hands the service the Aurora master
-  secret; on GCP the runtime service account is the IAM database user. The
-  append-only role (`INSERT`, `SELECT` only) must come from a schema migration.
+  shared ALB, `/ledger/*` and `/recon/*` included, so add a WAF rule allowing
+  only `/payments*` and `/webhooks/psp`.
+- **Database roles.** AWS app-services hands over the Aurora master secret;
+  the append-only role must come from a schema migration on both clouds.
 - **GCP CMEK ordering.** Cloud SQL takes CMEK only at creation, and YAML
   cannot reference `module.workload_cmek`: apply the key ring below first, then
   add the `database` blocks. The Cloud SQL service identity must exist too:
@@ -583,12 +606,10 @@ Gaps in the golden path that this design hits:
   ([Google Cloud docs](https://docs.cloud.google.com/sql/docs/postgres/configure-cmek),
   checked 2026-11).
 - **Scheduling.** The GCP `recon` job needs a raw Cloud Scheduler trigger; on
-  AWS, `recon` runs its own daily loop because app-services has no scheduled
-  task, and with two or more tasks the loop must take `pg_try_advisory_lock`
-  so only one runs.
-- **PITR window on GCP.** `edition` defaults to `ENTERPRISE`, whose log
-  retention stops at 7 days; `ENTERPRISE_PLUS` (default 14, up to 35) also
-  needs an Enterprise Plus `tier` (**verify before relying on** the tier name).
+  AWS, `recon`'s own daily loop takes `pg_try_advisory_lock` so one task runs.
+- **PITR window on GCP.** `edition` defaults to `ENTERPRISE` (7 days of
+  logs); `ENTERPRISE_PLUS` (up to 35) needs an Enterprise Plus `tier`
+  (**verify before relying on** the tier name).
 
 ### AWS: the settlement raw zone
 
@@ -653,8 +674,7 @@ resource "aws_iam_role_policy" "recon_settlements" {
 }
 ```
 
-Test in `GOVERNANCE` mode first: compliance-mode objects cannot be deleted
-early by anyone.
+Test in `GOVERNANCE` mode first.
 
 ### GCP: workload CMEK and the settlement raw zone
 
@@ -716,9 +736,8 @@ The Cloud SQL service agent holds Encrypter/Decrypter on the three database
 keys, and the Cloud Storage service agent on `settlements`; the key ring must
 match the bucket's location
 ([Google Cloud docs](https://docs.cloud.google.com/storage/docs/encryption/using-customer-managed-keys),
-checked 2026-11). `recon-run` also needs `roles/storage.objectViewer` on the
-bucket to read files back. Per [Per-component identity](00-primer.md#per-component-identity),
-these grants sit on the bucket, not the project.
+checked 2026-11). `recon-run` also needs `roles/storage.objectViewer`, on the bucket, not the
+project ([Per-component identity](00-primer.md#per-component-identity)).
 
 ## Runbook
 
@@ -731,8 +750,7 @@ PSP call p99 latency, and the PSP's status page.
 
 **Triage.**
 
-1. **PSP or us?** Compare our PSP latency with the PSP's status page. Check
-   egress: on AWS, Network Firewall alert logs in `aws-network` for drops to
+1. **PSP or us?** Compare with the PSP's status page. Check egress: on AWS, Network Firewall alert logs in `aws-network` for drops to
    the PSP hostname after an `aws.network.egress_domain_allowlist` change; on
    GCP, Cloud NAT errors or port exhaustion.
 2. **One operation or all?** One failing points at the PSP; all failing points
@@ -743,8 +761,8 @@ PSP call p99 latency, and the PSP's status page.
 
 1. **Never** mark unknown attempts failed in bulk or ask clients to pay
    again: that turns an outage into double charges.
-2. Shed load: `503` with `Retry-After` on `POST /payments` once in-flight PSP
-   calls pass the pool limit.
+2. Shed load: `503` with `Retry-After` once in-flight PSP calls reach the
+   agreed concurrency cap.
 3. With a second PSP behind the adapter gateway, route **new** payments to it.
    Unknown attempts stay with their original PSP.
 4. Egress regression: revert through the owning workspace (`aws-network`) in
@@ -753,21 +771,21 @@ PSP call p99 latency, and the PSP's status page.
    rate limits, retrieving each object by its stored PSP ID. Never search and
    re-send.
 
-**Verification.** The `unknown` rate is back near zero, no payment has been in
-`PENDING_PSP` for more than 5 minutes, and the next reconciliation shows no
-"in PSP, not in ledger" or duplicate-charge breaks for the incident window.
+**Verification.** The `unknown` rate is near zero, nothing is in
+`PENDING_PSP` past 5 minutes, and reconciliation shows no missing or duplicate
+charges for the window.
 
-**Follow-up.** Reconcile the incident window early. Review the outbound
-timeout against PSP p99. Game-day a PSP blackhole in staging.
+**Follow-up.** Reconcile the incident window early, and game-day a PSP
+blackhole in staging.
 
 ### The ledger does not balance, or reconciliation breaks spike
 
 **Detection signal.** The nightly global-zero check (sum of postings per
 currency is not zero), or reconciliation breaks above their normal daily count.
 
-**Triage.** Global zero failing means an unbalanced entry got in: was the
-deferred constraint trigger dropped by a migration? A break spike usually means
-lost events (outbox lag, a DLQ) or a changed report format.
+**Triage.** Global zero failing means an unbalanced entry got in: did a
+migration drop the deferred trigger? A break spike usually means lost events
+or a changed report format.
 
 **Mitigation.** Freeze payouts. Fix forward with reversing and correcting
 entries that cite the break ID; never edit postings. Re-run reconciliation from
@@ -776,8 +794,8 @@ the raw file.
 **Verification.** Global zero holds, `psp_clearing` equals unsettled captures
 net of fees and refunds, and the break count is back to baseline.
 
-**Follow-up.** Add the case to the ledger's invariant tests. If a migration
-removed a trigger, add a schema check for it to CI.
+**Follow-up.** Add the case to the invariant tests, and a CI schema check for
+the trigger.
 
 ## Study aids
 
@@ -786,6 +804,7 @@ removed a trigger, add a schema check for it to CI.
 | Fact | Value |
 |---|---|
 | This design's peak | 500 payments/s, 1,500 PSP calls/s, 5,000 postings/s |
+| Stripe live defaults | 100 req/s, 25 req/s per endpoint, 50 concurrent; 6 weeks' notice for a large increase |
 | Ledger growth | ~12.5 GB/day, ~4.6 TB/year |
 | Stripe idempotency | Keys up to 255 characters; prunable after 24 hours; replays stored `500`s |
 | Stripe webhooks | Retries for up to 3 days live; unordered; signature tolerance 5 minutes |
@@ -801,7 +820,7 @@ removed a trigger, add a schema check for it to CI.
 - **"Why double-entry?"** Money cannot appear or vanish, zero-sum entries give
   a cheap global check, and the postings are the audit trail.
 - **"Why not keep a balance column?"** Hot accounts serialise every payment on
-  one row lock. Derive balances; snapshot for speed.
+  one row lock. Derive balances; snapshot at a safe horizon.
 
 ### Classic mistakes
 
@@ -810,14 +829,12 @@ removed a trigger, add a schema check for it to CI.
 - Treating a timeout as a failure and letting the client pay again.
 - Updating or deleting ledger rows.
 - Applying webhook payloads directly, in arrival order.
-- Reconciliation that adjusts silently instead of opening breaks.
-- Putting card numbers in your own database.
+- Snapshotting balances up to "now", which drops late commits.
 
 ### Further reading
 
 - [Stripe idempotent requests](https://docs.stripe.com/api/idempotent_requests)
-- [Stripe webhooks: delivery behaviours](https://docs.stripe.com/webhooks)
-- [IETF Idempotency-Key header draft](https://datatracker.ietf.org/doc/draft-ietf-httpapi-idempotency-key-header/)
+  and [rate limits](https://docs.stripe.com/rate-limits)
 - [PostgreSQL transaction isolation](https://www.postgresql.org/docs/current/transaction-iso.html)
 - The [transactional outbox](03-microservices-sync-async.md#the-transactional-outbox)
   and the primer's [service map](00-primer.md#aws-gcp-service-map).
