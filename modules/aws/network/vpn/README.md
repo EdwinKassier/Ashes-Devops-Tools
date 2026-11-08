@@ -94,3 +94,7 @@ The following resources are created:
 | <a name="output_tunnel2_address"></a> [tunnel2\_address](#output\_tunnel2\_address) | Public IP address of the second VPN tunnel (AWS side). |
 | <a name="output_vpn_connection_id"></a> [vpn\_connection\_id](#output\_vpn\_connection\_id) | ID of the Site-to-Site VPN connection. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.
