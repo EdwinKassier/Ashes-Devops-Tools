@@ -259,6 +259,28 @@ run "backup_service_role_stack_set" {
     )
     error_message = "the Backup service role must be deployed by a service-managed StackSet to the Workloads OU."
   }
+
+  assert {
+    condition = (
+      jsondecode(aws_cloudformation_stack_set.backup_service_role[0].template_body).Resources.MemberBackupVault.Type == "AWS::Backup::BackupVault" &&
+      jsondecode(aws_cloudformation_stack_set.backup_service_role[0].template_body).Resources.MemberBackupVault.Properties.BackupVaultName == "org-backup-vault" &&
+      jsondecode(aws_cloudformation_stack_set.backup_service_role[0].template_body).Resources.MemberBackupVault.DeletionPolicy == "Retain"
+    )
+    error_message = "every Workloads-OU account must get the org-backup-vault the BACKUP_POLICY writes to, retained on stack deletion."
+  }
+}
+
+run "member_backup_vault_can_be_disabled" {
+  command = plan
+
+  variables {
+    create_member_backup_vault = false
+  }
+
+  assert {
+    condition     = !contains(keys(jsondecode(aws_cloudformation_stack_set.backup_service_role[0].template_body).Resources), "MemberBackupVault")
+    error_message = "create_member_backup_vault = false must leave only the service role in the StackSet."
+  }
 }
 
 run "unpinned_github_with_baseline_warns" {

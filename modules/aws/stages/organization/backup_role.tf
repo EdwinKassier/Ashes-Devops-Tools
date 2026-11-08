@@ -4,12 +4,31 @@
 # role needs no CloudFormation rights (a StackSet is an org-wide
 # role-deployment primitive). aws-backup's BACKUP_POLICY names it with
 # arn:aws:iam::$account:role/<backup_service_role_name>.
+#
+# The same StackSet creates the member-account backup vault. A BACKUP_POLICY
+# runs its jobs in each member account and writes to a vault of the given name
+# IN THAT ACCOUNT, so every account under the policy needs one (AWS Backup
+# policy syntax docs). The vault is retained if the stack is deleted, because a
+# vault that holds recovery points cannot be deleted. It uses the AWS managed
+# aws/backup key; cross-account copy to the central locked vault is tracked in
+# docs/known-gaps.md.
 
 locals {
+  member_backup_vault_resource = var.create_member_backup_vault ? {
+    MemberBackupVault = {
+      Type                = "AWS::Backup::BackupVault"
+      DeletionPolicy      = "Retain"
+      UpdateReplacePolicy = "Retain"
+      Properties = {
+        BackupVaultName = var.member_backup_vault_name
+      }
+    }
+  } : {}
+
   backup_service_role_template = jsonencode({
     AWSTemplateFormatVersion = "2010-09-09"
-    Description              = "AWS Backup service role for the organization BACKUP_POLICY (managed by aws-organization)."
-    Resources = {
+    Description              = "AWS Backup service role and vault for the organization BACKUP_POLICY (managed by aws-organization)."
+    Resources = merge(local.member_backup_vault_resource, {
       BackupServiceRole = {
         Type = "AWS::IAM::Role"
         Properties = {
@@ -28,7 +47,7 @@ locals {
           ]
         }
       }
-    }
+    })
   })
 }
 

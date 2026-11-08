@@ -417,6 +417,25 @@ variable "backup_service_role_name" {
   default     = "aws-backup-org-role"
 }
 
+variable "create_member_backup_vault" {
+  description = "Also create the member-account backup vault (member_backup_vault_name) in every Workloads-OU account, in the same StackSet as the Backup service role. The BACKUP_POLICY writes to a vault of that name in each member account, so without it scheduled jobs have no target. Only takes effect with create_backup_service_role. Disable only if another mechanism creates the vault."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
+variable "member_backup_vault_name" {
+  description = "Name of the member-account backup vault (must equal aws-backup vault_name)."
+  type        = string
+  default     = "org-backup-vault"
+  nullable    = false
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9_-]{2,50}$", var.member_backup_vault_name))
+    error_message = "member_backup_vault_name must be 2-50 characters of letters, digits, hyphens and underscores."
+  }
+}
+
 variable "backup_service_role_stack_set_name" {
   description = "Name of the StackSet that deploys the Backup service role."
   type        = string

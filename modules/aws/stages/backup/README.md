@@ -75,10 +75,10 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_cloudformation_stack_set.backup_role (modules/aws/stages/backup/main.tf#L109)
-- resource.aws_cloudformation_stack_set_instance.backup_role (modules/aws/stages/backup/main.tf#L141)
-- data source.aws_caller_identity.backup (modules/aws/stages/backup/main.tf#L25)
-- data source.aws_partition.backup (modules/aws/stages/backup/main.tf#L30)
+- resource.aws_cloudformation_stack_set.backup_role (modules/aws/stages/backup/main.tf#L121)
+- resource.aws_cloudformation_stack_set_instance.backup_role (modules/aws/stages/backup/main.tf#L153)
+- data source.aws_caller_identity.backup (modules/aws/stages/backup/main.tf#L27)
+- data source.aws_partition.backup (modules/aws/stages/backup/main.tf#L32)
 
 
 ## Inputs
@@ -98,7 +98,7 @@ The following resources are created:
 | <a name="input_partition"></a> [partition](#input\_partition) | AWS partition (aws, aws-us-gov, aws-cn) for the member Backup role ARN rendered into the BACKUP\_POLICY. | `string` | `"aws"` | no |
 | <a name="input_restore_testing_role_arn"></a> [restore\_testing\_role\_arn](#input\_restore\_testing\_role\_arn) | ARN of an existing IAM role (in the backup account) AWS Backup assumes to perform restore testing jobs. Null (default) creates aws-backup-restore-testing in the backup account. | `string` | `null` | no |
 | <a name="input_tfc_apply_boundary_policy_name"></a> [tfc\_apply\_boundary\_policy\_name](#input\_tfc\_apply\_boundary\_policy\_name) | Name of the tfc-apply permissions-boundary managed policy (tfc-oidc-baseline apply\_boundary\_policy\_name). Every IAM role this stage creates in the backup account (the restore-testing role) gets permissions\_boundary = arn:PARTITION:iam::ACCOUNT\_ID:policy/NAME, derived from that account's provider, which the member-account tfc-apply role requires when boundary propagation is on. Null = create roles without a boundary. | `string` | `"tfc-apply-boundary"` | no |
-| <a name="input_vault_name"></a> [vault\_name](#input\_vault\_name) | Name of the AWS Backup vault created in the backup account. This is the cross-account naming contract: the management account's org BACKUP\_POLICY targets the vault by this name. | `string` | `"org-backup-vault"` | no |
+| <a name="input_vault_name"></a> [vault\_name](#input\_vault\_name) | Name of the AWS Backup vault created in the backup account. This is the cross-account naming contract: the org BACKUP\_POLICY targets a vault of this name in each member account, which the member-account StackSet creates (aws-organization member\_backup\_vault\_name must match). | `string` | `"org-backup-vault"` | no |
 
 ## Outputs
 

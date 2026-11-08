@@ -86,6 +86,11 @@ run "backup_role_stack_set_by_default" {
     condition     = jsondecode(aws_cloudformation_stack_set.backup_role[0].template_body).Resources.BackupServiceRole.Properties.AssumeRolePolicyDocument.Statement[0].Principal.Service == "backup.amazonaws.com"
     error_message = "The StackSet role must be trusted by backup.amazonaws.com only."
   }
+
+  assert {
+    condition     = jsondecode(aws_cloudformation_stack_set.backup_role[0].template_body).Resources.MemberBackupVault.Properties.BackupVaultName == var.vault_name
+    error_message = "The legacy StackSet must create the member-account vault the BACKUP_POLICY targets."
+  }
 }
 
 run "explicit_backup_role_creates_no_stack_set" {

@@ -69,7 +69,7 @@ variable "aws_region" {
 # -----------------------------------------------------------------------------
 
 variable "vault_name" {
-  description = "Name of the AWS Backup vault created in the backup account. Cross-account naming contract: the management account's org BACKUP_POLICY targets the vault by this name."
+  description = "Name of the AWS Backup vault created in the backup account. Cross-account naming contract: the org BACKUP_POLICY targets a vault of this name in each member account; aws-organization creates those (its member_backup_vault_name must match)."
   type        = string
   default     = "org-backup-vault"
 }

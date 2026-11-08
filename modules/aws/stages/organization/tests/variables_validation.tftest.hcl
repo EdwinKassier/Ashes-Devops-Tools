@@ -149,3 +149,13 @@ run "cloudtrail_delegated_admin_needs_security_tooling" {
 
   expect_failures = [var.enable_cloudtrail_delegated_admin]
 }
+
+run "rejects_invalid_member_backup_vault_name" {
+  command = plan
+
+  variables {
+    member_backup_vault_name = "bad vault!"
+  }
+
+  expect_failures = [var.member_backup_vault_name]
+}
