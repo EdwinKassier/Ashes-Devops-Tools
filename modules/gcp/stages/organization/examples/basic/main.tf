@@ -1,8 +1,6 @@
-# NOTE: the module source below is pinned to a release tag (?ref=v0.1.0, bumped
-# by release-please through the x-release-please-version marker). Until the
-# first release tag exists, `terraform init` fails on it. To try this example
-# now, replace the source with the relative path "../../" (the module this
-# example lives in). CI skips tag-pinned examples until that tag is cut.
+# The module source below is pinned to a release tag (bumped by release-please
+# through the x-release-please-version marker). To try local changes, replace it
+# with the relative path "../../".
 #
 # Example: provision the org-level resources — folder hierarchy, IAM groups,
 # tags, org policies, and CMEK keys for the landing zone.

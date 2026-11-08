@@ -38,12 +38,7 @@ collect_examples() {
       -path '*/examples/*' ! -path '*/.terraform/*' | sed 's#/versions.tf##'
   } | sort -u | while read -r dir; do
     # Tag-pinned examples (git::...?ref=vX.Y.Z, bumped by release-please via
-    # the x-release-please-version marker) cannot init until that tag exists.
-    # Skipped here until the first release is cut; once v0.1.0 exists, delete
-    # this grep so CI validates them against the published tag.
-    if grep -qs 'x-release-please-version' "$dir"/*.tf; then
-      continue
-    fi
+    # the x-release-please-version marker) validate against the published tag.
     echo "$dir"
   done
 }
