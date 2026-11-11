@@ -411,6 +411,12 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   `no_plan_time_code_execution` also denies `data "aws_lambda_invocation"`, every `action` block
   whose type is not on the new, empty `allowed_action_types`, and the provider keys `credentials`
   and `token_url`. See `UPGRADING.md`.
+- **Plan-time execution gate review fixes (SEC-2 / CICD-2, breaking).** The gate has no fallback
+  parse: a file that python-hcl2 cannot parse fails (`envs/aws/workload/main.tf` now ends lines
+  with `?` and `:`). `.tf.json` files with duplicate keys fail. Files come from `git ls-files`, and
+  a tracked symlink, a submodule or a path under `.terraform/` or `node_modules/` fails. The policy
+  lists must be plain string literals, defined once. Module sources must match exactly.
+  `regex` in the parser lock is pinned to 2026.9.29.
 - **The plan-time execution gate parses HCL (SEC-2 / CICD-2, breaking).**
   `scripts/check-plan-time-exec.py` replaces the grep in `scripts/check-consistency.sh`. It parses
   every `.tf` (python-hcl2, hash-locked in `.github/requirements/hcl2.txt`) and `.tf.json` file, so

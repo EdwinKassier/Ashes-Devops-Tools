@@ -5,14 +5,18 @@ A plan runs with the workspace's credentials and environment variables
 (TFE_TOKEN, SUPABASE_ACCESS_TOKEN, the cloud plan identity). HCP Terraform
 evaluates policies/opa/no_plan_time_code_execution.rego only AFTER the plan,
 so this check enforces the same rules on the repository source at pull-request
-time. It parses every *.tf file (python-hcl2) and every *.tf.json file (json)
-in the tree (it skips .git, .terraform and node_modules) and fails on:
+time. It parses every tracked *.tf file (python-hcl2) and *.tf.json file
+(json, duplicate keys rejected) and fails on:
+  - a tracked symlink or submodule, or a tracked path inside .terraform/ or
+    node_modules/ (git does not list the files behind them);
   - a provisioner in a resource block outside the reviewed module (the module
     that the policy's allowed_provisioner_chain reaches from envs/saas) and
     outside TEST_PROVISIONER_ALLOW;
   - a provisioner in a removed block, anywhere (the plan JSON does not render
     removed blocks, so the policy cannot see these);
-  - a data "external" / data "http" block, top-level or inside a check block;
+  - a data block whose type is on the policy's exec_data_types (external,
+    http, aws_lambda_invocation), top-level or inside a check block;
+  - an action block whose type is not on allowed_action_types;
   - a data "terraform_remote_state" whose backend is not a literal on the
     policy's allowed_remote_state_backends;
   - a provider that is not on the policy's allowed_provider_sources: in
@@ -20,17 +24,22 @@ in the tree (it skips .git, .terraform and node_modules) and fails on:
     provider of every provider, resource, data, ephemeral and action block;
   - a provider argument or nested block (dynamic blocks included) that matches
     the policy's endpoint_key_pattern and is not in endpoint_key_exceptions;
-  - a module source that is neither local nor this repository's release tag;
+  - a module source that is neither local nor this repository's release tag,
+    or a local source into .terraform/ or node_modules/;
   - a drift between allowed_provisioner_chain and the module calls in the code;
-  - a file that does not parse (fail closed).
+  - a file that does not parse (fail closed, no fallback parse).
 
-One source of truth: the provider, backend and endpoint lists and the
-provisioner chain are READ from policies/opa/no_plan_time_code_execution*.rego
-of the repository that holds this script. A fork edits only the allowlist
-.rego file, and both controls follow.
+One source of truth: the data, action, provider, backend and endpoint lists
+and the provisioner chain are READ from
+policies/opa/no_plan_time_code_execution*.rego of the repository that holds
+this script. A list body must be plain string literals; anything else (a
+comprehension, a set expression, a second definition) exits 2. A fork edits
+only the allowlist .rego file, and both controls follow.
 
-Exit codes: 0 clean, 1 violations, 2 setup error (parser missing, policy
-unreadable). PLAN_EXEC_ROOT overrides the tree to scan (tests).
+Exit codes: 0 clean, 1 violations, 2 setup error (parser or git missing,
+policy unreadable). PLAN_EXEC_ROOT overrides the tree to scan (tests): it is
+read with `git ls-files` when it is a git work tree, else walked.
+PLAN_EXEC_POLICY_DIR overrides the policy folder (tests).
 """
 from __future__ import annotations
 
@@ -38,6 +47,7 @@ import json
 import os
 import posixpath
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -52,10 +62,16 @@ except ImportError:  # fail closed with the install hint
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-ROOT = Path(os.environ.get("PLAN_EXEC_ROOT") or REPO).resolve()
-POLICY = REPO / "policies" / "opa" / "no_plan_time_code_execution.rego"
-ALLOWLIST = REPO / "policies" / "opa" / "no_plan_time_code_execution_allowlist.rego"
+TEST_ROOT = os.environ.get("PLAN_EXEC_ROOT")
+ROOT = Path(TEST_ROOT or REPO).resolve()
+# PLAN_EXEC_POLICY_DIR replaces the policy folder (tests of the .rego reader).
+POLICY_DIR = Path(os.environ.get("PLAN_EXEC_POLICY_DIR") or REPO / "policies" / "opa").resolve()
+POLICY = POLICY_DIR / "no_plan_time_code_execution.rego"
+ALLOWLIST = POLICY_DIR / "no_plan_time_code_execution_allowlist.rego"
+POLICY_PACKAGE = "terraform.policies.no_plan_time_code_execution"
 SKIP_DIRS = {".git", ".terraform", "node_modules"}
+# Folders whose content a git checkout or a TFC run does not review.
+HIDDEN_SEGMENTS = {".terraform", "node_modules"}
 
 # The root whose module calls start the policy's allowed_provisioner_chain.
 PROVISIONER_CHAIN_ROOT = "envs/saas"
@@ -65,22 +81,28 @@ PROVISIONER_CHAIN_ROOT = "envs/saas"
 # fixed `sleep 20` waits for S3 bucket settings to become consistent.
 TEST_PROVISIONER_ALLOW = {"tests/e2e/aws/main.tf": {"terraform_data.archive_settle"}}
 
-LOCAL_MODULE = re.compile(r"^\.\.?/")
+LOCAL_MODULE = re.compile(r"\.\.?/.*", re.S)
 OWN_RELEASE_MODULE = re.compile(
-    r"^git::https://github\.com/EdwinKassier/Ashes-Devops-Tools\.git//modules/[a-z0-9/_-]+"
-    r"\?ref=v[0-9]+\.[0-9]+\.[0-9]+$"
+    r"git::https://github\.com/EdwinKassier/Ashes-Devops-Tools\.git//modules/[a-z0-9/_-]+"
+    r"\?ref=v[0-9]+\.[0-9]+\.[0-9]+"
 )
 DEFAULT_REGISTRY = "registry.terraform.io"
 BUILTIN_TERRAFORM = "terraform.io/builtin/terraform"
 TYPED_BLOCKS = ("resource", "data", "ephemeral", "action")
-# python-hcl2 7.3.1 rejects a valid HCL form: a line inside parentheses that
-# starts with a conditional or logical operator ("? a", ": b", "&& c").
-# When the strict parse fails, the file is parsed once more with those
-# newlines joined. The join only removes line breaks, so it can only hide a
-# continuation line behind a comment on the line before. Such a line is part
-# of an expression (never a block, key or module source), and an expression
-# is never accepted where this check needs a literal.
-LEADING_OPERATOR = re.compile(r"\n[ \t]*(?=(?:\?|:|&&|\|\|)\s)")
+
+# A rego list body this script accepts: string literals, commas, whitespace
+# and comments, nothing else.
+STRING_SET_BODY = re.compile(r'(?:\s|,|"[^"\\\n]*"|#[^\n]*)*')
+CHAIN_BODY = re.compile(
+    r'(?:\s|,|#[^\n]*|\{"name":\s*"[^"\\\n]*",\s*"source":\s*"[^"\\\n]*"\})*'
+)
+
+
+def show(path: Path) -> str:
+    try:
+        return path.relative_to(REPO).as_posix()
+    except ValueError:
+        return str(path)
 
 
 def setup_error(msg: str) -> None:
@@ -89,21 +111,55 @@ def setup_error(msg: str) -> None:
 
 
 # --- read the lists from the OPA policy ------------------------------------
-def _rego_rule(text: str, name: str, opener: str, closer: str, src: Path) -> str:
-    """Body of a top-level `name := <opener> ... <closer>` rule, comments stripped.
-    closer is a regex: the first match after the opener ends the body."""
-    m = re.search(rf"^{re.escape(name)}\s*:=\s*{re.escape(opener)}(.*?){closer}",
-                  text, re.M | re.S)
+def _rego_rule(text: str, name: str, src: Path) -> str:
+    """Right-hand side of the one top-level `name := ...` rule, up to the next
+    top-level line that is not a closing bracket (or the end of the file)."""
+    m = re.search(rf"^{re.escape(name)}\s*:=\s*(.*?)(?=^[^\s\]}}]|\Z)", text, re.M | re.S)
     if not m:
-        setup_error(f"cannot read {name} from {src.relative_to(REPO)}")
-    return "\n".join(line.split("#", 1)[0] for line in m.group(1).splitlines())
+        setup_error(f"cannot read {name} from {show(src)}")
+    return m.group(1).strip()
 
 
-def rego_string_set(text: str, name: str, src: Path) -> set[str]:
-    values = set(re.findall(r'"([^"]*)"', _rego_rule(text, name, "{", r"\}", src)))
-    if not values:
-        setup_error(f"{name} in {src.relative_to(REPO)} is empty")
+def rego_string_set(text: str, name: str, src: Path, allow_empty: bool = False) -> set[str]:
+    rhs = _rego_rule(text, name, src)
+    if allow_empty and rhs == "set()":
+        return set()
+    if not (rhs.startswith("{") and rhs.endswith("}") and STRING_SET_BODY.fullmatch(rhs[1:-1])):
+        setup_error(f"{name} in {show(src)} must be a set of string literals, "
+                    "with no expressions or comprehensions")
+    values = set(re.findall(r'"([^"]*)"', re.sub(r"#[^\n]*", "", rhs)))
+    if not values and not allow_empty:
+        setup_error(f"{name} in {show(src)} is empty")
     return values
+
+
+def rego_chain(text: str, src: Path) -> list[tuple[str, str]]:
+    rhs = _rego_rule(text, "allowed_provisioner_chain", src)
+    if not (rhs.startswith("[") and rhs.endswith("]") and CHAIN_BODY.fullmatch(rhs[1:-1])):
+        setup_error(f"allowed_provisioner_chain in {show(src)} must be a list of "
+                    '{"name": "...", "source": "..."} literals')
+    chain = re.findall(r'\{"name":\s*"([^"]+)",\s*"source":\s*"([^"]+)"\}', rhs)
+    if not chain:
+        setup_error(f"allowed_provisioner_chain in {show(src)} is empty")
+    return chain
+
+
+def single_definitions(names: list[str]) -> None:
+    """Each list must be defined exactly once across the policy package, so an
+    extra `name contains ...` or `name := ...` elsewhere cannot widen OPA
+    without this script seeing it."""
+    texts = []
+    for f in sorted(POLICY_DIR.glob("*.rego")):
+        if f.name.endswith("_test.rego"):
+            continue
+        t = f.read_text(encoding="utf-8")
+        if re.search(rf"^package\s+{re.escape(POLICY_PACKAGE)}\s*$", t, re.M):
+            texts.append(t)
+    for name in names:
+        n = sum(len(re.findall(rf"^{re.escape(name)}\b", t, re.M)) for t in texts)
+        if n != 1:
+            setup_error(f"{name} is defined {n} times in package {POLICY_PACKAGE}; "
+                        "it must be defined exactly once")
 
 
 def load_policy() -> dict:
@@ -112,20 +168,20 @@ def load_policy() -> dict:
         allow = ALLOWLIST.read_text(encoding="utf-8")
     except OSError as exc:
         setup_error(f"cannot read the OPA policy: {exc}")
-    m = re.search(r"^endpoint_key_pattern\s*:=\s*`([^`]+)`", policy, re.M)
+    single_definitions(["exec_data_types", "endpoint_key_pattern", "allowed_provisioner_chain",
+                        "allowed_provider_sources", "endpoint_key_exceptions",
+                        "allowed_remote_state_backends", "allowed_action_types"])
+    m = re.search(r"^endpoint_key_pattern\s*:=\s*`([^`]+)`\s*$", policy, re.M)
     if not m:
-        setup_error(f"cannot read endpoint_key_pattern from {POLICY.relative_to(REPO)}")
-    chain = re.findall(r'\{"name":\s*"([^"]+)",\s*"source":\s*"([^"]+)"\}',
-                       _rego_rule(policy, "allowed_provisioner_chain", "[", r"^\]", POLICY))
-    if not chain:
-        setup_error(f"allowed_provisioner_chain in {POLICY.relative_to(REPO)} is empty")
+        setup_error(f"endpoint_key_pattern in {show(POLICY)} must be one raw string")
     return {
         "exec_data_types": rego_string_set(policy, "exec_data_types", POLICY),
         "endpoint_key": re.compile(m.group(1)),
-        "chain": chain,
+        "chain": rego_chain(policy, POLICY),
         "providers": rego_string_set(allow, "allowed_provider_sources", ALLOWLIST),
         "endpoint_exceptions": rego_string_set(allow, "endpoint_key_exceptions", ALLOWLIST),
         "backends": rego_string_set(allow, "allowed_remote_state_backends", ALLOWLIST),
+        "actions": rego_string_set(allow, "allowed_action_types", ALLOWLIST, allow_empty=True),
     }
 
 
@@ -185,6 +241,10 @@ def provider_local(rtype: str, body: dict) -> str:
     return rtype.split("_", 1)[0]
 
 
+def hidden_path(path: str) -> bool:
+    return bool(HIDDEN_SEGMENTS & set(path.split("/")))
+
+
 # --- checks ---------------------------------------------------------------
 def required_providers(doc: dict):
     """Yield (local name, normalised source) for every required_providers entry."""
@@ -223,8 +283,11 @@ def check_doc(rel: str, doc: dict, dir_providers: dict, pol: dict, provisioner_d
         typed_blocks += [("data", t) for t in typed(check_body.get("data"))]
     for kind, (rtype, name, body) in typed_blocks:
         if kind == "data" and rtype in pol["exec_data_types"]:
-            out.append(f'{rel}: data "{rtype}" "{name}" runs at plan time with the '
-                       "workspace's credentials and environment")
+            out.append(f'{rel}: data "{rtype}" "{name}" runs code or calls out at plan time '
+                       "with the workspace's credentials and environment")
+        if kind == "action" and rtype not in pol["actions"]:
+            out.append(f'{rel}: action "{rtype}" "{name}" is not on allowed_action_types '
+                       "(an action runs provider code at apply time)")
         if kind == "data" and rtype == "terraform_remote_state" \
                 and literal(body.get("backend")) not in pol["backends"]:
             out.append(f"{rel}: data.terraform_remote_state.{name} backend must be a literal "
@@ -244,15 +307,19 @@ def check_doc(rel: str, doc: dict, dir_providers: dict, pol: dict, provisioner_d
             out.append(f'{rel}: provider "{pname}" ({src}) is not on allowed_provider_sources')
         for key in sorted(set(all_keys(body))):
             if pol["endpoint_key"].match(key) and key not in pol["endpoint_exceptions"]:
-                out.append(f'{rel}: provider "{pname}" sets "{key}" (an endpoint, proxy or TLS '
-                           "override can send the workspace's credentials to another host)")
+                out.append(f'{rel}: provider "{pname}" sets "{key}" (an endpoint, proxy, TLS or '
+                           "credential override can send the workspace's credentials to another host)")
 
     for mname, body in labelled(doc.get("module")):
         src = body.get("source")
         src = src if isinstance(src, str) else ""
-        if not (LOCAL_MODULE.match(src) or OWN_RELEASE_MODULE.match(src)):
+        if not (LOCAL_MODULE.fullmatch(src) or OWN_RELEASE_MODULE.fullmatch(src)):
             out.append(f'{rel}: module "{mname}" source "{src}" is neither local nor this '
                        "repository's release tag")
+        elif LOCAL_MODULE.fullmatch(src) and hidden_path(
+                posixpath.normpath(posixpath.join(posixpath.dirname(rel), src))):
+            out.append(f'{rel}: module "{mname}" source "{src}" points into .terraform/ or '
+                       "node_modules/, which this check does not scan")
     return out
 
 
@@ -271,17 +338,53 @@ def check_chain(docs: dict[str, dict], pol: dict) -> list[str]:
     return out
 
 
+def _no_duplicate_keys(pairs):
+    seen = {}
+    for k, v in pairs:
+        if k in seen:
+            raise ValueError(f"duplicate JSON key {k!r}")
+        seen[k] = v
+    return seen
+
+
 def parse(path: Path, is_json: bool):
     text = path.read_text(encoding="utf-8")
     if is_json:
-        return json.loads(text)
-    try:
-        return hcl2.loads(text)
-    except Exception:  # noqa: BLE001 - retried once, then the caller fails closed
-        joined = LEADING_OPERATOR.sub(" ", text)
-        if joined == text:
-            raise
-        return hcl2.loads(joined)
+        return json.loads(text, object_pairs_hook=_no_duplicate_keys)
+    return hcl2.loads(text)
+
+
+def is_tf(name: str) -> bool:
+    return name.endswith(".tf") or name.endswith(".tf.json")
+
+
+def discover() -> tuple[list[str], list[str]]:
+    """(files to parse, problems). Git mode lists tracked files only: that is
+    what a VCS-driven run checks out."""
+    if not TEST_ROOT or (ROOT / ".git").exists():
+        try:
+            raw = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-s", "-z"],
+                                 check=True, capture_output=True).stdout.decode("utf-8")
+        except (OSError, subprocess.CalledProcessError) as exc:
+            setup_error(f"git ls-files failed in {ROOT}: {exc}")
+        files, problems = [], []
+        for entry in filter(None, raw.split("\0")):
+            meta, path = entry.split("\t", 1)
+            mode = meta.split(" ", 1)[0]
+            if mode == "120000":
+                problems.append(f"{path}: tracked symlink (the files behind it are not scanned)")
+            elif mode == "160000":
+                problems.append(f"{path}: submodule (its files are not scanned)")
+            elif hidden_path(path):
+                problems.append(f"{path}: tracked file inside .terraform/ or node_modules/")
+            elif is_tf(path):
+                files.append(path)
+        return sorted(files), problems
+    files = []
+    for dirpath, dirnames, filenames in os.walk(ROOT):
+        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
+        files += [(Path(dirpath) / f).relative_to(ROOT).as_posix() for f in filenames if is_tf(f)]
+    return sorted(files), []
 
 
 def main() -> int:
@@ -290,25 +393,18 @@ def main() -> int:
     for _, source in pol["chain"]:
         provisioner_dir = posixpath.normpath(posixpath.join(provisioner_dir, source))
 
-    problems: list[str] = []
+    files, problems = discover()
     docs: dict[str, dict] = {}
-    for dirpath, dirnames, filenames in os.walk(ROOT):
-        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
-        for fname in sorted(filenames):
-            is_json = fname.endswith(".tf.json")
-            if not (is_json or fname.endswith(".tf")):
-                continue
-            path = Path(dirpath) / fname
-            rel = path.relative_to(ROOT).as_posix()
-            try:
-                doc = parse(path, is_json)
-            except Exception as exc:  # noqa: BLE001 - any parse error fails closed
-                problems.append(f"{rel}: cannot parse ({type(exc).__name__}); fail closed")
-                continue
-            if not isinstance(doc, dict):
-                problems.append(f"{rel}: top level is not an object; fail closed")
-                continue
-            docs[rel] = doc
+    for rel in files:
+        try:
+            doc = parse(ROOT / rel, rel.endswith(".tf.json"))
+        except Exception as exc:  # noqa: BLE001 - any parse error fails closed
+            problems.append(f"{rel}: cannot parse ({type(exc).__name__}: {str(exc)[:120]}); fail closed")
+            continue
+        if not isinstance(doc, dict):
+            problems.append(f"{rel}: top level is not an object; fail closed")
+            continue
+        docs[rel] = doc
 
     # required_providers are module-scoped: one map per directory.
     by_dir: dict[str, dict] = {}

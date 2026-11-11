@@ -244,6 +244,21 @@ tree passes. Before you merge:
   the policy in the same change: the check fails when the chain in the policy
   and the module calls in `envs/saas` and `modules/saas/stages/saas-workload`
   differ.
+- **Every file must parse, with no fallback.** python-hcl2 7.3.1 rejects one
+  valid HCL form: a line inside parentheses that starts with `?`, `:`, `&&` or
+  `||`. Such a file fails the check. Put the operator at the end of the line
+  before (`cond ?` then `a :` then `b`). A `.tf.json` file with a duplicate
+  key at any level fails too.
+- **Tracked files only.** The check reads `git ls-files`. A tracked symlink, a
+  submodule, or a tracked file under `.terraform/` or `node_modules/` fails,
+  and so does a local module source that points into `.terraform/` or
+  `node_modules/`.
+- **The policy lists must be plain literals.** Each list in
+  `policies/opa/no_plan_time_code_execution*.rego` that the script reads must
+  be a set (or array) of string literals, defined once in the package. A
+  comprehension, a set expression or a second definition makes the script
+  exit 2.
+
 #### Run triggers auto-apply explicitly non-prod workloads (tfc-admin)
 
 **Trust change on the upgrade apply (estates with policy sets on).** tfc-admin's

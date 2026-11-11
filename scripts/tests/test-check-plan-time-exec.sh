@@ -220,32 +220,181 @@ add_file "${t}" modules/saas/stages/saas-workload/main.tf 'module "vault" {
 }'
 expect_rc "a renamed call in the provisioner chain fails" 1 "${t}" "allowed_provisioner_chain"
 
-# --- parser gap: a line that starts with ? or : inside parentheses --------------
-expect_rc "leading-operator conditional parses" 0 "$(case_tree leadop envs/r/main.tf 'locals {
+# --- parse failures fail closed (no fallback parse) ------------------------------
+# python-hcl2 7.3.1 rejects a line that starts with ? or : inside parentheses.
+# There is no retry: a retry that joined such lines let a heredoc closing line
+# swallow the blocks after it.
+expect_rc "leading-operator conditional fails closed" 1 "$(case_tree leadop envs/r/main.tf 'locals {
   x = (
     var.a
     ? "b"
     : "c"
   )
-}')"
-expect_rc "leading-operator retry still sees a provisioner" 1 "$(case_tree leadopprov envs/r/main.tf 'locals {
+}')" "cannot parse"
+expect_rc "heredoc with a leading-operator line cannot hide a provisioner" 1 "$(case_tree heredoc envs/r/main.tf 'locals {
   x = (
     var.a
-    ? "b"
+    ? <<EOT
+text
+EOT
     : "c"
   )
 }
-resource terraform_data x {
-  provisioner local-exec {
+resource "terraform_data" "x" {
+  provisioner "local-exec" {
     command = "id"
   }
+}')"
+expect_rc "heredoc body line that starts with : is not joined" 1 "$(case_tree heredoc2 envs/r/main.tf 'locals {
+  s = <<EOT
+a
+EOT
+}
+resource "terraform_data" "x" {
+  provisioner "local-exec" {
+    command = <<CMD
+: start
+CMD
+  }
 }')" "provisioner"
-expect_rc "a comment cannot hide a remote-state backend through the retry" 1 "$(case_tree leadopcomment envs/r/main.tf 'data "terraform_remote_state" "x" {
-  backend = (true # c
-    ? "http"
-    : "cloud"
-  )
+expect_rc "duplicate tf.json key cannot hide a provisioner" 1 "$(case_tree jsondup modules/a/main.tf.json '{"resource": {"terraform_data": {"x": {"provisioner": [{"local-exec": {"command": "id"}}]}}}, "resource": {"aws_s3_bucket": {"b": {"bucket": "x"}}}}')" "duplicate JSON key"
+expect_rc "duplicate nested tf.json key fails closed" 1 "$(case_tree jsondup2 envs/r/p.tf.json '{"provider": {"aws": {"region": "eu-west-2", "region": "us-east-1"}}}')" "duplicate JSON key"
+
+# --- tracked files (git mode) ----------------------------------------------------
+# git_tree <name>: a git work tree with every file staged (ls-files reads the index).
+git_tree() {
+  git -C "$1" init -q
+  git -C "$1" add -A
+}
+t="${workdir}/gitok"
+add_file "${t}" modules/a/main.tf 'resource "aws_s3_bucket" "b" {
+  bucket = "x"
+}'
+add_file "${t}" untracked-later.txt 'x'
+git_tree "${t}"
+add_file "${t}" evil/main.tf "${PROV}"
+expect_rc "git mode passes a clean tree and skips untracked files" 0 "${t}"
+t="${workdir}/gitsymlink"
+add_file "${t}" elsewhere/main.tf "${PROV}"
+mkdir -p "${t}/modules"
+ln -s ../elsewhere "${t}/modules/link"
+git_tree "${t}"
+git -C "${t}" rm -q --cached elsewhere/main.tf
+expect_rc "a tracked symlink fails" 1 "${t}" "tracked symlink"
+t="${workdir}/gitnodemodules"
+add_file "${t}" modules/a/node_modules/x/main.tf "${PROV}"
+git_tree "${t}"
+git -C "${t}" add -f modules/a/node_modules/x/main.tf
+expect_rc "a tracked file under node_modules fails" 1 "${t}" "node_modules"
+t="${workdir}/gitdotterraform"
+add_file "${t}" envs/r/.terraform/modules/m/main.tf "${PROV}"
+git_tree "${t}"
+git -C "${t}" add -f envs/r/.terraform/modules/m/main.tf
+expect_rc "a tracked file under .terraform fails" 1 "${t}" ".terraform"
+expect_rc "a local module source into node_modules fails" 1 "$(case_tree modnm envs/r/main.tf 'module "m" {
+  source = "./node_modules/x"
+}')" "node_modules"
+expect_rc "a local module source into .terraform fails" 1 "$(case_tree moddt envs/r/main.tf 'module "m" {
+  source = "../../.terraform/modules/x"
+}')" ".terraform"
+
+# --- mutations the first suite did not catch -----------------------------------
+expect_rc "aws_lambda_invocation data fails" 1 "$(case_tree lambda modules/a/main.tf 'data "aws_lambda_invocation" "x" {
+  function_name = "f"
+  input         = "{}"
+}')" 'data "aws_lambda_invocation"'
+expect_rc "aws_lambda_invoke action fails" 1 "$(case_tree lambdaact modules/a/main.tf 'action "aws_lambda_invoke" "x" {
+  config {
+    function_name = "f"
+  }
+}')" "allowed_action_types"
+expect_rc "interpolated remote-state backend fails" 1 "$(case_tree rsinterp envs/r/main.tf 'data "terraform_remote_state" "x" {
+  backend = "${"cloud"}"
 }')" "terraform_remote_state"
+expect_rc "remote state with the remote backend passes" 0 "$(case_tree rsremote envs/r/main.tf 'data "terraform_remote_state" "x" {
+  backend = "remote"
+}')"
+expect_rc "a provisioner nested in another block is found" 1 "$(case_tree nested modules/a/main.tf 'resource "terraform_data" "x" {
+  dynamic "provisioner" {
+    for_each = [1]
+    content {}
+  }
+}')" "provisioner"
+expect_rc "a sub-folder of vault-secrets is not the reviewed module" 1 "$(case_tree vssub modules/supabase/vault-secrets/sub/main.tf "${PROV}")" "provisioner"
+expect_rc "an ephemeral block of an unlisted provider fails" 1 "$(case_tree eph modules/a/main.tf 'ephemeral "vault_kv_secret" "x" {
+  path = "x"
+}')" "hashicorp/vault"
+expect_rc "an ephemeral block of an allowed provider passes" 0 "$(case_tree ephok modules/a/main.tf 'ephemeral "random_password" "x" {
+  length = 20
+}')"
+expect_rc "the provider argument decides the provider" 1 "$(case_tree provarg modules/a/main.tf 'resource "aws_s3_bucket" "b" {
+  provider = dns
+  bucket   = "x"
+}')" "hashicorp/dns"
+expect_rc "an aliased allowed provider argument passes" 0 "$(case_tree provalias modules/a/main.tf 'resource "aws_s3_bucket" "b" {
+  provider = aws.west
+  bucket   = "x"
+}')"
+t="${workdir}/scope"
+add_file "${t}" modules/a/versions.tf 'terraform {
+  required_providers {
+    dns = { source = "hashicorp/aws" }
+  }
+}'
+add_file "${t}" modules/b/main.tf 'resource "dns_a_record_set" "x" {
+  name = "x"
+}'
+expect_rc "required_providers apply to their own folder only" 1 "${t}" "modules/b/main.tf"
+expect_rc "a tf.json comment key is skipped" 0 "$(case_tree jsoncomment modules/a/versions.tf.json '{"terraform": {"required_providers": {"//": "pinned by Renovate", "aws": {"source": "hashicorp/aws"}}}}')"
+for src in \
+  'git::https://github.com/EdwinKassier/Ashes-Devops-Tools.git//modules/aws/stages/security?ref=v0.1.0&depth=1' \
+  'git::https://github.com/EdwinKassier/Ashes-Devops-Tools.git//modules/aws/stages/security?ref=v0.1.0-evil' \
+  'git::https://github.com/EdwinKassier/Ashes-Devops-Tools.git//modules/aws/stages/security?ref=main' \
+  'git::https://github.com/EdwinKassier/Ashes-Devops-Tools.git//modules/../../x?ref=v0.1.0' \
+  'git::https://github.com/EdwinKassier/Ashes-Devops-Tools.git-evil//modules/aws?ref=v0.1.0' \
+  '..evil/x' \
+  '.evil/x'; do
+  expect_rc "module source ${src} fails" 1 "$(case_tree "mod$(printf '%s' "${src}" | cksum | cut -d' ' -f1)" envs/r/main.tf "module \"m\" {
+  source = \"${src}\"
+}")" "neither local nor"
+done
+
+# --- the .rego reader accepts only string literals ------------------------------
+# policy_copy <name>: a copy of the policy files (not the tests) to mutate.
+policy_copy() {
+  local d="${workdir}/$1"
+  mkdir -p "${d}"
+  cp "${REPO_ROOT}/policies/opa/no_plan_time_code_execution.rego" \
+    "${REPO_ROOT}/policies/opa/no_plan_time_code_execution_allowlist.rego" "${d}/"
+  echo "${d}"
+}
+# expect_policy_rc <label> <rc> <policy dir> <text>
+expect_policy_rc() {
+  local rc=0
+  PLAN_EXEC_POLICY_DIR="$3" PLAN_EXEC_ROOT="${workdir}/clean" python3 "${SCRIPT}" >"${workdir}/out" 2>&1 || rc=$?
+  if [ "${rc}" -eq "$2" ] && grep -qF -- "$4" "${workdir}/out"; then ok "$1"; else
+    bad "$1 (rc=${rc}, want $2 with: $4)"
+    cat "${workdir}/out" >&2
+  fi
+}
+d="$(policy_copy polok)"
+expect_policy_rc "an unchanged policy copy is read" 0 "${d}" "0 problem(s)"
+d="$(policy_copy polcomp)"
+python3 - "${d}/no_plan_time_code_execution_allowlist.rego" <<'PY'
+import re, sys
+p = sys.argv[1]
+s = open(p).read()
+s = re.sub(r"allowed_provider_sources := \{.*?\n\}", 'allowed_provider_sources := {x | some x in ["registry.terraform.io/attacker/exfil"]}', s, flags=re.S)
+open(p, "w").write(s)
+PY
+expect_policy_rc "a comprehension in an allowlist exits 2" 2 "${d}" "string literals"
+d="$(policy_copy polexpr)"
+sed -i.bak 's/^allowed_remote_state_backends := .*/allowed_remote_state_backends := {"cloud"} | {"http"}/' "${d}/no_plan_time_code_execution_allowlist.rego"
+expect_policy_rc "a set expression in an allowlist exits 2" 2 "${d}" "string literals"
+d="$(policy_copy poltwice)"
+printf '\nallowed_provider_sources contains "registry.terraform.io/attacker/exfil"\n' >"${d}/extra.rego.tmp"
+{ printf 'package terraform.policies.no_plan_time_code_execution\n'; cat "${d}/extra.rego.tmp"; } >"${d}/extra.rego"
+expect_policy_rc "a second definition in the package exits 2" 2 "${d}" "defined 2 times"
 
 # --- fail closed -----------------------------------------------------------------
 expect_rc "unparseable file fails closed" 1 "$(case_tree broken modules/a/main.tf 'resource "x" {')" "cannot parse"

@@ -1,1 +1,4 @@
+# The checker for scripts/check-plan-time-exec.py. regex is pinned to a
+# release at least two weeks old when the lock was made (supply-chain cooling).
 python-hcl2==7.3.1
+regex==2026.9.29

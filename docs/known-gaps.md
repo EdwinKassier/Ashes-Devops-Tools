@@ -966,6 +966,7 @@ side (all mock-tested, secure defaults):
   `hostname` in its `config`. When `config` is built from locals or variables
   the plan JSON shows only references, so such a check could not be complete.
   No remote-state read in this repo sets `hostname`.
+  `scripts/check-plan-time-exec.py` does not check `config.hostname` either.
 - **The supabase `access_token` provider argument is allowed.** The policy and
   `scripts/check-plan-time-exec.py` deny the inline-credential keys
   `credentials` and `token_url` in provider blocks, but not `access_token`:
@@ -973,6 +974,22 @@ side (all mock-tested, secure defaults):
   is off. A change to that argument relies on review.
   `impersonate_service_account` is also allowed, because every GCP root sets
   it.
+- **The plan-time execution gate trusts the pull request's own copy.** CI runs
+  `scripts/check-plan-time-exec.py`, the policy files it reads in
+  `policies/opa/` and the parser lock in `.github/requirements/` from the pull
+  request's head. One pull request can widen an allowlist (or weaken the
+  script) and use the wider list in the same change. The intended control is
+  CODEOWNERS review on `/policies/`, `/scripts/check-plan-time-exec.py` and
+  `/.github/requirements/`. Today `.github/CODEOWNERS` covers `/policies/`
+  only, and its teams are placeholders until a fork sets its own
+  (`scripts/init-landing-zone.sh --codeowners`).
+- **What the plan-time execution gate does not scan.** It parses tracked
+  `*.tf` and `*.tf.json` files only. `*.tftest.hcl` and `*.tfmock.hcl` files
+  are not scanned: `terraform test` runs them in CI with mock providers and in
+  the sandbox end-to-end workflow with sandbox credentials, never in an HCP
+  Terraform workspace. The code behind a module source pinned to this
+  repository's release tag (`git::…?ref=vX.Y.Z`) is not scanned either; it
+  was checked when that release was cut.
 
 ## DECISION — needs a human call
 

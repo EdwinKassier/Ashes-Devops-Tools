@@ -68,9 +68,9 @@ locals {
   # Wrong-account guard for both providers. No try(): a missing account_ids key
   # fails the plan loudly instead of silently dropping the guard.
   workload_account_id = (
-    local.read_organization
-    ? local.org_remote.account_ids[local.workload_account_key]
-    : local.organization_contract.account_ids[local.workload_account_key]
+    local.read_organization ?
+    local.org_remote.account_ids[local.workload_account_key] :
+    local.organization_contract.account_ids[local.workload_account_key]
   )
 
   # Network contract; null / "" in standalone mode (enable_network_hub = false).
@@ -87,9 +87,9 @@ locals {
   # a contract supplies it, so a rename there cannot silently leave this
   # workload writing to a stale bucket.
   log_archive_bucket_name = (
-    local.read_security
-    ? local.security_remote.log_archive_bucket_name
-    : local.security_contract.log_archive_bucket_name
+    local.read_security ?
+    local.security_remote.log_archive_bucket_name :
+    local.security_contract.log_archive_bucket_name
   )
 }
 
@@ -159,7 +159,7 @@ locals {
 }
 
 # =============================================================================
-# APP SERVICES — the application golden path 
+# APP SERVICES — the application golden path
 #
 # One entry in local.services (var.services, else aws.workload_environments.<env>.services) = an ECR repo, a Fargate service in the spoke's
 # private subnets behind the shared internal ALB, least-privilege task roles, a
