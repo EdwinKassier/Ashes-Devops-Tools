@@ -4,11 +4,13 @@
 # repo root, so resource positions in the README match `make docs` output.
 set -euo pipefail
 
+[ "$#" -eq 0 ] && exit 0
+
 cd "$(dirname "$0")/.."
 
 modules="$(./scripts/terraform-roots.sh modules)"
-for dir in $(printf '%s\n' "$@" | xargs -n1 dirname | sort -u); do
+while IFS= read -r dir; do
   if printf '%s\n' "$modules" | grep -qxF "$dir"; then
     terraform-docs --config .terraform-docs.yml "$dir"
   fi
-done
+done < <(printf '%s\n' "$@" | sed 's#/[^/]*$##' | sort -u)

@@ -12,7 +12,7 @@ repos:
         description: Validate Terraform configuration
         # git exports GIT_DIR to hooks. Running terraform init on a git-sourced
         # example then runs its git checkout against this repository and moves HEAD.
-        # Examples are validated by make validate-all and CI
+        # Examples are validated by `make validate-all` and CI
         # (scripts/terraform-roots.sh collect_examples), outside any hook.
         exclude: '(^|/)examples/'
         args:
@@ -21,6 +21,8 @@ repos:
       - id: terraform_tflint
         name: TFLint
         description: Lint Terraform files
+        # Examples are excluded for the same GIT_DIR reason as terraform_validate above.
+        exclude: '(^|/)examples/'
         args:
           - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl
           # `--module` was removed in tflint v0.54.0 (tflint now errors: "Failed to
@@ -53,11 +55,13 @@ repos:
       - id: terraform_trivy
         name: Trivy security scan
         description: Security scanner for Terraform
+        # Examples are excluded for the same GIT_DIR reason as terraform_validate above:
+        # Trivy config scans fetch git module sources. CI and `make security` still scan them.
+        exclude: '(^|/)examples/'
         args:
           - --args=--skip-dirs="**/.terraform"
           - --args=--severity=CRITICAL,HIGH
 
-  # General hooks
   # Local hook, not the pre-commit-terraform one: that hook runs terraform-docs
   # from inside each module directory, so resource positions in the README differ
   # from `make docs` and the two fight. This one uses .terraform-docs.yml from the
@@ -69,9 +73,11 @@ repos:
         description: Generate Terraform module documentation (same as make docs)
         entry: scripts/precommit-terraform-docs.sh
         language: script
+        require_serial: true
         files: '^modules/.*\.tf$'
         exclude: '(^|/)(examples|tests)/'
 
+  # General hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # v6.0.0
     hooks:
