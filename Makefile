@@ -1,4 +1,4 @@
-.PHONY: help install fmt fmt-check validate validate-all lint consistency security security-low security-report docs docs-check count count-check links examples-refs required-checks required-checks-live backend-check cfn-lint shellcheck test test-scripts ci clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
+.PHONY: help install fmt fmt-check validate validate-all lint consistency security security-low security-report docs docs-check count count-check links examples-refs required-checks required-checks-live backend-check cfn-lint shellcheck test test-scripts ci yamllint markdownlint-check commit-check module-usage opa-test codeowners-check clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
 
 TERRAFORM := terraform
 TFLINT := tflint
@@ -8,6 +8,8 @@ TRIVY := trivy
 TRIVY_VERSION := $(shell awk '$$1=="trivy"{print $$2}' .tool-versions)
 TRIVY_ARGS := config . --skip-dirs '**/.terraform'
 SHELLCHECK_VERSION := $(shell awk '$$1=="shellcheck"{print $$2}' .tool-versions)
+# OPA MUST match the version the `opa` job in terraform-plan.yml installs (OPA_VERSION there).
+OPA_VERSION := $(shell awk '$$1=="opa"{print $$2}' .tool-versions)
 # Checkov MUST match the version CI runs (checkov-action pins the image; keep
 # .tool-versions in sync). Newer checkov ships new checks, so a skewed local
 # binary gives a false green. Prefer an exact-version uvx run; otherwise the
@@ -196,9 +198,50 @@ consistency: ## Assert canonical strings (region regex, provider pins) haven't d
 	@./scripts/check-consistency.sh
 	@./scripts/check-contracts.sh
 
-ci: ## Run the local CI pipeline (fmt → consistency → counts → links → shellcheck → docs → validate → lint → test → security)
+yamllint: ## yamllint exactly as CI: the pre-commit hook config, all files (CI: meta-lint)
+	@command -v $(PRE_COMMIT) >/dev/null 2>&1 || { echo "pre-commit not found: pipx install pre-commit (or brew install pre-commit)"; exit 1; }
+	@$(PRE_COMMIT) run yamllint --all-files
+
+markdownlint-check: ## markdownlint exactly as CI (the hook runs --fix; pre-commit fails when it changes a file) (CI: meta-lint)
+	@command -v $(PRE_COMMIT) >/dev/null 2>&1 || { echo "pre-commit not found: pipx install pre-commit (or brew install pre-commit)"; exit 1; }
+	@$(PRE_COMMIT) run markdownlint --all-files || { echo "markdownlint failed or changed files: review the diff and commit the fixes"; exit 1; }
+
+# CI (meta-lint) checks the commits of the PR: merge-base with the base branch..HEAD.
+COMMIT_BASE ?= origin/main
+commit-check: ## Conventional-commit check and the UPGRADING.md rule for breaking commits, merge-base(COMMIT_BASE)..HEAD (CI: meta-lint)
+	@command -v cz >/dev/null 2>&1 || { echo "cz (commitizen) not found: pipx install commitizen (CI uses .github/requirements/commitizen.txt)"; exit 1; }
+	@git rev-parse --verify --quiet $(COMMIT_BASE) >/dev/null || { echo "$(COMMIT_BASE) not found: run 'git fetch origin main' or set COMMIT_BASE=<ref>"; exit 1; }
+	@base="$$(git merge-base $(COMMIT_BASE) HEAD)"; \
+	if [ "$$base" = "$$(git rev-parse HEAD)" ]; then echo "commit-check: no commits ahead of $(COMMIT_BASE)"; exit 0; fi; \
+	cz check --rev-range "$$base..HEAD" || exit 1; \
+	if git log --format=%B "$$base..HEAD" | grep -Eq '^[a-z]+(\([^)]*\))?!:|^BREAKING[ -]CHANGE'; then \
+		git diff --name-only "$$base..HEAD" | grep -qx 'UPGRADING.md' || { echo "A commit is marked breaking (!: or BREAKING CHANGE) but UPGRADING.md is not in the diff. Add an entry under 'Unreleased'."; exit 1; }; \
+	fi; echo "commit-check: OK"
+
+module-usage: ## Fail on unreferenced modules that are not marked library-only (CI: meta-lint)
+	@python3 scripts/check-module-usage.py --check
+
+opa-test: ## opa check --strict and opa test on both policy sets, at the CI-pinned version (CI: opa)
+	@command -v opa >/dev/null 2>&1 || { echo "opa not found. Install opa $(OPA_VERSION) (pinned in .tool-versions): 'brew install opa' or 'mise install opa@$(OPA_VERSION)' or https://www.openpolicyagent.org/docs/latest/#running-opa"; exit 1; }
+	@v="$$(opa version 2>/dev/null | awk '/^Version:/{print $$2; exit}')"; \
+	if [ "$$v" != "$(OPA_VERSION)" ]; then echo "opa $$v does not match the CI-pinned $(OPA_VERSION) (.tool-versions). Install opa $(OPA_VERSION)."; exit 1; fi
+	@opa check --strict policies/opa policies/opa-destructive
+	@opa test policies/opa policies/opa-destructive
+
+codeowners-check: ## Fail on @your-org/ placeholder owners when CODEOWNERS_ENFORCE=true; otherwise warn, as CI does (CI: codeowners)
+	@if grep -nE '@your-org/' .github/CODEOWNERS; then \
+		if [ "$${CODEOWNERS_ENFORCE:-false}" = "true" ]; then echo "CODEOWNERS still contains @your-org/ placeholder teams (CODEOWNERS_ENFORCE=true)."; exit 1; fi; \
+		echo "warning: CODEOWNERS still contains @your-org/ placeholder teams (set CODEOWNERS_ENFORCE=true to make this fatal)."; \
+	else echo "No placeholder owners found."; fi
+
+ci: ## Run the local CI pipeline: every workstation-runnable gate of terraform-plan.yml and reusable-security.yml (see make -n ci)
 	@$(MAKE) fmt-check
 	@$(MAKE) consistency
+	@$(MAKE) yamllint
+	@$(MAKE) markdownlint-check
+	@$(MAKE) commit-check
+	@$(MAKE) codeowners-check
+	@$(MAKE) scaffold-fixtures-check
 	@$(MAKE) config-check
 	@$(MAKE) count-check
 	@$(MAKE) links
@@ -207,10 +250,12 @@ ci: ## Run the local CI pipeline (fmt → consistency → counts → links → s
 	@$(MAKE) backend-check
 	@$(MAKE) shellcheck
 	@$(MAKE) test-scripts
+	@$(MAKE) module-usage
 	@$(MAKE) docs-check
 	@$(MAKE) validate-all
 	@$(MAKE) lint
 	@$(MAKE) test
+	@$(MAKE) opa-test
 	@$(MAKE) security
 
 init-gcp-organization: ## Initialize the gcp-organization root

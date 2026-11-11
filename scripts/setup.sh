@@ -110,6 +110,19 @@ else
   echo "trivy $trivy_installed OK"
 fi
 
+# OPA — runs the policy unit tests behind `make opa-test` (CI `opa` job). The target
+# refuses any version other than .tool-versions, so report a mismatch here.
+REQUIRED_OPA_VERSION="$(_tool_version opa 1.22.2)"
+opa_installed=$(installed_version opa version)
+if [[ -z "$opa_installed" ]]; then
+  echo "opa not found. Install $REQUIRED_OPA_VERSION: 'mise install opa@$REQUIRED_OPA_VERSION' or 'brew install opa'"
+  echo "or see https://www.openpolicyagent.org/docs/latest/#running-opa"
+elif [[ "$opa_installed" != "$REQUIRED_OPA_VERSION" ]]; then
+  echo "WARNING: opa $opa_installed is installed but $REQUIRED_OPA_VERSION is required (make opa-test will refuse)."
+else
+  echo "opa $opa_installed OK"
+fi
+
 # terraform-docs
 tfdocs_installed=$(installed_version terraform-docs)
 if [[ -z "$tfdocs_installed" ]]; then
