@@ -13,9 +13,11 @@ Composed children:
 
 - **backup_vault** (`backup-vault`, `aws.backup`) — a KMS-encrypted AWS Backup
   vault with a Compliance-mode Vault Lock (WORM) and a restore testing plan, in
-  the delegated backup account. The Vault Lock makes recovery points tamper-proof
-  against ransomware / rogue admins; restore testing continuously validates
-  recoverability rather than assuming it.
+  the delegated backup account. The Vault Lock makes recovery points in this
+  vault tamper-proof against ransomware and rogue admins. Today nothing is
+  copied to this vault. Restore testing selects only recovery points in this
+  vault and only EBS volumes, so it does not yet prove recoverability (control
+  matrix BCK-01 and BCK-02; known-gaps A5).
 - **backup_org_policy** (`backup-org-policy`, default = management) — an AWS
   Organizations `BACKUP_POLICY` attached to the Workloads OU so every account
   beneath it inherits a baseline daily backup plan without per-account

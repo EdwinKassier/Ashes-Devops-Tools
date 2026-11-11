@@ -60,14 +60,14 @@ This landing zone implements defense-in-depth across every layer:
 
 ### Audit & Compliance
 
-- **Cloud Audit Logs**: Data Access logs on for all services. The audit bucket retention is the organization stage variable `audit_log_retention_days` (default 365 days). The landing zone does not enforce framework minimums: set it to meet PCI DSS, HIPAA or FedRAMP yourself.
+- **Cloud Audit Logs**: Data Access logs on for all services. The audit bucket retention is the organization stage variable `audit_log_retention_days` (default 365 days). The landing zone does not enforce framework minimums. In the gcp-organization root the retention is fixed at 365 days: the root does not pass `audit_log_retention_days`, so only a direct caller of the stage can change it. Exposing it through `config/landing-zone.yaml` is planned (WS4 Task 5). Until then, root users who need a longer period for PCI DSS, HIPAA or FedRAMP must call the stage directly.
 - **Security Command Center**: a Pub/Sub notification of every ACTIVE finding (CMEK topic). The SCC tier is activated outside Terraform.
 - **Org Policies** — domain-restricted sharing, uniform bucket access, disable SA key creation
 
 ### CI/CD Security
 
 - **All GitHub Actions SHA-pinned** — no mutable tag references
-- **Branch protection**: not codified in this repository. Required reviews and status checks are GitHub repository settings that the maintainers configure (see `docs/runbooks/promotion.md`). Verify them in the repository settings.
+- **Branch protection**: not codified in this repository. Required reviews and status checks are GitHub repository settings that the maintainers configure (see `docs/guides/BRANCH_PROTECTION.md` and `docs/runbooks/promotion.md`). Verify them in the repository settings.
 - **Secret scanning** — Gitleaks runs on push to `main`/`develop` and weekly (not on every PR; the PR gate runs Trivy + Checkov)
 - **Static analysis** — Trivy (config) and Checkov on every PR, and again on push to `main`/`develop` and weekly (TFSec is EOL and folded into Trivy)
 

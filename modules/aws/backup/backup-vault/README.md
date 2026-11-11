@@ -4,17 +4,19 @@ KMS-encrypted AWS Backup vault with Compliance-mode Vault Lock (WORM) and AWS
 Backup restore testing for the SRA landing zone. Runs in the delegated Backup
 account.
 
-The vault is the immutable target for the organization backup plan. Vault Lock
-is configured in **Compliance mode** (`changeable_for_days` is non-null): after
+The vault is the planned immutable target for the organization backup plan.
+Today nothing is copied to it: the org backup policy writes to member-account
+vaults (control matrix BCK-01, known-gaps A5). Vault Lock is configured in **Compliance mode** (`changeable_for_days` is non-null): after
 the cooling-off window elapses the lock cannot be changed or removed and
 recovery points cannot be deleted before `min_retention_days` by anyone,
 including the root user. This is the control that makes backups tamper-proof
 against ransomware and rogue administrators.
 
 Restore testing (`aws_backup_restore_testing_plan` + `_selection`) periodically
-restores recovery points on a schedule so recoverability is **validated**
-rather than assumed. The selection targets EBS recovery points by a tag
-condition, so it is apply-ready without hard-coding resource ARNs.
+restores recovery points on a schedule. The selection targets EBS recovery
+points in this vault only, by a tag condition, so it is apply-ready without
+hard-coding resource ARNs. Because nothing is copied to this vault yet, restore
+testing does not prove recoverability today (BCK-02).
 
 <!-- BEGIN_TF_DOCS -->
 
@@ -51,12 +53,12 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_backup_restore_testing_plan.this (modules/aws/backup/backup-vault/main.tf#L61)
-- resource.aws_backup_restore_testing_selection.this (modules/aws/backup/backup-vault/main.tf#L76)
-- resource.aws_backup_vault.this (modules/aws/backup/backup-vault/main.tf#L45)
-- resource.aws_backup_vault_lock_configuration.this (modules/aws/backup/backup-vault/main.tf#L51)
-- resource.aws_iam_role.restore_testing (modules/aws/backup/backup-vault/main.tf#L22)
-- resource.aws_iam_role_policy_attachment.restore_testing (modules/aws/backup/backup-vault/main.tf#L39)
+- resource.aws_backup_restore_testing_plan.this (modules/aws/backup/backup-vault/main.tf#L64)
+- resource.aws_backup_restore_testing_selection.this (modules/aws/backup/backup-vault/main.tf#L79)
+- resource.aws_backup_vault.this (modules/aws/backup/backup-vault/main.tf#L48)
+- resource.aws_backup_vault_lock_configuration.this (modules/aws/backup/backup-vault/main.tf#L54)
+- resource.aws_iam_role.restore_testing (modules/aws/backup/backup-vault/main.tf#L25)
+- resource.aws_iam_role_policy_attachment.restore_testing (modules/aws/backup/backup-vault/main.tf#L42)
 
 
 ## Inputs

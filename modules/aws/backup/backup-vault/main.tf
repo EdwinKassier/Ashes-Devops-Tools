@@ -1,16 +1,19 @@
 # KMS-encrypted AWS Backup vault with Compliance-mode Vault Lock and restore
 # testing for the SRA landing zone. Runs in the delegated Backup account.
 #
-# The vault is the WORM target for the organization backup plan. Vault Lock is
+# The vault is the planned WORM target for the organization backup plan. Today
+# nothing is copied to it: the org backup policy writes to member-account vaults
+# (control matrix BCK-01, known-gaps A5). Vault Lock is
 # configured in Compliance mode (changeable_for_days is non-null): once the
 # cooling-off window elapses the lock is immutable and recovery points cannot be
 # deleted before min_retention_days by anyone, including the root user. This is
 # the control that makes backups tamper-proof against ransomware / rogue admins.
 #
 # Restore testing (aws_backup_restore_testing_plan + _selection) periodically
-# restores recovery points on a schedule so recoverability is continuously
-# validated rather than assumed. The selection targets EBS recovery points by a
-# tag condition so the plan is apply-ready without hard-coding resource ARNs.
+# restores recovery points on a schedule. The selection targets EBS recovery
+# points in this vault only, by a tag condition, so the plan is apply-ready
+# without hard-coding resource ARNs. Because nothing is copied to this vault
+# yet, restore testing does not prove recoverability today (BCK-02).
 
 locals {
   create_restore_testing_role = var.restore_testing_role_arn == null

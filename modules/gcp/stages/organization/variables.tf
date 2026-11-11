@@ -238,7 +238,7 @@ variable "gcp" {
     # audit bucket when enable_audit_bucket_lock = true.
     log_analytics_retention_days = optional(number, 400)
     # Manage the organization's Cloud Logging settings (google_logging_organization_settings): the
-    # storage location of the Default and Required log buckets of new projects
+    # storage location of the `_Default` and `_Required` log buckets of new projects
     # (logging_settings_storage_location, default default_region) and optionally their CMEK
     # (logging_settings_kms_key_name). Default false.
     enable_logging_organization_settings = optional(bool, false)
@@ -250,7 +250,7 @@ variable "gcp" {
     # the audit-log sinks (cloudaudit) are routed centrally, so enable it only after confirming the
     # non-audit org logs you need are covered by another sink.
     disable_default_sink = optional(bool, false)
-    # Optional CMEK for the Default and Required log buckets of new projects. Grant the org Cloud Logging
+    # Optional CMEK for the `_Default` and `_Required` log buckets of new projects. Grant the org Cloud Logging
     # service account (gcloud logging settings describe --organization=<id>)
     # roles/cloudkms.cryptoKeyEncrypterDecrypter on the key first. Null = Google-managed encryption.
     logging_settings_kms_key_name = optional(string)

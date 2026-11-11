@@ -1,6 +1,6 @@
 # Cloud Armor Example
 
-A production-ready Cloud Armor WAF policy with OWASP managed rules, Log4Shell
+A Cloud Armor WAF policy with OWASP managed rules, Log4Shell
 protection, adaptive protection (ML-based), and a custom IP-block rule.
 
 ## What this creates

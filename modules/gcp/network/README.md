@@ -1,6 +1,6 @@
 # Network Modules Library
 
-This directory contains a suite of Terraform modules for building enterprise-grade network infrastructure on Google Cloud Platform (GCP).
+This directory contains a suite of Terraform modules for building network infrastructure on Google Cloud Platform (GCP).
 
 ## Modules Overview
 

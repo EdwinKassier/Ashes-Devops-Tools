@@ -511,8 +511,8 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
     `make required-checks-live` diffs the live settings).
   - Create the release GitHub App, set the variable `RELEASE_APP_ID` and the secret
     `RELEASE_APP_PRIVATE_KEY` in the `release` environment
-    (`docs/guides/CI_SECRETS.md#release_app`; `release.yml` requires them), and cut the
-    first release.
+    (`docs/guides/CI_SECRETS.md#release_app`; `release.yml` requires them), so later
+    releases come from release-please.
 - **No IAM policy-simulation harness.** SCP, RCP and boundary conditions are
   asserted against rendered JSON only; nothing in `scripts/` or CI runs
   `SimulatePrincipalPolicy`. Real-cloud proof comes from the sandbox (ADR 0006).
@@ -903,5 +903,4 @@ side (all mock-tested, secure defaults):
   `terraform fmt`, and CI runs `terraform validate` on every root, so they are
   treated as Checkov parser limits. Checkov does not scan those three files, so a
   misconfiguration in them would not be caught by Checkov. Trivy and CI validation
-  still cover them. Checkov does not scan those files. They do
-  not fail the gate. Re-check after each Checkov upgrade.
+  still cover them. They do not fail the gate. Re-check after each Checkov upgrade.
