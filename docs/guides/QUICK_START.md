@@ -287,7 +287,7 @@ To plan a change to the gcp-workload environment:
 ```bash
 # Set TF_WORKSPACE to the full TFC workspace name (TF_CLOUD_ORGANIZATION exported as above)
 TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload init
-TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=../../../examples/dev.tfvars.example
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan
 ```
 
 ---
@@ -394,7 +394,7 @@ make plan-gcp-organization
 ### App Environment
 
 ```bash
-make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
+make plan-gcp-workload APP_ENV=dev
 ```
 
 ---
@@ -421,7 +421,7 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
 | `make lint` | Run TFLint across all roots |
 | `make test` | Run all .tftest.hcl suites |
 | `make plan-gcp-organization` | Plan control-plane changes |
-| `make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example` | Plan an app environment |
+| `make plan-gcp-workload APP_ENV=dev` | Plan an app environment (add `APP_VARS=examples/dev.tfvars.example` for local tuning knobs) |
 | `make ci` | Full local pipeline (fmt-check + consistency + count-check + links + shellcheck + docs-check + validate-all + lint + test + security) |
 
 ---

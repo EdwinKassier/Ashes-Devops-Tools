@@ -30,7 +30,7 @@ $(if $(TF_PLUGIN_CACHE_DIR),$(shell mkdir -p "$(TF_PLUGIN_CACHE_DIR)"))
 
 APP_ENV ?= dev
 APP_WORKSPACE ?= gcp-workload-$(APP_ENV)
-APP_VARS ?= examples/dev.tfvars.example
+APP_VARS ?=
 
 BLUE := \033[0;34m
 GREEN := \033[0;32m
@@ -266,8 +266,8 @@ init-gcp-workload: ## Initialize the gcp-workload root
 plan-gcp-organization: ## Plan the gcp-organization root
 	@$(TERRAFORM) -chdir=envs/gcp/organization plan
 
-plan-gcp-workload: ## Plan the gcp-workload root for APP_ENV using APP_VARS
-	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/gcp/workload plan -var-file=$(abspath $(APP_VARS))
+plan-gcp-workload: ## Plan gcp-workload-<APP_ENV> in HCP Terraform (read-only); APP_VARS=<file> adds a tuning -var-file
+	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/gcp/workload plan $(if $(APP_VARS),-var-file=$(abspath $(APP_VARS)))
 
 apply-gcp-organization: ## Refuses: applies run in Terraform Cloud only (CLAUDE.md "State & Apply Rules")
 	@echo "Local apply is not supported. gcp-organization is applied by Terraform Cloud:"

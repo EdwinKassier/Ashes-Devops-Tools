@@ -71,7 +71,7 @@ Always verify the workspace before planning:
 
 ```bash
 echo "$TF_WORKSPACE"
-TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=../../../examples/dev.tfvars.example
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan
 ```
 
 ## `envs/gcp/workload` cannot find the organization remote state
@@ -116,7 +116,7 @@ make pre-commit-install
 
 ```bash
 export TF_LOG=DEBUG
-TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=../../../examples/dev.tfvars.example
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan
 ```
 
 ## WIF / ADC authentication failures in CI

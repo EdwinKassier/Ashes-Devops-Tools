@@ -252,6 +252,9 @@ for extra in $(printf '%s\n' "$trigger_map" | awk '$2 !~ /^modules\// { print $2
   [ -d "$extra" ] || note "root_trigger_dirs lists $extra, which is not a directory"
 done
 
+echo "==> Example tfvars set no identity or placement inputs (scripts/check-example-tfvars.sh)"
+./scripts/check-example-tfvars.sh >/dev/null || note "examples/*.tfvars.example sets an input config/landing-zone.yaml owns"
+
 if [ "$fail" -eq 0 ]; then
   echo "OK: all consistency invariants hold."
 else

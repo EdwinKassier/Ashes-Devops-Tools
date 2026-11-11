@@ -311,7 +311,7 @@ make count                 # Live module / root / test-suite counts
 make docs                  # Regenerate all module READMEs via terraform-docs
 make docs-check            # Verify no README is stale
 make plan-gcp-organization     # Plan control-plane changes
-make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
+make plan-gcp-workload APP_ENV=dev
 ```
 
 ---

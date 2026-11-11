@@ -249,7 +249,7 @@ make plan-gcp-organization
 ### App Environment
 
 ```bash
-make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
+make plan-gcp-workload APP_ENV=dev
 ```
 
 ## Pull Requests

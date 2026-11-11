@@ -6,29 +6,20 @@
 # service teams live under gcp.environments.<env>) and the workspace variables
 # that envs/tfc-admin sets. Use this file only for a read-only local plan:
 #
-#   make plan-gcp-workload APP_ENV=dev   # APP_VARS defaults to this file
+#   make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
+#   (without APP_VARS the plan uses config/landing-zone.yaml alone)
 #
 # Never apply from here (CLAUDE.md "State & Apply Rules"). Never commit secrets
 # or real billing account IDs. All values below are placeholders.
 # ──────────────────────────────────────────────────────────────────────────────
 
-# ── Project & identity ─────────────────────────────────────────────────────────
-# project_prefix, region and tfc_organization default to org.prefix,
-# gcp.environments[<env>].region and org.tfc.organization in the committed
-# config/landing-zone.yaml; the values below override it.
-
-project_prefix = "acme"
-environment    = "dev"
-region         = "europe-west2"
-
-# Service account that a local plan impersonates (the gcp-bootstrap output
-# `terraform_admin_email`). Format:
-# terraform-admin@<prefix>-admin-<suffix>.iam.gserviceaccount.com
-terraform_admin_email = "terraform-admin@acme-admin-0000.iam.gserviceaccount.com"
-
-# Terraform Cloud organization (org.tfc.organization in config/landing-zone.yaml).
-tfc_organization            = "acme-tfc"
-organization_workspace_name = "gcp-organization"
+# ── Identity and placement come from config/landing-zone.yaml ────────────────
+# project_prefix, environment, region, tfc_organization and the upstream
+# workspace names are NOT set here: the root reads them from
+# config/landing-zone.yaml (org.prefix, gcp.environments.<env>, org.tfc.*) and
+# from the workspace variables tfc-admin writes. An explicit value here would
+# override them. terraform_admin_email stays unset: plans run in HCP Terraform
+# with the workspace's own plan identity (CLAUDE.md "State & Apply Rules").
 
 # ── Networking ─────────────────────────────────────────────────────────────────
 #
