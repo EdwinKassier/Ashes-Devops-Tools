@@ -264,9 +264,14 @@ variable "profile" {
 }
 
 variable "enforce_egress_allowlist" {
-  description = "Fail the plan unless the firewall drops unmatched egress and carries a domain allowlist (or the waiver is set). Null = on when the profile is production and an aws.workload_environments entry is_production (unset = keys prod / production)."
+  description = "Fail the plan unless the firewall drops unmatched egress and carries a domain allowlist (or the waiver is set). Null = on when the profile is production and an aws.workload_environments entry is_production (required on every entry; the environment name is not read)."
   type        = bool
   default     = null
+
+  validation {
+    condition     = var.enforce_egress_allowlist != null || length(local.cfg.workload_missing_is_production) == 0
+    error_message = "Every aws.workload_environments entry in config/landing-zone.yaml must set is_production: true or false; the environment name is not read. Missing or invalid: ${join(", ", local.cfg.workload_missing_is_production)}."
+  }
 }
 
 variable "network_firewall_egress_domain_allowlist" {

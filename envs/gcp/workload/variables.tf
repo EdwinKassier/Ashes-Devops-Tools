@@ -27,6 +27,11 @@ variable "environment" {
     condition     = can(regex("^[a-z][a-z0-9-]{0,29}$", var.environment))
     error_message = "environment must be lowercase alphanumeric with optional hyphens (e.g., 'dev', 'staging', 'prod')."
   }
+
+  validation {
+    condition     = !contains(local.cfg.environments_missing_is_production, var.environment)
+    error_message = "gcp.environments.${var.environment} in config/landing-zone.yaml must set is_production: true or false; the environment name is not read."
+  }
 }
 
 variable "region" {

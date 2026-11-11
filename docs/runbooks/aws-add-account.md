@@ -23,7 +23,7 @@ aws:
     payments_prod: {email: aws+payments-prod@example.com, ou: Workloads/Prod}   # child OUs are keyed by path
   workload_environments:
     # ...existing...
-    payments-prod: {account_key: payments_prod}   # env key: hyphens, not underscores
+    payments-prod: {account_key: payments_prod, is_production: true}   # env key: hyphens, not underscores; is_production is required
 ```
 
 The `workload_environments` key is the environment name: `aws-workload` accepts only lowercase letters, digits and hyphens there (`^[a-z][a-z0-9-]{0,30}$`), so use `payments-prod`. The account key (`payments_prod`) may keep its underscore.

@@ -42,6 +42,7 @@ override_data {
             folder_name         = "Development"
             host_project_id     = "cfgco-dev-host-abcd"
             host_project_number = "222222222222"
+            is_production       = false
             region              = "europe-west1"
             cidr_block          = "10.10.0.0/16"
             labels              = {}
@@ -366,4 +367,16 @@ run "accepts_known_map_input_keys" {
     vm_backup_schedules  = { nightly = { daily_schedule = { start_time = "02:00" }, retention_policy = { max_retention_days = 7 } } }
     os_patch_deployments = { weekly = { reboot_config = "NEVER", day_of_week = "SATURDAY" } }
   }
+}
+
+# Production is the is_production flag alone: a config environment without it
+# fails the plan, naming the entry, instead of silently counting as non-prod.
+run "config_environment_without_is_production_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-missing-is-production.yaml"
+  }
+
+  expect_failures = [var.environment]
 }

@@ -774,8 +774,8 @@ locals {
   # auto_apply_run_trigger (enable_nonprod_workload_auto_apply). Trust change:
   # a confirmed upstream apply (gcp-network-hub, aws-network, aws-security)
   # applies these without a further confirmation. Fail-closed: only an
-  # environment whose is_production is EXPLICITLY false qualifies; an omitted
-  # flag (prd, live, prod-eu, ...) keeps manual confirmation.
+  # environment whose is_production is false qualifies (the environments
+  # validation fails the plan when an environment omits the flag).
   explicit_nonprod_workloads = toset(concat(
     [for k in local.gcp_workload_names : k if lookup(local.gcp_production_flags, local.workspaces[k].environment, null) == false],
     [for k in local.aws_workload_names : k if try(local.aws_environments[local.workspaces[k].environment].is_production, null) == false],

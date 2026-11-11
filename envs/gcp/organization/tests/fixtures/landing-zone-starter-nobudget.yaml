@@ -14,6 +14,7 @@ gcp:
   allowed_regions: [europe-west1]
   environments:
     dev:
+      is_production: false
       display_name: Development
       region: europe-west1
       cidr_block: 10.10.0.0/16

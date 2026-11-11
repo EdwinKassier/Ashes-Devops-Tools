@@ -740,3 +740,21 @@ run "unset_everywhere_takes_stage_default" {
     error_message = "a key unset in config and gcp_overrides must reach the stage as its default (strict folder bundle on prod)."
   }
 }
+
+# Production is the is_production flag alone: a config environment without it
+# fails the plan, naming the entry, instead of silently counting as non-prod.
+run "config_environment_without_is_production_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-missing-is-production.yaml"
+    domain                   = null
+    project_prefix           = null
+    billing_account          = null
+    tfc_organization         = null
+    environments             = null
+    gcp_overrides            = {}
+  }
+
+  expect_failures = [var.environments]
+}

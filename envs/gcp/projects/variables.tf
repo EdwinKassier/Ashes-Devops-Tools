@@ -46,7 +46,7 @@ variable "project_services" {
 }
 
 variable "environments" {
-  description = "Map of application environment definitions. is_production (default false) is surfaced as environment_config[<env>].is_production for the gcp-workload guardrail checks. Null = gcp.environments from config/landing-zone.yaml (the single source shared by every GCP root and tfc-admin)."
+  description = "Map of application environment definitions. is_production (default false here; required on every gcp.environments entry in config/landing-zone.yaml) is surfaced as environment_config[<env>].is_production for the gcp-workload guardrail checks. Null = gcp.environments from config/landing-zone.yaml (the single source shared by every GCP root and tfc-admin)."
   type = map(object({
     display_name            = string
     region                  = string
@@ -75,6 +75,11 @@ variable "environments" {
   validation {
     condition     = alltrue([for c in(var.environments != null ? [for e in values(var.environments) : e.cidr_block] : [for e in values(local.cfg.environments) : e.cidr_block]) : can(cidrnetmask(c))])
     error_message = "Each environment's cidr_block must be valid CIDR notation, e.g. 10.10.0.0/16."
+  }
+
+  validation {
+    condition     = var.environments != null || length(local.cfg.environments_missing_is_production) == 0
+    error_message = "Every gcp.environments entry in config/landing-zone.yaml must set is_production: true or false; the environment name is not read. Missing or invalid: ${join(", ", local.cfg.environments_missing_is_production)}."
   }
 }
 

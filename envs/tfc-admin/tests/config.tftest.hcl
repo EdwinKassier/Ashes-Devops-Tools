@@ -104,7 +104,7 @@ run "explicit_variables_win_over_config" {
     enable_aws          = false
     enable_saas         = false
     project_name_prefix = "x-"
-    environments        = { qa = {} }
+    environments        = { qa = { is_production = false } }
     enable_policy_sets  = true
     vcs_repo            = { identifier = "acme/landing-zone", oauth_token_id = "ot-abc123" }
   }
@@ -365,4 +365,16 @@ run "cidr_outside_aws_supernet_fails_the_plan" {
   }
 
   expect_failures = [terraform_data.input_contract]
+}
+
+# Production is the is_production flag alone: a config environment (either
+# cloud) without it fails the plan, naming the entry.
+run "config_environment_without_is_production_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-missing-is-production.yaml"
+  }
+
+  expect_failures = [var.environments]
 }

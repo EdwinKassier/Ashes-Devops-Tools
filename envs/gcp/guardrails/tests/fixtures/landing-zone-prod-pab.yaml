@@ -9,6 +9,7 @@ gcp:
   principal_access_boundary: true
   environments:
     dev:
+      is_production: false
       display_name: Development
     prod:
       display_name: Production

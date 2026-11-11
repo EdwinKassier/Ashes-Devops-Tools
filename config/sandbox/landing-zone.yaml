@@ -97,6 +97,7 @@ aws:
     workload_dev: {email: aws+sbx-workload-dev@example.com, ou: Workloads}
   workload_environments:
     dev:
+      is_production: false
       account_key: workload_dev
       vpc_cidr: 10.72.0.0/16
   network:

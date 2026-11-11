@@ -84,6 +84,7 @@ run "preset_does_not_apply_to_other_environments" {
           folder_id           = "folders/111"
           host_project_id     = "acme-dev-host-abcd"
           host_project_number = "222222222222"
+          is_production       = false
           region              = "europe-west2"
           cidr_block          = "10.10.0.0/16"
         }
@@ -109,6 +110,7 @@ run "top_level_presets_apply_to_every_environment" {
           folder_id           = "folders/111"
           host_project_id     = "acme-dev-host-abcd"
           host_project_number = "222222222222"
+          is_production       = false
           region              = "europe-west2"
           cidr_block          = "10.10.0.0/16"
         }

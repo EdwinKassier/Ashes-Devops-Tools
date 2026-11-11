@@ -1,0 +1,29 @@
+# Negative fixture: an environment WITHOUT is_production. The plan must fail
+# naming it (config-check expects this file to fail schema validation too).
+version: 1
+org:
+  prefix: acme
+  regions:
+    gcp: europe-west1
+gcp:
+  environments:
+    dev:
+      display_name: Development
+      region: europe-west1
+      cidr_block: 10.10.0.0/16
+      budget_monthly_limit: 100
+  network:
+    hub_cidr_block: 10.0.0.0/16
+    dns_hub_cidr_block: 10.1.0.0/16
+    ncc_hub:
+      enabled: true
+    vpn:
+      enabled: true
+      tunnel_count: 2
+      peer_gateway_ips: [203.0.113.1, 203.0.113.2]
+      advertised_ip_ranges:
+        - {range: 10.0.0.0/16, description: hub VPC}
+    interconnect:
+      hub-partner-1:
+        region: europe-west1
+        router_name: hub-ic-router

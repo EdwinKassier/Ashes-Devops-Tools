@@ -7,4 +7,5 @@ gcp:
   break_glass_group: gcp-break-glass@acme.io
   environments:
     dev:
+      is_production: false
       display_name: Development

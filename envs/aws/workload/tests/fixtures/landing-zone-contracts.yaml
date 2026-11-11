@@ -8,7 +8,7 @@ org:
     organization: cfg-tfc
 aws:
   workload_environments:
-    dev: {account_key: workload_dev}
+    dev: {is_production: false, account_key: workload_dev}
   contracts:
     organization:
       account_ids: {workload_dev: "222222222222"}

@@ -178,3 +178,15 @@ run "ncc_api_off_without_ncc_config" {
     error_message = "Without any NCC key in the config the NCC API must stay off."
   }
 }
+
+# Production is the is_production flag alone: a config environment without it
+# fails the plan, naming the entry, instead of silently counting as non-prod.
+run "config_environment_without_is_production_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-missing-is-production.yaml"
+  }
+
+  expect_failures = [var.environments]
+}

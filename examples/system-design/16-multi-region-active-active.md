@@ -476,6 +476,7 @@ gcp:
   environments:
     prod-eu1:
       region: europe-west1
+      is_production: true
       cidr_block: 10.40.0.0/16
       additional_regions:
         europe-west4:

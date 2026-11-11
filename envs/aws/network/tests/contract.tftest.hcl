@@ -134,3 +134,17 @@ run "variable_contract_beats_config_contract" {
     error_message = "explicit variables must win over the config file."
   }
 }
+
+# Production is the is_production flag alone: an aws.workload_environments
+# entry without it fails the plan, naming the entry. A key named prod is not
+# read.
+run "config_workload_environment_without_is_production_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-missing-is-production.yaml"
+    log_archive_bucket_name  = null
+  }
+
+  expect_failures = [var.enforce_egress_allowlist]
+}

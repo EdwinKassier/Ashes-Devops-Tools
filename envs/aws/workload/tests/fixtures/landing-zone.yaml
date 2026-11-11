@@ -9,5 +9,5 @@ org:
 aws:
   enabled_regions: [eu-west-2, eu-west-1]
   workload_environments:
-    dev: {account_key: workload_nonprod, vpc_cidr: 10.40.0.0/16}
-    prod: {account_key: workload_prod}
+    dev: {is_production: false, account_key: workload_nonprod, vpc_cidr: 10.40.0.0/16}
+    prod: {is_production: true, account_key: workload_prod}

@@ -12,8 +12,8 @@ mock_provider "tfe" {}
 variables {
   tfc_organization = "acme"
   environments = {
-    dev  = {}
-    prod = {}
+    dev  = { is_production = false }
+    prod = { is_production = true }
   }
   enable_gcp                       = true
   enable_aws                       = true
@@ -147,8 +147,8 @@ run "derived_family_keys_unchanged" {
 
   variables {
     environments = {
-      dev  = { aws_account_key = "workload_dev" }
-      prod = {}
+      dev  = { is_production = false, aws_account_key = "workload_dev" }
+      prod = { is_production = true }
     }
     aws_organization_outputs_from_tfc = true
     gcp_bootstrap_outputs_from_tfc    = true
@@ -208,7 +208,7 @@ run "multi_environment_catalog_names_unchanged" {
       dev     = { is_production = false, aws_account_key = "workload_dev" }
       staging = { is_production = false }
       prod    = { is_production = true, aws_account_key = "workload_prod" }
-      qa      = {}
+      qa      = { is_production = false }
     }
     saas_workspaces            = ["web", "admin"]
     manage_tfc_admin_workspace = true
@@ -301,13 +301,13 @@ run "multi_environment_catalog_names_unchanged" {
 
   assert {
     condition = alltrue([
-      for ws in ["gcp-workload-dev", "gcp-workload-staging", "aws-workload-dev", "aws-workload-staging"] :
+      for ws in ["gcp-workload-dev", "gcp-workload-staging", "gcp-workload-qa", "aws-workload-dev", "aws-workload-staging", "aws-workload-qa"] :
       module.workspace[ws].queue_all_runs && module.workspace[ws].auto_apply_run_trigger
       ]) && alltrue([
-      for ws in ["gcp-workload-prod", "gcp-workload-qa", "aws-workload-prod", "aws-workload-qa", "gcp-guardrails", "tfc-admin"] :
+      for ws in ["gcp-workload-prod", "aws-workload-prod", "gcp-guardrails", "tfc-admin"] :
       !module.workspace[ws].queue_all_runs && !module.workspace[ws].auto_apply_run_trigger
     ])
-    error_message = "only explicitly non-production workloads queue all runs and auto-apply run triggers."
+    error_message = "only non-production workloads (is_production = false) queue all runs and auto-apply run triggers."
   }
 
   assert {
@@ -332,7 +332,7 @@ run "catalog_drives_workspaces_and_triggers" {
     environments = {
       dev     = { is_production = false }
       staging = { is_production = false }
-      prod    = {}
+      prod    = { is_production = true }
     }
     manage_tfc_admin_workspace    = true
     import_tfc_admin_workspace    = false

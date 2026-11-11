@@ -30,7 +30,7 @@ variable "tfc_organization" {
 }
 
 variable "environments" {
-  description = "Application environments to create per-env workload workspaces for (gcp-workload-<env> when enable_gcp, aws-workload-<env> when enable_aws). Null (default) derives them from config/landing-zone.yaml instead: gcp.environments keys for gcp-workload-<env> and aws.workload_environments (with account_key) for aws-workload-<env>, so the environment list is written once. Optional aws_account_key names the aws-organization account key (accounts / workload_accounts, e.g. workload_dev) the aws-workload-<env> workspace deploys into: it is set as that workspace's workload_account_key variable and selects the tfc-plan/tfc-apply roles read via aws_organization_outputs_from_tfc. Optional is_production (else gcp.environments[*].is_production / aws.workload_environments[*].is_production; unset = true only for the keys prod / production) marks a production workload: see disable_speculative_on_production."
+  description = "Application environments to create per-env workload workspaces for (gcp-workload-<env> when enable_gcp, aws-workload-<env> when enable_aws). Null (default) derives them from config/landing-zone.yaml instead: gcp.environments keys for gcp-workload-<env> and aws.workload_environments (with account_key) for aws-workload-<env>, so the environment list is written once. Optional aws_account_key names the aws-organization account key (accounts / workload_accounts, e.g. workload_dev) the aws-workload-<env> workspace deploys into: it is set as that workspace's workload_account_key variable and selects the tfc-plan/tfc-apply roles read via aws_organization_outputs_from_tfc. is_production (required on every entry here, and on every gcp.environments / aws.workload_environments entry when the config file supplies them) marks a production workload: see disable_speculative_on_production. A name such as prod is not read."
   type = map(object({
     aws_account_key = optional(string)
     is_production   = optional(bool)
@@ -40,6 +40,13 @@ variable "environments" {
   validation {
     condition     = alltrue([for k in concat(keys(coalesce(var.environments, {})), local.cfg.gcp_environment_keys, keys(local.cfg.aws_environments)) : can(regex("^[a-z][a-z0-9_-]*$", k))])
     error_message = "environments keys must be lowercase alphanumeric with hyphens/underscores (they become workspace names)."
+  }
+
+  validation {
+    condition = (var.environments != null
+      ? alltrue([for e in values(var.environments) : e.is_production != null])
+    : length(local.cfg.missing_is_production) == 0)
+    error_message = "is_production must be true or false on every environment (environments[*].is_production, or gcp.environments / aws.workload_environments in config/landing-zone.yaml); a name such as prod is not read. Missing: ${var.environments != null ? join(", ", [for k, e in var.environments : k if e.is_production == null]) : join(", ", local.cfg.missing_is_production)}."
   }
 }
 
@@ -165,7 +172,7 @@ variable "disable_speculative_on_saas" {
 }
 
 variable "disable_speculative_on_production" {
-  description = "Disable automatic speculative PR plans on production workload workspaces (gcp-workload-<env> / aws-workload-<env> whose environment is_production, or whose key is prod / production when is_production is unset). A speculative plan runs the PR's code with the workspace's plan identity, so on a production workspace any PR author could read production through it. Default true; non-production workloads keep speculative plans."
+  description = "Disable automatic speculative PR plans on production workload workspaces (gcp-workload-<env> / aws-workload-<env> whose environment is_production; is_production (required) marks a production workload). A speculative plan runs the PR's code with the workspace's plan identity, so on a production workspace any PR author could read production through it. Default true; non-production workloads keep speculative plans."
   type        = bool
   default     = true
 }
@@ -634,7 +641,7 @@ variable "auto_apply_on_merge" {
 }
 
 variable "enable_nonprod_workload_auto_apply" {
-  description = "Workload workspaces whose environment sets is_production = false EXPLICITLY get auto_apply_run_trigger (a run queued by a confirmed upstream apply applies without a second confirmation) and queue_all_runs. The run queue_all_runs starts at creation is expected to fail (the workspace's identity and variables do not exist yet); the setting exists so later VCS and run-trigger runs queue without a manual first run. An omitted is_production, production workloads and every shared workspace keep manual confirmation. Null (default) = on only while the policy sets (and so the mandatory destroy_guard) are attached, so an unguarded estate never auto-applies; true forces it on, false confirms every run."
+  description = "Workload workspaces whose environment sets is_production = false get auto_apply_run_trigger (a run queued by a confirmed upstream apply applies without a second confirmation) and queue_all_runs. The run queue_all_runs starts at creation is expected to fail (the workspace's identity and variables do not exist yet); the setting exists so later VCS and run-trigger runs queue without a manual first run. Production workloads and every shared workspace keep manual confirmation. Null (default) = on only while the policy sets (and so the mandatory destroy_guard) are attached, so an unguarded estate never auto-applies; true forces it on, false confirms every run."
   type        = bool
   default     = null
 }

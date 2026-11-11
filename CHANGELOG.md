@@ -407,6 +407,12 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
 
 ### Changed
 
+- **One production rule: `is_production` (breaking).** Every `gcp.environments` and
+  `aws.workload_environments` entry, and every entry of tfc-admin's `environments` variable, must
+  set `is_production`; `config/landing-zone.schema.json` and the roots that read the flag fail
+  the plan without it. The names `prod` and `production`, and the `prod` substring match in
+  gcp-workload, no longer decide production. `scripts/check-production-rule.sh` (run by
+  `make consistency`) fails on any name-based production check. See `UPGRADING.md`.
 - **CI performance** — the per-root validate matrix (218 legs, near GitHub's 256-leg cap) is now 10
   round-robin shards; validate, lint and test share a provider plugin cache (`actions/cache`, keyed on all
   `.terraform.lock.hcl` files) and TFLint caches its ruleset plugins. `Validation Summary` remains the

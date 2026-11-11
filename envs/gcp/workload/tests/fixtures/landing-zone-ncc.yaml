@@ -31,4 +31,5 @@ gcp:
     connectivity: peering
   environments:
     dev:
+      is_production: false
       network_connectivity: ncc

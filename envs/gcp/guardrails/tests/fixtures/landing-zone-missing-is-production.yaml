@@ -1,0 +1,14 @@
+# Negative fixture: an environment WITHOUT is_production. The plan must fail
+# naming it (config-check expects this file to fail schema validation too).
+org:
+  prefix: acme
+  display_name: Acme
+  domain: acme.io
+gcp:
+  break_glass_group: gcp-break-glass@acme.io
+  environments:
+    dev:
+      display_name: Development
+    prod:
+      display_name: Production
+      is_production: true

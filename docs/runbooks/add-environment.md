@@ -29,9 +29,9 @@ Each run is queued when its upstream **applies**; a no-op apply fires no trigger
 for your confirmation. A workload whose environment sets `is_production: false` **explicitly** has
 `auto_apply_run_trigger` and `queue_all_runs` (`enable_nonprod_workload_auto_apply`; by default only
 while the policy sets and their `destroy_guard` are attached), so the run its upstream queues applies
-on its own. Set `is_production: false` explicitly to opt an environment into
-auto-apply: an omitted flag fails closed, so the workload waits for confirmation like production and
-the shared workspaces.
+on its own. Set `is_production: false` to opt an environment into auto-apply, or
+`is_production: true` to keep the workload waiting for confirmation like the shared workspaces. The
+flag is required: the plan fails when an environment omits it.
 
 > **Trust change.** Confirming a shared upstream apply (`gcp-network-hub`, `aws-network`,
 > `aws-security`) also applies every non-production workload it triggers, with no second

@@ -45,11 +45,14 @@ locals {
     # aws.network.spoke_attachments: workload spokes the hub accepts, associates
     # and propagates (JSON text for the same reason as vpn).
     spoke_attachments = try(jsonencode(local.lz.aws.network.spoke_attachments), null)
-    # aws.workload_environments production flags (unset = keys prod/production).
+    # aws.workload_environments production flags (is_production is required).
     workload_production = try([
-      for k, e in local.lz.aws.workload_environments : k
-      if coalesce(try(tobool(e.is_production), null), can(regex("^prod(uction)?$", k)))
+      for k, e in local.lz.aws.workload_environments : k if try(tobool(e.is_production), false)
     ], [])
+    workload_missing_is_production = sort([
+      for k, e in try({ for k, e in local.lz.aws.workload_environments : k => e }, {}) : k
+      if try(tobool(e.is_production), null) == null
+    ])
     # aws.contracts.organization: stage contract override (same type as
     # var.organization_contract, identical in every aws root). Present => the
     # aws-organization read is skipped.

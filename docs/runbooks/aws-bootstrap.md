@@ -126,7 +126,7 @@ The cloud flag, the workload environments and their account keys come from the c
 aws:
   enabled: true                 # tfc-admin enable_aws
   workload_environments:
-    dev: {account_key: workload_dev}   # aws-workload-dev + its workload_account_key
+    dev: {account_key: workload_dev, is_production: false}   # aws-workload-dev + its workload_account_key
 ```
 
 Then apply tfc-admin with only the inputs the file does not hold:

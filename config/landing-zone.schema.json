@@ -421,6 +421,9 @@
           },
           "additionalProperties": {
             "type": "object",
+            "required": [
+              "is_production"
+            ],
             "properties": {
               "display_name": {
                 "type": "string"
@@ -1216,6 +1219,9 @@
           "type": "object",
           "additionalProperties": {
             "type": "object",
+            "required": [
+              "is_production"
+            ],
             "properties": {
               "account_key": {
                 "type": "string"

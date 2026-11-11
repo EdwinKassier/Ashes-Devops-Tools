@@ -6,4 +6,5 @@ org:
 gcp:
   environments:
     dev:
+      is_production: false
       display_name: Development

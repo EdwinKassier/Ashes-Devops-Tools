@@ -102,6 +102,12 @@ locals {
       for k, e in try({ for k, e in local.lz.aws.workload_environments : k => e }, {}) :
       k => { aws_account_key = try(tostring(e.account_key), null), is_production = try(tobool(e.is_production), null) }
     })
+    # Environments whose is_production is missing or not a boolean (the
+    # environments validation names them).
+    missing_is_production = sort(concat(
+      [for k, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : "gcp.environments.${k}" if try(tobool(e.is_production), null) == null],
+      [for k, e in try({ for k, e in local.lz.aws.workload_environments : k => e }, {}) : "aws.workload_environments.${k}" if try(tobool(e.is_production), null) == null],
+    ))
   }
 
   project_name_keys = ["gcp", "aws", "saas", "platform", "gcp-workloads", "aws-workloads", "guardrails"]
@@ -156,12 +162,12 @@ locals {
     for k, e in var.environments : k => { aws_account_key = e.aws_account_key, is_production = e.is_production }
   }) : local.cfg.aws_environments
 
-  # Production environments: an explicit is_production wins; unset falls back
-  # to the key name (prod / production), so a prod env is never missed.
+  # Production environments: is_production true, nothing else (the variable
+  # validation guarantees every environment states it).
   gcp_production_flags = var.environments != null ? { for k, e in var.environments : k => e.is_production } : local.cfg.gcp_production
   production_workloads = toset(concat(
-    [for k in local.gcp_environment_keys : "${local.catalog_family.gcp}-${k}" if coalesce(lookup(local.gcp_production_flags, k, null), can(regex("^prod(uction)?$", k)))],
-    [for k, e in local.aws_environments : "${local.catalog_family.aws}-${k}" if coalesce(e.is_production, can(regex("^prod(uction)?$", k)))],
+    [for k in local.gcp_environment_keys : "${local.catalog_family.gcp}-${k}" if try(local.gcp_production_flags[k], null) == true],
+    [for k, e in local.aws_environments : "${local.catalog_family.aws}-${k}" if e.is_production == true],
   ))
 }
 

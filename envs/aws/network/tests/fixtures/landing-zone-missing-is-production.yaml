@@ -1,0 +1,11 @@
+# Negative fixture: an environment WITHOUT is_production. The plan must fail
+# naming it (config-check expects this file to fail schema validation too).
+version: 1
+org:
+  name: cfgco
+  tfc:
+    organization: cfg-tfc
+aws:
+  log_archive_bucket_name: cfgco-org-log-archive
+  workload_environments:
+    prod: {account_key: workload_prod}

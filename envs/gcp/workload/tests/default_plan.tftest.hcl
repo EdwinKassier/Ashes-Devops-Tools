@@ -46,6 +46,7 @@ override_data {
             folder_name         = "Development"
             host_project_id     = "acme-dev-host-abcd"
             host_project_number = "222222222222"
+            is_production       = false
             region              = "europe-west1"
             cidr_block          = "10.10.0.0/16"
             labels              = {}
@@ -146,6 +147,7 @@ run "prod_without_enforced_perimeter_warns" {
               folder_name         = "Production"
               host_project_id     = "acme-prod-host-abcd"
               host_project_number = "333333333333"
+              is_production       = true
               region              = "europe-west1"
               cidr_block          = "10.30.0.0/16"
               labels              = {}

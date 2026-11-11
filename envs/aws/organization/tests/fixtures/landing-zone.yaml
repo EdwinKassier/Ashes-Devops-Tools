@@ -30,6 +30,6 @@ aws:
     workload_nonprod: {email: aws+workload-nonprod@cfg.test, ou: Workloads}
     workload_prod: {email: aws+workload-prod@cfg.test, ou: Workloads}
   workload_environments:
-    dev: {account_key: workload_nonprod}
-    staging: {account_key: workload_nonprod}
-    prod: {account_key: workload_prod, vpc_cidr: 10.40.0.0/16}
+    dev: {is_production: false, account_key: workload_nonprod}
+    staging: {is_production: false, account_key: workload_nonprod}
+    prod: {is_production: true, account_key: workload_prod, vpc_cidr: 10.40.0.0/16}

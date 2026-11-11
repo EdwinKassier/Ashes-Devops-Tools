@@ -426,11 +426,13 @@ gcp:
   environments:
     dev:
       cidr_block: 10.10.0.0/16
+      is_production: false
 aws:
   workload_environments:
     dev:
       account_key: workload_dev
       vpc_cidr: 10.72.0.0/16
+      is_production: false
 ```
 
 ### Typed contracts between roots

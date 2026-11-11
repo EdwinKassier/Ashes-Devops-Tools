@@ -55,6 +55,12 @@ locals {
         is_production           = tobool(try(e.is_production, false))
       }
     }
+    # Environment keys whose is_production is missing or not a boolean. The
+    # schema requires it; the environments validation names them.
+    environments_missing_is_production = sort([
+      for k, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : k
+      if try(tobool(e.is_production), null) == null
+    ])
   }
 
   # Effective values. Required ones fall back to an inert sentinel only so

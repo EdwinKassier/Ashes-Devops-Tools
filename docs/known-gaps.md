@@ -30,7 +30,7 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   `function_default_timeout` on an existing project.
 - **Upstream applies auto-apply non-prod workloads.** Workload
   `gcp-workload-<env>` / `aws-workload-<env>` workspaces whose environment sets
-  `is_production: false` explicitly (an omitted flag never qualifies) get
+  `is_production: false` (the flag is required on every environment) get
   `auto_apply_run_trigger` and `queue_all_runs`
   (`enable_nonprod_workload_auto_apply`; the null default turns it on only while
   the policy sets, and so `destroy_guard`, are attached). The trust change: a

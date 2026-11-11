@@ -80,8 +80,8 @@ org:
     # gcp_workloads_project: landing-zone-gcp-workloads
     # aws_workloads_project: landing-zone-aws-workloads
     # Production workloads (gcp.environments[*].is_production,
-    # aws.workload_environments[*].is_production; unset = keys prod/production)
-    # get no speculative PR plans (tfc-admin disable_speculative_on_production).
+    # aws.workload_environments[*].is_production; is_production is required on
+    # every environment) get no speculative PR plans (tfc-admin disable_speculative_on_production).
     # HCP Terraform plan: free | essentials | standard | premium. With vcs_repo
     # set, standard and premium turn on the OPA policy sets by default
     # (policies/opa guardrails + the mandatory destroy_guard in
@@ -344,8 +344,8 @@ aws:
   #         accounts: [log_archive, security_tooling]
 
   # Network Firewall egress posture (aws-network). A production estate (profile
-  # production AND a workload environment with is_production, or keyed
-  # prod/production) fails the plan unless unmatched traffic is dropped AND the
+  # production AND a workload environment with is_production: true; the flag
+  # is required on every environment) fails the plan unless unmatched traffic is dropped AND the
   # allowlist is non-empty. A leading dot matches subdomains. Extend the list
   # with every domain your workloads call (package mirrors, SaaS APIs); matching
   # is on HTTP Host / TLS SNI, and everything else is dropped.

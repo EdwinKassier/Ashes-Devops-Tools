@@ -27,11 +27,16 @@ variable "project_prefix" {
 }
 
 variable "environments" {
-  description = "Environment keys with is_production (default false). A production environment turns admin containment on. Null = gcp.environments from config/landing-zone.yaml (the single source shared by every GCP root and tfc-admin); other attributes are ignored here."
+  description = "Environment keys with is_production (default false here; required on every gcp.environments entry in config/landing-zone.yaml). A production environment turns admin containment on. Null = gcp.environments from config/landing-zone.yaml (the single source shared by every GCP root and tfc-admin); other attributes are ignored here."
   type = map(object({
     is_production = optional(bool, false)
   }))
   default = null
+
+  validation {
+    condition     = var.environments != null || length(local.cfg.environments_missing_is_production) == 0
+    error_message = "Every gcp.environments entry in config/landing-zone.yaml must set is_production: true or false; the environment name is not read. Missing or invalid: ${join(", ", local.cfg.environments_missing_is_production)}."
+  }
 }
 
 variable "enable_admin_containment" {

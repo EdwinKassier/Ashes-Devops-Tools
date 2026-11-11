@@ -10,6 +10,7 @@ aws:
   enabled_regions: [eu-west-2]
   workload_environments:
     dev:
+      is_production: false
       account_key: workload_nonprod
       vpc_cidr: 10.40.0.0/16
       services:
@@ -19,5 +20,6 @@ aws:
           health_check_path: /healthz
         worker: {}
     prod:
+      is_production: true
       account_key: workload_prod
       services: {}

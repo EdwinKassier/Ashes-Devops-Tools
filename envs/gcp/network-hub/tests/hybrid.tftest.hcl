@@ -143,3 +143,16 @@ run "hub_additional_regions_variable_wins" {
     error_message = "An explicit hub_additional_regions variable must win over the config file."
   }
 }
+
+# Production is the is_production flag alone: a config environment without it
+# fails the plan, naming the entry, instead of silently counting as non-prod.
+run "config_environment_without_is_production_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-missing-is-production.yaml"
+    environments             = null
+  }
+
+  expect_failures = [var.environments]
+}

@@ -140,9 +140,9 @@ locals {
   # on which only this environment's workload SAs hold policyEditor.
   vpc_sc_access_policy = var.vpc_sc_access_policy_name != null ? var.vpc_sc_access_policy_name : try(local.env_config.vpc_sc_access_policy_id, null)
 
-  # Explicit production marker from gcp-projects environment_config. The name
-  # match is only a fallback for an environment_config that predates it.
-  is_production = coalesce(try(local.env_config.is_production, null), can(regex("prod", lower(var.environment))))
+  # Production is the environment_config flag from gcp-projects, nothing else.
+  # projects_contract_guard fails the plan when the contract omits it.
+  is_production = try(local.env_config.is_production, null) == true
 
   # Public ingress: var.public_ingress_services, else
   # gcp.workload.public_ingress.<env>. Exposure needs the Cloud Armor policy.
@@ -315,6 +315,10 @@ resource "terraform_data" "projects_contract_guard" {
     precondition {
       condition     = contains(keys(local.env_config_map), var.environment)
       error_message = "The gcp-projects contract environment_config has no \"${var.environment}\" entry (projects_contract / gcp.contracts.projects, else the ${var.projects_workspace_name} workspace's contract output); add the environment to gcp.environments and apply gcp-projects first."
+    }
+    precondition {
+      condition     = try(local.env_config.is_production, null) != null
+      error_message = "The gcp-projects contract environment_config.${var.environment} has no is_production (projects_contract / gcp.contracts.projects, else the ${var.projects_workspace_name} workspace's contract output). Set it to true or false; the environment name is not read."
     }
   }
 }

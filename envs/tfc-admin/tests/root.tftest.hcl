@@ -10,8 +10,8 @@ mock_provider "tfe" {}
 variables {
   tfc_organization = "acme"
   environments = {
-    dev  = {}
-    prod = {}
+    dev  = { is_production = false }
+    prod = { is_production = true }
   }
   enable_gcp      = true
   enable_aws      = true
@@ -206,7 +206,7 @@ run "production_flag_overrides_name" {
 
   assert {
     condition     = module.workspace["gcp-workload-dev"].speculative_enabled == false && module.workspace["aws-workload-prod"].speculative_enabled == true
-    error_message = "an explicit is_production wins over the prod/production name heuristic."
+    error_message = "is_production alone decides production; the key name is not read."
   }
 }
 
@@ -646,8 +646,8 @@ run "aws_workload_account_binding" {
 
   variables {
     environments = {
-      dev  = { aws_account_key = "workload_dev" }
-      prod = {}
+      dev  = { is_production = false, aws_account_key = "workload_dev" }
+      prod = { is_production = true }
     }
     aws_organization_outputs_from_tfc = true
   }
@@ -1504,8 +1504,8 @@ run "derived_account_id_too_long_fails" {
   variables {
     gcp_project_prefix = "acmecorp"
     environments = {
-      dev                  = {}
-      integration-testing2 = {}
+      dev                  = { is_production = false }
+      integration-testing2 = { is_production = false }
     }
   }
 
@@ -1567,7 +1567,7 @@ run "new_nonprod_workload_queues_all_runs_and_auto_applies_triggers" {
     enable_nonprod_workload_auto_apply = true
     environments = {
       dev  = { is_production = false }
-      prod = {}
+      prod = { is_production = true }
     }
   }
 
@@ -1580,16 +1580,18 @@ run "new_nonprod_workload_queues_all_runs_and_auto_applies_triggers" {
   }
 }
 
-# Fail-closed: an environment that omits is_production (prd, live, prod-eu,
-# or even dev) never auto-applies.
-run "omitted_is_production_never_auto_applies" {
+# Only is_production = false opts a workload into auto-apply, whatever its
+# name: production environments (even one named dev) never auto-apply, even
+# with auto-apply forced on.
+run "production_flag_never_auto_applies" {
   command = plan
 
   variables {
+    enable_nonprod_workload_auto_apply = true
     environments = {
-      dev     = {}
-      prd     = {}
-      prod-eu = {}
+      dev     = { is_production = true }
+      prd     = { is_production = true }
+      prod-eu = { is_production = true }
     }
   }
 
@@ -1597,7 +1599,7 @@ run "omitted_is_production_never_auto_applies" {
     condition = alltrue([
       for ws in output.workspace_names : !module.workspace[ws].queue_all_runs && !module.workspace[ws].auto_apply_run_trigger
     ])
-    error_message = "only is_production = false (explicit) opts a workload into auto-apply; an omitted flag must keep manual confirmation."
+    error_message = "only is_production = false opts a workload into auto-apply; a production environment must keep manual confirmation."
   }
 }
 
@@ -1609,7 +1611,7 @@ run "nonprod_workload_auto_apply_default_off_without_policy_sets" {
   variables {
     environments = {
       dev  = { is_production = false }
-      prod = {}
+      prod = { is_production = true }
     }
   }
 
@@ -1631,7 +1633,7 @@ run "nonprod_workload_auto_apply_default_on_with_policy_sets" {
     import_tfc_admin_workspace = false
     environments = {
       dev  = { is_production = false }
-      prod = {}
+      prod = { is_production = true }
     }
   }
 
@@ -1656,7 +1658,7 @@ run "nonprod_workload_auto_apply_opt_out" {
     enable_nonprod_workload_auto_apply = false
     environments = {
       dev  = { is_production = false }
-      prod = {}
+      prod = { is_production = true }
     }
   }
 
@@ -1675,7 +1677,7 @@ run "prod_and_shared_need_confirmation" {
   variables {
     environments = {
       dev  = { is_production = false }
-      prod = {}
+      prod = { is_production = true }
     }
   }
 
@@ -1829,4 +1831,25 @@ run "saas_outputs_reader_single_team_input_removed" {
   }
 
   expect_failures = [var.saas_outputs_reader_team_id]
+}
+
+# Production is the is_production flag alone: an explicit environment without
+# it fails the plan, and the key prod does not make a workload production.
+run "explicit_environment_without_is_production_fails" {
+  command = plan
+  variables {
+    environments = { prod = {} }
+  }
+  expect_failures = [var.environments]
+}
+
+run "prod_key_without_flag_is_not_production_by_name" {
+  command = plan
+  variables {
+    environments = { prod = { is_production = false } }
+  }
+  assert {
+    condition     = !contains(local.production_workloads, "gcp-workload-prod")
+    error_message = "Only is_production decides production; the key prod alone must not."
+  }
 }

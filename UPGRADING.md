@@ -116,8 +116,7 @@ confirmation and sees no change. With policy sets on, every
 `is_production: false` **explicitly** gets `auto_apply_run_trigger` and
 `queue_all_runs`. A confirmed upstream apply (`gcp-network-hub`, `aws-network`,
 `aws-security`) then applies those workloads with no second confirmation.
-An omitted `is_production` keeps manual confirmation. Production workloads and
-every shared workspace are unchanged.
+Production workloads and every shared workspace are unchanged.
 
 **To keep the previous behaviour,** set `enable_nonprod_workload_auto_apply = false`
 on tfc-admin **before** the upgrade apply.
@@ -464,7 +463,7 @@ forwarding rule per other `aws.enabled_regions` region, plus the
 #### Production egress fails closed (aws-network)
 
 `aws-network` now fails the plan when the profile is `production` and an AWS
-workload environment `is_production` (unset = keys `prod` / `production`) unless
+workload environment sets `is_production: true` unless
 unmatched egress is dropped and a domain allowlist is set. Before upgrading,
 set in `config/landing-zone.yaml` (seed in `config/landing-zone.example.yaml`):
 
@@ -1099,6 +1098,27 @@ Applies to workloads with `enable_saas_secret_bridge = true`.
   reads ephemerally" under Terraform 1.17).
 
 ### All clouds
+
+#### `is_production` is required on every environment (all roots that read environments)
+
+**Who:** every fork. **Before the apply:** add `is_production: true` or
+`is_production: false` to each entry under `gcp.environments` and
+`aws.workload_environments` in `config/landing-zone.yaml`, and to each entry of
+tfc-admin's `environments` variable if you set it. The plan now fails, naming
+each entry without it, in tfc-admin, in aws-network (unless you set
+`enforce_egress_allowlist`) and in every GCP root (gcp-workload checks its own
+environment). The names
+`prod` and `production` no longer make an environment production on their own.
+Before this change, tfc-admin and aws-network treated an unflagged `prod` as
+production, gcp-workload treated any name that contains `prod` (also `nonprod`
+and `preprod`) as production, and the other GCP roots treated an unflagged
+environment as non-production. Check that each flag matches what you intend
+before you apply.
+
+gcp-workload now also fails the plan when the gcp-projects contract
+`environment_config.<env>` has no `is_production`. The gcp-projects contract
+output always sets it. Add it if you supply the contract yourself
+(`projects_contract` or `gcp.contracts.projects`).
 
 #### `make plan-gcp-workload` no longer adds the example tfvars file (tooling)
 

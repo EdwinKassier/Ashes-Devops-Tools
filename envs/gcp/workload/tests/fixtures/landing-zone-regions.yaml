@@ -29,6 +29,7 @@ gcp:
       ncc_spoke_group: edge
   environments:
     dev:
+      is_production: false
       additional_regions:
         europe-west4:
           subnet_cidrs:

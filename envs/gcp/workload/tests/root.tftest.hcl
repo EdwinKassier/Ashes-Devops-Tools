@@ -82,6 +82,7 @@ override_data {
             folder_name         = "Development"
             host_project_id     = "acme-dev-host-abcd"
             host_project_number = "222222222222"
+            is_production       = false
             region              = "europe-west1"
             cidr_block          = "10.10.0.0/16"
             labels              = {}
@@ -427,8 +428,31 @@ run "projects_contract_missing_environment_fails" {
           folder_id           = "folders/222"
           host_project_id     = "acme-prod-host-abcd"
           host_project_number = "444444444444"
+          is_production       = true
           region              = "europe-west1"
           cidr_block          = "10.20.0.0/16"
+        }
+      }
+    }
+  }
+
+  expect_failures = [terraform_data.projects_contract_guard]
+}
+
+# Production is the environment_config is_production flag alone: a contract
+# entry without it fails on the named guard; the environment name is not read.
+run "projects_contract_without_is_production_fails" {
+  command = plan
+
+  variables {
+    projects_contract = {
+      environment_config = {
+        dev = {
+          folder_id           = "folders/111"
+          host_project_id     = "acme-dev-host-abcd"
+          host_project_number = "222222222222"
+          region              = "europe-west1"
+          cidr_block          = "10.10.0.0/16"
         }
       }
     }

@@ -184,3 +184,16 @@ run "ncc_roles_from_config" {
     error_message = "gcp.network.ncc_hub.enabled: true must grant the network-hub SAs hubAdmin and the workload SAs spokeAdmin."
   }
 }
+
+# Production is the is_production flag alone: a config environment without it
+# fails the plan, naming the entry, instead of silently counting as non-prod.
+run "config_environment_without_is_production_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-missing-is-production.yaml"
+    environments             = null
+  }
+
+  expect_failures = [var.environments]
+}
