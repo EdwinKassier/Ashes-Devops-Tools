@@ -15,6 +15,12 @@ case "$mode" in
     ;;
 esac
 
+targets="$(./scripts/docs-targets.sh)"
+if [ -z "$targets" ]; then
+  echo "docs-targets.sh returned no targets" >&2
+  exit 1
+fi
+
 fail=0
 while IFS=$'\t' read -r config dir; do
   case "$mode" in
@@ -27,6 +33,6 @@ while IFS=$'\t' read -r config dir; do
       terraform-docs --config "$config" --output-check "$dir" || fail=1
       ;;
   esac
-done < <(./scripts/docs-targets.sh)
+done <<<"$targets"
 
 exit "$fail"
