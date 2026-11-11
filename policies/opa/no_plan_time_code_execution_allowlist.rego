@@ -35,3 +35,7 @@ endpoint_key_exceptions := {
 # Backends a data "terraform_remote_state" may read. Every remote-state read
 # in this repo uses "cloud" (HCP Terraform); "remote" is its older name.
 allowed_remote_state_backends := {"cloud", "remote"}
+
+# Action block types (Terraform 1.14+) that a configuration may declare. This
+# repo declares none, so every action block is denied.
+allowed_action_types := set()

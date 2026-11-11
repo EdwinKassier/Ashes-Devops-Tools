@@ -407,6 +407,10 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
 
 ### Security
 
+- **Plan-time execution policy covers Lambda, actions and inline credentials (SEC-2, breaking).**
+  `no_plan_time_code_execution` also denies `data "aws_lambda_invocation"`, every `action` block
+  whose type is not on the new, empty `allowed_action_types`, and the provider keys `credentials`
+  and `token_url`. See `UPGRADING.md`.
 - **The plan-time execution gate parses HCL (SEC-2 / CICD-2, breaking).**
   `scripts/check-plan-time-exec.py` replaces the grep in `scripts/check-consistency.sh`. It parses
   every `.tf` (python-hcl2, hash-locked in `.github/requirements/hcl2.txt`) and `.tf.json` file, so

@@ -966,6 +966,13 @@ side (all mock-tested, secure defaults):
   `hostname` in its `config`. When `config` is built from locals or variables
   the plan JSON shows only references, so such a check could not be complete.
   No remote-state read in this repo sets `hostname`.
+- **The supabase `access_token` provider argument is allowed.** The policy and
+  `scripts/check-plan-time-exec.py` deny the inline-credential keys
+  `credentials` and `token_url` in provider blocks, but not `access_token`:
+  `envs/saas` sets the supabase `access_token` to a placeholder when Supabase
+  is off. A change to that argument relies on review.
+  `impersonate_service_account` is also allowed, because every GCP root sets
+  it.
 
 ## DECISION — needs a human call
 

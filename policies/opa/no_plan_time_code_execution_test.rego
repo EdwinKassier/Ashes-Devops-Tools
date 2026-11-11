@@ -324,3 +324,34 @@ test_remote_state_in_module_denied if {
 		"expressions": {"backend": {"constant_value": "http"}},
 	}])
 }
+
+# ── Review follow-up: lambda data source, actions, inline credentials ───────
+test_lambda_invocation_data_denied if count(p.deny) == 1 with input as in_root([data_source("aws_lambda_invocation")])
+
+test_lambda_invoke_action_denied if {
+	inp := {"plan": {"configuration": {"root_module": {"actions": [{"address": "action.aws_lambda_invoke.a", "type": "aws_lambda_invoke", "name": "a", "provider_config_key": "aws"}]}}}}
+	count(p.deny) == 1 with input as inp
+}
+
+test_action_in_module_denied if {
+	inp := {"plan": {"configuration": {"root_module": {"module_calls": {"m": {"source": "../x", "module": {"actions": [{"address": "action.aws_lambda_invoke.a", "type": "aws_lambda_invoke"}]}}}}}}}
+	count(p.deny) == 1 with input as inp
+}
+
+test_google_credentials_denied if {
+	count(p.deny) == 1 with input as with_providers({"google": prov("google", "registry.terraform.io/hashicorp/google", {"credentials": {"references": ["var.creds"]}})})
+}
+
+# envs/saas sets the supabase access_token (a placeholder when Supabase is off).
+test_supabase_access_token_allowed if {
+	count(p.deny) == 0 with input as with_providers({"supabase": prov("supabase", "registry.terraform.io/supabase/supabase", {"access_token": {"references": ["local.x"]}})})
+}
+
+test_token_url_denied if {
+	count(p.deny) == 1 with input as with_providers({"google": prov("google", "registry.terraform.io/hashicorp/google", {"token_url": {"constant_value": "https://attacker.example/token"}})})
+}
+
+# shared_credentials_files does not match: only the exact key credentials does.
+test_shared_credentials_files_allowed if {
+	count(p.deny) == 0 with input as with_providers({"aws": prov("aws", "registry.terraform.io/hashicorp/aws", {"shared_credentials_files": {"constant_value": ["/x"]}})})
+}

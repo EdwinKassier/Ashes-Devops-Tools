@@ -1,6 +1,8 @@
 # MANDATORY: no provisioners outside the one reviewed module-call chain, no
-# external / http data sources anywhere, only allowlisted providers and
-# remote-state backends, and no provider endpoint, proxy or TLS overrides.
+# external / http / aws_lambda_invocation data sources anywhere, no action
+# blocks outside allowed_action_types, only allowlisted providers and
+# remote-state backends, and no provider endpoint, proxy, TLS or inline
+# credential (credentials, token_url) overrides.
 # The allowlists are in no_plan_time_code_execution_allowlist.rego. A plan runs with the workspace's
 # credentials and environment variables (TFE_TOKEN, SUPABASE_ACCESS_TOKEN, the
 # cloud plan identity). A data "external" or data "http" block and every
@@ -54,7 +56,9 @@ package terraform.policies.no_plan_time_code_execution
 
 import rego.v1
 
-exec_data_types := {"external", "http"}
+# Data sources that run code or call out during the plan: external runs a
+# program, http fetches a URL, aws_lambda_invocation invokes a Lambda function.
+exec_data_types := {"external", "http", "aws_lambda_invocation"}
 
 allowed_provisioner_chain := [
 	{"name": "saas_workload", "source": "../../modules/saas/stages/saas-workload"},
@@ -65,7 +69,11 @@ allowed_provisioner_chain := [
 # aws endpoints {} / custom_ca_bundle / insecure / *_proxy /
 # ec2_metadata_service_endpoint, google *_custom_endpoint / universe_domain,
 # tfe hostname / ssl_skip_verify, supabase endpoint, azurerm metadata_host.
-endpoint_key_pattern := `^(endpoints?|.*_endpoint|hostname|base_url|api_url|metadata_host|universe_domain|custom_ca_bundle|insecure|ssl_skip_verify|skip_tls_verify|https?_proxy|no_proxy)$`
+# Inline credentials (google credentials, a token_url) swap the workspace's
+# identity or send a token exchange to another host; no provider block in
+# this repo sets them. access_token is not listed: envs/saas sets the supabase
+# access_token to a placeholder when Supabase is off (docs/known-gaps.md).
+endpoint_key_pattern := `^(endpoints?|.*_endpoint|hostname|base_url|api_url|metadata_host|universe_domain|custom_ca_bundle|insecure|ssl_skip_verify|skip_tls_verify|https?_proxy|no_proxy|credentials|token_url)$`
 
 # Every resource block of the configuration, at any module depth, with its
 # walk path.
@@ -148,4 +156,19 @@ deny contains msg if {
 	some attr, _ in object.get(pc, "expressions", {})
 	endpoint_override(attr)
 	msg := sprintf("provider %s sets %q: an endpoint, proxy or TLS override can send the workspace's credentials to another host", [key, attr])
+}
+
+# Every action block of the configuration (Terraform 1.14+), at any module
+# depth: configuration...actions[i] with .type and .address (verified with
+# Terraform 1.17.1). An action runs provider code at apply time, for example
+# aws_lambda_invoke. Only types on allowed_action_types may appear.
+deny contains msg if {
+	walk(input.plan.configuration, [path, a])
+	n := count(path)
+	n >= 2
+	path[n - 2] == "actions"
+	is_number(path[n - 1])
+	is_object(a)
+	not object.get(a, "type", "") in allowed_action_types
+	msg := sprintf("%s: action type %q is not on allowed_action_types; an action runs provider code at apply time", [object.get(a, "address", "?"), object.get(a, "type", "?")])
 }

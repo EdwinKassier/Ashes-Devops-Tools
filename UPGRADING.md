@@ -197,6 +197,13 @@ cases:
   or `remote` is denied, also when `backend` is a variable or local. Use the
   `cloud` backend, or add the backend to `allowed_remote_state_backends` in
   the allowlist file.
+- **A Lambda invocation or an action block.** `data "aws_lambda_invocation"`
+  invokes a Lambda function during the plan and is denied like `external` and
+  `http`. An `action` block (Terraform 1.14 and later, for example
+  `aws_lambda_invoke`) runs provider code at apply time and is denied unless
+  its type is on `allowed_action_types` in the allowlist file, which is empty.
+- **Inline provider credentials.** A provider block that sets `credentials` or
+  `token_url` is denied. Use the workspace's dynamic credentials instead.
 
 The plan of a denied run has already run, so a denial is not a rollback. To
 unblock a run that you judge safe before the policy change merges, set
@@ -237,7 +244,6 @@ tree passes. Before you merge:
   the policy in the same change: the check fails when the chain in the policy
   and the module calls in `envs/saas` and `modules/saas/stages/saas-workload`
   differ.
-
 #### Run triggers auto-apply explicitly non-prod workloads (tfc-admin)
 
 **Trust change on the upgrade apply (estates with policy sets on).** tfc-admin's
