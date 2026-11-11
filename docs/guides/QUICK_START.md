@@ -294,74 +294,38 @@ TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan
 
 ## 6. Variable Reference
 
-Any variable below that maps to a `config/landing-zone.yaml` key (shown in brackets) may be left out of tfvars. An explicit variable still wins.
+Each root's full input list (name, type, default, description) is generated from its
+`variables.tf` into the root's README by `make docs`, and `make docs-check` (CI) fails when
+it is stale. Most inputs are optional because they default to a key in
+`config/landing-zone.yaml`; the description of each input names that key.
 
-### `envs/gcp/bootstrap` — Required Variables
+| Root | Workspace | Inputs |
+|---|---|---|
+| `envs/gcp/bootstrap` | `gcp-bootstrap` | [README](../../envs/gcp/bootstrap/README.md#inputs) |
+| `envs/gcp/organization` | `gcp-organization` | [README](../../envs/gcp/organization/README.md#inputs) |
+| `envs/gcp/guardrails` | `gcp-guardrails` | [README](../../envs/gcp/guardrails/README.md#inputs) |
+| `envs/gcp/projects` | `gcp-projects` | [README](../../envs/gcp/projects/README.md#inputs) |
+| `envs/gcp/network-hub` | `gcp-network-hub` | [README](../../envs/gcp/network-hub/README.md#inputs) |
+| `envs/gcp/workload` | `gcp-workload-<env>` | [README](../../envs/gcp/workload/README.md#inputs) |
+| `envs/tfc-admin` | `tfc-admin` | [README](../../envs/tfc-admin/README.md#inputs) |
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `domain` (`org.domain`) | GCP organization domain name — used to look up the org ID | `"example.com"` |
-| `admin_email` (`gcp.admin_email`) | Email of the organization administrator | `"admin@example.com"` |
-| `project_prefix` (`org.prefix`) | Short prefix for all project names, shared by every GCP root | `"acme"` |
-| `tfc_organization` (`org.tfc.organization`) | Terraform Cloud org name, for the TFC WIF provider | `"my-tfc-org"` |
+The values operators most often look for, and where they really live:
 
-### `envs/gcp/organization` — Required Variables
+| Setting | Set it in `config/landing-zone.yaml` | Or as a variable on |
+|---|---|---|
+| Org admin email | `gcp.admin_email` | `gcp-organization`: `gcp_overrides.admin_email` |
+| Org admin groups | `gcp.organization_admin_groups` | `gcp-organization`: `gcp_overrides.organization_admin_groups` |
+| Break-glass group | `gcp.break_glass_group` | `gcp-organization`: `gcp_overrides.containment_exempt_principals` |
+| Security contact (Essential Contacts) | (no config key) | `gcp-organization`: `gcp_overrides.security_contact_email` |
+| Break-glass user | (no config key) | `gcp-organization`: `gcp_overrides.break_glass_user` |
 
-> **Note:** `org_id` and `billing_account_id` are **not input variables** — they are resolved automatically from data sources (`data.google_organization` and `data.google_billing_account`). Set `domain` and either `billing_account` or `billing_account_display_name` instead.
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `domain` (`org.domain`) | GCP organization domain name — used to look up the org ID | `"example.com"` |
-| `admin_email` (`gcp.admin_email`) | Email of the organization administrator | `"admin@example.com"` |
-| `environments` (`gcp.environments`) | Map of environment configs (region, CIDR, budget, IAM bindings). Defined once in the config file and read by every GCP root | *(see example)* |
-| `organization_admin_groups` (`gcp.organization_admin_groups`) | Google Groups granted Organization Admin (at least one, unless `allow_user_principals_for_break_glass`) | `["gcp-org-admins@example.com"]` |
-
-### `envs/gcp/network-hub` — Required Variables
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `hub_vpc_cidr_block` (`gcp.network.hub_cidr_block`) | CIDR for the hub VPC — must not overlap with DNS hub or any spoke | `"10.0.0.0/16"` |
-| `dns_hub_vpc_cidr_block` (`gcp.network.dns_hub_cidr_block`) | CIDR for the DNS hub VPC — must not overlap with hub or any spoke | `"10.1.0.0/16"` |
-
-### `envs/gcp/organization` — Key Optional Variables
-
-| Variable | Default (or config key) | Description |
-|----------|---------|-------------|
-| `billing_account` | `null` | Billing account ID — required unless `billing_account_display_name` is set |
-| `billing_account_display_name` | `null` | Alternative to `billing_account` — looks up by display name |
-| `project_prefix` | `org.prefix` | Short prefix for all project names (1–10 chars, lowercase, starts with a letter). **Tripwire:** the example config's `"my-org"` is deliberately invalid — a `validation` block rejects it at plan time. You **must** change it to your real organization identifier before your first plan. |
-| `default_region` | `org.regions.gcp`, else `"europe-west2"` | Primary region for KMS, logging, network hub |
-| `tfc_organization` | `org.tfc.organization` | Terraform Cloud org name for dynamic provider credentials |
-| `break_glass_user` | `null` | Email granted Organization Admin in emergencies |
-| `monthly_budget_amount` | `1000` | Org-level budget alert threshold (in `budget_currency`) |
-| `security_contact_email` | `null` | Email for security notifications via Essential Contacts |
-
-### `envs/gcp/workload` — Required Variables
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `project_prefix` (`org.prefix`) | Matches org root prefix | `"acme"` |
-| `environment` | Short env name (used in resource naming); must match a key in `gcp.environments`. tfc-admin sets it from the workspace name | `"dev"` |
-| `tfc_organization` (`org.tfc.organization`) | Terraform Cloud org name — used to read organization remote state | `"my-tfc-org"` |
-
-> **VPC CIDR:** The per-environment CIDR is not set here — it comes from the `environments` map (its `cidr_block`), which flows into the `environment_config` published by `gcp-projects` and consumed by `gcp-workload`. The `environments` map is defined once, under `gcp.environments` in `config/landing-zone.yaml`, and every GCP root reads it from there.
-
-### `envs/gcp/workload` — Key Optional Variables
-
-| Variable | Default (or config key) | Description |
-|----------|---------|-------------|
-| `region` | `gcp.environments[<env>].region`, else `org.regions.gcp`, else `"europe-west2"` | Default GCP region for this environment |
-| `terraform_admin_email` | `null` | SA to impersonate for deliberate local break-glass runs only (from bootstrap output). Leave `null` for the phase-0 apply and on every TFC workspace. Example: `"terraform-admin@acme-admin-xxxx.iam.gserviceaccount.com"` |
-| `enable_cloud_armor` | preset, else `false` | Create the environment Cloud Armor policy (implied by public ingress) |
-| `enable_owasp_rules` | preset, else `false` | Enable Cloud Armor OWASP managed rules (requires `enable_cloud_armor`) |
-| `vpc_sc_enable_dry_run` | preset, else `true` | Keep the environment perimeter in dry-run; the `prod-gcp-workload` preset enforces it |
-| `public_ingress_services` | `gcp.workload.public_ingress.<env>` | Services to expose on a global external ALB with a managed certificate ([guide](deploying-a-service.md#exposing-the-service-front-door)) |
-| `app_bootstrap_image` | `gcp.workload.bootstrap_image`, else the public Cloud Run sample | First-revision image; set a mirror inside the VPC-SC perimeter |
-| `owasp_sensitivity` | `2` | Cloud Armor OWASP rule sensitivity (1=strict, 4=permissive) |
-| `enable_deletion_protection` | `true` | Guard against accidental destruction of the VPC/subnets/DNS zones |
-| `vpc_sc_ingress_policies` / `vpc_sc_egress_policies` | `[]` | Optional VPC Service Controls ingress/egress policies for the perimeter |
-
-> **Hybrid connectivity (HA-VPN, Dedicated/Partner Interconnect):** `modules/gcp/stages/net-hub` already wires `network/vpn` (`var.vpn.enabled`) and `network/interconnect`. `modules/gcp/stages/network-hub` does not pass them through yet, so they are not configurable from `config/landing-zone.yaml` or `envs/gcp/network-hub`; exposing them is planned work (see [`known-gaps.md`](../known-gaps.md)).
+`gcp_overrides` is one object variable on `gcp-organization`. A setting such as
+`admin_email` is **not** a separate workspace variable there: a workspace variable with that
+name configures nothing. Set every key you need in the same `gcp_overrides` value, because a
+later value replaces the whole object ([presets README](../../examples/presets/README.md)).
+Hybrid connectivity (HA VPN, Interconnect) is configured under `gcp.network.vpn` and
+`gcp.network.interconnect`; the VPN pre-shared key is the write-only `vpn_shared_secret_wo`
+variable on `gcp-network-hub` ([hybrid connectivity runbook](../runbooks/gcp-hybrid-connectivity.md)).
 
 ---
 

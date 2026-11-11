@@ -433,7 +433,7 @@ variable "services" {
       enable_serverless_v2    = optional(bool, true)
       serverless_min_capacity = optional(number, 0.5)
       serverless_max_capacity = optional(number, 4)
-      database_name           = optional(string) # null => service name with _ for -
+      database_name           = optional(string) # null => service name, underscores for hyphens
       backup_retention_period = optional(number, 7)
       deletion_protection     = optional(bool, true)
       skip_final_snapshot     = optional(bool, false)

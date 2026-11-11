@@ -43,20 +43,6 @@ gcp_overrides = {
 The variable names before this change map 1:1 to keys (UPGRADING.md).
 
 <!-- BEGIN_TF_DOCS -->
-
-
-## Usage
-
-Basic usage of this module is as follows:
-
-```hcl
-module "example" {
-	source = "<module-path>"
-
-	# Required variables
-}
-```
-
 ## Requirements
 
 | Name | Version |
@@ -72,23 +58,6 @@ module "example" {
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | 8.10.0 |
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
-
-## Modules
-
-
-- organization - ../../../modules/gcp/stages/organization
-
-
-## Resources
-
-The following resources are created:
-
-
-- resource.terraform_data.starter_requires_budget (envs/gcp/organization/main.tf#L108)
-- data source.google_billing_account.billing (envs/gcp/organization/data.tf#L33)
-- data source.google_organization.org (envs/gcp/organization/data.tf#L27)
-- data source.terraform_remote_state.gcp_bootstrap (envs/gcp/organization/data.tf#L15)
-
 
 ## Inputs
 

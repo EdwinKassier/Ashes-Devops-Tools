@@ -63,9 +63,9 @@ repos:
           - --args=--severity=CRITICAL,HIGH
 
   # Local hook, not the pre-commit-terraform one: that hook runs terraform-docs
-  # from inside each module directory, so resource positions in the README differ
-  # from `make docs` and the two fight. This one uses .terraform-docs.yml from the
-  # repo root, like scripts/module-docs.sh.
+  # from inside each directory, so resource positions in the README differ
+  # from `make docs` and the two fight. This one uses the configs listed by
+  # scripts/docs-targets.sh from the repo root, like scripts/module-docs.sh.
   - repo: local
     hooks:
       - id: terraform_docs
@@ -74,7 +74,7 @@ repos:
         entry: scripts/precommit-terraform-docs.sh
         language: script
         require_serial: true
-        files: '^modules/.*\.tf$'
+        files: '^(modules|envs)/.*\.tf$'
         exclude: '(^|/)(examples|tests)/'
 
   # General hooks

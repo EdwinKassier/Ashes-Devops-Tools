@@ -14,21 +14,6 @@ TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan
 By default this root reads organization outputs from the Terraform Cloud workspace named `organization`.
 
 <!-- BEGIN_TF_DOCS -->
-
-
-## Usage
-
-Basic usage of this module is as follows:
-
-```hcl
-module "example" {
-	source = "<module-path>"
-
-	# Required variables
-	environment =
-}
-```
-
 ## Requirements
 
 | Name | Version |
@@ -43,23 +28,6 @@ module "example" {
 | Name | Version |
 |------|---------|
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
-
-## Modules
-
-
-- environment - ../../../modules/gcp/stages/environment
-
-
-## Resources
-
-The following resources are created:
-
-
-- resource.terraform_data.projects_contract_guard (envs/gcp/workload/main.tf#L302)
-- data source.terraform_remote_state.network_hub (envs/gcp/workload/main.tf#L42)
-- data source.terraform_remote_state.organization (envs/gcp/workload/main.tf#L20)
-- data source.terraform_remote_state.projects (envs/gcp/workload/main.tf#L31)
-
 
 ## Inputs
 
@@ -80,6 +48,7 @@ The following resources are created:
 | <a name="input_enable_artifact_registry_vulnerability_scanning"></a> [enable\_artifact\_registry\_vulnerability\_scanning](#input\_enable\_artifact\_registry\_vulnerability\_scanning) | Scan app-service container images on push (Container Scanning API + repository vulnerability scanning INHERITED). Billed per scanned image. Default true. | `bool` | `true` | no |
 | <a name="input_enable_cloud_armor"></a> [enable\_cloud\_armor](#input\_enable\_cloud\_armor) | Enable the environment Cloud Armor security policy (also implied by public ingress). Null = a configured preset (e.g. prod-gcp-workload), else false. | `bool` | `null` | no |
 | <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | Enable lifecycle protection to prevent accidental destruction of critical network resources (VPC, subnets, DNS zones). Set to false only during teardown — requires state manipulation before destroy. See docs/runbooks/cidr-expansion.md for the removal procedure. | `bool` | `true` | no |
+| <a name="input_enable_egress_proxy"></a> [enable\_egress\_proxy](#input\_enable\_egress\_proxy) | Send the environment's private-tier egress through the hub Secure Web Proxy (preview): a Private Service Connect endpoint in this VPC, and no Cloud NAT for the private tier. Needs the proxy enabled on gcp-network-hub (secure\_web\_proxy) with this host project in its consumers. Null = gcp.environments[<environment>].egress\_proxy from config/landing-zone.yaml, else false. | `bool` | `null` | no |
 | <a name="input_enable_gke_autopilot"></a> [enable\_gke\_autopilot](#input\_enable\_gke\_autopilot) | Create one private GKE Autopilot cluster for the environment (default off). | `bool` | `false` | no |
 | <a name="input_enable_host_project_workloads"></a> [enable\_host\_project\_workloads](#input\_enable\_host\_project\_workloads) | Allow app\_services entries without service\_team, which then run in the Shared VPC host project next to the network core. Null (default) = allowed outside production, refused in production (environment\_config is\_production). Set true to allow it in production too, false to refuse it everywhere. | `bool` | `null` | no |
 | <a name="input_enable_network_hub"></a> [enable\_network\_hub](#input\_enable\_network\_hub) | Connect the environment VPC to the gcp-network-hub (VPC peering + DNS peering zone, from network\_hub\_contract or the gcp-network-hub remote state). False = standalone: no gcp-network-hub read, no hub peering, no DNS peering zone. | `bool` | `true` | no |
@@ -99,7 +68,7 @@ The following resources are created:
 | <a name="input_log_config_flow_sampling"></a> [log\_config\_flow\_sampling](#input\_log\_config\_flow\_sampling) | VPC Flow Logs packet-sampling rate (0.0–1.0). 0.1 = 10% of packets sampled. Recommended: 0.5 for dev/staging, 0.1 for prod (reduce Logging cost). Set to 0.0 to disable flow log collection while keeping the log bucket. | `number` | `0.1` | no |
 | <a name="input_monthly_budget_limit"></a> [monthly\_budget\_limit](#input\_monthly\_budget\_limit) | Monthly budget limit for this application environment in var.budget\_currency.<br/>A value of 0 (the default) disables budget alerting entirely — the budget<br/>Pub/Sub topic and Cloud Function notifier are not created.<br/>Set a positive value to enable cost alerting (e.g., 1000 for USD 1,000/month). | `number` | `0` | no |
 | <a name="input_network_connectivity"></a> [network\_connectivity](#input\_network\_connectivity) | How the environment VPC reaches the hub: peering (VPC peering) or ncc (a Network Connectivity Center spoke on the gcp-network-hub NCC hub, which must be enabled there first). Switching an existing environment deletes its hub peering; see docs/runbooks/gcp-peering-to-ncc-migration.md. Null = gcp.environments[<environment>].network\_connectivity, else gcp.network.connectivity from config/landing-zone.yaml, else peering. Ignored when enable\_network\_hub = false. | `string` | `null` | no |
-| <a name="input_network_hub_contract"></a> [network\_hub\_contract](#input\_network\_hub\_contract) | gcp-network-hub stage contract: hub\_network {vpc\_self\_link, dns\_domain} the env VPC peers with and forwards DNS to, plus the optional NCC hub {ncc\_hub\_id, ncc\_spoke\_group} it joins when network\_connectivity = ncc. Null = gcp.contracts.network\_hub from config/landing-zone.yaml, else read from the gcp-network-hub workspace's remote state. Ignored when enable\_network\_hub = false. | <pre>object({<br/>    vpc_self_link   = string<br/>    dns_domain      = string<br/>    ncc_hub_id      = optional(string)<br/>    ncc_spoke_group = optional(string)<br/>  })</pre> | `null` | no |
+| <a name="input_network_hub_contract"></a> [network\_hub\_contract](#input\_network\_hub\_contract) | gcp-network-hub stage contract: hub\_network {vpc\_self\_link, dns\_domain} the env VPC peers with and forwards DNS to, plus the optional NCC hub {ncc\_hub\_id, ncc\_spoke\_group} it joins when network\_connectivity = ncc. Null = gcp.contracts.network\_hub from config/landing-zone.yaml, else read from the gcp-network-hub workspace's remote state. Ignored when enable\_network\_hub = false. | <pre>object({<br/>    vpc_self_link                   = string<br/>    dns_domain                      = string<br/>    ncc_hub_id                      = optional(string)<br/>    ncc_spoke_group                 = optional(string)<br/>    egress_proxy_service_attachment = optional(string)<br/>  })</pre> | `null` | no |
 | <a name="input_network_hub_workspace_name"></a> [network\_hub\_workspace\_name](#input\_network\_hub\_workspace\_name) | Workspace name that stores the gcp-network-hub root state (hub\_network for peering + DNS) | `string` | `"gcp-network-hub"` | no |
 | <a name="input_organization_contract"></a> [organization\_contract](#input\_organization\_contract) | gcp-organization stage contract, the same type in every gcp root: org\_id (numeric), billing\_account (billingAccounts/XXXXXX-XXXXXX-XXXXXX or bare ID), admin\_project\_number, folders (key => {id, name, display\_name}), tag\_values (key => tag value ID) and scoped\_access\_policy\_ids (env => policy ID). This root needs: org\_id, billing\_account, admin\_project\_number. Null = gcp.contracts.organization from config/landing-zone.yaml, else the contract output of the gcp-organization workspace. | <pre>object({<br/>    org_id               = optional(string)<br/>    billing_account      = optional(string)<br/>    admin_project_number = optional(string)<br/>    folders = optional(map(object({<br/>      id           = string<br/>      name         = string<br/>      display_name = string<br/>    })), {})<br/>    tag_values               = optional(map(string), {})<br/>    scoped_access_policy_ids = optional(map(string), {})<br/>  })</pre> | `null` | no |
 | <a name="input_organization_workspace_name"></a> [organization\_workspace\_name](#input\_organization\_workspace\_name) | Workspace name that stores the organization root state (org\_id, billing\_account, admin\_project\_number, CMEK, tags) | `string` | `"gcp-organization"` | no |
