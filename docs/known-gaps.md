@@ -482,6 +482,15 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   accepts a plain HTTP listener with forward or fixed-response. Enforcing
   `redirect-https` on application load balancers is a breaking change planned
   outside Phase 0.
+- **Real-cloud checks fail on schedule until the sandbox is funded (2026-11-11).**
+  Drift detection and sandbox e2e fail on schedule while their credentials and
+  variables are unset (plan decision D10). The owner can opt out with the
+  repository variable `REAL_CLOUD_CHECKS_OPT_OUT=true`; the variable is not set yet.
+  Once set, scheduled runs end without failing and show warnings that the checks
+  did not run: drift detection reports "did NOT run" and a summary that says drift
+  is unmonitored, and sandbox e2e reports "E2E NOT run". Manual and `e2e`-label
+  e2e runs still fail when unconfigured. Remove the variable once the sandbox is
+  funded (WS5 Task 30).
 
 ## OPEN — operator actions and items carried from archived audits
 
