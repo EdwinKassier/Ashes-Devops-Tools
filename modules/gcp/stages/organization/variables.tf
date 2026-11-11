@@ -49,7 +49,7 @@ variable "customer_id" {
 }
 
 variable "gcp" {
-  description = "The gcp section of the organization stage: every tuning input the gcp-organization root takes from config/landing-zone.yaml (gcp.*) or from its gcp_overrides variable, in one object. Each attribute is documented in the type; an unset (or null) attribute takes the default shown there. admin_email is required. The root fills enable_admin_containment, containment_exempt_principals, guardrail_owner_mode and allowed_workload_identity_issuers from its own derivations."
+  description = "The gcp section of the organization stage: every tuning input the gcp-organization root takes from config/landing-zone.yaml (gcp.*) or from its gcp_overrides variable, in one object. Each attribute is documented in the type; an unset (or null) attribute takes the default shown there. admin_email is required. The root fills enable_admin_containment, containment_exempt_principals, guardrail_owner_mode and allowed_workload_identity_issuers from its own derivations. The allowed_regions default allows two EU regions (europe-west1, europe-west2) and one US region (us-central1). The deployable root reads gcp.allowed_regions from config/landing-zone.yaml instead. A direct caller of this stage with data-residency needs must set allowed_regions."
   type = object({
     # Email address of the primary administrator. Granted standing org/billing admin as a user:
     # principal ONLY when allow_user_principals_for_break_glass = true.

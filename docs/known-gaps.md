@@ -491,6 +491,11 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   is unmonitored, and sandbox e2e reports "E2E NOT run". Manual and `e2e`-label
   e2e runs still fail when unconfigured. Remove the variable once the sandbox is
   funded (WS5 Task 30).
+- **CMP-20: the org stage `allowed_regions` default mixes EU and US.** The default in
+  `modules/gcp/stages/organization/variables.tf` allows `europe-west1`, `europe-west2` and
+  `us-central1`. Narrowing it is a breaking change (the location policy would deny the
+  dropped regions for callers that rely on the default), so it is deferred out of Phase 0.
+  The deployable root reads `gcp.allowed_regions` from `config/landing-zone.yaml`.
 
 ## OPEN — operator actions and items carried from archived audits
 
