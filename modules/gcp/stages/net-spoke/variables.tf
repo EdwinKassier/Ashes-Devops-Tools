@@ -138,11 +138,13 @@ variable "firewall" {
 }
 
 variable "nat" {
-  description = "Cloud NAT (and its Cloud Router) for the private and database tiers. Set enabled = false for a network with no egress need."
+  description = "Cloud NAT (and its Cloud Router). Set enabled = false for a network with no egress need. include_private_subnets: NAT the private tier (null, the default, = true unless egress_proxy.enabled, which sends private-tier egress through the hub proxy instead). include_database_subnets (default false): NAT the database tier; leave it off so a database VM has no internet path even when it lacks the database network tag. When no tier is NATed, no NAT or router is created."
   type = object({
-    enabled            = optional(bool, true)
-    ip_allocate_option = optional(string, "AUTO_ONLY")
-    log_filter         = optional(string, "ERRORS_ONLY")
+    enabled                  = optional(bool, true)
+    ip_allocate_option       = optional(string, "AUTO_ONLY")
+    log_filter               = optional(string, "ERRORS_ONLY")
+    include_private_subnets  = optional(bool)
+    include_database_subnets = optional(bool, false)
   })
   default  = {}
   nullable = false
@@ -463,5 +465,46 @@ variable "firewall_policy_enforcement_order" {
   validation {
     condition     = var.firewall_policy_enforcement_order == null ? true : contains(["BEFORE_CLASSIC_FIREWALL", "AFTER_CLASSIC_FIREWALL"], var.firewall_policy_enforcement_order)
     error_message = "firewall_policy_enforcement_order must be null, BEFORE_CLASSIC_FIREWALL or AFTER_CLASSIC_FIREWALL."
+  }
+}
+
+variable "egress_proxy" {
+  description = <<-EOT
+    Opt-in central egress (preview): a Private Service Connect endpoint in this VPC for the hub
+    Secure Web Proxy (stages/net-hub secure_web_proxy with psc_nat_subnet_cidr). service_attachment
+    is the hub output secure_web_proxy.service_attachment_id (this project must be in the hub's
+    consumer_accept_projects). The endpoint takes an address from the first primary-region private
+    subnet (address pins it). global_access lets other regions of this VPC use it. Enabling it also
+    drops the private tier from Cloud NAT unless nat.include_private_subnets says otherwise, so
+    private-tier workloads reach the internet only through the proxy (HTTPS_PROXY=<endpoint>:<port>).
+  EOT
+  type = object({
+    enabled            = optional(bool, false)
+    service_attachment = optional(string)
+    address            = optional(string)
+    global_access      = optional(bool, false)
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = !var.egress_proxy.enabled || can(regex("^projects/[^/]+/regions/[^/]+/serviceAttachments/[^/]+$", coalesce(var.egress_proxy.service_attachment, "-")))
+    error_message = "egress_proxy.service_attachment must be a service attachment ID of the form projects/<project>/regions/<region>/serviceAttachments/<name> when egress_proxy.enabled is true."
+  }
+}
+
+variable "alerting" {
+  description = "Cloud NAT alert policies (allocation failures and OUT_OF_RESOURCES packet drops) in this project, on by default whenever a NAT exists. notification_channel_ids are existing channel IDs (projects/<project>/notificationChannels/<id>); empty = the policies still open incidents in the console but notify no one. enabled = false creates none."
+  type = object({
+    enabled                       = optional(bool, true)
+    notification_channel_ids      = optional(list(string), [])
+    nat_dropped_packets_threshold = optional(number, 0)
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = alltrue([for c in var.alerting.notification_channel_ids : can(regex("^projects/[^/]+/notificationChannels/[^/]+$", c))])
+    error_message = "alerting.notification_channel_ids entries must look like projects/<project>/notificationChannels/<id>."
   }
 }

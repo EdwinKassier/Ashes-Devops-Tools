@@ -412,7 +412,8 @@ module "database" {
   private_network = var.network_id
 
   enable_iam_authentication     = true
-  enable_high_availability      = each.value.database.enable_high_availability
+  enable_high_availability      = coalesce(each.value.database.enable_high_availability, var.is_production)
+  backup_location               = each.value.database.backup_location
   enable_point_in_time_recovery = each.value.database.enable_point_in_time_recovery
   encryption_key_name           = each.value.database.encryption_key_name
   enable_deletion_protection    = coalesce(each.value.database.enable_deletion_protection, var.enable_deletion_protection)

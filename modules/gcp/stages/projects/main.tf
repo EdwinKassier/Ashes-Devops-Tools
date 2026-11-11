@@ -80,10 +80,12 @@ resource "google_monitoring_monitored_project" "projects" {
 # conditional (delegated) folderIamAdmin grant that only admits these role lists.
 
 locals {
+  # Roles in non_delegable_workload_folder_roles are granted by gcp-organization
+  # directly: projects-apply's delegated folder IAM no longer admits them.
   workload_folder_grants = merge([
     for env, sas in var.workload_service_accounts : merge([
       for phase in ["plan", "apply"] : {
-        for role in var.workload_folder_roles[phase] : "${env}|${phase}|${role}" => {
+        for role in setsubtract(toset(var.workload_folder_roles[phase]), toset(var.non_delegable_workload_folder_roles)) : "${env}|${phase}|${role}" => {
           folder = var.folders[env].id
           role   = role
           member = "serviceAccount:${sas[phase]}"
@@ -101,6 +103,19 @@ locals {
       }
     }
   ]...)
+
+  # gcp-network-hub creates the hub side of each environment peering only once
+  # the spoke network exists, so its SAs list the networks of each environment
+  # folder: read-only roles/compute.viewer (already in the delegated workload
+  # allow-list), nothing that can change an environment.
+  network_env_viewer_grants = var.network_service_accounts == null ? {} : merge([
+    for env in sort(keys(var.environments)) : {
+      for phase in ["plan", "apply"] : "${env}|${phase}" => {
+        folder = var.folders[env].id
+        member = "serviceAccount:${var.network_service_accounts[phase]}"
+      }
+    } if env != var.network_folder_key
+  ]...)
 }
 
 resource "google_folder_iam_member" "workload_sa_folder_roles" {
@@ -117,5 +132,13 @@ resource "google_folder_iam_member" "network_sa_folder_roles" {
 
   folder = each.value.folder
   role   = each.value.role
+  member = each.value.member
+}
+
+resource "google_folder_iam_member" "network_sa_env_viewer" {
+  for_each = local.network_env_viewer_grants
+
+  folder = each.value.folder
+  role   = "roles/compute.viewer"
   member = each.value.member
 }

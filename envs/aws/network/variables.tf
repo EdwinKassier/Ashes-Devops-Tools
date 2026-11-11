@@ -74,46 +74,46 @@ variable "aws_enabled_regions" {
 # -----------------------------------------------------------------------------
 
 variable "top_cidr" {
-  description = "CIDR of the top-level supernet owned by the top IPAM pool."
+  description = "CIDR of the top-level supernet owned by the top IPAM pool. Null = aws.network.top_cidr from config/landing-zone.yaml, else 10.64.0.0/10 (the AWS block of docs/architecture/cidr-plan.md)."
   type        = string
-  default     = "10.0.0.0/8"
+  default     = null
 
   validation {
-    condition     = can(cidrhost(var.top_cidr, 0))
-    error_message = "top_cidr must be a valid IPv4 CIDR block (e.g. 10.0.0.0/8)."
+    condition     = var.top_cidr == null || can(cidrhost(var.top_cidr, 0))
+    error_message = "top_cidr must be a valid IPv4 CIDR block (e.g. 10.64.0.0/10)."
   }
 }
 
 variable "regional_cidrs" {
-  description = "Map of region to the CIDR each regional IPAM pool provisions. Every CIDR should fall within top_cidr."
+  description = "Map of region to the CIDR each regional IPAM pool provisions. Every CIDR should fall within top_cidr. Null = aws.network.regional_cidrs from config/landing-zone.yaml, else { <aws_region, or the first enabled region when aws_region is not enabled> = 10.64.0.0/12 }."
   type        = map(string)
-  default     = { eu-west-2 = "10.0.0.0/12" }
+  default     = null
 
   validation {
-    condition     = alltrue([for c in values(var.regional_cidrs) : can(cidrhost(c, 0))])
+    condition     = var.regional_cidrs == null || alltrue([for c in values(coalesce(var.regional_cidrs, {})) : can(cidrhost(c, 0))])
     error_message = "Every value in regional_cidrs must be a valid IPv4 CIDR block."
   }
 }
 
 variable "inspection_cidr" {
-  description = "IPv4 CIDR of the inspection VPC that hosts the Network Firewall endpoints and its transit-gateway attachment."
+  description = "IPv4 CIDR of the inspection VPC that hosts the Network Firewall endpoints and its transit-gateway attachment. Null = aws.network.inspection_cidr from config/landing-zone.yaml, else 10.64.0.0/16."
   type        = string
-  default     = "10.0.0.0/16"
+  default     = null
 
   validation {
-    condition     = can(cidrnetmask(var.inspection_cidr))
-    error_message = "inspection_cidr must be a valid IPv4 CIDR block (e.g. 10.0.0.0/16)."
+    condition     = var.inspection_cidr == null || can(cidrnetmask(var.inspection_cidr))
+    error_message = "inspection_cidr must be a valid IPv4 CIDR block (e.g. 10.64.0.0/16)."
   }
 }
 
 variable "egress_cidr" {
-  description = "IPv4 CIDR of the centralized egress VPC that hosts the NAT gateways, interface endpoints, and Route 53 resolver endpoints."
+  description = "IPv4 CIDR of the centralized egress VPC that hosts the NAT gateways, interface endpoints, and Route 53 resolver endpoints. Null = aws.network.egress_cidr from config/landing-zone.yaml, else 10.65.0.0/16."
   type        = string
-  default     = "10.1.0.0/16"
+  default     = null
 
   validation {
-    condition     = can(cidrnetmask(var.egress_cidr))
-    error_message = "egress_cidr must be a valid IPv4 CIDR block (e.g. 10.1.0.0/16)."
+    condition     = var.egress_cidr == null || can(cidrnetmask(var.egress_cidr))
+    error_message = "egress_cidr must be a valid IPv4 CIDR block (e.g. 10.65.0.0/16)."
   }
 }
 
@@ -295,8 +295,18 @@ variable "enable_vpn" {
 
 variable "vpn" {
   description = "Site-to-Site VPN settings (customer_gateway_ip, customer_gateway_bgp_asn, static_routes_only, onprem_cidrs, tunnel_inside_cidrs, enable_acceleration, preshared_key_storage), used only when the VPN is enabled. Null = aws.network.vpn from config/landing-zone.yaml. The tunnel pre-shared keys are never set here: AWS stores them in Secrets Manager."
-  type        = any
-  default     = null
+  # Untyped so this variable and the config-file value (JSON text) share one
+  # decode path, and so a misspelled key stays visible: an object type
+  # constraint would drop it silently. The validation rejects unknown keys
+  # (config/landing-zone.schema.json does the same for the config file); the
+  # network-hub stage types and validates the values.
+  type    = any
+  default = null
+
+  validation {
+    condition     = length([for k in keys(coalesce(var.vpn, {})) : k if !contains(["customer_gateway_ip", "customer_gateway_bgp_asn", "static_routes_only", "onprem_cidrs", "tunnel_inside_cidrs", "enable_acceleration", "preshared_key_storage"], k)]) == 0
+    error_message = "vpn has keys the network-hub stage does not accept: ${join(", ", [for k in keys(coalesce(var.vpn, {})) : k if !contains(["customer_gateway_ip", "customer_gateway_bgp_asn", "static_routes_only", "onprem_cidrs", "tunnel_inside_cidrs", "enable_acceleration", "preshared_key_storage"], k)])}."
+  }
 }
 
 variable "spoke_attachments" {

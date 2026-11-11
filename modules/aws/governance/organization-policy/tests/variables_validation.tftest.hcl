@@ -201,3 +201,13 @@ run "rejects_bad_allowed_image_provider" {
 
   expect_failures = [var.ec2_allowed_images]
 }
+
+run "wildcard_stackset_managed_policy_name_rejected" {
+  command = plan
+
+  variables {
+    stackset_managed_policy_names = ["tfc-*"]
+  }
+
+  expect_failures = [var.stackset_managed_policy_names]
+}

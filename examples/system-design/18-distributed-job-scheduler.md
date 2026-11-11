@@ -548,7 +548,7 @@ aws:
   workload_environments:
     prod:
       account_key: workload_prod
-      vpc_cidr: 10.30.0.0/16
+      vpc_cidr: 10.72.0.0/16
       services:
         scheduler: # API + dispatcher loop + relay + reaper in one task
           desired_count: 3

@@ -105,25 +105,62 @@ run "saas_only" {
   }
 }
 
-# Module-only PRs must trigger plans: each workspace watches its own dir, the
-# module domains its root consumes, and its estate's config files
+# Module-only PRs must trigger plans, but only where the module is used: each
+# workspace watches its own dir, the module trees its root composes (directly
+# or through a stage; root_trigger_dirs) and its estate's config files
 # (sandbox.tftest.hcl covers the per-estate split).
-run "trigger_patterns_cover_module_domains" {
+run "trigger_patterns_cover_composed_modules" {
   command = plan
 
   assert {
-    condition     = toset(module.workspace["gcp-organization"].trigger_patterns) == toset(["envs/gcp/organization/**", "modules/gcp/**", "config/landing-zone.yaml"])
-    error_message = "GCP roots must trigger on their dir, modules/gcp/** and the estate config."
+    condition = toset(module.workspace["gcp-bootstrap"].trigger_patterns) == toset([
+      "envs/gcp/bootstrap/**",
+      "modules/gcp/iam/service-account/**", "modules/gcp/iam/workload-identity/**",
+      "modules/gcp/project/**", "modules/gcp/stages/bootstrap/**",
+      "config/landing-zone.yaml",
+    ])
+    error_message = "gcp-bootstrap must trigger on its dir, the four module trees it composes and the estate config, nothing else."
   }
 
   assert {
-    condition     = toset(module.workspace["aws-workload-dev"].trigger_patterns) == toset(["envs/aws/workload/**", "modules/aws/**", "config/landing-zone.yaml"])
-    error_message = "AWS roots must trigger on their dir, modules/aws/** and the estate config."
+    condition = alltrue([
+      for p in ["modules/gcp/stages/organization/**", "modules/gcp/stages/guardrails/**", "modules/gcp/governance/kms/**", "envs/gcp/organization/**", "config/landing-zone.yaml"] :
+      contains(module.workspace["gcp-organization"].trigger_patterns, p)
+    ])
+    error_message = "gcp-organization must trigger on its stage and the modules the stage composes."
+  }
+
+  # A network or workload module change no longer queues the privileged
+  # bootstrap and organization roots.
+  assert {
+    condition = alltrue([
+      for ws in ["gcp-bootstrap", "gcp-organization", "gcp-projects", "aws-organization", "aws-identity"] :
+      !anytrue([for p in module.workspace[ws].trigger_patterns : startswith(p, "modules/gcp/network/") || startswith(p, "modules/aws/network/") || startswith(p, "modules/gcp/compute/") || p == "modules/gcp/**" || p == "modules/aws/**"])
+    ])
+    error_message = "control-plane roots that compose no network or compute module must not trigger on those trees (or on a whole cloud's modules/**)."
   }
 
   assert {
-    condition     = toset(module.workspace["saas-web"].trigger_patterns) == toset(["envs/saas/**", "modules/saas/**", "modules/supabase/**", "modules/vercel/**", "config/landing-zone.yaml"])
-    error_message = "the saas root must trigger on envs/saas and the saas/supabase/vercel module domains."
+    condition = alltrue([
+      for p in ["envs/gcp/workload/**", "modules/gcp/stages/environment/**", "modules/gcp/stages/net-spoke/**", "modules/gcp/network/tiered-vpc/**", "examples/presets/**"] :
+      contains(module.workspace["gcp-workload-dev"].trigger_patterns, p)
+    ]) && module.workspace["gcp-workload-dev"].trigger_patterns == module.workspace["gcp-workload-prod"].trigger_patterns
+    error_message = "every gcp-workload-<env> must trigger on the environment composition (stage, spoke network, tiered VPC) and on the preset files its config reads."
+  }
+
+  assert {
+    condition     = contains(module.workspace["aws-workload-dev"].trigger_patterns, "modules/aws/stages/workload/**") && contains(module.workspace["aws-workload-dev"].trigger_patterns, "modules/aws/stages/app-services/**") && !contains(module.workspace["aws-workload-dev"].trigger_patterns, "modules/aws/stages/organization/**")
+    error_message = "aws-workload-<env> must trigger on the workload and app-services stages, not on the organization stage."
+  }
+
+  assert {
+    condition = toset(module.workspace["saas-web"].trigger_patterns) == toset([
+      "envs/saas/**", "modules/saas/stages/saas-workload/**",
+      "modules/supabase/environment/**", "modules/supabase/project/**", "modules/supabase/settings/**",
+      "modules/supabase/vault-secrets/**", "modules/vercel/project/**",
+      "config/landing-zone.yaml",
+    ])
+    error_message = "the saas root must trigger on envs/saas and the saas, supabase and vercel modules it composes."
   }
 }
 
@@ -813,27 +850,77 @@ run "team_access_least_privilege" {
       tfe_team_project_access.this["${p}/approvers"].workspace_access[0].runs == "apply" &&
       tfe_team_project_access.this["${p}/approvers"].workspace_access[0].variables == "read" &&
       tfe_team_project_access.this["${p}/approvers"].team_id == "team-approvers1"
-    ]) && !contains(keys(tfe_team_project_access.this), "saas/approvers")
-    error_message = "the approvers team must get runs = apply (variables read-only) on every control-plane project and nowhere else."
+    ]) && tfe_team_project_access.this["saas/approvers"].workspace_access[0].runs == "apply"
+    error_message = "the approvers team must get runs = apply (variables read-only) on every control-plane project and on the saas project."
   }
 
   assert {
-    condition     = tfe_team_project_access.this["saas/platform"].access == "write" && tfe_team_project_access.this["aws/team-viewers1"].access == "read"
-    error_message = "workload-only projects keep platform write; viewer teams get read on every project."
+    condition     = tfe_team_project_access.this["aws/team-viewers1"].access == "read"
+    error_message = "viewer teams get read on every project."
   }
 
-  # 3 projects x (platform + viewer) + 2 control-plane projects x approvers +
-  # the security team on the guardrails project = 9.
+  # The saas project holds account-wide Supabase/Vercel tokens: a plan (also a
+  # CLI speculative plan with unreviewed configuration) can read them, so the
+  # platform team may view runs there but never queue one.
   assert {
-    condition     = length(tfe_team_project_access.this) == 9
-    error_message = "3 x (platform + viewer) + 2 approvers + 1 security = 9 project grants."
+    condition = (
+      tfe_team_project_access.this["saas/platform"].access == "custom" &&
+      tfe_team_project_access.this["saas/platform"].workspace_access[0].runs == "read" &&
+      tfe_team_project_access.this["saas/platform"].workspace_access[0].variables == "read"
+    )
+    error_message = "on the secret-bearing saas project the platform team must get custom access with runs = read (no plan)."
   }
 
-  # Workload workspaces sharing a project with the control plane get write
-  # through a workspace-level grant; control-plane workspaces never do.
+  # 3 projects x (platform + viewer) + approvers on the 2 control-plane
+  # projects and the saas project + the security team on guardrails = 10.
   assert {
-    condition     = toset(keys(tfe_team_access.platform_workload)) == toset(["gcp-workload-dev", "gcp-workload-prod", "aws-workload-dev", "aws-workload-prod"]) && alltrue([for g in values(tfe_team_access.platform_workload) : g.access == "write" && g.team_id == "team-platform1"])
-    error_message = "only the gcp/aws workload workspaces get a workspace-level platform write grant."
+    condition     = length(tfe_team_project_access.this) == 10
+    error_message = "3 x (platform + viewer) + 3 approvers + 1 security = 10 project grants."
+  }
+
+  # Non-production workload workspaces sharing a project with the control
+  # plane get write through a workspace-level grant; control-plane and
+  # production workload workspaces never do.
+  assert {
+    condition     = toset(keys(tfe_team_access.platform_workload)) == toset(["gcp-workload-dev", "aws-workload-dev"]) && alltrue([for g in values(tfe_team_access.platform_workload) : g.access == "write" && g.team_id == "team-platform1"])
+    error_message = "only the non-production gcp/aws workload workspaces get a workspace-level platform write grant."
+  }
+
+  # Production workloads get the control-plane treatment: the platform team
+  # inherits only the custom project grant (plan, variables read-only), so one
+  # person cannot set a TF_VAR_* and confirm a prod apply; the approvers team
+  # confirms. The tag lets the TFC-layer policy recognise them.
+  assert {
+    condition = alltrue([
+      for ws in ["gcp-workload-prod", "aws-workload-prod"] :
+      !contains(keys(tfe_team_access.platform_workload), ws) && contains(module.workspace[ws].tag_names, "tier:production")
+    ]) && !contains(module.workspace["gcp-workload-dev"].tag_names, "tier:production")
+    error_message = "production workloads must get no workspace-level write grant and must carry the tier:production tag."
+  }
+}
+
+# A production environment flagged only by is_production (not by its name) is
+# protected too, and a non-production one named prod keeps write.
+run "production_workloads_follow_is_production" {
+  command = plan
+
+  variables {
+    environments = {
+      live = { is_production = true }
+      prod = { is_production = false }
+    }
+    platform_team_id                = "team-platform1"
+    control_plane_approvers_team_id = "team-approvers1"
+  }
+
+  assert {
+    condition     = toset(keys(tfe_team_access.platform_workload)) == toset(["gcp-workload-prod", "aws-workload-prod"])
+    error_message = "write follows is_production: live (production) gets none, prod (explicitly non-production) keeps it."
+  }
+
+  assert {
+    condition     = contains(module.workspace["aws-workload-live"].tag_names, "tier:production") && !contains(module.workspace["aws-workload-prod"].tag_names, "tier:production")
+    error_message = "tier:production follows is_production."
   }
 }
 
@@ -947,8 +1034,10 @@ run "approvers_must_differ_from_platform" {
   expect_failures = [terraform_data.input_contract]
 }
 
-# Opt-in split: workload workspaces move to <prefix><cloud>-workloads projects,
-# which get fixed platform write; control-plane projects stay custom.
+# Opt-in split: workload workspaces move to <prefix><cloud>-workloads projects.
+# A workloads project that holds a production workload gets the control-plane
+# treatment (custom platform access, approvers confirm), and its
+# non-production workloads get write through workspace-level grants.
 run "split_workload_projects" {
   command = plan
 
@@ -964,14 +1053,103 @@ run "split_workload_projects" {
   }
 
   assert {
-    condition     = tfe_team_project_access.this["gcp-workloads/platform"].access == "write" && tfe_team_project_access.this["gcp/platform"].access == "custom" && !contains(keys(tfe_team_project_access.this), "aws-workloads/approvers")
-    error_message = "workload projects get fixed platform write; only control-plane projects get custom + approvers."
+    condition = alltrue([
+      for p in ["gcp-workloads", "aws-workloads"] :
+      tfe_team_project_access.this["${p}/platform"].access == "custom" &&
+      tfe_team_project_access.this["${p}/platform"].workspace_access[0].runs == "plan" &&
+      tfe_team_project_access.this["${p}/platform"].workspace_access[0].variables == "read" &&
+      tfe_team_project_access.this["${p}/approvers"].workspace_access[0].runs == "apply" &&
+      tfe_team_project_access.this["${p}/approvers"].team_id == "team-approvers1"
+    ]) && tfe_team_project_access.this["gcp/platform"].access == "custom"
+    error_message = "a workloads project holding a production workload gets custom platform access (plan, variables read-only) and an approvers grant."
+  }
+
+  assert {
+    condition     = toset(keys(tfe_team_access.platform_workload)) == toset(["gcp-workload-dev", "aws-workload-dev"]) && alltrue([for g in values(tfe_team_access.platform_workload) : g.access == "write"])
+    error_message = "only the non-production workloads get workspace-level write in a project that holds a production workload."
+  }
+}
+
+# A workloads project with no production workload keeps fixed platform write
+# and needs neither approvers nor workspace-level grants.
+run "split_workload_projects_nonprod_only" {
+  command = plan
+
+  variables {
+    environments = {
+      dev     = { is_production = false }
+      staging = { is_production = false }
+    }
+    split_workload_projects         = true
+    platform_team_id                = "team-platform1"
+    control_plane_approvers_team_id = "team-approvers1"
+  }
+
+  assert {
+    condition     = tfe_team_project_access.this["gcp-workloads/platform"].access == "write" && tfe_team_project_access.this["aws-workloads/platform"].access == "write" && !contains(keys(tfe_team_project_access.this), "aws-workloads/approvers") && !contains(keys(tfe_team_project_access.this), "gcp-workloads/approvers")
+    error_message = "a non-production-only workloads project keeps fixed platform write and gets no approvers grant."
   }
 
   assert {
     condition     = length(tfe_team_access.platform_workload) == 0
-    error_message = "no workspace-level grants are needed once workloads have their own project."
+    error_message = "no workspace-level grants are needed when the workloads project holds no production workload."
   }
+}
+
+# The state export team reads state versions on every project except the
+# security-only guardrails project, and nothing else.
+run "state_backup_team_reads_state_only" {
+  command = plan
+
+  variables {
+    platform_team_id     = "team-platform1"
+    state_backup_team_id = "team-backup1"
+  }
+
+  assert {
+    condition = toset([for k, g in tfe_team_project_access.this : split("/", k)[0] if g.team_id == "team-backup1"]) == toset(["gcp", "aws", "saas"]) && alltrue([
+      for k, g in tfe_team_project_access.this : (
+        g.access == "custom" &&
+        g.workspace_access[0].state_versions == "read" &&
+        g.workspace_access[0].runs == "read" &&
+        g.workspace_access[0].variables == "none" &&
+        g.workspace_access[0].locking == false &&
+        g.project_access[0].teams == "none"
+      ) if g.team_id == "team-backup1"
+    ])
+    error_message = "the state backup team must get custom state_versions = read (runs read, variables none) on every project but guardrails."
+  }
+}
+
+run "state_backup_team_must_be_dedicated" {
+  command = plan
+
+  variables {
+    platform_team_id     = "team-same1"
+    state_backup_team_id = "team-same1"
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+# TFC applies with the exact version CI tests.
+run "terraform_version_is_exact" {
+  command = plan
+
+  assert {
+    condition     = alltrue([for ws in output.workspace_names : module.workspace[ws].terraform_version == "1.17.1"])
+    error_message = "every workspace must run the exact Terraform version CI pins (.tool-versions)."
+  }
+}
+
+run "terraform_version_constraint_rejected" {
+  command = plan
+
+  variables {
+    terraform_version = "~> 1.17"
+  }
+
+  expect_failures = [var.terraform_version]
 }
 
 run "policy_set_optional_and_advisory_source" {
@@ -1058,6 +1236,25 @@ run "destructive_set_overridable_main_set_not" {
   }
 }
 
+# A hand-created (unmanaged) tfc-admin workspace is looked up and attached
+# too, so the TFC-layer guard judges tfc-admin's own plans.
+run "policy_sets_judge_unmanaged_tfc_admin" {
+  command = plan
+
+  variables {
+    enable_policy_sets = true
+    vcs_repo           = { identifier = "acme/landing-zone", oauth_token_id = "ot-abc123" }
+  }
+
+  assert {
+    condition     = length(data.tfe_workspace.tfc_admin) == 1 && length(local.policy_set_workspace_ids) == length(module.workspace) + 1
+    error_message = "with policy sets on, the unmanaged tfc-admin workspace must be attached to both sets as well as every managed workspace."
+  }
+
+  # vcs_repo without self-management still warns about speculative plans.
+  expect_failures = [check.tfc_admin_workspace_hardened]
+}
+
 # Policy-set overrides are org-wide and granted by an owner in the HCP UI to
 # the hand-created security team; without security_team_id a check warns.
 run "destructive_set_without_security_team_warns" {
@@ -1098,7 +1295,7 @@ run "self_management_adopts_tfc_admin" {
   }
 
   assert {
-    condition     = module.workspace["tfc-admin"].speculative_enabled == false && toset(module.workspace["tfc-admin"].trigger_patterns) == toset(["envs/tfc-admin/**", "modules/tfc/**", "config/landing-zone.yaml"])
+    condition     = module.workspace["tfc-admin"].speculative_enabled == false && toset(module.workspace["tfc-admin"].trigger_patterns) == toset(["envs/tfc-admin/**", "modules/tfc/workspace/**", "config/landing-zone.yaml"])
     error_message = "a self-managed tfc-admin workspace is control plane: no speculative plans, triggers on its dir + modules/tfc + the estate config."
   }
 
@@ -1135,8 +1332,8 @@ run "tfc_admin_workspace_apply_restricted" {
   }
 
   assert {
-    condition     = !contains(keys(tfe_team_project_access.this), "platform/approvers") && tfe_team_project_access.this["platform/platform"].workspace_access[0].runs == "plan"
-    error_message = "on the platform project (tfc-admin only) the approvers team gets no grant and the platform team is capped at plan."
+    condition     = !contains(keys(tfe_team_project_access.this), "platform/approvers") && tfe_team_project_access.this["platform/platform"].workspace_access[0].runs == "read"
+    error_message = "on the platform project (tfc-admin only, holds TFE_TOKEN) the approvers team gets no grant and the platform team gets runs = read: a plan there could read the org-admin token."
   }
 
   assert {
@@ -1526,35 +1723,42 @@ run "effective_prefix_format_validated" {
   expect_failures = [terraform_data.input_contract]
 }
 
-# SaaS bridge reader: a hand-created team whose token (TFE_TOKEN on bridging
-# workload workspaces only) reads saas-* outputs and nothing else. tfc-admin
-# grants the access; it never creates the token.
+# SaaS bridge readers: one hand-created team per saas-<name> workspace, whose
+# token (TFE_TOKEN on the workloads bridging that stack only) reads that
+# workspace's outputs and nothing else. tfc-admin grants the access; it never
+# creates the token.
 run "saas_outputs_reader_default_off" {
   command = plan
 
   assert {
     condition     = length(tfe_team_access.saas_outputs_reader) == 0
-    error_message = "without saas_outputs_reader_team_id no saas outputs-reader grant may exist."
+    error_message = "without saas_outputs_reader_team_ids no saas outputs-reader grant may exist."
   }
 }
 
-run "saas_outputs_reader_reads_saas_outputs_only" {
+run "saas_outputs_reader_one_team_per_stack" {
   command = plan
 
   variables {
-    saas_workspaces             = ["web", "admin"]
-    saas_outputs_reader_team_id = "team-saasreader1"
+    saas_workspaces = ["web", "admin"]
+    saas_outputs_reader_team_ids = {
+      "saas-web"   = "team-saasweb1"
+      "saas-admin" = "team-saasadmin1"
+    }
   }
 
   assert {
-    condition     = toset(keys(tfe_team_access.saas_outputs_reader)) == toset(["saas-web", "saas-admin"])
-    error_message = "the outputs-reader team gets one grant per saas-* workspace and no other workspace."
+    condition = (
+      toset(keys(tfe_team_access.saas_outputs_reader)) == toset(["saas-web", "saas-admin"]) &&
+      tfe_team_access.saas_outputs_reader["saas-web"].team_id == "team-saasweb1" &&
+      tfe_team_access.saas_outputs_reader["saas-admin"].team_id == "team-saasadmin1"
+    )
+    error_message = "each outputs-reader team gets a grant on its own saas-* workspace only."
   }
 
   assert {
     condition = alltrue([
       for k, a in tfe_team_access.saas_outputs_reader :
-      a.team_id == "team-saasreader1" &&
       a.permissions[0].state_versions == "read-outputs" &&
       a.permissions[0].runs == "read" &&
       a.permissions[0].variables == "none" &&
@@ -1566,31 +1770,42 @@ run "saas_outputs_reader_reads_saas_outputs_only" {
   }
 
   assert {
-    condition     = length([for k, g in tfe_team_project_access.this : k if g.team_id == "team-saasreader1"]) == 0
-    error_message = "the outputs-reader team must get no project-level grant."
+    condition     = length([for k, g in tfe_team_project_access.this : k if contains(["team-saasweb1", "team-saasadmin1"], g.team_id)]) == 0
+    error_message = "the outputs-reader teams must get no project-level grant."
   }
 }
 
-run "saas_outputs_reader_needs_saas" {
+run "saas_outputs_reader_shared_team_rejected" {
   command = plan
 
   variables {
-    enable_saas                 = false
-    saas_outputs_reader_team_id = "team-saasreader1"
+    saas_workspaces = ["web", "admin"]
+    saas_outputs_reader_team_ids = {
+      "saas-web"   = "team-saasreader1"
+      "saas-admin" = "team-saasreader1"
+    }
   }
 
-  assert {
-    condition     = length(tfe_team_access.saas_outputs_reader) == 0
-    error_message = "with no saas-* workspaces the outputs-reader team gets nothing."
+  expect_failures = [terraform_data.input_contract]
+}
+
+run "saas_outputs_reader_unknown_workspace_rejected" {
+  command = plan
+
+  variables {
+    enable_saas                  = false
+    saas_outputs_reader_team_ids = { "saas-web" = "team-saasreader1" }
   }
+
+  expect_failures = [terraform_data.input_contract]
 }
 
 run "saas_outputs_reader_must_be_dedicated" {
   command = plan
 
   variables {
-    platform_team_id            = "team-same1"
-    saas_outputs_reader_team_id = "team-same1"
+    platform_team_id             = "team-same1"
+    saas_outputs_reader_team_ids = { "saas-web" = "team-same1" }
   }
 
   expect_failures = [terraform_data.input_contract]
@@ -1600,7 +1815,17 @@ run "saas_outputs_reader_team_id_format" {
   command = plan
 
   variables {
-    saas_outputs_reader_team_id = "saas-reader"
+    saas_outputs_reader_team_ids = { "saas-web" = "saas-reader" }
+  }
+
+  expect_failures = [var.saas_outputs_reader_team_ids]
+}
+
+run "saas_outputs_reader_single_team_input_removed" {
+  command = plan
+
+  variables {
+    saas_outputs_reader_team_id = "team-saasreader1"
   }
 
   expect_failures = [var.saas_outputs_reader_team_id]

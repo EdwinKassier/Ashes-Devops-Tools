@@ -309,3 +309,60 @@ run "scaffold_gcp_aws_saas_plans" {
     landing_zone_config_path = "../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
   }
 }
+
+# Address plan: the committed fixture follows docs/architecture/cidr-plan.md
+# (GCP 10.0.0.0/12, AWS defaults in 10.64.0.0/10), so no conflict is reported.
+run "cidr_plan_clean_config_has_no_conflict" {
+  command = plan
+
+  assert {
+    condition     = length(local.cidr_overlaps) == 0 && length(local.cidr_outside_aws_top) == 0
+    error_message = "the plan-conformant fixture must report no address conflict."
+  }
+
+  assert {
+    condition     = local.cidr_aws_top == "10.64.0.0/10" && local.cidr_all["aws.network.inspection_cidr"] == "10.64.0.0/16" && local.cidr_all["gcp.environments.prod.cidr_block"] == "10.30.0.0/16"
+    error_message = "the check must see the GCP ranges and the aws-network defaults."
+  }
+}
+
+# The old aws-network defaults sat on the GCP hub: tfc-admin fails the plan and
+# names each conflicting pair.
+run "cidr_overlap_fails_the_plan" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-cidr-overlap.yaml"
+  }
+
+  assert {
+    condition = (
+      contains(local.cidr_overlaps, "aws.network.inspection_cidr (10.0.0.0/16) overlaps gcp.network.hub_cidr_block (10.0.0.0/16)") &&
+      contains(local.cidr_overlaps, "aws.network.top_cidr (10.0.0.0/8) overlaps gcp.environments.dev.cidr_block (10.10.0.0/16)") &&
+      !anytrue([for o in local.cidr_overlaps : startswith(o, "aws.network.top_cidr") && strcontains(o, "overlaps aws.")])
+    )
+    error_message = "overlaps across clouds are reported pairwise; AWS VPCs inside the AWS supernet are not."
+  }
+
+  assert {
+    condition     = length(local.cidr_outside_aws_top) == 0
+    error_message = "every fixed AWS range sits inside top_cidr 10.0.0.0/8 here."
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+run "cidr_outside_aws_supernet_fails_the_plan" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-cidr-outside.yaml"
+  }
+
+  assert {
+    condition     = length(local.cidr_outside_aws_top) == 1 && contains(local.cidr_outside_aws_top, "aws.workload_environments.dev.vpc_cidr (10.20.0.0/16) is outside aws.network.top_cidr (10.64.0.0/10)")
+    error_message = "a fixed workload vpc_cidr outside top_cidr is reported."
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}

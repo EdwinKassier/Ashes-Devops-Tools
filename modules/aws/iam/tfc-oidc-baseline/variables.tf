@@ -259,7 +259,7 @@ variable "enable_apply_boundary_propagation" {
 }
 
 variable "enable_plan_role_data_read_deny" {
-  description = "Attach an inline deny to the plan role for data-plane reads that ReadOnlyAccess otherwise grants (s3:GetObject*, secretsmanager:GetSecretValue / BatchGetSecretValue, ssm:GetParameter*, kms:Decrypt / GenerateDataKey*, ec2:GetPasswordData / console output, glue:GetConnection(s), DynamoDB item reads, sqs:ReceiveMessage, kinesis:GetRecords, CloudWatch Logs event reads/queries, rds-data, Athena/Redshift Data results, ECR image pulls). Default true: speculative PR plans run as this role, so it reads configuration, not data."
+  description = "Attach a deny managed policy (<plan_role_name>-data-read-deny, one per account) to the plan role for data-plane reads that ReadOnlyAccess otherwise grants (s3:GetObject*, secretsmanager:GetSecretValue / BatchGetSecretValue, ssm:GetParameter*, kms:Decrypt / GenerateDataKey*, ec2:GetPasswordData / console output, glue:GetConnection(s), DynamoDB item reads, sqs:ReceiveMessage, kinesis:GetRecords, CloudWatch Logs event reads/queries, rds-data, Athena/Redshift Data results, ECR image pulls) and for secret-bearing reads (API Gateway key values, launch-template and launch-configuration user data, CodeBuild project and build environment variables, Cognito app-client secrets, AppSync API keys, Step Functions execution data, Lightsail access details, Glacier job output, Elastic Beanstalk configuration). Default true: speculative PR plans run as this role, so it reads configuration, not data."
   type        = bool
   default     = true
 }

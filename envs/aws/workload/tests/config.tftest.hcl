@@ -71,8 +71,8 @@ run "vpc_cidr_defaults_when_not_in_config" {
   }
 
   assert {
-    condition     = local.workload_account_key == "workload_prod" && local.vpc_cidr == "10.20.0.0/16"
-    error_message = "an environment without vpc_cidr in the config must get the built-in 10.20.0.0/16."
+    condition     = local.workload_account_key == "workload_prod" && local.vpc_cidr == "10.72.0.0/16"
+    error_message = "an environment without vpc_cidr in the config must get the built-in 10.72.0.0/16."
   }
 }
 

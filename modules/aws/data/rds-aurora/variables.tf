@@ -195,7 +195,18 @@ variable "preferred_maintenance_window" {
 }
 
 variable "deletion_protection" {
-  description = "Whether the cluster has AWS-side deletion protection. Secure default is true; a terraform_data guard additionally blocks accidental `terraform destroy`."
+  description = <<-EOT
+    Whether the cluster is protected from deletion. Secure default is true.
+
+    When true, the cluster's AWS-side deletion_protection is set and a
+    terraform_data guard with prevent_destroy is created. The guard is replaced
+    whenever the cluster would be replaced, so Terraform refuses any plan that
+    destroys or replaces the cluster. Setting this to false while the guard
+    exists is also refused. To intentionally destroy or replace a protected
+    cluster, first run:
+      terraform state rm 'module.<name>.terraform_data.deletion_guard[0]'
+    then set this to false and apply.
+  EOT
   type        = bool
   default     = true
 }

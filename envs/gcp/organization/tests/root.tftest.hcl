@@ -383,6 +383,27 @@ run "containment_derived_on_for_production_from_config" {
   }
 }
 
+# A break-glass group alone derives containment ON, before any production
+# environment exists (gcp-guardrails derives it the same way).
+run "containment_derived_on_from_break_glass_group" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-dev-break-glass.yaml"
+    domain                   = null
+    project_prefix           = null
+    billing_account          = null
+    tfc_organization         = null
+    environments             = null
+    gcp_overrides            = {}
+  }
+
+  assert {
+    condition     = length(local.production_environment_keys) == 0 && output.admin_containment_enabled == true && jsonencode(local.containment_exempt_principals) == jsonencode(["principalSet://goog/group/gcp-break-glass@acme.io"])
+    error_message = "a break-glass group must turn containment on even with no production environment."
+  }
+}
+
 # An explicit gcp.admin_containment: false in config waives the production
 # containment requirement (unset is not a waiver).
 run "config_false_waives_containment" {
@@ -695,23 +716,6 @@ run "unset_override_keeps_config_value" {
   assert {
     condition     = contains(flatten([for r in module.organization.admin_containment_rules : r.denied_permissions]), "iam.googleapis.com/principalaccessboundarypolicies.unbind")
     error_message = "the config value (boundary on) must reach the stage."
-  }
-}
-
-# A removed variable that is still set (tfvars, TFC variable or TF_VAR_) fails
-# the plan, and the message names its gcp_overrides replacement.
-run "removed_input_fails_with_replacement" {
-  command = plan
-
-  variables {
-    enable_pam = true
-  }
-
-  expect_failures = [terraform_data.removed_inputs_guard]
-
-  assert {
-    condition     = local.removed_inputs_message == "Removed variables are set; move each into gcp_overrides (UPGRADING.md): enable_pam -> gcp_overrides.enable_pam."
-    error_message = "the guard must name the removed variable and its gcp_overrides key."
   }
 }
 

@@ -34,7 +34,7 @@ run "default_catalog_names_unchanged" {
     platform_team_id                = "team-platform1"
     control_plane_approvers_team_id = "team-approvers1"
     viewer_team_ids                 = ["team-viewer1"]
-    saas_outputs_reader_team_id     = "team-saasread1"
+    saas_outputs_reader_team_ids    = { "saas-web" = "team-saasread1" }
   }
 
   assert {
@@ -70,15 +70,15 @@ run "default_catalog_names_unchanged" {
     condition = toset(keys(tfe_team_project_access.this)) == toset([
       "aws/approvers", "aws/platform", "aws/team-viewer1",
       "gcp/approvers", "gcp/platform", "gcp/team-viewer1",
-      "saas/platform", "saas/team-viewer1",
+      "saas/approvers", "saas/platform", "saas/team-viewer1",
       "guardrails/security",
     ])
     error_message = "the project team grants must keep their <project>/<team> keys."
   }
 
   assert {
-    condition     = toset(keys(tfe_team_access.platform_workload)) == toset(["aws-workload-dev", "aws-workload-prod", "gcp-workload-dev", "gcp-workload-prod"])
-    error_message = "the platform workspace-level write grants must stay keyed by workload workspace name."
+    condition     = toset(keys(tfe_team_access.platform_workload)) == toset(["aws-workload-dev", "gcp-workload-dev"])
+    error_message = "the platform workspace-level write grants must stay keyed by workload workspace name (non-production workloads only)."
   }
 
   assert {
@@ -272,8 +272,8 @@ run "multi_environment_catalog_names_unchanged" {
   }
 
   assert {
-    condition     = length(tfe_team_access.platform_workload) == 0 && length(tfe_team_access.tfc_admin) == 1
-    error_message = "split projects need no workspace-level platform write; tfc-admin keeps its explicit grant."
+    condition     = toset(keys(tfe_team_access.platform_workload)) == toset(["aws-workload-dev", "aws-workload-qa", "aws-workload-staging", "gcp-workload-dev", "gcp-workload-qa", "gcp-workload-staging"]) && length(tfe_team_access.tfc_admin) == 1
+    error_message = "a workloads project that holds a production workload is custom, so its non-production workloads get workspace-level write (keyed by workspace name); tfc-admin keeps its explicit grant."
   }
 
   assert {

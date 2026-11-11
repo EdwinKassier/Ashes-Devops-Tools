@@ -143,3 +143,9 @@ variable "key_account_id" {
     error_message = "key_account_id must be null or a 12-digit AWS account ID."
   }
 }
+
+variable "enable_deletion_protection" {
+  description = "Create a prevent_destroy guard that makes any plan which destroys or replaces the KMS key fail. Turning it off does not remove an existing guard: run terraform state rm on the guard first."
+  type        = bool
+  default     = true
+}

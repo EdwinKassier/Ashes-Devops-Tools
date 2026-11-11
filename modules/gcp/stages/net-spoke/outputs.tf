@@ -138,3 +138,18 @@ output "ncc_producer_spoke_ids" {
   description = "NCC producer VPC spoke IDs (Private Service Access), keyed by name; empty when connectivity = peering."
   value       = try(module.ncc_spoke[0].producer_spoke_ids, {})
 }
+
+output "nat_subnet_tiers" {
+  description = "Subnet tiers the primary Cloud NAT translates (private unless egress goes through the hub proxy, database only with nat.include_database_subnets); empty when no NAT is created."
+  value       = local.create_nat ? concat(local.nat_private ? ["private"] : [], local.nat_database ? ["database"] : []) : []
+}
+
+output "egress_proxy_address" {
+  description = "Internal address of the PSC endpoint for the hub Secure Web Proxy (set HTTPS_PROXY to it and the proxy port), or null when egress_proxy.enabled = false."
+  value       = try(google_compute_address.egress_proxy[0].address, null)
+}
+
+output "nat_alert_policy_ids" {
+  description = "Cloud NAT alert policy IDs keyed by alert (nat_allocation_failed, nat_dropped_packets); empty when alerting is off or no NAT exists."
+  value       = try(module.nat_alerts[0].all_alert_policy_ids, {})
+}

@@ -59,16 +59,18 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_securitylake_aws_log_source.this (modules/aws/security/securitylake/main.tf#L27)
-- resource.aws_securitylake_data_lake.this (modules/aws/security/securitylake/main.tf#L5)
-- resource.aws_securitylake_subscriber.this (modules/aws/security/securitylake/main.tf#L38)
+- resource.aws_securitylake_aws_log_source.this (modules/aws/security/securitylake/main.tf#L51)
+- resource.aws_securitylake_data_lake.additional (modules/aws/security/securitylake/main.tf#L34)
+- resource.aws_securitylake_data_lake.this (modules/aws/security/securitylake/main.tf#L16)
+- resource.aws_securitylake_subscriber.this (modules/aws/security/securitylake/main.tf#L62)
 
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_aws_enabled_regions"></a> [aws\_enabled\_regions](#input\_aws\_enabled\_regions) | Regions in which Security Lake is enabled. One data-lake configuration block is created per Region. | `list(string)` | <pre>[<br/>  "eu-west-2"<br/>]</pre> | no |
+| <a name="input_additional_region_kms_key_ids"></a> [additional\_region\_kms\_key\_ids](#input\_additional\_region\_kms\_key\_ids) | Map of Region to the KMS key (ARN) that encrypts that Region's Security Lake objects, for every enabled Region after the first. A KMS key is regional, so kms\_key\_id covers the home Region only. A Region without an entry uses S3\_MANAGED. | `map(string)` | `{}` | no |
+| <a name="input_aws_enabled_regions"></a> [aws\_enabled\_regions](#input\_aws\_enabled\_regions) | Regions in which Security Lake is enabled. The first is the home Region (encrypted with kms\_key\_id); each Region gets its own data lake. | `list(string)` | <pre>[<br/>  "eu-west-2"<br/>]</pre> | no |
 | <a name="input_enable_security_lake"></a> [enable\_security\_lake](#input\_enable\_security\_lake) | Master COST toggle for Amazon Security Lake. When false the module creates no resources. Security Lake incurs ingestion, storage, and normalization charges, so it is gated separately from the rest of the security tooling. | `bool` | `true` | no |
 | <a name="input_kms_key_id"></a> [kms\_key\_id](#input\_kms\_key\_id) | KMS key identifier (key ID, ARN, or the literal S3\_MANAGED) used to encrypt the Security Lake S3 objects in each configured Region. | `string` | `"S3_MANAGED"` | no |
 | <a name="input_log_sources"></a> [log\_sources](#input\_log\_sources) | AWS-native log sources ingested into Security Lake. Each must be one of CLOUD\_TRAIL\_MGMT, VPC\_FLOW, ROUTE53, or SH\_FINDINGS. | `list(string)` | <pre>[<br/>  "CLOUD_TRAIL_MGMT",<br/>  "VPC_FLOW",<br/>  "ROUTE53",<br/>  "SH_FINDINGS"<br/>]</pre> | no |
@@ -82,6 +84,7 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
+| <a name="output_additional_data_lake_arns"></a> [additional\_data\_lake\_arns](#output\_additional\_data\_lake\_arns) | ARNs of the Security Lake data lakes in the enabled Regions after the home Region, keyed by Region. |
 | <a name="output_data_lake_arn"></a> [data\_lake\_arn](#output\_data\_lake\_arn) | ARN of the Security Lake data lake, or null when Security Lake is disabled. |
 | <a name="output_log_source_names"></a> [log\_source\_names](#output\_log\_source\_names) | Names of the AWS-native log sources ingested into Security Lake. |
 <!-- END_TF_DOCS -->

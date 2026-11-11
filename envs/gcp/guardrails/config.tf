@@ -51,10 +51,12 @@ locals {
   enable_principal_access_boundary = coalesce(var.enable_principal_access_boundary, local.cfg.principal_access_boundary, false)
 
   # Admin containment follows the estate exactly as in gcp-organization: on
-  # whenever a production environment exists, unless explicitly set
-  # (variable > gcp.admin_containment > derived).
+  # whenever a production environment exists or a break-glass principal is set,
+  # unless explicitly set (variable > gcp.admin_containment > derived). A named
+  # break-glass group is the one input the deny needs, so it switches the deny
+  # on before the first production environment arrives.
   production_environment_keys = sort([for k, e in local.environments : k if e.is_production])
-  enable_admin_containment    = coalesce(var.enable_admin_containment, local.cfg.admin_containment, length(local.production_environment_keys) > 0)
+  enable_admin_containment    = coalesce(var.enable_admin_containment, local.cfg.admin_containment, length(local.production_environment_keys) > 0 || length(local.containment_exempt_principals) > 0)
   containment_exempt_principals = length(var.containment_exempt_principals) > 0 ? var.containment_exempt_principals : (
     local.cfg.break_glass_group != null ? ["principalSet://goog/group/${local.cfg.break_glass_group}"] : []
   )

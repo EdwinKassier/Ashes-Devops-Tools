@@ -36,6 +36,9 @@ jobs:
       pull-requests: write   # ... and opens the PR
     steps:
       # Egress/process audit for this job (audit mode: observe, never block).
+      # Not block yet: the terraform-docs release download redirects to a
+      # GitHub asset CDN host that GitHub has changed before. Move to block
+      # with the endpoints the StepSecurity audit log reports for this job.
       - name: Harden runner
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
         with:

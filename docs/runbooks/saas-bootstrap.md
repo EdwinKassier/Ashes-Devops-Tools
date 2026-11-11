@@ -76,13 +76,17 @@ A workload root with `enable_saas_secret_bridge = true` copies `supabase_api_url
 Manager (AWS) or Secret Manager (GCP) secret. It reads them with `ephemeral "tfe_outputs"` and
 writes them with a write-only argument, so they are in neither the workload's plan nor its state.
 
-**Reader team (an organization owner, once).** Create a team named `saas-outputs-reader` with no
-organization access flags. Put its ID into tfc-admin's `saas_outputs_reader_team_id`. tfc-admin then
-grants it custom access on every `saas-*` workspace and nothing else: `state_versions =
-read-outputs`, runs read-only, no variables. Create a team token with a unique description and an
-`expired_at` 90 days out. Store it as the sensitive environment variable `TFE_TOKEN` only on the
-workload workspaces that set `enable_saas_secret_bridge`, through tfc-admin's write-only
-`workspace_variables`. tfc-admin never creates the token, so the token is in no state. Rotate it
+**Reader teams (an organization owner, once per saas stack).** For each `saas-<name>` workspace,
+create a team named `saas-outputs-reader-<name>` with no organization access flags. Map the workspace
+to the team in tfc-admin's `saas_outputs_reader_team_ids` (`{ "saas-<name>" = "team-..." }`).
+tfc-admin then grants each team custom access on its own `saas-<name>` workspace and nothing else:
+`state_versions = read-outputs`, runs read-only, no variables. One team per stack matters: a
+non-production workload keeps automatic PR plans, and a PR's plan can read the workload's
+`TFE_TOKEN`. With one team per stack, that token reads only the stack the workload bridges, never a
+production stack. Create a team token with a unique description and an `expired_at` 90 days out.
+Store it as the sensitive environment variable `TFE_TOKEN` only on the workload workspaces that
+bridge that stack (`enable_saas_secret_bridge` with `saas_workspace_name = "saas-<name>"`), through
+tfc-admin's write-only `workspace_variables`. tfc-admin never creates the token, so the token is in no state. Rotate it
 like the [tfc-admin token](tfc-admin-token-rotation.md#3-rotate-every-90-days-or-on-any-suspected-exposure).
 The bridge reads saas outputs with this token, through the reader team's grant, not through
 remote-state sharing (`extra_remote_state_consumers`). A workload with the bridge off needs no

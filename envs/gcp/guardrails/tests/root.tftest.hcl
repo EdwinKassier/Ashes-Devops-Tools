@@ -81,7 +81,9 @@ run "containment_spec_from_config" {
   }
 }
 
-run "no_production_no_containment" {
+# A break-glass group alone turns containment on: the deny does not wait for
+# the first production environment.
+run "break_glass_group_turns_containment_on" {
   command = plan
 
   variables {
@@ -91,8 +93,23 @@ run "no_production_no_containment" {
   }
 
   assert {
+    condition     = output.admin_containment_enabled == true && jsonencode(output.deny_policy_names) == jsonencode(["contain-admin-identity"])
+    error_message = "a break-glass group must turn the containment deny on even with no production environment."
+  }
+}
+
+run "no_production_no_break_glass_no_containment" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-dev-only-no-break-glass.yaml"
+    domain                   = null
+    project_prefix           = null
+  }
+
+  assert {
     condition     = output.admin_containment_enabled == false && length(output.deny_policy_names) == 0
-    error_message = "without a production environment no containment deny policy is planned."
+    error_message = "without a production environment or a break-glass group no containment deny policy is planned."
   }
 
   assert {

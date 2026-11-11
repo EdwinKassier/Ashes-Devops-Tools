@@ -54,37 +54,34 @@ locals {
   ])))
 }
 
-# Install the Node dependencies the provisioner scripts import (pg) reproducibly
-# before any script runs:
+# Every script run installs the Node dependencies it imports (pg) in the SAME
+# local-exec command, immediately before `node` runs. A remote runner (Terraform
+# Cloud, CI) starts each run on a fresh filesystem with no node_modules, so a
+# separate install resource that only re-runs when the lockfile changes would
+# leave a later bootstrap/reconcile run without its dependencies.
 #   - `npm ci` installs exactly the committed package-lock.json (integrity-
-#     checked) and fails loudly up front rather than mid-apply.
+#     checked) and fails loudly up front rather than mid-script.
 #   - --ignore-scripts: never execute dependency lifecycle scripts on the apply
 #     runner (supply-chain hardening). pg and its dependencies are pure JS and
 #     ship no install scripts; the optional native binding (pg-native) is not
 #     used.
 #   - --no-audit --no-fund: no extra calls to the registry's audit endpoint and
 #     no noise in the apply log.
-resource "terraform_data" "npm_install" {
-  triggers_replace = {
-    lock_hash = filesha256("${path.module}/scripts/package-lock.json")
-  }
-
-  provisioner "local-exec" {
-    command     = "npm ci --ignore-scripts --no-audit --no-fund --prefix ${path.module}/scripts"
-    working_dir = path.root
-  }
+#   - `&&` stops before node when the install fails.
+locals {
+  npm_install_command = "npm ci --ignore-scripts --no-audit --no-fund --prefix ${path.module}/scripts"
+  bootstrap_command   = "${local.npm_install_command} && node ${path.module}/scripts/bootstrap.mjs"
+  reconcile_command   = "${local.npm_install_command} && node ${path.module}/scripts/reconcile.mjs"
 }
 
 resource "terraform_data" "bootstrap" {
-  depends_on = [terraform_data.npm_install]
-
   triggers_replace = {
     script_hash = filesha256("${path.module}/scripts/bootstrap.mjs")
     db          = local.db_identity
   }
 
   provisioner "local-exec" {
-    command     = "node ${path.module}/scripts/bootstrap.mjs"
+    command     = local.bootstrap_command
     working_dir = path.root
 
     environment = {
@@ -104,7 +101,7 @@ resource "terraform_data" "reconcile" {
   depends_on = [terraform_data.bootstrap]
 
   provisioner "local-exec" {
-    command     = "node ${path.module}/scripts/reconcile.mjs"
+    command     = local.reconcile_command
     working_dir = path.root
 
     environment = {
@@ -119,9 +116,23 @@ resource "terraform_data" "reconcile" {
 }
 
 # ── State migration from null_resource (module versions before 2026-11) ───────
-moved {
+# The separate install resource is gone: the install now runs inside each
+# script command. Forget it (and its older null_resource form) without running
+# anything; destroying a terraform_data has no external effect anyway.
+removed {
+  from = terraform_data.npm_install
+
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
   from = null_resource.npm_install
-  to   = terraform_data.npm_install
+
+  lifecycle {
+    destroy = false
+  }
 }
 
 moved {

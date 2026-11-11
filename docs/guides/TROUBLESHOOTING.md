@@ -391,9 +391,9 @@ Or:
 node --version   # must report v18.x or higher
 ```
 
-**Cause (second error):** the automated `npm ci` (run by `null_resource.npm_install` before the bootstrap/reconcile scripts) failed, or Node.js/npm is missing on the apply runner — so the `pg` package isn't available.
+**Cause (second error):** the automated `npm ci` (run in the same command as the bootstrap/reconcile scripts) failed, or Node.js/npm is missing on the apply runner — so the `pg` package isn't available.
 
-**Fix:** ensure **Node.js 18+ and npm** are on the apply runner's PATH, then re-apply — the `null_resource.npm_install` installs `pg` automatically via `npm ci`. To reproduce/prime locally:
+**Fix:** ensure **Node.js 18+ and npm** are on the apply runner's PATH, then re-apply: each script run installs `pg` automatically via `npm ci`. To reproduce/prime locally:
 
 ```bash
 npm ci --prefix modules/supabase/vault-secrets/scripts

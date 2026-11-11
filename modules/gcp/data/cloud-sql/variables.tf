@@ -112,6 +112,17 @@ variable "backup_start_time" {
   }
 }
 
+variable "backup_location" {
+  description = "Location of the automated backups: a region (e.g. europe-west2) or a multi-region (eu, us, asia). Pick a region other than the instance's to survive a regional outage. Null (default) = Cloud SQL's default, the multi-region nearest the instance."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.backup_location == null || can(regex("^([a-z]+-[a-z]+[0-9]+|us|eu|asia)$", coalesce(var.backup_location, "-")))
+    error_message = "backup_location must be a GCP region (e.g. europe-west2) or a multi-region (us, eu, asia)."
+  }
+}
+
 variable "transaction_log_retention_days" {
   description = "Number of days of transaction (WAL) logs to retain for point-in-time recovery"
   type        = number
@@ -265,10 +276,13 @@ variable "enable_deletion_protection" {
     Prevent accidental destruction of the instance.
 
     When true, the instance's own deletion_protection API attribute is set and a
-    terraform_data guard resource is created with prevent_destroy = true, so
-    Terraform refuses to destroy this module. To intentionally remove a protected
-    instance, set this to false (which also removes the guard) and apply, or run:
-      terraform state rm 'module.<name>.terraform_data.deletion_protection_guard'
+    terraform_data guard resource is created with prevent_destroy = true. The
+    guard is replaced whenever the instance would be replaced, so Terraform
+    refuses any plan that destroys or replaces the instance. Setting this to
+    false while the guard exists is also refused. To intentionally destroy or
+    replace a protected instance, first run:
+      terraform state rm 'module.<name>.terraform_data.deletion_protection_guard[0]'
+    then set this to false and apply.
   EOT
   type        = bool
   default     = true

@@ -93,7 +93,10 @@ gh api repos/OWNER/REPO/branches/main/protection \
 
 ## Release Tag Protection
 
-Tags that trigger the `terraform-apply.yml` workflow should be protected. The
+Tags that trigger the `terraform-apply.yml` workflow should be protected. That
+workflow ("Terraform Release Metadata") applies nothing: HCP Terraform runs every
+apply, and the workflow only publishes a GitHub Release for an applied tag. It
+keeps its file name because docs and environment policies link to it. The
 workflow acts on all of these patterns (keep this list in sync with its `on.push.tags`):
 `gcp-organization/v*`, `gcp-workload/*/v*`, `aws-*/v*`, `aws-workload/*/v*`, `saas/*/v*`.
 
@@ -125,7 +128,7 @@ Once the sandbox workflow exists, add **`Sandbox convergence`** (HCP Terraform h
 Ensure Dependabot auto-approves and merges **security** PRs only:
 
 1. **Settings → Code security and analysis → Dependabot security updates**: Enable
-2. **Settings → Code security and analysis → Dependabot version updates**: Review `.github/dependabot.yml`. It covers GitHub Actions and the CI Python tooling only. Terraform providers and `.terraform.lock.hcl` files are owned by Renovate (`renovate.json`): one grouped weekly PR per provider family, labelled for REVIEW, never auto-merged, with provider majors disabled so they stay deliberate (see `docs/guides/provider-upgrades.md`)
+2. **Settings → Code security and analysis → Dependabot version updates**: Review `.github/dependabot.yml`. It covers GitHub Actions, the CI Python tooling and the `pg` npm dependency of `modules/supabase/vault-secrets/scripts` (exact pin, `fix(deps)` commits so the bump shows in the changelog). Terraform providers and `.terraform.lock.hcl` files are owned by Renovate (`renovate.json`): one grouped weekly PR per provider family, labelled for REVIEW, never auto-merged, with provider majors disabled so they stay deliberate (see `docs/guides/provider-upgrades.md`)
 3. Create a branch protection rule that allows Dependabot to bypass review requirements for patch-level security updates
 
 ---
@@ -136,7 +139,9 @@ Secrets required by CI/CD — scope each to the minimum environment:
 
 | Secret | Scope | Purpose |
 |--------|-------|---------|
-| `TFC_TOKEN` | Repository | Read-only TFC team token for run status verification |
+| `TFC_TOKEN` | Environment `tfc-readonly` | Read-only TFC team token for run status verification |
+| `TFC_TOKEN_DRIFT` | Environment `tfc-drift` | Queue plans + read state versions, for the refresh-only drift check |
+| `TFC_TOKEN_STATE_BACKUP` | Environment `tfc-state-backup` | Read state versions, for the scheduled state export ([state backup](../runbooks/state-backup.md)) |
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | Repository | WIF provider name for GCP authentication |
 | `GCP_SERVICE_ACCOUNT` | Repository | Terraform admin SA for plan/apply |
 

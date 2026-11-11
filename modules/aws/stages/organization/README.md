@@ -77,20 +77,20 @@ The following resources are created:
 - resource.aws_cloudformation_stack_set.backup_service_role (modules/aws/stages/organization/backup_role.tf#L54)
 - resource.aws_cloudformation_stack_set_instance.backup_service_role (modules/aws/stages/organization/backup_role.tf#L83)
 - resource.aws_cloudtrail_organization_delegated_admin_account.this (modules/aws/stages/organization/cloudtrail_delegation.tf#L20)
-- resource.aws_cloudwatch_event_rule.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L218)
-- resource.aws_cloudwatch_event_rule.guard_alerts_forward (modules/aws/stages/organization/guard_alerts.tf#L261)
-- resource.aws_cloudwatch_event_target.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L226)
-- resource.aws_cloudwatch_event_target.guard_alerts_forward (modules/aws/stages/organization/guard_alerts.tf#L271)
-- resource.aws_iam_role.guard_alerts_forwarder (modules/aws/stages/organization/guard_alerts.tf#L235)
+- resource.aws_cloudwatch_event_rule.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L225)
+- resource.aws_cloudwatch_event_rule.guard_alerts_forward (modules/aws/stages/organization/guard_alerts.tf#L268)
+- resource.aws_cloudwatch_event_target.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L233)
+- resource.aws_cloudwatch_event_target.guard_alerts_forward (modules/aws/stages/organization/guard_alerts.tf#L278)
+- resource.aws_iam_role.guard_alerts_forwarder (modules/aws/stages/organization/guard_alerts.tf#L242)
 - resource.aws_iam_role.org_trail_cloudwatch (modules/aws/stages/organization/trail_delivery_role.tf#L7)
-- resource.aws_iam_role_policy.guard_alerts_forwarder (modules/aws/stages/organization/guard_alerts.tf#L248)
+- resource.aws_iam_role_policy.guard_alerts_forwarder (modules/aws/stages/organization/guard_alerts.tf#L255)
 - resource.aws_iam_role_policy.org_trail_cloudwatch (modules/aws/stages/organization/trail_delivery_role.tf#L24)
-- resource.aws_kms_alias.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L156)
+- resource.aws_kms_alias.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L163)
 - resource.aws_kms_key.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L127)
 - resource.aws_organizations_delegated_administrator.identity_center (modules/aws/stages/organization/identity_center_delegation.tf#L5)
-- resource.aws_sns_topic.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L163)
-- resource.aws_sns_topic_policy.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L179)
-- resource.aws_sns_topic_subscription.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L208)
+- resource.aws_sns_topic.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L170)
+- resource.aws_sns_topic_policy.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L186)
+- resource.aws_sns_topic_subscription.guard_alerts (modules/aws/stages/organization/guard_alerts.tf#L215)
 
 
 ## Inputs
@@ -150,7 +150,7 @@ The following resources are created:
 | <a name="input_tfc_apply_role_policy_arns"></a> [tfc\_apply\_role\_policy\_arns](#input\_tfc\_apply\_role\_policy\_arns) | Managed policy ARNs attached to every member-account tfc-apply role (capped by the apply permissions boundary, tfc\_enable\_apply\_permissions\_boundary). | `list(string)` | <pre>[<br/>  "arn:aws:iam::aws:policy/AdministratorAccess"<br/>]</pre> | no |
 | <a name="input_tfc_enable_apply_boundary_propagation"></a> [tfc\_enable\_apply\_boundary\_propagation](#input\_tfc\_enable\_apply\_boundary\_propagation) | Make the embedded tfc-apply boundary self-propagating (default true): tfc-apply can only create / grant to roles carrying the same boundary and can never remove a boundary, closing the create-unbounded-role escape. Every aws\_iam\_role created by tfc-apply in a member account must then set permissions\_boundary to the tfc-apply-boundary ARN. | `bool` | `true` | no |
 | <a name="input_tfc_enable_apply_permissions_boundary"></a> [tfc\_enable\_apply\_permissions\_boundary](#input\_tfc\_enable\_apply\_permissions\_boundary) | Cap every member-account tfc-apply role with a permissions boundary (default true). With tfc\_apply\_permissions\_boundary\_arn = null the StackSet embeds tfc-apply-boundary: allow-all except leaving the org, stopping/deleting CloudTrail/GuardDuty/Config, modifying the TFC roles/OIDC provider/boundary, creating IAM users/access keys, and (tfc\_enable\_apply\_boundary\_propagation) creating or granting to roles without the same boundary. | `bool` | `true` | no |
-| <a name="input_tfc_enable_plan_role_data_read_deny"></a> [tfc\_enable\_plan\_role\_data\_read\_deny](#input\_tfc\_enable\_plan\_role\_data\_read\_deny) | Attach an inline deny on data-plane reads (s3:GetObject*, secretsmanager:GetSecretValue, ssm:GetParameter*, kms:Decrypt, DynamoDB/SQS/Kinesis/Logs reads, ...) to every member-account tfc-plan role (default true). | `bool` | `true` | no |
+| <a name="input_tfc_enable_plan_role_data_read_deny"></a> [tfc\_enable\_plan\_role\_data\_read\_deny](#input\_tfc\_enable\_plan\_role\_data\_read\_deny) | Attach a deny on data-plane and secret-bearing reads (s3:GetObject*, secretsmanager:GetSecretValue, ssm:GetParameter*, kms:Decrypt, DynamoDB/SQS/Kinesis/Logs reads, API key values, launch-template user data, CodeBuild environment variables, ...) to every member-account tfc-plan role (default true). | `bool` | `true` | no |
 | <a name="input_tfc_hostname"></a> [tfc\_hostname](#input\_tfc\_hostname) | Terraform Cloud / Enterprise hostname issuing the workload-identity tokens. | `string` | `"app.terraform.io"` | no |
 | <a name="input_tfc_management_workspaces"></a> [tfc\_management\_workspaces](#input\_tfc\_management\_workspaces) | Management-default workspaces that get their own role pair (tfc-management-roles workspaces). aws-security and aws-backup have built-in least-privilege policies; others need apply\_policy\_json. | <pre>map(object({<br/>    project           = optional(string)<br/>    apply_policy_json = optional(string)<br/>  }))</pre> | <pre>{<br/>  "aws-backup": {},<br/>  "aws-security": {}<br/>}</pre> | no |
 | <a name="input_tfc_oidc_allow_workspace_wildcards"></a> [tfc\_oidc\_allow\_workspace\_wildcards](#input\_tfc\_oidc\_allow\_workspace\_wildcards) | Allow '*' inside bound workspace names (StringLike sub match). The organization and project are always literal. Default false: exact workspace names. | `bool` | `false` | no |

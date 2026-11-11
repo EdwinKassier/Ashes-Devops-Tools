@@ -59,7 +59,7 @@ gcp:
     staging:
       display_name: Staging
       region: europe-west1          # optional, default org.regions.gcp
-      cidr_block: 10.129.0.0/16     # must not overlap dev (10.128.0.0/16), the hub, or any other spoke
+      cidr_block: 10.13.0.0/16      # next free /16 in the GCP block (docs/architecture/cidr-plan.md); tfc-admin fails on any overlap
       budget_monthly_limit: 500
       is_production: false
       iam_group_role_bindings: {}

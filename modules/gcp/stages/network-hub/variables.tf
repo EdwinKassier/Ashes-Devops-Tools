@@ -38,15 +38,48 @@ variable "dns_project_id" {
 
 variable "spoke_project_numbers" {
   description = <<-EOT
-    Map of spoke project NUMBERS (not IDs) to include in the VPC-SC perimeter.
-    The GCP Access Context Manager API requires numeric project numbers prefixed with
-    "projects/". Project IDs (e.g. "myorg-dev-host-abc1") are rejected with a
-    permission error that is misleading — always pass project numbers here.
+    Map of environment key to the environment host project NUMBER (not ID). Used for the
+    NCC hub auto-accept list and as the default consumer list of the published Secure Web Proxy.
+    These projects are NOT in the hub VPC-SC perimeter: each environment host project sits in
+    its own environment perimeter (stages/environment), so prod and non-prod never share one.
+    Accepts bare numbers or "projects/<number>"; empty values are ignored.
 
     Obtain with: gcloud projects describe <id> --format='value(projectNumber)'
     Or use module.projects.project_numbers from the stages/projects module output.
   EOT
   type        = map(string)
+}
+
+variable "hub_project_number" {
+  description = "Numeric project number of the hub project (var.hub_project_id). It and dns_project_number are the only projects in the hub VPC-SC perimeter. Required when vpc_sc_access_policy_name is set."
+  type        = string
+  default     = ""
+  nullable    = false
+
+  validation {
+    condition     = var.hub_project_number == "" || can(regex("^[0-9]+$", var.hub_project_number))
+    error_message = "hub_project_number must be a bare numeric project number (no 'projects/' prefix, not a project ID)."
+  }
+  validation {
+    condition     = var.vpc_sc_access_policy_name == null || var.hub_project_number != ""
+    error_message = "hub_project_number is required when vpc_sc_access_policy_name is set (the hub perimeter protects the hub and DNS projects)."
+  }
+}
+
+variable "dns_project_number" {
+  description = "Numeric project number of the DNS hub project (var.dns_project_id), protected by the hub VPC-SC perimeter together with the hub project. Required when vpc_sc_access_policy_name is set."
+  type        = string
+  default     = ""
+  nullable    = false
+
+  validation {
+    condition     = var.dns_project_number == "" || can(regex("^[0-9]+$", var.dns_project_number))
+    error_message = "dns_project_number must be a bare numeric project number (no 'projects/' prefix, not a project ID)."
+  }
+  validation {
+    condition     = var.vpc_sc_access_policy_name == null || var.dns_project_number != ""
+    error_message = "dns_project_number is required when vpc_sc_access_policy_name is set (the hub perimeter protects the hub and DNS projects)."
+  }
 }
 
 variable "org_id" {
@@ -275,6 +308,63 @@ variable "hub_additional_regions" {
     })), [])
     nat = optional(bool, true)
   }))
+  default  = {}
+  nullable = false
+}
+
+variable "spoke_peerings" {
+  description = "Hub side of the environment VPC peerings (connectivity = peering), keyed by environment key: the spoke network self link and the route exchange from the hub's view. Each entry becomes the peering hub-to-<env> on the hub VPC. Pass only spokes whose network already exists (envs/gcp/network-hub discovers them); the gcp-workload-<env> root creates the spoke side. Empty (default) = no hub-side peerings."
+  type = map(object({
+    network_self_link    = string
+    export_custom_routes = optional(bool, true)
+    import_custom_routes = optional(bool, true)
+  }))
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = alltrue([for k in keys(var.spoke_peerings) : can(regex("^[a-z]([-a-z0-9]{0,53}[a-z0-9])?$", k))])
+    error_message = "spoke_peerings keys must be environment keys usable in the peering name hub-to-<env>: lowercase letters, digits and hyphens, starting with a letter, at most 55 characters."
+  }
+}
+
+variable "secure_web_proxy" {
+  description = <<-EOT
+    Opt-in central egress control (preview): a Secure Web Proxy in the hub with an FQDN allowlist
+    (everything else is denied). See stages/net-hub secure_web_proxy for the fields.
+    psc_nat_subnet_cidr publishes it to the environments over Private Service Connect;
+    consumer_accept_projects empty = the environment host projects (spoke_project_numbers).
+    Default: off.
+  EOT
+  type = object({
+    enabled       = optional(bool, false)
+    address       = optional(string)
+    ports         = optional(list(number), [443])
+    allowed_fqdns = optional(list(string), [])
+    additional_rules = optional(map(object({
+      priority            = number
+      action              = string
+      session_matcher     = string
+      application_matcher = optional(string)
+      description         = optional(string)
+      enabled             = optional(bool, true)
+    })), {})
+    certificate_urls         = optional(list(string), [])
+    proxy_only_subnet_cidr   = optional(string)
+    psc_nat_subnet_cidr      = optional(string)
+    consumer_accept_projects = optional(list(string), [])
+  })
+  default  = {}
+  nullable = false
+}
+
+variable "alerting" {
+  description = "Hub data-plane alert policies (VPN tunnel down, BGP session down, Cloud NAT allocation failures and drops), on by default for the features that exist. notification_channel_ids: existing channel IDs (projects/<project>/notificationChannels/<id>). enabled = false creates none."
+  type = object({
+    enabled                       = optional(bool, true)
+    notification_channel_ids      = optional(list(string), [])
+    nat_dropped_packets_threshold = optional(number, 0)
+  })
   default  = {}
   nullable = false
 }

@@ -133,18 +133,37 @@
         }
       }
     },
+%{ if length(stackset_policy_arns) > 0 ~}
+    {
+      "Sid": "DenyStackSetPolicyTampering",
+      "Effect": "Deny",
+      "Action": ${policy_tamper_actions},
+      "Resource": ${jsonencode(stackset_policy_arns)},
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": ${jsonencode(stackset_exempt_arns)}
+        }
+      }
+    },
+%{ endif ~}
     {
       "Sid": "DenyLogArchiveObjectLockTampering",
       "Effect": "Deny",
       "Action": [
         "s3:BypassGovernanceRetention",
-        "s3:PutBucketObjectLockConfiguration",
-        "s3:PutBucketPolicy",
-        "s3:DeleteBucketPolicy"
+        "s3:PutBucket*",
+        "s3:DeleteBucket",
+        "s3:DeleteBucketPolicy",
+        "s3:PutReplicationConfiguration",
+        "s3:PutEncryptionConfiguration",
+        "s3:PutLifecycleConfiguration",
+        "s3:PutInventoryConfiguration"
       ],
       "Resource": [
         "arn:${partition}:s3:::${log_archive_bucket_name}",
-        "arn:${partition}:s3:::${log_archive_bucket_name}/*"
+        "arn:${partition}:s3:::${log_archive_bucket_name}/*",
+        "arn:${partition}:s3:::${log_archive_bucket_name}-access-logs",
+        "arn:${partition}:s3:::${log_archive_bucket_name}-access-logs/*"
       ],
       "Condition": {
         "ArnNotLike": {

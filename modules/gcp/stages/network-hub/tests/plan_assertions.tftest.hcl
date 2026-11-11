@@ -150,3 +150,47 @@ run "ssh_rdp_deny_associated_with_every_folder" {
     error_message = "The IAP range must get goto_next at a higher priority than the internet SSH/RDP deny, or IAP TCP forwarding is blocked."
   }
 }
+
+# The hub owns the hub side of every environment peering, with a name unique
+# per environment (two environments used to collide on one reverse-peering
+# name created from their own workload states).
+run "hub_side_spoke_peerings_unique_per_environment" {
+  command = plan
+
+  variables {
+    spoke_peerings = {
+      dev  = { network_self_link = "projects/mock-dev-host/global/networks/mock-dev-vpc" }
+      prod = { network_self_link = "projects/mock-prod-host/global/networks/mock-prod-vpc" }
+    }
+  }
+
+  assert {
+    condition = (
+      google_compute_network_peering.hub_to_spoke["dev"].name == "hub-to-dev" &&
+      google_compute_network_peering.hub_to_spoke["prod"].name == "hub-to-prod"
+    )
+    error_message = "each environment gets its own hub-side peering name (hub-to-<env>)."
+  }
+
+  assert {
+    condition = alltrue([
+      for k, p in google_compute_network_peering.hub_to_spoke :
+      p.network == "projects/mock-hub-project/global/networks/hub-vpc-core" && p.export_custom_routes && p.import_custom_routes
+    ])
+    error_message = "hub-side peerings sit on the hub VPC and exchange custom routes both ways."
+  }
+
+  assert {
+    condition     = google_compute_network_peering.hub_to_spoke["prod"].peer_network == "projects/mock-prod-host/global/networks/mock-prod-vpc"
+    error_message = "the hub-side peering targets the environment's spoke network."
+  }
+}
+
+run "no_spoke_peerings_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(google_compute_network_peering.hub_to_spoke) == 0
+    error_message = "without spoke_peerings the hub creates no peering."
+  }
+}

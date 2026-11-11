@@ -94,3 +94,26 @@ run "rejects_vpn_with_both_secret_forms" {
   }
   expect_failures = [var.vpn_shared_secret_wo]
 }
+
+run "rejects_published_proxy_without_consumers" {
+  command = plan
+
+  variables {
+    secure_web_proxy = {
+      enabled             = true
+      psc_nat_subnet_cidr = "10.0.253.0/24"
+    }
+  }
+
+  expect_failures = [var.secure_web_proxy]
+}
+
+run "rejects_malformed_notification_channel" {
+  command = plan
+
+  variables {
+    alerting = { notification_channel_ids = ["123"] }
+  }
+
+  expect_failures = [var.alerting]
+}

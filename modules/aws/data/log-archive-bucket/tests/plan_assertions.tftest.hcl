@@ -101,3 +101,106 @@ run "module_tags_applied" {
     error_message = "module-level tags must land on aws_s3_bucket.this"
   }
 }
+
+# S3 server access logs cannot land in an SSE-KMS / Object Lock bucket, so by
+# default they go to a companion SSE-S3 bucket with no Object Lock.
+run "access_logs_go_to_companion_sse_s3_bucket" {
+  command = plan
+
+  assert {
+    condition = (
+      aws_s3_bucket_logging.this.target_bucket == "acme-org-log-archive-access-logs" &&
+      aws_s3_bucket_logging.this.target_bucket != var.log_archive_bucket_name &&
+      output.access_log_bucket_name == "acme-org-log-archive-access-logs"
+    )
+    error_message = "access logs must target the companion <name>-access-logs bucket, never the archive itself"
+  }
+
+  assert {
+    condition = (
+      one(aws_s3_bucket_server_side_encryption_configuration.access_logs[0].rule).apply_server_side_encryption_by_default[0].sse_algorithm == "AES256" &&
+      aws_s3_bucket_versioning.access_logs[0].versioning_configuration[0].status == "Enabled" &&
+      aws_s3_bucket_public_access_block.access_logs[0].restrict_public_buckets == true &&
+      aws_s3_bucket_ownership_controls.access_logs[0].rule[0].object_ownership == "BucketOwnerEnforced" &&
+      aws_s3_bucket_lifecycle_configuration.access_logs[0].rule[0].expiration[0].days == 365
+    )
+    error_message = "the access-log bucket must use SSE-S3, no Object Lock, versioning, full public-access block, owner-enforced objects and its own expiry"
+  }
+
+  assert {
+    condition = (
+      one([for s in jsondecode(aws_s3_bucket_policy.access_logs[0].policy).Statement : s if s.Sid == "S3ServerAccessLogsWrite"]).Principal.Service == "logging.s3.amazonaws.com" &&
+      one([for s in jsondecode(aws_s3_bucket_policy.access_logs[0].policy).Statement : s if s.Sid == "S3ServerAccessLogsWrite"]).Resource == "arn:aws:s3:::acme-org-log-archive-access-logs/s3-access-logs/*" &&
+      one([for s in jsondecode(aws_s3_bucket_policy.access_logs[0].policy).Statement : s if s.Sid == "S3ServerAccessLogsWrite"]).Condition.ArnLike["aws:SourceArn"] == "arn:aws:s3:::acme-org-log-archive" &&
+      one([for s in jsondecode(aws_s3_bucket_policy.access_logs[0].policy).Statement : s if s.Sid == "DenyInsecureTransport"]).Effect == "Deny"
+    )
+    error_message = "only the S3 logging service may write, only under the prefix, only for the log archive; non-TLS access is denied"
+  }
+}
+
+run "existing_access_log_bucket_skips_companion" {
+  command = plan
+
+  variables {
+    access_log_bucket = "acme-audit-access-logs"
+  }
+
+  assert {
+    condition     = aws_s3_bucket_logging.this.target_bucket == "acme-audit-access-logs" && length(aws_s3_bucket.access_logs) == 0 && length(aws_s3_bucket_policy.access_logs) == 0
+    error_message = "a supplied access_log_bucket must be the target and no companion bucket created"
+  }
+}
+
+run "cloudtrail_grants_pinned_to_trail_owner_when_set" {
+  command = plan
+
+  variables {
+    cloudtrail_trail_account_id = "111111111111"
+  }
+
+  assert {
+    condition = alltrue([
+      for sid in ["AWSCloudTrailAclCheck", "AWSCloudTrailWrite"] :
+      one([for s in jsondecode(aws_s3_bucket_policy.this.policy).Statement : s if s.Sid == sid]).Condition.ArnLike["aws:SourceArn"] == "arn:aws:cloudtrail:*:111111111111:trail/*" &&
+      one([for s in jsondecode(aws_s3_bucket_policy.this.policy).Statement : s if s.Sid == sid]).Condition.StringEquals["aws:SourceOrgID"] == var.org_id
+    ])
+    error_message = "CloudTrail grants must require both the org ID and a trail ARN in the trail owner account"
+  }
+
+  # Config is not a trail: its grant stays org-scoped only.
+  assert {
+    condition     = !can(one([for s in jsondecode(aws_s3_bucket_policy.this.policy).Statement : s if s.Sid == "AWSConfigWrite"]).Condition.ArnLike)
+    error_message = "the Config grant must not carry the CloudTrail SourceArn pin"
+  }
+}
+
+run "cloudtrail_grants_org_only_by_default" {
+  command = plan
+
+  assert {
+    condition     = !can(one([for s in jsondecode(aws_s3_bucket_policy.this.policy).Statement : s if s.Sid == "AWSCloudTrailWrite"]).Condition.ArnLike)
+    error_message = "with no cloudtrail_trail_account_id the CloudTrail grant must stay org-scoped only"
+  }
+}
+
+run "deletion_guard_on_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(terraform_data.deletion_guard) == 1 && terraform_data.deletion_guard[0].input == var.log_archive_bucket_name
+    error_message = "the log-archive bucket must carry a prevent_destroy guard by default"
+  }
+}
+
+run "deletion_guard_can_be_disabled" {
+  command = plan
+
+  variables {
+    enable_deletion_protection = false
+  }
+
+  assert {
+    condition     = length(terraform_data.deletion_guard) == 0
+    error_message = "enable_deletion_protection = false must omit the guard"
+  }
+}

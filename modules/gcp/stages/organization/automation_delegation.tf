@@ -11,6 +11,15 @@
 #    instead of the org node: environment folders admit only the workload role
 #    list, the shared folder only the network role list. It cannot grant on any
 #    other folder, on the admin project (directly under the org) or on the org.
+#
+# 3. The workload roles that control IAM or identities on an environment folder
+#    (non_delegable_workload_folder_roles). An IAM condition on a delegated
+#    folderIamAdmin can restrict the ROLES a grant names
+#    (iam.googleapis.com/modifiedGrantsByRole) but not the MEMBERS: there is no
+#    member attribute. A delegate allowed to grant projectIamAdmin could grant
+#    it to itself and then grant roles/owner on every project in the folder. So
+#    these roles never enter the delegated allow-list; this stage grants them to
+#    the workload SAs directly.
 
 locals {
   # Environment folders get a scoped policy; the shared (hub/DNS) folder stays in
@@ -29,13 +38,34 @@ locals {
     } if contains(keys(var.workload_service_accounts), env)
   ]...)
 
+  # Role allow-lists with the non-delegable roles removed. Subtracting here (not
+  # only in gcp-bootstrap) keeps an older bootstrap contract, or a hand-written
+  # one in config, from re-opening the self-grant path.
+  effective_delegated_workload_folder_roles = sort(setsubtract(toset(var.delegated_workload_folder_roles), toset(var.non_delegable_workload_folder_roles)))
+  effective_delegated_network_folder_roles  = sort(setsubtract(toset(var.delegated_network_folder_roles), toset(var.non_delegable_workload_folder_roles)))
+
   # Delegated folder-IAM targets: { folder key => allowed role list }.
   delegated_folder_iam_targets = var.projects_apply_service_account == null ? {} : {
     for k in keys(var.environments) : k => (
-      k == var.shared_folder_key ? var.delegated_network_folder_roles : var.delegated_workload_folder_roles
+      k == var.shared_folder_key ? local.effective_delegated_network_folder_roles : local.effective_delegated_workload_folder_roles
     )
-    if length(k == var.shared_folder_key ? var.delegated_network_folder_roles : var.delegated_workload_folder_roles) > 0
+    if length(k == var.shared_folder_key ? local.effective_delegated_network_folder_roles : local.effective_delegated_workload_folder_roles) > 0
   }
+
+  # Non-delegable workload roles, granted here: { "<env>|<phase>|<role>" => ... }
+  # on each environment's own folder, for the roles workload_folder_roles lists.
+  non_delegable_workload_grants = merge([
+    for env, sas in var.workload_service_accounts : merge([
+      for phase in ["plan", "apply"] : {
+        for role in sort(setintersection(toset(var.workload_folder_roles[phase]), toset(var.non_delegable_workload_folder_roles))) : "${env}|${phase}|${role}" => {
+          env    = env
+          role   = role
+          member = "serviceAccount:${sas[phase]}"
+        }
+      }
+    ]...)
+    if contains(keys(var.environments), env) && env != var.shared_folder_key
+  ]...)
 }
 
 resource "google_access_context_manager_access_policy" "environment" {
@@ -66,4 +96,14 @@ resource "google_folder_iam_member" "projects_delegated_folder_iam" {
     description = "projects-apply may only grant the ${each.key == var.shared_folder_key ? "network" : "workload"} folder roles on this folder"
     expression  = "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly([${join(", ", [for r in sort(each.value) : "'${r}'"])}])"
   }
+}
+
+# The IAM-controlling workload roles (see 3. above), granted by this stage so
+# that projects-apply never needs them in its allow-list.
+resource "google_folder_iam_member" "workload_non_delegable_folder_roles" {
+  for_each = local.non_delegable_workload_grants
+
+  folder = module.organization.folders[each.value.env].name
+  role   = each.value.role
+  member = each.value.member
 }

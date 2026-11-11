@@ -85,7 +85,7 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_monitoring_dashboard.compute_dashboard (modules/gcp/monitoring/compute-dashboard/main.tf#L77)
+- resource.google_monitoring_dashboard.compute_dashboard (modules/gcp/monitoring/compute-dashboard/main.tf#L97)
 
 
 ## Inputs

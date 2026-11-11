@@ -552,7 +552,7 @@ aws:
   workload_environments:
     prod:
       account_key: workload_prod
-      vpc_cidr: 10.40.0.0/16
+      vpc_cidr: 10.73.0.0/16
       is_production: true
   network:
     stateful_default_actions:

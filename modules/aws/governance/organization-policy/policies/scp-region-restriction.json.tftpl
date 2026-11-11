@@ -40,9 +40,7 @@
           "aws:RequestedRegion": ${allowed_regions}
         },
         "ArnNotLike": {
-          "aws:PrincipalArn": [
-            "${break_glass_role_arn}"
-          ]
+          "aws:PrincipalArn": ${break_glass_arns}
         }
       }
     },
@@ -59,9 +57,7 @@
           "aws:RequestedRegion": ${allowed_regions_with_us_east_1}
         },
         "ArnNotLike": {
-          "aws:PrincipalArn": [
-            "${break_glass_role_arn}"
-          ]
+          "aws:PrincipalArn": ${break_glass_arns}
         }
       }
     }

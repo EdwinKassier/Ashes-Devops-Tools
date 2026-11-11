@@ -36,8 +36,9 @@ Defined by the `environments` map (`cidr_block` per env) and the hub CIDRs on th
 | New environments | `10.13.0.0/16` onward | `environments[<new>].cidr_block` |
 
 Rule: each GCP environment gets one `/16`, assigned sequentially from `10.10.0.0/16`.
-The hub and DNS VPCs must not overlap any env CIDR (the `cidrnetmask` validations
-only check well-formedness, not overlap — this document is the overlap control).
+The hub and DNS VPCs must not overlap any env CIDR. tfc-admin enforces this: its
+plan fails when two ranges in `config/landing-zone.yaml` overlap (see
+[Enforcement](#enforcement)).
 
 ## AWS (`10.64.0.0/10`)
 
@@ -45,6 +46,27 @@ Managed by the IPAM pool hierarchy in `envs/aws/network` (`modules/aws/network/i
 IPAM allocates each spoke VPC a CIDR from the regional pool, so per-VPC ranges are
 not hand-assigned. Keep the top-level IPAM supernet inside `10.64.0.0/10` and
 record any additional regional pools here.
+
+| Purpose | Default CIDR | Set in (`config/landing-zone.yaml`) |
+|---|---|---|
+| IPAM supernet | `10.64.0.0/10` | `aws.network.top_cidr` |
+| Regional pool (primary region) | `10.64.0.0/12` | `aws.network.regional_cidrs` |
+| Inspection VPC | `10.64.0.0/16` | `aws.network.inspection_cidr` |
+| Egress VPC | `10.65.0.0/16` | `aws.network.egress_cidr` |
+| Workload VPC (dev, example) | `10.72.0.0/16` | `aws.workload_environments.<env>.vpc_cidr` (built-in default `10.72.0.0/16`) |
+| Workload VPC (prod, example) | `10.73.0.0/16` | `aws.workload_environments.<env>.vpc_cidr` |
+
+## Enforcement
+
+tfc-admin reads the whole config file and fails its plan when:
+
+- any two of the GCP hub, DNS hub and `gcp.environments.*.cidr_block` ranges overlap;
+- any of those overlaps `aws.network.top_cidr` or a fixed AWS VPC range (inspection, egress, a set `vpc_cidr`);
+- two fixed AWS VPC ranges overlap; or
+- a fixed AWS VPC range is outside `aws.network.top_cidr`.
+
+The check reads only the config file. A CIDR set as an explicit TFC variable on a
+network workspace is not checked, so keep CIDRs in the config file.
 
 ## Before enabling cross-cloud VPN
 

@@ -217,3 +217,13 @@ run "rejects_ephemeral_password_user_without_entry" {
     users = [{ name = "app", ephemeral_password = true }]
   }
 }
+
+run "rejects_invalid_backup_location" {
+  command = plan
+
+  expect_failures = [var.backup_location]
+
+  variables {
+    backup_location = "Europe West 2"
+  }
+}

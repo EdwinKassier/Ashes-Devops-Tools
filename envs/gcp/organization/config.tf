@@ -114,11 +114,13 @@ locals {
   default_region    = coalesce(var.default_region, local.cfg.default_region, "europe-west2")
 
   # Admin containment follows the estate: on whenever a production environment
-  # exists, unless explicitly set (gcp_overrides > gcp.admin_containment > derived).
+  # exists or a break-glass principal is set, unless explicitly set
+  # (gcp_overrides > gcp.admin_containment > derived). gcp-guardrails derives it
+  # the same way, so the containment tag and the deny agree.
   # gcp.principal_access_boundary is shared with gcp-bootstrap and gcp-guardrails,
   # so the boundary and its containment deny rules cannot drift apart.
   production_environment_keys   = sort([for k, e in coalesce(local.environments, {}) : k if e.is_production])
-  enable_admin_containment      = coalesce(local.gcp.enable_admin_containment, length(local.production_environment_keys) > 0)
+  enable_admin_containment      = coalesce(local.gcp.enable_admin_containment, length(local.production_environment_keys) > 0 || length(local.containment_exempt_principals) > 0)
   containment_exempt_principals = local.gcp.containment_exempt_principals == null ? [] : tolist(local.gcp.containment_exempt_principals)
   # Cost profile (variable > org.profile > production). The starter profile
   # requires a budget (variable > org.monthly_budget_usd) and alerts at 50/80/100%.

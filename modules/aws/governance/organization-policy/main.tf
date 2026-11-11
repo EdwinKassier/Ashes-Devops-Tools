@@ -41,7 +41,9 @@ locals {
   #   * privileged_arns — pipeline roles + break-glass. Reconfiguration actions
   #     that routine Terraform legitimately performs in member accounts (Config
   #     recorders in workload accounts, GuardDuty/CloudTrail settings in the
-  #     security-tooling account, flow-log replacement, log-archive Object Lock).
+  #     security-tooling account, flow-log replacement, log-archive bucket
+  #     configuration: Object Lock, policy, replication, encryption, lifecycle,
+  #     public-access block, ownership, logging, versioning, deletion).
   #     Local member-account admins are denied.
   #
   # Privileged-role IAM tampering (create/update/delete/attach on the protected
@@ -90,6 +92,24 @@ locals {
     local.break_glass_principal_arns,
     var.config_recorder_pipeline_role_arns,
   ))
+  # Managed policies a StackSet owns in every member account (by default the
+  # tfc-apply-boundary permissions boundary and the tfc-plan read deny from
+  # tfc-oidc-baseline). The role
+  # statements above cover role actions only; without this a member admin could
+  # publish a new default version of the boundary (or of the plan-role read
+  # deny) and lift every deny in it.
+  # Same exemptions as DenyStackSetRoleTampering: break-glass and the StackSet
+  # execution role that creates and updates the policy.
+  stackset_policy_arns = [for n in var.stackset_managed_policy_names : "arn:${var.partition}:iam::*:policy/${n}"]
+  policy_tamper_actions = [
+    "iam:CreatePolicy",
+    "iam:CreatePolicyVersion",
+    "iam:DeletePolicy",
+    "iam:DeletePolicyVersion",
+    "iam:SetDefaultPolicyVersion",
+    "iam:TagPolicy",
+    "iam:UntagPolicy",
+  ]
   role_tamper_actions = [
     "iam:CreateRole",
     "iam:DeleteRole",
@@ -116,6 +136,8 @@ locals {
         stackset_role_arns      = local.stackset_role_arns
         stackset_exempt_arns    = local.stackset_exempt_arns
         role_tamper_actions     = jsonencode(local.role_tamper_actions)
+        stackset_policy_arns    = local.stackset_policy_arns
+        policy_tamper_actions   = jsonencode(local.policy_tamper_actions)
         log_archive_bucket_name = var.log_archive_bucket_name
         kms_protection_tag_key  = var.kms_protection_tag_key
         # Recorder actions: DenyWeakenSecurityServices (pipeline-wide exemption)
@@ -137,8 +159,11 @@ locals {
         # so edge deployments (enable_edge) work without allowing the region.
         allowed_regions_with_us_east_1 = jsonencode(distinct(concat(var.allowed_regions, ["us-east-1"])))
         # Break-glass is the only exemption. The run role is not: global-service
-        # calls are in the template's NotAction, so it needs no carve-out.
-        break_glass_role_arn = var.break_glass_role_arn
+        # calls are in the template's NotAction, so it needs no carve-out. The
+        # exemption is the member-account role-name pattern (as in
+        # deny-tamper): an SCP never applies to the management account, so a
+        # management-account ARN here would exempt nothing.
+        break_glass_arns = jsonencode(local.break_glass_principal_arns)
       })
     }
     # Suspended OU: deny everything except break-glass and the StackSet execution

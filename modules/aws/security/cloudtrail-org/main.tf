@@ -239,6 +239,30 @@ resource "aws_kms_alias" "cloudwatch" {
   target_key_id = aws_kms_key.cloudwatch[0].key_id
 }
 
+# ---------------------------------------------------------------------------
+# Deletion guard
+#
+# prevent_destroy must be a static literal, so a terraform_data guard carries
+# it. replace_triggered_by ties the guard to the key: a plan that destroys OR
+# replaces the CloudWatch Logs key (which schedules the old key, and everything encrypted
+# under it, for deletion) must also replace the guard, which prevent_destroy
+# refuses. Setting enable_deletion_protection = false does not lift an existing
+# guard (removing it is itself a destroy). To retire the key deliberately,
+# first run:
+#   terraform state rm '<module_address>.terraform_data.cloudwatch_kms_deletion_guard[0]'
+# ---------------------------------------------------------------------------
+
+resource "terraform_data" "cloudwatch_kms_deletion_guard" {
+  count = local.create_cw_kms_key && var.enable_deletion_protection ? 1 : 0
+
+  input = "alias/${var.trail_name}-cloudwatch"
+
+  lifecycle {
+    prevent_destroy      = true
+    replace_triggered_by = [aws_kms_key.cloudwatch[0].id]
+  }
+}
+
 resource "aws_cloudwatch_log_group" "trail" {
   count             = var.enable_cloudwatch_logs ? 1 : 0
   name              = "/aws/cloudtrail/${var.trail_name}"

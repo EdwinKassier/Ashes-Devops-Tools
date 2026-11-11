@@ -50,15 +50,16 @@ run "guardduty_isolation_and_forensics_wired" {
     error_message = "EventBridge target must point at the isolation Lambda ARN"
   }
 
+  # The trust is scoped by principal-side keys only. aws:SourceAccount and
+  # aws:SourceOrgID are set only on service-principal calls, so a role-to-role
+  # AssumeRole conditioned on them would always be denied.
   assert {
-    condition     = can(regex("aws:PrincipalOrgID", aws_iam_role.forensics_snapshot[0].assume_role_policy))
-    error_message = "Forensics role trust must be scoped by aws:PrincipalOrgID"
-  }
-
-  # aws:SourceAccount scoping is present on the trust (belt-and-suspenders).
-  assert {
-    condition     = can(regex("aws:SourceAccount", aws_iam_role.forensics_snapshot[0].assume_role_policy))
-    error_message = "Forensics role trust must also be scoped by aws:SourceAccount"
+    condition = (
+      jsondecode(aws_iam_role.forensics_snapshot[0].assume_role_policy).Statement[0].Condition.StringEquals["aws:PrincipalOrgID"] == "o-abc123def0" &&
+      jsondecode(aws_iam_role.forensics_snapshot[0].assume_role_policy).Statement[0].Condition.StringEquals["aws:PrincipalAccount"] == "333333333333" &&
+      !can(regex("aws:Source", aws_iam_role.forensics_snapshot[0].assume_role_policy))
+    )
+    error_message = "Forensics role trust must be scoped by aws:PrincipalOrgID and aws:PrincipalAccount, never by aws:Source* keys"
   }
 
   # EventBridge must be granted permission to invoke the Lambda.
@@ -114,8 +115,11 @@ run "quarantine_sg_and_forensics_kms_created" {
   }
 
   assert {
-    condition     = can(regex("aws:SourceOrgID", aws_iam_role_policy.forensics_kms[0].policy))
-    error_message = "The forensics KMS grant must be scoped by aws:SourceOrgID"
+    condition = (
+      jsondecode(aws_iam_role_policy.forensics_kms[0].policy).Statement[0].Condition.StringEquals["aws:PrincipalOrgID"] == "o-abc123def0" &&
+      !can(regex("aws:Source", aws_iam_role_policy.forensics_kms[0].policy))
+    )
+    error_message = "The forensics KMS grant must be scoped by aws:PrincipalOrgID, never by aws:SourceOrgID"
   }
 }
 

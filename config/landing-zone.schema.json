@@ -855,6 +855,10 @@
                     "project_admin_group_email"
                   ]
                 }
+              },
+              "egress_proxy": {
+                "type": "boolean",
+                "description": "Send the environment's private-tier egress through the hub Secure Web Proxy (preview). Needs gcp-network-hub secure_web_proxy."
               }
             },
             "additionalProperties": false
@@ -1087,6 +1091,9 @@
                     "edge",
                     "default"
                   ]
+                },
+                "egress_proxy_service_attachment": {
+                  "type": "string"
                 }
               },
               "additionalProperties": false
@@ -1406,6 +1413,29 @@
         "network": {
           "type": "object",
           "properties": {
+            "top_cidr": {
+              "type": "string",
+              "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$",
+              "description": "Top-level IPAM supernet (aws-network). Default 10.64.0.0/10, the AWS block of docs/architecture/cidr-plan.md."
+            },
+            "regional_cidrs": {
+              "type": "object",
+              "description": "Region => regional IPAM pool CIDR (aws-network). Default {<org.regions.aws>: 10.64.0.0/12}.",
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"
+              }
+            },
+            "inspection_cidr": {
+              "type": "string",
+              "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$",
+              "description": "Inspection VPC CIDR (aws-network). Default 10.64.0.0/16."
+            },
+            "egress_cidr": {
+              "type": "string",
+              "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$",
+              "description": "Egress VPC CIDR (aws-network). Default 10.65.0.0/16."
+            },
             "egress_domain_allowlist": {
               "type": "array",
               "items": {

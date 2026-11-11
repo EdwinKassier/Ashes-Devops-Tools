@@ -132,3 +132,36 @@ run "rejects_center_group_for_spoke" {
 
   expect_failures = [var.ncc]
 }
+
+run "rejects_egress_proxy_without_service_attachment" {
+  command = plan
+
+  variables {
+    egress_proxy = { enabled = true }
+  }
+
+  expect_failures = [var.egress_proxy]
+}
+
+run "rejects_egress_proxy_with_gateway_id" {
+  command = plan
+
+  variables {
+    egress_proxy = {
+      enabled            = true
+      service_attachment = "projects/p/locations/europe-west1/gateways/swp"
+    }
+  }
+
+  expect_failures = [var.egress_proxy]
+}
+
+run "rejects_malformed_notification_channel" {
+  command = plan
+
+  variables {
+    alerting = { notification_channel_ids = ["123"] }
+  }
+
+  expect_failures = [var.alerting]
+}

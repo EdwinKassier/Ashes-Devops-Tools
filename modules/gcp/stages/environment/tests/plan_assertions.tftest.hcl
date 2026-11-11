@@ -17,12 +17,11 @@ mock_provider "google" {
 mock_provider "google-beta" {}
 
 variables {
-  environment          = "dev"
-  project_prefix       = "acme"
-  org_id               = "123456789012"
-  billing_account      = "billingAccounts/000000-111111-222222"
-  admin_project_number = "111111111111"
-  labels               = { environment = "dev", managed-by = "terraform" }
+  environment     = "dev"
+  project_prefix  = "acme"
+  org_id          = "123456789012"
+  billing_account = "billingAccounts/000000-111111-222222"
+  labels          = { environment = "dev", managed-by = "terraform" }
 
   host_project = {
     project_id     = "acme-dev-host-abcd"
@@ -86,7 +85,7 @@ run "budget_targets_the_host_project" {
   }
 }
 
-run "perimeter_with_default_policies" {
+run "perimeter_without_default_policies" {
   command = plan
 
   variables {
@@ -99,16 +98,85 @@ run "perimeter_with_default_policies" {
   }
 
   assert {
-    condition = (
-      local.effective_vpc_sc_ingress_policies[0].sources[0].resource == "//iam.googleapis.com/projects/111111111111/locations/global/workloadIdentityPools/*" &&
-      local.effective_vpc_sc_egress_policies[0].operations[0].service_name == "storage.googleapis.com"
-    )
-    error_message = "Empty policy lists must use the defaults: admin-project WIF pools in, storage out."
+    condition     = length(local.effective_vpc_sc_ingress_policies) == 0 && length(local.effective_vpc_sc_egress_policies) == 0
+    error_message = "Empty policy lists must mean no rule in either direction: no default egress to the world, no default ingress."
   }
 
   assert {
     condition     = output.components.psc_target == "all-apis"
     error_message = "A dry-run perimeter must keep the all-apis PSC bundle."
+  }
+}
+
+# Rules the operator names pass through unchanged.
+run "perimeter_with_named_policies" {
+  command = plan
+
+  variables {
+    vpc_service_controls = {
+      access_policy_name = "1234567890"
+      ingress_policies = [{
+        identities = ["serviceAccount:acme-wl-dev-apply@acme-admin.iam.gserviceaccount.com"]
+        sources    = [{ access_level = "*" }]
+        resources  = ["*"]
+        operations = [{ service_name = "storage.googleapis.com" }]
+      }]
+      egress_policies = [{
+        identities = ["serviceAccount:api-run@acme-dev-host-abcd.iam.gserviceaccount.com"]
+        resources  = ["projects/333333333333"]
+        operations = [{ service_name = "storage.googleapis.com" }]
+      }]
+    }
+  }
+
+  assert {
+    condition     = local.effective_vpc_sc_egress_policies[0].resources == tolist(["projects/333333333333"]) && local.effective_vpc_sc_ingress_policies[0].sources[0].access_level == "*"
+    error_message = "Caller-supplied ingress and egress rules must reach the perimeter as given."
+  }
+}
+
+# Production: a production database is regional by default, and app services
+# without a service_team are refused unless host-project workloads are allowed
+# explicitly (the refusal is covered in variables_validation).
+run "production_allows_host_project_workloads_when_explicit" {
+  command = plan
+
+  variables {
+    is_production                 = true
+    enable_host_project_workloads = true
+    app_services = {
+      api = { database = {} }
+    }
+  }
+
+  assert {
+    condition     = output.app_services["api"].database_availability == "REGIONAL"
+    error_message = "A production database must default to high availability (REGIONAL)."
+  }
+
+  assert {
+    condition     = output.components.host_project_workloads == true
+    error_message = "enable_host_project_workloads = true must allow host-project workloads in production."
+  }
+}
+
+run "non_production_database_stays_zonal" {
+  command = plan
+
+  variables {
+    app_services = {
+      api = { database = {} }
+    }
+  }
+
+  assert {
+    condition     = output.app_services["api"].database_availability == "ZONAL"
+    error_message = "Outside production a database defaults to ZONAL, and a host-project service is allowed."
+  }
+
+  assert {
+    condition     = output.components.host_project_workloads == true
+    error_message = "Outside production host-project workloads are allowed by default."
   }
 }
 

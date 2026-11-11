@@ -154,6 +154,18 @@ run "stage_apply_sas_are_least_privilege" {
     condition     = contains(output.delegated_workload_folder_roles, "roles/compute.admin") && !contains(output.delegated_workload_folder_roles, "roles/compute.orgFirewallPolicyAdmin") && contains(output.delegated_network_folder_roles, "roles/compute.orgFirewallPolicyAdmin") && !contains(output.delegated_network_folder_roles, "roles/secretmanager.admin")
     error_message = "the per-folder delegation allow-lists must be split: workload roles for env folders, network roles for the shared folder."
   }
+
+  # The workload SAs keep the IAM-controlling roles (gcp-organization grants
+  # them), but projects-apply may never grant them: it could grant them to itself.
+  assert {
+    condition = (
+      contains(output.workload_folder_roles.apply, "roles/resourcemanager.projectIamAdmin") &&
+      contains(output.workload_folder_roles.apply, "roles/iam.workloadIdentityPoolAdmin") &&
+      length(setintersection(toset(output.delegated_workload_folder_roles), toset(["roles/resourcemanager.projectIamAdmin", "roles/iam.serviceAccountAdmin", "roles/iam.serviceAccountKeyAdmin", "roles/iam.serviceAccountTokenCreator", "roles/iam.workloadIdentityPoolAdmin"]))) == 0 &&
+      length(setintersection(toset(output.delegated_network_folder_roles), toset(["roles/resourcemanager.projectIamAdmin", "roles/iam.serviceAccountAdmin", "roles/iam.workloadIdentityPoolAdmin"]))) == 0
+    )
+    error_message = "the IAM-controlling workload roles must stay out of every delegation allow-list."
+  }
 }
 
 run "legacy_org_level_folder_delegation_is_opt_in" {

@@ -239,8 +239,22 @@ locals {
   # Roles the projects-apply SA may hand out on folders (IAM delegated role
   # grants). Admin project sits directly under the org node, not in a folder, so
   # this delegation can never reach the automation project or the org node.
-  delegated_workload_folder_roles = sort(distinct(concat(local.effective_workload_folder_roles.plan, local.effective_workload_folder_roles.apply)))
-  delegated_network_folder_roles  = sort(distinct(concat(local.effective_network_folder_roles.plan, local.effective_network_folder_roles.apply)))
+  #
+  # Roles that control IAM or identities are never delegable: a folder IAM
+  # condition limits which roles a grant names, not who receives them, so a
+  # delegate allowed to grant projectIamAdmin could grant it to itself.
+  # gcp-organization grants these to the workload SAs directly (its
+  # non_delegable_workload_folder_roles, same default list) and drops them from
+  # the allow-list it binds, even when an older contract still carries them.
+  non_delegable_folder_roles = [
+    "roles/resourcemanager.projectIamAdmin",
+    "roles/iam.serviceAccountAdmin",
+    "roles/iam.serviceAccountKeyAdmin",
+    "roles/iam.serviceAccountTokenCreator",
+    "roles/iam.workloadIdentityPoolAdmin",
+  ]
+  delegated_workload_folder_roles = sort(setsubtract(toset(concat(local.effective_workload_folder_roles.plan, local.effective_workload_folder_roles.apply)), toset(local.non_delegable_folder_roles)))
+  delegated_network_folder_roles  = sort(setsubtract(toset(concat(local.effective_network_folder_roles.plan, local.effective_network_folder_roles.apply)), toset(local.non_delegable_folder_roles)))
   delegated_folder_roles          = sort(distinct(concat(local.delegated_workload_folder_roles, local.delegated_network_folder_roles)))
 }
 

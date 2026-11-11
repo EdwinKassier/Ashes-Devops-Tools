@@ -69,11 +69,18 @@ run "password_rotation_does_not_change_db_identity" {
   }
 }
 
-run "npm_install_reruns_on_lockfile_change" {
+run "every_script_run_installs_dependencies_first" {
   command = plan
 
+  # A remote runner starts each run without node_modules, so the install must
+  # happen in the same command as each script, before node, and stay hardened.
   assert {
-    condition     = terraform_data.npm_install.triggers_replace["lock_hash"] == filesha256("${path.module}/scripts/package-lock.json")
-    error_message = "npm_install must re-run when package-lock.json changes."
+    condition     = local.bootstrap_command == "npm ci --ignore-scripts --no-audit --no-fund --prefix ${path.module}/scripts && node ${path.module}/scripts/bootstrap.mjs"
+    error_message = "bootstrap must run npm ci --ignore-scripts in the same command, before node."
+  }
+
+  assert {
+    condition     = local.reconcile_command == "npm ci --ignore-scripts --no-audit --no-fund --prefix ${path.module}/scripts && node ${path.module}/scripts/reconcile.mjs"
+    error_message = "reconcile must run npm ci --ignore-scripts in the same command, before node."
   }
 }

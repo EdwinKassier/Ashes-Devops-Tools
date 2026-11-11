@@ -53,8 +53,13 @@ run "workload_sas_scoped_to_own_env_folder" {
   command = plan
 
   assert {
-    condition     = length(google_folder_iam_member.workload_sa_folder_roles) == 8
-    error_message = "2 envs x (2 plan + 2 apply) roles = 8 folder grants expected."
+    condition     = length(google_folder_iam_member.workload_sa_folder_roles) == 6
+    error_message = "2 envs x (2 plan + 1 apply) roles = 6 folder grants expected: projectIamAdmin is granted by gcp-organization, not here."
+  }
+
+  assert {
+    condition     = length([for k, m in google_folder_iam_member.workload_sa_folder_roles : k if m.role == "roles/resourcemanager.projectIamAdmin"]) == 0
+    error_message = "This stage must never grant a non-delegable role: projects-apply could grant it to itself."
   }
 
   assert {
@@ -89,7 +94,44 @@ run "network_sas_scoped_to_shared_folder" {
     condition = length(google_folder_iam_member.network_sa_folder_roles) == 2 && alltrue([
       for m in google_folder_iam_member.network_sa_folder_roles : m.folder == "folders/100"
     ])
-    error_message = "network-hub SAs must be granted only on the shared folder."
+    error_message = "network-hub SAs must be granted their network roles only on the shared folder."
+  }
+}
+
+# gcp-network-hub lists each environment's networks to peer only existing
+# spokes: its SAs get read-only compute.viewer on every environment folder
+# (not the shared folder, which already has their network roles).
+run "network_sas_view_environment_folders" {
+  command = plan
+
+  variables {
+    environments = {
+      shared = {
+        display_name = "Shared"
+        description  = "Shared network"
+        projects     = { hub = { name = "hub", labels = {} } }
+      }
+      dev = {
+        display_name = "Development"
+        description  = "Development environment"
+        projects     = { host = { name = "host", labels = {} } }
+      }
+      prod = {
+        display_name = "Production"
+        description  = "Production environment"
+        projects     = { host = { name = "host", labels = {} } }
+      }
+    }
+  }
+
+  assert {
+    condition = (
+      toset(keys(google_folder_iam_member.network_sa_env_viewer)) == toset(["dev|plan", "dev|apply", "prod|plan", "prod|apply"]) &&
+      alltrue([for m in google_folder_iam_member.network_sa_env_viewer : m.role == "roles/compute.viewer"]) &&
+      google_folder_iam_member.network_sa_env_viewer["prod|apply"].folder == "folders/222" &&
+      google_folder_iam_member.network_sa_env_viewer["dev|plan"].member == "serviceAccount:my-org-network-hub-plan@admin.iam.gserviceaccount.com"
+    )
+    error_message = "the network-hub plan and apply SAs get only roles/compute.viewer on each environment folder, never on the shared folder."
   }
 }
 
@@ -102,7 +144,7 @@ run "no_grants_by_default" {
   }
 
   assert {
-    condition     = length(google_folder_iam_member.workload_sa_folder_roles) == 0 && length(google_folder_iam_member.network_sa_folder_roles) == 0
+    condition     = length(google_folder_iam_member.workload_sa_folder_roles) == 0 && length(google_folder_iam_member.network_sa_folder_roles) == 0 && length(google_folder_iam_member.network_sa_env_viewer) == 0
     error_message = "No automation grants are made unless SAs are supplied."
   }
 }

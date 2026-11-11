@@ -86,8 +86,10 @@ run "workload_and_network_sas_get_folder_scoped_roles" {
       "dev|apply|roles/compute.admin"                          = { folder = "folders/111", role = "roles/compute.admin" }
       "network|plan|roles/compute.viewer"                      = { folder = "folders/100", role = "roles/compute.viewer" }
       "network|apply|roles/compute.networkAdmin"               = { folder = "folders/100", role = "roles/compute.networkAdmin" }
+      "network-env|dev|plan"                                   = { folder = "folders/111", role = "roles/compute.viewer" }
+      "network-env|dev|apply"                                  = { folder = "folders/111", role = "roles/compute.viewer" }
     }
-    error_message = "Workload SAs must be granted only on their own env folder and network-hub SAs only on the shared folder; stale envs ignored."
+    error_message = "Workload SAs must be granted only on their own env folder, network-hub SAs their network roles only on the shared folder plus compute.viewer on each env folder; stale envs ignored."
   }
 }
 

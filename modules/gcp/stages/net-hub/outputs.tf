@@ -120,3 +120,23 @@ output "ncc_spoke_group" {
   description = "The NCC group environment spokes join (edge for STAR, default for MESH), or null when ncc.enabled = false."
   value       = try(module.ncc_hub[0].spoke_group, null)
 }
+
+output "nat_subnet_tiers" {
+  description = "Subnet tiers the primary Cloud NAT translates (private, plus database only with nat.include_database_subnets); empty when NAT is disabled."
+  value       = var.nat.enabled ? concat(["private"], var.nat.include_database_subnets ? ["database"] : []) : []
+}
+
+output "secure_web_proxy" {
+  description = "The hub Secure Web Proxy: gateway_id, address (known after apply unless set), ports and service_attachment_id (target for spoke PSC endpoints, null when not published). Null when secure_web_proxy.enabled = false."
+  value = var.secure_web_proxy.enabled ? {
+    gateway_id            = module.secure_web_proxy[0].gateway_id
+    address               = module.secure_web_proxy[0].gateway_address
+    ports                 = module.secure_web_proxy[0].gateway_ports
+    service_attachment_id = module.secure_web_proxy[0].service_attachment_id
+  } : null
+}
+
+output "network_alert_policy_ids" {
+  description = "Data-plane alert policy IDs keyed by alert (vpn_tunnel_down, bgp_session_down, nat_allocation_failed, nat_dropped_packets); empty when alerting is off or no watched feature exists."
+  value       = try(module.network_alerts[0].all_alert_policy_ids, {})
+}

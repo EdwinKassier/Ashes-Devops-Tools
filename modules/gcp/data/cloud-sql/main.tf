@@ -45,15 +45,24 @@ locals {
 
 # Deletion protection guard — present only when enable_deletion_protection = true.
 # Terraform's prevent_destroy must be a static literal; it cannot reference a variable.
-# This guard carries prevent_destroy = true and is created conditionally so that
-# removing it (by toggling the flag) is also blocked, forcing an explicit state rm.
+# This guard carries prevent_destroy = true and is created conditionally:
+#   - replace_triggered_by ties it to the instance id, so any plan that would
+#     REPLACE the instance (a ForceNew change such as name, region or
+#     encryption_key_name) also plans to replace the guard, and prevent_destroy
+#     then fails the plan before the database is touched. In-place updates keep
+#     the same id and are not blocked.
+#   - toggling the flag to false would destroy the guard, which is also blocked.
+# To intentionally destroy or replace a protected instance, first run:
+#   terraform state rm '<module_address>.terraform_data.deletion_protection_guard[0]'
+# then set enable_deletion_protection = false and apply.
 resource "terraform_data" "deletion_protection_guard" {
   count = var.enable_deletion_protection ? 1 : 0
 
   input = var.name
 
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy      = true
+    replace_triggered_by = [google_sql_database_instance.this.id]
   }
 }
 
@@ -117,6 +126,8 @@ resource "google_sql_database_instance" "this" {
       point_in_time_recovery_enabled = var.enable_point_in_time_recovery
       start_time                     = var.backup_start_time
       transaction_log_retention_days = var.transaction_log_retention_days
+      # Null = Cloud SQL's default (the multi-region nearest the instance).
+      location = var.backup_location
     }
 
     dynamic "database_flags" {

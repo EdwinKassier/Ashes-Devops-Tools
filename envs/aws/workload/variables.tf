@@ -128,13 +128,13 @@ variable "aws_enabled_regions" {
 }
 
 variable "vpc_cidr" {
-  description = "IPv4 CIDR of the workload spoke VPC. Used for subnet math; the actual CIDR is allocated from the shared IPAM pool at apply. Null = aws.workload_environments[<environment>].vpc_cidr from config/landing-zone.yaml, else 10.20.0.0/16."
+  description = "IPv4 CIDR of the workload spoke VPC. Used for subnet math; the actual CIDR is allocated from the shared IPAM pool at apply. Null = aws.workload_environments[<environment>].vpc_cidr from config/landing-zone.yaml, else 10.72.0.0/16."
   type        = string
   default     = null
 
   validation {
-    condition     = can(cidrnetmask(coalesce(var.vpc_cidr, try(local.cfg.vpc_cidrs[local.environment], null), "10.20.0.0/16")))
-    error_message = "vpc_cidr (or aws.workload_environments.<environment>.vpc_cidr in config/landing-zone.yaml) must be a valid IPv4 CIDR block (e.g. 10.20.0.0/16)."
+    condition     = can(cidrnetmask(coalesce(var.vpc_cidr, try(local.cfg.vpc_cidrs[local.environment], null), "10.72.0.0/16")))
+    error_message = "vpc_cidr (or aws.workload_environments.<environment>.vpc_cidr in config/landing-zone.yaml) must be a valid IPv4 CIDR block (e.g. 10.72.0.0/16)."
   }
 }
 

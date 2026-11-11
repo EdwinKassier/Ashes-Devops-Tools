@@ -275,6 +275,6 @@ output "principal_access_boundary_policy" {
 # validated here (a variable validation cannot read the derived locals without
 # a cycle). A failed precondition fails the plan.
 output "admin_containment_enabled" {
-  description = "Deprecated: read contract.admin_containment_enabled (removed in v1.0). Whether the admin-containment deny policy is on (explicit enable_admin_containment, else gcp.admin_containment, else on when any environment is_production)."
+  description = "Deprecated: read contract.admin_containment_enabled (removed in v1.0). Whether the admin-containment deny policy is on (explicit enable_admin_containment, else gcp.admin_containment, else on when any environment is_production or a break-glass principal is set)."
   value       = local.contract.admin_containment_enabled
 }

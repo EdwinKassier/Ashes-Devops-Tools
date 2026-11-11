@@ -100,6 +100,46 @@ variable "enable_log_based_alert" {
   default     = false
 }
 
+variable "enable_vpn_tunnel_alert" {
+  description = "Create an alert policy that fires when an HA VPN tunnel in the project is down (vpn.googleapis.com/tunnel_established below 1 for a whole alignment period), one incident per tunnel."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "enable_bgp_session_alert" {
+  description = "Create an alert policy that fires when a Cloud Router BGP session in the project is down (router.googleapis.com/bgp/session_up below 1), one incident per session. Covers the BGP sessions of HA VPN tunnels and Cloud Interconnect attachments."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "enable_nat_allocation_failure_alert" {
+  description = "Create an alert policy that fires when a Cloud NAT gateway in the project fails to allocate NAT IPs or ports to a VM (router.googleapis.com/nat/nat_allocation_failed)."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "enable_nat_dropped_packets_alert" {
+  description = "Create an alert policy that fires when a Cloud NAT gateway in the project drops sent packets because it ran out of NAT ports or IPs (router.googleapis.com/nat/dropped_sent_packets_count with reason OUT_OF_RESOURCES)."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "nat_dropped_packets_threshold" {
+  description = "Packets dropped for OUT_OF_RESOURCES per alignment period, per NAT gateway, above which the NAT dropped-packets alert fires. 0 (default) fires on any drop."
+  type        = number
+  default     = 0
+  nullable    = false
+
+  validation {
+    condition     = var.nat_dropped_packets_threshold >= 0
+    error_message = "nat_dropped_packets_threshold must be >= 0."
+  }
+}
+
 # ── Thresholds ────────────────────────────────────────────────────────────────
 
 variable "cpu_utilization_threshold" {

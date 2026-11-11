@@ -327,14 +327,20 @@ locals {
     for id in var.wif_tenant_pins.github_owner_ids : "assertion.repository_owner_id == \"${id}\""
   ]
 
+  # An uploaded JWKS (oidc.jwks_json) replaces the issuer's published keys with
+  # keys the uploader holds: a provider with the pinned issuer and the exact
+  # pinned condition would still accept tokens the uploader mints. A provider
+  # for a pinned issuer must therefore use the issuer's own discovery keys.
+  wif_uploaded_jwks = "(has(resource.oidc.jwksJson) && resource.oidc.jwksJson != '')"
+
   wif_tenant_constraints = var.wif_tenant_pins.tfc_organization == null && length(var.wif_tenant_pins.github_owner_ids) == 0 ? [] : [{
     name         = "custom.wifProviderTenantPinned"
     display_name = "Workload identity providers pin the tenant"
-    description  = "HCP Terraform providers must start their attribute condition with this estate's TFC organization clause, with nothing OR-ed beside it; a GitHub Actions provider's condition must be exactly an allowed repository_owner_id clause."
+    description  = "HCP Terraform providers must start their attribute condition with this estate's TFC organization clause, with nothing OR-ed beside it; a GitHub Actions provider's condition must be exactly an allowed repository_owner_id clause. Providers for these issuers may not upload their own JWKS."
     action_type  = "DENY"
     condition = join(" || ", compact([
-      local.wif_tfc_pattern == null ? "" : "(resource.oidc.issuerUri.startsWith('https://${var.wif_tenant_pins.tfc_hostname}') && !resource.attributeCondition.matches(\"${local.wif_tfc_pattern}\"))",
-      length(local.wif_github_conditions) == 0 ? "" : "(resource.oidc.issuerUri.startsWith('https://token.actions.githubusercontent.com') && !(${join(" || ", [for c in local.wif_github_conditions : "resource.attributeCondition == \"${replace(c, "\"", "\\\"")}\""])}))",
+      local.wif_tfc_pattern == null ? "" : "(resource.oidc.issuerUri.startsWith('https://${var.wif_tenant_pins.tfc_hostname}') && (${local.wif_uploaded_jwks} || !resource.attributeCondition.matches(\"${local.wif_tfc_pattern}\")))",
+      length(local.wif_github_conditions) == 0 ? "" : "(resource.oidc.issuerUri.startsWith('https://token.actions.githubusercontent.com') && (${local.wif_uploaded_jwks} || !(${join(" || ", [for c in local.wif_github_conditions : "resource.attributeCondition == \"${replace(c, "\"", "\\\"")}\""])})))",
     ]))
     method_types   = ["CREATE", "UPDATE"]
     resource_types = ["iam.googleapis.com/WorkloadIdentityPoolProvider"]

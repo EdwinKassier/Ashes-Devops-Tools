@@ -67,3 +67,13 @@ output "queue_all_runs" {
   description = "Whether the workspace queues a run as soon as it is created."
   value       = tfe_workspace.this.queue_all_runs
 }
+
+output "tag_names" {
+  description = "Workspace tags (sorted)."
+  value       = sort(tolist(tfe_workspace.this.tag_names))
+}
+
+output "terraform_version" {
+  description = "Terraform version the workspace runs (null = the TFC default)."
+  value       = tfe_workspace.this.terraform_version
+}

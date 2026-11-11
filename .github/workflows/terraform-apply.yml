@@ -1,5 +1,11 @@
 name: Terraform Release Metadata
 
+# Records a GitHub Release for a per-workspace deployment tag once HCP Terraform
+# has applied the tagged commit. It applies nothing: HCP Terraform runs every
+# plan and apply. The file keeps its historical name terraform-apply.yml because
+# README.md, SECURITY.md, docs/INDEX.md, the runbooks and the CI guides link to
+# it by path, and the tfc-readonly environment's documentation names it.
+
 on:
   push:
     tags:
@@ -193,12 +199,20 @@ jobs:
           egress-policy: audit
 
       - name: Create release summary
+        # Tag-derived values reach the shell through env, never by expression
+        # interpolation into the script: a crafted tag name must not run code.
+        env:
+          WORKSPACE: ${{ needs.verify-run.outputs.workspace }}
+          VERSION: ${{ needs.verify-run.outputs.version }}
+          STATUS: ${{ needs.verify-run.outputs.status }}
         run: |
-          echo "## Release Summary" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Workspace: ${{ needs.verify-run.outputs.workspace }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Version: ${{ needs.verify-run.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Terraform Cloud status: ${{ needs.verify-run.outputs.status }}" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## Release Summary"
+            echo ""
+            echo "- Workspace: ${WORKSPACE}"
+            echo "- Version: ${VERSION}"
+            echo "- Terraform Cloud status: ${STATUS}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Create GitHub release
         # Publish a Release only when the infrastructure is actually applied AND the
@@ -219,12 +233,16 @@ jobs:
         # commit does not match the applied run (L7) do not publish a release;
         # record why so the tag's state is traceable instead of silently missing.
         if: needs.verify-run.outputs.status != 'applied' || needs.verify-run.outputs.commit_match != 'true'
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+          STATUS: ${{ needs.verify-run.outputs.status }}
+          COMMIT_MATCH: ${{ needs.verify-run.outputs.commit_match }}
         run: |
           {
             echo "## Release held"
             echo ""
-            echo "No GitHub Release was published for tag \`${{ github.ref_name }}\`."
-            echo "Terraform Cloud status is \`${{ needs.verify-run.outputs.status }}\`."
-            echo "Commit match: \`${{ needs.verify-run.outputs.commit_match }}\` (need applied/true)."
+            echo "No GitHub Release was published for tag \`${TAG_NAME}\`."
+            echo "Terraform Cloud status is \`${STATUS}\`."
+            echo "Commit match: \`${COMMIT_MATCH}\` (need applied/true)."
             echo "Re-run this workflow (or re-tag) once the matching apply completes to publish the release."
           } >> "$GITHUB_STEP_SUMMARY"

@@ -190,3 +190,9 @@ variable "cloudwatch_logs_role_permissions_boundary_arn" {
     error_message = "cloudwatch_logs_role_permissions_boundary_arn must be null or an IAM policy ARN."
   }
 }
+
+variable "enable_deletion_protection" {
+  description = "Create a prevent_destroy guard that makes any plan which destroys or replaces the module-created CloudWatch Logs KMS key fail (no effect when cloudwatch_logs_kms_key_arn supplies the key). Turning it off does not remove an existing guard: run terraform state rm on the guard first."
+  type        = bool
+  default     = true
+}

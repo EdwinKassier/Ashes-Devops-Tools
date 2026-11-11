@@ -22,6 +22,12 @@
 locals {
   # Explicit zones win; otherwise fall back to the zones GCP returns.
   zones = length(var.network.explicit_zones) > 0 ? var.network.explicit_zones : data.google_compute_zones.available.names
+
+  # Tiers Cloud NAT translates. The private tier leaves NAT when egress goes
+  # through the hub proxy; the database tier only joins on request.
+  nat_private  = coalesce(var.nat.include_private_subnets, !var.egress_proxy.enabled)
+  nat_database = var.nat.include_database_subnets
+  create_nat   = var.nat.enabled && (local.nat_private || local.nat_database)
 }
 
 # Auto-discover available zones (used only when network.explicit_zones is empty).
@@ -95,10 +101,12 @@ module "additional_firewall_rules" {
 # EGRESS AND PRIVATE SERVICES (NAT, PSA, PSC)
 # =============================================================================
 
-# Cloud NAT for the private and database tiers only (public tier excluded).
+# Cloud NAT for the private tier (public tier excluded; database tier only
+# with nat.include_database_subnets, because its egress deny is tag-based and
+# an untagged VM there would otherwise reach the internet).
 module "integrated_nat" {
   source = "../../network/nat"
-  count  = var.nat.enabled ? 1 : 0
+  count  = local.create_nat ? 1 : 0
 
   project_id = var.project_id
   name       = "${var.network.name}-nat"
@@ -112,8 +120,8 @@ module "integrated_nat" {
   source_subnetwork_ip_ranges_to_nat = "LIST_OF_SUBNETWORKS"
 
   subnetworks = concat(
-    [for s in module.network.subnets.private : { name = s.self_link, source_ip_ranges_to_nat = ["ALL_IP_RANGES"] }],
-    [for s in module.network.subnets.database : { name = s.self_link, source_ip_ranges_to_nat = ["ALL_IP_RANGES"] }]
+    local.nat_private ? [for s in module.network.subnets.private : { name = s.self_link, source_ip_ranges_to_nat = ["ALL_IP_RANGES"] }] : [],
+    local.nat_database ? [for s in module.network.subnets.database : { name = s.self_link, source_ip_ranges_to_nat = ["ALL_IP_RANGES"] }] : []
   )
 
   enable_logging = true
@@ -125,7 +133,7 @@ module "integrated_nat" {
 # integrated_nat[0] address is unchanged.
 module "additional_region_nat" {
   source   = "../../network/nat"
-  for_each = var.nat.enabled ? { for region, r in var.additional_regions : region => r if r.nat } : {}
+  for_each = local.create_nat ? { for region, r in var.additional_regions : region => r if r.nat } : {}
 
   project_id = var.project_id
   name       = "${var.network.name}-nat-${each.key}"
@@ -138,13 +146,41 @@ module "additional_region_nat" {
   nat_ip_allocate_option             = var.nat.ip_allocate_option
   source_subnetwork_ip_ranges_to_nat = "LIST_OF_SUBNETWORKS"
 
-  subnetworks = [
-    { name = module.network.additional_region_subnets[each.key].private.self_link, source_ip_ranges_to_nat = ["ALL_IP_RANGES"] },
-    { name = module.network.additional_region_subnets[each.key].database.self_link, source_ip_ranges_to_nat = ["ALL_IP_RANGES"] },
-  ]
+  subnetworks = concat(
+    local.nat_private ? [{ name = module.network.additional_region_subnets[each.key].private.self_link, source_ip_ranges_to_nat = ["ALL_IP_RANGES"] }] : [],
+    local.nat_database ? [{ name = module.network.additional_region_subnets[each.key].database.self_link, source_ip_ranges_to_nat = ["ALL_IP_RANGES"] }] : [],
+  )
 
   enable_logging = true
   log_filter     = var.nat.log_filter
+}
+
+# Central egress (opt-in, preview): a PSC endpoint for the hub Secure Web
+# Proxy. Workloads use <endpoint address>:<proxy port> as HTTPS_PROXY.
+resource "google_compute_address" "egress_proxy" {
+  count = var.egress_proxy.enabled ? 1 : 0
+
+  project      = var.project_id
+  name         = "${var.network.name}-egress-proxy"
+  region       = var.region
+  address_type = "INTERNAL"
+  subnetwork   = module.network.subnets.private[sort(keys(module.network.subnets.private))[0]].self_link
+  address      = var.egress_proxy.address
+  labels       = var.labels
+}
+
+resource "google_compute_forwarding_rule" "egress_proxy" {
+  count = var.egress_proxy.enabled ? 1 : 0
+
+  project                 = var.project_id
+  name                    = "${var.network.name}-egress-proxy"
+  region                  = var.region
+  network                 = module.network.network_id
+  ip_address              = google_compute_address.egress_proxy[0].id
+  target                  = var.egress_proxy.service_attachment
+  load_balancing_scheme   = ""
+  allow_psc_global_access = var.egress_proxy.global_access
+  labels                  = var.labels
 }
 
 module "private_service_access" {
@@ -357,4 +393,28 @@ module "vpc_service_controls" {
   dry_run_restricted_services = each.value.dry_run_restricted_services
   dry_run_ingress_policies    = each.value.dry_run_ingress_policies
   dry_run_egress_policies     = each.value.dry_run_egress_policies
+}
+
+# =============================================================================
+# DATA-PLANE ALERTS (Cloud NAT, on whenever a NAT exists)
+# =============================================================================
+
+module "nat_alerts" {
+  source = "../../monitoring/alert-policy"
+  count  = var.alerting.enabled && local.create_nat ? 1 : 0
+
+  project_id                     = var.project_id
+  alert_display_name_prefix      = var.network.name
+  extra_notification_channel_ids = var.alerting.notification_channel_ids
+
+  # Only the Cloud NAT policies; the compute and Cloud Run ones belong to the
+  # workloads.
+  enable_high_cpu_alert     = false
+  enable_high_memory_alert  = false
+  enable_error_rate_alert   = false
+  enable_high_latency_alert = false
+
+  enable_nat_allocation_failure_alert = true
+  enable_nat_dropped_packets_alert    = true
+  nat_dropped_packets_threshold       = var.alerting.nat_dropped_packets_threshold
 }

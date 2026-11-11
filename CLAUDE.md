@@ -1,6 +1,6 @@
 # CLAUDE.md — Agent Onboarding
 
-Terraform GCP + AWS landing zone. 124 modules, 15 deployable roots, remote state via Terraform Cloud.
+Terraform GCP + AWS landing zone. 125 modules, 15 deployable roots, remote state via Terraform Cloud.
 
 ---
 
@@ -30,7 +30,7 @@ modules/               # grouped by owning cloud (domain)
   gcp/                  # GCP-native modules
     stages/             # Orchestration wrappers: bootstrap, organization, guardrails (org IAM deny policies), projects, network-hub, environment (the gcp-workload-<env> composition), workload, app-services (Cloud Run/SQL/GKE golden path); network compositions net-hub, net-spoke, dns-anchor
     project/            # THE project primitive — every stage creates GCP projects through it (no naming scheme inside)
-    network/            # ~24 primitives: tiered-vpc (shared VPC + 3-tier subnets + baseline firewall core), vpc, subnet, ncc-hub, ncc-spoke, dns, vpn, vpc-sc, cloud-armor, internal-lb, api-gateway, cdn, app-ingress, …
+    network/            # ~25 primitives: tiered-vpc (shared VPC + 3-tier subnets + baseline firewall core), vpc, subnet, ncc-hub, ncc-spoke, dns, vpn, vpc-sc, cloud-armor, secure-web-proxy, internal-lb, api-gateway, cdn, app-ingress, …
     governance/         # billing, kms, org-policy, scc, tags, cloud-audit-logs, private-ca
     iam/                # organization, role, service-account, workload-identity, identity-group*, deny-policy, principal-access-boundary
     monitoring/         # alert-policy, compute-dashboard, slo, control-plane (landing-zone self-observability)
@@ -219,7 +219,7 @@ Vercel executes `ignore_command` in `/bin/sh`, not bash. Use POSIX sh syntax:
 
 ### vault-secrets Node.js dependency
 
-`modules/supabase/vault-secrets` installs its Node.js dependencies **automatically** at apply time: a `terraform_data.npm_install` runs `npm ci --ignore-scripts --no-audit --no-fund --prefix modules/supabase/vault-secrets/scripts` before the bootstrap/reconcile provisioners (which `import { Pool } from "pg"`). No manual step — the apply runner just needs **Node.js 18+ and npm** on PATH. To prime locally: `npm ci --ignore-scripts --prefix modules/supabase/vault-secrets/scripts`. The vault RPCs live in the unexposed `iac_vault` schema (never in `public`).
+`modules/supabase/vault-secrets` installs its Node.js dependencies **automatically** at apply time: the bootstrap and reconcile provisioners (which `import { Pool } from "pg"`) each run `npm ci --ignore-scripts --no-audit --no-fund --prefix modules/supabase/vault-secrets/scripts` in the same command, before `node`, so a fresh runner works on every apply. No manual step — the apply runner just needs **Node.js 18+ and npm** on PATH. To prime locally: `npm ci --ignore-scripts --prefix modules/supabase/vault-secrets/scripts`. The vault RPCs live in the unexposed `iac_vault` schema (never in `public`).
 
 ### AWS modules
 

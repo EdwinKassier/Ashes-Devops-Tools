@@ -74,6 +74,7 @@ run "contracts_replace_remote_state" {
       output.host_project_id == "acme-dev-host-abcd" &&
       local.org_id == "123456789012" &&
       local.hub_vpc_peerings["hub-peering"].peer_network == "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc" &&
+      local.hub_vpc_peerings["hub-peering"].create_reverse_peering == false &&
       local.hub_dns_zones["internal-peering"].dns_name == "hub.internal."
     )
     error_message = "contract values must flow into the host project lookup and the hub peering / DNS peering inputs"
@@ -334,4 +335,54 @@ run "rejects_unknown_network_connectivity" {
   }
 
   expect_failures = [var.network_connectivity]
+}
+
+# Opt-in central egress: the spoke targets the hub Secure Web Proxy's service
+# attachment published in the gcp-network-hub contract.
+run "egress_proxy_off_by_default" {
+  command = plan
+
+  variables {
+    network_hub_contract = {
+      vpc_self_link = "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc"
+      dns_domain    = "hub.internal."
+    }
+  }
+
+  assert {
+    condition     = local.enable_egress_proxy == false && length(terraform_data.egress_proxy_guard) == 0
+    error_message = "the egress proxy must be off unless enabled."
+  }
+}
+
+run "egress_proxy_targets_hub_service_attachment" {
+  command = plan
+
+  variables {
+    enable_egress_proxy = true
+    network_hub_contract = {
+      vpc_self_link                   = "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc"
+      dns_domain                      = "hub.internal."
+      egress_proxy_service_attachment = "projects/acme-hub/regions/europe-west2/serviceAttachments/swp"
+    }
+  }
+
+  assert {
+    condition     = local.enable_egress_proxy && local.hub_network.egress_proxy_service_attachment == "projects/acme-hub/regions/europe-west2/serviceAttachments/swp"
+    error_message = "the egress proxy endpoint must target the hub's published service attachment."
+  }
+}
+
+run "egress_proxy_without_hub_proxy_fails" {
+  command = plan
+
+  variables {
+    enable_egress_proxy = true
+    network_hub_contract = {
+      vpc_self_link = "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc"
+      dns_domain    = "hub.internal."
+    }
+  }
+
+  expect_failures = [terraform_data.egress_proxy_guard]
 }

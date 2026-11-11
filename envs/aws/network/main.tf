@@ -55,10 +55,10 @@ module "aws_network_hub" {
   aws_region          = local.aws_region
   aws_enabled_regions = local.aws_enabled_regions
 
-  top_cidr           = var.top_cidr
-  regional_cidrs     = var.regional_cidrs
-  inspection_cidr    = var.inspection_cidr
-  egress_cidr        = var.egress_cidr
+  top_cidr           = local.top_cidr
+  regional_cidrs     = local.regional_cidrs
+  inspection_cidr    = local.inspection_cidr
+  egress_cidr        = local.egress_cidr
   availability_zones = var.availability_zones
   az_count           = var.az_count
 

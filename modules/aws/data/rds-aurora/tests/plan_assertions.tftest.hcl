@@ -90,7 +90,7 @@ run "secure_defaults" {
 
   # Deletion guard present.
   assert {
-    condition     = terraform_data.deletion_guard.input == var.name
+    condition     = terraform_data.deletion_guard[0].input == var.name
     error_message = "the deletion guard must track the cluster identifier."
   }
 }

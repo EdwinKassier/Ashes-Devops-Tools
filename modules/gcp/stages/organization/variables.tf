@@ -608,7 +608,7 @@ variable "projects_apply_service_account" {
 }
 
 variable "delegated_workload_folder_roles" {
-  description = "Roles projects-apply may grant on environment folders (gcp-bootstrap output delegated_workload_folder_roles)."
+  description = "Roles projects-apply may grant on environment folders (gcp-bootstrap output delegated_workload_folder_roles). Any role in non_delegable_workload_folder_roles is dropped from the allow-list."
   type        = list(string)
   default     = []
 
@@ -627,6 +627,29 @@ variable "delegated_network_folder_roles" {
     condition     = length(setintersection(toset(var.delegated_network_folder_roles), toset(["roles/owner", "roles/resourcemanager.folderAdmin", "roles/resourcemanager.folderIamAdmin", "roles/iam.securityAdmin"]))) == 0
     error_message = "delegated_network_folder_roles must not contain roles/owner, folderAdmin, folderIamAdmin or iam.securityAdmin (the delegate could escalate)."
   }
+}
+
+variable "workload_folder_roles" {
+  description = "Roles each workload plan/apply SA holds on its own environment folder ({ plan, apply }, gcp-bootstrap output workload_folder_roles). This stage grants the ones listed in non_delegable_workload_folder_roles directly; gcp-projects grants the rest through the delegated folder IAM."
+  type = object({
+    plan  = list(string)
+    apply = list(string)
+  })
+  default  = { plan = [], apply = [] }
+  nullable = false
+}
+
+variable "non_delegable_workload_folder_roles" {
+  description = "Roles that projects-apply may never grant on an environment folder, whatever delegated_workload_folder_roles says. A folder IAM condition can limit which roles a delegate grants but not to whom, so a delegate that may grant one of these roles can grant it to itself and take over every project in the folder. This stage grants these roles to the workload SAs itself (when workload_folder_roles lists them)."
+  type        = list(string)
+  default = [
+    "roles/resourcemanager.projectIamAdmin",
+    "roles/iam.serviceAccountAdmin",
+    "roles/iam.serviceAccountKeyAdmin",
+    "roles/iam.serviceAccountTokenCreator",
+    "roles/iam.workloadIdentityPoolAdmin",
+  ]
+  nullable = false
 }
 
 # --- Privileged Access Manager: just-in-time org admin ---

@@ -14,8 +14,8 @@ output "key_ids" {
 }
 
 output "key_names" {
-  description = "Map of CryptoKey names (for use in resource configs)"
-  value       = { for k, v in google_kms_crypto_key.keys : k => v.name }
+  description = "Map of key name to the full CryptoKey resource name (projects/<project>/locations/<location>/keyRings/<ring>/cryptoKeys/<key>), the form every kms_key_name argument requires."
+  value       = { for k, v in google_kms_crypto_key.keys : k => v.id }
 }
 
 output "keyring_location" {

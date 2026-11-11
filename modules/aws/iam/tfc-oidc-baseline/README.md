@@ -13,13 +13,14 @@ Each targeted member account receives:
 | `tfc-plan` role (bound accounts only) | `ReadOnlyAccess`. Trusts `<host>:sub = organization:<org>:project:<project>:workspace:<ws>:run_phase:plan`. |
 | `tfc-apply` role (bound accounts only) | `AdministratorAccess` by default, **capped by a permissions boundary**. Trusts `...:run_phase:apply`. |
 | `tfc-apply-boundary` managed policy | Embedded permissions boundary (default on, `enable_apply_permissions_boundary`). |
+| `tfc-plan-data-read-deny` managed policy | Data-plane and secret-bearing read deny attached to `tfc-plan` (default on, `enable_plan_role_data_read_deny`). |
 
 **Apply permissions boundary.** The boundary allows everything except:
 
 - leaving the organization;
 - stopping or deleting CloudTrail, GuardDuty (detector, members and administrator association) and Config (recorder and delivery channel);
 - disabling Security Hub (`securityhub:Disable*`, `BatchDisableStandards`), Macie or Inspector, or deleting an Access Analyzer;
-- changing the `tfc-plan` and `tfc-apply` roles, the OIDC provider or the boundary itself;
+- changing the `tfc-plan` and `tfc-apply` roles, the OIDC provider, the boundary itself or the plan-role read deny;
 - creating, modifying, deleting, tagging or passing the break-glass role (`break_glass_role_name`), OrganizationAccountAccessRole or `stacksets-exec-*` (`protected_role_names`);
 - destroying, disabling or rewriting the policy of a KMS key tagged `protected = "true"`, or removing that tag;
 - setting or removing `dp:*` data-perimeter tags;
@@ -31,14 +32,31 @@ workload layers can apply normally. To use your own boundary, supply
 privilege-escalation barrier. The apply role can still create a new
 unbounded role, so the org deny-tamper SCP remains the primary control.
 
-**Plan-role data-read deny.** `tfc-plan` is denied data-plane reads that
-`ReadOnlyAccess` grants (object/secret/parameter/item reads, `kms:Decrypt`,
-`kms:GenerateDataKey*`, `ec2:GetPasswordData`, console output, Glue connection
-reads, log events, query results, image pulls). Reads Terraform needs to refresh
-resources stay allowed: `lambda:GetFunction*` (environment variables),
-`ecs:DescribeTaskDefinition` (container environment) and
-`ec2:DescribeInstanceAttribute` (user data). Keep secrets out of those fields
-and reference Secrets Manager or SSM instead.
+**Plan-role data-read deny.** `tfc-plan` is denied data-plane and
+secret-bearing reads that `ReadOnlyAccess` grants: object, secret, parameter
+and item reads, `kms:Decrypt`, `kms:GenerateDataKey*`, `ec2:GetPasswordData`,
+console output, Glue connection reads, log events, query results, image pulls,
+API Gateway key values (`apigateway:GET` on the `/apikeys` and
+`/usageplans/*/keys` paths only), launch-template and launch-configuration user
+data, CodeBuild project and build environment variables, Lambda layer code,
+Cognito app-client secrets, AppSync API keys, Step Functions execution data,
+Lightsail access details, Glacier job output and Elastic Beanstalk
+configuration. The deny is one managed policy per account
+(`<plan_role_name>-data-read-deny`), so the template does not grow with each
+binding. It must stay under the 6,144-character managed-policy quota, which
+bounds `plan_role_data_read_exempt_arns`.
+
+The role stays `ReadOnlyAccess` minus a deny-list rather than an allow-list on
+`ViewOnlyAccess` or `SecurityAudit`: refresh calls many `Get*` actions those
+policies lack, and an allow-list cannot be proven complete in mock tests. Reads
+Terraform needs to refresh resources this repo manages stay allowed:
+`lambda:GetFunction*` (environment variables), `ecs:DescribeTaskDefinition`
+(container environment), `ec2:DescribeInstanceAttribute` (user data) and
+`apigateway:GET` outside the key paths. Keep secrets out of those fields and
+reference Secrets Manager or SSM instead. A stack that plans a launch template,
+CodeBuild project or similar must list its ARN in
+`plan_role_data_read_exempt_arns`; one that plans REST API keys must turn the
+deny off.
 
 **Member break-glass role.** With `enable_member_break_glass_role = true`, a
 sibling StackSet (`member_break_glass_stack_set_name`) deploys
@@ -106,10 +124,10 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_cloudformation_stack_set.break_glass (modules/aws/iam/tfc-oidc-baseline/main.tf#L646)
-- resource.aws_cloudformation_stack_set.this (modules/aws/iam/tfc-oidc-baseline/main.tf#L529)
-- resource.aws_cloudformation_stack_set_instance.break_glass (modules/aws/iam/tfc-oidc-baseline/main.tf#L682)
-- resource.aws_cloudformation_stack_set_instance.this (modules/aws/iam/tfc-oidc-baseline/main.tf#L569)
+- resource.aws_cloudformation_stack_set.break_glass (modules/aws/iam/tfc-oidc-baseline/main.tf#L730)
+- resource.aws_cloudformation_stack_set.this (modules/aws/iam/tfc-oidc-baseline/main.tf#L607)
+- resource.aws_cloudformation_stack_set_instance.break_glass (modules/aws/iam/tfc-oidc-baseline/main.tf#L766)
+- resource.aws_cloudformation_stack_set_instance.this (modules/aws/iam/tfc-oidc-baseline/main.tf#L653)
 
 
 ## Inputs
@@ -129,7 +147,7 @@ The following resources are created:
 | <a name="input_enable_apply_boundary_propagation"></a> [enable\_apply\_boundary\_propagation](#input\_enable\_apply\_boundary\_propagation) | Make the embedded tfc-apply boundary self-propagating (default true): tfc-apply may only CreateRole / PutRolePermissionsBoundary / AttachRolePolicy / PutRolePolicy when the target role carries this same boundary (iam:PermissionsBoundary), and may never delete a permissions boundary. Without it the apply identity can create an unbounded role, attach AdministratorAccess and assume it. Every aws\_iam\_role created by tfc-apply in a member account must then set permissions\_boundary to arn:<partition>:iam::<account>:policy/<apply\_boundary\_policy\_name>. Applies to the embedded boundary only (apply\_permissions\_boundary\_arn = null). | `bool` | `true` | no |
 | <a name="input_enable_apply_permissions_boundary"></a> [enable\_apply\_permissions\_boundary](#input\_enable\_apply\_permissions\_boundary) | Cap the apply role with a permissions boundary (default true). With apply\_permissions\_boundary\_arn = null the StackSet embeds a managed boundary that allows everything EXCEPT: leaving the org; stopping/deleting CloudTrail, GuardDuty and Config; disabling Security Hub, Macie, Inspector or Access Analyzer; modifying the plan/apply roles, the OIDC provider or the boundary itself; creating/modifying/passing the break-glass, OrganizationAccountAccessRole or StackSet execution roles; destroying or re-policying protected KMS keys; dp:* tag changes; and iam:CreateUser/CreateAccessKey/CreateLoginProfile. | `bool` | `true` | no |
 | <a name="input_enable_member_break_glass_role"></a> [enable\_member\_break\_glass\_role](#input\_enable\_member\_break\_glass\_role) | Deploy the break-glass role (break\_glass\_role\_name) into every account of member\_break\_glass\_target\_ou\_ids via a sibling SERVICE\_MANAGED StackSet, so the SCP-exempt break-glass name is occupied (and protected) in each member account instead of being claimable by the first principal to create it. Default false at module level; the organization stage enables it for the org root. | `bool` | `false` | no |
-| <a name="input_enable_plan_role_data_read_deny"></a> [enable\_plan\_role\_data\_read\_deny](#input\_enable\_plan\_role\_data\_read\_deny) | Attach an inline deny to the plan role for data-plane reads that ReadOnlyAccess otherwise grants (s3:GetObject*, secretsmanager:GetSecretValue / BatchGetSecretValue, ssm:GetParameter*, kms:Decrypt / GenerateDataKey*, ec2:GetPasswordData / console output, glue:GetConnection(s), DynamoDB item reads, sqs:ReceiveMessage, kinesis:GetRecords, CloudWatch Logs event reads/queries, rds-data, Athena/Redshift Data results, ECR image pulls). Default true: speculative PR plans run as this role, so it reads configuration, not data. | `bool` | `true` | no |
+| <a name="input_enable_plan_role_data_read_deny"></a> [enable\_plan\_role\_data\_read\_deny](#input\_enable\_plan\_role\_data\_read\_deny) | Attach a deny managed policy (<plan\_role\_name>-data-read-deny, one per account) to the plan role for data-plane reads that ReadOnlyAccess otherwise grants (s3:GetObject*, secretsmanager:GetSecretValue / BatchGetSecretValue, ssm:GetParameter*, kms:Decrypt / GenerateDataKey*, ec2:GetPasswordData / console output, glue:GetConnection(s), DynamoDB item reads, sqs:ReceiveMessage, kinesis:GetRecords, CloudWatch Logs event reads/queries, rds-data, Athena/Redshift Data results, ECR image pulls) and for secret-bearing reads (API Gateway key values, launch-template and launch-configuration user data, CodeBuild project and build environment variables, Cognito app-client secrets, AppSync API keys, Step Functions execution data, Lightsail access details, Glacier job output, Elastic Beanstalk configuration). Default true: speculative PR plans run as this role, so it reads configuration, not data. | `bool` | `true` | no |
 | <a name="input_kms_protection_tag_key"></a> [kms\_protection\_tag\_key](#input\_kms\_protection\_tag\_key) | Resource-tag key marking protected KMS keys (value "true"). The tfc-apply boundary denies ScheduleKeyDeletion / DisableKey / DisableKeyRotation / DeleteImportedKeyMaterial / PutKeyPolicy on such keys and removing or rewriting the tag. Must match the organization-policy kms\_protection\_tag\_key and the kms-key protection\_tag\_key. | `string` | `"protected"` | no |
 | <a name="input_max_session_duration"></a> [max\_session\_duration](#input\_max\_session\_duration) | Maximum session duration (seconds) for both roles. TFC requests 1 hour by default. | `number` | `3600` | no |
 | <a name="input_member_break_glass_mfa_max_age"></a> [member\_break\_glass\_mfa\_max\_age](#input\_member\_break\_glass\_mfa\_max\_age) | Maximum MFA age (seconds) accepted by the member break-glass trust when member\_break\_glass\_require\_mfa is true. | `number` | `3600` | no |

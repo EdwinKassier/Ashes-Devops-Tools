@@ -33,7 +33,7 @@ aws_region          = "eu-west-2"
 aws_enabled_regions = ["eu-west-2"]
 
 # Optional — spoke VPC CIDR (subnet math; actual CIDR allocated from shared IPAM).
-vpc_cidr = "10.20.0.0/16"
+vpc_cidr = "10.72.0.0/16"
 
 # REQUIRED — central log-archive bucket name. MUST match the name the
 # aws-organization and aws-network roots use (cross-root naming contract).

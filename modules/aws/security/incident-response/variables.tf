@@ -18,7 +18,7 @@ variable "forensics_account_id" {
 }
 
 variable "org_id" {
-  description = "AWS Organizations organization ID (o-xxxx) used to scope the forensics role trust policy via aws:PrincipalOrgID and the forensics KMS grant via aws:SourceOrgID."
+  description = "AWS Organizations organization ID (o-xxxx) used to scope the forensics role trust policy via aws:PrincipalOrgID and the forensics KMS grant via aws:PrincipalOrgID."
   type        = string
   default     = ""
 
@@ -40,7 +40,7 @@ variable "quarantine_vpc_id" {
 }
 
 variable "forensics_kms_key_arn" {
-  description = "ARN of the forensics CMK. When set, the forensics snapshot-sharing role is granted kms:Decrypt/DescribeKey/CreateGrant on it (scoped by aws:SourceOrgID) so shared encrypted snapshots are usable in the forensics account. Empty (default) omits the grant."
+  description = "ARN of the forensics CMK. When set, the forensics snapshot-sharing role is granted kms:Decrypt/DescribeKey/CreateGrant on it (scoped by aws:PrincipalOrgID) so shared encrypted snapshots are usable in the forensics account. Empty (default) omits the grant."
   type        = string
   default     = ""
 

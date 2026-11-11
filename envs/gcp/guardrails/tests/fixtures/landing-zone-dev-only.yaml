@@ -1,4 +1,5 @@
-# Fixture: no production environment, so no containment deny policy.
+# Fixture: no production environment, but a break-glass group, so the
+# containment deny policy is on.
 org:
   prefix: acme
   domain: acme.io

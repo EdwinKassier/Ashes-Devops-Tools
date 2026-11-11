@@ -398,7 +398,7 @@ variable "project_name_prefix" {
 }
 
 variable "platform_team_id" {
-  description = "TFC team ID (team-...) of the broad platform team: fixed WRITE on workload workspaces (saas, gcp/aws workloads), and only custom plan-level access on control-plane workspaces (see platform_team_control_plane_runs and control_plane_approvers_team_id). Null = no grant."
+  description = "TFC team ID (team-...) of the broad platform team: fixed WRITE on non-production gcp/aws workload workspaces, custom plan-level access (variables read-only) on control-plane workspaces and on production gcp/aws workload workspaces (see platform_team_control_plane_runs and control_plane_approvers_team_id), and runs = read on the secret-bearing saas and tfc-admin projects. Null = no grant."
   type        = string
   default     = null
 
@@ -409,7 +409,7 @@ variable "platform_team_id" {
 }
 
 variable "control_plane_approvers_team_id" {
-  description = "TFC team ID (team-...) of the small control-plane approvers team: custom access on every project holding control-plane workspaces with runs = apply (confirm/discard applies) and variables/state read-only. It is the only team this root lets apply the control plane, so a platform-team member who edits code cannot also approve the apply. Must differ from platform_team_id. Null = no approvers grant (only organization owners can apply the control plane)."
+  description = "TFC team ID (team-...) of the small approvers team: custom access with runs = apply (confirm/discard applies) and variables/state read-only on every project holding control-plane workspaces, on the saas project and on every project holding a production gcp/aws workload. It is the only team this root lets apply the control plane and production workloads, so a platform-team member who edits code or queues a run cannot also approve the apply. Must differ from platform_team_id. Null = no approvers grant (only organization owners can apply them)."
   type        = string
   default     = null
 
@@ -431,7 +431,7 @@ variable "security_team_id" {
 }
 
 variable "platform_team_control_plane_runs" {
-  description = "Runs permission of platform_team_id on projects holding control-plane workspaces (custom access; variables read-only, no locking, workspace create/delete/move, run tasks or policy overrides). plan (default) = queue plans only, applies are confirmed by control_plane_approvers_team_id; read = view runs only; apply = may also confirm applies (variables stay read-only). Workload workspaces keep fixed write access."
+  description = "Runs permission of platform_team_id on projects holding control-plane workspaces (custom access; variables read-only, no locking, workspace create/delete/move, run tasks or policy overrides). plan (default) = queue plans only, applies are confirmed by control_plane_approvers_team_id; read = view runs only; apply = may also confirm applies (variables stay read-only). The same level applies to production gcp/aws workload workspaces; non-production workload workspaces keep fixed write access. On projects that hold static secrets (the self-managed tfc-admin project and the saas project) the platform team always gets runs = read whatever this is set to: queuing a plan, including a CLI speculative plan, runs code that can read the workspace's environment variables."
   type        = string
   default     = "plan"
 
@@ -458,14 +458,38 @@ variable "tfc_admin_team_id" {
   }
 }
 
+variable "saas_outputs_reader_team_ids" {
+  description = "Map of saas-<name> workspace name to the TFC team ID (team-...) of its hand-created outputs-reader team. Each team gets custom access on its one saas workspace with state_versions = read-outputs (no state download, no variables, runs read-only) and nothing else. Its team token, created by an owner with an expiry and stored as a sensitive TFE_TOKEN only on the workload workspaces that bridge that stack (enable_saas_secret_bridge), lets the workload secret bridge read the outputs; tfc-admin never creates that token, so it is in no state. One team per stack: every value must be distinct and differ from every other team input. Empty = no grant."
+  type        = map(string)
+  default     = {}
+
+  validation {
+    condition     = alltrue([for t in values(var.saas_outputs_reader_team_ids) : can(regex("^team-[A-Za-z0-9]+$", t))])
+    error_message = "saas_outputs_reader_team_ids values must be TFC team IDs (team-...)."
+  }
+}
+
+# tflint-ignore: terraform_unused_declarations # removed input: its validation fails the plan while it is set
 variable "saas_outputs_reader_team_id" {
-  description = "TFC team ID (team-...) of the hand-created saas-outputs-reader team. It gets custom access on every saas-<name> workspace with state_versions = read-outputs (no state download, no variables, runs read-only) and nothing else. Its team token, created by an owner with an expiry and stored as a sensitive TFE_TOKEN only on workload workspaces that set enable_saas_secret_bridge, lets the workload secret bridge read saas outputs; tfc-admin never creates that token, so it is in no state. Must differ from every other team input. Null = no grant."
+  description = "Removed. Use saas_outputs_reader_team_ids (one team per saas-<name> workspace). A single team on every saas workspace let a non-production workload's token read production saas outputs."
+  type        = string
+  default     = null
+  deprecated  = "Use saas_outputs_reader_team_ids (one team per saas-<name> workspace)."
+
+  validation {
+    condition     = var.saas_outputs_reader_team_id == null
+    error_message = "saas_outputs_reader_team_id is removed: one team on every saas-* workspace let a non-production workload's token read production outputs. Set saas_outputs_reader_team_ids = { \"saas-<name>\" = \"team-...\" } with one dedicated team per stack (docs/runbooks/saas-bootstrap.md)."
+  }
+}
+
+variable "state_backup_team_id" {
+  description = "TFC team ID (team-...) whose team token the scheduled state export (.github/workflows/state-backup.yml, docs/runbooks/state-backup.md) uses: custom access with state_versions = read, runs = read and variables = none on every project except the security-only guardrails project. The token can read every state file, including sensitive values, so it must be a dedicated team kept in a branch-restricted GitHub environment. Null = no grant."
   type        = string
   default     = null
 
   validation {
-    condition     = var.saas_outputs_reader_team_id == null || can(regex("^team-[A-Za-z0-9]+$", var.saas_outputs_reader_team_id))
-    error_message = "saas_outputs_reader_team_id must be a TFC team ID (team-...)."
+    condition     = var.state_backup_team_id == null || can(regex("^team-[A-Za-z0-9]+$", var.state_backup_team_id))
+    error_message = "state_backup_team_id must be a TFC team ID (team-...)."
   }
 }
 
@@ -521,9 +545,14 @@ variable "opa_version" {
 }
 
 variable "terraform_version" {
-  description = "Terraform version constraint applied to every managed workspace (the repo requires >= 1.17, < 2.0). Null uses the TFC default."
+  description = "Exact Terraform version every managed workspace runs, so HCP Terraform applies with the version CI tests (.tool-versions; scripts/check-consistency.sh fails when this default differs). Bump it together with .tool-versions, .terraform-version and the workflows' TERRAFORM_VERSION. Null uses the TFC default (latest), which is not recommended."
   type        = string
-  default     = "~> 1.17"
+  default     = "1.17.1"
+
+  validation {
+    condition     = var.terraform_version == null || can(regex("^1\\.(1[7-9]|[2-9][0-9])\\.[0-9]+$", coalesce(var.terraform_version, "1.17.0")))
+    error_message = "terraform_version must be an exact 1.x release of at least 1.17 such as 1.17.1 (the repo requires >= 1.17, < 2.0), not a constraint like ~> 1.17, so plans and applies use the version CI tests."
+  }
 }
 
 variable "vcs_repo" {

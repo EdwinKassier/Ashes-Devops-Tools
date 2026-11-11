@@ -1,0 +1,272 @@
+name: Terraform State Backup
+
+# Exports the current state version of every HCP Terraform workspace to a
+# versioned, write-once bucket outside HCP Terraform, so an organization
+# deletion, a compromised owner token or an HCP outage cannot take the only
+# copy of the estate's state with it. Restore steps: docs/runbooks/state-backup.md.
+#
+# Targets (one or both; each authenticates with GitHub OIDC, no static keys):
+#   - S3:  vars.STATE_BACKUP_S3_BUCKET, vars.STATE_BACKUP_AWS_ROLE_ARN,
+#          vars.STATE_BACKUP_AWS_REGION. Bucket with versioning and Object Lock
+#          (default retention), SSE-KMS; the role may only PutObject/GetObject
+#          under the prefix (no delete).
+#   - GCS: vars.STATE_BACKUP_GCS_BUCKET, vars.STATE_BACKUP_GCP_WIF_PROVIDER,
+#          vars.STATE_BACKUP_GCP_SA. Bucket with a locked retention policy and
+#          CMEK; the service account holds roles/storage.objectCreator only.
+# Source:
+#   - secrets.TFC_TOKEN_STATE_BACKUP  team token of the dedicated state-backup
+#          team (envs/tfc-admin state_backup_team_id: state_versions = read,
+#          nothing else). It can read every state, including sensitive values,
+#          so it lives in the `tfc-state-backup` GitHub environment, restricted
+#          to the default branch.
+#   - vars.TFC_ORGANIZATION
+#   - vars.STATE_BACKUP_WORKSPACES  (optional) JSON array of workspace names
+#          that MUST be exported; a missing one fails the run. Default: every
+#          workspace the token can see.
+#   - vars.STATE_BACKUP_PREFIX  (optional) object-name prefix, default "tfstate/".
+#
+# Fail-closed like drift-detection.yml: with no source token or no complete
+# target the run FAILS, as does any workspace that cannot be exported. Set the
+# repository variable STATE_BACKUP_OPT_OUT=true to acknowledge running without
+# backups; scheduled runs then skip with a warning (a manual dispatch still
+# fails). Nothing is skipped silently.
+#
+# Objects are named <prefix><org>/<workspace>/<created-at>_serial-<n>_<sv-id>.tfstate
+# and never overwritten, so the bucket keeps every exported version.
+
+on:
+  schedule:
+    - cron: '30 5 * * *'  # Daily at 05:30 UTC
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: state-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Export HCP Terraform state
+    runs-on: ubuntu-latest
+    environment: tfc-state-backup
+    timeout-minutes: 60
+    permissions:
+      id-token: write  # GitHub OIDC to AWS / GCP; no repository access needed
+    steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      # Not block yet: the S3 regional endpoint and the GCP endpoints depend on
+      # the configured buckets. Move to block with the endpoints the
+      # StepSecurity audit log reports (app.terraform.io, archivist.terraform.io
+      # and the cloud endpoints of this estate).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Check backup configuration
+        id: cfg
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN_STATE_BACKUP }}
+          TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
+          S3_BUCKET: ${{ vars.STATE_BACKUP_S3_BUCKET }}
+          AWS_ROLE_ARN: ${{ vars.STATE_BACKUP_AWS_ROLE_ARN }}
+          AWS_REGION: ${{ vars.STATE_BACKUP_AWS_REGION }}
+          GCS_BUCKET: ${{ vars.STATE_BACKUP_GCS_BUCKET }}
+          GCP_WIF_PROVIDER: ${{ vars.STATE_BACKUP_GCP_WIF_PROVIDER }}
+          GCP_SA: ${{ vars.STATE_BACKUP_GCP_SA }}
+          OPT_OUT: ${{ vars.STATE_BACKUP_OPT_OUT }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          errors=()
+          [ -n "$TFC_TOKEN" ] || errors+=("secret TFC_TOKEN_STATE_BACKUP is not set")
+          [ -n "$TFC_ORGANIZATION" ] || errors+=("variable TFC_ORGANIZATION is not set")
+          s3=false
+          gcs=false
+          if [ -n "$S3_BUCKET$AWS_ROLE_ARN$AWS_REGION" ]; then
+            if [ -n "$S3_BUCKET" ] && [ -n "$AWS_ROLE_ARN" ] && [ -n "$AWS_REGION" ]; then
+              s3=true
+            else
+              errors+=("S3 target is incomplete: set STATE_BACKUP_S3_BUCKET, _AWS_ROLE_ARN and _AWS_REGION")
+            fi
+          fi
+          if [ -n "$GCS_BUCKET$GCP_WIF_PROVIDER$GCP_SA" ]; then
+            if [ -n "$GCS_BUCKET" ] && [ -n "$GCP_WIF_PROVIDER" ] && [ -n "$GCP_SA" ]; then
+              gcs=true
+            else
+              errors+=("GCS target is incomplete: set STATE_BACKUP_GCS_BUCKET, _GCP_WIF_PROVIDER and _GCP_SA")
+            fi
+          fi
+          if [ "$s3" = false ] && [ "$gcs" = false ]; then
+            errors+=("no backup target is configured (S3 and/or GCS)")
+          fi
+          {
+            echo "s3=${s3}"
+            echo "gcs=${gcs}"
+          } >> "$GITHUB_OUTPUT"
+          if [ "${#errors[@]}" -eq 0 ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "configured=false" >> "$GITHUB_OUTPUT"
+          for e in "${errors[@]}"; do echo "::error::State backup: ${e}."; done
+          if [ "$OPT_OUT" = "true" ] && [ "$EVENT_NAME" != "workflow_dispatch" ]; then
+            echo "::warning::State backup did NOT run and STATE_BACKUP_OPT_OUT=true:" \
+              "Terraform state has no copy outside HCP Terraform."
+            exit 0
+          fi
+          echo "::error::Configure the state backup (docs/runbooks/state-backup.md) or set" \
+            "the repository variable STATE_BACKUP_OPT_OUT=true to acknowledge running without it."
+          exit 1
+
+      - name: Authenticate to AWS (GitHub OIDC)
+        if: steps.cfg.outputs.configured == 'true' && steps.cfg.outputs.s3 == 'true'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd  # v6.3.0
+        with:
+          role-to-assume: ${{ vars.STATE_BACKUP_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.STATE_BACKUP_AWS_REGION }}
+          role-session-name: state-backup-${{ github.run_id }}-${{ github.run_attempt }}
+          role-duration-seconds: 3600
+
+      - name: Authenticate to GCP (Workload Identity Federation)
+        if: steps.cfg.outputs.configured == 'true' && steps.cfg.outputs.gcs == 'true'
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.STATE_BACKUP_GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.STATE_BACKUP_GCP_SA }}
+
+      - name: Export current state versions
+        if: steps.cfg.outputs.configured == 'true'
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN_STATE_BACKUP }}
+          TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
+          REQUIRED_WORKSPACES: ${{ vars.STATE_BACKUP_WORKSPACES }}
+          PREFIX: ${{ vars.STATE_BACKUP_PREFIX || 'tfstate/' }}
+          S3_ENABLED: ${{ steps.cfg.outputs.s3 }}
+          S3_BUCKET: ${{ vars.STATE_BACKUP_S3_BUCKET }}
+          GCS_ENABLED: ${{ steps.cfg.outputs.gcs }}
+          GCS_BUCKET: ${{ vars.STATE_BACKUP_GCS_BUCKET }}
+        run: |
+          set -uo pipefail
+          umask 077
+          work="${RUNNER_TEMP}/state-backup"
+          mkdir -p "$work"
+          trap 'rm -rf "$work"' EXIT
+          TFC_API="https://app.terraform.io/api/v2"
+          api() {
+            curl --silent --show-error --fail-with-body --max-time 60 --connect-timeout 10 \
+              --header "Authorization: Bearer ${TFC_TOKEN}" \
+              --header "Content-Type: application/vnd.api+json" "$1"
+          }
+
+          # Every workspace the token can see (paginated).
+          : > "$work/visible"
+          page=1
+          while [ -n "$page" ] && [ "$page" != "null" ]; do
+            list_url="${TFC_API}/organizations/${TFC_ORGANIZATION}/workspaces"
+            resp=$(api "${list_url}?page%5Bsize%5D=100&page%5Bnumber%5D=${page}") \
+              || { echo "::error::Listing workspaces failed: ${resp}"; exit 1; }
+            echo "$resp" | jq -r '.data[] | "\(.attributes.name) \(.id)"' >> "$work/visible"
+            page=$(echo "$resp" | jq -r '.meta.pagination["next-page"] // empty')
+          done
+          visible=$(wc -l < "$work/visible" | tr -d ' ')
+          echo "The token can see ${visible} workspace(s) in ${TFC_ORGANIZATION}."
+
+          failed=0
+          if [ -n "$REQUIRED_WORKSPACES" ]; then
+            for ws in $(echo "$REQUIRED_WORKSPACES" | jq -r '.[]'); do
+              if ! awk -v w="$ws" '$1 == w { f = 1 } END { exit f ? 0 : 1 }' "$work/visible"; then
+                echo "::error::Required workspace '${ws}' is not visible to TFC_TOKEN_STATE_BACKUP" \
+                  "(missing, or the state-backup team has no access to its project)."
+                failed=$((failed + 1))
+              fi
+            done
+          fi
+          [ "$visible" -gt 0 ] || { echo "::error::The token sees no workspace."; exit 1; }
+
+          exported=0
+          present=0
+          empty=0
+          # fd 3, so no command in the loop can consume the workspace list.
+          while read -r -u 3 ws ws_id; do
+            sv=$(api "${TFC_API}/workspaces/${ws_id}/current-state-version" 2>/dev/null)
+            if [ -z "$sv" ] || ! echo "$sv" | jq -e '.data.id' >/dev/null 2>&1; then
+              # A workspace that has never applied has no state (HTTP 404).
+              if echo "$sv" | jq -e '.errors[]? | select(.status == "404")' >/dev/null 2>&1; then
+                echo "::notice::${ws}: no state yet, nothing to export."
+                empty=$((empty + 1))
+              else
+                echo "::error::${ws}: could not read the current state version: ${sv}"
+                failed=$((failed + 1))
+              fi
+              continue
+            fi
+            sv_id=$(echo "$sv" | jq -r '.data.id')
+            serial=$(echo "$sv" | jq -r '.data.attributes.serial')
+            created=$(echo "$sv" | jq -r '.data.attributes["created-at"]' | tr -d ':')
+            url=$(echo "$sv" | jq -r '.data.attributes["hosted-state-download-url"] // empty')
+            key="${PREFIX}${TFC_ORGANIZATION}/${ws}/${created}_serial-${serial}_${sv_id}.tfstate"
+            file="${work}/${sv_id}.tfstate"
+            if [ -z "$url" ] || ! curl --silent --show-error --fail --location --max-time 300 \
+                --header "Authorization: Bearer ${TFC_TOKEN}" --output "$file" "$url"; then
+              echo "::error::${ws}: could not download state version ${sv_id}."
+              failed=$((failed + 1))
+              continue
+            fi
+            # Never store something that is not the state it claims to be.
+            got_serial=$(jq -r '.serial' "$file" 2>/dev/null)
+            lineage=$(jq -r '.lineage // empty' "$file" 2>/dev/null)
+            if [ "$got_serial" != "$serial" ] || [ -z "$lineage" ]; then
+              echo "::error::${ws}: downloaded state ${sv_id} is not state JSON with serial ${serial}."
+              failed=$((failed + 1))
+              continue
+            fi
+            ok=true
+            new=false
+            if [ "$S3_ENABLED" = "true" ]; then
+              if aws s3api head-object --bucket "$S3_BUCKET" --key "$key" >/dev/null 2>&1; then
+                :
+              elif aws s3api put-object --bucket "$S3_BUCKET" --key "$key" --body "$file" \
+                  --checksum-algorithm SHA256 --content-type application/json >/dev/null; then
+                new=true
+              else
+                echo "::error::${ws}: upload to s3://${S3_BUCKET}/${key} failed."
+                ok=false
+              fi
+            fi
+            if [ "$GCS_ENABLED" = "true" ]; then
+              if gcloud storage objects describe "gs://${GCS_BUCKET}/${key}" >/dev/null 2>&1; then
+                :
+              elif gcloud storage cp --no-clobber --content-type=application/json --quiet \
+                  "$file" "gs://${GCS_BUCKET}/${key}" >/dev/null; then
+                new=true
+              else
+                echo "::error::${ws}: upload to gs://${GCS_BUCKET}/${key} failed."
+                ok=false
+              fi
+            fi
+            rm -f "$file"
+            if [ "$ok" = true ]; then
+              if [ "$new" = true ]; then exported=$((exported + 1)); else present=$((present + 1)); fi
+              echo "${ws}: serial ${serial} (${sv_id}) backed up."
+            else
+              failed=$((failed + 1))
+            fi
+          done 3< "$work/visible"
+
+          {
+            echo "## Terraform state backup"
+            echo ""
+            echo "| Result | Workspaces |"
+            echo "|---|---|"
+            echo "| Newly exported | ${exported} |"
+            echo "| Already in the bucket | ${present} |"
+            echo "| No state yet | ${empty} |"
+            echo "| Failed | ${failed} |"
+            echo ""
+            echo "Targets: S3 ${S3_ENABLED}, GCS ${GCS_ENABLED}. Restore: docs/runbooks/state-backup.md."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$failed" -gt 0 ]; then
+            echo "::error::${failed} workspace(s) were not backed up (see above)."
+            exit 1
+          fi

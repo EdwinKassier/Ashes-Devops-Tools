@@ -61,13 +61,13 @@ gcp:
   allowed_regions:
     - europe-west2
   network:
-    hub_cidr_block: 10.100.0.0/16
-    dns_hub_cidr_block: 10.101.0.0/16
+    hub_cidr_block: 10.0.0.0/16
+    dns_hub_cidr_block: 10.1.0.0/16
   # One environment only: the sandbox proves the upgrade path, not scale.
   environments:
     dev:
       display_name: Sandbox Development
-      cidr_block: 10.110.0.0/16
+      cidr_block: 10.10.0.0/16
       budget_monthly_limit: 100
       is_production: false
       labels:
@@ -98,7 +98,7 @@ aws:
   workload_environments:
     dev:
       account_key: workload_dev
-      vpc_cidr: 10.120.0.0/16
+      vpc_cidr: 10.72.0.0/16
   network:
     egress_domain_allowlist:
       - .amazonaws.com

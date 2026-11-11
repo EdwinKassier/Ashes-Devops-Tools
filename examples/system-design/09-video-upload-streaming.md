@@ -549,7 +549,7 @@ aws:
   workload_environments:
     prod:
       account_key: workload_prod
-      vpc_cidr: 10.30.0.0/16
+      vpc_cidr: 10.72.0.0/16
       services:
         upload-api:
           path_patterns: ["/v1/videos", "/v1/videos/*"]

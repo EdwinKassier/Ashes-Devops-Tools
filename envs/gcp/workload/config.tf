@@ -120,6 +120,14 @@ locals {
       dns_domain      = tostring(local.lz.gcp.contracts.network_hub.dns_domain)
       ncc_hub_id      = try(tostring(local.lz.gcp.contracts.network_hub.ncc_hub_id), null)
       ncc_spoke_group = try(tostring(local.lz.gcp.contracts.network_hub.ncc_spoke_group), null)
+
+      egress_proxy_service_attachment = try(tostring(local.lz.gcp.contracts.network_hub.egress_proxy_service_attachment), null)
+    }
+
+    # gcp.environments.<env>.egress_proxy: opt-in central egress (preview).
+    environment_egress_proxy = {
+      for env, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : env => tobool(e.egress_proxy)
+      if try(e.egress_proxy, null) != null
     }
 
     # Hub connectivity: gcp.environments.<env>.network_connectivity, else

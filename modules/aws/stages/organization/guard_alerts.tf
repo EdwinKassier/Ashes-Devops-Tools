@@ -151,6 +151,13 @@ resource "aws_kms_key" "guard_alerts" {
       },
     ]
   })
+
+  # The key is unconditional, so it carries prevent_destroy itself (no toggle):
+  # a plan that destroys or replaces it fails. To retire it deliberately,
+  # remove it from state first.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_kms_alias" "guard_alerts" {

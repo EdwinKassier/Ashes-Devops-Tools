@@ -48,10 +48,10 @@ run "production_patterns_exclude_sandbox_config" {
     error_message = "every production workspace must trigger on its landing-zone config and workspace_variables_file, and never on config/sandbox/**."
   }
 
-  # Existing patterns stay: the root's own dir and its module domains.
+  # Existing patterns stay: the root's own dir and the modules it composes.
   assert {
-    condition     = toset(module.workspace["gcp-organization"].trigger_patterns) == toset(["envs/gcp/organization/**", "modules/gcp/**", "config/landing-zone.yaml", "config/tfc-workspaces.sandbox-test-missing.yaml"])
-    error_message = "the estate config patterns are added to the working-directory and module-domain patterns."
+    condition     = toset(module.workspace["gcp-projects"].trigger_patterns) == toset(["envs/gcp/projects/**", "modules/gcp/project/**", "modules/gcp/stages/projects/**", "config/landing-zone.yaml", "config/tfc-workspaces.sandbox-test-missing.yaml"])
+    error_message = "the estate config patterns are added to the working-directory and composed-module patterns."
   }
 
   assert {
@@ -103,8 +103,8 @@ run "sandbox_patterns_only_sandbox_config" {
   }
 
   assert {
-    condition     = toset(module.workspace["aws-workload-dev"].trigger_patterns) == toset(["envs/aws/workload/**", "modules/aws/**", "config/sandbox/**"])
-    error_message = "the sandbox pattern is added to the working-directory and module-domain patterns."
+    condition     = toset(module.workspace["aws-identity"].trigger_patterns) == toset(["envs/aws/identity/**", "modules/aws/iam/iam-identity-center/**", "config/sandbox/**"])
+    error_message = "the sandbox pattern is added to the working-directory and composed-module patterns."
   }
 }
 

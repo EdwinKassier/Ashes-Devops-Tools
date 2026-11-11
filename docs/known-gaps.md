@@ -420,6 +420,62 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   `examples/presets/prod-gcp-workload.yaml`, consistency-tested). Other roots
   still need the `-var-file` overlays or TFC variables.
 
+## OPEN — residual items from the 2026-11-11 audit remediation
+
+[The audit](audit/2026-11-11-expert-audit.md) has the findings. These parts are not closed:
+
+- **Validate in the sandbox (mock-tested only):**
+  - GCP rejects a peering to a network that does not exist yet. The hub-side
+    `hub-to-<env>` peering design relies on it, and on the `google_compute_networks`
+    attribute `networks`.
+  - The log-archive CloudTrail grants now also require `aws:SourceArn` =
+    `arn:<p>:cloudtrail:*:<management>:trail/*`. Confirm one real delivery,
+    including from a delegated-admin trail.
+  - Server access logs arrive in the companion `<archive>-access-logs` bucket.
+  - A no-op folder IAM write passes the `modifiedGrantsByRole` delegation condition.
+  - The hub Secure Web Proxy (preview): the PSC endpoint, the FQDN allowlist,
+    and a spoke private tier with no Cloud NAT.
+- **gcp-projects delegation still admits data-plane admin roles.** projects-apply
+  can grant itself `storage.admin`, `secretmanager.admin`, `run.admin` and similar
+  on environment folders. The IAM-controlling roles moved to gcp-organization.
+  Moving every workload folder grant there would close this.
+- **No default VPC-SC ingress rule for the TFC workload identities.** Add one
+  before you enforce an environment perimeter (`examples/vpc-sc`).
+- **GKE Autopilot still runs in the Shared VPC host project** in production.
+- **The Secure Web Proxy has no TLS inspection.** Rules match on host name only.
+- **AWS data-plane alarms are not implemented:** TGW `PacketDropCountBlackhole` /
+  `NoRoute`, Network Firewall `DroppedPackets`, Site-to-Site VPN `TunnelState`.
+- **The tfc-plan API-key deny cannot use `plan_role_data_read_exempt_arns`.** A
+  stack that plans REST API keys must turn the deny off.
+- **The deny-tamper SCP does not cover an external apply boundary** set through
+  `apply_permissions_boundary_arn`.
+- **Security Lake in extra Regions** uses S3-managed keys unless
+  `additional_region_kms_key_ids` names a regional key.
+- **`tfc_admin_guard` cannot see a workspace removed from a policy set** when the
+  same plan creates a workspace (`workspace_ids` is unknown).
+- **gcp-guardrails state is backed up only** if the security team grants the
+  state-backup team access by hand.
+- **One `config/landing-zone.yaml` edit still queues a plan on every workspace.**
+  Trigger patterns are now scoped to each root's modules, but the file itself is
+  shared. Splitting it per layer and environment is open.
+- **Services still live in the workload root.** [ADR 0015](adr/0015-team-owned-app-stacks.md)
+  (team-owned app stacks) is Proposed.
+- **`aws/stages/organization` is still one large stage.** [ADR 0016](adr/0016-split-aws-organization-stage.md)
+  is Proposed.
+- **Stage tests:** `aws/stages/security` and the gcp-organization CMEK path now
+  have real wiring suites. Other stages still rely on `override_module`, and no
+  stage has a real-apply e2e test.
+- **Root config suites without assertions:** aws/security, gcp/bootstrap,
+  gcp/guardrails, gcp/network-hub, gcp/organization.
+- **gcp-network-hub has three untyped (`any`) inputs** without unknown-key checks.
+  An object type drops undeclared keys silently, so map inputs here use `any`
+  plus key validation instead.
+- **CI hardening:** `check-jsonschema` is still installed without hashes
+  (`terraform-plan.yml`). harden-runner is still in audit mode for docs-bot,
+  e2e-sandbox and state-backup.
+- **Release:** one SemVer for all 125 modules, no signed tags or build provenance.
+- **Bus factor:** one maintainer. Code cannot fix this; see the operator items below.
+
 ## OPEN — operator actions and items carried from archived audits
 
 `docs/audit/archive/` holds superseded audits; this file is the single list of open items.
@@ -595,8 +651,9 @@ Enable only after validating in a real/test org. Each defaults to prior behaviou
   - For an organization trail, `aws:SourceAccount` is the management account,
     and the KMS encryption context is the trail ARN in the management account.
     The log CMK's `kms:EncryptionContext:aws:cloudtrail:arn` pattern
-    (`<management>:trail/*`) and the log-archive bucket's `aws:SourceOrgID`
-    statements are name-agnostic, so they admit the new trail unchanged. The
+    (`<management>:trail/*`) and the log-archive bucket's `aws:SourceOrgID` and
+    `aws:SourceArn` (`arn:<p>:cloudtrail:*:<management>:trail/*`) statements are
+    name-agnostic, so they admit the new trail unchanged. The
     open A1 item (`aws:SourceOrgID` on CloudTrail's KMS calls) applies to it
     exactly as to the old trail.
 
@@ -810,5 +867,6 @@ side (all mock-tested, secure defaults):
   `hashicorp/*` PR, labelled for review, never auto-merged, provider majors
   disabled); Dependabot keeps GitHub Actions and the CI Python tooling. The
   Renovate GitHub App still has to be installed by an operator. Open calls:
-  `semanticCommits` is off (the `build(deps):` prefix is set by hand), and
+  `semanticCommits` is off (the `fix(deps):` prefix is set by hand; Dependabot
+  also updates the `pg` package of `vault-secrets`), and
   `required_version` / provider-major bumps stay manual by design.

@@ -115,14 +115,14 @@ run "plan_role_is_read_only_and_roles_are_account_scoped" {
   command = plan
 
   assert {
-    condition     = jsonencode(jsondecode(output.template_body).Resources.TfcPlanRoleNetwork.Properties.ManagedPolicyArns) == jsonencode([{ "Fn::Sub" = "arn:$${AWS::Partition}:iam::aws:policy/ReadOnlyAccess" }])
-    error_message = "the plan role must carry only ReadOnlyAccess"
+    condition     = jsonencode(jsondecode(output.template_body).Resources.TfcPlanRoleNetwork.Properties.ManagedPolicyArns) == jsonencode([{ "Fn::Sub" = "arn:$${AWS::Partition}:iam::aws:policy/ReadOnlyAccess" }, { Ref = "TfcPlanDataReadDeny" }])
+    error_message = "the plan role must carry only ReadOnlyAccess plus the read deny"
   }
 
   assert {
     condition = alltrue([
       for name, r in jsondecode(output.template_body).Resources :
-      !startswith(name, "TfcPlanRole") || alltrue([for a in r.Properties.ManagedPolicyArns : !strcontains(a["Fn::Sub"], "AdministratorAccess") && !strcontains(a["Fn::Sub"], "PowerUserAccess")])
+      !startswith(name, "TfcPlanRole") || alltrue([for a in r.Properties.ManagedPolicyArns : !strcontains(try(a["Fn::Sub"], ""), "AdministratorAccess") && !strcontains(try(a["Fn::Sub"], ""), "PowerUserAccess")])
     ])
     error_message = "no plan role may carry a write policy"
   }
@@ -256,9 +256,10 @@ run "apply_role_capped_by_embedded_boundary" {
         "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:role/tfc-apply",
         "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:oidc-provider/app.terraform.io",
         "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:policy/tfc-apply-boundary",
+        "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:policy/tfc-plan-data-read-deny",
       ])
     ])
-    error_message = "the boundary must stop the apply role tampering with the TFC roles, OIDC provider or the boundary"
+    error_message = "the boundary must stop the apply role tampering with the TFC roles, OIDC provider, the boundary or the plan-role read deny"
   }
 
   assert {
@@ -348,8 +349,8 @@ run "embedded_boundary_is_protected_by_default" {
   command = plan
 
   assert {
-    condition     = contains(local.baseline_protected_arns, local.apply_boundary_arn_sub) && length(local.baseline_protected_arns) == 4
-    error_message = "by default the embedded boundary stays the fourth protected ARN."
+    condition     = contains(local.baseline_protected_arns, local.apply_boundary_arn_sub) && length(local.baseline_protected_arns) == 5
+    error_message = "by default the embedded boundary and the plan-role deny are among the five protected ARNs."
   }
 }
 
@@ -412,30 +413,48 @@ run "boundary_propagation_can_be_disabled" {
 }
 
 run "plan_role_denies_data_plane_reads" {
-  # ReadOnlyAccess grants data reads; the plan role gets an inline deny.
+  # ReadOnlyAccess grants data reads; every plan role gets the shared deny
+  # managed policy (one per account, so the template does not grow per binding).
   command = plan
 
   assert {
-    condition = alltrue([
-      for name, r in jsondecode(output.template_body).Resources :
-      !startswith(name, "TfcPlanRole") || (
-        r.Properties.Policies[0].PolicyDocument.Statement[0].Effect == "Deny" &&
-        r.Properties.Policies[0].PolicyDocument.Statement[0].Resource == "*" &&
-        length(setsubtract(
-          ["s3:GetObject*", "secretsmanager:GetSecretValue", "ssm:GetParameter*", "kms:Decrypt", "dynamodb:GetItem", "dynamodb:BatchGetItem", "dynamodb:Query", "dynamodb:Scan", "sqs:ReceiveMessage", "kinesis:GetRecords", "logs:GetLogEvents", "logs:FilterLogEvents", "logs:StartQuery", "rds-data:*", "athena:GetQueryResults"],
-          r.Properties.Policies[0].PolicyDocument.Statement[0].Action
-        )) == 0
-      )
-    ])
-    error_message = "every plan role must carry the data-plane read deny on all resources"
+    condition = (
+      jsondecode(output.template_body).Resources.TfcPlanDataReadDeny.Type == "AWS::IAM::ManagedPolicy" &&
+      jsondecode(output.template_body).Resources.TfcPlanDataReadDeny.Properties.ManagedPolicyName == "tfc-plan-data-read-deny" &&
+      !contains(keys(jsondecode(output.template_body).Resources.TfcPlanDataReadDeny), "Condition") &&
+      jsondecode(output.template_body).Resources.TfcPlanDataReadDeny.Properties.PolicyDocument.Statement[0].Effect == "Deny" &&
+      jsondecode(output.template_body).Resources.TfcPlanDataReadDeny.Properties.PolicyDocument.Statement[0].Resource == "*" &&
+      length(setsubtract(
+        ["s3:GetObject*", "secretsmanager:GetSecretValue", "ssm:GetParameter*", "kms:Decrypt", "dynamodb:GetItem", "dynamodb:BatchGetItem", "dynamodb:Query", "dynamodb:Scan", "sqs:ReceiveMessage", "kinesis:GetRecords", "logs:GetLogEvents", "logs:FilterLogEvents", "logs:StartQuery", "rds-data:*", "athena:GetQueryResults"],
+        jsondecode(output.template_body).Resources.TfcPlanDataReadDeny.Properties.PolicyDocument.Statement[0].Action
+      )) == 0
+    )
+    error_message = "the account must carry the data-plane read deny managed policy on all resources"
   }
 
   assert {
     condition = alltrue([
       for name, r in jsondecode(output.template_body).Resources :
-      !startswith(name, "TfcApplyRole") || !contains(keys(r.Properties), "Policies")
+      !startswith(name, "TfcPlanRole") || (
+        contains(r.Properties.ManagedPolicyArns, { Ref = "TfcPlanDataReadDeny" }) &&
+        !contains(keys(r.Properties), "Policies")
+      )
+    ])
+    error_message = "every plan role must attach the deny managed policy"
+  }
+
+  assert {
+    condition = alltrue([
+      for name, r in jsondecode(output.template_body).Resources :
+      !startswith(name, "TfcApplyRole") || (!contains(keys(r.Properties), "Policies") && !contains(r.Properties.ManagedPolicyArns, { Ref = "TfcPlanDataReadDeny" }))
     ])
     error_message = "the data-plane deny applies to the plan role only"
+  }
+
+  # The apply role must not detach or re-version the plan role's deny.
+  assert {
+    condition     = contains(local.baseline_protected_arns, local.plan_read_deny_arn_sub)
+    error_message = "the plan-role deny policy must be in the apply role's tamper-protected set"
   }
 }
 
@@ -448,8 +467,8 @@ run "plan_role_data_read_exemptions_render_as_not_resource" {
 
   assert {
     condition = (
-      jsondecode(output.template_body).Resources.TfcPlanRoleNetwork.Properties.Policies[0].PolicyDocument.Statement[0].NotResource == ["arn:aws:secretsmanager:eu-west-2:444444444444:secret:supabase-connection-*"] &&
-      !contains(keys(jsondecode(output.template_body).Resources.TfcPlanRoleNetwork.Properties.Policies[0].PolicyDocument.Statement[0]), "Resource")
+      jsondecode(output.template_body).Resources.TfcPlanDataReadDeny.Properties.PolicyDocument.Statement[0].NotResource == ["arn:aws:secretsmanager:eu-west-2:444444444444:secret:supabase-connection-*"] &&
+      !contains(keys(jsondecode(output.template_body).Resources.TfcPlanDataReadDeny.Properties.PolicyDocument.Statement[0]), "Resource")
     )
     error_message = "exempt ARNs must render as NotResource (and replace Resource = *)"
   }
@@ -464,10 +483,10 @@ run "plan_role_data_plane_deny_covers_log_and_secret_read_paths" {
         "ssm:GetCommandInvocation", "logs:GetLogRecord", "logs:GetLogEvents", "logs:FilterLogEvents", "logs:StartQuery",
         "rds:DownloadDBLogFilePortion", "es:ESHttpGet", "cassandra:Select", "codecommit:GitPull", "codecommit:GetFile",
         "s3:GetObject*", "secretsmanager:BatchGetSecretValue", "kms:GenerateDataKey*",
-        ] : contains(jsondecode(output.template_body).Resources.TfcPlanRoleNetwork.Properties.Policies[0].PolicyDocument.Statement[0].Action, a)
+        ] : contains(jsondecode(output.template_body).Resources.TfcPlanDataReadDeny.Properties.PolicyDocument.Statement[0].Action, a)
       ]) &&
-      !anytrue([for a in ["lambda:GetFunction", "ec2:GetLaunchTemplateData", "apigateway:GET"] : contains(jsondecode(output.template_body).Resources.TfcPlanRoleNetwork.Properties.Policies[0].PolicyDocument.Statement[0].Action, a)]) &&
-      length(jsonencode(jsondecode(output.template_body).Resources.TfcPlanRoleNetwork.Properties.Policies[0].PolicyDocument)) < 10240
+      !anytrue([for a in ["lambda:GetFunction", "apigateway:GET"] : contains(jsondecode(output.template_body).Resources.TfcPlanDataReadDeny.Properties.PolicyDocument.Statement[0].Action, a)]) &&
+      length(jsonencode(jsondecode(output.template_body).Resources.TfcPlanDataReadDeny.Properties.PolicyDocument)) < 6144
     )
     error_message = "member plan roles must deny the full data-plane read set (never refresh-needed reads) within the inline size limit."
   }
@@ -481,8 +500,11 @@ run "plan_role_data_read_deny_can_be_disabled" {
   }
 
   assert {
-    condition     = !contains(keys(jsondecode(output.template_body).Resources.TfcPlanRoleNetwork.Properties), "Policies")
-    error_message = "enable_plan_role_data_read_deny = false must omit the inline deny"
+    condition = (
+      !contains(keys(jsondecode(output.template_body).Resources), "TfcPlanDataReadDeny") &&
+      !contains(jsondecode(output.template_body).Resources.TfcPlanRoleNetwork.Properties.ManagedPolicyArns, { Ref = "TfcPlanDataReadDeny" })
+    )
+    error_message = "enable_plan_role_data_read_deny = false must omit the deny policy and its attachment"
   }
 }
 
@@ -553,14 +575,14 @@ run "plan_role_denies_secret_bearing_reads_not_needed_for_refresh" {
   assert {
     condition = length(setsubtract(
       ["ec2:GetPasswordData", "kms:GenerateDataKey*", "secretsmanager:BatchGetSecretValue", "glue:GetConnection", "glue:GetConnections"],
-      jsondecode(output.template_body).Resources.TfcPlanRoleNetwork.Properties.Policies[0].PolicyDocument.Statement[0].Action
+      jsondecode(output.template_body).Resources.TfcPlanDataReadDeny.Properties.PolicyDocument.Statement[0].Action
     )) == 0
     error_message = "the plan-role deny must cover GetPasswordData, GenerateDataKey*, BatchGetSecretValue and Glue connection reads"
   }
 
   # ssm:GetParameter* covers GetParameterHistory.
   assert {
-    condition     = contains(jsondecode(output.template_body).Resources.TfcPlanRoleNetwork.Properties.Policies[0].PolicyDocument.Statement[0].Action, "ssm:GetParameter*")
+    condition     = contains(jsondecode(output.template_body).Resources.TfcPlanDataReadDeny.Properties.PolicyDocument.Statement[0].Action, "ssm:GetParameter*")
     error_message = "ssm:GetParameter* (incl. GetParameterHistory) must be denied"
   }
 
@@ -568,7 +590,7 @@ run "plan_role_denies_secret_bearing_reads_not_needed_for_refresh" {
   assert {
     condition = alltrue([
       for a in ["lambda:GetFunction", "lambda:GetFunctionConfiguration", "ecs:DescribeTaskDefinition", "ec2:DescribeInstanceAttribute"] :
-      !contains(jsondecode(output.template_body).Resources.TfcPlanRoleNetwork.Properties.Policies[0].PolicyDocument.Statement[0].Action, a)
+      !contains(jsondecode(output.template_body).Resources.TfcPlanDataReadDeny.Properties.PolicyDocument.Statement[0].Action, a)
     ])
     error_message = "refresh-critical reads (lambda:GetFunction*, ecs:DescribeTaskDefinition, ec2:DescribeInstanceAttribute) must not be denied"
   }
@@ -681,5 +703,82 @@ run "github_provider_opt_out" {
   assert {
     condition     = !contains(keys(jsondecode(output.template_body).Resources), "GithubOidcProvider")
     error_message = "create_github_oidc_provider = false must omit the GitHub provider."
+  }
+}
+
+# Secret-bearing reads that ReadOnlyAccess grants and that Terraform refresh of
+# the resources this repo manages never calls.
+run "plan_role_denies_secret_bearing_control_plane_reads" {
+  command = plan
+
+  assert {
+    condition = length(setsubtract(
+      [
+        "ec2:GetLaunchTemplateData", "ec2:DescribeLaunchTemplateVersions", "autoscaling:DescribeLaunchConfigurations",
+        "codebuild:BatchGetProjects", "codebuild:BatchGetBuilds", "lambda:GetLayerVersion",
+        "cognito-idp:DescribeUserPoolClient", "appsync:ListApiKeys", "states:GetExecutionHistory", "states:DescribeExecution",
+        "lightsail:GetInstanceAccessDetails", "lightsail:GetRelationalDatabaseMasterUserPassword",
+        "glacier:GetJobOutput", "elasticbeanstalk:DescribeConfigurationSettings",
+        "ecr:GetAuthorizationToken", "codecommit:GetBlob", "codeartifact:ReadFromRepository", "timestream:Select",
+      ],
+      jsondecode(output.template_body).Resources.TfcPlanDataReadDeny.Properties.PolicyDocument.Statement[0].Action
+    )) == 0
+    error_message = "the plan-role deny must cover launch-template user data, CodeBuild env vars, Cognito/AppSync secrets, Step Functions data, Lightsail, Glacier and Beanstalk reads"
+  }
+
+  # API key values: apigateway:GET denied on the key paths only, so refresh of
+  # HTTP APIs (also apigateway:GET) keeps working.
+  assert {
+    condition = (
+      one([for st in jsondecode(output.template_body).Resources.TfcPlanDataReadDeny.Properties.PolicyDocument.Statement : st if st.Sid == "DenyApiKeyValueReads"]).Effect == "Deny" &&
+      one([for st in jsondecode(output.template_body).Resources.TfcPlanDataReadDeny.Properties.PolicyDocument.Statement : st if st.Sid == "DenyApiKeyValueReads"]).Action == "apigateway:GET" &&
+      [for x in one([for st in jsondecode(output.template_body).Resources.TfcPlanDataReadDeny.Properties.PolicyDocument.Statement : st if st.Sid == "DenyApiKeyValueReads"]).Resource : x["Fn::Sub"]] == [
+        "arn:$${AWS::Partition}:apigateway:*::/apikeys",
+        "arn:$${AWS::Partition}:apigateway:*::/apikeys/*",
+        "arn:$${AWS::Partition}:apigateway:*::/usageplans/*/keys",
+        "arn:$${AWS::Partition}:apigateway:*::/usageplans/*/keys/*",
+      ]
+    )
+    error_message = "every plan role must deny apigateway:GET on the API key and usage-plan key paths only"
+  }
+
+  # IAM managed-policy quota (6,144 characters) and the inline template limit.
+  assert {
+    condition = (
+      length(jsonencode(jsondecode(output.template_body).Resources.TfcPlanDataReadDeny.Properties.PolicyDocument)) < 6144 &&
+      length(output.template_body) <= 51200
+    )
+    error_message = "the plan-role deny must fit the 6,144-character managed-policy quota and the template the inline template limit"
+  }
+}
+
+run "plan_role_api_key_deny_kept_with_exemptions" {
+  command = plan
+
+  variables {
+    plan_role_data_read_exempt_arns = ["arn:aws:secretsmanager:eu-west-2:444444444444:secret:supabase-connection-*"]
+  }
+
+  assert {
+    condition = (
+      length(jsondecode(output.template_body).Resources.TfcPlanDataReadDeny.Properties.PolicyDocument.Statement) == 2 &&
+      jsondecode(output.template_body).Resources.TfcPlanDataReadDeny.Properties.PolicyDocument.Statement[1].Sid == "DenyApiKeyValueReads"
+    )
+    error_message = "data-read exemptions must not drop the API key deny"
+  }
+}
+
+# Template growth: the deny is one managed policy per account, not per role,
+# so a large estate (24 bound accounts) still fits the inline template limit.
+run "template_fits_with_many_bindings" {
+  command = plan
+
+  variables {
+    account_bindings = { for i in range(24) : "acct_${i}" => { account_id = format("1000000000%02d", i), workspaces = ["aws-workload-env${i}"] } }
+  }
+
+  assert {
+    condition     = length(output.template_body) <= 51200
+    error_message = "the template with 24 bindings must stay within the 51,200-byte inline template limit"
   }
 }

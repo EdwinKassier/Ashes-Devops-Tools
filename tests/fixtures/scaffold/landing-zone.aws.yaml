@@ -109,8 +109,9 @@ gcp:
   billing_admin_groups:
     - gcp-billing-admins@acme.example
   # Break-glass Cloud Identity group (gcp-organization, gcp-guardrails). It is
-  # exempt from the admin-containment deny policy, which turns on automatically once any
-  # environment is_production. Create the group, with 2+ members, before the
+  # exempt from the admin-containment deny policy, which turns on automatically
+  # when this group is set or any environment is_production (opt out with
+  # admin_containment: false). Create the group, with 2+ members, before the
   # first org apply.
   break_glass_group: gcp-break-glass@acme.example
   # Who receives the control-plane guardrail-change alerts (gcp-organization).
@@ -207,7 +208,11 @@ gcp:
       # variable; the key is the service name. A service runs in the host project
       # unless `service_team` names an entry of service_teams below: then it
       # deploys into that team's project (the Cloud Run service agent is granted
-      # Shared VPC subnet access automatically). Promote by adding the same entry
+      # Shared VPC subnet access automatically). A production environment
+      # (is_production) refuses a service without service_team unless the
+      # workload's enable_host_project_workloads is true. A production
+      # database is regional (high availability) unless it sets
+      # enable_high_availability: false. Promote by adding the same entry
       # under the next environment. `make init` enables the service below.
       # services:
       #   api:
@@ -233,7 +238,7 @@ gcp:
     prod:
       display_name: Production
       region: europe-west2
-      cidr_block: 10.30.0.0/16
+      cidr_block: 10.12.0.0/16
       budget_monthly_limit: 2000
       is_production: true
       iam_group_role_bindings: {}
@@ -311,7 +316,7 @@ aws:
   workload_environments:
     dev:
       account_key: workload_dev
-      vpc_cidr: 10.20.0.0/16
+      vpc_cidr: 10.72.0.0/16
       is_production: false
       # Services deployed to this environment (ECS Fargate behind the shared
       # ALB, optional Aurora and GitHub deploy role). Fields:
@@ -322,7 +327,7 @@ aws:
       #     health_check_path: /healthz
     prod:
       account_key: workload_prod
-      vpc_cidr: 10.40.0.0/16
+      vpc_cidr: 10.73.0.0/16
       is_production: true
 
   # IAM Identity Center access by name (aws-identity): Identity Store group
@@ -347,6 +352,14 @@ aws:
   # with every domain your workloads call (package mirrors, SaaS APIs); matching
   # is on HTTP Host / TLS SNI, and everything else is dropped.
   network:
+    # Addressing (aws-network). docs/architecture/cidr-plan.md gives AWS
+    # 10.64.0.0/10 and GCP 10.0.0.0/12; tfc-admin fails its plan when an AWS
+    # range overlaps a GCP one, or a workload vpc_cidr falls outside top_cidr.
+    # The values below are the defaults.
+    # top_cidr: 10.64.0.0/10
+    # regional_cidrs: {eu-west-2: 10.64.0.0/12}
+    # inspection_cidr: 10.64.0.0/16
+    # egress_cidr: 10.65.0.0/16
     egress_domain_allowlist:
       - .amazonaws.com
       - .github.com

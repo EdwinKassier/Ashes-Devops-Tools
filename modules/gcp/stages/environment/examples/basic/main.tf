@@ -16,11 +16,10 @@
 module "environment" {
   source = "../../"
 
-  environment          = "dev"
-  project_prefix       = "acme"
-  org_id               = "123456789012"
-  billing_account      = "000000-111111-222222"
-  admin_project_number = "111111111111"
+  environment     = "dev"
+  project_prefix  = "acme"
+  org_id          = "123456789012"
+  billing_account = "000000-111111-222222"
 
   host_project = {
     project_id     = "acme-dev-host-abcd"

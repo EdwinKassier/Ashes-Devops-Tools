@@ -6,10 +6,13 @@ name: Drift Detection
 # workflow then duplicates that signal and may be opted out of (below).
 #
 # Required repository configuration (see docs/guides/CI_SECRETS.md):
-#   - secrets.TFC_TOKEN_DRIFT  Terraform Cloud team token with QUEUE PLANS (write)
-#                              permission on the target workspaces. Drift detection
-#                              creates speculative, plan-only+refresh runs
-#                              (POST /runs), which READ access alone cannot do.
+#   - secrets.TFC_TOKEN_DRIFT  Terraform Cloud team token with QUEUE PLANS (runs =
+#                              plan) and READ STATE VERSIONS on the target
+#                              workspaces. Drift detection reads the current state
+#                              version to find the last applied run and its
+#                              configuration version, then creates a speculative
+#                              refresh-only run pinned to it (POST /runs), which
+#                              READ access alone cannot do.
 #                              Keep this separate from the read-only TFC_TOKEN used
 #                              by the release workflow. There is NO fallback to
 #                              TFC_TOKEN: the read-only release token must never
@@ -21,7 +24,14 @@ name: Drift Detection
 #                              and the AWS guardrail workspaces (aws-organization,
 #                              aws-security, aws-network). Set it to the workspaces
 #                              this estate actually has.
+# What counts as drift: a plan-only, refresh-only run against the configuration
+# version of the run that wrote the current state (the last apply). Real
+# infrastructure that differs from that state is drift. A merged but not yet
+# applied configuration is NOT drift; it is reported separately as a warning
+# ("pending configuration") and in the issue body.
 # Nothing is skipped silently: a drift check that never ran must not show green.
+#   - A listed workspace has no state, or its state was not written by a run
+#     (local execution, e.g. gcp-bootstrap before the handover): its leg FAILS.
 #   - TFC_TOKEN_DRIFT/TFC_ORGANIZATION not configured: the run FAILS.
 #   - A listed workspace does not exist in the organization: its leg FAILS.
 # To acknowledge that this estate runs without the check, set the repository
@@ -64,11 +74,14 @@ jobs:
     outputs:
       configured: ${{ steps.check.outputs.configured }}
     steps:
-      # Egress/process audit for this job (audit mode: observe, never block).
+      # This job holds a secret and its step makes no network call: block
+      # egress except the GitHub API.
       - name: Harden runner
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
 
       - name: Check whether TFC_TOKEN_DRIFT / TFC_ORGANIZATION are configured
         id: check
@@ -79,12 +92,13 @@ jobs:
           TFC_TOKEN: ${{ secrets.TFC_TOKEN_DRIFT }}
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
           OPT_OUT: ${{ vars.REAL_CLOUD_CHECKS_OPT_OUT }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           if [ -n "$TFC_TOKEN" ] && [ -n "$TFC_ORGANIZATION" ]; then
             echo "configured=true" >> "$GITHUB_OUTPUT"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            if [ "$OPT_OUT" = "true" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            if [ "$OPT_OUT" = "true" ] && [ "$EVENT_NAME" != "workflow_dispatch" ]; then
               echo "::warning::Drift detection NOT run: TFC_TOKEN_DRIFT/TFC_ORGANIZATION are" \
                 "not configured and REAL_CLOUD_CHECKS_OPT_OUT=true. Drift is unmonitored."
               exit 0
@@ -141,11 +155,15 @@ jobs:
         # yamllint disable-line rule:line-length
         workspace: ${{ fromJSON(vars.TFC_DRIFT_WORKSPACES || '["gcp-bootstrap","gcp-organization","gcp-projects","gcp-network-hub","gcp-workload-dev","aws-organization","aws-security","aws-network"]') }}
     steps:
-      # Egress/process audit for this job (audit mode: observe, never block).
+      # This job holds TFC_TOKEN_DRIFT. Its steps call only the HCP Terraform
+      # API (curl) and the GitHub API (gh issue), so all other egress is blocked.
       - name: Harden runner
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            app.terraform.io:443
+            api.github.com:443
 
       - name: Assert Terraform Cloud credentials are configured
         env:
@@ -158,40 +176,19 @@ jobs:
           fi
           test -n "$TFC_ORGANIZATION" || { echo "::error::vars.TFC_ORGANIZATION is not set."; exit 1; }
 
-      - name: Fetch latest run status from Terraform Cloud
-        id: run_status
-        env:
-          TFC_TOKEN: ${{ secrets.TFC_TOKEN_DRIFT }}
-          TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
-          WORKSPACE: ${{ matrix.workspace }}
-        run: |
-          RUNS_URL="https://app.terraform.io/api/v2/organizations/${TFC_ORGANIZATION}"
-          RUNS_URL="${RUNS_URL}/workspaces/${WORKSPACE}/runs?page%5Bsize%5D=1"
-          response=$(curl --silent --show-error --fail-with-body \
-            --header "Authorization: Bearer ${TFC_TOKEN}" \
-            --header "Content-Type: application/vnd.api+json" \
-            "${RUNS_URL}") \
-            || { echo "::error::TFC API request failed for workspace '${WORKSPACE}'." \
-              "Check TFC_TOKEN_DRIFT and TFC_ORGANIZATION. Response: ${response}" >&2; exit 1; }
-
-          if ! echo "$response" | jq -e '.data | type == "array"' >/dev/null 2>&1; then
-            echo "::error::Unexpected TFC API response format for workspace '${WORKSPACE}': ${response}" >&2
-            exit 1
-          fi
-
-          status=$(echo "$response" | jq -r '.data[0].attributes.status // "none"')
-          run_id=$(echo "$response" | jq -r '.data[0].id // "none"')
-          echo "status=${status}" >> "$GITHUB_OUTPUT"
-          echo "run_id=${run_id}" >> "$GITHUB_OUTPUT"
-
-      - name: Trigger speculative plan via Terraform Cloud API
-        id: trigger_plan
+      - name: Resolve the last applied configuration version
+        id: resolve
         env:
           TFC_TOKEN: ${{ secrets.TFC_TOKEN_DRIFT }}
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
           WORKSPACE: ${{ matrix.workspace }}
           OPT_OUT: ${{ vars.REAL_CLOUD_CHECKS_OPT_OUT }}
         run: |
+          api() {
+            curl --silent --show-error --fail-with-body --max-time 30 --connect-timeout 10 \
+              --header "Authorization: Bearer ${TFC_TOKEN}" \
+              --header "Content-Type: application/vnd.api+json" "$1"
+          }
           # Look up workspace ID. A missing workspace (HTTP 404) FAILS the leg: a
           # listed workspace that was never checked must not show green. Only
           # REAL_CLOUD_CHECKS_OPT_OUT=true turns it into a warning and a skip.
@@ -222,89 +219,135 @@ jobs:
               "'${WORKSPACE}'. Response: $(cat /tmp/ws.json)" >&2
             exit 1
           fi
-          ws_response=$(cat /tmp/ws.json)
-          ws_id=$(echo "$ws_response" | jq -r '.data.id')
-          if [ -z "$ws_id" ] || [ "$ws_id" = "null" ]; then
+          ws_id=$(jq -r '.data.id // empty' /tmp/ws.json)
+          if [ -z "$ws_id" ]; then
             echo "::error::Could not parse workspace ID from TFC response for '${WORKSPACE}'" >&2
             exit 1
           fi
           echo "workspace_id=${ws_id}" >> "$GITHUB_OUTPUT"
 
-          # Trigger a speculative plan (drift check) using the latest configuration version
-          run_response=$(curl --silent --show-error \
+          # Drift is the difference between the real infrastructure and the
+          # state the last APPLY wrote, judged against the configuration that
+          # apply used. The current state version names the run that wrote it;
+          # that run names its configuration version. Planning the latest
+          # configuration instead would report merged-but-unapplied changes as
+          # drift.
+          sv=$(api "https://app.terraform.io/api/v2/workspaces/${ws_id}/current-state-version") \
+            || { echo "::error::'${WORKSPACE}' has no current state version (never applied?)," \
+                 "or TFC_TOKEN_DRIFT lacks read access to state versions: ${sv}" >&2; exit 1; }
+          applied_run=$(echo "$sv" | jq -r '.data.relationships.run.data.id // empty')
+          if [ -z "$applied_run" ]; then
+            echo "::error::The current state of '${WORKSPACE}' was not written by an HCP" \
+              "Terraform run (local execution or a state upload), so there is no applied" \
+              "configuration to check against. Move the workspace to remote execution" \
+              "and apply once, or remove it from TFC_DRIFT_WORKSPACES." >&2
+            exit 1
+          fi
+          run=$(api "https://app.terraform.io/api/v2/runs/${applied_run}") \
+            || { echo "::error::Could not read applied run ${applied_run}: ${run}" >&2; exit 1; }
+          applied_cv=$(echo "$run" | jq -r '.data.relationships["configuration-version"].data.id // empty')
+          if [ -z "$applied_cv" ]; then
+            echo "::error::Applied run ${applied_run} of '${WORKSPACE}' has no configuration version." >&2
+            exit 1
+          fi
+          echo "applied_run=${applied_run}" >> "$GITHUB_OUTPUT"
+          echo "applied_cv=${applied_cv}" >> "$GITHUB_OUTPUT"
+
+          # Pending configuration (reported separately, never as drift): the
+          # newest non-speculative configuration version (a merge) differs from
+          # the applied one. Best effort: an API error here only skips the note.
+          CV_URL="https://app.terraform.io/api/v2/workspaces/${ws_id}/configuration-versions"
+          cvs=$(api "${CV_URL}?page%5Bsize%5D=20" || true)
+          latest_cv=$(echo "$cvs" \
+            | jq -r '[.data[]? | select(.attributes.speculative != true)][0].id // empty' 2>/dev/null || true)
+          if [ -n "$latest_cv" ] && [ "$latest_cv" != "$applied_cv" ]; then
+            echo "pending_config=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::'${WORKSPACE}': configuration ${latest_cv} is newer than the" \
+              "applied ${applied_cv} (merged but not applied). This is NOT drift; confirm" \
+              "or discard the pending run in HCP Terraform."
+          else
+            echo "pending_config=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Queue a refresh-only drift check on the applied configuration
+        id: trigger_plan
+        if: steps.resolve.outputs.skipped != 'true'
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN_DRIFT }}
+          WS_ID: ${{ steps.resolve.outputs.workspace_id }}
+          APPLIED_CV: ${{ steps.resolve.outputs.applied_cv }}
+          WORKSPACE: ${{ matrix.workspace }}
+        run: |
+          # plan-only (speculative, can never apply) + refresh-only (only
+          # compares real infrastructure with state), pinned to the configuration
+          # version of the last applied run.
+          body=$(jq -n --arg ws "$WS_ID" --arg cv "$APPLIED_CV" '{
+            data: {
+              type: "runs",
+              attributes: {
+                message: "Drift detection: refresh-only check of the applied configuration (automated)",
+                "plan-only": true,
+                "refresh-only": true
+              },
+              relationships: {
+                workspace: {data: {type: "workspaces", id: $ws}},
+                "configuration-version": {data: {type: "configuration-versions", id: $cv}}
+              }
+            }
+          }')
+          run_response=$(curl --silent --show-error --max-time 30 --connect-timeout 10 \
             --request POST \
             --header "Authorization: Bearer ${TFC_TOKEN}" \
             --header "Content-Type: application/vnd.api+json" \
-            --data "{
-              \"data\": {
-                \"attributes\": {
-                  \"message\": \"Drift detection run (automated)\",
-                  \"plan-only\": true,
-                  \"refresh\": true
-                },
-                \"type\": \"runs\",
-                \"relationships\": {
-                  \"workspace\": {
-                    \"data\": { \"type\": \"workspaces\", \"id\": \"${ws_id}\" }
-                  }
-                }
-              }
-            }" \
+            --data "$body" \
             "https://app.terraform.io/api/v2/runs")
           drift_run_id=$(echo "$run_response" | jq -r '.data.id // empty')
           if [ -z "$drift_run_id" ]; then
-            echo "::error::Could not queue a drift plan for '${WORKSPACE}': ${run_response}" >&2
+            echo "::error::Could not queue a drift check for '${WORKSPACE}': ${run_response}" >&2
             exit 1
           fi
           echo "drift_run_id=${drift_run_id}" >> "$GITHUB_OUTPUT"
 
-      - name: Poll for plan result
+      - name: Poll for the drift check result
         id: poll
-        if: steps.trigger_plan.outputs.skipped != 'true'
+        if: steps.resolve.outputs.skipped != 'true'
         env:
           TFC_TOKEN: ${{ secrets.TFC_TOKEN_DRIFT }}
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
           DRIFT_RUN_ID: ${{ steps.trigger_plan.outputs.drift_run_id }}
-          # Mapped via env (not inlined into the run script) to avoid interpolating
-          # an expression directly into shell — matches the pattern used elsewhere.
           WORKSPACE: ${{ matrix.workspace }}
         run: |
           for i in $(seq 1 20); do
             sleep 30
-            # ?include=plan: the resource-change counts live on the PLAN object,
-            # not the run object (audit A1). Reading them off .data.attributes
-            # (the run) always yielded null -> // 0 -> drift never detected.
-            run_response=$(curl --silent --show-error \
+            # ?include=plan: has-changes and the resource counts live on the
+            # PLAN object, not the run object.
+            run_response=$(curl --silent --show-error --max-time 30 --connect-timeout 10 \
               --header "Authorization: Bearer ${TFC_TOKEN}" \
               --header "Content-Type: application/vnd.api+json" \
               "https://app.terraform.io/api/v2/runs/${DRIFT_RUN_ID}?include=plan")
             status=$(echo "$run_response" | jq -r '.data.attributes.status')
-            # Pre-extract the plan's attributes object (audit A1) so each count
-            # line stays short; default {} when no plan is included yet.
             pa='([.included[]?|select(.type=="plans").attributes][0] // {})'
-            resource_additions=$(echo "$run_response" | jq -r "${pa}[\"resource-additions\"] // 0")
+            # A refresh-only plan has changes exactly when real infrastructure
+            # differs from the applied state.
+            has_changes=$(echo "$run_response" | jq -r "${pa}[\"has-changes\"] // false")
             resource_changes=$(echo "$run_response" | jq -r "${pa}[\"resource-changes\"] // 0")
-            resource_destructions=$(echo "$run_response" | jq -r "${pa}[\"resource-destructions\"] // 0")
-            echo "Attempt ${i}: status=${status} +${resource_additions} ~${resource_changes} -${resource_destructions}"
+            echo "Attempt ${i}: status=${status} has-changes=${has_changes} ~${resource_changes}"
             case "$status" in
               planned_and_finished|planned)
-                total=$((resource_additions + resource_changes + resource_destructions))
-                echo "drift_detected=$([ "$total" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-                echo "resource_additions=${resource_additions}" >> "$GITHUB_OUTPUT"
+                echo "drift_detected=${has_changes}" >> "$GITHUB_OUTPUT"
                 echo "resource_changes=${resource_changes}" >> "$GITHUB_OUTPUT"
-                echo "resource_destructions=${resource_destructions}" >> "$GITHUB_OUTPUT"
                 RUN_URL="https://app.terraform.io/app/${TFC_ORGANIZATION}"
                 RUN_URL="${RUN_URL}/workspaces/${WORKSPACE}/runs/${DRIFT_RUN_ID}"
                 echo "run_url=${RUN_URL}" >> "$GITHUB_OUTPUT"
                 exit 0
                 ;;
-              errored|canceled|discarded)
-                echo "Plan run ended with status: ${status}" >&2
+              errored|canceled|discarded|force_canceled)
+                echo "Drift check ended with status: ${status}" >&2
                 exit 1
                 ;;
             esac
           done
-          echo "Timed out waiting for plan to complete" >&2
+          echo "Timed out waiting for the drift check to complete" >&2
           exit 1
 
       - name: Open drift issue
@@ -314,25 +357,28 @@ jobs:
           WORKSPACE: ${{ matrix.workspace }}
           # Route poll outputs through env (not inlined into the script) so no
           # workflow expression is interpolated directly into shell.
-          RESOURCE_ADDITIONS: ${{ steps.poll.outputs.resource_additions }}
           RESOURCE_CHANGES: ${{ steps.poll.outputs.resource_changes }}
-          RESOURCE_DESTRUCTIONS: ${{ steps.poll.outputs.resource_destructions }}
+          APPLIED_RUN: ${{ steps.resolve.outputs.applied_run }}
+          PENDING_CONFIG: ${{ steps.resolve.outputs.pending_config }}
           RUN_URL: ${{ steps.poll.outputs.run_url }}
         run: |
           TITLE="[Drift] Infrastructure drift detected in workspace: ${WORKSPACE}"
           BODY="## Infrastructure Drift Detected
 
-          Workspace **\`${WORKSPACE}\`** has drifted from the Terraform state.
+          Workspace **\`${WORKSPACE}\`** has drifted: real infrastructure differs
+          from the state written by its last apply (run \`${APPLIED_RUN}\`). The
+          check is a refresh-only plan of that run's configuration, so merged but
+          unapplied changes are not counted.
 
-          | Metric | Count |
+          | Metric | Value |
           |--------|-------|
-          | Additions | ${RESOURCE_ADDITIONS} |
-          | Changes | ${RESOURCE_CHANGES} |
-          | Destructions | ${RESOURCE_DESTRUCTIONS} |
+          | Changed resources (refresh-only) | ${RESOURCE_CHANGES} |
+          | Unapplied configuration pending | ${PENDING_CONFIG} |
 
-          **Plan URL:** ${RUN_URL}
+          **Drift check run:** ${RUN_URL}
 
-          Review and apply the changes to bring the workspace back into compliance.
+          Find who changed the resources outside Terraform, then either revert
+          that change or bring the code in line and apply.
           "
 
           # Check if an open drift issue already exists to avoid duplicates
@@ -393,13 +439,14 @@ jobs:
               echo "skipped with a warning, not checked. Look for \"did NOT run\" warnings on the"
               echo "matrix jobs; those workspaces are unmonitored."
             elif [ "$RESULT" = "success" ]; then
-              echo "✅ **All workspace plans completed — no drift detected.**"
+              echo "✅ **All refresh-only checks completed — no drift detected.**"
             else
-              echo "❌ **One or more workspace plans detected drift or encountered an error.**"
+              echo "❌ **One or more workspace checks detected drift or encountered an error.**"
               echo ""
               echo "Check the individual matrix job steps above for Terraform Cloud run links and"
               echo "per-workspace change counts, or look for automatically opened GitHub Issues"
-              echo "labelled \`drift\`."
+              echo "labelled \`drift\`. Merged but unapplied configuration shows as a separate"
+              echo "\"pending configuration\" warning, never as drift."
             fi
             echo ""
             echo "**Configured workspaces** (\`TFC_DRIFT_WORKSPACES\` repository variable): \`${WORKSPACES}\`"

@@ -37,6 +37,12 @@ alarms with `cis_alarms_excluded`.
 > exists before CloudTrail validates delivery — that ordering is a stage concern
 > and is not expressed here at the module level.
 
+The module-created CloudWatch Logs CMK is guarded by default
+(`enable_deletion_protection`): a `terraform_data` guard with `prevent_destroy`
+and `replace_triggered_by` makes a plan that destroys or replaces the key fail.
+Turning the flag off does not remove an existing guard; run `terraform state rm`
+on `terraform_data.cloudwatch_kms_deletion_guard[0]` first.
+
 <!-- BEGIN_TF_DOCS -->
 
 
@@ -66,6 +72,7 @@ module "example" {
 | Name | Version |
 |------|---------|
 | <a name="provider_aws"></a> [aws](#provider\_aws) | 6.72.0 |
+| <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 
 
@@ -75,16 +82,17 @@ The following resources are created:
 
 
 - resource.aws_cloudtrail.org (modules/aws/security/cloudtrail-org/main.tf#L60)
-- resource.aws_cloudwatch_log_group.trail (modules/aws/security/cloudtrail-org/main.tf#L242)
-- resource.aws_cloudwatch_log_metric_filter.cis (modules/aws/security/cloudtrail-org/main.tf#L420)
-- resource.aws_cloudwatch_metric_alarm.cis (modules/aws/security/cloudtrail-org/main.tf#L432)
-- resource.aws_iam_role.cloudtrail_cw (modules/aws/security/cloudtrail-org/main.tf#L282)
-- resource.aws_iam_role_policy.cloudtrail_cw (modules/aws/security/cloudtrail-org/main.tf#L290)
+- resource.aws_cloudwatch_log_group.trail (modules/aws/security/cloudtrail-org/main.tf#L266)
+- resource.aws_cloudwatch_log_metric_filter.cis (modules/aws/security/cloudtrail-org/main.tf#L444)
+- resource.aws_cloudwatch_metric_alarm.cis (modules/aws/security/cloudtrail-org/main.tf#L456)
+- resource.aws_iam_role.cloudtrail_cw (modules/aws/security/cloudtrail-org/main.tf#L306)
+- resource.aws_iam_role_policy.cloudtrail_cw (modules/aws/security/cloudtrail-org/main.tf#L314)
 - resource.aws_kms_alias.cloudwatch (modules/aws/security/cloudtrail-org/main.tf#L236)
 - resource.aws_kms_key.cloudwatch (modules/aws/security/cloudtrail-org/main.tf#L227)
-- resource.aws_sns_topic.cis_alarms (modules/aws/security/cloudtrail-org/main.tf#L311)
-- resource.aws_sns_topic_policy.cis_alarms (modules/aws/security/cloudtrail-org/main.tf#L318)
-- resource.aws_sns_topic_subscription.cis_alarms (modules/aws/security/cloudtrail-org/main.tf#L336)
+- resource.aws_sns_topic.cis_alarms (modules/aws/security/cloudtrail-org/main.tf#L335)
+- resource.aws_sns_topic_policy.cis_alarms (modules/aws/security/cloudtrail-org/main.tf#L342)
+- resource.aws_sns_topic_subscription.cis_alarms (modules/aws/security/cloudtrail-org/main.tf#L360)
+- resource.terraform_data.cloudwatch_kms_deletion_guard (modules/aws/security/cloudtrail-org/main.tf#L255)
 - data source.aws_caller_identity.current (modules/aws/security/cloudtrail-org/main.tf#L30)
 - data source.aws_partition.current (modules/aws/security/cloudtrail-org/main.tf#L32)
 - data source.aws_region.current (modules/aws/security/cloudtrail-org/main.tf#L31)
@@ -108,6 +116,7 @@ The following resources are created:
 | <a name="input_cloudwatch_logs_role_arn"></a> [cloudwatch\_logs\_role\_arn](#input\_cloudwatch\_logs\_role\_arn) | ARN of an existing role CloudTrail assumes to deliver to the CloudWatch Logs group (/aws/cloudtrail/<trail\_name>). Null = this module creates <trail\_name>-cloudwatch-delivery. The landing zone passes the role aws-organization creates, so the aws-security pipeline role needs no IAM write permissions. | `string` | `null` | no |
 | <a name="input_cloudwatch_logs_role_permissions_boundary_arn"></a> [cloudwatch\_logs\_role\_permissions\_boundary\_arn](#input\_cloudwatch\_logs\_role\_permissions\_boundary\_arn) | Permissions boundary for the module-created CloudWatch Logs delivery role (when cloudwatch\_logs\_role\_arn is null). Required in a member account whose pipeline role may only create bounded roles. Null = no boundary. | `string` | `null` | no |
 | <a name="input_enable_cloudwatch_logs"></a> [enable\_cloudwatch\_logs](#input\_enable\_cloudwatch\_logs) | Attach a CloudWatch Logs group to the org trail and create the CIS AWS section-4 metric-filter alarms (4.1-4.15) with a KMS-encrypted SNS topic. Self-sufficient by default: a logs-granted CMK is created when cloudwatch\_logs\_kms\_key\_arn is null. Set false for S3-only delivery. | `bool` | `true` | no |
+| <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | Create a prevent\_destroy guard that makes any plan which destroys or replaces the module-created CloudWatch Logs KMS key fail (no effect when cloudwatch\_logs\_kms\_key\_arn supplies the key). Turning it off does not remove an existing guard: run terraform state rm on the guard first. | `bool` | `true` | no |
 | <a name="input_enable_lambda_data_events"></a> [enable\_lambda\_data\_events](#input\_enable\_lambda\_data\_events) | Record Lambda Invoke data events (AWS::Lambda::Function) on the org trail. Default false — per-invocation billing can be significant for high-throughput functions. | `bool` | `false` | no |
 | <a name="input_exclude_log_archive_bucket_from_data_events"></a> [exclude\_log\_archive\_bucket\_from\_data\_events](#input\_exclude\_log\_archive\_bucket\_from\_data\_events) | Exclude the log-archive bucket (log\_archive\_bucket) from S3 data events so CloudTrail does not record its own log deliveries (a self-amplifying loop). Default true. | `bool` | `true` | no |
 | <a name="input_s3_data_events_excluded_bucket_arns"></a> [s3\_data\_events\_excluded\_bucket\_arns](#input\_s3\_data\_events\_excluded\_bucket\_arns) | Additional S3 bucket ARNs (arn:aws:s3:::name) excluded from S3 data events, e.g. high-volume access-log or Security Lake buckets. Matched as a resources.ARN NotStartsWith prefix. | `list(string)` | `[]` | no |

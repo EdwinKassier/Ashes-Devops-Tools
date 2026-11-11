@@ -42,6 +42,14 @@ locals {
     interconnect = try(jsonencode(local.lz.gcp.network.interconnect), null)
     # Opt-in extra hub regions (JSON text, same reason as vpn above).
     additional_regions = try(jsonencode(local.lz.gcp.network.additional_regions), null)
+    # Hub connectivity per environment: gcp.environments.<env>.network_connectivity,
+    # else gcp.network.connectivity, else peering (the gcp-workload resolution).
+    # Only peering environments get a hub-side peering.
+    network_connectivity = try(tostring(local.lz.gcp.network.connectivity), null)
+    environment_connectivity = {
+      for env, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : env => tostring(e.network_connectivity)
+      if try(e.network_connectivity, null) != null
+    }
     # Normalised to the attribute types of var.environments (region defaults to
     # org.regions.gcp, display_name to the key). A malformed entry is caught by
     # the var.environments validations, which also read local.cfg.
@@ -96,6 +104,7 @@ locals {
   vpc_sc_access_policy_name = var.vpc_sc_access_policy_name != null ? var.vpc_sc_access_policy_name : local.cfg.vpc_sc_access_policy
   dns_hub_vpc_cidr_block    = coalesce(var.dns_hub_vpc_cidr_block, local.cfg.dns_hub_vpc_cidr_block, "0.0.0.0/32")
   tfc_organization          = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
+  create_spoke_peerings     = coalesce(var.create_spoke_peerings, true)
   # Opt-in NCC hub (default off: environment VPCs peer with the hub VPC).
   enable_ncc_hub      = coalesce(var.enable_ncc_hub, local.cfg.enable_ncc_hub, false)
   ncc_preset_topology = coalesce(var.ncc_preset_topology, local.cfg.ncc_preset_topology, "STAR")

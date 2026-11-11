@@ -881,3 +881,48 @@ run "slo_created_when_declared" {
     error_message = "output.services must expose the SLO name, null without one."
   }
 }
+
+# Production databases are regional (high availability) unless a service opts
+# out explicitly; backup_location moves the backups to another region.
+run "production_database_defaults_to_high_availability" {
+  command = plan
+
+  variables {
+    is_production = true
+    services = {
+      api = {
+        database = {}
+      }
+      batch = {
+        database = { enable_high_availability = false, backup_location = "europe-west2" }
+      }
+    }
+  }
+
+  assert {
+    condition     = module.database["api"].availability_type == "REGIONAL" && output.services["api"].database_availability == "REGIONAL"
+    error_message = "a production database must default to REGIONAL (high availability)."
+  }
+
+  assert {
+    condition     = module.database["batch"].availability_type == "ZONAL" && module.database["batch"].backup_location == "europe-west2" && module.database["api"].backup_location == null
+    error_message = "enable_high_availability = false must opt a production database out, and backup_location must reach the instance."
+  }
+}
+
+run "non_production_database_stays_zonal" {
+  command = plan
+
+  variables {
+    services = {
+      api = {
+        database = {}
+      }
+    }
+  }
+
+  assert {
+    condition     = module.database["api"].availability_type == "ZONAL"
+    error_message = "outside production a database defaults to ZONAL."
+  }
+}
