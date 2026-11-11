@@ -897,8 +897,18 @@ side (all mock-tested, secure defaults):
   secret-named), from `enable_saas_secret_bridge`, and from the fixed tfc-admin
   and `saas-*` workspaces. A secret that a person adds by hand in the HCP
   Terraform UI on any other workspace, with no bridge flag, is not detected:
-  that workspace keeps its normal platform access and speculative plans. Set
-  every secret through tfc-admin's write-only `workspace_variables`.
+  that workspace keeps its normal platform access and speculative plans. The
+  same holds for project and organization variable sets that a person creates
+  by hand. Set every secret through tfc-admin's write-only
+  `workspace_variables`.
+- **Who still runs code with a secret-bearing workspace's tokens.** On a
+  secret-bearing non-production workload the approvers team now confirms runs,
+  so it gains plan-level reach to that workload's bridge `TFE_TOKEN`
+  (decision D1). The tfc-admin team, organization owners and anyone who can
+  merge to the VCS branch also run code with those tokens.
+- **`disable_speculative_on_saas = false` re-enables PR plans on `saas-*`**
+  even while `enable_speculative_on_secret_bearing = false`. The `saas-*`
+  workspaces keep their own switch.
 
 ## DECISION — needs a human call
 

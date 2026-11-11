@@ -986,8 +986,9 @@ run "guardrails_project_without_security_team_warns" {
   command = plan
 
   variables {
-    platform_team_id = "team-platform1"
-    security_team_id = null
+    platform_team_id                = "team-platform1"
+    control_plane_approvers_team_id = "team-approvers1"
+    security_team_id                = null
   }
 
   assert {
@@ -1006,7 +1007,8 @@ run "security_team_must_differ_from_platform" {
     security_team_id = "team-same1"
   }
 
-  expect_failures = [terraform_data.input_contract]
+  # The check also warns: no approvers team for the saas project.
+  expect_failures = [terraform_data.input_contract, check.secret_bearing_projects_have_approvers]
 }
 
 run "platform_team_runs_override" {
@@ -1016,6 +1018,10 @@ run "platform_team_runs_override" {
     platform_team_id                 = "team-platform1"
     platform_team_control_plane_runs = "read"
   }
+
+  # No approvers team: only organization owners can confirm runs on the
+  # secret-bearing projects, so a check warns.
+  expect_failures = [check.secret_bearing_projects_have_approvers]
 
   assert {
     condition     = tfe_team_project_access.this["gcp/platform"].workspace_access[0].runs == "read" && length([for k in keys(tfe_team_project_access.this) : k if endswith(k, "/approvers")]) == 0
@@ -1191,6 +1197,10 @@ run "saas_bridge_flag_from_committed_file_or_env" {
     }
   }
 
+  # No approvers team: only organization owners can confirm runs on the
+  # secret-bearing projects, so a check warns.
+  expect_failures = [check.secret_bearing_projects_have_approvers]
+
   assert {
     condition     = module.workspace["aws-workload-dev"].speculative_enabled == false && module.workspace["gcp-workload-dev"].speculative_enabled == false
     error_message = "the bridge flag from the committed file or a TF_VAR_ env variable marks the workspace secret-bearing."
@@ -1199,6 +1209,114 @@ run "saas_bridge_flag_from_committed_file_or_env" {
   assert {
     condition     = length(tfe_team_access.platform_workload) == 0
     error_message = "a secret-bearing non-production workload gets no workspace-level platform write."
+  }
+}
+
+# The bridge flag fails closed: any value other than an explicit false
+# ("false", "0", "" after trimming spaces and quotes) counts as on.
+run "saas_bridge_flag_fails_closed_on_truthy_values" {
+  command = plan
+
+  variables {
+    split_workload_projects = true
+    platform_team_id        = "team-platform1"
+    workspace_variables = {
+      "gcp-workload-dev" = {
+        enable_saas_secret_bridge = { value = "1" }
+      }
+      "aws-workload-dev" = {
+        enable_saas_secret_bridge = { value = "!false", hcl = true }
+      }
+    }
+  }
+
+  # No approvers team: only organization owners can confirm runs on the
+  # secret-bearing projects, so a check warns.
+  expect_failures = [check.secret_bearing_projects_have_approvers]
+
+  assert {
+    condition     = module.workspace["gcp-workload-dev"].speculative_enabled == false && module.workspace["aws-workload-dev"].speculative_enabled == false
+    error_message = "a bridge flag of \"1\" or the HCL expression !false must mark the workspace secret-bearing."
+  }
+
+  assert {
+    condition     = length(tfe_team_access.platform_workload) == 0
+    error_message = "a workspace whose bridge flag is not an explicit false gets no workspace-level platform write."
+  }
+}
+
+run "saas_bridge_flag_explicit_false_is_off" {
+  command = plan
+
+  variables {
+    split_workload_projects = true
+    platform_team_id        = "team-platform1"
+    workspace_variables = {
+      "gcp-workload-dev" = {
+        enable_saas_secret_bridge = { value = " \"False\" ", hcl = true }
+      }
+      "aws-workload-dev" = {
+        enable_saas_secret_bridge = { value = "false", hcl = true }
+      }
+    }
+  }
+
+  # No approvers team: only organization owners can confirm runs on the
+  # secret-bearing projects, so a check warns.
+  expect_failures = [check.secret_bearing_projects_have_approvers]
+
+  assert {
+    condition     = module.workspace["gcp-workload-dev"].speculative_enabled == true && module.workspace["aws-workload-dev"].speculative_enabled == true
+    error_message = "an explicit false bridge flag does not make the workspace secret-bearing."
+  }
+
+  assert {
+    condition     = contains(keys(tfe_team_access.platform_workload), "gcp-workload-dev") && contains(keys(tfe_team_access.platform_workload), "aws-workload-dev")
+    error_message = "a non-production workload with the bridge explicitly off keeps workspace-level platform write."
+  }
+}
+
+# Without an approvers team, only organization owners can confirm runs on a
+# secret-bearing project: a check warns.
+run "secret_bearing_without_approvers_warns" {
+  command = plan
+
+  variables {
+    enable_saas             = false
+    saas_workspaces         = []
+    split_workload_projects = true
+    platform_team_id        = "team-platform1"
+    workspace_variables = {
+      "gcp-workload-dev" = {
+        enable_saas_secret_bridge = { value = "true", hcl = true }
+      }
+    }
+  }
+
+  expect_failures = [check.secret_bearing_projects_have_approvers]
+}
+
+# A service-role key is a secret even when it was not marked sensitive.
+run "service_role_key_name_marks_workspace" {
+  command = plan
+
+  variables {
+    split_workload_projects         = true
+    platform_team_id                = "team-platform1"
+    control_plane_approvers_team_id = "team-approvers1"
+    workspace_variables = {
+      "aws-workload-dev" = {
+        SUPABASE_SERVICE_ROLE_KEY = { value = "not-a-real-key", category = "env" }
+      }
+      "gcp-workload-dev" = {
+        db_passwd = { value = "not-a-real-password" }
+      }
+    }
+  }
+
+  assert {
+    condition     = module.workspace["aws-workload-dev"].speculative_enabled == false && module.workspace["gcp-workload-dev"].speculative_enabled == false
+    error_message = "*_SERVICE_ROLE_KEY and *_PASSWD keys mark the workspace secret-bearing."
   }
 }
 
@@ -1215,6 +1333,10 @@ run "secret_named_variable_marks_workspace" {
       }
     }
   }
+
+  # No approvers team: only organization owners can confirm runs on the
+  # secret-bearing projects, so a check warns.
+  expect_failures = [check.secret_bearing_projects_have_approvers]
 
   assert {
     condition     = module.workspace["gcp-workload-dev"].speculative_enabled == false && !contains(keys(tfe_team_access.platform_workload), "gcp-workload-dev")
@@ -1235,7 +1357,7 @@ run "sensitive_common_variable_marks_every_workspace" {
     }
   }
 
-  expect_failures = [check.secret_bearing_control_plane_project]
+  expect_failures = [check.secret_bearing_control_plane_project, check.secret_bearing_projects_have_approvers]
 
   assert {
     condition = alltrue([
@@ -1265,6 +1387,10 @@ run "secret_bearing_speculative_opt_out" {
       }
     }
   }
+
+  # No approvers team: only organization owners can confirm runs on the
+  # secret-bearing projects, so a check warns.
+  expect_failures = [check.secret_bearing_projects_have_approvers]
 
   assert {
     condition     = module.workspace["gcp-workload-prod"].speculative_enabled == true
@@ -1309,7 +1435,7 @@ run "secret_bearing_in_control_plane_project_warns" {
     }
   }
 
-  expect_failures = [check.secret_bearing_control_plane_project]
+  expect_failures = [check.secret_bearing_control_plane_project, check.secret_bearing_projects_have_approvers]
 
   assert {
     condition     = tfe_team_project_access.this["gcp/platform"].workspace_access[0].runs == "read" && !contains(keys(tfe_team_access.platform_workload), "gcp-workload-prod")
@@ -1326,6 +1452,10 @@ run "state_backup_team_reads_state_only" {
     platform_team_id     = "team-platform1"
     state_backup_team_id = "team-backup1"
   }
+
+  # No approvers team: only organization owners can confirm runs on the
+  # secret-bearing projects, so a check warns.
+  expect_failures = [check.secret_bearing_projects_have_approvers]
 
   assert {
     condition = toset([for k, g in tfe_team_project_access.this : split("/", k)[0] if g.team_id == "team-backup1"]) == toset(["gcp", "aws", "saas"]) && alltrue([
@@ -1350,7 +1480,7 @@ run "state_backup_team_must_be_dedicated" {
     state_backup_team_id = "team-same1"
   }
 
-  expect_failures = [terraform_data.input_contract]
+  expect_failures = [terraform_data.input_contract, check.secret_bearing_projects_have_approvers]
 }
 
 # TFC applies with the exact version CI tests.
@@ -2031,7 +2161,7 @@ run "saas_outputs_reader_must_be_dedicated" {
     saas_outputs_reader_team_ids = { "saas-web" = "team-same1" }
   }
 
-  expect_failures = [terraform_data.input_contract]
+  expect_failures = [terraform_data.input_contract, check.secret_bearing_projects_have_approvers]
 }
 
 run "saas_outputs_reader_team_id_format" {

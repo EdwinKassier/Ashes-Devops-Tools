@@ -816,11 +816,17 @@ locals {
   # The broad platform team gets runs = read, never plan, on every project that
   # holds one; the workspace gets no workspace-level write and no speculative
   # plans (unless enable_speculative_on_secret_bearing).
-  secret_variable_key_pattern = "(?i)(^|_)(TOKEN|SECRET|PASSWORD|PASSPHRASE|PRIVATE_KEY|API_KEY|ACCESS_KEY|CREDENTIALS)$"
+  # Marking a variable sensitive is the contract; the name pattern is defence
+  # in depth for a secret that was not marked.
+  secret_variable_key_pattern = "(?i)(^|_)(TOKEN|SECRET|SECRET_KEY|SERVICE_ROLE_KEY|PASSWORD|PASSWD|PASSPHRASE|PRIVATE_KEY|API_KEY|ACCESS_KEY|CREDENTIALS)$"
   common_set_is_secret = anytrue([
     for k, v in var.common_workspace_variables : v.sensitive || can(regex(local.secret_variable_key_pattern, k))
   ])
-  saas_bridge_keys = ["enable_saas_secret_bridge", "TF_VAR_enable_saas_secret_bridge"]
+  # The bridge flag fails closed: a present key counts as on unless its value
+  # is an explicit false ("false", "0" or "" after trimming spaces and quotes,
+  # any case). "1", "!false" or "1 == 1" (HCL) all count as on.
+  saas_bridge_keys       = ["enable_saas_secret_bridge", "TF_VAR_enable_saas_secret_bridge"]
+  saas_bridge_off_values = ["false", "0", ""]
   secret_bearing_workspaces = toset(concat(
     [
       for ws, vars in local.workspace_vars : ws
@@ -828,7 +834,10 @@ locals {
     ],
     [
       for ws, vars in local.workspace_vars : ws
-      if anytrue([for k in local.saas_bridge_keys : try(lower(trimspace(vars[k].value)), "false") == "true"])
+      if anytrue([
+        for k in local.saas_bridge_keys : contains(keys(vars), k) &&
+        !contains(local.saas_bridge_off_values, try(lower(trim(vars[k].value, " \t\r\n\"'")), "unparsed"))
+      ])
     ],
     local.common_set_is_secret ? [for ws in local.workspace_names : ws if !contains(local.guardrails_workspaces, ws)] : [],
     local.saas_workspace_names,
@@ -1269,6 +1278,16 @@ check "secret_bearing_control_plane_project" {
   assert {
     condition     = !local.common_set_is_secret
     error_message = "common_workspace_variables carries a sensitive or secret-named value, and the shared variable set reaches every workspace except gcp-guardrails: every project is secret-bearing and the platform team gets runs = read everywhere. Set that value on the workspaces that need it (workspace_variables) instead."
+  }
+}
+
+# Without an approvers team, only organization owners can confirm runs on a
+# secret-bearing project (the platform team has runs = read there). The
+# tfc-admin project is left out: the tfc-admin team confirms its runs.
+check "secret_bearing_projects_have_approvers" {
+  assert {
+    condition     = var.platform_team_id == null || var.control_plane_approvers_team_id != null || length(setsubtract(local.secret_bearing_projects, local.tfc_admin_only_projects)) == 0
+    error_message = "control_plane_approvers_team_id is null while these projects are secret-bearing: ${join(", ", sort(tolist(setsubtract(local.secret_bearing_projects, local.tfc_admin_only_projects))))}. The platform team has runs = read there, so only organization owners can queue and confirm their runs. Set control_plane_approvers_team_id."
   }
 }
 

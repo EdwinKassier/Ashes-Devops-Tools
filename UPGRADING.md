@@ -109,8 +109,10 @@ on a `data "external"`, `data "http"`, provisioner or `hashicorp/external` /
 **Breaking.** Before, only the tfc-admin and `saas` projects were
 secret-bearing. Now tfc-admin also marks every workspace that it writes a
 sensitive variable to, that has a variable whose key looks like a secret
-(`*_TOKEN`, `*_SECRET`, `*_PASSWORD`, `*_PASSPHRASE`, `*_PRIVATE_KEY`, `*_API_KEY`,
-`*_ACCESS_KEY`, `*_CREDENTIALS`), or that sets `enable_saas_secret_bridge = true`
+(`*_TOKEN`, `*_SECRET`, `*_SECRET_KEY`, `*_SERVICE_ROLE_KEY`, `*_PASSWORD`,
+`*_PASSWD`, `*_PASSPHRASE`, `*_PRIVATE_KEY`, `*_API_KEY`, `*_ACCESS_KEY`,
+`*_CREDENTIALS`), or that sets `enable_saas_secret_bridge` to any value other
+than an explicit false (`false`, `0` or empty)
 (in `workspace_variables`, the committed `workspace_variables_file`, or as
 `TF_VAR_enable_saas_secret_bridge`). This includes non-production workloads.
 A sensitive or secret-named value in `common_workspace_variables` marks every
@@ -122,8 +124,11 @@ workspace except gcp-guardrails. Who loses what:
   `platform_team_control_plane_runs` (default `plan`) on production workload
   and control-plane projects and fixed `write` on non-production workload
   projects. A secret-bearing non-production workload also loses its
-  workspace-level `write` grant. Other non-production workloads in the same
-  project keep a workspace-level `write` grant.
+  workspace-level `write` grant. Other non-production workloads keep `write`.
+  In a split workloads project that held only non-production workloads, they
+  move from the project-level `write` grant to a new workspace-level `write`
+  grant. `tfc_admin_guard` stops that create too; the same security-team
+  override covers it.
 - **Pull requests:** secret-bearing workspaces no longer run speculative plans.
 - **One project per cloud** (`split_workload_projects = false`): a
   secret-bearing workload shares the `<prefix>gcp` / `<prefix>aws` project with

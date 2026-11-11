@@ -231,6 +231,9 @@ run "multi_environment_catalog_names_unchanged" {
     extra_remote_state_consumers = { "saas-web" = ["gcp-workload-dev"] }
   }
 
+  # No approvers team: only organization owners can confirm saas-* runs.
+  expect_failures = [check.secret_bearing_projects_have_approvers]
+
   assert {
     condition = output.workspace_names == tolist([
       "aws-backup", "aws-identity", "aws-network", "aws-organization", "aws-security", "aws-shared-services",
