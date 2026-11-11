@@ -104,6 +104,52 @@ Also in this change (no manual step): `scripts/check-consistency.sh` (CI) fails
 on a `data "external"`, `data "http"`, provisioner or `hashicorp/external` /
 `hashicorp/http` provider outside the reviewed allowlist.
 
+#### Secret-bearing workspaces are derived from their variables (tfc-admin)
+
+**Breaking.** Before, only the tfc-admin and `saas` projects were
+secret-bearing. Now tfc-admin also marks every workspace that it writes a
+sensitive variable to, that has a variable whose key looks like a secret
+(`*_TOKEN`, `*_SECRET`, `*_PASSWORD`, `*_PASSPHRASE`, `*_PRIVATE_KEY`, `*_API_KEY`,
+`*_ACCESS_KEY`, `*_CREDENTIALS`), or that sets `enable_saas_secret_bridge = true`
+(in `workspace_variables`, the committed `workspace_variables_file`, or as
+`TF_VAR_enable_saas_secret_bridge`). This includes non-production workloads.
+A sensitive or secret-named value in `common_workspace_variables` marks every
+workspace except gcp-guardrails. Who loses what:
+
+- **Platform team** (`platform_team_id`): on every project that holds a
+  secret-bearing workspace it now gets custom `runs = read` (no plans, no
+  applies, variables read-only). Before, it had
+  `platform_team_control_plane_runs` (default `plan`) on production workload
+  and control-plane projects and fixed `write` on non-production workload
+  projects. A secret-bearing non-production workload also loses its
+  workspace-level `write` grant. Other non-production workloads in the same
+  project keep a workspace-level `write` grant.
+- **Pull requests:** secret-bearing workspaces no longer run speculative plans.
+- **One project per cloud** (`split_workload_projects = false`): a
+  secret-bearing workload shares the `<prefix>gcp` / `<prefix>aws` project with
+  the control plane, so the platform team also drops to `runs = read` on the
+  control plane. A `check` warns.
+
+The approvers team (`control_plane_approvers_team_id`) gets `runs = apply` on
+every secret-bearing project (except the tfc-admin project). Before, a
+non-production bridging workload was applied by the platform team. **Set an
+approvers team before the upgrade apply**, or only organization owners can run
+those workloads. With the policy sets attached, `tfc_admin_guard` stops the
+upgrade apply because it creates new approvers grants: the security team
+overrides that run.
+
+To restore access:
+
+- Set `split_workload_projects = true` first, so that only the workloads
+  project drops to `runs = read` (AWS: the workload accounts' OIDC trust must
+  name the workloads project before you enable it; see the variable
+  description).
+- Opt back into speculative plans with `enable_speculative_on_secret_bearing = true`.
+  The platform team stays at `runs = read`: there is no opt-out for that,
+  because any plan can read the secret.
+- Move a secret out of `common_workspace_variables` onto the workspaces that
+  need it (`workspace_variables`).
+
 #### Run triggers auto-apply explicitly non-prod workloads (tfc-admin)
 
 **Trust change on the upgrade apply (estates with policy sets on).** tfc-admin's

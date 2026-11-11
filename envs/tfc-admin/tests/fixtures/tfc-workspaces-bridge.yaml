@@ -1,0 +1,4 @@
+# Test fixture: the committed file turns the SaaS bridge on for one workload.
+workspaces:
+  aws-workload-dev:
+    enable_saas_secret_bridge: true

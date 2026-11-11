@@ -1096,6 +1096,227 @@ run "split_workload_projects_nonprod_only" {
   }
 }
 
+# A plan is code execution with the workspace's environment. Any workspace that
+# holds a static secret (a sensitive workspace_variables entry, such as the
+# saas-outputs-reader TFE_TOKEN) is secret-bearing: the platform team gets
+# runs = read on its project, the workspace gets no workspace-level write and
+# no speculative plans.
+run "secret_bearing_production_workload_drops_platform_to_read" {
+  command = plan
+
+  variables {
+    split_workload_projects         = true
+    platform_team_id                = "team-platform1"
+    control_plane_approvers_team_id = "team-approvers1"
+    workspace_variables = {
+      "gcp-workload-prod" = {
+        TFE_TOKEN = { value = "not-a-real-token", category = "env", sensitive = true }
+      }
+    }
+  }
+
+  assert {
+    condition     = tfe_team_project_access.this["gcp-workloads/platform"].access == "custom" && tfe_team_project_access.this["gcp-workloads/platform"].workspace_access[0].runs == "read"
+    error_message = "a project holding a workspace with a sensitive variable must give the platform team runs = read: a plan there can read the variable."
+  }
+
+  assert {
+    condition     = tfe_team_project_access.this["aws-workloads/platform"].workspace_access[0].runs == "plan"
+    error_message = "a production workloads project without a static secret keeps platform runs = plan."
+  }
+
+  assert {
+    condition     = contains(keys(tfe_team_access.platform_workload), "gcp-workload-dev") && !contains(keys(tfe_team_access.platform_workload), "gcp-workload-prod")
+    error_message = "non-production workloads without a secret keep workspace-level write; a secret-bearing workspace never gets it."
+  }
+
+  assert {
+    condition     = module.workspace["gcp-workload-prod"].speculative_enabled == false
+    error_message = "a secret-bearing workspace must not run speculative plans (a PR plan can read its environment)."
+  }
+
+  assert {
+    condition     = contains(keys(tfe_team_project_access.this), "gcp-workloads/approvers")
+    error_message = "a secret-bearing project must keep a confirmer: the approvers team."
+  }
+}
+
+# The bridge flag alone marks the workspace: its TFE_TOKEN may be set by hand.
+run "saas_bridge_flag_marks_nonprod_workload_secret_bearing" {
+  command = plan
+
+  variables {
+    environments = {
+      dev = { is_production = false }
+    }
+    split_workload_projects         = true
+    platform_team_id                = "team-platform1"
+    control_plane_approvers_team_id = "team-approvers1"
+    workspace_variables = {
+      "aws-workload-dev" = {
+        enable_saas_secret_bridge = { value = "true", hcl = true }
+      }
+    }
+  }
+
+  assert {
+    condition     = tfe_team_project_access.this["aws-workloads/platform"].access == "custom" && tfe_team_project_access.this["aws-workloads/platform"].workspace_access[0].runs == "read" && contains(keys(tfe_team_project_access.this), "aws-workloads/approvers")
+    error_message = "a non-production bridging workload is secret-bearing: platform runs = read, approvers confirm."
+  }
+
+  assert {
+    condition     = tfe_team_project_access.this["gcp-workloads/platform"].access == "write"
+    error_message = "a non-production workloads project without a secret keeps fixed platform write."
+  }
+
+  assert {
+    condition     = module.workspace["aws-workload-dev"].speculative_enabled == false && module.workspace["gcp-workload-dev"].speculative_enabled == true
+    error_message = "a non-production bridging workload runs no speculative plans; a non-production workload without a secret keeps them."
+  }
+}
+
+# The committed workspace_variables_file can turn the bridge on as well (a
+# YAML bool), and a TF_VAR_ env variable can too.
+run "saas_bridge_flag_from_committed_file_or_env" {
+  command = plan
+
+  variables {
+    split_workload_projects  = true
+    platform_team_id         = "team-platform1"
+    workspace_variables_file = "tests/fixtures/tfc-workspaces-bridge.yaml"
+    workspace_variables = {
+      "gcp-workload-dev" = {
+        TF_VAR_enable_saas_secret_bridge = { value = "true", category = "env" }
+      }
+    }
+  }
+
+  assert {
+    condition     = module.workspace["aws-workload-dev"].speculative_enabled == false && module.workspace["gcp-workload-dev"].speculative_enabled == false
+    error_message = "the bridge flag from the committed file or a TF_VAR_ env variable marks the workspace secret-bearing."
+  }
+
+  assert {
+    condition     = length(tfe_team_access.platform_workload) == 0
+    error_message = "a secret-bearing non-production workload gets no workspace-level platform write."
+  }
+}
+
+# A token-shaped key is a secret even when it was not marked sensitive.
+run "secret_named_variable_marks_workspace" {
+  command = plan
+
+  variables {
+    split_workload_projects = true
+    platform_team_id        = "team-platform1"
+    workspace_variables = {
+      "gcp-workload-dev" = {
+        VERCEL_API_TOKEN = { value = "not-a-real-token", category = "env" }
+      }
+    }
+  }
+
+  assert {
+    condition     = module.workspace["gcp-workload-dev"].speculative_enabled == false && !contains(keys(tfe_team_access.platform_workload), "gcp-workload-dev")
+    error_message = "a workspace with a token-shaped variable key is secret-bearing even when sensitive = false."
+  }
+}
+
+# A sensitive value in the shared variable set reaches every workspace except
+# gcp-guardrails, so every shared project is secret-bearing.
+run "sensitive_common_variable_marks_every_workspace" {
+  command = plan
+
+  variables {
+    split_workload_projects = true
+    platform_team_id        = "team-platform1"
+    common_workspace_variables = {
+      some_api_key = { value = "not-a-real-key", category = "terraform", sensitive = true }
+    }
+  }
+
+  expect_failures = [check.secret_bearing_control_plane_project]
+
+  assert {
+    condition = alltrue([
+      for k, g in tfe_team_project_access.this : g.access == "custom" && g.workspace_access[0].runs == "read"
+      if g.team_id == "team-platform1"
+    ]) && length([for k, g in tfe_team_project_access.this : k if g.team_id == "team-platform1"]) == 5
+    error_message = "a sensitive common variable makes every shared project secret-bearing: platform runs = read on all five."
+  }
+
+  assert {
+    condition     = module.workspace["gcp-workload-dev"].speculative_enabled == false && module.workspace["aws-workload-dev"].speculative_enabled == false
+    error_message = "a sensitive common variable turns off speculative plans on every workspace."
+  }
+}
+
+run "secret_bearing_speculative_opt_out" {
+  command = plan
+
+  variables {
+    split_workload_projects              = true
+    platform_team_id                     = "team-platform1"
+    enable_speculative_on_secret_bearing = true
+    disable_speculative_on_production    = false
+    workspace_variables = {
+      "gcp-workload-prod" = {
+        TFE_TOKEN = { value = "not-a-real-token", category = "env", sensitive = true }
+      }
+    }
+  }
+
+  assert {
+    condition     = module.workspace["gcp-workload-prod"].speculative_enabled == true
+    error_message = "enable_speculative_on_secret_bearing = true keeps speculative plans on secret-bearing workspaces."
+  }
+
+  assert {
+    condition     = tfe_team_project_access.this["gcp-workloads/platform"].workspace_access[0].runs == "read"
+    error_message = "the opt-out covers speculative plans only: the platform team stays at runs = read."
+  }
+}
+
+# tfc-admin holds the org-admin TFE_TOKEN: it stays off speculative plans even
+# when an override list leaves it out.
+run "tfc_admin_speculative_off_without_list_entry" {
+  command = plan
+
+  variables {
+    manage_tfc_admin_workspace      = true
+    import_tfc_admin_workspace      = false
+    speculative_disabled_workspaces = []
+  }
+
+  assert {
+    condition     = module.workspace["tfc-admin"].speculative_enabled == false && module.workspace["gcp-organization"].speculative_enabled == true
+    error_message = "the self-managed tfc-admin workspace is secret-bearing: no speculative plans even when speculative_disabled_workspaces omits it."
+  }
+}
+
+# One project per cloud: a secret-bearing production workload drags the control
+# plane to runs = read. A check recommends split_workload_projects.
+run "secret_bearing_in_control_plane_project_warns" {
+  command = plan
+
+  variables {
+    split_workload_projects = false
+    platform_team_id        = "team-platform1"
+    workspace_variables = {
+      "gcp-workload-prod" = {
+        TFE_TOKEN = { value = "not-a-real-token", category = "env", sensitive = true }
+      }
+    }
+  }
+
+  expect_failures = [check.secret_bearing_control_plane_project]
+
+  assert {
+    condition     = tfe_team_project_access.this["gcp/platform"].workspace_access[0].runs == "read" && !contains(keys(tfe_team_access.platform_workload), "gcp-workload-prod")
+    error_message = "with one project per cloud, a secret-bearing workload puts the whole project at platform runs = read."
+  }
+}
+
 # The state export team reads state versions on every project except the
 # security-only guardrails project, and nothing else.
 run "state_backup_team_reads_state_only" {

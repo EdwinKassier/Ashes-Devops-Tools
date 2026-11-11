@@ -801,10 +801,52 @@ locals {
 
   # A plan is code execution with the workspace's credentials: anyone who may
   # queue a plan, including a CLI speculative plan with their own unreviewed
-  # configuration (speculative_enabled = false does not stop those), can read
-  # every environment variable on the workspace. So the broad platform team gets
-  # runs = read, never plan, on projects whose workspaces hold static secrets.
-  secret_bearing_projects = setunion(local.tfc_admin_only_projects, local.saas_projects)
+  # configuration (speculative_enabled = false does not stop those), or a PR
+  # speculative plan, can read every variable on the workspace. A workspace is
+  # secret-bearing when:
+  #   - this root writes a sensitive variable to it (workspace_variables, such
+  #     as the TFE_TOKEN of the SaaS bridge), or a variable whose key looks like
+  #     a secret (secret_variable_key_pattern) even if it is not marked sensitive;
+  #   - it runs the SaaS bridge (enable_saas_secret_bridge, as a Terraform or
+  #     TF_VAR_ env variable): its TFE_TOKEN may be set by hand, out of sight;
+  #   - the shared variable set carries a sensitive or secret-named value: that
+  #     set reaches every workspace except gcp-guardrails;
+  #   - it is tfc-admin (org-admin TFE_TOKEN) or a saas-* workspace (account-wide
+  #     Supabase/Vercel tokens), whose secrets are set by hand.
+  # The broad platform team gets runs = read, never plan, on every project that
+  # holds one; the workspace gets no workspace-level write and no speculative
+  # plans (unless enable_speculative_on_secret_bearing).
+  secret_variable_key_pattern = "(?i)(^|_)(TOKEN|SECRET|PASSWORD|PASSPHRASE|PRIVATE_KEY|API_KEY|ACCESS_KEY|CREDENTIALS)$"
+  common_set_is_secret = anytrue([
+    for k, v in var.common_workspace_variables : v.sensitive || can(regex(local.secret_variable_key_pattern, k))
+  ])
+  saas_bridge_keys = ["enable_saas_secret_bridge", "TF_VAR_enable_saas_secret_bridge"]
+  secret_bearing_workspaces = toset(concat(
+    [
+      for ws, vars in local.workspace_vars : ws
+      if anytrue([for k, v in vars : v.sensitive || can(regex(local.secret_variable_key_pattern, k))])
+    ],
+    [
+      for ws, vars in local.workspace_vars : ws
+      if anytrue([for k in local.saas_bridge_keys : try(lower(trimspace(vars[k].value)), "false") == "true"])
+    ],
+    local.common_set_is_secret ? [for ws in local.workspace_names : ws if !contains(local.guardrails_workspaces, ws)] : [],
+    local.saas_workspace_names,
+    var.manage_tfc_admin_workspace ? [var.tfc_admin_workspace_name] : [],
+  ))
+  secret_bearing_workloads_in_control_plane = sort([
+    for ws in local.secret_bearing_workspaces : ws
+    if contains(["gcp", "aws"], local.workspaces[ws].cloud) && !local.is_control_plane[ws] &&
+    contains(local.control_plane_projects, local.workspace_project_key[ws])
+  ])
+  secret_bearing_projects = setunion(
+    local.tfc_admin_only_projects,
+    local.saas_projects,
+    toset([
+      for ws in local.secret_bearing_workspaces : local.workspace_project_key[ws]
+      if contains(keys(local.workspace_project_key), ws) && contains(local.shared_access_projects, local.workspace_project_key[ws])
+    ]),
+  )
 
   # Production gcp-/aws-workload-<env> workspaces this root manages, and the
   # projects holding them: <cloud> (one project per cloud) or
@@ -815,11 +857,12 @@ locals {
     for k in local.managed_production_workloads : local.workspace_project_key[k]
     if contains(local.project_keys, local.workspace_project_key[k])
   ])
-  platform_custom_projects = setunion(local.control_plane_projects, local.saas_projects, local.production_workload_projects)
+  platform_custom_projects = setunion(local.control_plane_projects, local.saas_projects, local.production_workload_projects, local.secret_bearing_projects)
   approver_projects = setunion(
     setsubtract(local.control_plane_projects, local.tfc_admin_only_projects),
     local.saas_projects,
     local.production_workload_projects,
+    setsubtract(local.secret_bearing_projects, local.tfc_admin_only_projects),
   )
 
   team_project_access = merge(
@@ -859,13 +902,15 @@ locals {
   )
 
   # Non-production gcp/aws workload workspaces that share a project with the
-  # control plane or with a production workload. The saas project is
-  # secret-bearing and keeps runs = read for every saas-* workspace.
+  # control plane, with a production workload or with a secret-bearing
+  # workspace. A secret-bearing workspace never gets this grant: the saas
+  # project and every secret-bearing workload keep platform runs = read.
   platform_workspace_write = var.platform_team_id == null ? toset([]) : toset([
     for k, p in local.workspace_project_key : k
     if !local.is_control_plane[k] && !contains(local.managed_production_workloads, k) &&
+    !contains(local.secret_bearing_workspaces, k) &&
     contains(["gcp", "aws"], local.workspaces[k].cloud) &&
-    contains(setunion(local.control_plane_projects, local.production_workload_projects), p)
+    contains(setunion(local.control_plane_projects, local.production_workload_projects, local.secret_bearing_projects), p)
   ])
 
   # ── Speculative plans ──────────────────────────────────────────
@@ -874,6 +919,8 @@ locals {
     toset(local.guardrails_workspaces),
     var.disable_speculative_on_production ? local.production_workloads : toset([]),
     var.disable_speculative_on_saas ? toset(local.saas_workspace_names) : toset([]),
+    # Secret-bearing workspaces; saas-* keep their own switch above.
+    var.enable_speculative_on_secret_bearing ? toset([]) : setsubtract(local.secret_bearing_workspaces, toset(local.saas_workspace_names)),
   )
 
   # Every input keyed by workspace name must name a managed workspace of the
@@ -1206,6 +1253,22 @@ check "guardrails_project_has_security_team" {
   assert {
     condition     = length(local.guardrails_workspaces) == 0 || (local.guardrails_project && var.security_team_id != null)
     error_message = "gcp-guardrails is managed but ${local.guardrails_project ? "security_team_id is null: no team can run it (organization owners only). Create a security team and set security_team_id." : "enable_projects = false: it shares the default project instead of a security-only one. Set enable_projects = true and security_team_id."}"
+  }
+}
+
+# With one project per cloud, a secret-bearing workload shares its project with
+# the control plane, so the platform team can no longer queue control-plane
+# plans either. split_workload_projects = true keeps them apart. A sensitive or
+# secret-named value in the shared variable set reaches every control-plane
+# workspace, so it has the same effect in both modes.
+check "secret_bearing_control_plane_project" {
+  assert {
+    condition     = length(local.secret_bearing_workloads_in_control_plane) == 0
+    error_message = "Secret-bearing workloads (a sensitive or secret-named variable, or enable_saas_secret_bridge) share a TFC project with control-plane workspaces: ${join(", ", local.secret_bearing_workloads_in_control_plane)}. The platform team gets runs = read on that whole project, control plane included. Set split_workload_projects = true (org.tfc.split_workload_projects) to keep control-plane plans."
+  }
+  assert {
+    condition     = !local.common_set_is_secret
+    error_message = "common_workspace_variables carries a sensitive or secret-named value, and the shared variable set reaches every workspace except gcp-guardrails: every project is secret-bearing and the platform team gets runs = read everywhere. Set that value on the workspaces that need it (workspace_variables) instead."
   }
 }
 

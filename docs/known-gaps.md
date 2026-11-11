@@ -881,6 +881,25 @@ side (all mock-tested, secure defaults):
   workloads). Rotation: see
   [saas-bootstrap](runbooks/saas-bootstrap.md#bridging-secrets-to-a-workload-and-rotating-them).
 
+## OPEN — WS3 trust-model residuals (2026-11-11 due-diligence audit)
+
+- **SaaS bridge push model (SEC-1 follow-up).** Workloads with
+  `enable_saas_secret_bridge = true` still hold a `saas-outputs-reader`
+  `TFE_TOKEN`. tfc-admin marks them secret-bearing (no platform plan, no
+  speculative plan), so only the approvers team and organization owners can run
+  code that reads the token. A push model (`saas-<name>` writes the cloud
+  secrets) would remove the token from the workloads, but it needs AWS and
+  Google credentials in the saas root, which breaks the per-cloud workspace
+  split in [provider selection](architecture/provider-selection.md). Revisit
+  after the sandbox run.
+- **Secrets that tfc-admin does not write are invisible to it.** tfc-admin
+  derives secret-bearing workspaces from the variables it writes (sensitive or
+  secret-named), from `enable_saas_secret_bridge`, and from the fixed tfc-admin
+  and `saas-*` workspaces. A secret that a person adds by hand in the HCP
+  Terraform UI on any other workspace, with no bridge flag, is not detected:
+  that workspace keeps its normal platform access and speculative plans. Set
+  every secret through tfc-admin's write-only `workspace_variables`.
+
 ## DECISION — needs a human call
 
 - **Behaviour-changing security defaults** (not applied, would change posture):

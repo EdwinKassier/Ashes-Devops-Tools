@@ -405,7 +405,7 @@ variable "project_name_prefix" {
 }
 
 variable "platform_team_id" {
-  description = "TFC team ID (team-...) of the broad platform team: fixed WRITE on non-production gcp/aws workload workspaces, custom plan-level access (variables read-only) on control-plane workspaces and on production gcp/aws workload workspaces (see platform_team_control_plane_runs and control_plane_approvers_team_id), and runs = read on the secret-bearing saas and tfc-admin projects. Null = no grant."
+  description = "TFC team ID (team-...) of the broad platform team: fixed WRITE on non-production gcp/aws workload workspaces, custom plan-level access (variables read-only) on control-plane workspaces and on production gcp/aws workload workspaces (see platform_team_control_plane_runs and control_plane_approvers_team_id), and runs = read on secret-bearing projects (tfc-admin, saas, and every project holding a workspace with a static secret or the SaaS bridge; see platform_team_control_plane_runs). Null = no grant."
   type        = string
   default     = null
 
@@ -416,7 +416,7 @@ variable "platform_team_id" {
 }
 
 variable "control_plane_approvers_team_id" {
-  description = "TFC team ID (team-...) of the small approvers team: custom access with runs = apply (confirm/discard applies) and variables/state read-only on every project holding control-plane workspaces, on the saas project and on every project holding a production gcp/aws workload. It is the only team this root lets apply the control plane and production workloads, so a platform-team member who edits code or queues a run cannot also approve the apply. Must differ from platform_team_id. Null = no approvers grant (only organization owners can apply them)."
+  description = "TFC team ID (team-...) of the small approvers team: custom access with runs = apply (confirm/discard applies) and variables/state read-only on every project holding control-plane workspaces, on the saas project, on every project holding a production gcp/aws workload and on every other secret-bearing project except the self-managed tfc-admin project. It is the only team this root lets apply the control plane and production workloads, so a platform-team member who edits code or queues a run cannot also approve the apply. Must differ from platform_team_id. Null = no approvers grant (only organization owners can apply them)."
   type        = string
   default     = null
 
@@ -438,7 +438,7 @@ variable "security_team_id" {
 }
 
 variable "platform_team_control_plane_runs" {
-  description = "Runs permission of platform_team_id on projects holding control-plane workspaces (custom access; variables read-only, no locking, workspace create/delete/move, run tasks or policy overrides). plan (default) = queue plans only, applies are confirmed by control_plane_approvers_team_id; read = view runs only; apply = may also confirm applies (variables stay read-only). The same level applies to production gcp/aws workload workspaces; non-production workload workspaces keep fixed write access. On projects that hold static secrets (the self-managed tfc-admin project and the saas project) the platform team always gets runs = read whatever this is set to: queuing a plan, including a CLI speculative plan, runs code that can read the workspace's environment variables."
+  description = "Runs permission of platform_team_id on projects holding control-plane workspaces (custom access; variables read-only, no locking, workspace create/delete/move, run tasks or policy overrides). plan (default) = queue plans only, applies are confirmed by control_plane_approvers_team_id; read = view runs only; apply = may also confirm applies (variables stay read-only). The same level applies to production gcp/aws workload workspaces; non-production workload workspaces keep fixed write access. On secret-bearing projects (the self-managed tfc-admin project, the saas project, and every project holding a workspace with a sensitive or secret-named workspace variable or enable_saas_secret_bridge = true, or every shared project when common_workspace_variables carries one) the platform team always gets runs = read whatever this is set to: queuing a plan, including a CLI speculative plan, runs code that can read the workspace's variables."
   type        = string
   default     = "plan"
 
@@ -446,6 +446,12 @@ variable "platform_team_control_plane_runs" {
     condition     = contains(["read", "plan", "apply"], var.platform_team_control_plane_runs)
     error_message = "platform_team_control_plane_runs must be read, plan or apply."
   }
+}
+
+variable "enable_speculative_on_secret_bearing" {
+  description = "Keep speculative (PR) plans on secret-bearing workspaces: every workspace with a sensitive or secret-named (token, secret, password, passphrase, private key, API or access key, credentials) workspace variable or enable_saas_secret_bridge = true, every shared workspace when common_workspace_variables carries such a value, and the self-managed tfc-admin workspace. saas-* workspaces follow disable_speculative_on_saas instead. Default false: a speculative plan runs the PR's code with the workspace's variables, so it can read the secret. true only stops this rule from turning them off; speculative_disabled_workspaces, disable_speculative_on_production and disable_speculative_on_saas still apply, and the platform team stays at runs = read on those projects."
+  type        = bool
+  default     = false
 }
 
 variable "split_workload_projects" {

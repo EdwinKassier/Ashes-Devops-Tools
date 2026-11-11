@@ -405,6 +405,15 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   `config.tf`, a contract-gated remote-state read and a `tests/` suite. `templates/**` suites run in CI.
 - `scripts/check-consistency.sh` reports (does not fail on) single-platform `.terraform.lock.hcl` files.
 
+### Security
+
+- **Secret-bearing workspaces are derived, not listed (SEC-1, breaking).** tfc-admin marks every
+  workspace that holds a sensitive or secret-named variable or runs the SaaS bridge, including
+  non-production workloads. There the platform team drops to `runs = read`, the workspace runs no
+  speculative plans (`enable_speculative_on_secret_bearing` opts back in) and the approvers team
+  confirms runs. A `check` warns when a secret-bearing workload shares a project with the control
+  plane. See `UPGRADING.md`.
+
 ### Changed
 
 - **One production rule: `is_production` (breaking).** Every `gcp.environments` and

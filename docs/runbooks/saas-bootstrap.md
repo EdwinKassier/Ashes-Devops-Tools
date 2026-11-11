@@ -80,10 +80,11 @@ writes them with a write-only argument, so they are in neither the workload's pl
 create a team named `saas-outputs-reader-<name>` with no organization access flags. Map the workspace
 to the team in tfc-admin's `saas_outputs_reader_team_ids` (`{ "saas-<name>" = "team-..." }`).
 tfc-admin then grants each team custom access on its own `saas-<name>` workspace and nothing else:
-`state_versions = read-outputs`, runs read-only, no variables. One team per stack matters: a
-non-production workload keeps automatic PR plans, and a PR's plan can read the workload's
-`TFE_TOKEN`. With one team per stack, that token reads only the stack the workload bridges, never a
-production stack. Create a team token with a unique description and an `expired_at` 90 days out.
+`state_versions = read-outputs`, runs read-only, no variables. Every workload that holds the token
+is secret-bearing in tfc-admin (it has a sensitive variable, or `enable_saas_secret_bridge = true`):
+the platform team gets `runs = read` on its project, the approvers team confirms its runs, and it
+runs no speculative plans (`enable_speculative_on_secret_bearing` opts back in). One team per stack
+still limits a leaked non-production token to its own stack, never a production stack. Create a team token with a unique description and an `expired_at` 90 days out.
 Store it as the sensitive environment variable `TFE_TOKEN` only on the workload workspaces that
 bridge that stack (`enable_saas_secret_bridge` with `saas_workspace_name = "saas-<name>"`), through
 tfc-admin's write-only `workspace_variables`. tfc-admin never creates the token, so the token is in no state. Rotate it
