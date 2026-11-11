@@ -172,7 +172,9 @@ echo "==> No plan-time code execution, unlisted providers or endpoint overrides 
 # A plan runs with the workspace's credentials and environment variables (TFE_TOKEN,
 # SUPABASE_ACCESS_TOKEN, cloud plan identities), and HCP Terraform runs the OPA
 # policy no_plan_time_code_execution only after the plan. This gate enforces the
-# same rules on the repository source before any plan. It parses every .tf and
+# same rules on the repository source in the pull request, so a violation cannot
+# merge when Validation Summary is a required check (a speculative plan that
+# HCP Terraform starts for the same pull request is not stopped). It parses every .tf and
 # .tf.json file (python-hcl2, hash-locked in .github/requirements/hcl2.txt) and
 # reads its allowlists from policies/opa/no_plan_time_code_execution*.rego. It
 # also covers provisioners in removed blocks, which the plan JSON does not show.
