@@ -337,10 +337,12 @@ jobs:
         with:
           extra_args: yamllint --all-files
 
+      # Check-only manual-stage twin of the markdownlint hook (no --fix), the same
+      # hook `make markdownlint-check` runs.
       - name: Run markdownlint (pre-commit)
         uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd  # v3.0.1
         with:
-          extra_args: markdownlint --all-files
+          extra_args: markdownlint-check --all-files --hook-stage manual
 
       # The upstream repository ships placeholder owners on purpose; a fork must
       # replace them (scripts/init-landing-zone.sh --codeowners) or code-owner

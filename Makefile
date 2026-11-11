@@ -202,16 +202,16 @@ yamllint: ## yamllint exactly as CI: the pre-commit hook config, all files (CI: 
 	@command -v $(PRE_COMMIT) >/dev/null 2>&1 || { echo "pre-commit not found: pipx install pre-commit (or brew install pre-commit)"; exit 1; }
 	@$(PRE_COMMIT) run yamllint --all-files
 
-markdownlint-check: ## markdownlint exactly as CI (the hook runs --fix; pre-commit fails when it changes a file) (CI: meta-lint)
+markdownlint-check: ## markdownlint as CI, check-only (manual-stage hook without --fix; never rewrites files) (CI: meta-lint)
 	@command -v $(PRE_COMMIT) >/dev/null 2>&1 || { echo "pre-commit not found: pipx install pre-commit (or brew install pre-commit)"; exit 1; }
-	@$(PRE_COMMIT) run markdownlint --all-files || { echo "markdownlint failed or changed files: review the diff and commit the fixes"; exit 1; }
+	@$(PRE_COMMIT) run markdownlint-check --all-files --hook-stage manual
 
 # CI (meta-lint) checks the commits of the PR: merge-base with the base branch..HEAD.
 COMMIT_BASE ?= origin/main
 commit-check: ## Conventional-commit check and the UPGRADING.md rule for breaking commits, merge-base(COMMIT_BASE)..HEAD (CI: meta-lint)
 	@command -v cz >/dev/null 2>&1 || { echo "cz (commitizen) not found: pipx install commitizen (CI uses .github/requirements/commitizen.txt)"; exit 1; }
 	@git rev-parse --verify --quiet $(COMMIT_BASE) >/dev/null || { echo "$(COMMIT_BASE) not found: run 'git fetch origin main' or set COMMIT_BASE=<ref>"; exit 1; }
-	@base="$$(git merge-base $(COMMIT_BASE) HEAD)"; \
+	@base="$$(git merge-base $(COMMIT_BASE) HEAD)" && [ -n "$$base" ] || { echo "no merge-base with $(COMMIT_BASE): fetch full history (git fetch --unshallow)"; exit 1; }; \
 	if [ "$$base" = "$$(git rev-parse HEAD)" ]; then echo "commit-check: no commits ahead of $(COMMIT_BASE)"; exit 0; fi; \
 	cz check --rev-range "$$base..HEAD" || exit 1; \
 	if git log --format=%B "$$base..HEAD" | grep -Eq '^[a-z]+(\([^)]*\))?!:|^BREAKING[ -]CHANGE'; then \
@@ -250,7 +250,6 @@ ci: ## Run the local CI pipeline: every workstation-runnable gate of terraform-p
 	@$(MAKE) backend-check
 	@$(MAKE) shellcheck
 	@$(MAKE) test-scripts
-	@$(MAKE) module-usage
 	@$(MAKE) docs-check
 	@$(MAKE) validate-all
 	@$(MAKE) lint

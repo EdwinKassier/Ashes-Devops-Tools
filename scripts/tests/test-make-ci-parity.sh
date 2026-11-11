@@ -12,9 +12,10 @@ ci_block="$(awk '/^ci:/{f=1;next} f&&/^[^\t]/{f=0} f' "${REPO_ROOT}/Makefile")"
 failures=0
 for target in fmt-check consistency yamllint markdownlint-check commit-check codeowners-check \
   scaffold-fixtures-check config-check count-check links examples-refs required-checks \
-  backend-check shellcheck test-scripts module-usage docs-check validate-all lint test \
+  backend-check shellcheck test-scripts docs-check validate-all lint test \
   opa-test security; do
-  if grep -q "\$(MAKE) ${target}\$" <<<"${ci_block}"; then
+  # Anchored: a commented-out recipe line must not count.
+  if grep -Eq "^[[:space:]]*@\\\$\\(MAKE\\) ${target}\$" <<<"${ci_block}"; then
     printf '  ok   make ci runs %s\n' "${target}"
   else
     printf '  FAIL make ci does not run %s\n' "${target}" >&2

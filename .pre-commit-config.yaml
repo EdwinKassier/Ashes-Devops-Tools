@@ -146,6 +146,13 @@ repos:
         name: Markdown lint
         description: Lint markdown files
         args: ['--fix']
+      # Check-only twin (no --fix): `make markdownlint-check` and the CI
+      # meta-lint job run it, so a lint run never rewrites files.
+      - id: markdownlint
+        alias: markdownlint-check
+        name: Markdown lint (check only)
+        description: Lint markdown files without fixing them
+        stages: [manual]
 
   # YAML linting
   - repo: https://github.com/adrienverge/yamllint
