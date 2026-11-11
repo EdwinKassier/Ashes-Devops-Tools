@@ -34,7 +34,7 @@ provider "aws" {
 }
 
 module "aws_security" {
-  # checkov:skip=CKV_TF_1:Published example pinned to the release tag that release-please bumps (x-release-please-version); the tag ruleset (envs/github-admin) makes release tags immutable.
+  # checkov:skip=CKV_TF_1:Published example pinned to the release tag that release-please bumps (x-release-please-version); a commit SHA would break that flow. Release tags are not yet protected as immutable (tracked in docs/known-gaps.md).
   source = "git::https://github.com/EdwinKassier/Ashes-Devops-Tools.git//modules/aws/stages/security?ref=v0.1.0" # x-release-please-version
 
   providers = {

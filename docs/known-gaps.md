@@ -475,6 +475,13 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   e2e-sandbox and state-backup.
 - **Release:** one SemVer for all 125 modules, no signed tags or build provenance.
 - **Bus factor:** one maintainer. Code cannot fix this; see the operator items below.
+- **Release tags are mutable.** Published examples pin `?ref=vX.Y.Z` tags
+  (release-please bumps them) and Checkov CKV_TF_1 is skipped on them. Release
+  tags are not yet protected as immutable. Fix: add a tag ruleset (WS5 Task 8).
+- **Plain HTTP load-balancer listener.** `modules/aws/network/load-balancer`
+  accepts a plain HTTP listener with forward or fixed-response. Enforcing
+  `redirect-https` on application load balancers is a breaking change planned
+  outside Phase 0.
 
 ## OPEN — operator actions and items carried from archived audits
 
@@ -877,5 +884,7 @@ side (all mock-tested, secure defaults):
   error and `-d envs` reports 3. The files are `modules/gcp/stages/environment/variables.tf`,
   `envs/gcp/workload/variables.tf` and `envs/aws/network/variables.tf`. They pass
   `terraform fmt`, and CI runs `terraform validate` on every root, so they are
-  treated as Checkov parser limits. Checkov does not scan those files. They do
+  treated as Checkov parser limits. Checkov does not scan those three files, so a
+  misconfiguration in them would not be caught by Checkov. Trivy and CI validation
+  still cover them. Checkov does not scan those files. They do
   not fail the gate. Re-check after each Checkov upgrade.
