@@ -12,7 +12,8 @@ Repository secrets and variables referenced by `.github/workflows/`. Configure t
 | `TFC_TOKEN` | Secret | `terraform-apply.yml` | Terraform Cloud team token with **READ** access to workspace runs. Used only to verify run status before publishing a release; it does not trigger or modify runs. |
 | `TFC_TOKEN_DRIFT` | Secret | `drift-detection.yml` | Terraform Cloud team token with **Queue Plans** (`runs = plan`) and **Read state versions** on the target workspaces. Drift detection reads the current state version to find the last applied run and its configuration version, then creates a speculative refresh-only run pinned to that configuration (`POST /runs`), which read access cannot do. Merged but unapplied configuration is reported as a separate warning, not as drift. There is **no fallback** to `TFC_TOKEN`: if unset, scheduled runs skip and manual runs fail with an explicit error, so the release token is never silently granted Queue Plans. |
 | `TFC_ORGANIZATION` | Variable | `drift-detection.yml`, `terraform-apply.yml` | Terraform Cloud organization name that owns the workspaces. |
-| `RELEASE_PLEASE_TOKEN` | Secret | `release.yml` | Machine-account token release-please uses to open the release PR and cut `vX.Y.Z` tags. **Required; no fallback.** See [below](#release_please_token). |
+| `RELEASE_APP_ID` | Variable (`release` environment) | `release.yml` | ID of the release GitHub App. **Required; no fallback.** See [below](#release_app). |
+| `RELEASE_APP_PRIVATE_KEY` | Secret (`release` environment) | `release.yml` | Private key of the release GitHub App. The workflow mints a one-hour token from it on every run. **Required; no fallback.** See [below](#release_app). |
 
 Without both of these, `drift-detection.yml` **fails**, unless the repository variable
 `REAL_CLOUD_CHECKS_OPT_OUT=true` acknowledges running without it (see "Drift detection
@@ -43,29 +44,40 @@ The workflow passes it only to `peter-evans/create-pull-request`. The checkout s
 a stored credential. If the secret is unset the workflow falls back to `GITHUB_TOKEN` and the
 docs PR will not trigger CI.
 
-## RELEASE_PLEASE_TOKEN
+## release_app
 
-`release.yml` runs on every push to `main` and **fails on its first step** with
-`RELEASE_PLEASE_TOKEN missing` when the secret is unset. It deliberately does not fall back
-to `GITHUB_TOKEN`: a pull request opened with `GITHUB_TOKEN` does not trigger
-`pull_request` workflows, so the release PR would never receive the required
-**Validation Summary** check and could never merge under branch protection. A red run that
-names the missing secret is a better signal than a release PR that is stuck forever.
+`release.yml` runs on every push to `main`. It uses one GitHub App, the release bot, as its
+identity. The workflow mints an installation token that lasts one hour at the start of each run,
+so no long-lived personal access token exists. The first step **fails** with
+`Release App missing` when the variable `RELEASE_APP_ID` or the secret
+`RELEASE_APP_PRIVATE_KEY` is unset. It deliberately does not fall back to `GITHUB_TOKEN`: a pull
+request opened with `GITHUB_TOKEN` does not trigger `pull_request` workflows, so the release PR
+would never receive the required **Validation Summary** check and could never merge under branch
+protection. A red run that names the missing setting is a better signal than a release PR that
+is stuck forever.
 
-Create one of the following and store it as the repository secret `RELEASE_PLEASE_TOKEN`:
+Set it up once (repository admin):
 
-- **Fine-grained PAT** on a machine account (preferred over a classic PAT), scoped to this
-  repository only, with **Contents: Read and write**, **Pull requests: Read and write**
-  and **Issues: Read and write** (release-please creates its `autorelease:*` labels).
-  Give it an expiry and a calendar reminder to rotate it.
-- **GitHub App installation token**: an App installed on this repository with the same three
-  permissions. Mint the token in a step before release-please (for example with a SHA-pinned
-  `actions/create-github-app-token`) and pass it in place of the secret.
-- **Classic PAT** with `repo` scope: works, but is broader than needed.
+1. Go to **Settings, Developer settings, GitHub Apps, New GitHub App**. Name it
+   `ashes-release-bot`. Turn webhooks off.
+2. Give it these repository permissions: **Contents: Read and write**, **Pull requests: Read and
+   write**, **Issues: Read and write** (release-please creates its `autorelease:*` labels) and
+   **Metadata: Read**. Install it on this repository only.
+3. Generate a private key, then store both values in the `release` environment:
 
-The machine account must be allowed to push tags that your branch and tag rulesets protect.
+   ```bash
+   gh variable set RELEASE_APP_ID --env release --body "<app id>"
+   gh secret set RELEASE_APP_PRIVATE_KEY --env release < ashes-release-bot.private-key.pem
+   rm -P ashes-release-bot.private-key.pem   # macOS; use shred -u on Linux
+   gh workflow run release.yml
+   ```
+
+4. If a ruleset protects the `vX.Y.Z` tags, add the App as a bypass actor so release-please can
+   create the tag.
+
 Forks and clones that do not cut releases can disable the workflow instead
-(**Actions → Release → Disable workflow**).
+(**Actions, Release, Disable workflow**). Rotate the private key on a schedule: generate a new
+key, update the secret, then delete the old key in the App settings.
 
 ## Dynamic provider credentials (GCP and AWS roots) — managed by tfc-admin
 
@@ -173,7 +185,7 @@ environment, not at repository level, and restrict the environment's deployment 
 | Environment | Secrets | Deployment branch / tag policy | Used by |
 |---|---|---|---|
 | `tfc-drift` | `TFC_TOKEN_DRIFT` | `main` only | `drift-detection.yml` |
-| `release` | `RELEASE_PLEASE_TOKEN` | `main` only | `release.yml` |
+| `release` | `RELEASE_APP_PRIVATE_KEY` (plus variable `RELEASE_APP_ID`) | `main` only | `release.yml` |
 | `docs-bot` | `DOCS_BOT_PAT` (optional) | `main` only | `documentation.yml` |
 | `tfc-state-backup` | `TFC_TOKEN_STATE_BACKUP` | `main` only | `state-backup.yml` |
 | `tfc-readonly` | `TFC_TOKEN` | tags `gcp-*/v*`, `aws-*/v*`, `saas/*/v*`, `tfc-admin/v*` | `terraform-apply.yml` |
@@ -193,8 +205,8 @@ gh secret delete TFC_TOKEN_DRIFT                      # (repeat for each secret)
 
 The workflows already name these environments. GitHub creates an environment, unprotected, the
 first time a job references it, so the branch policy above is what makes the scoping real.
-Prefer a GitHub App installation token over `RELEASE_PLEASE_TOKEN` / `DOCS_BOT_PAT` PATs where
-your organization allows it.
+Prefer a GitHub App installation token over a `DOCS_BOT_PAT` PAT where
+your organization allows it. The release workflow already does this.
 
 ## Drift detection behavior without secrets
 
