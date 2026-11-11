@@ -143,7 +143,12 @@ Pass 1 sets `TFC_AWS_PROVIDER_AUTH` / `TFC_AWS_PLAN_ROLE_ARN` / `TFC_AWS_APPLY_R
 
 **VCS-driven runs get no local tfvars.** Every AWS root reads the committed `config/landing-zone.yaml`: `landing_zone_name` (`org.name`), `owner`, `cost_center`, `aws_region` (`org.regions.aws`), `tfc_organization`, `management_account_id`, `log_archive_bucket_name`, the region lists, the account map and the two role ARNs. An explicit variable still wins. Put any remaining per-workspace inputs in a committed `config/tfc-workspaces.yaml` (copy [`config/tfc-workspaces.example.yaml`](../../config/tfc-workspaces.example.yaml)); tfc-admin sets them as workspace variables (`workspace_variables_file`). Secrets are rejected there: pass them through tfc-admin `workspace_variables` (written write-only). Org-wide values not in the config file belong in `common_workspace_variables`.
 
-**Run #1 state note (the chicken-and-egg).** With Option B the first `aws-organization` run executes remotely in TFC. With Option A (or no TFC credentials yet) set tfc-admin `workspace_execution_modes = { "aws-organization" = "local" }`: the run then executes on your machine with the credentials in your shell while state still lands in the TFC workspace. Switch it back (remove the entry, re-apply tfc-admin) once the Option B roles exist. The `-backend=false` local-state-then-migrate route also works, but is rarely needed now that tfc-admin creates the workspace up front.
+**Run #1: where it executes.** tfc-admin creates `aws-organization` connected to VCS in **remote** execution mode. HCP Terraform does not allow remote applies from the CLI on a workspace linked to a VCS repository, so `terraform apply` from your shell fails there. Pick one path:
+
+- **Option B roles (recommended):** start a run for the `aws-organization` workspace in HCP Terraform, review the plan and confirm the apply. The run reads the committed config from the connected VCS branch, so merge your `config/landing-zone.yaml` changes there first. It uses the `TFC_AWS_*` variables that tfc-admin set in pass 1.
+- **Option A static key, or no TFC credentials yet:** set tfc-admin `workspace_execution_modes = { "gcp-bootstrap" = "local", "aws-organization" = "local" }` and re-apply tfc-admin. Keep the `gcp-bootstrap` entry if GCP is enabled, because this map replaces the default and does not merge with it. The run then executes on your machine with the credentials in your shell, while state stays in the TFC workspace. HCP Terraform does not use workspace variables in local mode, so the credentials must be in your shell. After run #1, remove the `aws-organization` entry and re-apply tfc-admin so every later run is remote and policy-checked.
+
+The `-backend=false` local-state-then-migrate route also works, but is rarely needed now that tfc-admin creates the workspace up front.
 
 Supply the TFC org the same way every root does: `export TF_CLOUD_ORGANIZATION=<your-tfc-org>` before `terraform init` (see `envs/aws/organization/backend.tf`). The `cloud` block accepts no `-backend-config`.
 
@@ -251,9 +256,8 @@ Follow this order top to bottom. **Manual gates** are inline and must be complet
 
 2. **Apply `aws-organization`.** Its inputs come from the committed `config/landing-zone.yaml`: `org.name`, real unique root emails for every account in `aws.accounts` / `aws.workload_accounts`, `aws.terraform_run_role_arn` and `aws.break_glass_role_arn` (see Step 2), and `aws.log_archive_bucket_name`. The workload bindings are derived from `aws.workload_environments`. Explicit variables (`config/tfc-workspaces.yaml`, or `terraform.tfvars` for a local run) override them. Then apply:
 
-   ```bash
-   terraform -chdir=envs/aws/organization apply
-   ```
+   - Remote (Option B): start a run on `aws-organization` in HCP Terraform and confirm the apply.
+   - Local execution mode (Option A, see Step 3): `terraform -chdir=envs/aws/organization apply`. This works only while tfc-admin holds `aws-organization` in `local` mode.
 
    `tfc_organization` comes from `org.tfc.organization`. `tfc_project` defaults to the tfc-admin AWS project (`landing-zone-aws`, or `org.tfc.aws_project`), which must match the workspace project literally. The apply creates the org, the OU tree, the foundational accounts, the guardrails and the **TFC OIDC baseline StackSet**. It publishes `account_ids`, `account_role_arns`, `tfc_plan_role_arns` and `tfc_apply_role_arns`.
 
