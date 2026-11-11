@@ -267,3 +267,60 @@ test_message_names_module_path if {
 	some m in msgs
 	startswith(m, "module.saas_workload.module.vault.terraform_data.x: ")
 }
+
+# ── More endpoint keys ─────────────────────────────────────────────────────
+test_base_url_denied if {
+	count(p.deny) == 1 with input as with_providers({"vercel": prov("vercel", "registry.terraform.io/vercel/vercel", {"base_url": {"constant_value": "https://attacker.example"}})})
+}
+
+test_api_url_denied if {
+	count(p.deny) == 1 with input as with_providers({"supabase": prov("supabase", "registry.terraform.io/supabase/supabase", {"api_url": {"constant_value": "https://attacker.example"}})})
+}
+
+test_metadata_host_denied if {
+	count(p.deny) == 1 with input as with_providers({"azurerm": prov("azurerm", "registry.terraform.io/hashicorp/azurerm", {"metadata_host": {"constant_value": "attacker.example"}})})
+}
+
+test_insecure_denied if {
+	count(p.deny) == 1 with input as with_providers({"aws": prov("aws", "registry.terraform.io/hashicorp/aws", {"insecure": {"constant_value": true}})})
+}
+
+test_skip_tls_verify_denied if {
+	count(p.deny) == 1 with input as with_providers({"aws": prov("aws", "registry.terraform.io/hashicorp/aws", {"skip_tls_verify": {"constant_value": true}})})
+}
+
+test_no_proxy_denied if {
+	count(p.deny) == 1 with input as with_providers({"aws": prov("aws", "registry.terraform.io/hashicorp/aws", {"no_proxy": {"constant_value": "*"}})})
+}
+
+test_azurerm_allowed if {
+	count(p.deny) == 0 with input as with_providers({"azurerm": prov("azurerm", "registry.terraform.io/hashicorp/azurerm", {"features": [{}]})})
+}
+
+# An enum (regional / legacy), not a host name.
+test_s3_us_east_1_regional_endpoint_allowed if {
+	count(p.deny) == 0 with input as with_providers({"aws": prov("aws", "registry.terraform.io/hashicorp/aws", {"s3_us_east_1_regional_endpoint": {"constant_value": "regional"}})})
+}
+
+# ── terraform_remote_state backends ────────────────────────────────────────
+remote_state(backend_expr) := in_root([{
+	"address": "data.terraform_remote_state.x", "mode": "data", "type": "terraform_remote_state", "name": "x",
+	"expressions": {"backend": backend_expr, "config": {"constant_value": {}}},
+}])
+
+test_remote_state_cloud_allowed if count(p.deny) == 0 with input as remote_state({"constant_value": "cloud"})
+
+test_remote_state_remote_allowed if count(p.deny) == 0 with input as remote_state({"constant_value": "remote"})
+
+test_remote_state_http_denied if count(p.deny) == 1 with input as remote_state({"constant_value": "http"})
+
+test_remote_state_s3_denied if count(p.deny) == 1 with input as remote_state({"constant_value": "s3"})
+
+test_remote_state_backend_reference_denied if count(p.deny) == 1 with input as remote_state({"references": ["var.backend"]})
+
+test_remote_state_in_module_denied if {
+	count(p.deny) == 1 with input as in_module("../x", [{
+		"address": "data.terraform_remote_state.x", "mode": "data", "type": "terraform_remote_state", "name": "x",
+		"expressions": {"backend": {"constant_value": "http"}},
+	}])
+}

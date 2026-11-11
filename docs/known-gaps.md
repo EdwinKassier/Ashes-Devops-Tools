@@ -918,12 +918,22 @@ side (all mock-tested, secure defaults):
   endpoint). The checks before the plan are `scripts/check-consistency.sh` in
   CI, which never sees a CLI upload, and `runs = read` for the platform team
   on secret-bearing projects.
+- **`removed` blocks are invisible to `no_plan_time_code_execution`.**
+  Terraform does not render a `removed` block in the plan JSON (verified with
+  Terraform 1.17.1). A destroy-time provisioner in one runs at apply without
+  the policy seeing it. What limits it today: `scripts/check-consistency.sh`
+  in CI fails on every provisioner in repo code, and confirming an apply needs
+  apply rights (the platform team has `runs = read` on secret-bearing
+  projects). A CLI upload by someone with apply rights is not covered.
 - **OPA cannot attest module content.** The provisioner allowlist pins the
   module-call chain and its source strings, not the bytes of
-  `modules/supabase/vault-secrets` or its `scripts/*.mjs`. The plan JSON does
-  not name the root directory either, so any root with the same two calls and
-  the same relative sources passes. A CLI upload can carry a modified copy at
-  the same paths. The saas project's `runs = read` for the platform team and
+  `modules/supabase/vault-secrets` or its `scripts/*.mjs`. The policy does
+  not pin the run's workspace either, so any workspace whose root has the
+  same two calls and the same relative sources passes. HCP Terraform's policy
+  input may carry `run.workspace` fields; pinning the rule to the `saas-*`
+  workspaces must first be verified against a real HCP run, because a wrong
+  field name would fail closed and block every saas apply. A CLI upload can
+  carry a modified copy at the same paths. The saas project's `runs = read` for the platform team and
   approvers-only confirmation are the control there.
 - **Endpoint overrides that the plan JSON does not show.** The policy reads
   the argument names in `configuration.provider_config.*.expressions`.
@@ -934,6 +944,19 @@ side (all mock-tested, secure defaults):
   config file (`endpoint_url`) never appear in the plan. Workspace variables
   that tfc-admin writes go through its reviewed configuration; a variable that
   a person adds by hand in the HCP Terraform UI does not.
+- **Credential-file arguments are not checked.** The policy does not look at
+  the aws provider's `shared_config_files`, `shared_credentials_files` or
+  `profile` (a file can set `credential_process`, which runs a command, or
+  `endpoint_url`), or the google provider's `credentials` /
+  `external_credentials` (an `external_account` file names its own
+  `token_url`). `envs/aws/security` and the other AWS roots legitimately set
+  `shared_config_files` to the TFC dynamic-credential file, so a fix needs
+  value-based rules, not a deny by argument name.
+- **Remote-state `hostname` is not checked.** `terraform_remote_state` must
+  use the `cloud` or `remote` backend, but the policy does not check a
+  `hostname` in its `config`. When `config` is built from locals or variables
+  the plan JSON shows only references, so such a check could not be complete.
+  No remote-state read in this repo sets `hostname`.
 
 ## DECISION — needs a human call
 

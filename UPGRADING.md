@@ -157,12 +157,15 @@ To restore access:
 
 #### `no_plan_time_code_execution` is exact and checks providers (policies)
 
-The policy is mandatory and not overridable (`policy_set_overridable = false`),
+**Breaking.** The policy is mandatory and not overridable (`policy_set_overridable = false`),
 and the policy set is read from your VCS branch. After you merge this change,
 the next run of each workspace uses it. The unchanged upstream roots pass:
 every provider they declare is on the list, no root provider block sets an
-endpoint key, and `envs/saas` keeps the reviewed module chain. A run is now
-denied after its plan in these cases:
+endpoint key, every remote-state read uses `backend = "cloud"`, and
+`envs/saas` keeps the reviewed module chain. The allowlists are in
+`policies/opa/no_plan_time_code_execution_allowlist.rego`: a fork edits only
+that file, in a reviewed change. A run is now denied after its plan in these
+cases:
 
 - **A provisioner outside the exact chain.** Only resources declared directly
   in `module.saas_workload.module.vault_secrets`, called with the sources
@@ -177,17 +180,23 @@ denied after its plan in these cases:
   `registry.terraform.io`. A provider from a private registry or another
   namespace is denied, also when its type name is `aws` or `google`. If your
   fork uses another provider, add its full source address to
-  `allowed_provider_sources` in `policies/opa/no_plan_time_code_execution.rego`
-  in a reviewed change.
+  `allowed_provider_sources` in the allowlist file.
 - **A provider endpoint, proxy or TLS override.** Any provider block that sets
-  `endpoints`, a key that ends in `_endpoint` (except `use_fips_endpoint` and
-  `use_dualstack_endpoint`), `hostname`, `base_url`, `api_url`,
+  `endpoints`, a key that ends in `_endpoint` (except `use_fips_endpoint`,
+  `use_dualstack_endpoint` and `s3_us_east_1_regional_endpoint`), `hostname`, `base_url`, `api_url`,
   `metadata_host`, `universe_domain`, `custom_ca_bundle`, `insecure`,
   `ssl_skip_verify`, `skip_tls_verify`, `http_proxy`, `https_proxy` or
   `no_proxy` is denied, whatever the value. Examples: a LocalStack `endpoints`
   block, a corporate proxy, or `hostname` on the `tfe` provider for Terraform
-  Enterprise. Remove the key. If you need it, change `endpoint_key_pattern` in
-  the policy in a reviewed change, and record why.
+  Enterprise. Remove the key. A switch or enum that takes no host name goes
+  in `endpoint_key_exceptions` in the allowlist file. To allow a real
+  override, change `endpoint_key_pattern` in the policy in a reviewed change,
+  and record why.
+- **A remote-state read with another backend.** A
+  `data "terraform_remote_state"` whose `backend` is not the literal `cloud`
+  or `remote` is denied, also when `backend` is a variable or local. Use the
+  `cloud` backend, or add the backend to `allowed_remote_state_backends` in
+  the allowlist file.
 
 The plan of a denied run has already run, so a denial is not a rollback. To
 unblock a run that you judge safe before the policy change merges, set

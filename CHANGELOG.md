@@ -407,11 +407,13 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
 
 ### Security
 
-- **Plan-time execution policy is exact (SEC-2).** `no_plan_time_code_execution` allows a
+- **Plan-time execution policy is exact (SEC-2, breaking).** `no_plan_time_code_execution` allows a
   provisioner only in `module.saas_workload.module.vault_secrets` with the exact source strings of
   `envs/saas`; a source that only ends in `supabase/vault-secrets` is denied. `external` / `http`
   data sources are denied everywhere. A new provider allowlist covers every provider the repo
-  declares, and provider endpoint, proxy and TLS overrides are denied. The policy header and docs
+  declares, provider endpoint, proxy and TLS overrides are denied, and `terraform_remote_state`
+  must use the `cloud` or `remote` backend. Forks extend
+  `policies/opa/no_plan_time_code_execution_allowlist.rego`. The policy header and docs
   now say that it runs after the plan: it stops the apply, and it detects (does not prevent)
   plan-time execution. See `UPGRADING.md`.
 - **Secret-bearing workspaces are derived, not listed (SEC-1, breaking).** tfc-admin marks every

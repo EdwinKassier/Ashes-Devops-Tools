@@ -1,6 +1,7 @@
 # MANDATORY: no provisioners outside the one reviewed module-call chain, no
-# external / http data sources anywhere, only allowlisted providers, and no
-# provider endpoint, proxy or TLS overrides. A plan runs with the workspace's
+# external / http data sources anywhere, only allowlisted providers and
+# remote-state backends, and no provider endpoint, proxy or TLS overrides.
+# The allowlists are in no_plan_time_code_execution_allowlist.rego. A plan runs with the workspace's
 # credentials and environment variables (TFE_TOKEN, SUPABASE_ACCESS_TOKEN, the
 # cloud plan identity). A data "external" or data "http" block and every
 # provider binary run during the plan; a provisioner runs arbitrary commands
@@ -26,9 +27,19 @@
 #     (one entry per provider configuration, including implied providers of
 #     modules, keyed "<name>[.<alias>]" or "<module_address>:<name>")
 #   resource_changes[].provider_name
-# Blind spots of that JSON: a `dynamic` block inside a provider block is not
-# rendered in .expressions, and endpoints set through environment variables or
-# an AWS shared config file never appear in the plan. See docs/known-gaps.md.
+#   ...resources[i].expressions.backend.constant_value (terraform_remote_state)
+# Blind spots (docs/known-gaps.md):
+#   - a `dynamic` block inside a provider block is not rendered in .expressions;
+#   - endpoints set through environment variables, an AWS shared config or
+#     credentials file (endpoint_url, credential_process) or a google
+#     external_account credentials file (token_url) never appear in the plan;
+#   - a `removed` block is not rendered at all, so a destroy-time provisioner
+#     in it runs at apply without this policy seeing it. What limits it today:
+#     scripts/check-consistency.sh greps the repo for every provisioner, and
+#     confirming an apply needs apply rights (the platform team has runs =
+#     read on secret-bearing projects);
+#   - the policy does not pin the run's workspace: any workspace whose root
+#     has the same two module calls and sources passes the provisioner rule.
 #
 # Provisioner allowlist: modules/supabase/vault-secrets (its reviewed bootstrap
 # and reconcile provisioners), reached through the EXACT chain of module calls
@@ -47,32 +58,11 @@ allowed_provisioner_chain := [
 	{"name": "vault_secrets", "source": "../../../supabase/vault-secrets"},
 ]
 
-# Every provider that a root, module or template of this repo declares, plus
-# the built-in provider of terraform_data / terraform_remote_state. azurerm is
-# listed for the commented example in templates/shared/cloud-root. A fork that
-# adds a provider adds it here in the same change.
-allowed_provider_sources := {
-	"registry.terraform.io/hashicorp/archive",
-	"registry.terraform.io/hashicorp/aws",
-	"registry.terraform.io/hashicorp/azurerm",
-	"registry.terraform.io/hashicorp/google",
-	"registry.terraform.io/hashicorp/google-beta",
-	"registry.terraform.io/hashicorp/null",
-	"registry.terraform.io/hashicorp/random",
-	"registry.terraform.io/hashicorp/tfe",
-	"registry.terraform.io/supabase/supabase",
-	"registry.terraform.io/vercel/vercel",
-	"terraform.io/builtin/terraform",
-}
-
 # Provider arguments that redirect API calls, proxy them or weaken TLS:
 # aws endpoints {} / custom_ca_bundle / insecure / *_proxy /
 # ec2_metadata_service_endpoint, google *_custom_endpoint / universe_domain,
 # tfe hostname / ssl_skip_verify, supabase endpoint, azurerm metadata_host.
 endpoint_key_pattern := `^(endpoints?|.*_endpoint|hostname|base_url|api_url|metadata_host|universe_domain|custom_ca_bundle|insecure|ssl_skip_verify|skip_tls_verify|https?_proxy|no_proxy)$`
-
-# Switches that pick another AWS-owned endpoint; they take no host name.
-endpoint_key_exceptions := {"use_fips_endpoint", "use_dualstack_endpoint"}
 
 # Every resource block of the configuration, at any module depth, with its
 # walk path.
@@ -118,6 +108,19 @@ deny contains msg if {
 	object.get(r, "mode", "") == "data"
 	object.get(r, "type", "") in exec_data_types
 	msg := sprintf("%s: data %q ran at plan time with the workspace's credentials and environment variables; it is not allowed", [full_address(path, r), r.type])
+}
+
+# A remote-state read runs a backend client with the workspace's environment
+# during the plan: an http or s3 backend can send it to another host. The
+# backend must be a literal on allowed_remote_state_backends.
+deny contains msg if {
+	some pair in config_resources
+	path := pair[0]
+	r := pair[1]
+	object.get(r, "mode", "") == "data"
+	object.get(r, "type", "") == "terraform_remote_state"
+	not object.get(r, ["expressions", "backend", "constant_value"], null) in allowed_remote_state_backends
+	msg := sprintf("%s: terraform_remote_state backend must be a literal %v, not %v", [full_address(path, r), sort(allowed_remote_state_backends), object.get(r, ["expressions", "backend"], null)])
 }
 
 deny contains msg if {
