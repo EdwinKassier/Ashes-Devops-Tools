@@ -413,7 +413,7 @@ jobs:
       - name: Scaffold fixtures match the scaffolder output
         run: make scaffold-fixtures-check
 
-      - name: Config schema (landing-zone.yaml examples and fixtures)
+      - name: Config schema (the real landing-zone.yaml when present, examples and fixtures)
         # Accepted risk: version-pinned lint tool installed without hashes
         # (dev-only, read-only job; no secrets in scope).
         run: |

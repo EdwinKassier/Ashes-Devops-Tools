@@ -1,4 +1,12 @@
 repos:
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.39.0
+    hooks:
+      - id: check-jsonschema
+        name: config/landing-zone.yaml matches the schema
+        files: ^config/(landing-zone|sandbox/landing-zone).*\.yaml$
+        args: ["--schemafile", "config/landing-zone.schema.json"]
+
   # Terraform hooks
   - repo: https://github.com/antonbabenko/pre-commit-terraform
     rev: cba87736ffe2c479523d9d69919c1215084c7acc  # v1.104.0

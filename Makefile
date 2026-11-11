@@ -374,12 +374,5 @@ scaffold-fixtures: ## Regenerate tests/fixtures/scaffold/*.yaml from the scaffol
 scaffold-fixtures-check: ## Fail if tests/fixtures/scaffold/ differs from fresh scaffolder output (CI: meta-lint)
 	./scripts/scaffold-fixtures.sh --check
 
-config-check: ## Validate config/*.example.yaml, config/sandbox/ and every test fixture and tests/fixtures/scaffold against config/landing-zone.schema.json (needs check-jsonschema)
-	@command -v check-jsonschema >/dev/null || { echo "check-jsonschema not found: pipx install check-jsonschema (see .tool-versions)"; exit 1; }
-	@{ echo config/landing-zone.example.yaml; find config/sandbox -name 'landing-zone*.yaml' 2>/dev/null; find envs modules -name 'landing-zone*.yaml' -path '*/tests/fixtures/*' ! -name '*-missing-is-production.yaml' ! -path '*/.terraform/*'; find tests/fixtures/scaffold -name 'landing-zone*.yaml'; } | sort | \
-		xargs check-jsonschema --schemafile config/landing-zone.schema.json
-	@./scripts/check-config-schema-coverage.sh
-	@for f in config/tests/*.yaml $$(find envs -name '*-missing-is-production.yaml' -path '*/tests/fixtures/*' ! -path '*/.terraform/*' | sort); do \
-		if check-jsonschema --schemafile config/landing-zone.schema.json "$$f" >/dev/null 2>&1; then \
-			echo "config-check: $$f should FAIL schema validation but passed"; exit 1; fi; \
-	done; echo "config-check: negative fixtures rejected as expected"
+config-check: ## Validate config/landing-zone.yaml (when present), the examples, config/sandbox/ and every test fixture and tests/fixtures/scaffold against config/landing-zone.schema.json (needs check-jsonschema)
+	@./scripts/check-config.sh
