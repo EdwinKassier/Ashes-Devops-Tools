@@ -376,7 +376,7 @@ scaffold-fixtures-check: ## Fail if tests/fixtures/scaffold/ differs from fresh 
 
 config-check: ## Validate config/*.example.yaml, config/sandbox/ and every test fixture and tests/fixtures/scaffold against config/landing-zone.schema.json (needs check-jsonschema)
 	@command -v check-jsonschema >/dev/null || { echo "check-jsonschema not found: pipx install check-jsonschema (see .tool-versions)"; exit 1; }
-	@{ echo config/landing-zone.example.yaml; find config/sandbox -name 'landing-zone*.yaml' 2>/dev/null; find envs modules -name 'landing-zone*.yaml' -path '*/tests/fixtures/*'; find tests/fixtures/scaffold -name 'landing-zone*.yaml'; } | sort | \
+	@{ echo config/landing-zone.example.yaml; find config/sandbox -name 'landing-zone*.yaml' 2>/dev/null; find envs modules -name 'landing-zone*.yaml' -path '*/tests/fixtures/*' ! -path '*/.terraform/*'; find tests/fixtures/scaffold -name 'landing-zone*.yaml'; } | sort | \
 		xargs check-jsonschema --schemafile config/landing-zone.schema.json
 	@./scripts/check-config-schema-coverage.sh
 	@for f in config/tests/*.yaml; do \
