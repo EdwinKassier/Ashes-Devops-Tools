@@ -10,6 +10,11 @@ repos:
       - id: terraform_validate
         name: Terraform validate
         description: Validate Terraform configuration
+        # git exports GIT_DIR to hooks. Running terraform init on a git-sourced
+        # example then runs its git checkout against this repository and moves HEAD.
+        # Examples are validated by make validate-all and CI
+        # (scripts/terraform-roots.sh collect_examples), outside any hook.
+        exclude: '(^|/)examples/'
         args:
           - --hook-config=--retry-once-with-cleanup=true
 
