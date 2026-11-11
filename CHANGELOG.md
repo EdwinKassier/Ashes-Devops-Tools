@@ -14,6 +14,10 @@ distinct from the per-workspace **deployment** tags (`gcp-organization/vX.Y.Z`,
 `gcp-workload/<env>/vX.Y.Z`, `aws-*/vX.Y.Z`, …) that `terraform-apply.yml` uses to record
 release metadata for a Terraform Cloud run.
 
+**Status:** release-please is configured but does not run until a maintainer creates the release
+GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
+([CI secrets](docs/guides/CI_SECRETS.md#release_app)). `v0.1.0` was tagged by hand.
+
 ---
 
 ## [Unreleased]

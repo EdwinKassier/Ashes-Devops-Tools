@@ -4,7 +4,7 @@
 
 # Ashes DevOps Tools
 
-**Production-grade Terraform infrastructure for AWS, GCP, Supabase, and Vercel**
+**Reference Terraform landing zone for AWS, GCP, Supabase and Vercel (pre-production: not yet applied to a real organization)**
 
 [![Terraform](https://img.shields.io/badge/Terraform-1.17%2B-7B42BC?style=for-the-badge&logo=terraform&logoColor=white)](https://terraform.io)
 [![AWS](https://img.shields.io/badge/AWS-FF9900?style=for-the-badge&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZmZmZiI%2BPHBhdGggZD0iTTE5LjM1IDEwLjA0QzE4LjY3IDYuNTkgMTUuNjQgNCAxMiA0IDkuMTEgNCA2LjYgNS42NCA1LjM1IDguMDQgMi4zNCA4LjM2IDAgMTAuOTEgMCAxNGMwIDMuMzEgMi42OSA2IDYgNmgxM2MyLjc2IDAgNS0yLjI0IDUtNSAwLTIuNjQtMi4wNS00Ljc4LTQuNjUtNC45NnoiLz48L3N2Zz4K&logoColor=white)](https://aws.amazon.com)
@@ -25,17 +25,18 @@
 
 </div>
 
-> **Maturity: v0.x.** Every module plans and is tested against mock providers, but
-> most guardrails and the newer opt-in modes have not yet been proven against a real
-> organization in the sandbox estate. Read [`docs/known-gaps.md`](docs/known-gaps.md)
-> (open, preview and sandbox-pending items) before relying on a control in
-> production, and [`UPGRADING.md`](UPGRADING.md) before taking a new release.
+> **Maturity: v0.x, pre-production.** Every module plans and is tested against mock
+> providers and scanned by Trivy and Checkov. No root has yet been applied to a real
+> organization, and the guardrails are unproven against real clouds. Read
+> [`docs/known-gaps.md`](docs/known-gaps.md) before relying on any control,
+> [`docs/runbooks/production-hardening.md`](docs/runbooks/production-hardening.md) before a
+> production estate, and [`UPGRADING.md`](UPGRADING.md) before taking a new release.
 
 ---
 
 ## Overview
 
-**Ashes DevOps Tools** is a fully-tested, security-scanned Terraform platform covering the four clouds it supports — `{aws, gcp, supabase, vercel}`. Each cloud is its own root(s) and Terraform Cloud workspace(s), so you deploy **any combination**:
+**Ashes DevOps Tools** is a reference landing zone, tested against mock providers and security-scanned, covering the four clouds it supports, `{aws, gcp, supabase, vercel}`. Each cloud is its own root(s) and Terraform Cloud workspace(s), so you deploy **any combination**:
 
 | Cloud | Roots | What it manages |
 |:--------|:--------|:----------------|
@@ -321,14 +322,24 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
 |:---------|:--------|:-------------|
 | [`terraform-plan.yml`](.github/workflows/terraform-plan.yml) | Pull Request | fmt · docs-check · validate (sharded) · lint · Trivy · Checkov · tests · meta-lint → `Validation Summary` |
 | [`terraform-apply.yml`](.github/workflows/terraform-apply.yml) | Workspace tags (`gcp-*/v*`, `gcp-workload/*/v*`, `aws-*/v*`, `saas/*/v*`, `tfc-admin/v*`) | Verify TFC run → publish release metadata |
-| [`release.yml`](.github/workflows/release.yml) | Push to `main` | release-please: maintain the release PR; merging it tags `vX.Y.Z` + updates CHANGELOG |
+| [`release.yml`](.github/workflows/release.yml) | Push to `main` | release-please: maintains the release PR; merging it tags `vX.Y.Z` and updates CHANGELOG. **Fails until a maintainer creates the release GitHub App** ([CI secrets](docs/guides/CI_SECRETS.md#release_app)) |
 | [`security-scan.yml`](.github/workflows/security-scan.yml) | Push + weekly | Trivy · Checkov · Gitleaks → SARIF |
 | [`documentation.yml`](.github/workflows/documentation.yml) | Module `*.tf` changes | Auto-generate docs → open PR |
 | [`drift-detection.yml`](.github/workflows/drift-detection.yml) | Scheduled | Detect infrastructure drift |
 
-**Releasing:** the repository is versioned `vX.Y.Z` by release-please from Conventional Commits — merge the
-open release PR to cut a release (see [CHANGELOG.md](CHANGELOG.md)). Separately, a per-workspace deployment
-tag records release metadata for a Terraform Cloud run:
+**CI status.** The two workflow badges at the top are live and show the state of `main`.
+A red badge means a gate is failing on `main` now. Open the latest run to see which one.
+Known causes are tracked in [`docs/known-gaps.md`](docs/known-gaps.md).
+The Security Scan and meta-lint findings are fixed in the repository and pass locally.
+A run on `main` shows green only after those fixes are merged.
+The Release workflow fails until the release GitHub App exists.
+Drift detection and the sandbox end-to-end job fail on schedule until a sandbox is funded
+([sandbox E2E](docs/guides/sandbox-e2e.md)).
+
+**Releasing:** the repository is versioned `vX.Y.Z` by release-please from Conventional Commits once the
+release GitHub App is set up. Until then a maintainer tags releases by hand (`v0.1.0` was cut that way).
+See [CHANGELOG.md](CHANGELOG.md). Separately, a per-workspace deployment tag records release metadata
+for a Terraform Cloud run:
 
 ```bash
 git tag -a gcp-organization/v1.2.0 -m "Release organization v1.2.0"

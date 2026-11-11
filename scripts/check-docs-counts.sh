@@ -58,6 +58,23 @@ expect README.md "${modules_total} modules — **${modules_gcp} GCP · ${modules
   "Module Library headline"
 expect CLAUDE.md "${modules_total} modules, ${roots} deployable roots" "CLAUDE.md header"
 
+# Claims the repo cannot back until a real-cloud apply exists (docs/known-gaps.md).
+# A banned phrase in README.md or CLAUDE.md fails, so it cannot creep back.
+ban() {
+  # ban <file> <extended regex> <why>
+  local hits
+  hits="$(grep -nEi -- "$2" "$1" || true)"
+  if [ -n "$hits" ]; then
+    echo "::error file=$1::$1 claims more than the repo can show ($3):"
+    printf '%s\n' "$hits"
+    fail=1
+  fi
+}
+for f in README.md CLAUDE.md; do
+  ban "$f" 'production[- ](grade|ready)|fully[- ]tested|battle[- ]tested' \
+    "no root has been applied to a real organization; see docs/runbooks/production-hardening.md"
+done
+
 if [ "$fail" -ne 0 ]; then
   echo
   echo "Live counts (scripts/check-docs-counts.sh --print):"

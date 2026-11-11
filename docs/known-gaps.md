@@ -482,6 +482,13 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   accepts a plain HTTP listener with forward or fixed-response. Enforcing
   `redirect-https` on application load balancers is a breaking change planned
   outside Phase 0.
+- **CI on `main` is red until this branch merges and operator steps are done
+  (2026-11-11).** The Security Scan (Trivy and Checkov) and meta-lint findings are
+  fixed on the branch and pass locally, but no CI run has confirmed it. Release
+  fails with a clear message because the release GitHub App does not exist yet.
+  Drift detection and sandbox e2e fail on schedule (next entry). README.md badges
+  are live, so they show this. **Close by:** merging, creating the release App
+  ([CI secrets](guides/CI_SECRETS.md#release_app)) and funding the sandbox.
 - **Real-cloud checks fail on schedule until the sandbox is funded (2026-11-11).**
   Drift detection and sandbox e2e fail on schedule while their credentials and
   variables are unset (plan decision D10). The owner can opt out with the
