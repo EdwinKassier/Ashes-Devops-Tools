@@ -698,3 +698,28 @@ run "queue_with_cmk" {
     error_message = "with a queue CMK the task role must get kms:Decrypt/GenerateDataKey on that key via SQS only."
   }
 }
+
+# The AVD-AWS-0104 suppression on service_https is safe only while this rule
+# stays TCP 443.
+run "service_https_egress_is_port_443_only" {
+  command = plan
+
+  variables {
+    services = {
+      orders = {}
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      for r in aws_vpc_security_group_egress_rule.service_https :
+      r.from_port == 443 && r.to_port == 443 && r.ip_protocol == "tcp"
+    ])
+    error_message = "service_https may only open TCP 443; anything wider voids the AVD-AWS-0104 suppression."
+  }
+
+  assert {
+    condition     = length(aws_vpc_security_group_egress_rule.service_https) == 1
+    error_message = "the egress rule must exist for the service, otherwise this test checks nothing."
+  }
+}

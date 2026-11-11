@@ -530,6 +530,7 @@ resource "aws_vpc_security_group_ingress_rule" "service_from_alb" {
   tags = var.tags
 }
 
+#trivy:ignore:AVD-AWS-0104 TCP 443 only (pinned by run "service_https_egress_is_port_443_only"), and the stage sets assign_public_ip = false on every task. In the standard spoke the private-tier default route is the transit gateway, so this traffic leaves through the central Network Firewall inspection path.
 resource "aws_vpc_security_group_egress_rule" "service_https" {
   # HTTPS out (via the spoke's TGW default route -> central egress/inspection)
   # for ECR, CloudWatch Logs, Secrets Manager and the app's own HTTPS calls.
