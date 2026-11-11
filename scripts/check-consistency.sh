@@ -255,6 +255,9 @@ done
 echo "==> Example tfvars set no identity or placement inputs (scripts/check-example-tfvars.sh)"
 ./scripts/check-example-tfvars.sh >/dev/null || note "examples/*.tfvars.example sets an input config/landing-zone.yaml owns"
 
+echo "==> Compliance matrices cite existing paths and unique IDs (scripts/check-matrix-paths.sh)"
+./scripts/check-matrix-paths.sh || note "docs/compliance matrices cite a missing path or repeat a control ID"
+
 if [ "$fail" -eq 0 ]; then
   echo "OK: all consistency invariants hold."
 else

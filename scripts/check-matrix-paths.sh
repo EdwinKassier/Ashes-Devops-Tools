@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Fail when the control matrix cites a repo path that does not exist, or when a
 # control ID appears twice (CMP-17).
+#   Usage: scripts/check-matrix-paths.sh   (run from scripts/check-consistency.sh)
+#   Exit 0 when every cited path exists and no ID repeats; 1 otherwise.
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
@@ -9,6 +11,11 @@ files=()
 for f in docs/compliance/control-matrix.md docs/compliance/framework-crosswalk.md; do
   [ -f "$f" ] && files+=("$f")
 done
+
+if [ "${#files[@]}" -eq 0 ]; then
+  echo "no compliance matrix files found (docs/compliance/control-matrix.md, framework-crosswalk.md)"
+  exit 1
+fi
 
 fail=0
 while IFS= read -r p; do

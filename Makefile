@@ -197,7 +197,6 @@ pre-commit-update: ## Update pinned pre-commit hooks
 consistency: ## Assert canonical strings (region regex, provider pins) haven't drifted across copies, and cross-root contracts (scripts/check-contracts.sh)
 	@./scripts/check-consistency.sh
 	@./scripts/check-contracts.sh
-	@./scripts/check-matrix-paths.sh
 
 yamllint: ## yamllint exactly as CI: the pre-commit hook config, all files (CI: meta-lint)
 	@command -v $(PRE_COMMIT) >/dev/null 2>&1 || { echo "pre-commit not found: pipx install pre-commit (or brew install pre-commit)"; exit 1; }

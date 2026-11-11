@@ -22,4 +22,5 @@ for target in fmt-check consistency yamllint markdownlint-check commit-check cod
     failures=$((failures + 1))
   fi
 done
-exit "${failures}"
+printf 'test-make-ci-parity: %s failed\n' "${failures}"
+[[ "${failures}" -eq 0 ]]

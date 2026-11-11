@@ -7,7 +7,10 @@ on:
     paths:
       - 'modules/**/*.tf'
       - 'modules/**/README.md'
+      - 'envs/**/*.tf'
       - '.terraform-docs.yml'
+      - '.terraform-docs-envs.yml'
+      - 'scripts/docs-targets.sh'
       - 'scripts/module-docs.sh'
       - '.github/workflows/documentation.yml'
   workflow_dispatch:

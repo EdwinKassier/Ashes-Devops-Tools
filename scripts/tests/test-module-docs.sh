@@ -2,7 +2,8 @@
 # Every deployable root has a README whose terraform-docs block is current, so
 # the variable reference cannot drift from variables.tf (ADO-4). The pre-commit
 # hook and `make docs` must also cover the same directories.
-#   bash scripts/tests/test-module-docs.sh   (make test-scripts; needs terraform-docs)
+#   bash scripts/tests/test-module-docs.sh   (make test-scripts)
+# It does not run terraform-docs: the Docs Check job and `make docs-check` gate freshness.
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${REPO_ROOT}"
@@ -33,12 +34,6 @@ envs_lines="$(grep -c "^\.terraform-docs-envs\.yml${tab}envs/" <<<"${targets}" |
 target_modules="$(awk -F'\t' '$1 == ".terraform-docs.yml" {print $2}' <<<"${targets}")"
 [[ "${target_modules}" == "${modules}" ]] && ok "docs-targets modules equal terraform-roots.sh modules" || bad "docs-targets modules differ from terraform-roots.sh modules"
 grep -qxF ".terraform-docs-envs.yml${tab}envs/gcp/organization" <<<"${targets}" && ok "organization root uses the envs config" || bad "organization root missing from docs-targets"
-
-if bash scripts/module-docs.sh check >/dev/null 2>&1; then
-  ok "module-docs check passes"
-else
-  bad "module-docs check passes"
-fi
 
 # Behaviour: the hook ignores a path that is not a docs target.
 hook_out="$(scripts/precommit-terraform-docs.sh scripts/not-a-target/x.tf 2>&1)" && hook_rc=0 || hook_rc=$?
