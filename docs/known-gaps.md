@@ -909,6 +909,31 @@ side (all mock-tested, secure defaults):
 - **`disable_speculative_on_saas = false` re-enables PR plans on `saas-*`**
   even while `enable_speculative_on_secret_bearing = false`. The `saas-*`
   workspaces keep their own switch.
+- **`no_plan_time_code_execution` acts after the plan.** HCP Terraform
+  evaluates policy sets after the plan. A `data "external"` / `data "http"`
+  block, a provider binary that is not on the allowlist, or a redirected
+  provider endpoint has already run with the workspace's credentials when the
+  policy fails. For those the policy marks the run and stops its apply; it
+  prevents only apply-time effects (provisioners, writes through a redirected
+  endpoint). The checks before the plan are `scripts/check-consistency.sh` in
+  CI, which never sees a CLI upload, and `runs = read` for the platform team
+  on secret-bearing projects.
+- **OPA cannot attest module content.** The provisioner allowlist pins the
+  module-call chain and its source strings, not the bytes of
+  `modules/supabase/vault-secrets` or its `scripts/*.mjs`. The plan JSON does
+  not name the root directory either, so any root with the same two calls and
+  the same relative sources passes. A CLI upload can carry a modified copy at
+  the same paths. The saas project's `runs = read` for the platform team and
+  approvers-only confirmation are the control there.
+- **Endpoint overrides that the plan JSON does not show.** The policy reads
+  the argument names in `configuration.provider_config.*.expressions`.
+  Terraform does not render a `dynamic` block inside a provider block there
+  (verified with Terraform 1.17.1: a `dynamic "endpoints"` block on the `aws`
+  provider is absent from the JSON). Environment variables (for example
+  `AWS_ENDPOINT_URL_STS`, `HTTPS_PROXY`, `TFE_HOSTNAME`) and an AWS shared
+  config file (`endpoint_url`) never appear in the plan. Workspace variables
+  that tfc-admin writes go through its reviewed configuration; a variable that
+  a person adds by hand in the HCP Terraform UI does not.
 
 ## DECISION — needs a human call
 

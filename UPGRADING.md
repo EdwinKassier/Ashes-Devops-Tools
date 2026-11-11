@@ -63,7 +63,7 @@ Trigger patterns now list each root's own module trees, not all of `modules/<clo
   - any wider team access or new token.
 
   Expect a security-team override when you add or remove an environment.
-- `no_plan_time_code_execution` (mandatory, not overridable) blocks provisioners and the `external` and `http` data sources outside `supabase/vault-secrets`.
+- `no_plan_time_code_execution` (mandatory, not overridable) blocks provisioners outside the reviewed `supabase/vault-secrets` call chain, and the `external` and `http` data sources everywhere. Its later changes are described below.
 
 Both sets now also attach to the tfc-admin workspace itself.
 
@@ -154,6 +154,47 @@ To restore access:
   because any plan can read the secret.
 - Move a secret out of `common_workspace_variables` onto the workspaces that
   need it (`workspace_variables`).
+
+#### `no_plan_time_code_execution` is exact and checks providers (policies)
+
+The policy is mandatory and not overridable (`policy_set_overridable = false`),
+and the policy set is read from your VCS branch. After you merge this change,
+the next run of each workspace uses it. The unchanged upstream roots pass:
+every provider they declare is on the list, no root provider block sets an
+endpoint key, and `envs/saas` keeps the reviewed module chain. A run is now
+denied after its plan in these cases:
+
+- **A provisioner outside the exact chain.** Only resources declared directly
+  in `module.saas_workload.module.vault_secrets`, called with the sources
+  `../../modules/saas/stages/saas-workload` and
+  `../../../supabase/vault-secrets`, may declare a provisioner. Before, any
+  module source that ended in `supabase/vault-secrets` passed. If your fork
+  calls `vault-secrets` from another root, renames either module call, or
+  moves either directory, restore the upstream layout.
+- **A provider that is not on the list.** The list is `hashicorp/archive`,
+  `aws`, `azurerm`, `google`, `google-beta`, `null`, `random`, `tfe`,
+  `supabase/supabase`, `vercel/vercel` and the built-in `terraform`, all from
+  `registry.terraform.io`. A provider from a private registry or another
+  namespace is denied, also when its type name is `aws` or `google`. If your
+  fork uses another provider, add its full source address to
+  `allowed_provider_sources` in `policies/opa/no_plan_time_code_execution.rego`
+  in a reviewed change.
+- **A provider endpoint, proxy or TLS override.** Any provider block that sets
+  `endpoints`, a key that ends in `_endpoint` (except `use_fips_endpoint` and
+  `use_dualstack_endpoint`), `hostname`, `base_url`, `api_url`,
+  `metadata_host`, `universe_domain`, `custom_ca_bundle`, `insecure`,
+  `ssl_skip_verify`, `skip_tls_verify`, `http_proxy`, `https_proxy` or
+  `no_proxy` is denied, whatever the value. Examples: a LocalStack `endpoints`
+  block, a corporate proxy, or `hostname` on the `tfe` provider for Terraform
+  Enterprise. Remove the key. If you need it, change `endpoint_key_pattern` in
+  the policy in a reviewed change, and record why.
+
+The plan of a denied run has already run, so a denial is not a rollback. To
+unblock a run that you judge safe before the policy change merges, set
+`policy_set_overridable = true` in tfc-admin as a time-boxed break-glass
+(`tfc_admin_guard` stops that tfc-admin plan until the security team
+overrides it), or ask an organization owner to detach the policy set in the
+HCP Terraform UI. Revert either one when the run is done.
 
 #### Run triggers auto-apply explicitly non-prod workloads (tfc-admin)
 

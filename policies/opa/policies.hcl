@@ -70,10 +70,10 @@ policy "gcp_cloud_run_no_public_url" {
 }
 
 # ── Mandatory: plan-time code execution ─────────────────────────────────────
-# No provisioners and no data "external" / data "http" outside
-# modules/supabase/vault-secrets (the same allowlist as
-# scripts/check-consistency.sh): they run code with the workspace's
-# credentials and environment variables.
+# No provisioners outside envs/saas -> saas_workload -> vault_secrets (exact
+# call chain and sources), no data "external" / data "http", only allowlisted
+# providers, no provider endpoint / proxy / TLS overrides. Evaluated after the
+# plan: it stops the apply and detects, but does not prevent, plan-time code.
 policy "no_plan_time_code_execution" {
   query             = "data.terraform.policies.no_plan_time_code_execution.deny"
   enforcement_level = "mandatory"

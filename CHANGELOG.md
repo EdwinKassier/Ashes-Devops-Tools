@@ -407,6 +407,13 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
 
 ### Security
 
+- **Plan-time execution policy is exact (SEC-2).** `no_plan_time_code_execution` allows a
+  provisioner only in `module.saas_workload.module.vault_secrets` with the exact source strings of
+  `envs/saas`; a source that only ends in `supabase/vault-secrets` is denied. `external` / `http`
+  data sources are denied everywhere. A new provider allowlist covers every provider the repo
+  declares, and provider endpoint, proxy and TLS overrides are denied. The policy header and docs
+  now say that it runs after the plan: it stops the apply, and it detects (does not prevent)
+  plan-time execution. See `UPGRADING.md`.
 - **Secret-bearing workspaces are derived, not listed (SEC-1, breaking).** tfc-admin marks every
   workspace that holds a sensitive or secret-named variable or runs the SaaS bridge, including
   non-production workloads. There the platform team drops to `runs = read`, the workspace runs no

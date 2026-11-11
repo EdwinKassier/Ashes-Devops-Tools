@@ -53,10 +53,16 @@ looked up by name. So `tfc_admin_guard` judges the plan that would detach it.
 HCP Terraform passes OPA one document. `input.plan` is the JSON plan (the
 `terraform show -json` shape) and `input.run` holds run metadata (organization,
 workspace and similar). Every policy except `no_plan_time_code_execution`
-reads only `input.plan.resource_changes[]`; that one walks
-`input.plan.configuration` (every module's resource blocks, their
-`provisioners` and the `source` of each module call), because a provisioner or
-a data source never shows up as a resource change that says so:
+reads only `input.plan.resource_changes[]`. That one also walks
+`input.plan.configuration`: every module's resource blocks, their
+`provisioners` and `mode`, the `source` of each module call, and
+`provider_config` (one entry per provider configuration, including the implied
+provider of each module, with its `full_name` and the argument names in
+`expressions`). A provisioner or a data source never shows up as a resource
+change that says so. It reads `resource_changes[].provider_name` too. The
+configuration JSON does not render a `dynamic` block inside a provider block,
+and it never shows environment variables, so the policy cannot see an endpoint
+set either way ([known gaps](../known-gaps.md)). The `resource_changes[]` fields:
 
 | Field | Meaning |
 |---|---|
@@ -74,15 +80,17 @@ query can evaluate code from several `.rego` files.
 `policies/opa/policies.hcl` declares one `policy` block per query. Each query
 returns a set of messages, and an empty set means the policy passed.
 
-- **mandatory**: a violation stops the run. A user with override permission can
-  still override it.
+- **mandatory**: a violation stops the run. A user with Manage Policy
+  Overrides can override it only when its set is overridable: the
+  `policies/opa` set only with `policy_set_overridable = true` (default
+  `false`), the `policies/opa-destructive` set always.
 - **advisory**: the violation shows on the run but never blocks it.
 
 | Policy | Level | Rule |
 |---|---|---|
 | `gcs_no_public_buckets` | mandatory | `google_storage_bucket` sets `uniform_bucket_level_access = true` and `public_access_prevention = "enforced"`. |
 | `gcp_iam_no_public_members` | mandatory | No `allUsers` / `allAuthenticatedUsers` in any `google_*_iam_member`, `_iam_binding` or `_iam_policy` (`policy_data`). |
-| `no_plan_time_code_execution` | mandatory | No `provisioner` block (`local-exec`, `remote-exec`, `file`) and no `data "external"` / `data "http"` in any module, except in resources declared directly in a module called with a source ending in `supabase/vault-secrets`. These run code with the workspace's credentials and environment variables. `scripts/check-consistency.sh` enforces the same allowlist on the repo; this policy also covers runs whose configuration never passed CI (a CLI upload, another branch). |
+| `no_plan_time_code_execution` | mandatory | Apply-time control for provisioners; detective control for the rest. HCP Terraform runs it after the plan, so a data source or a provider binary has already run when it fails, and it stops the apply. Denies: a `provisioner` block anywhere except in resources declared directly in `module.saas_workload.module.vault_secrets`, reached through the exact call chain and source strings of `envs/saas` (`../../modules/saas/stages/saas-workload`, then `../../../supabase/vault-secrets`); a `data "external"` or `data "http"` block anywhere; a provider whose source address is not on `allowed_provider_sources` (the providers this repo declares, plus the built-in `terraform`), in `provider_config` or in `resource_changes[].provider_name`; a provider block that sets an endpoint, proxy or TLS key (`endpoints`, `*_endpoint` except `use_fips_endpoint` / `use_dualstack_endpoint`, `hostname`, `base_url`, `api_url`, `metadata_host`, `universe_domain`, `custom_ca_bundle`, `insecure`, `ssl_skip_verify`, `skip_tls_verify`, `*_proxy`). The controls before the plan are `scripts/check-consistency.sh` in CI (provisioners and `external` / `http` data in the repo) and `runs = read` for the platform team on secret-bearing projects (tfc-admin). |
 | `gcp_cloud_run_no_public_url` | mandatory | No `google_cloud_run_v2_service` with `invoker_iam_disabled = true` and `ingress = INGRESS_TRAFFIC_ALL` (an unauthenticated, unprotected run.app URL). Public apps use `INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER` behind the external ALB. |
 | `aws_s3_public_access` | mandatory | No `public-read` / `public-read-write` / `authenticated-read` canned ACL. Every bucket- and account-level public access block keeps all four switches `true`. |
 | `aws_sg_no_public_admin_ports` | mandatory | No ingress from `0.0.0.0/0` or `::/0` that reaches TCP 22 or 3389, including all-protocol (`-1`) rules. Covers `aws_security_group`, `aws_security_group_rule` and `aws_vpc_security_group_ingress_rule`. |
