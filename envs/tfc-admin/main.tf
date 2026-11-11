@@ -647,12 +647,16 @@ locals {
     }
   }
   # The committed file must not steer credentials or the CLI: dynamic-credential
-  # env vars (TFC_*), CLI argument injection (TF_CLI_ARGS*), provider auth env
-  # vars, or Terraform's own controls. tfc-admin derives the legitimate ones.
+  # env vars (TFC_*), CLI argument injection (TF_CLI_ARGS*), the CLI config
+  # file and host tokens (TF_CLI_CONFIG_FILE, TF_TOKEN_*), the tfe provider's
+  # host and token (TFE_*), provider auth env vars, Terraform's own controls,
+  # and anything that reroutes or re-trusts HTTPS (proxies in any case,
+  # SSL_CERT_FILE / SSL_CERT_DIR). tfc-admin derives the legitimate ones.
+  reserved_env_pattern = "^((TFC_|TFE_|TF_CLI_ARGS|TF_CLI_CONFIG_FILE|TF_TOKEN_|TF_VAR_|TF_WORKSPACE|TF_LOG|AWS_|GOOGLE_|CLOUDSDK_|SUPABASE_|VERCEL_|SSL_CERT_FILE|SSL_CERT_DIR)|(?i:(HTTPS?|ALL|NO)_PROXY)$)"
   file_reserved_entries = flatten([
     for ws, vars in local.file_workspace_variables : [
       for k, v in vars : "${ws}.${k}"
-      if v.category == "env" && can(regex("^(TFC_|TF_CLI_ARGS|TF_VAR_|TF_WORKSPACE|TF_LOG|AWS_|GOOGLE_|CLOUDSDK_|SUPABASE_|VERCEL_)", k))
+      if v.category == "env" && can(regex(local.reserved_env_pattern, k))
     ]
   ])
   file_sensitive_entries = flatten([
@@ -987,7 +991,7 @@ resource "terraform_data" "input_contract" {
     }
     precondition {
       condition     = length(local.file_reserved_entries) == 0
-      error_message = "workspace_variables_file sets reserved environment variables: ${join(", ", local.file_reserved_entries)}. Dynamic-credential (TFC_*), CLI (TF_CLI_ARGS*, TF_*) and provider-auth env vars are derived by tfc-admin or set write-only via workspace_variables, never from the committed file."
+      error_message = "workspace_variables_file sets reserved environment variables: ${join(", ", local.file_reserved_entries)}. Dynamic-credential (TFC_*), CLI (TF_CLI_ARGS*, TF_CLI_CONFIG_FILE, TF_TOKEN_*, TF_*), TFE_*, proxy, SSL_CERT_* and provider-auth env vars are derived by tfc-admin or set write-only via workspace_variables, never from the committed file."
     }
     precondition {
       condition     = length(local.file_sensitive_entries) == 0

@@ -782,6 +782,41 @@ run "workspace_variables_file_rejects_reserved_env" {
   expect_failures = [terraform_data.input_contract]
 }
 
+# Every reserved name, one key at a time: credential redirection through the
+# tfe provider, the CLI config, host tokens, proxies (any case) and CA bundles.
+run "reserved_env_pattern_covers_redirection_vars" {
+  command = plan
+
+  assert {
+    condition = alltrue([for k in [
+      "TFE_TOKEN", "TFE_HOSTNAME", "TF_TOKEN_app_terraform_io", "TF_CLI_CONFIG_FILE",
+      "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
+      "http_proxy", "https_proxy", "all_proxy", "no_proxy", "Https_Proxy",
+      "SSL_CERT_FILE", "SSL_CERT_DIR",
+      "TFC_AWS_APPLY_ROLE_ARN", "TF_CLI_ARGS_plan", "AWS_PROFILE",
+    ] : can(regex(local.reserved_env_pattern, k))])
+    error_message = "a credential- or traffic-redirecting env var is not reserved."
+  }
+
+  assert {
+    condition = !anytrue([for k in [
+      "TF_PARALLELISM_HINT", "MY_HTTP_PROXY_NOTE", "NODE_OPTIONS_X", "APP_NAME", "no_proxy_list",
+    ] : can(regex(local.reserved_env_pattern, k))])
+    error_message = "an ordinary env var name is treated as reserved."
+  }
+}
+
+# The committed file that sets only the new reserved names still fails.
+run "workspace_variables_file_rejects_redirection_env" {
+  command = plan
+
+  variables {
+    workspace_variables_file = "tests/fixtures/tfc-workspaces-redirect-env.yaml"
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
 # gcp-guardrails is security_only: the platform-editable committed file must
 # not reach it (its inputs live in its security-owned root).
 run "workspace_variables_file_rejects_security_only_workspace" {

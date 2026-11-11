@@ -417,6 +417,9 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   a tracked symlink, a submodule or a path under `.terraform/` or `node_modules/` fails. The policy
   lists must be plain string literals, defined once. Module sources must match exactly.
   `regex` in the parser lock is pinned to 2026.9.29.
+- **The committed workspace file cannot set redirection env vars (breaking).** tfc-admin rejects
+  `TFE_*`, `TF_TOKEN_*`, `TF_CLI_CONFIG_FILE`, the proxy variables in any case, `SSL_CERT_FILE`
+  and `SSL_CERT_DIR` in `workspace_variables_file`. See `UPGRADING.md`.
 - **The plan-time execution gate parses HCL (SEC-2 / CICD-2, breaking).**
   `scripts/check-plan-time-exec.py` replaces the grep in `scripts/check-consistency.sh`. It parses
   every `.tf` (python-hcl2, hash-locked in `.github/requirements/hcl2.txt`) and `.tf.json` file, so

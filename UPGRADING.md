@@ -259,6 +259,19 @@ tree passes. Before you merge:
   comprehension, a set expression or a second definition makes the script
   exit 2.
 
+#### The committed workspace file cannot set redirection env vars (tfc-admin)
+
+**Breaking for some forks.** `workspace_variables_file`
+(`config/tfc-workspaces.yaml`) already could not set `TFC_*`, `TF_CLI_ARGS*`
+or provider-auth env vars. It now also rejects these env-category keys:
+`TFE_*`, `TF_TOKEN_*`, `TF_CLI_CONFIG_FILE`, `HTTP_PROXY`, `HTTPS_PROXY`,
+`ALL_PROXY` and `NO_PROXY` (in any case), `SSL_CERT_FILE` and `SSL_CERT_DIR`.
+Each one can send a workspace's tokens to another host or make it trust
+another certificate authority. The tfc-admin plan fails and names the keys.
+Remove them from the file. If a workspace really needs one (a corporate
+proxy, for example), set it through `workspace_variables` in tfc-admin, which
+the tfc-admin owners review.
+
 #### Run triggers auto-apply explicitly non-prod workloads (tfc-admin)
 
 **Trust change on the upgrade apply (estates with policy sets on).** tfc-admin's
