@@ -29,7 +29,7 @@ rather than rushed.
 
 ## What each cloud already gets right
 
-**AWS** — RCP data-perimeter + `DECLARATIVE_POLICY_EC2` + all five Organizations policy types default-on; centralized root-access management (`RootCredentialsManagement` + `RootSessions`); Security Hub **CENTRAL** configuration; IAM Access Analyzer **external + unused-access** analyzers; GuardDuty with the full modern feature set (S3 data events, EKS audit, RDS login, Lambda network, Runtime Monitoring) + Extended Threat Detection; Compliance-mode Vault Lock (WORM) backups with restore testing; CloudTrail Lake correctly *not* adopted (SRA-deprecated Dec-2025).
+**AWS** — RCP data-perimeter + `DECLARATIVE_POLICY_EC2` + all five Organizations policy types default-on; centralized root-access management (`RootCredentialsManagement` + `RootSessions`); Security Hub **CENTRAL** configuration; IAM Access Analyzer **external + unused-access** analyzers; GuardDuty with the full modern feature set (S3 data events, EKS audit, RDS login, Lambda network, Runtime Monitoring) + Extended Threat Detection; a Compliance-mode locked central backup vault and a weekly restore-testing plan (neither is effective yet: member backups are not copied to the locked vault, see BCK-01 and A5); CloudTrail Lake correctly *not* adopted (SRA-deprecated Dec-2025).
 
 **GCP** — keyless automation identity (GitHub + TFC WIF; SA key creation **and** upload denied org-wide); org-wide Data-Access audit logging (`ADMIN_READ`/`DATA_READ`/`DATA_WRITE` on all services, `include_children` sink); CIS-aligned org-policy set (deny external IP, no default-SA grants, Shielded VM, UBLA, restrict SQL public IP, domain-restricted sharing) with a stricter prod-folder subset; CMEK on all sensitive stores with 90-day rotation; hierarchical firewall using the modern `firewall_policy` construct; VPC-SC + Access Context Manager fully modeled.
 
@@ -41,7 +41,7 @@ Severity H/M/L. Class: **DOC** (fixed in this review) · **CONFIG** (default-off
 
 | ID | Gap | Sev | Class |
 |:---|:----|:----|:------|
-| [A5](../known-gaps.md#modernization--latest-best-practice-gaps-2026-review) | Single-region backups — no cross-region `copy_actions` or air-gapped destination vault | M | BEHAVIOR |
+| [A5](../known-gaps.md#modernization--latest-best-practice-gaps-2026-review) | Single-region backups. No `copy_actions`: member-account vaults are unlocked (AWS-managed key) and nothing copies recovery points to the locked central vault or a second region. Planned in WS4 Tasks 1 to 3 (control matrix BCK-01 to BCK-03) | M | BEHAVIOR |
 | [A6](../known-gaps.md#modernization--latest-best-practice-gaps-2026-review) | June-2026 SRA makes CloudWatch Unified Data Store the analytics *primary*; zone keeps S3 WORM as immutable sink, CloudWatch out-of-band | M | DOC / BEHAVIOR |
 | [A7](../known-gaps.md#modernization--latest-best-practice-gaps-2026-review) | Config conformance packs are an empty bring-your-own hook (no bundled pack) | M | DOC / CONFIG |
 | — | Security Hub CIS standard was pinned to v1.4.0 | L | **CONFIG — fixed** (now CIS v3.0.0) |
