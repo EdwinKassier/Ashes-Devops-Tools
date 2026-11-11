@@ -330,8 +330,6 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
 **CI status.** The two workflow badges at the top are live and show the state of `main`.
 A red badge means a gate is failing on `main` now. Open the latest run to see which one.
 Known causes are tracked in [`docs/known-gaps.md`](docs/known-gaps.md).
-The Security Scan and meta-lint findings are fixed in the repository and pass locally.
-A run on `main` shows green only after those fixes are merged.
 The Release workflow fails until the release GitHub App exists.
 Drift detection and the sandbox end-to-end job fail on schedule until a sandbox is funded
 ([sandbox E2E](docs/guides/sandbox-e2e.md)).
