@@ -1103,6 +1103,16 @@ Applies to workloads with `enable_saas_secret_bridge = true`.
 
 ### All clouds
 
+#### `config/landing-zone.yaml` is now schema-validated (`make config-check`, CI, pre-commit)
+
+**Who:** every fork that commits `config/landing-zone.yaml`. **Before the
+merge:** run `make config-check`. It and the CI meta-lint step now validate
+your `config/landing-zone.yaml` against `config/landing-zone.schema.json`, as
+they already did for the example, sandbox and test fixtures. A key the schema
+does not know, including a misspelled one such as `is_prodution`, now fails CI.
+Fix the key. If the key is valid and the schema lacks it, report a schema gap.
+A pre-commit hook checks the same file when you commit it.
+
 #### `is_production` is required on every environment (all roots that read environments)
 
 **Who:** every fork. **Before the apply:** add `is_production: true` or
