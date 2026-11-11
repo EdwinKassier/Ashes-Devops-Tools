@@ -870,3 +870,12 @@ side (all mock-tested, secure defaults):
   `semanticCommits` is off (the `fix(deps):` prefix is set by hand; Dependabot
   also updates the `pg` package of `vault-secrets`), and
   `required_version` / provider-major bumps stay manual by design.
+
+## Scanner coverage
+
+- **Checkov parsing errors.** With checkov 3.3.17, `-d modules` reports 1 parsing
+  error and `-d envs` reports 3. The files are `modules/gcp/stages/environment/variables.tf`,
+  `envs/gcp/workload/variables.tf` and `envs/aws/network/variables.tf`. They pass
+  `terraform fmt`, and CI runs `terraform validate` on every root, so they are
+  treated as Checkov parser limits. Checkov does not scan those files. They do
+  not fail the gate. Re-check after each Checkov upgrade.

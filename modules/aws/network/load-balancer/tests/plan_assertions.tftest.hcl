@@ -215,3 +215,22 @@ run "shared_alb_fixed_response_redirect_and_rules" {
     error_message = "listener rules must forward at the configured priority"
   }
 }
+
+run "http_listener_redirects_to_https" {
+  command = plan
+
+  variables {
+    listeners = {
+      http = {
+        port           = 80
+        protocol       = "HTTP"
+        default_action = "redirect-https"
+      }
+    }
+  }
+
+  assert {
+    condition     = aws_lb_listener.this["http"].default_action[0].type == "redirect" && aws_lb_listener.this["http"].default_action[0].redirect[0].protocol == "HTTPS"
+    error_message = "An HTTP listener must redirect to HTTPS."
+  }
+}

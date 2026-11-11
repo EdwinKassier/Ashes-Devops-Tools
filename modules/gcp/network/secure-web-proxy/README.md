@@ -110,7 +110,7 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_compute_service_attachment.this (modules/gcp/network/secure-web-proxy/main.tf#L124)
+- resource.google_compute_service_attachment.this (modules/gcp/network/secure-web-proxy/main.tf#L126)
 - resource.google_compute_subnetwork.proxy_only (modules/gcp/network/secure-web-proxy/main.tf#L26)
 - resource.google_compute_subnetwork.psc_nat (modules/gcp/network/secure-web-proxy/main.tf#L113)
 - resource.google_network_security_gateway_security_policy.this (modules/gcp/network/secure-web-proxy/main.tf#L48)

@@ -61,6 +61,7 @@ resource "aws_security_group" "this" {
 # -----------------------------------------------------------------------------
 
 resource "aws_lb" "this" {
+  # checkov:skip=CKV2_AWS_20:HTTP listeners are caller-supplied through var.listeners (for_each); the HTTP-to-HTTPS redirect is asserted by run "http_listener_redirects_to_https" in tests/plan_assertions.tftest.hcl.
   # checkov:skip=CKV_AWS_91:Access logging is opt-in via var.access_logs (the caller supplies the S3 bucket + prefix). The dynamic access_logs block enables it when configured; a landing-zone LB primitive cannot mandate a bucket it does not own.
   name               = var.name
   load_balancer_type = var.load_balancer_type

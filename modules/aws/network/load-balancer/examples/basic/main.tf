@@ -25,10 +25,11 @@ module "load_balancer" {
     web = {
       name        = "dev-app-web"
       port        = 8080
-      protocol    = "HTTP"
+      protocol    = "HTTPS"
       target_type = "ip"
       health_check = {
-        path = "/healthz"
+        protocol = "HTTPS"
+        path     = "/healthz"
       }
     }
   }

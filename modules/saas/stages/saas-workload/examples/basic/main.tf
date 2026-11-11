@@ -29,6 +29,7 @@ locals {
 }
 
 module "qa_saas_workload" {
+  # checkov:skip=CKV_TF_1:Published example pinned to the release tag that release-please bumps (x-release-please-version); the tag ruleset (envs/github-admin) makes release tags immutable.
   source = "git::https://github.com/EdwinKassier/Ashes-Devops-Tools.git//modules/saas/stages/saas-workload?ref=v0.1.0" # x-release-please-version
 
   # Supabase
