@@ -127,7 +127,7 @@ variable "gcp" {
     # so list the member accounts of a break-glass group here.
     break_glass_principal_emails = optional(list(string), [])
     # Opt-in custom organization-policy constraints (CEL-defined resource-shape guardrails), created
-    # AND enforced at the org node (enforcement = enforce | dry_run | off; dry_run logs violations
+    # AND enforced at the org node (enforcement = enforce, dry_run or off; dry_run logs violations
     # without blocking, the way to stage a new one). Default [] = none. See docs/known-gaps.md.
     custom_org_constraints = optional(list(object({
       name           = string
@@ -238,19 +238,19 @@ variable "gcp" {
     # audit bucket when enable_audit_bucket_lock = true.
     log_analytics_retention_days = optional(number, 400)
     # Manage the organization's Cloud Logging settings (google_logging_organization_settings): the
-    # storage location of the _Default/_Required buckets of new projects
+    # storage location of the Default and Required log buckets of new projects
     # (logging_settings_storage_location, default default_region) and optionally their CMEK
     # (logging_settings_kms_key_name). Default false.
     enable_logging_organization_settings = optional(bool, false)
     # SCC API generation for the notification stream: v1 (default, unchanged), both (add the v2 twin
     # next to v1 to verify), or v2 (flip; v1 configs destroyed). See docs/runbooks/scc-v2-migration.md.
     scc_api_version = optional(string, "v1")
-    # With enable_logging_organization_settings: disable the organization's _Default log sink, so new
-    # projects stop routing org-level logs into the _Default bucket. Default false (unchanged). Only
+    # With enable_logging_organization_settings: disable the organization's Default log sink, so new
+    # projects stop routing org-level logs into the Default bucket. Default false (unchanged). Only
     # the audit-log sinks (cloudaudit) are routed centrally, so enable it only after confirming the
     # non-audit org logs you need are covered by another sink.
     disable_default_sink = optional(bool, false)
-    # Optional CMEK for the _Default/_Required buckets of new projects. Grant the org Cloud Logging
+    # Optional CMEK for the Default and Required log buckets of new projects. Grant the org Cloud Logging
     # service account (gcloud logging settings describe --organization=<id>)
     # roles/cloudkms.cryptoKeyEncrypterDecrypter on the key first. Null = Google-managed encryption.
     logging_settings_kms_key_name = optional(string)
@@ -262,7 +262,7 @@ variable "gcp" {
     # production org first.
     enable_principal_access_boundary = optional(bool, false)
     # Resources the bounded automation SAs may act on
-    # (//cloudresourcemanager.googleapis.com/organizations|folders|projects/<id>). Empty = this
+    # (//cloudresourcemanager.googleapis.com/organizations, folders or projects, then /<id>). Empty = this
     # organization only.
     principal_access_boundary_allowed_resources = optional(list(string), [])
     # Enforce run.allowedIngress org-wide so Cloud Run services accept only internal or Cloud Load
@@ -709,4 +709,3 @@ variable "wif_tenant_pins" {
     error_message = "wif_tenant_pins.tfc_organization must be a literal TFC organization name and github_owner_ids numeric GitHub owner IDs."
   }
 }
-

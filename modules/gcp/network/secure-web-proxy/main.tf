@@ -1,9 +1,7 @@
 /**
  * Copyright 2026 Ashes
  *
- * # Secure Web Proxy (preview, opt-in)
- *
- * A regional Secure Web Proxy (Cloud Secure Web Proxy, an Envoy-based egress
+ * A regional Secure Web Proxy (preview, opt-in; Cloud Secure Web Proxy, an Envoy-based egress
  * proxy) with a gateway security policy that allows an FQDN allowlist and
  * denies everything else. Optionally creates the proxy-only subnet it needs
  * and publishes the gateway through a Private Service Connect service

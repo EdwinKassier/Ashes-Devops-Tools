@@ -211,7 +211,7 @@ variable "services" {
     The default `{}` creates nothing.
   EOT
   type = map(object({
-    runtime                     = optional(string, "cloud-run") # cloud-run | cloud-run-job
+    runtime                     = optional(string, "cloud-run") # cloud-run or cloud-run-job
     image                       = optional(string)              # null => var.bootstrap_image
     ingress                     = optional(string, "INGRESS_TRAFFIC_INTERNAL_ONLY")
     cpu                         = optional(string, "1000m")
@@ -300,7 +300,7 @@ variable "services" {
     # Service-level objective on the Cloud Run service (runtime = "cloud-run"
     # only). Null (default) creates none.
     slo = optional(object({
-      sli_type               = optional(string, "availability") # availability | latency
+      sli_type               = optional(string, "availability") # availability or latency
       goal                   = optional(number, 0.99)           # (0, 1)
       rolling_period_days    = optional(number, 28)
       latency_threshold      = optional(string, "1s") # latency SLI only

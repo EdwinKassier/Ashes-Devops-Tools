@@ -160,12 +160,12 @@ binding) and a deny-policy change cannot wait:
    incident. Never run a local `terraform apply` of the root.
 3. Apply it as the guardrails SA:
 
-```bash
-gcloud iam policies update contain-admin-identity \
-  --attachment-point="cloudresourcemanager.googleapis.com/organizations/${ORG_ID}" \
-  --kind=denypolicies --policy-file=contain-admin-identity.json --etag="${ETAG}" \
-  --impersonate-service-account="${PREFIX}-guardrails-apply@${ADMIN_PROJECT}.iam.gserviceaccount.com"
-```
+   ```bash
+   gcloud iam policies update contain-admin-identity \
+     --attachment-point="cloudresourcemanager.googleapis.com/organizations/${ORG_ID}" \
+     --kind=denypolicies --policy-file=contain-admin-identity.json --etag="${ETAG}" \
+     --impersonate-service-account="${PREFIX}-guardrails-apply@${ADMIN_PROJECT}.iam.gserviceaccount.com"
+   ```
 
 4. Once the workspace runs again, the security team queues a run on
    `gcp-guardrails` and confirms it. That reconciles state with what you
