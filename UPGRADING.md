@@ -205,6 +205,39 @@ unblock a run that you judge safe before the policy change merges, set
 overrides it), or ask an organization owner to detach the policy set in the
 HCP Terraform UI. Revert either one when the run is done.
 
+#### The plan-time execution gate parses HCL and checks module sources (CI)
+
+**Breaking for some forks.** `scripts/check-consistency.sh` (`make consistency`,
+`make ci` and CI meta-lint) now runs `scripts/check-plan-time-exec.py`, which
+parses every `.tf` and `.tf.json` file in the repository. The unchanged upstream
+tree passes. Before you merge:
+
+- **Install `python-hcl2` for local runs.** `make consistency` fails (exit 2
+  from the checker) without it:
+  `python3 -m pip install --user --no-deps --require-hashes -r .github/requirements/hcl2.txt`
+  (inside a virtualenv if your Python is externally managed). `make install`
+  does this. CI installs it in the meta-lint job.
+- **Module sources must be local or this repository's release tag.** A
+  `module` whose `source` is a registry address, another Git URL or an
+  unpinned ref now fails the check. Vendor the module under `modules/`, or add
+  a pattern for your own release URL next to `OWN_RELEASE_MODULE` in the
+  script in a reviewed change.
+- **Same lists as the OPA policy, now before the merge.** A provider that is
+  not on `allowed_provider_sources`, a provider endpoint, proxy or TLS key
+  (including inside a `dynamic` block), a `terraform_remote_state` backend
+  other than `cloud` or `remote`, and a `data "external"` / `data "http"`
+  block fail the check. The script reads these lists from
+  `policies/opa/no_plan_time_code_execution*.rego`, so a fork that extends
+  the allowlist file extends both controls.
+- **Provisioners.** They are allowed only in the module that the policy's
+  `allowed_provisioner_chain` reaches from `envs/saas`
+  (`modules/supabase/vault-secrets`) and in
+  `terraform_data.archive_settle` of `tests/e2e/aws/main.tf`. A provisioner in
+  a `removed` block always fails. If you rename a call in that chain, update
+  the policy in the same change: the check fails when the chain in the policy
+  and the module calls in `envs/saas` and `modules/saas/stages/saas-workload`
+  differ.
+
 #### Run triggers auto-apply explicitly non-prod workloads (tfc-admin)
 
 **Trust change on the upgrade apply (estates with policy sets on).** tfc-admin's

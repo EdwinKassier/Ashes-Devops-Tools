@@ -19,6 +19,12 @@ make pre-commit-install
 
 `make install` manages repo tooling. Terraform itself must already be installed separately.
 
+`make consistency` (and so `make ci`) needs `python-hcl2`, hash-locked like the CI Python tools.
+`make install` installs it; by hand:
+`python3 -m pip install --user --no-deps --require-hashes -r .github/requirements/hcl2.txt`
+(inside a virtualenv if your Python is externally managed). Without it the plan-time execution
+check (`scripts/check-plan-time-exec.py`) exits 2 and `make consistency` fails.
+
 ### Scanner versions: `.tool-versions` must be active before running pre-commit
 
 `.pre-commit-config.yaml`'s `terraform_tflint`, `terraform_trivy` and `terraform_checkov` hooks

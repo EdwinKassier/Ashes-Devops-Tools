@@ -407,6 +407,13 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
 
 ### Security
 
+- **The plan-time execution gate parses HCL (SEC-2 / CICD-2, breaking).**
+  `scripts/check-plan-time-exec.py` replaces the grep in `scripts/check-consistency.sh`. It parses
+  every `.tf` (python-hcl2, hash-locked in `.github/requirements/hcl2.txt`) and `.tf.json` file, so
+  bare labels, `.tf.json`, qualified and version-only provider sources, `check`-scoped data,
+  `removed` provisioners, `dynamic` endpoint blocks, endpoint overrides, remote-state backends and
+  non-local module sources are caught before the merge. It reads its lists from the OPA policy files
+  and fails when the policy's provisioner chain and the code differ. See `UPGRADING.md`.
 - **Plan-time execution policy is exact (SEC-2, breaking).** `no_plan_time_code_execution` allows a
   provisioner only in `module.saas_workload.module.vault_secrets` with the exact source strings of
   `envs/saas`; a source that only ends in `supabase/vault-secrets` is denied. `external` / `http`

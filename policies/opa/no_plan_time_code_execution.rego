@@ -13,9 +13,11 @@
 # credentials. For those, this policy is a detective control: it marks the run
 # and stops its apply. It is a preventive control only for what runs at apply
 # time: provisioners, and writes through a redirected endpoint.
-# The controls that act before the plan are scripts/check-consistency.sh in CI
-# (provisioners and external / http data in the repo; it never sees a CLI
-# upload) and tfc-admin's secret-bearing projects, where the platform team has
+# The controls that act before the plan are scripts/check-plan-time-exec.py in
+# CI (run by scripts/check-consistency.sh: it parses the repo's .tf and .tf.json
+# files and applies the lists of this policy, plus removed blocks, dynamic
+# provider blocks and module sources; it never sees a CLI upload) and
+# tfc-admin's secret-bearing projects, where the platform team has
 # runs = read (no plan) and pull requests get no speculative plan unless
 # enable_speculative_on_secret_bearing is set.
 #
@@ -35,7 +37,8 @@
 #     external_account credentials file (token_url) never appear in the plan;
 #   - a `removed` block is not rendered at all, so a destroy-time provisioner
 #     in it runs at apply without this policy seeing it. What limits it today:
-#     scripts/check-consistency.sh greps the repo for every provisioner, and
+#     scripts/check-plan-time-exec.py fails on a provisioner in any removed
+#     block in the repo, and
 #     confirming an apply needs apply rights (the platform team has runs =
 #     read on secret-bearing projects);
 #   - the policy does not pin the run's workspace: any workspace whose root

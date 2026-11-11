@@ -168,17 +168,18 @@ if [ -n "$prov" ]; then
   fail=1
 fi
 
-echo "==> No plan-time code execution outside the allowlist (external/http data sources, provisioners)"
+echo "==> No plan-time code execution, unlisted providers or endpoint overrides (HCL/JSON parse)"
 # A plan runs with the workspace's credentials and environment variables (TFE_TOKEN,
-# SUPABASE_ACCESS_TOKEN, cloud plan identities). A data "external" or data "http"
-# block in a PR runs during the speculative plan and can send those values out;
-# a provisioner runs during apply. Only the reviewed callers below may use them.
+# SUPABASE_ACCESS_TOKEN, cloud plan identities), and HCP Terraform runs the OPA
+# policy no_plan_time_code_execution only after the plan. This gate enforces the
+# same rules on the repository source before any plan. It parses every .tf and
+# .tf.json file (python-hcl2, hash-locked in .github/requirements/hcl2.txt) and
+# reads its allowlists from policies/opa/no_plan_time_code_execution*.rego. It
+# also covers provisioners in removed blocks, which the plan JSON does not show.
 # The TFC permission model (runs = read on secret-bearing projects) covers CLI
 # uploads that never reach this check.
-exec_allow='^(modules/supabase/vault-secrets/main\.tf|tests/e2e/aws/main\.tf):'
-execs=$(grep -rnE '^[[:space:]]*(data[[:space:]]+"(external|http)"|provisioner[[:space:]]+"|source[[:space:]]*=[[:space:]]*"hashicorp/(external|http)")' \
-  --include='*.tf' --exclude-dir='.terraform' modules envs examples templates tests 2>/dev/null | grep -vE "$exec_allow" || true)
-[ -z "$execs" ] || { echo "$execs" | while read -r l; do note "plan/apply-time code execution outside the allowlist: $l"; done; fail=1; }
+python3 scripts/check-plan-time-exec.py \
+  || note "plan/apply-time code execution or credential redirection (see the errors above; exit 2 = python-hcl2 missing or the policy unreadable)"
 
 echo "==> Lockfiles: multi-platform and one version per provider (Renovate owns them)"
 # A lockfile written by a plain local `terraform init` carries one h1: hash per

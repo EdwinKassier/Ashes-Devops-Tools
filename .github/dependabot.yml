@@ -22,8 +22,9 @@ updates:
       - "dependencies"
       - "github-actions"
 
-  # Hash-locked CI tooling (commitizen for the conventional-commit check).
-  # Dependabot regenerates the --generate-hashes lock from commitizen.in.
+  # Hash-locked CI tooling: commitizen (conventional-commit check), yamllint
+  # (script tests) and python-hcl2 (scripts/check-plan-time-exec.py). Dependabot
+  # regenerates each --generate-hashes lock from its .in file.
   - package-ecosystem: "pip"
     directory: "/.github/requirements"
     schedule:

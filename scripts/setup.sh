@@ -143,6 +143,17 @@ else
   echo "pre-commit $(installed_version pre-commit) OK"
 fi
 
+# python-hcl2 for scripts/check-plan-time-exec.py (make consistency). Hash-locked,
+# the same file CI installs. On an externally managed Python (PEP 668), run
+# this inside a virtualenv instead.
+hcl2_lock="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.github/requirements/hcl2.txt"
+if ! python3 -c 'import hcl2' >/dev/null 2>&1; then
+  echo "Installing python-hcl2 (hash-locked) ..."
+  python3 -m pip install --user --no-deps --require-hashes -r "$hcl2_lock"
+else
+  echo "python-hcl2 OK"
+fi
+
 # Checkov
 checkov_installed=$(installed_version checkov -V 2>/dev/null || installed_version checkov --version 2>/dev/null || echo "")
 if [[ -z "$checkov_installed" ]]; then

@@ -915,14 +915,22 @@ side (all mock-tested, secure defaults):
   provider endpoint has already run with the workspace's credentials when the
   policy fails. For those the policy marks the run and stops its apply; it
   prevents only apply-time effects (provisioners, writes through a redirected
-  endpoint). The checks before the plan are `scripts/check-consistency.sh` in
-  CI, which never sees a CLI upload, and `runs = read` for the platform team
-  on secret-bearing projects.
+  endpoint). The checks before the plan are `scripts/check-plan-time-exec.py`
+  in CI (run by `scripts/check-consistency.sh`) and `runs = read` for the
+  platform team on secret-bearing projects. The CI check parses the repo's
+  `.tf` and `.tf.json` files and applies the same lists, read from the policy
+  files. When branch protection requires `Validation Summary`
+  ([BRANCH_PROTECTION.md](guides/BRANCH_PROTECTION.md)), it blocks the merge, so
+  no run on the main branch plans the change. It does not stop a
+  speculative plan that HCP Terraform starts for the same pull request at the
+  same time (off on secret-bearing workspaces unless
+  `enable_speculative_on_secret_bearing` is set), and it never sees a CLI
+  upload.
 - **`removed` blocks are invisible to `no_plan_time_code_execution`.**
   Terraform does not render a `removed` block in the plan JSON (verified with
   Terraform 1.17.1). A destroy-time provisioner in one runs at apply without
-  the policy seeing it. What limits it today: `scripts/check-consistency.sh`
-  in CI fails on every provisioner in repo code, and confirming an apply needs
+  the policy seeing it. What limits it today: `scripts/check-plan-time-exec.py`
+  in CI fails on a provisioner in any `removed` block in repo code, and confirming an apply needs
   apply rights (the platform team has `runs = read` on secret-bearing
   projects). A CLI upload by someone with apply rights is not covered.
 - **OPA cannot attest module content.** The provisioner allowlist pins the
@@ -939,7 +947,8 @@ side (all mock-tested, secure defaults):
   the argument names in `configuration.provider_config.*.expressions`.
   Terraform does not render a `dynamic` block inside a provider block there
   (verified with Terraform 1.17.1: a `dynamic "endpoints"` block on the `aws`
-  provider is absent from the JSON). Environment variables (for example
+  provider is absent from the JSON). `scripts/check-plan-time-exec.py` flags
+  such a `dynamic` block in repo code before the merge. Environment variables (for example
   `AWS_ENDPOINT_URL_STS`, `HTTPS_PROXY`, `TFE_HOSTNAME`) and an AWS shared
   config file (`endpoint_url`) never appear in the plan. Workspace variables
   that tfc-admin writes go through its reviewed configuration; a variable that
