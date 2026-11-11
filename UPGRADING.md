@@ -612,6 +612,10 @@ leave the setting out of the policy.
 
 ### GCP
 
+#### No US defaults in the network stages (net-hub, net-spoke, dns-anchor)
+
+`modules/gcp/stages/net-hub`, `net-spoke` and `dns-anchor` now require `region`. Before, it defaulted to `us-central1`. In `net-spoke`, `flow_logs_export.bigquery_location` and `storage_location` now default to the spoke's region, not `US`. The roots and the `environment` and `network-hub` stages already pass these values, so only direct callers of the three stages change. An existing flow-log dataset created in `US` would be replaced if its location changes: set `bigquery_location = "US"` to keep it.
+
 #### The environment perimeter has no default VPC-SC rules (gcp-workload)
 
 `modules/gcp/stages/environment` no longer adds a default ingress or egress rule:

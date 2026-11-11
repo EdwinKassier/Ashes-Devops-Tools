@@ -28,6 +28,10 @@ locals {
   nat_private  = coalesce(var.nat.include_private_subnets, !var.egress_proxy.enabled)
   nat_database = var.nat.include_database_subnets
   create_nat   = var.nat.enabled && (local.nat_private || local.nat_database)
+
+  # Flow-log export locations follow the spoke's region unless pinned.
+  flow_logs_bigquery_location = coalesce(var.flow_logs_export.bigquery_location, var.region)
+  flow_logs_storage_location  = coalesce(var.flow_logs_export.storage_location, var.region)
 }
 
 # Auto-discover available zones (used only when network.explicit_zones is empty).
@@ -336,13 +340,13 @@ module "vpc_flow_logs" {
 
   create_bigquery_dataset            = var.flow_logs_export.create_bigquery_dataset
   bigquery_dataset_id                = var.flow_logs_export.bigquery_dataset_id
-  bigquery_location                  = var.flow_logs_export.bigquery_location
+  bigquery_location                  = local.flow_logs_bigquery_location
   bigquery_partition_expiration_days = var.flow_logs_export.retention_days
   bigquery_kms_key_name              = module.flow_logs_kms[0].key_names["vpc-flow-logs"]
 
   create_storage_bucket  = var.flow_logs_export.create_storage_bucket
   storage_bucket_name    = var.flow_logs_export.storage_bucket_name
-  storage_location       = var.flow_logs_export.storage_location
+  storage_location       = local.flow_logs_storage_location
   storage_retention_days = var.flow_logs_export.retention_days
   storage_kms_key_name   = module.flow_logs_kms[0].key_names["vpc-flow-logs"]
 

@@ -11,6 +11,7 @@ mock_provider "google-beta" {}
 
 variables {
   project_id = "mock-dns-project"
+  region     = "us-central1"
   network = {
     name       = "dns-vpc-core"
     cidr_block = "10.1.0.0/16"

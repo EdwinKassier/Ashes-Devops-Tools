@@ -17,7 +17,6 @@ variable "project_id" {
 variable "region" {
   description = "The primary GCP region of the network (e.g., 'us-central1', 'europe-west1')."
   type        = string
-  default     = "us-central1"
 
   validation {
     condition     = can(regex("^[a-z]+-[a-z]+[0-9]+$", var.region))
@@ -309,7 +308,9 @@ variable "flow_logs_export" {
     Export of VPC flow logs to BigQuery and/or Cloud Storage through a log sink,
     encrypted with a dedicated CMEK key. Off by default. When enabled, either set
     create_bigquery_dataset = true (the sink destination is then derived from
-    bigquery_dataset_id) or give an explicit destination URI.
+    bigquery_dataset_id) or give an explicit destination URI. bigquery_location
+    and storage_location default to the spoke's region (null); set them to pin
+    another location, for example "US" for an existing dataset.
   EOT
   type = object({
     enabled                 = optional(bool, false)
@@ -317,10 +318,10 @@ variable "flow_logs_export" {
     destination             = optional(string, "")
     create_bigquery_dataset = optional(bool, false)
     bigquery_dataset_id     = optional(string, "vpc_flow_logs")
-    bigquery_location       = optional(string, "US")
+    bigquery_location       = optional(string)
     create_storage_bucket   = optional(bool, false)
     storage_bucket_name     = optional(string, "")
-    storage_location        = optional(string, "US")
+    storage_location        = optional(string)
     retention_days          = optional(number, 90)
   })
   default  = {}

@@ -11,6 +11,7 @@ mock_provider "google-beta" {}
 
 variables {
   project_id     = "mock-hub-project"
+  region         = "us-central1"
   project_prefix = "mock"
   network = {
     name       = "hub-vpc-core"

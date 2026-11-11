@@ -49,25 +49,25 @@ This landing zone implements defense-in-depth across every layer:
 - **CMEK (Customer-Managed Encryption Keys)** via Cloud KMS — available across storage primitives. Storage is always encrypted at rest; buckets default to Google-managed keys (GMEK) and accept a CMEK via `kms_key_name`, with the composing stages wiring a CMK for regulated data. Require a CMEK at the module boundary for compliance environments.
 - **Key rotation enforced** — rotation period validated between 1–365 days at plan time
 - **Uniform bucket-level access** — no per-object ACLs on Cloud Storage
-- **Opt-in WORM retention** — audit-log buckets support a locked retention policy via `enable_bucket_lock` (default off; the org-level Cloud Logging sink is the authoritative tamper-evident copy)
+- **Opt-in WORM retention**: `gcp.enable_audit_bucket_lock` locks the audit bucket's retention policy (irreversible). Without it, the bucket is versioned and access-controlled but not immutable. Regulated environments require it.
 
 ### Network Security
 
 - **VPC Service Controls** — data perimeter around sensitive projects. **Ships in dry-run mode by default** (audit-only; it logs would-be violations but does not block them). Promote to enforced per environment once ingress/egress rules are validated — see [known-gaps.md](docs/known-gaps.md).
 - **Private Service Access** — RFC 1918 connectivity to Google APIs (no public egress for managed services)
 - **Cloud Armor** — WAF with OWASP rule sets for internet-facing workloads
-- **VPC Flow Logs** — full network telemetry retained in Cloud Storage
+- **VPC Flow Logs**: on every subnet, exported to a CMEK BigQuery dataset per environment (default 10% sampling, 30-day retention). Raise `log_config_flow_sampling` and `vpc_flow_logs_retention_days` for regulated environments.
 
 ### Audit & Compliance
 
-- **Cloud Audit Logs** — Data Access logs enabled for all services; retention configurable via `audit_log_retention_days` (default 365 days; increase for PCI-DSS/HIPAA/FedRAMP)
-- **Security Command Center** — notifications for HIGH and CRITICAL findings
+- **Cloud Audit Logs**: Data Access logs on for all services. The audit bucket retention is the organization stage variable `audit_log_retention_days` (default 365 days). The landing zone does not enforce framework minimums: set it to meet PCI DSS, HIPAA or FedRAMP yourself.
+- **Security Command Center**: a Pub/Sub notification of every ACTIVE finding (CMEK topic). The SCC tier is activated outside Terraform.
 - **Org Policies** — domain-restricted sharing, uniform bucket access, disable SA key creation
 
 ### CI/CD Security
 
 - **All GitHub Actions SHA-pinned** — no mutable tag references
-- **Branch protection** — required reviews and status checks before merge
+- **Branch protection**: not codified in this repository. Required reviews and status checks are GitHub repository settings that the maintainers configure (see `docs/runbooks/promotion.md`). Verify them in the repository settings.
 - **Secret scanning** — Gitleaks runs on push to `main`/`develop` and weekly (not on every PR; the PR gate runs Trivy + Checkov)
 - **Static analysis** — Trivy (config) and Checkov on every PR, and again on push to `main`/`develop` and weekly (TFSec is EOL and folded into Trivy)
 
@@ -75,17 +75,18 @@ This landing zone implements defense-in-depth across every layer:
 
 ## Supported Versions
 
-This is a **pre-1.0 boilerplate with no tagged releases yet** (`git tag` is currently
-empty). Consume it by pinning to a specific commit SHA; `main` is the supported line and
-receives the security fixes described above.
+This is a **pre-1.0 boilerplate**. One release exists: `v0.1.0` (2026-11-08), tagged by hand.
+Consume it by pinning to that tag or to a specific commit SHA. `main` is the supported line
+and receives the security fixes described above.
 
 A tag-based release and support model (`gcp-organization/vX.Y.Z`, `gcp-workload/<env>/vX.Y.Z`)
-is wired in `terraform-apply.yml` and the CHANGELOG for when the first release is cut. The
-table below becomes authoritative at that point:
+is wired in `terraform-apply.yml` and the CHANGELOG. No such component tags exist yet. The
+table below becomes authoritative when they do:
 
 | Component | Supported |
 |-----------|-----------|
-| `main` (untagged) | Active — pin to a commit SHA |
+| `main` | Active: pin to a tag or commit SHA |
+| `v0.1.0` | Pin target only; security fixes land on `main` |
 | `gcp-organization/v1.x` | Not yet released |
 | `gcp-workload/*/v1.x` | Not yet released |
 

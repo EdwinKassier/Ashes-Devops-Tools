@@ -17,7 +17,6 @@ variable "project_id" {
 variable "region" {
   description = "The primary GCP region of the network (e.g., 'us-central1', 'europe-west1')."
   type        = string
-  default     = "us-central1"
 
   validation {
     condition     = can(regex("^[a-z]+-[a-z]+[0-9]+$", var.region))

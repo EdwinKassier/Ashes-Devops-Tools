@@ -304,3 +304,45 @@ run "additional_region_nat_off_when_nat_disabled" {
     error_message = "nat.enabled = false must suppress every NAT, additional regions included."
   }
 }
+
+run "flow_log_export_follows_region" {
+  command = plan
+
+  variables {
+    region = "europe-west2"
+    flow_logs_export = {
+      enabled                 = true
+      create_bigquery_dataset = true
+      create_storage_bucket   = true
+      storage_bucket_name     = "mock-dev-flow-logs"
+    }
+  }
+
+  assert {
+    condition     = module.vpc_flow_logs[0].bigquery_dataset.location == "europe-west2"
+    error_message = "the flow-log BigQuery export must default to the spoke's region, not US."
+  }
+
+  assert {
+    condition     = module.vpc_flow_logs[0].storage_bucket.location == "europe-west2"
+    error_message = "the flow-log storage export must default to the spoke's region, not US."
+  }
+}
+
+run "flow_log_export_location_can_be_pinned" {
+  command = plan
+
+  variables {
+    region = "europe-west2"
+    flow_logs_export = {
+      enabled                 = true
+      create_bigquery_dataset = true
+      bigquery_location       = "US"
+    }
+  }
+
+  assert {
+    condition     = module.vpc_flow_logs[0].bigquery_dataset.location == "US"
+    error_message = "an explicit bigquery_location must win over the region default."
+  }
+}
